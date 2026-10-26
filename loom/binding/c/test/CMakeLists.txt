@@ -319,9 +319,9 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    pass_report_test
+    invocation_report_test
   SRCS
-    "pass_report_test.cc"
+    "invocation_report_test.cc"
   DEPS
     ::test_util
     iree::testing::gtest

@@ -221,6 +221,7 @@ loom_cc_library(
         "src/workspace.c",
     ],
     hdrs = LOOMC_PUBLIC_HDRS + [
+        "src/compile_report.h",
         "src/config.h",
         "src/context.h",
         "src/diagnostic.h",

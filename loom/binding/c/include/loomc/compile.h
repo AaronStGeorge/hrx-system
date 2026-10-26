@@ -157,8 +157,8 @@ typedef struct loomc_compile_options_t {
 
   /// Extension chain for compile invocation options such as
   /// `loomc_target_specialization_options_t`, `loomc_pass_trace_options_t`,
-  /// `loomc_pass_report_options_t`, and native report options from
-  /// loomc/interop.h.
+  /// `loomc_pass_report_options_t`, `loomc_compile_report_options_t`, and
+  /// native report options from loomc/interop.h.
   const void* next;
 
   /// Runtime artifact module name for this invocation. Empty uses the

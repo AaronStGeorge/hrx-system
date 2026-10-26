@@ -306,8 +306,8 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "pass_report_test",
-    srcs = ["pass_report_test.cc"],
+    name = "invocation_report_test",
+    srcs = ["invocation_report_test.cc"],
     deps = [
         ":test_util",
         "//loom/binding/c:interop",

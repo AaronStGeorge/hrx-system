@@ -10,6 +10,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 
@@ -19,6 +20,7 @@
 #include "loom/pass/registry.h"
 #include "loom/target/math_policy.h"
 #include "loom/util/stream.h"
+#include "loomc/compile_report.h"
 #include "loomc/context.h"
 #include "loomc/module.h"
 #include "loomc/source.h"
@@ -787,7 +789,7 @@ TEST(InteropTest, SharesPreparedProgramAcrossIndependentReportOwners) {
 }
 
 TEST(InteropTest,
-     RequestCompilationRetainsPassReportsAndRejectsBorrowedReports) {
+     RequestCompilationRetainsReportsAndRejectsBorrowedTargetReports) {
   auto context = CreateReportingContext();
   auto workspace = CreateWorkspace();
   auto source = CreateSource("input.loom", kReportInput);
@@ -843,9 +845,14 @@ TEST(InteropTest,
       passes.value.invocation_head->details->fields[0].string_value,
       IREE_SV("identity")));
 
+  const loomc_compile_report_options_t public_target_report = {
+      .type = LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS,
+      .next = &trace,
+      .mode = LOOMC_COMPILE_REPORT_MODE_DETAILS,
+  };
   const loomc_pass_report_options_t public_report = {
       .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
-      .next = &trace,
+      .next = &public_target_report,
   };
   const loomc_compile_options_t public_options = {.next = &public_report};
   raw_product = nullptr;
@@ -856,7 +863,7 @@ TEST(InteropTest,
   product.reset(raw_product);
   result.reset(raw_result);
   EXPECT_TRUE(loomc_result_succeeded(result.get()));
-  ASSERT_EQ(loomc_result_artifact_count(result.get()), 1u);
+  ASSERT_EQ(loomc_result_artifact_count(result.get()), 2u);
   EXPECT_TRUE(loomc_string_view_equal(
       loomc_result_artifact_at(result.get(), 0)->format,
       loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_PASS_REPORT_JSON)));
@@ -878,6 +885,27 @@ TEST(InteropTest,
   EXPECT_EQ(raw_product, nullptr);
   EXPECT_EQ(raw_result, nullptr);
   EXPECT_EQ(compilation.value.target_capability_rows.count, 0u);
+  product.reset();
+  compiler.reset();
+  request.reset();
+  bytecode.reset();
+  program.reset();
+  source.reset();
+  workspace.reset();
+  context.reset();
+  const auto* artifact = loomc_result_artifact_at(result.get(), 1);
+  EXPECT_TRUE(loomc_string_view_equal(
+      artifact->format,
+      loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_COMPILE_REPORT_JSON)));
+  loomc_byte_span_t contents = {};
+  LOOMC_ASSERT_OK(loomc_byte_sequence_clone(
+      artifact->contents, loomc_allocator_system(), &contents));
+  EXPECT_NE(std::string_view(reinterpret_cast<const char*>(contents.data),
+                             contents.data_length)
+                .find("identity"),
+            std::string_view::npos);
+  loomc_allocator_free(loomc_allocator_system(),
+                       const_cast<uint8_t*>(contents.data));
 }
 
 }  // namespace

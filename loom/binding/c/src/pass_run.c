@@ -6,6 +6,7 @@
 
 #include "pass_run.h"
 
+#include "compile_report.h"
 #include "context.h"
 #include "diagnostic.h"
 #include "iree/io/vec_stream.h"
@@ -142,31 +143,75 @@ static loomc_status_t loomc_pass_program_execute_into_result(
   return status;
 }
 
+static loomc_status_t loomc_pass_program_run_with_reports(
+    const loomc_pass_program_t* pass_program, loomc_workspace_t* workspace,
+    loomc_module_t* module,
+    const loom_pass_environment_capability_t* launch_config_capability,
+    const loomc_option_chain_t* options, loomc_result_t* result) {
+  loom_pass_report_t pass_report = {0};
+  loomc_compile_report_state_t compile_report = {0};
+  loomc_option_chain_t report_options = *options;
+  if (options->pass_report_options) {
+    loom_pass_report_initialize(loomc_workspace_block_pool(workspace),
+                                &pass_report);
+    pass_report.include_timing = iree_all_bits_set(
+        options->pass_report_options->flags, LOOMC_PASS_REPORT_FLAG_TIMING);
+    report_options.pass_report = &pass_report;
+  }
+  if (options->compile_report_options &&
+      options->compile_report_options->mode != LOOMC_COMPILE_REPORT_MODE_NONE) {
+    loomc_compile_report_state_initialize(
+        options->compile_report_options->mode,
+        options->compile_report_options->format,
+        loomc_workspace_block_pool(workspace), result, &compile_report);
+    const loomc_target_pass_environment_t* target_pass_environment =
+        loomc_context_target_pass_environment(loomc_module_context(module));
+    compile_report.diagnostic_text_print_options =
+        target_pass_environment
+            ? &target_pass_environment->diagnostic_type_print_options
+            : NULL;
+    report_options.compile_report = &compile_report.report;
+  }
+  loomc_status_t status = loomc_pass_program_execute_into_result(
+      pass_program, workspace, module, launch_config_capability,
+      &report_options, result);
+  if (loomc_status_is_ok(status) && options->pass_report_options) {
+    status = loomc_pass_report_add_artifact(
+        &pass_report, options->pass_report_options, result);
+  }
+  if (loomc_status_is_ok(status) && compile_report.mode) {
+    loom_target_compile_report_record_status(
+        &compile_report.report,
+        (iree_status_code_t)loomc_result_status_code(result));
+    status =
+        loomc_compile_report_record_config_bindings(&compile_report, module);
+    if (loomc_status_is_ok(status)) {
+      status = loomc_compile_report_state_finish(
+          &compile_report, options->compile_report_options->identifier);
+    }
+  }
+  loomc_compile_report_state_deinitialize(&compile_report);
+  if (options->pass_report_options) {
+    loom_pass_report_deinitialize(&pass_report);
+  }
+  return status;
+}
+
 loomc_status_t loomc_pass_program_run_into_result(
     const loomc_pass_program_t* pass_program, loomc_workspace_t* workspace,
     loomc_module_t* module,
     const loom_pass_environment_capability_t* launch_config_capability,
     const loomc_option_chain_t* options, loomc_result_t* result) {
-  if (!options->pass_report_options) {
-    return loomc_pass_program_execute_into_result(
-        pass_program, workspace, module, launch_config_capability, options,
-        result);
+  if (options->pass_report_options || (options->compile_report_options &&
+                                       options->compile_report_options->mode !=
+                                           LOOMC_COMPILE_REPORT_MODE_NONE)) {
+    return loomc_pass_program_run_with_reports(pass_program, workspace, module,
+                                               launch_config_capability,
+                                               options, result);
   }
-  loom_pass_report_t report;
-  loom_pass_report_initialize(loomc_workspace_block_pool(workspace), &report);
-  report.include_timing = iree_all_bits_set(options->pass_report_options->flags,
-                                            LOOMC_PASS_REPORT_FLAG_TIMING);
-  loomc_option_chain_t report_options = *options;
-  report_options.pass_report = &report;
-  loomc_status_t status = loomc_pass_program_execute_into_result(
-      pass_program, workspace, module, launch_config_capability,
-      &report_options, result);
-  if (loomc_status_is_ok(status)) {
-    status = loomc_pass_report_add_artifact(
-        &report, options->pass_report_options, result);
-  }
-  loom_pass_report_deinitialize(&report);
-  return status;
+  return loomc_pass_program_execute_into_result(pass_program, workspace, module,
+                                                launch_config_capability,
+                                                options, result);
 }
 
 static loomc_status_t loomc_pass_run_options_resolve(
@@ -189,6 +234,7 @@ static loomc_status_t loomc_pass_run_options_resolve(
       options ? options->next : NULL,
       LOOMC_OPTION_CHAIN_ALLOW_PASS_TRACE |
           LOOMC_OPTION_CHAIN_ALLOW_PASS_REPORT |
+          LOOMC_OPTION_CHAIN_ALLOW_COMPILE_REPORT |
           LOOMC_OPTION_CHAIN_ALLOW_NATIVE_PASS_REPORT |
           LOOMC_OPTION_CHAIN_ALLOW_NATIVE_COMPILE_REPORT,
       out_option_chain);

@@ -791,6 +791,7 @@ static loomc_status_t loomc_compile_module_impl(
       LOOMC_OPTION_CHAIN_ALLOW_TARGET_SPECIALIZATION |
           LOOMC_OPTION_CHAIN_ALLOW_PASS_TRACE |
           LOOMC_OPTION_CHAIN_ALLOW_PASS_REPORT |
+          LOOMC_OPTION_CHAIN_ALLOW_COMPILE_REPORT |
           LOOMC_OPTION_CHAIN_ALLOW_NATIVE_PASS_REPORT |
           LOOMC_OPTION_CHAIN_ALLOW_NATIVE_COMPILE_REPORT,
       &option_chain));
@@ -906,7 +907,8 @@ loomc_status_t loomc_compile_artifact(
   loomc_emit_transaction_t emit_transaction = {0};
   if (loomc_status_is_ok(status)) {
     status = loomc_emit_transaction_initialize(
-        options ? options->emit_options : NULL, result, &emit_transaction);
+        options ? options->emit_options : NULL, workspace, result,
+        &emit_transaction);
   }
   if (loomc_status_is_ok(status)) {
     loomc_emit_transaction_set_diagnostic_environment(&emit_transaction,
@@ -1162,6 +1164,7 @@ loomc_status_t loomc_compile_request(
               LOOMC_OPTION_CHAIN_ALLOW_TARGET_SPECIALIZATION |
                   LOOMC_OPTION_CHAIN_ALLOW_PASS_TRACE |
                   LOOMC_OPTION_CHAIN_ALLOW_PASS_REPORT |
+                  LOOMC_OPTION_CHAIN_ALLOW_COMPILE_REPORT |
                   LOOMC_OPTION_CHAIN_ALLOW_NATIVE_PASS_REPORT,
               &option_chain));
   IREE_RETURN_AND_END_ZONE_IF_ERROR(

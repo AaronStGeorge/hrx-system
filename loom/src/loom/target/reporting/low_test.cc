@@ -404,7 +404,10 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       loom_low_register_type(/*descriptor_set_stable_id=*/1,
                              /*register_class_id=*/0, 2)));
   loom_target_compile_report_t report = {};
-  loom_target_compile_report_initialize(&report, iree_allocator_system());
+  iree_arena_allocator_t report_arena;
+  iree_arena_initialize(&block_pool, &report_arena);
+  loom_target_compile_report_initialize(&report,
+                                        iree_arena_allocator(&report_arena));
   report.requested_detail_flags =
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS |
@@ -725,11 +728,13 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   schedule.model_summary_count = 1;
 
   loom_low_emission_frame_t frame = {
+      .module = module,
       .target = target,
       .schedule = schedule,
   };
   frame.allocation.module = module;
   frame.allocation.target = target;
+  frame.allocation.liveness.module = module;
   frame.allocation.liveness.intervals = liveness_intervals;
   frame.allocation.liveness.interval_count = IREE_ARRAYSIZE(liveness_intervals);
   frame.allocation.liveness.value_ids = liveness_value_ids;
@@ -1293,6 +1298,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   loom_target_compile_report_deinitialize(&allocation_report);
 
   loom_target_compile_report_deinitialize(&report);
+  iree_arena_deinitialize(&report_arena);
   loom_module_free(module);
   loom_context_deinitialize(&context);
   iree_arena_block_pool_deinitialize(&block_pool);

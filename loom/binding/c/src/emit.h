@@ -7,11 +7,8 @@
 #ifndef LOOMC_EMIT_STORAGE_H_
 #define LOOMC_EMIT_STORAGE_H_
 
-#include "diagnostic.h"
-#include "loom/error/diagnostic.h"
+#include "compile_report.h"
 #include "loom/target/provider.h"
-#include "loom/target/reporting/report.h"
-#include "loom/util/json.h"
 #include "loomc/emit.h"
 #include "visibility.h"
 
@@ -61,28 +58,13 @@ typedef struct loomc_emit_transaction_t {
   const loom_target_emitter_t* emitter;
 
   // Optional report spanning request resolution, compilation, and emission.
-  loom_target_compile_report_t compile_report;
-
-  // True when |compile_report| owns storage and must be deinitialized.
-  bool compile_report_initialized;
-
-  // Canonical diagnostic JSON retained only for detailed JSON reports.
-  loom_json_value_list_t compile_report_diagnostics;
-
-  // Borrowed result sink writing into |compile_report_diagnostics|.
-  loom_diagnostic_sink_t compile_report_diagnostic_sink;
-
-  // Target-aware printer options borrowed by the report diagnostic sink.
-  const loom_text_print_options_t* diagnostic_text_print_options;
-
-  // True when diagnostic JSON capture was installed on |result|.
-  bool compile_report_diagnostics_initialized;
+  loomc_compile_report_state_t compile_report;
 } loomc_emit_transaction_t;
 
 // Resolves public options into an unbound emission transaction.
 LOOMC_API_PRIVATE loomc_status_t loomc_emit_transaction_initialize(
-    const loomc_emit_options_t* options, loomc_result_t* result,
-    loomc_emit_transaction_t* out_transaction);
+    const loomc_emit_options_t* options, loomc_workspace_t* workspace,
+    loomc_result_t* result, loomc_emit_transaction_t* out_transaction);
 
 // Returns the exact public artifact format constraint, or an empty view.
 LOOMC_API_PRIVATE loomc_string_view_t loomc_emit_transaction_artifact_format(

@@ -1493,11 +1493,26 @@ static iree_status_t loom_target_compile_report_format_entries_json(
   return loom_json_object_end(&object);
 }
 
+static iree_status_t loom_target_compile_report_write_diagnostic_segment(
+    void* user_data, iree_const_byte_span_t segment) {
+  return loom_output_stream_write(
+      (loom_output_stream_t*)user_data,
+      iree_make_string_view((const char*)segment.data, segment.data_length));
+}
+
 static iree_status_t loom_target_compile_report_format_diagnostics_json(
     const loom_target_compile_report_format_options_t* options,
     loom_output_stream_t* stream) {
-  return loom_json_write_value_list_array(options->diagnostics.json_objects,
-                                          stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, IREE_SV("[")));
+  if (options->diagnostics.json_objects) {
+    IREE_RETURN_IF_ERROR(iree_byte_sequence_enumerate(
+        options->diagnostics.json_objects,
+        (iree_byte_sequence_segment_callback_t){
+            .fn = loom_target_compile_report_write_diagnostic_segment,
+            .user_data = stream,
+        }));
+  }
+  return loom_output_stream_write(stream, IREE_SV("]"));
 }
 
 static iree_status_t loom_target_compile_report_format_config_binding_row_json(

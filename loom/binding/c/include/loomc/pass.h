@@ -106,7 +106,7 @@ typedef uint32_t loomc_pass_report_flags_t;
 /// one REPORT artifact with pass identity, status, change flags, statistics,
 /// and details. A diagnosed pass failure retains completed observations in its
 /// failed result. Rejection before the program starts produces no pass report;
-/// a non-OK infrastructure status returns no result and never attempts report
+/// a non-OK infrastructure status returns no result and stops further report
 /// serialization.
 ///
 /// Omitting this extension disables collection. Attaching it with zero flags
@@ -158,8 +158,9 @@ typedef struct loomc_pass_run_options_t {
   /// Size of this structure in bytes, or zero.
   loomc_host_size_t structure_size;
   /// Invocation extensions, borrowed until execution returns. Supports
-  /// loomc_pass_trace_options_t, loomc_pass_report_options_t, and native report
-  /// options from loomc/interop.h.
+  /// loomc_pass_trace_options_t, loomc_pass_report_options_t,
+  /// loomc_compile_report_options_t, and native report options from
+  /// loomc/interop.h.
   const void* next;
 } loomc_pass_run_options_t;
 

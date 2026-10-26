@@ -447,6 +447,8 @@ static iree_status_t loom_target_compile_report_record_schedule_band_rows(
       schedule->target.descriptor_set;
   // Reuse one block's band rows and a compact sortable projection. Whole
   // function output lives in the report's owned row lists, not this scratch.
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(module->arena.block_pool, &scratch_arena);
   iree_host_size_t summary_capacity = 0;
   loom_target_compile_report_schedule_band_summary_row_t* summaries = NULL;
   iree_status_t status = iree_ok_status();
@@ -458,10 +460,10 @@ static iree_status_t loom_target_compile_report_record_schedule_band_rows(
       continue;
     }
     if (block->scheduled_node_count > summary_capacity) {
-      status = iree_allocator_grow_array(report->allocator,
-                                         block->scheduled_node_count,
-                                         sizeof(*summaries) + sizeof(uint32_t),
-                                         &summary_capacity, (void**)&summaries);
+      status = iree_arena_grow_array(&scratch_arena, /*existing_count=*/0,
+                                     block->scheduled_node_count,
+                                     sizeof(*summaries) + sizeof(uint32_t),
+                                     &summary_capacity, (void**)&summaries);
       if (!iree_status_is_ok(status)) {
         break;
       }
@@ -519,7 +521,7 @@ static iree_status_t loom_target_compile_report_record_schedule_band_rows(
           report, summaries, indices, summary_count);
     }
   }
-  iree_allocator_free(report->allocator, summaries);
+  iree_arena_deinitialize(&scratch_arena);
   return status;
 }
 
@@ -568,17 +570,21 @@ static iree_status_t loom_target_compile_report_record_pressure_origin_rows(
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "pressure origin row scratch is too large");
   }
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(liveness->module->arena.block_pool, &scratch_arena);
+  const iree_allocator_t scratch_allocator =
+      iree_arena_allocator(&scratch_arena);
   loom_target_compile_report_pressure_origin_info_t* origin_infos = NULL;
   loom_target_compile_report_pressure_origin_row_t* rows = NULL;
   iree_status_t status = iree_allocator_malloc(
-      report->allocator, origin_info_bytes, (void**)&origin_infos);
+      scratch_allocator, origin_info_bytes, (void**)&origin_infos);
   if (iree_status_is_ok(status)) {
     memset(origin_infos, 0, origin_info_bytes);
     status = loom_target_compile_report_build_pressure_origin_infos(
         schedule, origin_infos, liveness->value_count);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_allocator_malloc(report->allocator, row_bytes, (void**)&rows);
+    status = iree_allocator_malloc(scratch_allocator, row_bytes, (void**)&rows);
   }
   for (iree_host_size_t summary_index = 0;
        iree_status_is_ok(status) &&
@@ -649,12 +655,7 @@ static iree_status_t loom_target_compile_report_record_pressure_origin_rows(
           report, &rows[row_index]);
     }
   }
-  if (rows != NULL) {
-    iree_allocator_free(report->allocator, rows);
-  }
-  if (origin_infos != NULL) {
-    iree_allocator_free(report->allocator, origin_infos);
-  }
+  iree_arena_deinitialize(&scratch_arena);
   return status;
 }
 
@@ -693,13 +694,12 @@ loom_target_compile_report_pressure_origin_for_liveness_value(
 }
 
 static iree_status_t loom_target_compile_report_acquire_pressure_origin_infos(
-    loom_target_compile_report_t* report,
+    iree_allocator_t scratch_allocator,
     const loom_liveness_analysis_t* liveness,
     const loom_low_schedule_table_t* schedule,
     loom_target_compile_report_pressure_origin_info_t** out_origin_infos) {
   *out_origin_infos = NULL;
-  if (schedule == NULL || liveness == NULL || liveness->value_count == 0 ||
-      iree_allocator_is_null(report->allocator)) {
+  if (schedule == NULL || liveness == NULL || liveness->value_count == 0) {
     return iree_ok_status();
   }
   iree_host_size_t origin_info_bytes = 0;
@@ -711,15 +711,10 @@ static iree_status_t loom_target_compile_report_acquire_pressure_origin_infos(
                             "pressure origin info table is too large");
   }
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(
-      report->allocator, origin_info_bytes, (void**)out_origin_infos));
+      scratch_allocator, origin_info_bytes, (void**)out_origin_infos));
   memset(*out_origin_infos, 0, origin_info_bytes);
-  iree_status_t status = loom_target_compile_report_build_pressure_origin_infos(
+  return loom_target_compile_report_build_pressure_origin_infos(
       schedule, *out_origin_infos, liveness->value_count);
-  if (!iree_status_is_ok(status)) {
-    iree_allocator_free(report->allocator, *out_origin_infos);
-    *out_origin_infos = NULL;
-  }
-  return status;
 }
 
 static iree_status_t loom_target_compile_report_record_pressure_rows(
@@ -775,11 +770,15 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
   if (allocation->spill_plan_count == 0) {
     return iree_ok_status();
   }
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(allocation->module->arena.block_pool, &scratch_arena);
+  const iree_allocator_t scratch_allocator =
+      iree_arena_allocator(&scratch_arena);
   const loom_liveness_analysis_t* liveness = &allocation->liveness;
   loom_target_compile_report_pressure_origin_info_t* origin_infos = NULL;
   iree_status_t status =
       loom_target_compile_report_acquire_pressure_origin_infos(
-          report, liveness, schedule, &origin_infos);
+          scratch_allocator, liveness, schedule, &origin_infos);
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < allocation->spill_plan_count; ++i) {
     const loom_low_allocation_spill_plan_t* spill_plan =
@@ -816,9 +815,7 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
     };
     status = loom_target_compile_report_record_spill_row(report, &row);
   }
-  if (origin_infos != NULL) {
-    iree_allocator_free(report->allocator, origin_infos);
-  }
+  iree_arena_deinitialize(&scratch_arena);
   return status;
 }
 
@@ -832,11 +829,15 @@ iree_status_t loom_target_compile_report_record_materialized_spill_rows(
   if (frame->materialized_spills.record_count == 0) {
     return iree_ok_status();
   }
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(frame->module->arena.block_pool, &scratch_arena);
+  const iree_allocator_t scratch_allocator =
+      iree_arena_allocator(&scratch_arena);
   const loom_liveness_analysis_t* liveness = &frame->allocation.liveness;
   loom_target_compile_report_pressure_origin_info_t* origin_infos = NULL;
   iree_status_t status =
       loom_target_compile_report_acquire_pressure_origin_infos(
-          report, liveness, &frame->schedule, &origin_infos);
+          scratch_allocator, liveness, &frame->schedule, &origin_infos);
   for (const loom_low_allocation_materialized_spill_vec_t* vec =
            frame->materialized_spills.head;
        iree_status_is_ok(status) && vec != NULL; vec = vec->next) {
@@ -881,9 +882,7 @@ iree_status_t loom_target_compile_report_record_materialized_spill_rows(
       status = loom_target_compile_report_record_spill_row(report, &row);
     }
   }
-  if (origin_infos != NULL) {
-    iree_allocator_free(report->allocator, origin_infos);
-  }
+  iree_arena_deinitialize(&scratch_arena);
   return status;
 }
 
@@ -1176,9 +1175,13 @@ loom_target_compile_report_record_allocation_high_water_rows(
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "allocation high-water scratch is too large");
   }
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(allocation->module->arena.block_pool, &scratch_arena);
+  const iree_allocator_t scratch_allocator =
+      iree_arena_allocator(&scratch_arena);
   loom_target_compile_report_allocation_high_water_scratch_t* scratch = NULL;
   iree_status_t status =
-      iree_allocator_malloc(report->allocator, scratch_bytes, (void**)&scratch);
+      iree_allocator_malloc(scratch_allocator, scratch_bytes, (void**)&scratch);
   if (iree_status_is_ok(status)) {
     for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
       scratch[i] = (loom_target_compile_report_allocation_high_water_scratch_t){
@@ -1191,7 +1194,7 @@ loom_target_compile_report_record_allocation_high_water_rows(
   loom_target_compile_report_pressure_origin_info_t* origin_infos = NULL;
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_acquire_pressure_origin_infos(
-        report, liveness, schedule, &origin_infos);
+        scratch_allocator, liveness, schedule, &origin_infos);
   }
 
   for (iree_host_size_t i = 0;
@@ -1295,12 +1298,8 @@ loom_target_compile_report_record_allocation_high_water_rows(
                                                                          &row);
   }
 
-  if (origin_infos != NULL) {
-    iree_allocator_free(report->allocator, origin_infos);
-  }
-  if (scratch != NULL) {
-    iree_allocator_free(report->allocator, scratch);
-  }
+  iree_arena_deinitialize(&scratch_arena);
+
   return status;
 }
 

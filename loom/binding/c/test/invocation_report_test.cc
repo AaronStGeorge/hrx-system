@@ -8,6 +8,7 @@
 
 #include "iree/testing/gtest.h"
 #include "loom/pass/registry.h"
+#include "loomc/compile_report.h"
 #include "loomc/interop.h"
 #include "loomc/pass.h"
 #include "test/util.h"
@@ -50,7 +51,7 @@ struct AllocationState {
   }
 };
 
-class PassReportTest : public ::testing::Test {
+class InvocationReportTest : public ::testing::Test {
  protected:
   void SetUp() override {
     static const loom_pass_descriptor_t descriptor = {
@@ -157,21 +158,32 @@ class PassReportTest : public ::testing::Test {
   HandlePtr<loomc_pass_program_t, loomc_pass_program_release> program_;
 };
 
-TEST_F(PassReportTest, ResultOwnsSuccessAndDiagnosedFailureReports) {
-  ResultPtr results[4];
-  for (int i = 0; i < 4; ++i) {
+TEST_F(InvocationReportTest, ResultOwnsSuccessAndDiagnosedFailureReports) {
+  // Cover outcome, invocation entry point, format, and verbosity independently.
+  ResultPtr results[16];
+  for (int i = 0; i < 16; ++i) {
+    SCOPED_TRACE(i);
     const bool rejected = (i & 1) != 0;
     Prepare(rejected ? "symbol-dce,test.reject" : "symbol-dce");
     std::string identifier = "passes.json";
+    const loomc_compile_report_options_t target_report = {
+        .type = LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS,
+        .mode = (i & 8) ? LOOMC_COMPILE_REPORT_MODE_DETAILS
+                        : LOOMC_COMPILE_REPORT_MODE_SUMMARY,
+        .format = (i & 4) ? LOOMC_COMPILE_REPORT_FORMAT_TEXT
+                          : LOOMC_COMPILE_REPORT_FORMAT_JSON,
+    };
     const loomc_pass_report_options_t report = {
         .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
+        .next = &target_report,
         .identifier = loomc_make_cstring_view(identifier.c_str()),
     };
     loomc_result_t* result = nullptr;
-    LOOMC_ASSERT_OK(Run(&report, i >= 2, loomc_allocator_system(), &result));
+    LOOMC_ASSERT_OK(
+        Run(&report, (i & 2) != 0, loomc_allocator_system(), &result));
     results[i].reset(result);
     EXPECT_EQ(loomc_result_succeeded(result), !rejected);
-    ASSERT_EQ(loomc_result_artifact_count(result), 1u);
+    ASSERT_EQ(loomc_result_artifact_count(result), 2u);
     identifier.assign(identifier.size(), 'x');
   }
   program_.reset();
@@ -179,7 +191,8 @@ TEST_F(PassReportTest, ResultOwnsSuccessAndDiagnosedFailureReports) {
   compiler_.reset();
   workspace_.reset();
   context_.reset();
-  for (int i = 0; i < 4; ++i) {
+  for (int i = 0; i < 16; ++i) {
+    SCOPED_TRACE(i);
     const auto* artifact = loomc_result_artifact_at(results[i].get(), 0);
     EXPECT_EQ(artifact->kind, LOOMC_ARTIFACT_KIND_REPORT);
     EXPECT_TRUE(loomc_string_view_equal(
@@ -198,10 +211,32 @@ TEST_F(PassReportTest, ResultOwnsSuccessAndDiagnosedFailureReports) {
               (i & 1) != 0);
     loomc_allocator_free(loomc_allocator_system(),
                          const_cast<uint8_t*>(contents.data));
+
+    artifact = loomc_result_artifact_at(results[i].get(), 1);
+    const bool text = (i & 4) != 0;
+    EXPECT_EQ(artifact->kind, LOOMC_ARTIFACT_KIND_REPORT);
+    EXPECT_TRUE(loomc_string_view_equal(
+        artifact->format,
+        loomc_make_cstring_view(
+            text ? LOOMC_ARTIFACT_FORMAT_COMPILE_REPORT_TEXT
+                 : LOOMC_ARTIFACT_FORMAT_COMPILE_REPORT_JSON)));
+    EXPECT_TRUE(loomc_string_view_is_empty(artifact->identifier));
+    LOOMC_ASSERT_OK(loomc_byte_sequence_clone(
+        artifact->contents, loomc_allocator_system(), &contents));
+    const std::string target_contents(
+        reinterpret_cast<const char*>(contents.data), contents.data_length);
+    EXPECT_NE(target_contents.find((i & 1) ? "OUT_OF_RANGE" : "OK"),
+              std::string::npos);
+    if ((i & 1) && (i & 8) && !text) {
+      EXPECT_NE(target_contents.find("\"diagnostics\":[{"), std::string::npos);
+      EXPECT_NE(target_contents.find("test.reject"), std::string::npos);
+    }
+    loomc_allocator_free(loomc_allocator_system(),
+                         const_cast<uint8_t*>(contents.data));
   }
 }
 
-TEST_F(PassReportTest, RejectsInvalidAndConflictingOptions) {
+TEST_F(InvocationReportTest, RejectsInvalidAndConflictingPassOptions) {
   Prepare("symbol-dce");
   for (int invalid_case = 0; invalid_case < 7; ++invalid_case) {
     SCOPED_TRACE(invalid_case);
@@ -246,47 +281,121 @@ TEST_F(PassReportTest, RejectsInvalidAndConflictingOptions) {
   }
 }
 
-TEST_F(PassReportTest, CollectionIsOptInAndAnEmptyProgramStillHasAReport) {
+TEST_F(InvocationReportTest, RejectsInvalidAndConflictingCompileOptions) {
+  Prepare("symbol-dce");
+  for (int invalid_case = 0; invalid_case < 9; ++invalid_case) {
+    SCOPED_TRACE(invalid_case);
+    loomc_compile_report_options_t report = {
+        .type = LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS,
+        .mode = LOOMC_COMPILE_REPORT_MODE_DETAILS,
+    };
+    const auto duplicate = report;
+    loom_target_compile_report_t native = {};
+    loomc_native_compile_report_options_t native_options = {
+        .type = LOOMC_STRUCTURE_TYPE_NATIVE_COMPILE_REPORT_OPTIONS,
+        .report = &native,
+    };
+    const void* next = &report;
+    switch (invalid_case) {
+      case 0:
+        report.structure_size = 1;
+        break;
+      case 1:
+        report.mode = static_cast<loomc_compile_report_mode_t>(3);
+        break;
+      case 2:
+        report.format = static_cast<loomc_compile_report_format_t>(2);
+        break;
+      case 3:
+        report.identifier.size = 1;
+        break;
+      case 4:
+        report.next = &duplicate;
+        break;
+      case 5:
+        report.next = &native_options;
+        break;
+      case 6:
+        native_options.next = &report;
+        next = &native_options;
+        break;
+      case 7:
+        report.type = LOOMC_STRUCTURE_TYPE_NONE;
+        break;
+      case 8:
+        report.mode = LOOMC_COMPILE_REPORT_MODE_NONE;
+        report.identifier = loomc_make_cstring_view("report");
+        break;
+    }
+    loomc_result_t* result = nullptr;
+    LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT,
+                           Run(next, false, loomc_allocator_system(), &result));
+    EXPECT_EQ(result, nullptr);
+  }
+}
+
+TEST_F(InvocationReportTest,
+       CollectionIsOptInAndAnEmptyProgramStillHasAReport) {
   loomc_pass_program_t* program = nullptr;
   LOOMC_ASSERT_OK(loomc_pass_program_create_empty(
       context_.get(), nullptr, loomc_allocator_system(), &program));
   program_.reset(program);
-  for (bool enabled : {false, true}) {
+  for (int variant = 0; variant < 4; ++variant) {
+    const loomc_compile_report_options_t target_report = {
+        .type = LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS,
+        .mode = variant == 3 ? LOOMC_COMPILE_REPORT_MODE_DETAILS
+                             : LOOMC_COMPILE_REPORT_MODE_NONE,
+    };
     const loomc_pass_report_options_t report = {
         .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
         .flags = LOOMC_PASS_REPORT_FLAG_TIMING,
     };
+    const void* next = nullptr;
+    if (variant == 1) {
+      next = &report;
+    } else if (variant >= 2) {
+      next = &target_report;
+    }
     loomc_result_t* result = nullptr;
-    LOOMC_ASSERT_OK(Run(enabled ? &report : nullptr, false,
-                        loomc_allocator_system(), &result));
+    LOOMC_ASSERT_OK(Run(next, false, loomc_allocator_system(), &result));
     ResultPtr owner(result);
     EXPECT_TRUE(loomc_result_succeeded(result));
-    EXPECT_EQ(loomc_result_artifact_count(result), enabled ? 1u : 0u);
+    EXPECT_EQ(loomc_result_artifact_count(result), variant & 1);
   }
 }
 
-TEST_F(PassReportTest, AllocationFailureStopsWithoutPublishingOrRetrying) {
+TEST_F(InvocationReportTest,
+       AllocationFailureStopsWithoutPublishingOrRetrying) {
   Prepare("symbol-dce");
-  const loomc_pass_report_options_t report = {
-      .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
-  };
-  for (size_t fail_at = 0;; ++fail_at) {
-    AllocationState allocation = {.fail_at = fail_at};
-    loomc_result_t* result = nullptr;
-    loomc_status_t status =
-        Run(&report, false, allocation.allocator(), &result);
-    const bool succeeded = loomc_status_is_ok(status);
-    if (succeeded) {
-      EXPECT_EQ(loomc_result_artifact_count(result), 1u);
-    } else {
-      LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_RESOURCE_EXHAUSTED, status);
-      EXPECT_EQ(result, nullptr);
-      EXPECT_EQ(allocation.attempts, fail_at + 1);
-    }
-    loomc_result_release(result);
-    EXPECT_EQ(allocation.live, 0u);
-    if (succeeded) {
-      break;
+  for (bool text : {false, true}) {
+    const loomc_compile_report_options_t target_report = {
+        .type = LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS,
+        .mode = LOOMC_COMPILE_REPORT_MODE_DETAILS,
+        .format = text ? LOOMC_COMPILE_REPORT_FORMAT_TEXT
+                       : LOOMC_COMPILE_REPORT_FORMAT_JSON,
+    };
+    const loomc_pass_report_options_t report = {
+        .type = LOOMC_STRUCTURE_TYPE_PASS_REPORT_OPTIONS,
+        .next = &target_report,
+    };
+    for (size_t fail_at = 0;; ++fail_at) {
+      AllocationState allocation = {.fail_at = fail_at};
+      loomc_result_t* result = nullptr;
+      loomc_status_t status =
+          Run(&report, false, allocation.allocator(), &result);
+      const bool succeeded = loomc_status_is_ok(status);
+      if (succeeded) {
+        EXPECT_EQ(loomc_result_artifact_count(result), 2u);
+      } else {
+        LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_RESOURCE_EXHAUSTED, status);
+        EXPECT_EQ(result, nullptr);
+        EXPECT_EQ(allocation.attempts, fail_at + 1);
+      }
+      loomc_result_release(result);
+      EXPECT_EQ(allocation.live, 0u);
+      if (succeeded) {
+        break;
+      }
     }
   }
 }
