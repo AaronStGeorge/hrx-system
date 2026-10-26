@@ -3897,6 +3897,11 @@ iree_hal_vulkan_queue_pop_completed_submissions(iree_hal_vulkan_queue_t* queue,
     queue->pending_tail = NULL;
   }
   completed_tail->next = NULL;
+  // Publish in dequeue order before callbacks can reenter or another drainer
+  // can retire a later prefix. This cursor tracks native completion progress,
+  // not completion of callback side effects.
+  iree_atomic_store(&queue->last_dequeued_epoch, (int64_t)completed_tail->epoch,
+                    iree_memory_order_release);
   return completed_head;
 }
 
@@ -4681,8 +4686,6 @@ static void iree_hal_vulkan_queue_complete_submission(
     iree_async_frontier_tracker_advance(queue->frontier_tracker, queue->axis,
                                         submission->epoch);
   }
-  iree_atomic_store(&queue->last_drained_epoch, (int64_t)submission->epoch,
-                    iree_memory_order_release);
   iree_status_free(terminal_status);
 }
 
@@ -5491,7 +5494,7 @@ static int iree_hal_vulkan_queue_completion_thread_main(void* entry_arg) {
         queue->wakeup_semaphore,
     };
     uint64_t wait_values[2] = {
-        (uint64_t)iree_atomic_load(&queue->last_drained_epoch,
+        (uint64_t)iree_atomic_load(&queue->last_dequeued_epoch,
                                    iree_memory_order_acquire) +
             1,
         observed_wakeup_value + 1,
@@ -5622,7 +5625,7 @@ iree_status_t iree_hal_vulkan_queue_initialize(
   iree_async_frontier_initialize(
       iree_async_fixed_frontier_as_frontier(&out_queue->frontier),
       /*entry_count=*/0);
-  iree_atomic_store(&out_queue->last_drained_epoch, 0,
+  iree_atomic_store(&out_queue->last_dequeued_epoch, 0,
                     iree_memory_order_release);
   iree_atomic_store(&out_queue->wakeup_value, 0, iree_memory_order_release);
   iree_atomic_store(&out_queue->activation_state,

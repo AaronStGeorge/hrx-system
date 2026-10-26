@@ -8,7 +8,10 @@
 
 #include <atomic>
 
+#include "iree/base/internal/atomics.h"
+#include "iree/base/threading/mutex.h"
 #include "iree/hal/cts/util/test_base.h"
+#include "iree/hal/drivers/vulkan/util/libvulkan.h"
 
 namespace iree::hal::cts {
 namespace {
@@ -110,6 +113,83 @@ TEST_P(VulkanQueueTest, AcceptedSubmissionCompletesOnceAndReleasesAction) {
     EXPECT_EQ(state.status_code.load(), completion_status);
     EXPECT_EQ(state.destroy_count.load(), 1);
   }
+}
+
+TEST_P(VulkanQueueTest, ReentrantCompletionKeepsWaitProgressMonotonic) {
+  SemaphoreList first_signals(device_, {0}, {1});
+  SemaphoreList final_signals(device_, {0}, {1});
+  struct State {
+    // Queue borrowed until both completion callbacks have returned.
+    iree_hal_vulkan_queue_t* queue;
+    // Terminal signal for the observer submitted by the first callback.
+    iree_hal_semaphore_list_t final_signals;
+    // Epoch retired reentrantly before the first callback returns.
+    std::atomic<uint64_t> nested_epoch{0};
+    // Completion progress seen after the first callback has returned.
+    std::atomic<uint64_t> observed_epoch{0};
+  } state{reinterpret_cast<iree_hal_vulkan_queue_t*>(transfer_queue_),
+          final_signals};
+  iree_hal_vulkan_queue_completion_action_t action = {
+      .fn =
+          [](void* user_data, const iree_status_t completion_status) {
+            auto* state = static_cast<State*>(user_data);
+            auto* queue = state->queue;
+            iree_status_t status = iree_status_clone(completion_status);
+            if (iree_status_is_ok(status)) {
+              status = iree_hal_vulkan_queue_submit_barrier(
+                  queue, iree_hal_semaphore_list_empty(),
+                  iree_hal_semaphore_list_empty(), /*barriers=*/nullptr);
+            }
+            if (iree_status_is_ok(status)) {
+              iree_slim_mutex_lock(&queue->submission_mutex);
+              uint64_t epoch = queue->next_epoch_value - 1;
+              iree_slim_mutex_unlock(&queue->submission_mutex);
+              state->nested_epoch = epoch;
+              VkSemaphoreWaitInfo wait_info = {
+                  .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+                  .semaphoreCount = 1,
+                  .pSemaphores = &queue->epoch_semaphore,
+                  .pValues = &epoch,
+              };
+              status = iree_status_from_vk_result(
+                  __FILE__, __LINE__,
+                  iree_vkWaitSemaphores_raw(&queue->syms, queue->logical_device,
+                                            &wait_info, UINT64_MAX),
+                  "vkWaitSemaphores");
+            }
+            if (iree_status_is_ok(status)) {
+              // Retire the nested submission while this callback still owns
+              // the earlier one, then observe progress on the worker's next
+              // drain after the outer completion has finished.
+              iree_hal_vulkan_queue_drain_completions(queue);
+              iree_hal_vulkan_queue_completion_action_t observer = {
+                  .fn =
+                      [](void* user_data, const iree_status_t) {
+                        auto* state = static_cast<State*>(user_data);
+                        state->observed_epoch = (uint64_t)iree_atomic_load(
+                            &state->queue->last_dequeued_epoch,
+                            iree_memory_order_acquire);
+                      },
+                  .user_data = state,
+              };
+              status = iree_hal_vulkan_queue_submit_barrier_with_action(
+                  queue, iree_hal_semaphore_list_empty(), state->final_signals,
+                  /*barriers=*/nullptr, observer);
+            }
+            if (!iree_status_is_ok(status)) {
+              iree_hal_semaphore_list_fail(state->final_signals, status);
+            }
+          },
+      .user_data = &state,
+  };
+  IREE_ASSERT_OK(iree_hal_vulkan_queue_submit_barrier_with_action(
+      state.queue, iree_hal_semaphore_list_empty(), first_signals,
+      /*barriers=*/nullptr, action));
+  IREE_EXPECT_OK(iree_hal_semaphore_list_wait(
+      first_signals, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+  IREE_EXPECT_OK(iree_hal_semaphore_list_wait(
+      final_signals, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+  EXPECT_GE(state.observed_epoch.load(), state.nested_epoch.load());
 }
 
 CTS_REGISTER_TEST_SUITE(VulkanQueueTest);
