@@ -160,6 +160,11 @@ amdf_status_t amdf_gpu_umd_user_queue_wait_consumed(
 // identifier is retried, regardless of whether the driver consumed it.
 amdf_status_t amdf_gpu_umd_user_queue_destroy(amdf_gpu_umd_user_queue_t* queue);
 
+// Stops native accesses, preserving queue/mapping storage and the original
+// execution error. An attempted removal is never repeated, even after failure.
+amdf_status_t amdf_gpu_umd_user_queue_inactivate(
+    amdf_gpu_umd_user_queue_t* queue);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

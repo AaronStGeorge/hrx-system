@@ -57,6 +57,12 @@ amdf_status_t iree_hal_amd_gpu_aql_scratch_poll(
 iree_status_t iree_hal_amd_gpu_aql_scratch_resume(
     iree_hal_amd_gpu_aql_scratch_t* scratch);
 
+// Consumes the completed allocation after terminal queue failure without
+// resuming removed firmware. Newly acquired backing stays owned until ordinary
+// native-stop teardown; the existing callback join still covers acquisition.
+void iree_hal_amd_gpu_aql_scratch_abandon(
+    iree_hal_amd_gpu_aql_scratch_t* scratch);
+
 // Cold predicate after accepted work and service publication have joined.
 bool iree_hal_amd_gpu_aql_scratch_is_pending(
     const iree_hal_amd_gpu_aql_scratch_t* scratch);

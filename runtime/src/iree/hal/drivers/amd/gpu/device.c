@@ -14,6 +14,7 @@
 #include "iree/base/threading/notification.h"
 #include "iree/hal/drivers/amd/fabric/memory_backend.h"
 #include "iree/hal/drivers/amd/gpu/code.h"
+#include "iree/hal/drivers/amd/gpu/device_failure.h"
 #include "iree/hal/drivers/amd/gpu/executable.h"
 #include "iree/hal/drivers/amd/gpu/profile.h"
 #include "iree/hal/drivers/amd/gpu/publication.h"
@@ -41,6 +42,9 @@ static const iree_hal_amd_gpu_queue_lifecycle_t
     iree_hal_amd_gpu_pm4_queue_lifecycle = {
         .close = iree_hal_amd_gpu_pm4_queue_close,
         .is_idle = iree_hal_amd_gpu_pm4_queue_is_idle,
+        .is_host_idle = iree_hal_amd_gpu_pm4_queue_is_host_idle,
+        .try_inactivate = iree_hal_amd_gpu_pm4_queue_try_inactivate,
+        .retire_failed = iree_hal_amd_gpu_pm4_queue_retire_failed,
         .shutdown = iree_hal_amd_gpu_pm4_queue_shutdown,
         .trim = iree_hal_amd_gpu_pm4_queue_trim,
         .set_profile = iree_hal_amd_gpu_pm4_queue_set_profile,
@@ -56,6 +60,9 @@ static const iree_hal_amd_gpu_queue_lifecycle_t
     iree_hal_amd_gpu_aql_queue_lifecycle = {
         .close = iree_hal_amd_gpu_aql_queue_close,
         .is_idle = iree_hal_amd_gpu_aql_queue_is_idle,
+        .is_host_idle = iree_hal_amd_gpu_aql_queue_is_host_idle,
+        .try_inactivate = iree_hal_amd_gpu_aql_queue_try_inactivate,
+        .retire_failed = iree_hal_amd_gpu_aql_queue_retire_failed,
         .shutdown = iree_hal_amd_gpu_aql_queue_shutdown,
         .trim = iree_hal_amd_gpu_aql_queue_trim,
         .trim_scratch = iree_hal_amd_gpu_aql_queue_trim_scratch,
@@ -141,6 +148,8 @@ typedef struct iree_hal_amd_gpu_device_t {
   } transfers;
   // Sole native-event completion/retirement worker.
   iree_hal_amd_gpu_completion_t completion;
+  // Completion-owned terminal join and independent publication-worker report.
+  iree_hal_amd_gpu_device_failure_t failure;
   // Immutable native observation policy borrowed by this device's semaphores.
   iree_hal_amd_gpu_semaphore_wait_context_t semaphore_wait;
   // Optional shared shader reports, consumed within the serialized drain.
@@ -194,6 +203,7 @@ void iree_hal_amd_gpu_device_options_initialize(
       .queue_count = 4,
       .host_numa_node = UINT32_MAX,
       .completion_spin_ns = 100000,
+      .failure_timeout_ms = 30000,
       .queue = {.ring_byte_length = 0,
                 .retirement_capacity = 256,
                 .argument_capacity = 65536,
@@ -569,14 +579,16 @@ static bool iree_hal_amd_gpu_device_is_idle(iree_hal_amd_gpu_device_t* device) {
 // final context/event teardown stays on this original cold owner.
 static bool iree_hal_amd_gpu_device_release_children(
     iree_hal_amd_gpu_device_t* device) {
+  if (device->context->cleanup_blocked ||
+      (iree_atomic_load(&device->membership.terminal.completed,
+                        iree_memory_order_acquire) &&
+       !amdf_status_is_ok(device->membership.terminal.status))) {
+    // Unproven native access keeps backing, after CPU callback owners joined.
+    return false;
+  }
   iree_hal_amd_gpu_context_join_memory(device->context);
   iree_hal_amd_fabric_allocation_queue_drain(device->context->memory.queue);
   iree_hal_amd_gpu_publication_deinitialize(&device->publication);
-  if (device->context->cleanup_blocked) {
-    // A failed child constructor may have kept native ownership without
-    // returning a queue. Its borrowed construction facts must also stay live.
-    return false;
-  }
   if (!iree_hal_amd_gpu_file_staging_free(device->transfers.file_staging)) {
     return false;
   }
@@ -663,6 +675,7 @@ static bool iree_hal_amd_gpu_device_release_children(
   iree_async_notification_release(device->memory.notification);
   iree_async_proactor_pool_entry_release(device->proactor_entry);
   iree_hal_device_spec_release(device->spec);
+  iree_hal_amd_gpu_device_failure_deinitialize(&device->failure);
   return true;
 }
 
@@ -709,25 +722,35 @@ static void iree_hal_amd_gpu_device_destroy(iree_hal_device_t* base) {
     device->queue_lifecycle->close(device->queues[i]);
   }
   iree_atomic_store(&device->closing, 1, iree_memory_order_release);
-  amdf_status_t status = iree_hal_amd_gpu_context_signal(device->context);
+  amdf_status_t status =
+      amdf_status_is_ok(
+          iree_hal_amd_gpu_completion_query_status(&device->completion))
+          ? iree_hal_amd_gpu_context_signal(device->context)
+          : AMDF_STATUS_OK;
   if (!amdf_status_is_ok(status)) {
-    iree_hal_amd_gpu_context_report(device->context, status,
-                                    "GPU shutdown event_signal");
+    iree_hal_amd_gpu_context_fail_execution(device->context, status,
+                                            "GPU shutdown event_signal");
   }
   // Final release runs on the application owner. Completion observes closing
   // after its final retirement round; joining includes every callback tail.
   iree_thread_release(device->completion.thread);
   device->completion.thread = NULL;
-  iree_slim_mutex_deinitialize(&device->completion.drain_mutex);
-  if (!iree_hal_amd_gpu_device_is_idle(device)) {
-    iree_hal_amd_gpu_context_join_memory(device->context);
-    iree_hal_amd_fabric_allocation_queue_drain(device->context->memory.queue);
-    iree_hal_amd_gpu_publication_deinitialize(&device->publication);
+  // The terminal callback joins accepted CPU work even when native removal
+  // fails. Join the remaining source-table readers before any retained-backing
+  // return: application-owned callbacks and allocators outlive the device, not
+  // an abandoned worker.
+  iree_hal_amd_gpu_context_join_memory(device->context);
+  iree_hal_amd_gpu_publication_deinitialize(&device->publication);
+  if (!iree_hal_amd_gpu_device_is_idle(device) ||
+      (iree_atomic_load(&device->membership.terminal.completed,
+                        iree_memory_order_acquire) &&
+       !amdf_status_is_ok(device->membership.terminal.status))) {
     iree_hal_amd_gpu_context_report(
         device->context, amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST),
         "GPU observer exited with unproven native uses; preserving ownership");
     return;
   }
+  iree_slim_mutex_deinitialize(&device->completion.drain_mutex);
   if (!iree_hal_amd_gpu_device_release_children(device)) {
     return;
   }
@@ -1228,6 +1251,10 @@ static iree_status_t iree_hal_amd_gpu_device_create_prepared(
            device->publication_sources + options->queue_count,
            (publication_count - options->queue_count) *
                sizeof(*device->publication_sources));
+    iree_hal_amd_gpu_device_failure_initialize(
+        context, (iree_hal_device_t*)device, options->failure_timeout_ms,
+        &device->publication, &device->completion, &device->membership,
+        device->transfers.queue, device->aql_code, &device->failure);
     status = iree_hal_amd_gpu_publication_initialize(
         publication_count, device->publication_sources, affinity,
         host_allocator, &device->publication);

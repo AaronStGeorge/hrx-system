@@ -159,6 +159,26 @@ void iree_hal_amd_gpu_pm4_queue_close(iree_hal_queue_t* queue);
 // prove consumption of the final notification/padding tail.
 bool iree_hal_amd_gpu_pm4_queue_is_idle(iree_hal_queue_t* queue);
 
+// After close/failure, joins CPU publishers and accepted callback borrowers
+// without requiring unread native captures to retire. This is not a GPU access
+// cessation proof and cannot authorize capture or native backing release.
+bool iree_hal_amd_gpu_pm4_queue_is_host_idle(iree_hal_queue_t* queue);
+
+// Attempts exclusive publication ownership and synchronously stops native
+// access while mappings and captures remain live. False means a CPU publisher
+// still owns the queue; out_status is unchanged. True supplies the native stop
+// result, including a sticky error whose backing must remain owned. The parent
+// closes/fails admission first and excludes completion observers for this call.
+bool iree_hal_amd_gpu_pm4_queue_try_inactivate(iree_hal_queue_t* queue,
+                                               amdf_status_t* out_status);
+
+// Releases the issued host prefix with failure after every affected native
+// queue has successfully stopped. No GPU completion word, download, timestamp,
+// or successful frontier is consumed. Runs under the parent's exclusive
+// completion ownership; false means a remaining CPU publisher must join first.
+bool iree_hal_amd_gpu_pm4_queue_retire_failed(iree_hal_queue_t* queue,
+                                              iree_status_code_t code);
+
 // Joins the final native notification tail after this queue is idle, its native
 // acquisition callbacks have joined, and publication/completion sources have
 // made their final accesses. Peer consumers may retain device-owned signal

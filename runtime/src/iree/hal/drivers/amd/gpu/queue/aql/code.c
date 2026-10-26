@@ -30,6 +30,10 @@ struct iree_hal_amd_gpu_aql_code_t {
   iree_hal_amd_gpu_aql_packet_t packet;
   // Terminal native failure, protected by mutex until loaders have joined.
   amdf_status_t failure;
+  // Parent closes publication before joining a blocked loading caller.
+  iree_atomic_int64_t closing_failure;
+  // First failed cache publication's existing target, retained through stop.
+  iree_hal_amd_fabric_memory_t unretired;
 };
 
 iree_status_t iree_hal_amd_gpu_aql_code_allocate(
@@ -144,6 +148,11 @@ iree_status_t iree_hal_amd_gpu_aql_code_publish(
               "query code publication address"));
   iree_slim_mutex_lock(&code->mutex);
   bool published = false;
+  const amdf_status_t closing = (amdf_status_t)iree_atomic_load(
+      &code->closing_failure, iree_memory_order_acquire);
+  if (!amdf_status_is_ok(closing) && amdf_status_is_ok(code->failure)) {
+    code->failure = closing;
+  }
   if (amdf_status_is_ok(code->failure)) {
     iree_hal_amd_gpu_aql_signal_t* signal = (void*)code->control.contents.data;
     uint32_t* words = (void*)(signal + 1);
@@ -179,24 +188,67 @@ iree_status_t iree_hal_amd_gpu_aql_code_publish(
                               iree_memory_order_acquire) != 0) {
         code->failure =
             code->context->gpu->event_wait(code->event, AMDF_TIMEOUT_INFINITE);
+        if (amdf_status_is_ok(code->failure)) {
+          code->failure = (amdf_status_t)iree_atomic_load(
+              &code->closing_failure, iree_memory_order_acquire);
+        }
       }
     }
   }
   const amdf_status_t failure = code->failure;
   if (published && !amdf_status_is_ok(failure)) {
-    // An incomplete cache writeback may still refer to this address. Keep the
-    // native backing through failed-owner teardown, as for unretired uploads.
-    memory->handle = NULL;
-    memory->mapping = NULL;
-    memory->contents = iree_byte_span_empty();
-    iree_hal_amd_gpu_context_report(
-        code->context, failure,
-        "code publication retirement unproven; preserving native backing");
+    // The failed loader can return before terminal native stop. Keep its one
+    // existing target reachable from this closed cache-publication owner.
+    code->unretired = *memory;
+    *memory = (iree_hal_amd_fabric_memory_t){.info = memory->info};
   }
   iree_slim_mutex_unlock(&code->mutex);
+  if (!amdf_status_is_ok(failure)) {
+    iree_hal_amd_gpu_context_fail_execution(
+        code->context, failure, "AQL instruction-cache publication");
+    iree_hal_amd_gpu_context_wake_failure(code->context);
+  }
   IREE_TRACE_ZONE_END(z0);
   return IREE_HAL_AMD_STATUS_FROM_AMDF(failure,
                                        "publish AQL instruction caches");
+}
+
+amdf_status_t iree_hal_amd_gpu_aql_code_close(iree_hal_amd_gpu_aql_code_t* code,
+                                              amdf_status_t failure) {
+  if (!code) {
+    return AMDF_STATUS_OK;
+  }
+  int64_t expected = 0;
+  iree_atomic_compare_exchange_strong(&code->closing_failure, &expected,
+                                      failure, iree_memory_order_release,
+                                      iree_memory_order_relaxed);
+  return code->event ? code->context->gpu->event_signal(code->event)
+                     : AMDF_STATUS_OK;
+}
+
+bool iree_hal_amd_gpu_aql_code_is_host_idle(iree_hal_amd_gpu_aql_code_t* code) {
+  if (!code) {
+    return true;
+  }
+  if (!iree_slim_mutex_try_lock(&code->mutex)) {
+    return false;
+  }
+  iree_slim_mutex_unlock(&code->mutex);
+  return true;
+}
+
+bool iree_hal_amd_gpu_aql_code_try_inactivate(iree_hal_amd_gpu_aql_code_t* code,
+                                              amdf_status_t* out_status) {
+  if (!code) {
+    *out_status = AMDF_STATUS_OK;
+    return true;
+  }
+  if (!iree_slim_mutex_try_lock(&code->mutex)) {
+    return false;
+  }
+  *out_status = iree_hal_amd_gpu_user_queue_inactivate(&code->queue);
+  iree_slim_mutex_unlock(&code->mutex);
+  return true;
 }
 
 amdf_status_t iree_hal_amd_gpu_aql_code_free(
@@ -204,7 +256,7 @@ amdf_status_t iree_hal_amd_gpu_aql_code_free(
   if (!code) {
     return AMDF_STATUS_OK;
   }
-  if (!amdf_status_is_ok(code->failure)) {
+  if (!amdf_status_is_ok(code->failure) && !code->queue.inactivated) {
     return code->failure;
   }
   const iree_hal_amd_gpu_context_t* context = code->context;
@@ -223,6 +275,8 @@ amdf_status_t iree_hal_amd_gpu_aql_code_free(
   }
   iree_hal_amd_fabric_memory_deinitialize(context->api, context->event_sink,
                                           &code->control);
+  iree_hal_amd_fabric_memory_deinitialize(context->api, context->event_sink,
+                                          &code->unretired);
   iree_slim_mutex_deinitialize(&code->mutex);
   iree_allocator_free(code->host_allocator, code);
   return AMDF_STATUS_OK;

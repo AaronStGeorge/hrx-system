@@ -467,10 +467,13 @@ typedef struct amdf_api_t {
       uint64_t timeout_nanoseconds, uint64_t poll_duration_nanoseconds);
 
   /// Destroys one queue after every accepted submission has retired.
+  /// Successful GPU kernel_queue_inactivate also permits destruction without
+  /// retirement of the aborted submissions.
   ///
   /// The caller must have exclusive access. The operation samples progress once
   /// and returns API-domain BUSY without waiting or native mutation while work
-  /// remains; the queue stays live. Every other result for a valid queue
+  /// remains without successful inactivation; the queue stays live. Every other
+  /// result for a valid queue
   /// consumes the handle, including a native cleanup error. Native errors
   /// retain their domains: a native busy error is not the API-domain
   /// precondition rejection. Failed cleanup preserves unreleased native
@@ -566,9 +569,12 @@ typedef struct amdf_api_t {
 
   /// Destroys one directly published queue after all mappings are gone and all
   /// published work has been consumed.
+  /// Successful GPU user_queue_inactivate removes the consumption requirement;
+  /// producer uses and mappings must still have ended.
   ///
   /// The caller must have exclusive access. The operation returns BUSY without
-  /// native mutation while a mapping or unconsumed publication remains. This
+  /// native mutation while a mapping remains, or while publication remains
+  /// unconsumed without successful inactivation. This
   /// API-domain rejection leaves the queue live. Every other result for a valid
   /// queue consumes the handle, including a native cleanup error. Native errors
   /// retain their domains: a native busy error is not a precondition rejection.

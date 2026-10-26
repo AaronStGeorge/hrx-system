@@ -45,10 +45,11 @@ typedef struct iree_hal_amd_gpu_sdma_copy_t {
   uint32_t length;
   // Qualified queue-side acquire/release operations for this copy.
   iree_hal_memory_effects_t effects;
-  // Reports exactly one terminal outcome. Successful retirement runs on the
-  // completion owner. Failure may run on publication and must only enqueue a
-  // prepared result for the consumer; it must not issue I/O or run user code.
-  // RETIRED includes rejected work that never acquired a native consumer.
+  // Reports failure independently of final operand retirement. Successful
+  // retirement runs on the completion owner. An UNRETIRED failure may precede
+  // the one RETIRED notification. Callbacks only enqueue a prepared result;
+  // they never issue I/O or run user code. RETIRED includes rejected work that
+  // never acquired a native consumer.
   void (*notify)(void* user_data, amdf_status_t status,
                  iree_hal_amd_gpu_sdma_retirement_t retirement);
   // Borrowed slot or operation, live through the callback.
@@ -87,6 +88,25 @@ iree_hal_amd_gpu_sdma_queue_completion_source(
 
 // Cold query after the device has joined its copy producers.
 bool iree_hal_amd_gpu_sdma_queue_is_idle(iree_hal_amd_gpu_sdma_queue_t* queue);
+
+// Joins CPU publication and failure-notification borrowers after admission has
+// closed. Unretired native copies retain both operands and are not certified
+// safe by this predicate. NULL is idle.
+bool iree_hal_amd_gpu_sdma_queue_is_host_idle(
+    iree_hal_amd_gpu_sdma_queue_t* queue);
+
+// Stops native access while retaining command, mapping, and operand ownership.
+// The parent excludes completion observers first. False means a CPU publisher
+// is still active and leaves out_status unchanged; true supplies the native
+// stop result. A failed native stop remains sticky and preserves backing.
+bool iree_hal_amd_gpu_sdma_queue_try_inactivate(
+    iree_hal_amd_gpu_sdma_queue_t* queue, amdf_status_t* out_status);
+
+// Returns accepted operands with the original failure after all affected
+// native queues have stopped. The parent exclusively owns completion. False
+// means a concurrent CPU publisher or failure notifier must join first.
+bool iree_hal_amd_gpu_sdma_queue_retire_failed(
+    iree_hal_amd_gpu_sdma_queue_t* queue);
 
 // Joins the final notification tail and releases native storage. Called after
 // both sources and every submitting caller have joined. Failure preserves the

@@ -141,6 +141,26 @@ void iree_hal_amd_gpu_aql_queue_close(iree_hal_queue_t* queue);
 // After external callers join, proves all accepted host/native uses retired.
 bool iree_hal_amd_gpu_aql_queue_is_idle(iree_hal_queue_t* queue);
 
+// After close/failure, joins CPU publishers, scratch/growth callbacks, and host
+// borrowers without requiring native capture retirement. Native access and
+// capture lifetimes remain unproven until successful inactivation.
+bool iree_hal_amd_gpu_aql_queue_is_host_idle(iree_hal_queue_t* queue);
+
+// Attempts exclusive publication ownership and stops native access while
+// retaining mappings and captures. False leaves out_status unchanged when a
+// CPU publisher still owns the queue. True supplies the native stop result;
+// failure preserves backing. The parent closes/fails admission and excludes
+// completion observers before calling this cold operation.
+bool iree_hal_amd_gpu_aql_queue_try_inactivate(iree_hal_queue_t* queue,
+                                               amdf_status_t* out_status);
+
+// Releases issued captures with failure after every affected native queue has
+// stopped. No completion signal, timestamp, download, or successful frontier is
+// consumed. The parent exclusively owns completion; false means a remaining
+// CPU publisher must join before retrying this cold lifetime operation.
+bool iree_hal_amd_gpu_aql_queue_retire_failed(iree_hal_queue_t* queue,
+                                              iree_status_code_t code);
+
 // Cold native tail/mapping/queue teardown after this queue is idle and its
 // service/completion sources and native callbacks have joined. Signal readers
 // may remain on other queues; their device-owned backing stays live. Failure

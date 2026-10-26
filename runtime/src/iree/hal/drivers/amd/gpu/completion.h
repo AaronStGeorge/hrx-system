@@ -56,7 +56,8 @@ typedef struct iree_hal_amd_gpu_completion_wait_t {
 // hint until that dependency progresses. KERNEL status queries remain
 // event-only.
 //
-// A native wait failure is delivered once to every source before worker exit.
+// A native execution/observation failure is delivered once to every source
+// before the worker joins the parent's terminal ownership and exits.
 // Queue sources record terminal failure; the return value is then ignored.
 // Failure does not establish native quiescence or permit releasing GPU storage.
 typedef bool (*iree_hal_amd_gpu_completion_fn_t)(
@@ -97,9 +98,9 @@ typedef struct iree_hal_amd_gpu_completion_t {
   iree_atomic_int32_t state;
   // Serializes source retirement and every borrowed wait-hint observation.
   iree_slim_mutex_t drain_mutex;
-  // Terminal native observation failure, protected by drain_mutex. A source
-  // installed after the final failure round must not await another callback.
-  amdf_status_t failure;
+  // First native execution/observation failure. Cold membership can observe it
+  // before the terminal worker joins, without taking the drain mutex.
+  iree_atomic_int64_t failure;
 } iree_hal_amd_gpu_completion_t;
 
 // Attempts one bounded source round without waiting for another observer.
@@ -140,6 +141,13 @@ void iree_hal_amd_gpu_completion_set_sources(
 // installation. Ordinary retirement and submission do not call this function.
 amdf_status_t iree_hal_amd_gpu_completion_query_status(
     iree_hal_amd_gpu_completion_t* completion);
+
+// Latches the first native error and excludes new healthy helper drains. Pure
+// host publication: no drain lock, native call, or publisher wait. The parent
+// arms its independent monitor first, then wakes host release waiters after
+// this publication, and uses request_stop to interrupt a parked native worker.
+void iree_hal_amd_gpu_completion_request_failure(
+    iree_hal_amd_gpu_completion_t* completion, amdf_status_t status);
 
 // Requests exit after the current source round and wakes a parked worker.
 // Called only after accepted work and producers have joined. This does not

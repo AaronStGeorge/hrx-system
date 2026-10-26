@@ -65,6 +65,10 @@ struct amdf_gpu_umd_user_queue_t {
   uint32_t queue_identifier;
   // Whether construction acquired a native queue, including identifier zero.
   bool queue_created;
+  // Whether terminal native removal was attempted, excluding ordinary destroy.
+  bool inactivation_attempted;
+  // Exact first removal/drain result; failure never authorizes another attempt.
+  amdf_status_t inactivation_status;
   // Whether insufficient scratch pauses for caller service instead of failing.
   bool scratch_service;
   // Sticky native VM, provider, or firmware failure.
@@ -251,8 +255,8 @@ amdf_status_t amdf_gpu_umd_user_queue_destroy(
   if (queue == NULL) {
     return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
   }
-  amdf_status_t status = AMDF_STATUS_OK;
-  if (queue->queue_created) {
+  amdf_status_t status = queue->inactivation_status;
+  if (!queue->inactivation_attempted && queue->queue_created) {
     uint64_t producer_index;
     uint64_t consumed_index;
     amdf_gpu_kfd_user_queue_sample_progress(queue, &producer_index,
@@ -278,6 +282,31 @@ amdf_status_t amdf_gpu_umd_user_queue_destroy(
   if (!amdf_status_is_ok(status)) {
     amdf_gpu_kfd_user_queue_abandon(queue);
   }
+  return status;
+}
+
+amdf_status_t amdf_gpu_umd_user_queue_inactivate(
+    amdf_gpu_umd_user_queue_t* queue) {
+  if (queue->inactivation_attempted) {
+    return queue->inactivation_status;
+  }
+  queue->inactivation_attempted = true;
+  amdf_status_t status = queue->native_api->queue_destroy(
+      queue->native_api->user_data, queue->device, queue->queue_identifier);
+  // KFD can consume the identifier on an error. Neither a retry nor a later
+  // status observation may reinterpret that identifier as a live queue.
+  queue->queue_created = false;
+  if (amdf_status_is_ok(status)) {
+    // Complete native access retirement before surrendering caller backing.
+    // Ring, control, doorbell, and mapping storage remain owned until destroy.
+    status = amdf_gpu_kfd_user_queue_buffer_destroy(
+        queue, &queue->retirement_flush_trigger);
+  }
+  queue->inactivation_status = status;
+  amdf_gpu_kfd_user_queue_record_failure(
+      queue, amdf_status_is_ok(status)
+                 ? amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION)
+                 : status);
   return status;
 }
 

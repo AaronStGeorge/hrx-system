@@ -243,6 +243,49 @@ class WindowsGpuKernelQueueTest
   amdf_gpu_umd_kernel_queue_t* queue_ = nullptr;
 };
 
+TEST_P(WindowsGpuKernelQueueTest,
+       InactivationStopsNativeWorkAndPreservesCheckedProgress) {
+  ASSERT_EQ(Submit(1), AMDF_STATUS_OK);
+  ASSERT_EQ(amdf_gpu_umd_kernel_queue_inactivate(queue_), AMDF_STATUS_OK);
+  EXPECT_EQ(state_.destroy_count, 1u);
+  EXPECT_EQ(state_.live_allocation_count, 1u);
+  state_.progress = UINT64_MAX;
+  EXPECT_EQ(amdf_gpu_umd_kernel_queue_query_progress(queue_), 0u);
+  EXPECT_EQ(amdf_gpu_umd_kernel_queue_query_terminal_status(queue_),
+            amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION));
+  EXPECT_EQ(amdf_gpu_umd_kernel_queue_inactivate(queue_), AMDF_STATUS_OK);
+  EXPECT_EQ(state_.destroy_count, 1u);
+  EXPECT_EQ(amdf_gpu_umd_kernel_queue_destroy(queue_), AMDF_STATUS_OK);
+  queue_ = nullptr;
+  EXPECT_EQ(state_.destroy_count, 1u);
+  EXPECT_EQ(state_.live_allocation_count, 0u);
+}
+
+TEST_P(WindowsGpuKernelQueueTest, InactivationPreservesOriginalDeviceFailure) {
+  amdf_kmt_device_status_record_reset(&device_.status);
+  const auto failure = amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
+  ASSERT_EQ(amdf_gpu_umd_kernel_queue_query_terminal_status(queue_), failure);
+  ASSERT_EQ(amdf_gpu_umd_kernel_queue_inactivate(queue_), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_gpu_umd_kernel_queue_query_terminal_status(queue_), failure);
+}
+
+TEST_P(WindowsGpuKernelQueueTest, FailedInactivationNeverRetriesNativeRemoval) {
+  ASSERT_EQ(Submit(1), AMDF_STATUS_OK);
+  state_.destroy_status = STATUS_UNSUCCESSFUL;
+  const amdf_status_t failure =
+      amdf_make_status(AMDF_STATUS_DOMAIN_NTSTATUS,
+                       static_cast<uint32_t>(state_.destroy_status));
+  EXPECT_EQ(amdf_gpu_umd_kernel_queue_inactivate(queue_), failure);
+  EXPECT_EQ(state_.destroy_count, 1u);
+  EXPECT_EQ(state_.live_allocation_count, 1u);
+  state_.destroy_status = STATUS_SUCCESS;
+  EXPECT_EQ(amdf_gpu_umd_kernel_queue_inactivate(queue_), failure);
+  EXPECT_EQ(amdf_gpu_umd_kernel_queue_destroy(queue_), failure);
+  queue_ = nullptr;
+  EXPECT_EQ(state_.destroy_count, 1u);
+  EXPECT_EQ(state_.live_allocation_count, 0u);
+}
+
 TEST_P(WindowsGpuKernelQueueTest, NotificationUsesCallerEventAndStableFence) {
   ASSERT_NO_FATAL_FAILURE(CreateNotificationEvent());
   EXPECT_EQ(amdf_gpu_umd_kernel_queue_query_notification_types(queue_),

@@ -124,6 +124,8 @@ struct iree_hal_amd_gpu_sdma_queue_t {
   } kernel;
   // Sticky removal error after a native destroy consumed its queue handle.
   amdf_status_t removal_status;
+  // Successful native stop replaces consumption/submission waits at teardown.
+  bool inactivated;
 };
 
 bool iree_hal_amd_gpu_sdma_queue_supports_cache_control(
@@ -136,13 +138,17 @@ bool iree_hal_amd_gpu_sdma_queue_supports_cache_control(
 static void iree_hal_amd_gpu_sdma_queue_fail(
     iree_hal_amd_gpu_sdma_queue_t* queue, amdf_status_t status) {
   int64_t expected = 0;
-  iree_atomic_compare_exchange_strong(
+  const bool first = iree_atomic_compare_exchange_strong(
       &queue->failure, &expected, (int64_t)status, iree_memory_order_release,
       iree_memory_order_relaxed);
   iree_atomic_fetch_or(&queue->observer, IREE_HAL_AMD_GPU_SDMA_OBSERVER_STOPPED,
                        iree_memory_order_acq_rel);
   iree_hal_amd_gpu_publication_notify(queue->publication,
                                       queue->publication_ordinal);
+  if (first) {
+    iree_hal_amd_gpu_context_fail_execution(queue->context, status,
+                                            "SDMA execution/publication");
+  }
 }
 
 // Only the deferred source reports failures after the completion owner stops.
@@ -152,9 +158,12 @@ static void iree_hal_amd_gpu_sdma_queue_fail(
 // wake.
 static void iree_hal_amd_gpu_sdma_queue_fail_copies(
     iree_hal_amd_gpu_sdma_queue_t* queue) {
-  if (queue->failure_delivered ||
-      iree_atomic_load(&queue->observer, iree_memory_order_acquire) !=
-          IREE_HAL_AMD_GPU_SDMA_OBSERVER_STOPPED) {
+  int32_t expected = IREE_HAL_AMD_GPU_SDMA_OBSERVER_STOPPED;
+  if (!iree_atomic_compare_exchange_strong(
+          &queue->observer, &expected,
+          IREE_HAL_AMD_GPU_SDMA_OBSERVER_STOPPED |
+              IREE_HAL_AMD_GPU_SDMA_OBSERVER_ACTIVE,
+          iree_memory_order_acquire, iree_memory_order_relaxed)) {
     return;
   }
   const amdf_status_t status = (amdf_status_t)iree_atomic_load(
@@ -163,12 +172,16 @@ static void iree_hal_amd_gpu_sdma_queue_fail_copies(
       (uint64_t)iree_atomic_load(&queue->retired, iree_memory_order_acquire);
   const uint64_t end =
       (uint64_t)iree_atomic_load(&queue->published, iree_memory_order_relaxed);
-  for (uint64_t i = begin; i != end; ++i) {
+  for (uint64_t i = begin; !queue->failure_delivered && i != end; ++i) {
     iree_hal_amd_gpu_sdma_copy_t* copy =
         queue->records[i & (IREE_HAL_AMD_GPU_SDMA_CAPACITY - 1)].copy;
     copy->notify(copy->user_data, status, IREE_HAL_AMD_GPU_SDMA_UNRETIRED);
   }
   queue->failure_delivered = true;
+  iree_atomic_fetch_and(&queue->observer,
+                        ~IREE_HAL_AMD_GPU_SDMA_OBSERVER_ACTIVE,
+                        iree_memory_order_release);
+  iree_hal_amd_gpu_context_wake_failure(queue->context);
 }
 
 static uint32_t* iree_hal_amd_gpu_sdma_fence(
@@ -394,7 +407,12 @@ static bool iree_hal_amd_gpu_sdma_queue_publish(void* user_data) {
     }
   }
   iree_hal_amd_gpu_sdma_queue_fail_copies(queue);
-  return iree_hal_amd_gpu_sdma_queue_handoff(queue, remainder, completed);
+  const bool ready =
+      iree_hal_amd_gpu_sdma_queue_handoff(queue, remainder, completed);
+  if (iree_atomic_load(&queue->failure, iree_memory_order_acquire)) {
+    iree_hal_amd_gpu_context_wake_failure(queue->context);
+  }
+  return ready;
 }
 
 void iree_hal_amd_gpu_sdma_queue_submit(iree_hal_amd_gpu_sdma_queue_t* queue,
@@ -529,6 +547,85 @@ bool iree_hal_amd_gpu_sdma_queue_is_idle(iree_hal_amd_gpu_sdma_queue_t* queue) {
               iree_atomic_load(&queue->retired, iree_memory_order_acquire));
 }
 
+bool iree_hal_amd_gpu_sdma_queue_is_host_idle(
+    iree_hal_amd_gpu_sdma_queue_t* queue) {
+  return !queue ||
+         (iree_hal_amd_gpu_publisher_is_idle(&queue->publisher) &&
+          !(iree_atomic_load(&queue->observer, iree_memory_order_acquire) &
+            IREE_HAL_AMD_GPU_SDMA_OBSERVER_ACTIVE));
+}
+
+bool iree_hal_amd_gpu_sdma_queue_try_inactivate(
+    iree_hal_amd_gpu_sdma_queue_t* queue, amdf_status_t* out_status) {
+  if (!queue) {
+    *out_status = AMDF_STATUS_OK;
+    return true;
+  }
+  if (!iree_hal_amd_gpu_publisher_try_acquire(&queue->publisher)) {
+    return false;
+  }
+  amdf_status_t status = queue->removal_status;
+  if (amdf_status_is_ok(status) && !queue->inactivated) {
+    status =
+        queue->user.queue
+            ? queue->context->gpu->user_queue_inactivate(queue->user.queue)
+            : queue->context->gpu->kernel_queue_inactivate(queue->kernel.queue);
+    if (amdf_status_is_ok(status)) {
+      queue->inactivated = true;
+    } else {
+      queue->removal_status = status;
+    }
+  }
+  *out_status = status;
+  if (iree_hal_amd_gpu_publisher_handoff(&queue->publisher, NULL)) {
+    iree_hal_amd_gpu_publication_notify(queue->publication,
+                                        queue->publication_ordinal);
+  }
+  return true;
+}
+
+bool iree_hal_amd_gpu_sdma_queue_retire_failed(
+    iree_hal_amd_gpu_sdma_queue_t* queue) {
+  if (!queue) {
+    return true;
+  }
+  IREE_ASSERT(queue->inactivated,
+              "failed copy retirement requires native access cessation");
+  if (!iree_hal_amd_gpu_publisher_try_acquire(&queue->publisher)) {
+    return false;
+  }
+  int32_t expected = IREE_HAL_AMD_GPU_SDMA_OBSERVER_STOPPED;
+  const bool acquired = iree_atomic_compare_exchange_strong(
+      &queue->observer, &expected,
+      IREE_HAL_AMD_GPU_SDMA_OBSERVER_STOPPED |
+          IREE_HAL_AMD_GPU_SDMA_OBSERVER_ACTIVE,
+      iree_memory_order_acquire, iree_memory_order_relaxed);
+  if (acquired) {
+    const amdf_status_t status = (amdf_status_t)iree_atomic_load(
+        &queue->failure, iree_memory_order_acquire);
+    const uint64_t end = (uint64_t)iree_atomic_load(&queue->published,
+                                                    iree_memory_order_acquire);
+    uint64_t position =
+        (uint64_t)iree_atomic_load(&queue->retired, iree_memory_order_relaxed);
+    for (; position != end; ++position) {
+      iree_hal_amd_gpu_sdma_copy_t* copy =
+          queue->records[position & (IREE_HAL_AMD_GPU_SDMA_CAPACITY - 1)].copy;
+      iree_atomic_store(&queue->retired, position + 1,
+                        iree_memory_order_release);
+      copy->notify(copy->user_data, status, IREE_HAL_AMD_GPU_SDMA_RETIRED);
+    }
+    queue->failure_delivered = true;
+    iree_atomic_fetch_and(&queue->observer,
+                          ~IREE_HAL_AMD_GPU_SDMA_OBSERVER_ACTIVE,
+                          iree_memory_order_release);
+  }
+  if (iree_hal_amd_gpu_publisher_handoff(&queue->publisher, NULL)) {
+    iree_hal_amd_gpu_publication_notify(queue->publication,
+                                        queue->publication_ordinal);
+  }
+  return acquired;
+}
+
 amdf_status_t iree_hal_amd_gpu_sdma_queue_free(
     iree_hal_amd_gpu_sdma_queue_t* queue) {
   if (!queue) {
@@ -539,10 +636,11 @@ amdf_status_t iree_hal_amd_gpu_sdma_queue_free(
   }
   const amdf_api_t* api = queue->context->api;
   amdf_status_t status = AMDF_STATUS_OK;
-  if (queue->user.queue && queue->user.position) {
+  if (!queue->inactivated && queue->user.queue && queue->user.position) {
     status = api->user_queue_wait_consumed(
         queue->user.queue, queue->user.position, AMDF_TIMEOUT_INFINITE, 0);
-  } else if (queue->kernel.queue && queue->kernel.last_submission) {
+  } else if (!queue->inactivated && queue->kernel.queue &&
+             queue->kernel.last_submission) {
     status = api->kernel_queue_wait(queue->kernel.queue,
                                     queue->kernel.last_submission,
                                     AMDF_TIMEOUT_INFINITE, 0);

@@ -18,6 +18,9 @@ enum {
 
 static void iree_hal_amd_gpu_aql_scratch_wake(
     iree_hal_amd_gpu_context_t* context) {
+  if (iree_hal_amd_gpu_context_wake_failure(context)) {
+    return;
+  }
   const amdf_status_t status = iree_hal_amd_gpu_context_signal(context);
   if (!amdf_status_is_ok(status)) {
     iree_hal_amd_gpu_context_report(context, status,
@@ -107,10 +110,15 @@ iree_status_t iree_hal_amd_gpu_aql_scratch_resume(
         .maximum_private_segment_byte_length =
             scratch->request.private_segment_byte_length,
         .maximum_wave_count = scratch->request.wave_count};
-    status = IREE_HAL_AMD_STATUS_FROM_AMDF(
+    const amdf_status_t native_status =
         scratch->growth->context->gpu->user_queue_resume_scratch(scratch->queue,
-                                                                 &binding),
-        "user_queue_resume_scratch");
+                                                                 &binding);
+    if (!amdf_status_is_ok(native_status)) {
+      iree_hal_amd_gpu_context_fail_execution(
+          scratch->growth->context, native_status, "user_queue_resume_scratch");
+    }
+    status = IREE_HAL_AMD_STATUS_FROM_AMDF(native_status,
+                                           "user_queue_resume_scratch");
   }
   iree_atomic_store(&scratch->phase,
                     iree_status_is_ok(status)
@@ -131,6 +139,15 @@ bool iree_hal_amd_gpu_aql_scratch_is_pending(
   return phase == IREE_HAL_AMD_GPU_AQL_SCRATCH_ACQUIRING ||
          phase == IREE_HAL_AMD_GPU_AQL_SCRATCH_READY ||
          phase == IREE_HAL_AMD_GPU_AQL_SCRATCH_RELEASING;
+}
+
+void iree_hal_amd_gpu_aql_scratch_abandon(
+    iree_hal_amd_gpu_aql_scratch_t* scratch) {
+  iree_status_free(scratch->status);
+  scratch->status = iree_ok_status();
+  iree_atomic_store(&scratch->phase, IREE_HAL_AMD_GPU_AQL_SCRATCH_FAILED,
+                    iree_memory_order_release);
+  iree_hal_amd_gpu_aql_scratch_wake(scratch->growth->context);
 }
 
 static void iree_hal_amd_gpu_aql_scratch_released(void* user_data) {

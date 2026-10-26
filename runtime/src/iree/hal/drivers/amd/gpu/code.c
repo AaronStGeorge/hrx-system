@@ -12,8 +12,12 @@
 #include "iree/hal/drivers/amd/status.h"
 
 struct iree_hal_amd_gpu_code_upload_t {
-  // Temporary native storage, released as soon as its last copy retires.
-  iree_hal_amd_fabric_memory_t memory;
+  // Loading caller plus accepted copy callbacks that still use this operation.
+  iree_atomic_int32_t remaining_users;
+  // Borrowed native owner, joined after the final transfer callback.
+  iree_hal_amd_gpu_context_t* context;
+  // Temporary staging followed by a target retained only on unretired failure.
+  iree_hal_amd_fabric_memory_t memories[2];
   // Native release never depends on allocating more host storage.
   iree_hal_amd_gpu_memory_release_t release;
   // Allocator owning this load state through native release completion.
@@ -46,8 +50,12 @@ void iree_hal_amd_gpu_code_upload_free(iree_hal_amd_gpu_context_t* context,
   if (!upload) {
     return;
   }
+  if (iree_atomic_fetch_sub(&upload->remaining_users, 1,
+                            iree_memory_order_acq_rel) != 1) {
+    return;
+  }
   iree_hal_amd_gpu_context_release_memory(
-      context, 1, &upload->memory,
+      context, upload->memories[1].handle ? 2 : 1, upload->memories,
       (iree_hal_amd_fabric_memory_release_callback_t){
           .fn = iree_hal_amd_gpu_code_upload_released, .user_data = upload},
       &upload->release);
@@ -68,6 +76,8 @@ iree_status_t iree_hal_amd_gpu_code_allocate(
   if (!resident->host_access) {
     IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, sizeof(*upload),
                                                (void**)&upload));
+    iree_atomic_store(&upload->remaining_users, 1, iree_memory_order_relaxed);
+    upload->context = context;
     upload->host_allocator = host_allocator;
     upload->byte_length = byte_length;
     iree_slim_mutex_initialize(&upload->mutex);
@@ -90,7 +100,7 @@ iree_status_t iree_hal_amd_gpu_code_allocate(
   if (iree_status_is_ok(status)) {
     *out_memory = memories[0];
     if (upload) {
-      upload->memory = memories[1];
+      upload->memories[0] = memories[1];
     }
     *out_upload = upload;
     *out_contents = iree_make_byte_span(memories[upload ? 1 : 0].contents.data,
@@ -138,13 +148,13 @@ static iree_status_t iree_hal_amd_gpu_code_prepare_copy(
       .type = AMDF_STRUCTURE_TYPE_MEMORY_SITE,
       .structure_size = sizeof(producer),
       .kind = AMDF_MEMORY_SITE_KIND_HOST,
-      .value.host.mapping = upload->memory.mapping,
+      .value.host.mapping = upload->memories[0].mapping,
   };
   amdf_memory_site_t consumer = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_SITE,
       .structure_size = sizeof(consumer),
       .kind = AMDF_MEMORY_SITE_KIND_DEVICE,
-      .value.device = {.memory = upload->memory.handle,
+      .value.device = {.memory = upload->memories[0].handle,
                        .queue_family_ordinal = transfer_family_ordinal},
   };
   amdf_memory_pair_info_t native = {
@@ -189,7 +199,7 @@ static iree_status_t iree_hal_amd_gpu_code_prepare_copy(
                             "code transfer queue lacks required cache control");
   }
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-      context->api->memory_query_address(upload->memory.handle, 0,
+      context->api->memory_query_address(upload->memories[0].handle, 0,
                                          AMDF_MEMORY_ADDRESS_GPU,
                                          &upload->copy.source),
       "query code staging address"));
@@ -209,6 +219,11 @@ static void iree_hal_amd_gpu_code_copy_complete(
   upload->completed = true;
   iree_notification_post(&upload->notification, IREE_ALL_WAITERS);
   iree_slim_mutex_unlock(&upload->mutex);
+  if (retirement == IREE_HAL_AMD_GPU_SDMA_RETIRED) {
+    // The loader can return after logical failure. Its native consumer keeps
+    // this record and any transferred target backing until access has stopped.
+    iree_hal_amd_gpu_code_upload_free(upload->context, upload);
+  }
 }
 
 static bool iree_hal_amd_gpu_code_copy_is_complete(void* user_data) {
@@ -227,7 +242,7 @@ iree_status_t iree_hal_amd_gpu_code_publish(
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_amd_gpu_code_upload_t* upload = *upload_ptr;
   *upload_ptr = NULL;
-  iree_hal_amd_fabric_memory_t* source = upload ? &upload->memory : memory;
+  iree_hal_amd_fabric_memory_t* source = upload ? &upload->memories[0] : memory;
   iree_status_t status = IREE_HAL_AMD_STATUS_FROM_AMDF(
       context->api->host_mapping_cache_control(source->mapping,
                                                AMDF_HOST_CACHE_OPERATION_FLUSH,
@@ -248,30 +263,30 @@ iree_status_t iree_hal_amd_gpu_code_publish(
     upload->copy.length = (uint32_t)iree_min(
         length - offset, IREE_HAL_AMD_GPU_SDMA_MAX_COPY_LENGTH);
     upload->completed = false;
+    iree_atomic_fetch_add(&upload->remaining_users, 1,
+                          iree_memory_order_relaxed);
     iree_hal_amd_gpu_sdma_queue_submit(queue, &upload->copy);
     iree_notification_await(&upload->notification,
                             iree_hal_amd_gpu_code_copy_is_complete, upload,
                             iree_infinite_timeout());
-    status = IREE_HAL_AMD_STATUS_FROM_AMDF(upload->status, "upload local code");
-    offset += upload->copy.length;
-    upload->copy.source += upload->copy.length;
-    upload->copy.target += upload->copy.length;
+    iree_slim_mutex_lock(&upload->mutex);
+    const amdf_status_t copy_status = upload->status;
+    if (upload->retirement == IREE_HAL_AMD_GPU_SDMA_UNRETIRED) {
+      // Rollback may destroy the failed executable as soon as this call
+      // returns. Move its existing target into the native copy's independent
+      // owner.
+      upload->memories[1] = *memory;
+      *memory = (iree_hal_amd_fabric_memory_t){.info = memory->info};
+    }
+    iree_slim_mutex_unlock(&upload->mutex);
+    status = IREE_HAL_AMD_STATUS_FROM_AMDF(copy_status, "upload local code");
+    if (iree_status_is_ok(status)) {
+      offset += upload->copy.length;
+      upload->copy.source += upload->copy.length;
+      upload->copy.target += upload->copy.length;
+    }
   }
-  if (upload && upload->retirement == IREE_HAL_AMD_GPU_SDMA_UNRETIRED) {
-    // Keep geometry for sanitizer rollback, but no failed executable may free
-    // native operands whose accepted copy has no retirement proof. The stopped
-    // SDMA owner keeps its context alive. Native memory/mapping handles remain
-    // allocated; the completed callback has returned host metadata ownership.
-    memory->handle = NULL;
-    memory->mapping = NULL;
-    memory->contents = iree_byte_span_empty();
-    iree_hal_amd_gpu_context_report(
-        context, upload->status,
-        "code upload retirement unproven; preserving native backing");
-    iree_hal_amd_gpu_code_upload_released(upload);
-  } else {
-    iree_hal_amd_gpu_code_upload_free(context, upload);
-  }
+  iree_hal_amd_gpu_code_upload_free(context, upload);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }

@@ -508,8 +508,14 @@ iree_runtime_cc_library(
 
 iree_runtime_cc_library(
     name = "queue",
-    srcs = ["queue.c"],
-    hdrs = ["queue.h"],
+    srcs = [
+        "lifecycle.c",
+        "queue.c",
+    ],
+    hdrs = [
+        "queue.h",
+        "state.h",
+    ],
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":backing",
@@ -644,6 +650,24 @@ iree_runtime_cc_test(
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:fixup",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue:recording",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "lifecycle_test",
+    srcs = ["lifecycle_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
+    deps = [
+        ":queue",
+        ":submission",
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/async:platform",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:capture_pool",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:publisher",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:semaphore",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -141,6 +141,7 @@ iree_cc_library(
   SRCS
     "file_staging.c"
   DEPS
+    ::file_completion
     amdf::headers
     iree::async
     iree::base
@@ -510,6 +511,7 @@ iree_cc_library(
     iree::hal
     iree::hal::drivers::amd::gpu::completion
     iree::hal::drivers::amd::gpu::context
+    iree::hal::drivers::amd::gpu::failure
     iree::hal::drivers::amd::gpu::profile
     iree::hal::drivers::amd::gpu::publication
     iree::hal::drivers::amd::gpu::tsan
@@ -1030,5 +1032,57 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+
+if(IREE_HAL_DRIVER_AMD_GPU)
+iree_cc_library(
+  NAME
+    file_completion
+  HDRS
+    "file_completion.h"
+  SRCS
+    "file_completion.c"
+  DEPS
+    amdf::headers
+    iree::async
+    iree::base
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU)
+iree_cc_test(
+  NAME
+    file_completion_test
+  SRCS
+    "file_completion_test.cc"
+  DEPS
+    ::file_completion
+    iree::async
+    iree::async::platform
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU)
+iree_cc_test(
+  NAME
+    membership_test
+  SRCS
+    "membership_test.cc"
+  DEPS
+    ::membership
+    ::program
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amd::gpu::completion
+    iree::hal::drivers::amd::gpu::failure
+    iree::hal::drivers::amd::gpu::publication
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -116,6 +116,9 @@ struct NativeQueue {
   static amdf_status_t AMDF_CALL Destroy(amdf_kernel_queue_t* queue) {
     return From(queue)->Call("destroy");
   }
+  static amdf_status_t AMDF_CALL Inactivate(amdf_kernel_queue_t* queue) {
+    return From(queue)->Call("inactivate");
+  }
   static amdf_status_t AMDF_CALL Allocate(
       amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
       amdf_memory_t** memory, amdf_memory_release_info_t* out_release_info) {
@@ -190,6 +193,7 @@ class KernelStorageTest : public ::testing::Test {
     api_.instance_destroy = [](amdf_instance_t*) { return AMDF_STATUS_OK; };
     gpu_.kernel_queue_create = NativeQueue::Create;
     gpu_.kernel_queue_submit = NativeQueue::Submit;
+    gpu_.kernel_queue_inactivate = NativeQueue::Inactivate;
     context_.api = &api_;
     context_.gpu = &gpu_;
     context_.device = reinterpret_cast<amdf_device_t*>(&native_);
@@ -373,6 +377,31 @@ TEST_F(KernelStorageTest, PartialConstructionPreservesItsCleanupOwner) {
     storage_ = nullptr;
     iree_hal_amd_gpu_context_join_memory(&context_);
   }
+}
+
+TEST_F(KernelStorageTest, InactivationJoinsUnreadCommandsBeforeBackingRelease) {
+  IREE_ASSERT_OK(Allocate());
+  Prepare();
+  ASSERT_EQ(iree_hal_amd_gpu_pm4_kmq_storage_submit(storage_, 0),
+            AMDF_STATUS_OK);
+  native_.fail_operation = "wait";
+  native_.failure = amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
+  native_.calls.clear();
+  EXPECT_EQ(iree_hal_amd_gpu_pm4_kmq_storage_inactivate(storage_),
+            AMDF_STATUS_OK);
+  EXPECT_TRUE(storage_->inactivated);
+  EXPECT_NE(storage_->queue, nullptr);
+  EXPECT_NE(storage_->memory.handle, nullptr);
+  EXPECT_EQ(storage_->last_submission, 17u);
+  EXPECT_EQ(native_.retired, 0u);
+  EXPECT_EQ(iree_hal_amd_gpu_pm4_kmq_storage_inactivate(storage_),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(iree_hal_amd_gpu_pm4_kmq_storage_free(storage_), AMDF_STATUS_OK);
+  storage_ = nullptr;
+  iree_hal_amd_gpu_context_join_memory(&context_);
+  EXPECT_EQ(native_.calls, (std::vector<std::string>{"inactivate", "destroy",
+                                                     "unmap", "free"}));
+  EXPECT_EQ(native_.waited, 0u);
 }
 
 }  // namespace

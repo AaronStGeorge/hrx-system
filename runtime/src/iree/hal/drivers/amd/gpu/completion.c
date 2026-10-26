@@ -121,26 +121,37 @@ static int iree_hal_amd_gpu_completion_main(void* user_data) {
       }
     }
     if (!amdf_status_is_ok(status)) {
-      // Exclude new helper drains before reporting failure. An already active
-      // source round joins before the terminal notification reaches sources.
-      iree_atomic_fetch_or(&completion->state,
-                           IREE_HAL_AMD_GPU_COMPLETION_STOP_REQUESTED,
-                           iree_memory_order_release);
       if (context->event) {
-        iree_hal_amd_gpu_context_report(context, status, "gpu.event_wait");
+        iree_hal_amd_gpu_context_fail_execution(context, status,
+                                                "gpu.event_wait");
       } else {
         iree_hal_amd_gpu_context_report_status(context, NULL, host_wait_status);
         iree_status_free(host_wait_status);
+        iree_hal_amd_gpu_context_fail_execution(context, status,
+                                                "kernel completion wait");
       }
-      iree_slim_mutex_lock(&completion->drain_mutex);
-      completion->failure = status;
-      iree_hal_amd_gpu_completion_drain(completion, status);
-      iree_slim_mutex_unlock(&completion->drain_mutex);
+      if (!context->execution_failure.notify) {
+        // A construction/test context may have no enclosing terminal owner.
+        iree_hal_amd_gpu_completion_request_failure(completion, status);
+      }
       break;
     }
   }
-  // Join an active helper before returning to the destruction owner; stopped
-  // helpers cannot enter another source round.
+  iree_slim_mutex_lock(&completion->drain_mutex);
+  const amdf_status_t failure =
+      iree_hal_amd_gpu_completion_query_status(completion);
+  if (!amdf_status_is_ok(failure)) {
+    // Join active helpers before the one terminal notification round. Native
+    // inactivation runs outside this mutex so CPU publishers can hand off.
+    iree_hal_amd_gpu_completion_drain(completion, failure);
+  }
+  iree_slim_mutex_unlock(&completion->drain_mutex);
+  if (!amdf_status_is_ok(failure) && context->execution_failure.join) {
+    context->execution_failure.join(context->execution_failure.user_data,
+                                    failure);
+  }
+  // Final release joins the terminal owner too; stopped helpers cannot enter
+  // another source round.
   iree_slim_mutex_lock(&completion->drain_mutex);
   iree_atomic_fetch_or(&completion->state, IREE_HAL_AMD_GPU_COMPLETION_STOPPED,
                        iree_memory_order_release);
@@ -198,10 +209,19 @@ void iree_hal_amd_gpu_completion_set_sources(
 
 amdf_status_t iree_hal_amd_gpu_completion_query_status(
     iree_hal_amd_gpu_completion_t* completion) {
-  iree_slim_mutex_lock(&completion->drain_mutex);
-  const amdf_status_t status = completion->failure;
-  iree_slim_mutex_unlock(&completion->drain_mutex);
-  return status;
+  return (amdf_status_t)iree_atomic_load(&completion->failure,
+                                         iree_memory_order_acquire);
+}
+
+void iree_hal_amd_gpu_completion_request_failure(
+    iree_hal_amd_gpu_completion_t* completion, amdf_status_t status) {
+  int64_t expected = 0;
+  iree_atomic_compare_exchange_strong(&completion->failure, &expected, status,
+                                      iree_memory_order_release,
+                                      iree_memory_order_relaxed);
+  iree_atomic_fetch_or(&completion->state,
+                       IREE_HAL_AMD_GPU_COMPLETION_STOP_REQUESTED,
+                       iree_memory_order_release);
 }
 
 amdf_status_t iree_hal_amd_gpu_completion_request_stop(

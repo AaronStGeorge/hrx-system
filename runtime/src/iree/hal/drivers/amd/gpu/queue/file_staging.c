@@ -9,6 +9,7 @@
 #include "iree/async/operations/scheduling.h"
 #include "iree/async/proactor.h"
 #include "iree/hal/drivers/amd/fabric/memory_transition.h"
+#include "iree/hal/drivers/amd/gpu/queue/file_completion.h"
 #include "iree/hal/drivers/amd/status.h"
 
 typedef struct iree_hal_amd_gpu_file_staging_block_t
@@ -67,19 +68,17 @@ typedef struct iree_hal_amd_gpu_file_staging_slot_t {
   union {
     // Placed native file request, reused only after its preceding use retires.
     iree_hal_amd_fabric_file_request_t io;
-    struct {
-      // Presecured terminal result delivered on the file's actual poll owner.
-      iree_async_nop_operation_t publication;
-      // Native queue failure converted by the receiving proactor.
-      amdf_status_t status;
-      // Whether accepted native consumers have relinquished this slot.
-      iree_hal_amd_gpu_sdma_retirement_t retirement;
-    } failure;
+    // Coalesced early-error and final-retirement handoff to the file owner.
+    iree_hal_amd_gpu_file_completion_t failure;
   };
   // Placed GPU copy, reused after native retirement.
   iree_hal_amd_gpu_sdma_copy_t copy;
   // Joins the submitting call and potentially immediate completion.
   iree_atomic_int32_t pending;
+  // Native notifications are serialized by SDMA's observer claim. The first
+  // failure switches io's union storage to the error handoff; healthy writes
+  // keep their prepared I/O request intact until the GPU copy completes.
+  bool failure_initialized;
   // Status transferred by completion to the final join.
   iree_status_t status;
   // Next step after both borrowers return.
@@ -397,17 +396,12 @@ static void iree_hal_amd_gpu_file_staging_step_completed(void* user_data,
   iree_hal_amd_gpu_file_staging_slot_join(slot);
 }
 
-static void iree_hal_amd_gpu_file_staging_copy_failed(
-    void* user_data, iree_async_operation_t* operation, iree_status_t status,
-    iree_async_completion_flags_t flags) {
+static void iree_hal_amd_gpu_file_staging_copy_failed(void* user_data,
+                                                      iree_status_t status,
+                                                      bool retired) {
   iree_hal_amd_gpu_file_staging_slot_t* slot = user_data;
   iree_hal_amd_gpu_file_staging_block_t* block = slot->block;
   iree_hal_amd_gpu_file_staging_t* staging = block->staging;
-  const iree_hal_amd_gpu_sdma_retirement_t retirement =
-      slot->failure.retirement;
-  status = iree_status_join(
-      IREE_HAL_AMD_STATUS_FROM_AMDF(slot->failure.status, "SDMA file copy"),
-      status);
   iree_slim_mutex_lock(&staging->mutex);
   const bool first_failure = iree_status_is_ok(staging->failure);
   if (first_failure) {
@@ -422,7 +416,7 @@ static void iree_hal_amd_gpu_file_staging_copy_failed(
   iree_hal_amd_gpu_file_staging_progress(staging);
   iree_hal_semaphore_list_fail(*slot->request->signals,
                                iree_status_clone(status));
-  if (retirement == IREE_HAL_AMD_GPU_SDMA_RETIRED) {
+  if (retired) {
     iree_hal_amd_gpu_file_staging_step_completed(slot, status);
   } else {
     // A failed observer/queue is not a retirement proof. Keep the callback's
@@ -442,14 +436,14 @@ static void iree_hal_amd_gpu_file_staging_copy_notified(
     IREE_TRACE_ZONE_END(z0);
     return;
   }
-  slot->failure.status = status;
-  slot->failure.retirement = retirement;
-  slot->failure.publication.base = (iree_async_operation_t){
-      .type = IREE_ASYNC_OPERATION_TYPE_NOP,
-      .completion_fn = iree_hal_amd_gpu_file_staging_copy_failed,
-      .user_data = slot};
-  IREE_CHECK_OK(iree_async_proactor_submit_one(
-      slot->request->bucket->proactor, &slot->failure.publication.base));
+  if (!slot->failure_initialized) {
+    slot->failure_initialized = true;
+    iree_hal_amd_gpu_file_completion_initialize(
+        slot->request->bucket->proactor,
+        iree_hal_amd_gpu_file_staging_copy_failed, slot, &slot->failure);
+  }
+  iree_hal_amd_gpu_file_completion_notify(
+      &slot->failure, status, retirement == IREE_HAL_AMD_GPU_SDMA_RETIRED);
   IREE_TRACE_ZONE_END(z0);
 }
 
@@ -501,6 +495,7 @@ static void iree_hal_amd_gpu_file_staging_copy(
       read ? slot->block->effects.read.bits : slot->block->effects.write.bits;
   slot->resume = read ? iree_hal_amd_gpu_file_staging_slot_finish
                       : iree_hal_amd_gpu_file_staging_downloaded;
+  slot->failure_initialized = false;
   iree_atomic_store(&slot->pending, 2, iree_memory_order_relaxed);
   iree_hal_amd_gpu_sdma_queue_submit(request->staging->queue, &slot->copy);
   iree_hal_amd_gpu_file_staging_slot_join(slot);

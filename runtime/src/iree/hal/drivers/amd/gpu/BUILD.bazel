@@ -31,7 +31,9 @@ iree_runtime_cc_library(
     name = "publication",
     srcs = ["publication.c"],
     hdrs = ["publication.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
+        ":failure",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/threading",
@@ -43,6 +45,7 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "publication_test",
     srcs = ["publication_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
     deps = [
         ":publication",
         "//runtime/src/iree/base",
@@ -62,6 +65,7 @@ iree_runtime_cc_library(
         ":code",
         ":completion",
         ":context",
+        ":device_failure",
         ":executable",
         ":feedback",
         ":profile",
@@ -127,6 +131,7 @@ iree_runtime_cc_test(
     deps = [
         ":code",
         ":context",
+        ":device_failure",
         ":publication",
         "//libamdf:headers",
         "//runtime/src/iree/base",
@@ -134,6 +139,8 @@ iree_runtime_cc_test(
         "//runtime/src/iree/base/threading",
         "//runtime/src/iree/hal/drivers/amd/fabric",
         "//runtime/src/iree/hal/drivers/amd/fabric:memory",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:membership",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue/aql:code",
         "//runtime/src/iree/hal/drivers/amd/gpu/queue/sdma:queue",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -479,5 +486,77 @@ iree_runtime_cc_benchmark(
         "//runtime/src/iree/hal/drivers/amd/gpu/image",
         "//runtime/src/iree/hal/drivers/amd/gpu/image:metadata",
         "//runtime/src/iree/testing:benchmark_main",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "failure",
+    srcs = ["failure.c"],
+    hdrs = ["failure.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
+    visibility = ["//runtime/src/iree/hal/drivers/amd/gpu:__subpackages__"],
+    deps = [
+        "//libamdf:headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "failure_test",
+    srcs = ["failure_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
+    deps = [
+        ":failure",
+        ":publication",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "device_failure",
+    srcs = ["device_failure.c"],
+    hdrs = ["device_failure.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
+    visibility = ["//runtime/src/iree/hal/drivers/amd/gpu:__pkg__"],
+    deps = [
+        ":completion",
+        ":context",
+        ":failure",
+        ":publication",
+        "//libamdf:headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd:status",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:membership",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue/aql:code",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue/sdma:queue",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "device_failure_test",
+    srcs = ["device_failure_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
+    deps = [
+        ":completion",
+        ":context",
+        ":device_failure",
+        ":publication",
+        "//runtime/src/iree/async/util:semaphore_wait",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:backing",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:host_wait",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:membership",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue:publisher",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue/pm4:queue",
+        "//runtime/src/iree/hal/drivers/amd/gpu/queue/pm4:submission",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )

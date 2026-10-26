@@ -33,6 +33,8 @@ class QueueTest : public ::testing::Test {
     // Whether the callback returned operand ownership.
     iree_hal_amd_gpu_sdma_retirement_t retirement =
         IREE_HAL_AMD_GPU_SDMA_UNRETIRED;
+    // Optional native stop proof required before returning accepted operands.
+    const bool* native_stopped = nullptr;
 
     Copy()
         : operation{
@@ -46,6 +48,10 @@ class QueueTest : public ::testing::Test {
                     ++self->notifications;
                     self->status = status;
                     self->retirement = retirement;
+                    if (self->native_stopped &&
+                        retirement == IREE_HAL_AMD_GPU_SDMA_RETIRED) {
+                      EXPECT_TRUE(*self->native_stopped);
+                    }
                   },
               .user_data = this,
           } {}
@@ -155,6 +161,20 @@ class QueueTest : public ::testing::Test {
     api_.kernel_queue_destroy = [](amdf_kernel_queue_t*) {
       return AMDF_STATUS_OK;
     };
+    gpu_.kernel_queue_inactivate = [](amdf_kernel_queue_t* queue) {
+      auto* self = reinterpret_cast<QueueTest*>(queue);
+      EXPECT_EQ(self->destroyed_, 0u);
+      ++self->native_stops_;
+      self->native_stopped_ = true;
+      return AMDF_STATUS_OK;
+    };
+    gpu_.user_queue_inactivate = [](amdf_user_queue_t* queue) {
+      auto* self = reinterpret_cast<QueueTest*>(queue);
+      EXPECT_EQ(self->destroyed_, 0u);
+      ++self->native_stops_;
+      self->native_stopped_ = true;
+      return AMDF_STATUS_OK;
+    };
     gpu_.user_queue_create = [](amdf_device_t* device,
                                 const amdf_gpu_user_queue_create_info_t* info,
                                 amdf_user_queue_t** queue) {
@@ -186,8 +206,7 @@ class QueueTest : public ::testing::Test {
     api_.user_queue_mapping_flush = [](amdf_user_queue_mapping_t* mapping) {
       auto* self = reinterpret_cast<QueueTest*>(mapping);
       ++self->user_.flush_count;
-      EXPECT_EQ(self->user_.write_index, 0u);
-      EXPECT_EQ(self->user_.doorbell, 0u);
+      EXPECT_EQ(self->user_.write_index, self->user_.doorbell);
       return self->user_.status;
     };
     api_.user_queue_wait_consumed = [](amdf_user_queue_t* queue, uint64_t,
@@ -316,6 +335,10 @@ class QueueTest : public ::testing::Test {
   iree_hal_amd_gpu_publication_t publication_ = {};
   // Production object under test.
   iree_hal_amd_gpu_sdma_queue_t* queue_ = nullptr;
+  // Number of native access-cessation calls made before final copy retirement.
+  uint32_t native_stops_ = 0;
+  // Access-cessation proof checked by operand-release callbacks.
+  bool native_stopped_ = false;
 };
 
 TEST_F(QueueTest,
@@ -422,6 +445,7 @@ TEST_F(QueueTest, FailureReportingJoinsAnActiveObserver) {
   hold_refresh_.store(true);
   std::thread observer([&] { Poll(); });
   entered_.acquire();
+  EXPECT_FALSE(iree_hal_amd_gpu_sdma_queue_is_host_idle(queue_));
   notification_status_ = amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL);
   iree_hal_amd_gpu_sdma_queue_submit(queue_, &copies[1].operation);
   Publish();
@@ -435,6 +459,46 @@ TEST_F(QueueTest, FailureReportingJoinsAnActiveObserver) {
     EXPECT_EQ(copy.notifications, 1u);
     EXPECT_EQ(copy.status, notification_status_);
     EXPECT_EQ(copy.retirement, IREE_HAL_AMD_GPU_SDMA_UNRETIRED);
+  }
+}
+
+TEST_F(QueueTest, NativeStopRetiresFaultedCopiesWithoutCompletionWrites) {
+  for (const auto mode :
+       {AMDF_QUEUE_PUBLICATION_MODE_USER, AMDF_QUEUE_PUBLICATION_MODE_KERNEL}) {
+    SCOPED_TRACE(mode);
+    ASSERT_NO_FATAL_FAILURE(Allocate(mode));
+    std::array<Copy, 2> copies;
+    for (auto& copy : copies) {
+      copy.native_stopped = &native_stopped_;
+      iree_hal_amd_gpu_sdma_queue_submit(queue_, &copy.operation);
+    }
+    const auto failure = amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
+    Poll(failure);
+    Publish();
+    EXPECT_TRUE(iree_hal_amd_gpu_sdma_queue_is_host_idle(queue_));
+    EXPECT_FALSE(iree_hal_amd_gpu_sdma_queue_is_idle(queue_));
+    for (auto& copy : copies) {
+      EXPECT_EQ(copy.retirement, IREE_HAL_AMD_GPU_SDMA_UNRETIRED);
+    }
+    amdf_status_t status = AMDF_STATUS_OK;
+    ASSERT_TRUE(iree_hal_amd_gpu_sdma_queue_try_inactivate(queue_, &status));
+    EXPECT_EQ(status, AMDF_STATUS_OK);
+    EXPECT_TRUE(iree_hal_amd_gpu_sdma_queue_retire_failed(queue_));
+    for (auto& copy : copies) {
+      EXPECT_EQ(copy.status, failure);
+      EXPECT_EQ(copy.retirement, IREE_HAL_AMD_GPU_SDMA_RETIRED);
+      EXPECT_EQ(copy.notifications, 2u);
+    }
+    EXPECT_TRUE(iree_hal_amd_gpu_sdma_queue_is_idle(queue_));
+    ASSERT_TRUE(iree_hal_amd_gpu_sdma_queue_try_inactivate(queue_, &status));
+    EXPECT_EQ(native_stops_, 1u);
+    EXPECT_TRUE(iree_hal_amd_gpu_sdma_queue_retire_failed(queue_));
+    user_.status = failure;
+    EXPECT_EQ(iree_hal_amd_gpu_sdma_queue_free(queue_), AMDF_STATUS_OK);
+    queue_ = nullptr;
+    native_stops_ = destroyed_ = 0;
+    native_stopped_ = false;
+    user_.status = AMDF_STATUS_OK;
   }
 }
 

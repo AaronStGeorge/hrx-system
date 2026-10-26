@@ -733,7 +733,9 @@ iree_cc_library(
     queue
   HDRS
     "queue.h"
+    "state.h"
   SRCS
+    "lifecycle.c"
     "queue.c"
   DEPS
     ::growth
@@ -832,6 +834,26 @@ iree_cc_library(
     iree::hal::drivers::amd::gpu::queue::user_queue
     iree::hal::drivers::amd::status
   PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU)
+iree_cc_test(
+  NAME
+    lifecycle_test
+  SRCS
+    "lifecycle_test.cc"
+  DEPS
+    ::queue
+    ::submission
+    iree::async
+    iree::async::platform
+    iree::hal
+    iree::hal::drivers::amd::gpu::queue::capture_pool
+    iree::hal::drivers::amd::gpu::queue::publisher
+    iree::hal::drivers::amd::gpu::queue::semaphore
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 endif()
 

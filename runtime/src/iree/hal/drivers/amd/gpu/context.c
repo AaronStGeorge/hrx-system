@@ -190,6 +190,23 @@ void iree_hal_amd_gpu_context_report(const iree_hal_amd_gpu_context_t* context,
                               operation);
 }
 
+void iree_hal_amd_gpu_context_fail_execution(
+    const iree_hal_amd_gpu_context_t* context, amdf_status_t status,
+    const char* operation) {
+  if (context->execution_failure.notify) {
+    context->execution_failure.notify(context->execution_failure.user_data,
+                                      status, operation);
+  } else {
+    iree_hal_amd_gpu_context_report(context, status, operation);
+  }
+}
+
+bool iree_hal_amd_gpu_context_wake_failure(
+    const iree_hal_amd_gpu_context_t* context) {
+  return context->execution_failure.wake &&
+         context->execution_failure.wake(context->execution_failure.user_data);
+}
+
 amdf_status_t iree_hal_amd_gpu_context_deinitialize_completion(
     iree_hal_amd_gpu_context_t* context) {
   if (context->event) {
@@ -362,7 +379,7 @@ iree_status_t iree_hal_amd_gpu_context_allocate(
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, IREE_HAL_AMD_STATUS_FROM_AMDF(
               fabric->api->query_extension(
-                  AMDF_EXTENSION_GPU, AMDF_GPU_EXTENSION_VERSION_3,
+                  AMDF_EXTENSION_GPU, AMDF_GPU_EXTENSION_VERSION_6,
                   AMDF_GPU_EXTENSION_VERSION_LATEST, &extension),
               "query_extension(GPU)"));
   iree_hal_amd_gpu_context_t* context = NULL;

@@ -82,6 +82,11 @@ amdf_status_t amdf_gpu_umd_kernel_queue_wait(
 amdf_status_t amdf_gpu_umd_kernel_queue_destroy(
     amdf_gpu_umd_kernel_queue_t* queue);
 
+// Stops native accesses without consuming library queue metadata. Retains
+// checked progress and never retries a native removal, including after failure.
+amdf_status_t amdf_gpu_umd_kernel_queue_inactivate(
+    amdf_gpu_umd_kernel_queue_t* queue);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

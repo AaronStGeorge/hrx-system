@@ -76,3 +76,9 @@ amdf_status_t amdf_gpu_umd_kernel_queue_destroy(
   (void)queue;
   return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
 }
+
+amdf_status_t amdf_gpu_umd_kernel_queue_inactivate(
+    amdf_gpu_umd_kernel_queue_t* queue) {
+  (void)queue;
+  return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+}
