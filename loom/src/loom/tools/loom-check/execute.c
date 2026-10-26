@@ -6,13 +6,10 @@
 
 #include "loom/tools/loom-check/execute.h"
 
-#include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
 #include "loom/error/json_sink.h"
 #include "loom/error/source.h"
-#include "loom/format/text/printer.h"
 #include "loom/pass/report.h"
-#include "loom/target/provider.h"
 #include "loom/target/reporting/format.h"
 #include "loom/tools/loom-check/comparison.h"
 #include "loom/tools/loom-check/compile.h"
@@ -360,19 +357,6 @@ typedef struct loom_check_pass_target_request_t {
   bool has_target;
 } loom_check_pass_target_request_t;
 
-static loom_text_print_flags_t loom_check_pass_print_flags(
-    const loom_test_case_t* test_case) {
-  loom_text_print_flags_t flags =
-      LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_PREFER_LOW_ASM;
-  if (iree_all_bits_set(test_case->output_flags, LOOM_TEST_OUTPUT_LOW_ASM)) {
-    flags |= LOOM_TEXT_PRINT_PRESERVE_LOW_ASM;
-  }
-  if (iree_all_bits_set(test_case->output_flags, LOOM_TEST_OUTPUT_LOCATIONS)) {
-    flags |= LOOM_TEXT_PRINT_LOCATIONS;
-  }
-  return flags;
-}
-
 // Compile options precede the pipeline, whose own pass options remain opaque
 // to this front door. A named pipeline starts with '@', so an explicit entry
 // uses entry=@function instead of overloading the pipeline spelling.
@@ -619,41 +603,33 @@ static iree_status_t loom_check_execute_pass_with_output(
     loom_output_stream_for_builder(&result->actual_output, &output_stream);
     status = loom_pass_report_format_json(&pass_report, &output_stream);
   } else if (emit_output) {
-    // Inspect the transformed IR, not the durable export projection that
-    // materializes retained target contexts as additional definitions.
-    loomc_module_interop_view_t view = {0};
-    status = loom_check_compile_project_module(module, &diagnostic_collector,
-                                               allocator, &view, &verified);
-    const loom_target_low_descriptor_registry_t low_registry =
-        loom_target_environment_low_descriptor_registry(
-            environment->target_environment);
-    loom_text_low_asm_environment_t low_asm_environment = {0};
-    loom_low_descriptor_text_asm_environment_initialize(&low_registry.registry,
-                                                        &low_asm_environment);
-    const loom_text_print_options_t print_options = {
-        .flags = loom_check_pass_print_flags(test_case),
-        .low_asm_environment = low_asm_environment,
+    const loomc_module_serialize_options_t print_options = {
+        .type = LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS,
+        .structure_size = sizeof(print_options),
+        .format = LOOMC_SOURCE_FORMAT_TEXT,
+        .text_presentation =
+            iree_all_bits_set(test_case->output_flags, LOOM_TEST_OUTPUT_LOW_ASM)
+                ? LOOMC_MODULE_TEXT_PRESENTATION_PRESERVE
+                : LOOMC_MODULE_TEXT_PRESENTATION_DEFAULT,
+        .print_locations = iree_all_bits_set(test_case->output_flags,
+                                             LOOM_TEST_OUTPUT_LOCATIONS),
     };
-    if (iree_status_is_ok(status) && verified) {
-      status = loom_text_print_module_to_builder_with_options(
-          view.module, &result->actual_output, &print_options);
+    loomc_source_t* printed = NULL;
+    status = iree_status_from_loomc(loomc_module_print_text_to_source(
+        module, &print_options, public_allocator, &printed));
+    if (iree_status_is_ok(status)) {
+      const loomc_byte_span_t contents = loomc_source_contents(printed);
+      status = iree_string_builder_append_string(
+          &result->actual_output,
+          iree_make_string_view((const char*)contents.data,
+                                contents.data_length));
     }
-    if (iree_status_is_ok(status) && verified) {
+    loomc_source_release(printed);
+    if (iree_status_is_ok(status)) {
       bool valid_output = false;
-      const loomc_module_serialize_options_t reprint_options = {
-          .type = LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS,
-          .structure_size = sizeof(reprint_options),
-          .format = LOOMC_SOURCE_FORMAT_TEXT,
-          .text_presentation = iree_all_bits_set(test_case->output_flags,
-                                                 LOOM_TEST_OUTPUT_LOW_ASM)
-                                   ? LOOMC_MODULE_TEXT_PRESENTATION_PRESERVE
-                                   : LOOMC_MODULE_TEXT_PRESENTATION_DEFAULT,
-          .print_locations = iree_all_bits_set(test_case->output_flags,
-                                               LOOM_TEST_OUTPUT_LOCATIONS),
-      };
       status = loom_check_validate_printed_ir(
           iree_string_builder_view(&result->actual_output), session, block_pool,
-          &reprint_options, result, &valid_output);
+          &print_options, result, &valid_output);
       if (iree_status_is_ok(status) && !valid_output) {
         result->raw_outcome = LOOM_CHECK_FAIL;
         emit_output = false;

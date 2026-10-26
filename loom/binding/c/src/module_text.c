@@ -105,6 +105,28 @@ loomc_status_t loomc_module_deserialize_text_from_source(
   return return_status;
 }
 
+loomc_status_t loomc_module_print_text_to_source(
+    const loomc_module_t* module,
+    const loomc_module_serialize_options_t* options,
+    loomc_allocator_t allocator, loomc_source_t** out_source) {
+  if (out_source == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_source must not be NULL");
+  }
+  *out_source = NULL;
+  loomc_module_resolved_serialize_options_t resolved_options = {0};
+  LOOMC_RETURN_IF_ERROR(loomc_module_resolve_serialize_options(
+      options, LOOMC_SOURCE_FORMAT_TEXT, &resolved_options));
+  const loom_module_t* internal_module = NULL;
+  LOOMC_RETURN_IF_ERROR(
+      loomc_module_require_internal(module, &internal_module));
+  IREE_TRACE_ZONE_BEGIN(z0);
+  loomc_status_t status = loomc_module_encode_text_source(
+      module, internal_module, &resolved_options, allocator, out_source);
+  IREE_TRACE_ZONE_END(z0);
+  return status;
+}
+
 loomc_status_t loomc_module_serialize_text_to_source(
     const loomc_module_t* module,
     const loomc_module_serialize_options_t* options,

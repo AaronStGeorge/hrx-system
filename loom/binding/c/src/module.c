@@ -234,7 +234,7 @@ loomc_status_t loomc_module_validate_serialize_options(
   return loomc_ok_status();
 }
 
-static loomc_status_t loomc_module_resolve_serialize_options(
+loomc_status_t loomc_module_resolve_serialize_options(
     const loomc_module_serialize_options_t* options,
     loomc_source_format_t required_format,
     loomc_module_resolved_serialize_options_t* out_options) {
@@ -453,7 +453,7 @@ loomc_status_t loomc_module_deserialize_explicit_source(
                                            &state, out_module, out_result);
 }
 
-static loomc_status_t loomc_module_require_internal(
+loomc_status_t loomc_module_require_internal(
     const loomc_module_t* module, const loom_module_t** out_internal_module) {
   if (module == NULL || out_internal_module == NULL) {
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,

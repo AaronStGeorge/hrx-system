@@ -339,7 +339,7 @@ typedef enum loomc_module_text_presentation_e {
   LOOMC_MODULE_TEXT_PRESENTATION_GENERIC = 1,
 
   /// Require descriptor-backed target-low assembly syntax for every
-  /// self-describing target-low function. Serialization fails when a function
+  /// self-describing target-low function. Text output fails when a function
   /// has no lossless assembly spelling for its representation contract.
   LOOMC_MODULE_TEXT_PRESENTATION_LOW_ASM = 2,
 
@@ -348,7 +348,7 @@ typedef enum loomc_module_text_presentation_e {
   LOOMC_MODULE_TEXT_PRESENTATION_PRESERVE = 3,
 } loomc_module_text_presentation_t;
 
-/// Module serialization options.
+/// Module serialization and current-IR text presentation options.
 ///
 /// Callers zero-initialize this descriptor, set `type` to
 /// `LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS`, set `structure_size` to
@@ -756,6 +756,40 @@ LOOMC_API_EXPORT bool loomc_module_function_try_get_export_info(
 LOOMC_API_EXPORT loomc_status_t loomc_module_function_get_export_info(
     const loomc_module_t* module, const loomc_module_function_t* function,
     loomc_module_function_export_info_t* out_info);
+
+/// Prints the current module IR as textual `.loom` for inspection.
+///
+/// Printing observes the IR as it stands, without materializing target facts
+/// retained by earlier compilation. Unlike serialization, this text is not a
+/// self-contained export of the module's compilation state. Use
+/// `loomc_module_serialize_text_to_source` when saving a module for replay in
+/// another context. Printing remains available when a retained target cannot
+/// be materialized for export.
+///
+/// This entry point does not add text dependencies to the bytecode APIs.
+/// Link-time optimization can omit the text printer when no used API selects
+/// text output.
+///
+/// @param module Module to inspect, without modifying its IR or target state.
+/// @param options Text presentation, location, and source identifier options.
+/// `NULL` selects defaults. `format` must be unknown or text.
+/// @param allocator Host allocator used for source-owned storage.
+/// @param out_source Receives one retained text source on success, or NULL on
+/// failure.
+/// @return OK when printing succeeded.
+///
+/// @ownership
+/// The caller owns the returned source and releases it with
+/// `loomc_source_release`. Its bytes remain valid independently of the module,
+/// workspace, and context until the source is released.
+///
+/// @thread_safety
+/// Printing is read-only. Concurrent printing of the same module is valid when
+/// the caller guarantees that no mutating operation is active.
+LOOMC_API_EXPORT loomc_status_t loomc_module_print_text_to_source(
+    const loomc_module_t* module,
+    const loomc_module_serialize_options_t* options,
+    loomc_allocator_t allocator, loomc_source_t** out_source);
 
 /// Serializes a module into an immutable source handle.
 ///

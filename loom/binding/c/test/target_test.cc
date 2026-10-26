@@ -1904,6 +1904,10 @@ TEST(TargetTest, RejectsSerializationWithoutATargetMaterializer) {
     WorkspacePtr workspace = CreateWorkspace();
     ModulePtr module =
         CreateIdentityModule(context.get(), workspace.get(), "entry");
+    loomc_source_t* raw_printed_source = nullptr;
+    LOOMC_ASSERT_OK(loomc_module_print_text_to_source(
+        module.get(), nullptr, loomc_allocator_system(), &raw_printed_source));
+    SourcePtr original_text(raw_printed_source);
     loomc_result_t* result = nullptr;
     loomc_status_t status = loomc_compile_module(
         compiler.get(), workspace.get(), pass_program.get(), module.get(),
@@ -1933,6 +1937,21 @@ TEST(TargetTest, RejectsSerializationWithoutATargetMaterializer) {
                                loomc_allocator_system(), &serialized_source));
     EXPECT_EQ(serialized_source, nullptr);
     EXPECT_NE(loomc_module_function_versions(module.get()), nullptr);
+
+    LOOMC_ASSERT_OK(loomc_module_print_text_to_source(
+        module.get(), &serialize_options, loomc_allocator_system(),
+        &raw_printed_source));
+    SourcePtr printed_text(raw_printed_source);
+    EXPECT_EQ(ToString(loomc_source_identifier(printed_text.get())),
+              "module.loom");
+    const auto original_contents = loomc_source_contents(original_text.get());
+    const auto printed_contents = loomc_source_contents(printed_text.get());
+    ASSERT_EQ(printed_contents.data_length, original_contents.data_length);
+    EXPECT_EQ(memcmp(printed_contents.data, original_contents.data,
+                     printed_contents.data_length),
+              0);
+    EXPECT_EQ(loomc_module_function_versions(module.get()), function_versions);
+    EXPECT_EQ(function_versions->count, 1u);
 
     WorkspacePtr clone_workspace = CreateWorkspace();
     loomc_module_t* clone = nullptr;
