@@ -818,16 +818,6 @@ typedef struct loom_low_lower_report_row_list_t {
   iree_host_size_t count;
 } loom_low_lower_report_row_list_t;
 
-// Owned contiguous storage for source-memory packet report rows.
-typedef struct loom_low_lower_memory_report_row_list_t {
-  // Allocated source-memory packet report rows, or NULL when empty.
-  loom_low_lower_memory_report_row_t* rows;
-  // Number of rows stored in |rows|.
-  iree_host_size_t count;
-  // Maximum number of rows that fit in |rows|.
-  iree_host_size_t capacity;
-} loom_low_lower_memory_report_row_list_t;
-
 // Returns mutable row storage for |vec|.
 static inline loom_low_lower_report_row_t* loom_low_lower_report_row_vec_rows(
     loom_low_lower_report_row_vec_t* vec) {
@@ -839,6 +829,13 @@ static inline const loom_low_lower_report_row_t*
 loom_low_lower_report_row_vec_const_rows(
     const loom_low_lower_report_row_vec_t* vec) {
   return (const loom_low_lower_report_row_t*)(vec + 1);
+}
+
+// Returns immutable source-memory row storage for |vec|.
+static inline const loom_low_lower_memory_report_row_t*
+loom_low_lower_memory_report_row_vec_const_rows(
+    const loom_low_lower_report_row_vec_t* vec) {
+  return (const loom_low_lower_memory_report_row_t*)(vec + 1);
 }
 
 typedef iree_status_t (*loom_low_lower_select_op_fn_t)(
@@ -1201,14 +1198,14 @@ typedef struct loom_low_lower_report_t {
   uint64_t selected_source_op_count;
   // Reported number of low operations emitted from source operation selections.
   uint64_t emitted_low_op_count;
-  // Allocator owning this record and its selection row blocks.
+  // Allocator owning this record.
   iree_allocator_t allocator;
-  // Allocator owning the contiguous memory row array.
-  iree_allocator_t memory_row_allocator;
+  // Arena owning temporary row blocks until the result is deinitialized.
+  iree_arena_allocator_t row_arena;
   // Selection decisions with instruction counts attached during emission.
   loom_low_lower_report_row_list_t rows;
   // Planned source-memory packet descriptions.
-  loom_low_lower_memory_report_row_list_t memory_rows;
+  loom_low_lower_report_row_list_t memory_rows;
 } loom_low_lower_report_t;
 
 typedef struct loom_low_lower_result_t {
