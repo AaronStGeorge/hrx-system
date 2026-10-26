@@ -30,6 +30,7 @@ extern "C" {
 // retaining their own entry mappings and direct launch configurations.
 // Prepared stages retain their executables independently of catalog lifetime.
 typedef struct loom_serve_jit_t loom_serve_jit_t;
+typedef struct loom_serve_jit_cache_t loom_serve_jit_cache_t;
 typedef struct loom_serve_jit_stage_t loom_serve_jit_stage_t;
 
 // Loads and indexes the explicit text/bytecode providers once. Source views
@@ -52,6 +53,18 @@ iree_status_t loom_serve_jit_create(iree_hal_device_t* device,
                                     loom_serve_compilation_report_t* report,
                                     iree_allocator_t host_allocator,
                                     loom_serve_jit_t** out_jit);
+
+// Creates a model-local catalog whose immutable completed products participate
+// in the device-owned cache. Source contents, selected configuration,
+// sanitizer semantics, stage specializations, and VM entry roots form exact
+// identities; authored locator or card pointer identity never authorizes a
+// hit. The catalog still owns its compiler workspace, publication/report, and
+// callbacks independently of every other model.
+iree_status_t loom_serve_jit_create_cached(
+    loom_serve_jit_cache_t* cache, loom_serve_host_t* host,
+    const loom_serve_sources_t* sources,
+    const loomc_sanitizer_options_t* sanitizer,
+    loom_serve_compilation_report_t* report, loom_serve_jit_t** out_jit);
 
 // Retains catalog ownership without retaining its borrowed host or report.
 void loom_serve_jit_retain(loom_serve_jit_t* jit);
@@ -175,6 +188,8 @@ iree_status_t loom_serve_jit_compile(loom_serve_jit_t* jit,
                                      iree_string_view_t root,
                                      const loomc_config_options_t* config,
                                      loom_serve_jit_stage_t** out_stage);
+void loom_serve_jit_stage_retain(loom_serve_jit_stage_t* stage);
+bool loom_serve_jit_stage_is_shared(const loom_serve_jit_stage_t* stage);
 void loom_serve_jit_stage_free(loom_serve_jit_stage_t* stage);
 // Requested host bytes owned by this stage, excluding its shared native code
 // and any independently recorded command. Does not inspect a source catalog.
@@ -213,6 +228,15 @@ iree_status_t loom_serve_jit_compile_vm(
     const loom_serve_sources_t* sources, iree_string_view_t source_path,
     iree_host_size_t root_count, const iree_string_view_t* roots,
     loom_serve_compilation_report_t* report, iree_allocator_t host_allocator,
+    iree_const_byte_span_t* out_image);
+
+// Compiles or reuses a VM image in jit's exact source generation. Every hit
+// returns independently owned bytes for a fresh VM module and replays the
+// original diagnostic evidence into jit's model-local report.
+iree_status_t loom_serve_jit_compile_vm_cached(
+    loom_serve_jit_t* jit, const loom_serve_sources_t* sources,
+    iree_string_view_t source_path, iree_host_size_t root_count,
+    const iree_string_view_t* roots, iree_allocator_t host_allocator,
     iree_const_byte_span_t* out_image);
 
 #ifdef __cplusplus

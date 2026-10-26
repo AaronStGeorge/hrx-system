@@ -263,17 +263,15 @@ static iree_status_t loom_serve_finite_prepare(
   }
   iree_vm_variant_t results[7] = {0};
   if (iree_status_is_ok(status)) {
-    status = loom_serve_preparation_allocate(
-        loom_serve_host_target_environment(
-            loom_serve_device_host(model->owner)),
-        model->control.environment, &options->sources, options->sources.prepare,
-        IREE_SV("prepare"),
+    status = loom_serve_preparation_allocate_cached(
+        model->jit, model->control.environment, &options->sources,
+        options->sources.prepare, IREE_SV("prepare"),
         LOOM_SERVE_PREPARATION_FLAG_PARAMETERS |
             LOOM_SERVE_PREPARATION_FLAG_MEMORY_FORECAST,
         iree_vm_variant_span_from_array(arguments),
         iree_vm_variant_span_from_array(results),
-        (iree_vm_module_span_t){modules, 2}, &model->compilation,
-        host_allocator, &model->preparation);
+        (iree_vm_module_span_t){modules, 2}, host_allocator,
+        &model->preparation);
   }
   int64_t capacities[4] = {0};
   for (iree_host_size_t i = 0; i < 4 && iree_status_is_ok(status); ++i) {
@@ -611,6 +609,9 @@ static iree_status_t loom_serve_finite_load_prepare(
   model->specialization_cache = load->options.specialization_cache;
   const iree_allocator_t host_allocator = model->host_allocator;
   IREE_RETURN_IF_ERROR(
+      loom_serve_device_create_jit(model->owner, &load->options.sources, NULL,
+                                   &model->compilation, &model->jit));
+  IREE_RETURN_IF_ERROR(
       loom_serve_finite_prepare(model, &load->options, load->event.wake,
                                 load->event.user_data, &load->tokenizer_load));
   const loom_model_file_list_t* paths = NULL;
@@ -630,17 +631,12 @@ static iree_status_t loom_serve_finite_load_prepare(
       loom_serve_preparation_memory_forecast(model->preparation);
   const iree_string_view_list_t additional_roots = {
       !iree_string_view_is_empty(forecast), &forecast};
-  iree_status_t status = loom_serve_program_compile_service(
-      loom_serve_host_target_environment(loom_serve_device_host(model->owner)),
-      model->control.environment, &load->options.sources,
+  iree_status_t status = loom_serve_program_compile_service_cached(
+      model->jit, model->control.environment, &load->options.sources,
       load->options.sources.control, IREE_ARRAYSIZE(roles), roles,
-      additional_roots, &model->compilation, host_allocator, &load->module);
+      additional_roots, host_allocator, &load->module);
   IREE_RETURN_IF_ERROR(status);
-  return loom_serve_jit_create(
-      loom_serve_device_handle(model->owner),
-      loom_serve_device_dispatch_queue(model->owner),
-      loom_serve_device_host(model->owner), &load->options.sources, NULL,
-      &model->compilation, host_allocator, &model->jit);
+  return iree_ok_status();
 }
 
 static void loom_serve_finite_load_execute(loomc_task_t* task,

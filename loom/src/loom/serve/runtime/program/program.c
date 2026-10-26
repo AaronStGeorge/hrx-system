@@ -45,6 +45,19 @@ void loom_serve_program_free(loom_serve_program_t* program) {
   iree_allocator_free(program->host_allocator, program);
 }
 
+static iree_status_t loom_serve_program_module_create(
+    iree_vm_environment_t* environment, iree_const_byte_span_t image,
+    iree_allocator_t host_allocator, iree_vm_module_t** out_module) {
+  iree_status_t status = iree_vm_bytecode_module_create_trusted(
+      environment, IREE_SV("model"),
+      (iree_vm_bytecode_module_storage_t){image, host_allocator},
+      host_allocator, out_module);
+  if (!iree_status_is_ok(status)) {
+    iree_allocator_free(host_allocator, (void*)image.data);
+  }
+  return status;
+}
+
 iree_status_t loom_serve_program_compile(
     loomc_target_environment_t* target_environment,
     iree_vm_environment_t* environment, const loom_serve_sources_t* sources,
@@ -59,13 +72,27 @@ iree_status_t loom_serve_program_compile(
       target_environment, sources, source_path, root_count, roots, report,
       host_allocator, &image);
   if (iree_status_is_ok(status)) {
-    status = iree_vm_bytecode_module_create_trusted(
-        environment, IREE_SV("model"),
-        (iree_vm_bytecode_module_storage_t){image, host_allocator},
-        host_allocator, out_module);
-    if (!iree_status_is_ok(status)) {
-      iree_allocator_free(host_allocator, (void*)image.data);
-    }
+    status = loom_serve_program_module_create(environment, image,
+                                              host_allocator, out_module);
+  }
+  IREE_TRACE_ZONE_END(z0);
+  return status;
+}
+
+static iree_status_t loom_serve_program_compile_cached(
+    loom_serve_jit_t* jit, iree_vm_environment_t* environment,
+    const loom_serve_sources_t* sources, iree_string_view_t source_path,
+    iree_host_size_t root_count, const iree_string_view_t* roots,
+    iree_allocator_t host_allocator, iree_vm_module_t** out_module) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  IREE_TRACE_ZONE_APPEND_TEXT(z0, source_path.data, source_path.size);
+  *out_module = NULL;
+  iree_const_byte_span_t image = iree_const_byte_span_empty();
+  iree_status_t status = loom_serve_jit_compile_vm_cached(
+      jit, sources, source_path, root_count, roots, host_allocator, &image);
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_program_module_create(environment, image,
+                                              host_allocator, out_module);
   }
   IREE_TRACE_ZONE_END(z0);
   return status;
@@ -116,8 +143,8 @@ static iree_status_t loom_serve_program_service_names(
   return iree_ok_status();
 }
 
-iree_status_t loom_serve_program_compile_service(
-    loomc_target_environment_t* target_environment,
+static iree_status_t loom_serve_program_compile_service_impl(
+    loom_serve_jit_t* jit, loomc_target_environment_t* target_environment,
     iree_vm_environment_t* environment, const loom_serve_sources_t* sources,
     iree_string_view_t source_path, iree_host_size_t root_count,
     const iree_string_view_t* roles, iree_string_view_list_t additional_roots,
@@ -144,15 +171,43 @@ iree_status_t loom_serve_program_compile_service(
     }
   }
   if (iree_status_is_ok(status)) {
-    status = loom_serve_program_compile(
-        target_environment, environment, sources, source_path,
-        root_count + additional_roots.count,
-        combined_roots ? combined_roots : (names ? names : roles), report,
-        host_allocator, out_module);
+    const iree_string_view_t* roots =
+        combined_roots ? combined_roots : (names ? names : roles);
+    status = jit ? loom_serve_program_compile_cached(
+                       jit, environment, sources, source_path,
+                       root_count + additional_roots.count, roots,
+                       host_allocator, out_module)
+                 : loom_serve_program_compile(
+                       target_environment, environment, sources, source_path,
+                       root_count + additional_roots.count, roots, report,
+                       host_allocator, out_module);
   }
   iree_allocator_free(host_allocator, combined_roots);
   iree_allocator_free(host_allocator, names);
   return status;
+}
+
+iree_status_t loom_serve_program_compile_service(
+    loomc_target_environment_t* target_environment,
+    iree_vm_environment_t* environment, const loom_serve_sources_t* sources,
+    iree_string_view_t source_path, iree_host_size_t root_count,
+    const iree_string_view_t* roles, iree_string_view_list_t additional_roots,
+    loom_serve_compilation_report_t* report, iree_allocator_t host_allocator,
+    iree_vm_module_t** out_module) {
+  return loom_serve_program_compile_service_impl(
+      NULL, target_environment, environment, sources, source_path, root_count,
+      roles, additional_roots, report, host_allocator, out_module);
+}
+
+iree_status_t loom_serve_program_compile_service_cached(
+    loom_serve_jit_t* jit, iree_vm_environment_t* environment,
+    const loom_serve_sources_t* sources, iree_string_view_t source_path,
+    iree_host_size_t root_count, const iree_string_view_t* roles,
+    iree_string_view_list_t additional_roots, iree_allocator_t host_allocator,
+    iree_vm_module_t** out_module) {
+  return loom_serve_program_compile_service_impl(
+      jit, NULL, environment, sources, source_path, root_count, roles,
+      additional_roots, NULL, host_allocator, out_module);
 }
 
 iree_status_t loom_serve_program_link_service(

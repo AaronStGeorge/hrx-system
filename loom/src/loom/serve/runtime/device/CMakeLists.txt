@@ -29,6 +29,7 @@ loom_cc_library(
     loom::serve::runtime::execution::workspace
     loom::serve::runtime::host
     loom::serve::runtime::parameter::residency
+    loom::serve::runtime::program::jit
     loom::serve::runtime::storage::memory
     loom::serve::runtime::storage::virtual_pool
   PUBLIC

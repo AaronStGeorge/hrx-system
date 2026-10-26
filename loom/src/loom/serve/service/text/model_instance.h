@@ -33,6 +33,8 @@ struct loom_serve_text_model_t {
   iree_allocator_t host_allocator;
   // Source-owned metadata and bytecode, independent of native model bindings.
   loom_serve_text_source_t source;
+  // Model-local diagnostics and work evidence from VM and native compilation.
+  loom_serve_compilation_report_t compilation;
   // Borrowed shared owner outliving every model resource and host I/O payload.
   loom_serve_device_t* device_owner;
   // GPU device and allocation domain borrowed from device_owner.

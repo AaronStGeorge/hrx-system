@@ -135,11 +135,8 @@ static void loom_serve_stage_set_execute(loomc_task_t* task,
   loom_serve_stage_set_job_t* job =
       (loom_serve_stage_set_job_t*)((uint8_t*)task -
                                     offsetof(loom_serve_stage_set_job_t, task));
-  job->status = loom_serve_jit_create(
-      loom_serve_device_handle(job->device),
-      loom_serve_device_dispatch_queue(job->device),
-      loom_serve_device_host(job->device), &job->sources, NULL,
-      &job->stages->compilation, job->stages->host_allocator, &job->jit);
+  job->status = loom_serve_device_create_jit(
+      job->device, &job->sources, NULL, &job->stages->compilation, &job->jit);
 }
 
 static void loom_serve_stage_set_release(loomc_task_t* task) {

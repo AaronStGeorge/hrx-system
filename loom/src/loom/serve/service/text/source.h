@@ -12,7 +12,6 @@
 #include "iree/vm/environment.h"
 #include "iree/vm/module.h"
 #include "loom/serve/runtime/parameter/sources.h"
-#include "loom/serve/runtime/program/compilation.h"
 #include "loom/serve/runtime/program/preparation.h"
 #include "loom/serve/service/text/model.h"
 #include "loom/serve/service/text/storage.h"
@@ -22,6 +21,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_serve_jit_t loom_serve_jit_t;
+
 // Source-owned preparation, independent of device bindings and invocation.
 // Private construction may run on a shared worker; the model retains this
 // representation and its descriptor tables through all warm program consumers.
@@ -30,8 +31,6 @@ typedef struct loom_serve_text_source_t {
   loom_serve_text_mode_t mode;
   // Allocation policy for source-owned metadata and bytecode.
   iree_allocator_t host_allocator;
-  // Copied diagnostics, extended by subsequent native stage compilation.
-  loom_serve_compilation_report_t compilation;
   // Construction registry for canonical VM/HAL reference descriptors.
   iree_vm_environment_t* environment;
   // Resolved byte-buffer reference descriptors.
@@ -67,11 +66,10 @@ typedef struct loom_serve_text_source_t {
 // failure and must be deinitialized by their owners. No device memory, queue
 // submission or shared pool mutation occurs. Option views are borrowed only
 // through this call; source-returned state may retain its own copied inputs.
-// target_environment supplies the native source grammar and VM compilation.
+// jit supplies the source grammar, model-local report, and immutable VM cache.
 iree_status_t loom_serve_text_source_initialize(
-    loomc_target_environment_t* target_environment,
-    const loom_serve_text_options_t* options, iree_allocator_t host_allocator,
-    loom_serve_text_source_t* out_source,
+    loom_serve_jit_t* jit, const loom_serve_text_options_t* options,
+    iree_allocator_t host_allocator, loom_serve_text_source_t* out_source,
     loom_serve_text_storage_t* out_storage);
 
 // Resolves source terminal semantics after the model owner joins tokenizer

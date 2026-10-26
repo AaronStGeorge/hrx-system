@@ -221,8 +221,14 @@ loom_cc_library(
 
 loom_cc_library(
     name = "jit",
-    srcs = ["jit.c"],
-    hdrs = ["jit.h"],
+    srcs = [
+        "jit.c",
+        "jit_cache.c",
+    ],
+    hdrs = [
+        "jit.h",
+        "jit_cache.h",
+    ],
     deps = [
         ":compilation",
         ":executable",
@@ -236,6 +242,7 @@ loom_cc_library(
         "//loom/src/loom/serve/runtime/host",
         "//loom/src/loom/target/arch/cmd:hal_command_buffer",
         "//loom/src/loom/target/arch/cmd:program",
+        "//loom/src/loom/util:digest",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",
         "//runtime/src/iree/hal",

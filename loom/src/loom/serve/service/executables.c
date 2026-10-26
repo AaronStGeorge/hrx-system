@@ -282,6 +282,7 @@ static void loom_serve_generation_release(void* value) {
     for (iree_host_size_t i = 0; i < generation->count; ++i) {
       loom_serve_jit_stage_free(generation->compiled[i]);
     }
+    loom_serve_jit_trim(generation->jit);
   }
   loom_serve_jit_release(generation->jit);
   iree_allocator_free(generation->host_allocator, generation->compiled);
@@ -1780,11 +1781,8 @@ static void loom_serve_generation_index(loomc_task_t* task,
                                               task));
   loom_serve_generation_t* generation = job->generation;
   loom_serve_device_t* device = job->executables->options.device;
-  job->status = loom_serve_jit_create(
-      loom_serve_device_handle(device),
-      loom_serve_device_dispatch_queue(device), loom_serve_device_host(device),
-      &job->sources, NULL, generation->report, generation->host_allocator,
-      &generation->jit);
+  job->status = loom_serve_device_create_jit(
+      device, &job->sources, NULL, generation->report, &generation->jit);
 }
 
 static void loom_serve_generation_indexed(loomc_task_t* task) {

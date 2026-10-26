@@ -9,6 +9,7 @@
 #include "iree/async/util/proactor_pool.h"
 #include "iree/tooling/device_profiling.h"
 #include "loom/serve/runtime/execution/queues.h"
+#include "loom/serve/runtime/program/jit_cache.h"
 #include "loom/serve/runtime/storage/virtual_pool.h"
 
 struct loom_serve_device_t {
@@ -38,6 +39,8 @@ struct loom_serve_device_t {
   loom_serve_memory_geometry_t state_geometry;
   // Parameter admission and eviction policy borrowing shared memory.
   loom_serve_residency_cache_t* residency_cache;
+  // Exact immutable source products shared by independent model instances.
+  loom_serve_jit_cache_t* jit_cache;
 };
 
 struct loom_serve_device_group_t {
@@ -219,6 +222,9 @@ static iree_status_t loom_serve_device_initialize(
         group->handle, device->storage_pool, &asan_options,
         group->host_allocator, &device->workspace));
   }
+  IREE_RETURN_IF_ERROR(
+      loom_serve_jit_cache_allocate(device->handle, device->dispatch,
+                                    group->host_allocator, &device->jit_cache));
   return loom_serve_residency_cache_allocate(
       device->memory_pool, device->workspace, group->host_allocator,
       &device->residency_cache);
@@ -340,6 +346,8 @@ iree_status_t loom_serve_device_group_free(loom_serve_device_group_t* group) {
   for (iree_host_size_t i = 0;
        i < group->device_count && iree_status_is_ok(cleanup_status); ++i) {
     loom_serve_device_t* device = &group->devices[i];
+    loom_serve_jit_cache_free(device->jit_cache);
+    device->jit_cache = NULL;
     loom_serve_residency_cache_free(device->residency_cache);
     device->residency_cache = NULL;
     loom_serve_workspace_release(device->workspace);
@@ -400,6 +408,7 @@ loom_serve_device_memory_statistics_t loom_serve_device_memory_statistics(
 
 iree_status_t loom_serve_device_trim(loom_serve_device_t* device,
                                      uint64_t target_bytes) {
+  loom_serve_jit_cache_trim(device->jit_cache);
   const loom_serve_device_memory_statistics_t memory =
       loom_serve_device_memory_statistics(device);
   const uint64_t committed = device->memory_pool
@@ -494,4 +503,12 @@ loom_serve_memory_geometry_t loom_serve_device_state_geometry(
 loom_serve_residency_cache_t* loom_serve_device_residency_cache(
     const loom_serve_device_t* device) {
   return device->residency_cache;
+}
+
+iree_status_t loom_serve_device_create_jit(
+    loom_serve_device_t* device, const loom_serve_sources_t* sources,
+    const loomc_sanitizer_options_t* sanitizer,
+    loom_serve_compilation_report_t* report, loom_serve_jit_t** out_jit) {
+  return loom_serve_jit_create_cached(device->jit_cache, device->owner->host,
+                                      sources, sanitizer, report, out_jit);
 }
