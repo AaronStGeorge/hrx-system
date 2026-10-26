@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from build_tools.devtools import cmake_cache, cmake_file_api, cmake_make
+from build_tools.devtools import cmake_cache, cmake_file_api, cmake_make, cmake_ninja
 from build_tools.devtools.command_plan import CommandStep, quote_command
 
 BUILD_TARGETS_CATALOG_FILENAME = "iree_ctest_build_targets.json"
@@ -315,9 +315,19 @@ def cmake_build_commands(
         cache = {
             entry.name: entry.value for entry in cmake_cache.load_cmake_cache(build_dir)
         }
-        if cache["CMAKE_GENERATOR"] == "Unix Makefiles":
+        generator = cache["CMAKE_GENERATOR"]
+        if generator == "Unix Makefiles":
             with cmake_make.selected_build_arguments(
                 build_dir, build_targets
+            ) as arguments:
+                yield [[*command_prefix, *arguments]]
+            return
+        if generator in ("Ninja", "Ninja Multi-Config"):
+            with cmake_ninja.selected_build_arguments(
+                build_dir,
+                build_targets,
+                build_config=build_config,
+                multi_config=generator == "Ninja Multi-Config",
             ) as arguments:
                 yield [[*command_prefix, *arguments]]
             return
@@ -525,6 +535,7 @@ class CTestBuildAndRunStep:
         except (
             CTestMetadataError,
             cmake_make.MakeBuildError,
+            cmake_ninja.NinjaBuildError,
             cmake_file_api.FileApiError,
             OSError,
         ) as exc:
