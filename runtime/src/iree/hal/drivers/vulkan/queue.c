@@ -2892,7 +2892,9 @@ static iree_status_t iree_hal_vulkan_queue_check_error(
   return iree_status_clone(status);
 }
 
-static iree_status_t iree_hal_vulkan_queue_signal_wakeup(
+// The value reservation and native signal must be ordered together: a later
+// value cannot reach Vulkan before an earlier signal still in flight.
+static iree_status_t iree_hal_vulkan_queue_signal_wakeup_under_lock(
     iree_hal_vulkan_queue_t* queue) {
   const uint64_t new_value =
       (uint64_t)iree_atomic_fetch_add(&queue->wakeup_value, 1,
@@ -3897,6 +3899,11 @@ iree_hal_vulkan_queue_pop_completed_submissions(iree_hal_vulkan_queue_t* queue,
     queue->pending_tail = NULL;
   }
   completed_tail->next = NULL;
+  // Publish in dequeue order before callbacks can reenter or another drainer
+  // can retire a later prefix. This cursor tracks native completion progress,
+  // not completion of callback side effects.
+  iree_atomic_store(&queue->last_dequeued_epoch, (int64_t)completed_tail->epoch,
+                    iree_memory_order_release);
   return completed_head;
 }
 
@@ -4681,8 +4688,6 @@ static void iree_hal_vulkan_queue_complete_submission(
     iree_async_frontier_tracker_advance(queue->frontier_tracker, queue->axis,
                                         submission->epoch);
   }
-  iree_atomic_store(&queue->last_drained_epoch, (int64_t)submission->epoch,
-                    iree_memory_order_release);
   iree_status_free(terminal_status);
 }
 
@@ -5087,7 +5092,7 @@ static void iree_hal_vulkan_queue_deferred_submission_ready(
     // Keep ownership until the wake succeeds. The completion thread takes this
     // same mutex before consuming ready nodes, so it sees the publication even
     // if it wakes before the node is linked.
-    status = iree_hal_vulkan_queue_signal_wakeup(queue);
+    status = iree_hal_vulkan_queue_signal_wakeup_under_lock(queue);
     if (!iree_status_is_ok(status)) {
       status = iree_hal_vulkan_queue_store_error(queue, status);
     }
@@ -5491,7 +5496,7 @@ static int iree_hal_vulkan_queue_completion_thread_main(void* entry_arg) {
         queue->wakeup_semaphore,
     };
     uint64_t wait_values[2] = {
-        (uint64_t)iree_atomic_load(&queue->last_drained_epoch,
+        (uint64_t)iree_atomic_load(&queue->last_dequeued_epoch,
                                    iree_memory_order_acquire) +
             1,
         observed_wakeup_value + 1,
@@ -5622,7 +5627,7 @@ iree_status_t iree_hal_vulkan_queue_initialize(
   iree_async_frontier_initialize(
       iree_async_fixed_frontier_as_frontier(&out_queue->frontier),
       /*entry_count=*/0);
-  iree_atomic_store(&out_queue->last_drained_epoch, 0,
+  iree_atomic_store(&out_queue->last_dequeued_epoch, 0,
                     iree_memory_order_release);
   iree_atomic_store(&out_queue->wakeup_value, 0, iree_memory_order_release);
   iree_atomic_store(&out_queue->activation_state,
@@ -5897,7 +5902,10 @@ void iree_hal_vulkan_queue_retire_frontier(iree_hal_vulkan_queue_t* queue) {
   iree_atomic_store(&queue->stop_requested, 1, iree_memory_order_release);
   iree_hal_vulkan_queue_cancel_memory(queue);
   if (queue->completion_thread) {
-    iree_status_t wake_status = iree_hal_vulkan_queue_signal_wakeup(queue);
+    iree_slim_mutex_lock(&queue->submission_mutex);
+    iree_status_t wake_status =
+        iree_hal_vulkan_queue_signal_wakeup_under_lock(queue);
+    iree_slim_mutex_unlock(&queue->submission_mutex);
     IREE_ASSERT(iree_status_is_ok(wake_status) ||
                     iree_status_code(wake_status) == IREE_STATUS_DATA_LOSS,
                 "Vulkan queue completion wakeup failed during teardown");

@@ -242,8 +242,9 @@ typedef struct iree_hal_vulkan_queue_t {
   // Next queue epoch value to assign to an accepted submission.
   uint64_t next_epoch_value;
 
-  // Last queue epoch whose completion side effects have fully retired.
-  iree_atomic_int64_t last_drained_epoch;
+  // Last completed native epoch dequeued under submission_mutex. The worker
+  // waits for later epochs; callbacks for this epoch may still be running.
+  iree_atomic_int64_t last_dequeued_epoch;
 
   // Accumulated causal frontier for work submitted through this queue.
   iree_hal_vulkan_queue_frontier_t frontier;
