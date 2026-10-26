@@ -1623,24 +1623,8 @@ static bool iree_hal_amd_gpu_aql_retire(
   const iree_status_code_t failure = (iree_status_code_t)iree_atomic_load(
       &queue->failure, iree_memory_order_acquire);
   if (failure != IREE_STATUS_OK) {
-    if (!queue->failure_delivered &&
-        iree_hal_amd_gpu_publisher_is_idle(&queue->publisher)) {
-      // No further acceptance can add a native user after the publisher joins.
-      const uint64_t end = (uint64_t)iree_atomic_load(
-          &queue->producer.count, iree_memory_order_acquire);
-      for (uint64_t i = position; i < end; ++i) {
-        iree_hal_amd_gpu_aql_fail_submission(
-            queue,
-            queue->issued[i & (queue->options.retirement_capacity - 1)]
-                .submission,
-            iree_make_status(failure, "AQL queue failed"));
-      }
-      if (end && queue->frontier.tracker) {
-        iree_async_frontier_tracker_fail_axis(
-            queue->frontier.tracker, queue->frontier.axis,
-            iree_make_status(failure, "AQL queue failed"));
-      }
-      queue->failure_delivered = true;
+    if (iree_hal_amd_gpu_publisher_is_idle(&queue->publisher)) {
+      iree_hal_amd_gpu_aql_queue_fail_issued(queue, failure);
     }
     return false;
   }

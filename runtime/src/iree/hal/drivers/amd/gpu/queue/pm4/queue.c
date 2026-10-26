@@ -1697,29 +1697,6 @@ static bool iree_hal_amd_gpu_pm4_progress(void* user_data) {
   iree_status_t failure = iree_hal_amd_gpu_pm4_check_failure(queue);
   if (!iree_status_is_ok(failure)) {
     iree_hal_amd_gpu_host_wait_set_cancel(&queue->pending.waits);
-    if (!queue->issued_failure_delivered &&
-        iree_atomic_load(&queue->native_failure, iree_memory_order_acquire) &&
-        iree_hal_amd_gpu_publisher_is_idle(&queue->publisher)) {
-      const uint64_t begin = (uint64_t)iree_atomic_load(
-          &queue->completed.count, iree_memory_order_acquire);
-      const uint64_t end = (uint64_t)iree_atomic_load(
-          &queue->producer.count, iree_memory_order_acquire);
-      for (uint64_t i = begin; i != end; ++i) {
-        iree_hal_amd_gpu_pm4_submission_t* submission =
-            queue->issued[i & queue->retirement.capacity_mask]
-                .action.submission;
-        iree_hal_amd_gpu_pm4_fail_submission(queue, submission,
-                                             iree_status_clone(failure));
-      }
-      // A published operation establishes that group assignment completed.
-      // An idle observer must not race construction by reading frontier state.
-      if (end && queue->frontier.tracker) {
-        iree_async_frontier_tracker_fail_axis(queue->frontier.tracker,
-                                              queue->frontier.axis,
-                                              iree_status_clone(failure));
-      }
-      queue->issued_failure_delivered = true;
-    }
   }
   iree_status_free(failure);
   return more;
@@ -1732,6 +1709,9 @@ static void iree_hal_amd_gpu_pm4_fail_native(
   if (iree_atomic_compare_exchange_strong(&queue->native_failure, &expected,
                                           status, iree_memory_order_release,
                                           iree_memory_order_relaxed)) {
+    // A publishing caller hands off before its existing closed-queue wake.
+    // Failure fanout then runs on completion, never on a competing observer.
+    iree_hal_amd_gpu_pm4_queue_close(&queue->base);
     iree_hal_amd_gpu_context_report(queue->context, status, operation);
   }
   iree_hal_amd_gpu_publication_notify(queue->options.publication,
@@ -1743,11 +1723,17 @@ static bool iree_hal_amd_gpu_pm4_retire(
     iree_hal_amd_gpu_completion_wait_t* out_wait) {
   iree_hal_amd_gpu_pm4_queue_t* queue = user_data;
   if (!amdf_status_is_ok((amdf_status_t)iree_atomic_load(
-          &queue->native_failure, iree_memory_order_relaxed))) {
-    return false;
-  }
-  if (!amdf_status_is_ok(wait_status)) {
-    iree_hal_amd_gpu_pm4_fail_native(queue, wait_status, "GPU completion wait");
+          &queue->native_failure, iree_memory_order_relaxed)) ||
+      !amdf_status_is_ok(wait_status)) {
+    if (!amdf_status_is_ok(wait_status)) {
+      iree_hal_amd_gpu_pm4_fail_native(queue, wait_status,
+                                       "GPU completion wait");
+    }
+    if (iree_hal_amd_gpu_publisher_is_idle(&queue->publisher)) {
+      iree_status_t status = iree_hal_amd_gpu_pm4_check_failure(queue);
+      iree_hal_amd_gpu_pm4_queue_fail_issued(queue, iree_status_code(status));
+      iree_status_free(status);
+    }
     return false;
   }
   uint64_t position = (uint64_t)iree_atomic_load(&queue->completed.count,

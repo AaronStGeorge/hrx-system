@@ -6,6 +6,91 @@
 
 #include "iree/hal/drivers/amd/gpu/queue/pm4/state.h"
 
+// The caller has joined publication. A native failure freezes the issued
+// prefix; only final failed retirement can subsequently release its captures.
+void iree_hal_amd_gpu_pm4_queue_fail_issued(iree_hal_amd_gpu_pm4_queue_t* queue,
+                                            iree_status_code_t code) {
+  if (queue->issued_failure_delivered) {
+    return;
+  }
+  const uint64_t begin = (uint64_t)iree_atomic_load(&queue->completed.count,
+                                                    iree_memory_order_acquire);
+  const uint64_t end = (uint64_t)iree_atomic_load(&queue->producer.count,
+                                                  iree_memory_order_acquire);
+  for (uint64_t i = begin; i != end; ++i) {
+    iree_hal_amd_gpu_pm4_submission_t* submission =
+        queue->issued[i & queue->retirement.capacity_mask].action.submission;
+    iree_status_t status = iree_status_from_code(code);
+    iree_hal_amd_gpu_pm4_submission_fail(submission, status);
+    iree_hal_semaphore_list_fail(submission->signals, status);
+  }
+  if (end && queue->frontier.tracker) {
+    iree_async_frontier_tracker_fail_axis(queue->frontier.tracker,
+                                          queue->frontier.axis,
+                                          iree_status_from_code(code));
+  }
+  queue->issued_failure_delivered = true;
+}
+
+bool iree_hal_amd_gpu_pm4_queue_try_inactivate(iree_hal_queue_t* base,
+                                               amdf_status_t* out_status) {
+  iree_hal_amd_gpu_pm4_queue_t* queue = (void*)base;
+  if (!iree_hal_amd_gpu_publisher_try_acquire(&queue->publisher)) {
+    return false;
+  }
+  *out_status = queue->kernel
+                    ? iree_hal_amd_gpu_pm4_kmq_storage_inactivate(queue->kernel)
+                    : iree_hal_amd_gpu_user_queue_inactivate(&queue->storage);
+  if (iree_hal_amd_gpu_publisher_handoff(&queue->publisher, NULL)) {
+    iree_hal_amd_gpu_publication_notify(queue->options.publication,
+                                        queue->options.source_ordinal);
+  }
+  return true;
+}
+
+bool iree_hal_amd_gpu_pm4_queue_retire_failed(iree_hal_queue_t* base,
+                                              iree_status_code_t code) {
+  iree_hal_amd_gpu_pm4_queue_t* queue = (void*)base;
+  IREE_ASSERT(
+      queue->kernel ? queue->kernel->inactivated : queue->storage.inactivated,
+      "failed retirement requires native access cessation");
+  if (!iree_hal_amd_gpu_publisher_try_acquire(&queue->publisher)) {
+    return false;
+  }
+  iree_hal_amd_gpu_pm4_queue_fail_issued(queue, code);
+  uint64_t position = (uint64_t)iree_atomic_load(&queue->completed.count,
+                                                 iree_memory_order_relaxed);
+  const uint64_t end = (uint64_t)iree_atomic_load(&queue->producer.count,
+                                                  iree_memory_order_acquire);
+  for (; position != end; ++position) {
+    // GPU retirement words may never commit after a fault. Native stop proves
+    // lifetime for this trusted host record without a successful frontier.
+    iree_hal_amd_gpu_pm4_retirement_t* action =
+        &queue->issued[position & queue->retirement.capacity_mask].action;
+    iree_hal_amd_gpu_pm4_submission_t* submission = action->submission;
+    const uint64_t words = action->consumed_words;
+    const uint64_t arguments = action->consumed_arguments;
+    iree_hal_amd_gpu_pm4_scratch_storage_free(queue->context, action->scratch);
+    action->scratch = NULL;
+    if (action->terminal) {
+      iree_hal_amd_gpu_pm4_submission_release_payload(submission);
+      iree_hal_amd_gpu_signal_retire(submission->signal, code);
+    }
+    iree_hal_amd_gpu_pm4_submission_release(submission);
+    iree_atomic_store(&queue->completed.words, words,
+                      iree_memory_order_release);
+    iree_atomic_store(&queue->completed.arguments, arguments,
+                      iree_memory_order_release);
+    iree_atomic_store(&queue->completed.count, position + 1,
+                      iree_memory_order_release);
+  }
+  if (iree_hal_amd_gpu_publisher_handoff(&queue->publisher, NULL)) {
+    iree_hal_amd_gpu_publication_notify(queue->options.publication,
+                                        queue->options.source_ordinal);
+  }
+  return true;
+}
+
 void iree_hal_amd_gpu_pm4_queue_close(iree_hal_queue_t* base) {
   iree_atomic_store(&((iree_hal_amd_gpu_pm4_queue_t*)base)->closed, 1,
                     iree_memory_order_release);

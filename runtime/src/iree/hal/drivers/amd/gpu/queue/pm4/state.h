@@ -139,8 +139,8 @@ struct iree_hal_amd_gpu_pm4_queue_t {
     // wait registration nor resumed publication holds this cold mutex.
     iree_slim_mutex_t completion_mutex;
   } pending;
-  // Service has failed every published operation after native failure and
-  // the last publishing caller's handoff. Their GPU ownership stays retained.
+  // Completion has failed issued timelines after the last publisher's handoff.
+  // GPU ownership stays retained until native stop or authoritative retirement.
   bool issued_failure_delivered;
   // Completion-owned delivery of logical failure while native retirement runs.
   bool feedback_failure_delivered;
@@ -210,6 +210,12 @@ static_assert(
 
 // Frees joined queue metadata after the device releases native ownership.
 void iree_hal_amd_gpu_pm4_queue_destroy(iree_hal_queue_t* queue);
+
+// Fails issued timelines without claiming that native accesses have ended.
+// The completion owner excludes every other capture observer and has joined
+// publication. Native access may still be live; this grants no lifetime credit.
+void iree_hal_amd_gpu_pm4_queue_fail_issued(iree_hal_amd_gpu_pm4_queue_t* queue,
+                                            iree_status_code_t code);
 
 #ifdef __cplusplus
 }  // extern "C"

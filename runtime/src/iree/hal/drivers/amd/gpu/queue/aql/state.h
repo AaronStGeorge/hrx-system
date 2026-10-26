@@ -167,6 +167,11 @@ struct iree_hal_amd_gpu_aql_queue_t {
 // Frees joined queue metadata after the device releases native ownership.
 void iree_hal_amd_gpu_aql_queue_destroy(iree_hal_queue_t* queue);
 
+// Fails issued timelines after publication joins, without releasing native
+// ownership. Only the exclusive completion owner inspects issued captures.
+void iree_hal_amd_gpu_aql_queue_fail_issued(iree_hal_amd_gpu_aql_queue_t* queue,
+                                            iree_status_code_t code);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

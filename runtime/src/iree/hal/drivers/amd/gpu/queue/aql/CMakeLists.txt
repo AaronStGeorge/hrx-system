@@ -837,4 +837,22 @@ iree_cc_library(
 )
 endif()
 
+iree_cc_test(
+  NAME
+    lifecycle_test
+  SRCS
+    "lifecycle_test.cc"
+  DEPS
+    ::queue
+    ::submission
+    iree::async
+    iree::async::platform
+    iree::hal
+    iree::hal::drivers::amd::gpu::queue::capture_pool
+    iree::hal::drivers::amd::gpu::queue::publisher
+    iree::hal::drivers::amd::gpu::queue::semaphore
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -6,6 +6,81 @@
 
 #include "iree/hal/drivers/amd/gpu/queue/aql/state.h"
 
+void iree_hal_amd_gpu_aql_queue_fail_issued(iree_hal_amd_gpu_aql_queue_t* queue,
+                                            iree_status_code_t code) {
+  if (queue->failure_delivered) {
+    return;
+  }
+  const uint64_t begin = (uint64_t)iree_atomic_load(&queue->completed.count,
+                                                    iree_memory_order_relaxed);
+  const uint64_t end = (uint64_t)iree_atomic_load(&queue->producer.count,
+                                                  iree_memory_order_acquire);
+  for (uint64_t i = begin; i != end; ++i) {
+    iree_hal_amd_gpu_aql_submission_t* submission =
+        queue->issued[i & (queue->options.retirement_capacity - 1)].submission;
+    iree_status_t status = iree_status_from_code(code);
+    iree_hal_amd_gpu_aql_submission_fail(submission, status);
+    iree_hal_semaphore_list_fail(submission->signals, status);
+  }
+  if (end && queue->frontier.tracker) {
+    iree_async_frontier_tracker_fail_axis(queue->frontier.tracker,
+                                          queue->frontier.axis,
+                                          iree_status_from_code(code));
+  }
+  queue->failure_delivered = true;
+}
+
+bool iree_hal_amd_gpu_aql_queue_try_inactivate(iree_hal_queue_t* base,
+                                               amdf_status_t* out_status) {
+  iree_hal_amd_gpu_aql_queue_t* queue = (void*)base;
+  if (!iree_hal_amd_gpu_publisher_try_acquire(&queue->publisher)) {
+    return false;
+  }
+  *out_status = iree_hal_amd_gpu_user_queue_inactivate(&queue->storage);
+  if (iree_hal_amd_gpu_publisher_handoff(&queue->publisher, NULL)) {
+    iree_hal_amd_gpu_publication_notify(queue->options.publication,
+                                        queue->options.source_ordinal);
+  }
+  return true;
+}
+
+bool iree_hal_amd_gpu_aql_queue_retire_failed(iree_hal_queue_t* base,
+                                              iree_status_code_t code) {
+  iree_hal_amd_gpu_aql_queue_t* queue = (void*)base;
+  IREE_ASSERT(queue->storage.inactivated,
+              "failed retirement requires native access cessation");
+  if (!iree_hal_amd_gpu_publisher_try_acquire(&queue->publisher)) {
+    return false;
+  }
+  iree_hal_amd_gpu_aql_queue_fail_issued(queue, code);
+  uint64_t position = (uint64_t)iree_atomic_load(&queue->completed.count,
+                                                 iree_memory_order_relaxed);
+  const uint64_t end = (uint64_t)iree_atomic_load(&queue->producer.count,
+                                                  iree_memory_order_acquire);
+  for (; position != end; ++position) {
+    // Native stop replaces uncommitted firmware completion for lifetime only.
+    iree_hal_amd_gpu_aql_retirement_t* action =
+        &queue->issued[position & (queue->options.retirement_capacity - 1)];
+    iree_hal_amd_gpu_aql_submission_t* submission = action->submission;
+    const uint64_t arguments = action->arguments;
+    if (action->terminal) {
+      iree_hal_amd_gpu_aql_submission_release_payload(submission);
+    }
+    iree_hal_amd_gpu_signal_retire(action->signal, code);
+    iree_hal_amd_gpu_signal_release(action->signal);
+    iree_hal_amd_gpu_aql_submission_release(submission);
+    iree_atomic_store(&queue->completed.arguments, arguments,
+                      iree_memory_order_release);
+    iree_atomic_store(&queue->completed.count, position + 1,
+                      iree_memory_order_release);
+  }
+  if (iree_hal_amd_gpu_publisher_handoff(&queue->publisher, NULL)) {
+    iree_hal_amd_gpu_publication_notify(queue->options.publication,
+                                        queue->options.source_ordinal);
+  }
+  return true;
+}
+
 void iree_hal_amd_gpu_aql_queue_close(iree_hal_queue_t* base) {
   iree_atomic_store(&((iree_hal_amd_gpu_aql_queue_t*)base)->closed, 1,
                     iree_memory_order_release);
