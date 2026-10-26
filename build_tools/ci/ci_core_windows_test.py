@@ -572,6 +572,8 @@ class CiCoreWindowsTest(unittest.TestCase):
         )
         self.assertIn("-DIREE_BUILD_BENCHMARKS=OFF", configure_cmd)
         self.assertIn("-DLOOM_BUILD=OFF", configure_cmd)
+        self.assertIn("-DIREE_HAL_DRIVER_AMD=ON", configure_cmd)
+        self.assertIn("-DAMDF_BUILD=ON", configure_cmd)
         self.assertIn("-DLIBHRX_BUILD=ON", configure_cmd)
         self.assertIn("-DLIBHRX_BUILD_CTS=OFF", configure_cmd)
         self.assertIn("-DLIBHRX_BUILD_HIP_BINDING=OFF", configure_cmd)

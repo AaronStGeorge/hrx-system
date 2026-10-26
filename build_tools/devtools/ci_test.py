@@ -318,7 +318,7 @@ class CiTest(unittest.TestCase):
                 cmake = ci.cmake_configure_step("example", enabled_drivers=drivers).argv
                 for engine, enabled in (("GPU", gpu), ("XDNA", xdna)):
                     option = f"-DIREE_HAL_DRIVER_AMD_{engine}="
-                    self.assertEqual(option + "ON" in bazel, enabled)
+                    self.assertIn(option + ("ON" if enabled else "OFF"), bazel)
                     self.assertIn(option + ("ON" if enabled else "OFF"), cmake)
 
     def test_codec_policy_precedes_explicit_job_overrides(self):

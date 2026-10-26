@@ -590,6 +590,8 @@ def build_core(args: argparse.Namespace) -> None:
         f"IREE_BUILD_TESTS={'ON' if ctest_enabled else 'OFF'}",
         "IREE_BUILD_BENCHMARKS=OFF",
         "LOOM_BUILD=OFF",
+        "IREE_HAL_DRIVER_AMD=ON",
+        "AMDF_BUILD=ON",
         "LIBHRX_BUILD=ON",
         "LIBHRX_BUILD_CTS=OFF",
         "LIBHRX_BUILD_HIP_BINDING=OFF",

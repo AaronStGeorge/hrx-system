@@ -390,8 +390,9 @@ def bazel_configure_step(
     enabled_driver_set = validate_enabled_drivers(enabled_drivers)
     command = ["bazel", "configure"]
     for driver, define in BAZEL_HAL_DRIVER_DEFINES:
-        if driver in enabled_driver_set:
-            command.append(f"-D{define}=ON")
+        enabled = driver in enabled_driver_set
+        if enabled or driver in ("amd", "amd-gpu", "amd-xdna"):
+            command.append(f"-D{define}={'ON' if enabled else 'OFF'}")
     if "amdgpu" in enabled_driver_set:
         command.append(ROCM_PINNED_DEPENDENCY_MODE_OPTION)
         rocm_root = os.environ.get("HRX_ROCM_ROOT")

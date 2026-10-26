@@ -156,7 +156,7 @@ class ConfigureBazelTest(unittest.TestCase):
             config = self.configure_bazel.generate_config(args)
 
         self.assertIn(
-            "build --//runtime/config/hal:drivers=task,amdgpu",
+            "build --//runtime/config/hal:drivers=task,amdgpu,amd-gpu,amd-xdna\n",
             config,
         )
         self.assertIn("common --repo_env=IREE_DEPENDENCY_MODE=pinned", config)
@@ -165,10 +165,33 @@ class ConfigureBazelTest(unittest.TestCase):
         self.assertNotIn("--deleted_packages", config)
 
     def test_libamdf_can_be_enabled_without_amdgpu(self):
-        args = self.configure_bazel.parse_arguments(["-DAMDF_BUILD=ON"])
+        args = self.configure_bazel.parse_arguments(
+            ["-DIREE_HAL_DRIVER_AMD=OFF", "-DAMDF_BUILD=ON"]
+        )
         config = self.configure_bazel.generate_config(args)
 
         self.assertIn("build --//libamdf/config:enabled=true", config)
+        self.assertIn("build --//runtime/config/hal:drivers=task\n", config)
+
+    def test_native_amd_defaults_and_explicit_opt_outs(self):
+        for options, drivers, provider in (
+            ([], "task,amd-gpu,amd-xdna", True),
+            (["-DIREE_HAL_DRIVER_AMD_XDNA=OFF"], "task,amd-gpu", True),
+            (["-DIREE_HAL_DRIVER_AMD_GPU=OFF"], "task,amd-xdna", True),
+            (["-DIREE_HAL_DRIVER_AMD=OFF"], "task", False),
+            (["--//runtime/config/hal:drivers=task"], "task", False),
+        ):
+            with self.subTest(options=options):
+                config = self.configure_bazel.generate_config(
+                    self.configure_bazel.parse_arguments(options)
+                )
+                self.assertIn(
+                    f"build --//runtime/config/hal:drivers={drivers}\n", config
+                )
+                self.assertIn(
+                    f"build --//libamdf/config:enabled={str(provider).lower()}\n",
+                    config,
+                )
 
     def test_amd_driver_rejects_explicitly_disabled_native_provider(self):
         args = self.configure_bazel.parse_arguments(
@@ -284,7 +307,11 @@ class ConfigureBazelTest(unittest.TestCase):
 
     def test_libamdf_explicit_disable_is_independent_of_hal_driver(self):
         args = self.configure_bazel.parse_arguments(
-            ["-DIREE_HAL_DRIVER_AMDGPU=ON", "-DAMDF_BUILD=OFF"]
+            [
+                "-DIREE_HAL_DRIVER_AMDGPU=ON",
+                "-DIREE_HAL_DRIVER_AMD=OFF",
+                "-DAMDF_BUILD=OFF",
+            ]
         )
         config = self.configure_bazel.generate_config(args)
 
@@ -378,7 +405,10 @@ class ConfigureBazelTest(unittest.TestCase):
                 args = self.configure_bazel.parse_arguments(arguments)
                 config = self.configure_bazel.generate_config(args)
                 self.assertIn(f"build --//runtime/config/net:rdma={expected}", config)
-                self.assertIn("build --//runtime/config/hal:drivers=task", config)
+                self.assertIn(
+                    "build --//runtime/config/hal:drivers=task,amd-gpu,amd-xdna\n",
+                    config,
+                )
 
     def test_rdma_rejects_mixed_selection_spellings(self):
         with self.assertRaisesRegex(SystemExit, "Do not mix portable -DIREE_NET_RDMA"):
@@ -392,7 +422,7 @@ class ConfigureBazelTest(unittest.TestCase):
         config = self.configure_bazel.generate_config(args)
 
         self.assertIn(
-            "build --//runtime/config/hal:drivers=task,webgpu",
+            "build --//runtime/config/hal:drivers=task,webgpu,amd-gpu,amd-xdna\n",
             config,
         )
         self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=none", config)
@@ -404,7 +434,7 @@ class ConfigureBazelTest(unittest.TestCase):
         config = self.configure_bazel.generate_config(args)
 
         self.assertIn(
-            "build --//runtime/config/hal:drivers=task,vulkan",
+            "build --//runtime/config/hal:drivers=task,vulkan,amd-gpu,amd-xdna\n",
             config,
         )
         self.assertIn("common --repo_env=IREE_DEPENDENCY_MODE=pinned", config)
@@ -425,11 +455,17 @@ class ConfigureBazelTest(unittest.TestCase):
         self.assertEqual(config, self.configure_bazel.generate_config(native))
         self.assertIn("build --//build_tools/vulkan/config:enabled=true", config)
         self.assertIn("build --//build_tools/d3d12/config:enabled=false", config)
-        self.assertIn("build --//runtime/config/hal:drivers=task\n", config)
+        self.assertIn(
+            "build --//runtime/config/hal:drivers=task,amd-gpu,amd-xdna\n", config
+        )
 
     def test_d3d12_can_be_selected_without_vulkan_or_a_hal_driver(self):
         args = self.configure_bazel.parse_arguments(
-            ["-DIREE_ENABLE_D3D12=ON", "-DIREE_ENABLE_VULKAN=OFF"]
+            [
+                "-DIREE_HAL_DRIVER_AMD=OFF",
+                "-DIREE_ENABLE_D3D12=ON",
+                "-DIREE_ENABLE_VULKAN=OFF",
+            ]
         )
         config = self.configure_bazel.generate_config(args)
         self.assertIn("build --//build_tools/vulkan/config:enabled=false", config)
@@ -441,7 +477,10 @@ class ConfigureBazelTest(unittest.TestCase):
             ["-DIREE_HAL_DRIVER_VULKAN=ON", "-DIREE_ENABLE_VULKAN=OFF"]
         )
         config = self.configure_bazel.generate_config(args)
-        self.assertIn("build --//runtime/config/hal:drivers=task,vulkan\n", config)
+        self.assertIn(
+            "build --//runtime/config/hal:drivers=task,vulkan,amd-gpu,amd-xdna\n",
+            config,
+        )
         self.assertIn("build --//build_tools/vulkan/config:enabled=false", config)
 
     def test_api_options_reject_ambiguous_or_invalid_inputs(self):
