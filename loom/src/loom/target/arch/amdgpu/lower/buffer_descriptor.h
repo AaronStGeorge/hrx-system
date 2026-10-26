@@ -36,6 +36,11 @@ iree_status_t loom_amdgpu_plan_buffer_view_extent(
     const loom_low_source_memory_access_plan_t* source,
     const loom_amdgpu_buffer_extent_plan_t** out_plan);
 
+// Returns whether |plan| consumes the source access's materialized dynamic
+// view-base value while constructing its descriptor bound.
+bool loom_amdgpu_buffer_extent_uses_dynamic_view_base(
+    const loom_amdgpu_buffer_extent_plan_t* plan);
+
 // Emits a buffer descriptor from a Low resource and its retained view bound.
 // Resource extent/control attributes are the ABI contract; source analysis is
 // never consulted. Only allocation can fail while executing the recipe.

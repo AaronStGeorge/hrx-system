@@ -1330,6 +1330,7 @@ iree_status_t loom_amdgpu_lower_atomic(loom_low_lower_context_t* context,
 
   loom_amdgpu_memory_access_t access =
       loom_amdgpu_memory_access_from_source(&plan->source);
+  access.buffer_extent = plan->buffer_extent;
   access.dynamic_term_plans = plan->dynamic_term_plans;
   access.address_form = plan->address_form;
   access.immediate_offset = plan->immediate_offset;
