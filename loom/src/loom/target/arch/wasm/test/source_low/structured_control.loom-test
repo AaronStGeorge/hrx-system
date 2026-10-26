@@ -378,3 +378,20 @@ low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @return_insid
   }
   return %result
 }
+
+// ====
+
+// RUN: pass source-to-low{control-flow=structured-low}
+
+wasm.target<simd128> @target
+
+func.def target(@target) @unreachable_tail() -> (i32) {
+  func.unreachable
+}
+
+// ----
+wasm.target<simd128> @target
+
+low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @unreachable_tail() -> (reg<wasm.i32>) asm {
+  low.unreachable
+}

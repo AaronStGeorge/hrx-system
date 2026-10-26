@@ -1062,6 +1062,10 @@ static iree_status_t loom_x86_function_structural(
     loom_x86_function_jump(function, function->block_count, block_index + 1);
     return iree_ok_status();
   }
+  if (loom_low_unreachable_isa(node->op)) {
+    loom_x86_function_jump(function, function->block_count, block_index + 1);
+    return iree_ok_status();
+  }
   if (loom_low_br_isa(node->op)) {
     const loom_low_allocation_edge_copy_group_t* group =
         loom_low_allocation_find_edge_copy_group_by_source_ordinal(

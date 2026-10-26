@@ -60,3 +60,17 @@ CHECK: * = OpSelect %ulong * %lower
 CHECK: * = OpPhi %bool *
 CHECK: * = OpULessThan %bool %iv *
 CHECK-NOT: *OpSLessThan*
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+// A result-bearing function may end in a path that source control proves
+// cannot reach its ordinary return. SPIR-V represents that contract directly.
+low.func.def target<spirv.logical.core>(@target) abi(shader_entry_point) @unreachable_tail() -> (reg<spirv.id : i32>) asm {
+  low.unreachable
+}
+
+// ----
+CHECK: OpUnreachable
+CHECK-NOT: OpReturn

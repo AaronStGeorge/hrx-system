@@ -233,3 +233,14 @@ low.func.def target<test.low.core>(@test_target) @conditional_return(%condition:
   }
   return %fallback
 }
+
+// ====
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @never_returns() -> (reg<test.i32>) asm {
+  low.unreachable
+}
+
+low.kernel.def target<test.low.core>(@test_target) @unreachable_kernel() asm {
+  low.unreachable
+}

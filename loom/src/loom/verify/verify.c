@@ -254,12 +254,14 @@ static iree_status_t loom_verify_region(
         state, contract, region->block_count));
   }
   const loom_op_t* callable_op = NULL;
+  loom_op_kind_t callable_unreachable = LOOM_OP_KIND_UNKNOWN;
   if (contract && contract->descriptor->terminator != LOOM_OP_KIND_UNKNOWN &&
       loom_verify_has_func_signature_scope(contract->vtable) &&
       contract->vtable->func_like->body_region_index ==
           contract->region_index &&
       state->result->error_count == contract->owner_initial_error_count) {
     callable_op = contract->op;
+    callable_unreachable = contract->vtable->func_like->unreachable_terminator;
   }
   // One-block dominance needs only the ordinary lexical scope. Multi-block
   // regions share one graph between dominance and consumed-value queries.
@@ -392,6 +394,7 @@ static iree_status_t loom_verify_region(
         status = loom_verify_emit_missing_terminator(state, contract);
       } else if (!loom_region_descriptor_matches_terminator(
                      contract->descriptor, terminator_op->kind) &&
+                 terminator_op->kind != callable_unreachable &&
                  (terminator_op->successor_count == 0 ||
                   iree_any_bit_set(contract->descriptor->flags,
                                    LOOM_REGION_SINGLE_BLOCK))) {

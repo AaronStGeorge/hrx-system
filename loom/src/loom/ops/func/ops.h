@@ -393,7 +393,8 @@ enum {
   LOOM_OP_FUNC_RETURN = LOOM_OP_KIND(LOOM_DIALECT_FUNC, 3),
   LOOM_OP_FUNC_LOCATION = LOOM_OP_KIND(LOOM_DIALECT_FUNC, 4),
   LOOM_OP_FUNC_EXIT = LOOM_OP_KIND(LOOM_DIALECT_FUNC, 5),
-  LOOM_OP_FUNC_COUNT_ = 6,
+  LOOM_OP_FUNC_UNREACHABLE = LOOM_OP_KIND(LOOM_DIALECT_FUNC, 6),
+  LOOM_OP_FUNC_COUNT_ = 7,
 };
 
 // Symbol visibility. Absent (0) means private (module-internal).
@@ -646,6 +647,14 @@ iree_status_t loom_func_exit_build(
 iree_status_t loom_func_exit_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_FUNC_UNREACHABLE: Terminate a direct function-body path that cannot reach the ordinary result-bearing return. Reaching this operation is undefined; it is not a runtime trap or assertion.
+// func.unreachable
+LOOM_DEFINE_ISA(loom_func_unreachable_isa, LOOM_OP_FUNC_UNREACHABLE)
+iree_status_t loom_func_unreachable_build(
+    loom_builder_t* builder,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // Returns the vtable array for the func dialect.
 const loom_op_vtable_t* const* loom_func_dialect_vtables(

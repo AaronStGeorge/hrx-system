@@ -74,7 +74,7 @@ static inline uint64_t loom_amdgpu_structural_packet_control_transfer_count(
   if (op == NULL) {
     return 0;
   }
-  if (loom_low_return_isa(op)) {
+  if (loom_low_return_isa(op) || loom_low_unreachable_isa(op)) {
     return 1;
   }
   if (loom_low_br_isa(op)) {

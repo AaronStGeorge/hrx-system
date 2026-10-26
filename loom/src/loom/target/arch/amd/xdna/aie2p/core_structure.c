@@ -31,6 +31,7 @@ loom_aie2p_core_structure_kind_t loom_aie2p_core_structure_classify(
     case LOOM_OP_LOW_COND_BR:
       return LOOM_AIE2P_CORE_STRUCTURE_CONDITIONAL_BRANCH;
     case LOOM_OP_LOW_RETURN:
+    case LOOM_OP_LOW_UNREACHABLE:
       return LOOM_AIE2P_CORE_STRUCTURE_RETURN;
     case LOOM_OP_LOW_FUNC_CALL:
       return LOOM_AIE2P_CORE_STRUCTURE_CALL;

@@ -19,6 +19,7 @@
 #include "loom/target/emit/wasm/types.h"
 
 enum {
+  LOOM_WASM_OPCODE_UNREACHABLE = 0x00,
   LOOM_WASM_OPCODE_BLOCK = 0x02,
   LOOM_WASM_OPCODE_LOOP = 0x03,
   LOOM_WASM_OPCODE_END = 0x0B,
@@ -1099,6 +1100,10 @@ static iree_status_t loom_wasm_emit_structural_op(loom_wasm_emit_state_t* state,
   }
   if (loom_low_return_isa(op)) {
     return loom_wasm_emit_low_return(state, op);
+  }
+  if (loom_low_unreachable_isa(op)) {
+    return loom_wasm_binary_write_u8(&state->writer,
+                                     LOOM_WASM_OPCODE_UNREACHABLE);
   }
   if (loom_low_func_exit_isa(op)) {
     return loom_wasm_emit_low_func_exit(state, op);

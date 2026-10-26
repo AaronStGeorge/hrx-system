@@ -1098,6 +1098,12 @@ iree_status_t loom_vm_function_plan_write(
         status = loom_vm_function_return(&frame, node, &return_scratch,
                                          &call_scratch.storage, stream,
                                          signature, out_row);
+      } else if (loom_low_unreachable_isa(node->op)) {
+        const iree_vm_bytecode_control_return_t instruction = {
+            .opcode = IREE_VM_BYTECODE_OPCODE_CONTROL_RETURN,
+        };
+        status =
+            iree_io_stream_write(stream, sizeof(instruction), &instruction);
       } else if (loom_low_br_isa(node->op)) {
         // Allocation records one group for each payload-bearing branch, in
         // source block order, including groups whose moves all coalesced.

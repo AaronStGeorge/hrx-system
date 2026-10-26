@@ -1566,6 +1566,9 @@ static iree_status_t loom_spirv_low_verify_op(
   if (loom_low_return_isa(op)) {
     return loom_spirv_low_verify_return(context, state, op);
   }
+  if (loom_low_unreachable_isa(op)) {
+    return iree_ok_status();
+  }
   if (loom_low_func_call_isa(op)) {
     return loom_spirv_low_verify_func_call(context, state, op);
   }

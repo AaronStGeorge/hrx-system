@@ -170,6 +170,7 @@ static bool loom_low_lower_supported_structured_source_op(
     case LOOM_OP_SCF_FOR:
     case LOOM_OP_SCF_WHILE:
     case LOOM_OP_FUNC_EXIT:
+    case LOOM_OP_FUNC_UNREACHABLE:
       return true;
     default:
       return false;
@@ -195,6 +196,7 @@ static bool loom_low_lower_op_is_structural(
     case LOOM_OP_CFG_BR:
     case LOOM_OP_CFG_COND_BR:
     case LOOM_OP_FUNC_EXIT:
+    case LOOM_OP_FUNC_UNREACHABLE:
     case LOOM_OP_SCF_FOR:
     case LOOM_OP_SCF_IF:
     case LOOM_OP_SCF_WHILE:

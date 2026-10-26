@@ -2100,6 +2100,7 @@ static iree_status_t loom_amdgpu_encode_packet(
     case LOOM_OP_LOW_COND_BR:
       return loom_amdgpu_encode_cond_branch_packet(state, packet);
     case LOOM_OP_LOW_RETURN:
+    case LOOM_OP_LOW_UNREACHABLE:
       return loom_amdgpu_encode_return_packet(state, packet);
     default:
       break;

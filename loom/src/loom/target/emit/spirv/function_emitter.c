@@ -1219,6 +1219,11 @@ iree_status_t loom_spirv_emit_low_op(loom_spirv_emit_state_t* state,
   if (loom_low_scf_if_isa(op)) {
     return loom_spirv_emit_scf_if(state, op);
   }
+  if (loom_low_unreachable_isa(op)) {
+    return loom_spirv_binary_write_instruction(
+        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+        LOOM_SPIRV_OP_UNREACHABLE, NULL, 0);
+  }
   if (loom_low_scf_for_isa(op)) {
     return loom_spirv_emit_scf_for(state, op);
   }

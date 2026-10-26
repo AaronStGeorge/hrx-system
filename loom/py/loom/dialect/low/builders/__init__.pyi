@@ -389,3 +389,8 @@ class LowBuilder(DialectBuilder):
         body: Region | None = ...,
         location_id: int | None = ...,
     ) -> None: ...
+    def unreachable(
+        self,
+        *,
+        location_id: int | None = ...,
+    ) -> None: ...

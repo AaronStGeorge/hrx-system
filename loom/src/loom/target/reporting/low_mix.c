@@ -38,7 +38,7 @@ static uint64_t loom_target_compile_report_low_control_transfer_count(
   if (node->op == NULL) {
     return 0;
   }
-  if (loom_low_return_isa(node->op)) {
+  if (loom_low_return_isa(node->op) || loom_low_unreachable_isa(node->op)) {
     return 1;
   }
   if (loom_low_br_isa(node->op)) {

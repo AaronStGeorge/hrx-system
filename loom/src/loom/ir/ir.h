@@ -1314,6 +1314,11 @@ typedef struct loom_func_like_vtable_t {
   // only declare a signature.
   uint8_t body_region_index;
 
+  // Optional terminator for a direct body path that cannot reach the ordinary
+  // result-bearing return. LOOM_OP_KIND_UNKNOWN when every direct body exit
+  // must use the body's declared terminator.
+  loom_op_kind_t unreachable_terminator;
+
   // Index of the template-family symbol attr on implementation providers.
   // LOOM_ATTR_INDEX_NONE for non-provider function-like operations.
   uint8_t template_family_attr_index;

@@ -54,7 +54,8 @@ enum {
   LOOM_OP_LOW_SCHEDULE_END = LOOM_OP_KIND(LOOM_DIALECT_LOW, 30),
   LOOM_OP_LOW_OP_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 31),
   LOOM_OP_LOW_FUNC_EXIT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 32),
-  LOOM_OP_LOW_COUNT_ = 33,
+  LOOM_OP_LOW_UNREACHABLE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 33),
+  LOOM_OP_LOW_COUNT_ = 34,
 };
 
 // Symbol visibility. Absent (0) means private (module-internal).
@@ -937,6 +938,14 @@ iree_status_t loom_low_func_exit_build(
 iree_status_t loom_low_func_exit_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_UNREACHABLE: Terminate a direct low function-body path that cannot reach the ordinary result-bearing return. Reaching this operation is undefined; it is not a runtime trap or assertion.
+// low.unreachable
+LOOM_DEFINE_ISA(loom_low_unreachable_isa, LOOM_OP_LOW_UNREACHABLE)
+iree_status_t loom_low_unreachable_build(
+    loom_builder_t* builder,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // Declarative short spellings used inside target assembly regions.
 extern const loom_op_assembly_format_table_t loom_low_assembly_formats;

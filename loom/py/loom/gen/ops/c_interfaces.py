@@ -34,7 +34,7 @@ from loom.dsl import (
 from loom.fields import compute_layout
 from loom.gen.ops import c_queries, c_symbols
 from loom.gen.ops.c_enums import CALL_LIKE_KIND_MAP
-from loom.gen.ops.c_names import c_prefix
+from loom.gen.ops.c_names import c_enum_name, c_prefix
 
 _MEMORY_ACCESS_OPERATION_KIND_MAP: dict[MemoryAccessOperationKind, str] = {
     MemoryAccessOperationKind.LOAD: "LOOM_MEMORY_ACCESS_OPERATION_LOAD",
@@ -72,7 +72,7 @@ class InterfaceFieldSpec:
         "callee_attr_index". Emitted as the designated initializer key.
     kind: How to resolve the Python value to a C integer index or literal.
         One of "attr", "region", "operand", "result", "block_arg", "bool",
-        "call_kind", or "c_ptr".
+        "call_kind", "op_kind", or "c_ptr".
     region_field: For kind="block_arg", the name of the interface field that
         names the region the block arg belongs to. Unused for other kinds.
     required: True when a soft default is still semantically required and must
@@ -191,6 +191,7 @@ INTERFACES: tuple[InterfaceSpec, ...] = (
                 expected_attr_type=ATTR_TYPE_I64,
             ),
             InterfaceFieldSpec("body", "body_region_index", "region"),
+            InterfaceFieldSpec("unreachable", "unreachable_terminator", "op_kind"),
             InterfaceFieldSpec("template_family", "template_family_attr_index", "attr"),
             InterfaceFieldSpec("priority", "priority_attr_index", "attr"),
             InterfaceFieldSpec("args", "args_operand_field_index", "operand"),
@@ -354,6 +355,7 @@ def _resolve_interface_field(
     iface: Any,
     field_spec: InterfaceFieldSpec,
     interface_name: str,
+    ops_by_name: dict[str, Op],
 ) -> str:
     """Resolves one interface field to its emitted C initializer value."""
     py_value = getattr(iface, field_spec.py_field)
@@ -387,6 +389,17 @@ def _resolve_interface_field(
         if not isinstance(py_value, CallLikeKind):
             raise ValueError(f"{interface_name} field {field_spec.py_field!r}: expected CallLikeKind, got {py_value!r}")
         return CALL_LIKE_KIND_MAP[py_value]
+    if field_spec.kind == "op_kind":
+        if py_value is None:
+            return "LOOM_OP_KIND_UNKNOWN"
+        referenced_op = ops_by_name.get(py_value)
+        if referenced_op is None:
+            raise ValueError(f"{interface_name} on {op.name!r}: op kind {py_value!r} must name a registered op")
+        if not referenced_op.has_trait("Terminator"):
+            raise ValueError(f"{interface_name} on {op.name!r}: op kind {py_value!r} must be a terminator")
+        if referenced_op.operands or referenced_op.results or referenced_op.attrs or referenced_op.regions or referenced_op.successors:
+            raise ValueError(f"{interface_name} on {op.name!r}: op kind {py_value!r} must have no operands, results, attrs, regions, or successors")
+        return c_enum_name(referenced_op)
     if field_spec.kind == "c_ptr":
         if isinstance(iface, TargetLikeInterface) and field_spec.py_field == "descriptor" and iface.bundle_table is not None:
             descriptor = iface.descriptor or f"{c_prefix(op)}_target_like_descriptor"
@@ -678,7 +691,7 @@ def _validate_region_branch_interface(op: Op, iface: RegionBranchInterface, inte
         raise ValueError(f"{interface_name} on {op.name!r}: true_region and false_region must be distinct")
 
 
-def _interface_field_initializers(op: Op, spec: InterfaceSpec, iface: Any) -> list[str]:
+def _interface_field_initializers(op: Op, spec: InterfaceSpec, iface: Any, ops_by_name: dict[str, Op]) -> list[str]:
     """Resolves and validates the fields of an implemented interface."""
     if isinstance(iface, CachePolicyInterface):
         _validate_cache_policy_interface(op, iface, spec.name)
@@ -692,7 +705,7 @@ def _interface_field_initializers(op: Op, spec: InterfaceSpec, iface: Any) -> li
         _validate_memory_access_interface(op, iface, spec.name)
     lines = ["    .available = true,"] if spec.inline else []
     for field_spec in spec.fields:
-        value_str = _resolve_interface_field(op, iface, field_spec, spec.name)
+        value_str = _resolve_interface_field(op, iface, field_spec, spec.name, ops_by_name)
         lines.append(f"    .{field_spec.c_field} = {value_str},")
     if isinstance(iface, FuncLikeInterface):
         symbol_interfaces = op.symbol_def.interfaces if op.symbol_def is not None else []
@@ -717,24 +730,24 @@ def _interface_field_initializers(op: Op, spec: InterfaceSpec, iface: Any) -> li
     return lines
 
 
-def emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str]) -> None:
+def emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str], ops_by_name: dict[str, Op]) -> None:
     """Appends a separate metadata declaration for pointer-based interfaces."""
     iface = c_queries.find_interface(op, spec.python_class)
     if iface is None or spec.inline:
         return
     lines.append(f"static const {spec.c_struct} {c_prefix(op)}_{spec.vtable_field} = {{")
-    lines.extend(_interface_field_initializers(op, spec, iface))
+    lines.extend(_interface_field_initializers(op, spec, iface, ops_by_name))
     lines.append("};")
     lines.append("")
 
 
-def interface_vtable_initializer(op: Op, spec: InterfaceSpec) -> str | None:
+def interface_vtable_initializer(op: Op, spec: InterfaceSpec, ops_by_name: dict[str, Op]) -> str | None:
     """Returns the binding initializer, or None when the interface is absent."""
     iface = c_queries.find_interface(op, spec.python_class)
     if iface is None:
         return None
     if spec.inline:
-        fields = " ".join(line.strip() for line in _interface_field_initializers(op, spec, iface))
+        fields = " ".join(line.strip() for line in _interface_field_initializers(op, spec, iface, ops_by_name))
         return f"{{ {fields} }}"
     return f"&{c_prefix(op)}_{spec.vtable_field}"
 

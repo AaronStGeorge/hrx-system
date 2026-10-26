@@ -3197,6 +3197,7 @@ static iree_status_t loom_amdgpu_append_structural_packet(
     case LOOM_OP_LOW_STORAGE_ADDRESS:
       return loom_amdgpu_append_storage_address_packet(user_data, context);
     case LOOM_OP_LOW_RETURN:
+    case LOOM_OP_LOW_UNREACHABLE:
       return loom_amdgpu_append_return_packet(user_data, context);
     case LOOM_OP_LOW_BR:
       return loom_amdgpu_append_branch_packet(user_data, context);

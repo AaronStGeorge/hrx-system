@@ -602,6 +602,11 @@ IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_low_lower_structural_op(
     }
     case LOOM_OP_FUNC_EXIT:
       return loom_low_lower_emit_func_exit(context, source_op);
+    case LOOM_OP_FUNC_UNREACHABLE: {
+      loom_op_t* low_unreachable_op = NULL;
+      return loom_low_unreachable_build(&context->builder, source_op->location,
+                                        &low_unreachable_op);
+    }
     case LOOM_OP_SCF_YIELD:
       return loom_low_lower_emit_scf_yield(context, source_op);
     case LOOM_OP_SCF_CONDITION:

@@ -578,6 +578,7 @@ static iree_status_t loom_aie2p_low_verify_op(
       AIE2P_CONFIGURATION_DESCRIPTOR_SET_ID) {
     if (packet->kind == LOOM_LOW_DESCRIPTOR_PACKET_NONE) {
       if (!loom_low_return_isa(packet->op) &&
+          !loom_low_unreachable_isa(packet->op) &&
           !loom_low_assume_isa(packet->op)) {
         const loom_diagnostic_param_t params[] = {
             loom_param_string(state->function_name),
@@ -614,7 +615,8 @@ static iree_status_t loom_aie2p_low_verify_op(
   } else if (state->target->descriptor_set->stable_id ==
              AIE2P_ARRAY_DESCRIPTOR_SET_ID) {
     if (packet->kind == LOOM_LOW_DESCRIPTOR_PACKET_NONE) {
-      if (loom_low_return_isa(packet->op)) {
+      if (loom_low_return_isa(packet->op) ||
+          loom_low_unreachable_isa(packet->op)) {
         return iree_ok_status();
       }
       const loom_diagnostic_param_t params[] = {

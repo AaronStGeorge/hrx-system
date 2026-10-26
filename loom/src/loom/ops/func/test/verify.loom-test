@@ -35,6 +35,14 @@ func.def @wrong_exit_type(%done: i1, %value: f32) -> (i32) {
   func.return %c0 : i32
 }
 
+func.def @unreachable_cannot_terminate_exit_region(%done: i1) -> (i32) {
+  // ERROR@+1: STRUCTURE/018 {op_name="func.exit", expected_terminator="func.return", actual_terminator="func.unreachable"}
+  func.exit %done : i1 {
+    func.unreachable
+  }
+  func.unreachable
+}
+
 template.decl @choice(%done: i1, %value: i32) -> (i32)
 
 template.def<@choice> @template_exit(%done: i1, %value: i32) -> (i32) {

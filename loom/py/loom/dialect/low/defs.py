@@ -551,7 +551,7 @@ low_func_def = Op(
     ),
     results=[Result("results", REGISTER, variadic=True)],
     regions=[RegionDef("body", doc="Low function body.", terminator="low.return")],
-    interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, body="body")],
+    interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, body="body", unreachable="low.unreachable")],
     verify="loom_low_func_def_verify",
     constraints=[
         BlockArgsSatisfy("body", REGISTER),
@@ -592,7 +592,7 @@ low_kernel_def = Op(
         retain="retain",
     ),
     regions=[RegionDef("body", doc="Low kernel body.", terminator="low.return")],
-    interfaces=[FuncLikeInterface(**_KERNEL_FUNC_LIKE_COMMON, body="body")],
+    interfaces=[FuncLikeInterface(**_KERNEL_FUNC_LIKE_COMMON, body="body", unreachable="low.unreachable")],
     verify="loom_low_kernel_def_verify",
     constraints=[
         BlockArgsSatisfy("body", REGISTER),
@@ -720,6 +720,20 @@ low_func_exit = Op(
         "low.func.exit %done : reg<wasm.i32> {\n  low.return\n}",
         "low.func.exit %found : reg<spirv.id : i1> {\n  low.return %value : reg<spirv.id : i32>\n}",
     ],
+)
+
+# ============================================================================
+# low.unreachable — terminate a low function path that cannot return
+# ============================================================================
+
+low_unreachable = Op(
+    "low.unreachable",
+    group=low_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Terminate a direct low function-body path that cannot reach the ordinary result-bearing return. Reaching this operation is undefined; it is not a runtime trap or assertion."),
+    traits=[TERMINATOR],
+    format=[],
+    examples=["low.unreachable"],
 )
 
 # ============================================================================
@@ -1918,4 +1932,5 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     # Appended to preserve every existing serialized Low operation ordinal.
     low_op_cond_br,
     low_func_exit,
+    low_unreachable,
 )

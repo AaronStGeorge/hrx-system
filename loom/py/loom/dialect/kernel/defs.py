@@ -361,6 +361,7 @@ kernel_def = Op(
             export_linkage="export_linkage",
             predicates="predicates",
             body="body",
+            unreachable="func.unreachable",
         )
     ],
     verify="loom_kernel_def_verify",

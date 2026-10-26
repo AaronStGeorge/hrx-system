@@ -124,6 +124,63 @@ def test_generate_tables_rejects_non_string_representation_contract() -> None:
         generate_tables_c("test", 0, [op])
 
 
+def _make_func_with_unreachable(unreachable: str) -> Op:
+    return Op(
+        "test.func",
+        group=Dialect("test"),
+        operands=[Operand("args", ANY, variadic=True)],
+        attrs=[AttrDef("callee", ATTR_TYPE_SYMBOL)],
+        interfaces=[
+            FuncLikeInterface(
+                callee="callee",
+                args="args",
+                unreachable=unreachable,
+            )
+        ],
+        format=[FuncArgs("args")],
+    )
+
+
+def test_generate_tables_resolves_func_unreachable_terminator() -> None:
+    terminator = Op("test.unreachable", group=Dialect("test"), traits=[TERMINATOR])
+
+    source = generate_tables_c(
+        "test",
+        0,
+        [_make_func_with_unreachable(terminator.name), terminator],
+    )
+
+    assert ".unreachable_terminator = LOOM_OP_TEST_UNREACHABLE" in source
+
+
+def test_generate_tables_rejects_unregistered_func_unreachable_terminator() -> None:
+    with pytest.raises(ValueError, match=r"op kind 'test\.missing' must name a registered op"):
+        generate_tables_c("test", 0, [_make_func_with_unreachable("test.missing")])
+
+
+def test_generate_tables_rejects_invalid_func_unreachable_terminator() -> None:
+    non_terminator = Op("test.unreachable", group=Dialect("test"))
+    with pytest.raises(ValueError, match=r"op kind 'test\.unreachable' must be a terminator"):
+        generate_tables_c(
+            "test",
+            0,
+            [_make_func_with_unreachable(non_terminator.name), non_terminator],
+        )
+
+    variadic_terminator = Op(
+        "test.unreachable",
+        group=Dialect("test"),
+        operands=[Operand("values", ANY, variadic=True)],
+        traits=[TERMINATOR],
+    )
+    with pytest.raises(ValueError, match=r"must have no operands, results, attrs, regions, or successors"):
+        generate_tables_c(
+            "test",
+            0,
+            [_make_func_with_unreachable(variadic_terminator.name), variadic_terminator],
+        )
+
+
 def _make_counted_loop_op(
     *,
     body_arg_source: str | None = "iter_args",

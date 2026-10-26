@@ -5787,7 +5787,9 @@ class FuncLikeInterface(NamedTuple):
     attr/region indices and emits a loom_func_like_vtable_t in .rodata. The
     complete operand list of each callable exit—the declared body terminator
     kind in a block directly owned by the body—is the function result tuple.
-    Nested same-kind terminators do not exit the function.
+    Nested same-kind terminators do not exit the function. A callable may also
+    declare one alternate zero-result terminator for a direct body path that
+    cannot reach the result-bearing return.
     """
 
     # Symbol ref attr that names this function (required).
@@ -5836,6 +5838,10 @@ class FuncLikeInterface(NamedTuple):
     # Region name for the function body. None for bodyless ops that
     # only declare a signature without providing an implementation.
     body: str | None = None
+    # Optional zero-result terminator for direct body paths that cannot reach
+    # the ordinary result-bearing return. None means every direct body exit
+    # must use the body region's declared terminator.
+    unreachable: str | None = None
     # Symbol attr naming the template family implemented by this function.
     # None for function kinds that are not template providers.
     template_family: str | None = None

@@ -241,3 +241,20 @@ low.func.def target<test.low.core> @foreign_function() asm {
 low.func.def target<amd.xdna.aie2p.array> @array_function() asm {
   return
 }
+
+// ====
+
+// A result-bearing function may have a direct body path that source control
+// proves cannot reach its ordinary return. AIE2P keeps that path terminal
+// without allocating or moving a fabricated result value.
+// RUN: emit aie2p-leaf @unreachable_tail registers=r0,lr
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @unreachable_tail() -> (reg<aie2p.er>) asm {
+  low.unreachable
+}
+
+// ----
+r0: preserved
+lr: preserved

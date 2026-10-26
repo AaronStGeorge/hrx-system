@@ -18,6 +18,20 @@ low.func.def target<amdgpu.rdna3.core>(@gfx11_target) @gfx11_constants(%resource
 
 // ====
 
+// A direct body path that source control proves cannot reach its ordinary
+// result-bearing return terminates the wave without fabricating a result.
+// RUN: emit amdgpu-assembly @gfx11_unreachable_tail waits=none
+amdgpu.target<gfx1100> @gfx11_target
+
+low.func.def target<amdgpu.rdna3.core>(@gfx11_target) @gfx11_unreachable_tail() -> (reg<amdgpu.vgpr>) asm {
+  low.unreachable
+}
+
+// ----
+  s_endpgm
+
+// ====
+
 // Structural copies from scalar to vector registers encode the scalar source
 // selector directly in VOP1 rather than interpreting it as a VGPR ordinal.
 // RUN: emit amdgpu-native-words @gfx942_sgpr_to_vgpr_copy waits=none strategy=source fixed=%source:physical_register:2:1 fixed=%result:physical_register:1:1

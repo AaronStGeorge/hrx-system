@@ -472,7 +472,7 @@ func_def = Op(
     ),
     results=[Result("results", ANY, variadic=True)],
     regions=[RegionDef("body", doc="Function body.", terminator="func.return")],
-    interfaces=[FuncLikeInterface(**_FUNC_LIKE_CONTRACT, body="body")],
+    interfaces=[FuncLikeInterface(**_FUNC_LIKE_CONTRACT, body="body", unreachable="func.unreachable")],
     verify="loom_func_def_verify",
     format=[
         *_MODIFIER_FORMAT,
@@ -663,6 +663,20 @@ func_return = Op(
 )
 
 # ============================================================================
+# func.unreachable — terminate a callable path that cannot return
+# ============================================================================
+
+func_unreachable = Op(
+    "func.unreachable",
+    group=func_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Terminate a direct function-body path that cannot reach the ordinary result-bearing return. Reaching this operation is undefined; it is not a runtime trap or assertion."),
+    traits=[TERMINATOR],
+    format=[],
+    examples=["func.unreachable"],
+)
+
+# ============================================================================
 # func.location — captured source provenance
 # ============================================================================
 
@@ -794,4 +808,6 @@ ALL_FUNC_OPS: tuple[Op, ...] = (
     func_return,
     func_location,
     func_exit,
+    # Appended to preserve every existing serialized Func operation ordinal.
+    func_unreachable,
 )

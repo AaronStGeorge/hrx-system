@@ -359,3 +359,27 @@ Disassembly of section CODE:
   local.get  0
   return
   end
+
+// ====
+
+// RUN: emit wasm-dis
+// REQUIRES: wasm-objdump
+
+wasm.target<simd128> @target
+
+// A result-bearing function may end in a path that source control proves
+// cannot reach its ordinary return. Wasm represents that contract directly.
+low.func.def public target<wasm.core.simd128>(@target) abi(wasm_function) @unreachable_tail() -> (reg<wasm.i32>) asm {
+  low.unreachable
+}
+
+// ----
+Disassembly of section CODE:
+
+<CODE>:
+        # 1 functions in section.
+
+<unreachable_tail>:
+
+  unreachable
+  end

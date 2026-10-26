@@ -38,6 +38,19 @@ kernel.def @conditional_kernel() {
   kernel.return
 }
 
+// A direct callable-body path may state that it cannot reach the ordinary
+// result-bearing return. The same terminator is valid for runtime kernels.
+func.def @never_returns() -> (i32) {
+  func.unreachable
+}
+
+kernel.def @unreachable_kernel() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch() {
+  func.unreachable
+}
+
 // ====
 
 // Link-once definitions retain public source visibility while permitting
