@@ -22,6 +22,7 @@ NUMERIC_CORPUS = loom_corpus_manifest(
         "conversion/integer_float8.loom",
         "conversion/integer_floating.loom",
         "conversion/integer_widths.loom",
+        "conversion/mxfp8_record_layout.loom",
         "conversion/narrow_arithmetic.loom",
         "conversion/narrow_integer_float.loom",
         "conversion/narrow_vectors.loom",

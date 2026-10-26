@@ -103,6 +103,7 @@ _KERNEL_SOURCES = [
     "numeric/conversion/float8_facts.loom",
     "numeric/conversion/integer_floating.loom",
     "numeric/conversion/integer_widths.loom",
+    "numeric/conversion/mxfp8_record_layout.loom",
     "numeric/conversion/narrow_vectors.loom",
     "numeric/conversion/quantization.loom",
     "numeric/float/approximate_extended.loom",
