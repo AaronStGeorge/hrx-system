@@ -336,7 +336,7 @@ TEST_F(MediaExecutionTest,
                                                      buffers_[1], &value));
   EXPECT_EQ(packet_.transfer.operations, nullptr);
   ASSERT_NO_FATAL_FAILURE(RemoveProducer());
-  IREE_ASSERT_OK(loom_serve_device_trim(device_, 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(device_), 0));
   output_.resize(packet_.device_length);
   const iree_hal_transfer_operation_t download = {
       .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,

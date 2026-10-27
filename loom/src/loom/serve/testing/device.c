@@ -70,7 +70,9 @@ static bool loom_serve_test_capacity_complete(void* user_data) {
 
 iree_status_t loom_serve_test_device_trim_and_drain(loom_serve_device_t* device,
                                                     uint64_t target_bytes) {
-  IREE_RETURN_IF_ERROR(loom_serve_device_trim(device, target_bytes));
+  loom_serve_device_trim_programs(device);
+  IREE_RETURN_IF_ERROR(
+      loom_serve_pool_trim(loom_serve_device_pool(device), target_bytes));
   loom_serve_memory_pool_t* memory = loom_serve_device_memory_pool(device);
   // A retained admission failure does not prevent already-accepted returns
   // from retiring. Join the native source before returning either diagnosis.

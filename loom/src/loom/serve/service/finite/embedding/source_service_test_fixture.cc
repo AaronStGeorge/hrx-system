@@ -527,7 +527,7 @@ void SourceEmbeddingServiceTest::CheckInvalidSubmissionRetirement(
   EXPECT_EQ(retired_counters_.cancelled, 0u);
   // Queue allocation records may still own backing after model retirement.
   // Trim is nonblocking; group destruction joins the remaining records.
-  IREE_ASSERT_OK(loom_serve_device_trim(device_, 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(device_), 0));
 }
 
 uint64_t SourceEmbeddingServiceTest::CompletedRequests() {

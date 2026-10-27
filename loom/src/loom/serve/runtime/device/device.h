@@ -124,37 +124,11 @@ loom_serve_device_t* loom_serve_device_group_at(
 loom_serve_pool_statistics_t loom_serve_device_memory_statistics(
     const loom_serve_device_t* device);
 
-// Cold owner-controlled trim toward target_bytes of reported managed backing.
-// Releases idle workspace first, then unpinned parameter groups in LRU order.
-// Live workspace, pinned parameters and model-owned mutable state survive.
-// An unreachable target is not an error; statistics expose the reached extent.
-// Consumers pin parameter groups through retirement; only those already
-// retired are eligible. Does not wait for live workspace or destroy queues.
-// Detached native returns do not reduce the
-// parameter budget, though statistics may still report those bytes until the
-// cache's queued sweep runs.
-// Platform unmap/free failures propagate to the owner.
-iree_status_t loom_serve_device_trim(loom_serve_device_t* device,
-                                     uint64_t target_bytes);
-
-// Independent idle policies, applied by the serialized serving owner. Zero
-// disables a policy. Both durations must be nonnegative. Mutable model state,
-// sessions, and prefix history are outside these policies.
-typedef struct loom_serve_device_idle_policy_t {
-  // Idle interval after the last command workspace root retires.
-  iree_duration_t workspace_timeout;
-  // Idle interval after the last invocation or explicit parameter pin releases.
-  // Only elastic parameter backing can be deactivated independently.
-  iree_duration_t parameter_timeout;
-} loom_serve_device_idle_policy_t;
-
-// Schedules expired backing releases without waiting for native maintenance.
-// Returns pending while enabled resources await retirement or idle expiry;
-// native releases already scheduled use the ordinary capacity observer.
-// Live invocation pins and explicit parameter pins prevent deactivation.
-iree_status_t loom_serve_device_trim_idle(
-    loom_serve_device_t* device, loom_serve_device_idle_policy_t policy,
-    iree_time_t now, bool* out_pending);
+// Releases unused device-local compiled products and group-wide immutable
+// tokenizers. Live model/load borrowers preserve their entries. These caches
+// are independent of model storage and its pool policies.
+// Called on the serialized host owner; does not wait for device work.
+void loom_serve_device_trim_programs(loom_serve_device_t* device);
 
 // Borrowed handles valid through group destruction. Every device record returns
 // the same HAL group; execution bindings retain their shared queue inventory.

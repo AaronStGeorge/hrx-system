@@ -16,6 +16,8 @@ namespace loom_serve::testing::embedding {
 
 class PoolBindingTest : public SourceEmbeddingServiceTest {
  protected:
+  iree_host_size_t DeviceCount() const override { return 2; }
+
   void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(SourceEmbeddingServiceTest::SetUp());
     interface_.set_observer(interface_.self, {});
@@ -27,9 +29,10 @@ class PoolBindingTest : public SourceEmbeddingServiceTest {
     const std::string package =
         iree::testing::MakeTempFilePath("embedding_pool_binding");
     ASSERT_NO_FATAL_FAILURE(WriteCheckpointPackage(package));
-    ASSERT_NO_FATAL_FAILURE(Load(package, shared_, &producer_));
-    ASSERT_NO_FATAL_FAILURE(Load(package, shared_, &peer_));
-    ASSERT_NO_FATAL_FAILURE(Load(package, isolated_, &model_));
+    ASSERT_NO_FATAL_FAILURE(Load(package, loom_serve_device_group_at(group_, 0),
+                                 shared_, &producer_));
+    ASSERT_NO_FATAL_FAILURE(Load(package, device_, shared_, &peer_));
+    ASSERT_NO_FATAL_FAILURE(Load(package, device_, isolated_, &model_));
     IREE_ASSERT_OK(loom_serve_finite_service_allocate(
         host_, model_, loom_serve_embedding_protocol(), IREE_SV("fixture"), 16,
         16, 0, nullptr, host_allocator_, &service_));
@@ -50,21 +53,29 @@ class PoolBindingTest : public SourceEmbeddingServiceTest {
   }
 
   void CreatePool(loom_serve_pool_t** out_pool) {
-    const auto* dispatch =
-        iree_hal_queue_family(loom_serve_device_dispatch_queue(device_));
-    const auto* transfer =
-        iree_hal_queue_family(loom_serve_device_transfer_queue(device_));
-    const iree_hal_pool_family_access_t families[] = {
-        {
-            .family = dispatch,
-            .usage = IREE_HAL_BUFFER_USAGE_STORAGE |
-                     IREE_HAL_BUFFER_USAGE_TRANSFER |
-                     IREE_HAL_BUFFER_USAGE_DISPATCH_INDIRECT_PARAMETERS,
-        },
-        {.family = transfer, .usage = IREE_HAL_BUFFER_USAGE_TRANSFER},
-    };
+    iree_hal_pool_family_access_t families[4];
+    iree_host_size_t family_count = 0;
+    for (iree_host_size_t i = 0; i < 2; ++i) {
+      auto* device = loom_serve_device_group_at(group_, i);
+      const auto* dispatch =
+          iree_hal_queue_family(loom_serve_device_dispatch_queue(device));
+      const auto* transfer =
+          iree_hal_queue_family(loom_serve_device_transfer_queue(device));
+      families[family_count++] = {
+          .family = dispatch,
+          .usage = IREE_HAL_BUFFER_USAGE_STORAGE |
+                   IREE_HAL_BUFFER_USAGE_TRANSFER |
+                   IREE_HAL_BUFFER_USAGE_DISPATCH_INDIRECT_PARAMETERS,
+      };
+      if (dispatch != transfer) {
+        families[family_count++] = {
+            .family = transfer,
+            .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
+        };
+      }
+    }
     const iree_hal_pool_scope_t scope = {
-        .family_count = dispatch == transfer ? 1u : 2u,
+        .family_count = family_count,
         .families = families,
     };
     const loom_serve_pool_options_t options = {
@@ -78,8 +89,8 @@ class PoolBindingTest : public SourceEmbeddingServiceTest {
         out_pool));
   }
 
-  void Load(const std::string& package, loom_serve_pool_t* pool,
-            loom_serve_finite_model_t** out_model) {
+  void Load(const std::string& package, loom_serve_device_t* device,
+            loom_serve_pool_t* pool, loom_serve_finite_model_t** out_model) {
     ModelDocument document;
     IREE_ASSERT_OK(document.Load(package + "/model.json"));
     const loom_serve_finite_model_options_t options = {
@@ -88,7 +99,7 @@ class PoolBindingTest : public SourceEmbeddingServiceTest {
         .options = IREE_SV("{\"batch_units\":64}"),
     };
     IREE_ASSERT_OK(loom_serve_finite_model_allocate(
-        device_, pool, &options, host_allocator_, out_model));
+        device, pool, &options, host_allocator_, out_model));
     EXPECT_EQ(loom_serve_finite_model_memory_limit(*out_model), 8192u);
     EXPECT_EQ(loom_serve_residency_cache(
                   loom_serve_finite_model_residency(*out_model)),
@@ -116,10 +127,10 @@ class PoolBindingTest : public SourceEmbeddingServiceTest {
     ASSERT_TRUE(complete);  // This source uses its already-compiled cold stage.
   }
 
-  void Submit(loom_serve_finite_model_t* model) {
+  void Submit(loom_serve_finite_model_t* model, loom_serve_pool_t* pool) {
     loom_serve_execution_frontier_t ready;
     IREE_ASSERT_OK(loom_serve_finite_model_submit(model, &result_, &ready));
-    auto* workspace = loom_serve_pool_workspace(shared_);
+    auto* workspace = loom_serve_pool_workspace(pool);
     for (size_t i = 0; i < IREE_ARRAYSIZE(ready.semaphores); ++i) {
       IREE_ASSERT_OK(loom_serve_workspace_wait(workspace, ready.semaphores[i],
                                                ready.values[i]));
@@ -147,7 +158,7 @@ class PoolBindingTest : public SourceEmbeddingServiceTest {
     IREE_ASSERT_OK(status);
   }
 
-  // Explicit owner shared by producer and peer on the same native device.
+  // Explicit owner shared by producer and peer on separate execution devices.
   loom_serve_pool_t* shared_ = nullptr;
   // Second allowance; no capacity is inferred from its physical placement.
   loom_serve_pool_t* isolated_ = nullptr;
@@ -160,14 +171,14 @@ class PoolBindingTest : public SourceEmbeddingServiceTest {
 };
 
 TEST_F(PoolBindingTest, RetainedResultsChargeOnlyTheirExplicitPool) {
-  EXPECT_EQ(loom_serve_device_group_count(group_), 1u);
+  EXPECT_EQ(loom_serve_device_group_count(group_), 2u);
   EXPECT_NE(loom_serve_pool_memory(shared_), loom_serve_pool_memory(isolated_));
   ASSERT_NO_FATAL_FAILURE(Prepare(producer_));
   loom_serve_residency_admission_t admission;
   IREE_ASSERT_OK(loom_serve_residency_try_admit(
       loom_serve_finite_model_residency(producer_), &admission));
   ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
-  ASSERT_NO_FATAL_FAILURE(Submit(producer_));
+  ASSERT_NO_FATAL_FAILURE(Submit(producer_, shared_));
   IREE_ASSERT_OK(
       loom_serve_finite_model_free(std::exchange(producer_, nullptr)));
   IREE_ASSERT_OK(loom_serve_memory_pool_await(loom_serve_pool_memory(shared_)));
@@ -204,7 +215,7 @@ TEST_F(PoolBindingTest, RetainedResultsChargeOnlyTheirExplicitPool) {
   EXPECT_FALSE(loom_serve_residency_cache_is_pending(cache));
   IREE_ASSERT_OK(loom_serve_residency_try_admit(residency, &admission));
   ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
-  ASSERT_NO_FATAL_FAILURE(Submit(peer_));
+  ASSERT_NO_FATAL_FAILURE(Submit(peer_, shared_));
   EXPECT_LE(loom_serve_memory_pool_statistics(loom_serve_pool_memory(shared_))
                 .peak_bytes,
             8192u);
@@ -219,15 +230,52 @@ TEST_F(PoolBindingTest, LastResultOutlivesEveryModelInItsPool) {
   IREE_ASSERT_OK(loom_serve_residency_try_admit(
       loom_serve_finite_model_residency(producer_), &admission));
   ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
-  ASSERT_NO_FATAL_FAILURE(Submit(producer_));
+  ASSERT_NO_FATAL_FAILURE(Submit(producer_, shared_));
   IREE_ASSERT_OK(
       loom_serve_finite_model_free(std::exchange(producer_, nullptr)));
   IREE_ASSERT_OK(loom_serve_finite_model_free(std::exchange(peer_, nullptr)));
   EXPECT_TRUE(loom_serve_pool_is_in_use(shared_));
   loom_serve_finite_result_release(std::exchange(result_, nullptr));
   EXPECT_FALSE(loom_serve_pool_is_in_use(shared_));
-  // The independent model still owns its own pool, on the same native device.
+  // The independent model still owns its own pool on the peer's device.
   EXPECT_TRUE(loom_serve_pool_is_in_use(isolated_));
+}
+
+TEST_F(PoolBindingTest, TrimReclaimsOnlyTheSelectedPoolAndPreservesReload) {
+  for (const auto& [model, pool] :
+       {std::pair{producer_, shared_}, std::pair{model_, isolated_}}) {
+    ASSERT_NO_FATAL_FAILURE(Prepare(model));
+    loom_serve_residency_admission_t admission;
+    IREE_ASSERT_OK(loom_serve_residency_try_admit(
+        loom_serve_finite_model_residency(model), &admission));
+    ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+    ASSERT_NO_FATAL_FAILURE(Submit(model, pool));
+    loom_serve_finite_result_release(std::exchange(result_, nullptr));
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(loom_serve_pool_memory(pool)));
+    EXPECT_GT(loom_serve_pool_statistics(pool).retained.committed_bytes, 0u);
+  }
+  auto* shared_residency = loom_serve_finite_model_residency(producer_);
+  auto* isolated_residency = loom_serve_finite_model_residency(model_);
+  const auto before = loom_serve_pool_statistics(isolated_);
+  const auto activity = loom_serve_residency_activity(shared_residency);
+
+  IREE_ASSERT_OK(loom_serve_pool_trim(shared_, 0));
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(loom_serve_pool_memory(shared_)));
+  EXPECT_FALSE(loom_serve_residency_snapshot(shared_residency).active);
+  EXPECT_TRUE(loom_serve_residency_snapshot(isolated_residency).active);
+  EXPECT_EQ(loom_serve_pool_statistics(shared_).retained.committed_bytes, 0u);
+  EXPECT_EQ(loom_serve_pool_statistics(isolated_).retained.committed_bytes,
+            before.retained.committed_bytes);
+
+  ASSERT_NO_FATAL_FAILURE(Prepare(producer_));
+  loom_serve_residency_admission_t admission;
+  IREE_ASSERT_OK(loom_serve_residency_try_admit(shared_residency, &admission));
+  ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
+  ASSERT_NO_FATAL_FAILURE(Submit(producer_, shared_));
+  EXPECT_EQ(loom_serve_residency_activity(shared_residency).activations,
+            activity.activations + 1);
+  EXPECT_EQ(loom_serve_pool_statistics(isolated_).retained.committed_bytes,
+            before.retained.committed_bytes);
 }
 
 }  // namespace loom_serve::testing::embedding

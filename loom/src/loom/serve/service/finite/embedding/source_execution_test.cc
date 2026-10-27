@@ -1027,7 +1027,7 @@ TEST_F(DeviceResultTest, RaggedCohortsComposeBeforeProducerRetirement) {
   }
   // Neither destruction of the producer nor final caller result release may
   // release the allocation captured by the still-blocked consumer.
-  IREE_ASSERT_OK(loom_serve_device_trim(device_, 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(device_), 0));
   IREE_ASSERT_OK(iree_hal_semaphore_signal(gate_, 1, nullptr));
   const iree_hal_transfer_operation_t download = {
       .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
@@ -1046,7 +1046,7 @@ TEST_F(DeviceResultTest, RaggedCohortsComposeBeforeProducerRetirement) {
   const std::array<float, 14> expected = {1, 1, 1, 3, 6, 3, 2,
                                           3, 4, 2, 1, 1, 1, 1};
   EXPECT_EQ(output_, expected);
-  IREE_ASSERT_OK(loom_serve_device_trim(device_, 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(device_), 0));
   EXPECT_EQ(
       loom_serve_device_memory_statistics(device_).workspace.reservation_count,
       0u);

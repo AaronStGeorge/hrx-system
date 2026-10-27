@@ -428,7 +428,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     loom_serve_execution_release(shared_execution_);
     loom_serve_execution_release(execution_);
     iree_hal_semaphore_release(consumer_gate_);
-    IREE_EXPECT_OK(loom_serve_device_trim(device_owner_, 0));
+    IREE_EXPECT_OK(
+        loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
     DrainNativeReturns();
     const auto memory = loom_serve_device_memory_statistics(device_owner_);
     EXPECT_EQ(memory.retained.reserved_bytes,

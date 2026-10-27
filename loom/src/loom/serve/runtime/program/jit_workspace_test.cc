@@ -185,7 +185,8 @@ TEST_P(JitWorkspaceTest, UnequalPrivateWorkspacesPreservePoolPolicyAndOutput) {
   } else {
     EXPECT_GT(shared.reuse_count, statistics.reuse_count);
   }
-  IREE_ASSERT_OK(loom_serve_device_trim(device_owner_, 0));
+  IREE_ASSERT_OK(
+      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
   const auto trimmed =
       loom_serve_device_memory_statistics(device_owner_).workspace;
   // Completed consumers do not imply retirement of every raw queue capture.
@@ -288,7 +289,8 @@ TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
   const auto live =
       loom_serve_device_memory_statistics(device_owner_).workspace;
   EXPECT_EQ(live.reservation_count, 1u);
-  IREE_ASSERT_OK(loom_serve_device_trim(device_owner_, 0));
+  IREE_ASSERT_OK(
+      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
   EXPECT_GT(loom_serve_device_memory_statistics(device_owner_)
                 .workspace.bytes_committed,
             0u);
@@ -299,7 +301,8 @@ TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
   for (size_t i = 0; i < held_.output.size(); ++i) {
     EXPECT_EQ(held_.output[i], 105 + i);
   }
-  IREE_ASSERT_OK(loom_serve_device_trim(device_owner_, 0));
+  IREE_ASSERT_OK(
+      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
   const auto trimmed =
       loom_serve_device_memory_statistics(device_owner_).workspace;
   // The model has retired, but a raw allocation capture can still preserve an
@@ -404,7 +407,8 @@ TEST_P(JitWorkspaceTest, RetiredModelDoesNotJoinRawQueueAllocationCaptures) {
   uint64_t observed = 0;
   IREE_ASSERT_OK(iree_hal_semaphore_query(held_.gate, &observed));
   EXPECT_EQ(observed, 0u);
-  IREE_ASSERT_OK(loom_serve_device_trim(device_owner_, 0));
+  IREE_ASSERT_OK(
+      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
   // Fixture teardown opens the predecessor and joins the retained completion
   // before checking the shared workspace for this test's remaining captures.
 }

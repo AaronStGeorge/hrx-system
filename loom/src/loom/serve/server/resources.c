@@ -325,9 +325,11 @@ static iree_status_t loom_serve_resources_write_device(
     loom_output_stream_t* output) {
   loom_serve_device_t* device =
       loom_serve_device_group_at(resources->device_group, device_index);
-  const loom_serve_device_idle_policy_t idle =
+  // Group construction creates these default pools first, in device order.
+  // Additional explicit pools follow them in the independent inventory.
+  const loom_serve_pool_idle_policy_t idle =
       resources->idle_policy_count ? resources->idle_policies[device_index]
-                                   : (loom_serve_device_idle_policy_t){0};
+                                   : (loom_serve_pool_idle_policy_t){0};
   const iree_hal_device_identity_spec_t* identity =
       iree_hal_device_spec_identity(
           iree_hal_device_spec(loom_serve_device_handle(device)));
@@ -501,7 +503,9 @@ iree_status_t loom_serve_resources_trim(const loom_serve_resources_t* resources,
                                         loom_output_stream_t* output) {
   loom_serve_device_t* device =
       loom_serve_device_group_at(resources->device_group, device_index);
-  IREE_RETURN_IF_ERROR(loom_serve_device_trim(device, target_bytes));
+  loom_serve_device_trim_programs(device);
+  IREE_RETURN_IF_ERROR(
+      loom_serve_pool_trim(loom_serve_device_pool(device), target_bytes));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       output, "{\"target_bytes\":%" PRIu64 ",\"device\":", target_bytes));
   IREE_RETURN_IF_ERROR(

@@ -30,7 +30,7 @@ extern "C" {
 
 // One packed autoregressive model residency. A single host owner multiplexes
 // retained rows through the same VM process, commands and weights. Private
-// command workspace is borrowed from the shared device execution pool.
+// command workspace is borrowed from the explicitly bound storage pool.
 // Packed epochs separate submission from successful completion; no row-local
 // VM or thread is required. The owner excludes other model mutation until
 // completion, but independent models may execute concurrently. Synchronous

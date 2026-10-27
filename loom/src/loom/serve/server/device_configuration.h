@@ -24,7 +24,7 @@ typedef struct loom_serve_device_configuration_t {
   // Native creation inputs; driver remains NULL until application resolution.
   loom_serve_device_options_t options[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
   // Independent owner-side idle policies in the same order as options.
-  loom_serve_device_idle_policy_t idle[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
+  loom_serve_pool_idle_policy_t idle[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
 } loom_serve_device_configuration_t;
 
 // Parses {"devices":{"key":{"uri":"...",...}}}. Device entries support

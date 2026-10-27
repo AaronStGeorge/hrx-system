@@ -141,6 +141,42 @@ loom_serve_pool_statistics_t loom_serve_pool_statistics(
   return statistics;
 }
 
+iree_status_t loom_serve_pool_trim(loom_serve_pool_t* pool,
+                                   uint64_t target_bytes) {
+  const loom_serve_pool_statistics_t memory = loom_serve_pool_statistics(pool);
+  const uint64_t committed = pool->memory ? memory.retained.committed_bytes
+                                          : memory.workspace.bytes_committed;
+  if (committed <= target_bytes) {
+    return iree_ok_status();
+  }
+  iree_device_size_t workspace_bytes = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_serve_workspace_trim(pool->workspace, &workspace_bytes));
+  if (pool->memory) {
+    IREE_RETURN_IF_ERROR(
+        loom_serve_residency_cache_trim(pool->residency_cache, target_bytes));
+    loom_serve_memory_pool_trim(pool->memory, target_bytes);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_serve_pool_trim_idle(loom_serve_pool_t* pool,
+                                        loom_serve_pool_idle_policy_t policy,
+                                        iree_time_t now, bool* out_pending) {
+  *out_pending = false;
+  if (policy.workspace_timeout) {
+    *out_pending = loom_serve_workspace_trim_idle(pool->workspace, now,
+                                                  policy.workspace_timeout);
+  }
+  if (policy.parameter_timeout) {
+    bool pending = false;
+    IREE_RETURN_IF_ERROR(loom_serve_residency_cache_trim_idle(
+        pool->residency_cache, now, policy.parameter_timeout, &pending));
+    *out_pending |= pending;
+  }
+  return iree_ok_status();
+}
+
 bool loom_serve_pool_is_in_use(const loom_serve_pool_t* pool) {
   if (!pool) {
     return false;

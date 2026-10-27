@@ -600,7 +600,7 @@ TEST_F(FiniteComponentTest, DeviceResultSurvivesTrimReloadAndRemoval) {
   ASSERT_NO_FATAL_FAILURE(CheckResult(1));
   IREE_ASSERT_OK(Retire(component_));
   loom_serve_finite_component_free(std::exchange(component_, nullptr));
-  IREE_ASSERT_OK(loom_serve_device_trim(device_, 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(device_), 0));
   ASSERT_NO_FATAL_FAILURE(CheckResult(1));
 }
 

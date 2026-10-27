@@ -199,10 +199,10 @@ class ImageServiceFixture : public ::testing::Test {
       }
     }
     iree_hal_semaphore_release(predecessor_);
-    for (iree_host_size_t i = 0; i < loom_serve_device_group_count(group_);
+    for (iree_host_size_t i = 0; i < loom_serve_device_group_pool_count(group_);
          ++i) {
       IREE_EXPECT_OK(
-          loom_serve_device_trim(loom_serve_device_group_at(group_, i), 0));
+          loom_serve_pool_trim(loom_serve_device_group_pool_at(group_, i), 0));
     }
   }
 

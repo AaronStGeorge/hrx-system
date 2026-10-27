@@ -73,6 +73,35 @@ typedef struct loom_serve_pool_statistics_t {
 loom_serve_pool_statistics_t loom_serve_pool_statistics(
     const loom_serve_pool_t* pool);
 
+// Cold owner-controlled trim toward target_bytes of managed backing. Releases
+// idle workspace first, then unpinned parameters in LRU order. Live workspace,
+// pinned parameters, and mutable model state survive. An unreachable target
+// is not an error; statistics expose the reached extent. Native returns can
+// remain visible until their queued sweep retires. Does not wait for live
+// work, destroy queues, or trim any execution device's compiled products.
+// Fixed parameter and state allocations remain until their model releases them.
+iree_status_t loom_serve_pool_trim(loom_serve_pool_t* pool,
+                                   uint64_t target_bytes);
+
+// Independent idle policies applied by the serialized serving owner. Zero
+// disables a policy; both durations must be nonnegative. Mutable model state,
+// sessions, and prefix history are outside these policies.
+typedef struct loom_serve_pool_idle_policy_t {
+  // Idle interval after the last command workspace root retires.
+  iree_duration_t workspace_timeout;
+  // Idle interval after the last invocation or explicit parameter pin releases.
+  // Only elastic parameter backing can be deactivated independently.
+  iree_duration_t parameter_timeout;
+} loom_serve_pool_idle_policy_t;
+
+// Schedules expired backing releases without waiting for native maintenance.
+// Returns pending while enabled resources await retirement or idle expiry;
+// native releases already scheduled use the ordinary capacity observer.
+// Live invocation pins and explicit parameter pins prevent deactivation.
+iree_status_t loom_serve_pool_trim_idle(loom_serve_pool_t* pool,
+                                        loom_serve_pool_idle_policy_t policy,
+                                        iree_time_t now, bool* out_pending);
+
 // Borrowed resources outliving every model, execution, and output using them.
 iree_hal_pool_t* loom_serve_pool_storage(const loom_serve_pool_t* pool);
 loom_serve_workspace_t* loom_serve_pool_workspace(

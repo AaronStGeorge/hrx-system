@@ -178,7 +178,7 @@ static iree_status_t loom_serve_device_configuration_entry(
   options->weight_slab_size = (iree_device_size_t)numbers[0];
   options->state_slab_size = (iree_device_size_t)numbers[1];
   options->memory_limit = numbers[2];
-  configuration->idle[index] = (loom_serve_device_idle_policy_t){
+  configuration->idle[index] = (loom_serve_pool_idle_policy_t){
       .workspace_timeout = (iree_duration_t)numbers[3] * 1000000,
       .parameter_timeout = (iree_duration_t)numbers[4] * 1000000};
   ++configuration->count;

@@ -297,7 +297,8 @@ TEST_P(WeightPackingTest,
     IREE_ASSERT_OK(loom_serve_activation_advance(
         activation, LOOM_SERVE_ACTIVATION_FLAG_CANCEL, &phase));
     EXPECT_EQ(phase, LOOM_SERVE_ACTIVATION_LOADING);
-    IREE_ASSERT_OK(loom_serve_device_trim(device_owner_, 0));
+    IREE_ASSERT_OK(
+        loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
   }
   // The outer physical owner services cold staging while joining the accepted
   // activation; its completion callback still owns the cancellation boundary.
@@ -311,7 +312,8 @@ TEST_P(WeightPackingTest,
   CheckPackedOn(execution_);
   EXPECT_EQ(loom_serve_weights_activity(plans_[0]).activations, 1u);
   loom_serve_residency_release(residencies_[0]);
-  IREE_ASSERT_OK(loom_serve_device_trim(device_owner_, 0));
+  IREE_ASSERT_OK(
+      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
   DrainNativeReturns();
   EXPECT_EQ(loom_serve_device_memory_statistics(device_owner_)
                 .workspace.bytes_committed,

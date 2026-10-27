@@ -203,6 +203,7 @@ loom_cc_test(
   DEPS
     ::maintenance
     iree::base
+    iree::hal
     iree::testing::gtest
     iree::testing::gtest_main
     loom::serve::runtime::device

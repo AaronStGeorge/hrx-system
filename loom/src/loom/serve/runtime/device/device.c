@@ -353,46 +353,9 @@ loom_serve_pool_statistics_t loom_serve_device_memory_statistics(
   return loom_serve_pool_statistics(device->pool);
 }
 
-iree_status_t loom_serve_device_trim(loom_serve_device_t* device,
-                                     uint64_t target_bytes) {
+void loom_serve_device_trim_programs(loom_serve_device_t* device) {
   loom_serve_tokenizer_cache_trim(device->owner->tokenizer_cache);
   loom_serve_jit_cache_trim(device->jit_cache);
-  const loom_serve_pool_statistics_t memory =
-      loom_serve_device_memory_statistics(device);
-  const uint64_t committed = loom_serve_pool_memory(device->pool)
-                                 ? memory.retained.committed_bytes
-                                 : memory.workspace.bytes_committed;
-  if (committed <= target_bytes) {
-    return iree_ok_status();
-  }
-  iree_device_size_t workspace_bytes = 0;
-  IREE_RETURN_IF_ERROR(loom_serve_workspace_trim(
-      loom_serve_pool_workspace(device->pool), &workspace_bytes));
-  if (loom_serve_pool_memory(device->pool)) {
-    IREE_RETURN_IF_ERROR(loom_serve_residency_cache_trim(
-        loom_serve_pool_residency_cache(device->pool), target_bytes));
-    loom_serve_memory_pool_trim(loom_serve_pool_memory(device->pool),
-                                target_bytes);
-  }
-  return iree_ok_status();
-}
-
-iree_status_t loom_serve_device_trim_idle(
-    loom_serve_device_t* device, loom_serve_device_idle_policy_t policy,
-    iree_time_t now, bool* out_pending) {
-  *out_pending = false;
-  if (policy.workspace_timeout) {
-    *out_pending = loom_serve_workspace_trim_idle(
-        loom_serve_pool_workspace(device->pool), now, policy.workspace_timeout);
-  }
-  if (policy.parameter_timeout) {
-    bool pending = false;
-    IREE_RETURN_IF_ERROR(loom_serve_residency_cache_trim_idle(
-        loom_serve_pool_residency_cache(device->pool), now,
-        policy.parameter_timeout, &pending));
-    *out_pending |= pending;
-  }
-  return iree_ok_status();
 }
 
 iree_hal_device_t* loom_serve_device_handle(const loom_serve_device_t* device) {

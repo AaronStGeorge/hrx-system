@@ -157,9 +157,12 @@ class SourceTextServiceTest : public ::testing::Test {
     });
   }
 
-  void StartManaged(loom_serve_device_idle_policy_t idle = {}) {
+  void StartManaged(loom_serve_pool_idle_policy_t idle = {}) {
     ASSERT_EQ(model_, nullptr);
     http_.Start([this, idle]() -> iree_status_t {
+      std::vector<loom_serve_pool_idle_policy_t> policies(
+          loom_serve_device_group_pool_count(group_));
+      policies[0] = idle;
       const loom_serve_model_registration_options_t options = {
           .device_group = group_, .heartbeat_interval = 0};
       loom_serve_registry_t* registry = nullptr;
@@ -172,8 +175,8 @@ class SourceTextServiceTest : public ::testing::Test {
               .request_quota = 16,
               .holding_capacity = 8,
               .resources = {.device_group = group_,
-                            .idle_policy_count = 1,
-                            .idle_policies = &idle},
+                            .idle_policy_count = policies.size(),
+                            .idle_policies = policies.data()},
           },
           host_allocator_);
       return iree_status_join(status, loom_serve_registry_free(registry));

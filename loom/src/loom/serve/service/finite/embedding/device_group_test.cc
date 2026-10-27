@@ -118,7 +118,7 @@ TEST_F(GroupEmbeddingServiceTest, EmbeddingsCompleteBeforeOtherDeviceRetires) {
   uint64_t observed = 0;
   IREE_ASSERT_OK(iree_hal_semaphore_query(frontier.semaphores[1], &observed));
   EXPECT_LT(observed, frontier.values[1]);
-  IREE_ASSERT_OK(loom_serve_device_trim(first, 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(first), 0));
   EXPECT_EQ(
       loom_serve_device_memory_statistics(first).workspace.reservation_count,
       1u);
