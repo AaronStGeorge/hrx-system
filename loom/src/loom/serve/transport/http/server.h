@@ -13,6 +13,7 @@
 #include "iree/net/carrier.h"
 #include "loom/serve/runtime/host/wake.h"
 #include "loom/serve/telemetry/stream.h"
+#include "loom/serve/transport/http/origin.h"
 #include "loom/serve/transport/http/request.h"
 
 #ifdef __cplusplus
@@ -57,6 +58,9 @@ typedef struct loom_serve_http_server_options_t {
   iree_host_size_t connection_capacity;
   // Per-connection framing limits; completed bytes remain owned until release.
   loom_serve_http_request_limits_t request_limits;
+  // Additional exact browser origins, validated during allocation and borrowed
+  // until server retirement. Empty retains automatic same-origin admission.
+  iree_string_view_list_t allowed_origins;
 } loom_serve_http_server_options_t;
 
 // Defaults to 64 connections, 16 KiB headers, 64 headers and 8 MiB
@@ -134,9 +138,11 @@ iree_async_semaphore_t* loom_serve_http_server_capacity_semaphore(
 // out_wait_value to the next capacity generation. No request bytes are consumed
 // while waiting. Per-peer failures are recorded without stopping other peers.
 // Callers join all accept/wait callbacks before destroying the server;
-// concurrent accepts are permitted.
+// concurrent accepts are permitted. |origin_source| records trusted transport
+// provenance, independently of any headers later received on the carrier.
 bool loom_serve_http_server_try_accept(
     loom_serve_http_server_t* server, iree_net_carrier_t* carrier,
+    loom_serve_http_origin_source_t origin_source,
     loom_serve_http_connection_release_callback_t release_callback,
     uint64_t* out_wait_value);
 
@@ -146,6 +152,11 @@ bool loom_serve_http_server_try_accept(
 loom_serve_http_connection_t* loom_serve_http_server_take_request(
     loom_serve_http_server_t* server,
     const loom_serve_http_request_t** out_request);
+
+// Browser admission policy combining immutable carrier provenance and server
+// configuration. Borrowed origins remain live through the connection claim.
+loom_serve_http_origin_policy_t loom_serve_http_connection_origin_policy(
+    const loom_serve_http_connection_t* connection);
 
 // Transfers |protocol| to this claimed connection, once, before sending the
 // upgrade response. Joins any previous HTTP receive callback without replacing

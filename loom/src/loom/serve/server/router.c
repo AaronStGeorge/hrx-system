@@ -94,8 +94,6 @@ typedef struct loom_serve_router_t {
   loom_serve_http_variants_t* variants;
   // Lazily allocated live readers; never owns a registration or model borrow.
   loom_serve_http_live_t* live;
-  // Borrowed explicit browser origin policy, independent of listener type.
-  iree_string_view_list_t observation_origins;
   // Immutable borrowed resource view, outliving the outer routing call.
   loom_serve_resources_t resources;
   // Shared-proactor expiry, joined before this owner's wake target disappears.
@@ -1229,7 +1227,6 @@ static iree_status_t loom_serve_router_accept(
     if (!router->live) {
       iree_status_t status = loom_serve_http_live_allocate(
           router->server, router->registry, &router->resources,
-          router->observation_origins,
           (loom_serve_wake_callback_t){loom_serve_router_wake, router},
           router->host_allocator, &router->live);
       if (!iree_status_is_ok(status)) {
@@ -1708,7 +1705,6 @@ iree_status_t loom_serve_router_run(iree_task_executor_t* executor,
       .server = server,
       .registry = registry,
       .resources = options.resources,
-      .observation_origins = options.observation_origins,
       .capacity = loom_serve_registry_capacity(registry),
       .request_capacity = options.request_quota,
       .held = {.capacity = options.holding_capacity},

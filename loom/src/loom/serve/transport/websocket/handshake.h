@@ -7,23 +7,22 @@
 #ifndef LOOM_SERVE_TRANSPORT_WEBSOCKET_HANDSHAKE_H_
 #define LOOM_SERVE_TRANSPORT_WEBSOCKET_HANDSHAKE_H_
 
-#include "loom/serve/transport/http/request.h"
+#include "loom/serve/transport/http/origin.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Validates an RFC 6455 server upgrade and appends its 101 response. HTTP has
-// already established HTTP/1.1 framing and unique headers. A present browser
-// Origin must exactly match an allowed origin; absence permits non-browser
-// clients. An empty allowlist therefore disables browser-origin upgrades.
+// already established HTTP/1.1 framing and unique headers. Browser admission
+// uses the HTTP owner's origin policy; absence permits non-browser clients.
 // Selects |subprotocol| only when nonempty and present in the client's offer.
 // No compression or extensions are negotiated. This does not install a
 // receiver or send bytes.
 iree_status_t loom_serve_websocket_handshake(
     const loom_serve_http_request_t* request,
-    iree_string_view_list_t allowed_origins, iree_string_view_t subprotocol,
-    iree_string_builder_t* response);
+    loom_serve_http_origin_policy_t origin_policy,
+    iree_string_view_t subprotocol, iree_string_builder_t* response);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -40,8 +40,6 @@ struct loom_serve_http_live_t {
   loom_serve_http_server_t* server;
   // Shared copied current state; sampling cost does not multiply with readers.
   loom_serve_observation_t* observation;
-  // Externally visible origins, borrowed from application configuration.
-  iree_string_view_list_t origins;
   // Shared proactor alarm, enabled only while readers exist.
   loom_serve_timer_t timer;
   // Cursor of an in-progress bounded sampling sweep; zero starts/ends a sweep.
@@ -65,7 +63,7 @@ struct loom_serve_http_live_t {
 
 iree_status_t loom_serve_http_live_allocate(
     loom_serve_http_server_t* server, loom_serve_registry_t* registry,
-    const loom_serve_resources_t* resources, iree_string_view_list_t origins,
+    const loom_serve_resources_t* resources,
     loom_serve_wake_callback_t observer, iree_allocator_t host_allocator,
     loom_serve_http_live_t** out_live) {
   *out_live = NULL;
@@ -79,7 +77,6 @@ iree_status_t loom_serve_http_live_allocate(
       (void**)&live));
   live->host_allocator = host_allocator;
   live->server = server;
-  live->origins = origins;
   loom_serve_timer_initialize(&live->timer);
   iree_async_proactor_t* proactor = NULL;
   iree_status_t status = iree_async_proactor_pool_get(
@@ -115,7 +112,8 @@ void loom_serve_http_live_accept(loom_serve_http_live_t* live,
   iree_string_builder_initialize_with_storage(live->storage,
                                               sizeof(live->storage), &output);
   iree_status_t status = loom_serve_websocket_handshake(
-      request, live->origins, IREE_SV("loom.observe.v1"), &output);
+      request, loom_serve_http_connection_origin_policy(connection),
+      IREE_SV("loom.observe.v1"), &output);
   if (!iree_status_is_ok(status)) {
     const bool denied = iree_status_is_permission_denied(status);
     iree_status_t response = loom_serve_http_response_reject(

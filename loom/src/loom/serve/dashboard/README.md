@@ -67,8 +67,10 @@ parameter, session, or ring pointer survives that synchronous copy.
 ## WebSocket projection
 
 `GET /v1/observe` uses the existing HTTP upgrade and negotiates
-`loom.observe.v1` when offered. Browser origins must match application
-configuration; native clients can omit Origin. A text frame contains:
+`loom.observe.v1` when offered. Browser admission uses the shared HTTP origin
+policy: local same-origin access and trusted Unix relays need no allowlist;
+additional origins are explicit HTTP configuration. Native clients can omit
+Origin. A text frame contains:
 
 ```json
 {"version":1,"server":"1790000000000000000:1","sequence":"1","page":{"type":"server","model_capacity":32,"device_count":0,"counters":null,"since_ns":null},"time_ns":"1000000000","revision":"1","previous_revision":"0","previous_time_ns":"0"}

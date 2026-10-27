@@ -91,9 +91,9 @@ trusted; deployment-owned tunnels and isolation supply any required boundary.
 devices. `/metrics`, `/logz` and `/logz/stream` expose counters and telemetry;
 slow observers do not retain model resources or backpressure record producers.
 
-`/dashboard/` serves the embedded live viewer. Set
-`--observation_origin=http://127.0.0.1:8080` for that browser origin, or the
-external origin of a relay. The [observation workflow](../../../../docs/src/serving/workflows/observe-model-server.md#watch-the-live-dashboard)
+`/dashboard/` serves the embedded live viewer without additional flags for
+local, numeric-IP, tunneled, and trusted Unix-relay access. The
+[observation workflow](../../../../docs/src/serving/workflows/observe-model-server.md#watch-the-live-dashboard)
 describes the graphs, memory scopes, bounded history, and Unix-socket relays.
 
 ## Trace live work

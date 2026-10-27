@@ -11,12 +11,12 @@ registration, admission and residency states they describe.
 
 ## Watch the live dashboard
 
-Allow the origin you will open in your browser, then visit
+Start the server, then visit
 `http://127.0.0.1:8080/dashboard/`:
 
 ```sh
 loom-serve --device=task --pool_backing=fixed \
-  --listen=127.0.0.1:8080 --observation_origin=http://127.0.0.1:8080 \
+  --listen=127.0.0.1:8080 \
   --model=vectors/model.json
 ```
 
@@ -72,13 +72,23 @@ Pause or a hidden tab releases the live connection. Resuming reads current
 state; rolling rates and activity buckets do not replay work that happened while
 disconnected. Lifetime averages still include that work and elapsed time.
 
-`--observation_origin` is repeatable and matches the exact browser origin,
-including scheme and port. It is a cross-origin check, not authentication.
-Without it, native clients may observe but browser upgrades are rejected.
-Behind a tunnel or reverse proxy, allow the externally visible origin and
-forward WebSocket upgrades along with HTTP. Relative URLs preserve a proxy
-mount prefix. The backend may bind only `unix:/run/loom/serve.sock`; the relay,
-not the browser, opens that Unix socket.
+No dashboard flag is needed for same-origin access through `localhost`, a
+numeric IP address, or an SSH tunnel. The browser-visible port may differ from
+the server's listening port. Relative URLs preserve a proxy mount prefix.
+
+A Unix-socket backend such as `unix:/run/loom/serve.sock` trusts its HTTP relay
+to validate public hostnames and control access to the socket. The relay
+preserves `Host` and `Origin`, forwards WebSocket upgrades, and replaces
+`X-Forwarded-Proto` with `https` when terminating TLS (`http` is the default).
+Use a protected socket directory or equivalent namespace isolation. TCP
+connections never gain relay trust from forwarded headers.
+
+For a direct DNS hostname or a deliberately separate browser UI, repeat
+`--http_allowed_origin=https://console.example` for each additional exact
+origin, including any nondefault port. Arbitrary DNS names are not inferred
+safe from matching request headers. This browser-origin check is neither
+authentication nor a CORS policy; native clients may omit `Origin`. Public
+access control belongs to the deployment.
 
 The `/v1/observe` WebSocket sends bounded current-state pages, with at most
 one application-unacknowledged page per viewer. Slow clients skip intermediate

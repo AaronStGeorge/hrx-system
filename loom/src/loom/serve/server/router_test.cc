@@ -475,7 +475,22 @@ TEST_P(HttpRouterTest, LiveActivitySamplesOwnersWithoutAMetricsScrape) {
   EXPECT_EQ(Read(held).find("HTTP/1.1 200"), 0u);
 }
 
-TEST_P(HttpRouterTest, BrowserLiveOriginRequiresExplicitAdmission) {
+TEST_P(HttpRouterTest, SameOriginBrowserLiveNeedsNoConfiguration) {
+  ObservationClient observer;
+  ASSERT_NO_FATAL_FAILURE(observer.OpenLive(
+      server_, "Origin: http://localhost\r\nSec-Fetch-Site: same-origin\r\n"));
+  ASSERT_NO_FATAL_FAILURE(observer.ReadUpgrade());
+  const auto first = observer.WebSocketFrame();
+  EXPECT_NE(first.find("\"type\":\"server\""), std::string::npos);
+  observer.Ack(first);
+  EXPECT_NE(observer.WebSocketFrame().find("\"type\":\"models\""),
+            std::string::npos);
+  observer.WriteFrame(8, "");
+  EXPECT_EQ(observer.WebSocketFrame(8), "");
+  observer.Join();
+}
+
+TEST_P(HttpRouterTest, CrossOriginBrowserLiveRequiresExplicitAdmission) {
   EXPECT_EQ(Read(Send("GET", "/v1/observe", "",
                       "Connection: Upgrade\r\nUpgrade: websocket\r\n"
                       "Sec-WebSocket-Version: 13\r\n"
@@ -490,14 +505,14 @@ TEST_P(HttpRouterTest, BrowserLiveOriginRequiresExplicitAdmission) {
 class HttpRouterLiveOriginTest : public HttpRouterTest {
  protected:
   void SetUp() override {
-    observation_origins_ = {1, &origin_};
+    allowed_origins_ = {1, &origin_};
     HttpRouterTest::SetUp();
   }
-  // External authority belongs to the configured relay, not the Unix backend.
+  // Deliberately authorized external UI, independent of the server's origin.
   const iree_string_view_t origin_ = IREE_SV("https://serve.example");
 };
 
-TEST_P(HttpRouterLiveOriginTest, BrowserOriginUsesConfigurationNotBackendHost) {
+TEST_P(HttpRouterLiveOriginTest, AdditionalBrowserOriginUsesHttpConfiguration) {
   ObservationClient observer;
   ASSERT_NO_FATAL_FAILURE(
       observer.OpenLive(server_, "Origin: https://serve.example\r\n"));

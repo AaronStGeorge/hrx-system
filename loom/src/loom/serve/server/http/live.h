@@ -19,16 +19,16 @@ typedef struct loom_serve_http_live_t loom_serve_http_live_t;
 
 // Allocates bounded reader metadata, shared current-state copies, and one 16
 // KiB formatting buffer. No timer runs without readers. Server, registry,
-// resources, origins, and wake target remain borrowed until shutdown advance
+// resources, and wake target remain borrowed until shutdown advance
 // retires the timer and every reader.
 iree_status_t loom_serve_http_live_allocate(
     loom_serve_http_server_t* server, loom_serve_registry_t* registry,
-    const loom_serve_resources_t* resources, iree_string_view_list_t origins,
+    const loom_serve_resources_t* resources,
     loom_serve_wake_callback_t observer, iree_allocator_t host_allocator,
     loom_serve_http_live_t** out_live);
 
 // Upgrades a validated route within the router's shared claim bound, consuming
-// the connection on every path. Origin allowlisting is mandatory for browsers;
+// the connection on every path. Browser admission uses the HTTP origin policy;
 // loom.observe.v1 is negotiated when offered. Native clients may omit Origin.
 // Allocation/handshake failures affect only this peer and are recorded through
 // the HTTP diagnostic stream.

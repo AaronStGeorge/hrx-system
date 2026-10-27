@@ -175,6 +175,63 @@ class HttpServerTest : public ::testing::Test {
   std::string socket_directory_;
 };
 
+TEST_F(HttpServerTest, BrowserOriginTrustFollowsAcceptedTransport) {
+  const std::string path = "unix:" + socket_directory_ + "/relay.sock";
+  loom_serve_http_listener_t* relay = nullptr;
+  IREE_ASSERT_OK(
+      Listen(iree_make_string_view(path.data(), path.size()), &relay));
+  additional_listeners_.push_back(relay);
+  // Both requests carry the same headers. Only the Unix binding grants relay
+  // authority; a subsequent TCP peer must not inherit it from a recycled slot.
+  for (auto* listener : {listener_, relay, listener_}) {
+    SCOPED_TRACE(listener == relay ? "Unix relay" : "TCP");
+    const int client = Connect(listener);
+    ASSERT_TRUE(Write(client,
+                      "GET /v1/observe HTTP/1.1\r\nHost: serve.example\r\n"
+                      "Origin: https://serve.example\r\n"
+                      "X-Forwarded-Proto: https\r\n"
+                      "Sec-Fetch-Site: same-origin\r\n\r\n"));
+    const loom_serve_http_request_t* request = nullptr;
+    auto* connection = Take(&request);
+    ASSERT_NE(connection, nullptr);
+    const auto policy = loom_serve_http_connection_origin_policy(connection);
+    EXPECT_EQ(policy.source, listener == relay ? LOOM_SERVE_HTTP_ORIGIN_RELAY
+                                               : LOOM_SERVE_HTTP_ORIGIN_DIRECT);
+    IREE_EXPECT_STATUS_IS(
+        listener == relay ? IREE_STATUS_OK : IREE_STATUS_PERMISSION_DENIED,
+        loom_serve_http_origin_check(request, policy));
+    loom_serve_http_connection_finish(connection);
+    EXPECT_EQ(Read(client), "");
+    EXPECT_EQ(close(client), 0);
+  }
+}
+
+TEST_F(HttpServerTest, InvalidBrowserOriginConfigurationFailsBeforeAdmission) {
+  auto options = loom_serve_http_server_options_default();
+  const iree_string_view_t origin = IREE_SV("https://serve.example/path");
+  options.allowed_origins = {1, &origin};
+  loom_serve_http_server_t* server = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_serve_http_server_allocate(
+                            pool_, &options, iree_allocator_system(), &server));
+  EXPECT_EQ(server, nullptr);
+}
+
+TEST_F(HttpServerTest, BrowserAuthorityMayUseATunnelPort) {
+  const int client = Connect();
+  ASSERT_TRUE(Write(client,
+                    "GET /v1/observe HTTP/1.1\r\nHost: localhost:13000\r\n"
+                    "Origin: http://localhost:13000\r\n\r\n"));
+  const loom_serve_http_request_t* request = nullptr;
+  auto* connection = Take(&request);
+  ASSERT_NE(connection, nullptr);
+  IREE_EXPECT_OK(loom_serve_http_origin_check(
+      request, loom_serve_http_connection_origin_policy(connection)));
+  loom_serve_http_connection_finish(connection);
+  EXPECT_EQ(Read(client), "");
+  EXPECT_EQ(close(client), 0);
+}
+
 TEST_F(HttpServerTest, FragmentedRequestAndOrderedStreamingResponse) {
   const auto limits = loom_serve_http_server_request_limits(server_);
   EXPECT_EQ(limits.header_byte_capacity, 16384u);
@@ -337,6 +394,9 @@ TEST_F(HttpServerTest, TcpAndUnixPollOwnersShareReclaimedCapacity) {
     const int index =
         iree_string_view_equal(request->target, IREE_SV("/tcp")) ? 0 : 1;
     EXPECT_FALSE(completed[index]);
+    EXPECT_EQ(loom_serve_http_connection_origin_policy(connection).source,
+              index == 0 ? LOOM_SERVE_HTTP_ORIGIN_DIRECT
+                         : LOOM_SERVE_HTTP_ORIGIN_RELAY);
     completed[index] = true;
     IREE_ASSERT_OK(loom_serve_http_connection_send(
         connection,

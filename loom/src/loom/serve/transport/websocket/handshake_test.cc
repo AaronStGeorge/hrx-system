@@ -33,8 +33,8 @@ class WebSocketHandshakeTest : public ::testing::Test {
         parser, iree_make_const_byte_span(headers.data(), headers.size()),
         &request);
     if (iree_status_is_ok(status)) {
-      status = loom_serve_websocket_handshake(request, origins, subprotocol,
-                                              &response_);
+      status = loom_serve_websocket_handshake(
+          request, {.allowed_origins = origins}, subprotocol, &response_);
     }
     loom_serve_http_request_parser_free(parser);
     return status;
@@ -46,7 +46,7 @@ class WebSocketHandshakeTest : public ::testing::Test {
   }
 
   static std::string Request(const std::string& extra = "") {
-    return "GET /v1/realtime?model=assistant HTTP/1.1\r\nHost: local\r\n"
+    return "GET /v1/realtime?model=assistant HTTP/1.1\r\nHost: localhost\r\n"
            "Upgrade: WebSocket\r\nConnection: keep-alive, Upgrade\r\n"
            "Sec-WebSocket-Version: 13\r\n"
            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
@@ -70,7 +70,7 @@ TEST_F(WebSocketHandshakeTest, RfcChallengeAndOfferedSubprotocol) {
 }
 
 TEST_F(WebSocketHandshakeTest,
-       BrowserOriginsAreExplicitAndSubprotocolIsOptional) {
+       AdditionalBrowserOriginsAreExplicitAndSubprotocolIsOptional) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_PERMISSION_DENIED,
                         Handshake(Request("Origin: https://chat.example\r\n")));
   EXPECT_EQ(Response(), "");
@@ -88,10 +88,20 @@ TEST_F(WebSocketHandshakeTest,
                 {1, origins}));
 }
 
+TEST_F(WebSocketHandshakeTest, SameOriginBrowserNeedsNoAllowlist) {
+  IREE_ASSERT_OK(
+      Handshake(Request("Origin: http://localhost\r\n"
+                        "Sec-Fetch-Site: same-origin\r\n")));
+  EXPECT_EQ(Response(),
+            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n");
+}
+
 TEST_F(WebSocketHandshakeTest, RejectsInvalidUpgradeBeforeWritingResponse) {
   const std::pair<std::string, std::string> changes[] = {
       {"GET /", "POST /"},
-      {"Host: local", "Host: "},
+      {"Host: localhost", "Host: "},
       {"Upgrade: WebSocket", "Upgrade: websocket-extra"},
       {"keep-alive, Upgrade", "keep-alive"},
       {"Version: 13", "Version: 8"},

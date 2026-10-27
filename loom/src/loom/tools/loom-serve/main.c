@@ -35,10 +35,11 @@ IREE_FLAG(int32_t, model_capacity, 32,
 IREE_FLAG_LIST(string, listen,
                "HTTP binding: IPv4 host:port, [IPv6]:port, or unix:path. "
                "Repeat for multiple listeners; default 127.0.0.1:8080.");
-IREE_FLAG_LIST(string, observation_origin,
-               "Browser origin allowed for the live dashboard, such as "
-               "http://127.0.0.1:8080. Repeat for additional public origins; "
-               "omit to allow only native clients without an Origin header.");
+IREE_FLAG_LIST(string, http_allowed_origin,
+               "Additional exact browser origin allowed for HTTP upgrades. "
+               "Local same-origin dashboards and trusted Unix relays work "
+               "without this flag. Repeat for named or cross-origin clients; "
+               "this is not authentication or a CORS policy.");
 IREE_FLAG(int32_t, connections, 64,
           "Maximum simultaneous HTTP connections across all listeners.");
 IREE_FLAG(int32_t, held_requests, -1,
@@ -83,6 +84,10 @@ static int loom_serve_main_agents_markdown(void) {
              "--listen=127.0.0.1:8080\n"
              "curl http://127.0.0.1:8080/v1/status\n"
              "```\n\n"
+             "Open `http://127.0.0.1:8080/dashboard/` for live requests, "
+             "throughput and memory. Local and SSH-tunneled access needs no "
+             "dashboard flags. The observation workflow describes trusted "
+             "Unix relays and additional browser origins.\n\n"
              "Use `--device=URI` for one device named `device`, or "
              "`--devices=path.json` for a group declared as "
              "`{\"devices\":{\"gpu\":{\"uri\":\"amdgpu://0\"}}}`. "
@@ -171,6 +176,9 @@ static int loom_serve_main_agents_markdown(void) {
              "provide repeatable state forks, while retaining both native "
              "choices permits rollback.\n\n"
              "## References\n\n"
+             "- Live dashboard and metrics: "
+             "https://rocm.github.io/hrx-system/loom/serving/workflows/"
+             "observe-model-server/\n"
              "- First output: "
              "https://rocm.github.io/hrx-system/loom/serving/workflows/"
              "serve-models/\n"
@@ -309,6 +317,7 @@ int loom_serve_main(int argc, char** argv,
     loom_serve_http_server_options_t options =
         loom_serve_http_server_options_default();
     options.connection_capacity = (iree_host_size_t)FLAG_connections;
+    options.allowed_origins = FLAG_http_allowed_origin_list();
     options.request_limits.body_byte_capacity =
         (iree_host_size_t)FLAG_request_body_bytes;
     status = loom_serve_http_server_allocate(
@@ -339,7 +348,6 @@ int loom_serve_main(int argc, char** argv,
         loom_serve_host_executor(host), server, registry,
         (loom_serve_router_options_t){
             .request_quota = (iree_host_size_t)FLAG_connections,
-            .observation_origins = FLAG_observation_origin_list(),
             .resources = {.device_group = group,
                           .idle_policy_count = devices.count,
                           .idle_policies = devices.idle,

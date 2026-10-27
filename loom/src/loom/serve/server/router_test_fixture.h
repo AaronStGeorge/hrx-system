@@ -71,7 +71,8 @@ class ObservationClient {
     iree_net_carrier_retain(peer_);
     uint64_t wait_value = 0;
     auto* capacity = loom_serve_http_server_capacity_semaphore(server);
-    while (!loom_serve_http_server_try_accept(server, peer_, {}, &wait_value)) {
+    while (!loom_serve_http_server_try_accept(
+        server, peer_, LOOM_SERVE_HTTP_ORIGIN_DIRECT, {}, &wait_value)) {
       // Like the production listener, retain the unadmitted carrier until a
       // capacity generation advances. Client EOF does not join reclamation of
       // the previous HTTP connection's server-side slot.
@@ -103,7 +104,7 @@ class ObservationClient {
          this}));
     IREE_ASSERT_OK(iree_net_carrier_activate(carrier_));
     const std::string request =
-        "GET " + target + " HTTP/1.1\r\nHost: local\r\n" + headers + "\r\n";
+        "GET " + target + " HTTP/1.1\r\nHost: localhost\r\n" + headers + "\r\n";
     const iree_net_send_params_t params = {
         .generated_prefix = iree_net_send_prefix_from_bytes(
             iree_make_const_byte_span(request.data(), request.size())),
@@ -487,6 +488,7 @@ class HttpRouterTest : public ::testing::TestWithParam<int> {
     IREE_ASSERT_OK(status);
     auto options = loom_serve_http_server_options_default();
     options.connection_capacity = connection_capacity_;
+    options.allowed_origins = allowed_origins_;
     IREE_ASSERT_OK(loom_serve_http_server_allocate(
         pool_, &options, iree_allocator_system(), &server_));
     auto listener_options = loom_serve_http_listener_options_default();
@@ -525,8 +527,7 @@ class HttpRouterTest : public ::testing::TestWithParam<int> {
           executor_, server_, registry,
           {.request_quota = request_quota_,
            .holding_capacity = holding_capacity_,
-           .resources = {.listener_count = 1, .listeners = &listener_},
-           .observation_origins = observation_origins_},
+           .resources = {.listener_count = 1, .listeners = &listener_}},
           iree_allocator_system());
       IREE_ASSERT_OK(loom_serve_registry_free(registry));
       returned_.store(true);
@@ -614,8 +615,8 @@ class HttpRouterTest : public ::testing::TestWithParam<int> {
   iree_host_size_t holding_capacity_ = 2;
   // Managed slots supplied only by registration-lifecycle cases.
   iree_host_size_t managed_capacity_ = 0;
-  // Explicit browser admission, borrowed until the router retires its readers.
-  iree_string_view_list_t observation_origins_ = {};
+  // Additional browser origins, borrowed until the HTTP owner retires.
+  iree_string_view_list_t allowed_origins_ = {};
   // Model dependency construction, never a replacement for registry behavior.
   loom_serve_registration_factory_t factory_ = {};
   // HTTP connection owner with no private polling thread.

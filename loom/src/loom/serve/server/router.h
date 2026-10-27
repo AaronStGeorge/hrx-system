@@ -27,10 +27,6 @@ typedef struct loom_serve_router_options_t {
   iree_host_size_t holding_capacity;
   // Application resources borrowed until the outer routing call returns.
   loom_serve_resources_t resources;
-  // Exact externally visible origins allowed to observe through a browser.
-  // Empty disables browser upgrades; native clients may omit Origin. Borrowed
-  // strings remain live through router return, including behind Unix relays.
-  iree_string_view_list_t observation_origins;
 } loom_serve_router_options_t;
 
 // Routes JSON request bodies by their model field and checkpoint operations by

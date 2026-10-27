@@ -1098,7 +1098,7 @@ function connect() {
     state(paused ? "Paused" : "Disconnected");
     if (!paused && !document.hidden) {
       $("notice").textContent =
-        `Live feed disconnected. If this is the first connection, start loom-serve with --observation_origin=${location.origin}. Relays must forward WebSocket upgrades. Reconnecting…`;
+        "Live feed disconnected. Relays must forward WebSocket upgrades and preserve the public origin. Reconnecting…";
       $("notice").hidden = false;
       retry = setTimeout(connect, retryDelay);
       retryDelay = Math.min(retryDelay * 2, 30000);
