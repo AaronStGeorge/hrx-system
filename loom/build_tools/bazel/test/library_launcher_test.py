@@ -113,14 +113,14 @@ class LibraryLauncherTest(unittest.TestCase):
             self.assertEqual(reports[-1]["row"], "summary")
 
     def test_unknown_arguments_fail_in_every_launcher(self):
-        for name in ("combined", "correctness", "format", "lint", "plan", "artifacts"):
+        for name in ("combined", "correctness", "format", "plan", "artifacts"):
             with self.subTest(launcher=name):
                 completed = self.run_launcher(name, "--unknown-launcher-option")
                 self.assertNotEqual(completed.returncode, 0)
                 self.assertTrue(completed.stderr)
 
     def test_single_tool_launchers_forward_help(self):
-        for name in ("format", "lint", "plan"):
+        for name in ("format", "plan"):
             with self.subTest(launcher=name):
                 completed = self.run_launcher(name, "--help")
                 self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -137,7 +137,6 @@ if __name__ == "__main__":
         "combined",
         "correctness",
         "format",
-        "lint",
         "plan",
         "artifacts",
         "library",

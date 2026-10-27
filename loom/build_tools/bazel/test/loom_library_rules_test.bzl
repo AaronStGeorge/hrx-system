@@ -498,8 +498,6 @@ def _test_direct_sources_own_checks_once(name, **kwargs):
             "format": ":direct_source_test_format_0_test",
             "format_launcher": ":direct_source_test_format_0_test_launcher",
             "library": ":direct_source_test_module_library",
-            "lint": ":direct_source_test_lint_0_test",
-            "lint_launcher": ":direct_source_test_lint_0_test_launcher",
             "module": ":direct_source_test_module",
             "suite": ":direct_source_test",
         },
@@ -526,17 +524,14 @@ def _test_direct_sources_own_checks_once_impl(env, targets):
         test.label.name
         for test in targets.suite[TestingAspectInfo].attrs.tests
     ]).contains_exactly([
-        "direct_source_test_lint_0_test",
         "direct_source_test_format_0_test",
         "direct_source_test_all_execute_reference_test",
         "direct_source_test_all_execute_serialized_reference_test",
         "direct_source_test_selected_execute_reference_test",
         "direct_source_test_selected_execute_serialized_reference_test",
     ])
-    for check in [targets.lint, targets.format]:
-        _expect_source_check(env, check, "profile_cases.loom", manual = False)
-    for check in [targets.lint_launcher, targets.format_launcher]:
-        _expect_source_check(env, check, "profile_cases.loom", manual = True)
+    _expect_source_check(env, targets.format, "profile_cases.loom", manual = False)
+    _expect_source_check(env, targets.format_launcher, "profile_cases.loom", manual = True)
     for artifact in [targets.module, targets.library]:
         env.expect.that_collection(artifact[TestingAspectInfo].attrs.tags).contains("manual")
 
@@ -547,7 +542,6 @@ def _test_reusable_module_owns_source_checks(name, **kwargs):
         targets = {
             "consumer": ":correctness_only_test",
             "format": ":profiled_module_format_1_test",
-            "lint": ":profiled_module_lint_1_test",
             "suite": ":profiled_module_test",
         },
         **kwargs
@@ -558,17 +552,14 @@ def _test_reusable_module_owns_source_checks_impl(env, targets):
         test.label.name
         for test in targets.suite[TestingAspectInfo].attrs.tests
     ]).contains_exactly([
-        "profiled_module_lint_0_test",
         "profiled_module_format_0_test",
-        "profiled_module_lint_1_test",
         "profiled_module_format_1_test",
     ])
     env.expect.that_collection([
         test.label.name
         for test in targets.consumer[TestingAspectInfo].attrs.tests
     ]).contains_exactly(["correctness_only_test_execute_reference_test"])
-    for check in [targets.lint, targets.format]:
-        _expect_source_check(env, check, "profile_cases.loom", manual = True)
+    _expect_source_check(env, targets.format, "profile_cases.loom", manual = True)
 
 def _test_nontext_module_has_no_source_suite(name, **kwargs):
     module_name = name + "_module"

@@ -29,7 +29,6 @@ load(
 
 _LOOM_BENCHMARK_TOOLCHAIN_TYPE = Label("//loom/build_tools/bazel:benchmark_toolchain_type")
 _LOOM_FORMAT_TOOLCHAIN_TYPE = Label("//loom/build_tools/bazel:format_toolchain_type")
-_LOOM_LINT_TOOLCHAIN_TYPE = Label("//loom/build_tools/bazel:lint_toolchain_type")
 _LOOM_LINK_TOOLCHAIN_TYPE = Label("//loom/build_tools/bazel:link_toolchain_type")
 _LOOM_TEST_TOOLCHAIN_TYPE = Label("//loom/build_tools/bazel:test_toolchain_type")
 
@@ -493,31 +492,6 @@ _loom_format_test_launcher = rule(
     toolchains = [_LOOM_FORMAT_TOOLCHAIN_TYPE],
 )
 
-def _loom_lint_test_launcher_impl(ctx):
-    tool = ctx.toolchains[_LOOM_LINT_TOOLCHAIN_TYPE].tool
-    output = _write_test_launcher(ctx, tool, ctx.file.src, [])
-    return [
-        DefaultInfo(
-            executable = output,
-            files = depset([output]),
-            runfiles = _tool_runfiles(ctx, tool, [ctx.file.src]),
-        ),
-    ]
-
-_loom_lint_test_launcher = rule(
-    implementation = _loom_lint_test_launcher_impl,
-    attrs = {
-        "src": attr.label(
-            allow_single_file = [".loom"],
-            mandatory = True,
-            doc = "Authored Loom text source to check.",
-        ),
-    },
-    doc = "Generates a launcher that checks one Loom source file.",
-    executable = True,
-    toolchains = [_LOOM_LINT_TOOLCHAIN_TYPE],
-)
-
 def _loom_plan_test_launcher_impl(ctx):
     tool = ctx.toolchains[_LOOM_BENCHMARK_TOOLCHAIN_TYPE].tool
     module = ctx.attr.module[_LoomTestModuleInfo].module
@@ -717,25 +691,12 @@ def _declare_execution_tests(name, module, profiles, **kwargs):
         )
     return tests.keys()
 
-def _declare_source_tests(name, srcs, tags, target_compatible_with):
-    """Checks authored text once at its owner, independently of execution."""
+def _declare_source_format_tests(name, srcs, tags, target_compatible_with):
+    """Exercises the native formatter; presubmit owns authoring-policy checks."""
     tests = []
     for index, src in enumerate(srcs):
         if not str(src).endswith(".loom"):
             continue
-        lint_test_name = "%s_lint_%d_test" % (name, index)
-        _declare_launcher_test(
-            name = lint_test_name,
-            launcher_rule = _loom_lint_test_launcher,
-            launcher_attrs = {"src": src},
-            test_kwargs = {
-                "tags": tags + ["hostonly"],
-                "target_compatible_with": target_compatible_with,
-                "visibility": ["//visibility:private"],
-            },
-        )
-        tests.append(lint_test_name)
-
         test_name = "%s_format_%d_test" % (name, index)
         _declare_launcher_test(
             name = test_name,
@@ -777,7 +738,7 @@ def _declare_library(
         target_compatible_with = target_compatible_with,
         visibility = module_visibility,
     )
-    tests = _declare_source_tests(name, srcs, tags, target_compatible_with)
+    tests = _declare_source_format_tests(name, srcs, tags, target_compatible_with)
 
     test_module = None
     if plan_benchmarks or execution_profiles:
@@ -982,7 +943,7 @@ def loom_test_module(
     execution or compiler profiles with ``loom_test(module = ...)``.
     The module requires only its source providers, independently of consumers'
     device requirements. Its default output is the linked bytecode file.
-    Authored ``.loom`` inputs also produce lint and format checks in a
+    Authored ``.loom`` inputs also produce native format checks in a
     ``<name>_test`` suite. These belong to this source owner, not to each
     workload or profile consuming the module. Other input formats do not
     produce Loom-text checks or a source suite.
@@ -1014,7 +975,7 @@ def loom_test_module(
         visibility = visibility,
         target_compatible_with = package_attributes.target_compatible_with,
     )
-    tests = _declare_source_tests(
+    tests = _declare_source_format_tests(
         name,
         srcs,
         package_attributes.tags,
@@ -1127,7 +1088,7 @@ def loom_test(
             target_compatible_with = target_compatible_with,
         )
         module = ":" + module_name
-        tests.extend(_declare_source_tests(name, srcs, tags, target_compatible_with))
+        tests.extend(_declare_source_format_tests(name, srcs, tags, target_compatible_with))
     for workload_name, workload in workloads.items():
         config_args = _test_config_args(workload_name, workload.configs)
         if type(workload.case) != "string":
