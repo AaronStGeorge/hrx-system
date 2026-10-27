@@ -19,10 +19,6 @@ loom_cc_library(
     name = "bank_service",
     srcs = ["bank_service.c"],
     hdrs = ["bank_service.h"],
-    target_compatible_with = select({
-        "//loom/config/emit:amdgpu_elf": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
     deps = [
         "//loom/src/loom/target/reporting:report",
         "//loom/src/loom/tools/loom-check:execute",
@@ -34,10 +30,6 @@ loom_cc_library(
     name = "occupancy",
     srcs = ["occupancy.c"],
     hdrs = ["occupancy.h"],
-    target_compatible_with = select({
-        "//loom/config/emit:amdgpu_elf": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
     deps = [
         "//loom/src/loom/target/arch/amdgpu/planning:occupancy",
         "//loom/src/loom/target/arch/amdgpu/planning:storage_lease",
@@ -50,18 +42,10 @@ loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
-    target_compatible_with = select({
-        "//loom/config/emit:amdgpu_elf": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
-    visibility = [
-        "//loom/src/loom/target/arch/amdgpu:__pkg__",
-        "//loom/src/loom/tools/loom-check:__pkg__",
-    ],
+    visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
     deps = [
         ":bank_service",
         ":occupancy",
-        "//loom/src/loom/target/emit/native/amdgpu:loom_check",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],

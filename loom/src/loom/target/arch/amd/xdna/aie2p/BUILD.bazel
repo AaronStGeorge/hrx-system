@@ -29,9 +29,11 @@ _XDNA_TARGET_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/arch:aie2p",
 ])
 
-_XDNA_IMAGE_COMPATIBLE_WITH = loom_config_compatible_with([
+_XDNA_ARTIFACT_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/emit:aie2p_elf",
-]) + loom_config_compatible_with([
+])
+
+_XDNA_IMAGE_COMPATIBLE_WITH = _XDNA_ARTIFACT_COMPATIBLE_WITH + loom_config_compatible_with([
     LIBAMDF.enabled_by,
 ])
 
@@ -659,13 +661,11 @@ loom_cc_library(
     name = "check_provider",
     srcs = [
         "check/array_plan.c",
-        "check/artifact.c",
         "check/leaf.c",
         "check/provider.c",
     ],
     hdrs = [
         "check/array_plan.h",
-        "check/artifact.h",
         "check/leaf.h",
         "check/provider.h",
     ],
@@ -674,13 +674,9 @@ loom_cc_library(
         ":array_plan",
         ":array_program",
         ":array_resident",
-        ":bundle_encoding",
         ":core_descriptors",
-        ":descriptor_encoding",
-        ":encoding",
         ":leaf_compile",
         ":machine",
-        "//loom/binding/c:loomc",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:function_requirements",
@@ -692,10 +688,27 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:provider",
         "//loom/src/loom/target/reporting:report",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:provider",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "artifact_check",
+    srcs = ["check/artifact.c"],
+    hdrs = ["check/artifact.h"],
+    target_compatible_with = _XDNA_ARTIFACT_COMPATIBLE_WITH,
+    visibility = ["//loom/src/loom/target/emit/native/aie2p:__pkg__"],
+    deps = [
+        ":bundle_encoding",
+        ":core_descriptors",
+        ":descriptor_encoding",
+        ":encoding",
+        ":machine",
+        "//loom/binding/c:loomc",
+        "//loom/src/loom/tools/loom-check:execute",
         "//runtime/src/iree/base",
         "//runtime/src/iree/schemas:xdna_executable",
     ],

@@ -14,6 +14,56 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+_ARCH_AIE2P_CHECK_COPTS = iree_select({
+    "//loom/config/arch:aie2p": ["-DLOOM_CHECK_HAVE_ARCH_AIE2P=1"],
+    "//conditions:default": [],
+})
+
+_ARCH_AIE2P_CHECK_DEPS = iree_select({
+    "//loom/config/arch:aie2p": [
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_ARCH_AMDGPU_CHECK_COPTS = iree_select({
+    "//loom/config/arch:amdgpu": ["-DLOOM_CHECK_HAVE_ARCH_AMDGPU=1"],
+    "//conditions:default": [],
+})
+
+_ARCH_AMDGPU_CHECK_DEPS = iree_select({
+    "//loom/config/arch:amdgpu": [
+        "//loom/src/loom/target/arch/amdgpu/check:provider",
+    ],
+    "//conditions:default": [],
+})
+
+_ARCH_SPIRV_CHECK_COPTS = iree_select({
+    "//loom/config/arch:spirv": ["-DLOOM_CHECK_HAVE_ARCH_SPIRV=1"],
+    "//conditions:default": [],
+})
+
+_ARCH_SPIRV_CHECK_DEPS = iree_select({
+    "//loom/config/arch:spirv": [
+        "//loom/src/loom/target/arch/spirv:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_ARTIFACT_AIE2P_ELF_CHECK_COPTS = iree_select({
+    "//loom/config/emit:aie2p_elf": [
+        "-DLOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF=1",
+    ],
+    "//conditions:default": [],
+})
+
+_ARTIFACT_AIE2P_ELF_CHECK_DEPS = iree_select({
+    "//loom/config/emit:aie2p_elf": [
+        "//loom/src/loom/target/emit/native/aie2p:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
 _ARTIFACT_AMDGPU_ELF_CHECK_COPTS = iree_select({
     "//loom/config/emit:amdgpu_elf": [
         "-DLOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF=1",
@@ -23,7 +73,7 @@ _ARTIFACT_AMDGPU_ELF_CHECK_COPTS = iree_select({
 
 _ARTIFACT_AMDGPU_ELF_CHECK_DEPS = iree_select({
     "//loom/config/emit:amdgpu_elf": [
-        "//loom/src/loom/target/arch/amdgpu/check:provider",
+        "//loom/src/loom/target/emit/native/amdgpu:check_provider",
     ],
     "//conditions:default": [],
 })
@@ -84,19 +134,7 @@ _ARTIFACT_X86_ELF_CHECK_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_TARGET_XDNA_CHECK_COPTS = iree_select({
-    "//loom/config/arch:aie2p": ["-DLOOM_CHECK_HAVE_TARGET_XDNA=1"],
-    "//conditions:default": [],
-})
-
-_TARGET_XDNA_CHECK_DEPS = iree_select({
-    "//loom/config/arch:aie2p": [
-        "//loom/src/loom/target/arch/amd/xdna/aie2p:check_provider",
-    ],
-    "//conditions:default": [],
-})
-
-_TARGET_XDNA_CHECK_TEST_DEPS = iree_select({
+_ARCH_AIE2P_CHECK_TEST_DEPS = iree_select({
     "//loom/config/arch:aie2p": [
         "//loom/src/loom/target/arch/amd/xdna/aie2p:check_test_provider",
     ],
@@ -104,21 +142,27 @@ _TARGET_XDNA_CHECK_TEST_DEPS = iree_select({
 })
 
 _LOOM_CHECK_PROVIDER_COPTS = (
+    _ARCH_AIE2P_CHECK_COPTS +
+    _ARCH_AMDGPU_CHECK_COPTS +
+    _ARCH_SPIRV_CHECK_COPTS +
+    _ARTIFACT_AIE2P_ELF_CHECK_COPTS +
     _ARTIFACT_AMDGPU_ELF_CHECK_COPTS +
     _ARTIFACT_SPIRV_BINARY_CHECK_COPTS +
     _ARTIFACT_VM_BINARY_CHECK_COPTS +
     _ARTIFACT_WASM_BINARY_CHECK_COPTS +
-    _ARTIFACT_X86_ELF_CHECK_COPTS +
-    _TARGET_XDNA_CHECK_COPTS
+    _ARTIFACT_X86_ELF_CHECK_COPTS
 )
 
 _LOOM_CHECK_PROVIDER_DEPS = (
+    _ARCH_AIE2P_CHECK_DEPS +
+    _ARCH_AMDGPU_CHECK_DEPS +
+    _ARCH_SPIRV_CHECK_DEPS +
+    _ARTIFACT_AIE2P_ELF_CHECK_DEPS +
     _ARTIFACT_AMDGPU_ELF_CHECK_DEPS +
     _ARTIFACT_SPIRV_BINARY_CHECK_DEPS +
     _ARTIFACT_VM_BINARY_CHECK_DEPS +
     _ARTIFACT_WASM_BINARY_CHECK_DEPS +
-    _ARTIFACT_X86_ELF_CHECK_DEPS +
-    _TARGET_XDNA_CHECK_DEPS
+    _ARTIFACT_X86_ELF_CHECK_DEPS
 )
 
 loom_cc_library(
@@ -521,7 +565,7 @@ loomc_cc_binary(
         "//loom/src/loom/tooling/export/cxx:loom_check",
         "//loom/src/loom/tooling/input:loomc_configured",
         "//runtime/src/iree/base",
-    ] + _LOOM_CHECK_PROVIDER_DEPS + _TARGET_XDNA_CHECK_TEST_DEPS,
+    ] + _LOOM_CHECK_PROVIDER_DEPS + _ARCH_AIE2P_CHECK_TEST_DEPS,
 )
 
 loom_cc_test(

@@ -20,6 +20,53 @@ iree_add_all_subdirs()
 if(LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
+    check_source_low
+  HDRS
+    "check/source_low.h"
+  SRCS
+    "check/source_low.c"
+  DEPS
+    iree::base
+    loom::binding::c::loomc
+    loom::binding::c::target::spirv::profile
+    loom::tools::loom-check::execute
+    loom::tools::loom-check::source_low
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_SPIRV)
+loom_cc_library(
+  NAME
+    check_provider
+  HDRS
+    "check/provider.h"
+  SRCS
+    "check/provider.c"
+  DEPS
+    ::check_source_low
+    iree::base
+    loom::tools::loom-check::provider
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_SPIRV)
+iree_execution_test_suite(
+  NAME
+    check_source_low_test
+  MANIFESTS
+    "check/source_low.test.json"
+  TOOLS
+    "loom-check=loom::tools::loom-check"
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_ARCH_SPIRV)
+loom_cc_library(
+  NAME
     bda_abi
   HDRS
     "bda_abi.h"

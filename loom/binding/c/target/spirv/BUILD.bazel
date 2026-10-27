@@ -17,27 +17,27 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
+_SPIRV_ARCH_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/arch:spirv",
+])
+
+_SPIRV_COMPATIBLE_WITH = _SPIRV_ARCH_COMPATIBLE_WITH + loom_config_compatible_with([
     "//loom/config/emit:spirv_binary",
 ])
 
 loom_cc_library(
-    name = "spirv",
+    name = "profile",
     srcs = [
         "profile.c",
         "profile_rows.c",
-        "spirv.c",
     ],
     hdrs = [
         "profile_rows.h",
-        "//loom/binding/c:include/loomc/target/spirv.h",
         "//loom/binding/c:include/loomc/target/spirv/base.h",
-        "//loom/binding/c:include/loomc/target/spirv/emit.h",
         "//loom/binding/c:include/loomc/target/spirv/profile.h",
     ],
     linkstatic = True,
-    target_compatible_with = _SPIRV_COMPATIBLE_WITH,
+    target_compatible_with = _SPIRV_ARCH_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
         "//loom/src/loom/error:error_defs",
@@ -46,8 +46,25 @@ loom_cc_library(
         "//loom/src/loom/target/arch/spirv:features",
         "//loom/src/loom/target/arch/spirv:profile",
         "//loom/src/loom/target/arch/spirv/records:target_records",
-        "//loom/src/loom/target/emit/spirv:binary_compiler_provider",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "spirv",
+    srcs = ["spirv.c"],
+    hdrs = [
+        "//loom/binding/c:include/loomc/target/spirv.h",
+        "//loom/binding/c:include/loomc/target/spirv/base.h",
+        "//loom/binding/c:include/loomc/target/spirv/emit.h",
+        "//loom/binding/c:include/loomc/target/spirv/profile.h",
+    ],
+    linkstatic = True,
+    target_compatible_with = _SPIRV_COMPATIBLE_WITH,
+    deps = [
+        ":profile",
+        "//loom/binding/c:loomc",
+        "//loom/src/loom/target/emit/spirv:binary_compiler_provider",
     ],
     alwayslink = True,
 )

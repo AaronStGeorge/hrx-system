@@ -8,11 +8,13 @@ load(
     "//build_tools/spirv:registry_sources.bzl",
     "loom_spirv_registry_sources",
 )
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_benchmark",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_config_compatible_with",
     "loom_generated_cc_library",
     "loom_generated_source",
 )
@@ -41,6 +43,10 @@ exports_files(
 
 _SPIRV_C_API_VISIBILITY = ["//loom/binding/c/target/spirv:__pkg__"]
 
+_SPIRV_ARCH_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/arch:spirv",
+])
+
 _SPIRV_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/spirv:__pkg__"]
 
 _SPIRV_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/spirv/lower:__pkg__"]
@@ -58,6 +64,41 @@ _SPIRV_PROVIDER_VISIBILITY = [
 _SPIRV_TOOLING_VISIBILITY = [
     "//loom/src/loom/tooling/target/spirv:__pkg__",
 ]
+
+loom_cc_library(
+    name = "check_source_low",
+    srcs = ["check/source_low.c"],
+    hdrs = ["check/source_low.h"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/spirv:profile",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//loom/src/loom/tools/loom-check:source_low",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "check_provider",
+    srcs = ["check/provider.c"],
+    hdrs = ["check/provider.h"],
+    visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
+    deps = [
+        ":check_source_low",
+        "//loom/src/loom/tools/loom-check:provider",
+        "//runtime/src/iree/base",
+    ],
+)
+
+iree_execution_test_suite(
+    name = "check_source_low_test",
+    manifests = ["check/source_low.test.json"],
+    tags = ["hostonly"],
+    target_compatible_with = _SPIRV_ARCH_COMPATIBLE_WITH,
+    tools = {
+        "loom-check": "//loom/src/loom/tools/loom-check",
+    },
+)
 
 #===------------------------------------------------------------------------===#
 # SPIR-V low descriptors

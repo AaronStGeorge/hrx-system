@@ -8,18 +8,14 @@
 
 #include "loom/target/arch/amdgpu/check/bank_service.h"
 #include "loom/target/arch/amdgpu/check/occupancy.h"
-#include "loom/target/emit/native/amdgpu/check/loom_check.h"
-
 static const loom_check_emit_provider_t* const kLoomAmdgpuCheckEmitProviders[] =
     {
         &loom_amdgpu_bank_service_loom_check_emit_provider,
         &loom_amdgpu_occupancy_loom_check_emit_provider,
-        &loom_amdgpu_kernel_loom_check_emit_provider,
-        &loom_amdgpu_native_loom_check_emit_provider,
 };
 
-const loom_check_provider_t loom_amdgpu_check_provider = {
-    .name = IREE_SVL("amdgpu"),
+const loom_check_provider_t loom_amdgpu_arch_check_provider = {
+    .name = IREE_SVL("amdgpu-arch"),
     .emit_providers = kLoomAmdgpuCheckEmitProviders,
     .emit_provider_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckEmitProviders),
 };

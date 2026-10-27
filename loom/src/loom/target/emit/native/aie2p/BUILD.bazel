@@ -30,3 +30,15 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
     ],
 )
+
+loom_cc_library(
+    name = "check_provider",
+    srcs = ["check_provider.c"],
+    hdrs = ["check_provider.h"],
+    visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
+    deps = [
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:artifact_check",
+        "//loom/src/loom/tools/loom-check:provider",
+        "//runtime/src/iree/base",
+    ],
+)

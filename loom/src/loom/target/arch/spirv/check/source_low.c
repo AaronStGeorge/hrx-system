@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/target/spirv/check/source_low.h"
+#include "loom/target/arch/spirv/check/source_low.h"
 
 #include "loom/tools/loom-check/compile.h"
 #include "loom/tools/loom-check/compile_diagnostics.h"

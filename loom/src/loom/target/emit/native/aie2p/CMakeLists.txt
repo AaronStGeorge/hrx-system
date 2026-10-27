@@ -26,4 +26,20 @@ loom_cc_library(
 )
 endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
+loom_cc_library(
+  NAME
+    check_provider
+  HDRS
+    "check_provider.h"
+  SRCS
+    "check_provider.c"
+  DEPS
+    iree::base
+    loom::target::arch::amd::xdna::aie2p::artifact_check
+    loom::tools::loom-check::provider
+  PUBLIC
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

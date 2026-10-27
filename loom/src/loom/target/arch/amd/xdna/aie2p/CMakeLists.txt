@@ -774,28 +774,21 @@ loom_cc_library(
     check_provider
   HDRS
     "check/array_plan.h"
-    "check/artifact.h"
     "check/leaf.h"
     "check/provider.h"
   SRCS
     "check/array_plan.c"
-    "check/artifact.c"
     "check/leaf.c"
     "check/provider.c"
   DEPS
     ::array_plan
     ::array_program
     ::array_resident
-    ::bundle_encoding
     ::core_descriptors
-    ::descriptor_encoding
-    ::encoding
     ::leaf_compile
     ::machine
     iree::base
-    iree::schemas::xdna_executable
     loom::analysis::symbol_facts
-    loom::binding::c::loomc
     loom::codegen::low::diagnostics
     loom::codegen::low::function_requirements
     loom::codegen::low::storage_layout
@@ -806,10 +799,31 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::ops::op_defs
-    loom::target::provider
     loom::target::reporting::report
     loom::tools::loom-check::execute
     loom::tools::loom-check::provider
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_ARCH_AIE2P)
+loom_cc_library(
+  NAME
+    artifact_check
+  HDRS
+    "check/artifact.h"
+  SRCS
+    "check/artifact.c"
+  DEPS
+    ::bundle_encoding
+    ::core_descriptors
+    ::descriptor_encoding
+    ::encoding
+    ::machine
+    iree::base
+    iree::schemas::xdna_executable
+    loom::binding::c::loomc
+    loom::tools::loom-check::execute
   PUBLIC
 )
 endif()

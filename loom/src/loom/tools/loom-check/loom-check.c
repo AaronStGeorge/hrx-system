@@ -28,6 +28,18 @@
 #include "loom/target/test/provider.h"
 #include "loom/tools/loom-check/test_provider.h"
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
+#ifndef LOOM_CHECK_HAVE_ARCH_AIE2P
+#define LOOM_CHECK_HAVE_ARCH_AIE2P 0
+#endif  // LOOM_CHECK_HAVE_ARCH_AIE2P
+#ifndef LOOM_CHECK_HAVE_ARCH_AMDGPU
+#define LOOM_CHECK_HAVE_ARCH_AMDGPU 0
+#endif  // LOOM_CHECK_HAVE_ARCH_AMDGPU
+#ifndef LOOM_CHECK_HAVE_ARCH_SPIRV
+#define LOOM_CHECK_HAVE_ARCH_SPIRV 0
+#endif  // LOOM_CHECK_HAVE_ARCH_SPIRV
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+#define LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
 #ifndef LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
 #define LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF 0
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
@@ -43,12 +55,24 @@
 #ifndef LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
 #define LOOM_CHECK_HAVE_ARTIFACT_X86_ELF 0
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
-#ifndef LOOM_CHECK_HAVE_TARGET_XDNA
-#define LOOM_CHECK_HAVE_TARGET_XDNA 0
-#endif  // LOOM_CHECK_HAVE_TARGET_XDNA
-
-#if LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#if LOOM_CHECK_HAVE_ARCH_AIE2P
+#include "loom/target/arch/amd/xdna/aie2p/check/provider.h"
+#if LOOM_CHECK_HAVE_TEST_PROVIDER
+#include "loom/target/arch/amd/xdna/aie2p/check/configuration.h"
+#include "loom/target/arch/amd/xdna/aie2p/check/test_provider.h"
+#endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
+#endif  // LOOM_CHECK_HAVE_ARCH_AIE2P
+#if LOOM_CHECK_HAVE_ARCH_AMDGPU
 #include "loom/target/arch/amdgpu/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARCH_AMDGPU
+#if LOOM_CHECK_HAVE_ARCH_SPIRV
+#include "loom/target/arch/spirv/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARCH_SPIRV
+#if LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+#include "loom/target/emit/native/aie2p/check_provider.h"
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+#if LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#include "loom/target/emit/native/amdgpu/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
 #if LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
 #include "loom/tooling/target/spirv/check/provider.h"
@@ -62,22 +86,29 @@
 #if LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
 #include "loom/target/emit/native/x86/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
-#if LOOM_CHECK_HAVE_TARGET_XDNA
-#include "loom/target/arch/amd/xdna/aie2p/check/provider.h"
-#if LOOM_CHECK_HAVE_TEST_PROVIDER
-#include "loom/target/arch/amd/xdna/aie2p/check/configuration.h"
-#include "loom/target/arch/amd/xdna/aie2p/check/test_provider.h"
-#endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
-#endif  // LOOM_CHECK_HAVE_TARGET_XDNA
-
 static const loom_check_provider_t* const kLoomCheckProviders[] = {
     &loom_cxx_export_check_provider,
 #if LOOM_CHECK_HAVE_TEST_PROVIDER
     &loom_check_test_provider,
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
     &loom_cmd_check_provider,
+#if LOOM_CHECK_HAVE_ARCH_AIE2P
+    &loom_aie2p_arch_check_provider,
+#if LOOM_CHECK_HAVE_TEST_PROVIDER
+    &loom_aie2p_check_test_provider,
+#endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
+#endif  // LOOM_CHECK_HAVE_ARCH_AIE2P
+#if LOOM_CHECK_HAVE_ARCH_AMDGPU
+    &loom_amdgpu_arch_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARCH_AMDGPU
+#if LOOM_CHECK_HAVE_ARCH_SPIRV
+    &loom_spirv_arch_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARCH_SPIRV
+#if LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+    &loom_aie2p_artifact_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
 #if LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
-    &loom_amdgpu_check_provider,
+    &loom_amdgpu_native_check_provider,
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
 #if LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
     &loom_spirv_emit_check_provider,
@@ -91,12 +122,6 @@ static const loom_check_provider_t* const kLoomCheckProviders[] = {
 #if LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
     &loom_x86_native_check_provider,
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
-#if LOOM_CHECK_HAVE_TARGET_XDNA
-    &loom_aie2p_check_provider,
-#if LOOM_CHECK_HAVE_TEST_PROVIDER
-    &loom_aie2p_check_test_provider,
-#endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
-#endif  // LOOM_CHECK_HAVE_TARGET_XDNA
 };
 
 // Developer tools accept test.* syntax without synthetic compiler behavior.
@@ -111,9 +136,9 @@ static const loom_target_provider_t kLoomCheckSyntaxProvider = {
 static const loom_target_provider_t* const kLoomCheckTargetExtensions[] = {
 #if LOOM_CHECK_HAVE_TEST_PROVIDER
     &loom_test_target_provider,
-#if LOOM_CHECK_HAVE_TARGET_XDNA
+#if LOOM_CHECK_HAVE_ARCH_AIE2P
     &loom_aie2p_configuration_check_target_provider,
-#endif  // LOOM_CHECK_HAVE_TARGET_XDNA
+#endif  // LOOM_CHECK_HAVE_ARCH_AIE2P
 #else
     &kLoomCheckSyntaxProvider,
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER

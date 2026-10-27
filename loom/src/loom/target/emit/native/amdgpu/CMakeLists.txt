@@ -140,6 +140,22 @@ loom_cc_library(
 endif()
 
 if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
+loom_cc_library(
+  NAME
+    check_provider
+  HDRS
+    "check/provider.h"
+  SRCS
+    "check/provider.c"
+  DEPS
+    ::loom_check
+    iree::base
+    loom::tools::loom-check::provider
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
 loom_check_test_suite(
   NAME
     loom_check_file_test

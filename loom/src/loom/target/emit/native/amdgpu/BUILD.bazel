@@ -36,8 +36,6 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
-
 _AMDGPU_HAL_KERNEL_LIBRARY_VISIBILITY = [
     "//loom/binding/c/target/amdgpu:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
@@ -121,7 +119,6 @@ loom_cc_library(
     name = "loom_check",
     srcs = ["check/loom_check.c"],
     hdrs = ["check/loom_check.h"],
-    visibility = _AMDGPU_CHECK_VISIBILITY,
     deps = [
         ":assembly",
         ":encoding",
@@ -143,6 +140,18 @@ loom_cc_library(
         "//loom/src/loom/tools/loom-check:execute",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base:core_headers",
+    ],
+)
+
+loom_cc_library(
+    name = "check_provider",
+    srcs = ["check/provider.c"],
+    hdrs = ["check/provider.h"],
+    visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
+    deps = [
+        ":loom_check",
+        "//loom/src/loom/tools/loom-check:provider",
+        "//runtime/src/iree/base",
     ],
 )
 
