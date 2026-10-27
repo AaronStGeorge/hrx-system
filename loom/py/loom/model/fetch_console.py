@@ -9,11 +9,13 @@
 from __future__ import annotations
 
 import codecs
+import math
 import os
 import threading
 import time
 import webbrowser
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import TextIO
 
 from .fetch_hf import AccessRequired
@@ -29,6 +31,51 @@ def display_text(text: str) -> str:
     )
 
 
+@dataclass
+class _ByteCount:
+    # Last observed stage count, including observations omitted from the console.
+    completed: int
+    # Latest extent for this stage, independent of another stage's byte units.
+    total: int | None
+    # Monotonic start of this attempt's observed interval.
+    start_time: float
+    # Initial count excludes already resumed bytes from the measured rate.
+    start_bytes: int
+
+    def rate(self, now: float) -> float:
+        elapsed = now - self.start_time
+        return (self.completed - self.start_bytes) / elapsed if elapsed > 0 else 0
+
+    def describe(self, now: float) -> list[str]:
+        extent = format_bytes(self.completed)
+        if self.total is not None:
+            percentage = self.completed * 100 // self.total if self.total else 100
+            filled = min(12, percentage * 12 // 100)
+            bar = "#" * filled + "." * (12 - filled)
+            extent = f"[{bar}] {percentage:3d}%  {extent} / {format_bytes(self.total)}"
+        else:
+            extent += " (total unknown)"
+        details = [extent]
+        rate = self.rate(now)
+        if rate > 0:
+            details.append(f"{format_bytes(int(rate))}/s")
+        if self.total is not None and self.completed < self.total:
+            if rate > 0:
+                seconds = math.ceil((self.total - self.completed) / rate)
+                hours, seconds = divmod(seconds, 3600)
+                minutes, seconds = divmod(seconds, 60)
+                if hours:
+                    duration = f"{hours}h {minutes:02d}m {seconds:02d}s"
+                elif minutes:
+                    duration = f"{minutes}m {seconds:02d}s"
+                else:
+                    duration = f"{seconds}s"
+                details.append("ETA " + duration)
+            else:
+                details.append("ETA estimating")
+        return details
+
+
 class ConsoleProgress:
     """Plain stderr observations for terminals, pipes, and redirected logs."""
 
@@ -41,18 +88,33 @@ class ConsoleProgress:
         self.last_time = 0.0
         # Most recent count from the acquisition or installation owner.
         self.files = None
+        # Per-file stage counters; wire bytes never replace reconstructed bytes.
+        self.counts = {}
 
     def __call__(self, event):
         if event.total_files is not None:
             self.files = (event.completed_files, event.total_files)
         now = time.monotonic()
-        if (
-            event.phase in self.phases
-            and event.phase != "complete"
-            and now - self.last_time < 5.0
-        ):
+        phase = event.phase
+        if event.completed_bytes is not None:
+            key = (phase, event.path)
+            counter = self.counts.get(key)
+            if counter is None or event.completed_bytes < counter.completed:
+                self.counts[key] = _ByteCount(
+                    event.completed_bytes, event.total_bytes, now, event.completed_bytes
+                )
+                if phase == "download" and counter is not None:
+                    self.counts.pop(("transfer", event.path), None)
+            else:
+                counter.completed = event.completed_bytes
+                counter.total = event.total_bytes
+        # Either Xet callback can drive the heartbeat. Always show the last file
+        # extent, including when reconstruction is waiting for incoming chunks.
+        if phase == "transfer" and ("download", event.path) in self.counts:
+            phase = "download"
+        if phase in self.phases and phase != "complete" and now - self.last_time < 30.0:
             return
-        self.phases.add(event.phase)
+        self.phases.add(phase)
         self.last_time = now
         labels = {
             "discover": "Metadata",
@@ -66,35 +128,25 @@ class ConsoleProgress:
             "install": "Install",
             "complete": "Complete",
         }
-        details = []
-        if event.completed_bytes is not None:
-            extent = format_bytes(event.completed_bytes)
-            if event.total_bytes is not None:
-                percentage = (
-                    event.completed_bytes * 100 // event.total_bytes
-                    if event.total_bytes
-                    else 100
-                )
-                filled = min(12, percentage * 12 // 100)
-                bar = "#" * filled + "." * (12 - filled)
-                extent = (
-                    f"[{bar}] {percentage:3d}%  "
-                    + extent
-                    + " / "
-                    + format_bytes(event.total_bytes)
-                )
-            else:
-                extent += " (total unknown)"
-            details.append(extent)
+        counter = self.counts.get((phase, event.path))
+        details = counter.describe(now) if counter else []
+        if phase == "download":
+            transfer = self.counts.get(("transfer", event.path))
+            if transfer is not None:
+                received = "received " + format_bytes(transfer.completed)
+                rate = transfer.rate(now)
+                if rate > 0:
+                    received += f" ({format_bytes(int(rate))}/s)"
+                details.append(received)
         if event.path is not None:
             details.append(display_text(event.path))
         if self.files is not None:
             details.append(f"{self.files[0]}/{self.files[1]} files")
-        if event.phase == "discover":
+        if phase == "discover":
             details.append("reading model metadata")
-        elif event.phase == "access":
+        elif phase == "access":
             details.append("checking source access")
-        text = f"loom-fetch  {labels[event.phase]:9s} " + "  ".join(details)
+        text = f"loom-fetch  {labels[phase]:9s} " + "  ".join(details)
         self.output.write(text + "\n")
         self.output.flush()
 

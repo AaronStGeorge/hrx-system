@@ -43,13 +43,13 @@ loom-fetch "$model_url/model.json" --preset=streaming --output=./moonshine
 ```
 
 Fetch reports its current phase, file counts, and available byte counts on
-stderr. Known byte totals include a compact bar and percentage. These updates
-also appear in redirected logs and with `--no-input`; they require no terminal.
+stderr. Known byte totals include a compact bar, percentage, and estimated time
+remaining once progress establishes a rate. These updates also appear in
+redirected logs and with `--no-input`; they require no terminal.
 For example, a large file can produce these status lines (illustrative counts):
 
 ```text
-loom-fetch  Download  [###.........]  25%  1.0 GiB / 4.0 GiB  model.safetensors  2/3 files
-loom-fetch  Transfer  384.0 MiB (total unknown)  model.safetensors  2/3 files
+loom-fetch  Download  [###.........]  25%  1.0 GiB / 4.0 GiB  34.1 MiB/s  ETA 1m 30s  received 512.0 MiB (17.1 MiB/s)  model.safetensors  2/3 files
 loom-fetch  Verify    [############] 100%  4.0 GiB / 4.0 GiB  model.safetensors  2/3 files
 loom-fetch  Complete  3/3 files
 ```
@@ -62,11 +62,16 @@ loom-fetch "$model_url/model.json" --preset=streaming --output=./moonshine --no-
 ```
 
 Use `--quiet` to suppress progress while retaining errors and access guidance.
-Download progress describes file bytes; Hugging Face may additionally report
-network transfer bytes separately when reconstructing a file from cached or
-compressed chunks. Verification reports bytes checked, including cache hits.
-Unknown totals stay unknown. A complete installation is reported only after
-its model card has been published.
+Download progress describes reconstructed file bytes. Hugging Face's network
+transfer bytes appear on the same row as `received`; these may differ from file
+bytes because of cached or compressed chunks. ETA uses the file's observed
+average progress, excluding bytes already present at resume, not the network
+counter. It estimates this file stage, not the remaining installation. Before
+progress establishes a rate, it reads `ETA estimating`; unknown file totals have
+no ETA. Verification reports bytes checked, including cache hits. Ongoing
+updates are limited to one line every thirty seconds, while new phases and final
+completion appear promptly. A complete installation is reported only after its
+model card has been published.
 
 On Windows PowerShell, the same acquisition is:
 

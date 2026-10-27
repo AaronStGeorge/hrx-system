@@ -41,6 +41,7 @@ iree_py_test(
     tags = ["skip-bazel_to_cmake"],
     deps = [
         ":fixture",
+        "//loom/py/loom/model:fetch_console",
         "//loom/py/loom/model:fetch_hf",
         "//loom/py/loom/model:fetch_source",
         "//loom/py/loom/model:fetch_transfer",

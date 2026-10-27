@@ -270,9 +270,14 @@ model name. An authored card with multiple presets can be served directly with
 
 Acquisition progress uses stderr, including when redirected or running with
 `--no-input`. Aligned phase rows include a compact bar and percentage when a
-byte total is known. It reports each new phase promptly and throttles ongoing
-updates to one line every five seconds. stdout remains the final path or
-`--json` result. `--quiet` suppresses progress without suppressing errors or
+byte total is known, with observed throughput and an estimated time remaining.
+Download rows retain the file total when Xet reports network activity; received
+network bytes and their rate appear separately. ETA is for the current file
+stage, uses its observed average rate, and excludes bytes already present when
+resuming. Until there is measurable progress, it reads `ETA estimating`.
+Each new phase prints promptly; ongoing updates are limited to one line every
+thirty seconds. stdout remains the final path or `--json` result. `--quiet`
+suppresses progress without suppressing errors or
 access actions. Reports contain destination paths and numeric facts, never
 provider logs, credentials, or signed redirect URLs.
 

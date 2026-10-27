@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import io
 import json
 import os
 import threading
@@ -11,9 +12,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
+from loom.model.fetch_console import ConsoleProgress
 from loom.model.fetch_hf import (
     AccessRequired,
     HuggingFace,
@@ -125,6 +128,42 @@ def test_xet_reconstruction_and_network_bytes_remain_separate():
     assert (file_event.completed_bytes, file_event.total_bytes) == (100, 100)
     assert (transfer.completed_bytes, transfer.total_bytes) == (32, None)
     assert "private" not in repr(events)
+
+
+def test_xet_console_retains_file_progress_during_network_only_updates():
+    from huggingface_hub.utils._xet_progress_reporting import (
+        XetDownloadProgressReporter,
+    )
+
+    output = io.StringIO()
+    gib = 1024**3
+    with (
+        patch("loom.model.fetch_console.time.monotonic", return_value=0) as clock,
+        XetDownloadProgressReporter(
+            reconstruction_desc="private signed URL",
+            transfer_desc="private credential",
+            total=4 * gib,
+            log_level=20,
+            tqdm_class=_download_progress_class(ConsoleProgress(output)),
+        ) as progress,
+    ):
+        for now, received in ((15, 384 * 1024**2), (30, gib // 2)):
+            clock.return_value = now
+            progress.update_progress(
+                SimpleNamespace(
+                    total_bytes_completed=gib,
+                    total_transfer_bytes_completed=received,
+                    total_bytes=4 * gib,
+                    total_bytes_completion_rate=0,
+                    total_transfer_bytes_completion_rate=0,
+                )
+            )
+    lines = output.getvalue().splitlines()
+    assert len(lines) == 2
+    assert "25%  1.0 GiB / 4.0 GiB  34.1 MiB/s  ETA 1m 30s" in lines[-1]
+    assert "received 512.0 MiB (8.5 MiB/s)" in lines[-1]
+    assert "private" not in output.getvalue()
+    assert "total unknown" not in output.getvalue()
 
 
 def test_gate_refreshes_credentials_and_preserves_selected_revision(tmp_path):
