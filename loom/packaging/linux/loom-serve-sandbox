@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+set -euo pipefail
+
+fail() {
+  printf 'loom-serve-sandbox: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: loom-serve-sandbox [sandbox options] -- [loom-serve arguments]
+
+Run the Linux SDK server without host networking or implicit host file access.
+The HTTP API, dashboard, and WebSocket feeds use SOCKET_DIR/serve.sock.
+
+  --socket-dir=DIR       Existing private directory for the socket (required).
+  --ro-bind=PATH         Mount an absolute file/directory path read-only at the
+                        same path; repeatable. Files are never copied.
+  --rw-bind=PATH         Mount an existing output file/directory read-write at
+                        the same absolute path; repeatable and opt-in.
+  --gpu=RENDER_NODE      Expose one AMD /dev/dri/renderD* node and /dev/kfd.
+  --npu=ACCEL_NODE       Expose one /dev/accel/accel* node. Repeat for more devices.
+  --binary=PATH          Installed SDK binary; default is beside this launcher.
+  --bwrap=PATH           Trusted bubblewrap binary; default /usr/bin/bwrap.
+  --help                Show this help without initializing devices.
+
+All arguments after -- pass unchanged to loom-serve. The launcher adds
+--listen=unix:/run/loom/serve.sock. Use absolute sandbox paths for --model,
+--devices, and --flagfile; their document-relative references work normally.
+The socket directory must be owned by your user with mode 0700. Its contents
+are writable from inside the sandbox; use a dedicated directory. Ctrl-C,
+SIGTERM, and SIGHUP request normal server shutdown and wait for it to finish.
+Keep writable output directories separate from read-only model/weight trees.
+
+Example (after installing bubblewrap and the Linux Loom SDK):
+  install -d -m 700 ./serve-socket
+  loom-serve-sandbox --socket-dir=./serve-socket \
+    --ro-bind=/srv/models --ro-bind=/srv/weights \
+    --gpu=/dev/dri/renderD128 -- \
+    --device=amdgpu --model=/srv/models/chat/model.json
+  curl --unix-socket ./serve-socket/serve.sock http://localhost/v1/models
+
+Only explicit accelerator nodes and read-only discovery metadata are exposed.
+The host kernel and drivers remain trusted. This is not a CPU/RAM/device quota
+or a defense against driver bugs. No raw bubblewrap options are accepted.
+EOF
+}
+
+# Only subprocesses call this: bwrap otherwise retains caller FDs in its payload.
+close_descriptors() {
+  local entry descriptor
+  for entry in /proc/"$BASHPID"/fd/*; do
+    descriptor=${entry##*/}
+    if ((descriptor > $1)); then
+      exec {descriptor}>&-
+    fi
+  done
+}
+
+mounts=()
+device_nodes=()
+socket_directory=
+server=
+bubblewrap=/usr/bin/bwrap
+gpu=0
+npu=0
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then usage; exit 0; fi
+[[ $(uname -s) == Linux ]] || fail 'supported on Linux only; use loom-serve with your platform isolation tools'
+while (($#)); do
+  case "$1" in
+    --help|-h) usage; exit 0 ;;
+    --) shift; break ;;
+    --ro-bind=*|--rw-bind=*)
+      option=${1%%=*}
+      value=${1#*=}
+      [[ $value == /* ]] || fail "$option requires an absolute path: $value"
+      source=$(realpath -e -- "$value") || fail "cannot resolve mount source: $value"
+      [[ -f $source || -d $source ]] || fail "mount source is not a regular file or directory: $value"
+      case "$source" in
+        /|/proc|/proc/*|/dev|/dev/*|/sys|/sys/*|/run|/run/*)
+          fail "not a regular input/output file tree: $source" ;;
+      esac
+      destination=$(realpath -ms -- "$value")
+      case "$destination" in
+        /|/dev|/dev/*|/proc|/proc/*|/sys|/sys/*|/run|/run/*|/tmp|/usr|/usr/*|/lib|/lib/*|/lib64|/lib64/*|/etc|/etc/*|/opt|/opt/loom|/opt/loom/*)
+          fail "mount destination is reserved by the sandbox: $destination" ;;
+      esac
+      if [[ $option == --rw-bind ]]; then
+        [[ -w $source ]] || fail "output path is not writable by your user: $source"
+        mounts+=(--bind "$source" "$destination")
+      else
+        mounts+=(--ro-bind "$source" "$destination")
+      fi
+      shift ;;
+    --socket-dir=*|--binary=*|--bwrap=*|--gpu=*|--npu=*)
+      option=${1%%=*}
+      value=${1#*=}
+      [[ -n $value ]] || fail "$option requires a path"
+      case "$option" in
+        --socket-dir) socket_directory=$value ;;
+        --binary) server=$value ;;
+        --bwrap) bubblewrap=$value ;;
+        --gpu|--npu)
+          node=$(realpath -e -- "$value") || fail "device not found: $value; check the host driver and device node"
+          if [[ $option == --gpu ]]; then
+            [[ $node =~ ^/dev/dri/renderD[0-9]+$ ]] || fail '--gpu requires an AMD DRM render node, not a card node'
+            gpu=1
+          else
+            [[ $node =~ ^/dev/accel/accel[0-9]+$ ]] || fail '--npu requires an accelerator node under /dev/accel'
+            npu=1
+          fi
+          device_nodes+=("$node") ;;
+      esac
+      shift ;;
+    *) fail "unknown sandbox option: $1; use --option=value, with loom-serve arguments after --" ;;
+  esac
+done
+
+((EUID != 0)) || fail 'run as an ordinary user; configure device access on the host instead of running as root'
+[[ -x $bubblewrap ]] || fail "bubblewrap not found: $bubblewrap; install your distribution's bubblewrap package or select its binary with --bwrap=PATH"
+[[ -n $socket_directory ]] || fail '--socket-dir is required; create a dedicated directory with install -d -m 700 PATH'
+socket_directory=$(realpath -e -- "$socket_directory") || fail 'socket directory does not exist; create it with install -d -m 700 PATH'
+[[ -d $socket_directory && $(stat -Lc '%u:%a' -- "$socket_directory") == "$EUID:700" ]] || fail '--socket-dir must be an existing directory owned by your user with mode 0700'
+if [[ -z $server ]]; then
+  server=$(dirname -- "$(realpath -e -- "${BASH_SOURCE[0]}")")/loom-serve
+fi
+server=$(realpath -e -- "$server") || fail 'loom-serve not found beside the launcher; install the Linux SDK or use --binary=PATH'
+[[ -f $server && -x $server ]] || fail "not an executable SDK command: $server"
+
+umask 077
+arguments=(
+  --unshare-all --unshare-user --disable-userns --new-session --die-with-parent
+  --cap-drop ALL --clearenv --setenv PATH /usr/bin --setenv LC_ALL C
+  --setenv HOME /tmp --setenv TMPDIR /tmp --chdir /
+  --proc /proc --dev /dev --tmpfs /tmp
+)
+# Bind system runtime directories, not /, /etc, the home directory, or /run.
+# This also supports distributions without merged /usr library directories.
+for path in /usr /lib /lib64 /etc/ld.so.cache; do
+  if [[ -e $path ]]; then arguments+=(--ro-bind "$path" "$path"); fi
+done
+arguments+=(--ro-bind "$(dirname -- "$server")" /opt/loom/bin)
+arguments+=("${mounts[@]}" --bind "$socket_directory" /run/loom)
+
+if ((gpu || npu)); then
+  # class and dev/char links resolve into devices; libamdf also reads NUMA data.
+  metadata=(/sys/devices /sys/dev/char)
+  if ((gpu)); then
+    metadata+=(/sys/class/drm /sys/class/kfd)
+    # Module version/parameter facts are optional in libamdf (built-in drivers
+    # and kernel sysfs configurations need not publish them).
+    if [[ -d /sys/module/amdgpu ]]; then metadata+=(/sys/module/amdgpu); fi
+    device_nodes+=(/dev/kfd)
+  fi
+  if ((npu)); then metadata+=(/sys/class/accel); fi
+  for path in "${metadata[@]}"; do
+    [[ -d $path && -r $path && -x $path ]] || fail "required device discovery metadata is unavailable: $path; check the host driver and outer sandbox policy"
+    arguments+=(--ro-bind "$path" "$path")
+  done
+  for node in "${device_nodes[@]}"; do
+    [[ -c $node && -r $node && -w $node ]] || fail "device requires read/write access: $node; check the host driver, device group/ACL, and outer sandbox policy"
+    arguments+=(--dev-bind "$node" "$node")
+  done
+fi
+arguments+=(--remount-ro /)
+
+# Test the exact policy before launching the server, so namespace or mount
+# failures get setup advice without mislabelling a server's own exit status.
+if ! (
+  close_descriptors 2
+  exec "$bubblewrap" "${arguments[@]}" -- /usr/bin/true </dev/null
+); then
+  fail 'sandbox setup failed (diagnostic above); install a current bubblewrap and check that the host/outer container permits unprivileged user namespaces and these mounts; no server was started'
+fi
+
+stopping=0
+interrupted=0
+sandbox_group=
+stop() {
+  interrupted=1
+  stopping=1
+  if [[ -n $sandbox_group ]]; then
+    # Namespace PID 1 ignores TERM; the server handles it and retires work.
+    # Normal child completion can race signal delivery.
+    kill -TERM -- "-$sandbox_group" || printf 'loom-serve-sandbox: sandbox already retiring\n' >&2
+  fi
+}
+trap stop INT TERM HUP
+
+# The trusted bootstrap reports session creation before exec, then closes its
+# pipe. No controller descriptor reaches the server, and stdout/stderr remain
+# unmodified. The shell only waits and forwards signals after this handshake.
+exec {output}>&1
+exec {events}< <(
+  exec 3>&1 4>&1 1>&"$output" 0</dev/null
+  close_descriptors 4
+  exec "$bubblewrap" "${arguments[@]}" --info-fd 3 -- \
+    /usr/bin/sh -c 'printf "ready\n" >&4; exec 4>&-; exec "$@"' \
+    loom-serve-sandbox "/opt/loom/bin/${server##*/}" \
+    --listen=unix:/run/loom/serve.sock "$@"
+)
+sandbox_pid=$!
+exec {output}>&-
+
+# read can be interrupted after consuming part of a line. Retain that prefix
+# while queuing early termination until the new process group exists.
+line=
+namespace_pid=
+while :; do
+  interrupted=0
+  fragment=
+  if IFS= read -r fragment <&"$events"; then
+    line+=$fragment
+    if [[ $line =~ \"child-pid\":[[:space:]]*([0-9]+) ]]; then
+      namespace_pid=${BASH_REMATCH[1]}
+    elif [[ $line == ready ]]; then
+      [[ -n $namespace_pid ]] || fail 'bubblewrap did not report the sandbox process identity'
+      sandbox_group=$namespace_pid
+      if ((stopping)); then stop; fi
+      break
+    fi
+    line=
+  else
+    line+=$fragment
+    if ((!interrupted)); then break; fi
+  fi
+done
+exec {events}<&-
+
+while :; do
+  interrupted=0
+  result=0
+  wait "$sandbox_pid" || result=$?
+  if ((!interrupted)); then break; fi
+done
+trap - INT TERM HUP
+exit "$result"
