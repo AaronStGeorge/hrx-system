@@ -469,12 +469,6 @@ static iree_status_t loom_target_pipeline_build_source_cfg_lowering(
   return loom_target_pipeline_build_run(builder, IREE_SV("cfg-simplify"));
 }
 
-static iree_status_t loom_target_pipeline_build_source_cfg_lowering_body(
-    loom_builder_t* builder, void* user_data) {
-  (void)user_data;
-  return loom_target_pipeline_build_source_cfg_lowering(builder);
-}
-
 static iree_status_t loom_target_pipeline_build_structured_source_finalization(
     loom_builder_t* builder, void* user_data) {
   IREE_RETURN_IF_ERROR(
@@ -927,55 +921,6 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
   return loom_target_pipeline_build_low_cleanup(builder, user_data);
 }
 
-static iree_status_t
-loom_target_pipeline_build_source_low_diagnostic_artifacts_body(
-    loom_builder_t* builder, void* user_data) {
-  const loom_target_pipeline_build_context_t* context =
-      (const loom_target_pipeline_build_context_t*)user_data;
-  // Diagnostic emission preserves source operations, not unchosen execution
-  // modes. Facts used for footprints and lowering describe the compiled root.
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
-      builder, IREE_SV("materialize-locations")));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
-      builder, IREE_SV("specialize-target-callgraph")));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_refine_boundaries(builder));
-  loom_op_t* for_op = NULL;
-  if (loom_target_pipeline_source_to_low_has_memory_diagnostics(context)) {
-    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
-        builder, IREE_SV("source"),
-        loom_target_pipeline_build_vector_memory_footprint, user_data,
-        &for_op));
-  }
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_preparatory_source_inlining(
-      builder, user_data));
-  loom_target_control_flow_lowering_t control_flow_lowering =
-      LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG;
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_resolve_control_flow_lowering(
-      context->options, &control_flow_lowering));
-  if (control_flow_lowering == LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG) {
-    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
-        builder, IREE_SV("source"),
-        loom_target_pipeline_build_source_cfg_lowering_body, user_data,
-        &for_op));
-    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_source_inlining(
-        builder, user_data, IREE_SV("resume")));
-  }
-  IREE_RETURN_IF_ERROR(
-      loom_target_pipeline_build_boundary_projection(builder, user_data));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
-      builder, IREE_SV("source"),
-      loom_target_pipeline_build_predicate_lifetimes, NULL, &for_op));
-  IREE_RETURN_IF_ERROR(
-      loom_target_pipeline_build_source_to_low(builder, context->options));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_inline_callables(
-      builder, iree_string_view_empty()));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
-      builder, IREE_SV("low"),
-      loom_target_pipeline_build_source_low_artifact_preparation, user_data,
-      &for_op));
-  return loom_target_pipeline_build_low_cleanup(builder, user_data);
-}
-
 static iree_status_t loom_target_pipeline_build_prepared_low_body(
     loom_builder_t* builder, void* user_data) {
   IREE_RETURN_IF_ERROR(
@@ -1014,27 +959,6 @@ iree_status_t loom_target_pipeline_build_to_source_low(
                                      LOOM_PASS_ANCHOR_MODULE,
                                      loom_target_pipeline_build_source_low_body,
                                      (void*)&context, out_pipeline_op);
-}
-
-iree_status_t loom_target_pipeline_build_to_source_low_diagnostic_artifacts(
-    loom_module_t* pipeline_module, iree_string_view_t name,
-    const loom_target_pipeline_options_t* options,
-    const loom_target_environment_t* target_environment,
-    loom_pass_environment_t pass_environment, loom_op_t** out_pipeline_op) {
-  IREE_ASSERT_ARGUMENT(pipeline_module);
-  IREE_ASSERT_ARGUMENT(target_environment);
-  IREE_ASSERT_ARGUMENT(out_pipeline_op);
-  *out_pipeline_op = NULL;
-
-  const loom_target_pipeline_build_context_t context = {
-      .target_environment = target_environment,
-      .pass_environment = pass_environment,
-      .options = options,
-  };
-  return loom_pass_ir_build_pipeline(
-      pipeline_module, name, LOOM_PASS_ANCHOR_MODULE,
-      loom_target_pipeline_build_source_low_diagnostic_artifacts_body,
-      (void*)&context, out_pipeline_op);
 }
 
 iree_status_t loom_target_pipeline_build_to_source_low_artifacts(

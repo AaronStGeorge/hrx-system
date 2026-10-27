@@ -152,6 +152,16 @@ authored target bindings can use the existing whole-module form without a
 function or target option. Pipeline-text outputs describe the pipeline itself
 and do not accept specialization requests.
 
+The optional `diagnostics=memory`, `diagnostics=operand-forms`, or
+`diagnostics=all` selects lowering remarks without changing source normalization,
+legalization, or sanitizer policy. `diagnostics=none` is the default. Diagnostics
+describe operations that reach lowering after ordinary optimization. Operations
+removed by optimization do not produce selection remarks or lowering errors.
+Tests of the isolated lowering boundary use explicit passes such as
+`pass source-to-low{diagnostics=operand-forms},low-dce`. This preserves deliberately
+unoptimized input without making diagnostic selection choose a different
+compiler pipeline.
+
 Pass, pass-report, and compile-report modes verify input before any target
 specialization or transformation, and verify successful pipeline output before
 comparison. Input verification errors use the same diagnostic annotations as

@@ -132,6 +132,39 @@ low.func.def target<amdgpu.gfx11.generic.core>(@__loom_target_context_0_0) abi(h
 amdgpu.target<gfx11-generic> @__loom_target_context_0_0 {subgroup_size = 32}
 
 // ====
+// RUN: emit source-low diagnostics=none output=low
+
+amdgpu.target<gfx11-generic> @target
+
+// Explicitly disabling diagnostics still runs ordinary constant folding.
+func.def target(@target) @diagnostics_none_keeps_source_normalization() -> (i32) {
+  %c6 = scalar.constant 6 : i32
+  %c7 = scalar.constant 7 : i32
+  %product = scalar.muli %c6, %c7 : i32
+  func.return %product : i32
+}
+
+// ----
+low.func.def target<amdgpu.gfx11.generic.core>(@target) abi(hal_kernel) @diagnostics_none_keeps_source_normalization() -> (reg<amdgpu.sgpr>) asm {
+  %product = s_mov_b32 42
+  return %product
+}
+
+// ====
+// RUN: emit source-low diagnostics=operand-forms output=none
+
+amdgpu.target<gfx11-generic> @target
+
+// Suppressing printed IR does not expose dead operations to the lowerer.
+func.def target(@target) @diagnostics_observe_only_live_operations(%lhs: f32, %rhs: f32) -> (f32) {
+  %bias = scalar.constant 0.5 : f32
+  %unused = scalar.fmaf %lhs, %lhs, %bias : f32
+  // REMARK@+1: AMDGPU/030 {descriptor_name="amdgpu.v_fmaak_f32", operand_form="fmaak", source_operand_index="2", literal_role="addend", decision_key="selected"}
+  %result = scalar.fmaf %lhs, %rhs, %bias : f32
+  func.return %result : f32
+}
+
+// ====
 // RUN: emit source-low output=module
 
 amdgpu.target<gfx11-generic> @target

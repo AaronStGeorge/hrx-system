@@ -505,40 +505,6 @@ TEST_F(TargetPipelineTest, StructuredControlFlowExpandsSourceLoopPolicies) {
   EXPECT_EQ(counts.resumed_target_inlining_ordinal, 0);
 }
 
-TEST_F(TargetPipelineTest, DiagnosticArtifactsPreserveRawSourceBoundary) {
-  ModulePtr module = AllocateModule(IREE_SV("pipeline"));
-
-  loom_op_t* pipeline_op = nullptr;
-  IREE_ASSERT_OK(loom_target_pipeline_build_to_source_low_diagnostic_artifacts(
-      module.get(), IREE_SV("compile"), /*options=*/nullptr, &environment_,
-      loom_pass_environment_empty(), &pipeline_op));
-
-  const PipelineRunCounts counts = CountPipelineRuns(module.get(), pipeline_op);
-  EXPECT_EQ(counts.final_template_selection, 0);
-  EXPECT_EQ(counts.target_callgraph_specialization, 2);
-  EXPECT_EQ(counts.boundary_refinement, 1);
-  EXPECT_EQ(counts.boundary_projection, 1);
-  EXPECT_EQ(counts.source_to_low, 1);
-  EXPECT_EQ(counts.symbol_dce, 0);
-  EXPECT_LT(counts.target_callgraph_specialization_ordinals[0],
-            counts.boundary_refinement_ordinal);
-  EXPECT_LT(counts.boundary_refinement_ordinal,
-            counts.boundary_cleanup_ordinal);
-  EXPECT_LT(counts.boundary_cleanup_ordinal,
-            counts.target_callgraph_specialization_ordinals[1]);
-  EXPECT_LT(counts.target_callgraph_specialization_ordinals[1],
-            counts.first_target_inlining_ordinal);
-  EXPECT_LT(counts.first_target_inlining_ordinal,
-            counts.first_scf_to_cfg_ordinal);
-  EXPECT_LT(counts.first_scf_to_cfg_ordinal,
-            counts.resumed_target_inlining_ordinal);
-  EXPECT_LT(counts.resumed_target_inlining_ordinal,
-            counts.boundary_projection_ordinal);
-  EXPECT_LT(counts.boundary_projection_ordinal, counts.source_to_low_ordinal);
-  EXPECT_LT(counts.source_to_low_ordinal, counts.last_target_inlining_ordinal);
-  EXPECT_EQ(counts.sanitizer_materialize_assertions, 0);
-}
-
 TEST_F(TargetPipelineTest, OperandFormDiagnosticsBuildsSourceToLowOption) {
   ModulePtr module = AllocateModule(IREE_SV("pipeline"));
   const loom_target_pipeline_options_t options = {
