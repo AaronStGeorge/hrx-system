@@ -38,6 +38,7 @@ iree_cc_library(
     "proactor.c"
     "proactor.h"
     "proactor_cancel.c"
+    "proactor_io.c"
     "proactor_submit.c"
     "proactor_validation.c"
     "proactor_validation.h"

@@ -72,14 +72,14 @@ class GpuFileIoResources {
   void RelayFileIo();
   // Submits and services task work without a kernel poller. The wait strategy
   // sleeps for one completion; the poll strategy returns without waiting.
-  // Only this host owner consumes the native CQ.
-  void ServiceHostIo(uint64_t* enter_calls, amdf::cts::WaitDeadline deadline);
+  // Only this host owner consumes the native CQ. Accepted I/O is serviced
+  // until completion; the outer test harness owns the progress watchdog.
+  void ServiceHostIo(uint64_t* enter_calls);
   // Services deferred kernel work, sleeping on its eventfd when I/O remains.
   // The GPU exclusively owns CQ consumption. Kernel CQ tail and TASKRUN, not
   // unread CQ occupancy, close the notification race. With no pending I/O,
   // returns so the caller can observe GPU-only admission and termination.
-  void ServiceDeviceIo(uint64_t* enter_calls, uint64_t* wait_calls,
-                       amdf::cts::WaitDeadline deadline);
+  void ServiceDeviceIo(uint64_t* enter_calls, uint64_t* wait_calls);
   // Checks every byte after GPU retirement; direct mode ends before this read.
   void VerifyFile(const std::vector<uint32_t>& expected_file, FileMode mode);
 
