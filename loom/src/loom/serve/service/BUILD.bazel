@@ -26,6 +26,7 @@ loom_cc_library(
     deps = [
         ":inspection",
         ":kind",
+        ":reasoning",
         ":reconfiguration",
         "//loom/src/loom/serve/runtime/host:wake",
         "//loom/src/loom/serve/telemetry:latency",
@@ -34,6 +35,24 @@ loom_cc_library(
         "//loom/src/loom/serve/transport/http:server",
         "//runtime/src/iree/base",
         "//runtime/src/iree/tokenizer",
+    ],
+)
+
+loom_cc_library(
+    name = "reasoning",
+    srcs = ["reasoning.c"],
+    hdrs = ["reasoning.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_test(
+    name = "reasoning_test",
+    srcs = ["reasoning_test.cc"],
+    deps = [
+        ":reasoning",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

@@ -8,6 +8,7 @@
 
 #include "loom/serve/dashboard/files.h"
 #include "loom/serve/server/router_test_fixture.h"
+#include "loom/serve/service/reasoning.h"
 #include "loom/serve/transport/http/multipart.h"
 
 namespace {
@@ -672,6 +673,7 @@ TEST_P(HttpRouterTest, DiscoveryAndIndependentBorrowedRequests) {
           R"("owned_by":"local","loom":{"kind":"embedding","endpoint":"/v1/test","tokenize":false}})"),
       std::string::npos);
   EXPECT_EQ(models.find("\"status\":"), std::string::npos);
+  EXPECT_EQ(models.find("\"reasoning\":"), std::string::npos);
   const std::string body_a = R"({"model":"\u0061","messages":["first"]})";
   const std::string body_b = R"({"model":"b","messages":["second"]})";
   const int a = Send("POST", "/v1/chat/completions", body_a);
@@ -688,6 +690,55 @@ TEST_P(HttpRouterTest, DiscoveryAndIndependentBorrowedRequests) {
       Read(Send("DELETE", "/v1/checkpoints/same", "", "X-Loom-Model: a\r\n"))
           .find("a:/v1/checkpoints/same:"),
       std::string::npos);
+}
+
+class HttpRouterReasoningTest : public HttpRouterTest {
+ protected:
+  void SetUp() override {
+    IREE_ASSERT_OK(loom_serve_reasoning_initialize(1, 45, 0, &a_.reasoning));
+    IREE_ASSERT_OK(loom_serve_reasoning_initialize(0, 0, 0, &b_.reasoning));
+    IREE_ASSERT_OK(
+        loom_serve_reasoning_initialize(1, 127, 6, &held_.reasoning));
+    IREE_ASSERT_OK(loom_serve_reasoning_initialize(1, 0, 0, &other_.reasoning));
+    HttpRouterTest::SetUp();
+  }
+};
+
+TEST_P(HttpRouterReasoningTest, DiscoveryUsesEachModelsDeclaration) {
+  for (const char* endpoint : {"/v1/models", "/v1/status"}) {
+    const auto response = Read(Send("GET", endpoint));
+    auto row = [&](const char* name) {
+      const auto begin = response.find(std::string("\"id\":\"") + name + "\"");
+      EXPECT_NE(begin, std::string::npos);
+      return begin == std::string::npos
+                 ? std::string()
+                 : response.substr(begin,
+                                   response.find(",\"loom\":", begin) - begin);
+    };
+    const auto selected = row("a");
+    EXPECT_NE(selected.find(R"("reasoning":true)"), std::string::npos);
+    EXPECT_NE(
+        selected.find(
+            R"("supported_reasoning_levels":["none","low","medium","xhigh"])"),
+        std::string::npos);
+    EXPECT_NE(selected.find(R"("default_reasoning_level":"none")"),
+              std::string::npos);
+    const auto disabled = row("b");
+    EXPECT_NE(disabled.find(R"("reasoning":false)"), std::string::npos);
+    EXPECT_EQ(disabled.find("supported_reasoning_levels"), std::string::npos);
+    EXPECT_EQ(disabled.find("default_reasoning_level"), std::string::npos);
+    const auto complete = row("held");
+    EXPECT_NE(
+        complete.find(
+            R"("supported_reasoning_levels":["none","minimal","low","medium","high","xhigh","max"])"),
+        std::string::npos);
+    EXPECT_NE(complete.find(R"("default_reasoning_level":"max")"),
+              std::string::npos);
+    const auto fixed = row("other");
+    EXPECT_NE(fixed.find(R"("reasoning":true)"), std::string::npos);
+    EXPECT_EQ(fixed.find("supported_reasoning_levels"), std::string::npos);
+    EXPECT_EQ(fixed.find("default_reasoning_level"), std::string::npos);
+  }
 }
 
 TEST_P(HttpRouterTest, RejectsAmbiguousSelectorsWithoutInvokingModels) {
@@ -1212,6 +1263,8 @@ TEST_P(HttpRouterCountersTest, LiveCountersPreservePrecisionOnTheWire) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Workers, HttpRouterTest, ::testing::Values(1, 4));
+INSTANTIATE_TEST_SUITE_P(Workers, HttpRouterReasoningTest,
+                         ::testing::Values(1, 4));
 INSTANTIATE_TEST_SUITE_P(Workers, HttpRouterCountersTest,
                          ::testing::Values(1, 4));
 INSTANTIATE_TEST_SUITE_P(Workers, HttpRouterTightCapacityTest,

@@ -11,6 +11,7 @@
 #include "loom/serve/runtime/host/wake.h"
 #include "loom/serve/service/inspection.h"
 #include "loom/serve/service/kind.h"
+#include "loom/serve/service/reasoning.h"
 #include "loom/serve/service/reconfiguration.h"
 #include "loom/serve/telemetry/latency.h"
 #include "loom/serve/telemetry/sample.h"
@@ -159,6 +160,8 @@ typedef struct loom_serve_service_t {
     iree_host_size_t max_output_tokens;
     // Exact source-prepared counting at /v1/chat/completions/input_tokens.
     bool input_token_count;
+    // Source-declared reasoning support and effort selection, if known.
+    loom_serve_reasoning_t reasoning;
   } capabilities;
   // Copies published ownership on the serialized owner without invoking model
   // work or reading state still borrowed by a CPU/device task.

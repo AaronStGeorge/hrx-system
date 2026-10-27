@@ -186,6 +186,9 @@ class ClientTest(unittest.TestCase):
                     # listener alone does not publish a usable model.
                     models = control(address, "GET", "/v1/models", 200)["data"]
                     self.assertEqual(len(models), 1)
+                    self.assertIs(models[0]["reasoning"], False)
+                    self.assertNotIn("supported_reasoning_levels", models[0])
+                    self.assertNotIn("default_reasoning_level", models[0])
                     registered = models[0]["created"]
                     self.assertIs(type(registered), int)
                     result = self.request(address, self.body(max_tokens=16))

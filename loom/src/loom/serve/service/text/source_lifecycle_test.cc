@@ -119,11 +119,12 @@ TEST_F(SourceTextServiceTest, DiscoveryReportsConfiguredSessionCapacity) {
   Start();
   const auto models = Read(Send("", "", "/v1/models", "GET"));
   EXPECT_NE(models.find(R"("input_tokens":true)"), std::string::npos) << models;
-  EXPECT_NE(
-      models.find(
-          R"("input_modalities":["text"],"output_modalities":["text"],"context_length":96,"limits":{"max_output_tokens":96})"),
-      std::string::npos)
-      << models;
+  for (const char* field :
+       {R"("input_modalities":["text"])", R"("output_modalities":["text"])",
+        R"("reasoning":false)", R"("context_length":96)",
+        R"("limits":{"max_output_tokens":96})"}) {
+    EXPECT_NE(models.find(field), std::string::npos) << models;
+  }
 }
 
 TEST_F(SourceTextServiceTest, NonstreamingDisconnectRetiresAnAcceptedEpoch) {

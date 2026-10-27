@@ -168,6 +168,11 @@ func.def public @bind_request(%state: buffer, %row: i32, %options: buffer) {
   func.return
 }
 
+func.def public @chat_reasoning() -> (i32, i32, i32) {
+  %c0 = scalar.constant 0 : i32
+  func.return %c0, %c0, %c0 : i32, i32, i32
+}
+
 func.def public @chat_image_limits() -> (i64, i64, i64, i64, i64) {
   %maximum_count = scalar.constant 4 : i64
   %compressed_bytes = scalar.constant 1048576 : i64

@@ -61,6 +61,24 @@ Text also reports configured `context_length` and
 `loom.input_tokens:true` advertises exact prepared-chat input counting.
 Capabilities do not establish learned quality or support for every optional field.
 
+Prepared text models declare `reasoning` explicitly. Models with an effort
+selector also publish `supported_reasoning_levels` and
+`default_reasoning_level`, the policy used when a request omits reasoning
+controls. For example, a Qwen policy can advertise:
+
+```json
+{
+  "reasoning": true,
+  "supported_reasoning_levels": ["none", "low", "medium", "xhigh"],
+  "default_reasoning_level": "none"
+}
+```
+
+These are fields of each `/v1/models` row, not server-wide settings. An absent
+declaration means unknown; `reasoning:false` means the model does not support
+reasoning. Accepted aliases need not appear as distinct levels. Discovery
+reflects source policy without inferring capabilities from the model name.
+
 Residency controls default to `component:"primary"`. A text deployment with an
 image-input component also accepts `component:"image"`; an image-generation
 deployment's normal computation is still `primary`. An undeclared component

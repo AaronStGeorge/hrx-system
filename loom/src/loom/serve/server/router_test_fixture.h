@@ -297,6 +297,8 @@ struct loom_serve_test_model_service_t {
   const loom_serve_telemetry_counters_t* counters = nullptr;
   // Optional immutable duration distributions published before owner startup.
   const loom_serve_telemetry_latency_t* latency = nullptr;
+  // Immutable source facts configured before the service is published.
+  loom_serve_reasoning_t reasoning = {};
 
   static void SetObserver(void* self, loom_serve_wake_callback_t observer) {
     auto* service = static_cast<loom_serve_test_model_service_t*>(self);
@@ -465,6 +467,7 @@ struct loom_serve_test_model_service_t {
             .tokenizer = tokenizer,
             .kind = LOOM_SERVE_MODEL_KIND_EMBEDDING,
             .endpoint = "/v1/test",
+            .capabilities = {.reasoning = reasoning},
             .snapshot = Snapshot,
             .capacity_domain = capacity_domain,
             .telemetry = {.counters = counters,
