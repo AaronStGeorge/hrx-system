@@ -89,8 +89,8 @@ class Aie2pSwitchTest : public ::testing::TestWithParam<loom_xdna_tile_kind_t> {
 
   // Register fields have the same layout for all three tile roles.
   uint32_t Decode(uint32_t word, loom_xdna_register_field_id_t field) {
-    loom_xdna_register_field_info_t info = {};
-    IREE_CHECK_OK(loom_xdna_register_field_info(field, &info));
+    const loom_xdna_register_field_info_t info =
+        loom_xdna_register_field_info(field);
     return (word >> info.least_significant_bit) &
            (UINT32_MAX >> (32 - info.bit_width));
   }

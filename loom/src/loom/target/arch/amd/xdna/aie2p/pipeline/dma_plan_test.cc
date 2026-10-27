@@ -85,8 +85,8 @@ TEST(Aie2pDmaPlanTest, UnrepresentableSequenceCannotTruncateItsIterator) {
 }
 
 uint32_t Decode(uint32_t word, loom_xdna_register_field_id_t field) {
-  loom_xdna_register_field_info_t info = {};
-  IREE_CHECK_OK(loom_xdna_register_field_info(field, &info));
+  const loom_xdna_register_field_info_t info =
+      loom_xdna_register_field_info(field);
   return (word >> info.least_significant_bit) &
          (UINT32_MAX >> (32 - info.bit_width));
 }
@@ -208,17 +208,14 @@ class Aie2pDmaSequenceTest
     words[0] = 16 - dma()->transfer_length_offset;
     if (layout()) {
       words[layout()->lock_word] =
-          loom_xdna_register_field_encode_admitted(layout()->locks.valid, 1) |
-          loom_xdna_register_field_encode_admitted(
-              layout()->locks.acquire_id, layout()->local_lock_base + 2) |
-          loom_xdna_register_field_encode_admitted(
-              layout()->locks.acquire_enable, 1) |
-          loom_xdna_register_field_encode_admitted(
-              layout()->locks.acquire_value, -1) |
-          loom_xdna_register_field_encode_admitted(
-              layout()->locks.release_id, layout()->local_lock_base + 3) |
-          loom_xdna_register_field_encode_admitted(
-              layout()->locks.release_value, 1);
+          loom_xdna_register_field_encode(layout()->locks.valid, 1) |
+          loom_xdna_register_field_encode(layout()->locks.acquire_id,
+                                          layout()->local_lock_base + 2) |
+          loom_xdna_register_field_encode(layout()->locks.acquire_enable, 1) |
+          loom_xdna_register_field_encode(layout()->locks.acquire_value, -1) |
+          loom_xdna_register_field_encode(layout()->locks.release_id,
+                                          layout()->local_lock_base + 3) |
+          loom_xdna_register_field_encode(layout()->locks.release_value, 1);
     } else {
       words[4] = 0xc0000000;
       words[5] = 0x02000000;
@@ -331,17 +328,16 @@ TEST_P(Aie2pDmaSequenceTest, RepeatedAlignedSuffixUsesTheSmallerChain) {
   ASSERT_EQ(sequence.descriptor_count, 6);
   ASSERT_EQ(sequence.task_count, 4);
   const uint32_t full_chain =
-      loom_xdna_register_field_encode_admitted(start_field(direction),
-                                               sequence.descriptor) |
-      loom_xdna_register_field_encode_admitted(repeat_field(direction), 255);
+      loom_xdna_register_field_encode(start_field(direction),
+                                      sequence.descriptor) |
+      loom_xdna_register_field_encode(repeat_field(direction), 255);
   EXPECT_EQ(sequence.tasks[0], full_chain);
   EXPECT_EQ(sequence.tasks[1], full_chain);
   EXPECT_EQ(sequence.tasks[2], full_chain);
   EXPECT_EQ(sequence.tasks[3],
-            loom_xdna_register_field_encode_admitted(start_field(direction),
-                                                     sequence.descriptor + 2) |
-                loom_xdna_register_field_encode_admitted(
-                    repeat_field(direction), 255));
+            loom_xdna_register_field_encode(start_field(direction),
+                                            sequence.descriptor + 2) |
+                loom_xdna_register_field_encode(repeat_field(direction), 255));
   ExpectExecution(sequence, direction, 5632, 1);
 }
 
@@ -367,21 +363,18 @@ TEST_P(Aie2pDmaSequenceTest, FiniteChainRetainsExactTailAndTaskEncodings) {
   for (uint32_t task = 0; task < 4; ++task) {
     const uint32_t final_head = layout() ? chain_length : 1;
     const uint32_t head = sequence.descriptor + (task == 3 ? final_head : 0);
-    EXPECT_EQ(
-        sequence.tasks[task],
-        loom_xdna_register_field_encode_admitted(start_field(direction), head) |
-            loom_xdna_register_field_encode_admitted(repeat_field(direction),
-                                                     cycles[task] - 1));
+    EXPECT_EQ(sequence.tasks[task],
+              loom_xdna_register_field_encode(start_field(direction), head) |
+                  loom_xdna_register_field_encode(repeat_field(direction),
+                                                  cycles[task] - 1));
   }
   for (uint32_t index = 0; index < sequence.descriptor_count; ++index) {
     auto expected = words;
     if (layout()) {
       const uint32_t slot = index == chain_length ? 0 : index % 3;
-      expected[layout()->address_word] |=
-          loom_xdna_register_field_encode_admitted(
-              layout()->address,
-              (layout()->local_address_base + 128 + slot * 64) >>
-                  dma()->address_encoding_shift);
+      expected[layout()->address_word] |= loom_xdna_register_field_encode(
+          layout()->address, (layout()->local_address_base + 128 + slot * 64) >>
+                                 dma()->address_encoding_shift);
     }
     if (index + 1 < chain_length) {
       const auto next =
@@ -391,9 +384,9 @@ TEST_P(Aie2pDmaSequenceTest, FiniteChainRetainsExactTailAndTaskEncodings) {
           layout() ? layout()->chain.enable
                    : LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD7_USE_NEXT_BD;
       expected[layout() ? layout()->chain.word : 7] |=
-          loom_xdna_register_field_encode_admitted(
-              next, sequence.descriptor + index + 1) |
-          loom_xdna_register_field_encode_admitted(enable, 1);
+          loom_xdna_register_field_encode(next,
+                                          sequence.descriptor + index + 1) |
+          loom_xdna_register_field_encode(enable, 1);
     }
     for (uint32_t word = 0; word < expected.size(); ++word) {
       EXPECT_EQ(sequence.words[index][word], expected[word])
@@ -423,14 +416,14 @@ TEST_P(Aie2pDmaSequenceTest, AlignedTailFitsWithoutDuplicatingRingSlots) {
       ASSERT_TRUE(valid);
       ASSERT_EQ(sequence.descriptor_count, 2 * capacity);
       ASSERT_EQ(sequence.task_count, 3);
-      EXPECT_EQ(sequence.tasks[0],
-                loom_xdna_register_field_encode_admitted(start_field(direction),
-                                                         sequence.descriptor) |
-                    loom_xdna_register_field_encode_admitted(
-                        repeat_field(direction), 255));
+      EXPECT_EQ(
+          sequence.tasks[0],
+          loom_xdna_register_field_encode(start_field(direction),
+                                          sequence.descriptor) |
+              loom_xdna_register_field_encode(repeat_field(direction), 255));
       EXPECT_EQ(sequence.tasks[1], sequence.tasks[0]);
       EXPECT_EQ(sequence.tasks[2],
-                loom_xdna_register_field_encode_admitted(
+                loom_xdna_register_field_encode(
                     start_field(direction), sequence.descriptor + capacity));
       ExpectExecution(sequence, direction, count, capacity);
     }

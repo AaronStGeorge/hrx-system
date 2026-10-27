@@ -67,51 +67,26 @@ typedef struct loom_xdna_register_dimension_info_t {
   uint32_t stride;
 } loom_xdna_register_dimension_info_t;
 
-// Returns the number of semantic fields in the selected NPU2 corpus.
-iree_host_size_t loom_xdna_register_field_count(void);
-
-// Returns public facts for one resolved field identifier.
-iree_status_t loom_xdna_register_field_info(
-    loom_xdna_register_field_id_t field_id,
-    loom_xdna_register_field_info_t* out_info);
+// Returns public facts for a compiler-selected generated field identifier.
+loom_xdna_register_field_info_t loom_xdna_register_field_info(
+    loom_xdna_register_field_id_t field_id);
 
 // Returns one address-pattern dimension by ordinal. The field identifier and
 // dimension ordinal are compiler-owned selections from the generated corpus.
 loom_xdna_register_dimension_info_t loom_xdna_register_field_dimension(
     loom_xdna_register_field_id_t field_id, iree_host_size_t ordinal);
 
-// Encodes one raw semantic value into positioned 32-bit register bits.
-//
-// Signed fields accept exactly their two's-complement domain. Unsigned fields
-// reject negative values and values wider than the declared field.
-// This packs bits without performing IO or enforcing read/write access. Encoded
-// values can also describe comparisons against read-only status fields.
-iree_status_t loom_xdna_register_field_encode(
-    loom_xdna_register_field_id_t field_id, int64_t value,
-    uint32_t* out_register_bits);
-
-// Encodes a field value admitted by its producing compiler stage.
-//
-// The field identifier must be generated and |value| must be in its signed or
-// unsigned domain. Callers handling external values use the checked encoder.
-uint32_t loom_xdna_register_field_encode_admitted(
-    loom_xdna_register_field_id_t field_id, int64_t value);
-
-// Forms one absolute register address for a field and concrete indices.
-//
-// |indices| must contain one value per field dimension in declaration order.
-// The coordinate and field's register module are validated against |family|.
-iree_status_t loom_xdna_register_field_address(
-    const loom_xdna_array_family_t* family,
-    loom_xdna_register_field_id_t field_id,
-    loom_xdna_tile_coordinate_t coordinate, iree_host_size_t index_count,
-    const uint16_t* indices, uint64_t* out_address);
+// Encodes an admitted raw semantic value into positioned 32-bit register bits.
+// The generated field identifier and value's signed or unsigned domain are
+// established by their producing compiler stage. This packs bits without
+// performing IO or enforcing read/write access; encoded values can also
+// describe comparisons against read-only status fields.
+uint32_t loom_xdna_register_field_encode(loom_xdna_register_field_id_t field_id,
+                                         int64_t value);
 
 // Forms an address from coordinates and indices admitted by physical planning.
-//
-// The field identifier must be generated, |coordinate| must expose its module,
-// and |indices| must contain the field's complete in-range dimension tuple.
-uint64_t loom_xdna_register_field_address_admitted(
+// |indices| contains the generated field's complete in-range dimension tuple.
+uint64_t loom_xdna_register_field_address(
     const loom_xdna_array_family_t* family,
     loom_xdna_register_field_id_t field_id,
     loom_xdna_tile_coordinate_t coordinate, const uint16_t* indices);
