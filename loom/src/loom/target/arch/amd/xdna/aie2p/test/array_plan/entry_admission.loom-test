@@ -301,3 +301,32 @@ low.func.def target<amd.xdna.aie2p.array>(@array_target) @independent_errors() a
   %receiver = receiver %output, 0
   return
 }
+
+// ====
+// RUN: emit aie2p-array-plan @consume
+
+// Native pipelines use CFG preparation before channel analysis. The array
+// inspector rejects their final configuration representation after lowering.
+aie2p.target<array> @array_target {device_profile = "amd.xdna.strix_halo.17f0_11"}
+
+// ERROR@+1: TARGET/055 {function_name="consume", descriptor_set_key="amd.xdna.aie2p.configuration", emitter_key="aie2p-array-plan", expected_descriptor_set_key="amd.xdna.aie2p.array"}
+pipeline.def<kernel> public retain target(@array_target) @consume() run() {
+  %pool = pipeline.memory<workgroup>[0, 2] : pool
+  %bytes = index.constant 64 : offset
+  %origin = index.constant 0 : offset
+  %capacity = index.constant 1 : index
+  %storage = buffer.alloca<workgroup> pool(%pool) align(64) %bytes : buffer
+  %slots = buffer.view %storage[%origin] : buffer -> view<1x16xi32>
+  %source = channel.bind<fifo> %slots, %capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    %begin = index.constant 0 : index
+    %end = index.constant 3 : index
+    %step = index.constant 1 : index
+    scf.for %i = [%begin to %end step %step] {
+      %write, %destination = channel.reserve %source : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+      channel.publish %write : write<tile<16xi32>>
+      %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      channel.release %read : read<tile<16xi32>>
+    }
+  }
+}

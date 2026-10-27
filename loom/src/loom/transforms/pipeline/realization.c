@@ -9,11 +9,96 @@
 #include "loom/ir/symbol_map.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/special_values.h"
+#include "loom/pass/report.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/callable.h"
 #include "loom/target/function_contract.h"
 #include "loom/target/function_version.h"
 #include "loom/target/pass_environment.h"
+
+// Observe the source proof before physical selection or consuming rewrites.
+// These rows describe transport eligibility, not a selected DMA implementation.
+static iree_status_t loom_pipeline_realization_report(
+    loom_pass_t* pass, const loom_module_t* module,
+    const loom_pipeline_realization_t* realization) {
+  if (!loom_pass_report_is_enabled(pass)) {
+    return iree_ok_status();
+  }
+  for (iree_host_size_t i = 0; i < realization->resources.strand_count; ++i) {
+    const loom_pipeline_worker_t* worker = &realization->workers[i];
+    const loom_pipeline_transport_t* transport = &worker->transport;
+    const loom_pass_report_detail_field_t fields[] = {
+        loom_pass_report_detail_uint64_field(IREE_SV("worker"), i),
+        loom_pass_report_detail_string_field(
+            IREE_SV("eligibility"),
+            transport->cohort_count ? IREE_SV("channel-copy")
+            : transport->count      ? IREE_SV("borrowed-movement")
+                                    : IREE_SV("unproven")),
+        loom_pass_report_detail_string_field(IREE_SV("execution_counts"),
+                                             worker->block_execution_counts
+                                                 ? IREE_SV("exact")
+                                                 : IREE_SV("unknown")),
+        loom_pass_report_detail_uint64_field(IREE_SV("batches"),
+                                             transport->batch_count),
+        loom_pass_report_detail_uint64_field(IREE_SV("streams"),
+                                             transport->stream_count),
+    };
+    IREE_RETURN_IF_ERROR(loom_pass_report_append_detail(
+        pass, IREE_SV("pipeline-transport"), fields, IREE_ARRAYSIZE(fields)));
+    for (iree_host_size_t j = 0; j < transport->batch_count; ++j) {
+      const loom_pipeline_transport_batch_t* batch = &transport->batches[j];
+      for (iree_host_size_t k = 0; k < batch->record_count; ++k) {
+        const loom_pipeline_transport_cohort_t* record = &batch->records[k];
+        const loom_pass_report_detail_field_t record_fields[] = {
+            loom_pass_report_detail_uint64_field(IREE_SV("worker"), i),
+            loom_pass_report_detail_uint64_field(IREE_SV("batch"), j),
+            loom_pass_report_detail_uint64_field(IREE_SV("record"), k),
+            loom_pass_report_detail_string_field(
+                IREE_SV("admission"),
+                loom_module_value_name(
+                    module, loom_op_const_results(record->admission->op)[0])),
+            loom_pass_report_detail_string_field(
+                IREE_SV("source"),
+                loom_module_value_name(module,
+                                       record->admission->channel->value_id)),
+            loom_pass_report_detail_uint64_field(IREE_SV("batch_records"),
+                                                 batch->record_count),
+            loom_pass_report_detail_uint64_field(IREE_SV("admissions"),
+                                                 record->admissions),
+            loom_pass_report_detail_uint64_field(IREE_SV("transfers"),
+                                                 record->transfers),
+            loom_pass_report_detail_uint64_field(IREE_SV("replays"),
+                                                 batch->replays),
+            loom_pass_report_detail_bool_field(IREE_SV("final_release"),
+                                               record->release != NULL),
+            loom_pass_report_detail_uint64_field(IREE_SV("destinations"),
+                                                 record->destination_count),
+        };
+        IREE_RETURN_IF_ERROR(loom_pass_report_append_detail(
+            pass, IREE_SV("pipeline-transport-record"), record_fields,
+            IREE_ARRAYSIZE(record_fields)));
+        for (iree_host_size_t d = 0; d < record->destination_count; ++d) {
+          const loom_pipeline_transport_destination_t* destination =
+              &record->destinations[d];
+          const loom_pass_report_detail_field_t destination_fields[] = {
+              loom_pass_report_detail_uint64_field(IREE_SV("worker"), i),
+              loom_pass_report_detail_uint64_field(IREE_SV("batch"), j),
+              loom_pass_report_detail_uint64_field(IREE_SV("record"), k),
+              loom_pass_report_detail_uint64_field(IREE_SV("destination"), d),
+              loom_pass_report_detail_string_field(
+                  IREE_SV("channel"),
+                  loom_module_value_name(module,
+                                         destination->channel->value_id)),
+          };
+          IREE_RETURN_IF_ERROR(loom_pass_report_append_detail(
+              pass, IREE_SV("pipeline-transport-destination"),
+              destination_fields, IREE_ARRAYSIZE(destination_fields)));
+        }
+      }
+    }
+  }
+  return iree_ok_status();
+}
 
 static iree_status_t loom_pipeline_realization_clone_workers(
     loom_pass_t* pass, loom_rewriter_t* rewriter,
@@ -175,6 +260,9 @@ iree_status_t loom_pipeline_realize(
     status = loom_pipeline_workers_build(
         module, &realization.resources, facts, NULL, 0, NULL,
         pass->diagnostic_emitter, pass->arena, &realization.workers, &valid);
+  }
+  if (iree_status_is_ok(status) && valid) {
+    status = loom_pipeline_realization_report(pass, module, &realization);
   }
   if (iree_status_is_ok(status) && valid) {
     status =

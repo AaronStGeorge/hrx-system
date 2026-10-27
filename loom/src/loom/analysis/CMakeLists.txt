@@ -953,6 +953,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::ir
+    loom::ops::cfg
     loom::ops::channel
     loom::ops::func
     loom::ops::index

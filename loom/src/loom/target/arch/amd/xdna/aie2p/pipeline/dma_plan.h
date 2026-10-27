@@ -129,6 +129,9 @@ bool loom_aie2p_native_encode_ingress(const loom_xdna_array_family_t* family,
 // tasks fit the hardware queue before any completion wait. The layout is NULL
 // for shim descriptors, whose external address is bound during invocation.
 // Record capacity, alignment, and stride have already passed DMA admission.
+// credit_interval is one for record credits, or one complete retained ring
+// rotation: admission is on its first record and reclamation on its last.
+// A retained ring has a whole number of rotations in repetitions.
 // On success the caller owns the retained arena storage and commits the exact
 // descriptor count. Unrepresentable programs return a static rejection reason.
 iree_status_t loom_aie2p_native_build_sequence(
@@ -136,7 +139,8 @@ iree_status_t loom_aie2p_native_build_sequence(
     const loom_aie2p_native_memory_layout_t* layout, uint16_t first_descriptor,
     uint16_t available_descriptors, loom_xdna_dma_direction_t direction,
     uint32_t repetitions, uint32_t capacity, uint32_t byte_offset,
-    uint32_t byte_stride, const uint32_t template_words[8],
+    uint32_t byte_stride, uint32_t credit_interval,
+    const uint32_t template_words[8],
     loom_aie2p_native_dma_sequence_t* out_sequence,
     iree_string_view_t* out_reason, bool* out_valid,
     iree_arena_allocator_t* arena);

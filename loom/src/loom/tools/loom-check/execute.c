@@ -466,7 +466,31 @@ static iree_status_t loom_check_execute_pass_with_output(
   loomc_pass_program_t* pass_program = NULL;
   if (iree_status_is_ok(status) && succeeded) {
     loomc_result_t* preparation = NULL;
-    if (iree_string_view_starts_with(pipeline, IREE_SV("@"))) {
+    if (iree_string_view_consume_prefix(&pipeline, IREE_SV("pipeline="))) {
+      loomc_target_pipeline_kind_t kind = LOOMC_TARGET_PIPELINE_KIND_SOURCE_LOW;
+      if (iree_string_view_equal(pipeline, IREE_SV("prepared-low"))) {
+        kind = LOOMC_TARGET_PIPELINE_KIND_PREPARED_LOW;
+      } else if (!iree_string_view_equal(pipeline, IREE_SV("source-low"))) {
+        status = iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "unknown target pipeline '%.*s'; expected source-low or "
+            "prepared-low",
+            (int)pipeline.size, pipeline.data);
+      }
+      if (iree_status_is_ok(status)) {
+        const loomc_target_pipeline_options_t options = {
+            .type = LOOMC_STRUCTURE_TYPE_TARGET_PIPELINE_OPTIONS,
+            .structure_size = sizeof(options),
+            .identifier =
+                loomc_make_cstring_view("__loom_check_target_pipeline"),
+            .kind = kind,
+        };
+        status = iree_status_from_loomc(
+            loomc_pass_program_create_from_target_pipeline(
+                session->context, &options, public_allocator, &pass_program,
+                &preparation));
+      }
+    } else if (iree_string_view_starts_with(pipeline, IREE_SV("@"))) {
       status =
           iree_status_from_loomc(loomc_pass_program_create_from_module_symbol(
               module, loomc_string_view_from_iree(pipeline), /*options=*/NULL,

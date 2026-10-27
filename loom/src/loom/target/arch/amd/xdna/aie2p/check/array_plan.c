@@ -875,7 +875,7 @@ static iree_status_t loom_aie2p_array_plan_check_execute(
       request->target_options, &function_symbol_name, &low_only));
   const loom_check_compile_source_low_options_t compile_options = {
       .pipeline = LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_DEFAULT,
-      .control_flow_lowering = LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW,
+      .control_flow_lowering = LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG,
   };
   const loom_aie2p_array_plan_check_consumer_t consumer = {
       .request = request,

@@ -39,39 +39,130 @@ iree_execution_test_suite(
 )
 endif()
 
-if(LOOM_ROUTE_AIE2P_XDNA_HAL AND LOOM_ROUTE_VM_IREE_VM)
-iree_execution_test_suite(
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
+loom_test_module(
   NAME
-    hal_execution_test
-  MANIFESTS
-    "test/hal_execution.test.json"
-  TOOLS
-    "loom-benchmark=loom::tools::loom-benchmark"
-    "loom-test=loom::tools::loom-test"
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/channel_lifetime.loom"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/dma_reuse.loom"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/hal_execution.loom"
+    hal_execution_test_module
+  SRCS
+    "test/hal_execution.loom"
+)
+endif()
+
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
+if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
+loom_execution_test(
+  NAME
+    hal_execution_test_execute_xdna_hardware_test
+  CORRECTNESS_ONLY
+  MODULE
+    "::hal_execution_test_module"
+  RUNNER_ARGS
+    "--device=xdna"
   LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
+    "iree-build-requirement=loom.artifact.aie2p_elf"
+    "iree-build-requirement=loom.execute.iree_hal"
+    "iree-build-requirement=runtime.hal.amd_xdna"
     "iree-run-requirement=libamdf.resource.xdna"
     "runtime-resource=amd-xdna"
+    "loom-execution-profile=xdna_hardware"
+    "loom-target-family=xdna"
+    "loom-target-class=npu"
+    "loom-executor=hardware"
   RESOURCE_GROUP
-    gpu-device
+    "gpu-device"
 )
+endif()
+endif()
+
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
+loom_test_module(
+  NAME
+    channel_lifetime_execution_test_module
+  SRCS
+    "test/channel_lifetime.loom"
+)
+endif()
+
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
+if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
+loom_execution_test(
+  NAME
+    channel_lifetime_execution_test_execute_xdna_hardware_test
+  CORRECTNESS_ONLY
+  MODULE
+    "::channel_lifetime_execution_test_module"
+  RUNNER_ARGS
+    "--device=xdna"
+  LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
+    "iree-build-requirement=loom.artifact.aie2p_elf"
+    "iree-build-requirement=loom.execute.iree_hal"
+    "iree-build-requirement=runtime.hal.amd_xdna"
+    "iree-run-requirement=libamdf.resource.xdna"
+    "runtime-resource=amd-xdna"
+    "loom-execution-profile=xdna_hardware"
+    "loom-target-family=xdna"
+    "loom-target-class=npu"
+    "loom-executor=hardware"
+  RESOURCE_GROUP
+    "gpu-device"
+)
+endif()
+endif()
+
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
+loom_test_module(
+  NAME
+    dma_reuse_execution_test_module
+  SRCS
+    "test/dma_reuse.loom"
+)
+endif()
+
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
+if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
+loom_execution_test(
+  NAME
+    dma_reuse_execution_test_execute_xdna_hardware_test
+  CORRECTNESS_ONLY
+  MODULE
+    "::dma_reuse_execution_test_module"
+  RUNNER_ARGS
+    "--device=xdna"
+  LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
+    "iree-build-requirement=loom.artifact.aie2p_elf"
+    "iree-build-requirement=loom.execute.iree_hal"
+    "iree-build-requirement=runtime.hal.amd_xdna"
+    "iree-run-requirement=libamdf.resource.xdna"
+    "runtime-resource=amd-xdna"
+    "loom-execution-profile=xdna_hardware"
+    "loom-target-family=xdna"
+    "loom-target-class=npu"
+    "loom-executor=hardware"
+  RESOURCE_GROUP
+    "gpu-device"
+)
+endif()
 endif()
 
 if(LOOM_ROUTE_AIE2P_XDNA_HAL AND LOOM_ROUTE_VM_IREE_VM)
 iree_execution_test_suite(
   NAME
-    channel_fanout_execution_test
+    loom_benchmark_execution_test
   MANIFESTS
-    "test/channel_fanout.test.json"
+    "test/loom-benchmark.test.json"
   TOOLS
-    "loom-test=loom::tools::loom-test"
+    "loom-benchmark=loom::tools::loom-benchmark"
   DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/channel_fanout.loom"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/channel_sram.loom"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/finite_ingress.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amd/xdna/test/hal_execution.loom"
   LABELS
     "iree-run-requirement=libamdf.resource.xdna"
     "runtime-resource=amd-xdna"

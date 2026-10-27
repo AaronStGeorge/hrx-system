@@ -25,6 +25,7 @@ loom_cc_library(
     loom::ir::symbol_map
     loom::ops::func
     loom::ops::special_values
+    loom::pass::report
     loom::pass::types
     loom::pass::value_facts
     loom::rewrite::callable

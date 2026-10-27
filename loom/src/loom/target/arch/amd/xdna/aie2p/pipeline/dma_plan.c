@@ -314,7 +314,8 @@ iree_status_t loom_aie2p_native_build_sequence(
     const loom_aie2p_native_memory_layout_t* layout, uint16_t first_descriptor,
     uint16_t available_descriptors, loom_xdna_dma_direction_t direction,
     uint32_t repetitions, uint32_t capacity, uint32_t byte_offset,
-    uint32_t byte_stride, const uint32_t template_words[8],
+    uint32_t byte_stride, uint32_t credit_interval,
+    const uint32_t template_words[8],
     loom_aie2p_native_dma_sequence_t* out_sequence,
     iree_string_view_t* out_reason, bool* out_valid,
     iree_arena_allocator_t* arena) {
@@ -336,7 +337,7 @@ iree_status_t loom_aie2p_native_build_sequence(
   uint32_t required_descriptors = 1;
   uint32_t task_count =
       (uint32_t)iree_host_size_ceil_div(repetitions, repeat_limit);
-  if (task_count > queue_depth) {
+  if (task_count > queue_depth || credit_interval > 1) {
     required_descriptors = 0;
     for (uint32_t span = capacity; span <= available_descriptors;
          span += capacity) {
@@ -437,6 +438,16 @@ iree_status_t loom_aie2p_native_build_sequence(
                                             capacity - 1) |
             loom_xdna_register_field_encode(layout->iteration.step,
                                             step_units ? step_units - 1 : 0);
+      }
+    }
+    if (credit_interval > 1) {
+      if (ordinal % credit_interval) {
+        words[layout->lock_word] &=
+            ~loom_xdna_register_field_encode(layout->locks.acquire_enable, 1);
+      }
+      if ((ordinal + 1) % credit_interval) {
+        words[layout->lock_word] &=
+            ~loom_xdna_register_field_encode(layout->locks.release_value, -1);
       }
     }
     const uint32_t chain_end =

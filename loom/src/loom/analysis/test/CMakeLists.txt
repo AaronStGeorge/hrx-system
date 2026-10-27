@@ -19,4 +19,14 @@ loom_check_test_suite(
     "storage_interference.loom-test"
 )
 
+if(LOOM_ARCH_AIE2P)
+loom_check_test_suite(
+  NAME
+    pipeline_transport_test
+  SRCS
+    "pipeline_transport.loom-test"
+    "pipeline_transport_control.loom-test"
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

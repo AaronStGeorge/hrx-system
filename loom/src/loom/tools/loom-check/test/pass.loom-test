@@ -54,3 +54,35 @@ func.def @invalid_mask(%coordinate: offset) -> (offset) {
   %result = index.andi %shifted, %mask : offset
   func.return %result : offset
 }
+
+// ====
+// RUN: pass pipeline=source-low
+
+test.target<low_core> @target
+
+func.def public retain target(@target) @identity(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def public retain target<test.low.core>(@target) abi(object_function) @identity(%value: reg<test.i32>) -> (reg<test.i32>) asm {
+  return %value
+}
+
+// ====
+// RUN: pass pipeline=prepared-low
+
+test.target<low_core> @target
+
+func.def public retain target(@target) @identity(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def public retain target<test.low.core>(@target) abi(object_function) @identity(%value: reg<test.i32>) -> (reg<test.i32>) asm {
+  return %value
+}

@@ -296,7 +296,7 @@ static iree_status_t loom_aie2p_native_claim_transport_cursor(
   if (cursor->worker != UINT32_MAX) {
     return loom_aie2p_native_reject(
         context, op,
-        IREE_SV("one static channel-copy site per FIFO read or write cursor"));
+        IREE_SV("one ordered transport stream per FIFO read or write cursor"));
   }
   cursor->worker = worker_index;
   cursor->maximum_admissions = (uint32_t)admissions;
@@ -439,6 +439,14 @@ static bool loom_aie2p_native_can_repeat(
       &context
            ->tiles[worker->tile->coordinate.column * context->family->row_count]
            .facts->dma;
+  if (channel->replay.record_count &&
+      ((uint64_t)request->transferred_byte_count !=
+           channel->record_byte_length ||
+       local->projection_byte_offset.constant != 0 ||
+       stride != channel->record_byte_length ||
+       transport->repetitions % channel->replay.record_count)) {
+    return false;
+  }
   if (begin < 0 || begin > UINT32_MAX || stride < 0 || stride > UINT32_MAX ||
       transport->repetitions > UINT32_MAX ||
       binding->capacity > (UINT64_C(1) << local_dma->iteration_bits) ||
@@ -452,6 +460,9 @@ static bool loom_aie2p_native_can_repeat(
     return false;
   }
   worker->repetition.count = (uint32_t)transport->repetitions;
+  if (channel->replay.record_count) {
+    worker->repetition.count /= channel->replay.record_count;
+  }
   worker->repetition.external_byte_offset = (uint32_t)begin;
   return true;
 }
@@ -512,14 +523,47 @@ static iree_status_t loom_aie2p_native_select(
     }
     context->workers[i] = (loom_aie2p_native_worker_t){.tile = tile};
     if (source->transport.cohort_count) {
-      for (iree_host_size_t j = 0; j < source->transport.cohort_count; ++j) {
-        const loom_pipeline_transport_cohort_t* cohort =
-            &source->transport.cohorts[j];
+      for (iree_host_size_t j = 0; j < source->transport.batch_count; ++j) {
+        const loom_pipeline_transport_batch_t* batch =
+            &source->transport.batches[j];
+        const loom_pipeline_transport_cohort_t* first = batch->records;
+        if (!first->release) {
+          continue;
+        }
+        const loom_pipeline_resource_channel_t* bound =
+            loom_pipeline_resources_lookup_channel(
+                &realization->resources, first->admission->channel->value_id);
+        loom_aie2p_native_channel_t* channel =
+            &context->channels[bound - realization->resources.channels];
+        const loom_aie2p_native_tile_t* owner =
+            context->pool_tiles[channel->pool_index];
+        if (channel->replay.record_count ||
+            batch->record_count != bound->capacity || !channel->record_dense ||
+            channel->byte_stride != channel->record_byte_length ||
+            batch->replays > (uint64_t)owner->facts->lock_value_maximum) {
+          return loom_aie2p_native_reject(
+              context, first->admission->op,
+              IREE_SV("one contiguous retained FIFO batch with a representable "
+                      "replay credit count"));
+        }
+        channel->replay.record_count = (uint32_t)batch->record_count;
+        channel->replay.count = (uint32_t)batch->replays;
+      }
+      for (iree_host_size_t j = 0; j < source->transport.batch_count; ++j) {
+        const loom_pipeline_transport_batch_t* batch =
+            &source->transport.batches[j];
+        const loom_pipeline_transport_cohort_t* cohort = batch->records;
+        if (cohort->transfers > UINT32_MAX / batch->record_count) {
+          return loom_aie2p_native_reject(
+              context, cohort->admission->op,
+              IREE_SV("a complete channel-copy count representable by native "
+                      "cursors"));
+        }
         bool valid = false;
         IREE_RETURN_IF_ERROR(loom_aie2p_native_claim_transport_cursor(
             context, realization, (uint32_t)i, cohort->admission->channel,
-            cohort->admission->op, true, source->transport.repetitions,
-            &valid));
+            cohort->admission->op, true,
+            cohort->admissions * batch->record_count, &valid));
         if (!valid) {
           return iree_ok_status();
         }
@@ -528,7 +572,7 @@ static iree_status_t loom_aie2p_native_select(
               context, realization, (uint32_t)i,
               cohort->destinations[k].channel,
               cohort->destinations[k].reservation, false,
-              source->transport.repetitions, &valid));
+              cohort->transfers * batch->record_count, &valid));
           if (!valid) {
             return iree_ok_status();
           }
@@ -650,6 +694,17 @@ static iree_status_t loom_aie2p_native_select(
         context, realization, source, worker, &valid));
     if (!valid) {
       return iree_ok_status();
+    }
+  }
+  for (iree_host_size_t i = 0; i < realization->resources.channel_count; ++i) {
+    const loom_aie2p_native_channel_t* channel = &context->channels[i];
+    if (channel->replay.record_count &&
+        (channel->cursor.writer.worker == UINT32_MAX ||
+         context->workers[channel->cursor.writer.worker].execution !=
+             LOOM_AIE2P_NATIVE_EXECUTION_DMA)) {
+      return loom_aie2p_native_reject(
+          context, realization->function.op,
+          IREE_SV("a coalescible immutable ingress for retained FIFO replay"));
     }
   }
   IREE_RETURN_IF_ERROR(

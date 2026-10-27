@@ -265,6 +265,8 @@ int loom_check_main(
       "  compile-report <p>\n"
       "              Parse, run pass pipeline <p>, print compile report,\n"
       "              compare.\n"
+      "              Pass pipelines accept lists, @symbols, or\n"
+      "              pipeline=source-low|prepared-low.\n"
       "  format <f>  Parse, convert to format <f>, convert back, compare.\n"
       "  emit <t>    Parse, emit analysis or target-structured output <t>,\n"
       "              print, compare.\n"

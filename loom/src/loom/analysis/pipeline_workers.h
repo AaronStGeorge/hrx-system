@@ -46,10 +46,10 @@ typedef enum loom_pipeline_transport_step_kind_e {
   LOOM_PIPELINE_TRANSPORT_STEP_WAIT,
 } loom_pipeline_transport_step_kind_t;
 
-// An observable step in a straight-line communication-only invocation. Pure
-// address calculations remain represented by the movement endpoint facts.
+// An observable communication site. Pure address calculations remain
+// represented by the movement endpoint facts.
 typedef struct loom_pipeline_transport_step_t {
-  // Source effect and its position in the invocation's sequential order.
+  // Source effect retained for this communication site.
   const loom_op_t* op;
   // Which retained communication plan supplies this step's operands.
   loom_pipeline_transport_step_kind_t kind;
@@ -82,15 +82,36 @@ typedef struct loom_pipeline_transport_destination_t {
 typedef struct loom_pipeline_transport_cohort_t {
   // Source FIFO admission supplying the record.
   const loom_channel_plan_action_t* admission;
-  // Arena-owned destinations in fanout result order.
+  // Arena-owned destinations in execution order within one replay.
   const loom_pipeline_transport_destination_t* destinations;
   // Number of independently completing destinations.
   iree_host_size_t destination_count;
+  // Final release of a retained source after replay, or NULL when copy alone
+  // consumes all source obligations in the admission's execution scope.
+  const loom_op_t* release;
+  // Exact number of distinct source records admitted by this source site.
+  uint64_t admissions;
+  // Exact number of copies to each destination over the complete invocation.
+  uint64_t transfers;
 } loom_pipeline_transport_cohort_t;
 
+// An ordered sequence of source records with the same destinations and replay
+// scope. Every retained record stays live until the complete sequence finishes
+// all its replays; a new batch then acquires the next source records.
+typedef struct loom_pipeline_transport_batch_t {
+  // Consecutive source-record cohorts in acquisition and copy order.
+  const loom_pipeline_transport_cohort_t* records;
+  // Number of distinct source records in one sequence.
+  iree_host_size_t record_count;
+  // Number of times each admitted sequence is copied to its destinations.
+  uint64_t replays;
+} loom_pipeline_transport_batch_t;
+
 typedef struct loom_pipeline_transport_t {
-  // All observable effects, in execution order; NULL when ordinary execution
-  // is required. This does not select a device engine or relax any ordering.
+  // All observable sites in CFG reverse postorder, preserving order within
+  // each block; NULL when ordinary execution is required. For borrowed
+  // movement, admission proves one straight-line sequence or repeated body.
+  // Record-batch lifetime and replay order are retained separately below.
   const loom_pipeline_transport_step_t* steps;
   // Number of steps in the complete invocation.
   iree_host_size_t count;
@@ -104,8 +125,13 @@ typedef struct loom_pipeline_transport_t {
   const loom_pipeline_transport_cohort_t* cohorts;
   // Number of channel transport cohorts in one ordered execution.
   iree_host_size_t cohort_count;
-  // Number of executions of the complete ordered sequence. A straight-line
+  // Ordered record sequences retaining a common lifetime and destination set.
+  const loom_pipeline_transport_batch_t* batches;
+  // Number of independently owned source sequences.
+  iree_host_size_t batch_count;
+  // Number of executions of the borrowed-movement sequence. A straight-line
   // invocation has one; a regular loop has its proven exact trip count.
+  // Channel-copy batches instead retain their own admission and replay counts.
   uint64_t repetitions;
   // Controlling recurrence for repeated execution, or NULL for straight-line
   // execution. Borrowed from the worker's retained CFG snapshot.

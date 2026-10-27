@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Channel membership retained independently of storage and record ownership.
+// Channel membership and admission provenance, independent of storage.
 
 #ifndef LOOM_ANALYSIS_CHANNEL_PLAN_H_
 #define LOOM_ANALYSIS_CHANNEL_PLAN_H_
@@ -87,6 +87,11 @@ typedef struct loom_channel_plan_t {
   // Equal entries mean membership only: records and consuming obligations
   // remain distinct SSA values with their original lifetime requirements.
   const loom_channel_identity_t* const* channels;
+  // Common admission result forwarded to each owned access, by value ordinal.
+  // INVALID means that the origin is external, opaque, or path dependent.
+  // A repeated admission creates different records: equality identifies its
+  // source site, not a dynamic record across different loop iterations.
+  const loom_value_id_t* admissions;
   // Original domain extent, excluding values created during materialization.
   loom_value_ordinal_t value_count;
   // Arena-owned channel actions in block/source order.
@@ -141,6 +146,13 @@ static inline const loom_channel_identity_t* loom_channel_plan_channel(
     const loom_channel_plan_t* plan, loom_value_id_t value_id) {
   return plan
       ->channels[loom_local_value_domain_ordinal(plan->value_domain, value_id)];
+}
+
+// Source admission shared by every forwarding path to this original access.
+static inline loom_value_id_t loom_channel_plan_admission(
+    const loom_channel_plan_t* plan, loom_value_id_t value_id) {
+  return plan->admissions[loom_local_value_domain_ordinal(plan->value_domain,
+                                                          value_id)];
 }
 
 #ifdef __cplusplus

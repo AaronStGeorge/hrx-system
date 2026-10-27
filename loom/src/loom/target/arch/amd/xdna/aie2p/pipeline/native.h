@@ -51,6 +51,15 @@ typedef struct loom_aie2p_native_channel_t {
     // Strand advancing the write cursor.
     loom_aie2p_native_cursor_t writer;
   } cursor;
+  // Nonzero only when a complete FIFO is retained across ordered replays.
+  // Its producer admits the complete batch and exchanges one credit per
+  // replay; ordinary channels continue exchanging one credit per record.
+  struct {
+    // Number of adjacent logical records in the retained batch.
+    uint32_t record_count;
+    // Number of complete replays before the producer may replace the batch.
+    uint32_t count;
+  } replay;
 } loom_aie2p_native_channel_t;
 
 // One worker's admitted access to a channel's resident memory and credits.

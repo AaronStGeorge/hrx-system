@@ -15,9 +15,16 @@ load(
     "loom_generated_source_family",
 )
 load(
+    "//loom/build_tools/bazel:defs.bzl",
+    "loom_execution_profile",
+    "loom_test",
+    "loom_test_module",
+)
+load(
     "//loom/build_tools/bazel:loom_check.bzl",
     "loom_check_test_suite",
 )
+load("//loom/target/amd/xdna:execution_profiles.bzl", "XDNA_HARDWARE_PROFILE")
 
 package(
     default_visibility = ["//visibility:private"],
@@ -1556,6 +1563,96 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
+)
+
+_XDNA_ONE_COLUMN_PROFILE = loom_execution_profile(
+    name = "xdna_one_column",
+    build_requirements = XDNA_HARDWARE_PROFILE.build_requirements,
+    executor = XDNA_HARDWARE_PROFILE.executor,
+    resource_group = XDNA_HARDWARE_PROFILE.resource_group,
+    run_requirements = XDNA_HARDWARE_PROFILE.run_requirements,
+    runner_args = ["--device=xdna://0?columns=1"],
+    target_class = XDNA_HARDWARE_PROFILE.target_class,
+    target_family = XDNA_HARDWARE_PROFILE.target_family,
+)
+
+_XDNA_TWO_COLUMN_PROFILE = loom_execution_profile(
+    name = "xdna_two_columns",
+    build_requirements = XDNA_HARDWARE_PROFILE.build_requirements,
+    executor = XDNA_HARDWARE_PROFILE.executor,
+    resource_group = XDNA_HARDWARE_PROFILE.resource_group,
+    run_requirements = XDNA_HARDWARE_PROFILE.run_requirements,
+    runner_args = ["--device=xdna://0?columns=2"],
+    target_class = XDNA_HARDWARE_PROFILE.target_class,
+    target_family = XDNA_HARDWARE_PROFILE.target_family,
+)
+
+_XDNA_THREE_COLUMN_PROFILE = loom_execution_profile(
+    name = "xdna_three_columns",
+    build_requirements = XDNA_HARDWARE_PROFILE.build_requirements,
+    executor = XDNA_HARDWARE_PROFILE.executor,
+    resource_group = XDNA_HARDWARE_PROFILE.resource_group,
+    run_requirements = XDNA_HARDWARE_PROFILE.run_requirements,
+    runner_args = ["--device=xdna://0?columns=3"],
+    target_class = XDNA_HARDWARE_PROFILE.target_class,
+    target_family = XDNA_HARDWARE_PROFILE.target_family,
+)
+
+loom_test(
+    name = "pipeline_retained_replay_test",
+    srcs = ["pipeline/test/retained_replay.loom"],
+    benchmark_smoke = False,
+    execution_profiles = [_XDNA_ONE_COLUMN_PROFILE],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:vm_iree_vm",
+    ]),
+)
+
+loom_test(
+    name = "pipeline_finite_ingress_test",
+    srcs = ["pipeline/test/finite_ingress.loom"],
+    benchmark_smoke = False,
+    execution_profiles = [_XDNA_ONE_COLUMN_PROFILE],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:vm_iree_vm",
+    ]),
+)
+
+loom_test(
+    name = "pipeline_channel_fanout_test",
+    srcs = ["pipeline/test/channel_fanout.loom"],
+    benchmark_smoke = False,
+    execution_profiles = [_XDNA_TWO_COLUMN_PROFILE],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:vm_iree_vm",
+    ]),
+)
+
+loom_test_module(
+    name = "pipeline_channel_sram_module",
+    srcs = ["pipeline/test/channel_sram.loom"],
+)
+
+loom_test(
+    name = "pipeline_rotating_sram_test",
+    benchmark_smoke = False,
+    case = "rotating_four_row_sram_handoff",
+    execution_profiles = [_XDNA_THREE_COLUMN_PROFILE],
+    module = ":pipeline_channel_sram_module",
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:vm_iree_vm",
+    ]),
+)
+
+loom_test(
+    name = "pipeline_terminal_prefetch_test",
+    benchmark_smoke = False,
+    case = "terminal_prefetch_replay",
+    execution_profiles = [_XDNA_ONE_COLUMN_PROFILE],
+    module = ":pipeline_channel_sram_module",
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:vm_iree_vm",
+    ]),
 )
 
 loom_cc_test(

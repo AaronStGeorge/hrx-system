@@ -105,7 +105,8 @@ static iree_status_t loom_aie2p_native_config_op(
 
 static iree_status_t loom_aie2p_native_config_function(
     loom_aie2p_native_configuration_t* config, loom_symbol_ref_t symbol,
-    uint8_t visibility, uint8_t retain, loom_op_t** out_function) {
+    uint8_t visibility, uint8_t retain, loom_location_id_t location,
+    loom_op_t** out_function) {
   loom_intern_table_clear(&config->constants);
   loom_builder_set_block(&config->builder,
                          loom_module_block(config->context->code.module));
@@ -119,7 +120,7 @@ static iree_status_t loom_aie2p_native_config_function(
       LOOM_TARGET_ABI_ARRAY_PROGRAM, loom_named_attr_slice_empty(),
       loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), symbol, NULL, 0, NULL, 0, NULL, 0, NULL, 0,
-      LOOM_LOCATION_UNKNOWN, out_function);
+      location, out_function);
 }
 
 static iree_status_t loom_aie2p_native_config_register(
@@ -752,6 +753,7 @@ iree_status_t loom_aie2p_native_emit_configuration(
       loom_aie2p_worker_symbol(&context->code, &invoke_symbol));
   const loom_symbol_ref_t entry_symbol =
       loom_func_like_callee(realization->function);
+  const loom_location_id_t location = realization->function.op->location;
   loom_kernel_launch_config_program_t* launch_program =
       loom_kernel_launch_config_program_from_pass(context->pass);
   if (launch_program) {
@@ -786,7 +788,7 @@ iree_status_t loom_aie2p_native_emit_configuration(
   }
   loom_op_t* initialize;
   IREE_RETURN_IF_ERROR(loom_aie2p_native_config_function(
-      &config, initialize_symbol, 0, 0, &initialize));
+      &config, initialize_symbol, 0, 0, location, &initialize));
   loom_builder_enter_region(&config.builder, initialize,
                             loom_low_func_def_body(initialize));
   for (iree_host_size_t i = 0; i < realization->resources.strand_count; ++i) {
@@ -831,8 +833,8 @@ iree_status_t loom_aie2p_native_emit_configuration(
   IREE_RETURN_IF_ERROR(loom_aie2p_worker_return(&config.builder, NULL, 0));
 
   loom_op_t* invoke;
-  IREE_RETURN_IF_ERROR(
-      loom_aie2p_native_config_function(&config, invoke_symbol, 0, 0, &invoke));
+  IREE_RETURN_IF_ERROR(loom_aie2p_native_config_function(
+      &config, invoke_symbol, 0, 0, location, &invoke));
   loom_builder_enter_region(&config.builder, invoke,
                             loom_low_func_def_body(invoke));
   IREE_RETURN_IF_ERROR(loom_aie2p_native_config_bindings(&config, realization));
@@ -849,7 +851,9 @@ iree_status_t loom_aie2p_native_emit_configuration(
             LOOM_AIE2P_NATIVE_EXECUTION_CONFIGURATION;
     IREE_RETURN_IF_ERROR(loom_aie2p_native_config_set_lock(
         &config, tile, channel->free_lock,
-        channel->source->capacity - reserve_initial));
+        (channel->replay.record_count ? channel->replay.count
+                                      : channel->source->capacity) -
+            reserve_initial));
     IREE_RETURN_IF_ERROR(loom_aie2p_native_config_set_lock(
         &config, tile, channel->ready_lock, 0));
   }
@@ -954,7 +958,7 @@ iree_status_t loom_aie2p_native_emit_configuration(
   }
   loom_op_t* entry;
   IREE_RETURN_IF_ERROR(loom_aie2p_native_config_function(
-      &config, entry_symbol, visibility, retain, &entry));
+      &config, entry_symbol, visibility, retain, location, &entry));
   loom_builder_enter_region(&config.builder, entry,
                             loom_low_func_def_body(entry));
   loom_string_id_t initialize_name, invoke_name;

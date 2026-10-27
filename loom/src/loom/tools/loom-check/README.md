@@ -183,6 +183,19 @@ selected:
 // RUN: pass target=vm:core entry=@entry @named_pipeline
 ```
 
+`pipeline=source-low` and `pipeline=prepared-low` select the same complete
+target compilation pipelines as `loom-opt --pipeline`. They work with pass,
+pass-report, and compile-report modes, including ordinary target and entry
+selection:
+
+```text
+// RUN: pass target=vm:core entry=@entry pipeline=source-low
+// RUN: pass-report pipeline=source-low
+```
+
+The named pipeline owns preparation and lowering order; the fixture supplies
+the authored program and observes its normal IR or report.
+
 Binary output uses `emit vm-dis target=vm:core` or
 `emit spirv-dis target=spirv:vulkan1.3+bda input=source-low`. These modes also
 accept `@function` for an explicit entry. The selected entry remains a compiler
