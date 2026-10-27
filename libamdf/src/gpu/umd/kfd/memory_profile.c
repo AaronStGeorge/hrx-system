@@ -272,24 +272,24 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
             AMDF_LINUX_DMA_BUF_DIRECT_HOST_PROVENANCE;
     profile.external_memory_support[1].flags &=
         ~AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_FOREIGN_API;
-    // Control allocations request UC on GMC9/11/12. GC12.0 additionally routes
-    // CP atomics through MALL. Native CPU route widths supply the independent
-    // AtomicOps requirement; the uncached mapping alone does not establish it.
-    // PCIe supports integer ADD, unlike raw SUB/AND/OR/XOR. Wait comparisons
-    // remain an independent queue capability.
+    // Control allocations request UC on GMC9/11/12. Aligned control-word
+    // loads/stores do not use PCIe AtomicOps transactions. Only read-modify-
+    // write operations require the corresponding native CPU route width.
+    // GC12.0 additionally routes CP atomics through MALL. PCIe supports
+    // integer ADD, unlike raw SUB/AND/OR/XOR. Wait comparisons remain an
+    // independent queue capability.
     const amdf_gpu_kfd_ip_version_t* gc = &topology->gc_ip;
     if (control_system && gc->exact &&
         (gc->major == 9 || gc->major == 11 ||
          (gc->major == 12 && gc->minor == 0 && gc->revision <= 1))) {
+      profile.atomic_operations_32 =
+          AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE;
+      profile.atomic_operations_64 = profile.atomic_operations_32;
       if (topology->host_atomics.supports_32) {
-        profile.atomic_operations_32 = AMDF_ATOMIC_OPERATION_WAIT |
-                                       AMDF_ATOMIC_OPERATION_STORE |
-                                       AMDF_ATOMIC_OPERATION_ADD;
+        profile.atomic_operations_32 |= AMDF_ATOMIC_OPERATION_ADD;
       }
       if (topology->host_atomics.supports_64) {
-        profile.atomic_operations_64 = AMDF_ATOMIC_OPERATION_WAIT |
-                                       AMDF_ATOMIC_OPERATION_STORE |
-                                       AMDF_ATOMIC_OPERATION_ADD;
+        profile.atomic_operations_64 |= AMDF_ATOMIC_OPERATION_ADD;
       }
     }
     profile.visibility.describe_site =

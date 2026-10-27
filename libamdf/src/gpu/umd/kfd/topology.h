@@ -33,11 +33,11 @@ typedef struct amdf_gpu_kfd_topology_t {
   // Loaded amdgpu module version, without its trailing newline. Empty when
   // unavailable or too long for exact matching; distinct from kernel release.
   char driver_version[64];
-  // Host atomic widths supported by every reported CPU-facing native route.
+  // Read-modify-write AtomicOps widths supported by every CPU-facing route.
   struct {
-    // Whether enabled CPU routes support naturally aligned 32-bit words.
+    // Whether enabled CPU routes support 32-bit AtomicOps transactions.
     bool supports_32;
-    // Whether enabled CPU routes support naturally aligned 64-bit words.
+    // Whether enabled CPU routes support 64-bit AtomicOps transactions.
     bool supports_64;
   } host_atomics;
   // Physical local-memory reachability reported by the installed driver.

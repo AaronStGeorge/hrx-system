@@ -36,6 +36,17 @@ class GpuProgramAtomicTest : public QueueFixture,
     if (this->IsSkipped()) {
       return;
     }
+    // Live control cells need queue-storage policy, not just host coherence.
+    ASSERT_NO_FATAL_FAILURE(this->CreateMemory(
+        AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE, 4096, &control_,
+        AMDF_MEMORY_FLAG_HOST_COHERENT | AMDF_MEMORY_FLAG_QUEUE_STORAGE));
+    const auto operations = this->GetParam() == 32
+                                ? control_->access_info.atomic_operations_32
+                                : control_->access_info.atomic_operations_64;
+    if ((operations & AMDF_ATOMIC_OPERATION_ADD) == 0) {
+      GTEST_SKIP() << "control backing lacks " << this->GetParam()
+                   << "-bit ADD required by the shader counter";
+    }
     kernel_ = kernels::program_atomic::kKernels.Find(this->gpu_endpoint_info_);
     ASSERT_NE(kernel_, nullptr) << "missing compiled program-atomic kernel";
     this->RecordProperty("program_atomic_target", kernel_->target);
@@ -44,16 +55,12 @@ class GpuProgramAtomicTest : public QueueFixture,
               kernels::program_atomic::kWorkgroupSize);
     ASSERT_EQ(kernel_->private_segment_byte_length, 0u);
     ASSERT_EQ(kernel_->group_segment_byte_length, 0u);
-    // Live control cells need queue-storage policy, not just host coherence.
-    // Arguments are immutable during execution and retain payload policy.
-    ASSERT_NO_FATAL_FAILURE(this->CreateMemory(
-        AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE, 4096, &control_,
-        AMDF_MEMORY_FLAG_HOST_COHERENT | AMDF_MEMORY_FLAG_QUEUE_STORAGE));
     ASSERT_NO_FATAL_FAILURE(this->CreateMemory(
         AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
         (sizeof(Record) * (kProducerCount + 2) + 4095) & ~UINT64_C(4095),
         &records_,
         AMDF_MEMORY_FLAG_HOST_COHERENT | AMDF_MEMORY_FLAG_QUEUE_STORAGE));
+    // Arguments are immutable during execution and retain payload policy.
     ASSERT_NO_FATAL_FAILURE(this->CreateMemory(AMDF_MEMORY_ACCESS_READ, 4096,
                                                &arguments_,
                                                AMDF_MEMORY_FLAG_HOST_COHERENT));

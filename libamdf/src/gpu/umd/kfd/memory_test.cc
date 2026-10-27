@@ -852,7 +852,8 @@ TEST(LinuxGpuMemoryProfileTest, SdmaSitesPreserveBackingSpecificCachePolicy) {
   }
 }
 
-TEST(LinuxGpuMemoryProfileTest, Gfx1151SystemPreservesPermissionsAndAtomicGap) {
+TEST(LinuxGpuMemoryProfileTest,
+     Gfx1151SdmaPreservesPermissionsWithoutAtomicReach) {
   auto device = MakeGfx1151Device();
   amdf_gpu_endpoint_profile_t endpoint = {};
   ASSERT_NO_FATAL_FAILURE(InitializeQueueFamilies(&device, &endpoint));
@@ -875,8 +876,12 @@ TEST(LinuxGpuMemoryProfileTest, Gfx1151SystemPreservesPermissionsAndAtomicGap) {
       SCOPED_TRACE(ordinal);
       const auto profile = QueryProfile(&device, ordinal);
       ASSERT_NE(profile.visibility.describe_site, nullptr);
-      EXPECT_EQ(profile.atomic_operations_32, 0u);
-      EXPECT_EQ(profile.atomic_operations_64, 0u);
+      const amdf_atomic_operations_t signals =
+          ordinal == 1
+              ? AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE
+              : 0u;
+      EXPECT_EQ(profile.atomic_operations_32, signals);
+      EXPECT_EQ(profile.atomic_operations_64, signals);
       constexpr amdf_memory_access_t accesses[] = {
           AMDF_MEMORY_ACCESS_READ, AMDF_MEMORY_ACCESS_WRITE,
           AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE};
@@ -885,6 +890,8 @@ TEST(LinuxGpuMemoryProfileTest, Gfx1151SystemPreservesPermissionsAndAtomicGap) {
         const amdf_memory_site_query_t query = {
             .access = access,
             .flags = profile.guaranteed_flags,
+            .atomic_operations_32 = profile.atomic_operations_32,
+            .atomic_operations_64 = profile.atomic_operations_64,
             .queue_family_info = &family,
         };
         amdf_memory_site_description_t description;
@@ -1088,20 +1095,17 @@ TEST(LinuxGpuMemoryProfileTest, SystemSignalsPreserveIndependentSdmaPolicy) {
   EXPECT_EQ(description.atomic_reach.scope_64, AMDF_ATOMIC_SCOPE_NONE);
 }
 
-TEST(LinuxGpuMemoryProfileTest, SystemSignalsDoNotRequireSdma) {
+TEST(LinuxGpuMemoryProfileTest, SystemSignalsDoNotRequireSdmaOrCpuAtomicOps) {
   auto device = MakeGfx1151Device();
-  device.topology.host_atomics = {true, true};
   device.topology.sdma = {};
   amdf_gpu_endpoint_profile_t endpoint = {};
   ASSERT_NO_FATAL_FAILURE(InitializeQueueFamilies(&device, &endpoint));
   ASSERT_EQ(endpoint.queue_family_count, 2u);
   const auto profile = QueryProfile(&device, 1);
   EXPECT_EQ(profile.atomic_operations_32,
-            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
-             AMDF_ATOMIC_OPERATION_ADD));
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
   EXPECT_EQ(profile.atomic_operations_64,
-            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
-             AMDF_ATOMIC_OPERATION_ADD));
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
   const amdf_memory_site_query_t query = {
       .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
       .flags = profile.guaranteed_flags,
@@ -1117,7 +1121,7 @@ TEST(LinuxGpuMemoryProfileTest, SystemSignalsDoNotRequireSdma) {
   ExpectSiteUnsupported(profile, kTransferFamily);
 }
 
-TEST(LinuxGpuMemoryProfileTest, SystemGroupSignalsRemainConsumerSpecific) {
+TEST(LinuxGpuMemoryProfileTest, SystemGroupAddRemainsConsumerSpecific) {
   auto qualified = MakeGfx1151Device();
   qualified.topology.host_atomics = {true, true};
   auto unqualified = MakeGfx1151Device();
@@ -1127,8 +1131,10 @@ TEST(LinuxGpuMemoryProfileTest, SystemGroupSignalsRemainConsumerSpecific) {
   amdf_memory_native_profile_t projected = {};
   ASSERT_TRUE(qualified_profile.construction.query_access(
       &qualified_profile, &unqualified_profile, &projected));
-  EXPECT_EQ(projected.atomic_operations_32, 0u);
-  EXPECT_EQ(projected.atomic_operations_64, 0u);
+  EXPECT_EQ(projected.atomic_operations_32,
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+  EXPECT_EQ(projected.atomic_operations_64,
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
   ASSERT_TRUE(unqualified_profile.construction.query_access(
       &unqualified_profile, &qualified_profile, &projected));
   EXPECT_EQ(projected.atomic_operations_32,
@@ -1344,12 +1350,12 @@ TEST(LinuxGpuMemoryProfileTest, LegacySdmaPreservesHostAperturePublication) {
   }
 }
 
-TEST(LinuxGpuMemoryProfileTest, SystemAtomicsRequireNativeMappingAndCpuRoutes) {
+TEST(LinuxGpuMemoryProfileTest, SystemSignalsDoNotRequireCpuAtomicOps) {
   const struct {
     // Native GC identity, independent of the compiler target spelling.
     amdf_gpu_kfd_ip_version_t gc;
-    // Whether owned control backing supports CP stores, waits, and ADD.
-    bool supports_atomics;
+    // Whether owned control backing supports CP stores and waits.
+    bool supports_signals;
   } cases[] = {
       {{.major = 9, .minor = 0, .revision = 10, .exact = true}, true},
       {{.major = 9, .minor = 4, .revision = 1, .exact = true}, true},
@@ -1390,19 +1396,18 @@ TEST(LinuxGpuMemoryProfileTest, SystemAtomicsRequireNativeMappingAndCpuRoutes) {
       for (uint32_t ordinal = 0; ordinal < 4; ++ordinal) {
         SCOPED_TRACE(ordinal);
         const auto profile = QueryProfile(&device, ordinal);
-        const bool native_mapping = ordinal == 1 && test_case.supports_atomics;
-        EXPECT_EQ(
-            profile.atomic_operations_32,
-            native_mapping && (widths & 1) != 0
-                ? (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
-                   AMDF_ATOMIC_OPERATION_ADD)
-                : 0u);
-        EXPECT_EQ(
-            profile.atomic_operations_64,
-            native_mapping && (widths & 2) != 0
-                ? (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
-                   AMDF_ATOMIC_OPERATION_ADD)
-                : 0u);
+        const amdf_atomic_operations_t signals =
+            ordinal == 1 && test_case.supports_signals
+                ? AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE
+                : 0u;
+        EXPECT_EQ(profile.atomic_operations_32,
+                  signals | (signals != 0 && (widths & 1) != 0
+                                 ? AMDF_ATOMIC_OPERATION_ADD
+                                 : 0u));
+        EXPECT_EQ(profile.atomic_operations_64,
+                  signals | (signals != 0 && (widths & 2) != 0
+                                 ? AMDF_ATOMIC_OPERATION_ADD
+                                 : 0u));
       }
     }
   }
