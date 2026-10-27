@@ -53,20 +53,6 @@ loom_aie2p_bundle_plan_packet_move_group(const loom_low_emission_frame_t* frame,
       &frame->allocation, packet->node_index);
 }
 
-static bool loom_aie2p_bundle_plan_physical_control_descriptor(
-    uint32_t descriptor_ordinal) {
-  switch (descriptor_ordinal) {
-    case AIE2P_CORE_DESCRIPTOR_REF_BRANCH_DIRECT:
-    case AIE2P_CORE_DESCRIPTOR_REF_BRANCH_NONZERO:
-    case AIE2P_CORE_DESCRIPTOR_REF_BRANCH_ZERO:
-    case AIE2P_CORE_DESCRIPTOR_REF_RETURN_:
-    case AIE2P_CORE_DESCRIPTOR_REF_CALL_DIRECT:
-      return true;
-    default:
-      return false;
-  }
-}
-
 static loom_aie2p_block_terminator_t
 loom_aie2p_bundle_plan_terminator_from_structure_kind(
     loom_aie2p_core_structure_kind_t structure_kind) {
@@ -316,14 +302,7 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
             ++out_analysis->read_only_data_fixup_count;
           }
         }
-        if (!loom_aie2p_bundle_plan_physical_control_descriptor(
-                descriptor_ordinal)) {
-          continue;
-        }
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "AIE2P physical control is materialized from structural Low CFG; "
-            "descriptor-backed control packets are not accepted");
+        continue;
       }
       const loom_aie2p_core_structure_kind_t structure_kind =
           loom_aie2p_core_structure_classify(packet.node->op);

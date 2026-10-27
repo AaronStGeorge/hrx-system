@@ -49,7 +49,6 @@ from loom.target.arch.amd.xdna.aie2p.core_schedule_data import CORE_SCHEDULE_TAB
 from loom.target.low_descriptors import (
     DescriptorFlag,
     EffectKind,
-    ImmediateFlag,
     ImmediateKind,
     InstructionClass,
     IssueUseKind,
@@ -386,7 +385,7 @@ def test_direct_branch_forms_retain_exact_control_contracts() -> None:
         immediate = descriptor.immediates[0]
         assert immediate.field_name == "i"
         assert immediate.kind is ImmediateKind.ORDINAL
-        assert immediate.flags == (ImmediateFlag.SYMBOLIC,)
+        assert immediate.flags == ()
         assert immediate.bit_width == 20
         assert immediate.value_step == 1
         assert immediate.signed_min == 0
@@ -424,7 +423,7 @@ def test_direct_call_retains_link_write_and_delay_contract() -> None:
     immediate = call.immediates[0]
     assert immediate.field_name == "i"
     assert immediate.kind is ImmediateKind.ORDINAL
-    assert immediate.flags == (ImmediateFlag.SYMBOLIC,)
+    assert immediate.flags == ()
     assert immediate.bit_width == 20
     assert immediate.value_step == 1
     assert immediate.signed_min == 0
@@ -476,8 +475,8 @@ def test_zero_overhead_loop_setup_owns_architectural_state() -> None:
             "II_MOVXM_mLSm",
             "aie2p.mlsm",
             "ls",
-            ImmediateKind.ORDINAL,
-            (ImmediateFlag.SYMBOLIC,),
+            ImmediateKind.SIGNED,
+            (),
             32,
         ),
         "amd.xdna.aie2p.state.loop-end-address": (
@@ -485,8 +484,8 @@ def test_zero_overhead_loop_setup_owns_architectural_state() -> None:
             "II_MOVXM_mLEm",
             "aie2p.mlem",
             "le",
-            ImmediateKind.ORDINAL,
-            (ImmediateFlag.SYMBOLIC,),
+            ImmediateKind.SIGNED,
+            (),
             32,
         ),
     }

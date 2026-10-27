@@ -101,7 +101,7 @@ loom_aie2p_bundle_encoding_packet_move_group(
       &frame->allocation, packet->node_index);
 }
 
-iree_status_t loom_aie2p_bundle_encoding_encode_packet(
+void loom_aie2p_bundle_encoding_encode_packet(
     const loom_low_emission_frame_t* frame,
     const loom_low_packet_view_t* packet,
     loom_aie2p_encoded_slot_t* out_encoded_slot,
@@ -145,22 +145,12 @@ iree_status_t loom_aie2p_bundle_encoding_encode_packet(
   for (uint16_t i = 0; i < descriptor_layout->immediate_count; ++i) {
     const loom_attribute_t value = attrs.entries[i].value;
     if (value.kind == LOOM_ATTR_SYMBOL) {
-      if (packet->descriptor_ordinal !=
-          AIE2P_CORE_DESCRIPTOR_REF_MATERIALIZE_LOCAL_ADDRESS_I32) {
-        return iree_make_status(
-            IREE_STATUS_UNIMPLEMENTED,
-            "AIE2P descriptor %u has no symbolic immediate relocation",
-            packet->descriptor_ordinal);
-      }
+      IREE_ASSERT_EQ(packet->descriptor_ordinal,
+                     AIE2P_CORE_DESCRIPTOR_REF_MATERIALIZE_LOCAL_ADDRESS_I32);
       const uint32_t ordinal =
           loom_low_function_requirements_read_only_data_ordinal(
               &frame->schedule.requirements, loom_attr_as_symbol(value));
-      if (ordinal == UINT32_MAX) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "AIE2P symbolic local address does not name retained read-only "
-            "data");
-      }
+      IREE_ASSERT_NE(ordinal, UINT32_MAX);
       IREE_ASSERT_EQ(*out_read_only_data_ordinal, UINT32_MAX);
       *out_read_only_data_ordinal = ordinal;
       immediate_values[i] = 0;
@@ -172,7 +162,6 @@ iree_status_t loom_aie2p_bundle_encoding_encode_packet(
   *out_encoded_slot =
       loom_aie2p_descriptor_encode(descriptor_set, packet->descriptor_ordinal,
                                    operand_assignments, immediate_values);
-  return iree_ok_status();
 }
 
 iree_status_t loom_aie2p_bundle_encoding_encode_storage_address(
@@ -186,17 +175,14 @@ iree_status_t loom_aie2p_bundle_encoding_encode_storage_address(
   IREE_ASSERT_EQ(node->result_count, 1u);
   const loom_low_allocation_assignment_t* result_assignment =
       loom_low_packet_result_assignment(&frame->allocation, packet, 0);
-  if (result_assignment == NULL ||
-      result_assignment->location_kind !=
-          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
-      result_assignment->descriptor_reg_class_id !=
-          AIE2P_CORE_REG_CLASS_ID_AIE2P_EP ||
-      result_assignment->unit_count != 1 ||
-      result_assignment->location_count != 1) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AIE2P local-storage address requires one physical aie2p.ep register");
-  }
+  IREE_ASSERT(result_assignment != NULL &&
+              result_assignment->location_kind ==
+                  LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
+              result_assignment->descriptor_reg_class_id ==
+                  AIE2P_CORE_REG_CLASS_ID_AIE2P_EP &&
+              result_assignment->unit_count == 1 &&
+              result_assignment->location_count == 1 &&
+              "verified AIE2P storage address must have one EP assignment");
 
   const loom_low_descriptor_t* descriptor =
       &descriptor_set->descriptors

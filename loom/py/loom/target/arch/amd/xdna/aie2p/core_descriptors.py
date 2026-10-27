@@ -1133,15 +1133,18 @@ def _immediate(
     spec: descriptor_specs._DescriptorSpec, operand: MachineOperand
 ) -> Immediate:
     immediate = _MACHINE_IMMEDIATES[operand.type_name]
-    if immediate.allows_symbol_reference or operand.name in spec.symbolic_immediates:
+    source_symbolic = operand.name in spec.symbolic_immediates
+    if immediate.allows_symbol_reference or source_symbolic:
         kind = ImmediateKind.ORDINAL
-        flags = (ImmediateFlag.SYMBOLIC,)
+        flags = (ImmediateFlag.SYMBOLIC,) if source_symbolic else ()
     elif immediate.is_signed:
         kind = ImmediateKind.SIGNED
         flags = ()
     else:
         kind = ImmediateKind.UNSIGNED
         flags = ()
+    if operand.name in spec.read_only_data_immediates:
+        flags = (*flags, ImmediateFlag.READ_ONLY_DATA)
     fixed_zero_bits = immediate.step.bit_length() - 1
     if immediate.is_negative:
         minimum = -(1 << (immediate.encoded_width_bits + fixed_zero_bits))
@@ -1438,6 +1441,16 @@ def _descriptor(spec: descriptor_specs._DescriptorSpec) -> Descriptor:
         raise ValueError(
             f"{form.name}: symbolic immediates name unknown machine immediates "
             f"{sorted(unknown_symbolic_immediates)}"
+        )
+    if len(set(spec.read_only_data_immediates)) != len(spec.read_only_data_immediates):
+        raise ValueError(f"{form.name}: read-only data immediate names must be unique")
+    non_symbolic_read_only_data = set(spec.read_only_data_immediates) - set(
+        spec.symbolic_immediates
+    )
+    if non_symbolic_read_only_data:
+        raise ValueError(
+            f"{form.name}: read-only data immediates must be symbolic "
+            f"{sorted(non_symbolic_read_only_data)}"
         )
     implicit_inputs = tuple(
         operand for operand in form.inputs if operand.name in spec.implicit_inputs

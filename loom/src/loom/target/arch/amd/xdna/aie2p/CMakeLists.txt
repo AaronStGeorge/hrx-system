@@ -1098,6 +1098,7 @@ loom_check_test_suite(
     "test/configuration_contracts.loom-test"
     "test/configuration_entry.loom-test"
     "test/configuration_measurement.loom-test"
+    "test/core_admission.loom-test"
     "test/descriptors/bf16_comparison.loom-test"
     "test/descriptors/bfp_move.loom-test"
     "test/descriptors/cascade.loom-test"

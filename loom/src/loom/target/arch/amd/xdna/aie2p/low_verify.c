@@ -97,6 +97,35 @@ typedef struct loom_aie2p_low_verify_state_t {
   uint32_t measurement_phase;
 } loom_aie2p_low_verify_state_t;
 
+#define LOOM_AIE2P_LOW_TARGET_CONTEXT_PARAM_COUNT 5
+
+static void loom_aie2p_low_make_target_context_params(
+    const loom_aie2p_low_verify_state_t* state, const loom_op_t* op,
+    loom_diagnostic_param_t* params) {
+  params[0] = loom_param_string(loom_low_diagnostic_target_key(state->target));
+  params[1] = loom_param_string(loom_low_diagnostic_export_name(state->target));
+  params[2] = loom_param_string(loom_low_diagnostic_config_key(state->target));
+  params[3] = loom_param_string(state->function_name);
+  params[4] =
+      loom_param_string(loom_low_diagnostic_operation_name(state->module, op));
+}
+
+static iree_status_t loom_aie2p_low_emit_target_context_error(
+    loom_low_verify_context_t* context,
+    const loom_aie2p_low_verify_state_t* state, const loom_op_t* op,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* extra_params,
+    iree_host_size_t extra_param_count) {
+  IREE_ASSERT_LE(extra_param_count, 4);
+  loom_diagnostic_param_t params[LOOM_AIE2P_LOW_TARGET_CONTEXT_PARAM_COUNT + 4];
+  loom_aie2p_low_make_target_context_params(state, op, params);
+  for (iree_host_size_t i = 0; i < extra_param_count; ++i) {
+    params[LOOM_AIE2P_LOW_TARGET_CONTEXT_PARAM_COUNT + i] = extra_params[i];
+  }
+  return loom_low_verify_context_emit(
+      context, op, error, params,
+      LOOM_AIE2P_LOW_TARGET_CONTEXT_PARAM_COUNT + extra_param_count);
+}
+
 static loom_diagnostic_param_t loom_aie2p_low_abi_layout_field_param(
     iree_string_view_t value) {
   return loom_param_with_field_ref(
@@ -264,19 +293,14 @@ static iree_status_t loom_aie2p_low_verify_begin_function(
   return iree_ok_status();
 }
 
-static iree_status_t loom_aie2p_low_verify_core_resource(
+static iree_status_t loom_aie2p_low_verify_core_pointer_result(
     loom_low_verify_context_t* context,
-    const loom_aie2p_low_verify_state_t* state, const loom_op_t* op) {
-  if (!loom_low_resource_isa(op) ||
-      loom_low_resource_import_kind(op) !=
-          LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER) {
-    return iree_ok_status();
-  }
-  const loom_type_t result_type =
-      loom_module_value_type(state->module, loom_low_resource_result(op));
+    const loom_aie2p_low_verify_state_t* state, const loom_op_t* op,
+    loom_value_id_t result) {
+  const loom_type_t result_type = loom_module_value_type(state->module, result);
   // Shared Low verification diagnoses non-register and foreign-descriptor
-  // resource results. This provider owns the narrower AIE2P native-pointer
-  // ABI and must not duplicate those diagnostics.
+  // results. This provider owns the narrower AIE2P address contract and must
+  // not duplicate those diagnostics.
   if (!loom_low_type_is_register(result_type) ||
       loom_low_register_type_descriptor_set_stable_id(result_type) !=
           AIE2P_CORE_DESCRIPTOR_SET_ID) {
@@ -299,6 +323,46 @@ static iree_status_t loom_aie2p_low_verify_core_resource(
                                       IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_aie2p_low_verify_core_branch_condition(
+    loom_low_verify_context_t* context,
+    const loom_aie2p_low_verify_state_t* state, const loom_op_t* op) {
+  const loom_type_t condition_type =
+      loom_module_value_type(state->module, loom_low_cond_br_condition(op));
+  if (loom_low_type_is_register(condition_type) &&
+      loom_low_register_type_descriptor_set_stable_id(condition_type) !=
+          AIE2P_CORE_DESCRIPTOR_SET_ID) {
+    return iree_ok_status();
+  }
+  if (loom_low_type_is_register(condition_type) &&
+      loom_low_register_type_class_id(condition_type) ==
+          AIE2P_CORE_REG_CLASS_ID_AIE2P_ER &&
+      loom_low_register_type_unit_count(condition_type) == 1) {
+    return iree_ok_status();
+  }
+
+  const loom_diagnostic_param_t extra_params[] = {
+      loom_param_type(condition_type),
+      loom_param_string(IREE_SV("reg<aie2p.er>")),
+  };
+  return loom_aie2p_low_emit_target_context_error(
+      context, state, op, LOOM_ERR_TARGET_035, extra_params,
+      IREE_ARRAYSIZE(extra_params));
+}
+
+static bool loom_aie2p_low_core_descriptor_is_physical_control(
+    uint32_t descriptor_ordinal) {
+  switch (descriptor_ordinal) {
+    case AIE2P_CORE_DESCRIPTOR_REF_BRANCH_DIRECT:
+    case AIE2P_CORE_DESCRIPTOR_REF_BRANCH_NONZERO:
+    case AIE2P_CORE_DESCRIPTOR_REF_BRANCH_ZERO:
+    case AIE2P_CORE_DESCRIPTOR_REF_CALL_DIRECT:
+    case AIE2P_CORE_DESCRIPTOR_REF_RETURN_:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static bool loom_aie2p_low_verify_is_core_body_op(
     const loom_low_verify_context_t* context, const loom_op_t* op) {
   const loom_region_t* function_body =
@@ -309,15 +373,8 @@ static bool loom_aie2p_low_verify_is_core_body_op(
 static iree_status_t loom_aie2p_low_verify_emit_unsupported_core_op(
     loom_low_verify_context_t* context,
     const loom_aie2p_low_verify_state_t* state, const loom_op_t* op) {
-  const loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_diagnostic_target_key(state->target)),
-      loom_param_string(loom_low_diagnostic_export_name(state->target)),
-      loom_param_string(loom_low_diagnostic_config_key(state->target)),
-      loom_param_string(state->function_name),
-      loom_param_string(loom_low_diagnostic_operation_name(state->module, op)),
-  };
-  return loom_low_verify_context_emit(context, op, LOOM_ERR_TARGET_001, params,
-                                      IREE_ARRAYSIZE(params));
+  return loom_aie2p_low_emit_target_context_error(context, state, op,
+                                                  LOOM_ERR_TARGET_001, NULL, 0);
 }
 
 static iree_status_t loom_aie2p_low_verify_core_op(
@@ -330,11 +387,33 @@ static iree_status_t loom_aie2p_low_verify_core_op(
   if (!loom_aie2p_low_verify_is_core_body_op(context, packet->op)) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(
-      loom_aie2p_low_verify_core_resource(context, state, packet->op));
-  if (packet->kind != LOOM_LOW_DESCRIPTOR_PACKET_NONE ||
-      loom_aie2p_core_structure_classify(packet->op) !=
-          LOOM_AIE2P_CORE_STRUCTURE_UNSUPPORTED) {
+  if (loom_low_resource_isa(packet->op) &&
+      loom_low_resource_import_kind(packet->op) ==
+          LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER) {
+    IREE_RETURN_IF_ERROR(loom_aie2p_low_verify_core_pointer_result(
+        context, state, packet->op, loom_low_resource_result(packet->op)));
+  } else if (loom_low_storage_address_isa(packet->op)) {
+    IREE_RETURN_IF_ERROR(loom_aie2p_low_verify_core_pointer_result(
+        context, state, packet->op,
+        loom_low_storage_address_result(packet->op)));
+  } else if (loom_low_cond_br_isa(packet->op)) {
+    IREE_RETURN_IF_ERROR(loom_aie2p_low_verify_core_branch_condition(
+        context, state, packet->op));
+  }
+  if (packet->kind != LOOM_LOW_DESCRIPTOR_PACKET_NONE) {
+    if (!loom_aie2p_low_core_descriptor_is_physical_control(
+            packet->descriptor_ordinal)) {
+      return iree_ok_status();
+    }
+    const loom_diagnostic_param_t extra_params[] = {
+        loom_param_string(IREE_SV("structural Low control flow")),
+    };
+    return loom_aie2p_low_emit_target_context_error(
+        context, state, packet->op, LOOM_ERR_TARGET_032, extra_params,
+        IREE_ARRAYSIZE(extra_params));
+  }
+  if (loom_aie2p_core_structure_classify(packet->op) !=
+      LOOM_AIE2P_CORE_STRUCTURE_UNSUPPORTED) {
     return iree_ok_status();
   }
   return loom_aie2p_low_verify_emit_unsupported_core_op(context, state,

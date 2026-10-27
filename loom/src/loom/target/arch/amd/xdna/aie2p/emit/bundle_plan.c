@@ -910,10 +910,9 @@ static iree_status_t loom_aie2p_bundle_plan_try_place_control(
   return iree_ok_status();
 }
 
-static iree_status_t loom_aie2p_bundle_plan_encode_branch(
+static loom_aie2p_encoded_slot_t loom_aie2p_bundle_plan_encode_branch(
     const loom_aie2p_bundle_plan_builder_t* builder,
-    uint32_t scheduled_packet_index, uint32_t descriptor_ordinal,
-    loom_aie2p_encoded_slot_t* out_encoded_slot) {
+    uint32_t scheduled_packet_index, uint32_t descriptor_ordinal) {
   const loom_low_descriptor_t* descriptor =
       &builder->descriptor_set->descriptors[descriptor_ordinal];
   IREE_ASSERT(loom_low_descriptor_layout(builder->descriptor_set, descriptor)
@@ -929,24 +928,20 @@ static iree_status_t loom_aie2p_bundle_plan_encode_branch(
     const loom_low_allocation_assignment_t* condition_assignment =
         loom_low_packet_operand_assignment(&builder->frame->allocation, &packet,
                                            0);
-    if (condition_assignment == NULL ||
-        condition_assignment->location_kind !=
-            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
-        condition_assignment->descriptor_reg_class_id !=
-            AIE2P_CORE_REG_CLASS_ID_AIE2P_ER ||
-        condition_assignment->unit_count != 1 ||
-        condition_assignment->location_count != 1) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AIE2P conditional branch requires one physical aie2p.er register");
-    }
+    IREE_ASSERT(condition_assignment != NULL &&
+                condition_assignment->location_kind ==
+                    LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
+                condition_assignment->descriptor_reg_class_id ==
+                    AIE2P_CORE_REG_CLASS_ID_AIE2P_ER &&
+                condition_assignment->unit_count == 1 &&
+                condition_assignment->location_count == 1 &&
+                "verified AIE2P branch condition must have one ER assignment");
     operand_assignments[0] = condition_assignment;
   }
   const int64_t target_immediate[] = {0};
-  *out_encoded_slot =
-      loom_aie2p_descriptor_encode(builder->descriptor_set, descriptor_ordinal,
-                                   operand_assignments, target_immediate);
-  return iree_ok_status();
+  return loom_aie2p_descriptor_encode(builder->descriptor_set,
+                                      descriptor_ordinal, operand_assignments,
+                                      target_immediate);
 }
 
 static loom_aie2p_encoded_slot_t loom_aie2p_bundle_plan_encode_call(
@@ -1376,22 +1371,20 @@ static iree_status_t loom_aie2p_bundle_plan_append_terminator(
        i < block_analysis->branches.count && iree_status_is_ok(status); ++i) {
     const loom_aie2p_block_branch_t* branch =
         &block_analysis->branches.values[i];
-    loom_aie2p_encoded_slot_t encoded_branch;
-    status = loom_aie2p_bundle_plan_encode_branch(
-        builder, block_analysis->terminator_packet_index,
-        branch->descriptor_ordinal, &encoded_branch);
+    const loom_aie2p_encoded_slot_t encoded_branch =
+        loom_aie2p_bundle_plan_encode_branch(
+            builder, block_analysis->terminator_packet_index,
+            branch->descriptor_ordinal);
     uint32_t bundle_index = 0;
-    if (iree_status_is_ok(status)) {
-      // A second branch follows the first branch's complete delay window.
-      const uint32_t minimum_issue_cycle =
-          i == 0 ? builder->execution_issue_cycle : builder->next_issue_cycle;
-      status = loom_aie2p_bundle_plan_append_control(
-          builder, block_analysis->terminator_packet_index,
-          block_analysis->terminator_packet_index,
-          block_analysis->terminator_issue_cycle, block_bundle_start,
-          minimum_issue_cycle, branch->descriptor_ordinal, encoded_branch,
-          /*close_delay_window=*/true, &bundle_index);
-    }
+    // A second branch follows the first branch's complete delay window.
+    const uint32_t minimum_issue_cycle =
+        i == 0 ? builder->execution_issue_cycle : builder->next_issue_cycle;
+    status = loom_aie2p_bundle_plan_append_control(
+        builder, block_analysis->terminator_packet_index,
+        block_analysis->terminator_packet_index,
+        block_analysis->terminator_issue_cycle, block_bundle_start,
+        minimum_issue_cycle, branch->descriptor_ordinal, encoded_branch,
+        /*close_delay_window=*/true, &bundle_index);
     if (iree_status_is_ok(status)) {
       builder->branch_fixups[builder->branch_fixup_count++] =
           (loom_aie2p_planned_branch_fixup_t){
@@ -1414,8 +1407,8 @@ static iree_status_t loom_aie2p_bundle_plan_append_packet(
     if (packet->descriptor != NULL) {
       loom_aie2p_encoded_slot_t encoded_slot;
       uint32_t read_only_data_ordinal = UINT32_MAX;
-      IREE_RETURN_IF_ERROR(loom_aie2p_bundle_encoding_encode_packet(
-          builder->frame, packet, &encoded_slot, &read_only_data_ordinal));
+      loom_aie2p_bundle_encoding_encode_packet(
+          builder->frame, packet, &encoded_slot, &read_only_data_ordinal);
       if (read_only_data_ordinal != UINT32_MAX) {
         loom_aie2p_bundle_plan_append_read_only_data_fixup(
             builder, packet_index, read_only_data_ordinal);
