@@ -412,6 +412,73 @@ def test_occupancy_local_memory_granularity_matches_physical_families() -> None:
     assert actual_processors_by_granularity == expected_processors_by_granularity
 
 
+def test_occupancy_register_classes_match_physical_families() -> None:
+    actual_processors_by_sgpr_contract: dict[tuple[int, int, bool], set[str]] = {}
+    actual_processors_by_agpr_contract: dict[tuple[int, int, bool], set[str]] = {}
+    for processor in AMDGPU_PROCESSOR_INFOS:
+        models = tuple(
+            model
+            for model in (processor.occupancy.wave32, processor.occupancy.wave64)
+            if model is not None
+        )
+        if not models:
+            continue
+        for register_class, contracts in (
+            ("amdgpu.sgpr", actual_processors_by_sgpr_contract),
+            ("amdgpu.agpr", actual_processors_by_agpr_contract),
+        ):
+            rows = tuple(
+                row
+                for model in models
+                for row in model.register_classes
+                if row.register_class == register_class
+            )
+            if not rows:
+                continue
+            contract = {
+                (row.pool_units, row.allocation_granularity, row.limits_occupancy)
+                for row in rows
+            }
+            assert len(contract) == 1, processor.processor
+            contracts.setdefault(next(iter(contract)), set()).add(processor.processor)
+
+    cdna_processors = {
+        "gfx90a",
+        "gfx940",
+        "gfx941",
+        "gfx942",
+        "gfx950",
+        "gfx9-4-generic",
+    }
+    rdna_processors = {
+        "gfx1100",
+        "gfx1101",
+        "gfx1102",
+        "gfx1103",
+        "gfx1150",
+        "gfx1151",
+        "gfx1152",
+        "gfx1153",
+        "gfx1170",
+        "gfx1171",
+        "gfx1172",
+        "gfx1200",
+        "gfx1201",
+        "gfx1250",
+        "gfx1251",
+        "gfx11-generic",
+        "gfx12-generic",
+        "gfx12-5-generic",
+    }
+    assert actual_processors_by_sgpr_contract == {
+        (800, 16, True): cdna_processors,
+        (2048, 128, False): rdna_processors,
+    }
+    assert actual_processors_by_agpr_contract == {
+        (256, 4, False): cdna_processors,
+    }
+
+
 def test_generic_descriptor_sets_have_independent_contracts() -> None:
     descriptor_sets_by_key = {info.key: info for info in AMDGPU_DESCRIPTOR_SET_INFOS}
     processors_by_name = {info.processor: info for info in AMDGPU_PROCESSOR_INFOS}

@@ -284,6 +284,11 @@ TEST_F(AmdgpuOccupancyTargetResourcesTest, DistinguishesNonlimitingRegisters) {
   EXPECT_EQ(vgpr->tier, 5u);
   EXPECT_EQ(sgpr->kind,
             LOOM_TARGET_RESIDENCY_CONSTRAINT_UNCONSTRAINED_RESOURCE);
+  EXPECT_EQ(sgpr->units, 36u);
+  EXPECT_EQ(sgpr->rounded_units, 128u);
+  EXPECT_EQ(sgpr->pool_units, 2048u);
+  EXPECT_EQ(sgpr->allocation_granularity, 128u);
+  EXPECT_EQ(sgpr->tier, 16u);
   for (const auto* constraint : {vgpr, sgpr}) {
     EXPECT_TRUE(iree_any_bit_set(
         constraint->flags,
@@ -295,6 +300,64 @@ TEST_F(AmdgpuOccupancyTargetResourcesTest, DistinguishesNonlimitingRegisters) {
   }
   EXPECT_EQ(lds->tier, 4u);
   EXPECT_EQ(lds->reduction_units_to_next_better_tier, 512u);
+}
+
+TEST_F(AmdgpuOccupancyTargetResourcesTest,
+       ReportsPhysicalScalarRegisterBackingAcrossRdnaModels) {
+  struct TargetCase {
+    // Exact processor selecting one distinct RDNA occupancy model.
+    const char* processor;
+    // Supported wave width selecting one generated model row.
+    uint32_t wave_size;
+  };
+  static constexpr TargetCase kCases[] = {
+      {"gfx1100", 32}, {"gfx1100", 64}, {"gfx1151", 32}, {"gfx1151", 64},
+      {"gfx1201", 32}, {"gfx1201", 64}, {"gfx1250", 32},
+  };
+
+  for (const TargetCase& test_case : kCases) {
+    SCOPED_TRACE(test_case.processor);
+    SCOPED_TRACE(test_case.wave_size);
+    loom_target_residency_constraint_list_t constraints = {};
+    Build(iree_make_cstring_view(test_case.processor), test_case.wave_size,
+          /*scalar_register_count=*/1, /*vector_register_count=*/1,
+          /*flat_workgroup_size=*/32, /*local_memory_bytes=*/0, &constraints);
+    const auto* sgpr = FindConstraint(constraints, IREE_SV("amdgpu.sgpr"));
+    ASSERT_NE(sgpr, nullptr);
+    EXPECT_EQ(sgpr->kind,
+              LOOM_TARGET_RESIDENCY_CONSTRAINT_UNCONSTRAINED_RESOURCE);
+    EXPECT_EQ(sgpr->units, 1u);
+    EXPECT_EQ(sgpr->rounded_units, 128u);
+    EXPECT_EQ(sgpr->pool_units, 2048u);
+    EXPECT_EQ(sgpr->allocation_granularity, 128u);
+    EXPECT_EQ(sgpr->tier, 16u);
+  }
+}
+
+TEST_F(AmdgpuOccupancyTargetResourcesTest,
+       PreservesCdnaScalarAndAccumulatorRegisterContracts) {
+  loom_target_residency_constraint_list_t constraints = {};
+  Build(IREE_SV("gfx942"), 64, /*scalar_register_count=*/36,
+        /*vector_register_count=*/1, /*flat_workgroup_size=*/64,
+        /*local_memory_bytes=*/0, &constraints,
+        /*accumulator_register_count=*/17);
+  const auto* sgpr = FindConstraint(constraints, IREE_SV("amdgpu.sgpr"));
+  const auto* agpr = FindConstraint(constraints, IREE_SV("amdgpu.agpr"));
+  ASSERT_NE(sgpr, nullptr);
+  ASSERT_NE(agpr, nullptr);
+
+  EXPECT_EQ(sgpr->kind, LOOM_TARGET_RESIDENCY_CONSTRAINT_POOLED_RESOURCE);
+  EXPECT_EQ(sgpr->units, 36u);
+  EXPECT_EQ(sgpr->rounded_units, 48u);
+  EXPECT_EQ(sgpr->pool_units, 800u);
+  EXPECT_EQ(sgpr->allocation_granularity, 16u);
+
+  EXPECT_EQ(agpr->kind,
+            LOOM_TARGET_RESIDENCY_CONSTRAINT_UNCONSTRAINED_RESOURCE);
+  EXPECT_EQ(agpr->units, 17u);
+  EXPECT_EQ(agpr->rounded_units, 20u);
+  EXPECT_EQ(agpr->pool_units, 256u);
+  EXPECT_EQ(agpr->allocation_granularity, 4u);
 }
 
 TEST_F(AmdgpuOccupancyTargetResourcesTest,
