@@ -153,6 +153,9 @@ TEST_F(LowLowerReportTest, CapturesAndReleasesSelectionRows) {
   ASSERT_NE(result_.report->rows.head, nullptr);
   ASSERT_EQ(result_.report->rows.head, result_.report->rows.tail);
   ASSERT_EQ(result_.report->rows.head->count, 1u);
+  EXPECT_EQ(result_.report->row_arena.block_pool, &block_pool_);
+  EXPECT_EQ(result_.report->row_arena.allocation_head, nullptr);
+  EXPECT_GT(result_.report->row_arena.used_allocation_size, 0u);
   const loom_low_lower_report_row_t& row =
       loom_low_lower_report_row_vec_const_rows(result_.report->rows.head)[0];
   EXPECT_TRUE(iree_string_view_equal(row.function_name, IREE_SV("add")));

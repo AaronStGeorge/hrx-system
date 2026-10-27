@@ -7,9 +7,10 @@
 // Pass pipeline IR tracing.
 //
 // The pass interpreter calls this cold diagnostic boundary immediately before
-// and after selected pass invocations. Callers own destination policy by
-// providing an output stream; the trace layer owns stable event formatting,
-// pass/stage matching, and IR snapshot printing.
+// selected pass invocations and after callbacks that return OK. Infrastructure
+// failure has no after boundary. Callers own destination policy by providing
+// an output stream; the trace layer owns stable event formatting, pass/stage
+// matching, and IR snapshot printing.
 
 #ifndef LOOM_PASS_TRACE_H_
 #define LOOM_PASS_TRACE_H_

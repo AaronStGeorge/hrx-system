@@ -203,6 +203,8 @@ loom_cc_library(
     deps = [
         ":program_plan",
         "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:parameter",
         "//loom/src/loom/ir",
         "//loom/src/loom/link:index_materializer",
         "//loom/src/loom/link:materialization_environment",

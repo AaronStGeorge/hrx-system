@@ -6,10 +6,11 @@
 
 // Pass pipeline execution reports.
 //
-// Reports are caller-owned snapshots of interpreter execution. The interpreter
-// appends one record per pass invocation after the pass callback finishes and
-// before its instance arena is torn down, copying descriptor-defined statistic
-// fields and optional pass-emitted detail rows into report-owned storage.
+// Reports are caller-owned snapshots of completed interpreter invocations. The
+// interpreter appends one record after a pass callback returns OK and before
+// its instance arena is torn down, copying descriptor-defined statistic fields
+// and optional pass-emitted detail rows into report-owned storage. A callback
+// infrastructure failure has no invocation record; earlier records remain.
 
 #ifndef LOOM_PASS_REPORT_H_
 #define LOOM_PASS_REPORT_H_

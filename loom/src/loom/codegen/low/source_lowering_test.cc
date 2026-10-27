@@ -60,17 +60,10 @@ TEST_F(SourceLoweringTest, PreparationDiagnosticStopsBeforeAllocation) {
     }
     descriptor.function_run = [](loom_pass_t* pass, loom_module_t* module,
                                  loom_func_like_t function) {
-      const loom_diagnostic_param_t params[] = {
-          loom_param_string(IREE_SV("canonicalize")),
-          loom_param_string(IREE_SV("function")),
-          loom_param_string(IREE_SV("generated")),
-          loom_param_string(IREE_SV("packetization preparation")),
-      };
+      (void)module;
       loom_diagnostic_emission_t emission = {
           .op = function.op,
-          .error = LOOM_ERR_STRUCTURE_028,
-          .params = params,
-          .param_count = IREE_ARRAYSIZE(params),
+          .error = LOOM_ERR_EXPECT_001,
       };
       return iree_diagnostic_emit(pass->diagnostic_emitter, &emission);
     };

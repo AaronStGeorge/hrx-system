@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "loom/analysis/ownership_lifetime.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
 #include "loom/pass/options.h"
@@ -304,6 +305,36 @@ static iree_status_t loom_test_resource_lifetime_run(loom_pass_t* pass,
   return iree_ok_status();
 }
 
+static iree_status_t loom_test_error_run(loom_pass_t* pass,
+                                         loom_module_t* module) {
+  loom_test_pass_trace_t* trace = loom_test_pass_trace_from_pass(pass);
+  IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
+      trace, pass, IREE_SV("test.error"), IREE_SV("<module>")));
+  if (trace) {
+    ++trace->error_invocation_count;
+  }
+  loom_test_invocation_statistics_t* statistics =
+      loom_test_invocation_statistics(pass);
+  ++statistics->invocations;
+  return iree_diagnostic_emit(pass->diagnostic_emitter,
+                              &(loom_diagnostic_emission_t){
+                                  .module = module,
+                                  .error = LOOM_ERR_EXPECT_001,
+                              });
+}
+
+static iree_status_t loom_test_fail_create(loom_pass_t* pass,
+                                           iree_string_view_t options) {
+  (void)options;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(pass->instance_arena, 64, &pass->state));
+  loom_test_pass_trace_t* trace = loom_test_pass_trace_from_pass(pass);
+  if (trace) {
+    ++trace->fail_create_count;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_test_fail_run(loom_pass_t* pass,
                                         loom_module_t* module) {
   (void)module;
@@ -316,8 +347,24 @@ static iree_status_t loom_test_fail_run(loom_pass_t* pass,
   loom_test_invocation_statistics_t* statistics =
       loom_test_invocation_statistics(pass);
   ++statistics->invocations;
-  return iree_make_status(IREE_STATUS_INTERNAL,
-                          "intentional test pass failure");
+  const loom_pass_report_detail_field_t fields[] = {
+      loom_pass_report_detail_bool_field(IREE_SV("created"),
+                                         pass->state != NULL),
+  };
+  IREE_RETURN_IF_ERROR(loom_pass_report_append_detail(
+      pass, IREE_SV("test.fail"), fields, IREE_ARRAYSIZE(fields)));
+  if (trace) {
+    trace->infrastructure_failure_returned = true;
+  }
+  return iree_status_from_code(IREE_STATUS_RESOURCE_EXHAUSTED);
+}
+
+static void loom_test_fail_destroy(loom_pass_t* pass) {
+  loom_test_pass_trace_t* trace = loom_test_pass_trace_from_pass(pass);
+  if (trace) {
+    ++trace->fail_destroy_count;
+  }
+  pass->state = NULL;
 }
 
 static const loom_pass_option_def_t kTestOptionsOptionDefs[] = {
@@ -382,9 +429,20 @@ static const loom_pass_requirement_def_t kTestRequiresTargetRequirements[] = {
     },
 };
 
+static const loom_pass_info_t kTestErrorPassInfo = {
+    .name = IREE_SVL("test.error"),
+    .description = IREE_SVL("Synthetic diagnosed compiler rejection."),
+    .kind = LOOM_PASS_MODULE,
+    .statistic_layout = &loom_test_invocation_statistics_layout,
+};
+
+static const loom_pass_info_t* loom_test_error_pass_info(void) {
+  return &kTestErrorPassInfo;
+}
+
 static const loom_pass_info_t kTestFailPassInfo = {
     .name = IREE_SVL("test.fail"),
-    .description = IREE_SVL("Synthetic module pass that always fails."),
+    .description = IREE_SVL("Synthetic pass infrastructure failure."),
     .kind = LOOM_PASS_MODULE,
     .statistic_layout = &loom_test_invocation_statistics_layout,
 };
@@ -500,9 +558,16 @@ static const loom_pass_descriptor_t kTestPassDescriptors[] = {
         .function_run = loom_test_acquire_value_facts_run,
     },
     {
+        .key = IREE_SVL("test.error"),
+        .info = loom_test_error_pass_info,
+        .module_run = loom_test_error_run,
+    },
+    {
         .key = IREE_SVL("test.fail"),
         .info = loom_test_fail_pass_info,
         .module_run = loom_test_fail_run,
+        .create = loom_test_fail_create,
+        .destroy = loom_test_fail_destroy,
     },
     {
         .key = IREE_SVL("test.mark-changed"),

@@ -216,6 +216,18 @@ loom_cc_library(
 )
 
 loom_cc_test(
+    name = "diagnostics_test",
+    srcs = ["diagnostics_test.cc"],
+    deps = [
+        ":schedule",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:parameter",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "block_test",
     srcs = [
         "block.h",

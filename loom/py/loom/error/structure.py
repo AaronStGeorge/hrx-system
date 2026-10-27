@@ -447,28 +447,6 @@ ERR_STRUCTURE_027 = ErrorDef(
     fix_hint="Choose a string value satisfying '{expected_constraint}'",
 )
 
-# ERR_STRUCTURE_028: Pass callback failed.
-ERR_STRUCTURE_028 = ErrorDef(
-    domain=ErrorDomain.STRUCTURE,
-    code=28,
-    severity=Severity.ERROR,
-    summary="Pass callback failed.",
-    message=(
-        "pass '{pass_key}' failed while running at {anchor_kind} anchor "
-        "on symbol '{symbol_name}' in pipeline '@{pipeline_name}'"
-    ),
-    params=(
-        ErrorParam("pass_key", ParamKind.STRING),
-        ErrorParam("anchor_kind", ParamKind.STRING),
-        ErrorParam("symbol_name", ParamKind.STRING),
-        ErrorParam("pipeline_name", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Inspect the pass-specific diagnostic or run the named pipeline on IR "
-        "that satisfies pass '{pass_key}'"
-    ),
-)
-
 # ERR_STRUCTURE_029: Operation placement constraint violated.
 ERR_STRUCTURE_029 = ErrorDef(
     domain=ErrorDomain.STRUCTURE,
@@ -1091,7 +1069,6 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_025,
     ERR_STRUCTURE_026,
     ERR_STRUCTURE_027,
-    ERR_STRUCTURE_028,
     ERR_STRUCTURE_029,
     ERR_STRUCTURE_030,
     ERR_STRUCTURE_031,

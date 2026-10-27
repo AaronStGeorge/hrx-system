@@ -15,7 +15,6 @@
 #include <utility>
 
 #include "iree/testing/gtest.h"
-#include "loom/error/parameter.h"
 #include "loom/ir/module.h"
 #include "loom/pass/registry.h"
 #include "loom/target/math_policy.h"
@@ -174,21 +173,11 @@ iree_status_t ObserveModule(loom_pass_t* pass, loom_module_t* module) {
 
 iree_status_t RejectModule(loom_pass_t* pass, loom_module_t* module) {
   IREE_RETURN_IF_ERROR(ObserveModule(pass, module));
-  const loom_diagnostic_param_t params[] = {
-      loom_param_string(IREE_SV("test.reject")),
-      loom_param_string(IREE_SV("module")),
-      loom_param_string(IREE_SV("identity")),
-      loom_param_string(IREE_SV("rejected by native provider")),
-  };
   const loom_diagnostic_emission_t emission = {
       .module = module,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 28),
-      .params = params,
-      .param_count = IREE_ARRAYSIZE(params),
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_EXPECT, 1),
   };
-  IREE_RETURN_IF_ERROR(
-      iree_diagnostic_emit(pass->diagnostic_emitter, &emission));
-  return iree_status_from_code(IREE_STATUS_OUT_OF_RANGE);
+  return iree_diagnostic_emit(pass->diagnostic_emitter, &emission);
 }
 
 TargetEnvironmentPtr CreateReportingEnvironment() {
@@ -609,13 +598,13 @@ TEST(InteropTest, ComposesReportsAndTraceForRunAndCompile) {
         }
         ResultPtr result(raw_result);
         EXPECT_EQ(loomc_result_status_code(result.get()),
-                  fail ? LOOMC_STATUS_OUT_OF_RANGE : LOOMC_STATUS_OK);
+                  fail ? LOOMC_STATUS_FAILED_PRECONDITION : LOOMC_STATUS_OK);
         EXPECT_EQ(loomc_result_succeeded(result.get()), !fail);
         EXPECT_EQ(loomc_result_diagnostic_count(result.get()), fail ? 1u : 0u);
       }
       ASSERT_EQ(passes.value.invocation_count, 4u);
       EXPECT_EQ(passes.value.invocation_head->next->status_code,
-                fail ? IREE_STATUS_OUT_OF_RANGE : IREE_STATUS_OK);
+                fail ? IREE_STATUS_FAILED_PRECONDITION : IREE_STATUS_OK);
       ASSERT_EQ(compilation.value.target_capability_rows.count, fail ? 4u : 2u);
       const auto* rows = static_cast<
           const loom_target_compile_report_target_capability_row_t*>(
@@ -665,10 +654,12 @@ TEST(InteropTest, RetainsCompletedReportsWhenTraceOrReportAllocationFails) {
               },
       };
     }
+    const loomc_string_view_t cse_pass_name = loomc_make_cstring_view("cse");
     const loomc_pass_trace_options_t trace = {
         .type = LOOMC_STRUCTURE_TYPE_PASS_TRACE_OPTIONS,
         .structure_size = sizeof(trace),
-        .flags = LOOMC_PASS_TRACE_FLAG_AFTER_ALL,
+        .after_filters = fail_trace ? &cse_pass_name : nullptr,
+        .after_filter_count = fail_trace ? 1u : 0u,
         .sink =
             {
                 .write =

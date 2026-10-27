@@ -308,7 +308,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::base::internal::fpu_state
-    loom::error::error_defs
     loom::ir
     loom::ops::op_defs
     loom::ops::pass
@@ -438,6 +437,7 @@ loom_cc_test(
   DEPS
     ::interpreter
     ::program
+    ::registry
     ::report
     ::trace
     iree::testing::gtest
@@ -447,6 +447,7 @@ loom_cc_test(
     loom::ops::op_defs
     loom::ops::test
     loom::pass::test::harness
+    loom::pass::test::registry
     loom::rewrite::rewriter
     loom::util::stream
 )

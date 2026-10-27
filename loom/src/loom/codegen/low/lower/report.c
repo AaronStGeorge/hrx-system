@@ -19,10 +19,8 @@
 #include "loom/util/fact_cfg.h"
 
 enum {
-  // Default allocation block size for source-to-Low selection report rows.
-  LOOM_LOW_LOWER_REPORT_ROW_BLOCK_BYTE_LENGTH = 4096,
-  // Initial allocation size for contiguous source-memory report rows.
-  LOOM_LOW_LOWER_MEMORY_REPORT_ROW_ARRAY_BYTE_LENGTH = 4096,
+  // Target allocation size for homogeneous source-to-Low report row chunks.
+  LOOM_LOW_LOWER_REPORT_ROW_CHUNK_BYTE_LENGTH = 4096,
 };
 
 typedef struct loom_low_lower_memory_expression_term_t {
@@ -96,46 +94,34 @@ static void loom_low_lower_report_populate_descriptor(
       context, descriptor, descriptor->semantic_tag_string_ref);
 }
 
-static void loom_low_lower_report_row_list_deinitialize(
-    iree_allocator_t allocator, loom_low_lower_report_row_list_t* list) {
-  loom_low_lower_report_row_vec_t* vec = list->head;
-  while (vec != NULL) {
-    loom_low_lower_report_row_vec_t* next = vec->next;
-    iree_allocator_free(allocator, vec);
-    vec = next;
-  }
-  *list = (loom_low_lower_report_row_list_t){0};
-}
-
-static void loom_low_lower_memory_report_row_list_deinitialize(
-    iree_allocator_t allocator, loom_low_lower_memory_report_row_list_t* list) {
-  iree_allocator_free(allocator, list->rows);
-  *list = (loom_low_lower_memory_report_row_list_t){0};
-}
-
 void loom_low_lower_result_deinitialize(loom_low_lower_result_t* result) {
   if (result == NULL || result->report == NULL) {
     return;
   }
   loom_low_lower_report_t* report = result->report;
-  loom_low_lower_report_row_list_deinitialize(report->allocator, &report->rows);
-  loom_low_lower_memory_report_row_list_deinitialize(
-      report->memory_row_allocator, &report->memory_rows);
+  iree_arena_deinitialize(&report->row_arena);
   iree_allocator_free(report->allocator, report);
   result->report = NULL;
 }
 
 static iree_status_t loom_low_lower_report_row_list_append(
-    loom_low_lower_report_row_list_t* list, iree_allocator_t allocator,
-    const loom_low_lower_report_row_t* row) {
+    loom_low_lower_report_row_list_t* list, iree_arena_allocator_t* arena,
+    iree_host_size_t row_size, const void* row) {
   if (list->tail == NULL || list->tail->count == list->tail->capacity) {
-    iree_host_size_t capacity = (LOOM_LOW_LOWER_REPORT_ROW_BLOCK_BYTE_LENGTH -
-                                 sizeof(loom_low_lower_report_row_vec_t)) /
-                                sizeof(*row);
-    capacity = iree_max((iree_host_size_t)1, capacity);
+    const iree_host_size_t chunk_byte_length =
+        iree_min((iree_host_size_t)LOOM_LOW_LOWER_REPORT_ROW_CHUNK_BYTE_LENGTH,
+                 iree_arena_block_pool_max_allocation_size(arena->block_pool));
+    iree_host_size_t capacity = 1;
+    if (chunk_byte_length > sizeof(loom_low_lower_report_row_vec_t)) {
+      capacity = iree_max(
+          (iree_host_size_t)1,
+          (chunk_byte_length - sizeof(loom_low_lower_report_row_vec_t)) /
+              row_size);
+    }
     loom_low_lower_report_row_vec_t* vec = NULL;
     IREE_RETURN_IF_ERROR(iree_allocator_malloc_struct_array(
-        allocator, sizeof(*vec), capacity, sizeof(*row), (void**)&vec));
+        iree_arena_allocator(arena), sizeof(*vec), capacity, row_size,
+        (void**)&vec));
     *vec = (loom_low_lower_report_row_vec_t){
         .capacity = capacity,
     };
@@ -146,9 +132,8 @@ static iree_status_t loom_low_lower_report_row_list_append(
     }
     list->tail = vec;
   }
-  loom_low_lower_report_row_t* rows =
-      loom_low_lower_report_row_vec_rows(list->tail);
-  rows[list->tail->count++] = *row;
+  uint8_t* rows = (uint8_t*)(list->tail + 1);
+  memcpy(rows + list->tail->count++ * row_size, row, row_size);
   ++list->count;
   return iree_ok_status();
 }
@@ -189,8 +174,9 @@ static iree_status_t loom_low_lower_report_prepare_selected_plan(
                               (void**)&context->result->report));
     *context->result->report = (loom_low_lower_report_t){
         .allocator = allocator,
-        .memory_row_allocator = context->module->allocator,
     };
+    iree_arena_initialize(context->module->arena.block_pool,
+                          &context->result->report->row_arena);
   }
   loom_low_lower_report_t* report = context->result->report;
   ++report->selected_source_op_count;
@@ -286,8 +272,8 @@ static iree_status_t loom_low_lower_report_prepare_selected_plan(
     row.native_transition_destination_type =
         plan_report.native_transition_destination_type;
   }
-  return loom_low_lower_report_row_list_append(&report->rows, report->allocator,
-                                               &row);
+  return loom_low_lower_report_row_list_append(
+      &report->rows, &report->row_arena, sizeof(row), &row);
 }
 
 iree_status_t loom_low_lower_report_prepare(loom_low_lower_context_t* context) {
@@ -318,23 +304,6 @@ void loom_low_lower_report_record_emission(loom_low_lower_context_t* context,
     report->selection_cursor = report->selection_cursor->next;
     report->selection_index = 0;
   }
-}
-
-static iree_status_t loom_low_lower_memory_report_row_list_append(
-    loom_low_lower_memory_report_row_list_t* list, iree_allocator_t allocator,
-    const loom_low_lower_memory_report_row_t* row) {
-  if (list->count == list->capacity) {
-    iree_host_size_t minimum_capacity =
-        LOOM_LOW_LOWER_MEMORY_REPORT_ROW_ARRAY_BYTE_LENGTH / sizeof(*row);
-    minimum_capacity = iree_max((iree_host_size_t)1, minimum_capacity);
-    iree_host_size_t capacity = list->capacity;
-    IREE_RETURN_IF_ERROR(iree_allocator_grow_array(allocator, minimum_capacity,
-                                                   sizeof(*row), &capacity,
-                                                   (void**)&list->rows));
-    list->capacity = capacity;
-  }
-  list->rows[list->count++] = *row;
-  return iree_ok_status();
 }
 
 static bool loom_low_lower_report_multiply_u64(uint64_t lhs, uint64_t rhs,
@@ -695,7 +664,7 @@ iree_status_t loom_low_lower_source_op_execution_count_plus_one(
 iree_status_t loom_low_lower_record_memory_report_row(
     loom_low_lower_context_t* context,
     const loom_low_lower_memory_report_row_t* row) {
-  return loom_low_lower_memory_report_row_list_append(
-      &context->result->report->memory_rows,
-      context->result->report->memory_row_allocator, row);
+  loom_low_lower_report_t* report = context->result->report;
+  return loom_low_lower_report_row_list_append(
+      &report->memory_rows, &report->row_arena, sizeof(*row), row);
 }

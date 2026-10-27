@@ -75,9 +75,11 @@ typedef struct loom_pass_interpreter_options_t {
 // Functions added while the program runs are not visited by that invocation;
 // erased or replaced snapshot entries are skipped when reached.
 //
-// Status carries interpreter, pass implementation, explicit fail/halt, and
-// trace/report sink failures. Pass-emitted diagnostics are accumulated in
-// |out_result|; a nonzero diagnostic count does not by itself change status.
+// Status carries interpreter infrastructure, explicit fail/halt, and
+// trace/report sink failures. A non-OK pass callback terminates after cleanup
+// without emitting an after trace or appending an invocation report.
+// Pass-emitted diagnostics are accumulated in |out_result|; a nonzero
+// diagnostic count does not by itself change status.
 iree_status_t loom_pass_interpreter_run_program(
     const loom_pass_program_t* program, loom_module_t* module,
     const loom_pass_interpreter_options_t* options,
@@ -85,9 +87,11 @@ iree_status_t loom_pass_interpreter_run_program(
 
 // Executes a module-root compiled pass program.
 //
-// Status carries interpreter, pass implementation, explicit fail/halt, and
-// trace/report sink failures. Pass-emitted diagnostics are accumulated in
-// |out_result|; a nonzero diagnostic count does not by itself change status.
+// Status carries interpreter infrastructure, explicit fail/halt, and
+// trace/report sink failures. A non-OK pass callback terminates after cleanup
+// without emitting an after trace or appending an invocation report.
+// Pass-emitted diagnostics are accumulated in |out_result|; a nonzero
+// diagnostic count does not by itself change status.
 iree_status_t loom_pass_interpreter_run_module(
     const loom_pass_program_t* program, loom_module_t* module,
     const loom_pass_interpreter_options_t* options,
@@ -95,9 +99,11 @@ iree_status_t loom_pass_interpreter_run_module(
 
 // Executes a function-root compiled pass program on one function-like symbol.
 //
-// Status carries interpreter, pass implementation, explicit fail/halt, and
-// trace/report sink failures. Pass-emitted diagnostics are accumulated in
-// |out_result|; a nonzero diagnostic count does not by itself change status.
+// Status carries interpreter infrastructure, explicit fail/halt, and
+// trace/report sink failures. A non-OK pass callback terminates after cleanup
+// without emitting an after trace or appending an invocation report.
+// Pass-emitted diagnostics are accumulated in |out_result|; a nonzero
+// diagnostic count does not by itself change status.
 iree_status_t loom_pass_interpreter_run_function(
     const loom_pass_program_t* program, loom_module_t* module,
     loom_func_like_t function, const loom_pass_interpreter_options_t* options,

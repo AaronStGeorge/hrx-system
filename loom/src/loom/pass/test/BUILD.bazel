@@ -29,6 +29,7 @@ loom_cc_library(
     hdrs = ["registry.h"],
     deps = [
         "//loom/src/loom/analysis:ownership_lifetime",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/test",

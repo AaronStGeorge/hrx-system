@@ -385,7 +385,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context, IREE_SV("test"), &block_pool,
                                       NULL, iree_allocator_system(), &module));
-  for (uint32_t i = 0; i < 7; ++i) {
+  for (uint32_t i = 0; i < 9; ++i) {
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
     IREE_ASSERT_OK(
         loom_module_define_value(module, (loom_type_t){0}, &value_id));
@@ -403,6 +403,14 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       module, 6,
       loom_low_register_type(/*descriptor_set_stable_id=*/1,
                              /*register_class_id=*/0, 2)));
+  IREE_ASSERT_OK(loom_module_set_value_type(
+      module, 7,
+      loom_low_register_type(/*descriptor_set_stable_id=*/1,
+                             /*register_class_id=*/0, 1)));
+  IREE_ASSERT_OK(loom_module_set_value_type(
+      module, 8,
+      loom_low_register_type(/*descriptor_set_stable_id=*/1,
+                             /*register_class_id=*/0, 1)));
   loom_target_compile_report_t report = {};
   iree_arena_allocator_t report_arena;
   iree_arena_initialize(&block_pool, &report_arena);
@@ -427,11 +435,11 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
                   .register_class_id = 0,
                   .register_descriptor_set_stable_id = 1,
               },
-          .peak_live_units = 7,
-          .peak_live_values = 5,
+          .peak_live_units = 3,
+          .peak_live_values = 2,
           .peak_block = {},
           .peak_op = {},
-          .peak_point = 3,
+          .peak_point = 2,
       },
       {
           .value_class =
@@ -441,8 +449,8 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
                   .register_class_id = 1,
                   .register_descriptor_set_stable_id = 1,
               },
-          .peak_live_units = 11,
-          .peak_live_values = 2,
+          .peak_live_units = 2,
+          .peak_live_values = 1,
           .peak_block = {},
           .peak_op = &peak_op,
           .peak_point = 9,
@@ -476,7 +484,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           .descriptor_reg_class_id = 0,
           .flags = {},
           .start_point = 2,
-          .end_point = 6,
+          .end_point = 3,
           .unit_count = 2,
           .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
           .location_base = 7,
@@ -484,42 +492,62 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       },
   };
   const loom_value_id_t liveness_value_ids[] = {
-      4,
-      5,
-      6,
+      4, 5, 6, 7, 8,
   };
   const uint32_t liveness_value_interval_indices[] = {
-      0,
-      1,
-      2,
+      0, 1, 2, 3, UINT32_MAX,
   };
   const loom_liveness_interval_t liveness_intervals[] = {
       {
           .value_id = 4,
           .start_point = 0,
-          .end_point = 8,
+          .end_point = 3,
           .value_class = pressure_summaries[0].value_class,
           .unit_count = 1,
       },
       {
           .value_id = 5,
-          .start_point = 1,
-          .end_point = 12,
+          .start_point = 9,
+          .end_point = 10,
           .value_class = pressure_summaries[1].value_class,
           .unit_count = 2,
       },
       {
           .value_id = 6,
           .start_point = 2,
-          .end_point = 6,
+          .end_point = 3,
           .value_class = pressure_summaries[0].value_class,
           .unit_count = 2,
       },
+      {
+          .value_id = 7,
+          .start_point = 0,
+          .end_point = 8,
+          .value_class = pressure_summaries[0].value_class,
+          .unit_count = 1,
+      },
+  };
+  const loom_liveness_segment_t liveness_segments[] = {
+      {.start_point = 0, .end_point = 3},
+      {.start_point = 9, .end_point = 10},
+      {.start_point = 2, .end_point = 3},
+      // This value's enclosing interval spans the class peak at point 2, but
+      // its first half-open segment ends there and its next segment starts
+      // later. It must not contribute to the pressure-origin rows.
+      {.start_point = 0, .end_point = 2},
+      {.start_point = 3, .end_point = 8},
+  };
+  const loom_liveness_segment_range_t liveness_segment_ranges[] = {
+      {.start = 0, .count = 1},
+      {.start = 1, .count = 1},
+      {.start = 2, .count = 1},
+      {.start = 3, .count = 2},
+      // The last local value is unused and therefore has no interval or
+      // segments.
+      {},
   };
   const uint32_t assignment_indices_by_value_ordinal[] = {
-      0,
-      1,
-      2,
+      0, 1, 2, UINT32_MAX, UINT32_MAX,
   };
   const loom_low_allocation_copy_decision_t copy_decisions[] = {
       {
@@ -693,6 +721,10 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       },
   };
   const uint32_t scheduled_node_indices[] = {0, 1, 2, 3, 4, 5, 6, 7};
+  const uint32_t value_producer_nodes[] = {
+      LOOM_LOW_SCHEDULE_NODE_NONE, 0, 1, LOOM_LOW_SCHEDULE_NODE_NONE,
+      LOOM_LOW_SCHEDULE_NODE_NONE,
+  };
   loom_target_facts_t target_facts = {};
   const loom_target_bundle_t* target_bundle = loom_target_bundle_table_lookup(
       &loom_test_target_bundles, LOOM_TEST_TARGET_KIND_LOW_CORE);
@@ -715,6 +747,9 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   loom_low_schedule_table_t schedule = {
       .module = module,
       .target = target,
+      .value_ids = liveness_value_ids,
+      .value_count = IREE_ARRAYSIZE(liveness_value_ids),
+      .value_producer_nodes = value_producer_nodes,
       .blocks = schedule_blocks,
       .block_count = IREE_ARRAYSIZE(schedule_blocks),
       .nodes = schedule_nodes,
@@ -741,6 +776,9 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   frame.allocation.liveness.value_count = IREE_ARRAYSIZE(liveness_value_ids);
   frame.allocation.liveness.value_interval_indices =
       liveness_value_interval_indices;
+  frame.allocation.liveness.segments = liveness_segments;
+  frame.allocation.liveness.segment_count = IREE_ARRAYSIZE(liveness_segments);
+  frame.allocation.liveness.value_segment_ranges = liveness_segment_ranges;
   frame.allocation.liveness.pressure_summaries = pressure_summaries;
   frame.allocation.liveness.pressure_summary_count =
       IREE_ARRAYSIZE(pressure_summaries);
@@ -801,6 +839,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
 
   IREE_ASSERT_OK(
       loom_target_compile_report_record_low_emission_frame(&report, &frame));
+  EXPECT_FALSE(loom_module_value_ordinal_scratch_is_active(module));
 
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
@@ -838,7 +877,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
                                          : iree_string_view_empty()));
   EXPECT_EQ(report.schedule_node_count, 13u);
   EXPECT_EQ(report.register_pressure_summary_count, 2u);
-  EXPECT_EQ(report.register_pressure_peak_live_units, 11u);
+  EXPECT_EQ(report.register_pressure_peak_live_units, 3u);
   EXPECT_EQ(report.allocation_spill_count, 2u);
   EXPECT_EQ(report.allocation_materialized_spill_storage_count, 4u);
   EXPECT_EQ(report.allocation_materialized_spill_store_count, 5u);
@@ -895,11 +934,12 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           loom_target_compile_report_vec_const_rows(report.pressure_rows.head));
   EXPECT_TRUE(iree_string_view_equal(pressure_rows[0].function_name,
                                      IREE_SV("<unnamed>")));
-  EXPECT_EQ(pressure_rows[0].peak_live_units, 7u);
-  EXPECT_EQ(pressure_rows[0].peak_live_values, 5u);
+  EXPECT_EQ(pressure_rows[0].peak_live_units, 3u);
+  EXPECT_EQ(pressure_rows[0].peak_live_values, 2u);
   EXPECT_TRUE(iree_string_view_equal(pressure_rows[0].peak_operation_name,
                                      IREE_SV("<block-boundary>")));
-  EXPECT_EQ(pressure_rows[1].peak_live_units, 11u);
+  EXPECT_EQ(pressure_rows[1].peak_live_units, 2u);
+  EXPECT_EQ(pressure_rows[1].peak_live_values, 1u);
   EXPECT_TRUE(iree_string_view_equal(pressure_rows[0].register_class,
                                      IREE_SV("test.gpr")));
   EXPECT_TRUE(iree_string_view_equal(pressure_rows[1].register_class,
@@ -926,6 +966,16 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
                                      IREE_SV("register.copy.b32")));
   EXPECT_EQ(pressure_origin_rows[2].live_units, 2u);
   EXPECT_EQ(pressure_origin_rows[2].live_values, 1u);
+  EXPECT_EQ(
+      pressure_origin_rows[0].live_units + pressure_origin_rows[1].live_units,
+      pressure_rows[0].peak_live_units);
+  EXPECT_EQ(
+      pressure_origin_rows[0].live_values + pressure_origin_rows[1].live_values,
+      pressure_rows[0].peak_live_values);
+  EXPECT_EQ(pressure_origin_rows[2].live_units,
+            pressure_rows[1].peak_live_units);
+  EXPECT_EQ(pressure_origin_rows[2].live_values,
+            pressure_rows[1].peak_live_values);
   EXPECT_EQ(report.schedule_band_rows.count, 8u);
   ASSERT_NE(report.schedule_band_rows.head, nullptr);
   loom_target_compile_report_schedule_band_row_t schedule_band_rows[8] = {};
@@ -1285,8 +1335,11 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   loom_target_compile_report_t allocation_report = {};
   loom_target_compile_report_initialize(&allocation_report,
                                         iree_allocator_system());
+  allocation_report.requested_detail_flags =
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS;
   IREE_ASSERT_OK(loom_target_compile_report_record_low_allocation(
       &allocation_report, &frame.allocation));
+  EXPECT_FALSE(loom_module_value_ordinal_scratch_is_active(module));
   EXPECT_TRUE(iree_string_view_equal(allocation_report.function_name,
                                      report.function_name));
   EXPECT_TRUE(iree_string_view_equal(allocation_report.target_bundle_name,
@@ -1295,6 +1348,19 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
             report.allocation_spill_count);
   EXPECT_EQ(allocation_report.allocation_assignment_count,
             report.allocation_assignment_count);
+  ASSERT_EQ(allocation_report.pressure_origin_rows.count, 2u);
+  const auto* allocation_pressure_origins =
+      static_cast<const loom_target_compile_report_pressure_origin_row_t*>(
+          loom_target_compile_report_vec_const_rows(
+              allocation_report.pressure_origin_rows.head));
+  EXPECT_EQ(allocation_pressure_origins[0].origin_kind,
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN);
+  EXPECT_EQ(allocation_pressure_origins[0].live_units, 3u);
+  EXPECT_EQ(allocation_pressure_origins[0].live_values, 2u);
+  EXPECT_EQ(allocation_pressure_origins[1].origin_kind,
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN);
+  EXPECT_EQ(allocation_pressure_origins[1].live_units, 2u);
+  EXPECT_EQ(allocation_pressure_origins[1].live_values, 1u);
   loom_target_compile_report_deinitialize(&allocation_report);
 
   loom_target_compile_report_deinitialize(&report);

@@ -503,57 +503,61 @@ iree_status_t loom_target_compile_report_record_low_lowering(
   loom_target_compile_report_memory_batch_initialize(report, &memory_arena,
                                                      &memory_batch);
   iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0;
-       i < lowering_report->memory_rows.count && iree_status_is_ok(status);
-       ++i) {
-    const loom_low_lower_memory_report_row_t* source_row =
-        &lowering_report->memory_rows.rows[i];
-    const loom_target_compile_report_memory_interval_t source_interval =
-        loom_target_compile_report_source_interval(
-            &source_row->source_interval);
-    const loom_target_compile_report_source_low_memory_row_t row = {
-        .function_name = source_row->function_name,
-        .source_op_name = source_row->source_op_name,
-        .source_op_kind = source_row->source_op_kind,
-        .source_root_name = source_row->source_root_name,
-        .source_root_argument_index = source_row->source_root_argument_index,
-        .memory_space = source_row->memory_space,
-        .operation_kind = source_row->operation_kind,
-        .packet_key = source_row->packet_key,
-        .strategy_key = source_row->strategy_key,
-        .address_form = source_row->address_form,
-        .dynamic_term_kind = source_row->dynamic_term_kind,
-        .fallback_reason = source_row->fallback_reason,
-        .static_offset_bytes = source_row->static_offset_bytes,
-        .element_byte_count = source_row->element_byte_count,
-        .vector_lane_count = source_row->vector_lane_count,
-        .issued_read_byte_count = source_row->issued_read_byte_count,
-        .issued_write_byte_count = source_row->issued_write_byte_count,
-        .issued_read_unknown_width_count =
-            source_row->issued_read_unknown_width_count,
-        .issued_write_unknown_width_count =
-            source_row->issued_write_unknown_width_count,
-        .dynamic_stride_bytes = source_row->dynamic_stride_bytes,
-        .vector_lane_stride_bytes = source_row->vector_lane_stride_bytes,
-        .storage_element_format = source_row->storage_element_format,
-        .storage_scale_format = source_row->storage_scale_format,
-        .storage_secondary_scale_format =
-            source_row->storage_secondary_scale_format,
-        .storage_payload_packing = source_row->storage_payload_packing,
-        .storage_scale_topology = source_row->storage_scale_topology,
-        .storage_affine_policy = source_row->storage_affine_policy,
-        .storage_rounding_policy = source_row->storage_rounding_policy,
-        .storage_codebook_policy = source_row->storage_codebook_policy,
-        .storage_sparsity_policy = source_row->storage_sparsity_policy,
-        .bank_service =
-            loom_target_compile_report_bank_service(&source_row->bank_service),
-        .subgroup_access = loom_target_compile_report_subgroup_access(
-            &source_row->subgroup_access),
-        .source_interval = source_interval,
-        .execution_count_plus_one = source_row->execution_count_plus_one,
-    };
-    status =
-        loom_target_compile_report_memory_batch_append(&memory_batch, &row);
+  for (const loom_low_lower_report_row_vec_t* vec =
+           lowering_report->memory_rows.head;
+       vec != NULL && iree_status_is_ok(status); vec = vec->next) {
+    const loom_low_lower_memory_report_row_t* source_rows =
+        loom_low_lower_memory_report_row_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count && iree_status_is_ok(status);
+         ++i) {
+      const loom_low_lower_memory_report_row_t* source_row = &source_rows[i];
+      const loom_target_compile_report_memory_interval_t source_interval =
+          loom_target_compile_report_source_interval(
+              &source_row->source_interval);
+      const loom_target_compile_report_source_low_memory_row_t row = {
+          .function_name = source_row->function_name,
+          .source_op_name = source_row->source_op_name,
+          .source_op_kind = source_row->source_op_kind,
+          .source_root_name = source_row->source_root_name,
+          .source_root_argument_index = source_row->source_root_argument_index,
+          .memory_space = source_row->memory_space,
+          .operation_kind = source_row->operation_kind,
+          .packet_key = source_row->packet_key,
+          .strategy_key = source_row->strategy_key,
+          .address_form = source_row->address_form,
+          .dynamic_term_kind = source_row->dynamic_term_kind,
+          .fallback_reason = source_row->fallback_reason,
+          .static_offset_bytes = source_row->static_offset_bytes,
+          .element_byte_count = source_row->element_byte_count,
+          .vector_lane_count = source_row->vector_lane_count,
+          .issued_read_byte_count = source_row->issued_read_byte_count,
+          .issued_write_byte_count = source_row->issued_write_byte_count,
+          .issued_read_unknown_width_count =
+              source_row->issued_read_unknown_width_count,
+          .issued_write_unknown_width_count =
+              source_row->issued_write_unknown_width_count,
+          .dynamic_stride_bytes = source_row->dynamic_stride_bytes,
+          .vector_lane_stride_bytes = source_row->vector_lane_stride_bytes,
+          .storage_element_format = source_row->storage_element_format,
+          .storage_scale_format = source_row->storage_scale_format,
+          .storage_secondary_scale_format =
+              source_row->storage_secondary_scale_format,
+          .storage_payload_packing = source_row->storage_payload_packing,
+          .storage_scale_topology = source_row->storage_scale_topology,
+          .storage_affine_policy = source_row->storage_affine_policy,
+          .storage_rounding_policy = source_row->storage_rounding_policy,
+          .storage_codebook_policy = source_row->storage_codebook_policy,
+          .storage_sparsity_policy = source_row->storage_sparsity_policy,
+          .bank_service = loom_target_compile_report_bank_service(
+              &source_row->bank_service),
+          .subgroup_access = loom_target_compile_report_subgroup_access(
+              &source_row->subgroup_access),
+          .source_interval = source_interval,
+          .execution_count_plus_one = source_row->execution_count_plus_one,
+      };
+      status =
+          loom_target_compile_report_memory_batch_append(&memory_batch, &row);
+    }
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_memory_batch_finish(&memory_batch);
@@ -606,20 +610,8 @@ loom_target_compile_report_record_low_emission_frame_with_dynamic_context(
     loom_target_compile_report_record_move_causes(report, frame);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_target_compile_report_record_low_allocation_contents(
-        report, &frame->allocation, &frame->schedule, dynamic_context);
-  }
-  if (iree_status_is_ok(status)) {
-    loom_target_compile_report_record_allocation_materialization(
-        report, frame->materialized_spill_storage_count,
-        frame->materialized_spill_storage_bytes,
-        frame->materialized_spill_store_count,
-        frame->materialized_spill_store_bytes, frame->materialized_reload_count,
-        frame->materialized_reload_bytes);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_target_compile_report_record_materialized_spill_rows(report,
-                                                                       frame);
+    status = loom_target_compile_report_record_low_frame_allocation(
+        report, frame, dynamic_context);
   }
   loom_low_allocation_release_value_scratch(&value_scratch);
   return status;

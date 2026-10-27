@@ -35,7 +35,7 @@ typedef enum loomc_pass_trace_flag_bits_e {
   /// Trace the IR immediately before every pass invocation.
   LOOMC_PASS_TRACE_FLAG_BEFORE_ALL = 1u << 0,
 
-  /// Trace the IR immediately after every pass invocation.
+  /// Trace the IR after every pass invocation whose callback returns OK.
   LOOMC_PASS_TRACE_FLAG_AFTER_ALL = 1u << 1,
 } loomc_pass_trace_flag_bits_t;
 
