@@ -571,3 +571,54 @@ func.def @wide_static_index_bound_preserves_body_range() {
 ^_bb3:
   func.return
 }
+
+// ====
+
+// RUN: pass scf-to-cfg,canonicalize,dce
+
+// Lowering a structured loop must preserve the two precise feedback rounds
+// used to establish the carried XOR envelope.
+func.def @xor_feedback_survives_cfg_lowering(%count: index) -> (i64, i64, i64) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %mask = index.constant 5760 : index
+  %last = scf.for %iv = [%begin to %count step %step](%origin = %begin : index) -> (index) {
+    %lower = test.fact_range_lo %origin : index -> i64
+    %upper = test.fact_range_hi %origin : index -> i64
+    %divisor = test.fact_divisor %origin : index -> i64
+    test.use %lower, %upper, %divisor : i64, i64, i64
+    %next = index.xori %origin, %mask : index
+    scf.yield %next : index
+  }
+  %result_lower = test.fact_range_lo %last : index -> i64
+  %result_upper = test.fact_range_hi %last : index -> i64
+  %result_divisor = test.fact_divisor %last : index -> i64
+  func.return %result_lower, %result_upper, %result_divisor : i64, i64, i64
+}
+
+// ----
+func.def @xor_feedback_survives_cfg_lowering(%count: index) -> (i64, i64, i64) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %mask = index.constant 5760 : index
+  cfg.br ^_bb1(%begin: index, %begin: index)
+^_bb1(%19: index, %20: index):
+  %23 = index.cmp slt, %19, %count : index
+  cfg.cond_br %23, ^_bb2, ^_bb3
+^_bb2:
+  %iv, %origin = index.assume %19, %20 [range(%19, 0, 9223372036854775806), lt(%19, %count), range(%20, 0, 8064), multiple_of(%20, 128)] : index, index
+  %lower = scalar.constant 0 : i64
+  %upper = scalar.constant 8064 : i64
+  %divisor = scalar.constant 128 : i64
+  test.use %lower, %upper, %divisor : i64, i64, i64
+  %next = index.xori %origin, %mask : index
+  %24 = index.add %iv, %step : index
+  cfg.br ^_bb1(%24: index, %next: index)
+^_bb3:
+  cfg.br ^_bb4(%20: index)
+^_bb4(%17: index):
+  %result_lower = scalar.constant 0 : i64
+  %result_upper = scalar.constant 8064 : i64
+  %result_divisor = scalar.constant 128 : i64
+  func.return %result_lower, %result_upper, %result_divisor : i64, i64, i64
+}

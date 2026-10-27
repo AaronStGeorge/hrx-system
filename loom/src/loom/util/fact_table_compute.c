@@ -535,9 +535,9 @@ static loom_value_facts_t loom_value_fact_table_refine_cfg_recurrence(
 static iree_status_t loom_value_fact_table_compute_cfg_block_arg(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_value_fact_cfg_region_t* region, const loom_scc_t* component,
-    uint16_t block_index, uint16_t arg_index, bool widen, uint32_t iteration,
-    loom_value_fact_cfg_changed_fn_t on_changed, void* user_data,
-    bool* out_changed) {
+    uint16_t block_index, uint16_t arg_index, bool widen,
+    uint32_t feedback_round, loom_value_fact_cfg_changed_fn_t on_changed,
+    void* user_data, bool* out_changed) {
   const loom_cfg_graph_t* graph = &region->graph;
   const loom_block_t* block = graph->blocks[block_index].block;
   if (!block || arg_index >= block->arg_count) {
@@ -662,7 +662,7 @@ static iree_status_t loom_value_fact_table_compute_cfg_block_arg(
           loom_value_fact_table_lookup(table, value_id);
       IREE_RETURN_IF_ERROR(loom_value_fact_table_widen_for_type(
           table, module, member_type, table, current_facts, table, facts,
-          iteration, &facts));
+          feedback_round, &facts));
       if (is_extent) {
         facts = loom_value_fact_table_clamp_extent_domain(member_type, facts);
       }
@@ -687,13 +687,13 @@ static iree_status_t loom_value_fact_table_compute_cfg_block_arg(
 static iree_status_t loom_value_fact_table_compute_cfg_forwarding(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_value_fact_cfg_region_t* region,
-    iree_host_size_t control_flow_component, uint32_t iteration, bool widen,
-    iree_arena_allocator_t* recurrence_arena, bool* out_changed) {
+    iree_host_size_t control_flow_component, uint32_t feedback_round,
+    bool widen, iree_arena_allocator_t* recurrence_arena, bool* out_changed) {
   IREE_RETURN_IF_ERROR(loom_value_fact_cfg_update_forwarding(
       region, control_flow_component, table->transient_arena));
   const loom_scc_t* blocks =
       &region->control_flow.components.values[control_flow_component];
-  if (widen && iteration == 1) {
+  if (widen && feedback_round == 0) {
     for (iree_host_size_t i = 0; i < blocks->node_count; ++i) {
       IREE_RETURN_IF_ERROR(loom_value_fact_cfg_build_recurrences(
           table, module, region, (uint16_t)blocks->nodes[i], recurrence_arena));
@@ -708,8 +708,8 @@ static iree_status_t loom_value_fact_table_compute_cfg_forwarding(
         &region->arguments[component->nodes[0]];
     IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_cfg_block_arg(
         table, module, region, component->is_cycle ? component : NULL,
-        argument->block_index, argument->argument_index, widen, iteration, NULL,
-        NULL, out_changed));
+        argument->block_index, argument->argument_index, widen, feedback_round,
+        NULL, NULL, out_changed));
   }
   return iree_ok_status();
 }
@@ -955,19 +955,21 @@ static iree_status_t loom_value_fact_table_iterate_cfg_component(
   const iree_host_size_t* blocks = component->nodes;
   loom_value_fact_cfg_seed_control(table, region, component);
   bool converged = false;
-  for (uint32_t iteration = 0; iteration < LOOM_VALUE_FACT_CFG_MAX_ITERATIONS;
-       ++iteration) {
+  for (uint32_t sweep = 0; sweep < LOOM_VALUE_FACT_CFG_MAX_ITERATIONS;
+       ++sweep) {
     bool changed = false;
     // Seed producers in execution order before joining the whole forwarding
     // partition. An inner loop's initializer can live inside this component.
-    if (iteration != 0) {
+    // The seed sweep has no backedge join and consumes no widening round.
+    if (sweep != 0) {
+      const uint32_t feedback_round = sweep - 1;
       IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_cfg_forwarding(
-          table, module, region, component_index, iteration, /*widen=*/true,
-          scratch_arena, &changed));
+          table, module, region, component_index, feedback_round,
+          /*widen=*/true, scratch_arena, &changed));
     }
     for (iree_host_size_t i = 0; i < component->node_count; ++i) {
       uint16_t block_index = blocks[i];
-      if (iteration == 0) {
+      if (sweep == 0) {
         IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_cfg_block_args(
             table, module, region, block_index, &changed));
       }
@@ -989,7 +991,7 @@ static iree_status_t loom_value_fact_table_iterate_cfg_component(
     // after widening, without another convergence solve or new analysis.
     bool changed = false;
     IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_cfg_forwarding(
-        table, module, region, component_index, /*iteration=*/0,
+        table, module, region, component_index, /*feedback_round=*/0,
         /*widen=*/false, scratch_arena, &changed));
     if (changed) {
       for (iree_host_size_t i = 0; i < component->node_count; ++i) {

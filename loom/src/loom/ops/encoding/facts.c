@@ -152,10 +152,10 @@ static iree_status_t loom_encoding_facts_widen_extension(
     loom_type_t type, loom_value_fact_table_t* target,
     const loom_value_fact_table_t* previous_table, loom_value_facts_t previous,
     const loom_value_fact_table_t* next_table, loom_value_facts_t next,
-    uint32_t iteration, loom_value_facts_t* inout_facts) {
+    uint32_t feedback_round, loom_value_facts_t* inout_facts) {
   (void)domain;
   return loom_encoding_facts_merge_extension(
-      LOOM_ENCODING_FACT_MERGE_WIDEN, iteration, module, type, target,
+      LOOM_ENCODING_FACT_MERGE_WIDEN, feedback_round, module, type, target,
       previous_table, previous, next_table, next, inout_facts);
 }
 
