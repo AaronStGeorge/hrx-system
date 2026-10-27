@@ -301,11 +301,10 @@ static iree_status_t loom_x86_function_stack_frame(
   return iree_ok_status();
 }
 
-static void loom_x86_function_append(loom_x86_function_t* function,
-                                     uint16_t encoding_format_id,
-                                     uint16_t encoding_id,
-                                     loom_x86_encoding_operands_t operands,
-                                     uint32_t reference) {
+void loom_x86_function_append(loom_x86_function_t* function,
+                              uint16_t encoding_format_id, uint16_t encoding_id,
+                              loom_x86_encoding_operands_t operands,
+                              uint32_t reference) {
   function->instructions[function->instruction_count++] =
       (loom_x86_instruction_t){
           .operands = operands,
@@ -400,7 +399,7 @@ static void loom_x86_function_note_upper_vector_state(
   }
 }
 
-static void loom_x86_function_append_transport(
+void loom_x86_function_append_transport(
     loom_x86_function_t* function,
     const loom_x86_transport_instruction_t* instruction) {
   if (instruction->encoding_format_id) {

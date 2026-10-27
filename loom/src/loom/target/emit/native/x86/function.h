@@ -14,6 +14,7 @@
 #include "loom/target/emit/native/object.h"
 #include "loom/target/emit/native/x86/abi.h"
 #include "loom/target/emit/native/x86/encoding.h"
+#include "loom/target/emit/native/x86/transport.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,6 +84,22 @@ typedef struct loom_x86_function_t {
   // Fixed stack allocation and restoration after callee saves.
   loom_x86_stack_frame_t stack;
 } loom_x86_function_t;
+
+// Appends a concrete instruction to caller-reserved storage and accumulates
+// scalar GPR writes for the preservation envelope. Vector descriptor producers
+// retain class-aware effects separately; packed encoding recipes do not carry
+// register classes. The caller provides space for one more instruction.
+void loom_x86_function_append(loom_x86_function_t* function,
+                              uint16_t encoding_format_id, uint16_t encoding_id,
+                              loom_x86_encoding_operands_t operands,
+                              uint32_t reference);
+
+// Appends a selected transfer and retains its GPR/upper-vector-state effects.
+// Coalesced transfers append nothing and have no preservation effect. The
+// caller provides space for at most one more instruction.
+void loom_x86_function_append_transport(
+    loom_x86_function_t* function,
+    const loom_x86_transport_instruction_t* instruction);
 
 // Lays out admitted storage and the SysV preservation envelope. Alignment is a
 // power of two within signed 32-bit addressing, or zero without a requirement;

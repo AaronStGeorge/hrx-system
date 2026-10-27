@@ -12,7 +12,9 @@
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/arch/x86/register_classes.h"
 #include "loom/target/emit/native/x86/encoding.h"
+#include "loom/target/emit/native/x86/transport.h"
 
 namespace {
 
@@ -118,6 +120,102 @@ TEST_F(FunctionTest, EmptyLeafNeedsOnlyReturn) {
                                          stream_, &instruction_count, &arena_));
   EXPECT_EQ(instruction_count, 1u);
   EXPECT_EQ(Read(), Encode(Instruction(LOOM_X86_ENCODING_FORM_RETURN)));
+}
+
+TEST(FunctionConstructionTest, PreservesOnlyWrittenCalleeSavedGprs) {
+  constexpr uint8_t registers[] = {0, 1,  2,  3,  5,  6,  7, 8,
+                                   9, 10, 11, 12, 13, 14, 15};
+  for (uint16_t width : {uint16_t{0}, uint16_t{LOOM_X86_ENCODING_REX_W}}) {
+    for (uint8_t reg : registers) {
+      SCOPED_TRACE(::testing::Message()
+                   << "register=" << +reg << " width=" << width);
+      loom_x86_instruction_t instructions[1] = {};
+      loom_x86_function_t function = {.instructions = instructions};
+      loom_x86_function_append(&function, LOOM_X86_ENCODING_FORM_CONSTANT,
+                               0xb8 | width, {.immediate = 42, .result = reg},
+                               UINT32_MAX);
+      EXPECT_EQ(function.instruction_count, 1u);
+      const bool preserved = reg == 3 || reg == 5 || reg >= 12;
+      EXPECT_EQ(function.saved_registers, preserved ? 1u << reg : 0);
+      EXPECT_FALSE(function.may_dirty_upper_vector_state);
+      EXPECT_EQ(instructions[0].operands.result, reg);
+    }
+  }
+}
+
+TEST(FunctionConstructionTest, AccumulatesWritesButNotReadsOrVectorOrdinals) {
+  loom_x86_instruction_t instructions[4] = {};
+  loom_x86_function_t function = {.instructions = instructions};
+  loom_x86_function_append(&function, LOOM_X86_ENCODING_FORM_COMPARE, 0x39,
+                           {.inputs = {3, 12}}, UINT32_MAX);
+  EXPECT_EQ(function.saved_registers, 0);
+  // A packed vector result numbered 15 does not name the GPR R15.
+  loom_x86_function_append(&function, 0xc1c0, 0x096f,
+                           {.result = 15, .inputs = {7}}, UINT32_MAX);
+  EXPECT_EQ(function.saved_registers, 0);
+  loom_x86_function_append(&function, LOOM_X86_ENCODING_FORM_CONSTANT, 0xb8,
+                           {.immediate = 42, .result = 3}, UINT32_MAX);
+  loom_x86_function_append(&function, LOOM_X86_ENCODING_FORM_CONSTANT, 0xb8,
+                           {.immediate = 43, .result = 12}, UINT32_MAX);
+  EXPECT_EQ(function.instruction_count, 4u);
+  EXPECT_EQ(function.saved_registers, (1u << 3) | (1u << 12));
+}
+
+TEST(FunctionConstructionTest, RetainsSelectedTransportEffects) {
+  struct TransferCase {
+    // Register class of the destination.
+    uint16_t destination_class;
+    // Physical allocation ordinal within the destination class.
+    uint32_t destination;
+    // Register class of the source.
+    uint16_t source_class;
+    // Physical allocation ordinal within the source class.
+    uint32_t source;
+    // Callee-preserved architectural GPR writes.
+    uint16_t saved_registers;
+    // Whether the transfer can dirty the low sixteen YMM/ZMM registers.
+    bool dirty_upper_state;
+  };
+  const TransferCase cases[] = {
+      {LOOM_X86_REGISTER_CLASS_GPR64, 12, LOOM_X86_REGISTER_CLASS_GPR64, 7,
+       1u << 12, false},
+      {LOOM_X86_REGISTER_CLASS_GPR32, 3, LOOM_X86_REGISTER_CLASS_GPR64, 7,
+       1u << 3, false},
+      {LOOM_X86_REGISTER_CLASS_GPR64, 12, LOOM_X86_REGISTER_CLASS_GPR64, 12, 0,
+       false},
+      {LOOM_X86_REGISTER_CLASS_XMM, 15, LOOM_X86_REGISTER_CLASS_XMM, 9, 0,
+       false},
+      {LOOM_X86_REGISTER_CLASS_YMM, 12, LOOM_X86_REGISTER_CLASS_YMM, 11, 0,
+       true},
+      {LOOM_X86_REGISTER_CLASS_ZMM, 18, LOOM_X86_REGISTER_CLASS_ZMM, 17, 0,
+       false},
+      {LOOM_X86_REGISTER_CLASS_K, 0, LOOM_X86_REGISTER_CLASS_K, 7, 0, false},
+      {LOOM_X86_REGISTER_CLASS_GPR64, 12, LOOM_X86_REGISTER_CLASS_ZMM, 17,
+       1u << 12, false},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "destination class=" << test_case.destination_class
+                 << " source class=" << test_case.source_class);
+    loom_x86_transport_instruction_t transfer;
+    ASSERT_TRUE(loom_x86_transport_select_register(
+        test_case.destination_class, test_case.destination,
+        test_case.source_class, test_case.source, &transfer));
+    loom_x86_instruction_t instructions[2] = {};
+    loom_x86_function_t function = {.instructions = instructions};
+    loom_x86_function_append_transport(&function, &transfer);
+    EXPECT_EQ(function.instruction_count,
+              transfer.encoding_format_id == 0 ? 0u : 1u);
+    EXPECT_EQ(function.saved_registers, test_case.saved_registers);
+    EXPECT_EQ(function.may_dirty_upper_vector_state,
+              test_case.dirty_upper_state);
+    // Appending a read-only scalar instruction preserves accumulated effects.
+    loom_x86_function_append(&function, LOOM_X86_ENCODING_FORM_COMPARE, 0x39,
+                             {.inputs = {3, 12}}, UINT32_MAX);
+    EXPECT_EQ(function.saved_registers, test_case.saved_registers);
+    EXPECT_EQ(function.may_dirty_upper_vector_state,
+              test_case.dirty_upper_state);
+  }
 }
 
 TEST(FunctionStackLayoutTest, PaddingAndRestoration) {
