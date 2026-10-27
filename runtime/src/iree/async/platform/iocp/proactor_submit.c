@@ -8,7 +8,7 @@
 //
 // This module validates complete batches, reserves all carrier and message
 // storage needed by active heads, and only then commits operations. Per-type
-// commit helpers issue overlapped I/O calls or route poll-owned work through
+// commit helpers issue socket I/O calls or route poll-owned work through
 // the pending queue. Platform failures after acceptance are delivered through
 // ordinary terminal completions instead of escaping from submit().
 
@@ -119,8 +119,8 @@ static void iree_async_proactor_iocp_post_direct_completion(
   if (!iree_async_iocp_completion_port_try_post(&proactor->completion_port, 0,
                                                 0, &carrier->overlapped,
                                                 &error_code)) {
-    iree_async_iocp_fallback_completion_slist_push(
-        &proactor->fallback_completion_queue, carrier);
+    iree_async_iocp_carrier_slist_push(&proactor->fallback_completion_queue,
+                                       carrier);
     iree_async_iocp_completion_port_request_fallback_wake(
         &proactor->completion_port);
   }
@@ -659,13 +659,27 @@ static void iree_async_proactor_iocp_commit_message(
 // File I/O submit handlers
 //===----------------------------------------------------------------------===//
 
-void iree_async_proactor_iocp_finish_file_issue(
+iree_status_t iree_async_proactor_iocp_finish_file_issue(
     iree_async_proactor_iocp_t* proactor, iree_async_iocp_carrier_t* carrier,
     uint32_t error_code) {
   if (error_code == ERROR_SUCCESS || error_code == ERROR_IO_PENDING) {
+    // The RMW pairs with cancel's flag publication. Either we observe intent
+    // that preceded native admission, or cancel's native call follows this
+    // already-issued request. A load alone cannot establish that ordering.
+    const int32_t flags = iree_atomic_fetch_or(
+        &carrier->operation->internal_flags, 0, iree_memory_order_acq_rel);
+    if (iree_any_bit_set(flags, IREE_ASYNC_IOCP_INTERNAL_FLAG_CANCELLED) &&
+        !CancelIoEx((HANDLE)carrier->io_handle, &carrier->overlapped)) {
+      DWORD error = GetLastError();
+      if (error != ERROR_NOT_FOUND) {
+        return iree_make_status(iree_status_code_from_win32_error(error),
+                                "CancelIoEx after file admission failed: %lu",
+                                (unsigned long)error);
+      }
+    }
     // Immediate success also produces an IOCP packet. Only that packet returns
     // ownership, just as for a request that reports IO_PENDING.
-    return;
+    return iree_ok_status();
   }
   const bool read =
       carrier->operation->type == IREE_ASYNC_OPERATION_TYPE_FILE_READ;
@@ -678,6 +692,7 @@ void iree_async_proactor_iocp_finish_file_issue(
     iree_async_proactor_iocp_post_win32_error(proactor, carrier, error_code,
                                               read ? "ReadFile" : "WriteFile");
   }
+  return iree_ok_status();
 }
 
 static void iree_async_proactor_iocp_commit_file_open(
@@ -770,7 +785,7 @@ static void iree_async_proactor_iocp_commit_file_open(
                                                   iree_ok_status());
 }
 
-static void iree_async_proactor_iocp_commit_file_read(
+static iree_status_t iree_async_proactor_iocp_commit_file_read(
     iree_async_proactor_iocp_t* proactor,
     iree_async_file_read_operation_t* read_op,
     iree_async_iocp_carrier_t* carrier) {
@@ -790,10 +805,10 @@ static void iree_async_proactor_iocp_commit_file_read(
   BOOL read_ok = ReadFile(file_handle, buffer_ptr, buffer_length, NULL,
                           &carrier->overlapped);
   DWORD error = read_ok ? ERROR_SUCCESS : GetLastError();
-  iree_async_proactor_iocp_finish_file_issue(proactor, carrier, error);
+  return iree_async_proactor_iocp_finish_file_issue(proactor, carrier, error);
 }
 
-static void iree_async_proactor_iocp_commit_file_write(
+static iree_status_t iree_async_proactor_iocp_commit_file_write(
     iree_async_proactor_iocp_t* proactor,
     iree_async_file_write_operation_t* write_op,
     iree_async_iocp_carrier_t* carrier) {
@@ -816,7 +831,7 @@ static void iree_async_proactor_iocp_commit_file_write(
   BOOL write_ok = WriteFile(file_handle, buffer_ptr, buffer_length, NULL,
                             &carrier->overlapped);
   DWORD error = write_ok ? ERROR_SUCCESS : GetLastError();
-  iree_async_proactor_iocp_finish_file_issue(proactor, carrier, error);
+  return iree_async_proactor_iocp_finish_file_issue(proactor, carrier, error);
 }
 
 static void iree_async_proactor_iocp_commit_file_close(
@@ -846,6 +861,64 @@ static void iree_async_proactor_iocp_commit_file_close(
                              "CloseHandle failed (Win32 error %lu)",
                              (unsigned long)close_error);
   iree_async_proactor_iocp_post_direct_completion(proactor, carrier, status);
+}
+
+//===----------------------------------------------------------------------===//
+// Poll-owned file admission
+//===----------------------------------------------------------------------===//
+
+iree_status_t iree_async_proactor_iocp_drain_file_submissions(
+    iree_async_proactor_iocp_t* proactor, iree_host_size_t* completed_count) {
+  iree_async_iocp_carrier_t* head = NULL;
+  iree_async_iocp_carrier_t* tail = NULL;
+  iree_async_iocp_carrier_slist_flush(
+      &proactor->pending_files, IREE_ATOMIC_SLIST_FLUSH_ORDER_APPROXIMATE_FIFO,
+      &head, &tail);
+  // A failed native cancellation leaves its I/O outstanding. Continue admitting
+  // the other independently accepted entries in this detached batch; their
+  // ownership cannot be abandoned when reporting the cancellation error.
+  iree_status_t status = iree_ok_status();
+  while (head) {
+    iree_async_iocp_carrier_t* carrier = head;
+    head = iree_async_iocp_carrier_slist_get_next(carrier);
+    iree_async_iocp_carrier_slist_set_next(carrier, NULL);
+    iree_async_operation_t* operation = carrier->operation;
+    if (iree_any_bit_set(iree_async_operation_load_internal_flags(operation),
+                         IREE_ASYNC_IOCP_INTERNAL_FLAG_CANCELLED)) {
+      operation->next = NULL;
+      iree_async_proactor_iocp_release_carrier(proactor, carrier);
+      iree_async_proactor_iocp_dispatch_completion(
+          proactor, operation, iree_status_from_code(IREE_STATUS_CANCELLED),
+          IREE_ASYNC_COMPLETION_FLAG_NONE, completed_count);
+      continue;
+    }
+    switch (operation->type) {
+      case IREE_ASYNC_OPERATION_TYPE_FILE_OPEN:
+        iree_async_proactor_iocp_commit_file_open(
+            proactor, (iree_async_file_open_operation_t*)operation, carrier);
+        break;
+      case IREE_ASYNC_OPERATION_TYPE_FILE_READ:
+        status = iree_status_join(
+            status, iree_async_proactor_iocp_commit_file_read(
+                        proactor, (iree_async_file_read_operation_t*)operation,
+                        carrier));
+        break;
+      case IREE_ASYNC_OPERATION_TYPE_FILE_WRITE:
+        status = iree_status_join(
+            status, iree_async_proactor_iocp_commit_file_write(
+                        proactor, (iree_async_file_write_operation_t*)operation,
+                        carrier));
+        break;
+      case IREE_ASYNC_OPERATION_TYPE_FILE_CLOSE:
+        iree_async_proactor_iocp_commit_file_close(
+            proactor, (iree_async_file_close_operation_t*)operation, carrier);
+        break;
+      default:
+        IREE_ASSERT_UNREACHABLE("only file carriers await file admission");
+        IREE_BUILTIN_UNREACHABLE();
+    }
+  }
+  return status;
 }
 
 //===----------------------------------------------------------------------===//
@@ -954,7 +1027,8 @@ static void iree_async_proactor_iocp_rollback_reservations(
   }
 }
 
-static void iree_async_proactor_iocp_commit_operation(
+// Returns whether this head queued file admission requiring a batch wake.
+static bool iree_async_proactor_iocp_commit_operation(
     iree_async_proactor_iocp_t* proactor, iree_async_operation_t* operation) {
   if (operation->type == IREE_ASYNC_OPERATION_TYPE_SEQUENCE) {
     iree_async_sequence_prepare_for_submission(
@@ -972,82 +1046,72 @@ static void iree_async_proactor_iocp_commit_operation(
     case IREE_ASYNC_OPERATION_TYPE_SEQUENCE:
     case IREE_ASYNC_OPERATION_TYPE_HANDLE_POLL:
       iree_async_proactor_iocp_push_pending(proactor, operation);
-      return;
+      return false;
 
     case IREE_ASYNC_OPERATION_TYPE_SOCKET_ACCEPT:
       iree_async_proactor_iocp_commit_socket_accept(
           proactor, (iree_async_socket_accept_operation_t*)operation, carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_SOCKET_CONNECT:
       iree_async_proactor_iocp_commit_socket_connect(
           proactor, (iree_async_socket_connect_operation_t*)operation, carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_SOCKET_RECV:
       iree_async_proactor_iocp_commit_socket_recv(
           proactor, (iree_async_socket_recv_operation_t*)operation, carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_SOCKET_SEND:
       iree_async_proactor_iocp_commit_socket_send(
           proactor, (iree_async_socket_send_operation_t*)operation, carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_SOCKET_SENDTO:
       iree_async_proactor_iocp_commit_socket_sendto(
           proactor, (iree_async_socket_sendto_operation_t*)operation, carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_SOCKET_RECVFROM:
       iree_async_proactor_iocp_commit_socket_recvfrom(
           proactor, (iree_async_socket_recvfrom_operation_t*)operation,
           carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_SOCKET_RECV_POOL:
       iree_async_proactor_iocp_commit_socket_recv_pool(
           proactor, (iree_async_socket_recv_pool_operation_t*)operation,
           carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_SOCKET_CLOSE:
       iree_async_proactor_iocp_commit_socket_close(
           proactor, (iree_async_socket_close_operation_t*)operation, carrier);
-      return;
+      return false;
 
     case IREE_ASYNC_OPERATION_TYPE_SEMAPHORE_SIGNAL:
       iree_async_proactor_iocp_commit_semaphore_signal(
           proactor, (iree_async_semaphore_signal_operation_t*)operation,
           carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_SEMAPHORE_WAIT:
       iree_async_proactor_iocp_commit_semaphore_wait(
           proactor, (iree_async_semaphore_wait_operation_t*)operation, carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_NOTIFICATION_WAIT:
       iree_async_proactor_iocp_commit_notification_wait(
           proactor, (iree_async_notification_wait_operation_t*)operation);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_NOTIFICATION_SIGNAL:
       iree_async_proactor_iocp_commit_notification_signal(
           proactor, (iree_async_notification_signal_operation_t*)operation,
           carrier);
-      return;
+      return false;
     case IREE_ASYNC_OPERATION_TYPE_MESSAGE:
       iree_async_proactor_iocp_commit_message(
           proactor, (iree_async_message_operation_t*)operation, carrier);
-      return;
+      return false;
 
     case IREE_ASYNC_OPERATION_TYPE_FILE_OPEN:
-      iree_async_proactor_iocp_commit_file_open(
-          proactor, (iree_async_file_open_operation_t*)operation, carrier);
-      return;
     case IREE_ASYNC_OPERATION_TYPE_FILE_READ:
-      iree_async_proactor_iocp_commit_file_read(
-          proactor, (iree_async_file_read_operation_t*)operation, carrier);
-      return;
     case IREE_ASYNC_OPERATION_TYPE_FILE_WRITE:
-      iree_async_proactor_iocp_commit_file_write(
-          proactor, (iree_async_file_write_operation_t*)operation, carrier);
-      return;
     case IREE_ASYNC_OPERATION_TYPE_FILE_CLOSE:
-      iree_async_proactor_iocp_commit_file_close(
-          proactor, (iree_async_file_close_operation_t*)operation, carrier);
-      return;
+      iree_async_iocp_carrier_slist_push(&proactor->pending_files, carrier);
+      return true;
 
     case IREE_ASYNC_OPERATION_TYPE_FUTEX_WAIT:
     case IREE_ASYNC_OPERATION_TYPE_FUTEX_WAKE:
@@ -1100,9 +1164,14 @@ static iree_status_t iree_async_proactor_iocp_submit_prepared(
 
   iree_async_continuation_chain_iterator_t commit_iterator =
       iree_async_continuation_chain_iterator_make(operations);
+  bool queued_files = false;
   while ((operation = iree_async_continuation_chain_iterator_next(
               &commit_iterator)) != NULL) {
-    iree_async_proactor_iocp_commit_operation(proactor, operation);
+    queued_files |=
+        iree_async_proactor_iocp_commit_operation(proactor, operation);
+  }
+  if (queued_files) {
+    iree_async_proactor_iocp_wake(&proactor->base);
   }
   return iree_ok_status();
 }

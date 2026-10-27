@@ -166,8 +166,9 @@ typedef struct iree_async_iocp_carrier_t {
   struct iree_async_iocp_carrier_t* next;
   struct iree_async_iocp_carrier_t* prev;
 
-  // Intrusive linkage while a failed synthetic post awaits poll dispatch.
-  iree_atomic_slist_intrusive_ptr_t fallback_next;
+  // Intrusive linkage for pending file admission or failed-post completion.
+  // These queue memberships occupy disjoint phases of the carrier lifetime.
+  iree_atomic_slist_intrusive_ptr_t queue_next;
 
   // Per-type auxiliary data. The active member is determined by |type|.
 #if defined(IREE_PLATFORM_WINDOWS)
@@ -238,10 +239,10 @@ typedef struct iree_async_iocp_carrier_t {
 #endif
 } iree_async_iocp_carrier_t;
 
-IREE_TYPED_ATOMIC_SLIST_WRAPPER(iree_async_iocp_fallback_completion,
+IREE_TYPED_ATOMIC_SLIST_WRAPPER(iree_async_iocp_carrier,
                                 iree_async_iocp_carrier_t,
                                 offsetof(iree_async_iocp_carrier_t,
-                                         fallback_next));
+                                         queue_next));
 
 //===----------------------------------------------------------------------===//
 // Proactor implementation struct
@@ -252,7 +253,8 @@ IREE_TYPED_ATOMIC_SLIST_WRAPPER(iree_async_iocp_fallback_completion,
 // Unlike the POSIX backend, IOCP is completion-based: the kernel performs I/O
 // and posts completion packets to the port. This means:
 //   - No worker thread pool (I/O completes in kernel, not userspace)
-//   - Socket/file operations issue overlapped I/O directly from submit()
+//   - Socket operations issue overlapped I/O directly from submit()
+//   - Potentially blocking native file calls issue only on the poll owner
 //   - poll() calls GetQueuedCompletionStatusEx to dequeue completions
 //   - wake() uses PostQueuedCompletionStatus with a sentinel
 //   - MPSC pending_queue only for non-I/O operations (timers, events, etc.)
@@ -269,9 +271,13 @@ struct iree_async_proactor_iocp_t {
   // pushes here from arbitrary threads; poll() drains on the poll thread.
   iree_atomic_slist_t pending_queue;
 
+  // Accepted file carriers awaiting native admission on the poll owner.
+  // Operation next pointers retain their exact carrier/cancellation identity.
+  iree_async_iocp_carrier_slist_t pending_files;
+
   // Synthetic completions whose IOCP post failed after batch acceptance.
   // Entries are already-owned carriers; publication cannot allocate or fail.
-  iree_async_iocp_fallback_completion_slist_t fallback_completion_queue;
+  iree_async_iocp_carrier_slist_t fallback_completion_queue;
 
   // Semaphore wait operations funneled to the poll thread.
   iree_atomic_slist_t pending_semaphore_waits;
@@ -431,9 +437,18 @@ void iree_async_proactor_iocp_release_carrier(
 // Processes ReadFile/WriteFile's immediate result after accepted submission.
 // SUCCESS and IO_PENDING retain the carrier for its native completion packet;
 // other results publish exactly one synthetic completion on the poll owner.
-void iree_async_proactor_iocp_finish_file_issue(
+// Joins cancellation racing native admission. A cancellation syscall failure
+// propagates through poll without returning the accepted native I/O borrow.
+iree_status_t iree_async_proactor_iocp_finish_file_issue(
     iree_async_proactor_iocp_t* proactor, iree_async_iocp_carrier_t* carrier,
     uint32_t error_code);
+
+// Issues a detached batch of accepted file operations on the poll owner.
+// Adds terminal pre-issue cancellations to completed_count. Native issue errors
+// complete through carriers; native cancellation errors return while the
+// outstanding native operation remains owned until its completion packet.
+iree_status_t iree_async_proactor_iocp_drain_file_submissions(
+    iree_async_proactor_iocp_t* proactor, iree_host_size_t* completed_count);
 
 // Returns accepted operation resources and dispatches its callback on the
 // poll owner. The callback may destroy the operation.

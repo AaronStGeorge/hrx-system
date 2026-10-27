@@ -322,7 +322,8 @@ iree_status_t iree_async_proactor_create_iocp(
 
   // Initialize MPSC queues and carrier freelist.
   iree_atomic_slist_initialize(&proactor->pending_queue);
-  iree_async_iocp_fallback_completion_slist_initialize(
+  iree_async_iocp_carrier_slist_initialize(&proactor->pending_files);
+  iree_async_iocp_carrier_slist_initialize(
       &proactor->fallback_completion_queue);
   iree_atomic_slist_initialize(&proactor->pending_semaphore_waits);
   iree_async_semaphore_wait_context_initialize(
@@ -683,7 +684,8 @@ static void iree_async_proactor_iocp_destroy(
 
   // Deinitialize MPSC queues and carrier freelist.
   iree_atomic_slist_deinitialize(&proactor->pending_queue);
-  iree_async_iocp_fallback_completion_slist_deinitialize(
+  iree_async_iocp_carrier_slist_deinitialize(&proactor->pending_files);
+  iree_async_iocp_carrier_slist_deinitialize(
       &proactor->fallback_completion_queue);
   iree_atomic_slist_deinitialize(&proactor->pending_semaphore_waits);
   iree_async_semaphore_wait_context_deinitialize(
@@ -1279,7 +1281,7 @@ static iree_host_size_t iree_async_proactor_iocp_drain_fallback_completions(
     iree_async_proactor_iocp_t* proactor) {
   iree_async_iocp_carrier_t* head = NULL;
   iree_async_iocp_carrier_t* tail = NULL;
-  if (!iree_async_iocp_fallback_completion_slist_flush(
+  if (!iree_async_iocp_carrier_slist_flush(
           &proactor->fallback_completion_queue,
           IREE_ATOMIC_SLIST_FLUSH_ORDER_APPROXIMATE_FIFO, &head, &tail)) {
     return 0;
@@ -1289,8 +1291,8 @@ static iree_host_size_t iree_async_proactor_iocp_drain_fallback_completions(
   iree_async_iocp_carrier_t* carrier = head;
   while (carrier) {
     iree_async_iocp_carrier_t* next =
-        iree_async_iocp_fallback_completion_slist_get_next(carrier);
-    iree_async_iocp_fallback_completion_slist_set_next(carrier, NULL);
+        iree_async_iocp_carrier_slist_get_next(carrier);
+    iree_async_iocp_carrier_slist_set_next(carrier, NULL);
     IREE_ASSERT(carrier->type == IREE_ASYNC_IOCP_CARRIER_DIRECT);
     iree_async_proactor_iocp_complete_direct(proactor, carrier,
                                              &completed_count);
@@ -1852,6 +1854,18 @@ static iree_status_t iree_async_proactor_iocp_poll(
   // Phase 1: Drain pending queue (register new operations).
   completed_count += iree_async_proactor_iocp_drain_pending_queue(proactor);
 
+  // File producers only publish reserved carriers. Potentially blocking file
+  // calls and cancellation racing admission belong to this polling owner.
+  iree_status_t file_status = iree_async_proactor_iocp_drain_file_submissions(
+      proactor, &completed_count);
+  if (!iree_status_is_ok(file_status)) {
+    if (out_completed_count) {
+      *out_completed_count = completed_count;
+    }
+    IREE_TRACE_ZONE_END(z0);
+    return file_status;
+  }
+
   // Phase 1.3: Drain accepted synthetic completions whose IOCP notification
   // failed before this poll began.
   completed_count +=
@@ -2126,6 +2140,13 @@ static iree_status_t iree_async_proactor_iocp_poll(
     }
   }
 
+  // Admit files queued by completion callbacks without waiting for another
+  // native completion. Each drain takes one snapshot, so reentrant producers
+  // leave a persistent wake for the next poll instead of recursing.
+  gqcs_status = iree_status_join(
+      gqcs_status, iree_async_proactor_iocp_drain_file_submissions(
+                       proactor, &completed_count));
+
   // Phase 8: Process pending notification waits. Check epoch advancement
   // for async waits registered during Phase 1 or earlier.
   gqcs_status = iree_status_join(gqcs_status, iree_async_iocp_notification_poll(
@@ -2253,25 +2274,42 @@ static iree_status_t iree_async_proactor_iocp_cancel(
 
     case IREE_ASYNC_OPERATION_TYPE_FILE_READ:
     case IREE_ASYNC_OPERATION_TYPE_FILE_WRITE: {
-      iree_async_operation_set_internal_flags(
-          operation, IREE_ASYNC_IOCP_INTERNAL_FLAG_CANCELLED);
+      // Pairs with the issue owner's RMW after ReadFile/WriteFile. If this
+      // native cancel precedes admission, that owner repeats it afterward.
+      iree_atomic_fetch_or(&operation->internal_flags,
+                           IREE_ASYNC_IOCP_INTERNAL_FLAG_CANCELLED,
+                           iree_memory_order_acq_rel);
       // Same pattern as socket I/O cancel: carrier address == OVERLAPPED
       // address (offset 0), handle from the operation's file struct.
       LPOVERLAPPED overlapped = (LPOVERLAPPED)operation->next;
+      iree_status_t status = iree_ok_status();
       if (overlapped != NULL) {
         HANDLE handle =
             iree_async_proactor_iocp_handle_from_io_operation(operation);
-        CancelIoEx(handle, overlapped);
+        if (!CancelIoEx(handle, overlapped)) {
+          DWORD error = GetLastError();
+          if (error != ERROR_NOT_FOUND) {
+            status = iree_make_status(iree_status_code_from_win32_error(error),
+                                      "CancelIoEx failed: %lu",
+                                      (unsigned long)error);
+          }
+        }
       }
       iree_async_proactor_iocp_wake(&proactor->base);
-      return iree_ok_status();
+      return status;
     }
 
-    case IREE_ASYNC_OPERATION_TYPE_SOCKET_CLOSE:
     case IREE_ASYNC_OPERATION_TYPE_FILE_OPEN:
     case IREE_ASYNC_OPERATION_TYPE_FILE_CLOSE:
-      // These actions commit synchronously and already own a terminal carrier
-      // completion, so there is nothing left to cancel.
+      // A pending file action can be withdrawn before its native call. Once
+      // that call begins, its ordinary terminal result owns completion.
+      iree_async_operation_set_internal_flags(
+          operation, IREE_ASYNC_IOCP_INTERNAL_FLAG_CANCELLED);
+      iree_async_proactor_iocp_wake(&proactor->base);
+      return iree_ok_status();
+
+    case IREE_ASYNC_OPERATION_TYPE_SOCKET_CLOSE:
+      // Socket close commits during submit and already owns a completion.
       return iree_ok_status();
 
     default:
