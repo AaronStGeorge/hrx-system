@@ -320,7 +320,7 @@ class Aie2pProgramCompileTest : public ::testing::Test {
       loom_aie2p_leaf_contribution_t* out_contribution,
       loom_aie2p_program_compiler_t* compiler = nullptr) {
     if (compiler == nullptr) {
-      IREE_RETURN_IF_ERROR(loom_aie2p_program_compiler_create(
+      IREE_RETURN_IF_ERROR(loom_aie2p_program_compiler_allocate(
           module, &program_arena_, &compiler));
     }
     iree_arena_allocator_t requirements_arena;
@@ -368,7 +368,7 @@ TEST_F(Aie2pProgramCompileTest, RetainsHelperObjectsAcrossProgramCompilations) {
     loom_op_t* entry = FindFunction(module.get(), IREE_SV("entry"));
     ASSERT_NE(entry, nullptr);
     loom_aie2p_program_compiler_t* compiler = nullptr;
-    IREE_ASSERT_OK(loom_aie2p_program_compiler_create(
+    IREE_ASSERT_OK(loom_aie2p_program_compiler_allocate(
         module.get(), &program_arena_, &compiler));
     const uint8_t* helper_contents = nullptr;
     const uint8_t* entry_contents = nullptr;

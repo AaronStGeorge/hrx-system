@@ -42,7 +42,7 @@ typedef struct loom_aie2p_program_compiler_t loom_aie2p_program_compiler_t;
 
 // Allocates a compiler in |arena|, which also owns its retained helper objects
 // and complete program contributions. The module outlives this compiler.
-iree_status_t loom_aie2p_program_compiler_create(
+iree_status_t loom_aie2p_program_compiler_allocate(
     loom_module_t* module, iree_arena_allocator_t* arena,
     loom_aie2p_program_compiler_t** out_compiler);
 

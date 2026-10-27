@@ -43,7 +43,7 @@ struct loom_aie2p_program_compiler_t {
   loom_aie2p_program_callable_t** helpers_by_symbol;
 };
 
-iree_status_t loom_aie2p_program_compiler_create(
+iree_status_t loom_aie2p_program_compiler_allocate(
     loom_module_t* module, iree_arena_allocator_t* arena,
     loom_aie2p_program_compiler_t** out_compiler) {
   IREE_RETURN_IF_ERROR(
