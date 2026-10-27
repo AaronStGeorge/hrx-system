@@ -1501,17 +1501,6 @@ ERR_TARGET_081 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_082: Target device profile is unavailable.
-ERR_TARGET_082 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=82,
-    severity=Severity.ERROR,
-    summary="Target device profile is unavailable.",
-    message="target device profile '{profile}' is unavailable to this target family",
-    params=(ErrorParam("profile", ParamKind.STRING),),
-    fix_hint="Select a device profile provided by this target family.",
-)
-
 # ERR_TARGET_089: Target representation requires structured control flow.
 ERR_TARGET_089 = ErrorDef(
     domain=ErrorDomain.TARGET,
@@ -1732,7 +1721,6 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_079,
     ERR_TARGET_080,
     ERR_TARGET_081,
-    ERR_TARGET_082,
     ERR_TARGET_089,
     ERR_TARGET_090,
     ERR_TARGET_091,

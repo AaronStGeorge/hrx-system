@@ -97,6 +97,7 @@ loom_generated_cc_library(
     loom::target::arch::amd::xdna::aie2p::target_facts
     loom::target::arch::amd::xdna::aie2p::target_records
     loom::target::arch::amd::xdna::device_profile
+    loom::target::arch::amd::xdna::error_defs
     loom::target::resolved_target
     loom::target::types
 )

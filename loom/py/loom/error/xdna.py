@@ -948,6 +948,17 @@ ERR_XDNA_061 = ErrorDef(
     ),
 )
 
+# ERR_XDNA_062: An AIE2P target device profile is unavailable.
+ERR_XDNA_062 = ErrorDef(
+    domain=ErrorDomain.XDNA,
+    code=62,
+    severity=Severity.ERROR,
+    summary="AIE2P target device profile is unavailable.",
+    message="AIE2P target device profile '{profile}' is unavailable",
+    params=(ErrorParam("profile", ParamKind.STRING),),
+    fix_hint="Select a device profile provided by the AIE2P target family.",
+)
+
 ALL_XDNA_ERRORS = (
     ERR_XDNA_001,
     ERR_XDNA_005,
@@ -1002,4 +1013,5 @@ ALL_XDNA_ERRORS = (
     ERR_XDNA_059,
     ERR_XDNA_060,
     ERR_XDNA_061,
+    ERR_XDNA_062,
 )
