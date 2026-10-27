@@ -8,6 +8,7 @@
 
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/value_refs.h"
+#include "loom/ir/value_replacement.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/special_values.h"
@@ -121,22 +122,33 @@ static uint16_t loom_cfg_converge_loop_continuation(
              : LOOM_CFG_LOOP_CONTINUATION_NONE;
 }
 
-// Isolates one loop's result-producing exits from an enclosing decision that
-// reaches the same continuation. Without the gateway, target control planners
-// for the loop and enclosing decision would both own the same CFG edges. The
-// new block has the continuation's exact signature, so existing exit payloads
-// remain unchanged while each control owner receives a disjoint frontier.
-static iree_status_t loom_cfg_converge_isolate_loop_exit_frontier(
-    loom_pass_t* pass, loom_module_t* module, loom_region_t* body,
-    loom_rewriter_t* rewriter, iree_arena_allocator_t* arena,
-    const loom_value_fact_cfg_region_t* facts, bool* out_changed) {
-  *out_changed = false;
+// One payload-preserving gateway planned against an immutable graph snapshot.
+typedef struct loom_cfg_converge_frontier_t {
+  // Next disjoint frontier in natural-loop order.
+  struct loom_cfg_converge_frontier_t* next;
+  // Original continuation supplying the gateway signature and live position.
+  loom_block_t* continuation;
+  // Original graph edges redirected together; owned by the plan arena.
+  loom_cfg_edge_index_span_t edges;
+} loom_cfg_converge_frontier_t;
+
+// Plans disjoint loop exit frontiers before inserting any gateway. Each gateway
+// preserves every path and payload between original blocks, so these plans
+// preserve each other's dominance, reachability, and loop membership. Shared
+// edges wait for the next snapshot instead of being redirected twice.
+static iree_status_t loom_cfg_converge_plan_loop_exit_frontiers(
+    const loom_value_fact_cfg_region_t* facts,
+    iree_arena_allocator_t* scratch_arena, iree_arena_allocator_t* plan_arena,
+    loom_cfg_converge_frontier_t** out_frontiers) {
+  *out_frontiers = NULL;
   const loom_cfg_graph_t* graph = &facts->graph;
   const loom_cfg_loop_nest_t* loops = &facts->loops;
   if (!loops->reducible) {
     return iree_ok_status();
   }
 
+  uint8_t* claimed_edges = NULL;
+  loom_cfg_converge_frontier_t** next = out_frontiers;
   for (iree_host_size_t loop_index = 0; loop_index < loops->loop_count;
        ++loop_index) {
     const loom_cfg_natural_loop_t* loop = &loops->loops[loop_index];
@@ -160,10 +172,10 @@ static iree_status_t loom_cfg_converge_isolate_loop_exit_frontier(
       continue;
     }
 
-    iree_arena_reset(arena);
+    iree_arena_reset(scratch_arena);
     loom_cfg_edge_index_t* direct_exits = NULL;
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        arena, loop->direct_exit_count, sizeof(*direct_exits),
+        scratch_arena, loop->direct_exit_count, sizeof(*direct_exits),
         (void**)&direct_exits));
     iree_host_size_t direct_exit_count = 0;
     for (iree_host_size_t edge_index = 0; edge_index < graph->edge_count;
@@ -182,12 +194,12 @@ static iree_status_t loom_cfg_converge_isolate_loop_exit_frontier(
 
     uint8_t* visited_targets = NULL;
     uint8_t* visited_edges = NULL;
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, graph->block_count,
-                                                   sizeof(*visited_targets),
-                                                   (void**)&visited_targets));
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, graph->edge_count,
-                                                   sizeof(*visited_edges),
-                                                   (void**)&visited_edges));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        scratch_arena, graph->block_count, sizeof(*visited_targets),
+        (void**)&visited_targets));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        scratch_arena, graph->edge_count, sizeof(*visited_edges),
+        (void**)&visited_edges));
     memset(visited_targets, 0, graph->block_count * sizeof(*visited_targets));
     memset(visited_edges, 0, graph->edge_count * sizeof(*visited_edges));
 
@@ -201,7 +213,11 @@ static iree_status_t loom_cfg_converge_isolate_loop_exit_frontier(
         continue;
       }
       const loom_cfg_region_t* region = &facts->regions.blocks[target];
+      // An externally entered exit region would leave the new gateway shared
+      // too, so it cannot isolate this loop's frontier.
       if (visited_targets[target] ||
+          !loom_cfg_dominance_block_dominates(&facts->dominance,
+                                              loop->header_index, target) ||
           region->continuation_index != continuation ||
           region->exit_edges.count == 0) {
         supported = false;
@@ -215,8 +231,9 @@ static iree_status_t loom_cfg_converge_isolate_loop_exit_frontier(
     }
 
     loom_cfg_edge_index_t* frontier = NULL;
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        arena, frontier_capacity, sizeof(*frontier), (void**)&frontier));
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(scratch_arena, frontier_capacity,
+                                  sizeof(*frontier), (void**)&frontier));
     iree_host_size_t frontier_count = 0;
     for (iree_host_size_t i = 0; i < direct_exit_count && supported; ++i) {
       const loom_cfg_edge_info_t* exit = &graph->edges[direct_exits[i]];
@@ -243,38 +260,101 @@ static iree_status_t loom_cfg_converge_isolate_loop_exit_frontier(
       continue;
     }
 
-    loom_block_t* continuation_block =
-        (loom_block_t*)graph->blocks[continuation].block;
-    loom_block_t* gateway = NULL;
-    IREE_RETURN_IF_ERROR(loom_region_insert_block(
-        module, body, continuation_block->region_index, &gateway));
-    loom_builder_t* builder = &rewriter->builder;
-    builder->ip.parent_op = graph->edges[frontier[0]].terminator->parent_op;
-    loom_builder_set_block(builder, gateway);
-    for (uint16_t i = 0; i < continuation_block->arg_count; ++i) {
-      loom_value_id_t argument = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
-          builder, gateway,
-          loom_module_value_type(module, continuation_block->arg_ids[i]),
-          &argument));
+    if (!claimed_edges) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          plan_arena, graph->edge_count, sizeof(*claimed_edges),
+          (void**)&claimed_edges));
+      memset(claimed_edges, 0, graph->edge_count * sizeof(*claimed_edges));
     }
-    loom_op_t* branch = NULL;
-    IREE_RETURN_IF_ERROR(loom_cfg_br_build(
-        builder, continuation_block, gateway->arg_ids, gateway->arg_count,
-        graph->edges[frontier[0]].terminator->location, &branch));
+    bool overlaps = false;
     for (iree_host_size_t i = 0; i < frontier_count; ++i) {
-      const loom_cfg_edge_info_t* edge = &graph->edges[frontier[i]];
-      loom_op_successors(edge->terminator)[edge->successor_index] = gateway;
+      overlaps |= claimed_edges[frontier[i]] != 0;
     }
-
-    IREE_RETURN_IF_ERROR(loom_rewriter_refresh_cfg_facts(rewriter, body));
-    loom_cfg_converge_statistics_t* statistics =
-        loom_cfg_converge_statistics(pass);
-    ++statistics->loop_exit_frontiers_isolated;
-    *out_changed = true;
-    return iree_ok_status();
+    if (overlaps) {
+      continue;
+    }
+    loom_cfg_converge_frontier_t* plan = NULL;
+    loom_cfg_edge_index_t* edges = NULL;
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate(plan_arena, sizeof(*plan), (void**)&plan));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        plan_arena, frontier_count, sizeof(*edges), (void**)&edges));
+    memcpy(edges, frontier, frontier_count * sizeof(*edges));
+    for (iree_host_size_t i = 0; i < frontier_count; ++i) {
+      claimed_edges[frontier[i]] = 1;
+    }
+    *plan = (loom_cfg_converge_frontier_t){
+        .continuation = (loom_block_t*)graph->blocks[continuation].block,
+        .edges = {.values = edges, .count = frontier_count},
+    };
+    *next = plan;
+    next = &plan->next;
   }
   return iree_ok_status();
+}
+
+// Isolates a loop's result-producing exits from an enclosing decision sharing
+// its continuation. The gateway retains the continuation's exact signature, so
+// each control owner receives a disjoint frontier with unchanged exit payloads.
+static iree_status_t loom_cfg_converge_apply_loop_exit_frontier(
+    loom_module_t* module, loom_region_t* body, loom_rewriter_t* rewriter,
+    const loom_cfg_graph_t* graph,
+    const loom_cfg_converge_frontier_t* frontier) {
+  loom_block_t* continuation_block = frontier->continuation;
+  loom_block_t* gateway = NULL;
+  IREE_RETURN_IF_ERROR(loom_region_insert_block(
+      module, body, continuation_block->region_index, &gateway));
+  loom_builder_t* builder = &rewriter->builder;
+  builder->ip.parent_op =
+      graph->edges[frontier->edges.values[0]].terminator->parent_op;
+  loom_builder_set_block(builder, gateway);
+  for (uint16_t i = 0; i < continuation_block->arg_count; ++i) {
+    loom_value_id_t argument = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
+        builder, gateway,
+        loom_module_value_type(module, continuation_block->arg_ids[i]),
+        &argument));
+  }
+  IREE_RETURN_IF_ERROR(loom_module_assign_value_types(
+      module, continuation_block->arg_ids, gateway->arg_ids,
+      continuation_block->arg_count));
+  loom_op_t* branch = NULL;
+  IREE_RETURN_IF_ERROR(loom_cfg_br_build(
+      builder, continuation_block, gateway->arg_ids, gateway->arg_count,
+      graph->edges[frontier->edges.values[0]].terminator->location, &branch));
+  for (iree_host_size_t i = 0; i < frontier->edges.count; ++i) {
+    const loom_cfg_edge_info_t* edge = &graph->edges[frontier->edges.values[i]];
+    loom_op_successors(edge->terminator)[edge->successor_index] = gateway;
+  }
+
+  return iree_ok_status();
+}
+
+static iree_status_t loom_cfg_converge_isolate_loop_exit_frontiers(
+    loom_pass_t* pass, loom_module_t* module, loom_region_t* body,
+    loom_rewriter_t* rewriter, iree_arena_allocator_t* arena,
+    const loom_value_fact_cfg_region_t* facts, bool* out_changed) {
+  *out_changed = false;
+  iree_arena_reset(arena);
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(arena->block_pool, &scratch_arena);
+  loom_cfg_converge_frontier_t* frontiers = NULL;
+  iree_status_t status = loom_cfg_converge_plan_loop_exit_frontiers(
+      facts, &scratch_arena, arena, &frontiers);
+  iree_arena_deinitialize(&scratch_arena);
+  for (const loom_cfg_converge_frontier_t* frontier = frontiers;
+       frontier && iree_status_is_ok(status); frontier = frontier->next) {
+    status = loom_cfg_converge_apply_loop_exit_frontier(
+        module, body, rewriter, &facts->graph, frontier);
+    if (iree_status_is_ok(status)) {
+      ++loom_cfg_converge_statistics(pass)->loop_exit_frontiers_isolated;
+      *out_changed = true;
+    }
+  }
+  if (iree_status_is_ok(status) && *out_changed) {
+    status = loom_rewriter_refresh_cfg_facts(rewriter, body);
+  }
+  return status;
 }
 
 static bool loom_cfg_converge_is_forwarding(const loom_block_t* block,
@@ -750,7 +830,7 @@ iree_status_t loom_cfg_converge_run(loom_pass_t* pass, loom_module_t* module,
           rewriter.fact_table, module, body, &facts);
     }
     if (iree_status_is_ok(status)) {
-      status = loom_cfg_converge_isolate_loop_exit_frontier(
+      status = loom_cfg_converge_isolate_loop_exit_frontiers(
           pass, module, body, &rewriter, &arena, facts, &changed);
     }
     if (iree_status_is_ok(status) && !changed) {
