@@ -1,31 +1,3 @@
-// Two live YMM values occupy the complete test budget. The entry edge retains
-// its tuple in the header arguments' physical storage. Swapping the vectors
-// across the backedge forces the shared move sequencer to use a 32-byte cycle
-// cell.
-// RUN: emit x86-frame @saturated_vector_cycle x86.ymm=2
-x86.target<avx2> @target
-
-low.func.def target<x86.avx2.core>(@target) @saturated_vector_cycle(%left: reg<x86.ymm>, %right: reg<x86.ymm>, %iterations: reg<x86.gpr32>, %output: reg<x86.gpr64>) asm {
-  low.br.identity(0, 3) ^header(%left: reg<x86.ymm>, %right: reg<x86.ymm>, %iterations: reg<x86.gpr32>)
-^header(%first: reg<x86.ymm>, %second: reg<x86.ymm>, %remaining: reg<x86.gpr32>):
-  low.cond_br %remaining, ^body, ^exit : reg<x86.gpr32>
-^body:
-  %next = sub.imm.gpr32 %remaining {imm32 = 1}
-  low.br ^header(%second: reg<x86.ymm>, %first: reg<x86.ymm>, %next: reg<x86.gpr32>)
-^exit:
-  vmovdqu32.store.ymm %first, %output {disp32 = 0}
-  vmovdqu32.store.ymm %second, %output {disp32 = 32}
-  return
-}
-
-// ----
-callee-preserved: none
-stack: 64 bytes, alignment 32
-realignment: r11, saved RSP at +32
-upper-state-cleanup: vzeroupper
-
-// ====
-
 // Explicit storage traffic lowers the complete SIMD width family at
 // unaligned offsets through native load/store transport.
 // RUN: emit x86-native-bytes @xmm_storage

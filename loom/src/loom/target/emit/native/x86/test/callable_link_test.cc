@@ -95,6 +95,8 @@ extern "C" void write_exact_avx2_lanes(uint8_t* byte_output,
                                        int64_t* qword_output);
 extern "C" void add_constant_i32x4(const int32_t* input, int32_t* output);
 extern "C" void reverse_i8x32_lanes(const uint8_t* input, uint8_t* output);
+extern "C" void rotate_i32x8_rows(const uint32_t* input, uint32_t* output,
+                                  uint32_t iterations);
 extern "C" void spill_i8x32(const uint8_t* input, uint8_t* output);
 extern "C" void write_mixed_results(const int32_t* input,
                                     int32_t* vector_output,
@@ -536,6 +538,29 @@ TEST(NativeCallableTest, Avx2VectorFunctionUsesOrdinaryCLinkage) {
   EXPECT_EQ(exact_qwords,
             (std::array<int64_t, 4>{INT64_C(0x0123456789abcdef), -2,
                                     INT64_C(0x0123456789abcdef), -2}));
+}
+
+TEST(NativeCallableTest, Avx2FullBankRotationPreservesEveryLane) {
+  constexpr size_t kRowCount = 16;
+  constexpr size_t kLaneCount = 8;
+  std::array<uint32_t, kRowCount * kLaneCount> input;
+  for (size_t i = 0; i < input.size(); ++i) {
+    input[i] = UINT32_C(0x13579bdf) ^
+               (static_cast<uint32_t>(i) * UINT32_C(0x01020305));
+  }
+  for (uint32_t iterations : {0u, 1u, 2u, 15u, 16u, 17u}) {
+    SCOPED_TRACE(iterations);
+    std::array<uint32_t, kRowCount * kLaneCount> output = {};
+    rotate_i32x8_rows(input.data(), output.data(), iterations);
+    for (size_t row = 0; row < kRowCount; ++row) {
+      const size_t source_row = (row + iterations) % kRowCount;
+      for (size_t lane = 0; lane < kLaneCount; ++lane) {
+        ASSERT_EQ(output[row * kLaneCount + lane],
+                  input[source_row * kLaneCount + lane])
+            << "row " << row << ", lane " << lane;
+      }
+    }
+  }
 }
 
 template <typename Bits, typename Copy>

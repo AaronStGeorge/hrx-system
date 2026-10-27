@@ -71,6 +71,51 @@ low.func.def public target<x86.avx2.core> abi(object_function) @reverse_i8x32_la
   return
 }
 
+// Rotating a full bank of live rows requires a stack temporary at the backedge.
+// The ordinary allocator sees all sixteen AVX2 registers, without a test budget.
+low.func.def public target<x86.avx2.core> abi(object_function) @rotate_i32x8_rows(%input: reg<x86.gpr64>, %output: reg<x86.gpr64>, %iterations: reg<x86.gpr32>) asm {
+  %input0 = vmovdqu32.load.ymm %input {disp32 = 0}
+  %input1 = vmovdqu32.load.ymm %input {disp32 = 32}
+  %input2 = vmovdqu32.load.ymm %input {disp32 = 64}
+  %input3 = vmovdqu32.load.ymm %input {disp32 = 96}
+  %input4 = vmovdqu32.load.ymm %input {disp32 = 128}
+  %input5 = vmovdqu32.load.ymm %input {disp32 = 160}
+  %input6 = vmovdqu32.load.ymm %input {disp32 = 192}
+  %input7 = vmovdqu32.load.ymm %input {disp32 = 224}
+  %input8 = vmovdqu32.load.ymm %input {disp32 = 256}
+  %input9 = vmovdqu32.load.ymm %input {disp32 = 288}
+  %input10 = vmovdqu32.load.ymm %input {disp32 = 320}
+  %input11 = vmovdqu32.load.ymm %input {disp32 = 352}
+  %input12 = vmovdqu32.load.ymm %input {disp32 = 384}
+  %input13 = vmovdqu32.load.ymm %input {disp32 = 416}
+  %input14 = vmovdqu32.load.ymm %input {disp32 = 448}
+  %input15 = vmovdqu32.load.ymm %input {disp32 = 480}
+  low.br ^header(%input0: reg<x86.ymm>, %input1: reg<x86.ymm>, %input2: reg<x86.ymm>, %input3: reg<x86.ymm>, %input4: reg<x86.ymm>, %input5: reg<x86.ymm>, %input6: reg<x86.ymm>, %input7: reg<x86.ymm>, %input8: reg<x86.ymm>, %input9: reg<x86.ymm>, %input10: reg<x86.ymm>, %input11: reg<x86.ymm>, %input12: reg<x86.ymm>, %input13: reg<x86.ymm>, %input14: reg<x86.ymm>, %input15: reg<x86.ymm>, %iterations: reg<x86.gpr32>)
+^header(%row0: reg<x86.ymm>, %row1: reg<x86.ymm>, %row2: reg<x86.ymm>, %row3: reg<x86.ymm>, %row4: reg<x86.ymm>, %row5: reg<x86.ymm>, %row6: reg<x86.ymm>, %row7: reg<x86.ymm>, %row8: reg<x86.ymm>, %row9: reg<x86.ymm>, %row10: reg<x86.ymm>, %row11: reg<x86.ymm>, %row12: reg<x86.ymm>, %row13: reg<x86.ymm>, %row14: reg<x86.ymm>, %row15: reg<x86.ymm>, %remaining: reg<x86.gpr32>):
+  low.cond_br %remaining, ^body, ^exit : reg<x86.gpr32>
+^body:
+  %next = sub.imm.gpr32 %remaining {imm32 = 1}
+  low.br ^header(%row1: reg<x86.ymm>, %row2: reg<x86.ymm>, %row3: reg<x86.ymm>, %row4: reg<x86.ymm>, %row5: reg<x86.ymm>, %row6: reg<x86.ymm>, %row7: reg<x86.ymm>, %row8: reg<x86.ymm>, %row9: reg<x86.ymm>, %row10: reg<x86.ymm>, %row11: reg<x86.ymm>, %row12: reg<x86.ymm>, %row13: reg<x86.ymm>, %row14: reg<x86.ymm>, %row15: reg<x86.ymm>, %row0: reg<x86.ymm>, %next: reg<x86.gpr32>)
+^exit:
+  vmovdqu32.store.ymm %row0, %output {disp32 = 0}
+  vmovdqu32.store.ymm %row1, %output {disp32 = 32}
+  vmovdqu32.store.ymm %row2, %output {disp32 = 64}
+  vmovdqu32.store.ymm %row3, %output {disp32 = 96}
+  vmovdqu32.store.ymm %row4, %output {disp32 = 128}
+  vmovdqu32.store.ymm %row5, %output {disp32 = 160}
+  vmovdqu32.store.ymm %row6, %output {disp32 = 192}
+  vmovdqu32.store.ymm %row7, %output {disp32 = 224}
+  vmovdqu32.store.ymm %row8, %output {disp32 = 256}
+  vmovdqu32.store.ymm %row9, %output {disp32 = 288}
+  vmovdqu32.store.ymm %row10, %output {disp32 = 320}
+  vmovdqu32.store.ymm %row11, %output {disp32 = 352}
+  vmovdqu32.store.ymm %row12, %output {disp32 = 384}
+  vmovdqu32.store.ymm %row13, %output {disp32 = 416}
+  vmovdqu32.store.ymm %row14, %output {disp32 = 448}
+  vmovdqu32.store.ymm %row15, %output {disp32 = 480}
+  return
+}
+
 // Deliberately unaligned authored storage proves that native stack traffic uses
 // the unaligned vector move family rather than relying on frame alignment.
 low.func.def public target<x86.avx2.core> abi(object_function) @spill_i8x32(%input: reg<x86.gpr64>, %output: reg<x86.gpr64>) asm {
