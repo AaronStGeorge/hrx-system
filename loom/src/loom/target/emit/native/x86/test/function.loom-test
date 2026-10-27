@@ -99,9 +99,10 @@ code: 48 83 ec 08 c4 e1 fb 92 cf c4 e1 f8 91 0c 24 c4 e1 f8 90 0c 24 c4 e1 fb 93
 
 // ====
 
-// Synchronous call transport keeps a stored argument out of the allocatable
-// register set even when pure setup remains between its reload and the call.
-// RUN: emit x86-frame @stored_call strategy=pressure x86.gpr64=1
+// Entry and call transport access the private slot directly, without a
+// separate reload temporary. Pure setup between the reload and call preserves
+// the argument's storage binding.
+// RUN: emit x86-native-bytes @stored_call
 x86.target<scalar> @target
 
 low.func.decl pure target<x86.scalar.core>(@target) @consume_stored(%value: reg<x86.gpr64>, %setup: reg<x86.gpr32>)
@@ -116,8 +117,7 @@ low.func.def target<x86.scalar.core>(@target) @stored_call(%input: reg<x86.gpr64
 }
 
 // ----
-callee-preserved: none
-stack: 8 bytes, alignment 16
+code: 53 48 83 ec 10 48 89 3c 24 bb 01 00 00 00 48 8b 3c 24 8b f3 e8 00 00 00 00 8b c3 48 83 c4 10 5b c3
 
 // ====
 
