@@ -221,6 +221,46 @@ static iree_status_t loom_x86_function_storage_layout(
   return iree_ok_status();
 }
 
+bool loom_x86_function_layout_stack(uint32_t storage_byte_length,
+                                    uint32_t storage_alignment,
+                                    uint16_t saved_registers,
+                                    loom_x86_stack_frame_t* out_stack) {
+  *out_stack = (loom_x86_stack_frame_t){0};
+  if (storage_byte_length == 0 && storage_alignment == 0) {
+    return true;
+  }
+  const uint64_t alignment = iree_max(storage_alignment, 8u);
+  out_stack->alignment = (uint32_t)alignment;
+  uint64_t allocation_size = storage_byte_length;
+  if (alignment > 16) {
+    out_stack->realignment.mask = -(int32_t)alignment;
+    // Storage admission bounds the extent to INT32_MAX, leaving ample room in
+    // this widened calculation for the restoration slot and padding.
+    const uint64_t saved_pointer_offset = iree_host_align(allocation_size, 8);
+    allocation_size = saved_pointer_offset + sizeof(uint64_t);
+    out_stack->realignment.saved_pointer_offset =
+        (uint32_t)saved_pointer_offset;
+    // SysV integer arguments occupy RDI, RSI, RDX, RCX, R8, and R9. R11 is
+    // available before entry transport; no SSA lifetime is pinned to it yet.
+    out_stack->realignment.scratch_register =
+        LOOM_X86_GPR_TRANSPORT_SCRATCH_REGISTER;
+    allocation_size = iree_host_align(allocation_size, alignment);
+  } else {
+    // Entry RSP is 8 modulo 16 because CALL has pushed the return address.
+    // Include all callee-save pushes when padding the local allocation.
+    const uint64_t incoming_bytes =
+        sizeof(uint64_t) * (1u + iree_math_count_ones_u32(saved_registers));
+    allocation_size =
+        iree_host_align(allocation_size + incoming_bytes, alignment) -
+        incoming_bytes;
+  }
+  if (allocation_size > INT32_MAX) {
+    return false;
+  }
+  out_stack->allocation_size = (uint32_t)allocation_size;
+  return true;
+}
+
 static iree_status_t loom_x86_function_stack_frame(
     loom_x86_function_builder_t* builder) {
   loom_x86_function_t* function = builder->function;
@@ -228,38 +268,15 @@ static iree_status_t loom_x86_function_stack_frame(
       builder->incoming.count == 0) {
     return iree_ok_status();
   }
-  const uint64_t alignment = iree_max(builder->storage_alignment, 8u);
-  function->stack.alignment = (uint32_t)alignment;
-  uint64_t allocation_size = builder->storage_byte_length;
-  if (alignment > 16) {
-    function->stack.realignment.mask = -(int32_t)alignment;
-    // Storage admission bounds the extent to INT32_MAX, leaving ample room in
-    // this widened calculation for the restoration slot and padding.
-    const uint64_t saved_pointer_offset = iree_host_align(allocation_size, 8);
-    allocation_size = saved_pointer_offset + sizeof(uint64_t);
-    function->stack.realignment.saved_pointer_offset =
-        (uint32_t)saved_pointer_offset;
-    // SysV integer arguments occupy RDI, RSI, RDX, RCX, R8, and R9. R11 is
-    // available before entry transport; no SSA lifetime is pinned to it yet.
-    function->stack.realignment.scratch_register =
-        LOOM_X86_GPR_TRANSPORT_SCRATCH_REGISTER;
-    allocation_size = iree_host_align(allocation_size, alignment);
-  } else {
-    // Entry RSP is 8 modulo 16 because CALL has pushed the return address.
-    // Include all callee-save pushes when padding the local allocation.
-    const uint64_t incoming_bytes =
-        sizeof(uint64_t) *
-        (1u + iree_math_count_ones_u32(function->saved_registers));
-    allocation_size =
-        iree_host_align(allocation_size + incoming_bytes, alignment) -
-        incoming_bytes;
-  }
-  if (allocation_size > INT32_MAX) {
+  const uint32_t alignment = (uint32_t)iree_max(
+      builder->storage_alignment, builder->incoming.count ? 8u : 0u);
+  if (!loom_x86_function_layout_stack((uint32_t)builder->storage_byte_length,
+                                      alignment, function->saved_registers,
+                                      &function->stack)) {
     return loom_x86_function_reject(
         builder, LOOM_ERR_X86_004,
         IREE_SV("a stack adjustment within signed 32 bits"));
   }
-  function->stack.allocation_size = (uint32_t)allocation_size;
   const uint32_t incoming_offset =
       8u * (1u + iree_math_count_ones_u32(function->saved_registers));
   for (iree_host_size_t i = 0; i < builder->incoming.count; ++i) {

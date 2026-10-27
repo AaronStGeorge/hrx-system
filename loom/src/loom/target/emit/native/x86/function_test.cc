@@ -120,6 +120,63 @@ TEST_F(FunctionTest, EmptyLeafNeedsOnlyReturn) {
   EXPECT_EQ(Read(), Encode(Instruction(LOOM_X86_ENCODING_FORM_RETURN)));
 }
 
+TEST(FunctionStackLayoutTest, PaddingAndRestoration) {
+  struct LayoutCase {
+    // Admitted storage before ABI padding.
+    uint32_t storage_byte_length;
+    // Strongest storage or call alignment requirement.
+    uint32_t storage_alignment;
+    // Architectural callee-preserved GPRs written by the function.
+    uint16_t saved_registers;
+    // Concrete stack adjustments consumed by the native writer.
+    loom_x86_stack_frame_t expected;
+  };
+  const LayoutCase cases[] = {
+      {0, 0, 0, {}},
+      {0, 0, 1u << 3, {}},
+      {0, 8, 0, {0, 8, {}}},
+      {16, 1, 0, {16, 8, {}}},
+      {8, 16, 0, {8, 16, {}}},
+      {8, 16, 1u << 3, {16, 16, {}}},
+      {8, 16, (1u << 3) | (1u << 12), {8, 16, {}}},
+      {0, 16, 0, {8, 16, {}}},
+      {0, 16, 1u << 3, {0, 16, {}}},
+      {8, 64, 1u << 3, {64, 64, {-64, 8, 11}}},
+      {17, 32, 0, {32, 32, {-32, 24, 11}}},
+      {32, 32, 0, {64, 32, {-32, 32, 11}}},
+      {0, 64, 0, {64, 64, {-64, 0, 11}}},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "storage=" << test_case.storage_byte_length
+                 << " alignment=" << test_case.storage_alignment
+                 << " saved=" << test_case.saved_registers);
+    loom_x86_stack_frame_t stack = {};
+    ASSERT_TRUE(loom_x86_function_layout_stack(
+        test_case.storage_byte_length, test_case.storage_alignment,
+        test_case.saved_registers, &stack));
+    EXPECT_EQ(stack.allocation_size, test_case.expected.allocation_size);
+    EXPECT_EQ(stack.alignment, test_case.expected.alignment);
+    EXPECT_EQ(stack.realignment.mask, test_case.expected.realignment.mask);
+    EXPECT_EQ(stack.realignment.saved_pointer_offset,
+              test_case.expected.realignment.saved_pointer_offset);
+    EXPECT_EQ(stack.realignment.scratch_register,
+              test_case.expected.realignment.scratch_register);
+  }
+}
+
+TEST(FunctionStackLayoutTest, AdmitsOnlyEncodableAdjustments) {
+  loom_x86_stack_frame_t stack = {};
+  ASSERT_TRUE(loom_x86_function_layout_stack(INT32_MAX - 7u, 8, 0, &stack));
+  EXPECT_EQ(stack.allocation_size, INT32_MAX - 7u);
+  EXPECT_FALSE(loom_x86_function_layout_stack(INT32_MAX, 8, 0, &stack));
+
+  // The local extent fits, but alignment plus the restoration slot may not.
+  ASSERT_TRUE(loom_x86_function_layout_stack(INT32_MAX - 127u, 64, 0, &stack));
+  EXPECT_EQ(stack.allocation_size, INT32_MAX - 63u);
+  EXPECT_FALSE(loom_x86_function_layout_stack(INT32_MAX - 63u, 64, 0, &stack));
+}
+
 TEST_F(FunctionTest, DirtyUpperVectorStateCleansBeforeReturn) {
   iree_host_size_t block_starts[] = {0, 0};
   loom_x86_function_t function = {
@@ -363,11 +420,8 @@ TEST_F(FunctionTest, RealignmentRestoresTheSavedStackPointerBeforePops) {
       .block_count = 1,
       .saved_registers = 1u << 3,
   };
-  function.stack.allocation_size = 64;
-  function.stack.alignment = 64;
-  function.stack.realignment.mask = -64;
-  function.stack.realignment.saved_pointer_offset = 8;
-  function.stack.realignment.scratch_register = 11;
+  ASSERT_TRUE(loom_x86_function_layout_stack(8, 64, function.saved_registers,
+                                             &function.stack));
   uint64_t instruction_count = 0;
   IREE_ASSERT_OK(loom_x86_function_write(&function, nullptr, 0, nullptr,
                                          stream_, &instruction_count, &arena_));

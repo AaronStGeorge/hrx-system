@@ -36,6 +36,24 @@ typedef struct loom_x86_instruction_t {
 static_assert(sizeof(loom_x86_instruction_t) == 24,
               "prepared x86 instructions must remain compact");
 
+// Concrete stack adjustments after callee-save pushes. Byte emission consumes
+// this layout without recomputing alignment or selecting scratch registers.
+typedef struct loom_x86_stack_frame_t {
+  // Bytes subtracted from RSP after any alignment adjustment.
+  uint32_t allocation_size;
+  // Required alignment of the body RSP, or zero without a stack requirement.
+  uint32_t alignment;
+  // Dynamic restoration for alignments stronger than the SysV entry promise.
+  struct {
+    // Immediate AND mask, or zero when static padding suffices.
+    int32_t mask;
+    // Byte offset of the saved pre-alignment RSP within the allocation.
+    uint32_t saved_pointer_offset;
+    // Caller-clobbered register used before invocation transport.
+    uint8_t scratch_register;
+  } realignment;
+} loom_x86_stack_frame_t;
+
 // Prepared instructions borrow no IR, schedule, or allocation storage. They
 // remain valid until their arena is reset. The producer consumes each shared
 // packet and its final transport once; byte encoding never revisits the IR.
@@ -62,24 +80,22 @@ typedef struct loom_x86_function_t {
   const uint32_t* upper_vector_call_cleanup_indices;
   // Number of entries in |upper_vector_call_cleanup_indices|.
   iree_host_size_t upper_vector_call_cleanup_count;
-  // Fixed stack allocation after callee saves. Byte emission consumes these
-  // concrete adjustments without computing alignment or selecting scratch.
-  struct {
-    // Bytes subtracted from RSP after any alignment adjustment.
-    uint32_t allocation_size;
-    // Required alignment of the body RSP, or zero without local storage.
-    uint32_t alignment;
-    // Dynamic restoration for alignments stronger than the SysV entry promise.
-    struct {
-      // Immediate AND mask, or zero when static padding suffices.
-      int32_t mask;
-      // Byte offset of the saved pre-alignment RSP within the allocation.
-      uint32_t saved_pointer_offset;
-      // Caller-clobbered register used before invocation transport.
-      uint8_t scratch_register;
-    } realignment;
-  } stack;
+  // Fixed stack allocation and restoration after callee saves.
+  loom_x86_stack_frame_t stack;
 } loom_x86_function_t;
+
+// Lays out admitted storage and the SysV preservation envelope. Alignment is a
+// power of two within signed 32-bit addressing, or zero without a requirement;
+// incoming stack arguments supply at least eight-byte alignment even without
+// local storage. The saved-register mask uses architectural GPR numbers.
+// Returns false when ABI padding or the restoration slot makes the final
+// adjustment exceed signed 32 bits. No IR, allocation, or diagnostics are owned
+// here; the preparation caller retains incoming-load fixups and reports
+// failure.
+bool loom_x86_function_layout_stack(uint32_t storage_byte_length,
+                                    uint32_t storage_alignment,
+                                    uint16_t saved_registers,
+                                    loom_x86_stack_frame_t* out_stack);
 
 // Returns the allocator reservations needed by the native function envelope.
 // Descriptor fragments without GPR values need no reservation: the envelope
