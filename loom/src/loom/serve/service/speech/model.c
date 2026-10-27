@@ -821,8 +821,8 @@ static iree_status_t loom_serve_speech_model_link(
       iree_max(model->batch_input_capacity, model->output_capacity),
       LOOM_SERVE_SPEECH_BUFFER_ALIGNMENT));
   IREE_RETURN_IF_ERROR(loom_serve_rows_allocate(
-      &model->state, model->owner, model->execution, model->request_capacity,
-      model->input_capacity, model->stream_capacity,
+      &model->state, model->owner, model->pool, model->execution,
+      model->request_capacity, model->input_capacity, model->stream_capacity,
       model->conditioning_capacity, LOOM_SERVE_SPEECH_BUFFER_ALIGNMENT));
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
       host_allocator, model->request_capacity,

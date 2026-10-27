@@ -14,11 +14,12 @@ void loom_serve_rows_initialize(iree_allocator_t host_allocator,
 
 iree_status_t loom_serve_rows_allocate(
     loom_serve_rows_t* state, loom_serve_device_t* device,
-    loom_serve_execution_t* execution, iree_host_size_t row_count,
-    iree_device_size_t input_stride, iree_device_size_t stream_stride,
-    iree_device_size_t conditioning_length, iree_device_size_t alignment) {
+    loom_serve_pool_t* pool, loom_serve_execution_t* execution,
+    iree_host_size_t row_count, iree_device_size_t input_stride,
+    iree_device_size_t stream_stride, iree_device_size_t conditioning_length,
+    iree_device_size_t alignment) {
   const iree_allocator_t host_allocator = state->host_allocator;
-  state->pool = loom_serve_device_memory_pool(device);
+  state->pool = loom_serve_pool_memory(pool);
   state->execution = execution;
   if (state->pool) {
     IREE_RETURN_IF_ERROR(iree_hal_semaphore_create(
@@ -40,8 +41,8 @@ iree_status_t loom_serve_rows_allocate(
       requests[i] = iree_hal_make_pool_reservation_request(length, alignment);
     }
     status = loom_serve_execution_alloca_from_pool(
-        execution, loom_serve_device_storage_pool(device),
-        LOOM_SERVE_ROWS_BUFFER_COUNT, requests, state->buffers);
+        execution, loom_serve_pool_storage(pool), LOOM_SERVE_ROWS_BUFFER_COUNT,
+        requests, state->buffers);
   }
   for (iree_host_size_t i = 0;
        i < LOOM_SERVE_ROWS_BUFFER_COUNT && iree_status_is_ok(status); ++i) {
@@ -50,8 +51,8 @@ iree_status_t loom_serve_rows_allocate(
           state->strides[i] *
           (i == LOOM_SERVE_ROWS_CONDITIONING ? 1 : row_count);
       status = loom_serve_virtual_buffer_allocate(
-          state->pool, loom_serve_device_state_geometry(device), length,
-          alignment, &state->statistics, &state->reservations[i]);
+          state->pool, loom_serve_pool_state_geometry(pool), length, alignment,
+          &state->statistics, &state->reservations[i]);
       if (iree_status_is_ok(status)) {
         state->buffers[i] =
             loom_serve_virtual_buffer_handle(state->reservations[i]);
