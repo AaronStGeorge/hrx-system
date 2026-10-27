@@ -108,6 +108,7 @@ from .integer_float import (
     integer_float_descriptors,
     vector_integer_float_descriptors,
 )
+from .integer_unary import integer_unary_descriptors
 from .memory import memory_descriptors
 from .scalar import (
     X86_SCALAR_DESCRIPTOR_SET,
@@ -414,6 +415,7 @@ def _vector_widen_descriptor(
 
 
 _X86_AVX2_VECTOR_DESCRIPTORS = (
+    *integer_unary_descriptors(evex=False),
     *(
         _vex_descriptor(
             Descriptor(

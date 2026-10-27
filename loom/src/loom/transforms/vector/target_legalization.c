@@ -27,6 +27,7 @@
 #include "loom/transforms/vector/packet_legalization.h"
 #include "loom/transforms/vector/packet_plan.h"
 #include "loom/transforms/vector/reduction_legalization.h"
+#include "loom/transforms/vector/signed_unary_legalization.h"
 #include "loom/transforms/vector/to_scalar.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/numeric_format.h"
@@ -1556,6 +1557,18 @@ static iree_status_t loom_vector_legalize_workgroup_reduce(
 
 static const loom_target_legalizer_rule_t kVectorLegalizerRules[] = {
     {
+        .root_kind = LOOM_OP_VECTOR_NEGI,
+        .legalize = loom_vector_legalize_signed_unary,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_ABSI,
+        .legalize = loom_vector_legalize_signed_unary,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_SIGNI,
+        .legalize = loom_vector_legalize_signed_unary,
+    },
+    {
         .root_kind = LOOM_OP_KERNEL_WORKGROUP_REDUCE,
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REWRITE_LEGAL,
         .legalize = loom_vector_legalize_workgroup_reduce,
@@ -1605,6 +1618,11 @@ static const loom_target_legalizer_rule_t kVectorLegalizerRules[] = {
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_F32,
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
         .legalize = loom_vector_legalize_f32_extrema,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_SUBI,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+        .legalize = loom_vector_legalize_descriptor,
     },
     // Combining operations share one complete reference family. Native target
     // contracts retain precedence; explicit rejection selects the ordinary

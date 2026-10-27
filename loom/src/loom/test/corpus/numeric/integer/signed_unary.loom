@@ -1,0 +1,254 @@
+// Wrapping unary arithmetic at both signed boundaries and around zero. Vectors
+// span full packets and an irregular tail; each output row retains a guard lane.
+// The independent VM oracle evaluates the authored scalar and vector operations.
+
+func.def @signed_unary_i8(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %inputs = buffer.view %input[%base] : buffer -> view<67xi8>
+  %outputs = buffer.view %output[%base] : buffer -> view<6x68xi8>
+  %values = vector.load %inputs[0] : view<67xi8> -> vector<67xi8>
+  %negative = vector.negi %values : vector<67xi8>
+  %absolute = vector.absi %values : vector<67xi8>
+  %sign = vector.signi %values : vector<67xi8>
+  vector.store %negative, %outputs[0, 0] : vector<67xi8>, view<6x68xi8>
+  vector.store %absolute, %outputs[1, 0] : vector<67xi8>, view<6x68xi8>
+  vector.store %sign, %outputs[2, 0] : vector<67xi8>, view<6x68xi8>
+  %begin = index.constant 0 : index
+  %end = index.constant 67 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%begin to %end step %step] {
+    %value = view.load %inputs[%i] : view<67xi8> -> i8
+    %scalar_negative = scalar.negi %value : i8
+    %scalar_absolute = scalar.absi %value : i8
+    %scalar_sign = scalar.signi %value : i8
+    view.store %scalar_negative, %outputs[3, %i] : i8, view<6x68xi8>
+    view.store %scalar_absolute, %outputs[4, %i] : i8, view<6x68xi8>
+    view.store %scalar_sign, %outputs[5, %i] : i8, view<6x68xi8>
+  }
+  func.return
+}
+
+check.scenario @signed_unary_i8_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-128) step(1) period(2) : tensor<67xi8>
+    %output = check.generate.fill value(93) : tensor<6x68xi8>
+    check.compare<@signed_unary_i8>(%input, %output) : (tensor<67xi8>, tensor<6x68xi8>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x68xi8>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(126) step(1) period(2) : tensor<67xi8>
+    %output = check.generate.fill value(93) : tensor<6x68xi8>
+    check.compare<@signed_unary_i8>(%input, %output) : (tensor<67xi8>, tensor<6x68xi8>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x68xi8>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-1) step(1) period(3) : tensor<67xi8>
+    %output = check.generate.fill value(93) : tensor<6x68xi8>
+    check.compare<@signed_unary_i8>(%input, %output) : (tensor<67xi8>, tensor<6x68xi8>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x68xi8>
+    }
+  }
+  check.return
+}
+
+func.def @signed_unary_i16(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %inputs = buffer.view %input[%base] : buffer -> view<35xi16>
+  %outputs = buffer.view %output[%base] : buffer -> view<6x36xi16>
+  %values = vector.load %inputs[0] : view<35xi16> -> vector<35xi16>
+  %negative = vector.negi %values : vector<35xi16>
+  %absolute = vector.absi %values : vector<35xi16>
+  %sign = vector.signi %values : vector<35xi16>
+  vector.store %negative, %outputs[0, 0] : vector<35xi16>, view<6x36xi16>
+  vector.store %absolute, %outputs[1, 0] : vector<35xi16>, view<6x36xi16>
+  vector.store %sign, %outputs[2, 0] : vector<35xi16>, view<6x36xi16>
+  %begin = index.constant 0 : index
+  %end = index.constant 35 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%begin to %end step %step] {
+    %value = view.load %inputs[%i] : view<35xi16> -> i16
+    %scalar_negative = scalar.negi %value : i16
+    %scalar_absolute = scalar.absi %value : i16
+    %scalar_sign = scalar.signi %value : i16
+    view.store %scalar_negative, %outputs[3, %i] : i16, view<6x36xi16>
+    view.store %scalar_absolute, %outputs[4, %i] : i16, view<6x36xi16>
+    view.store %scalar_sign, %outputs[5, %i] : i16, view<6x36xi16>
+  }
+  func.return
+}
+
+check.scenario @signed_unary_i16_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-32768) step(1) period(2) : tensor<35xi16>
+    %output = check.generate.fill value(93) : tensor<6x36xi16>
+    check.compare<@signed_unary_i16>(%input, %output) : (tensor<35xi16>, tensor<6x36xi16>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x36xi16>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(32766) step(1) period(2) : tensor<35xi16>
+    %output = check.generate.fill value(93) : tensor<6x36xi16>
+    check.compare<@signed_unary_i16>(%input, %output) : (tensor<35xi16>, tensor<6x36xi16>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x36xi16>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-1) step(1) period(3) : tensor<35xi16>
+    %output = check.generate.fill value(93) : tensor<6x36xi16>
+    check.compare<@signed_unary_i16>(%input, %output) : (tensor<35xi16>, tensor<6x36xi16>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x36xi16>
+    }
+  }
+  check.return
+}
+
+func.def @signed_unary_i32(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %inputs = buffer.view %input[%base] : buffer -> view<19xi32>
+  %outputs = buffer.view %output[%base] : buffer -> view<6x20xi32>
+  %values = vector.load %inputs[0] : view<19xi32> -> vector<19xi32>
+  %negative = vector.negi %values : vector<19xi32>
+  %absolute = vector.absi %values : vector<19xi32>
+  %sign = vector.signi %values : vector<19xi32>
+  vector.store %negative, %outputs[0, 0] : vector<19xi32>, view<6x20xi32>
+  vector.store %absolute, %outputs[1, 0] : vector<19xi32>, view<6x20xi32>
+  vector.store %sign, %outputs[2, 0] : vector<19xi32>, view<6x20xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 19 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%begin to %end step %step] {
+    %value = view.load %inputs[%i] : view<19xi32> -> i32
+    %scalar_negative = scalar.negi %value : i32
+    %scalar_absolute = scalar.absi %value : i32
+    %scalar_sign = scalar.signi %value : i32
+    view.store %scalar_negative, %outputs[3, %i] : i32, view<6x20xi32>
+    view.store %scalar_absolute, %outputs[4, %i] : i32, view<6x20xi32>
+    view.store %scalar_sign, %outputs[5, %i] : i32, view<6x20xi32>
+  }
+  func.return
+}
+
+check.scenario @signed_unary_i32_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-2147483648) step(1) period(2) : tensor<19xi32>
+    %output = check.generate.fill value(93) : tensor<6x20xi32>
+    check.compare<@signed_unary_i32>(%input, %output) : (tensor<19xi32>, tensor<6x20xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x20xi32>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(2147483646) step(1) period(2) : tensor<19xi32>
+    %output = check.generate.fill value(93) : tensor<6x20xi32>
+    check.compare<@signed_unary_i32>(%input, %output) : (tensor<19xi32>, tensor<6x20xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x20xi32>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-1) step(1) period(3) : tensor<19xi32>
+    %output = check.generate.fill value(93) : tensor<6x20xi32>
+    check.compare<@signed_unary_i32>(%input, %output) : (tensor<19xi32>, tensor<6x20xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x20xi32>
+    }
+  }
+  check.return
+}
+
+func.def @signed_unary_i64(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %inputs = buffer.view %input[%base] : buffer -> view<11xi64>
+  %outputs = buffer.view %output[%base] : buffer -> view<6x12xi64>
+  %values = vector.load %inputs[0] : view<11xi64> -> vector<11xi64>
+  %negative = vector.negi %values : vector<11xi64>
+  %absolute = vector.absi %values : vector<11xi64>
+  %sign = vector.signi %values : vector<11xi64>
+  vector.store %negative, %outputs[0, 0] : vector<11xi64>, view<6x12xi64>
+  vector.store %absolute, %outputs[1, 0] : vector<11xi64>, view<6x12xi64>
+  vector.store %sign, %outputs[2, 0] : vector<11xi64>, view<6x12xi64>
+  %begin = index.constant 0 : index
+  %end = index.constant 11 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%begin to %end step %step] {
+    %value = view.load %inputs[%i] : view<11xi64> -> i64
+    %scalar_negative = scalar.negi %value : i64
+    %scalar_absolute = scalar.absi %value : i64
+    %scalar_sign = scalar.signi %value : i64
+    view.store %scalar_negative, %outputs[3, %i] : i64, view<6x12xi64>
+    view.store %scalar_absolute, %outputs[4, %i] : i64, view<6x12xi64>
+    view.store %scalar_sign, %outputs[5, %i] : i64, view<6x12xi64>
+  }
+  func.return
+}
+
+check.scenario @signed_unary_i64_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-9223372036854775808) step(1) period(2) : tensor<11xi64>
+    %output = check.generate.fill value(93) : tensor<6x12xi64>
+    check.compare<@signed_unary_i64>(%input, %output) : (tensor<11xi64>, tensor<6x12xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x12xi64>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(9223372036854775806) step(1) period(2) : tensor<11xi64>
+    %output = check.generate.fill value(93) : tensor<6x12xi64>
+    check.compare<@signed_unary_i64>(%input, %output) : (tensor<11xi64>, tensor<6x12xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x12xi64>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-1) step(1) period(3) : tensor<11xi64>
+    %output = check.generate.fill value(93) : tensor<6x12xi64>
+    check.compare<@signed_unary_i64>(%input, %output) : (tensor<11xi64>, tensor<6x12xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x12xi64>
+    }
+  }
+  check.return
+}
+
+func.def @signed_unary_predicates(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %inputs = buffer.view %input[%base] : buffer -> view<19xi8>
+  %outputs = buffer.view %output[%base] : buffer -> view<6x20xi8>
+  %values = vector.load %inputs[0] : view<19xi8> -> vector<19xi8>
+  %inactive = vector.constant 0 : vector<19xi8>
+  %predicates = vector.cmpi ne, %values, %inactive : vector<19xi8> -> vector<19xi1>
+  %negative = vector.negi %predicates : vector<19xi1>
+  %absolute = vector.absi %predicates : vector<19xi1>
+  %sign = vector.signi %predicates : vector<19xi1>
+  %negative_bytes = vector.extui %negative : vector<19xi1> to vector<19xi8>
+  %absolute_bytes = vector.extui %absolute : vector<19xi1> to vector<19xi8>
+  %sign_bytes = vector.extui %sign : vector<19xi1> to vector<19xi8>
+  vector.store %negative_bytes, %outputs[0, 0] : vector<19xi8>, view<6x20xi8>
+  vector.store %absolute_bytes, %outputs[1, 0] : vector<19xi8>, view<6x20xi8>
+  vector.store %sign_bytes, %outputs[2, 0] : vector<19xi8>, view<6x20xi8>
+  %begin = index.constant 0 : index
+  %end = index.constant 19 : index
+  %step = index.constant 1 : index
+  %scalar_inactive = scalar.constant 0 : i8
+  scf.for %i = [%begin to %end step %step] {
+    %value = view.load %inputs[%i] : view<19xi8> -> i8
+    %predicate = scalar.cmpi ne, %value, %scalar_inactive : i8
+    %scalar_negative = scalar.negi %predicate : i1
+    %scalar_absolute = scalar.absi %predicate : i1
+    %scalar_sign = scalar.signi %predicate : i1
+    %negative_byte = scalar.extui %scalar_negative : i1 to i8
+    %absolute_byte = scalar.extui %scalar_absolute : i1 to i8
+    %sign_byte = scalar.extui %scalar_sign : i1 to i8
+    view.store %negative_byte, %outputs[3, %i] : i8, view<6x20xi8>
+    view.store %absolute_byte, %outputs[4, %i] : i8, view<6x20xi8>
+    view.store %sign_byte, %outputs[5, %i] : i8, view<6x20xi8>
+  }
+  func.return
+}
+
+check.scenario @signed_unary_predicate_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-1) step(1) period(3) : tensor<19xi8>
+    %output = check.generate.fill value(93) : tensor<6x20xi8>
+    check.compare<@signed_unary_predicates>(%input, %output) : (tensor<19xi8>, tensor<6x20xi8>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6x20xi8>
+    }
+  }
+  check.return
+}

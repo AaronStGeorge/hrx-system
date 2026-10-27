@@ -1207,7 +1207,7 @@ static iree_status_t loom_scalar_legalize_narrow_bit_count(
 }
 
 // Composes signed-unary integer operations from target arithmetic primitives.
-// One-bit negation and absolute value are identities under wrapping i1
+// One-bit negation, absolute value, and sign are identities under wrapping i1
 // semantics. Narrow values use one signed i32 carrier so every intermediate
 // observes the authored sign while truncation preserves the minimum-value
 // wraparound case.
@@ -1255,14 +1255,34 @@ static iree_status_t loom_scalar_legalize_signed_unary(
       IREE_RETURN_IF_ERROR(loom_scalar_shrsi_build(
           builder, value, shift_amount, working_type, op->location, &shift));
       const loom_value_id_t sign = loom_scalar_shrsi_result(shift);
-      loom_op_t* magnitude = NULL;
-      IREE_RETURN_IF_ERROR(loom_scalar_xori_build(
-          builder, value, sign, working_type, op->location, &magnitude));
-      loom_op_t* subtraction = NULL;
-      IREE_RETURN_IF_ERROR(loom_scalar_subi_build(
-          builder, 0, loom_scalar_xori_result(magnitude), sign, working_type,
-          op->location, &subtraction));
-      replacement = loom_scalar_subi_result(subtraction);
+      if (loom_scalar_absi_isa(op)) {
+        loom_op_t* magnitude = NULL;
+        IREE_RETURN_IF_ERROR(loom_scalar_xori_build(
+            builder, value, sign, working_type, op->location, &magnitude));
+        loom_op_t* subtraction = NULL;
+        IREE_RETURN_IF_ERROR(loom_scalar_subi_build(
+            builder, 0, loom_scalar_xori_result(magnitude), sign, working_type,
+            op->location, &subtraction));
+        replacement = loom_scalar_subi_result(subtraction);
+      } else {
+        loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
+        IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_scalar_constant(
+            builder, op->location, working_type, 0, &zero));
+        loom_op_t* nonzero = NULL;
+        IREE_RETURN_IF_ERROR(
+            loom_scalar_cmpi_build(builder, LOOM_SCALAR_CMPI_PREDICATE_NE,
+                                   value, zero, op->location, &nonzero));
+        loom_op_t* extension = NULL;
+        IREE_RETURN_IF_ERROR(
+            loom_scalar_extui_build(builder, loom_scalar_cmpi_result(nonzero),
+                                    loom_type_scalar(LOOM_SCALAR_TYPE_I1),
+                                    working_type, op->location, &extension));
+        loom_op_t* combine = NULL;
+        IREE_RETURN_IF_ERROR(loom_scalar_ori_build(
+            builder, sign, loom_scalar_extui_result(extension), working_type,
+            op->location, &combine));
+        replacement = loom_scalar_ori_result(combine);
+      }
     }
 
     if (input_width < working_width) {
@@ -1722,6 +1742,11 @@ static const loom_target_legalizer_rule_t kScalarLegalizerRules[] = {
     },
     {
         .root_kind = LOOM_OP_SCALAR_ABSI,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_INTEGER,
+        .legalize = loom_scalar_legalize_signed_unary,
+    },
+    {
+        .root_kind = LOOM_OP_SCALAR_SIGNI,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_INTEGER,
         .legalize = loom_scalar_legalize_signed_unary,
     },

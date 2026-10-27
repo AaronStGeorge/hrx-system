@@ -131,6 +131,7 @@ from .integer_float import (
     vector_integer_float_descriptors,
 )
 from .integer_rotation import X86_AVX512_ROTATION_DESCRIPTORS
+from .integer_unary import integer_unary_descriptors
 from .memory import memory_descriptors
 from .scalar import X86_SCALAR_DESCRIPTOR_SET
 
@@ -587,6 +588,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
     descriptors=(
         *X86_AVX2_DESCRIPTORS,
         *X86_AVX512_ROTATION_DESCRIPTORS,
+        *integer_unary_descriptors(evex=True),
         *integer_float_descriptors(unsigned=True),
         *vector_integer_float_descriptors(
             AVX512_INTEGER_FLOAT_I32_FORMS[-2:], unsigned=False, evex=True

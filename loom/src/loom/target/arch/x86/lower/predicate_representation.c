@@ -7,6 +7,7 @@
 #include "loom/target/arch/x86/lower/predicate_representation.h"
 
 #include "loom/ops/vector/ops.h"
+#include "loom/target/arch/x86/feature_bits.h"
 
 typedef enum loom_x86_predicate_representation_action_e {
   LOOM_X86_PREDICATE_REPRESENTATION_ACTION_FLEXIBLE_RESULT = 0,
@@ -24,7 +25,9 @@ typedef enum loom_x86_predicate_profile_e {
 } loom_x86_predicate_profile_t;
 
 typedef struct loom_x86_predicate_representation_policy_t {
+  // Instruction profile providing predicate operations.
   loom_x86_predicate_profile_t profile;
+  // Largest logical predicate shape handled by this profile.
   uint32_t maximum_lane_count;
 } loom_x86_predicate_representation_policy_t;
 
@@ -233,14 +236,18 @@ static loom_low_representation_cost_t loom_x86_predicate_conversion_cost(
 
 static loom_low_representation_id_t loom_x86_predicate_native_representation(
     const loom_x86_predicate_representation_policy_t* policy,
-    uint32_t lane_count, uint32_t vector_bit_width) {
+    loom_low_lower_context_t* context, uint32_t lane_count,
+    uint32_t vector_bit_width) {
   if (vector_bit_width != 16 && vector_bit_width != 32 &&
       vector_bit_width != 64 && vector_bit_width != 128 &&
       vector_bit_width != 256 && vector_bit_width != 512) {
     return LOOM_LOW_REPRESENTATION_ID_NONE;
   }
   if (policy->profile == LOOM_X86_PREDICATE_PROFILE_AVX512 &&
-      vector_bit_width > 64) {
+      vector_bit_width > 64 &&
+      (vector_bit_width == 512 ||
+       (loom_low_lower_context_bundle(context)->config->contract_feature_bits &
+        LOOM_X86_FEATURE_AVX512_VL) != 0)) {
     return LOOM_X86_PREDICATE_REPRESENTATION_MASK;
   }
   return (loom_low_representation_id_t)(vector_bit_width / lane_count);
@@ -383,7 +390,7 @@ static void loom_x86_predicate_observe_compare(
   }
   const uint32_t vector_bit_width = lane_count * (uint32_t)element_bit_width;
   const loom_low_representation_id_t native_representation =
-      loom_x86_predicate_native_representation(policy, lane_count,
+      loom_x86_predicate_native_representation(policy, context, lane_count,
                                                vector_bit_width);
   if (native_representation == LOOM_LOW_REPRESENTATION_ID_NONE) {
     return;
@@ -538,7 +545,7 @@ static void loom_x86_predicate_observe_select(
   }
   const uint32_t vector_bit_width = lane_count * (uint32_t)element_bit_width;
   const loom_low_representation_id_t native_representation =
-      loom_x86_predicate_native_representation(policy, lane_count,
+      loom_x86_predicate_native_representation(policy, context, lane_count,
                                                vector_bit_width);
   if (native_representation == LOOM_LOW_REPRESENTATION_ID_NONE) {
     return;

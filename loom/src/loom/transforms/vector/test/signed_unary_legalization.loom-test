@@ -1,0 +1,83 @@
+// RUN: pass target-legalize{mode=eager},dce,canonicalize
+
+test.target<low_core> @target
+
+func.def target(@target) @predicate_identity(%input: vector<2x3xi1>) -> (vector<2x3xi1>, vector<2x3xi1>, vector<2x3xi1>) {
+  %negative = vector.negi %input : vector<2x3xi1>
+  %absolute = vector.absi %input : vector<2x3xi1>
+  %sign = vector.signi %input : vector<2x3xi1>
+  func.return %negative, %absolute, %sign : vector<2x3xi1>, vector<2x3xi1>, vector<2x3xi1>
+}
+
+// ----
+test.target<low_core> @target
+
+func.def target(@target) @predicate_identity(%input: vector<2x3xi1>) -> (vector<2x3xi1>, vector<2x3xi1>, vector<2x3xi1>) {
+  func.return %input, %input, %input : vector<2x3xi1>, vector<2x3xi1>, vector<2x3xi1>
+}
+
+// ====
+
+test.target<low_core> @target
+
+func.def target(@target) @signed_lanes(%input: vector<2x3xi64>) -> (vector<2x3xi64>, vector<2x3xi64>, vector<2x3xi64>) {
+  %negative = vector.negi %input : vector<2x3xi64>
+  %absolute = vector.absi %input : vector<2x3xi64>
+  %sign = vector.signi %input : vector<2x3xi64>
+  func.return %negative, %absolute, %sign : vector<2x3xi64>, vector<2x3xi64>, vector<2x3xi64>
+}
+
+// ----
+test.target<low_core> @target
+
+func.def target(@target) @signed_lanes(%input: vector<2x3xi64>) -> (vector<2x3xi64>, vector<2x3xi64>, vector<2x3xi64>) {
+  %18 = vector.constant 0 : vector<2x3xi64>
+  %negative = vector.subi %18, %input : vector<2x3xi64>
+  %14 = vector.constant 0 : vector<2x3xi64>
+  %15 = vector.subi %14, %input : vector<2x3xi64>
+  %16 = vector.cmpi slt, %input, %14 : vector<2x3xi64> -> vector<2x3xi1>
+  %absolute = vector.select %16, %15, %input : vector<2x3xi64>
+  %7 = vector.constant 0 : vector<2x3xi64>
+  %8 = vector.cmpi slt, %input, %7 : vector<2x3xi64> -> vector<2x3xi1>
+  %9 = vector.constant 1 : vector<2x3xi64>
+  %10 = vector.constant -1 : vector<2x3xi64>
+  %11 = vector.cmpi ne, %input, %7 : vector<2x3xi64> -> vector<2x3xi1>
+  %12 = vector.select %11, %9, %7 : vector<2x3xi64>
+  %sign = vector.select %8, %10, %12 : vector<2x3xi64>
+  func.return %negative, %absolute, %sign : vector<2x3xi64>, vector<2x3xi64>, vector<2x3xi64>
+}
+
+// ====
+
+// Final legalization retains the integer lane program when subtraction has no
+// native vector contract. Native vector carriers keep their earlier precedence.
+// RUN: pass target-legalize{mode=final,policy=reference-only},dce,canonicalize
+test.target<low_core> @target
+
+func.def target(@target) @reference_subtraction(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi32>) {
+  %difference = vector.subi %lhs, %rhs : vector<4xi32>
+  func.return %difference : vector<4xi32>
+}
+
+// ----
+test.target<low_core> @target
+
+func.def target(@target) @reference_subtraction(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi32>) {
+  %4 = vector.extract %lhs[0] : vector<4xi32> -> i32
+  %5 = vector.extract %rhs[0] : vector<4xi32> -> i32
+  %6 = scalar.subi %4, %5 : i32
+  %7 = vector.extract %lhs[1] : vector<4xi32> -> i32
+  %8 = vector.extract %rhs[1] : vector<4xi32> -> i32
+  %9 = scalar.subi %7, %8 : i32
+  %10 = vector.extract %lhs[2] : vector<4xi32> -> i32
+  %11 = vector.extract %rhs[2] : vector<4xi32> -> i32
+  %12 = scalar.subi %10, %11 : i32
+  %13 = vector.extract %lhs[3] : vector<4xi32> -> i32
+  %14 = vector.extract %rhs[3] : vector<4xi32> -> i32
+  %15 = scalar.subi %13, %14 : i32
+  %17 = vector.splat %6 : vector<4xi32>
+  %18 = vector.insert %9 into %17[1] : i32, vector<4xi32>
+  %19 = vector.insert %12 into %18[2] : i32, vector<4xi32>
+  %difference = vector.insert %15 into %19[3] : i32, vector<4xi32>
+  func.return %difference : vector<4xi32>
+}

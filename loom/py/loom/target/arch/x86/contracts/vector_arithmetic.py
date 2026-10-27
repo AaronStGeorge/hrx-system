@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from loom.dialect.vector import defs as vector
+from loom.target.arch.x86.contracts.integer_unary import integer_unary_rules
 from loom.target.arch.x86.contracts.rule_builders import (
     DescriptorLookup as _DescriptorLookup,
 )
@@ -345,6 +346,7 @@ def avx2_vector_arithmetic_rules(
     descriptor_lookup: _DescriptorLookup,
 ) -> tuple[ContractCase, ...]:
     return (
+        *integer_unary_rules(descriptor_lookup, evex=False),
         *_immediate_shift_rules(
             descriptor_lookup,
             "x86.avx2",
@@ -387,6 +389,7 @@ def avx512_vector_arithmetic_rules(
     descriptor_lookup: _DescriptorLookup,
 ) -> tuple[ContractCase, ...]:
     return (
+        *integer_unary_rules(descriptor_lookup, evex=True),
         *_immediate_shift_rules(
             descriptor_lookup,
             "x86.avx512",

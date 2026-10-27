@@ -186,6 +186,21 @@ endif()
 if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ROUTE_VM_IREE_VM AND IREE_ARCH STREQUAL "x86_64")
 iree_native_test(
   NAME
+    "signed_unary_scenario_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/signed_unary.loom}}"
+    "--device=task"
+    "--task_topology_max_group_count=2"
+  SRC
+    loom::tools::loom-test
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/signed_unary.loom"
+)
+endif()
+
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ROUTE_VM_IREE_VM AND IREE_ARCH STREQUAL "x86_64")
+iree_native_test(
+  NAME
     "float_exponent_scenario_test"
   ARGS
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/float/exponent.loom}}"

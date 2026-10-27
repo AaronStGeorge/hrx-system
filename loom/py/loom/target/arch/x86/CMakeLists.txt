@@ -74,6 +74,7 @@ iree_py_library(
     native_vector
   SRCS
     "native_conversion.py"
+    "native_integer_unary.py"
     "native_vector.py"
     "vector_encoding.py"
   DEPS
@@ -115,6 +116,7 @@ iree_py_library(
     "descriptors/integer_bits.py"
     "descriptors/integer_float.py"
     "descriptors/integer_rotation.py"
+    "descriptors/integer_unary.py"
     "descriptors/memory.py"
     "descriptors/packed_dot.py"
     "descriptors/scalar.py"

@@ -328,6 +328,8 @@ loom_cc_library(
         "bitwise_legalization.c",
         "bitwise_legalization.h",
         "memory_legalization.c",
+        "signed_unary_legalization.c",
+        "signed_unary_legalization.h",
         "target_legalization.c",
     ],
     hdrs = [

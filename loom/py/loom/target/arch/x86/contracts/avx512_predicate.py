@@ -200,9 +200,8 @@ def avx512_predicate_representation_id(lane_count: int, register_class: str) -> 
 
 def _predicate_representation_guards(
     field: str, lane_count: int, register_class: str
-) -> tuple[Guard, Guard]:
+) -> tuple[Guard, ...]:
     return (
-        Guard.low_value_register_class(field, register_class),
         Guard.low_value_representation(
             field,
             avx512_predicate_representation_id(lane_count, register_class),
@@ -212,16 +211,13 @@ def _predicate_representation_guards(
 
 def _conversion_representation_guards(
     field: str, lane_count: int, vector_bit_width: int | None
-) -> tuple[Guard, Guard]:
+) -> tuple[Guard, ...]:
+    # Representation selection owns the physical class. Requiring a class here
+    # would pin early packet queries to the callable SIMD carrier before mask
+    # versus SIMD planning has run.
     if vector_bit_width is None:
-        return (
-            Guard.low_value_register_class(field, "x86.k"),
-            Guard.low_value_representation(field, _MASK_REPRESENTATION),
-        )
-    return (
-        Guard.low_value_register_class(field, _REGISTER_CLASSES[vector_bit_width]),
-        Guard.low_value_representation(field, vector_bit_width // lane_count),
-    )
+        return (Guard.low_value_representation(field, _MASK_REPRESENTATION),)
+    return (Guard.low_value_representation(field, vector_bit_width // lane_count),)
 
 
 def _mask_to_carrier_descriptor_key(lane_count: int) -> str:
@@ -1005,6 +1001,11 @@ def _comparison_rule(
         descriptor=compare,
         guards=(
             *(
+                (Guard.descriptor_available(compare),)
+                if compare.feature_mask_words
+                else ()
+            ),
+            *(
                 (Guard.enum_attr_in("predicate", predicates),)
                 if predicates is not None
                 else ()
@@ -1221,6 +1222,7 @@ def _select_rule(
         source_op=vector.vector_select,
         descriptor=blend,
         guards=(
+            *((Guard.descriptor_available(blend),) if blend.feature_mask_words else ()),
             Guard.value_type("condition", _PREDICATE_TYPES[lane_count]),
             *_typed_guards(("true_value", "false_value", "result"), value_type),
             *_conversion_representation_guards(

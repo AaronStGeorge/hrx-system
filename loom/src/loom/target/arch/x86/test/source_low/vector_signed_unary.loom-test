@@ -1,0 +1,116 @@
+// Native absolute value uses the logical lane type even in partial carriers.
+// RUN: emit source-low target=x86:avx2 output=low
+func.def @absolute_lanes(%bytes: vector<4xi8>, %words: vector<8xi16>, %dwords: vector<8xi32>) -> (vector<4xi8>, vector<8xi16>, vector<8xi32>) {
+  %abs_bytes = vector.absi %bytes : vector<4xi8>
+  %abs_words = vector.absi %words : vector<8xi16>
+  %abs_dwords = vector.absi %dwords : vector<8xi32>
+  func.return %abs_bytes, %abs_words, %abs_dwords : vector<4xi8>, vector<8xi16>, vector<8xi32>
+}
+
+// ----
+low.func.def target<x86.avx2.core> abi(object_function) abi_layout({signature = (vector<4xi8>, vector<8xi16>, vector<8xi32>) -> (vector<4xi8>, vector<8xi16>, vector<8xi32>)}) @absolute_lanes(%bytes: reg<x86.xmm>, %words: reg<x86.xmm>, %dwords: reg<x86.ymm>) -> (reg<x86.xmm>, reg<x86.xmm>, reg<x86.ymm>) asm {
+  %abs_bytes = vpabsb.xmm %bytes
+  %abs_words = vpabsw.xmm %words
+  %abs_dwords = vpabsd.ymm %dwords
+  return %abs_bytes, %abs_words, %abs_dwords
+}
+
+// ====
+
+// AVX2 qwords compose every unary operation without scalar lane extraction.
+// RUN: emit source-low target=x86:avx2 output=low
+func.def @composed_qwords(%input: vector<4xi64>) -> (vector<4xi64>, vector<4xi64>, vector<4xi64>) {
+  %negative = vector.negi %input : vector<4xi64>
+  %absolute = vector.absi %input : vector<4xi64>
+  %sign = vector.signi %input : vector<4xi64>
+  func.return %negative, %absolute, %sign : vector<4xi64>, vector<4xi64>, vector<4xi64>
+}
+
+// ----
+low.func.def target<x86.avx2.core> abi(object_function) abi_layout({signature = (vector<4xi64>) -> (vector<4xi64>, vector<4xi64>, vector<4xi64>)}) @composed_qwords(%input: reg<x86.ymm>) -> (reg<x86.ymm>, reg<x86.ymm>, reg<x86.ymm>) asm {
+  %24 = vxorps.zero.ymm
+  %negative = vpsubq.ymm %24, %input
+  %26 = vpcmpgtq.ymm %24, %input
+  %absolute = vpblendvb.ymm %input, %negative, %26
+  %28 = mov.imm64 1
+  %29 = vmovq.xmm.gpr64 %28
+  %30 = vpbroadcastq.ymm %29
+  %31 = mov.imm64 -1
+  %32 = vmovq.xmm.gpr64 %31
+  %33 = vpbroadcastq.ymm %32
+  %34 = vpcmpeqq.ymm %input, %24
+  %35 = vpcmpeqq.ymm %input, %input
+  %36 = vpxor.ymm %34, %35
+  %37 = vpblendvb.ymm %24, %30, %36
+  %sign = vpblendvb.ymm %37, %33, %26
+  return %negative, %absolute, %sign
+}
+
+// ====
+
+// AVX-512 adds native qword absolute value, including one-lane XMM carriers.
+// RUN: emit source-low target=x86:avx512 output=low
+func.def @absolute_qwords(%single: vector<1xi64>, %pair: vector<2xi64>, %quad: vector<4xi64>, %octet: vector<8xi64>) -> (vector<1xi64>, vector<2xi64>, vector<4xi64>, vector<8xi64>) {
+  %a = vector.absi %single : vector<1xi64>
+  %b = vector.absi %pair : vector<2xi64>
+  %c = vector.absi %quad : vector<4xi64>
+  %d = vector.absi %octet : vector<8xi64>
+  func.return %a, %b, %c, %d : vector<1xi64>, vector<2xi64>, vector<4xi64>, vector<8xi64>
+}
+
+// ----
+low.func.def target<x86.avx512.core> abi(object_function) abi_layout({signature = (vector<1xi64>, vector<2xi64>, vector<4xi64>, vector<8xi64>) -> (vector<1xi64>, vector<2xi64>, vector<4xi64>, vector<8xi64>)}) @absolute_qwords(%single: reg<x86.xmm>, %pair: reg<x86.xmm>, %quad: reg<x86.ymm>, %octet: reg<x86.zmm>) -> (reg<x86.xmm>, reg<x86.xmm>, reg<x86.ymm>, reg<x86.zmm>) asm {
+  %a = avx512.vpabsq.xmm %single
+  %b = avx512.vpabsq.xmm %pair
+  %c = avx512.vpabsq.ymm %quad
+  %d = avx512.vpabsq.zmm %octet
+  return %a, %b, %c, %d
+}
+
+// ====
+
+// Without VL, partial packets use AVX2 while full-width absolute value stays
+// native. Qwords retain the shared comparison/selection recipe.
+// RUN: emit source-low output=low
+x86.target<avx512> @target {features = [-avx512vl]}
+
+func.def target(@target) @without_vl(%bytes: vector<4xi8>, %qwords: vector<2xi64>, %wide: vector<8xi64>) -> (vector<4xi8>, vector<2xi64>, vector<8xi64>) {
+  %a = vector.absi %bytes : vector<4xi8>
+  %b = vector.absi %qwords : vector<2xi64>
+  %c = vector.absi %wide : vector<8xi64>
+  func.return %a, %b, %c : vector<4xi8>, vector<2xi64>, vector<8xi64>
+}
+
+// ----
+low.func.def target<x86.avx512_features.core>(@target) abi(object_function) abi_layout({signature = (vector<4xi8>, vector<2xi64>, vector<8xi64>) -> (vector<4xi8>, vector<2xi64>, vector<8xi64>)}) @without_vl(%bytes: reg<x86.xmm>, %qwords: reg<x86.xmm>, %wide: reg<x86.zmm>) -> (reg<x86.xmm>, reg<x86.xmm>, reg<x86.zmm>) asm {
+  %a = vpabsb.xmm %bytes
+  %20 = vxorps.zero.xmm
+  %21 = vpsubq.xmm %20, %qwords
+  %22 = vpcmpgtq.xmm %20, %qwords
+  %b = vpblendvb.xmm %qwords, %21, %22
+  %c = avx512.vpabsq.zmm %wide
+  return %a, %b, %c
+}
+
+// ====
+
+// Sign remains full-width when no 512-bit sign-control instruction exists.
+// RUN: emit source-low target=x86:avx512 output=low
+func.def @wide_sign(%input: vector<64xi8>) -> (vector<64xi8>) {
+  %sign = vector.signi %input : vector<64xi8>
+  func.return %sign : vector<64xi8>
+}
+
+// ----
+low.func.def target<x86.avx512.core> abi(object_function) abi_layout({signature = (vector<64xi8>) -> (vector<64xi8>)}) @wide_sign(%input: reg<x86.zmm>) -> (reg<x86.zmm>) asm {
+  %12 = vxorps.zero
+  %13 = vpcmpb %input, %12, 1
+  %14 = mov.imm32 1
+  %15 = vpbroadcastb %14
+  %16 = mov.imm32 -1
+  %17 = vpbroadcastb %16
+  %18 = vpcmpb %input, %12, 4
+  %19 = vpblendmb %18, %15, %12
+  %sign = vpblendmb %13, %17, %19
+  return %sign
+}

@@ -66,6 +66,7 @@ loom_corpus_sources(
     "integer/narrow_consumers.loom"
     "integer/rotation.loom"
     "integer/scalar_observations.loom"
+    "integer/signed_unary.loom"
     "integer/wide/address_comparison.loom"
     "integer/wide/observations.loom"
     "integer/wide/shifts.loom"
