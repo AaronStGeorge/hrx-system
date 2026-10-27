@@ -872,9 +872,7 @@ IREE_API_EXPORT bool iree_string_view_parse_hex_bytes(
 
 IREE_API_EXPORT iree_status_t iree_string_view_parse_device_size(
     iree_string_view_t value, iree_device_size_t* out_size) {
-  // TODO(benvanik): probably worth to-lowering here on the size. Having copies
-  // of all the string view utils for just this case is code size overkill. For
-  // now only accept lazy lowercase.
+  const iree_string_view_t original_value = value;
   iree_device_size_t scale = 1;
   if (iree_string_view_consume_suffix(&value, IREE_SV("kb"))) {
     scale = 1000;
@@ -891,21 +889,40 @@ IREE_API_EXPORT iree_status_t iree_string_view_parse_device_size(
   } else if (iree_string_view_consume_suffix(&value, IREE_SV("b"))) {
     scale = 1;
   }
-  uint64_t size = 0;
-  if (!iree_string_view_atoi_uint64(value, &size)) {
+  if (iree_string_view_is_empty(value)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "size must be an integer, got '%.*s'",
-                            (int)value.size, value.data);
+                            "size requires a nonnegative decimal integer");
   }
-  size *= scale;
-  if (size > IREE_DEVICE_SIZE_MAX) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "size parsed (%" PRIu64
-        ") is out of the representable range of iree_device_size_t (%" PRIu64
-        ")",
-        size, (uint64_t)IREE_DEVICE_SIZE_MAX);
+  // Bound the magnitude before accumulating digits or scaling so neither
+  // arithmetic operation can wrap, including on a 32-bit device-size ABI.
+  const iree_device_size_t maximum = IREE_DEVICE_SIZE_MAX / scale;
+  iree_device_size_t size = 0;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < value.size && iree_status_is_ok(status);
+       ++i) {
+    const char c = value.data[i];
+    if (c < '0' || c > '9') {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "invalid byte size '%.*s'; expected decimal digits with an optional "
+          "b, kb, kib, mb, mib, gb, or gib suffix",
+          (int)original_value.size, original_value.data);
+    } else {
+      const iree_device_size_t digit = (iree_device_size_t)(c - '0');
+      if (size > maximum / 10 ||
+          (size == maximum / 10 && digit > maximum % 10)) {
+        status = iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "byte size '%.*s' exceeds the maximum of %" PRIu64 " bytes",
+            (int)original_value.size, original_value.data,
+            (uint64_t)IREE_DEVICE_SIZE_MAX);
+      } else {
+        size = size * 10 + digit;
+      }
+    }
   }
-  *out_size = size;
-  return iree_ok_status();
+  if (iree_status_is_ok(status)) {
+    *out_size = size * scale;
+  }
+  return status;
 }

@@ -361,7 +361,12 @@ IREE_API_EXPORT bool iree_string_view_parse_hex_bytes(
     iree_string_view_t value, iree_host_size_t buffer_length,
     uint8_t* out_buffer);
 
-// Parses a byte size in |value| and returns the value in |out_size|.
+// Parses a nonnegative decimal byte size in |value| into |out_size|. An
+// optional lowercase suffix selects decimal (b, kb, mb, gb) or binary (kib,
+// mib, gib) units. Leading zero digits remain decimal. Signs, whitespace,
+// fractions, exponents, and trailing characters are not accepted. Returns
+// INVALID_ARGUMENT for malformed values or OUT_OF_RANGE when the byte count
+// exceeds IREE_DEVICE_SIZE_MAX. Leaves |out_size| unchanged on failure.
 //
 // Examples:
 //   1073741824 => 1073741824
