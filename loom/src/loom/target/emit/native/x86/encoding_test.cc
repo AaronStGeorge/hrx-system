@@ -198,6 +198,19 @@ TEST(EncodingTest, PackedLowInterleaveWidths) {
   ExpectVectorEncoding(0x8210, 0x056c, operands, {0xc5, 0xe9, 0x6c, 0xcb});
 }
 
+TEST(EncodingTest, PackedAlignConcatenationOrder) {
+  loom_x86_encoding_operands_t operands = {
+      .immediate = 5,
+      .result = 1,
+      .inputs = {2, 3},
+  };
+  // LLVM spells this as vpalignr xmm1,xmm2,xmm3,5 and defines the result as
+  // xmm3[5..15] followed by xmm2[0..4]. The descriptor therefore names input
+  // zero "upper" and input one "lower".
+  ExpectVectorEncoding(0x9210, 0x070f, operands,
+                       {0xc4, 0xe3, 0x69, 0x0f, 0xcb, 0x05});
+}
+
 TEST(EncodingTest, EvexNdsMemoryBroadcastAndMaskModifiers) {
   // These bytes agree with independent LLVM and GNU assembler outputs.
   constexpr uint16_t kUnaryMerge = VectorRecipe(

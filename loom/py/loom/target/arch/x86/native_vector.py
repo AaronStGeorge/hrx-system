@@ -988,6 +988,13 @@ VPADDW = _instruction(
     _encoding(_EVEX, _MAP_1, 1, 0, 0xFD, (512,)),
     _encoding(_VEX, _MAP_1, 1, 0, 0xFD, (128, 256)),
 )
+VPALIGNR = _instruction(
+    "vpalignr",
+    _NDS_IMMEDIATE,
+    _OPERANDS_16,
+    _IMMEDIATES_5,
+    _encoding(_VEX, _MAP_3, 1, 0, 0x0F, (128, 256)),
+)
 VPAND = _instruction(
     "vpand",
     _NDS,
