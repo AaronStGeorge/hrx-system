@@ -134,6 +134,26 @@ def _download_progress_class(progress):
     return DownloadProgress
 
 
+def _download_failure(error: Exception, options: dict) -> FetchError:
+    # Xet's native errors carry useful IO/status causes but may also include
+    # signed redirects and credentials. Sanitize before crossing the worker
+    # boundary; arbitrary unexpected worker exceptions remain undisclosed.
+    reason = str(error).replace("\\/", "/")
+    token = options.get("token")
+    if isinstance(token, str) and token:
+        reason = reason.replace(token, "<redacted>")
+        reason = reason.replace(quote(token, safe=""), "<redacted>")
+    reason = re.sub(r"(?i)\bhttps?://[^\s\"'<>]*", "<redacted-url>", reason)
+    reason = re.sub(
+        r"(?i)\b(Bearer|Basic)\s+[-a-z0-9._~+/]+=*", r"\1 <redacted>", reason
+    )
+    reason = re.sub(r"\bhf_[A-Za-z0-9_]+", "<redacted>", reason)
+    return FetchError(
+        f"Hugging Face download failed for {options['repo_id']}/{options['filename']} "
+        f"(cache: {options['cache_dir']}): {type(error).__name__}: {reason}"
+    )
+
+
 def _hub_request(operation: str, options: dict, *, progress=None):
     import httpx2
     import huggingface_hub as hub
@@ -162,6 +182,13 @@ def _hub_request(operation: str, options: dict, *, progress=None):
         raise FetchError("Hugging Face could not retrieve the selected file") from None
     except httpx2.HTTPError:
         raise FetchError(f"Hugging Face {operation} transport failed") from None
+    except (RuntimeError, OSError) as error:
+        if operation != "download":
+            raise
+        # Native Xet maps IO and transport failures to RuntimeError rather than
+        # the SDK's HTTP exception hierarchy. Keep them on the normal CLI error
+        # path without retrying, changing transports, or discarding SDK caches.
+        raise _download_failure(error, options) from None
 
 
 def hf_url_source(

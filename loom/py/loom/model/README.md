@@ -270,9 +270,14 @@ model name. An authored card with multiple presets can be served directly with
 
 Acquisition progress uses stderr, including when redirected or running with
 `--no-input`. Aligned phase rows include a compact bar and percentage when a
-byte total is known. It reports each new phase promptly and throttles ongoing
-updates to one line every five seconds. stdout remains the final path or
-`--json` result. `--quiet` suppresses progress without suppressing errors or
+byte total is known, with observed throughput and an estimated time remaining.
+Download rows retain the file total when Xet reports network activity; received
+network bytes and their rate appear separately. ETA is for the current file
+stage, uses its observed average rate, and excludes bytes already present when
+resuming. Until there is measurable progress, it reads `ETA estimating`.
+Each new phase prints promptly; ongoing updates are limited to one line every
+thirty seconds. stdout remains the final path or `--json` result. `--quiet`
+suppresses progress without suppressing errors or
 access actions. Reports contain destination paths and numeric facts, never
 provider logs, credentials, or signed redirect URLs.
 
@@ -427,6 +432,13 @@ HF package or upstream access check. HF downloads use the SDK's ordinary cache;
 Loom verifies and shares those bytes without another payload cache. HTTP transfers
 validate status, framing, byte count, and locked hash; redirect destinations never
 replace logical source coordinates.
+
+Native transfer and cache-write failures report the selected repository file,
+the SDK cache directory, and the provider's error. Credentials and signed URLs are redacted.
+The SDK cache can be on a different volume from `--output`; its location follows
+the Hugging Face configuration, including `HF_HUB_CACHE`. A failed download does
+not clear that cache or switch transports, so another invocation can reuse the
+SDK's resumable data.
 
 HF `blob` and `resolve` model-card URLs resolve one immutable repository snapshot.
 The sibling lock and card-relative files retain that snapshot, including cached

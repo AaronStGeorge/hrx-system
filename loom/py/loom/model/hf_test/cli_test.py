@@ -45,6 +45,30 @@ def _publish(hub):
     hub.files["model.json"] = json.dumps(_card()).encode()
 
 
+def test_sdk_cache_write_failure_reports_context_without_traceback(tmp_path):
+    with running_hub(tmp_path) as hub:
+        _publish(hub)
+        hub.approved = True
+        # A regular file cannot contain the SDK cache, on either Windows or POSIX.
+        blocked_directory = tmp_path / "not-a-directory"
+        blocked_directory.write_bytes(b"occupied")
+        cache_directory = blocked_directory / "hf-cache"
+        result = subprocess.run(
+            _arguments(hub, "--list", "--json", "--no-input"),
+            env={**hub.environment(), "HF_HUB_CACHE": str(cache_directory)},
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1, result.stderr
+        document = json.loads(result.stdout)
+        assert document["kind"] == "error"
+        assert "Hugging Face download failed" in document["message"]
+        assert "fixture/model/model.json" in document["message"]
+        assert str(cache_directory) in document["message"]
+        assert "Traceback" not in result.stderr
+        assert "fixture-first" not in result.stdout + result.stderr
+
+
 def test_redirected_progress_arrives_before_hf_download_completes(tmp_path):
     with running_hub(tmp_path) as hub:
         _publish(hub)

@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import io
 import json
 import os
 import threading
@@ -11,9 +12,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
+from loom.model.fetch_console import ConsoleProgress
 from loom.model.fetch_hf import (
     AccessRequired,
     HuggingFace,
@@ -21,7 +24,60 @@ from loom.model.fetch_hf import (
     hf_url_source,
 )
 from loom.model.fetch_source import FetchError
-from loom.model.hf_test.hub import running_hub
+from loom.model.fetch_transfer import run_transfer
+from loom.model.hf_test.hub import failed_sdk_download, running_hub
+
+
+@pytest.mark.parametrize(
+    ("message", "reason", "secrets"),
+    [
+        (
+            "Data processing error: IO Error: No space left on device (os error 28)",
+            "No space left on device (os error 28)",
+            [],
+        ),
+        (
+            "Reqwest(reqwest::Error { kind: Status(403), url: "
+            '"https://transfer.example/blob?Policy=private-policy&Signature=private-signature", '
+            "source: TimedOut }) credential=fixture-secret",
+            "source: TimedOut",
+            [
+                "transfer.example",
+                "private-policy",
+                "private-signature",
+                "fixture-secret",
+            ],
+        ),
+        (
+            "HTTP status client error (401 Unauthorized) "
+            "Authorization: Bearer private-xet-token; token=hf_privatehubtoken",
+            "401 Unauthorized",
+            ["private-xet-token", "hf_privatehubtoken"],
+        ),
+        (
+            r"IO error: request to https:\/\/cdn.example\/blob?Signature=private-signature "
+            "failed; Authorization: Basic private-base64; token=hf_oauth_private",
+            "IO error",
+            ["cdn.example", "private-signature", "private-base64", "hf_oauth_private"],
+        ),
+    ],
+)
+def test_native_download_failure_survives_worker_without_secrets(
+    tmp_path, message, reason, secrets
+):
+    cache_directory = str(tmp_path / "hf-cache")
+    with pytest.raises(FetchError) as failure:
+        run_transfer(
+            failed_sdk_download,
+            (message, "fixture-secret", cache_directory),
+            threading.Event(),
+        )
+    diagnostic = str(failure.value)
+    assert reason in diagnostic
+    assert "fixture/model/parameter/model.gguf" in diagnostic
+    assert cache_directory in diagnostic
+    assert all(secret not in diagnostic for secret in secrets)
+    assert "unexpected transfer failure" not in diagnostic
 
 
 def test_download_progress_uses_real_provider_counters_without_logs(tmp_path):
@@ -72,6 +128,42 @@ def test_xet_reconstruction_and_network_bytes_remain_separate():
     assert (file_event.completed_bytes, file_event.total_bytes) == (100, 100)
     assert (transfer.completed_bytes, transfer.total_bytes) == (32, None)
     assert "private" not in repr(events)
+
+
+def test_xet_console_retains_file_progress_during_network_only_updates():
+    from huggingface_hub.utils._xet_progress_reporting import (
+        XetDownloadProgressReporter,
+    )
+
+    output = io.StringIO()
+    gib = 1024**3
+    with (
+        patch("loom.model.fetch_console.time.monotonic", return_value=0) as clock,
+        XetDownloadProgressReporter(
+            reconstruction_desc="private signed URL",
+            transfer_desc="private credential",
+            total=4 * gib,
+            log_level=20,
+            tqdm_class=_download_progress_class(ConsoleProgress(output)),
+        ) as progress,
+    ):
+        for now, received in ((15, 384 * 1024**2), (30, gib // 2)):
+            clock.return_value = now
+            progress.update_progress(
+                SimpleNamespace(
+                    total_bytes_completed=gib,
+                    total_transfer_bytes_completed=received,
+                    total_bytes=4 * gib,
+                    total_bytes_completion_rate=0,
+                    total_transfer_bytes_completion_rate=0,
+                )
+            )
+    lines = output.getvalue().splitlines()
+    assert len(lines) == 2
+    assert "25%  1.0 GiB / 4.0 GiB  34.1 MiB/s  ETA 1m 30s" in lines[-1]
+    assert "received 512.0 MiB (8.5 MiB/s)" in lines[-1]
+    assert "private" not in output.getvalue()
+    assert "total unknown" not in output.getvalue()
 
 
 def test_gate_refreshes_credentials_and_preserves_selected_revision(tmp_path):
