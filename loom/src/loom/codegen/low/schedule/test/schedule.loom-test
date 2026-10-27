@@ -1477,32 +1477,6 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_does_not_persis
 }
 
 // ====
-// RUN: emit low-schedule-json @resource_stall_ignores_authored_cliff_and_protects_next strategy=resource-stall diagnostics=candidates cliff=test.i32:69:15:14 cliff=test.i32:72:14:13 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_ignores_authored_cliff_and_protects_next(%pad: reg<test.i32 x66>, %lhs: reg<test.i32 x4>, %ptr: reg<test.ptr>) -> (reg<test.i32 x66>, reg<test.i32>, reg<test.i32 x4>) asm {
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_packet="test.extract_lane.i32", rejected_packet="test.load.v4i32", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="1", chosen_projected_live_units="68", rejected_projected_live_units="74", rejected_pressure_cliff_units="72"}
-  %lane = test.extract_lane.i32 %lhs, 0
-  %load = test.load.v4i32 %ptr
-  return %pad, %lane, %load
-}
-
-// ====
-// RUN: emit low-schedule-json @resource_stall_hides_latency_above_authored_pressure_cliff strategy=resource-stall diagnostics=candidates cliff=test.i32:69:15:14 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_hides_latency_above_authored_pressure_cliff(%pad: reg<test.i32 x70>, %ptr0: reg<test.ptr>, %ptr1: reg<test.ptr>) -> (reg<test.i32 x70>, reg<test.i32>, reg<test.i32 x4>) asm {
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", scored_candidate_count="2", chosen_packet="test.load.v4i32", rejected_packet="test.load.v4i32"}
-  %source = test.load.v4i32 %ptr0
-  %lane = test.extract_lane.i32 %source, 0
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", scored_candidate_count="2", chosen_packet="test.load.v4i32", rejected_packet="test.extract_lane.i32", chosen_data_ready_stall_cycles="0", rejected_data_ready_stall_cycles="4", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="0"}
-  %independent = test.load.v4i32 %ptr1
-  return %pad, %lane, %independent
-}
-
-// ====
 // RUN: emit low-schedule-json @resource_stall_accounts_for_collective_descriptor_frontier strategy=resource-stall diagnostics=candidates test.i32=29 output=none
 
 test.target<low_core> @test_target

@@ -23,23 +23,19 @@ TEST(TargetPressureTest, ResidencyHeadroomBelongsToGrowingResources) {
   };
   const iree_string_view_t resource_names[] = {IREE_SV("pointer"),
                                                IREE_SV("scalar")};
-  const loom_target_residency_cliff_t cliff = {
-      .resource_id = 0,
-      .cliff_units = 8,
-      .tier_before = 15,
-      .tier_after = 14,
-  };
+  const loom_target_residency_cliff_t cliffs[] = {{0, 8, 15, 14},
+                                                  {0, 12, 14, 13}};
   const loom_target_residency_cliff_range_t ranges[] = {
-      {.start = 0, .count = 1},
-      {.start = 1, .count = 0},
+      {.start = 0, .count = IREE_ARRAYSIZE(cliffs)},
+      {.start = IREE_ARRAYSIZE(cliffs), .count = 0},
   };
   const loom_target_residency_model_t residency = {
       .best_tier = 15,
       .direct_resources =
           {
               .names = resource_names,
-              .cliffs = &cliff,
-              .cliff_count = 1,
+              .cliffs = cliffs,
+              .cliff_count = IREE_ARRAYSIZE(cliffs),
               .cliff_ranges = ranges,
               .resource_count = IREE_ARRAYSIZE(ranges),
           },
@@ -73,7 +69,10 @@ TEST(TargetPressureTest, ResidencyHeadroomBelongsToGrowingResources) {
       {"growing below cliff", 1, 1, 0, 0, 2},
       {"one unit below cliff", 1, 2, 0, 0, 1},
       {"crossing cliff", 1, 3, 0, 1, no_cliff},
-      {"cliff already crossed by source", 1, 3, 1, 0, no_cliff},
+      {"first cliff already crossed by source", 1, 3, 1, 0, 4},
+      {"next cliff remains actionable", 1, 7, 1, 1, no_cliff},
+      {"both cliffs crossed", 1, 7, 0, 2, no_cliff},
+      {"all cliffs already crossed by source", 1, 7, 2, 0, no_cliff},
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.name);
@@ -83,7 +82,7 @@ TEST(TargetPressureTest, ResidencyHeadroomBelongsToGrowingResources) {
     uint16_t delta_classes[] = {1, 0};
     uint16_t block_classes[] = {0};
     uint8_t block_touched[] = {1, 0};
-    uint32_t first_cliffs[] = {test_case.first_cliff, 1};
+    uint32_t first_cliffs[] = {test_case.first_cliff, IREE_ARRAYSIZE(cliffs)};
     loom_low_schedule_pressure_state_t pressure = {
         .current_live_units_by_reg_class = live,
         .first_actionable_pressure_cliff_indices = first_cliffs,

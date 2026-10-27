@@ -271,6 +271,7 @@ loom_cc_test(
         "context.h",
         "pressure.h",
         "pressure_alias.h",
+        "pressure_test.cc",
         "ready_policy.h",
         "setup_order.h",
         "storage_lifetime.h",
