@@ -264,7 +264,7 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "call_pressure_test",
+    name = "pressure_test",
     srcs = [
         "call_pressure.h",
         "call_pressure_test.cc",
@@ -276,6 +276,7 @@ loom_cc_test(
         "storage_lifetime.h",
         "storage_relation_index.h",
         "target_pressure.h",
+        "target_pressure_test.cc",
     ],
     deps = [
         ":dependency_index",
