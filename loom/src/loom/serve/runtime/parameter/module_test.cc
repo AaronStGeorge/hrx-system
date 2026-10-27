@@ -18,33 +18,16 @@
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/retirement.h"
+#include "loom/serve/runtime/parameter/parameter_test_base.h"
 #include "loom/serve/runtime/program/program.h"
-#include "loom/serve/testing/device.h"
 
 namespace {
 
-class ParameterModuleTest : public ::testing::TestWithParam<uint32_t> {
+class ParameterModuleTest : public loom_serve::testing::ParameterTest {
  protected:
   void SetUp() override {
     loom_serve_retirement_initialize(&retirement_);
-    IREE_ASSERT_OK(
-        loom_serve_host_create(GetParam(), nullptr, allocator_, &host_));
-    iree_hal_driver_t* driver = nullptr;
-    IREE_ASSERT_OK(loom_serve_test_driver_acquire(host_, &driver));
-    const loom_serve_device_options_t options = {
-        .driver = driver,
-        .uri = loom_serve_test_device()->device_uri,
-    };
-    auto status = loom_serve_device_group_allocate(host_, 1, &options,
-                                                   allocator_, &group_);
-    iree_hal_driver_release(driver);
-    IREE_ASSERT_OK(status);
-    const loom_serve_pool_options_t pool_options = {};
-    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
-        group_, {IREE_SV("pool"), 1}, &pool_options, &storage_owner_));
-    owner_ = loom_serve_device_group_at(group_, 0);
-    device_ = loom_serve_device_handle(owner_);
-    queue_ = loom_serve_device_transfer_queue(owner_);
+    ASSERT_NO_FATAL_FAILURE(ParameterTest::SetUp());
     IREE_ASSERT_OK(iree_vm_environment_allocate(allocator_, &environment_));
     const iree_vm_ref_type_table_t* table = nullptr;
     IREE_ASSERT_OK(iree_hal_module_register_types(environment_, &table));
@@ -110,8 +93,7 @@ class ParameterModuleTest : public ::testing::TestWithParam<uint32_t> {
       }
     }
     iree_vm_environment_free(environment_);
-    IREE_EXPECT_OK(loom_serve_device_group_free(group_));
-    loom_serve_host_release(host_);
+    ParameterTest::TearDown();
   }
 
   void SelectSource(size_t domain) {
@@ -193,20 +175,6 @@ class ParameterModuleTest : public ::testing::TestWithParam<uint32_t> {
     iree_hal_buffer_release(std::exchange(targets_[domain], nullptr));
   }
 
-  // Host allocation policy, alive through final queue retirement.
-  iree_allocator_t allocator_ = iree_allocator_system();
-  // Shared workers and proactor used by the native queue implementation.
-  loom_serve_host_t* host_ = nullptr;
-  // Physical owner enclosing every module and accepted operation.
-  loom_serve_device_group_t* group_ = nullptr;
-  // Borrowed serving storage and queue capabilities.
-  loom_serve_device_t* owner_ = nullptr;
-  // Explicit fixed backing for the parameter module's retained buffers.
-  loom_serve_pool_t* storage_owner_ = nullptr;
-  // Borrowed physical device, alive through group teardown.
-  iree_hal_device_t* device_ = nullptr;
-  // Borrowed exact transfer queue used by all tested operations.
-  iree_hal_queue_t* queue_ = nullptr;
   // Canonical type owner outliving the module and escaped fence references.
   iree_vm_environment_t* environment_ = nullptr;
   // Device reference identities supplied to the native capability.

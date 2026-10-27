@@ -58,9 +58,18 @@ class ControlTest
     IREE_ASSERT_OK(
         loom_serve_test_host_create(2, iree_allocator_system(), &host_));
     IREE_ASSERT_OK(loom_serve_test_driver_acquire(host_, &driver_));
+    device_status_ = CreateDevice();
   }
 
   static void TearDownTestSuite() {
+    iree_hal_device_group_release(group_);
+    iree_hal_device_release(device_);
+    iree_async_frontier_tracker_release(frontier_tracker_);
+    iree_status_free(device_status_);
+    group_ = nullptr;
+    device_ = nullptr;
+    frontier_tracker_ = nullptr;
+    device_status_ = iree_ok_status();
     iree_hal_driver_release(driver_);
     loom_serve_host_release(host_);
     driver_ = nullptr;
@@ -68,7 +77,7 @@ class ControlTest
   }
 
   void SetUp() override {
-    iree::Status status = CreateDevice();
+    iree::Status status = iree_status_clone(device_status_);
     if (status.code() == iree::StatusCode::kUnimplemented ||
         status.code() == iree::StatusCode::kUnavailable) {
       GTEST_SKIP() << status.ToString();
@@ -189,12 +198,9 @@ class ControlTest
     loom_serve_execution_queues_release(execution_queues_);
     loom_serve_workspace_release(workspace_);
     iree_hal_pool_release(storage_pool_);
-    iree_hal_device_group_release(group_);
-    iree_hal_device_release(device_);
-    iree_async_frontier_tracker_release(frontier_tracker_);
   }
 
-  iree_status_t CreateDevice() {
+  static iree_status_t CreateDevice() {
     auto params = iree_hal_device_create_params_default();
     params.proactor_pool = loom_serve_host_proactor_pool(host_);
     iree_status_t status = iree_hal_driver_create_device_by_uri(
@@ -368,19 +374,21 @@ class ControlTest
   // Schedule and counters/canary supplied to the continuation command.
   static constexpr std::array<size_t, 2> kContinuationLengths = {96, 16};
   // Host allocation policy used for all runtime objects.
-  iree_allocator_t host_allocator_ = iree_allocator_system();
+  inline static iree_allocator_t host_allocator_ = iree_allocator_system();
   // Copied compiler evidence retained beyond individual results.
   loom_serve_compilation_report_t compilation_ = {};
   // Shared compiler workers and I/O services outliving the device.
   inline static loom_serve_host_t* host_ = nullptr;
   // One application driver retains process-owned native context across devices.
   inline static iree_hal_driver_t* driver_ = nullptr;
-  // Cross-queue frontier registry retained through group destruction.
-  iree_async_frontier_tracker_t* frontier_tracker_ = nullptr;
-  // Owned target device.
-  iree_hal_device_t* device_ = nullptr;
-  // Owned domain for the device's semaphores.
-  iree_hal_device_group_t* group_ = nullptr;
+  // Cross-queue frontier registry retained through suite group destruction.
+  inline static iree_async_frontier_tracker_t* frontier_tracker_ = nullptr;
+  // Suite-owned target device shared by every independent model execution.
+  inline static iree_hal_device_t* device_ = nullptr;
+  // Suite-owned domain for the device's semaphores.
+  inline static iree_hal_device_group_t* group_ = nullptr;
+  // Construction result replayed per case so unsupported devices still skip.
+  inline static iree_status_t device_status_ = iree_ok_status();
   // Retained roots, including indirect counts, qualified on both queue
   // families.
   iree_hal_pool_t* storage_pool_ = nullptr;

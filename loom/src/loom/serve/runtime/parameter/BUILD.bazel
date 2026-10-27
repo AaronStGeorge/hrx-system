@@ -137,6 +137,8 @@ loom_cc_library(
     srcs = [
         "gather_test.cc",
         "module_test.cc",
+        "parameter_test_base.cc",
+        "parameter_test_base.h",
     ],
     deps = [
         ":gather",

@@ -151,6 +151,8 @@ loom_cc_library(
   SRCS
     "gather_test.cc"
     "module_test.cc"
+    "parameter_test_base.cc"
+    "parameter_test_base.h"
   DEPS
     ::gather
     ::module
