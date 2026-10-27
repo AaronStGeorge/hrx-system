@@ -1,0 +1,63 @@
+// RUN: emit source-low output=module
+
+x86.target<avx2> @target
+
+func.def target(@target) @avx2_windows(%bytes: vector<32xi8>, %values: vector<8xf32>) -> (vector<4xi8>, vector<8xi8>, vector<4xf32>, vector<4xf32>) {
+  %shift = vector.slice %bytes[3] : vector<32xi8> -> vector<4xi8>
+  %cross = vector.slice %bytes[12] : vector<32xi8> -> vector<8xi8>
+  %low = vector.slice %values[0] : vector<8xf32> -> vector<4xf32>
+  %high = vector.slice %values[4] : vector<8xf32> -> vector<4xf32>
+  func.return %shift, %cross, %low, %high : vector<4xi8>, vector<8xi8>, vector<4xf32>, vector<4xf32>
+}
+
+// ----
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) abi(object_function) abi_layout({signature = (vector<32xi8>, vector<8xf32>) -> (vector<4xi8>, vector<8xi8>, vector<4xf32>, vector<4xf32>)}) @avx2_windows(%bytes: reg<x86.ymm>, %values: reg<x86.ymm>) -> (reg<x86.xmm>, reg<x86.xmm>, reg<x86.xmm>, reg<x86.xmm>) asm {
+  %6 = slice %bytes[0] : reg<x86.ymm> -> reg<x86.xmm>
+  %shift = vpsrldq.xmm %6, 3
+  %8 = vextractf128.xmm %bytes, 1
+  %cross = vpalignr.xmm %8, %6, 12
+  %low = slice %values[0] : reg<x86.ymm> -> reg<x86.xmm>
+  %high = vextractf128.xmm %values, 1
+  return %shift, %cross, %low, %high
+}
+
+// ====
+// RUN: emit source-low output=module
+
+x86.target<avx512> @target
+
+func.def target(@target) @avx512_windows(%bytes: vector<64xi8>, %words: vector<32xi16>, %dwords: vector<16xf32>, %qwords: vector<8xi64>) -> (vector<8xi8>, vector<32xi8>, vector<16xi16>, vector<4xf32>, vector<8xf32>, vector<4xi64>) {
+  %cross = vector.slice %bytes[12] : vector<64xi8> -> vector<8xi8>
+  %high_half = vector.slice %bytes[32] : vector<64xi8> -> vector<32xi8>
+  %assembled = vector.slice %words[1] : vector<32xi16> -> vector<16xi16>
+  %quarter = vector.slice %dwords[8] : vector<16xf32> -> vector<4xf32>
+  %aligned_dword = vector.slice %dwords[3] : vector<16xf32> -> vector<8xf32>
+  %aligned_qword = vector.slice %qwords[1] : vector<8xi64> -> vector<4xi64>
+  func.return %cross, %high_half, %assembled, %quarter, %aligned_dword, %aligned_qword : vector<8xi8>, vector<32xi8>, vector<16xi16>, vector<4xf32>, vector<8xf32>, vector<4xi64>
+}
+
+// ----
+x86.target<avx512> @target
+
+low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({signature = (vector<64xi8>, vector<32xi16>, vector<16xf32>, vector<8xi64>) -> (vector<8xi8>, vector<32xi8>, vector<16xi16>, vector<4xf32>, vector<8xf32>, vector<4xi64>)}) @avx512_windows(%bytes: reg<x86.zmm>, %words: reg<x86.zmm>, %dwords: reg<x86.zmm>, %qwords: reg<x86.zmm>) -> (reg<x86.xmm>, reg<x86.ymm>, reg<x86.ymm>, reg<x86.xmm>, reg<x86.ymm>, reg<x86.ymm>) asm {
+  %10 = slice %bytes[0] : reg<x86.zmm> -> reg<x86.xmm>
+  %11 = vextractf32x4.xmm %bytes, 1
+  %cross = vpalignr.xmm %11, %10, 12
+  %high_half = vextracti64x4.ymm %bytes, 1
+  %14 = slice %words[0] : reg<x86.zmm> -> reg<x86.xmm>
+  %15 = vextractf32x4.xmm %words, 1
+  %16 = vextractf32x4.xmm %words, 2
+  %17 = vpalignr.xmm %15, %14, 2
+  %18 = vpalignr.xmm %16, %15, 2
+  %19 = slice %words[0] : reg<x86.zmm> -> reg<x86.ymm>
+  %20 = vinsertf128.ymm.xmm %19, %17, 0
+  %assembled = vinsertf128.ymm.xmm %20, %18, 1
+  %quarter = vextractf32x4.xmm %dwords, 2
+  %23 = valignd.zmm %dwords, %dwords, 3
+  %aligned_dword = slice %23[0] : reg<x86.zmm> -> reg<x86.ymm>
+  %25 = valignq.zmm %qwords, %qwords, 1
+  %aligned_qword = slice %25[0] : reg<x86.zmm> -> reg<x86.ymm>
+  return %cross, %high_half, %assembled, %quarter, %aligned_dword, %aligned_qword
+}

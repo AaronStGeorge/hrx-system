@@ -134,6 +134,7 @@ loom_cc_library(
     "register_classes.c"
   DEPS
     iree::base
+    loom::ir
     loom::target::arch::x86::descriptors::avx512_features_descriptors_ids
   PUBLIC
 )
@@ -433,6 +434,7 @@ loom_check_test_suite(
     "test/source_low/vector_from_elements.loom-test"
     "test/source_low/vector_large_insert.loom-test"
     "test/source_low/vector_signed_unary.loom-test"
+    "test/source_low/vector_slice.loom-test"
     "test/source_low/view_carrier.loom-test"
     "test/source_low/view_carriers.loom-test"
     "test/source_low/view_transport.loom-test"
