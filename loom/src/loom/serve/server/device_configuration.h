@@ -17,7 +17,7 @@ extern "C" {
 typedef struct loom_serve_device_configuration_t {
   // Allocator owning decoded strings.
   iree_allocator_t host_allocator;
-  // Single allocation holding all decoded names and URIs.
+  // Single allocation holding all decoded strings.
   char* strings;
   // Number of populated entries in both arrays below.
   iree_host_size_t count;
@@ -31,6 +31,9 @@ typedef struct loom_serve_device_configuration_t {
 // pool_backing, weight_slab_bytes, state_slab_bytes, memory_bytes,
 // workspace_idle_ms, and parameter_idle_ms. Defaults are elastic backing,
 // 1 GiB weight slabs, 64 MiB state slabs, no byte limit, and disabled expiry.
+// Byte counts accept integer JSON numbers or strings parsed by
+// iree_string_view_parse_device_size, such as "64gib". Idle durations remain
+// integer JSON numbers in milliseconds.
 // Limits are per record, not a combined physical-memory-domain budget.
 // Rejects duplicate/unknown keys, invalid types and unsupported combinations
 // before creating a driver or device. Copies strings and zeros output on error.

@@ -23,6 +23,48 @@ FORMAT = Path(sys.argv.pop(1)).resolve()
 
 
 class ServerTest(unittest.TestCase):
+    def test_byte_size_flags_publish_exact_limits(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "server.log"
+            with running_server(
+                [
+                    str(SERVER),
+                    "--device=task",
+                    "--pool_backing=elastic",
+                    "--weight_slab_bytes=1gib",
+                    "--state_slab_bytes=64mib",
+                    "--memory_bytes=64gib",
+                    "--workers=1",
+                    "--listen=127.0.0.1:0",
+                ],
+                log,
+            ) as (process, bound_address):
+                self.assertIsNotNone(bound_address, log.read_text())
+                address = urlsplit(f"http://{bound_address}")
+                snapshot = control(address, "GET", "/v1/status", 200)
+                memory = snapshot["server"]["resources"]["devices"][0]["memory"]
+                self.assertEqual(memory["retained"]["limit_bytes"], 64 << 30)
+                self.assertEqual(memory["retained"]["committed_bytes"], 0)
+            self.assertEqual(process.returncode, 0, log.read_text())
+
+    def test_byte_size_errors_name_the_flag_before_opening_a_device(self):
+        cases = (
+            ("weight_slab_bytes", "123fb", "INVALID_ARGUMENT"),
+            ("state_slab_bytes", "1.5gib", "INVALID_ARGUMENT"),
+            ("memory_bytes", "17179869184gib", "OUT_OF_RANGE"),
+        )
+        for flag, value, status in cases:
+            with self.subTest(flag=flag):
+                result = subprocess.run(
+                    [str(SERVER), "--device=not-opened", f"--{flag}={value}"],
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertIn(status, result.stderr)
+                self.assertIn(f"--{flag}", result.stderr)
+                self.assertNotIn('"event":"ready"', result.stderr)
+
     def test_idle_durations_are_nonnegative(self):
         for flag in ("workspace_idle_ms", "parameter_idle_ms"):
             with self.subTest(flag=flag):
@@ -179,6 +221,9 @@ class ServerTest(unittest.TestCase):
                 options = [
                     "--device=task",
                     "--pool_backing=fixed",
+                    "--weight_slab_bytes=1gib",
+                    "--state_slab_bytes=64mib",
+                    "--memory_bytes=0b",
                     f"--workers={workers}",
                     "--listen=127.0.0.1:0",
                     "--workspace_idle_ms=1",
@@ -299,6 +344,9 @@ class ServerTest(unittest.TestCase):
                             device_keys[1]: {
                                 "uri": "task",
                                 "pool_backing": "fixed",
+                                "weight_slab_bytes": "1gib",
+                                "state_slab_bytes": "64mib",
+                                "memory_bytes": "0b",
                                 "workspace_idle_ms": 60000,
                                 "parameter_idle_ms": 120000,
                             },

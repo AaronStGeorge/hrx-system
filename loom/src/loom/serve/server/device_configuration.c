@@ -46,38 +46,53 @@ static iree_status_t loom_serve_device_configuration_string(
 }
 
 typedef struct loom_serve_device_configuration_fields_t {
-  // Raw JSON field values; null data marks omission.
+  // Decoder owning storage for all string values in this device entry.
+  loom_serve_device_configuration_parser_t* parser;
+  // Decoded strings or raw JSON numbers; null data marks omission.
   iree_string_view_t values[7];
 } loom_serve_device_configuration_fields_t;
+
+static const char* const loom_serve_device_configuration_field_names[] = {
+    "uri",
+    "pool_backing",
+    "weight_slab_bytes",
+    "state_slab_bytes",
+    "memory_bytes",
+    "workspace_idle_ms",
+    "parameter_idle_ms"};
 
 static iree_status_t loom_serve_device_configuration_field(
     void* self, iree_string_view_t key, iree_json_value_type_t type,
     iree_string_view_t value) {
-  static const char* const names[] = {"uri",
-                                      "pool_backing",
-                                      "weight_slab_bytes",
-                                      "state_slab_bytes",
-                                      "memory_bytes",
-                                      "workspace_idle_ms",
-                                      "parameter_idle_ms"};
   loom_serve_device_configuration_fields_t* fields = self;
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(names); ++i) {
-    if (!iree_string_view_equal(key, iree_make_cstring_view(names[i]))) {
-      continue;
-    }
-    const iree_json_value_type_t expected =
-        i < 2 ? IREE_JSON_VALUE_TYPE_STRING : IREE_JSON_VALUE_TYPE_NUMBER;
-    if (fields->values[i].data || type != expected) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "duplicate or wrongly typed device field '%s'",
-                              names[i]);
-    }
-    fields->values[i] = value;
-    return iree_ok_status();
+  iree_host_size_t i = 0;
+  while (i < IREE_ARRAYSIZE(loom_serve_device_configuration_field_names) &&
+         !iree_string_view_equal(
+             key, iree_make_cstring_view(
+                      loom_serve_device_configuration_field_names[i]))) {
+    ++i;
   }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unknown device field '%.*s'", (int)key.size,
-                          key.data);
+  if (i == IREE_ARRAYSIZE(loom_serve_device_configuration_field_names)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown device field '%.*s'", (int)key.size,
+                            key.data);
+  }
+  const bool type_allowed = (type == IREE_JSON_VALUE_TYPE_STRING && i < 5) ||
+                            (type == IREE_JSON_VALUE_TYPE_NUMBER && i >= 2);
+  if (fields->values[i].data || !type_allowed) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "duplicate or wrongly typed device field '%s'",
+                            loom_serve_device_configuration_field_names[i]);
+  }
+  if (type == IREE_JSON_VALUE_TYPE_STRING) {
+    IREE_RETURN_IF_ERROR(loom_serve_device_configuration_string(
+                             fields->parser, value, &fields->values[i]),
+                         "device field '%s'",
+                         loom_serve_device_configuration_field_names[i]);
+  } else {
+    fields->values[i] = value;
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_serve_device_configuration_entry(
@@ -110,16 +125,17 @@ static iree_status_t loom_serve_device_configuration_entry(
                               (int)options->name.size, options->name.data);
     }
   }
-  loom_serve_device_configuration_fields_t fields = {0};
-  IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
-      value, loom_serve_device_configuration_field, &fields));
+  loom_serve_device_configuration_fields_t fields = {.parser = parser};
+  IREE_RETURN_IF_ERROR(
+      iree_json_enumerate_object_typed(
+          value, loom_serve_device_configuration_field, &fields),
+      "device '%.*s'", (int)options->name.size, options->name.data);
   if (!fields.values[0].data) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "device '%.*s' requires 'uri'",
                             (int)options->name.size, options->name.data);
   }
-  IREE_RETURN_IF_ERROR(loom_serve_device_configuration_string(
-      parser, fields.values[0], &options->uri));
+  options->uri = fields.values[0];
   if (fields.values[1].data) {
     if (iree_string_view_equal(fields.values[1], IREE_SV("fixed"))) {
       options->backing = LOOM_SERVE_DEVICE_BACKING_FIXED;
@@ -130,17 +146,30 @@ static iree_status_t loom_serve_device_configuration_entry(
   }
   uint64_t numbers[] = {options->weight_slab_size, options->state_slab_size, 0,
                         0, 0};
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(numbers); ++i) {
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(numbers) && iree_status_is_ok(status); ++i) {
     if (fields.values[i + 2].data) {
-      IREE_RETURN_IF_ERROR(
-          iree_json_parse_uint64(fields.values[i + 2], &numbers[i]));
+      if (i < 3) {
+        iree_device_size_t size = 0;
+        status =
+            iree_string_view_parse_device_size(fields.values[i + 2], &size);
+        numbers[i] = size;
+      } else {
+        status = iree_json_parse_uint64(fields.values[i + 2], &numbers[i]);
+      }
+      if (!iree_status_is_ok(status)) {
+        status = iree_status_annotate_f(
+            status, "device '%.*s' field '%s'", (int)options->name.size,
+            options->name.data,
+            loom_serve_device_configuration_field_names[i + 2]);
+      }
     }
   }
-  if (numbers[0] > IREE_DEVICE_SIZE_MAX || numbers[1] > IREE_DEVICE_SIZE_MAX ||
-      numbers[3] > INT64_MAX / 1000000 || numbers[4] > INT64_MAX / 1000000) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "device slab size or idle interval is out of range");
+  IREE_RETURN_IF_ERROR(status);
+  if (numbers[3] > INT64_MAX / 1000000 || numbers[4] > INT64_MAX / 1000000) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "device idle interval is out of range");
   }
   if (options->backing == LOOM_SERVE_DEVICE_BACKING_FIXED && numbers[2]) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

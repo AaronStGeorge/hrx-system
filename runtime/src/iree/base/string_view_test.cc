@@ -769,14 +769,66 @@ TEST(StringViewTest, ParseDeviceSize) {
   EXPECT_THAT(ParseDeviceSize("1000kb"), IsOkAndHolds(Eq(1000 * 1000u)));
   EXPECT_THAT(ParseDeviceSize("1000kib"), IsOkAndHolds(Eq(1000 * 1024u)));
 
-  // NOTE: we don't verify very hard here and accept random suffixes just like
-  // atoi does (because under the covers we're using atoi).
-  EXPECT_THAT(ParseDeviceSize("123fb"), IsOkAndHolds(Eq(123u)));
+  EXPECT_THAT(ParseDeviceSize("0010"), IsOkAndHolds(Eq(10u)));
+  EXPECT_THAT(ParseDeviceSize(std::string(64, '0') + "10kib"),
+              IsOkAndHolds(Eq(10240u)));
 }
 
 TEST(StringViewTest, ParseDeviceSizeInvalid) {
-  EXPECT_THAT(ParseDeviceSize(""), StatusIs(StatusCode::kInvalidArgument));
-  EXPECT_THAT(ParseDeviceSize("abc"), StatusIs(StatusCode::kInvalidArgument));
+  const std::string_view invalid[] = {
+      "",    "abc",  "b",     "gib",  "-1",
+      "+1",  " 1",   "1 ",    "1 gb", "1.5",
+      "1e3", "0x10", "123fb", "64GB", "64GiB",
+      "1k",  "1bb",  "1gibb", "1/2",  std::string_view("1\0gb", 4),
+  };
+  for (auto value : invalid) {
+    SCOPED_TRACE(value);
+    iree_device_size_t output = 42;
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        iree_string_view_parse_device_size(
+            iree_make_string_view(value.data(), value.size()), &output));
+    EXPECT_EQ(output, 42u);
+  }
+}
+
+TEST(StringViewTest, ParseDeviceSizeUnitBoundaries) {
+  struct Unit {
+    // Supported suffix, including omission for bytes.
+    const char* suffix;
+    // Number of bytes in one unit.
+    uint64_t scale;
+  };
+  const Unit units[] = {{"", 1},
+                        {"b", 1},
+                        {"kb", 1000},
+                        {"kib", 1024},
+                        {"mb", 1000000},
+                        {"mib", 1048576},
+                        {"gb", 1000000000},
+                        {"gib", 1073741824}};
+  for (const auto& unit : units) {
+    SCOPED_TRACE(unit.suffix);
+    EXPECT_THAT(ParseDeviceSize(std::string("0") + unit.suffix),
+                IsOkAndHolds(Eq(0u)));
+    EXPECT_THAT(ParseDeviceSize(std::string("1") + unit.suffix),
+                IsOkAndHolds(Eq(unit.scale)));
+    const uint64_t maximum = IREE_DEVICE_SIZE_MAX / unit.scale;
+    EXPECT_THAT(ParseDeviceSize(std::to_string(maximum) + unit.suffix),
+                IsOkAndHolds(Eq(maximum * unit.scale)));
+    const std::string overflow =
+        (maximum == UINT64_MAX ? "18446744073709551616"
+                               : std::to_string(maximum + 1)) +
+        unit.suffix;
+    iree_device_size_t output = 42;
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_OUT_OF_RANGE,
+        iree_string_view_parse_device_size(
+            iree_make_string_view(overflow.data(), overflow.size()), &output));
+    EXPECT_EQ(output, 42u);
+  }
+  EXPECT_THAT(ParseDeviceSize("18446744073709551616gib"),
+              StatusIs(StatusCode::kOutOfRange));
 }
 
 TEST(StringViewTest, ParseEmptyNumber) {

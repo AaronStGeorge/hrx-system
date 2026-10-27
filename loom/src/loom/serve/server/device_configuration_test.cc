@@ -80,6 +80,63 @@ TEST_F(DeviceConfigurationTest, UriConvenienceUsesTheSameDefaults) {
   loom_serve_device_configuration_deinitialize(&convenience);
 }
 
+TEST_F(DeviceConfigurationTest, ByteSizeStringsDecodeToExactCounts) {
+  IREE_ASSERT_OK(Parse(R"({"devices":{"gpu":{"uri":"task",
+    "pool_backing":"el\u0061stic","memory_bytes":"64\u0067ib",
+    "weight_slab_bytes":"1gb","state_slab_bytes":"64mib",
+    "workspace_idle_ms":1000}}})"));
+  EXPECT_EQ(configuration_.options[0].memory_limit, UINT64_C(64) << 30);
+  EXPECT_EQ(configuration_.options[0].weight_slab_size, UINT64_C(1000000000));
+  EXPECT_EQ(configuration_.options[0].state_slab_size, UINT64_C(64) << 20);
+  EXPECT_EQ(configuration_.idle[0].workspace_timeout,
+            iree_make_duration_ms(1000));
+
+  // Strings avoid rounding by JSON producers that represent numbers as doubles.
+  IREE_ASSERT_OK(Parse(R"({"devices":{"gpu":{"uri":"task",
+    "memory_bytes":"9007199254740993","weight_slab_bytes":4096,
+    "state_slab_bytes":"004096"}}})"));
+  EXPECT_EQ(configuration_.options[0].memory_limit, UINT64_C(9007199254740993));
+  EXPECT_EQ(configuration_.options[0].weight_slab_size, 4096u);
+  EXPECT_EQ(configuration_.options[0].state_slab_size, 4096u);
+}
+
+TEST_F(DeviceConfigurationTest,
+       ByteSizeStringsRejectMalformedOrOverflowingValues) {
+  for (const char* field :
+       {"weight_slab_bytes", "state_slab_bytes", "memory_bytes"}) {
+    for (const char* value :
+         {R"("")", R"("-1")", R"("1.5gib")", R"("1e3")", R"("123fb")",
+          R"("64gib extra")", R"("1\u0000gb")", "true", "null", "[]", "{}"}) {
+      const auto json = std::string(R"({"devices":{"gpu":{"uri":"task",")") +
+                        field + "\":" + value + "}}}";
+      SCOPED_TRACE(json);
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(json));
+      EXPECT_EQ(configuration_.count, 0u);
+      EXPECT_EQ(configuration_.strings, nullptr);
+    }
+    for (const char* value :
+         {R"("18446744073709551616")", R"("17179869184gib")"}) {
+      const auto json = std::string(R"({"devices":{"gpu":{"uri":"task",")") +
+                        field + "\":" + value + "}}}";
+      SCOPED_TRACE(json);
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, Parse(json));
+      EXPECT_EQ(configuration_.count, 0u);
+      EXPECT_EQ(configuration_.strings, nullptr);
+    }
+  }
+}
+
+TEST_F(DeviceConfigurationTest, ByteSizeErrorsNameTheDeviceAndField) {
+  const iree::Status status(Parse(R"({"devices":{
+    "first":{"uri":"task"},
+    "gpu":{"uri":"task","memory_bytes":"123fb"}}})"));
+  EXPECT_EQ(status.code(), iree::StatusCode::kInvalidArgument);
+  EXPECT_NE(status.ToString().find("device 'gpu' field 'memory_bytes'"),
+            std::string::npos);
+  EXPECT_EQ(configuration_.count, 0u);
+  EXPECT_EQ(configuration_.strings, nullptr);
+}
+
 TEST_F(DeviceConfigurationTest,
        RejectsMalformedDeclarationsWithoutPartialOwners) {
   const char* invalid[] = {
@@ -99,13 +156,16 @@ TEST_F(DeviceConfigurationTest,
       R"({"devices":{"gpu":{"uri":0}}})",
       R"({"devices":{"gpu":{"uri":"task\u0000"}}})",
       R"({"devices":{"gpu":{"uri":"task","uri":"xdna"}}})",
-      R"({"devices":{"gpu":{"uri":"task","memory_bytes":"4096"}}})",
+      R"({"devices":{"gpu":{"uri":"task","memory_bytes":"4kib","memory_bytes":4096}}})",
       R"({"devices":{"gpu":{"uri":"task","memory_bytes":-1}}})",
       R"({"devices":{"gpu":{"uri":"task","memory_bytes":1.5}}})",
       R"({"devices":{"gpu":{"uri":"task","memory_bytes":1e3}}})",
       R"({"devices":{"gpu":{"uri":"task","memory_bytes":1,"pool_backing":"fixed"}}})",
+      R"({"devices":{"gpu":{"uri":"task","memory_bytes":"1gib","pool_backing":"fixed"}}})",
       R"({"devices":{"gpu":{"uri":"task","pool_backing":"automatic"}}})",
       R"({"devices":{"gpu":{"uri":"task","parameter_idle_ms":false}}})",
+      R"({"devices":{"gpu":{"uri":"task","parameter_idle_ms":"1000"}}})",
+      R"({"devices":{"gpu":{"uri":"task","workspace_idle_ms":"1gib"}}})",
       R"({"devices":{"gpu":{"uri":"task","workspace_idle_ms":-1}}})",
       R"({"devices":{"gpu":{"uri":"task","unknown":1}}})",
       R"({"devices":{"gpu":{"uri":"task"}}} trailing)",
@@ -134,6 +194,12 @@ TEST_F(DeviceConfigurationTest, RejectsOverflowAndAcceptsExplicitZero) {
     "parameter_idle_ms":0,"workspace_idle_ms":0}}})"));
   EXPECT_EQ(configuration_.options[0].weight_slab_size, 0u);
   EXPECT_EQ(configuration_.options[0].state_slab_size, 0u);
+  IREE_ASSERT_OK(Parse(R"({"devices":{"gpu":{"uri":"task",
+    "pool_backing":"fixed","weight_slab_bytes":"0b",
+    "state_slab_bytes":"0mib","memory_bytes":"0"}}})"));
+  EXPECT_EQ(configuration_.options[0].weight_slab_size, 0u);
+  EXPECT_EQ(configuration_.options[0].state_slab_size, 0u);
+  EXPECT_EQ(configuration_.options[0].memory_limit, 0u);
 }
 
 }  // namespace
