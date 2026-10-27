@@ -159,6 +159,106 @@ class PressureAliasTest : public ::testing::Test {
     EXPECT_EQ(values[1].candidate_transferred_units, 0u);
   }
 
+  void CheckSourceBaseline(loom_low_storage_relation_kind_t kind,
+                           uint16_t source_count, uint16_t relation_count,
+                           uint32_t shared_units) {
+    for (bool source_first : {false, true}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "kind=" << static_cast<uint32_t>(kind) << " sources="
+                   << source_count << " relations=" << relation_count
+                   << " source-first=" << source_first);
+      loom_low_schedule_value_record_t values[3] = {};
+      values[0].unit_count = kind == LOOM_LOW_STORAGE_RELATION_SUBRANGE ? 4 : 2;
+      values[1].unit_count = values[0].unit_count;
+      values[2].unit_count = 2u * relation_count;
+      uint32_t producer_nodes[] = {LOOM_LOW_SCHEDULE_NODE_NONE,
+                                   LOOM_LOW_SCHEDULE_NODE_NONE, 0};
+      loom_low_schedule_node_t producer = {
+          .operand_count = relation_count,
+          .result_count = 1,
+          .storage_relation_count = relation_count,
+      };
+      uint32_t relation_starts[] = {0, relation_count};
+      loom_segmented_storage_t relations;
+      loom_segmented_storage_initialize(
+          relation_count * sizeof(loom_low_schedule_storage_relation_t),
+          alignof(loom_low_schedule_storage_relation_t), &relations);
+      loom_low_schedule_storage_relation_t* rows = nullptr;
+      IREE_ASSERT_OK(loom_segmented_storage_append(
+          &relations, &arena_, reinterpret_cast<void**>(&rows)));
+      for (uint16_t i = 0; i < relation_count; ++i) {
+        rows[i] = {};
+        rows[i].source_ordinal = source_count == 1 ? 0 : i;
+        rows[i].destination_ordinal = 2;
+        rows[i].source_operand_index = i;
+        rows[i].source_unit_offset =
+            kind == LOOM_LOW_STORAGE_RELATION_SUBRANGE ? 1 : 0;
+        rows[i].destination_unit_offset = 2u * i;
+        rows[i].unit_count = 2;
+        rows[i].kind = kind;
+        loom_low_schedule_node_operand_ordinals(&producer)[i] =
+            rows[i].source_ordinal;
+      }
+      loom_low_schedule_node_result_ordinals(&producer)[0] = 2;
+      loom_local_value_domain_t domain = {
+          .value_count = IREE_ARRAYSIZE(values),
+      };
+      loom_low_schedule_build_state_t state = {
+          .scratch_arena = &arena_,
+          .value_domain = &domain,
+          .values = values,
+          .value_producer_nodes = producer_nodes,
+          .nodes = &producer,
+          .storage_relations = {relation_starts, &relations, 1, relation_count},
+      };
+      loom_low_schedule_pressure_state_t pressure = {};
+      IREE_ASSERT_OK(loom_low_schedule_pressure_alias_initialize(
+          &state, &pressure.storage_aliases));
+      // A live-in result from another block cannot inherit a local source.
+      EXPECT_EQ(loom_low_schedule_pressure_alias_append_source_baseline_result(
+                    &state, &pressure, 1, 2),
+                0u);
+      EXPECT_EQ(pressure.storage_aliases.source_count, 0u);
+      if (source_first) {
+        for (uint16_t i = 0; i < source_count; ++i) {
+          values[i].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
+          values[i].live_unit_count = values[i].unit_count;
+        }
+      }
+      const uint32_t owned =
+          loom_low_schedule_pressure_alias_append_source_baseline_result(
+              &state, &pressure, 0, 2);
+      EXPECT_EQ(owned, source_first ? shared_units : 0u);
+      values[2].flags |= LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
+      values[2].live_unit_count = values[2].unit_count - owned;
+      if (!source_first) {
+        uint32_t transferred = 0;
+        for (uint16_t i = 0; i < source_count; ++i) {
+          transferred += loom_low_schedule_pressure_alias_transfer_to_source(
+              &state, &pressure, i);
+          values[i].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
+          values[i].live_unit_count = values[i].unit_count;
+        }
+        EXPECT_EQ(transferred, shared_units);
+      }
+      EXPECT_EQ(values[2].live_unit_count, values[2].unit_count - shared_units);
+      uint32_t transferred = 0;
+      for (uint16_t i = 0; i < source_count; ++i) {
+        transferred += loom_low_schedule_pressure_alias_transfer_from_source(
+            &state, &pressure, i);
+        values[i].flags = 0;
+        values[i].live_unit_count = 0;
+      }
+      EXPECT_EQ(transferred, shared_units);
+      EXPECT_EQ(values[2].live_unit_count, values[2].unit_count);
+      loom_low_schedule_pressure_alias_deactivate_result(&state, &pressure, 2);
+      for (uint16_t i = 0; i < source_count; ++i) {
+        EXPECT_EQ(pressure.storage_aliases.source_unit_counts[i], 0u);
+      }
+      EXPECT_EQ(values[2].flags, LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE);
+    }
+  }
+
   // Owns blocks for the relation index and mutable alias simulation.
   iree_arena_block_pool_t pool_;
   // Scratch state for each test's simulated schedule.
@@ -197,6 +297,14 @@ TEST_F(PressureAliasTest, RequiredLateAliasRetainsTransientOwnership) {
                     required_mask, true);
     }
   }
+}
+
+TEST_F(PressureAliasTest, SourceBaselineChargesSharedStorageOnce) {
+  CheckSourceBaseline(LOOM_LOW_STORAGE_RELATION_SAME_STORAGE, 1, 1, 2);
+  CheckSourceBaseline(LOOM_LOW_STORAGE_RELATION_SUBRANGE, 1, 1, 2);
+  CheckSourceBaseline(LOOM_LOW_STORAGE_RELATION_CONTIGUOUS_PART, 2, 2, 4);
+  CheckSourceBaseline(LOOM_LOW_STORAGE_RELATION_CONTIGUOUS_PART, 1, 2, 2);
+  CheckSourceBaseline(LOOM_LOW_STORAGE_RELATION_DISJOINT_STORAGE, 1, 1, 0);
 }
 
 }  // namespace
