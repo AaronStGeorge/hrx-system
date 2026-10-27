@@ -7,6 +7,7 @@
 #include <string>
 
 #include "iree/testing/gtest.h"
+#include "loom/error/error_catalog.h"
 #include "loom/pass/registry.h"
 #include "loomc/compile_report.h"
 #include "loomc/interop.h"
@@ -65,9 +66,12 @@ class InvocationReportTest : public ::testing::Test {
               return &info;
             },
         .module_run =
-            [](loom_pass_t*, loom_module_t*) {
-              return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                      "report test rejection");
+            [](loom_pass_t* pass, loom_module_t* module) {
+              const loom_diagnostic_emission_t emission = {
+                  .module = module,
+                  .error = LOOM_ERR_EXPECT_001,
+              };
+              return iree_diagnostic_emit(pass->diagnostic_emitter, &emission);
             },
     };
     static const loom_pass_registry_t registry = {
@@ -225,11 +229,12 @@ TEST_F(InvocationReportTest, ResultOwnsSuccessAndDiagnosedFailureReports) {
         artifact->contents, loomc_allocator_system(), &contents));
     const std::string target_contents(
         reinterpret_cast<const char*>(contents.data), contents.data_length);
-    EXPECT_NE(target_contents.find((i & 1) ? "OUT_OF_RANGE" : "OK"),
+    EXPECT_NE(target_contents.find((i & 1) ? "FAILED_PRECONDITION" : "OK"),
               std::string::npos);
     if ((i & 1) && (i & 8) && !text) {
       EXPECT_NE(target_contents.find("\"diagnostics\":[{"), std::string::npos);
-      EXPECT_NE(target_contents.find("test.reject"), std::string::npos);
+      EXPECT_NE(target_contents.find("\"error_id\":\"ERR_EXPECT_001\""),
+                std::string::npos);
     }
     loomc_allocator_free(loomc_allocator_system(),
                          const_cast<uint8_t*>(contents.data));

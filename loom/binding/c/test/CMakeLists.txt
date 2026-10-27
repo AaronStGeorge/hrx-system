@@ -328,6 +328,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::binding::c::interop
     loom::binding::c::loomc
+    loom::error::error_defs
     loom::pass::registry
 )
 

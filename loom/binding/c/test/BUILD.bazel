@@ -312,6 +312,7 @@ loom_cc_test(
         ":test_util",
         "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/pass:registry",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
