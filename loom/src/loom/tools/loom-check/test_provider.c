@@ -20,7 +20,6 @@ static const loom_check_emit_provider_t* const kLoomCheckTestEmitProviders[] = {
     &loom_check_test_config_schema_provider,
     &loom_check_test_low_allocation_provider,
     &loom_check_test_low_schedule_provider,
-    &loom_check_test_low_synthetic_hazard_provider,
 };
 
 static bool loom_check_test_unavailable_requirement_matches(

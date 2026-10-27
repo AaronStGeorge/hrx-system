@@ -741,6 +741,20 @@ TEST_F(LowPacketHazardPlanTest, SupportsScheduleOnlyDiagnostics) {
   EXPECT_EQ(plan.records[0].reason_id, kSyntheticHazardMissingData);
   EXPECT_TRUE(iree_string_view_equal(plan.records[0].reason_name,
                                      IREE_SV("synthetic.missing-data")));
+  EXPECT_EQ(plan.records[0].action_id, LOOM_LOW_PACKET_HAZARD_PLAN_ACTION_NONE);
+  EXPECT_TRUE(iree_string_view_is_empty(plan.records[0].action_name));
+  EXPECT_EQ(plan.records[0].producer_node_index, LOOM_LOW_SCHEDULE_NODE_NONE);
+  EXPECT_EQ(plan.records[0].producer_packet_index,
+            LOOM_LOW_PACKET_HAZARD_PLAN_PACKET_NONE);
+  EXPECT_EQ(plan.records[0].producer_scheduled_ordinal,
+            LOOM_LOW_PACKET_HAZARD_PLAN_ORDINAL_NONE);
+  EXPECT_EQ(plan.records[0].consumer_node_index, 0u);
+  EXPECT_EQ(plan.records[0].insertion_packet_index, 0u);
+  EXPECT_EQ(plan.records[0].block_index, 0u);
+  EXPECT_EQ(plan.records[0].scheduled_ordinal, 0u);
+  EXPECT_EQ(plan.records[0].progress_class_id,
+            LOOM_LOW_PACKET_PROGRESS_CLASS_NONE);
+  EXPECT_TRUE(iree_string_view_is_empty(plan.records[0].progress_class_name));
   EXPECT_EQ(plan.records[1].kind,
             LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_UNSUPPORTED_PRE_ALLOCATION);
   EXPECT_EQ(plan.records[1].reason_id, kSyntheticHazardRequiresAllocation);
@@ -770,6 +784,8 @@ TEST_F(LowPacketHazardPlanTest, QueriesProviderExactlyOncePerPacket) {
   EXPECT_EQ(audit.query_count, state_.schedule.scheduled_node_count);
   EXPECT_EQ(audit.next_packet_index, state_.schedule.scheduled_node_count);
   EXPECT_EQ(audit.queried_packet_mask, 0b111u);
+  EXPECT_EQ(plan.record_count, 0u);
+  EXPECT_EQ(plan.records, nullptr);
 }
 
 void LoopCarriedProducerHazardQuery(

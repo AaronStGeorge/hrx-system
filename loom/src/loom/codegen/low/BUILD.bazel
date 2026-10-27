@@ -1355,10 +1355,16 @@ loom_cc_test(
 
 loom_cc_test(
     name = "packet_hazard_plan_test",
-    srcs = ["packet_hazard_plan_test.cc"],
+    srcs = [
+        "packet_hazard_plan_json_test.cc",
+        "packet_hazard_plan_test.cc",
+    ],
     deps = [
         ":packet_hazard_plan",
+        ":packet_hazard_plan_json",
         ":packet_progress",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

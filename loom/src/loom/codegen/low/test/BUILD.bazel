@@ -39,7 +39,6 @@ loom_check_test_suite(
         "allocation_tied_domains.loom-test",
         "descriptor_constraints.loom-test",
         "guarded_motion.loom-test",
-        "hazard_plan.loom-test",
         "packet.loom-test",
         "register_parts.loom-test",
         "storage_transport.loom-test",
