@@ -944,7 +944,7 @@ def amdgpu_test_steps(
         + (
             # Compiler compatibility and hardware execution share one target
             # selector so other architectures are rejected during analysis.
-            "--//loom/config/target/amdgpu:targets=" + target_selector,
+            "--//loom/config/arch/amdgpu:targets=" + target_selector,
             "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
             "--//runtime/src/iree/hal/drivers/amd/gpu:targets=" + target_selector,
             "--//runtime/config/hal:drivers=task,amd-gpu",
@@ -983,7 +983,7 @@ def amdgpu_windows_steps(
         ci_config.AMDGPU_WINDOWS_BAZEL_OPTIONS
         + amd_gpu_device_compiler_options()
         + (
-            "--//loom/config/target/amdgpu:targets=" + target_selector,
+            "--//loom/config/arch/amdgpu:targets=" + target_selector,
             # Loom's IREE HAL representation compatibility reads the shared
             # AMDGPU selector even when native execution uses the AMD GPU HAL.
             "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,

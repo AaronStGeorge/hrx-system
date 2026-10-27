@@ -759,11 +759,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/embedding/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_embedding_device_group_test

@@ -470,7 +470,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND LOOM_IMPORT_CXX)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P)
 iree_native_test(
   NAME
     "vector_lookup_lowering"
