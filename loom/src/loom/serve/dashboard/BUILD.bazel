@@ -63,7 +63,10 @@ iree_c_embed_data(
     flatten = True,
     h_file_output = "files.h",
     identifier = "loom_serve_dashboard_files",
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/arch:vm",
+        "//loom/config/emit:vm_binary",
+    ]),
 )
 
 loom_cc_library(
