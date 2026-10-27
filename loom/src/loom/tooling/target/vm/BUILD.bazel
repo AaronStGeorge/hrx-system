@@ -92,7 +92,7 @@ loom_generated_file(
     inputs = ["//loom/src/loom/tooling/target/vm/test:imports.loom"],
     output = "imports.vm",
     output_flag = "--output=",
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
 )
 
 iree_c_embed_data(
@@ -102,13 +102,13 @@ iree_c_embed_data(
     c_file_output = "imports_bytecode.c",
     h_file_output = "imports_bytecode.h",
     identifier = "loom_vm_imports_bytecode",
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
 )
 
 loom_cc_test(
     name = "imports_test",
     srcs = ["imports_test.cc"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
     deps = [
         ":imports_bytecode",
         "//loom/binding/c:loomc",
@@ -143,7 +143,7 @@ loom_generated_file(
     inputs = ["//loom/src/loom/tooling/target/vm/test:native_references.loom"],
     output = "native_references.vm",
     output_flag = "--output=",
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
 )
 
 iree_c_embed_data(
@@ -153,7 +153,7 @@ iree_c_embed_data(
     c_file_output = "native_references_bytecode.c",
     h_file_output = "native_references_bytecode.h",
     identifier = "loom_vm_native_references_bytecode",
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
 )
 
 iree_c_embed_data(
@@ -168,7 +168,7 @@ iree_c_embed_data(
 loom_cc_test(
     name = "emission_test",
     srcs = ["emission_test.cc"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
     deps = [
         ":emission_test_data",
         ":native_references_bytecode",
@@ -186,7 +186,7 @@ loom_cc_test(
 loom_cc_test(
     name = "native_references_test",
     srcs = ["native_references_test.cc"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
     deps = [
         ":native_references_bytecode",
         "//loom/src/loom/format:location",

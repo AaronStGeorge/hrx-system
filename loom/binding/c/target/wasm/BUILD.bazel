@@ -23,8 +23,8 @@ loom_cc_library(
     hdrs = ["//loom/binding/c:include/loomc/target/wasm.h"],
     linkstatic = True,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:wasm",
-        "//loom/config/emit:wasm",
+        "//loom/config/arch:wasm",
+        "//loom/config/emit:wasm_binary",
     ]),
     deps = [
         "//loom/binding/c:loomc",

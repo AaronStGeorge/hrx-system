@@ -16,7 +16,7 @@ load(
 package(default_visibility = ["//visibility:public"])
 
 _SPIRV_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/emit:spirv_artifacts",
+    "//loom/config/emit:spirv_binary",
 ])
 
 loom_target_profile(
@@ -44,7 +44,7 @@ loom_target_set(
     name = "all",
     allow_empty = True,
     targets = select({
-        "//loom/config/emit:spirv_artifacts": [
+        "//loom/config/emit:spirv_binary": [
             ":vulkan1.3+bda",
             ":vulkan1.3+bda+extended-types",
             ":vulkan1.3+bda+subgroup32+ballot+hal",

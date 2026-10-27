@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_generated_cc_library(
   NAME
     error_defs
@@ -32,7 +32,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_generated_file_family(
   NAME
     hardware_tables_gen
@@ -53,7 +53,7 @@ loom_generated_file_family(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     array_facts
@@ -69,7 +69,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     array_registers
@@ -87,7 +87,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     device_profile
@@ -104,7 +104,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     array_facts_test
@@ -115,11 +115,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     array_registers_test
@@ -131,11 +131,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     device_profile_test
@@ -147,7 +147,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 

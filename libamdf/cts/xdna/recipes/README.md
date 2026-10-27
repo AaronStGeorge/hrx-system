@@ -156,8 +156,8 @@ The queue is destroyed before its instruction storage and context. Payload
 attachments are released before registered CPU backing. A failed native
 release stops destruction of dependent owners.
 
-Enable `LOOM_BUILD` and `LOOM_TARGET_XDNA` alongside `AMDF_BUILD` to build
-the compiler-generated fixtures.
+Enable `LOOM_BUILD`, `LOOM_ARCH_AIE2P`, and `LOOM_EMIT_ELF` alongside
+`AMDF_BUILD` to build the compiler-generated fixtures.
 
 ```sh
 iree-bazel-test --config=asan //libamdf/cts/xdna/recipes:execution

@@ -499,22 +499,22 @@ loom_cc_library_group(
         "//loom/src/loom/ops/%s:op_defs" % dialect
         for dialect in _DIALECTS
     ] + select({
-        "//loom/config/target/arch:amdgpu": ["//loom/src/loom/target/arch/amdgpu/ops:op_defs"],
+        "//loom/config/arch:amdgpu": ["//loom/src/loom/target/arch/amdgpu/ops:op_defs"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:spirv": ["//loom/src/loom/target/arch/spirv/ops:op_defs"],
+        "//loom/config/arch:spirv": ["//loom/src/loom/target/arch/spirv/ops:op_defs"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:vm": ["//loom/src/loom/target/arch/vm/ops:op_defs"],
+        "//loom/config/arch:vm": ["//loom/src/loom/target/arch/vm/ops:op_defs"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:wasm": ["//loom/src/loom/target/arch/wasm/ops:op_defs"],
+        "//loom/config/arch:wasm": ["//loom/src/loom/target/arch/wasm/ops:op_defs"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:x86": ["//loom/src/loom/target/arch/x86/ops:op_defs"],
+        "//loom/config/arch:x86": ["//loom/src/loom/target/arch/x86/ops:op_defs"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:xdna": ["//loom/src/loom/target/arch/amd/xdna/aie2p/ops:op_defs"],
+        "//loom/config/arch:aie2p": ["//loom/src/loom/target/arch/amd/xdna/aie2p/ops:op_defs"],
         "//conditions:default": [],
     }),
 )
@@ -563,22 +563,22 @@ loom_cc_library_group(
         "//loom/src/loom/ops/%s:builders" % dialect
         for dialect in _DIALECTS
     ] + select({
-        "//loom/config/target/arch:amdgpu": ["//loom/src/loom/target/arch/amdgpu/ops:builders"],
+        "//loom/config/arch:amdgpu": ["//loom/src/loom/target/arch/amdgpu/ops:builders"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:spirv": ["//loom/src/loom/target/arch/spirv/ops:builders"],
+        "//loom/config/arch:spirv": ["//loom/src/loom/target/arch/spirv/ops:builders"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:vm": ["//loom/src/loom/target/arch/vm/ops:builders"],
+        "//loom/config/arch:vm": ["//loom/src/loom/target/arch/vm/ops:builders"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:wasm": ["//loom/src/loom/target/arch/wasm/ops:builders"],
+        "//loom/config/arch:wasm": ["//loom/src/loom/target/arch/wasm/ops:builders"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:x86": ["//loom/src/loom/target/arch/x86/ops:builders"],
+        "//loom/config/arch:x86": ["//loom/src/loom/target/arch/x86/ops:builders"],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/target/arch:xdna": ["//loom/src/loom/target/arch/amd/xdna/aie2p/ops:builders"],
+        "//loom/config/arch:aie2p": ["//loom/src/loom/target/arch/amd/xdna/aie2p/ops:builders"],
         "//conditions:default": [],
     }),
 )

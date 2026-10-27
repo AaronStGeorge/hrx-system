@@ -112,9 +112,9 @@ publication, POSIX I/O, complete output checks and CPU/NPU comparisons.
 
 ## Building and inspecting images
 
-Enable `AMDF_BUILD`, `LOOM_BUILD` and `LOOM_TARGET_XDNA` in the repository
-configuration. Building either arithmetic corpus automatically compiles both
-profiles and embeds their outputs:
+Enable `AMDF_BUILD`, `LOOM_BUILD`, `LOOM_ARCH_AIE2P`, and `LOOM_EMIT_ELF` in
+the repository configuration. Building either arithmetic corpus automatically
+compiles both profiles and embeds their outputs:
 
 ```sh
 iree-bazel-build //libamdf/cts/xdna/recipes:execution_dynamic_bin

@@ -95,7 +95,7 @@ iree_native_test(
 
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_binary(
   NAME
     emit_spirv_offline
@@ -135,7 +135,7 @@ iree_c_embed_data(
   PUBLIC
 )
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
 loom_cc_binary(
   NAME
     emit_amdgpu_offline
@@ -148,7 +148,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
 loom_cc_binary(
   NAME
     emit_amdgpu_hsa
@@ -162,7 +162,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_binary(
   NAME
     emit_spirv_vulkaninfo
@@ -175,7 +175,7 @@ loom_cc_binary(
 )
 endif()
 
-if(IREE_VULKAN_AVAILABLE AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(IREE_VULKAN_AVAILABLE AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_binary(
   NAME
     emit_spirv_vulkan
@@ -189,7 +189,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL)
 loom_cc_binary(
   NAME
     emit_spirv_iree_hal
@@ -208,7 +208,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
 iree_native_test(
   NAME
     "emit_amdgpu_offline_test"
@@ -217,7 +217,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
 loom_cc_test(
   NAME
     emit_amdgpu_hsa_test
@@ -239,7 +239,7 @@ loom_cc_test(
 )
 endif()
 
-if(IREE_VULKAN_AVAILABLE AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(IREE_VULKAN_AVAILABLE AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     emit_spirv_vulkan_test
@@ -262,7 +262,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL)
 loom_cc_test(
   NAME
     emit_spirv_iree_hal_test

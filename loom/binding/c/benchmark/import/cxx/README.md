@@ -45,7 +45,7 @@ Build and run the selection comparison without enabling native emission:
 
 ```sh
 iree-bazel-build --config=opt --config=loom-importer-cxx \
-  --//loom/config/target:enable=amdgpu \
+  --//loom/config/arch:enable=amdgpu \
   //loom/binding/c/benchmark/import/cxx:q8s32_selection_benchmark
 
 for name in SelectQ8S32CxxProviders SelectQ8S32AuthoredLoomProviders; do
@@ -132,7 +132,7 @@ Build an optimized executable before collecting numbers:
 
 ```sh
 iree-bazel-build --config=opt --config=loom-importer-cxx \
-  --//loom/config/target:enable=amdgpu --//loom/config/emit:enable=amdgpu \
+  --//loom/config/arch:enable=amdgpu --//loom/config/emit:enable=elf \
   //loom/binding/c/benchmark/import/cxx:source_to_hsaco_benchmark
 
 bazel-bin/loom/binding/c/benchmark/import/cxx/source_to_hsaco_benchmark \

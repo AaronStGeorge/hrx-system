@@ -18,8 +18,8 @@ package(
 )
 
 _AMDGPU_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:amdgpu",
-    "//loom/config/emit:amdgpu",
+    "//loom/config/arch:amdgpu",
+    "//loom/config/emit:amdgpu_elf",
 ])
 
 loom_cc_library(

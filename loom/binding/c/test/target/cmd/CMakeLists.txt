@@ -23,7 +23,7 @@ loom_cc_test(
     loom::binding::c::test::test_util
 )
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ARTIFACT_AMDGPU_ELF)
 loom_cc_test(
   NAME
     specialization_test

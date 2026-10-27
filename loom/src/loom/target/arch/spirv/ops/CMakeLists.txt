@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
     op_defs
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 iree_cc_library(
   NAME
     builders
@@ -37,7 +37,7 @@ iree_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
     op_builders
@@ -52,7 +52,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_generated_cc_library(
   NAME
     ops
@@ -103,7 +103,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
     type_builders

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     service
@@ -30,7 +30,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     kind
@@ -44,7 +44,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     kind_test
@@ -56,11 +56,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     prepared_request
@@ -75,7 +75,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     reconfiguration
@@ -89,7 +89,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     prepared_request_test
@@ -102,11 +102,11 @@ loom_cc_test(
     iree::testing::gtest_main
     iree::vm
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     execution_reconfiguration
@@ -125,7 +125,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     executables
@@ -162,7 +162,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     inspection
@@ -179,7 +179,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     inspection_test
@@ -191,7 +191,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 

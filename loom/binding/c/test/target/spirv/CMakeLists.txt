@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_test(
   NAME
     profile_test
@@ -24,11 +24,11 @@ loom_cc_test(
     loom::binding::c::test::test_util
     loom::target::profile
   LABELS
-    "iree-build-requirement=loom.target.arch.spirv"
+    "iree-build-requirement=loom.arch.spirv"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_test(
   NAME
     vulkaninfo_test
@@ -43,11 +43,11 @@ loom_cc_test(
     loom::binding::c::target::spirv::vulkaninfo
     loom::binding::c::test::test_util
   LABELS
-    "iree-build-requirement=loom.target.arch.spirv"
+    "iree-build-requirement=loom.arch.spirv"
 )
 endif()
 
-if(IREE_VULKAN_AVAILABLE AND LOOM_TARGET_ARCH_SPIRV)
+if(IREE_VULKAN_AVAILABLE AND LOOM_ARCH_SPIRV)
 loom_cc_test(
   NAME
     vulkan_test
@@ -62,11 +62,11 @@ loom_cc_test(
     loom::binding::c::target::spirv::vulkan
     loom::binding::c::test::test_util
   LABELS
-    "iree-build-requirement=loom.target.arch.spirv"
+    "iree-build-requirement=loom.arch.spirv"
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_SPIRV)
 loom_cc_test(
   NAME
     iree_hal_test
@@ -84,11 +84,11 @@ loom_cc_test(
     loom::binding::c::target::spirv::iree_hal
     loom::binding::c::test::test_util
   LABELS
-    "iree-build-requirement=loom.target.arch.spirv"
+    "iree-build-requirement=loom.arch.spirv"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_SPIRV)
 loom_cc_test(
   NAME
     iree_hal_execution_test
@@ -108,7 +108,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "runtime-resource=vulkan-device"
-    "iree-build-requirement=loom.target.arch.spirv"
+    "iree-build-requirement=loom.arch.spirv"
   RESOURCE_GROUP
     gpu-device
 )

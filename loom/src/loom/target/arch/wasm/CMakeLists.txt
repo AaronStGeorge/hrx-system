@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_WASM)
+if(LOOM_ARCH_WASM)
 loom_cc_library(
   NAME
     math_policy
@@ -24,7 +24,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM)
+if(LOOM_ARCH_WASM)
 loom_cc_library(
   NAME
     low_verify
@@ -47,7 +47,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM)
+if(LOOM_ARCH_WASM)
 loom_cc_library(
   NAME
     ir_provider
@@ -64,7 +64,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM)
+if(LOOM_ARCH_WASM)
 loom_cc_library(
   NAME
     provider
@@ -102,7 +102,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM)
+if(LOOM_ARCH_WASM)
 loom_cc_test(
   NAME
     registers_test
@@ -115,11 +115,11 @@ loom_cc_test(
     loom::target::arch::wasm::descriptors
     loom::target::registers
   LABELS
-    "iree-build-requirement=loom.target.arch.wasm"
+    "iree-build-requirement=loom.arch.wasm"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM)
+if(LOOM_ARCH_WASM)
 loom_check_test_suite(
   NAME
     loom_check_file_test

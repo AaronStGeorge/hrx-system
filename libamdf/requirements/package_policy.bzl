@@ -30,10 +30,10 @@ load(
 )
 load(
     "//loom/requirements:defs.bzl",
-    "EMIT_AMDGPU",
-    "EMIT_XDNA",
-    "TARGET_ARCH_AMDGPU",
-    "TARGET_ARCH_XDNA",
+    "ARCH_AIE2P",
+    "ARCH_AMDGPU",
+    "ARTIFACT_AIE2P_ELF",
+    "ARTIFACT_AMDGPU_ELF",
 )
 
 PACKAGE_POLICIES = [
@@ -76,7 +76,7 @@ PACKAGE_POLICIES = [
             "libamdf/cts/gpu/recipes",
             "libamdf/cts/interop/gpu/xdna/recipes",
         ],
-        build_requirements = [TARGET_ARCH_AMDGPU, EMIT_AMDGPU],
+        build_requirements = [ARCH_AMDGPU, ARTIFACT_AMDGPU_ELF],
     ),
     package_policy(
         packages = [
@@ -127,7 +127,7 @@ PACKAGE_POLICIES = [
             "libamdf/cts/xdna/programs",
             "libamdf/cts/xdna/recipes",
         ],
-        build_requirements = [TARGET_ARCH_XDNA, EMIT_XDNA],
+        build_requirements = [ARCH_AIE2P, ARTIFACT_AIE2P_ELF],
     ),
     package_policy(
         packages = [

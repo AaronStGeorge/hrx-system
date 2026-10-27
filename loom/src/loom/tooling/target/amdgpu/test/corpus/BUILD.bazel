@@ -41,7 +41,7 @@ _GENERIC_COMPATIBLE_WITH = loom_config_compatible_with([
 ])
 
 _AMDGPU_SOURCE_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target:amdgpu",
+    "//loom/config/arch:amdgpu",
 ])
 
 _GFX11_GENERIC_REPRESENTATION = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.gfx11.generic.core"]
@@ -69,7 +69,7 @@ _CDNA4_ARTIFACT_COMPATIBLE_WITH = (
 
 _CDNA4_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/execute:amdgpu_hal",
-    "//loom/config/target/amdgpu:iree_hal_descriptor_set_cdna4_core",
+    "//loom/config/arch/amdgpu:iree_hal_descriptor_set_cdna4_core",
 ])
 
 loom_test(

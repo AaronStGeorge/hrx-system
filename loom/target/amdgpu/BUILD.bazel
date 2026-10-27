@@ -29,7 +29,7 @@ exports_files(["execution_profiles.bzl"])
     loom_amdgpu_target_profile(
         name = target,
         target = target,
-        target_compatible_with = loom_config_compatible_with(["//loom/config/emit:amdgpu_artifacts"]),
+        target_compatible_with = loom_config_compatible_with(["//loom/config/emit:amdgpu_elf"]),
     )
     for target in LOOM_AMDGPU_SUPPORTED_TARGETS
 ]

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     check_provider

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     spirv
@@ -38,7 +38,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL)
 loom_cc_library(
   NAME
     iree_hal

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(AMDF_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_BUILD AND LOOM_EMIT_XDNA AND AMDF_FAMILY_XDNA AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows"))
+if(AMDF_BUILD AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND AMDF_FAMILY_XDNA AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows"))
 iree_cc_library(
   NAME
     execution_cases
@@ -34,7 +34,7 @@ iree_cc_library(
 )
 endif()
 
-if(AMDF_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_BUILD AND LOOM_EMIT_XDNA AND AMDF_FAMILY_XDNA AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows"))
+if(AMDF_BUILD AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND AMDF_FAMILY_XDNA AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows"))
 amdf_cts_binary(
   NAME
     execution_dynamic_bin
@@ -49,7 +49,7 @@ amdf_cts_binary(
 )
 endif()
 
-if(AMDF_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_BUILD AND LOOM_EMIT_XDNA AND AMDF_FAMILY_XDNA AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows"))
+if(AMDF_BUILD AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND AMDF_FAMILY_XDNA AND (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows"))
 iree_native_test(
   NAME
     "execution_dynamic"
@@ -62,8 +62,8 @@ iree_native_test(
     "amdf::amdf"
   LABELS
     "iree-build-requirement=libamdf"
-    "iree-build-requirement=loom.target.arch.xdna"
-    "iree-build-requirement=loom.emit.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
+    "iree-build-requirement=loom.artifact.aie2p_elf"
     "iree-build-requirement=libamdf.xdna"
     "iree-run-requirement=libamdf.resource.xdna"
     "runtime-resource=amd-xdna"

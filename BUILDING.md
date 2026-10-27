@@ -435,9 +435,10 @@ $baseOptions = @(
   '-GNinja'
   '-DCMAKE_BUILD_TYPE=RelWithDebInfo'
   '-DLIBHRX_BUILD=OFF'
-  '-DLOOM_TARGET_DEFAULTS=OFF'
-  '-DLOOM_TARGET_VM=ON'
-  '-DLOOM_TARGET_X86=ON'
+  '-DLOOM_ARCH_AIE2P=OFF'
+  '-DLOOM_ARCH_AMDGPU=OFF'
+  '-DLOOM_ARCH_SPIRV=OFF'
+  '-DLOOM_EMIT_SPIRV=OFF'
 )
 
 $llvmBin = 'C:\Program Files\LLVM\bin'
@@ -741,31 +742,66 @@ ROCr-backed AMDGPU programs still needs the runtime and access to a GPU.
 See the [AMDGPU build tools guide](build_tools/amdgpu/README.md) for device
 compiler selection and runtime target selectors.
 
-### Loom compiler targets and execution
+### Loom compiler capabilities and execution
 
-Loom target options select compiler backends: `LOOM_TARGET_AMDGPU=ON` enables
-compilation for AMDGPU. Executing the compiled programs is controlled separately
-by Loom execution support and the runtime `IREE_HAL_DRIVER_*` options.
+Loom build selection has three independent axes. Architecture options select
+target records and lowering transforms. Emission options select serialized
+artifact formats. Execution options select the host substrate used to run an
+artifact. A compiler or execution provider enters the build only when all of
+its required leaves are present. For example, x86 native compilation requires
+the `x86` architecture and `elf` emission, while task execution additionally
+requires the IREE HAL substrate, task driver, and embedded ELF loader.
 
-The default dependency-satisfied Loom target set is
-`amdgpu,spirv,vm,xdna,x86`. VM compilation and function execution provide the
-standard evaluator for `check.case` and `check.benchmark`. AMDGPU and SPIR-V
-target compilation use pinned source dependencies by default and do not enable
-the matching runtime HAL drivers. WebAssembly is opt-in. The default execution
-substrate is `iree_hal`; execution still needs a
-matching runtime HAL driver such as `IREE_HAL_DRIVER_VULKAN` or
-`IREE_HAL_DRIVER_AMDGPU`.
+Ordinary builds enable every production architecture except WebAssembly:
+`aie2p,amdgpu,spirv,vm,x86`. Their artifact formats are `elf,spirv,vm`, and
+their execution substrates are `iree_hal,iree_vm`. WebAssembly architecture,
+emission, and hosted execution remain opt-in. AIE2P names the compiler
+architecture used by the XDNA product family; XDNA remains the runtime and
+device-family vocabulary.
 
-CMake exposes `LOOM_TARGET_DEFAULTS` and `LOOM_EXECUTE_DEFAULTS` to set the
-default value for dependency-satisfied target and execution options before the
-individual `LOOM_TARGET_*` and `LOOM_EXECUTE_*` overrides are evaluated. Bazel
-configuration writes complete native lists instead, so portable `-D...=OFF`
-options remove entries from the default set.
+Architecture and emission do not enable a matching runtime HAL driver. A build
+can compile AMDGPU or SPIR-V artifacts without a GPU. Execution routes require
+the corresponding `IREE_HAL_DRIVER_*` option or the non-HAL VM/Wasm host.
 
-AMDGPU has an additional compiler target selector list. `LOOM_TARGET_AMDGPU=ON`
-enables the backend; `LOOM_TARGET_AMDGPU_TARGETS` selects which AMDGPU
-processors it supports. The default selector is `loom_defaults`, which includes
-all of the following:
+| Capability | CMake option | Bazel native value |
+| --- | --- | --- |
+| AIE2P architecture | `LOOM_ARCH_AIE2P` | `--//loom/config/arch:enable=...aie2p...` |
+| AMDGPU architecture | `LOOM_ARCH_AMDGPU` | `--//loom/config/arch:enable=...amdgpu...` |
+| SPIR-V architecture | `LOOM_ARCH_SPIRV` | `--//loom/config/arch:enable=...spirv...` |
+| VM architecture | `LOOM_ARCH_VM` | `--//loom/config/arch:enable=...vm...` |
+| WebAssembly architecture | `LOOM_ARCH_WASM` | `--//loom/config/arch:enable=...wasm...` |
+| x86 architecture | `LOOM_ARCH_X86` | `--//loom/config/arch:enable=...x86...` |
+| ELF emission | `LOOM_EMIT_ELF` | `--//loom/config/emit:enable=...elf...` |
+| SPIR-V binary emission | `LOOM_EMIT_SPIRV` | `--//loom/config/emit:enable=...spirv...` |
+| VM binary emission | `LOOM_EMIT_VM` | `--//loom/config/emit:enable=...vm...` |
+| WebAssembly binary emission | `LOOM_EMIT_WASM` | `--//loom/config/emit:enable=...wasm...` |
+| IREE HAL execution | `LOOM_EXECUTE_IREE_HAL` | `--//loom/config/execute:enable=...iree_hal...` |
+| IREE VM execution | `LOOM_EXECUTE_IREE_VM` | `--//loom/config/execute:enable=...iree_vm...` |
+| WebAssembly host execution | `LOOM_EXECUTE_WASM_HOST` | `--//loom/config/execute:enable=...wasm_host...` |
+
+Bazel's native flags are complete lists. This explicitly selects the ordinary
+all-but-Wasm configuration:
+
+```bash
+python dev.py bazel configure \
+  --//loom/config/arch:enable=aie2p,amdgpu,spirv,vm,x86 \
+  --//loom/config/emit:enable=elf,spirv,vm \
+  --//loom/config/execute:enable=iree_hal,iree_vm
+```
+
+Portable `-D...=ON|OFF` options edit the same lists. Enabling hosted Wasm
+end-to-end requires all three leaves:
+
+```bash
+python dev.py bazel configure \
+  -DLOOM_ARCH_WASM=ON \
+  -DLOOM_EMIT_WASM=ON \
+  -DLOOM_EXECUTE_WASM_HOST=ON
+```
+
+AMDGPU has an additional architecture selector list.
+`LOOM_ARCH_AMDGPU_TARGETS` selects which processors the compiler supports. The
+default selector is `loom_defaults`, which includes all of the following:
 
 | Architecture family | Processor targets |
 | --- | --- |
@@ -803,52 +839,36 @@ The `iree_hal` selector narrows Loom to the supported subset requested by
 `IREE_HAL_AMDGPU_TARGETS`. Use it for a JIT build targeting the same processors
 as the runtime; `loom_defaults` keeps the compiler's full target set.
 
-| Option | Values | CMake | Bazel portable | Bazel native |
-| --- | --- | --- | --- | --- |
-| `LOOM_TARGET_AMDGPU` | `ON`, `OFF` | Builds Loom AMDGPU target support and production AMDGPU emission. | Adds or removes `amdgpu` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
-| `LOOM_TARGET_AMDGPU_TARGETS` | AMDGPU selectors | Selects descriptor-backed AMDGPU processors compiled into Loom AMDGPU target support. | Not exposed as a portable `-D` option. | `--//loom/config/target/amdgpu:targets=<complete-selector-list>` |
-| `LOOM_TARGET_SPIRV` | `ON`, `OFF` | Builds Loom SPIR-V target support and production SPIR-V emission. | Adds or removes `spirv` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
-| `LOOM_TARGET_VM` | `ON`, `OFF` | Builds Loom VM compilation and function execution. | Adds or removes `vm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
-| `LOOM_TARGET_WASM` | `ON`, `OFF` | Builds Loom WebAssembly target support and production Wasm emission. | Adds or removes `wasm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
-| `LOOM_TARGET_XDNA` | `ON`, `OFF` | Builds Loom XDNA target support and production XDNA emission. | Adds or removes `xdna` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
-| `LOOM_TARGET_X86` | `ON`, `OFF` | Builds Loom x86 target support and native emission. | Adds or removes `x86` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
-| `LOOM_EXECUTE_IREE_HAL` | `ON`, `OFF` | Builds Loom execution providers that run through IREE HAL when a matching runtime HAL driver is enabled. | Adds or removes `iree_hal` from the Loom execute substrate set. | `--//loom/config/execute:enable=<complete-execute-list>` |
-
-The native Loom target flag is a complete list. The default target set is
-`amdgpu,spirv,vm,xdna,x86`, and the default execution substrate set is
-`iree_hal`:
-
-```bash
-python dev.py bazel configure \
-  --//loom/config/target:enable=amdgpu,spirv,vm,xdna,x86
-```
-
 AMDGPU compiler target selection is also a complete list. Bazel uses
 comma-separated list values; CMake uses normal semicolon-separated CMake lists:
 
 ```bash
 python dev.py bazel configure \
-  -DLOOM_TARGET_AMDGPU=ON \
-  --//loom/config/target/amdgpu:targets=gfx942,gfx120X-all,gfx12-5-generic
+  -DLOOM_ARCH_AMDGPU=ON \
+  -DLOOM_EMIT_ELF=ON \
+  --//loom/config/arch/amdgpu:targets=gfx942,gfx120X-all,gfx12-5-generic
 
 python dev.py cmake configure \
-  -DLOOM_TARGET_AMDGPU=ON \
-  -DLOOM_TARGET_AMDGPU_TARGETS='gfx942;gfx120X-all;gfx12-5-generic'
+  -DLOOM_ARCH_AMDGPU=ON \
+  -DLOOM_EMIT_ELF=ON \
+  -DLOOM_ARCH_AMDGPU_TARGETS='gfx942;gfx120X-all;gfx12-5-generic'
 ```
 
 To select Loom targets from the runtime's processor set:
 
 ```bash
 python dev.py cmake configure \
-  -DLOOM_TARGET_AMDGPU=ON \
-  -DLOOM_TARGET_AMDGPU_TARGETS=iree_hal \
+  -DLOOM_ARCH_AMDGPU=ON \
+  -DLOOM_EMIT_ELF=ON \
+  -DLOOM_ARCH_AMDGPU_TARGETS=iree_hal \
   -DIREE_HAL_AMDGPU_TARGETS='gfx942;gfx1201'
 ```
 
-To disable one of the default compiler backends:
+To remove SPIR-V compilation from the ordinary configuration, disable both its
+architecture and format leaves:
 
 ```bash
-python dev.py bazel configure -DLOOM_TARGET_SPIRV=OFF
+python dev.py bazel configure -DLOOM_ARCH_SPIRV=OFF -DLOOM_EMIT_SPIRV=OFF
 ```
 
 Execution options describe the runtime substrate available to Loom tools, not a
@@ -858,21 +878,19 @@ HAL driver:
 
 ```bash
 python dev.py bazel configure \
-  -DLOOM_TARGET_AMDGPU=ON \
+  -DLOOM_ARCH_AMDGPU=ON \
+  -DLOOM_EMIT_ELF=ON \
   -DLOOM_EXECUTE_IREE_HAL=ON \
   -DIREE_HAL_DRIVER_AMDGPU=ON \
   --//runtime/src/iree/hal/drivers/amdgpu:targets=gfx942 \
-  --//loom/config/target/amdgpu:targets=gfx942 \
+  --//loom/config/arch/amdgpu:targets=gfx942 \
   -DIREE_ROCM_PATH=/opt/rocm
 ```
 
 Compiling for AMDGPU does not require a GPU. Enable the runtime HAL only when
-execution support is needed. Advanced embedders can select architecture and
-emitter slices separately for AMDGPU, SPIR-V, Wasm, and XDNA through
-`//loom/config/target/arch` and `//loom/config/emit`. VM and x86 integrate their
-architecture and artifact support under the public target product. Execution
-slices remain independently selectable through `//loom/config/execute`;
-ordinary builds use the `LOOM_TARGET_*` options above.
+execution support is needed. The architecture, emission, and execution lists
+remain independent so source-to-low tools, offline artifact producers, and
+runtime-enabled tools can select only the capabilities they consume.
 
 ### Loom importers
 

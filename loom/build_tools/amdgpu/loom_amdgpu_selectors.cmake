@@ -59,7 +59,7 @@ function(_loom_amdgpu_expand_iree_hal_target_selectors out_targets)
   set(_expanded_targets)
   if(NOT DEFINED IREE_HAL_AMDGPU_TARGETS)
     message(FATAL_ERROR
-      "LOOM_TARGET_AMDGPU_TARGETS contains iree_hal but "
+      "LOOM_ARCH_AMDGPU_TARGETS contains iree_hal but "
       "IREE_HAL_AMDGPU_TARGETS is not defined.")
   endif()
   foreach(_iree_hal_selector ${IREE_HAL_AMDGPU_TARGETS})
@@ -124,16 +124,16 @@ function(_loom_amdgpu_descriptor_set_selected
 endfunction()
 
 function(loom_amdgpu_configure_target_selectors)
-  if(NOT DEFINED LOOM_TARGET_AMDGPU_TARGETS)
-    set(LOOM_TARGET_AMDGPU_TARGETS ${_LOOM_AMDGPU_DEFAULT_TARGET_SELECTORS})
+  if(NOT DEFINED LOOM_ARCH_AMDGPU_TARGETS)
+    set(LOOM_ARCH_AMDGPU_TARGETS ${_LOOM_AMDGPU_DEFAULT_TARGET_SELECTORS})
   endif()
 
   loom_amdgpu_expand_target_selectors(
     _loom_amdgpu_exact_targets
-    ${LOOM_TARGET_AMDGPU_TARGETS}
+    ${LOOM_ARCH_AMDGPU_TARGETS}
   )
   set(_loom_amdgpu_generic_targets)
-  foreach(_selector ${LOOM_TARGET_AMDGPU_TARGETS})
+  foreach(_selector ${LOOM_ARCH_AMDGPU_TARGETS})
     if("${_selector}" STREQUAL "${LOOM_AMDGPU_TARGET_SOURCE_LOOM_DEFAULTS}")
       list(APPEND _loom_amdgpu_generic_targets
         ${_LOOM_AMDGPU_SUPPORTED_CODE_OBJECT_PROCESSORS})
@@ -171,14 +171,14 @@ function(loom_amdgpu_configure_target_selectors)
       _loom_amdgpu_exact_targets
       "${_processor}"
     )
-    set("LOOM_TARGET_AMDGPU_PROCESSOR_${_processor_upper}"
+    set("LOOM_ARCH_AMDGPU_PROCESSOR_${_processor_upper}"
         "${_selected}" PARENT_SCOPE)
     _loom_amdgpu_exact_target_selected(
       _iree_hal_selected
       _loom_amdgpu_iree_hal_exact_targets
       "${_processor}"
     )
-    set("LOOM_TARGET_AMDGPU_IREE_HAL_PROCESSOR_${_processor_upper}"
+    set("LOOM_ARCH_AMDGPU_IREE_HAL_PROCESSOR_${_processor_upper}"
         "${_iree_hal_selected}" PARENT_SCOPE)
   endforeach()
 
@@ -190,14 +190,14 @@ function(loom_amdgpu_configure_target_selectors)
       _loom_amdgpu_generic_targets
       "${_capability}"
     )
-    set("LOOM_TARGET_AMDGPU_${_capability_upper}" "${_selected}" PARENT_SCOPE)
+    set("LOOM_ARCH_AMDGPU_${_capability_upper}" "${_selected}" PARENT_SCOPE)
     _loom_amdgpu_descriptor_set_selected(
       _iree_hal_selected
       _loom_amdgpu_iree_hal_exact_targets
       _loom_amdgpu_iree_hal_generic_targets
       "${_capability}"
     )
-    set("LOOM_TARGET_AMDGPU_IREE_HAL_${_capability_upper}"
+    set("LOOM_ARCH_AMDGPU_IREE_HAL_${_capability_upper}"
         "${_iree_hal_selected}" PARENT_SCOPE)
   endforeach()
 endfunction()

@@ -17,7 +17,7 @@ package(
 )
 
 _XDNA_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/emit:xdna_artifacts",
+    "//loom/config/emit:aie2p_elf",
 ])
 
 loom_cc_library(

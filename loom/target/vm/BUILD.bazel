@@ -19,14 +19,14 @@ loom_target_profile(
     name = "core",
     family = "vm",
     selector = "core",
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
 )
 
 loom_target_set(
     name = "all",
     allow_empty = True,
     targets = select({
-        "//loom/config/target/arch:vm": [":core"],
+        "//loom/config/arch:vm": [":core"],
         "//conditions:default": [],
     }),
 )

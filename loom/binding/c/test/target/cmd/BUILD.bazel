@@ -33,7 +33,7 @@ loom_cc_test(
     name = "specialization_test",
     srcs = ["specialization_test.cc"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:amdgpu_artifacts",
+        "//loom/config/emit:amdgpu_elf",
     ]),
     deps = [
         "//loom/binding/c:loomc",

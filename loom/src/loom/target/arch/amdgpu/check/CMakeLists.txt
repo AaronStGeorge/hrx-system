@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
 loom_cc_library(
   NAME
     bank_service
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
 loom_cc_library(
   NAME
     occupancy
@@ -42,7 +42,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
 loom_cc_library(
   NAME
     provider

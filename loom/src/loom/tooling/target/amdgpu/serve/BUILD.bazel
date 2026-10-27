@@ -52,8 +52,8 @@ loom_cc_test(
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = _ROCR_TEST_TAGS,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/emit:amdgpu_artifacts",
+        "//loom/config/arch:x86",
+        "//loom/config/emit:amdgpu_elf",
         "//runtime/config/hal:driver_amdgpu",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
@@ -80,7 +80,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["test_compiler.c"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:amdgpu_artifacts",
+        "//loom/config/emit:amdgpu_elf",
     ]),
     deps = [
         "//loom/binding/c/target/amdgpu",
@@ -94,7 +94,7 @@ loom_cc_binary(
     name = "loom-serve-test-tool",
     testonly = True,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:amdgpu_artifacts",
+        "//loom/config/emit:amdgpu_elf",
         "//runtime/config/hal:driver_amdgpu",
     ]),
     deps = [
@@ -225,7 +225,7 @@ loom_cc_library(
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
         tags = runtime_tags,
         target_compatible_with = loom_config_compatible_with([
-            "//loom/config/target/arch:vm",
+            "//loom/config/arch:vm",
             "//loom/config/execute:amdgpu_hal",
         ] + runtime_requirements),
         deps = [
@@ -508,7 +508,7 @@ loom_cc_test(
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
         tags = runtime_tags,
         target_compatible_with = loom_config_compatible_with([
-            "//loom/config/target/arch:vm",
+            "//loom/config/arch:vm",
             "//loom/config/execute:amdgpu_hal",
         ] + runtime_requirements) + select({
             "@platforms//os:linux": [],
@@ -535,7 +535,7 @@ loom_cc_test(
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
         tags = runtime_tags,
         target_compatible_with = loom_config_compatible_with([
-            "//loom/config/target/arch:vm",
+            "//loom/config/arch:vm",
             "//loom/config/execute:amdgpu_hal",
         ] + runtime_requirements) + select({
             "@platforms//os:linux": [],

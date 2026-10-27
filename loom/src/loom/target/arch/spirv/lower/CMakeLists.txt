@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_generated_file(
   NAME
     collective_rows_gen
@@ -22,7 +22,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_generated_file(
   NAME
     workgroup_reduce_rows_gen
@@ -35,7 +35,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
     lower
@@ -96,7 +96,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
     cooperative_initializer
@@ -115,7 +115,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_ARCH_SPIRV)
 loom_check_test_suite(
   NAME
     collective_arithmetic_tests
@@ -126,7 +126,7 @@ loom_check_test_suite(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_ARCH_SPIRV)
 loom_check_test_suite(
   NAME
     workgroup_reduce_tests
@@ -137,7 +137,7 @@ loom_check_test_suite(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_ARCH_SPIRV)
 loom_check_test_suite(
   NAME
     cooperative_initializer_tests
@@ -148,7 +148,7 @@ loom_check_test_suite(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_ARCH_SPIRV)
 loom_check_test_suite(
   NAME
     cooperative_memory_tests
@@ -159,7 +159,7 @@ loom_check_test_suite(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_ARCH_SPIRV)
 loom_check_test_suite(
   NAME
     matrix_tests

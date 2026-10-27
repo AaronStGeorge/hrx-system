@@ -32,8 +32,8 @@ loom_py_test(
     ],
     main = "benchmark_execution_test.py",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"],
 )

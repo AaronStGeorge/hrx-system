@@ -2316,8 +2316,8 @@ loom_corpus_test(
     "--vulkan_validation_layers=false"
   LABELS
     "loom-corpus"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.vulkan"
     "iree-run-requirement=vulkan.resource.device"
@@ -2329,7 +2329,7 @@ loom_corpus_test(
   RESOURCE_GROUP
     "gpu-device"
   REQUIRES
-    LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN
+    LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN
 )
 
 loom_test_module(
@@ -2341,7 +2341,7 @@ loom_test_module(
     "loom::test::corpus::numeric::inverse_hyperbolic_narrow"
 )
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 loom_execution_test(
   NAME
     inverse_hyperbolic_stress_execute_spirv_vulkan_hardware_test
@@ -2354,8 +2354,8 @@ loom_execution_test(
   LABELS
     "manual"
     "stress"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.vulkan"
     "iree-run-requirement=vulkan.resource.device"

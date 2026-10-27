@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     asan
@@ -21,7 +21,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     asan_test
@@ -33,11 +33,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     feedback
@@ -49,7 +49,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     feedback_test
@@ -61,11 +61,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     tsan
@@ -77,7 +77,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     tsan_test
@@ -89,11 +89,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     ubsan
@@ -105,7 +105,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     ubsan_test
@@ -117,11 +117,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     signal
@@ -133,7 +133,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     signal_test
@@ -144,7 +144,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 

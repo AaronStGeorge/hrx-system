@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     records
@@ -24,7 +24,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     types
@@ -40,7 +40,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     program
@@ -55,7 +55,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     reference_plan
@@ -74,7 +74,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     function_plan
@@ -104,7 +104,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     program_build
@@ -131,7 +131,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     reference_plan_test
@@ -146,11 +146,11 @@ loom_cc_test(
     loom::ir
     loom::ops::type_registry
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     types_test
@@ -165,11 +165,11 @@ loom_cc_test(
     loom::ir
     loom::ops::type_registry
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     ir_provider
@@ -186,7 +186,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     provider
@@ -219,7 +219,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_check_test_suite(
   NAME
     loom_check_file_test
@@ -271,7 +271,7 @@ loom_check_test_suite(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_check_compile_tests(
   NAME
     "emission"

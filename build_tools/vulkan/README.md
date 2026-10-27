@@ -18,7 +18,7 @@ For example, the raw profile test runs on the CPU with Vulkan HAL disabled:
 ```bash
 iree-bazel-test --config=asan \
   --//runtime/config/hal:drivers=task \
-  --//loom/config/target:enable=spirv \
+  --//loom/config/arch:enable=spirv \
   //loom/binding/c/test/target/spirv:vulkan_test
 ```
 

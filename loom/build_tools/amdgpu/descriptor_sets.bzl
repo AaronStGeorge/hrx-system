@@ -24,7 +24,7 @@ def _descriptor_set_config_label(capability, prefix = ""):
         fail("Unknown Loom AMDGPU descriptor-set capability: {}".format(capability))
     if prefix:
         capability = prefix + "_" + capability
-    return "//loom/config/target/amdgpu:" + capability
+    return "//loom/config/arch/amdgpu:" + capability
 
 def _descriptor_set_capabilities_compatible_with(capabilities, prefix = ""):
     compatibility = {

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV AND IREE_VULKAN_AVAILABLE)
+if(LOOM_ARCH_SPIRV AND IREE_VULKAN_AVAILABLE)
 loom_cc_library(
   NAME
     vulkan

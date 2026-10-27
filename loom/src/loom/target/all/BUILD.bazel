@@ -21,11 +21,11 @@ package(
 #===------------------------------------------------------------------------===#
 
 ALL_TARGETS_ENABLED = loom_config_compatible_with([
-    "//loom/config/target/arch:amdgpu",
-    "//loom/config/target/arch:spirv",
-    "//loom/config/target/arch:vm",
-    "//loom/config/target/arch:wasm",
-    "//loom/config/target/arch:x86",
+    "//loom/config/arch:amdgpu",
+    "//loom/config/arch:spirv",
+    "//loom/config/arch:vm",
+    "//loom/config/arch:wasm",
+    "//loom/config/arch:x86",
 ])
 
 loom_cc_library(

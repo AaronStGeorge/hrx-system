@@ -147,7 +147,7 @@ loom_cc_test(
     name = "module_compiler_test",
     srcs = ["module_compiler_test.cc"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:wasm",
+        "//loom/config/arch:wasm",
     ]),
     deps = [
         ":module_compiler",

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     facts
@@ -28,7 +28,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     feature_bits
@@ -40,7 +40,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     call_abi
@@ -55,7 +55,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     source_signature
@@ -71,7 +71,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_test(
   NAME
     source_signature_test
@@ -85,11 +85,11 @@ loom_cc_test(
     loom::ir
     loom::ops::func
   LABELS
-    "iree-build-requirement=loom.target.arch.x86"
+    "iree-build-requirement=loom.arch.x86"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     math_policy
@@ -105,7 +105,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_test(
   NAME
     math_policy_test
@@ -120,11 +120,11 @@ loom_cc_test(
     loom::target::math_policy
     loom::target::types
   LABELS
-    "iree-build-requirement=loom.target.arch.x86"
+    "iree-build-requirement=loom.arch.x86"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     register_classes
@@ -139,7 +139,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_test(
   NAME
     register_classes_test
@@ -154,11 +154,11 @@ loom_cc_test(
     loom::codegen::low::descriptors
     loom::target::arch::x86::descriptors::shards_for_testing
   LABELS
-    "iree-build-requirement=loom.target.arch.x86"
+    "iree-build-requirement=loom.arch.x86"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     legalization
@@ -185,7 +185,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     hal_materialization
@@ -213,7 +213,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     pass_registry
@@ -231,7 +231,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     ir_provider
@@ -249,7 +249,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     provider
@@ -277,7 +277,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_test(
   NAME
     provider_test
@@ -297,11 +297,11 @@ loom_cc_test(
     loom::target::facts_builder
     loom::testing::module_ptr
   LABELS
-    "iree-build-requirement=loom.target.arch.x86"
+    "iree-build-requirement=loom.arch.x86"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     compiler_provider
@@ -319,7 +319,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_check_test_suite(
   NAME
     loom_check_file_test
@@ -461,7 +461,7 @@ loom_check_test_suite(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_generated_cc_library(
   NAME
     packed_dot_contract
@@ -482,7 +482,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     packed_dot_contract_projection
@@ -497,7 +497,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_test(
   NAME
     packed_dot_contract_test
@@ -509,11 +509,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::arch::x86::descriptors::shards_for_testing
   LABELS
-    "iree-build-requirement=loom.target.arch.x86"
+    "iree-build-requirement=loom.arch.x86"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_test(
   NAME
     packed_dot_contract_projection_test
@@ -526,7 +526,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::analysis::contract_storage
   LABELS
-    "iree-build-requirement=loom.target.arch.x86"
+    "iree-build-requirement=loom.arch.x86"
 )
 endif()
 

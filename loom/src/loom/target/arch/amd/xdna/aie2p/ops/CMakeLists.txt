@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     op_defs
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     builders
@@ -45,7 +45,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_generated_cc_library(
   NAME
     ops

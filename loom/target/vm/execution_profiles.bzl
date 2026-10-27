@@ -7,11 +7,11 @@
 """Reference function execution through the IREE VM provider."""
 
 load("//loom/build_tools/bazel:defs.bzl", "loom_execution_profile")
-load("//loom/requirements:defs.bzl", "TARGET_ARCH_VM")
+load("//loom/requirements:defs.bzl", "ARCH_VM")
 
 VM_REFERENCE_PROFILE = loom_execution_profile(
     name = "vm_reference",
-    build_requirements = [TARGET_ARCH_VM],
+    build_requirements = [ARCH_VM],
     executor = "reference",
     target_class = "cpu",
     target_family = "vm",

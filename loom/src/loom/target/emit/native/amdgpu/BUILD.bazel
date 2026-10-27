@@ -378,7 +378,7 @@ loom_cc_benchmark(
     name = "packet_plan_benchmark",
     srcs = ["packet_plan_benchmark.cc"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/amdgpu:" + LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY[key]
+        "//loom/config/arch/amdgpu:" + LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY[key]
         for key in [
             "amdgpu.cdna2.core",
             "amdgpu.rdna4.gfx125x.core",

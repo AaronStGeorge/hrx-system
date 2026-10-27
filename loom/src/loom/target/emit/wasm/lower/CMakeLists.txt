@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     vector_carrier
@@ -24,7 +24,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_test(
   NAME
     vector_carrier_test
@@ -36,12 +36,12 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::ir
   LABELS
-    "iree-build-requirement=loom.target.arch.wasm"
-    "iree-build-requirement=loom.emit.wasm"
+    "iree-build-requirement=loom.arch.wasm"
+    "iree-build-requirement=loom.artifact.wasm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     vector_dynamic_slice
@@ -59,7 +59,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_test(
   NAME
     vector_dynamic_slice_test
@@ -70,12 +70,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.wasm"
-    "iree-build-requirement=loom.emit.wasm"
+    "iree-build-requirement=loom.arch.wasm"
+    "iree-build-requirement=loom.artifact.wasm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     predicate_representation
@@ -94,7 +94,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_test(
   NAME
     predicate_representation_test
@@ -106,12 +106,12 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::ir
   LABELS
-    "iree-build-requirement=loom.target.arch.wasm"
-    "iree-build-requirement=loom.emit.wasm"
+    "iree-build-requirement=loom.arch.wasm"
+    "iree-build-requirement=loom.artifact.wasm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     lower

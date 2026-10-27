@@ -19,9 +19,10 @@ platform(
         "@platforms//os:wasi",
     ],
     flags = [
-        "--//loom/config/execute:enable=",
+        "--//loom/config/emit:enable=vm,wasm",
+        "--//loom/config/execute:enable=iree_vm,wasm_host",
         "--//loom/config/import:enable=",
-        "--//loom/config/target:enable=vm,wasm",
+        "--//loom/config/arch:enable=vm,wasm",
         "--//runtime/config/hal:drivers=",
     ],
 )

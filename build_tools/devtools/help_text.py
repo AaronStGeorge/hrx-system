@@ -171,7 +171,7 @@ active.""",
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=pinned
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMD=OFF
-  python dev.py bazel configure -DLOOM_TARGET_AMDGPU=ON
+  python dev.py bazel configure -DLOOM_ARCH_AMDGPU=ON -DLOOM_EMIT_ELF=ON
   python dev.py bazel configure --importer-env tilelang
   python dev.py bazel configure --importer-env mlir
   python dev.py bazel configure --//runtime/config/hal:drivers=amdgpu,task --repo_env=IREE_ROCM_PATH=/opt/rocm

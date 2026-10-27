@@ -37,14 +37,14 @@ loom_test_module(
     "integer_constant_values.loom"
 )
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_execution_test(
   NAME
     integer_constant_values_test_execute_vm_reference_test
   MODULE
     "::integer_constant_values_test_module"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"

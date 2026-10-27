@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     device
@@ -56,7 +56,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     device_test
@@ -68,11 +68,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     device_cpu_test
@@ -87,7 +87,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::serve::runtime::host
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 

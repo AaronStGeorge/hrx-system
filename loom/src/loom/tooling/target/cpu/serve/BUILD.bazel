@@ -31,7 +31,7 @@ loom_cc_test(
     ],
     data = RECOGNITION_SOURCES + ["//loom/src/loom/serve/fixture/recognition:activity.json"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -61,7 +61,7 @@ loom_cc_test(
     ],
     data = RECOGNITION_SOURCES + ["//loom/src/loom/serve/fixture/recognition:activity.json"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -94,7 +94,7 @@ loom_cc_test(
     ],
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -128,7 +128,7 @@ loom_cc_test(
     ],
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -149,7 +149,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["test_compiler.c"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]),
     deps = [
         "//loom/binding/c/target/cpu:iree_hal",
@@ -176,7 +176,7 @@ loomc_cc_binary(
     name = "loom-serve-test-tool",
     testonly = True,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
     ]),
     deps = [
@@ -195,7 +195,7 @@ loom_cc_test(
         "//loom/src/loom/serve/runtime/program:testdata/jit/stage.loom",
     ],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -243,7 +243,7 @@ loom_py_test(
     main = "fetch_model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -286,7 +286,7 @@ loom_py_test(
     main = "build_fetch_model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -327,7 +327,7 @@ loom_py_test(
     main = "staged_model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -370,7 +370,7 @@ loom_py_test(
     main = "build_fetch_model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//loom/config/serve:image_input_enabled",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
@@ -408,7 +408,7 @@ loom_py_test(
     main = "hf_model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -462,7 +462,7 @@ loom_py_test(
         "skip-bazel_to_cmake",
     ],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -498,7 +498,7 @@ loom_py_test(
     main = "publication_model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -540,7 +540,7 @@ loom_py_test(
     main = "partition_model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -575,7 +575,7 @@ loom_py_test(
     main = "swatch_model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -606,7 +606,7 @@ loom_py_test(
         main = "service_model_card_test.py",
         tags = ["skip-bazel_to_cmake"],
         target_compatible_with = loom_config_compatible_with([
-            "//loom/config/target/arch:x86",
+            "//loom/config/arch:x86",
             "//runtime/config/hal:driver_task",
             "//runtime/config/hal:executable_loader_embedded_elf",
         ]) + ["@platforms//cpu:x86_64"] + select({
@@ -658,7 +658,7 @@ loom_py_test(
     main = "model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -688,7 +688,7 @@ loom_py_test(
     main = "model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -715,7 +715,7 @@ loom_py_test(
     main = "model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -742,7 +742,7 @@ loom_py_test(
     main = "model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -769,7 +769,7 @@ loom_py_test(
     main = "model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -796,7 +796,7 @@ loom_py_test(
     main = "model_card_test.py",
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -821,7 +821,7 @@ loom_py_test(
     ],
     main = "server_test.py",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -843,7 +843,7 @@ loom_py_test(
     data = TEXT_SOURCES + PROJECTOR_SOURCES + [":loom-serve-test-tool"],
     main = "pressure_test.py",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
         "//runtime/config/hal:driver_task",
         "//runtime/config/hal:executable_loader_embedded_elf",
     ]) + ["@platforms//cpu:x86_64"] + select({
@@ -897,8 +897,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_COMPONENT_SOURCE": "$(rootpath //loom/src/loom/serve/service/finite:testdata/component/prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]),
     deps = [
         ":test_compiler",
@@ -921,8 +921,8 @@ loom_py_test(
     ],
     main = "client_test.py",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -955,8 +955,8 @@ loom_py_test(
     ],
     main = "client_test.py",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -969,8 +969,8 @@ loom_cc_test(
     args = ["--model_source=$(rootpath //loom/src/loom/serve/fixture/recognition:prepare.loom)"],
     data = RECOGNITION_SOURCES,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -990,8 +990,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/image:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1011,8 +1011,8 @@ loom_cc_test(
     ],
     data = RECOGNITION_SOURCES,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1032,8 +1032,8 @@ loom_cc_test(
     ],
     data = RECOGNITION_SOURCES,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1054,8 +1054,8 @@ loom_cc_test(
     ],
     data = RECOGNITION_SOURCES,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1075,8 +1075,8 @@ loom_cc_test(
     ],
     data = SPEECH_SOURCES,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1096,8 +1096,8 @@ loom_cc_test(
     ],
     data = RECOGNITION_SOURCES,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1117,8 +1117,8 @@ loom_cc_test(
     ],
     data = SPEECH_SOURCES + SPEECH_VARIANT_SOURCES,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1139,8 +1139,8 @@ loom_cc_test(
     ],
     data = SPEECH_SOURCES + SPEECH_VARIANT_SOURCES,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1161,8 +1161,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/decision:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1182,8 +1182,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/embedding:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1205,8 +1205,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/embedding:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1247,8 +1247,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/embedding:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1268,8 +1268,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1289,8 +1289,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_PROJECTOR_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/projector:model.json)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]),
     deps = [
         ":test_compiler",
@@ -1310,8 +1310,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_PROJECTOR_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/projector:model.json)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1336,8 +1336,8 @@ loom_cc_test(
     },
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1357,8 +1357,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1378,8 +1378,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1399,8 +1399,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1420,8 +1420,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1443,8 +1443,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1464,8 +1464,8 @@ loom_cc_test(
         "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/text:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]) + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -1589,8 +1589,8 @@ loom_cc_test(
         "//loom/src/loom/serve/service:testdata/executables/prepare.loom",
     ],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/execute:task_hal",
+        "//loom/config/arch:x86",
+        "//loom/config/execute:x86_task_hal",
     ]),
     deps = [
         ":test_compiler",

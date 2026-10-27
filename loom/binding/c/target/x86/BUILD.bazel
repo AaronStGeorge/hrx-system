@@ -19,7 +19,7 @@ package(
 )
 
 _X86_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:x86",
+    "//loom/config/arch:x86",
 ])
 
 loom_cc_library(

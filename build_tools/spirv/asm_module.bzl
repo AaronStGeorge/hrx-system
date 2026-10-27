@@ -22,7 +22,7 @@ IreeSpirvAsmModuleInfo = provider(
 )
 
 _SPIRV_AS_TOOL = Label("//third_party:spirv_as")
-_LOOM_SPIRV_ARTIFACTS_CONFIG = Label("//loom/config/emit:spirv_artifacts")
+_LOOM_SPIRV_ARTIFACTS_CONFIG = Label("//loom/config/emit:spirv_binary")
 _VULKAN_DRIVER_CONFIG = Label("//runtime/config/hal:driver_vulkan")
 _INCOMPATIBLE_TARGET = ["@platforms//:incompatible"]
 

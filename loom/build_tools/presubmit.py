@@ -38,21 +38,27 @@ GLOBAL_TEST_TRIGGERS = (
     "requirements",
 )
 CTEST_RESOURCE_LABEL_EXCLUDE_REGEX = "runtime-resource="
-CMAKE_SOURCE_FORMAT_TARGET_DEFINES = (
-    ("amdgpu", "LOOM_TARGET_AMDGPU"),
-    ("spirv", "LOOM_TARGET_SPIRV"),
-    ("vm", "LOOM_TARGET_VM"),
-    ("wasm", "LOOM_TARGET_WASM"),
-    ("xdna", "LOOM_TARGET_XDNA"),
-    ("x86", "LOOM_TARGET_X86"),
-)
-CI_LOOM_TARGETS = ",".join(
-    target for target, _define in CMAKE_SOURCE_FORMAT_TARGET_DEFINES
+CMAKE_SOURCE_FORMAT_CAPABILITY_DEFINES = (
+    ("architecture aie2p", "LOOM_ARCH_AIE2P"),
+    ("architecture amdgpu", "LOOM_ARCH_AMDGPU"),
+    ("architecture spirv", "LOOM_ARCH_SPIRV"),
+    ("architecture vm", "LOOM_ARCH_VM"),
+    ("architecture wasm", "LOOM_ARCH_WASM"),
+    ("architecture x86", "LOOM_ARCH_X86"),
+    ("artifact elf", "LOOM_EMIT_ELF"),
+    ("artifact spirv", "LOOM_EMIT_SPIRV"),
+    ("artifact vm", "LOOM_EMIT_VM"),
+    ("artifact wasm", "LOOM_EMIT_WASM"),
+    ("execution iree_hal", "LOOM_EXECUTE_IREE_HAL"),
+    ("execution iree_vm", "LOOM_EXECUTE_IREE_VM"),
+    ("execution wasm_host", "LOOM_EXECUTE_WASM_HOST"),
 )
 # Formatting, hygiene, dependency selection, and tests share one build
 # configuration so successive phases retain Bazel's configured analysis graph.
 BAZEL_CONFIGURATION_ARGS = (
-    f"--//loom/config/target:enable={CI_LOOM_TARGETS}",
+    "--//loom/config/arch:enable=aie2p,amdgpu,spirv,vm,wasm,x86",
+    "--//loom/config/emit:enable=elf,spirv,vm,wasm",
+    "--//loom/config/execute:enable=iree_hal,iree_vm,wasm_host",
     "--//loom/config/import:enable=cxx",
 )
 BAZEL_SOURCE_TOOL_ARGS = (
@@ -216,20 +222,24 @@ def validate_cmake_source_format_configuration() -> bool:
         return False
 
     cmake_true_values = frozenset({"1", "ON", "TRUE", "YES", "Y"})
-    missing_targets = [
-        (target, define)
-        for target, define in CMAKE_SOURCE_FORMAT_TARGET_DEFINES
+    missing_capabilities = [
+        (capability, define)
+        for capability, define in CMAKE_SOURCE_FORMAT_CAPABILITY_DEFINES
         if (project_presubmit.cmake_cache_value(build_dir, define) or "").upper()
         not in cmake_true_values
     ]
-    if not missing_targets:
+    if not missing_capabilities:
         return True
 
-    missing_names = ", ".join(target for target, _define in missing_targets)
-    missing_options = " ".join(f"-D{define}=ON" for _target, define in missing_targets)
+    missing_names = ", ".join(
+        capability for capability, _define in missing_capabilities
+    )
+    missing_options = " ".join(
+        f"-D{define}=ON" for _capability, define in missing_capabilities
+    )
     print(
         "loom presubmit: canonical source formatting requires the CMake "
-        f"build tree to enable {CI_LOOM_TARGETS}; missing: {missing_names}"
+        f"build tree to enable every Loom capability; missing: {missing_names}"
     )
     print(
         "loom presubmit: reconfigure that tree with "

@@ -28,7 +28,7 @@ package(
 _X86_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/x86/check:__pkg__"]
 
 _TASK_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:x86",
+    "//loom/config/arch:x86",
     "//runtime/config/hal:driver_task",
     "//runtime/config/hal:executable_loader_embedded_elf",
 ]) + ["@platforms//cpu:x86_64"]
@@ -220,7 +220,7 @@ loom_check_test(
     args = ["--target=x86:scalar"],
     runner = "//loom/src/loom/tools/loom-check:loom-check",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]),
 )
 
@@ -240,7 +240,7 @@ iree_py_test(
         "//loom/src/loom/tools/loom-compile",
     ],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]),
     deps = [
         "//loom/py/loom/reporting",
@@ -262,7 +262,7 @@ loom_generated_file(
     output = "callable.o",
     output_flag = "--output=",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]) + [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -281,7 +281,7 @@ loom_generated_file(
     output = "vector_callable.o",
     output_flag = "--output=",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]) + [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -300,7 +300,7 @@ loom_generated_file(
     output = "runtime_division.o",
     output_flag = "--output=",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]) + [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -319,7 +319,7 @@ loom_generated_file(
     output = "avx512_callable.o",
     output_flag = "--output=",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]) + [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -338,7 +338,7 @@ loom_generated_file(
     output = "avx512_bf16_callable.o",
     output_flag = "--output=",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]) + [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -357,7 +357,7 @@ loom_generated_file(
     output = "packed_dot_callable.o",
     output_flag = "--output=",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]) + [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -376,7 +376,7 @@ loom_cc_test(
     ],
     copts = ["-mavx2"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]) + [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -395,7 +395,7 @@ loom_cc_test(
     ],
     copts = ["-mavx2"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]) + [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
@@ -418,7 +418,7 @@ loom_generated_file(
     output = "hal_dispatch.so",
     output_flag = "--output=",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]),
 )
 
@@ -442,7 +442,7 @@ loom_generated_file(
     output = "hal_dispatch_c_api.so",
     output_flag = "{path}",
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]),
 )
 

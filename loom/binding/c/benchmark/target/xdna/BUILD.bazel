@@ -20,7 +20,7 @@ loom_cc_benchmark(
     name = "compile_throughput_benchmark",
     srcs = ["compile_throughput_benchmark.cc"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:xdna_artifacts",
+        "//loom/config/emit:aie2p_elf",
     ]),
     deps = [
         "//loom/binding/c:loomc",

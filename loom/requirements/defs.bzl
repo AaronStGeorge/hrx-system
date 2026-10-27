@@ -11,32 +11,46 @@ load(
     "build_requirement",
 )
 
-EMIT_AMDGPU = build_requirement(
-    id = "loom.emit.amdgpu",
-    label = Label("//loom/requirements:emit_amdgpu"),
-    enabled_by = Label("//loom/config/emit:amdgpu"),
-    cmake_condition = "LOOM_BUILD AND LOOM_EMIT_AMDGPU",
+ARTIFACT_AMDGPU_ELF = build_requirement(
+    id = "loom.artifact.amdgpu_elf",
+    label = Label("//loom/requirements:artifact_amdgpu_elf"),
+    enabled_by = Label("//loom/config/emit:amdgpu_elf"),
+    cmake_condition = "LOOM_ARTIFACT_AMDGPU_ELF",
 )
 
-EMIT_SPIRV = build_requirement(
-    id = "loom.emit.spirv",
-    label = Label("//loom/requirements:emit_spirv"),
-    enabled_by = Label("//loom/config/emit:spirv"),
-    cmake_condition = "LOOM_EMIT_SPIRV",
+ARTIFACT_AIE2P_ELF = build_requirement(
+    id = "loom.artifact.aie2p_elf",
+    label = Label("//loom/requirements:artifact_aie2p_elf"),
+    enabled_by = Label("//loom/config/emit:aie2p_elf"),
+    cmake_condition = "LOOM_ARTIFACT_AIE2P_ELF",
 )
 
-EMIT_WASM = build_requirement(
-    id = "loom.emit.wasm",
-    label = Label("//loom/requirements:emit_wasm"),
-    enabled_by = Label("//loom/config/emit:wasm"),
-    cmake_condition = "LOOM_EMIT_WASM",
+ARTIFACT_SPIRV_BINARY = build_requirement(
+    id = "loom.artifact.spirv_binary",
+    label = Label("//loom/requirements:artifact_spirv_binary"),
+    enabled_by = Label("//loom/config/emit:spirv_binary"),
+    cmake_condition = "LOOM_ARTIFACT_SPIRV_BINARY",
 )
 
-EMIT_XDNA = build_requirement(
-    id = "loom.emit.xdna",
-    label = Label("//loom/requirements:emit_xdna"),
-    enabled_by = Label("//loom/config/emit:xdna"),
-    cmake_condition = "LOOM_BUILD AND LOOM_EMIT_XDNA",
+ARTIFACT_VM_BINARY = build_requirement(
+    id = "loom.artifact.vm_binary",
+    label = Label("//loom/requirements:artifact_vm_binary"),
+    enabled_by = Label("//loom/config/emit:vm_binary"),
+    cmake_condition = "LOOM_ARTIFACT_VM_BINARY",
+)
+
+ARTIFACT_WASM_BINARY = build_requirement(
+    id = "loom.artifact.wasm_binary",
+    label = Label("//loom/requirements:artifact_wasm_binary"),
+    enabled_by = Label("//loom/config/emit:wasm_binary"),
+    cmake_condition = "LOOM_ARTIFACT_WASM_BINARY",
+)
+
+ARTIFACT_X86_ELF = build_requirement(
+    id = "loom.artifact.x86_elf",
+    label = Label("//loom/requirements:artifact_x86_elf"),
+    enabled_by = Label("//loom/config/emit:x86_elf"),
+    cmake_condition = "LOOM_ARTIFACT_X86_ELF",
 )
 
 EXECUTE_IREE_HAL = build_requirement(
@@ -44,6 +58,20 @@ EXECUTE_IREE_HAL = build_requirement(
     label = Label("//loom/requirements:execute_iree_hal"),
     enabled_by = Label("//loom/config/execute:iree_hal"),
     cmake_condition = "LOOM_EXECUTE_IREE_HAL",
+)
+
+EXECUTE_IREE_VM = build_requirement(
+    id = "loom.execute.iree_vm",
+    label = Label("//loom/requirements:execute_iree_vm"),
+    enabled_by = Label("//loom/config/execute:iree_vm"),
+    cmake_condition = "LOOM_EXECUTE_IREE_VM",
+)
+
+EXECUTE_WASM_HOST = build_requirement(
+    id = "loom.execute.wasm_host",
+    label = Label("//loom/requirements:execute_wasm_host"),
+    enabled_by = Label("//loom/config/execute:wasm_host"),
+    cmake_condition = "LOOM_EXECUTE_WASM_HOST",
 )
 
 IMPORT_CXX = build_requirement(
@@ -67,61 +95,65 @@ IMPORT_TILELANG = build_requirement(
     cmake_condition = "LOOM_IMPORT_TILELANG",
 )
 
-TARGET_ARCH_AMDGPU = build_requirement(
-    id = "loom.target.arch.amdgpu",
-    label = Label("//loom/requirements:target_arch_amdgpu"),
-    enabled_by = Label("//loom/config/target/arch:amdgpu"),
-    cmake_condition = "LOOM_TARGET_ARCH_AMDGPU",
+ARCH_AMDGPU = build_requirement(
+    id = "loom.arch.amdgpu",
+    label = Label("//loom/requirements:arch_amdgpu"),
+    enabled_by = Label("//loom/config/arch:amdgpu"),
+    cmake_condition = "LOOM_ARCH_AMDGPU",
 )
 
-TARGET_ARCH_SPIRV = build_requirement(
-    id = "loom.target.arch.spirv",
-    label = Label("//loom/requirements:target_arch_spirv"),
-    enabled_by = Label("//loom/config/target/arch:spirv"),
-    cmake_condition = "LOOM_TARGET_ARCH_SPIRV",
+ARCH_SPIRV = build_requirement(
+    id = "loom.arch.spirv",
+    label = Label("//loom/requirements:arch_spirv"),
+    enabled_by = Label("//loom/config/arch:spirv"),
+    cmake_condition = "LOOM_ARCH_SPIRV",
 )
 
-TARGET_ARCH_WASM = build_requirement(
-    id = "loom.target.arch.wasm",
-    label = Label("//loom/requirements:target_arch_wasm"),
-    enabled_by = Label("//loom/config/target/arch:wasm"),
-    cmake_condition = "LOOM_TARGET_ARCH_WASM",
+ARCH_WASM = build_requirement(
+    id = "loom.arch.wasm",
+    label = Label("//loom/requirements:arch_wasm"),
+    enabled_by = Label("//loom/config/arch:wasm"),
+    cmake_condition = "LOOM_ARCH_WASM",
 )
 
-TARGET_ARCH_VM = build_requirement(
-    id = "loom.target.arch.vm",
-    label = Label("//loom/requirements:target_arch_vm"),
-    enabled_by = Label("//loom/config/target/arch:vm"),
-    cmake_condition = "LOOM_TARGET_ARCH_VM",
+ARCH_VM = build_requirement(
+    id = "loom.arch.vm",
+    label = Label("//loom/requirements:arch_vm"),
+    enabled_by = Label("//loom/config/arch:vm"),
+    cmake_condition = "LOOM_ARCH_VM",
 )
 
-TARGET_ARCH_XDNA = build_requirement(
-    id = "loom.target.arch.xdna",
-    label = Label("//loom/requirements:target_arch_xdna"),
-    enabled_by = Label("//loom/config/target/arch:xdna"),
-    cmake_condition = "LOOM_TARGET_ARCH_XDNA",
+ARCH_AIE2P = build_requirement(
+    id = "loom.arch.aie2p",
+    label = Label("//loom/requirements:arch_aie2p"),
+    enabled_by = Label("//loom/config/arch:aie2p"),
+    cmake_condition = "LOOM_ARCH_AIE2P",
 )
 
-TARGET_ARCH_X86 = build_requirement(
-    id = "loom.target.arch.x86",
-    label = Label("//loom/requirements:target_arch_x86"),
-    enabled_by = Label("//loom/config/target/arch:x86"),
-    cmake_condition = "LOOM_TARGET_ARCH_X86",
+ARCH_X86 = build_requirement(
+    id = "loom.arch.x86",
+    label = Label("//loom/requirements:arch_x86"),
+    enabled_by = Label("//loom/config/arch:x86"),
+    cmake_condition = "LOOM_ARCH_X86",
 )
 
 REQUIREMENTS = [
-    EMIT_AMDGPU,
-    EMIT_SPIRV,
-    EMIT_WASM,
-    EMIT_XDNA,
+    ARCH_AIE2P,
+    ARCH_AMDGPU,
+    ARCH_SPIRV,
+    ARCH_VM,
+    ARCH_WASM,
+    ARCH_X86,
+    ARTIFACT_AIE2P_ELF,
+    ARTIFACT_AMDGPU_ELF,
+    ARTIFACT_SPIRV_BINARY,
+    ARTIFACT_VM_BINARY,
+    ARTIFACT_WASM_BINARY,
+    ARTIFACT_X86_ELF,
     EXECUTE_IREE_HAL,
+    EXECUTE_IREE_VM,
+    EXECUTE_WASM_HOST,
     IMPORT_CXX,
     IMPORT_MLIR,
     IMPORT_TILELANG,
-    TARGET_ARCH_AMDGPU,
-    TARGET_ARCH_SPIRV,
-    TARGET_ARCH_WASM,
-    TARGET_ARCH_VM,
-    TARGET_ARCH_XDNA,
-    TARGET_ARCH_X86,
 ]

@@ -5,25 +5,18 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:settings.bzl", "iree_string_list_flag")
-load(":targets.bzl", "LOOM_TARGETS")
+load(
+    "//loom/config:capabilities.bzl",
+    "LOOM_ARCHITECTURES",
+    "LOOM_DEFAULT_ARCHITECTURES",
+)
 
 package(default_visibility = ["//visibility:public"])
 
-# Public Loom target product capabilities. Enabling one of these values means
-# the build contains the target architecture and production artifact emission
-# needed to compile for that backend.
-DEFAULT_ENABLED = [
-    "amdgpu",
-    "spirv",
-    "vm",
-    "xdna",
-    "x86",
-]
-
 iree_string_list_flag(
     name = "enable",
-    build_setting_default = DEFAULT_ENABLED,
-    values = LOOM_TARGETS,
+    build_setting_default = LOOM_DEFAULT_ARCHITECTURES,
+    values = LOOM_ARCHITECTURES,
 )
 
 [
@@ -33,5 +26,5 @@ iree_string_list_flag(
             ":enable": value,
         },
     )
-    for value in LOOM_TARGETS
+    for value in LOOM_ARCHITECTURES
 ]

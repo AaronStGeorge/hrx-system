@@ -33,7 +33,7 @@ iree_execution_test_suite(
     manifests = ["loom-compile.test.json"],
     tags = ["hostonly"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:wasm_artifacts",
+        "//loom/config/emit:wasm_binary",
     ]),
     tools = {
         "loom-compile": "//loom/src/loom/tools/loom-compile",

@@ -9,6 +9,7 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -16,6 +17,7 @@ sys.path.insert(0, str(REPO_ROOT / "build_tools/bazel_to_cmake"))
 
 import bazel_to_cmake_config
 import bazel_to_cmake_converter
+import bazel_to_cmake_requirements
 import bazel_to_cmake_targets
 from loom_binary import LoomBinaryBuildFileFunctions
 
@@ -40,7 +42,7 @@ class ConfigTest(unittest.TestCase):
             str(REPO_ROOT / "loom/src/loom/target/arch/wasm"),
             repo_root=str(REPO_ROOT),
         )
-        self.assertIn("if(LOOM_TARGET_ARCH_WASM)", output)
+        self.assertIn("if(LOOM_ARCH_WASM)", output)
         self.assertIn("iree_cc_library(\n", output)
         self.assertIn("DEPS\n    ::first\n    ::second\n", output)
         self.assertNotIn("SRCS", output)
@@ -50,12 +52,12 @@ class ConfigTest(unittest.TestCase):
         for label, condition in (
             ("//loom/config/import:cxx", "LOOM_IMPORT_CXX"),
             (
-                "//loom/config/emit:xdna_artifacts",
-                "LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA",
+                "//loom/config/emit:aie2p_elf",
+                "LOOM_ARTIFACT_AIE2P_ELF",
             ),
             (
-                "//loom/config/target/amdgpu:descriptor_set_gfx11_generic_core",
-                "LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE",
+                "//loom/config/arch/amdgpu:descriptor_set_gfx11_generic_core",
+                "LOOM_ARCH_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE",
             ),
         ):
             with self.subTest(label=label):
@@ -178,8 +180,8 @@ loom_generated_source_family(
         )
         compatibility = functions.loom_config_compatible_with(
             [
-                "//loom/config/emit:amdgpu_artifacts",
-                "//loom/config/target/amdgpu:descriptor_set_rdna3_5_core",
+                "//loom/config/emit:amdgpu_elf",
+                "//loom/config/arch/amdgpu:descriptor_set_rdna3_5_core",
             ]
         )
         functions.loom_target_profile(
@@ -189,12 +191,9 @@ loom_generated_source_family(
             target_compatible_with=compatibility,
         )
         self.assertIn("REQUIRES", converter.body)
+        self.assertIn("LOOM_ARTIFACT_AMDGPU_ELF", converter.body)
         self.assertIn(
-            "LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU",
-            converter.body,
-        )
-        self.assertIn(
-            "AND LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE", converter.body
+            "AND LOOM_ARCH_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE", converter.body
         )
 
     def test_loom_kernel_projects_profile_roots_configs_and_library_edges(self):
@@ -208,7 +207,7 @@ loom_generated_source_family(
         )
         compatibility = functions.select(
             {
-                "//loom/config/emit:xdna_artifacts": [],
+                "//loom/config/emit:aie2p_elf": [],
                 "//conditions:default": ["@platforms//:incompatible"],
             }
         )
@@ -232,13 +231,10 @@ loom_generated_source_family(
         self.assertIn('FAMILY\n    "amd.xdna.aie2p"', converter.body)
         self.assertIn('SELECTOR\n    "amd.xdna.strix.17f0_10"', converter.body)
         self.assertIn(
-            "REQUIRES\n    LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA",
+            "REQUIRES\n    LOOM_ARTIFACT_AIE2P_ELF",
             converter.body,
         )
-        self.assertIn(
-            "if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)",
-            converter.body,
-        )
+        self.assertIn("if(LOOM_ARTIFACT_AIE2P_ELF)", converter.body)
         self.assertIn('COMPONENT\n    "//programs:mul"', converter.body)
         self.assertIn('SRCS\n    "z.loom"\n    "a.loom"', converter.body)
         self.assertIn("LIBRARIES\n    ::z_library\n    ::a_library", converter.body)
@@ -301,6 +297,41 @@ loom_kernel_binary(name="program", srcs=["program.loom"], deps=[":support"], tar
         self.assertIn("  LIBRARIES\n    ::support", output)
         self.assertIn('OUTPUT\n    "program"', output)
 
+    def test_runtime_amdgpu_cts_uses_architecture_selector_variables(self):
+        runtime_project = bazel_to_cmake_config.include_project(
+            REPO_ROOT / ".bazel_to_cmake.cfg.py", "runtime/.bazel_to_cmake.cfg.py"
+        )
+        converter = SimpleNamespace(body="")
+        empty_policy = bazel_to_cmake_requirements.ProjectRequirementPolicy(
+            package_policies=[]
+        )
+        with mock.patch.object(
+            bazel_to_cmake_requirements,
+            "load_project_policy",
+            return_value=empty_policy,
+        ):
+            functions = runtime_project.build_file_functions(
+                converter=converter,
+                targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@hrx": ""}),
+                build_dir=str(REPO_ROOT / "runtime/src/iree/hal/drivers/amd/gpu/cts"),
+                repo_root=str(REPO_ROOT),
+                condition_mappings=self.project.condition_mappings,
+            )
+        functions._loaded_modules = SimpleNamespace(
+            symbol=lambda *_args: {
+                "gfx1151": "descriptor_set_rdna3_5_core",
+            }
+        )
+        functions.iree_hal_amd_gpu_cts_testdata(
+            name="testdata",
+            srcs=["program.loom"],
+            backend_names=["amd_gpu"],
+        )
+        self.assertIn(
+            '"gfx1151=LOOM_ARCH_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE"', converter.body
+        )
+        self.assertNotIn("LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_", converter.body)
+
     def test_shared_tools_preserve_runtime_only_ownership(self):
         runtime_project = bazel_to_cmake_config.include_project(
             REPO_ROOT / ".bazel_to_cmake.cfg.py", "runtime/.bazel_to_cmake.cfg.py"
@@ -331,7 +362,7 @@ loom_kernel_binary(name="program", srcs=["program.loom"], deps=[":support"], tar
 loomc_shared_libraries(
     name="loomc_shared",
     components=[":base"] + select({
-        "//loom/config/emit:amdgpu_artifacts": ["//loom/binding/c/target/amdgpu"],
+        "//loom/config/emit:amdgpu_elf": ["//loom/binding/c/target/amdgpu"],
         "//conditions:default": [],
     }),
     runtime_deps=["//runtime/src/iree/base"],
@@ -343,14 +374,12 @@ loom_generated_cc_library(name="catalog", generator=":generate", instance_owned=
             str(REPO_ROOT / "loom/binding/c"),
             repo_root=str(REPO_ROOT),
         )
-        self.assertIn(
-            "if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)", output
-        )
+        self.assertIn("if(LOOM_ARTIFACT_AMDGPU_ELF)", output)
         self.assertIn("loom::binding::c::target::amdgpu", output)
         self.assertIn("  RUNTIME_DEPS\n    iree::base", output)
         self.assertEqual(output.count("  LINKABLE_MORE_THAN_ONCE\n"), 2)
 
-    def test_loom_artifact_execution_requires_compiler_project(self):
+    def test_loom_artifact_condition_reaches_external_execution_rule(self):
         converter = SimpleNamespace(body="")
         functions = bazel_to_cmake_converter.BuildFileFunctions(
             converter=converter,
@@ -372,16 +401,13 @@ loom_generated_cc_library(name="catalog", generator=":generate", instance_owned=
             tools={"loom-compile": "//loom/src/loom/tools/loom-compile"},
             target_compatible_with=functions.select(
                 {
-                    "//loom/config/emit:xdna_artifacts": [],
+                    "//loom/config/emit:aie2p_elf": [],
                     "//conditions:default": ["@platforms//:incompatible"],
                 }
             ),
         )
 
-        self.assertIn(
-            "if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)",
-            converter.body,
-        )
+        self.assertIn("if(LOOM_ARTIFACT_AIE2P_ELF)", converter.body)
         self.assertIn("loom-compile=", converter.body)
 
 

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     scalar_descriptors
@@ -22,7 +22,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx2_descriptors
@@ -35,7 +35,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx2_features_descriptors
@@ -48,7 +48,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx512_descriptors
@@ -61,7 +61,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     packed_dot_descriptors
@@ -74,7 +74,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx512_vnni_descriptors
@@ -87,7 +87,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx512_bf16_descriptors
@@ -100,7 +100,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx512_fp16_descriptors
@@ -113,7 +113,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx_vnni_descriptors
@@ -126,7 +126,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx_vnni_int8_descriptors
@@ -139,7 +139,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx_vnni_int16_descriptors
@@ -152,7 +152,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx10_2_descriptors
@@ -165,7 +165,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx512_features_descriptors
@@ -210,7 +210,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     entry
@@ -230,7 +230,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     vector_construct
@@ -249,7 +249,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_test(
   NAME
     entry_test
@@ -262,11 +262,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::descriptors
   LABELS
-    "iree-build-requirement=loom.target.arch.x86"
+    "iree-build-requirement=loom.arch.x86"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     low_registry
@@ -297,7 +297,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     shards_for_testing

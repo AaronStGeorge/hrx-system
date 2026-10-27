@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     placement
@@ -28,7 +28,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     placement_test
@@ -43,11 +43,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::facts
     loom::target::arch::amdgpu::target_info
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     address_state
@@ -70,7 +70,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE AND LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE AND LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     address_state_test
@@ -89,11 +89,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::encoding
     loom::target::arch::amdgpu::refs::target_refs
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     descriptor_semantics
@@ -110,7 +110,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     matrix_wait_states
@@ -126,7 +126,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     matrix_wait_states_test
@@ -138,11 +138,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::arch::amdgpu::target_info_defs
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     matrix_result_wait
@@ -167,7 +167,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     matrix_coexecution
@@ -196,7 +196,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     structural_packet
@@ -217,7 +217,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     delay_alu
@@ -231,7 +231,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     delay_alu_test
@@ -242,11 +242,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_states
@@ -295,7 +295,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_states_format
@@ -315,7 +315,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     sgpr_read_wait_test
@@ -329,11 +329,11 @@ loom_cc_test(
     loom::codegen::low::schedule
     loom::util::cfg_graph_test_util
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_counters
@@ -345,7 +345,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_completion
@@ -361,7 +361,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_frontier
@@ -385,7 +385,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_loop
@@ -406,7 +406,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_classification
@@ -436,7 +436,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     trans_result_window
@@ -454,7 +454,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_dependency_visit
@@ -470,7 +470,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     wait_dependency_visit_test
@@ -482,11 +482,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     trans_result_window_test
@@ -500,11 +500,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info_defs
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_plan
@@ -547,7 +547,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE AND LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE AND LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     wait_actions_test
@@ -559,11 +559,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE AND LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE AND LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     wait_plan_test
@@ -588,11 +588,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::target_info
     loom::util::cfg_graph_test_util
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_packet_tables
@@ -613,7 +613,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     wait_packets
@@ -637,7 +637,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     wait_packets_test
@@ -651,11 +651,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::refs::target_refs
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     vopd_plan
@@ -692,7 +692,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     packet_plan
@@ -717,7 +717,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     storage_lease
@@ -737,7 +737,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     occupancy_model
@@ -754,7 +754,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     occupancy
@@ -783,7 +783,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     occupancy_test
@@ -799,7 +799,7 @@ loom_cc_test(
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 

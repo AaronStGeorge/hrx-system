@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     test_compiler
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY AND IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV)
 loom_cc_binary(
   NAME
     loom-serve-test-tool
@@ -37,7 +37,7 @@ loom_cc_binary(
 )
 endif()
 
-if(IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     test_device
@@ -54,7 +54,7 @@ loom_cc_library(
 )
 endif()
 
-if(IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     memory_test
@@ -66,15 +66,15 @@ loom_cc_test(
     "--vulkan_dedicated_compute_queue=false"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     execution_queues_test
@@ -86,15 +86,15 @@ loom_cc_test(
     "--vulkan_dedicated_compute_queue=false"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     control_test
@@ -130,15 +130,15 @@ loom_cc_test(
     "--control_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/control/kernels.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     finite_component_test
@@ -160,15 +160,15 @@ loom_cc_test(
     "LOOM_SERVE_TEST_COMPONENT_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/finite/testdata/component/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_image_service_test
@@ -188,15 +188,15 @@ loom_cc_test(
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/image/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_recognition_model_test
@@ -214,15 +214,15 @@ loom_cc_test(
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_recognition_stream_test
@@ -240,15 +240,15 @@ loom_cc_test(
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     registry_speech_test
@@ -272,15 +272,15 @@ loom_cc_test(
     "--model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/model.json}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     registry_recognition_test
@@ -298,15 +298,15 @@ loom_cc_test(
     "--model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_speech_service_test
@@ -335,15 +335,15 @@ loom_cc_test(
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_speech_service_parallel_test
@@ -373,15 +373,15 @@ loom_cc_test(
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 iree_py_test(
   NAME
     catalog_test
@@ -441,9 +441,9 @@ iree_py_test(
     loom::serve::testing::workload
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -455,7 +455,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_decision_service_test
@@ -481,15 +481,15 @@ loom_cc_test(
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/decision/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_embedding_service_test
@@ -516,15 +516,15 @@ loom_cc_test(
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/embedding/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_service_test
@@ -545,15 +545,15 @@ loom_cc_test(
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_media_test
@@ -590,15 +590,15 @@ loom_cc_test(
     "LOOM_SERVE_TEST_PROJECTOR_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/model.json}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     native_text_service_test
@@ -619,9 +619,9 @@ loom_cc_test(
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
   LABELS
     "iree-run-requirement=vulkan.resource.device"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
     gpu-device
 )

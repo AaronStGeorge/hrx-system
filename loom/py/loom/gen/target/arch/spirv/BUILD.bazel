@@ -30,7 +30,7 @@ GENERATOR_VISIBILITY = [
 ]
 
 _SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:spirv",
+    "//loom/config/arch:spirv",
 ])
 
 loom_spirv_registry_sources(

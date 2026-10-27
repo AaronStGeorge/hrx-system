@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_WASM)
+if(LOOM_ARCH_WASM)
 loom_cc_library(
   NAME
     target_records

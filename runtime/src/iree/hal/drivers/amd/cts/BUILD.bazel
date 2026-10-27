@@ -18,7 +18,7 @@ package(
 )
 
 _X86_COMPATIBLE_WITH = ["@platforms//cpu:x86_64"] + loom_config_compatible_with([
-    "//loom/config/target/arch:x86",
+    "//loom/config/arch:x86",
 ])
 
 _CPU_EXECUTION_COMPATIBLE_WITH = _X86_COMPATIBLE_WITH + loom_config_compatible_with([
@@ -93,10 +93,10 @@ iree_runtime_cc_test(
 )
 
 _EXECUTION_COMPATIBLE_WITH = _CPU_EXECUTION_COMPATIBLE_WITH + loom_config_compatible_with([
-    "//loom/config/emit:amdgpu_artifacts",
+    "//loom/config/emit:amdgpu_elf",
 ]) + select(dict([
     (
-        "//loom/config/target/amdgpu:" + capability,
+        "//loom/config/arch/amdgpu:" + capability,
         [],
     )
     for capability in LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES

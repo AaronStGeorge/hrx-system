@@ -891,7 +891,18 @@ class CiTest(unittest.TestCase):
             {"task", "amdgpu", "vulkan", "webgpu", "amd-gpu", "amd-xdna"},
         )
         self.assertIn(
-            "--//loom/config/target:enable=amdgpu,spirv,vm,wasm,xdna,x86",
+            "--//loom/config/arch:enable="
+            + ",".join(ci.REPOSITORY_BUILD_LOOM_ARCHITECTURES),
+            configure_step.argv,
+        )
+        self.assertIn(
+            "--//loom/config/emit:enable="
+            + ",".join(ci.REPOSITORY_BUILD_LOOM_ARTIFACT_FORMATS),
+            configure_step.argv,
+        )
+        self.assertIn(
+            "--//loom/config/execute:enable="
+            + ",".join(ci.REPOSITORY_BUILD_LOOM_EXECUTION_SUBSTRATES),
             configure_step.argv,
         )
         self.assertIn(
@@ -1056,9 +1067,12 @@ class CiTest(unittest.TestCase):
         configure_step = steps[0]
         for _driver, define in ci.CMAKE_HAL_DRIVER_DEFINES:
             self.assertIn(f"-D{define}=ON", configure_step.argv)
-        for _target, define in ci.CMAKE_LOOM_TARGET_DEFINES:
+        for _architecture, define in ci.CMAKE_LOOM_ARCH_DEFINES:
             self.assertIn(f"-D{define}=ON", configure_step.argv)
-        self.assertIn("-DLOOM_TARGET_VM=ON", configure_step.argv)
+        for _artifact_format, define in ci.CMAKE_LOOM_EMIT_DEFINES:
+            self.assertIn(f"-D{define}=ON", configure_step.argv)
+        for _substrate, define in ci.CMAKE_LOOM_EXECUTE_DEFINES:
+            self.assertIn(f"-D{define}=ON", configure_step.argv)
         for _importer, define in ci.CMAKE_LOOM_IMPORTER_DEFINES:
             self.assertIn(f"-D{define}=ON", configure_step.argv)
         for option in ci.AMDGPU_DEVICE_BINARY_PREBUILT_OPTIONS:
@@ -1068,7 +1082,7 @@ class CiTest(unittest.TestCase):
         self.assertFalse(
             any(
                 option.startswith("-DIREE_HAL_AMDGPU_TARGETS=")
-                or option.startswith("-DLOOM_TARGET_AMDGPU_TARGETS=")
+                or option.startswith("-DLOOM_ARCH_AMDGPU_TARGETS=")
                 for option in configure_step.argv
             )
         )
@@ -1152,7 +1166,7 @@ class CiTest(unittest.TestCase):
                     test_step.argv,
                 )
                 self.assertIn(
-                    "--//loom/config/target/amdgpu:targets=selected-hardware",
+                    "--//loom/config/arch/amdgpu:targets=selected-hardware",
                     test_step.argv,
                 )
                 self.assertIn(
@@ -2052,7 +2066,7 @@ fi
             "-DIREE_HAL_AMD_GPU_TARGETS=selected-hardware", configure_step.argv
         )
         self.assertIn(
-            "-DLOOM_TARGET_AMDGPU_TARGETS=selected-hardware", configure_step.argv
+            "-DLOOM_ARCH_AMDGPU_TARGETS=selected-hardware", configure_step.argv
         )
         self.assertIn(
             "-DIREE_HAL_AMDGPU_TARGETS=selected-hardware", configure_step.argv

@@ -28,18 +28,18 @@
 #include "loom/target/test/provider.h"
 #include "loom/tools/loom-check/test_provider.h"
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
-#ifndef LOOM_CHECK_HAVE_EMIT_AMDGPU
-#define LOOM_CHECK_HAVE_EMIT_AMDGPU 0
-#endif  // LOOM_CHECK_HAVE_EMIT_AMDGPU
-#ifndef LOOM_CHECK_HAVE_EMIT_SPIRV
-#define LOOM_CHECK_HAVE_EMIT_SPIRV 0
-#endif  // LOOM_CHECK_HAVE_EMIT_SPIRV
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#define LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
+#define LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
 #ifndef LOOM_CHECK_HAVE_TARGET_VM
 #define LOOM_CHECK_HAVE_TARGET_VM 0
 #endif  // LOOM_CHECK_HAVE_TARGET_VM
-#ifndef LOOM_CHECK_HAVE_EMIT_WASM
-#define LOOM_CHECK_HAVE_EMIT_WASM 0
-#endif  // LOOM_CHECK_HAVE_EMIT_WASM
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
+#define LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
 #ifndef LOOM_CHECK_HAVE_TARGET_X86
 #define LOOM_CHECK_HAVE_TARGET_X86 0
 #endif  // LOOM_CHECK_HAVE_TARGET_X86
@@ -47,18 +47,18 @@
 #define LOOM_CHECK_HAVE_TARGET_XDNA 0
 #endif  // LOOM_CHECK_HAVE_TARGET_XDNA
 
-#if LOOM_CHECK_HAVE_EMIT_AMDGPU
+#if LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
 #include "loom/target/arch/amdgpu/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_EMIT_AMDGPU
-#if LOOM_CHECK_HAVE_EMIT_SPIRV
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#if LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
 #include "loom/tooling/target/spirv/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_EMIT_SPIRV
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
 #if LOOM_CHECK_HAVE_TARGET_VM
 #include "loom/tooling/target/vm/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_TARGET_VM
-#if LOOM_CHECK_HAVE_EMIT_WASM
+#if LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
 #include "loom/tooling/target/wasm/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_EMIT_WASM
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
 #if LOOM_CHECK_HAVE_TARGET_X86
 #include "loom/target/arch/x86/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_TARGET_X86
@@ -76,18 +76,18 @@ static const loom_check_provider_t* const kLoomCheckProviders[] = {
     &loom_check_test_provider,
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
     &loom_cmd_check_provider,
-#if LOOM_CHECK_HAVE_EMIT_AMDGPU
+#if LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
     &loom_amdgpu_check_provider,
-#endif  // LOOM_CHECK_HAVE_EMIT_AMDGPU
-#if LOOM_CHECK_HAVE_EMIT_SPIRV
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#if LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
     &loom_spirv_emit_check_provider,
-#endif  // LOOM_CHECK_HAVE_EMIT_SPIRV
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
 #if LOOM_CHECK_HAVE_TARGET_VM
     &loom_vm_emit_check_provider,
 #endif  // LOOM_CHECK_HAVE_TARGET_VM
-#if LOOM_CHECK_HAVE_EMIT_WASM
+#if LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
     &loom_wasm_emit_check_provider,
-#endif  // LOOM_CHECK_HAVE_EMIT_WASM
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
 #if LOOM_CHECK_HAVE_TARGET_X86
     &loom_x86_check_provider,
 #endif  // LOOM_CHECK_HAVE_TARGET_X86

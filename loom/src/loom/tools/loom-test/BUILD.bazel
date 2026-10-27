@@ -52,36 +52,36 @@ _SPIRV_VULKAN_TARGET_DEPS = iree_select({
 })
 
 _XDNA_TARGET_COPTS = iree_select({
-    "//loom/config/execute:xdna_hal": ["-DLOOM_TEST_HAVE_XDNA=1"],
+    "//loom/config/execute:aie2p_xdna_hal": ["-DLOOM_TEST_HAVE_XDNA=1"],
     "//conditions:default": [],
 })
 
 _XDNA_TARGET_DEPS = iree_select({
-    "//loom/config/execute:xdna_hal": [
+    "//loom/config/execute:aie2p_xdna_hal": [
         "//loom/binding/c/target/amd/xdna:iree_hal",
     ],
     "//conditions:default": [],
 })
 
 _VM_TARGET_COPTS = iree_select({
-    "//loom/config/target/arch:vm": ["-DLOOM_TEST_HAVE_VM=1"],
+    "//loom/config/execute:vm_iree_vm": ["-DLOOM_TEST_HAVE_VM=1"],
     "//conditions:default": [],
 })
 
 _VM_TARGET_DEPS = iree_select({
-    "//loom/config/target/arch:vm": [
+    "//loom/config/execute:vm_iree_vm": [
         "//loom/src/loom/tooling/target/vm:testbench",
     ],
     "//conditions:default": [],
 })
 
 _WASM_TARGET_COPTS = iree_select({
-    "//loom/config/target/arch:wasm": ["-DLOOM_TEST_HAVE_WASM=1"],
+    "//loom/config/execute:wasm_hosted": ["-DLOOM_TEST_HAVE_WASM=1"],
     "//conditions:default": [],
 })
 
 _WASM_TARGET_DEPS = iree_select({
-    "//loom/config/target/arch:wasm": [
+    "//loom/config/execute:wasm_hosted": [
         "//loom/src/loom/tooling/target/wasm:testbench",
     ],
     "//conditions:default": [],
@@ -94,7 +94,7 @@ _LOOM_TEST_TARGET_COPTS = (
     _VM_TARGET_COPTS +
     _WASM_TARGET_COPTS +
     iree_select({
-        "//loom/config/execute:task_hal": ["-DLOOM_TEST_HAVE_TASK=1"],
+        "//loom/config/execute:x86_task_hal": ["-DLOOM_TEST_HAVE_TASK=1"],
         "//conditions:default": [],
     })
 )
@@ -106,7 +106,7 @@ _LOOM_TEST_TARGET_DEPS = (
     _VM_TARGET_DEPS +
     _WASM_TARGET_DEPS +
     iree_select({
-        "//loom/config/execute:task_hal": ["//loom/binding/c/target/cpu:iree_hal"],
+        "//loom/config/execute:x86_task_hal": ["//loom/binding/c/target/cpu:iree_hal"],
         "//conditions:default": [],
     })
 )
@@ -240,7 +240,7 @@ iree_execution_test_suite(
     data = ["testdata/scenario_cases.loom"],
     manifests = ["scenario_execution.test.json"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
     tools = {
         "loom-test": ":loom-test",
     },

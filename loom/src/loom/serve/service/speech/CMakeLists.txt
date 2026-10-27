@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     request
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     request_test
@@ -37,11 +37,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     generator
@@ -59,7 +59,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     consumer
@@ -73,7 +73,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     stream
@@ -90,7 +90,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     voice
@@ -109,7 +109,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     voice_http
@@ -128,7 +128,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     voice_http_test
@@ -144,11 +144,11 @@ loom_cc_test(
     loom::serve::transport::http::multipart
     loom::serve::transport::http::request
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     model
@@ -194,7 +194,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 set(_source_service_tests_platform_defines "")
 if(LOOM_SERVE_AUDIO_CODEC_WAV)
   list(APPEND _source_service_tests_platform_defines "LOOM_TEST_AUDIO_WAV=1")
@@ -252,7 +252,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     output
@@ -266,7 +266,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     output_test
@@ -278,11 +278,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     http
@@ -303,7 +303,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     service
@@ -341,7 +341,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     voice_load

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARTIFACT_WASM_BINARY)
 iree_execution_test_suite(
   NAME
     loom_compile_execution_test
@@ -32,7 +32,7 @@ iree_wasm_cc_library(
   PUBLIC
 )
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     host
@@ -47,7 +47,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     testbench
@@ -67,7 +67,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     loom_check
@@ -84,7 +84,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     check_provider

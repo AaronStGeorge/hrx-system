@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_generated_cc_library(
   NAME
     error_defs
@@ -32,7 +32,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     target_info_defs
@@ -44,7 +44,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     buffer_resource
@@ -59,7 +59,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_generated_cc_library(
   NAME
     target_info
@@ -108,7 +108,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     target_info_test
@@ -119,11 +119,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     target_identity
@@ -140,7 +140,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     target_identity_test
@@ -152,11 +152,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     facts
@@ -177,7 +177,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     amdhsa_target_id
@@ -195,7 +195,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     amdhsa_target_id_test
@@ -209,11 +209,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     artifact_key
@@ -232,7 +232,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     artifact_key_test
@@ -246,11 +246,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     profile_types
@@ -263,7 +263,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     profile
@@ -285,7 +285,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     profile_test
@@ -302,11 +302,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::records::target_records
     loom::target::facts_builder
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     registers_test
@@ -321,11 +321,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::refs::target_refs
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     math_policy
@@ -344,7 +344,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     legalization
@@ -388,7 +388,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     low_aliases
@@ -402,7 +402,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     low_asm_diagnostics
@@ -421,7 +421,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     low_verify
@@ -450,7 +450,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     ir_provider
@@ -469,7 +469,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     provider
@@ -497,7 +497,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     provider_test
@@ -537,11 +537,11 @@ loom_cc_test(
     loom::transforms::symbol::template_selection
     loom::verify
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     sanitizer_site_table_test
@@ -567,11 +567,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::ops
     loom::testing::module_ptr
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     sanitizer_race_lifetime_test
@@ -597,11 +597,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::refs::target_refs
     loom::testing::module_ptr
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     pass_registry
@@ -618,7 +618,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 iree_native_test(
   NAME
     "memory_stability"
@@ -632,7 +632,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "memory_stability"
@@ -647,7 +647,7 @@ endif()
 file(GLOB _GLOB_TEST_SOURCE_LOW_X_LOOM_TEST_BE73FC6D LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS test/source_low/*.loom-test)
 file(GLOB _GLOB_TEST/SOURCE_LOW/MEMORY_STABILITY_LOOM-TEST_BE73FC6D LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS test/source_low/memory_stability.loom-test)
 list(REMOVE_ITEM _GLOB_TEST_SOURCE_LOW_X_LOOM_TEST_BE73FC6D ${_GLOB_TEST/SOURCE_LOW/MEMORY_STABILITY_LOOM-TEST_BE73FC6D})
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_test_suite(
   NAME
     loom_check_file_test
@@ -658,7 +658,7 @@ loom_check_test_suite(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "address_cast_banks"
@@ -675,7 +675,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "cluster_query_carriers"
@@ -688,7 +688,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "float64_narrow"
@@ -725,7 +725,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "immutable_storage"
@@ -762,7 +762,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "memory_float64_carrier"
@@ -799,7 +799,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "memory_mixed_wide_offsets"
@@ -836,7 +836,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "memory_scalar_packets"
@@ -873,7 +873,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "memory_strided_packed_packets"
@@ -910,7 +910,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "narrow_float_arguments"
@@ -929,7 +929,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "narrow_kernel_arguments"
@@ -966,7 +966,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "predicate_truncation"
@@ -1003,7 +1003,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "query_carriers"
@@ -1020,7 +1020,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "source_low_system_scope_store_wait"
@@ -1035,7 +1035,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "source_low_uniform_vector_extract"
@@ -1072,7 +1072,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "trigonometry"
@@ -1109,7 +1109,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "uniform_packed_memory"

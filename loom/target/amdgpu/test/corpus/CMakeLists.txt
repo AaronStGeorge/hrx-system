@@ -560,8 +560,8 @@ loom_corpus_test(
     "--device=legacy-amdgpu"
   LABELS
     "loom-corpus"
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amdgpu"
     "iree-run-requirement=runtime.resource.amd_gpu"
@@ -573,7 +573,7 @@ loom_corpus_test(
   RESOURCE_GROUP
     "gpu-device"
   REQUIRES
-    LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU
+    LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU
 )
 
 loom_corpus_test(
@@ -772,8 +772,8 @@ loom_corpus_test(
     "loom-corpus"
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
@@ -785,7 +785,7 @@ loom_corpus_test(
   RESOURCE_GROUP
     "gpu-device"
   REQUIRES
-    AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU
+    AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU
 )
 
 loom_corpus_test(
@@ -807,8 +807,8 @@ loom_corpus_test(
   LABELS
     "loom-corpus"
     "notsan"
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amdgpu"
     "iree-run-requirement=runtime.resource.amd_gpu"
@@ -820,7 +820,7 @@ loom_corpus_test(
   RESOURCE_GROUP
     "gpu-device"
   REQUIRES
-    LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU
+    LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU
 )
 
 loom_test_module(
@@ -832,7 +832,7 @@ loom_test_module(
     "loom::test::corpus::numeric::inverse_hyperbolic_narrow"
 )
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 loom_execution_test(
   NAME
     inverse_hyperbolic_stress_execute_amdgpu_hardware_test
@@ -844,8 +844,8 @@ loom_execution_test(
   LABELS
     "manual"
     "stress"
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amdgpu"
     "iree-run-requirement=runtime.resource.amd_gpu"
@@ -859,7 +859,7 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     inverse_hyperbolic_stress_execute_amd_gpu_hardware_test
@@ -873,8 +873,8 @@ loom_execution_test(
     "stress"
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"

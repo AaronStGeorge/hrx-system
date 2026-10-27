@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF)
 loom_cc_benchmark(
   NAME
     compile_throughput_benchmark
@@ -32,8 +32,8 @@ loom_cc_benchmark(
     loom::binding::c::target::amdgpu
   TESTONLY
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
 )
 endif()
 

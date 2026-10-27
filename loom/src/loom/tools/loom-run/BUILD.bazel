@@ -47,12 +47,12 @@ _SPIRV_VULKAN_EXECUTE_DEPS = iree_select({
 })
 
 _TASK_EXECUTE_COPTS = iree_select({
-    "//loom/config/execute:task_hal": ["-DLOOM_RUN_HAVE_TASK=1"],
+    "//loom/config/execute:x86_task_hal": ["-DLOOM_RUN_HAVE_TASK=1"],
     "//conditions:default": [],
 })
 
 _TASK_EXECUTE_DEPS = iree_select({
-    "//loom/config/execute:task_hal": ["//loom/binding/c/target/cpu:iree_hal"],
+    "//loom/config/execute:x86_task_hal": ["//loom/binding/c/target/cpu:iree_hal"],
     "//conditions:default": [],
 })
 

@@ -1192,15 +1192,15 @@ loom_corpus_test(
     "TARGET/001"
   LABELS
     "loom-corpus"
-    "iree-build-requirement=loom.target.arch.vm"
-    "iree-build-requirement=loom.target.arch.wasm"
-    "iree-build-requirement=loom.emit.wasm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.arch.wasm"
+    "iree-build-requirement=loom.artifact.wasm_binary"
     "loom-execution-profile=wasm_hosted"
     "loom-target-family=wasm"
     "loom-target-class=cpu"
     "loom-executor=hosted"
   REQUIRES
-    LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM
+    LOOM_ARCH_VM AND LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

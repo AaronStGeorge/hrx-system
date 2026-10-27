@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     op_defs
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     builders
@@ -45,7 +45,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_generated_cc_library(
   NAME
     ops

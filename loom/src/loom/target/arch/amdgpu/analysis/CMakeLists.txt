@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     lds_bank_service
@@ -28,7 +28,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     lds_bank_service_test
@@ -40,7 +40,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::arch::amdgpu::target_info
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 

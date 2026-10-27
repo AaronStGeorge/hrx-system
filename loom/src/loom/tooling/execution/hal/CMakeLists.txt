@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
+if(LOOM_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
 iree_execution_test_suite(
   NAME
     compile_diagnostics_test
@@ -22,7 +22,7 @@ iree_execution_test_suite(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
+if(LOOM_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
 iree_native_test(
   NAME
     "command_count_observations_test"
@@ -36,7 +36,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
+if(LOOM_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
 iree_native_test(
   NAME
     "command_scenario_execution_test"
@@ -50,7 +50,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
+if(LOOM_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
 iree_native_test(
   NAME
     "command_scenario_specialization_test"
@@ -76,7 +76,7 @@ loom_test_module(
     "testdata/scenario_batch_hal_actual.loom"
 )
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 loom_execution_test(
   NAME
     hardware_test_execute_amdgpu_hardware_test
@@ -85,8 +85,8 @@ loom_execution_test(
   RUNNER_ARGS
     "--device=legacy-amdgpu"
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amdgpu"
     "iree-run-requirement=runtime.resource.amd_gpu"
@@ -100,7 +100,7 @@ loom_execution_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 loom_execution_test(
   NAME
     hardware_test_execute_spirv_vulkan_hardware_test
@@ -110,8 +110,8 @@ loom_execution_test(
     "--device=vulkan"
     "--vulkan_validation_layers=false"
   LABELS
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.vulkan"
     "iree-run-requirement=vulkan.resource.device"
@@ -125,7 +125,7 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     hardware_test_execute_amd_gpu_hardware_test
@@ -136,8 +136,8 @@ loom_execution_test(
   LABELS
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
@@ -158,7 +158,7 @@ loom_test_module(
     "testdata/scenario_compare_hal_vm.loom"
 )
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+if(LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 loom_execution_test(
   NAME
     scenario_compare_test_execute_amdgpu_hardware_test
@@ -167,8 +167,8 @@ loom_execution_test(
   RUNNER_ARGS
     "--device=legacy-amdgpu"
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amdgpu"
     "iree-run-requirement=runtime.resource.amd_gpu"
@@ -182,7 +182,7 @@ loom_execution_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 loom_execution_test(
   NAME
     scenario_compare_test_execute_spirv_vulkan_hardware_test
@@ -192,8 +192,8 @@ loom_execution_test(
     "--device=vulkan"
     "--vulkan_validation_layers=false"
   LABELS
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.vulkan"
     "iree-run-requirement=vulkan.resource.device"
@@ -207,7 +207,7 @@ loom_execution_test(
 )
 endif()
 
-if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_ARCH_AMDGPU AND LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_GPU)
 loom_execution_test(
   NAME
     scenario_compare_test_execute_amd_gpu_hardware_test
@@ -218,8 +218,8 @@ loom_execution_test(
   LABELS
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
+    "iree-build-requirement=loom.artifact.amdgpu_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-run-requirement=libamdf.resource.amd_gpu"
@@ -233,7 +233,7 @@ loom_execution_test(
 )
 endif()
 
-if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)) AND IREE_HAL_DRIVER_AMDGPU)
+if(LOOM_ROUTE_AMDGPU_HAL AND IREE_HAL_DRIVER_AMDGPU)
 iree_native_test(
   NAME
     "scenario_benchmark_test"
@@ -265,7 +265,7 @@ iree_native_test(
 )
 endif()
 
-if((LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)) AND IREE_HAL_DRIVER_AMDGPU)
+if(LOOM_ROUTE_AMDGPU_HAL AND IREE_HAL_DRIVER_AMDGPU)
 iree_native_test(
   NAME
     "scenario_benchmark_comparison_test"

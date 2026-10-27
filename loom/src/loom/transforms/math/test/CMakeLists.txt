@@ -19,7 +19,7 @@ loom_check_test_suite(
     "widen_f32_round.loom-test"
 )
 
-if(LOOM_TARGET_AMDGPU AND LOOM_TARGET_XDNA)
+if(LOOM_ARCH_AIE2P AND LOOM_ARCH_AMDGPU)
 iree_native_test(
   NAME
     "trigonometry"

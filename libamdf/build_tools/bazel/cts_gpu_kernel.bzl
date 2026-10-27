@@ -104,7 +104,7 @@ def amdf_cts_gpu_kernel_set(
     compatibility = {"//conditions:default": ["@platforms//:incompatible"]}
     for target in targets:
         capability = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_TARGET[target]
-        compatibility["//loom/config/target/amdgpu:" + capability] = []
+        compatibility["//loom/config/arch/amdgpu:" + capability] = []
         product_name = name + "_" + target
         loom_kernel_binary(
             name = product_name,

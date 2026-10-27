@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_generated_file_family(
   NAME
     candidate_tables_gen
@@ -32,7 +32,7 @@ loom_generated_file_family(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     candidate_tables

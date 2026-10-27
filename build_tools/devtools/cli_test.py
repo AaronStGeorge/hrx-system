@@ -207,14 +207,14 @@ class CliTest(unittest.TestCase):
             [
                 "bazel",
                 "configure",
-                "-DLOOM_TARGET_AMDGPU=ON",
+                "-DLOOM_ARCH_AMDGPU=ON",
             ]
         )
 
         plan = args.handler(args)
         description = plan.describe()
 
-        self.assertIn("-DLOOM_TARGET_AMDGPU=ON", description)
+        self.assertIn("-DLOOM_ARCH_AMDGPU=ON", description)
 
     def test_bazel_configure_accepts_importer_environment(self):
         args = cli.parse_arguments(["bazel", "configure", "--importer-env", "tilelang"])
@@ -909,14 +909,36 @@ class CliTest(unittest.TestCase):
         for targets, enabled in cases:
             with self.subTest(targets=targets):
                 command = self.planned_argv(["bazel", "clang-tidy", "--", *targets])
-                target_flags = [
-                    arg.removeprefix(bazel_configure.NATIVE_LOOM_TARGET_FLAG + "=")
+                architecture_flags = [
+                    arg.removeprefix(bazel_configure.NATIVE_LOOM_ARCH_FLAG + "=")
                     for arg in command
-                    if arg.startswith(bazel_configure.NATIVE_LOOM_TARGET_FLAG + "=")
+                    if arg.startswith(bazel_configure.NATIVE_LOOM_ARCH_FLAG + "=")
                 ]
                 self.assertEqual(
-                    target_flags,
-                    [",".join(bazel_configure.LOOM_TARGETS)] if enabled else [],
+                    architecture_flags,
+                    [",".join(bazel_configure.LOOM_ARCHITECTURES)] if enabled else [],
+                )
+                artifact_format_flags = [
+                    arg.removeprefix(bazel_configure.NATIVE_LOOM_EMIT_FLAG + "=")
+                    for arg in command
+                    if arg.startswith(bazel_configure.NATIVE_LOOM_EMIT_FLAG + "=")
+                ]
+                self.assertEqual(
+                    artifact_format_flags,
+                    [",".join(bazel_configure.LOOM_ARTIFACT_FORMATS)]
+                    if enabled
+                    else [],
+                )
+                execution_flags = [
+                    arg.removeprefix(bazel_configure.NATIVE_LOOM_EXECUTE_FLAG + "=")
+                    for arg in command
+                    if arg.startswith(bazel_configure.NATIVE_LOOM_EXECUTE_FLAG + "=")
+                ]
+                self.assertEqual(
+                    execution_flags,
+                    [",".join(bazel_configure.LOOM_EXECUTE_SUBSTRATES)]
+                    if enabled
+                    else [],
                 )
                 importer_flags = [
                     arg.removeprefix(bazel_configure.NATIVE_LOOM_IMPORT_FLAG + "=")

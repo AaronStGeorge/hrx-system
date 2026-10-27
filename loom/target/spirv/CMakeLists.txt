@@ -17,7 +17,7 @@ loom_target_profile(
   SELECTOR
     "vulkan1.3+bda"
   REQUIRES
-    LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV
+    LOOM_ARTIFACT_SPIRV_BINARY
 )
 
 loom_target_profile(
@@ -28,7 +28,7 @@ loom_target_profile(
   SELECTOR
     "vulkan1.3+bda+extended-types"
   REQUIRES
-    LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV
+    LOOM_ARTIFACT_SPIRV_BINARY
 )
 
 loom_target_profile(
@@ -39,11 +39,11 @@ loom_target_profile(
   SELECTOR
     "vulkan1.3+bda+subgroup32+ballot+hal"
   REQUIRES
-    LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV
+    LOOM_ARTIFACT_SPIRV_BINARY
 )
 
 set(_all_platform_targets "")
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY)
   list(APPEND _all_platform_targets loom::target::spirv::vulkan1.3+bda)
   list(APPEND _all_platform_targets loom::target::spirv::vulkan1.3+bda+extended-types)
   list(APPEND _all_platform_targets loom::target::spirv::vulkan1.3+bda+subgroup32+ballot+hal)

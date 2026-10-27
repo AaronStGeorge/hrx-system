@@ -132,12 +132,12 @@ iree_runtime_cc_test(
 # check the source and complete descriptor contract for every supported family.
 # This comparison embeds all instruction families in one test executable.
 _PROGRAM_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/emit:amdgpu_artifacts",
-    "//loom/config/target/amdgpu:descriptor_set_gfx11_generic_core",
-    "//loom/config/target/amdgpu:descriptor_set_rdna3_5_core",
-    "//loom/config/target/amdgpu:descriptor_set_rdna4m_core",
-    "//loom/config/target/amdgpu:descriptor_set_gfx12_generic_core",
-    "//loom/config/target/amdgpu:descriptor_set_gfx12_5_generic_core",
+    "//loom/config/emit:amdgpu_elf",
+    "//loom/config/arch/amdgpu:descriptor_set_gfx11_generic_core",
+    "//loom/config/arch/amdgpu:descriptor_set_rdna3_5_core",
+    "//loom/config/arch/amdgpu:descriptor_set_rdna4m_core",
+    "//loom/config/arch/amdgpu:descriptor_set_gfx12_generic_core",
+    "//loom/config/arch/amdgpu:descriptor_set_gfx12_5_generic_core",
 ])
 
 _PROGRAM_TARGETS = [

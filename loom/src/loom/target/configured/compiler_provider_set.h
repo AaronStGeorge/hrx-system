@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Complete compiler providers selected by //loom/config/target.
+// Complete compiler providers selected by architecture/format intersections.
 
 #ifndef LOOM_TARGET_CONFIGURED_COMPILER_PROVIDER_SET_H_
 #define LOOM_TARGET_CONFIGURED_COMPILER_PROVIDER_SET_H_

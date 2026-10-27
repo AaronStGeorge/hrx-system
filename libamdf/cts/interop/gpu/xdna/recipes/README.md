@@ -430,8 +430,8 @@ capability-selected through the existing grouped corpus.
 ## Build and execution
 
 The ordinary build compiles the `.loom` fixtures and embeds the GPU image and
-both NPU profiles. Enable `LOOM_BUILD`, `LOOM_TARGET_AMDGPU` and
-`LOOM_TARGET_XDNA` alongside `AMDF_BUILD`.
+both NPU profiles. Enable `LOOM_BUILD`, `LOOM_ARCH_AMDGPU`,
+`LOOM_ARCH_AIE2P`, and `LOOM_EMIT_ELF` alongside `AMDF_BUILD`.
 
 ```sh
 iree-bazel-test --config=asan //libamdf/cts/interop/gpu/xdna/recipes:execution

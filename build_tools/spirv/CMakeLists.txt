@@ -10,6 +10,6 @@ set(IREE_PACKAGE_ROOT_PREFIX "iree/build_tools/spirv")
 add_subdirectory(registry)
 
 if(IREE_BUILD_TESTS AND (IREE_HAL_DRIVER_VULKAN OR
-    (LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)))
+    LOOM_ARTIFACT_SPIRV_BINARY))
   add_subdirectory(testdata)
 endif()
