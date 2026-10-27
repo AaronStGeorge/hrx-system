@@ -258,13 +258,74 @@ def _mask_to_carrier_emit(
     source: ValueRef,
     result: ValueRef,
 ) -> tuple[EmitDescriptorOp, ...]:
-    descriptor = descriptor_lookup(_mask_to_carrier_descriptor_key(lane_count))
+    emits, _ = avx512_predicate_mask_to_simd_emits(
+        descriptor_lookup,
+        lane_count=lane_count,
+        result_element_bit_width=_CARRIER_ELEMENT_BIT_WIDTHS[lane_count],
+        source=source,
+        result=result,
+    )
+    return emits
+
+
+def avx512_predicate_mask_to_simd_emits(
+    descriptor_lookup: _DescriptorLookup,
+    *,
+    lane_count: int,
+    result_element_bit_width: int,
+    source: ValueRef,
+    result: ValueRef,
+    result_type: TypePattern | None = None,
+) -> tuple[tuple[EmitDescriptorOp, ...], tuple[Descriptor, ...]]:
+    """Expands a native predicate mask into signed SIMD predicate lanes."""
+
+    result_vector_bit_width = max(128, lane_count * result_element_bit_width)
+    descriptor = descriptor_lookup(
+        _mask_to_vector_descriptor_key(
+            result_element_bit_width,
+            result_vector_bit_width,
+        )
+    )
     return (
-        _op_emit(
-            descriptor=descriptor,
-            operands={"source": source},
-            results={"dst": result},
+        (
+            _op_emit(
+                descriptor=descriptor,
+                operands={"source": source},
+                results={"dst": result},
+                result_types=(None if result_type is None else {"dst": result_type}),
+            ),
         ),
+        (descriptor,),
+    )
+
+
+def avx512_predicate_simd_to_mask_emits(
+    descriptor_lookup: _DescriptorLookup,
+    *,
+    lane_count: int,
+    source_element_bit_width: int,
+    source: ValueRef,
+    result: ValueRef,
+) -> tuple[tuple[EmitDescriptorOp, ...], tuple[Descriptor, ...]]:
+    """Compresses signed SIMD predicate lanes into a native predicate mask."""
+
+    source_vector_bit_width = max(128, lane_count * source_element_bit_width)
+    descriptor = descriptor_lookup(
+        _vector_to_mask_descriptor_key(
+            source_element_bit_width,
+            source_vector_bit_width,
+        )
+    )
+    return (
+        (
+            _op_emit(
+                descriptor=descriptor,
+                operands={"source": source},
+                results={"dst": result},
+                result_types={"dst": DescriptorResultType()},
+            ),
+        ),
+        (descriptor,),
     )
 
 
@@ -274,15 +335,14 @@ def avx512_predicate_carrier_to_mask_emits(
     source: ValueRef,
     result: ValueRef,
 ) -> tuple[EmitDescriptorOp, ...]:
-    descriptor = descriptor_lookup(_carrier_to_mask_descriptor_key(lane_count))
-    return (
-        _op_emit(
-            descriptor=descriptor,
-            operands={"source": source},
-            results={"dst": result},
-            result_types={"dst": DescriptorResultType()},
-        ),
+    emits, _ = avx512_predicate_simd_to_mask_emits(
+        descriptor_lookup,
+        lane_count=lane_count,
+        source_element_bit_width=_CARRIER_ELEMENT_BIT_WIDTHS[lane_count],
+        source=source,
+        result=result,
     )
+    return emits
 
 
 def _vector_descriptor_prefix(vector_bit_width: int) -> str:
