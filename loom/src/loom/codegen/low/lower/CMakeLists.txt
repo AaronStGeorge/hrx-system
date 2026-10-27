@@ -134,6 +134,7 @@ loom_cc_library(
     loom::ops::func
     loom::ops::func_symbol_facts
     loom::ops::global
+    loom::ops::global::rodata_pool
     loom::ops::index
     loom::ops::kernel
     loom::ops::low

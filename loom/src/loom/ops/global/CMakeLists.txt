@@ -95,4 +95,33 @@ loom_cc_test(
     loom::util::fact_table
 )
 
+loom_cc_library(
+  NAME
+    rodata_pool
+  HDRS
+    "rodata_pool.h"
+  SRCS
+    "rodata_pool.c"
+  DEPS
+    ::global
+    iree::base::internal
+    iree::base::internal::arena
+    loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    rodata_pool_test
+  SRCS
+    "rodata_pool_test.cc"
+  DEPS
+    ::global
+    ::rodata_pool
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
