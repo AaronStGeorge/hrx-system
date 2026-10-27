@@ -8,6 +8,7 @@
 
 #include <cxx/ast.h>
 #include <cxx/control.h>
+#include <cxx/initialization.h>
 #include <cxx/symbols.h>
 #include <cxx/translation_unit.h>
 #include <cxx/types.h>
@@ -46,6 +47,15 @@ bool is_current_object(cxx::ExpressionAST* expression) {
   auto* unary = cxx::ast_cast<cxx::UnaryExpressionAST>(expression);
   return unary && !unary->symbol && unary->op == cxx::TokenKind::T_STAR &&
          is_current_object(unary->expression);
+}
+
+const cxx::StringLiteral* string_initializer(cxx::ExpressionAST* initializer) {
+  auto arguments = cxx::Initializer(initializer).arguments();
+  auto* literal = arguments.size() == 1
+                      ? cxx::ast_cast<cxx::StringLiteralExpressionAST>(
+                            unwrap_expression(arguments.front()))
+                      : nullptr;
+  return literal ? literal->literal : nullptr;
 }
 
 cxx::FunctionSymbol* direct_callee(cxx::CallExpressionAST* call) {

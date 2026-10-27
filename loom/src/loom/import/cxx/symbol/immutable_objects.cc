@@ -7,11 +7,8 @@
 #include "loom/import/cxx/symbol/immutable_objects.h"
 
 #include <cxx/ast.h>
-#include <cxx/ast_interpreter.h>
 #include <cxx/binder.h>
 #include <cxx/control.h>
-#include <cxx/initialization.h>
-#include <cxx/literals.h>
 #include <cxx/memory_layout.h>
 #include <cxx/names.h>
 #include <cxx/symbols.h>
@@ -22,7 +19,7 @@
 #include <cctype>
 #include <string>
 
-#include "iree/base/internal/unicode.h"
+#include "loom/import/cxx/source/constants.h"
 #include "loom/import/cxx/source/error.h"
 #include "loom/import/cxx/source/expressions.h"
 #include "loom/ops/global/ops.h"
@@ -130,25 +127,6 @@ int64_t explicit_alignment(cxx::VariableSymbol* variable) {
   return alignment;
 }
 
-bool is_utf8_string_object(const cxx::TypeTraits& traits,
-                           cxx::VariableSymbol* definition,
-                           iree_string_view_t contents) {
-  auto* type = definition->type();
-  if (!traits.is_array(type) ||
-      !traits.is_char_type(traits.remove_cv(traits.get_element_type(type)))) {
-    return false;
-  }
-  auto arguments = cxx::Initializer(definition->initializer()).arguments();
-  if (arguments.size() != 1) {
-    return false;
-  }
-  auto* literal = cxx::ast_cast<cxx::StringLiteralExpressionAST>(
-      unwrap_expression(arguments.front()));
-  // Numeric escapes can produce arbitrary code units even in a u8 literal.
-  return literal && literal->literal->codeUnitSize() == 1 &&
-         iree_unicode_utf8_validate(contents);
-}
-
 }  // namespace
 
 void ImmutableObjects::retain_definition(cxx::VariableSymbol* variable,
@@ -215,20 +193,17 @@ ImmutableObject ImmutableObjects::reference(cxx::VariableSymbol* variable,
       diagnostics_.reject(unit_, owner,
                           "immutable storage requires constant initialization");
     }
-    cxx::ASTInterpreter interpreter(&unit_);
-    auto representation = interpreter.objectRepresentation(
-        *definition->constValue(), source_type);
+    auto representation =
+        object_representation(unit_, source_type, *definition->constValue(),
+                              string_initializer(definition->initializer()));
     if (!representation) {
       diagnostics_.reject(
           unit_, owner,
           "immutable storage requires a fully initialized, trivially "
           "copyable, address-free object representation");
     }
-    contents = std::move(*representation);
-    is_utf8 = is_utf8_string_object(
-        traits, definition,
-        iree_make_string_view(reinterpret_cast<const char*>(contents.data()),
-                              contents.size()));
+    contents = std::move(representation->bytes);
+    is_utf8 = representation->is_utf8;
     if (has_internal_linkage) {
       kind = EmissionKind::PrivateDefinition;
       spelling = names_.unique(private_object_name(definition));

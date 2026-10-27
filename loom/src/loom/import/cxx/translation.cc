@@ -907,15 +907,23 @@ class Translator final : private Initialization::Evaluation {
     }
   }
 
-  StorageAccess allocate_local(cxx::Symbol* symbol, int64_t alignment,
-                               cxx::AST* owner) {
-    auto allocation = storage_.allocate(
-        symbol->type(), LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE, alignment, owner);
+  StorageAccess allocate_local(
+      cxx::Symbol* symbol, int64_t alignment, cxx::AST* owner,
+      const ObjectRepresentation* initializer = nullptr) {
+    auto allocation =
+        storage_.allocate(symbol->type(), LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE,
+                          alignment, owner, initializer);
     auto spelling = cxx::to_string(symbol->name());
     name(Value(allocation.pointer), spelling + "_storage");
     name(allocation.view, spelling + "_view");
     locals_[symbol] = allocation;
     return {allocation.view, std::nullopt};
+  }
+
+  StorageProjection string_literal(cxx::StringLiteralExpressionAST* literal) {
+    auto contents = initialization_.literal(literal->type, literal, literal);
+    auto allocation = storage_.constant(literal->type, *contents, literal);
+    return storage_.project(allocation.pointer, literal->type, literal);
   }
 
   StorageProjection immutable_object(cxx::VariableSymbol* variable,
@@ -1005,7 +1013,15 @@ class Translator final : private Initialization::Evaluation {
     if (unit_.typeTraits().is_array(variable->type()) ||
         control_->addressed(variable) ||
         unit_.typeTraits().is_volatile(variable->type())) {
-      allocate_local(variable, variable->explicitAlignment(), owner);
+      auto contents =
+          unit_.typeTraits().is_volatile(variable->type())
+              ? std::nullopt
+              : initialization_.literal(variable->type(), initializer, owner);
+      allocate_local(variable, variable->explicitAlignment(), owner,
+                     contents ? &*contents : nullptr);
+      if (contents) {
+        return;
+      }
       if (initializer) {
         if (types_.address_domain(types_.unqualified(variable->type()),
                                   owner) == LOOM_SCALAR_TYPE_NONE) {
@@ -1315,6 +1331,9 @@ class Translator final : private Initialization::Evaluation {
     ast = strip_implicit_casts(ast);
     if (auto* nested = cxx::ast_cast<cxx::NestedExpressionAST>(ast)) {
       return object_address(nested->expression);
+    }
+    if (auto* literal = cxx::ast_cast<cxx::StringLiteralExpressionAST>(ast)) {
+      return string_literal(literal);
     }
     if (auto reference = reference_field_address(ast)) {
       return *reference;
@@ -3159,6 +3178,9 @@ class Translator final : private Initialization::Evaluation {
     }
     if (auto* literal = cxx::ast_cast<cxx::BoolLiteralExpressionAST>(ast)) {
       return scalars_.integer(literal->isTrue, LOOM_SCALAR_TYPE_I1, source);
+    }
+    if (auto* literal = cxx::ast_cast<cxx::StringLiteralExpressionAST>(ast)) {
+      return string_literal(literal).pointer;
     }
     if (cxx::ast_cast<cxx::IntLiteralExpressionAST>(ast) ||
         cxx::ast_cast<cxx::FloatLiteralExpressionAST>(ast) ||

@@ -350,6 +350,7 @@ loom_cc_library(
   SRCS
     "constants.cc"
   DEPS
+    iree::base::internal::unicode
     iree::third_party::cxx_parser
   PUBLIC
 )

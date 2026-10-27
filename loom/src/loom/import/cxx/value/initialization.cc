@@ -7,9 +7,11 @@
 #include "loom/import/cxx/value/initialization.h"
 
 #include <cxx/ast.h>
+#include <cxx/ast_interpreter.h>
 #include <cxx/ast_rewriter.h>
 #include <cxx/function_body.h>
 #include <cxx/initialization.h>
+#include <cxx/literals.h>
 #include <cxx/symbols.h>
 #include <cxx/types.h>
 
@@ -17,6 +19,8 @@
 #include <utility>
 
 #include "loom/import/cxx/source/error.h"
+#include "loom/import/cxx/source/expressions.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/scalar/ops.h"
 
 namespace loom::cxx_import {
@@ -395,6 +399,42 @@ void Initialization::object(StorageProjection destination,
                             cxx::ExpressionAST* initializer,
                             cxx::FunctionSymbol* constructor, cxx::AST* owner,
                             bool retained) {
+  if (unit_.typeTraits().is_array(type) &&
+      unit_.typeTraits().is_char_type(
+          unit_.typeTraits().get_element_type(type)) &&
+      unit_.typeTraits().is_volatile(type)) {
+    if (auto* string = string_initializer(initializer)) {
+      auto* array =
+          cxx::type_cast<cxx::BoundedArrayType>(types_.unqualified(type));
+      auto* element_type = unit_.typeTraits().get_element_type(type);
+      for (size_t index = 0; index < array->size(); ++index) {
+        const int64_t code_unit =
+            index < string->charCount() ? string->charAt(index) : 0;
+        auto value =
+            scalars_.constant(cxx::ConstValue{code_unit}, element_type, owner);
+        auto element = storage_.element(destination, array, index, owner);
+        storage_.store(storage_.dereference(element, element_type, owner),
+                       value, element_type, owner);
+      }
+      return;
+    }
+  }
+  if (auto contents = literal(type, initializer, owner)) {
+    auto source = storage_.root(
+        storage_.literal(iree_make_const_byte_span(contents->bytes.data(),
+                                                   contents->bytes.size()),
+                         contents->is_utf8,
+                         LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT,
+                         destination.alignment, owner),
+        owner);
+    auto length = scalars_.integer(
+        contents->bytes.size(), LOOM_SCALAR_TYPE_OFFSET, locations_.get(owner));
+    loom_op_t* copy;
+    check(loom_buffer_copy_build(
+        &builder_, source.root, source.byte_offset, destination.pointer.root,
+        destination.pointer.byte_offset, length, locations_.get(owner), &copy));
+    return;
+  }
   cxx::Initializer source(initializer);
   bool list = !initializer || source.form() == cxx::InitializerForm::kList ||
               source.form() == cxx::InitializerForm::kParen;
@@ -502,6 +542,29 @@ void Initialization::object(StorageProjection destination,
   objects_.store(destination, initialized, object_type, owner);
 }
 
+std::optional<ObjectRepresentation> Initialization::literal(
+    const cxx::Type* type, cxx::ExpressionAST* initializer, cxx::AST* owner) {
+  auto traits = unit_.typeTraits();
+  if (!traits.is_array(type) ||
+      !traits.is_char_type(traits.get_element_type(type))) {
+    return std::nullopt;
+  }
+  auto* string = string_initializer(initializer);
+  if (!string) {
+    return std::nullopt;
+  }
+  cxx::ASTInterpreter interpreter(&unit_);
+  auto value = interpreter.evaluateInitializer(type, initializer);
+  auto representation =
+      value ? object_representation(unit_, type, *value, string) : std::nullopt;
+  if (!representation) {
+    diagnostics_.reject(
+        unit_, owner,
+        "string initializer has no complete source object representation");
+  }
+  return representation;
+}
+
 void Initialization::storage(StorageAllocation allocation,
                              const cxx::Type* type,
                              cxx::ExpressionAST* initializer,
@@ -509,6 +572,12 @@ void Initialization::storage(StorageAllocation allocation,
                              cxx::AST* owner) {
   if (auto* array =
           cxx::type_cast<cxx::BoundedArrayType>(types_.unqualified(type))) {
+    if (unit_.typeTraits().is_char_type(array->elementType()) &&
+        string_initializer(initializer)) {
+      object(storage_.project(allocation.pointer, type, owner), type,
+             initializer, constructor, owner);
+      return;
+    }
     cxx::Initializer source(initializer);
     if (source.form() != cxx::InitializerForm::kList &&
         source.form() != cxx::InitializerForm::kParen) {

@@ -111,6 +111,7 @@ loom_check_test_suite(
     "immutable_strings.cxx-test"
     "index_views.cxx-test"
     "initializer_dependencies.cxx-test"
+    "inline_strings.cxx-test"
     "integer_intrinsics.cxx-test"
     "integer_widening.cxx-test"
     "intrinsics_invalid.cxx-test"
@@ -486,6 +487,34 @@ loom_test_module(
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/immutable_object_link_tables.h"
 )
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
+loom_test_module(
+  NAME
+    inline_strings_test_module
+  SRCS
+    "inline_strings.cxx"
+)
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
+loom_execution_test(
+  NAME
+    inline_strings_test_execute_vm_reference_test
+  MODULE
+    "::inline_strings_test_module"
+  LABELS
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
+    "loom-execution-profile=vm_reference"
+    "loom-target-family=vm"
+    "loom-target-class=cpu"
+    "loom-executor=reference"
+)
+endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)

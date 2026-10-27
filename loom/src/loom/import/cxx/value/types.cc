@@ -912,14 +912,22 @@ loom_type_t Types::get(const cxx::Type* input, cxx::AST* ast) {
       return loom_type_scalar(LOOM_SCALAR_TYPE_I1);
     case cxx::TypeKind::kInt:
     case cxx::TypeKind::kUnsignedInt:
+    case cxx::TypeKind::kChar32:
       return loom_type_scalar(LOOM_SCALAR_TYPE_I32);
     case cxx::TypeKind::kChar:
     case cxx::TypeKind::kSignedChar:
     case cxx::TypeKind::kUnsignedChar:
+    case cxx::TypeKind::kChar8:
       return loom_type_scalar(LOOM_SCALAR_TYPE_I8);
     case cxx::TypeKind::kShortInt:
     case cxx::TypeKind::kUnsignedShortInt:
+    case cxx::TypeKind::kChar16:
       return loom_type_scalar(LOOM_SCALAR_TYPE_I16);
+    case cxx::TypeKind::kWideChar:
+      return loom_type_scalar(unit_.control()->memoryLayout()->sizeOf(input) ==
+                                      2
+                                  ? LOOM_SCALAR_TYPE_I16
+                                  : LOOM_SCALAR_TYPE_I32);
     case cxx::TypeKind::kLongInt:
     case cxx::TypeKind::kUnsignedLongInt:
       return loom_type_scalar(unit_.control()->memoryLayout()->sizeOfLong() == 4

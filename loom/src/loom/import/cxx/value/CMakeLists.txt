@@ -217,9 +217,12 @@ loom_cc_library(
     ::vector
     iree::third_party::cxx_parser
     loom::import::cxx::source
+    loom::import::cxx::source::constants
     loom::import::cxx::source::error
+    loom::import::cxx::source::expressions
     loom::import::cxx::source::locations
     loom::ir
+    loom::ops::buffer
     loom::ops::scalar
   PUBLIC
 )
@@ -244,6 +247,7 @@ loom_cc_library(
     ::types
     iree::third_party::cxx_parser
     loom::import::cxx::source
+    loom::import::cxx::source::constants
     loom::import::cxx::source::error
     loom::import::cxx::source::locations
     loom::ir

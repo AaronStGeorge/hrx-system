@@ -116,6 +116,7 @@ loom_check_test_suite(
         "immutable_strings.cxx-test",
         "index_views.cxx-test",
         "initializer_dependencies.cxx-test",
+        "inline_strings.cxx-test",
         "integer_intrinsics.cxx-test",
         "integer_widening.cxx-test",
         "intrinsics_invalid.cxx-test",
@@ -391,6 +392,13 @@ loom_test_module(
     ],
     data = ["immutable_object_link_tables.h"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
+)
+
+loom_test(
+    name = "inline_strings_test",
+    srcs = ["inline_strings.cxx"],
+    execution_profiles = [VM_REFERENCE_PROFILE],
+    target_compatible_with = _HOST_COMPATIBILITY,
 )
 
 loom_test(

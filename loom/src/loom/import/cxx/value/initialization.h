@@ -13,6 +13,7 @@
 #include <array>
 #include <optional>
 
+#include "loom/import/cxx/source/constants.h"
 #include "loom/import/cxx/value/objects.h"
 #include "loom/import/cxx/value/vector.h"
 
@@ -85,6 +86,11 @@ class Initialization {
   Value value(const cxx::Type* type, cxx::ExpressionAST* initializer,
               cxx::FunctionSymbol* constructor, cxx::AST* owner,
               std::optional<Value> retained = std::nullopt);
+  // Captures a character-array string initializer using the source ABI's code
+  // units, terminator, and zero fill. Other initializer forms return no value.
+  std::optional<ObjectRepresentation> literal(const cxx::Type* type,
+                                              cxx::ExpressionAST* initializer,
+                                              cxx::AST* owner);
   // Initializes an already allocated object from a present source initializer.
   // Array scalar elements keep the allocation's retained typed view.
   void storage(StorageAllocation allocation, const cxx::Type* type,

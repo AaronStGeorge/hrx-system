@@ -17,6 +17,8 @@
 
 namespace loom::cxx_import {
 
+struct ObjectRepresentation;
+
 // An evaluated source lvalue origin with an admitted storage representation.
 // Alignment belongs to this object projection, not to the two-component
 // pointer value transported by the ABI.
@@ -118,12 +120,25 @@ class Storage {
              const cxx::Type* element_type, cxx::AST* owner);
   // Allocates an admitted scalar, vector, record or fixed array using its
   // source layout and explicit alignment. Each execution creates a fresh root;
-  // initialization is emitted separately. The driver owns storage-duration and
-  // scope admission. Aggregate footprints use bytes; Objects projects their
-  // value components independently of the backing allocation.
+  // an optional exact object representation initializes the fresh storage.
+  // The driver owns storage-duration and scope admission. Aggregate footprints
+  // use bytes; Objects projects their value components independently of the
+  // backing allocation.
   StorageAllocation allocate(const cxx::Type* type,
                              loom_value_fact_memory_space_t memory_space,
-                             int64_t explicit_alignment, cxx::AST* owner);
+                             int64_t explicit_alignment, cxx::AST* owner,
+                             const ObjectRepresentation* initializer = nullptr);
+  // Materializes an anonymous immutable source object with its ABI alignment
+  // and fixed-array projection. Equal objects may share executable storage.
+  StorageAllocation constant(const cxx::Type* type,
+                             const ObjectRepresentation& contents,
+                             cxx::AST* owner);
+  // Builds an exact byte payload in immutable executable storage or fresh
+  // initialized frame storage. The caller establishes the source object
+  // extent and alignment; the builder copies bytes into module-owned IR.
+  loom_value_id_t literal(iree_const_byte_span_t contents, bool is_utf8,
+                          loom_value_fact_memory_space_t memory_space,
+                          int64_t alignment, cxx::AST* owner);
   // Admits an existing exact-size buffer root as one fixed source object.
   // The producer owns lifetime, access rights, and root alignment; this owner
   // retains the source layout, extent, and memory domain used by projections.

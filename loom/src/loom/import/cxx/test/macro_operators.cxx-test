@@ -63,18 +63,30 @@ static_assert(sizeof(QUOTE(__FILE__)) == 9);
 static_assert(sizeof(QUOTE("a")) == 4);
 
 // ====
-// RUN: verify
+// RUN: with-locations pass canonicalize,cse,dce
 #define QUOTE(value) #value
 const char* quoted() {
-  // ERROR@+1: LOWERING/059 "unsupported expression: string-literal-expression"
   return QUOTE(ab);
 }
 
+// ----
+func.def public @quoted() -> (buffer, offset) {
+  %2 = buffer.constant align(1) utf8("ab\u0000") : buffer loc("loom/src/loom/import/cxx/test/macro_operators.cxx-test":3:10 to 3:15)
+  %3 = index.constant 0 : offset loc("loom/src/loom/import/cxx/test/macro_operators.cxx-test":3:10 to 3:15)
+  func.return %2, %3 : buffer, offset loc("loom/src/loom/import/cxx/test/macro_operators.cxx-test":3:3 to 3:20)
+} loc("loom/src/loom/import/cxx/test/macro_operators.cxx-test":2:1 to 4:2)
+
 // ====
-// RUN: verify
+// RUN: with-locations pass canonicalize,cse,dce
 #define QUOTE(value) #value
 #define FORWARD(value) value
 const char* empty() {
-  // ERROR@+1: LOWERING/059 "unsupported expression: string-literal-expression"
   return FORWARD(QUOTE());
 }
+
+// ----
+func.def public @empty() -> (buffer, offset) {
+  %2 = buffer.constant align(1) utf8("\u0000") : buffer loc("loom/src/loom/import/cxx/test/macro_operators.cxx-test":4:18 to 4:23)
+  %3 = index.constant 0 : offset loc("loom/src/loom/import/cxx/test/macro_operators.cxx-test":4:18 to 4:23)
+  func.return %2, %3 : buffer, offset loc("loom/src/loom/import/cxx/test/macro_operators.cxx-test":4:3 to 4:27)
+} loc("loom/src/loom/import/cxx/test/macro_operators.cxx-test":3:1 to 5:2)

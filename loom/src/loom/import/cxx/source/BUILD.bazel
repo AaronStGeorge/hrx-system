@@ -245,7 +245,10 @@ loom_cc_library(
     hdrs = ["constants.h"],
     cxx_features = CXX_COMPILER_OPTIONS["cxx_features"],
     cxx_standard = CXX_COMPILER_OPTIONS["cxx_standard"],
-    deps = ["//third_party:cxx_parser"],
+    deps = [
+        "//runtime/src/iree/base/internal:unicode",
+        "//third_party:cxx_parser",
+    ],
 )
 
 loom_cc_library(
