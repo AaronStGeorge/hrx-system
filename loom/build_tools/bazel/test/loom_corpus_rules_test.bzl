@@ -276,7 +276,6 @@ def _test_source_owner_supplies_execution_module_impl(env, targets):
     source_tests = [test.label.name for test in source_test_targets]
     if sorted(source_tests) != [
         "sample_nested_fixture_format_0_test",
-        "sample_nested_fixture_lint_0_test",
     ]:
         env.fail("unexpected source-owned checks %r" % source_tests)
     consumer_tests = [

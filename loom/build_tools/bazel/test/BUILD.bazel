@@ -348,7 +348,6 @@ py_test(
         "--combined=$(rootpath :profiled_test_selected_execute_reference_test)",
         "--correctness=$(rootpath :correctness_only_test_execute_reference_test)",
         "--format=$(rootpath :public_kernel_library_format_0_test)",
-        "--lint=$(rootpath :public_kernel_library_lint_0_test)",
         "--plan=$(rootpath :public_kernel_library_plan_test)",
         "--artifacts=$(rootpath :public_kernel_library_kernel_binary_gfx11_generic_test)",
         "--library=$(rootpath :linked_module)",
@@ -359,7 +358,6 @@ py_test(
         ":profiled_test_selected_execute_reference_test",
         ":public_kernel_library_format_0_test",
         ":public_kernel_library_kernel_binary_gfx11_generic_test",
-        ":public_kernel_library_lint_0_test",
         ":public_kernel_library_plan_test",
     ],
 )
