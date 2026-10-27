@@ -389,6 +389,7 @@ _NO_EXTENDED_TYPES_XFAILS = {
     "numeric/conversion/narrow_vectors.loom:@narrow_vector_floating_shapes": "TARGET/003",
     "numeric/conversion/quantization.loom:@quantization_shapes": "TARGET/003",
     "numeric/float/narrow_reduction.loom:@narrow_reduction": "TARGET/003",
+    "numeric/integer/narrow_consumers.loom:@packed_integer_consumers": "TARGET/003",
     "numeric/vector/broadcast_arithmetic.loom:@broadcast_arithmetic_bf16": "TARGET/003",
     "numeric/vector/broadcast_arithmetic.loom:@broadcast_arithmetic_f16": "TARGET/003",
     "numeric/vector/broadcast_arithmetic.loom:@broadcast_arithmetic_i16": "TARGET/003",

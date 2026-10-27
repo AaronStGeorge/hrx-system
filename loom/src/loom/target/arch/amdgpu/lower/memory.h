@@ -64,6 +64,8 @@ typedef uint8_t loom_amdgpu_memory_access_selection_flags_t;
 enum loom_amdgpu_memory_access_selection_flag_bits_e {
   // Native packets retain their destination for inactive SIMD lanes.
   LOOM_AMDGPU_MEMORY_ACCESS_SELECTION_FLAG_PRESERVE_INACTIVE = 1u << 0,
+  // A narrow scalar load's solved carrier does not require sign extension.
+  LOOM_AMDGPU_MEMORY_ACCESS_SELECTION_FLAG_UNSIGNED_NARROW = 1u << 1,
 };
 
 typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;

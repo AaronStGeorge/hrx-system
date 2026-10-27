@@ -138,3 +138,110 @@ check.scenario @narrow_integer_consumer_values {
   }
   check.return
 }
+
+// Runtime selection crosses packed register boundaries. The same extracted
+// value is observed as raw storage, signed arithmetic, and unsigned arithmetic;
+// scalar loads establish an independent lane-selection oracle.
+kernel.def @packed_integer_consumers() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%selector: index, %bytes: buffer, %halves: buffer, %output: buffer) where [range(%selector, 0, 31)] {
+  %c4 = index.constant 4 : index
+  %position = index.rem %selector, %c4 : index
+  %origin = index.constant 0 : offset
+  %raw_origin = index.constant 24 : offset
+  %byte_input = buffer.view %bytes[%origin] : buffer -> view<4xi8>
+  %half_input = buffer.view %halves[%origin] : buffer -> view<4xi16>
+  %words = buffer.view %output[%origin] : buffer -> view<6xi32>
+  %raw_bytes = buffer.view %output[%raw_origin] : buffer -> view<16xi8>
+  %raw_halves = buffer.view %output[%raw_origin] : buffer -> view<8xi16>
+  %byte_packet = vector.load %byte_input[0] : view<4xi8> -> vector<4xi8>
+  %half_packet = vector.load %half_input[0] : view<4xi16> -> vector<4xi16>
+  %byte = vector.extract %byte_packet[%position] : vector<4xi8> -> i8
+  %half = vector.extract %half_packet[%position] : vector<4xi16> -> i16
+  %static_byte = vector.extract %byte_packet[1] : vector<4xi8> -> i8
+  %static_half = vector.extract %half_packet[3] : vector<4xi16> -> i16
+  %raw_byte = view.load %byte_input[0] : view<4xi8> -> i8
+  %raw_half = view.load %half_input[0] : view<4xi16> -> i16
+  %byte_signed = scalar.extsi %byte : i8 to i32
+  %byte_unsigned = scalar.extui %byte : i8 to i32
+  %half_signed = scalar.extsi %half : i16 to i32
+  %half_unsigned = scalar.extui %half : i16 to i32
+  view.store %byte_signed, %words[0] : i32, view<6xi32>
+  view.store %byte_unsigned, %words[1] : i32, view<6xi32>
+  view.store %half_signed, %words[2] : i32, view<6xi32>
+  view.store %half_unsigned, %words[3] : i32, view<6xi32>
+  view.store %byte, %raw_bytes[0] : i8, view<16xi8>
+  view.store %static_byte, %raw_bytes[2] : i8, view<16xi8>
+  view.store %half, %raw_halves[2] : i16, view<8xi16>
+  view.store %static_half, %raw_halves[3] : i16, view<8xi16>
+  view.store %raw_byte, %raw_bytes[8] : i8, view<16xi8>
+  view.store %raw_half, %raw_halves[5] : i16, view<8xi16>
+  %global_byte = view.load %byte_input[%position] : view<4xi8> -> i8
+  %global_half = view.load %half_input[%position] : view<4xi16> -> i16
+  %global_byte_unsigned = scalar.extui %global_byte : i8 to i32
+  %global_half_unsigned = scalar.extui %global_half : i16 to i32
+  view.store %global_byte_unsigned, %words[4] : i32, view<6xi32>
+  view.store %global_half_unsigned, %words[5] : i32, view<6xi32>
+  kernel.return
+}
+
+func.def @packed_integer_consumers_oracle(%selector: index, %bytes: buffer, %halves: buffer, %output: buffer) where [range(%selector, 0, 31)] {
+  %c4 = index.constant 4 : index
+  %position = index.rem %selector, %c4 : index
+  %origin = index.constant 0 : offset
+  %raw_origin = index.constant 24 : offset
+  %byte_input = buffer.view %bytes[%origin] : buffer -> view<4xi8>
+  %half_input = buffer.view %halves[%origin] : buffer -> view<4xi16>
+  %words = buffer.view %output[%origin] : buffer -> view<6xi32>
+  %raw_bytes = buffer.view %output[%raw_origin] : buffer -> view<16xi8>
+  %raw_halves = buffer.view %output[%raw_origin] : buffer -> view<8xi16>
+  %byte = view.load %byte_input[%position] : view<4xi8> -> i8
+  %half = view.load %half_input[%position] : view<4xi16> -> i16
+  %static_byte = view.load %byte_input[1] : view<4xi8> -> i8
+  %static_half = view.load %half_input[3] : view<4xi16> -> i16
+  %raw_byte = view.load %byte_input[0] : view<4xi8> -> i8
+  %raw_half = view.load %half_input[0] : view<4xi16> -> i16
+  %byte_signed = scalar.extsi %byte : i8 to i32
+  %byte_unsigned = scalar.extui %byte : i8 to i32
+  %half_signed = scalar.extsi %half : i16 to i32
+  %half_unsigned = scalar.extui %half : i16 to i32
+  view.store %byte_signed, %words[0] : i32, view<6xi32>
+  view.store %byte_unsigned, %words[1] : i32, view<6xi32>
+  view.store %half_signed, %words[2] : i32, view<6xi32>
+  view.store %half_unsigned, %words[3] : i32, view<6xi32>
+  view.store %byte, %raw_bytes[0] : i8, view<16xi8>
+  view.store %static_byte, %raw_bytes[2] : i8, view<16xi8>
+  view.store %half, %raw_halves[2] : i16, view<8xi16>
+  view.store %static_half, %raw_halves[3] : i16, view<8xi16>
+  view.store %raw_byte, %raw_bytes[8] : i8, view<16xi8>
+  view.store %raw_half, %raw_halves[5] : i16, view<8xi16>
+  %global_byte = view.load %byte_input[%position] : view<4xi8> -> i8
+  %global_half = view.load %half_input[%position] : view<4xi16> -> i16
+  %global_byte_unsigned = scalar.extui %global_byte : i8 to i32
+  %global_half_unsigned = scalar.extui %global_half : i16 to i32
+  view.store %global_byte_unsigned, %words[4] : i32, view<6xi32>
+  view.store %global_half_unsigned, %words[5] : i32, view<6xi32>
+  func.return
+}
+
+check.scenario @packed_integer_carrier_values {
+  check.trial[32](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %bytes = check.generate.random.uniform seed(%seed) range(-128 to 127) : tensor<4xi8>
+    %halves = check.generate.random.uniform seed(%seed) range(-32768 to 32767) : tensor<4xi16>
+    %output = check.generate.fill value(-7777) : tensor<12xi32>
+    check.compare<@packed_integer_consumers, @packed_integer_consumers_oracle>(%trial, %bytes, %halves, %output) : (index, tensor<4xi8>, tensor<4xi16>, tensor<12xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<12xi32>
+    }
+  }
+  check.trial[4](%trial: index, %entropy: check.entropy) {
+    %bytes = check.generate.iota offset(-128) step(85) : tensor<4xi8>
+    %halves = check.generate.iota offset(-32768) step(21845) : tensor<4xi16>
+    %output = check.generate.fill value(-7777) : tensor<12xi32>
+    check.compare<@packed_integer_consumers, @packed_integer_consumers_oracle>(%trial, %bytes, %halves, %output) : (index, tensor<4xi8>, tensor<4xi16>, tensor<12xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<12xi32>
+    }
+  }
+  check.return
+}

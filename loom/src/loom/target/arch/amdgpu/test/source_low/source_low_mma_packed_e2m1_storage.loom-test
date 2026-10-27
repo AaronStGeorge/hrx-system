@@ -80,14 +80,14 @@ low.kernel.def target<amdgpu.rdna4.core>(@target) abi_layout({constant_count = 0
   %column_parity = v_and_b32 %c1, %column
   %k_half = v_lshrrev_b32_src0_inline %lane, 4
   %payload_origin = v_lshl_add_u32_shift_imm %k_half, %column_pair, 6
-  %119 = global_load_i8_saddr %payload_origin, %payload_view
-  %120 = global_load_i8_saddr %payload_origin, %payload_view {offset = 8}
-  %121 = global_load_i8_saddr %payload_origin, %payload_view {offset = 16}
-  %122 = global_load_i8_saddr %payload_origin, %payload_view {offset = 24}
-  %123 = global_load_i8_saddr %payload_origin, %payload_view {offset = 32}
-  %124 = global_load_i8_saddr %payload_origin, %payload_view {offset = 40}
-  %125 = global_load_i8_saddr %payload_origin, %payload_view {offset = 48}
-  %126 = global_load_i8_saddr %payload_origin, %payload_view {offset = 56}
+  %119 = global_load_u8_saddr %payload_origin, %payload_view
+  %120 = global_load_u8_saddr %payload_origin, %payload_view {offset = 8}
+  %121 = global_load_u8_saddr %payload_origin, %payload_view {offset = 16}
+  %122 = global_load_u8_saddr %payload_origin, %payload_view {offset = 24}
+  %123 = global_load_u8_saddr %payload_origin, %payload_view {offset = 32}
+  %124 = global_load_u8_saddr %payload_origin, %payload_view {offset = 40}
+  %125 = global_load_u8_saddr %payload_origin, %payload_view {offset = 48}
+  %126 = global_load_u8_saddr %payload_origin, %payload_view {offset = 56}
   %127 = v_and_b32_lit %119, 255
   %128 = v_and_b32_lit %120, 255
   %129 = v_lshlrev_b32_src0_inline %128, 8

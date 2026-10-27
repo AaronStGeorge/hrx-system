@@ -933,6 +933,8 @@ enum loom_amdgpu_vector_extract_flag_bits_e {
   LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_MASK = 1u << 2,
   // Extraction uses the dynamic index instead of a static lane offset.
   LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_DYNAMIC = 1u << 3,
+  // Packed integer extraction produces a zero-extended scalar payload.
+  LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_ZERO_EXTEND = 1u << 4,
 };
 typedef uint8_t loom_amdgpu_vector_extract_flags_t;
 

@@ -17,7 +17,7 @@ func.def @packed_word_lookup(%input: buffer, %table: buffer, %output: buffer) {
 CHECK: %packed = global_load_b128_saddr *, %input_view
 CHECK: * = global_load_b32_saddr *, %table_view
 CHECK-NOT: * = global_load_b32_saddr *, %input_view*
-CHECK-NOT: * = global_load_i8_saddr *
+CHECK-NOT: * = global_load_?8_saddr *
 CHECK-NOT: * = global_load_i16_saddr *
 
 // ====
@@ -38,7 +38,7 @@ func.def @packed_byte_lookup(%input: buffer, %table: buffer, %output: buffer) {
 CHECK: %packed = global_load_b128_saddr *, %input_view
 CHECK: * = global_load_b32_saddr *, %table_view
 CHECK-NOT: * = global_load_b32_saddr *, %input_view*
-CHECK-NOT: * = global_load_i8_saddr *
+CHECK-NOT: * = global_load_?8_saddr *
 CHECK-NOT: * = global_load_i16_saddr *
 
 // ====
@@ -61,7 +61,7 @@ func.def @packed_halfword_lookup(%input: buffer, %table: buffer, %output: buffer
 CHECK: %packed = global_load_b128_saddr *, %input_view
 CHECK: * = global_load_b32_saddr *, %table_view
 CHECK-NOT: * = global_load_b32_saddr *, %input_view*
-CHECK-NOT: * = global_load_i8_saddr *
+CHECK-NOT: * = global_load_?8_saddr *
 CHECK-NOT: * = global_load_i16_saddr *
 
 // ====
@@ -84,7 +84,7 @@ func.def @packed_signed_byte_lookup(%input: buffer, %table: buffer, %output: buf
 CHECK: %packed = global_load_b128_saddr *, %input_view
 CHECK: * = global_load_b32_vaddr * {offset = 512}
 CHECK-NOT: * = global_load_b32_saddr *, %input_view*
-CHECK-NOT: * = global_load_i8_saddr *
+CHECK-NOT: * = global_load_?8_saddr *
 CHECK-NOT: * = global_load_i16_saddr *
 
 // ====
@@ -104,7 +104,7 @@ func.def @packed_short_lookup(%input: buffer, %table: buffer, %output: buffer) {
 // ----
 CHECK: %packed = global_load_b64_saddr *, %input_view
 CHECK: * = global_load_b32_saddr *, %table_view
-CHECK-NOT: * = global_load_i8_saddr *
+CHECK-NOT: * = global_load_?8_saddr *
 CHECK-NOT: * = global_load_b32_saddr *, %input_view*
 
 // ====
@@ -133,7 +133,7 @@ func.def @packed_snapshot_consumers(%input: buffer, %table: buffer, %unsigned_ou
 // ----
 CHECK: %packed = global_load_b128_saddr *, %input_view
 CHECK: global_store_b128_saddr *, %input_view*
-CHECK-NOT: * = global_load_i8_saddr *
+CHECK-NOT: * = global_load_?8_saddr *
 CHECK-NOT: * = global_load_b32_saddr *, %input_view*
 
 // ====
@@ -157,7 +157,7 @@ func.def @packed_masked_consumer(%input: buffer, %table: buffer, %output: buffer
 // ----
 CHECK: %packed = global_load_b128_saddr *, %input_view
 CHECK: * = global_load_b32_saddr *, %table_view
-CHECK-NOT: * = global_load_i8_saddr *
+CHECK-NOT: * = global_load_?8_saddr *
 CHECK-NOT: * = global_load_b32_saddr *, %input_view*
 
 // ====
@@ -175,7 +175,7 @@ func.def @packed_scatter_alias(%storage: buffer) {
 
 // ----
 CHECK: %packed = global_load_b128_saddr *, %view
-CHECK-NOT: * = global_load_i8_saddr *
+CHECK-NOT: * = global_load_?8_saddr *
 CHECK-NOT: * = global_load_b32_saddr *, %view*
 
 // ====
@@ -194,7 +194,7 @@ func.def @masked_byte_tail(%input: buffer, %output: buffer, %active: i1) {
 }
 
 // ----
-CHECK: * = global_load_i8_saddr *, %input_view
-CHECK: * = global_load_i8_saddr *, %input_view {offset = 2}
+CHECK: * = global_load_?8_saddr *, %input_view
+CHECK: * = global_load_?8_saddr *, %input_view {offset = 2}
 CHECK-NOT: * = global_load_b32_saddr *, %input_view*
-CHECK-NOT: * = global_load_i8_saddr *, %input_view {offset = 3}
+CHECK-NOT: * = global_load_?8_saddr *, %input_view {offset = 3}
