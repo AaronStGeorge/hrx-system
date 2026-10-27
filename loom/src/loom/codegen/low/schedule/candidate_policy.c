@@ -352,7 +352,63 @@ static bool loom_low_schedule_candidate_has_ready_pair_affinity(
          score->data_ready_stall_cycles == 0 && score->hazard_stall_cycles == 0;
 }
 
-static loom_low_schedule_candidate_compare_mode_t
+loom_low_schedule_pressure_progress_kind_t
+loom_low_schedule_classify_candidate_pressure_progress(
+    const loom_low_schedule_candidate_score_t* score) {
+  const bool unlocks_descriptor = iree_any_bit_set(
+      score->flags, LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR);
+  const bool unlocks_non_growing_descriptor = iree_any_bit_set(
+      score->flags,
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_NON_GROWING_DESCRIPTOR);
+  const bool has_register_activity = score->killed_live_value_count != 0 ||
+                                     score->produced_live_value_count != 0;
+  if (iree_any_bit_set(
+          score->flags,
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_CONSTRAINED_COMPLETION)) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_CONSTRAINED_COMPLETION;
+  }
+  const bool grows_packing_resource = iree_any_bit_set(
+      score->flags, LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_GROWS_PACKING_RESOURCE);
+  if (!grows_packing_resource &&
+      score->killed_live_units > score->produced_live_units) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_REDUCTION;
+  }
+  const bool is_non_growing =
+      !grows_packing_resource &&
+      score->killed_live_units >= score->produced_live_units;
+  if (score->storage_relation_count != 0 && is_non_growing) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_STORAGE;
+  }
+  if (unlocks_descriptor && unlocks_non_growing_descriptor) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_FRONTIER;
+  }
+  if (has_register_activity && is_non_growing) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NON_GROWING;
+  }
+  return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE;
+}
+
+loom_low_schedule_pressure_risk_t
+loom_low_schedule_classify_candidate_pressure_risk(
+    const loom_low_schedule_candidate_score_t* score,
+    uint32_t current_persistent_pressure_penalty) {
+  if (score->pressure_cliff_penalty > current_persistent_pressure_penalty) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT;
+  }
+  if (iree_any_bit_set(
+          score->flags,
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_NEEDS_COMPLETION_RECOVERY) ||
+      (score->units_until_pressure_cliff !=
+           LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE &&
+       score->units_until_pressure_cliff <=
+           iree_max(score->activation_reserve_units,
+                    score->pressure_demand_units))) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_RISK_NEAR_CLIFF;
+  }
+  return LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE;
+}
+
+loom_low_schedule_candidate_compare_mode_t
 loom_low_schedule_choose_candidate_compare_mode(
     const loom_low_schedule_candidate_score_t* scores,
     iree_host_size_t score_count,

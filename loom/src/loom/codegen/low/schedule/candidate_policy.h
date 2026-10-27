@@ -71,6 +71,26 @@ static inline bool loom_low_schedule_candidate_policy_uses_ready_progress_order(
                            LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_STORAGE);
 }
 
+// Classifies pressure progress from the completed live-unit, storage, and
+// descriptor-frontier facts in |score|.
+loom_low_schedule_pressure_progress_kind_t
+loom_low_schedule_classify_candidate_pressure_progress(
+    const loom_low_schedule_candidate_score_t* score);
+
+// Classifies new debt or bounded downstream demand relative to current
+// persistent pressure. Existing debt alone does not make a candidate risky.
+loom_low_schedule_pressure_risk_t
+loom_low_schedule_classify_candidate_pressure_risk(
+    const loom_low_schedule_candidate_score_t* score,
+    uint32_t current_persistent_pressure_penalty);
+
+// Selects the physical-pressure context shared by every nominee comparison.
+// A packing completion takes precedence over general pressure relief.
+loom_low_schedule_candidate_compare_mode_t
+loom_low_schedule_choose_candidate_compare_mode(
+    const loom_low_schedule_candidate_score_t* scores,
+    iree_host_size_t score_count, uint32_t current_persistent_pressure_penalty);
+
 // Returns true when |lhs| is preferred to |rhs| under the selected physical
 // pressure context. Both scores borrow |register_debt_word_count| debt words
 // from their owning policy. Comparison reads only retained score facts.

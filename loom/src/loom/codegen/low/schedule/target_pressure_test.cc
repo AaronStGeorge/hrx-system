@@ -71,6 +71,7 @@ TEST(TargetPressureTest, ResidencyHeadroomBelongsToGrowingResources) {
       {"unchanged pointer bank", 1, 0, 0, 0, no_cliff},
       {"shrinking pointer bank", 1, -1, 0, 0, no_cliff},
       {"growing below cliff", 1, 1, 0, 0, 2},
+      {"one unit below cliff", 1, 2, 0, 0, 1},
       {"crossing cliff", 1, 3, 0, 1, no_cliff},
       {"cliff already crossed by source", 1, 3, 1, 0, no_cliff},
   };

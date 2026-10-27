@@ -66,6 +66,122 @@ class CandidatePolicyTest : public ::testing::Test {
   };
 };
 
+TEST_F(CandidatePolicyTest, PressureProgressUsesPhysicalAndFrontierFacts) {
+  auto score = MakeCandidate(0, 0);
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_progress(&score),
+            LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE);
+
+  score.killed_live_units = 8;
+  score.produced_live_units = 4;
+  score.killed_live_value_count = 2;
+  score.produced_live_value_count = 1;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_progress(&score),
+            LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_REDUCTION);
+
+  // An aggregate reduction is not relief if a shared physical bank grows.
+  score.flags = LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_GROWS_PACKING_RESOURCE;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_progress(&score),
+            LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE);
+
+  score.flags = 0;
+  score.killed_live_units = 4;
+  score.killed_live_value_count = 1;
+  score.storage_relation_count = 1;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_progress(&score),
+            LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_STORAGE);
+
+  score.storage_relation_count = 0;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_progress(&score),
+            LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NON_GROWING);
+
+  score.produced_live_units = 8;
+  score.produced_live_value_count = 2;
+  score.flags = LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_progress(&score),
+            LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE);
+
+  // A growing candidate can still expose a non-growing descriptor frontier.
+  score.flags |=
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_NON_GROWING_DESCRIPTOR;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_progress(&score),
+            LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_FRONTIER);
+
+  score.active_unspillable_completion_capacity = 8;
+  score.active_unspillable_completion_domain_id = 1;
+  score.flags |=
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_CONSTRAINED_COMPLETION;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_progress(&score),
+            LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_CONSTRAINED_COMPLETION);
+}
+
+TEST_F(CandidatePolicyTest, PressureRiskProtectsBoundedDemandWithoutOldDebt) {
+  auto score = MakeCandidate(0, 0);
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_risk(&score, 0),
+            LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE);
+
+  score.pressure_cliff_penalty = 1;
+  score.pressure_cliff_units = 8;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_risk(&score, 0),
+            LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT);
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_risk(&score, 1),
+            LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE);
+
+  score.pressure_cliff_penalty = 0;
+  score.pressure_cliff_units = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE;
+  score.units_until_pressure_cliff = 4;
+  score.pressure_demand_units = 3;
+  score.activation_reserve_units = 3;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_risk(&score, 0),
+            LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE);
+
+  score.pressure_demand_units = 4;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_risk(&score, 0),
+            LOOM_LOW_SCHEDULE_PRESSURE_RISK_NEAR_CLIFF);
+  score.pressure_demand_units = 3;
+  score.activation_reserve_units = 4;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_risk(&score, 0),
+            LOOM_LOW_SCHEDULE_PRESSURE_RISK_NEAR_CLIFF);
+
+  // An absent bounded cliff is not a horizon, even for saturated demand.
+  score.units_until_pressure_cliff = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE;
+  score.pressure_demand_units = UINT32_MAX;
+  score.activation_reserve_units = UINT32_MAX;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_risk(&score, 0),
+            LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE);
+
+  score.flags = LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_NEEDS_COMPLETION_RECOVERY;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_risk(&score, 0),
+            LOOM_LOW_SCHEDULE_PRESSURE_RISK_NEAR_CLIFF);
+  score.pressure_cliff_penalty = 1;
+  score.pressure_cliff_units = 8;
+  EXPECT_EQ(loom_low_schedule_classify_candidate_pressure_risk(&score, 0),
+            LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT);
+}
+
+TEST_F(CandidatePolicyTest, CompareModeAccountsForEveryNomineeAndCurrentDebt) {
+  loom_low_schedule_candidate_score_t scores[] = {
+      MakeCandidate(0, 0), MakeCandidate(0, 1), MakeCandidate(0, 2)};
+  EXPECT_EQ(loom_low_schedule_choose_candidate_compare_mode(scores, 3, 0),
+            LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT);
+  EXPECT_EQ(loom_low_schedule_choose_candidate_compare_mode(scores, 3, 1),
+            LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF);
+
+  scores[0].pressure_cliff_penalty = 1;
+  scores[0].pressure_cliff_units = 8;
+  scores[0].pressure_risk =
+      loom_low_schedule_classify_candidate_pressure_risk(&scores[0], 0);
+  EXPECT_EQ(loom_low_schedule_choose_candidate_compare_mode(scores, 3, 0),
+            LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF);
+
+  // A later packing nominee controls the entire comparison, even after an
+  // earlier nominee already established a general pressure-recovery need.
+  scores[2].flags = LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_NEEDS_COMPLETION_RECOVERY;
+  scores[2].pressure_risk =
+      loom_low_schedule_classify_candidate_pressure_risk(&scores[2], 0);
+  EXPECT_EQ(loom_low_schedule_choose_candidate_compare_mode(scores, 3, 1),
+            LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION);
+}
+
 TEST_F(CandidatePolicyTest, PackingRecoveryPreservesStorageHandoff) {
   auto storage_handoff = MakeConstrainedCandidate(3, 0);
   storage_handoff.flags |= LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_STORAGE;
