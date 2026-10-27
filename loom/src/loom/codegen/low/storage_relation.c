@@ -60,6 +60,7 @@ static uint32_t loom_low_storage_low_relation_count(const loom_op_t* op) {
       return loom_low_concat_sources(op).count;
     case LOOM_OP_LOW_ASSUME:
     case LOOM_OP_LOW_BR:
+    case LOOM_OP_LOW_BR_IDENTITY:
     case LOOM_OP_LOW_SCF_YIELD:
     case LOOM_OP_LOW_SCF_CONDITION:
     case LOOM_OP_LOW_SCF_FOR:
@@ -124,6 +125,17 @@ static void loom_low_storage_relation_from_value_relation(
     case LOOM_VALUE_RELATION_CFG_ARGUMENT:
       cause = LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_BRANCH;
       flags = LOOM_LOW_STORAGE_RELATION_FLAG_PREFERRED;
+      if (loom_low_br_identity_isa(op)) {
+        const uint16_t identity_start =
+            (uint16_t)loom_low_br_identity_start(op);
+        const uint16_t identity_count =
+            (uint16_t)loom_low_br_identity_count(op);
+        if (value_relation->source_operand_index >= identity_start &&
+            value_relation->source_operand_index <
+                identity_start + identity_count) {
+          flags = LOOM_LOW_STORAGE_RELATION_FLAG_HARD;
+        }
+      }
       break;
     case LOOM_VALUE_RELATION_LOOP_CARRIED:
       if (loom_low_scf_for_isa(op) || loom_low_scf_while_isa(op)) {

@@ -162,14 +162,15 @@ lr: preserved
 
 // ====
 
-// A parallel edge-copy cycle writes both swapped values and the temporary
-// used to break the cycle. These moves have no source descriptor operations.
+// The entry tuple retains the incoming physical storage. The backedge's
+// parallel edge-copy cycle writes both swapped values and the temporary used
+// to break the cycle. These moves have no source descriptor operations.
 // RUN: emit aie2p-leaf @swap fixed=%condition:physical_register:253:1 fixed=%first:physical_register:254:1 fixed=%second:physical_register:265:1 fixed=%left:physical_register:254:1 fixed=%right:physical_register:265:1 registers=r0,r1,r2,r3,lr
 
 aie2p.target<core> @target
 
 low.func.def target<amd.xdna.aie2p.core>(@target) @swap(%condition: reg<aie2p.er>, %first: reg<aie2p.er>, %second: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.er>) asm {
-  low.br ^loop(%first: reg<aie2p.er>, %second: reg<aie2p.er>)
+  low.br.identity(0, 2) ^loop(%first: reg<aie2p.er>, %second: reg<aie2p.er>)
 ^loop(%left: reg<aie2p.er>, %right: reg<aie2p.er>):
   low.cond_br %condition, ^body, ^exit : reg<aie2p.er>
 ^body:

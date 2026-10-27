@@ -3079,8 +3079,8 @@ static iree_status_t loom_amdgpu_append_branch_packet(
   loom_amdgpu_assembly_emit_state_t* emit_state =
       (loom_amdgpu_assembly_emit_state_t*)user_data;
   const loom_op_t* op = context->packet->node->op;
-  const loom_block_t* dest = loom_low_br_dest(op);
-  loom_value_slice_t args = loom_low_br_args(op);
+  const loom_block_t* dest = loom_direct_branch_dest(op);
+  loom_value_slice_t args = loom_direct_branch_args(op);
   bool emitted_edge_copies = false;
   if (args.count != 0) {
     const loom_low_allocation_edge_copy_group_t* group =
@@ -3186,6 +3186,9 @@ static iree_status_t loom_amdgpu_verify_assembly_target(
 static iree_status_t loom_amdgpu_append_structural_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   const loom_op_t* op = context->packet->node->op;
+  if (loom_direct_branch_isa(op)) {
+    return loom_amdgpu_append_branch_packet(user_data, context);
+  }
   switch (op->kind) {
     case LOOM_OP_LOW_COPY:
     case LOOM_OP_LOW_MOVE:
@@ -3199,8 +3202,6 @@ static iree_status_t loom_amdgpu_append_structural_packet(
     case LOOM_OP_LOW_RETURN:
     case LOOM_OP_LOW_UNREACHABLE:
       return loom_amdgpu_append_return_packet(user_data, context);
-    case LOOM_OP_LOW_BR:
-      return loom_amdgpu_append_branch_packet(user_data, context);
     case LOOM_OP_LOW_COND_BR:
       return loom_amdgpu_append_cond_branch_packet(user_data, context);
     default:

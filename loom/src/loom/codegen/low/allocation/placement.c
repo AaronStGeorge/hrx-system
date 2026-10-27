@@ -135,9 +135,9 @@ typedef struct loom_low_placement_build_state_t {
   uint32_t packet_move_group_count;
   // Total units covered by low.copy/move/slice/concat relations.
   iree_host_size_t packet_move_unit_count;
-  // Number of low.br operations that may require edge copies.
+  // Number of Low direct branches that may require edge copies.
   uint32_t edge_copy_group_count;
-  // Total units covered by low.br relations.
+  // Total units covered by Low direct-branch relations.
   iree_host_size_t branch_unit_count;
   // Maximum raw move units contributed by one operation during collection.
   iree_host_size_t max_move_group_unit_count;
@@ -811,7 +811,7 @@ static bool loom_low_placement_concat_has_packet_uses(
   const loom_value_t* result = loom_module_value(state->module, value_id);
   const loom_use_t* use = NULL;
   loom_value_for_each_use(result, use) {
-    if (!loom_low_br_isa(loom_use_user_op(*use))) {
+    if (!loom_direct_branch_isa(loom_use_user_op(*use))) {
       return true;
     }
   }

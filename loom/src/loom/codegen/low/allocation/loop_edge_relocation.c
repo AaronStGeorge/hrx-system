@@ -240,8 +240,8 @@ static bool loom_low_allocation_loop_edge_relocation_find_backedge(
   }
   const loom_op_t* terminator = (*out_backedge)->terminator;
   const loom_block_t* header = graph->blocks[header_index].block;
-  if (terminator == NULL || !loom_low_br_isa(terminator) ||
-      loom_low_br_dest(terminator) != header ||
+  if (terminator == NULL || !loom_direct_branch_isa(terminator) ||
+      loom_direct_branch_dest(terminator) != header ||
       (*out_backedge)->successor_index != 0) {
     *out_backedge = NULL;
     return false;

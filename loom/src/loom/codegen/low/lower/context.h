@@ -45,6 +45,8 @@ typedef struct loom_low_lower_source_query_coverage_t
     loom_low_lower_source_query_coverage_t;
 typedef struct loom_low_lower_source_graph_placement_t
     loom_low_lower_source_graph_placement_t;
+typedef struct loom_low_lower_control_carriers_t
+    loom_low_lower_control_carriers_t;
 typedef struct loom_low_lower_participation_state_t
     loom_low_lower_participation_state_t;
 typedef struct loom_control_participant_table_t
@@ -98,6 +100,8 @@ typedef struct loom_low_lowering_frame_t {
   loom_low_lower_value_binding_t* value_bindings;
   // Planned block topology and branch expansions, before Low construction.
   loom_low_lower_control_plan_t* control_plan;
+  // Supplemental SSA closure for target-created control edges, or NULL.
+  loom_low_lower_control_carriers_t* control_carriers;
   // Callable signature, argument imports, and ABI layout retained for emission.
   loom_low_lower_function_boundary_t boundary;
   // Shared descriptor bindings for the active immutable target tables. Without

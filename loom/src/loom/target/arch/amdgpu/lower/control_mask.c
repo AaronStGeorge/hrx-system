@@ -43,7 +43,7 @@ iree_status_t loom_amdgpu_prepare_masked_merge(
   *out_constants = NULL;
   const loom_module_t* module = loom_low_lower_context_module(context);
   const uint16_t count =
-      loom_low_lower_control_argument_count(context, merge_low_dest);
+      loom_low_lower_control_carrier_argument_offset(context, merge_low_dest);
   loom_amdgpu_mask_merge_constants_t* constants = NULL;
   const uint32_t previous_error_count =
       loom_low_lower_context_error_count(context);

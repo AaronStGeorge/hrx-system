@@ -53,6 +53,9 @@ typedef struct loom_low_allocation_interval_assignment_state_t {
   loom_consumption_region_query_t nested_consumption_query;
   // Assignment-index window still live at the current interval start.
   loom_low_allocation_active_set_t active;
+  // Representative register assignment indexed by exact-storage origin.
+  // NULL when every value has independent storage.
+  uint32_t* assignment_indices_by_storage_origin;
   // Monotone fixed-claim availability cursor for this assignment attempt.
   loom_low_allocation_fixed_availability_t fixed_availability;
   // Victim-search arrays reused after each selected set has been consumed.
@@ -491,31 +494,25 @@ static iree_status_t loom_low_allocation_interval_assignment_record_failure(
 }
 
 static const loom_low_allocation_assignment_t*
-loom_low_allocation_interval_assignment_tied_source_assignment(
+loom_low_allocation_interval_assignment_exact_storage_assignment(
     const loom_low_allocation_interval_assignment_state_t* state,
     loom_value_ordinal_t value_ordinal) {
   const loom_low_placement_table_t* placement = state->context->placement;
-  const loom_low_placement_relation_range_t range =
-      loom_low_placement_relation_range_for_value_ordinal(placement,
-                                                          value_ordinal);
-  for (uint32_t i = 0; i < range.count; ++i) {
-    const loom_low_placement_relation_t* relation =
-        &placement->relations[range.start + i];
-    if (relation->cause != LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT) {
-      continue;
-    }
-    const uint32_t assignment_index =
-        state->result
-            .assignment_indices_by_value_ordinal[relation->source_ordinal];
-    IREE_ASSERT_NE(assignment_index, UINT32_MAX,
-                   "a tied source must be assigned before its result");
-    const loom_low_allocation_assignment_t* assignment =
-        &state->result.assignments[assignment_index];
-    return loom_low_allocation_assignment_is_register_like(assignment)
-               ? assignment
-               : NULL;
+  if (state->assignment_indices_by_storage_origin == NULL) {
+    return NULL;
   }
-  return NULL;
+  const loom_value_ordinal_t origin =
+      placement->tied_storage_origins_by_value_ordinal[value_ordinal];
+  const uint32_t assignment_index =
+      state->assignment_indices_by_storage_origin[origin];
+  if (assignment_index == UINT32_MAX) {
+    return NULL;
+  }
+  const loom_low_allocation_assignment_t* assignment =
+      &state->result.assignments[assignment_index];
+  return loom_low_allocation_assignment_is_register_like(assignment)
+             ? assignment
+             : NULL;
 }
 
 static iree_status_t loom_low_allocation_interval_assignment_consumption_query(
@@ -1294,9 +1291,9 @@ static bool loom_low_allocation_interval_assignment_replays_location(
                                                              retained);
 }
 
-// Publishes one value's assignment and attached lease records. Required ties
-// inherit an existing physical reservation; only fresh acquisitions release
-// conflicting leases before reaching this common owner.
+// Publishes one value's assignment and attached lease records. Exact-storage
+// aliases inherit an existing physical reservation; only fresh acquisitions
+// release conflicting leases before reaching this common owner.
 static uint32_t loom_low_allocation_interval_assignment_publish_assignment(
     loom_low_allocation_interval_assignment_state_t* state,
     const loom_low_allocation_assignment_t* assignment,
@@ -1327,6 +1324,19 @@ static uint32_t loom_low_allocation_interval_assignment_publish_assignment(
       state->result.assignment_count;
   state->result.assignment_indices_by_value_ordinal[value_ordinal] =
       assignment_index;
+  if (state->assignment_indices_by_storage_origin != NULL &&
+      loom_low_allocation_assignment_is_register_like(assignment)) {
+    const loom_value_ordinal_t origin =
+        state->context->placement
+            ->tied_storage_origins_by_value_ordinal[value_ordinal];
+    uint32_t* representative =
+        &state->assignment_indices_by_storage_origin[origin];
+    if (*representative == UINT32_MAX ||
+        !loom_low_allocation_assignment_is_register_like(
+            &state->result.assignments[*representative])) {
+      *representative = assignment_index;
+    }
+  }
   if (state->unit_liveness.write_interference != NULL) {
     const loom_low_allocation_storage_origin_t origin =
         loom_low_allocation_write_interference_storage_origin_for_value_ordinal(
@@ -1559,6 +1569,16 @@ loom_low_allocation_interval_assignment_initialize_result_storage(
          ++i) {
       state->result.assignment_indices_by_value_ordinal[i] = UINT32_MAX;
     }
+    if (state->context->placement->tied_storage_origins_by_value_ordinal !=
+        NULL) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          state->scratch_arena, state->context->liveness->value_count,
+          sizeof(*state->assignment_indices_by_storage_origin),
+          (void**)&state->assignment_indices_by_storage_origin));
+      memset(state->assignment_indices_by_storage_origin, 0xFF,
+             state->context->liveness->value_count *
+                 sizeof(*state->assignment_indices_by_storage_origin));
+    }
   }
   if (order->interval_count > 0) {
     IREE_RETURN_IF_ERROR(
@@ -1689,24 +1709,24 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
       continue;
     }
 
-    const loom_low_allocation_assignment_t* tied_source =
-        loom_low_allocation_interval_assignment_tied_source_assignment(
+    const loom_low_allocation_assignment_t* exact_storage =
+        loom_low_allocation_interval_assignment_exact_storage_assignment(
             state, value_ordinal);
-    if (tied_source != NULL) {
+    if (exact_storage != NULL) {
       // Placement and unit liveness established the whole component's location
       // constraints and reservation before its first member was assigned.
-      // Verified ties preserve the source's complete register class and width.
+      // Exact-storage members preserve one complete register class and width.
       const loom_low_allocation_assignment_t inherited_assignment = {
           .value_id = interval->value_id,
-          .descriptor_reg_class_id = tied_source->descriptor_reg_class_id,
+          .descriptor_reg_class_id = exact_storage->descriptor_reg_class_id,
           .start_point = entry->acquisition_start_point,
           .end_point =
               loom_low_allocation_live_range_interval_storage_end_point(
                   interval),
           .unit_count = interval->unit_count,
-          .location_kind = tied_source->location_kind,
-          .location_base = tied_source->location_base,
-          .location_count = tied_source->location_count,
+          .location_kind = exact_storage->location_kind,
+          .location_base = exact_storage->location_base,
+          .location_count = exact_storage->location_count,
       };
       const loom_low_allocation_assignment_t assignment =
           loom_low_allocation_interval_assignment_prepare_assignment(

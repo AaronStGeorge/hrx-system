@@ -26,13 +26,15 @@ callee-preserved: none
 
 // ====
 
-// Two live YMM values occupy the complete test budget. Swapping them across
-// the backedge forces the shared move sequencer to use a 32-byte cycle cell.
+// Two live YMM values occupy the complete test budget. The entry edge retains
+// its tuple in the header arguments' physical storage. Swapping the vectors
+// across the backedge forces the shared move sequencer to use a 32-byte cycle
+// cell.
 // RUN: emit x86-frame @saturated_vector_cycle x86.ymm=2
 x86.target<avx2> @target
 
 low.func.def target<x86.avx2.core>(@target) @saturated_vector_cycle(%left: reg<x86.ymm>, %right: reg<x86.ymm>, %iterations: reg<x86.gpr32>, %output: reg<x86.gpr64>) asm {
-  low.br ^header(%left: reg<x86.ymm>, %right: reg<x86.ymm>, %iterations: reg<x86.gpr32>)
+  low.br.identity(0, 3) ^header(%left: reg<x86.ymm>, %right: reg<x86.ymm>, %iterations: reg<x86.gpr32>)
 ^header(%first: reg<x86.ymm>, %second: reg<x86.ymm>, %remaining: reg<x86.gpr32>):
   low.cond_br %remaining, ^body, ^exit : reg<x86.gpr32>
 ^body:

@@ -36,10 +36,10 @@ static bool loom_amdgpu_wait_loop_interval_is_supported(
   const loom_block_t* header = graph->blocks[interval->header_index].block;
   if (entry_edge == NULL || backedge == NULL ||
       entry_edge->terminator == NULL || backedge->terminator == NULL ||
-      !loom_low_br_isa(entry_edge->terminator) ||
-      loom_low_br_dest(entry_edge->terminator) != header ||
-      !loom_low_br_isa(backedge->terminator) ||
-      loom_low_br_dest(backedge->terminator) != header ||
+      !loom_direct_branch_isa(entry_edge->terminator) ||
+      loom_direct_branch_dest(entry_edge->terminator) != header ||
+      !loom_direct_branch_isa(backedge->terminator) ||
+      loom_direct_branch_dest(backedge->terminator) != header ||
       backedge->successor_index != 0) {
     return false;
   }

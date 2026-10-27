@@ -1464,3 +1464,56 @@ value %refilled: test.i32 -> target_id[0:1]
 value %joined: test.i32 -> target_id[0:1]
 value %next: test.i32 -> target_id[0:1]
 value %final: test.i32 -> target_id[0:1]
+
+// ====
+
+// The selected middle payload aliases its destination physically. Neighboring
+// payloads remain ordinary edge transfers.
+// RUN: emit low-allocation-query @branch_identity_range edge-moves values=%prefix,%retained,%suffix,%prefix_result,%retained_result,%suffix_result fixed=%prefix:target_id:0:1 fixed=%retained:target_id:1:1 fixed=%suffix:target_id:2:1 fixed=%prefix_result:target_id:3:1 fixed=%suffix_result:target_id:4:1 test.i32=5
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @branch_identity_range(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  low.br.identity(1, 1) ^exit(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>)
+^exit(%prefix_result: reg<test.i32>, %retained_result: reg<test.i32>, %suffix_result: reg<test.i32>):
+  return %prefix_result, %retained_result, %suffix_result
+}
+
+// ----
+edge moves: 2
+move test.i32:target_id[3] <- test.i32:target_id[0]
+move test.i32:target_id[4] <- test.i32:target_id[2]
+value %prefix: test.i32 -> target_id[0:1]
+value %retained: test.i32 -> target_id[1:1]
+value %suffix: test.i32 -> target_id[2:1]
+value %prefix_result: test.i32 -> target_id[3:1]
+value %retained_result: test.i32 -> target_id[1:1]
+value %suffix_result: test.i32 -> target_id[4:1]
+
+// ====
+
+// A carrier remains live along the loop continuation after one dynamic path
+// captures it. The explicit branch identity still requires the resume argument
+// to inherit its storage when optional edge coalescing rejects the overlap.
+// RUN: emit low-allocation-query @loop_branch_identity values=%source,%result test.i32=8
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @loop_branch_identity(%source: reg<test.i32>, %condition: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.br ^header
+^header:
+  low.cond_br %condition, ^capture, ^continue : reg<test.i32>
+^capture:
+  low.br.identity(0, 1) ^resume(%source: reg<test.i32>)
+^resume(%result: reg<test.i32>):
+  low.cond_br %condition, ^exit, ^continue : reg<test.i32>
+^continue:
+  %continued = test.add.i32 %source, %source
+  low.br ^header
+^exit:
+  return %result
+}
+
+// ----
+value %source: test.i32 -> target_id[0:1]
+value %result: test.i32 -> target_id[0:1]

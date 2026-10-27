@@ -167,6 +167,39 @@ low.func.def target<test.low.core>(@test_target) @entry_preamble() -> (reg<test.
 
 test.target<low_core> @test_target
 
+low.func.def target<test.low.core>(@test_target) @identity_branch_rejects_empty_range(%value: reg<test.i32>) -> (reg<test.i32>) asm {
+  // ERROR@+1: STRUCTURE/014 {attr_name="count", actual_value="0", expected_constraint="positive u16"}
+  low.br.identity(0, 0) ^exit(%value: reg<test.i32>)
+^exit(%result: reg<test.i32>):
+  return %result
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @identity_branch_rejects_start_after_payload(%value: reg<test.i32>) -> (reg<test.i32>) asm {
+  // ERROR@+1: STRUCTURE/014 {attr_name="start", actual_value="1", expected_constraint="payload position containing the identity range"}
+  low.br.identity(1, 1) ^exit(%value: reg<test.i32>)
+^exit(%result: reg<test.i32>):
+  return %result
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @identity_branch_rejects_range_after_payload(%value: reg<test.i32>) -> (reg<test.i32>) asm {
+  // ERROR@+1: STRUCTURE/014 {attr_name="count", actual_value="2", expected_constraint="range contained by the branch payload"}
+  low.br.identity(0, 2) ^exit(%value: reg<test.i32>)
+^exit(%result: reg<test.i32>):
+  return %result
+}
+
+// ====
+
+test.target<low_core> @test_target
+
 low.func.def target<test.low.core>(@test_target) @live_in_after_preamble(%input: reg<test.i32>) -> (reg<test.i32>) {
   %arg0 = low.live_in<test.arg0> : reg<test.i32>
   %copy = low.copy %arg0 : reg<test.i32> -> reg<test.i32>

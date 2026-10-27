@@ -394,3 +394,12 @@ class LowBuilder(DialectBuilder):
         *,
         location_id: int | None = ...,
     ) -> None: ...
+    def identity(
+        self,
+        *,
+        start: int,
+        count: int,
+        dest: Block,
+        args: list[ValueRef] = ...,
+        location_id: int | None = ...,
+    ) -> None: ...

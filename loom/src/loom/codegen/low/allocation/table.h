@@ -130,10 +130,10 @@ typedef struct loom_low_allocation_copy_decision_t {
   loom_low_allocation_copy_kind_t kind;
 } loom_low_allocation_copy_decision_t;
 
-// Copy required to materialize one low.br edge payload into a destination block
-// argument location.
+// Copy required to materialize one Low direct-branch payload into a destination
+// block argument location.
 typedef struct loom_low_allocation_edge_copy_t {
-  // Operand index in the owning low.br payload.
+  // Operand index in the owning Low direct-branch payload.
   uint16_t payload_index;
   // Coalesced segments forward source storage; materialized segments read
   // their source before establishing the destination value.
@@ -159,9 +159,9 @@ typedef struct loom_low_allocation_edge_copy_t {
 static_assert(sizeof(loom_low_allocation_edge_copy_t) == 32,
               "edge-copy segments must retain their compact allocation shape");
 
-// Contiguous edge-copy group for one low.br terminator.
+// Contiguous edge-copy group for one Low direct-branch terminator.
 typedef struct loom_low_allocation_edge_copy_group_t {
-  // low.br terminator that owns this outgoing edge.
+  // Low direct-branch terminator that owns this outgoing edge.
   const loom_op_t* terminator_op;
   // Source-order ordinal of |terminator_op| in its low function body.
   uint32_t source_ordinal;
@@ -384,14 +384,14 @@ typedef struct loom_low_allocation_table_t {
   // labels. CFG backedges never execute this group. Sources are external ABI
   // coordinates; destinations are the finalized argument assignments.
   loom_low_move_group_t entry_moves;
-  // Edge-copy records grouped by low.br terminator source order.
+  // Edge-copy records grouped by Low direct-branch terminator source order.
   const loom_low_allocation_edge_copy_t* edge_copies;
   // Number of records in |edge_copies|.
   iree_host_size_t edge_copy_count;
   // First coalesced incoming edge-copy index by local value ordinal, or NULL
   // when the consumer did not request the retained relation.
   const uint32_t* first_coalesced_incoming_copy_by_value_ordinal;
-  // Per-low.br groups indexing |edge_copies|.
+  // Per-direct-branch groups indexing |edge_copies|.
   const loom_low_allocation_edge_copy_group_t* edge_copy_groups;
   // Number of records in |edge_copy_groups|.
   iree_host_size_t edge_copy_group_count;

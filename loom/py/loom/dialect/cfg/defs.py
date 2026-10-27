@@ -27,6 +27,7 @@ from loom.dsl import (
     I1,
     TERMINATOR,
     Dialect,
+    DirectBranchInterface,
     Op,
     Operand,
     OperandRole,
@@ -56,6 +57,7 @@ cfg_br = Op(
     operands=[Operand("args", ANY, variadic=True, doc="Values forwarded to the destination block arguments.")],
     successors=[Successor("dest", doc="Destination block.")],
     traits=[TERMINATOR],
+    interfaces=[DirectBranchInterface(args="args", dest="dest")],
     verify="loom_cfg_br_verify",
     format=[
         BlockRef("dest"),

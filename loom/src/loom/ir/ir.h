@@ -747,6 +747,11 @@ enum loom_op_flag_bits_e {
   // cached from its immutable vtable so module inventories do not resolve the
   // operation kind again as summaries are recorded and dropped.
   LOOM_OP_FLAG_SEMANTIC_CALL = 1u << 4,
+
+  // The operation implements the generated DirectBranch interface. Cached
+  // from its immutable vtable so CFG, scheduling, and emission hot paths can
+  // classify branches without resolving the operation kind.
+  LOOM_OP_FLAG_DIRECT_BRANCH = 1u << 5,
 };
 typedef uint8_t loom_op_flags_t;
 
@@ -1048,6 +1053,10 @@ enum loom_op_vtable_flag_bits_e {
   // neither reads nor publishes identities, origins, or other auxiliary facts.
   // Effective traits must preserve this contract for every operation instance.
   LOOM_OP_VTABLE_FACTS_FROM_OPERANDS = 1u << 13,
+  // The op implements the generated DirectBranch interface: it is an
+  // unconditional terminator with one successor and its complete operand list
+  // is the positional successor payload.
+  LOOM_OP_VTABLE_DIRECT_BRANCH = 1u << 14,
 };
 typedef uint16_t loom_op_vtable_flags_t;
 

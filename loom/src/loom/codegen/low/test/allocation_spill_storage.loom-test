@@ -207,7 +207,7 @@ test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @loop_edges(%condition: reg<test.i32>) -> (reg<test.i32>) asm {
   %seed = test.const.i32 0
-  low.br ^loop(%seed: reg<test.i32>)
+  low.br.identity(0, 1) ^loop(%seed: reg<test.i32>)
 ^loop(%state: reg<test.i32>):
   %a = test.const.i32 1
   %b = test.const.i32 2
@@ -223,7 +223,7 @@ low.func.def target<test.low.core>(@target) @loop_edges(%condition: reg<test.i32
   %de = test.add.i32 %d, %e
   %def = test.add.i32 %de, %f
   %updated = test.add.i32 %def, %next
-  low.br ^loop(%updated: reg<test.i32>)
+  low.br.identity(0, 1) ^loop(%updated: reg<test.i32>)
 ^exit:
   return %next
 }

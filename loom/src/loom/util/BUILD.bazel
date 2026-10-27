@@ -635,6 +635,7 @@ loom_cc_library(
     hdrs = ["cfg_graph.h"],
     deps = [
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],

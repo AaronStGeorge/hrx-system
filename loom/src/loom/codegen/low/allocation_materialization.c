@@ -484,7 +484,7 @@ static iree_status_t loom_low_allocation_insert_storage_reserves(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_rebuild_br_without_arg(
+static iree_status_t loom_low_allocation_rebuild_direct_br_without_arg(
     loom_module_t* module, loom_op_t* branch_op, uint16_t arg_index,
     iree_arena_allocator_t* arena) {
   const uint16_t old_count = branch_op->operand_count;
@@ -508,9 +508,29 @@ static iree_status_t loom_low_allocation_rebuild_br_without_arg(
                           &builder);
   loom_builder_set_before(&builder, branch_op);
   loom_op_t* replacement_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_br_build(&builder, loom_low_br_dest(branch_op),
-                                         new_args, new_count,
-                                         branch_op->location, &replacement_op));
+  loom_block_t* destination = loom_direct_branch_dest(branch_op);
+  if (loom_low_br_identity_isa(branch_op)) {
+    uint16_t identity_start = (uint16_t)loom_low_br_identity_start(branch_op);
+    uint16_t identity_count = (uint16_t)loom_low_br_identity_count(branch_op);
+    if (arg_index < identity_start) {
+      --identity_start;
+    } else if (arg_index < identity_start + identity_count) {
+      --identity_count;
+    }
+    if (identity_count != 0) {
+      IREE_RETURN_IF_ERROR(loom_low_br_identity_build(
+          &builder, identity_start, identity_count, destination, new_args,
+          new_count, branch_op->location, &replacement_op));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_low_br_build(&builder, destination, new_args,
+                                             new_count, branch_op->location,
+                                             &replacement_op));
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(loom_low_br_build(&builder, destination, new_args,
+                                           new_count, branch_op->location,
+                                           &replacement_op));
+  }
   return loom_op_erase(module, branch_op);
 }
 
@@ -544,8 +564,8 @@ static loom_op_t* loom_low_allocation_materialization_target_op(
       *out_operand_index = loom_value_def_index(block_argument);
       loom_op_t* branch_op =
           (loom_op_t*)loom_block_const_last_op(target->owner.predecessor_block);
-      IREE_ASSERT(loom_low_br_isa(branch_op));
-      IREE_ASSERT_EQ(loom_low_br_dest(branch_op), destination_block);
+      IREE_ASSERT(loom_direct_branch_isa(branch_op));
+      IREE_ASSERT_EQ(loom_direct_branch_dest(branch_op), destination_block);
       return branch_op;
     }
     case LOOM_LOW_SPILL_MATERIALIZATION_TARGET_ACTION_SOURCE:
@@ -732,8 +752,8 @@ static iree_status_t loom_low_allocation_remove_branch_argument(
   if (payload < per_user_placement_values.bit_count) {
     iree_bitmap_reset(per_user_placement_values, payload);
   }
-  return loom_low_allocation_rebuild_br_without_arg(module, branch_op,
-                                                    argument_index, arena);
+  return loom_low_allocation_rebuild_direct_br_without_arg(
+      module, branch_op, argument_index, arena);
 }
 
 static iree_status_t loom_low_allocation_apply_spill_materialization_plan(

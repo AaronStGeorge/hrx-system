@@ -167,7 +167,7 @@ typedef struct loom_low_spill_materialization_plan_builder_t {
   loom_value_u32_scratch_t* value_index;
   // First branch-payload cell indexed by dense source-body block.
   uint32_t* branch_payload_starts;
-  // Logical state for every original top-level low.br payload.
+  // Logical state for every original top-level Low direct-branch payload.
   loom_low_spill_materialization_branch_payload_t* branch_payloads;
   // Number of records in |branch_payloads|.
   uint32_t branch_payload_count;
@@ -418,7 +418,7 @@ static iree_status_t loom_low_spill_materialization_initialize_branches(
     builder->branch_payload_starts[i] = (uint32_t)payload_count;
     const loom_op_t* terminator =
         loom_block_const_last_op(builder->body->blocks[i]);
-    if (terminator && loom_low_br_isa(terminator)) {
+    if (terminator && loom_direct_branch_isa(terminator)) {
       payload_count += terminator->operand_count;
     }
     if (payload_count > UINT32_MAX) {
@@ -437,10 +437,10 @@ static iree_status_t loom_low_spill_materialization_initialize_branches(
   for (iree_host_size_t i = 0; i < block_count; ++i) {
     const loom_op_t* terminator =
         loom_block_const_last_op(builder->body->blocks[i]);
-    if (!terminator || !loom_low_br_isa(terminator)) {
+    if (!terminator || !loom_direct_branch_isa(terminator)) {
       continue;
     }
-    loom_block_t* destination = loom_low_br_dest(terminator);
+    loom_block_t* destination = loom_direct_branch_dest(terminator);
     const loom_value_id_t* operands = loom_op_const_operands(terminator);
     for (uint16_t j = 0; j < terminator->operand_count; ++j) {
       IREE_ASSERT_LT(j, destination->arg_count);
@@ -462,7 +462,7 @@ static bool loom_low_spill_materialization_try_branch_payload_index(
     loom_use_t use, uint32_t* out_payload_index) {
   loom_op_t* user_op = loom_use_user_op(use);
   loom_block_t* source_block = user_op->parent_block;
-  if (!loom_low_br_isa(user_op) ||
+  if (!loom_direct_branch_isa(user_op) ||
       source_block->parent_region != builder->body ||
       loom_block_const_last_op(source_block) != user_op) {
     return false;
@@ -1343,8 +1343,8 @@ IREE_ATTRIBUTE_NOINLINE iree_status_t loom_low_spill_materialization_plan_build(
 static bool loom_low_allocation_spill_plan_use_is_removed_block_arg_edge(
     loom_use_t use, const loom_block_t* block, uint16_t arg_index) {
   const loom_op_t* user_op = loom_use_user_op(use);
-  return block && loom_low_br_isa(user_op) &&
-         loom_low_br_dest(user_op) == block &&
+  return block && loom_direct_branch_isa(user_op) &&
+         loom_direct_branch_dest(user_op) == block &&
          loom_use_operand_index(use) == arg_index;
 }
 

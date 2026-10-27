@@ -108,6 +108,7 @@ from loom.dsl import (
     Consume,
     Dialect,
     DimIndexInBounds,
+    DirectBranchInterface,
     Discard,
     EnumCase,
     EnumDef,
@@ -1999,6 +2000,7 @@ test_br = Op(
     doc="Test CFG branch terminator with a semantic successor edge.",
     successors=[Successor("dest", doc="Destination block.")],
     traits=[TERMINATOR],
+    interfaces=[DirectBranchInterface(args=None, dest="dest")],
     format=[BlockRef("dest")],
     examples=["test.br ^dest"],
 )

@@ -716,6 +716,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::ir
+    loom::ops::op_defs
   PUBLIC
 )
 

@@ -55,7 +55,8 @@ enum {
   LOOM_OP_LOW_OP_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 31),
   LOOM_OP_LOW_FUNC_EXIT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 32),
   LOOM_OP_LOW_UNREACHABLE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 33),
-  LOOM_OP_LOW_COUNT_ = 34,
+  LOOM_OP_LOW_BR_IDENTITY = LOOM_OP_KIND(LOOM_DIALECT_LOW, 34),
+  LOOM_OP_LOW_COUNT_ = 35,
 };
 
 // Symbol visibility. Absent (0) means private (module-internal).
@@ -946,6 +947,26 @@ iree_status_t loom_low_unreachable_build(
     loom_builder_t* builder,
     loom_location_id_t location,
     loom_op_t** out_op);
+
+// LOOM_OP_LOW_BR_IDENTITY: Unconditional branch whose contiguous identity payload range shares exact physical storage with the corresponding destination block arguments. Other payload values use ordinary edge transfers. This preserves register contents when destination participation includes lanes that did not execute the branch.
+// low.br.identity(2, 1) ^capture(%result: reg<test.i32>, %mask: reg<test.i32>, %retained: reg<test.i32>)
+LOOM_DEFINE_ISA(loom_low_br_identity_isa, LOOM_OP_LOW_BR_IDENTITY)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_br_identity_args, 0)
+LOOM_DEFINE_SUCCESSOR(loom_low_br_identity_dest, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_br_identity_start, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_br_identity_count, 1)
+iree_status_t loom_low_br_identity_build(
+    loom_builder_t* builder,
+    int64_t start,
+    int64_t count,
+    loom_block_t* dest,
+    const loom_value_id_t* args,
+    iree_host_size_t args_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_br_identity_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Declarative short spellings used inside target assembly regions.
 extern const loom_op_assembly_format_table_t loom_low_assembly_formats;

@@ -256,17 +256,18 @@ vm.module core(0.0) {
 vm.target<core> @vm
 
 // The true and false destinations both skip the physically next block. Each
-// arm then branches backwards to the join instead of falling through.
+// arm then branches backwards to the join instead of falling through. Both
+// arms retain their computed value in the join argument's physical storage.
 low.func.def public target<vm.core>(@vm) abi(vm_function) @routed(%condition: reg<vm.value : i1>, %a: reg<vm.value : i32>, %b: reg<vm.value : i32>) -> (reg<vm.value : i32>) asm {
   low.cond_br %condition, ^yes, ^no : reg<vm.value : i1>
 ^join(%result: reg<vm.value : i32>):
   return %result
 ^yes:
   %sum = integer.add.i32 %a, %b
-  low.br ^join(%sum: reg<vm.value : i32>)
+  low.br.identity(0, 1) ^join(%sum: reg<vm.value : i32>)
 ^no:
   %difference = integer.sub.i32 %a, %b
-  low.br ^join(%difference: reg<vm.value : i32>)
+  low.br.identity(0, 1) ^join(%difference: reg<vm.value : i32>)
 }
 
 // ----

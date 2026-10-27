@@ -17,7 +17,9 @@ extern "C" {
 
 // Builds one canonical owner ordinal per value in the acquired domain's
 // definition scope. Mandatory aliases and destructive ties share an owner;
-// copies, slices, concats and control-flow payloads remain independent.
+// copies, slices, concats and ordinary control-flow payloads remain
+// independent. Payload ranges explicitly carried by low.br.identity share an
+// owner with their corresponding destination block arguments.
 // Returns NULL when all values are independent. Otherwise the arena-owned
 // array has value_count + additional_value_capacity entries, including an
 // independent reserved tail for values introduced during preparation.

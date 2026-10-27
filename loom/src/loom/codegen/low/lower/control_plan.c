@@ -10,6 +10,7 @@
 
 #include "loom/codegen/low/loop_execution.h"
 #include "loom/codegen/low/lower/context.h"
+#include "loom/codegen/low/lower/control_carriers.h"
 #include "loom/codegen/low/lower/realization.h"
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
@@ -81,20 +82,34 @@ static loom_low_lower_block_ref_t loom_low_lower_control_signature(
              : block;
 }
 
-uint16_t loom_low_lower_control_argument_count(
+static uint32_t loom_low_lower_control_carrier_argument_offset_wide(
     const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block) {
   const loom_low_lower_block_ref_t signature =
       loom_low_lower_control_signature(context, block);
-  uint16_t count = 0;
+  if (signature == 0) {
+    return 0;
+  }
+  const uint16_t index = (uint16_t)(signature - 1);
+  const loom_block_t* source =
+      loom_region_block(loom_func_like_body(context->source_function), index);
+  const uint16_t authored_count =
+      index == 0 ? context->lowering->boundary.argument_count
+                 : source->arg_count;
+  return (uint32_t)authored_count +
+         loom_low_lower_realization_block_argument_count(context, source);
+}
+
+static uint32_t loom_low_lower_control_argument_count_wide(
+    const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block) {
+  const loom_low_lower_block_ref_t signature =
+      loom_low_lower_control_signature(context, block);
+  uint32_t count =
+      loom_low_lower_control_carrier_argument_offset_wide(context, block);
   if (signature != 0) {
-    const uint16_t index = (uint16_t)(signature - 1);
     const loom_block_t* source =
-        loom_region_block(loom_func_like_body(context->source_function), index);
-    const uint16_t authored_count =
-        index == 0 ? context->lowering->boundary.argument_count
-                   : source->arg_count;
-    count = authored_count +
-            loom_low_lower_realization_block_argument_count(context, source);
+        loom_region_block(loom_func_like_body(context->source_function),
+                          (uint16_t)(signature - 1));
+    count += loom_low_lower_control_source_carriers(context, source).count;
   }
   const uint16_t source_count =
       loom_func_like_body(context->source_function)->block_count;
@@ -105,6 +120,48 @@ uint16_t loom_low_lower_control_argument_count(
   return count;
 }
 
+const loom_block_t* loom_low_lower_control_signature_source_block(
+    const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block) {
+  const loom_low_lower_block_ref_t signature =
+      loom_low_lower_control_signature(context, block);
+  if (signature == 0) {
+    return NULL;
+  }
+  return loom_region_const_block(loom_func_like_body(context->source_function),
+                                 (uint16_t)(signature - 1));
+}
+
+uint16_t loom_low_lower_control_argument_count(
+    const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block) {
+  const uint32_t count =
+      loom_low_lower_control_argument_count_wide(context, block);
+  IREE_ASSERT_LE(count, UINT16_MAX);
+  return (uint16_t)count;
+}
+
+uint16_t loom_low_lower_control_carrier_argument_offset(
+    const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block) {
+  const uint32_t count =
+      loom_low_lower_control_carrier_argument_offset_wide(context, block);
+  IREE_ASSERT_LE(count, UINT16_MAX);
+  return (uint16_t)count;
+}
+
+iree_status_t loom_low_lower_control_validate_argument_counts(
+    const loom_low_lower_context_t* context) {
+  const iree_host_size_t block_count =
+      loom_low_lower_control_block_count(context);
+  for (iree_host_size_t i = 0; i < block_count; ++i) {
+    if (loom_low_lower_control_argument_count_wide(
+            context, (loom_low_lower_block_ref_t)(i + 1)) > UINT16_MAX) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "planned control block argument count exceeds "
+                              "u16");
+    }
+  }
+  return iree_ok_status();
+}
+
 loom_type_t loom_low_lower_control_argument_type(
     const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block,
     uint16_t argument_index) {
@@ -112,6 +169,7 @@ loom_type_t loom_low_lower_control_argument_type(
       loom_low_lower_control_signature(context, block);
   uint16_t authored_count = 0;
   uint16_t source_argument_count = 0;
+  uint16_t realization_count = 0;
   uint16_t source_index = 0;
   const loom_block_t* source = NULL;
   if (signature != 0) {
@@ -121,9 +179,11 @@ loom_type_t loom_low_lower_control_argument_type(
     authored_count = source_index == 0
                          ? context->lowering->boundary.argument_count
                          : source->arg_count;
-    source_argument_count =
-        authored_count +
+    realization_count =
         loom_low_lower_realization_block_argument_count(context, source);
+    source_argument_count =
+        authored_count + realization_count +
+        loom_low_lower_control_source_carriers(context, source).count;
   }
   if (argument_index >= source_argument_count) {
     const uint16_t source_count =
@@ -131,6 +191,13 @@ loom_type_t loom_low_lower_control_argument_type(
     IREE_ASSERT_GT(block, source_count);
     return context->lowering->control_plan->blocks[block - source_count - 1]
         .argument_types[argument_index - source_argument_count];
+  }
+  if (argument_index >= authored_count + realization_count) {
+    const loom_low_lower_control_carrier_slice_t carriers =
+        loom_low_lower_control_source_carriers(context, source);
+    return loom_low_lower_control_carrier_type(
+        context,
+        carriers.values[argument_index - authored_count - realization_count]);
   }
   if (argument_index >= authored_count) {
     return loom_low_lower_realization_block_argument_type(
@@ -158,11 +225,11 @@ iree_status_t loom_low_lower_control_add_block_with_appended_arguments(
   loom_low_lower_control_plan_t* plan = context->lowering->control_plan;
   const loom_low_lower_block_ref_t canonical_signature =
       loom_low_lower_control_signature(context, signature);
-  const uint16_t base_argument_count =
-      canonical_signature
-          ? loom_low_lower_control_argument_count(context, canonical_signature)
-          : 0;
-  if ((uint32_t)base_argument_count + argument_count > UINT16_MAX) {
+  const uint32_t base_argument_count =
+      canonical_signature ? loom_low_lower_control_argument_count_wide(
+                                context, canonical_signature)
+                          : 0;
+  if (base_argument_count + argument_count > UINT16_MAX) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "planned control block argument count exceeds u16");
   }
@@ -203,10 +270,10 @@ loom_low_lower_block_ref_t loom_low_lower_control_successor(
       loom_op_const_successors(source_terminator)[successor_index]);
 }
 
-iree_status_t loom_low_lower_control_interpose_successor(
+static iree_status_t loom_low_lower_control_interpose_successor_impl(
     loom_low_lower_context_t* context, const loom_op_t* source_terminator,
     uint8_t successor_index, loom_low_lower_block_ref_t block,
-    loom_low_lower_block_ref_t* out_previous) {
+    bool require_equal_signatures, loom_low_lower_block_ref_t* out_previous) {
   loom_low_lower_control_source_t* source =
       &context->lowering->control_plan
            ->sources[source_terminator->parent_block->region_index];
@@ -220,10 +287,32 @@ iree_status_t loom_low_lower_control_interpose_successor(
     }
   }
   *out_previous = source->successors[successor_index];
-  IREE_ASSERT_EQ(loom_low_lower_control_argument_count(context, *out_previous),
-                 loom_low_lower_control_argument_count(context, block));
+  if (require_equal_signatures) {
+    IREE_ASSERT_EQ(
+        loom_low_lower_control_argument_count(context, *out_previous),
+        loom_low_lower_control_argument_count(context, block));
+  }
   source->successors[successor_index] = block;
   return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_control_interpose_successor(
+    loom_low_lower_context_t* context, const loom_op_t* source_terminator,
+    uint8_t successor_index, loom_low_lower_block_ref_t block,
+    loom_low_lower_block_ref_t* out_previous) {
+  return loom_low_lower_control_interpose_successor_impl(
+      context, source_terminator, successor_index, block,
+      /*require_equal_signatures=*/true, out_previous);
+}
+
+iree_status_t loom_low_lower_control_interpose_argless_successor(
+    loom_low_lower_context_t* context, const loom_op_t* source_terminator,
+    uint8_t successor_index, loom_low_lower_block_ref_t block,
+    loom_low_lower_block_ref_t* out_previous) {
+  IREE_ASSERT_EQ(loom_low_lower_control_argument_count(context, block), 0);
+  return loom_low_lower_control_interpose_successor_impl(
+      context, source_terminator, successor_index, block,
+      /*require_equal_signatures=*/false, out_previous);
 }
 
 void loom_low_lower_set_branch_plan(loom_low_lower_context_t* context,
@@ -378,6 +467,8 @@ iree_status_t loom_low_lower_control_emit_cond_branch(
     loom_low_lower_context_t* context, const loom_op_t* source_terminator,
     loom_value_id_t low_condition, loom_block_t* low_true_dest,
     loom_block_t* low_false_dest) {
+  IREE_RETURN_IF_ERROR(loom_low_lower_control_carriers_emit_edge_forwards(
+      context, source_terminator));
   loom_op_t* low_cond_br_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_cond_br_build(
       loom_low_lower_context_builder(context), low_condition, low_true_dest,
@@ -484,6 +575,21 @@ iree_status_t loom_low_lower_control_plan_build(
       status = loom_low_lower_emit_branch_constraint(
           context, terminator, IREE_SV("block_count_u16"));
     }
+  }
+  if (iree_status_is_ok(status) &&
+      !loom_low_lower_context_diagnostic_limit_reached(context)) {
+    status = loom_low_lower_control_carriers_finalize(context);
+  }
+  if (iree_status_is_ok(status) &&
+      loom_low_lower_control_block_count(context) > UINT16_MAX) {
+    const loom_op_t* source_op =
+        body->block_count ? loom_block_const_last_op(loom_region_block(body, 0))
+                          : NULL;
+    status = source_op
+                 ? loom_low_lower_emit_branch_constraint(
+                       context, source_op, IREE_SV("block_count_u16"))
+                 : iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                    "planned control block count exceeds u16");
   }
   iree_arena_deinitialize(&scratch_arena);
   return status;

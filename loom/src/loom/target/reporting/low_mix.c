@@ -41,9 +41,9 @@ static uint64_t loom_target_compile_report_low_control_transfer_count(
   if (loom_low_return_isa(node->op) || loom_low_unreachable_isa(node->op)) {
     return 1;
   }
-  if (loom_low_br_isa(node->op)) {
+  if (loom_direct_branch_isa(node->op)) {
     return loom_target_compile_report_low_branch_falls_through(
-               schedule, node, loom_low_br_dest(node->op))
+               schedule, node, loom_direct_branch_dest(node->op))
                ? 0
                : 1;
   }
@@ -78,7 +78,7 @@ static uint64_t loom_target_compile_report_low_structural_move_count(
     return 0;
   }
   if (node->kind == LOOM_LOW_SCHEDULE_NODE_TERMINATOR &&
-      loom_low_br_isa(node->op)) {
+      loom_direct_branch_isa(node->op)) {
     const loom_low_allocation_edge_copy_group_t* group =
         loom_low_allocation_find_edge_copy_group_by_source_ordinal(
             allocation, source_ordinal);
@@ -505,8 +505,8 @@ static bool loom_target_compile_report_low_block_branch_to(
     const loom_block_t* block, const loom_block_t* dest,
     const loom_op_t** out_br) {
   const loom_op_t* terminator = block != NULL ? block->last_op : NULL;
-  if (terminator == NULL || !loom_low_br_isa(terminator) ||
-      loom_low_br_dest(terminator) != dest) {
+  if (terminator == NULL || !loom_direct_branch_isa(terminator) ||
+      loom_direct_branch_dest(terminator) != dest) {
     return false;
   }
   *out_br = terminator;
@@ -565,7 +565,7 @@ static bool loom_target_compile_report_low_branch_arg(
   if (branch_op == NULL || arg_index >= dest->arg_count) {
     return false;
   }
-  const loom_value_slice_t args = loom_low_br_args(branch_op);
+  const loom_value_slice_t args = loom_direct_branch_args(branch_op);
   if (arg_index < args.count) {
     *out_value_id = args.values[arg_index];
     return true;
