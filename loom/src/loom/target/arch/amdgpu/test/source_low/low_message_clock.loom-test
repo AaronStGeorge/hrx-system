@@ -15,7 +15,6 @@ low.func.def target<amdgpu.rdna3.core>(@gpu) @clock_words() -> (reg<amdgpu.sgpr>
 
 // ----
   s_sendmsg_rtn_b32 s0, message(131)
-  s_waitcnt vmcnt(63) lgkmcnt(0)
   s_sendmsg_rtn_b64 s[2:3], message(131)
   s_waitcnt vmcnt(63) lgkmcnt(0)
   s_xor_b32 s4, s2, s0
@@ -41,7 +40,6 @@ low.func.def target<amdgpu.rdna3.core>(@gpu) @clock_words() -> (reg<amdgpu.sgpr>
 
 // ----
 0xBE804C83
-0xBF89FC07
 0xBE824D83
 0xBF89FC07
 0x8D040002
@@ -67,7 +65,6 @@ low.func.def target<amdgpu.rdna3_5.core>(@gpu) @clock_words() -> (reg<amdgpu.sgp
 
 // ----
   s_sendmsg_rtn_b32 s0, message(131)
-  s_waitcnt vmcnt(63) lgkmcnt(0)
   s_sendmsg_rtn_b64 s[2:3], message(131)
   s_waitcnt vmcnt(63) lgkmcnt(0)
   s_xor_b32 s4, s2, s0
@@ -93,7 +90,6 @@ low.func.def target<amdgpu.rdna3_5.core>(@gpu) @clock_words() -> (reg<amdgpu.sgp
 
 // ----
 0xBE804C83
-0xBF89FC07
 0xBE824D83
 0xBF89FC07
 0x8D040002
@@ -119,7 +115,6 @@ low.func.def target<amdgpu.rdna4m.core>(@gpu) @clock_words() -> (reg<amdgpu.sgpr
 
 // ----
   s_sendmsg_rtn_b32 s0, message(131)
-  s_waitcnt vmcnt(63) lgkmcnt(0)
   s_sendmsg_rtn_b64 s[2:3], message(131)
   s_waitcnt vmcnt(63) lgkmcnt(0)
   s_xor_b32 s4, s2, s0
@@ -145,7 +140,6 @@ low.func.def target<amdgpu.rdna4m.core>(@gpu) @clock_words() -> (reg<amdgpu.sgpr
 
 // ----
 0xBE804C83
-0xBF89FC07
 0xBE824D83
 0xBF89FC07
 0x8D040002
@@ -171,7 +165,6 @@ low.func.def target<amdgpu.rdna4.core>(@gpu) @clock_words() -> (reg<amdgpu.sgpr>
 
 // ----
   s_sendmsg_rtn_b32 s0, message(131)
-  s_wait_kmcnt kmcnt(0)
   s_sendmsg_rtn_b64 s[2:3], message(131)
   s_wait_kmcnt kmcnt(0)
   s_xor_b32 s4, s2, s0
@@ -197,7 +190,6 @@ low.func.def target<amdgpu.rdna4.core>(@gpu) @clock_words() -> (reg<amdgpu.sgpr>
 
 // ----
 0xBE804C83
-0xBFC70000
 0xBE824D83
 0xBFC70000
 0x8D040002
@@ -223,7 +215,6 @@ low.func.def target<amdgpu.rdna4.gfx125x.core>(@gpu) @clock_words() -> (reg<amdg
 
 // ----
   s_sendmsg_rtn_b32 s0, message(131)
-  s_wait_kmcnt kmcnt(0)
   s_sendmsg_rtn_b64 s[2:3], message(131)
   s_wait_kmcnt kmcnt(0)
   s_xor_b32 s4, s2, s0
@@ -249,7 +240,6 @@ low.func.def target<amdgpu.rdna4.gfx125x.core>(@gpu) @clock_words() -> (reg<amdg
 
 // ----
 0xBE804C83
-0xBFC70000
 0xBE824D83
 0xBFC70000
 0x8D040002
@@ -275,7 +265,6 @@ low.func.def target<amdgpu.rdna4.gfx1251.core>(@gpu) @clock_words() -> (reg<amdg
 
 // ----
   s_sendmsg_rtn_b32 s0, message(131)
-  s_wait_kmcnt kmcnt(0)
   s_sendmsg_rtn_b64 s[2:3], message(131)
   s_wait_kmcnt kmcnt(0)
   s_xor_b32 s4, s2, s0
@@ -301,7 +290,6 @@ low.func.def target<amdgpu.rdna4.gfx1251.core>(@gpu) @clock_words() -> (reg<amdg
 
 // ----
 0xBE804C83
-0xBFC70000
 0xBE824D83
 0xBFC70000
 0x8D040002
@@ -327,7 +315,6 @@ low.func.def target<amdgpu.rdna4.gfx1250_a0.core>(@gpu) @clock_words() -> (reg<a
 
 // ----
   s_sendmsg_rtn_b32 s0, message(131)
-  s_wait_kmcnt kmcnt(0)
   s_sendmsg_rtn_b64 s[2:3], message(131)
   s_wait_kmcnt kmcnt(0)
   s_xor_b32 s4, s2, s0
@@ -353,7 +340,6 @@ low.func.def target<amdgpu.rdna4.gfx1250_a0.core>(@gpu) @clock_words() -> (reg<a
 
 // ----
 0xBE804C83
-0xBFC70000
 0xBE824D83
 0xBFC70000
 0x8D040002

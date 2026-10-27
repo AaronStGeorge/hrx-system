@@ -9,6 +9,7 @@
 #include "loom/analysis/condition_facts.h"
 #include "loom/codegen/low/lower/source_memory.h"
 #include "loom/ir/module.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/facts.h"
 #include "loom/target/arch/amdgpu/lower/address_realization.h"
 #include "loom/target/arch/amdgpu/lower/buffer_descriptor.h"
@@ -17,6 +18,7 @@
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/memory_packet.h"
 #include "loom/target/arch/amdgpu/lower/source_alloca_layout.h"
+#include "loom/target/arch/amdgpu/lower/source_integer_representation.h"
 #include "loom/target/arch/amdgpu/lower/source_value_analysis.h"
 
 #define LOOM_AMDGPU_MASK_RELATION_CAPACITY 8
@@ -224,6 +226,16 @@ static iree_status_t loom_amdgpu_memory_access_plan_select_from_context(
       loom_memory_access_cast(module, source_op);
   const loom_value_id_t mask = loom_memory_access_mask(source_access);
   loom_amdgpu_memory_access_selection_flags_t selection_flags = 0;
+  if (source_op->kind == LOOM_OP_VIEW_LOAD) {
+    const loom_value_id_t result = loom_op_const_results(source_op)[0];
+    if (loom_amdgpu_source_integer_representation_type_is_narrow(
+            loom_module_value_type(module, result)) &&
+        loom_amdgpu_source_integer_representation_lookup(context, result) !=
+            LOOM_AMDGPU_NARROW_INTEGER_REPRESENTATION_SIGN_EXTENDED) {
+      selection_flags |=
+          LOOM_AMDGPU_MEMORY_ACCESS_SELECTION_FLAG_UNSIGNED_NARROW;
+    }
+  }
   if (mask != LOOM_VALUE_ID_INVALID) {
     if (!loom_value_fact_table_query_uniform_element_origin(
             loom_low_lower_context_fact_table(context), module, mask,

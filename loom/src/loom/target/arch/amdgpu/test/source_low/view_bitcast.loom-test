@@ -18,7 +18,7 @@ low.func.def target<amdgpu.gfx11.generic.core> abi(hal_kernel) @packet_alias(%re
   %words = resource<hal_binding> {extent = 128, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %14 = v_mov_b32 0
   global_store_b8_saddr %14, %replacement, %words {offset = 81}
-  %byte = global_load_i8_saddr %14, %words {offset = 76}
+  %byte = global_load_u8_saddr %14, %words {offset = 76}
   %word = global_load_b32_saddr %14, %words {offset = 80}
   return %byte, %word
 }
@@ -52,6 +52,6 @@ low.func.def target<amdgpu.gfx11.generic.core> abi(hal_kernel) @selected_packet_
   %28, %29 = s_add_co_u32 %25, %packet_offset
   %30, %31 = s_addc_u32 %26, %27, %29
   %32 = concat(%28, %30) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %byte = global_load_i8_saddr %24, %32 {offset = 5}
+  %byte = global_load_u8_saddr %24, %32 {offset = 5}
   return %byte
 }

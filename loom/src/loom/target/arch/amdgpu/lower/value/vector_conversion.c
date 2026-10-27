@@ -19,6 +19,7 @@
 #include "loom/target/arch/amdgpu/lower/encoding/float_to_integer64.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/mask.h"
+#include "loom/target/arch/amdgpu/lower/source_integer_representation.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/lower/value/scalar_conversion.h"
 #include "loom/target/arch/amdgpu/target_info_defs.h"
@@ -65,11 +66,8 @@ static void loom_amdgpu_vector_extract_plan_from_accepted_op(
       case LOOM_AMDGPU_VECTOR_STORAGE_KIND_I1_MASK:
       case LOOM_AMDGPU_VECTOR_STORAGE_KIND_PACKED_16BIT_FLOAT:
       case LOOM_AMDGPU_VECTOR_STORAGE_KIND_PACKED_8BIT_FLOAT:
-        result_register_count = source_storage.element_register_count;
-        break;
       case LOOM_AMDGPU_VECTOR_STORAGE_KIND_PACKED_INTEGER:
         result_register_count = source_storage.element_register_count;
-        flags |= LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_SIGN_EXTEND;
         break;
       case LOOM_AMDGPU_VECTOR_STORAGE_KIND_NONE:
       default:
@@ -159,6 +157,21 @@ iree_status_t loom_amdgpu_select_vector_extract_plan(
   if (*out_selected) {
     loom_amdgpu_vector_extract_plan_from_accepted_op(
         loom_low_lower_context_module(context), source_op, out_plan);
+    const loom_type_t source_result_type = loom_module_value_type(
+        loom_low_lower_context_module(context), out_plan->result);
+    if (loom_amdgpu_source_integer_representation_type_is_narrow(
+            source_result_type)) {
+      const loom_low_representation_id_t representation =
+          loom_amdgpu_source_integer_representation_lookup(context,
+                                                           out_plan->result);
+      if (representation ==
+          LOOM_AMDGPU_NARROW_INTEGER_REPRESENTATION_SIGN_EXTENDED) {
+        out_plan->flags |= LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_SIGN_EXTEND;
+      } else if (representation ==
+                 LOOM_AMDGPU_NARROW_INTEGER_REPRESENTATION_ZERO_EXTENDED) {
+        out_plan->flags |= LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_ZERO_EXTEND;
+      }
+    }
     if (out_plan->dynamic_index == LOOM_VALUE_ID_INVALID) {
       loom_type_t result_type = loom_type_none();
       IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
@@ -179,7 +192,8 @@ iree_status_t loom_amdgpu_finalize_vector_extract_plan(
   const bool aliases_source =
       plan->lane_count == 1 &&
       !iree_any_bit_set(plan->flags,
-                        LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_SIGN_EXTEND);
+                        LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_SIGN_EXTEND |
+                            LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_ZERO_EXTEND);
   const uint16_t register_class =
       iree_any_bit_set(plan->flags, LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_MASK)
           ? LOOM_AMDGPU_REG_CLASS_ID_SGPR
@@ -1094,6 +1108,9 @@ static iree_status_t loom_amdgpu_extract_vector_register_unit(
         iree_any_bit_set(plan->flags,
                          LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_SIGN_EXTEND)
             ? LOOM_AMDGPU_BITFIELD_EXTRACT_MODE_SIGN_EXTEND
+        : iree_any_bit_set(plan->flags,
+                           LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_ZERO_EXTEND)
+            ? LOOM_AMDGPU_BITFIELD_EXTRACT_MODE_ZERO_EXTEND
             : LOOM_AMDGPU_BITFIELD_EXTRACT_MODE_RAW_SHIFTED;
     return loom_amdgpu_extract_packed_register_lane(
         context, source_op, low_source, plan, lane_offset, extract_mode,
@@ -1122,7 +1139,8 @@ static iree_status_t loom_amdgpu_lower_static_vector_extract(
       plan->result_register_count == plan->register_count &&
       loom_type_equal(source_type, result_type) &&
       !iree_any_bit_set(plan->flags,
-                        LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_SIGN_EXTEND)) {
+                        LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_SIGN_EXTEND |
+                            LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_ZERO_EXTEND)) {
     return loom_low_lower_bind_value(context, plan->result, low_source);
   }
 
@@ -1185,7 +1203,8 @@ static iree_status_t loom_amdgpu_lower_dynamic_vector_extract(
       loom_low_lower_lookup_value(context, plan->source);
   if (plan->lane_count == 1 &&
       !iree_any_bit_set(plan->flags,
-                        LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_SIGN_EXTEND)) {
+                        LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_SIGN_EXTEND |
+                            LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_ZERO_EXTEND)) {
     return loom_low_lower_bind_value(context, plan->result, low_source);
   }
   if (iree_any_bit_set(plan->flags, LOOM_AMDGPU_VECTOR_EXTRACT_FLAG_MASK)) {

@@ -187,7 +187,7 @@ func.def @global_load_i16_saddr(%input: buffer) -> (i16) {
 low.func.def target<amdgpu.gfx11.generic.core> abi(hal_kernel) @global_load_i16_saddr() -> (reg<amdgpu.vgpr>) asm {
   %input_view = resource<hal_binding> {extent = 2, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %8 = v_mov_b32 0
-  %loaded = global_load_i16_saddr %8, %input_view
+  %loaded = global_load_u16_saddr %8, %input_view
   return %loaded
 }
 
@@ -283,7 +283,7 @@ low.func.def target<amdgpu.gfx11.generic.core> abi(hal_kernel) @descriptor_load_
   %15 = s_mov_b32 2
   %16 = s_mov_b32 822173696
   %17 = concat(%14, %15, %16) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
-  %loaded = buffer_load_i16_off_zero %17
+  %loaded = buffer_load_u16_off_zero %17
   return %loaded
 }
 

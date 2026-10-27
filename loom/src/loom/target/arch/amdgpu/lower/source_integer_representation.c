@@ -10,6 +10,7 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/lower/bitpack.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
@@ -31,7 +32,7 @@ static bool loom_amdgpu_source_integer_representation_is_narrow(
 }
 
 static void loom_amdgpu_source_integer_representation_record_flexible(
-    loom_value_id_t value_id,
+    loom_value_id_t value_id, uint32_t normalization_cost,
     loom_low_lower_representation_recorder_t* recorder) {
   const loom_low_representation_candidate_t candidates[] = {
       {
@@ -40,12 +41,14 @@ static void loom_amdgpu_source_integer_representation_record_flexible(
       {
           .representation =
               LOOM_AMDGPU_NARROW_INTEGER_REPRESENTATION_SIGN_EXTENDED,
-          .cost = {.runtime = 1, .code_size = 1},
+          .cost = {.runtime = normalization_cost,
+                   .code_size = normalization_cost},
       },
       {
           .representation =
               LOOM_AMDGPU_NARROW_INTEGER_REPRESENTATION_ZERO_EXTENDED,
-          .cost = {.runtime = 1, .code_size = 1},
+          .cost = {.runtime = normalization_cost,
+                   .code_size = normalization_cost},
       },
   };
   loom_low_lower_representation_record_candidates(
@@ -180,8 +183,17 @@ void loom_amdgpu_source_integer_representation_observe_boundary(
       }
       if (action ==
           LOOM_AMDGPU_SOURCE_INTEGER_REPRESENTATION_ACTION_FLEXIBLE_RESULT) {
-        loom_amdgpu_source_integer_representation_record_flexible(result,
-                                                                  recorder);
+        // Extraction and loads can incorporate sign/zero extension in their
+        // native instruction. Prefer that form when consumers need it instead
+        // of charging for a second normalization after a raw producer. Raw-only
+        // consumers retain the first candidate, including zero-offset aliases.
+        const uint32_t normalization_cost =
+            source_op->kind == LOOM_OP_VECTOR_EXTRACT ||
+                    source_op->kind == LOOM_OP_VIEW_LOAD
+                ? 0u
+                : 1u;
+        loom_amdgpu_source_integer_representation_record_flexible(
+            result, normalization_cost, recorder);
       } else {
         loom_amdgpu_source_integer_representation_record_guarantees(
             result,

@@ -75,8 +75,8 @@ low.func.def target<amdgpu.rdna3_5.core> abi(hal_kernel) @observe_byte() asm {
   %source = resource<hal_binding> {extent = 1, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %destination = resource<hal_binding> {extent = 2, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %9 = v_mov_b32 0
-  %first = global_load_i8_saddr<volatile> %9, %source
-  %second = global_load_i8_saddr<volatile> %9, %source
+  %first = global_load_u8_saddr<volatile> %9, %source
+  %second = global_load_u8_saddr<volatile> %9, %source
   global_store_b8_saddr<volatile> %9, %first, %destination
   global_store_b8_saddr<volatile> %9, %second, %destination {offset = 1}
   return

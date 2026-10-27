@@ -664,7 +664,7 @@ static bool loom_amdgpu_memory_access_selects_low16_float_descriptor(
   return !loom_value_has_no_uses(result_value);
 }
 
-static bool loom_amdgpu_memory_access_selects_signed_i8_descriptor(
+static bool loom_amdgpu_memory_access_selects_i8_descriptor(
     const loom_op_t* source_op, loom_low_source_memory_operation_kind_t kind,
     loom_type_t vector_type) {
   return kind == LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD &&
@@ -673,7 +673,7 @@ static bool loom_amdgpu_memory_access_selects_signed_i8_descriptor(
                                               1) == 1;
 }
 
-static bool loom_amdgpu_memory_access_selects_signed_i16_descriptor(
+static bool loom_amdgpu_memory_access_selects_i16_descriptor(
     const loom_op_t* source_op, loom_low_source_memory_operation_kind_t kind,
     loom_type_t vector_type) {
   return kind == LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD &&
@@ -942,13 +942,17 @@ bool loom_amdgpu_memory_access_plan_select(
           module, source_op, kind, vector_type)) {
     access.payload_format = LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_LOW_16BIT_FLOAT;
   }
-  if (loom_amdgpu_memory_access_selects_signed_i8_descriptor(source_op, kind,
-                                                             vector_type)) {
+  const bool signed_narrow = !iree_any_bit_set(
+      selection_flags,
+      LOOM_AMDGPU_MEMORY_ACCESS_SELECTION_FLAG_UNSIGNED_NARROW);
+  if (loom_amdgpu_memory_access_selects_i8_descriptor(source_op, kind,
+                                                      vector_type)) {
     access.payload_format =
-        LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_8BIT_INTEGER;
+        signed_narrow ? LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_8BIT_INTEGER
+                      : LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_UNSIGNED_8BIT_INTEGER;
   }
-  if (loom_amdgpu_memory_access_selects_signed_i16_descriptor(source_op, kind,
-                                                              vector_type)) {
+  if (signed_narrow && loom_amdgpu_memory_access_selects_i16_descriptor(
+                           source_op, kind, vector_type)) {
     access.payload_format =
         LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER;
   }

@@ -324,6 +324,7 @@ loom_cc_library(
     loom::transforms::cleanup::canonicalizer
     loom::transforms::cleanup::pass_environment
     loom::util::fact_table
+    loom::util::predicate_facts
     loom::util::walk
   PUBLIC
 )
