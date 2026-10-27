@@ -1789,7 +1789,8 @@ static void iree_async_proactor_iocp_complete_file_io(
                           &bytes_transferred, FALSE);
   if (!overlapped_ok) {
     DWORD error = GetLastError();
-    if (error == ERROR_HANDLE_EOF) {
+    if (error == ERROR_HANDLE_EOF &&
+        operation->type == IREE_ASYNC_OPERATION_TYPE_FILE_READ) {
       // Reading at or past EOF: not an error, just 0 bytes transferred.
       // Matches POSIX read() returning 0 at EOF.
       bytes_transferred = 0;

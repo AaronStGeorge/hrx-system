@@ -428,6 +428,13 @@ iree_status_t iree_async_proactor_iocp_acquire_carrier(
 void iree_async_proactor_iocp_release_carrier(
     iree_async_proactor_iocp_t* proactor, iree_async_iocp_carrier_t* carrier);
 
+// Processes ReadFile/WriteFile's immediate result after accepted submission.
+// SUCCESS and IO_PENDING retain the carrier for its native completion packet;
+// other results publish exactly one synthetic completion on the poll owner.
+void iree_async_proactor_iocp_finish_file_issue(
+    iree_async_proactor_iocp_t* proactor, iree_async_iocp_carrier_t* carrier,
+    uint32_t error_code);
+
 // Returns accepted operation resources and dispatches its callback on the
 // poll owner. The callback may destroy the operation.
 void iree_async_proactor_iocp_dispatch_completion(

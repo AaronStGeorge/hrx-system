@@ -159,6 +159,74 @@ class IocpProactorTest : public ::testing::Test {
   iree_async_proactor_t* proactor_ = nullptr;
 };
 
+struct FileIssueResultCase {
+  // Native read or write whose admission returned this result.
+  iree_async_operation_type_t type;
+  // GetLastError result from an immediately completed native call.
+  uint32_t error_code;
+  // Public result of the one terminal completion.
+  iree_status_code_t expected_status;
+};
+
+class IocpFileIssueResultTest
+    : public IocpProactorTest,
+      public ::testing::WithParamInterface<FileIssueResultCase> {};
+
+TEST_P(IocpFileIssueResultTest, ImmediateResultReturnsCarrierExactlyOnce) {
+  const auto test_case = GetParam();
+  CompletionState completion;
+  iree_async_file_read_operation_t read;
+  iree_async_file_write_operation_t write;
+  InitializeOperation(&read, IREE_ASYNC_OPERATION_TYPE_FILE_READ, &completion);
+  InitializeOperation(&write, IREE_ASYNC_OPERATION_TYPE_FILE_WRITE,
+                      &completion);
+  iree_async_operation_t* operation =
+      test_case.type == IREE_ASYNC_OPERATION_TYPE_FILE_READ ? &read.base
+                                                            : &write.base;
+  // The native dependency returned without retaining an I/O borrow. Inject
+  // that result at the real admission boundary using its reserved carrier.
+  iree_async_iocp_carrier_t* carrier = nullptr;
+  IREE_ASSERT_OK(iree_async_proactor_iocp_acquire_carrier(
+      iocp(), IREE_ASYNC_IOCP_CARRIER_FILE_IO, operation, 0, &carrier));
+  operation->next = reinterpret_cast<iree_async_operation_t*>(carrier);
+  iree_async_proactor_iocp_finish_file_issue(iocp(), carrier,
+                                             test_case.error_code);
+  EXPECT_EQ(completion.call_count, 0);
+  EXPECT_EQ(iree_atomic_load(&iocp()->outstanding_carrier_count,
+                             iree_memory_order_relaxed),
+            1);
+  while (completion.call_count == 0) {
+    IREE_ASSERT_OK(
+        iree_async_proactor_poll(proactor_, iree_infinite_timeout(), nullptr));
+  }
+  EXPECT_EQ(completion.call_count, 1);
+  EXPECT_EQ(completion.status_code, test_case.expected_status);
+  EXPECT_EQ(read.bytes_read, 0u);
+  EXPECT_EQ(write.bytes_written, 0u);
+  EXPECT_EQ(operation->next, nullptr);
+  EXPECT_EQ(iree_atomic_load(&iocp()->outstanding_carrier_count,
+                             iree_memory_order_relaxed),
+            0);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_DEADLINE_EXCEEDED,
+      iree_async_proactor_poll(proactor_, iree_immediate_timeout(), nullptr));
+  EXPECT_EQ(completion.call_count, 1);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    NativeResults, IocpFileIssueResultTest,
+    ::testing::Values(
+        FileIssueResultCase{IREE_ASYNC_OPERATION_TYPE_FILE_READ,
+                            ERROR_HANDLE_EOF, IREE_STATUS_OK},
+        FileIssueResultCase{IREE_ASYNC_OPERATION_TYPE_FILE_READ,
+                            ERROR_ACCESS_DENIED, IREE_STATUS_PERMISSION_DENIED},
+        FileIssueResultCase{IREE_ASYNC_OPERATION_TYPE_FILE_READ,
+                            ERROR_OPERATION_ABORTED, IREE_STATUS_CANCELLED},
+        FileIssueResultCase{IREE_ASYNC_OPERATION_TYPE_FILE_WRITE,
+                            ERROR_ACCESS_DENIED, IREE_STATUS_PERMISSION_DENIED},
+        FileIssueResultCase{IREE_ASYNC_OPERATION_TYPE_FILE_WRITE,
+                            ERROR_HANDLE_EOF, IREE_STATUS_RESOURCE_EXHAUSTED}));
+
 TEST_F(IocpProactorTest, DirectPostFailureCompletesAcceptedSignal) {
   iree_async_notification_t* notification = nullptr;
   IREE_ASSERT_OK(iree_async_notification_create(

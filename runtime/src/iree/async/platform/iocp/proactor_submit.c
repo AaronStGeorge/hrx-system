@@ -659,6 +659,27 @@ static void iree_async_proactor_iocp_commit_message(
 // File I/O submit handlers
 //===----------------------------------------------------------------------===//
 
+void iree_async_proactor_iocp_finish_file_issue(
+    iree_async_proactor_iocp_t* proactor, iree_async_iocp_carrier_t* carrier,
+    uint32_t error_code) {
+  if (error_code == ERROR_SUCCESS || error_code == ERROR_IO_PENDING) {
+    // Immediate success also produces an IOCP packet. Only that packet returns
+    // ownership, just as for a request that reports IO_PENDING.
+    return;
+  }
+  const bool read =
+      carrier->operation->type == IREE_ASYNC_OPERATION_TYPE_FILE_READ;
+  if (read && error_code == ERROR_HANDLE_EOF) {
+    // EOF has the same successful zero-byte result whether ReadFile reports it
+    // immediately or GetOverlappedResult reports it from a completion packet.
+    iree_async_proactor_iocp_post_direct_completion(proactor, carrier,
+                                                    iree_ok_status());
+  } else {
+    iree_async_proactor_iocp_post_win32_error(proactor, carrier, error_code,
+                                              read ? "ReadFile" : "WriteFile");
+  }
+}
+
 static void iree_async_proactor_iocp_commit_file_open(
     iree_async_proactor_iocp_t* proactor,
     iree_async_file_open_operation_t* open_op,
@@ -768,14 +789,8 @@ static void iree_async_proactor_iocp_commit_file_read(
 
   BOOL read_ok = ReadFile(file_handle, buffer_ptr, buffer_length, NULL,
                           &carrier->overlapped);
-  if (!read_ok) {
-    DWORD error = GetLastError();
-    if (error != ERROR_IO_PENDING) {
-      iree_async_proactor_iocp_post_win32_error(proactor, carrier, error,
-                                                "ReadFile");
-      return;
-    }
-  }
+  DWORD error = read_ok ? ERROR_SUCCESS : GetLastError();
+  iree_async_proactor_iocp_finish_file_issue(proactor, carrier, error);
 }
 
 static void iree_async_proactor_iocp_commit_file_write(
@@ -800,14 +815,8 @@ static void iree_async_proactor_iocp_commit_file_write(
 
   BOOL write_ok = WriteFile(file_handle, buffer_ptr, buffer_length, NULL,
                             &carrier->overlapped);
-  if (!write_ok) {
-    DWORD error = GetLastError();
-    if (error != ERROR_IO_PENDING) {
-      iree_async_proactor_iocp_post_win32_error(proactor, carrier, error,
-                                                "WriteFile");
-      return;
-    }
-  }
+  DWORD error = write_ok ? ERROR_SUCCESS : GetLastError();
+  iree_async_proactor_iocp_finish_file_issue(proactor, carrier, error);
 }
 
 static void iree_async_proactor_iocp_commit_file_close(
