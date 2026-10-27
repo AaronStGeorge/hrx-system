@@ -23,6 +23,11 @@ without per-zone or allocation callstacks. The same provider option works with
 other runtime tools and tests. Build the exact executable target after source
 changes before running it; building a test does not refresh a sibling tool.
 
+Tracy uses the hardware timer when supported and falls back to an OS timer on
+hosts that do not expose invariant TSC, including some virtual machines. The
+portable timer has lower resolution but allows the same instrumented binary to
+run without disabling Tracy's clock checks.
+
 CMake exposes the equivalent configuration on hosts using the CMake workflow:
 
 ```sh

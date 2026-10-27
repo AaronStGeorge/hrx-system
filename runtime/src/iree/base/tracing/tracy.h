@@ -38,6 +38,10 @@
 #define TRACY_NO_VERIFY 1
 #endif  // NDEBUG
 
+// Virtualized hosts may not expose invariant TSC. Keep the hardware timer when
+// available and use Tracy's OS timer otherwise instead of aborting at startup.
+#define TRACY_TIMER_FALLBACK 1
+
 // Force callstack capture on all zones (even those without the C suffix).
 #if (IREE_TRACING_FEATURES &                             \
      IREE_TRACING_FEATURE_INSTRUMENTATION_CALLSTACKS) || \
@@ -473,10 +477,9 @@ static inline void iree_tracing_context_message_literal(
 static inline void iree_tracing_context_message_dynamic(
     iree_tracing_context_t* context, uint64_t timestamp, const char* value,
     iree_host_size_t value_length) {}
-static void iree_tracing_context_plot_config(iree_tracing_context_t* context,
-                                             const char* name_literal,
-                                             uint8_t type, bool step, bool fill,
-                                             uint32_t color) {}
+static inline void iree_tracing_context_plot_config(
+    iree_tracing_context_t* context, const char* name_literal, uint8_t type,
+    bool step, bool fill, uint32_t color) {}
 static inline void iree_tracing_context_plot_value_i64(
     iree_tracing_context_t* context, uint64_t timestamp, const char* plot_name,
     int64_t value) {}
