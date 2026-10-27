@@ -406,23 +406,10 @@ static iree_status_t loom_bytecode_attribute_impl_decode_at_depth(
       *out_attr = loom_attr_signed_enum_set(words, set.word_count);
       return iree_ok_status();
     }
-    case LOOM_BYTECODE_ATTR_BYTES: {
-      const uint64_t length_offset =
-          loom_bytecode_reader_cursor_absolute_position(cursor);
-      uint64_t byte_length = 0;
-      IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(
-          materializer->decoder, cursor, &byte_length));
-      if (byte_length > UINT32_MAX || byte_length > IREE_HOST_SIZE_MAX) {
-        return loom_bytecode_reader_emit_count_exceeds(
-            materializer->decoder, IREE_SV("bytes_attribute"), byte_length,
-            UINT32_MAX, length_offset);
-      }
-      iree_const_byte_span_t span = iree_const_byte_span_empty();
-      IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_span(
-          materializer->decoder, cursor, byte_length, &span));
-      *out_attr = loom_attr_bytes(span.data, (uint32_t)span.data_length);
-      return iree_ok_status();
-    }
+    case LOOM_BYTECODE_ATTR_BYTES:
+    case LOOM_BYTECODE_ATTR_UTF8:
+      return loom_bytecode_attribute_read_bytes(materializer->decoder, cursor,
+                                                kind, out_attr);
     case LOOM_BYTECODE_ATTR_SYMBOL: {
       const uint64_t name_offset =
           loom_bytecode_reader_cursor_absolute_position(cursor);

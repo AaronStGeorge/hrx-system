@@ -9,7 +9,7 @@ from typing import Any
 
 from loom.builder import TiedResultSpec, ValueRef
 from loom.builders import DialectBuilder
-from loom.ir import Predicate, Type
+from loom.ir import Predicate, Type, Utf8Attr
 
 class GlobalBuilder(DialectBuilder):
     def constant(
@@ -44,7 +44,7 @@ class GlobalBuilder(DialectBuilder):
         symbol: str,
         alignment: int | None = ...,
         bank_conflicts: Sequence[str] | None = ...,
-        contents: Any,
+        contents: bytes | Utf8Attr,
         location_id: int | None = ...,
     ) -> None: ...
     def load(

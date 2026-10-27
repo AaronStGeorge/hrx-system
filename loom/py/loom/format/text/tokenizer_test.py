@@ -42,6 +42,12 @@ def _texts(source: str) -> list[str]:
     return [t.text for t in _tokens(source)]
 
 
+@pytest.mark.parametrize("codepoint", [0xD800, 0xDFFF])
+def test_raw_surrogate_is_rejected_in_strings(codepoint: int) -> None:
+    with pytest.raises(ParseError, match="surrogate"):
+        _tokens('"' + chr(codepoint) + '"')
+
+
 # ============================================================================
 # Individual token types
 # ============================================================================

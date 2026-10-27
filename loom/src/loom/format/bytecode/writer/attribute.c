@@ -218,8 +218,9 @@ static iree_status_t loom_bytecode_write_attr_value_at_depth(
     }
     case LOOM_ATTR_BYTES: {
       iree_const_byte_span_t bytes = loom_attr_as_bytes(attr);
-      IREE_RETURN_IF_ERROR(
-          loom_bytecode_page_writer_write_u8(writer, LOOM_BYTECODE_ATTR_BYTES));
+      IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(
+          writer, loom_attr_is_utf8(attr) ? LOOM_BYTECODE_ATTR_UTF8
+                                          : LOOM_BYTECODE_ATTR_BYTES));
       IREE_RETURN_IF_ERROR(
           loom_bytecode_page_writer_write_uvarint(writer, bytes.data_length));
       IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write(writer, bytes.data,
@@ -597,8 +598,9 @@ static iree_status_t loom_bytecode_emit_attr_value_at_depth(
     }
     case LOOM_ATTR_BYTES: {
       iree_const_byte_span_t bytes = loom_attr_as_bytes(attr);
-      IREE_RETURN_IF_ERROR(
-          loom_bytecode_emit_u8(builder, LOOM_BYTECODE_ATTR_BYTES));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(
+          builder, loom_attr_is_utf8(attr) ? LOOM_BYTECODE_ATTR_UTF8
+                                           : LOOM_BYTECODE_ATTR_BYTES));
       IREE_RETURN_IF_ERROR(
           loom_bytecode_emit_uvarint(builder, bytes.data_length));
       if (bytes.data_length > 0) {

@@ -667,6 +667,12 @@ class Tokenizer:
                     SourceLocation(self._line, self._column, self._position),
                     self._filename,
                 )
+            if 0xD800 <= ord(character) <= 0xDFFF:
+                raise ParseError(
+                    "surrogate is not a Unicode scalar value",
+                    SourceLocation(self._line, self._column, self._position),
+                    self._filename,
+                )
             if decoded_chunks is not None:
                 decoded_chunks.append(character)
             self._advance()

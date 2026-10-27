@@ -17,7 +17,8 @@ from pathlib import Path
 from loom.builder import IRBuilder
 from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.cfg import ALL_CFG_OPS
-from loom.dialect.func import ALL_FUNC_OPS
+from loom.dialect.func import ALL_FUNC_OPS, ALL_FUNC_PARAMETERIZED_ATTRS
+from loom.dialect.globals import ALL_GLOBAL_OPS
 from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.low import ALL_LOW_OPS
 from loom.dialect.scf import ALL_SCF_OPS
@@ -58,6 +59,7 @@ from loom.ir import (
     SymbolNameArray,
     SymbolNameSet,
     TypeKind,
+    Utf8Attr,
 )
 from loom.verify import verify_module
 
@@ -169,7 +171,10 @@ def _roundtrip_through_c(loom_format: Path, source: Module | str) -> Module:
         )
         return read_module(
             c_bytecode_path.read_bytes(),
-            parameterized_attrs=ALL_TEST_PARAMETERIZED_ATTRS,
+            parameterized_attrs=(
+                *ALL_TEST_PARAMETERIZED_ATTRS,
+                *ALL_FUNC_PARAMETERIZED_ATTRS,
+            ),
             type_defs=ALL_TEST_TYPES,
         )
 
@@ -794,13 +799,59 @@ def _test_shared_projected_graph(loom_format: Path, loom_link: Path) -> None:
     assert printer.print_module(parser.parse(text, verify=True)) == canonical
 
 
+def _test_byte_attribute_interop(
+    loom_format: Path, loom_link: Path, fixture: Path
+) -> None:
+    parser = Parser()
+    printer = Printer()
+    for operations in (ALL_TEST_OPS, ALL_GLOBAL_OPS):
+        parser.register_ops(operations)
+        printer.register_ops(operations)
+    parser.register_parameterized_attrs(ALL_FUNC_PARAMETERIZED_ATTRS)
+    [source] = _fixture_sources(fixture)
+    module = parser.parse(source)
+    canonical = printer.print_module(module)
+    for candidate in (
+        _roundtrip_through_c(loom_format, source),
+        _roundtrip_through_c(loom_format, module),
+    ):
+        assert printer.print_module(candidate) == canonical
+        text, raw = (
+            operation.attributes["contents"] for operation in candidate.body.ops[:2]
+        )
+        assert text == Utf8Attr("advance")
+        assert raw == bytes(text) == b"advance"
+        assert text != raw
+
+    with tempfile.TemporaryDirectory(prefix="loom-byte-selected-") as directory:
+        source_path = Path(directory) / "source.loombc"
+        selected_path = Path(directory) / "selected.loombc"
+        source_path.write_bytes(write_module(module))
+        _run_loom_format(
+            [
+                loom_link,
+                source_path,
+                "--to=bc",
+                f"--output={selected_path}",
+                *(f"--root={symbol.name}" for symbol in module.symbols),
+            ]
+        )
+        selected = read_module(
+            selected_path.read_bytes(), parameterized_attrs=ALL_FUNC_PARAMETERIZED_ATTRS
+        )
+    assert printer.print_module(selected) == canonical
+
+
 def main() -> None:
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 6:
         raise ValueError(
-            "expected C loom-format, loom-link, predicate and scoped-type fixture paths"
+            "expected C loom-format, loom-link, predicate, scoped-type, and byte-attribute fixture paths"
         )
     _test_predicate_attribute_interop(
         Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+    )
+    _test_byte_attribute_interop(
+        Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[5])
     )
     _test_instance_flags_interop(Path(sys.argv[1]))
     _test_scoped_type_interop(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[4]))

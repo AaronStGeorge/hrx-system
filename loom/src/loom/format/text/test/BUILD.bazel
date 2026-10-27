@@ -14,13 +14,17 @@ package(
 )
 
 exports_files(
-    ["predicate_attributes.loom-test"],
+    [
+        "byte_attributes.loom-test",
+        "predicate_attributes.loom-test",
+    ],
     visibility = ["//loom/py/loom/format/bytecode:__pkg__"],
 )
 
 loom_check_test_suite(
     name = "test",
     srcs = [
+        "byte_attributes.loom-test",
         "encoding_aliases.loom-test",
         "error_recovery.loom-test",
         "instance_flags.loom-test",

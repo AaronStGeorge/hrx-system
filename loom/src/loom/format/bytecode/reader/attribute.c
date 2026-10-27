@@ -8,10 +8,40 @@
 
 #include <string.h>
 
+#include "iree/base/internal/unicode.h"
 #include "loom/error/error_catalog.h"
 #include "loom/format/bytecode/reader/type.h"
 #include "loom/ir/parameterized_type.h"
 #include "loom/ops/type_registry.h"
+
+iree_status_t loom_bytecode_attribute_read_bytes(
+    loom_bytecode_reader_decoder_t* decoder,
+    loom_bytecode_reader_cursor_t* cursor, loom_bytecode_attr_kind_t kind,
+    loom_attribute_t* out_attr) {
+  const uint64_t offset = loom_bytecode_reader_cursor_absolute_position(cursor);
+  uint64_t byte_length = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_reader_read_uvarint(decoder, cursor, &byte_length));
+  if (byte_length > UINT32_MAX || byte_length > IREE_HOST_SIZE_MAX) {
+    return loom_bytecode_reader_emit_count_exceeds(
+        decoder, IREE_SV("bytes_attribute"), byte_length, UINT32_MAX, offset);
+  }
+  iree_const_byte_span_t bytes = iree_const_byte_span_empty();
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_reader_read_span(decoder, cursor, byte_length, &bytes));
+  *out_attr = loom_attr_bytes(bytes.data, (uint32_t)bytes.data_length);
+  if (kind == LOOM_BYTECODE_ATTR_UTF8) {
+    if (!iree_unicode_utf8_validate(iree_make_string_view(
+            (const char*)bytes.data, bytes.data_length))) {
+      return loom_bytecode_reader_emit_invalid_field(
+          decoder, cursor->range_name, IREE_SV("attribute"), 0,
+          IREE_SV("utf8_data"), offset,
+          IREE_SV("attribute_payload_is_not_valid_utf_8"));
+    }
+    out_attr->flags = LOOM_ATTR_BYTES_UTF8;
+  }
+  return iree_ok_status();
+}
 
 iree_status_t loom_bytecode_skip_type_bindings(
     loom_bytecode_reader_decoder_t* decoder,
@@ -401,13 +431,11 @@ static iree_status_t loom_bytecode_attribute_validate_at_depth(
       return loom_bytecode_attribute_read_signed_enum_set(
           validator->decoder, cursor, descriptor, &set);
     }
-    case LOOM_BYTECODE_ATTR_BYTES: {
-      uint64_t byte_length = 0;
-      IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(
-          validator->decoder, cursor, &byte_length));
-      iree_const_byte_span_t unused = iree_const_byte_span_empty();
-      return loom_bytecode_reader_read_span(validator->decoder, cursor,
-                                            byte_length, &unused);
+    case LOOM_BYTECODE_ATTR_BYTES:
+    case LOOM_BYTECODE_ATTR_UTF8: {
+      loom_attribute_t unused;
+      return loom_bytecode_attribute_read_bytes(validator->decoder, cursor,
+                                                kind, &unused);
     }
     case LOOM_BYTECODE_ATTR_SYMBOL: {
       const uint64_t offset =

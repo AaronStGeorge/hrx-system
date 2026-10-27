@@ -291,7 +291,7 @@ static bool loom_attribute_equal_impl(const loom_attribute_t* a,
       return memcmp(a->predicate_list, b->predicate_list,
                     (iree_host_size_t)a->count * sizeof(loom_predicate_t)) == 0;
     case LOOM_ATTR_BYTES:
-      if (a->reserved_1 != b->reserved_1) {
+      if (a->flags != b->flags || a->reserved_1 != b->reserved_1) {
         return false;
       }
       if (a->reserved_1 == 0) {
@@ -421,6 +421,7 @@ static uint32_t loom_attribute_hash_impl(const loom_attribute_t* attr,
           (iree_host_size_t)attr->count * sizeof(loom_predicate_t));
       break;
     case LOOM_ATTR_BYTES:
+      hash = loom_structural_hash_mix_u8(hash, attr->flags);
       hash = loom_structural_hash_mix_u32(hash, attr->reserved_1);
       if (attr->reserved_1 != 0 && attr->bytes != NULL) {
         hash =

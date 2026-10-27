@@ -1914,6 +1914,7 @@ class ReaderTest : public ::testing::Test {
         break;
       }
       case 11:    // BYTES.
+      case 20:    // UTF8.
       case 13: {  // ENUM_ARRAY.
         uint64_t count = ReadUVarint(bytes, offset);
         *offset += count;

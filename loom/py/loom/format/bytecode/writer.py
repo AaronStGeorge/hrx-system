@@ -78,6 +78,7 @@ from loom.ir import (
     TaggedLocation,
     Type,
     TypeKind,
+    Utf8Attr,
     Value,
 )
 from loom.type_binding import binding_children, iter_value_bindings
@@ -164,6 +165,7 @@ ATTR_KIND_SIGNED_ENUM_SET = 16
 ATTR_KIND_SYMBOL_ARRAY = 17
 ATTR_KIND_SYMBOL_SET = 18
 ATTR_KIND_STRING_ARRAY = 19
+ATTR_KIND_UTF8 = 20
 
 # Type kind bytes. These must match loom_bytecode_type_kind_e, not just the
 # current Python enum spelling.
@@ -191,7 +193,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 42
+FORMAT_VERSION = 43
 PRODUCER = "loom-py"
 
 SYMBOL_INTERFACE_FLAG_MASK = (1 << 14) - 1
@@ -817,7 +819,7 @@ class BytecodeWriter:
         if isinstance(value, str):
             self._ctx.intern_string(value)
             return None
-        if isinstance(value, (int, float, bytes, bytearray)):
+        if isinstance(value, (int, float, bytes, bytearray, Utf8Attr)):
             return None
         return self._number_attr_children(value, attr_def, aggregate_nesting_depth)
 
@@ -1729,11 +1731,13 @@ class BytecodeWriter:
             else:
                 self._write_type_use(buf, value, value_numbers)
             return
-        if attr_type == "bytes":
-            if not isinstance(value, bytes | bytearray):
+        if attr_type == "bytes" or isinstance(value, bytes | bytearray | Utf8Attr):
+            if not isinstance(value, bytes | bytearray | Utf8Attr):
                 raise TypeError(f"bytes attribute value must be bytes, got {value!r}")
             data = bytes(value)
-            buf.write_u8(ATTR_KIND_BYTES)
+            buf.write_u8(
+                ATTR_KIND_UTF8 if isinstance(value, Utf8Attr) else ATTR_KIND_BYTES
+            )
             buf.write_varint(len(data))
             buf.write_bytes(data)
             return
@@ -1768,11 +1772,6 @@ class BytecodeWriter:
         elif isinstance(value, str):
             buf.write_u8(ATTR_KIND_STRING)
             buf.write_varint(self._ctx.strings[value])
-        elif isinstance(value, bytes | bytearray):
-            data = bytes(value)
-            buf.write_u8(ATTR_KIND_BYTES)
-            buf.write_varint(len(data))
-            buf.write_bytes(data)
         elif isinstance(value, EnumArrayAttr):
             raise ValueError("enum arrays require a descriptor-backed field")
         elif isinstance(value, SignedEnumSetAttr):

@@ -27,6 +27,7 @@ loom_cc_library(
     ::type_plan
     iree::base
     iree::base::internal::arena
+    iree::base::internal::unicode
     loom::error::error_defs
     loom::format::bytecode::format
     loom::ir

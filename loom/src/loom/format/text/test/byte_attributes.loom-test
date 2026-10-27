@@ -1,0 +1,17 @@
+global.rodata.def @text = utf8("advance")
+
+global.rodata.def @raw = bytes("616476616e6365")
+
+global.rodata.def @empty_text = utf8("")
+
+global.rodata.def @empty_bytes = bytes("")
+
+global.rodata.def @unicode = utf8("café 世界 🧵 �")
+
+global.rodata.def @escaped = utf8("quote: \" slash: \\ \b\f\n\r\t\u0000\u001F")
+
+global.rodata.def @binary = bytes("0080ff")
+
+test.record @metadata {nested = {raw = bytes("616476616e6365"), text = utf8("advance")}, string = "advance", text = utf8("advance")}
+
+test.record @location {location = #func.location.file<"policy.cxx", range = [1, 1, 1, 8], text = utf8("advance")>}

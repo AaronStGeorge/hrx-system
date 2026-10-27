@@ -731,7 +731,8 @@ static iree_status_t loom_tokenizer_scan_string_content(
       iree_host_size_t byte_position = t->position;
       uint32_t byte_column = t->column;
       uint32_t codepoint = loom_tokenizer_advance_utf8(t);
-      if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR) {
+      if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR &&
+          t->position == byte_position + 1) {
         loom_diagnostic_param_t params[] = {
             loom_param_u32((uint32_t)byte_position),
         };
@@ -1349,9 +1350,10 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
   if ((uint8_t)c >= 0x80) {
     iree_host_size_t saved_position = t->position;
     uint32_t saved_column = t->column;
-    uint32_t codepoint = iree_unicode_utf8_decode(t->source, &t->position);
-    t->position = saved_position;  // Don't consume — we're about to error.
-    if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR) {
+    iree_host_size_t decoded_position = saved_position;
+    uint32_t codepoint = iree_unicode_utf8_decode(t->source, &decoded_position);
+    if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR &&
+        decoded_position == saved_position + 1) {
       loom_diagnostic_param_t params[] = {
           loom_param_u32((uint32_t)saved_position),
       };
@@ -1363,8 +1365,6 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
       *out_token = loom_tokenizer_make_error_token(t);
       return iree_ok_status();
     }
-    iree_host_size_t decoded_position = saved_position;
-    (void)iree_unicode_utf8_decode(t->source, &decoded_position);
     t->position = decoded_position;
     t->column = saved_column + 1;
     IREE_RETURN_IF_ERROR(loom_tokenizer_set_error(
@@ -1537,7 +1537,8 @@ iree_status_t loom_tokenizer_scan_angle_interior(
       uint32_t byte_line = tokenizer->line;
       uint32_t byte_column = tokenizer->column;
       uint32_t codepoint = loom_tokenizer_advance_utf8(tokenizer);
-      if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR) {
+      if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR &&
+          tokenizer->position == byte_position + 1) {
         loom_diagnostic_param_t params[] = {
             loom_param_u32((uint32_t)byte_position),
         };

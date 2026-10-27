@@ -693,6 +693,22 @@ TEST_F(RemapTest, CopiesByteAttributePayloadAcrossModules) {
   EXPECT_EQ(memcmp(target_attr.bytes, source_bytes, sizeof(source_bytes)), 0);
 }
 
+TEST_F(RemapTest, CopiesUtf8FormIncludingEmptyPayloads) {
+  loom_ir_remap_t remap = InitializeRemap();
+  for (auto text : {IREE_SV(""), IREE_SV("a\0b\xEF\xBF\xBD")}) {
+    loom_attribute_t target_attr = {};
+    auto source_attr = loom_attr_utf8(text);
+    IREE_ASSERT_OK(loom_ir_remap_attribute(&remap, source_attr, &target_attr));
+    EXPECT_TRUE(loom_attr_is_utf8(target_attr));
+    EXPECT_TRUE(loom_attribute_equal(&source_attr, &target_attr));
+    if (text.size > 0) {
+      EXPECT_NE(target_attr.bytes, source_attr.bytes);
+    } else {
+      EXPECT_EQ(target_attr.bytes, nullptr);
+    }
+  }
+}
+
 TEST_F(RemapTest, RemapsCompactParameterizedAttributeSlotsByDescriptor) {
   loom_string_id_t source_label_id = LOOM_STRING_ID_INVALID;
   IREE_ASSERT_OK(

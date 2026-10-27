@@ -114,6 +114,7 @@ from loom.ir import (
     TiedResult,
     Type,
     TypeKind,
+    Utf8Attr,
     Value,
     rebuild_value_metadata,
     replace_canonical_attr_dict,
@@ -2275,14 +2276,8 @@ class BytecodeReader:
                         f"(encoding table has {len(self._encodings)} entries)"
                     )
                 return self._encodings[encoding_id - 1], offset
-            case 11:  # BYTES
-                byte_length, offset = decode_varint(data, offset)
-                end_offset = offset + byte_length
-                if end_offset > len(data):
-                    raise BytecodeError(
-                        f"bytes attr length {byte_length} exceeds payload size"
-                    )
-                return data[offset:end_offset], end_offset
+            case 11 | 20:  # BYTES / UTF8
+                return self._read_bytes_attr_value(data, offset, is_utf8=kind == 20)
             case 12:  # SCOPED_ENUM
                 string_id, offset = decode_varint(data, offset)
                 return self._strings[string_id], offset
@@ -2361,6 +2356,24 @@ class BytecodeReader:
                 return self._read_string_array_attr(data, offset, attr_def)
             case _:
                 raise BytecodeError(f"unknown attr value kind: {kind}")
+
+    @staticmethod
+    def _read_bytes_attr_value(
+        data: bytes, offset: int, *, is_utf8: bool
+    ) -> tuple[bytes | Utf8Attr, int]:
+        byte_length, offset = decode_varint(data, offset)
+        end_offset = offset + byte_length
+        if byte_length > 0xFFFFFFFF or end_offset > len(data):
+            raise BytecodeError(f"bytes attr length {byte_length} exceeds payload size")
+        payload = data[offset:end_offset]
+        if is_utf8:
+            try:
+                return Utf8Attr(payload.decode("utf-8")), end_offset
+            except UnicodeDecodeError as exc:
+                raise BytecodeError(
+                    "utf8 attribute payload is not valid UTF-8"
+                ) from exc
+        return payload, end_offset
 
     def _read_string_array_attr(
         self, data: bytes, offset: int, attr_def: Any | None

@@ -106,6 +106,7 @@ __all__ = [
     "ATTR_AGGREGATE_MAX_NESTING_DEPTH",
     "EnumArrayAttr",
     "StringArrayAttr",
+    "Utf8Attr",
     "SignedEnumSetAttr",
     "ParameterizedAttr",
     "ParameterizedAttrArray",
@@ -1488,6 +1489,8 @@ def _canonicalize_parameterized_value(
                 family_name, parameter.name, value
             )
         case kind if kind == ATTR_TYPE_BYTES:
+            if isinstance(value, Utf8Attr):
+                return value
             if not isinstance(value, bytes | bytearray | memoryview):
                 raise type_error("a byte payload")
             return bytes(value)
@@ -1542,6 +1545,24 @@ def _canonicalize_parameterized_string_array(
             f"of strings, got {value!r}"
         )
     return StringArrayAttr(values)
+
+
+@dataclass(frozen=True, slots=True)
+class Utf8Attr:
+    """Explicit UTF-8 byte payload, distinct from interned strings and raw bytes.
+
+    Embedded NUL is permitted. Encoding adds no terminator or normalization.
+    """
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, str):
+            raise TypeError("UTF-8 attribute requires a string")
+        self.value.encode("utf-8")
+
+    def __bytes__(self) -> bytes:
+        return self.value.encode("utf-8")
 
 
 @dataclass(frozen=True, slots=True, init=False)
