@@ -1320,8 +1320,19 @@ iree_status_t loom_x86_function_prepare(
                                LOOM_X86_INDIRECT_RESULT_POINTER_REGISTER));
   }
   loom_x86_function_normalize_arguments(frame, &builder);
-  loom_x86_function_incoming(frame, LOOM_LOW_ALLOCATION_LOCATION_STORAGE,
-                             LOOM_X86_INCOMING_REGISTER_GROUP_ALL, &builder);
+  if (builder.storage_alignment > 16) {
+    // R11 still carries the caller's pre-alignment RSP. Stored vector inputs
+    // borrow that base, while stored GPR inputs overwrite it with their value.
+    // Finish vector loads before reusing R11 as scalar transport scratch.
+    loom_x86_function_incoming(frame, LOOM_LOW_ALLOCATION_LOCATION_STORAGE,
+                               LOOM_X86_INCOMING_REGISTER_GROUP_VECTOR,
+                               &builder);
+    loom_x86_function_incoming(frame, LOOM_LOW_ALLOCATION_LOCATION_STORAGE,
+                               LOOM_X86_INCOMING_REGISTER_GROUP_GPR, &builder);
+  } else {
+    loom_x86_function_incoming(frame, LOOM_LOW_ALLOCATION_LOCATION_STORAGE,
+                               LOOM_X86_INCOMING_REGISTER_GROUP_ALL, &builder);
+  }
   iree_status_t status = loom_x86_function_moves(
       &frame->allocation, frame->allocation.entry_moves.moves, &builder);
   if (!builder.rejected && iree_status_is_ok(status)) {

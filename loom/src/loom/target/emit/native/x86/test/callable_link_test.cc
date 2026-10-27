@@ -116,6 +116,13 @@ extern "C" void call_vector_mix(uint64_t* output, I32x8 v0, uint64_t g0,
                                 I32x8 v3, uint64_t g3, I32x8 v4, uint64_t g4,
                                 I32x8 v5, uint64_t g5, I32x8 v6, uint64_t g6,
                                 I32x8 v7, I32x8 v8);
+extern "C" void stored_mixed_stack(uint64_t* output, uint64_t unused0,
+                                   uint64_t unused1, uint64_t unused2,
+                                   uint64_t unused3, uint64_t unused4,
+                                   uint64_t scalar, I32x8 vector0,
+                                   I32x8 vector1, I32x8 vector2, I32x8 vector3,
+                                   I32x8 vector4, I32x8 vector5, I32x8 vector6,
+                                   I32x8 vector7, I32x8 vector8);
 extern "C" void native_vector_mix(uint64_t* output, I32x8 v0, uint64_t g0,
                                   I32x8 v1, uint64_t g1, I32x8 v2, uint64_t g2,
                                   I32x8 v3, uint64_t g3, I32x8 v4, uint64_t g4,
@@ -881,6 +888,25 @@ TEST(NativeCallableTest, IndependentIntegerAndSseArgumentBanks) {
   for (uint64_t scalar : scalars) {
     EXPECT_EQ(output[output_index++], scalar);
   }
+}
+
+TEST(NativeCallableTest, StoredStackArgumentsRetainCallerBaseAcrossClasses) {
+  // Keep a wrongly selected scalar-as-address load inside valid memory so a
+  // base-register regression reports different payloads instead of crashing.
+  std::array<uint32_t, 24> other_payload;
+  other_payload.fill(0xdeadbeef);
+  const uint64_t scalar = reinterpret_cast<uintptr_t>(other_payload.data());
+  const I32x8 unused = {};
+  const I32x8 vector = {11, -23, 37, -41, 53, -67, 79, -83};
+  std::array<uint64_t, 5> output = {};
+  stored_mixed_stack(output.data(), 1, 2, 3, 4, 5, scalar, unused, unused,
+                     unused, unused, unused, unused, unused, unused, vector);
+  I32x8 actual;
+  std::memcpy(&actual, output.data(), sizeof(actual));
+  for (size_t lane = 0; lane < 8; ++lane) {
+    EXPECT_EQ(actual[lane], vector[lane]);
+  }
+  EXPECT_EQ(output[4], scalar);
 }
 
 TEST(NativeCallableTest, ScalarSseStackArgumentsAndReturns) {
