@@ -83,3 +83,18 @@ low.func.def target<amd.xdna.aie2p.core> @non_rodata_local_address() asm {
   %address = mov.local-address @code_symbol
   return
 }
+
+// ====
+// Final storage packing may place an otherwise valid address beyond the
+// signed addend carried by native local-address relocations.
+// RUN: emit aie2p-leaf @oversized_storage_address
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @oversized_storage_address() asm {
+  %prefix = storage {byte_alignment = 1, byte_length = 9223372036854775807} : low.storage<private>
+  %allocation = storage {byte_alignment = 2, byte_length = 1} : low.storage<private>
+  // ERROR@+1: XDNA/060 {function_name="oversized_storage_address", storage_space="private", byte_offset="9223372036854775808", maximum_byte_offset="9223372036854775807"}
+  %address = storage_address %allocation : low.storage<private> -> reg<aie2p.ep>
+  return
+}

@@ -139,15 +139,17 @@ iree_status_t loom_aie2p_leaf_compile(
   iree_status_t status = loom_aie2p_leaf_build_frame(
       module, function_op, options, &scratch_arena, &frame, &frame_accepted);
   loom_aie2p_leaf_program_plan_t program_plan = {0};
+  bool program_planned = false;
   if (iree_status_is_ok(status) && frame_accepted) {
     const loom_aie2p_bundle_plan_options_t plan_options = {
+        .diagnostic_emitter = options->diagnostic_emitter,
         .preserve_link_register = options->preserve_link_register,
         .link_shadow_register = options->link_shadow_register,
     };
     status = loom_aie2p_bundle_plan_build(&frame, &plan_options, &scratch_arena,
-                                          &program_plan);
+                                          &program_planned, &program_plan);
   }
-  if (iree_status_is_ok(status) && frame_accepted &&
+  if (iree_status_is_ok(status) && program_planned &&
       options->compile_report != NULL) {
     loom_target_compile_report_emission_breakdown_t emission_breakdown = {
         .body_instruction_count = program_plan.issue_cycle_count,
@@ -167,16 +169,16 @@ iree_status_t loom_aie2p_leaf_compile(
         options->compile_report, &emission_breakdown);
   }
   bool capacity_admitted = false;
-  if (iree_status_is_ok(status) && frame_accepted) {
+  if (iree_status_is_ok(status) && program_planned) {
     status = loom_aie2p_program_capacity_admit(
         module, function_op, program_plan.encoded_byte_length,
         options->diagnostic_emitter, &capacity_admitted);
   }
-  if (iree_status_is_ok(status) && frame_accepted && capacity_admitted) {
+  if (iree_status_is_ok(status) && program_planned && capacity_admitted) {
     status =
         loom_aie2p_leaf_object_emit(&program_plan, arena, out_contribution);
   }
-  if (iree_status_is_ok(status) && frame_accepted && capacity_admitted) {
+  if (iree_status_is_ok(status) && program_planned && capacity_admitted) {
     *out_compiled = true;
   }
   iree_arena_deinitialize(&scratch_arena);

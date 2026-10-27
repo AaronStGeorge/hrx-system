@@ -1371,14 +1371,21 @@ loom_cc_library(
     ::core_structure
     ::descriptor_encoding
     ::encoding
+    ::leaf_program
     iree::base
     iree::base::internal
     iree::base::internal::arena
+    loom::codegen::low::diagnostics
     loom::codegen::low::frame
     loom::codegen::low::loop_execution
     loom::codegen::low::packet
+    loom::codegen::low::storage_layout
+    loom::error::diagnostic
+    loom::error::emitter
     loom::ir
     loom::ops::low
+    loom::ops::type_builders
+    loom::target::arch::amd::xdna::error_defs
   PUBLIC
 )
 endif()
@@ -1420,7 +1427,6 @@ loom_cc_library(
     loom::codegen::low::frame
     loom::codegen::low::function_requirements
     loom::codegen::low::packet
-    loom::codegen::low::storage_layout
     loom::ops::low
   PUBLIC
 )

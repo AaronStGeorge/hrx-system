@@ -6,9 +6,7 @@
 
 #include "loom/target/arch/amd/xdna/aie2p/emit/bundle_encoding.h"
 
-#include "iree/base/internal/math.h"
 #include "loom/codegen/low/function_requirements.h"
-#include "loom/codegen/low/storage_layout.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/core_descriptors.h"
 
@@ -164,12 +162,11 @@ void loom_aie2p_bundle_encoding_encode_packet(
                                    operand_assignments, immediate_values);
 }
 
-iree_status_t loom_aie2p_bundle_encoding_encode_storage_address(
+void loom_aie2p_bundle_encoding_encode_storage_address(
     const loom_low_emission_frame_t* frame,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_packet_view_t* packet,
-    loom_aie2p_encoded_slot_t* out_encoded_slot,
-    loom_storage_space_t* out_storage_space, uint64_t* out_byte_offset) {
+    loom_aie2p_encoded_slot_t* out_encoded_slot) {
   const loom_low_schedule_node_t* node = packet->node;
   IREE_ASSERT(loom_low_storage_address_isa(node->op));
   IREE_ASSERT_EQ(node->result_count, 1u);
@@ -199,28 +196,6 @@ iree_status_t loom_aie2p_bundle_encoding_encode_storage_address(
   *out_encoded_slot = loom_aie2p_descriptor_encode(
       descriptor_set, AIE2P_CORE_DESCRIPTOR_REF_MATERIALIZE_LOCAL_ADDRESS_I32,
       operand_assignments, immediate_values);
-
-  const loom_low_storage_layout_t* layout =
-      &frame->schedule.requirements.storage_layout;
-  loom_low_storage_layout_reference_t reference;
-  loom_low_storage_layout_lookup_reference(
-      &layout->index, layout->records,
-      loom_low_storage_address_storage(node->op), &reference);
-  const int64_t operation_offset = loom_low_storage_address_offset(node->op);
-  IREE_ASSERT_GE(operation_offset, 0);
-  uint64_t byte_offset = 0;
-  if (!iree_checked_add_u64(reference.reservation.byte_offset,
-                            reference.byte_offset, &byte_offset) ||
-      !iree_checked_add_u64(byte_offset, (uint64_t)operation_offset,
-                            &byte_offset) ||
-      byte_offset > INT64_MAX) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AIE2P local-storage address exceeds native fixup range");
-  }
-  *out_storage_space = reference.reservation.space;
-  *out_byte_offset = byte_offset;
-  return iree_ok_status();
 }
 
 loom_aie2p_encoded_slot_t

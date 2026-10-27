@@ -94,17 +94,20 @@ TEST_F(LowFunctionRequirementsTest, CollectsStorageAcrossBlocks) {
 low.func.def target<test.low.core> @storage(%condition: reg<test.i32>) asm {
   %stack = storage {byte_length = 8, byte_alignment = 4} : low.storage<stack>
   %private = storage {byte_length = 12, byte_alignment = 8} : low.storage<private>
+  %stack_address = storage_address %stack : low.storage<stack> -> reg<test.ptr>
   low.cond_br %condition, ^left, ^right : reg<test.i32>
 ^left:
   %later = storage {byte_length = 16, byte_alignment = 16} : low.storage<stack>
+  %later_address = storage_address %later : low.storage<stack> -> reg<test.ptr>
   return
 ^right:
   return
 }
 )");
   const auto requirements = Analyze(module.get());
-  EXPECT_EQ(requirements.node_count, 6u);
+  EXPECT_EQ(requirements.node_count, 8u);
   EXPECT_EQ(requirements.return_count, 2u);
+  EXPECT_EQ(requirements.storage_address_count, 2u);
   const auto& layout = requirements.storage_layout;
   EXPECT_EQ(layout.space_sizes.stack_bytes, 32u);
   EXPECT_EQ(layout.space_sizes.private_bytes, 12u);
@@ -124,6 +127,7 @@ low.func.def target<test.low.core> @empty() asm {
   EXPECT_EQ(requirements.storage_layout.record_count, 0u);
   EXPECT_EQ(requirements.node_count, 1u);
   EXPECT_EQ(requirements.return_count, 1u);
+  EXPECT_EQ(requirements.storage_address_count, 0u);
 }
 
 TEST_F(LowFunctionRequirementsTest, ResidentControlFlowHasNoReturn) {

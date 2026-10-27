@@ -19,6 +19,8 @@ extern "C" {
 #endif
 
 typedef struct loom_aie2p_bundle_plan_options_t {
+  // Structured diagnostics for final-frame semantic rejection.
+  iree_diagnostic_emitter_t diagnostic_emitter;
   // Whether this entry program preserves its incoming link register across
   // direct helper calls.
   bool preserve_link_register;
@@ -26,7 +28,8 @@ typedef struct loom_aie2p_bundle_plan_options_t {
   loom_aie2p_physical_register_id_t link_shadow_register;
 } loom_aie2p_bundle_plan_options_t;
 
-// Plans physical bundles for one successful, spill-free AIE2P Low frame.
+// Plans physical bundles for one successful, spill-free AIE2P Low frame. A
+// diagnosed final-frame rejection returns OK with |out_planned| false.
 //
 // Blocks retain source order. Entry and selected native branch destinations
 // begin at 16-byte program addresses. Forward-only destinations share a
@@ -69,7 +72,8 @@ typedef struct loom_aie2p_bundle_plan_options_t {
 iree_status_t loom_aie2p_bundle_plan_build(
     const loom_low_emission_frame_t* frame,
     const loom_aie2p_bundle_plan_options_t* options,
-    iree_arena_allocator_t* arena, loom_aie2p_leaf_program_plan_t* out_plan);
+    iree_arena_allocator_t* arena, bool* out_planned,
+    loom_aie2p_leaf_program_plan_t* out_plan);
 
 #ifdef __cplusplus
 }  // extern "C"

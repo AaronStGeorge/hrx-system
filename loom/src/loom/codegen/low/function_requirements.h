@@ -62,7 +62,9 @@ typedef struct loom_low_function_requirements_t {
   // Number of operations in the immediate function body.
   iree_host_size_t node_count;
   // Number of Low returns that transfer control back to a caller.
-  iree_host_size_t return_count;
+  uint32_t return_count;
+  // Number of Low operations materializing function-local storage addresses.
+  uint32_t storage_address_count;
 } loom_low_function_requirements_t;
 
 // Returns the retained read-only data ordinal for |symbol|, or UINT32_MAX when

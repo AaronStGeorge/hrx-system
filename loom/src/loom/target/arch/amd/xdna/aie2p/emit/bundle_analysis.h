@@ -9,6 +9,7 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/frame.h"
+#include "loom/target/arch/amd/xdna/aie2p/emit/leaf_program.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,7 +84,11 @@ typedef struct loom_aie2p_bundle_plan_analysis_t {
   iree_host_size_t control_bundle_capacity;
   // Direct module-local calls requiring final symbol fixups.
   iree_host_size_t call_fixup_count;
-  // Structural local-storage addresses requiring placement fixups.
+  // Accepted local-storage address fixups in source packet order.
+  loom_aie2p_planned_storage_fixup_t* storage_fixups;
+  // Fixup index for each scheduled packet, or UINT32_MAX when absent.
+  uint32_t* storage_fixup_indices_by_packet;
+  // Number of accepted records in |storage_fixups|.
   iree_host_size_t storage_fixup_count;
   // Symbolic read-only data addresses requiring placement fixups.
   iree_host_size_t read_only_data_fixup_count;
@@ -91,10 +96,14 @@ typedef struct loom_aie2p_bundle_plan_analysis_t {
   iree_host_size_t hardware_loop_candidate_count;
 } loom_aie2p_bundle_plan_analysis_t;
 
-// Classifies the scheduled CFG and computes exact plan storage capacities.
+// Classifies the scheduled CFG, admits final-frame semantics, and computes
+// exact plan storage capacities. A diagnosed rejection returns OK with
+// |out_accepted| false and no plan may consume the partial analysis.
 iree_status_t loom_aie2p_bundle_plan_analyze(
-    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena,
-    loom_aie2p_bundle_plan_analysis_t* out_analysis);
+    const loom_low_emission_frame_t* frame,
+    iree_diagnostic_emitter_t diagnostic_emitter,
+    iree_arena_allocator_t* plan_arena, iree_arena_allocator_t* scratch_arena,
+    loom_aie2p_bundle_plan_analysis_t* out_analysis, bool* out_accepted);
 
 #ifdef __cplusplus
 }  // extern "C"
