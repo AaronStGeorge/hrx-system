@@ -33,6 +33,7 @@
 #include "loom/transforms/symbol/boundary_pruning.h"
 #include "loom/transforms/symbol/boundary_specialization.h"
 #include "loom/util/fact_table.h"
+#include "loom/util/predicate_facts.h"
 #include "loom/util/reference_transfer.h"
 #include "loom/util/walk.h"
 
@@ -798,7 +799,7 @@ static iree_status_t loom_refine_boundaries_materialize_exact_value(
     loom_module_t* module, const loom_value_fact_table_t* boundary_facts,
     loom_builder_t* builder, loom_value_id_t fact_value,
     loom_value_id_t old_value, loom_location_id_t location,
-    int64_t* materialized_count) {
+    loom_func_like_t predicate_owner, int64_t* materialized_count) {
   if (!loom_refine_boundaries_value_has_uses(module, old_value)) {
     return iree_ok_status();
   }
@@ -815,8 +816,22 @@ static iree_status_t loom_refine_boundaries_materialize_exact_value(
   loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_constant_build(builder, facts, type, location, &replacement));
+  // A body constant cannot replace a signature identity in a precondition.
+  // Body operands and dependent types still receive the exact value; surviving
+  // predicates retain the argument so ordinary pruning preserves its ABI slot.
+  uint8_t predicates_index = predicate_owner.op
+                                 ? predicate_owner.vtable->predicates_attr_index
+                                 : LOOM_ATTR_INDEX_NONE;
+  loom_attribute_t predicates = {0};
+  if (predicates_index != LOOM_ATTR_INDEX_NONE) {
+    predicates = loom_op_const_attrs(predicate_owner.op)[predicates_index];
+  }
   IREE_RETURN_IF_ERROR(
       loom_value_replace_all_uses_with(module, old_value, replacement));
+  if (predicates.kind == LOOM_ATTR_PREDICATE_LIST && predicates.count > 0) {
+    IREE_RETURN_IF_ERROR(loom_op_set_attr(module, predicate_owner.op,
+                                          predicates_index, predicates));
+  }
   *materialized_count += 1;
   return iree_ok_status();
 }
@@ -847,7 +862,7 @@ static iree_status_t loom_refine_boundaries_apply_op_boundary_values(
         apply->module, apply->replacements, results[i], apply->applied_count));
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_materialize_exact_value(
         apply->module, apply->boundary_facts, &builder, results[i], results[i],
-        op->location, apply->materialized_count));
+        op->location, (loom_func_like_t){0}, apply->materialized_count));
   }
   return iree_ok_status();
 }
@@ -913,10 +928,66 @@ static iree_status_t loom_refine_boundaries_apply_projected_argument_values(
         IREE_RETURN_IF_ERROR(loom_refine_boundaries_materialize_exact_value(
             module, boundary_facts, &entry_builder,
             function_info->argument_ids[i], loom_block_arg_id(entry_block, i),
-            function_info->function.op->location, materialized_count));
+            function_info->function.op->location, function_info->function,
+            materialized_count));
       }
     }
   }
+  return iree_ok_status();
+}
+
+static bool loom_refine_boundaries_predicate_is_constant_true(
+    const loom_value_fact_table_t* boundary_facts,
+    const loom_predicate_t* predicate) {
+  for (uint8_t i = 0; i < predicate->arg_count; ++i) {
+    if (predicate->arg_tags[i] == LOOM_PRED_ARG_VALUE &&
+        !loom_value_facts_is_exact(
+            loom_value_fact_table_lookup(boundary_facts, predicate->args[i]))) {
+      return false;
+    }
+  }
+  return loom_value_fact_table_evaluate_predicate(boundary_facts, predicate) ==
+         LOOM_DECISION_TRUTH_TRUE;
+}
+
+// Only caller-derived constants can discharge a private precondition. Dynamic
+// range/class facts still need their signature carrier after this pass's facts
+// expire. The callee's local facts assume the contract and cannot prove it.
+static iree_status_t loom_refine_boundaries_discharge_predicates(
+    loom_module_t* module, loom_func_like_t function,
+    const loom_value_fact_table_t* boundary_facts, bool* out_changed) {
+  *out_changed = false;
+  uint16_t count = 0;
+  const loom_predicate_t* predicates =
+      loom_func_like_predicates(function, &count);
+  uint16_t first_proven = 0;
+  while (first_proven < count &&
+         !loom_refine_boundaries_predicate_is_constant_true(
+             boundary_facts, &predicates[first_proven])) {
+    ++first_proven;
+  }
+  if (first_proven == count) {
+    return iree_ok_status();
+  }
+
+  loom_predicate_t* retained = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      &module->arena, count - 1, sizeof(*retained), (void**)&retained));
+  if (first_proven > 0) {
+    memcpy(retained, predicates, first_proven * sizeof(*retained));
+  }
+  uint16_t retained_count = first_proven;
+  for (uint16_t i = first_proven + 1; i < count; ++i) {
+    if (!loom_refine_boundaries_predicate_is_constant_true(boundary_facts,
+                                                           &predicates[i])) {
+      retained[retained_count++] = predicates[i];
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_op_set_attr(
+      module, function.op, function.vtable->predicates_attr_index,
+      retained_count ? loom_attr_predicate_list(retained, retained_count)
+                     : (loom_attribute_t){0}));
+  *out_changed = true;
   return iree_ok_status();
 }
 
@@ -1456,6 +1527,15 @@ static iree_status_t loom_refine_boundaries_run_function(
       loom_refine_boundaries_statistics(pass);
   int64_t replacements_applied = 0;
   int64_t constants_materialized = 0;
+  bool predicates_changed = false;
+  if (function_info->can_refine_boundary) {
+    IREE_RETURN_IF_ERROR(loom_refine_boundaries_discharge_predicates(
+        graph->module, function_info->function, seed_facts,
+        &predicates_changed));
+    if (predicates_changed) {
+      loom_pass_mark_changed(pass);
+    }
+  }
   loom_canonicalizer_options_t options = {
       .patterns = *canonicalizer_patterns,
       .refine_boundary = {loom_refine_boundaries_can_refine_boundary, graph},
@@ -1490,7 +1570,7 @@ static iree_status_t loom_refine_boundaries_run_function(
       *local_types_changed = true;
       loom_pass_mark_changed(pass);
     }
-    if (constants_materialized > 0) {
+    if (constants_materialized > 0 || predicates_changed) {
       ++statistics->functions_changed;
       statistics->boundary_constants_materialized += constants_materialized;
       loom_pass_mark_changed(pass);
@@ -1527,7 +1607,7 @@ static iree_status_t loom_refine_boundaries_run_function(
 
   ++statistics->functions_canonicalized;
   if (replacements_applied > 0 || constants_materialized > 0 ||
-      canonicalize_result.changed) {
+      predicates_changed || canonicalize_result.changed) {
     ++statistics->functions_changed;
   }
   if (replacements_applied > 0) {

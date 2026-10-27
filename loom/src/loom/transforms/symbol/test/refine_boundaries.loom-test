@@ -1,5 +1,139 @@
 // RUN: pass refine-boundaries
 
+// Exact caller facts discharge the contract before the argument is replaced
+// by a body constant. The constant is not a signature identity.
+func.def @store_count(%count: index, %output: buffer) where [range(%count, 1, 8), multiple_of(%count, 2)] {
+  %origin = index.constant 0 : offset
+  %view = buffer.view %output[%origin] : buffer -> view<1xi32>
+  %value = index.cast %count : index to i32
+  view.store %value, %view[0] : i32, view<1xi32>
+  func.return
+}
+
+func.def public @store_four(%output: buffer) {
+  %count = index.constant 4 : index
+  func.call @store_count(%count, %output) : (index, buffer)
+  func.return
+}
+
+// ----
+func.def @store_count(%output: buffer) {
+  %origin = index.constant 0 : offset
+  %view = buffer.view %output[%origin] : buffer -> view<1xi32>
+  %value = scalar.constant 4 : i32
+  view.store %value, %view[0] : i32, view<1xi32>
+  func.return
+}
+
+func.def public @store_four(%output: buffer) {
+  func.call @store_count(%output) : (buffer)
+  func.return
+}
+
+// ====
+
+// A partly known relation remains a boundary contract, while the body still
+// specializes its exact floating-point operand. Finite is independently proven
+// by the caller; equality with its unknown input must not prove itself.
+func.def @add_equal(%left: f32, %right: f32) -> (f32) where [eq(%left, %right), finite(%left)] {
+  %sum = scalar.addf %left, %right : f32
+  func.return %sum : f32
+}
+
+func.def public @add_one_and_half(%value: f32) -> (f32) {
+  %left = scalar.constant 1.5 : f32
+  %sum = func.call @add_equal(%left, %value) : (f32, f32) -> (f32)
+  func.return %sum : f32
+}
+
+// ----
+func.def @add_equal(%left: f32, %right: f32) -> (f32) where [eq(%left, %right)] {
+  %8 = scalar.constant 1.5 : f32
+  %sum = scalar.addf %8, %right : f32
+  func.return %sum : f32
+}
+
+func.def public @add_one_and_half(%value: f32) -> (f32) {
+  %left = scalar.constant 1.5 : f32
+  %sum = func.call pure @add_equal(%left, %value) : (f32, f32) -> (f32)
+  func.return %sum : f32
+}
+
+// ====
+
+// Public contracts belong to external callers even when one internal caller
+// supplies a constant. No caller fact may erase or replace that precondition.
+func.def public @bounded_public(%value: index) -> (index) where [range(%value, 1, 8)] {
+  %scale = index.constant 2 : index
+  %result = index.mul %value, %scale : index
+  func.return %result : index
+}
+
+func.def public @call_public() -> (index) {
+  %known_value = index.constant 4 : index
+  %result = func.call @bounded_public(%known_value) : (index) -> (index)
+  func.return %result : index
+}
+
+// ----
+func.def public @bounded_public(%value: index) -> (index) where [range(%value, 1, 8)] {
+  %scale = index.constant 2 : index
+  %result = index.mul %value, %scale : index
+  func.return %result : index
+}
+
+func.def public @call_public() -> (index) {
+  %known_value = index.constant 4 : index
+  %result = func.call pure @bounded_public(%known_value) : (index) -> (index)
+  func.return %result : index
+}
+
+// ====
+
+// Caller-derived nonconstant facts are not a replacement for the callee's
+// durable contract. Later passes still need the range after analysis expires.
+func.def @consume_bounded(%value: index) where [range(%value, 1, 8)] {
+  test.use %value : index
+  func.return
+}
+
+func.def public @forward_bounded(%value: index) where [range(%value, 1, 8)] {
+  func.call @consume_bounded(%value) : (index)
+  func.return
+}
+
+// ====
+
+// RUN: pass refine-boundaries{mode=encodings}
+
+// Encoding-only refinement also materializes exact arguments, without a body
+// canonicalizer that could clean up a misplaced signature predicate later.
+func.def @consume_exact(%value: index) where [range(%value, 1, 8)] {
+  test.use %value : index
+  func.return
+}
+
+func.def public @forward_exact() {
+  %known_value = index.constant 4 : index
+  func.call @consume_exact(%known_value) : (index)
+  func.return
+}
+
+// ----
+func.def @consume_exact() {
+  %2 = index.constant 4 : index
+  test.use %2 : index
+  func.return
+}
+
+func.def public @forward_exact() {
+  %known_value = index.constant 4 : index
+  func.call @consume_exact() : ()
+  func.return
+}
+
+// ====
+
 // A private callee sees exact facts from all internal callers. Its simplified
 // return facts then seed call results, letting callers fold ordinary local code.
 func.def @private_extent_identity(%n: index) -> (index) {
