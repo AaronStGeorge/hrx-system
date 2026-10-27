@@ -47,6 +47,11 @@ build --incompatible_strict_action_env
 # Fail loudly if source files change during a build.
 build --guard_against_concurrent_changes
 
+# Build tools are optimized even in fastbuild and sanitizer configurations.
+# Reuse their PIC objects for both static and shared linkage instead of
+# compiling dependencies separately for each linkage mode.
+build --host_features=prefer_pic_for_opt_binaries
+
 # Preserve runfiles trees on Windows and Unix-like hosts.
 startup --windows_enable_symlinks
 build --enable_runfiles
