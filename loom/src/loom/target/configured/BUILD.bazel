@@ -182,7 +182,7 @@ _CONFIGURED_COMPILER_DEPS = (
     }) +
     iree_select({
         "//loom/config/emit:spirv_binary": [
-            "//loom/src/loom/target/arch/spirv:compiler_provider",
+            "//loom/src/loom/target/emit/spirv:binary_compiler_provider",
         ],
         "//conditions:default": [],
     }) +

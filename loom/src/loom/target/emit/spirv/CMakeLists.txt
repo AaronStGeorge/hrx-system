@@ -258,6 +258,22 @@ loom_cc_library(
 )
 endif()
 
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
+loom_cc_library(
+  NAME
+    binary_compiler_provider
+  HDRS
+    "binary_compiler_provider.h"
+  SRCS
+    "binary_compiler_provider.c"
+  DEPS
+    ::module_compiler
+    loom::target::arch::spirv::provider
+    loom::target::provider
+  PUBLIC
+)
+endif()
+
 if(LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_ARCH_SPIRV)
 loom_cc_test(
   NAME

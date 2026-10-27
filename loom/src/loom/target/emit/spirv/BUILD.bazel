@@ -22,11 +22,6 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_SPIRV_MODULE_COMPILER_VISIBILITY = [
-    "//loom/src/loom/target/arch/spirv:__pkg__",
-    "//loom/src/loom/tooling/target/spirv:__pkg__",
-]
-
 _SPIRV_COMPILE_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/emit:spirv_binary",
 ])
@@ -222,7 +217,6 @@ loom_cc_library(
     srcs = ["module_compiler.c"],
     hdrs = ["module_compiler.h"],
     target_compatible_with = _SPIRV_COMPILE_COMPATIBLE_WITH,
-    visibility = _SPIRV_MODULE_COMPILER_VISIBILITY,
     deps = [
         ":module_builder",
         ":module_emitter",
@@ -250,6 +244,21 @@ loom_cc_library(
         "//loom/src/loom/target/reporting:artifact_manifest_collect",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "binary_compiler_provider",
+    srcs = ["binary_compiler_provider.c"],
+    hdrs = ["binary_compiler_provider.h"],
+    visibility = [
+        "//loom/binding/c/target/spirv:__pkg__",
+        "//loom/src/loom/target/configured:__pkg__",
+    ],
+    deps = [
+        ":module_compiler",
+        "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/spirv:provider",
     ],
 )
 

@@ -39,7 +39,7 @@
 #include "loom/target/emit/native/amdgpu/hal_kernel_library.h"
 #endif  // LOOM_CONFIG_COMPILER_HAVE_AMDGPU
 #if LOOM_CONFIG_COMPILER_HAVE_SPIRV
-#include "loom/target/arch/spirv/compiler_provider.h"
+#include "loom/target/emit/spirv/binary_compiler_provider.h"
 #endif  // LOOM_CONFIG_COMPILER_HAVE_SPIRV
 #if LOOM_CONFIG_COMPILER_HAVE_VM
 #include "loom/target/emit/vm/module_compiler.h"
@@ -60,7 +60,7 @@ static const loom_target_provider_t* const kConfiguredEmitterProviders[] = {
     &loom_amdgpu_hal_kernel_library_provider,
 #endif  // LOOM_CONFIG_COMPILER_HAVE_AMDGPU
 #if LOOM_CONFIG_COMPILER_HAVE_SPIRV
-    &loom_spirv_compiler_provider,
+    &loom_spirv_binary_compiler_provider,
 #endif  // LOOM_CONFIG_COMPILER_HAVE_SPIRV
 #if LOOM_CONFIG_COMPILER_HAVE_VM
     &loom_vm_module_provider,
@@ -98,7 +98,7 @@ static iree_status_t loom_configured_compiler_provider_set_initialize(void) {
 #if LOOM_CONFIG_COMPILER_HAVE_SPIRV
   IREE_RETURN_IF_ERROR(loom_target_provider_set_storage_append_set(
       &configured_compiler_provider_storage,
-      &loom_spirv_compiler_provider_set));
+      &loom_spirv_binary_compiler_provider_set));
 #endif  // LOOM_CONFIG_COMPILER_HAVE_SPIRV
 #if LOOM_CONFIG_COMPILER_HAVE_VM
   IREE_RETURN_IF_ERROR(loom_target_provider_set_storage_append_set(

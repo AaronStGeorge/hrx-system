@@ -51,6 +51,7 @@ _SPIRV_RECORDS_VISIBILITY = ["//loom/src/loom/target/arch/spirv/records:__pkg__"
 
 _SPIRV_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/configured:__pkg__",
+    "//loom/src/loom/target/emit/spirv:__pkg__",
     "//loom/src/loom/tooling/target/spirv:__pkg__",
 ] + _SPIRV_C_API_VISIBILITY
 
@@ -244,22 +245,6 @@ loom_cc_library(
         "//loom/src/loom/target:facts_builder",
         "//loom/src/loom/target/arch/spirv/records:record_defs",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "compiler_provider",
-    srcs = ["compiler_provider.c"],
-    hdrs = ["compiler_provider.h"],
-    visibility = _SPIRV_C_API_VISIBILITY + [
-        "//loom/src/loom/target/configured:__pkg__",
-        "//loom/src/loom/tooling/target/spirv:__pkg__",
-    ],
-    deps = [
-        ":facts",
-        ":provider",
-        "//loom/src/loom/target:provider",
-        "//loom/src/loom/target/emit/spirv:module_compiler",
     ],
 )
 
