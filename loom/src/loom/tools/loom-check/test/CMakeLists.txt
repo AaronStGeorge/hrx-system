@@ -9,6 +9,30 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    pipeline_workers
+  HDRS
+    "pipeline_workers.h"
+  SRCS
+    "pipeline_workers.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::analysis::channel_plan
+    loom::analysis::pipeline_resources
+    loom::analysis::pipeline_workers
+    loom::analysis::source_storage_packing
+    loom::ir
+    loom::ops::channel
+    loom::ops::pipeline
+    loom::ops::type_registry
+    loom::tools::loom-check::execute
+    loom::util::fact_table
+  TESTONLY
+  PUBLIC
+)
+
 loom_check_test_suite(
   NAME
     core_test

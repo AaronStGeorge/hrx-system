@@ -12,6 +12,7 @@
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/test/config/providers.h"
 #include "loom/tools/loom-check/test/low/providers.h"
+#include "loom/tools/loom-check/test/pipeline_workers.h"
 
 static const loom_check_emit_provider_t* const kLoomCheckTestEmitProviders[] = {
     &loom_check_test_config_materialize_provider,
@@ -19,6 +20,7 @@ static const loom_check_emit_provider_t* const kLoomCheckTestEmitProviders[] = {
     &loom_check_test_low_allocation_provider,
     &loom_check_test_low_schedule_provider,
     &loom_check_test_low_synthetic_hazard_provider,
+    &loom_check_test_pipeline_workers_provider,
 };
 
 static bool loom_check_test_unavailable_requirement_matches(

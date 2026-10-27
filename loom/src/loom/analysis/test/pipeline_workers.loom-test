@@ -1,0 +1,457 @@
+// RUN: emit pipeline-workers @test
+
+// Two records remain distinct through nested fanout and loop-carried reads.
+// Two admissions per site feed three complete replays before final release.
+func.def @worker(%source: channel<tile<4xi32>>, %other: channel<tile<4xi32>>, %left: channel<tile<4xi32>>, %right: channel<tile<4xi32>>, %limit: index, %condition: i1) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  cfg.br ^panels(%c0: index)
+^panels(%panel: index):
+  %more_panels = index.cmp ult, %panel, %c2 : index
+  cfg.cond_br %more_panels, ^acquire, ^done
+^acquire:
+  %first, %first_view = channel.acquire %source : channel<tile<4xi32>> -> (read<tile<4xi32>>, view<4xi32>)
+  %second = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  cfg.br ^replays(%c0: index, %first: read<tile<4xi32>>, %second: read<tile<4xi32>>)
+^replays(%replay: index, %a: read<tile<4xi32>>, %b: read<tile<4xi32>>):
+  %more_replays = index.cmp ult, %replay, %c3 : index
+  cfg.cond_br %more_replays, ^copy, ^release
+^copy:
+  %a_keep, %a_copy = channel.fanout %a : read<tile<4xi32>> -> (read<tile<4xi32>>, read<tile<4xi32>>)
+  %a_left, %a_right = channel.fanout %a_copy : read<tile<4xi32>> -> (read<tile<4xi32>>, read<tile<4xi32>>)
+  %al, %al_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %a_left -> %al : read<tile<4xi32>>, write<tile<4xi32>>
+  %ar, %ar_view = channel.reserve %right : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %a_right -> %ar : read<tile<4xi32>>, write<tile<4xi32>>
+  %b_keep, %b_left, %b_right = channel.fanout %b : read<tile<4xi32>> -> (read<tile<4xi32>>, read<tile<4xi32>>, read<tile<4xi32>>)
+  %bl, %bl_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %b_left -> %bl : read<tile<4xi32>>, write<tile<4xi32>>
+  %br, %br_view = channel.reserve %right : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %b_right -> %br : read<tile<4xi32>>, write<tile<4xi32>>
+  %next_replay = index.add %replay, %c1 : index
+  cfg.br ^replays(%next_replay: index, %a_keep: read<tile<4xi32>>, %b_keep: read<tile<4xi32>>)
+^release:
+  channel.release %a : read<tile<4xi32>>
+  channel.release %b : read<tile<4xi32>>
+  %next_panel = index.add %panel, %c1 : index
+  cfg.br ^panels(%next_panel: index)
+^done:
+  func.return
+}
+
+pipeline.def @test(%pool: pool, %limit: index, %condition: i1) run() {
+  %c0 = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 32 : offset
+  %a = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %b = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %c = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %d = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %av = buffer.view %a[%c0] : buffer -> view<2x4xi32>
+  %bv = buffer.view %b[%c0] : buffer -> view<2x4xi32>
+  %cv = buffer.view %c[%c0] : buffer -> view<2x4xi32>
+  %dv = buffer.view %d[%c0] : buffer -> view<2x4xi32>
+  %source = channel.bind<fifo> %av, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %other = channel.bind<fifo> %bv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %left = channel.bind<fifo> %cv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %right = channel.bind<fifo> %dv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left, %right, %limit, %condition) : (channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, index, i1)
+  }
+}
+
+// ----
+execution=transport block_counts=exact streams=0
+batch 0: records=2 replays=3
+  record first from source: admissions=2 transfers=6 release=first
+    to left reservation=al copy=first -> al
+    to right reservation=ar copy=first -> ar
+  record second from source: admissions=2 transfers=6 release=second
+    to left reservation=bl copy=second -> bl
+    to right reservation=br copy=second -> br
+
+// ====
+
+// Copies consume one-shot records without requiring a separate final release.
+func.def @worker(%source: channel<tile<4xi32>>, %other: channel<tile<4xi32>>, %left: channel<tile<4xi32>>, %right: channel<tile<4xi32>>, %limit: index, %condition: i1) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %a = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  %b = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  %first, %first_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %a -> %first : read<tile<4xi32>>, write<tile<4xi32>>
+  %second, %second_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %b -> %second : read<tile<4xi32>>, write<tile<4xi32>>
+  func.return
+}
+
+pipeline.def @test(%pool: pool, %limit: index, %condition: i1) run() {
+  %c0 = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 32 : offset
+  %a = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %b = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %c = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %d = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %av = buffer.view %a[%c0] : buffer -> view<2x4xi32>
+  %bv = buffer.view %b[%c0] : buffer -> view<2x4xi32>
+  %cv = buffer.view %c[%c0] : buffer -> view<2x4xi32>
+  %dv = buffer.view %d[%c0] : buffer -> view<2x4xi32>
+  %source = channel.bind<fifo> %av, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %other = channel.bind<fifo> %bv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %left = channel.bind<fifo> %cv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %right = channel.bind<fifo> %dv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left, %right, %limit, %condition) : (channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, index, i1)
+  }
+}
+
+// ----
+execution=transport block_counts=exact streams=0
+batch 0: records=2 replays=1
+  record a from source: admissions=1 transfers=1 release=none
+    to left reservation=first copy=a -> first
+  record b from source: admissions=1 transfers=1 release=none
+    to left reservation=second copy=b -> second
+
+// ====
+
+// Equal payloads and destinations do not merge different source channels.
+func.def @worker(%source: channel<tile<4xi32>>, %other: channel<tile<4xi32>>, %left: channel<tile<4xi32>>, %right: channel<tile<4xi32>>, %limit: index, %condition: i1) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %a = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  %b = channel.accept %other : channel<tile<4xi32>> -> read<tile<4xi32>>
+  %first, %first_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %a -> %first : read<tile<4xi32>>, write<tile<4xi32>>
+  %second, %second_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %b -> %second : read<tile<4xi32>>, write<tile<4xi32>>
+  func.return
+}
+
+pipeline.def @test(%pool: pool, %limit: index, %condition: i1) run() {
+  %c0 = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 32 : offset
+  %a = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %b = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %c = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %d = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %av = buffer.view %a[%c0] : buffer -> view<2x4xi32>
+  %bv = buffer.view %b[%c0] : buffer -> view<2x4xi32>
+  %cv = buffer.view %c[%c0] : buffer -> view<2x4xi32>
+  %dv = buffer.view %d[%c0] : buffer -> view<2x4xi32>
+  %source = channel.bind<fifo> %av, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %other = channel.bind<fifo> %bv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %left = channel.bind<fifo> %cv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %right = channel.bind<fifo> %dv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left, %right, %limit, %condition) : (channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, index, i1)
+  }
+}
+
+// ----
+execution=transport block_counts=exact streams=0
+batch 0: records=1 replays=1
+  record a from source: admissions=1 transfers=1 release=none
+    to left reservation=first copy=a -> first
+batch 1: records=1 replays=1
+  record b from other: admissions=1 transfers=1 release=none
+    to left reservation=second copy=b -> second
+
+// ====
+
+// The same destinations in a different order require separate batches.
+func.def @worker(%source: channel<tile<4xi32>>, %other: channel<tile<4xi32>>, %left: channel<tile<4xi32>>, %right: channel<tile<4xi32>>, %limit: index, %condition: i1) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %a = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  %b = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  %al, %ar = channel.fanout %a : read<tile<4xi32>> -> (read<tile<4xi32>>, read<tile<4xi32>>)
+  %first_left, %first_left_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %al -> %first_left : read<tile<4xi32>>, write<tile<4xi32>>
+  %first_right, %first_right_view = channel.reserve %right : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %ar -> %first_right : read<tile<4xi32>>, write<tile<4xi32>>
+  %bl, %br = channel.fanout %b : read<tile<4xi32>> -> (read<tile<4xi32>>, read<tile<4xi32>>)
+  %second_right, %second_right_view = channel.reserve %right : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %br -> %second_right : read<tile<4xi32>>, write<tile<4xi32>>
+  %second_left, %second_left_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %bl -> %second_left : read<tile<4xi32>>, write<tile<4xi32>>
+  func.return
+}
+
+pipeline.def @test(%pool: pool, %limit: index, %condition: i1) run() {
+  %c0 = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 32 : offset
+  %a = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %b = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %c = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %d = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %av = buffer.view %a[%c0] : buffer -> view<2x4xi32>
+  %bv = buffer.view %b[%c0] : buffer -> view<2x4xi32>
+  %cv = buffer.view %c[%c0] : buffer -> view<2x4xi32>
+  %dv = buffer.view %d[%c0] : buffer -> view<2x4xi32>
+  %source = channel.bind<fifo> %av, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %other = channel.bind<fifo> %bv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %left = channel.bind<fifo> %cv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %right = channel.bind<fifo> %dv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left, %right, %limit, %condition) : (channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, index, i1)
+  }
+}
+
+// ----
+execution=transport block_counts=exact streams=0
+batch 0: records=1 replays=1
+  record a from source: admissions=1 transfers=1 release=none
+    to left reservation=first_left copy=a -> first_left
+    to right reservation=first_right copy=a -> first_right
+batch 1: records=1 replays=1
+  record b from source: admissions=1 transfers=1 release=none
+    to right reservation=second_right copy=b -> second_right
+    to left reservation=second_left copy=b -> second_left
+
+// ====
+
+// Copy order must match admission order for autonomous record-batch transport.
+func.def @worker(%source: channel<tile<4xi32>>, %other: channel<tile<4xi32>>, %left: channel<tile<4xi32>>, %right: channel<tile<4xi32>>, %limit: index, %condition: i1) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %a = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  %b = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  %first, %first_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %b -> %first : read<tile<4xi32>>, write<tile<4xi32>>
+  %second, %second_view = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %a -> %second : read<tile<4xi32>>, write<tile<4xi32>>
+  func.return
+}
+
+pipeline.def @test(%pool: pool, %limit: index, %condition: i1) run() {
+  %c0 = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 32 : offset
+  %a = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %b = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %c = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %d = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %av = buffer.view %a[%c0] : buffer -> view<2x4xi32>
+  %bv = buffer.view %b[%c0] : buffer -> view<2x4xi32>
+  %cv = buffer.view %c[%c0] : buffer -> view<2x4xi32>
+  %dv = buffer.view %d[%c0] : buffer -> view<2x4xi32>
+  %source = channel.bind<fifo> %av, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %other = channel.bind<fifo> %bv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %left = channel.bind<fifo> %cv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %right = channel.bind<fifo> %dv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left, %right, %limit, %condition) : (channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, index, i1)
+  }
+}
+
+// ----
+execution=worker block_counts=exact streams=0
+
+// ====
+
+// An unknown replay count cannot become a fixed transport repetition.
+func.def @worker(%source: channel<tile<4xi32>>, %other: channel<tile<4xi32>>, %left: channel<tile<4xi32>>, %right: channel<tile<4xi32>>, %limit: index, %condition: i1) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %initial = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  cfg.br ^header(%c0: index, %initial: read<tile<4xi32>>)
+^header(%i: index, %read: read<tile<4xi32>>):
+  %more = index.cmp ult, %i, %limit : index
+  cfg.cond_br %more, ^copy, ^done
+^copy:
+  %keep, %outgoing = channel.fanout %read : read<tile<4xi32>> -> (read<tile<4xi32>>, read<tile<4xi32>>)
+  %write, %payload = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %outgoing -> %write : read<tile<4xi32>>, write<tile<4xi32>>
+  %next = index.add %i, %c1 : index
+  cfg.br ^header(%next: index, %keep: read<tile<4xi32>>)
+^done:
+  channel.release %read : read<tile<4xi32>>
+  func.return
+}
+
+pipeline.def @test(%pool: pool, %limit: index, %condition: i1) run() {
+  %c0 = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 32 : offset
+  %a = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %b = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %c = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %d = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %av = buffer.view %a[%c0] : buffer -> view<2x4xi32>
+  %bv = buffer.view %b[%c0] : buffer -> view<2x4xi32>
+  %cv = buffer.view %c[%c0] : buffer -> view<2x4xi32>
+  %dv = buffer.view %d[%c0] : buffer -> view<2x4xi32>
+  %source = channel.bind<fifo> %av, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %other = channel.bind<fifo> %bv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %left = channel.bind<fifo> %cv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %right = channel.bind<fifo> %dv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left, %right, %limit, %condition) : (channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, index, i1)
+  }
+}
+
+// ----
+execution=worker block_counts=unknown streams=0
+
+// ====
+
+// Conditional routing remains ordinary worker execution.
+func.def @worker(%source: channel<tile<4xi32>>, %other: channel<tile<4xi32>>, %left: channel<tile<4xi32>>, %right: channel<tile<4xi32>>, %limit: index, %condition: i1) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %read = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  cfg.cond_br %condition, ^left, ^right
+^left:
+  %left_write, %left_payload = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %read -> %left_write : read<tile<4xi32>>, write<tile<4xi32>>
+  cfg.br ^done
+^right:
+  %right_write, %right_payload = channel.reserve %right : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %read -> %right_write : read<tile<4xi32>>, write<tile<4xi32>>
+  cfg.br ^done
+^done:
+  func.return
+}
+
+pipeline.def @test(%pool: pool, %limit: index, %condition: i1) run() {
+  %c0 = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 32 : offset
+  %a = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %b = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %c = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %d = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %av = buffer.view %a[%c0] : buffer -> view<2x4xi32>
+  %bv = buffer.view %b[%c0] : buffer -> view<2x4xi32>
+  %cv = buffer.view %c[%c0] : buffer -> view<2x4xi32>
+  %dv = buffer.view %d[%c0] : buffer -> view<2x4xi32>
+  %source = channel.bind<fifo> %av, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %other = channel.bind<fifo> %bv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %left = channel.bind<fifo> %cv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %right = channel.bind<fifo> %dv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left, %right, %limit, %condition) : (channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, index, i1)
+  }
+}
+
+// ----
+execution=worker block_counts=unknown streams=0
+
+// ====
+
+// Payload computation prevents treating the worker as pure transport.
+func.def @worker(%source: channel<tile<4xi32>>, %other: channel<tile<4xi32>>, %left: channel<tile<4xi32>>, %right: channel<tile<4xi32>>, %limit: index, %condition: i1) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %read, %input = channel.acquire %source : channel<tile<4xi32>> -> (read<tile<4xi32>>, view<4xi32>)
+  %write, %output = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  %value = view.load %input[%c0] : view<4xi32> -> i32
+  view.store %value, %output[%c0] : i32, view<4xi32>
+  channel.publish %write : write<tile<4xi32>>
+  channel.release %read : read<tile<4xi32>>
+  func.return
+}
+
+pipeline.def @test(%pool: pool, %limit: index, %condition: i1) run() {
+  %c0 = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 32 : offset
+  %a = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %b = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %c = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %d = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %av = buffer.view %a[%c0] : buffer -> view<2x4xi32>
+  %bv = buffer.view %b[%c0] : buffer -> view<2x4xi32>
+  %cv = buffer.view %c[%c0] : buffer -> view<2x4xi32>
+  %dv = buffer.view %d[%c0] : buffer -> view<2x4xi32>
+  %source = channel.bind<fifo> %av, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %other = channel.bind<fifo> %bv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %left = channel.bind<fifo> %cv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %right = channel.bind<fifo> %dv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left, %right, %limit, %condition) : (channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, index, i1)
+  }
+}
+
+// ----
+execution=worker block_counts=exact streams=0
+
+// ====
+
+// Equal exact trip counts do not establish one common replay scope.
+// One retained record crosses both loops and has only one final release.
+func.def @worker(%source: channel<tile<4xi32>>, %other: channel<tile<4xi32>>, %left: channel<tile<4xi32>>, %right: channel<tile<4xi32>>, %limit: index, %condition: i1) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %initial = channel.accept %source : channel<tile<4xi32>> -> read<tile<4xi32>>
+  cfg.br ^left_header(%c0: index, %initial: read<tile<4xi32>>)
+^left_header(%i: index, %left_read: read<tile<4xi32>>):
+  %left_more = index.cmp ult, %i, %c3 : index
+  cfg.cond_br %left_more, ^left_copy, ^left_done
+^left_copy:
+  %left_keep, %left_outgoing = channel.fanout %left_read : read<tile<4xi32>> -> (read<tile<4xi32>>, read<tile<4xi32>>)
+  %left_write, %left_payload = channel.reserve %left : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %left_outgoing -> %left_write : read<tile<4xi32>>, write<tile<4xi32>>
+  %next_i = index.add %i, %c1 : index
+  cfg.br ^left_header(%next_i: index, %left_keep: read<tile<4xi32>>)
+^left_done:
+  cfg.br ^right_header(%c0: index, %left_read: read<tile<4xi32>>)
+^right_header(%j: index, %right_read: read<tile<4xi32>>):
+  %right_more = index.cmp ult, %j, %c3 : index
+  cfg.cond_br %right_more, ^right_copy, ^right_done
+^right_copy:
+  %right_keep, %right_outgoing = channel.fanout %right_read : read<tile<4xi32>> -> (read<tile<4xi32>>, read<tile<4xi32>>)
+  %right_write, %right_payload = channel.reserve %right : channel<tile<4xi32>> -> (write<tile<4xi32>>, view<4xi32>)
+  channel.copy %right_outgoing -> %right_write : read<tile<4xi32>>, write<tile<4xi32>>
+  %next_j = index.add %j, %c1 : index
+  cfg.br ^right_header(%next_j: index, %right_keep: read<tile<4xi32>>)
+^right_done:
+  channel.release %right_read : read<tile<4xi32>>
+  func.return
+}
+
+pipeline.def @test(%pool: pool, %limit: index, %condition: i1) run() {
+  %c0 = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 32 : offset
+  %a = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %b = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %c = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %d = buffer.alloca<workgroup> pool(%pool) align(16) %bytes : buffer
+  %av = buffer.view %a[%c0] : buffer -> view<2x4xi32>
+  %bv = buffer.view %b[%c0] : buffer -> view<2x4xi32>
+  %cv = buffer.view %c[%c0] : buffer -> view<2x4xi32>
+  %dv = buffer.view %d[%c0] : buffer -> view<2x4xi32>
+  %source = channel.bind<fifo> %av, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %other = channel.bind<fifo> %bv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %left = channel.bind<fifo> %cv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  %right = channel.bind<fifo> %dv, %c2 : view<2x4xi32>, index -> channel<tile<4xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left, %right, %limit, %condition) : (channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, channel<tile<4xi32>>, index, i1)
+  }
+}
+
+// ----
+execution=worker block_counts=exact streams=0
