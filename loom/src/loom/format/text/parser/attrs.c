@@ -474,21 +474,43 @@ static iree_status_t loom_parse_bytes_attr_hex(loom_parser_t* parser,
 
 static iree_status_t loom_parse_bytes_attr(loom_parser_t* parser,
                                            loom_attribute_t* out_attr) {
-  if (!loom_tokenizer_try_consume_keyword(&parser->tokenizer,
-                                          IREE_SV("bytes"))) {
+  bool is_utf8 =
+      loom_tokenizer_try_consume_keyword(&parser->tokenizer, IREE_SV("utf8"));
+  if (!is_utf8 && !loom_tokenizer_try_consume_keyword(&parser->tokenizer,
+                                                      IREE_SV("bytes"))) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'bytes'"));
+    return loom_parser_emit_unexpected_token(parser, peek,
+                                             IREE_SV("'bytes' or 'utf8'"));
   }
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LPAREN, NULL);
-  loom_token_t hex_token = loom_token_none();
-  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_STRING, &hex_token);
+  loom_token_t text_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_STRING, &text_token);
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RPAREN, NULL);
-  return loom_parse_bytes_attr_hex(parser, hex_token, out_attr);
+  if (!is_utf8) {
+    return loom_parse_bytes_attr_hex(parser, text_token, out_attr);
+  }
+#if defined(IREE_PTR_SIZE_64)
+  if (text_token.text.size > UINT32_MAX) {
+    return loom_parser_emit_unexpected_token(
+        parser, text_token,
+        IREE_SV("a UTF-8 payload of at most UINT32_MAX bytes"));
+  }
+#endif  // IREE_PTR_SIZE_64
+  uint8_t* bytes = NULL;
+  if (text_token.text.size > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(
+        &parser->module->arena, text_token.text.size, (void**)&bytes));
+    memcpy(bytes, text_token.text.data, text_token.text.size);
+  }
+  *out_attr = loom_attr_utf8(
+      iree_make_string_view((const char*)bytes, text_token.text.size));
+  return iree_ok_status();
 }
 
 static bool loom_parse_next_generic_attr_is_bytes(loom_parser_t* parser) {
   loom_tokenizer_t lookahead = parser->tokenizer;
-  if (!loom_tokenizer_try_consume_keyword(&lookahead, IREE_SV("bytes"))) {
+  if (!loom_tokenizer_try_consume_keyword(&lookahead, IREE_SV("bytes")) &&
+      !loom_tokenizer_try_consume_keyword(&lookahead, IREE_SV("utf8"))) {
     return false;
   }
   return loom_tokenizer_at(&lookahead, LOOM_TOKEN_LPAREN);

@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
+#include "iree/base/internal/unicode.h"
 #include "loom/ir/context.h"
 #include "loom/ir/parameterized_type.h"
 #include "loom/ir/structural_hash.h"
@@ -2907,8 +2908,13 @@ static iree_status_t loom_module_canonicalize_attr_value(
       *out_value = loom_attr_encoding((uint16_t)value.encoding_id);
       return iree_ok_status();
     case LOOM_ATTR_BYTES: {
+      if (value.flags & ~LOOM_ATTR_BYTES_UTF8) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "bytes attribute has unknown flags");
+      }
       if (value.reserved_1 == 0) {
         *out_value = loom_attr_bytes(NULL, 0);
+        out_value->flags = value.flags;
         return iree_ok_status();
       }
       if (value.bytes == NULL) {
@@ -2920,6 +2926,7 @@ static iree_status_t loom_module_canonicalize_attr_value(
                                                (void**)&bytes));
       memcpy(bytes, value.bytes, value.reserved_1);
       *out_value = loom_attr_bytes(bytes, value.reserved_1);
+      out_value->flags = value.flags;
       return iree_ok_status();
     }
     case LOOM_ATTR_SCOPED_ENUM:
@@ -3222,7 +3229,7 @@ iree_status_t loom_module_replace_canonical_attr_dict(
 
 static iree_status_t loom_module_verify_canonical_attr_header(
     const loom_attribute_t* attr, iree_string_view_t owner_name) {
-  if (attr->reserved_0 != 0 || attr->reserved_1 != 0) {
+  if (attr->flags != 0 || attr->reserved_1 != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "%.*s has non-zero reserved bits",
                             (int)owner_name.size, owner_name.data);
@@ -3243,7 +3250,9 @@ static iree_status_t loom_module_verify_canonical_attr_value(
     return iree_ok_status();
   }
 
-  if (value->reserved_0 != 0) {
+  uint8_t allowed_flags =
+      value->kind == LOOM_ATTR_BYTES ? LOOM_ATTR_BYTES_UTF8 : 0;
+  if (value->flags & ~allowed_flags) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "attribute value has non-zero reserved bits");
   }
@@ -3443,6 +3452,12 @@ static iree_status_t loom_module_verify_canonical_attr_value(
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
             "bytes attribute pointer does not match its byte length");
+      }
+      if (loom_attr_is_utf8(*value) &&
+          !iree_unicode_utf8_validate(iree_make_string_view(
+              (const char*)value->bytes, value->reserved_1))) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "utf8 attribute payload is not valid UTF-8");
       }
       return iree_ok_status();
     case LOOM_ATTR_DICT: {

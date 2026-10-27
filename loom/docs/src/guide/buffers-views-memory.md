@@ -29,6 +29,27 @@ packed weight buffer, for example, can expose byte payloads, integer words, and
 scale values through different views without pretending those views are
 different allocations.
 
+## Define read-only byte payloads
+
+[`global.rodata.def`](../reference/dialects/global/ops/rodata-def.md) stores an
+exact byte sequence. Use `utf8("text")` for UTF-8 text and `bytes("hex")` for
+raw binary data:
+
+```loom
+global.rodata.def @message = utf8("ready\n")
+
+global.rodata.def @signature = bytes("0080ff")
+```
+
+Both forms produce byte storage accessed through `global.load`. The UTF-8 form
+supports JSON string escapes, including `\u0000` for an explicit NUL byte.
+Neither form adds a terminator or changes the payload's bytes. For example,
+`utf8("Loom")` and `bytes("4c6f6f6d")` each contain exactly four bytes.
+
+Text and bytecode round trips retain the chosen form, including empty payloads.
+An ordinary quoted attribute such as `"Loom"` is an interned string attribute,
+not a byte payload.
+
 ## Project a buffer into logical coordinates
 
 [`buffer.view`](../reference/dialects/buffer/ops/view.md) combines an opaque

@@ -111,6 +111,7 @@ from loom.ir import (
     Type,
     TypeKind,
     Use,
+    Utf8Attr,
     Value,
 )
 from loom.stable_id import stable_id_from_string
@@ -1528,6 +1529,22 @@ class TestAttributeRoundTrips:
 
     def test_bytes_payload(self) -> None:
         assert self._roundtrip_attr("v", b"\x00\x11\xfe\xff") == b"\x00\x11\xfe\xff"
+
+    @pytest.mark.parametrize("text", ["", "advance", "a\0b", "café 世界 🧵 �"])
+    def test_utf8_payload(self, text: str) -> None:
+        value = Utf8Attr(text)
+        assert self._roundtrip_attr("v", value) == value
+
+    @pytest.mark.parametrize(
+        "payload", [b"\xff", b"\xc0\xaf", b"\xed\xa0\x80", b"\xe2\x82"]
+    )
+    def test_invalid_utf8_wire_payload(self, payload: bytes) -> None:
+        reader = BytecodeReader(b"")
+        wire = bytes([20]) + encode_varint(len(payload)) + payload
+        with pytest.raises(BytecodeError, match="not valid UTF-8"):
+            reader._read_attr_value(wire, 0)
+        raw_wire = bytes([11]) + wire[1:]
+        assert reader._read_attr_value(raw_wire, 0) == (payload, len(raw_wire))
 
     # Booleans.
     def test_bool_true(self) -> None:

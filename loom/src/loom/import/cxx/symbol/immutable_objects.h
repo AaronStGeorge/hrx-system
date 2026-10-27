@@ -76,6 +76,8 @@ class ImmutableObjects {
     ImmutableObject object;
     // Source linkage policy projected into the emitted symbol.
     EmissionKind kind;
+    // Narrow string initializer whose complete object bytes are valid UTF-8.
+    bool is_utf8;
     // Concrete selected-source-ABI representation, empty for declarations.
     std::vector<uint8_t> contents;
     // First source use responsible for retaining this object.

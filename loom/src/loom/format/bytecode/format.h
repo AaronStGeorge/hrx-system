@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 42
+#define LOOM_BYTECODE_FORMAT_VERSION 43
 
 #define LOOM_BYTECODE_SOURCE_TRIVIA_LEADING_BLANK_LINE (1u << 0)
 #define LOOM_BYTECODE_SOURCE_TRIVIA_COMMENT_COUNT_SHIFT 1
@@ -885,26 +885,26 @@ typedef enum loom_bytecode_section_kind_e {
 // 7=TYPE, 8=PREDICATE_LIST, 9=DICT, 10=ENCODING, 11=BYTES,
 // 12=SCOPED_ENUM, 13=ENUM_ARRAY, 14=PARAMETERIZED,
 // 15=PARAMETERIZED_ARRAY, 16=SIGNED_ENUM_SET, 17=SYMBOL_ARRAY,
-// 18=SYMBOL_SET, 19=STRING_ARRAY. ABSENT is never encoded as a payload value.
-// TYPE value_data follows the Scoped type uses contract above: a complete type
-// use in SSA scopes, a completed child reference inside a scoped record, or an
-// untagged TYPES index in module-level metadata.
-// ENUM value_data is the raw uint8 case ordinal;
-// bytecode readers preserve it without consulting enum case tables so open enum
-// attrs can survive tools whose op tables do not yet name the ordinal. Closed
-// enum policy remains a verifier contract. BYTES value_data is
-// [byte_length: varint] followed by that many uninterpreted bytes.
-// SCOPED_ENUM value_data is a STRINGS table index naming the stable key in the
-// representation contract selected by the enclosing function. Dense runtime
-// ordinals are never serialized.
-// ENUM_ARRAY value_data is [element_count: varint] followed by that many raw
-// uint8 stable enum values. It is valid only for descriptor-backed fields;
-// generic dictionary entries cannot carry it.
-// SIGNED_ENUM_SET value_data is [word_count: byte] followed by |word_count|
-// little-endian positive uint64 words and then |word_count| little-endian
-// negative uint64 words. The partitions must be disjoint and canonically
-// trimmed. It is valid only for closed descriptor-backed enum fields.
-// PARAMETERIZED value_data is encoded as:
+// 18=SYMBOL_SET, 19=STRING_ARRAY, 20=UTF8. ABSENT is never encoded as a payload
+// value. TYPE value_data follows the Scoped type uses contract above: a
+// complete type use in SSA scopes, a completed child reference inside a scoped
+// record, or an untagged TYPES index in module-level metadata. ENUM value_data
+// is the raw uint8 case ordinal; bytecode readers preserve it without
+// consulting enum case tables so open enum attrs can survive tools whose op
+// tables do not yet name the ordinal. Closed enum policy remains a verifier
+// contract. BYTES value_data is [byte_length: varint] followed by that many
+// uninterpreted bytes. UTF8 uses the same layout, with a valid UTF-8 payload.
+// Neither form adds a terminator; the distinct tags retain the authored form
+// even for empty payloads. SCOPED_ENUM value_data is a STRINGS table index
+// naming the stable key in the representation contract selected by the
+// enclosing function. Dense runtime ordinals are never serialized. ENUM_ARRAY
+// value_data is [element_count: varint] followed by that many raw uint8 stable
+// enum values. It is valid only for descriptor-backed fields; generic
+// dictionary entries cannot carry it. SIGNED_ENUM_SET value_data is
+// [word_count: byte] followed by |word_count| little-endian positive uint64
+// words and then |word_count| little-endian negative uint64 words. The
+// partitions must be disjoint and canonically trimmed. It is valid only for
+// closed descriptor-backed enum fields. PARAMETERIZED value_data is encoded as:
 //   [family_name_id: varint]
 //   [present_parameter_count: varint]
 //   For each present parameter in declaration order:
@@ -967,6 +967,8 @@ typedef enum loom_bytecode_attr_kind_e {
   LOOM_BYTECODE_ATTR_SYMBOL_ARRAY = 17,
   LOOM_BYTECODE_ATTR_SYMBOL_SET = 18,
   LOOM_BYTECODE_ATTR_STRING_ARRAY = 19,
+  // Same length + payload encoding as BYTES, with validated UTF-8 form.
+  LOOM_BYTECODE_ATTR_UTF8 = 20,
   LOOM_BYTECODE_ATTR_COUNT,
 } loom_bytecode_attr_kind_t;
 

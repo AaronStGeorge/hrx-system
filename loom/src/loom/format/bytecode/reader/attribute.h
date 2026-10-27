@@ -152,6 +152,13 @@ loom_bytecode_attribute_read_kind(loom_bytecode_reader_decoder_t* decoder,
   return iree_ok_status();
 }
 
+// Reads a bounded BYTES or UTF8 payload, validating the latter's encoding.
+// The returned attribute borrows the input bytes until canonicalized.
+iree_status_t loom_bytecode_attribute_read_bytes(
+    loom_bytecode_reader_decoder_t* decoder,
+    loom_bytecode_reader_cursor_t* cursor, loom_bytecode_attr_kind_t kind,
+    loom_attribute_t* out_attr);
+
 // Reads one predicate payload without projecting VALUE arguments.
 iree_status_t loom_bytecode_attribute_read_predicate(
     loom_bytecode_reader_decoder_t* decoder,

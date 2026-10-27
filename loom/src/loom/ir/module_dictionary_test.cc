@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <map>
 #include <vector>
 
@@ -112,6 +113,66 @@ TEST_F(ModuleDictionaryTest, SeparatedDuplicatesAreRejectedAfterReordering) {
             &dictionary));
     EXPECT_EQ(dictionary.kind, LOOM_ATTR_ABSENT);
   }
+}
+
+TEST_F(ModuleDictionaryTest,
+       BytePayloadCanonicalizationPreservesFormAndOwnership) {
+  auto entries = Entries(2);
+  char payload[] = {'a', '\0', 'b'};
+  for (auto length : {size_t{0}, sizeof(payload)}) {
+    entries[0].value = loom_attr_bytes((const uint8_t*)payload, length);
+    entries[1].value = loom_attr_utf8(iree_make_string_view(payload, length));
+    loom_attribute_t dictionary = loom_attr_absent();
+    IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
+        module_, loom_make_named_attr_slice(entries.data(), entries.size()),
+        &dictionary));
+    IREE_EXPECT_OK(loom_module_verify_canonical_attr_dict(module_, dictionary));
+    for (uint16_t i = 0; i < dictionary.count; ++i) {
+      const auto value = dictionary.dict_entries[i].value;
+      EXPECT_EQ(loom_attr_is_utf8(value), i == 1);
+      EXPECT_EQ(value.reserved_1, length);
+      if (length == 0) {
+        EXPECT_EQ(value.bytes, nullptr);
+      } else {
+        EXPECT_NE(value.bytes, (const uint8_t*)payload);
+        EXPECT_EQ(std::memcmp(value.bytes, payload, length), 0);
+      }
+    }
+  }
+}
+
+TEST_F(ModuleDictionaryTest, Utf8RejectsMalformedPayloadsAndFlags) {
+  auto entries = Entries(1);
+  const iree_string_view_t malformed[] = {
+      IREE_SV("\xff"),         IREE_SV("\xc0\xaf"),
+      IREE_SV("\xed\xa0\x80"), IREE_SV("\xf4\x90\x80\x80"),
+      IREE_SV("\xe2\x82"),
+  };
+  for (auto payload : malformed) {
+    entries[0].value = loom_attr_utf8(payload);
+    auto dictionary =
+        loom_make_canonical_attr_dict(entries.data(), entries.size());
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        loom_module_verify_canonical_attr_dict(module_, dictionary));
+    entries[0].value =
+        loom_attr_bytes((const uint8_t*)payload.data, payload.size);
+    IREE_EXPECT_OK(loom_module_verify_canonical_attr_dict(module_, dictionary));
+  }
+  for (auto value : {loom_attr_bytes(nullptr, 0), loom_attr_i64(1)}) {
+    value.flags = 0x80;
+    entries[0].value = value;
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          loom_module_verify_canonical_attr_dict(
+                              module_, loom_make_canonical_attr_dict(
+                                           entries.data(), entries.size())));
+  }
+  entries[0].value = loom_attr_i64(1);
+  entries[0].value.flags = LOOM_ATTR_BYTES_UTF8;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_module_verify_canonical_attr_dict(
+                            module_, loom_make_canonical_attr_dict(
+                                         entries.data(), entries.size())));
 }
 
 TEST_F(ModuleDictionaryTest, ReorderedPayloadsAreCopiedOnce) {

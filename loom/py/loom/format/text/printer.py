@@ -124,6 +124,7 @@ from loom.ir import (
     SymbolNameArray,
     SymbolNameSet,
     Type,
+    Utf8Attr,
 )
 from loom.location_tag import builtin_location_tag_name
 
@@ -795,6 +796,8 @@ def _format_attr_value(
             raise TypeError(f"type attribute value must be a Type: {value!r}")
         return print_type(cast(Type, value), type_context, type_registry)
     if attr_def is not None and attr_def.attr_type == "bytes":
+        if isinstance(value, Utf8Attr):
+            return f"utf8({_format_string_literal(value.value)})"
         if not isinstance(value, bytes | bytearray):
             raise TypeError(f"bytes attribute value must be bytes: {value!r}")
         return f'bytes("{bytes(value).hex()}")'
@@ -806,6 +809,8 @@ def _format_attr_value(
         return _format_float(value)
     if isinstance(value, SymbolName):
         return "@" + str(value)
+    if isinstance(value, Utf8Attr):
+        return f"utf8({_format_string_literal(value.value)})"
     if isinstance(value, bytes | bytearray):
         return f'bytes("{bytes(value).hex()}")'
     if isinstance(value, PredicateListAttr) or (
@@ -1047,7 +1052,7 @@ def _is_pipeline_printable_attr_value(
             _is_pipeline_printable_attr_value(element, element_descriptor)
             for element in value
         )
-    if isinstance(value, bool | int | float | str | bytes | bytearray):
+    if isinstance(value, bool | int | float | str | bytes | bytearray | Utf8Attr):
         return True
     if isinstance(value, list | tuple):
         return all(_is_pipeline_printable_attr_value(item) for item in value)

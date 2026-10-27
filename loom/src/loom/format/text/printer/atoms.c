@@ -86,7 +86,8 @@ iree_status_t loom_print_string_literal(loom_output_stream_t* stream,
   while (position < text.size) {
     iree_host_size_t codepoint_start = position;
     uint32_t codepoint = iree_unicode_utf8_decode(text, &position);
-    if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR) {
+    if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR &&
+        position == codepoint_start + 1) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "invalid UTF-8 string literal");
     }
@@ -1253,6 +1254,13 @@ static iree_status_t loom_print_attr_impl(
     case LOOM_ATTR_BYTES: {
       static const char kHexDigits[] = "0123456789abcdef";
       iree_const_byte_span_t bytes = loom_attr_as_bytes(*attr);
+      if (loom_attr_is_utf8(*attr)) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "utf8("));
+        IREE_RETURN_IF_ERROR(loom_print_string_literal(
+            stream,
+            iree_make_string_view((const char*)bytes.data, bytes.data_length)));
+        return loom_output_stream_write_char(stream, ')');
+      }
       IREE_RETURN_IF_ERROR(
           loom_output_stream_write_cstring(stream, "bytes(\""));
       for (iree_host_size_t i = 0; i < bytes.data_length; ++i) {

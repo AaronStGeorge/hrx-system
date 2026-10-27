@@ -130,6 +130,62 @@ TEST_F(BytecodeAttributeTest, NamedPredicatesValidateAndMaterialize) {
   EXPECT_EQ(error_count_, 0u);
 }
 
+TEST_F(BytecodeAttributeTest, ByteFormsValidateAndMaterializeExactPayloads) {
+  for (const auto text : {IREE_SV(""), IREE_SV("a\0b\xEF\xBF\xBD")}) {
+    std::vector<uint8_t> data = {static_cast<uint8_t>(text.size)};
+    data.insert(data.end(), text.data, text.data + text.size);
+    for (const auto kind :
+         {LOOM_BYTECODE_ATTR_BYTES, LOOM_BYTECODE_ATTR_UTF8}) {
+      auto validator = MakeValidator();
+      auto cursor = MakeCursor(data.data(), data.size());
+      IREE_ASSERT_OK(loom_bytecode_attribute_validate_named(&validator, &cursor,
+                                                            nullptr, kind, 0));
+      EXPECT_EQ(cursor.cursor.position, data.size());
+      auto materializer = MakeMaterializer();
+      cursor = MakeCursor(data.data(), data.size());
+      loom_attribute_t attribute;
+      IREE_ASSERT_OK(loom_bytecode_attribute_materialize_named(
+          &materializer, &cursor, nullptr, kind, &attribute, 0));
+      EXPECT_EQ(loom_attr_is_utf8(attribute), kind == LOOM_BYTECODE_ATTR_UTF8);
+      EXPECT_EQ(attribute.reserved_1, text.size);
+      EXPECT_TRUE(iree_string_view_equal(
+          iree_make_string_view((const char*)attribute.bytes,
+                                attribute.reserved_1),
+          text));
+    }
+  }
+}
+
+TEST_F(BytecodeAttributeTest, MalformedUtf8IsDiagnosedAtBothReaderBoundaries) {
+  for (auto text :
+       {IREE_SV("\xff"), IREE_SV("\xc0\xaf"), IREE_SV("\xed\xa0\x80"),
+        IREE_SV("\xe2\x82"), IREE_SV("\xf4\x90\x80\x80")}) {
+    std::vector<uint8_t> data = {static_cast<uint8_t>(text.size)};
+    data.insert(data.end(), text.data, text.data + text.size);
+    auto validator = MakeValidator();
+    auto cursor = MakeCursor(data.data(), data.size());
+    uint32_t previous_errors = error_count_;
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_DEFERRED,
+        loom_bytecode_attribute_validate_named(&validator, &cursor, nullptr,
+                                               LOOM_BYTECODE_ATTR_UTF8, 0));
+    EXPECT_EQ(error_count_, previous_errors + 1);
+    auto materializer = MakeMaterializer();
+    cursor = MakeCursor(data.data(), data.size());
+    loom_attribute_t attribute;
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_DEFERRED,
+                          loom_bytecode_attribute_materialize_named(
+                              &materializer, &cursor, nullptr,
+                              LOOM_BYTECODE_ATTR_UTF8, &attribute, 0));
+    EXPECT_EQ(error_count_, previous_errors + 2);
+    cursor = MakeCursor(data.data(), data.size());
+    IREE_ASSERT_OK(loom_bytecode_attribute_materialize_named(
+        &materializer, &cursor, nullptr, LOOM_BYTECODE_ATTR_BYTES, &attribute,
+        0));
+    EXPECT_EQ(error_count_, previous_errors + 2);
+  }
+}
+
 TEST_F(BytecodeAttributeTest, GlobalTypeParametersAcceptConstantPredicates) {
   const uint8_t data[] = {
       1, LOOM_PREDICATE_EQ, 2, LOOM_PRED_ARG_CONST, 8, LOOM_PRED_ARG_CONST, 8,

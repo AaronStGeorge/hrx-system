@@ -92,7 +92,9 @@ from loom.ir import (
     TypeKind,
     TypeTable,
     Use,
+    Utf8Attr,
     Value,
+    canonicalize_attr_dict,
     evaluate_predicate,
     evaluate_predicates,
     parse_scalar_type_kind,
@@ -1729,3 +1731,30 @@ class TestPredicateEvaluation:
             self._pred("eq", ("value", 3), ("value", 7)),
             {3: 64, 7: 32},
         )
+
+
+class TestUtf8Attr:
+    @pytest.mark.parametrize("text", ["", "advance", "a\0b", "café 世界 🧵 �"])
+    def test_form_is_part_of_identity(self, text: str) -> None:
+        value = Utf8Attr(text)
+        assert bytes(value) == text.encode("utf-8")
+        assert value != text
+        assert value != bytes(value)
+        assert value == Utf8Attr(text)
+        assert len({value, Utf8Attr(text), text, bytes(value)}) == 3
+        dictionary = canonicalize_attr_dict({"raw": bytes(value), "text": value})
+        assert dictionary["text"] == value
+        assert dictionary["raw"] != dictionary["text"]
+
+    def test_parameter_canonicalization_preserves_form(self) -> None:
+        family = ParameterizedAttrDef(
+            "test.payload", group=Dialect("test"), parameters=[AttrDef("data", "bytes")]
+        )
+        value = Utf8Attr("a\0b")
+        attribute = ParameterizedAttr(family, {"data": value})
+        assert attribute.get("data") == value
+
+    @pytest.mark.parametrize("codepoint", [0xD800, 0xDFFF])
+    def test_rejects_surrogates(self, codepoint: int) -> None:
+        with pytest.raises(UnicodeEncodeError):
+            Utf8Attr("a" + chr(codepoint) + "b")

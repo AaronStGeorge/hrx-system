@@ -43,8 +43,10 @@ loom_cc_library(
     "immutable_objects.cc"
   DEPS
     ::names
+    iree::base::internal::unicode
     iree::third_party::cxx_parser
     loom::import::cxx::source::error
+    loom::import::cxx::source::expressions
     loom::import::cxx::source::locations
     loom::ir
     loom::ops::global

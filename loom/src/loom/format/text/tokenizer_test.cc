@@ -1249,6 +1249,17 @@ TEST(Tokenizer, InvalidUtf8InString) {
   ExpectNoInfrastructureStatus(t.get());
 }
 
+TEST(Tokenizer, ReplacementCharacterIsValidUtf8) {
+  for (const char* source : {"\"\xEF\xBF\xBD\"", "\"\\uFFFD\""}) {
+    ScopedTokenizer t(source);
+    auto token = t.next();
+    EXPECT_EQ(token.kind, LOOM_TOKEN_STRING);
+    EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("\xEF\xBF\xBD")));
+    EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
+    ExpectNoInfrastructureStatus(t.get());
+  }
+}
+
 TEST(Tokenizer, InvalidUtf8TruncatedSequence) {
   // Start of a 3-byte sequence (0xE4) followed by only 1 continuation byte,
   // then the closing quote. The closing quote is not a valid continuation byte,
@@ -1293,15 +1304,15 @@ TEST(Tokenizer, InvalidUtf8BareBytes) {
 }
 
 TEST(Tokenizer, ValidUnicodeOutsideStringError) {
-  // Chinese character outside a string — valid UTF-8 but not a valid token.
-  // Should produce an error mentioning the codepoint.
-  ScopedTokenizer t("\xe4\xbd\xa0");
-  ExpectNextErrorToken(t.get(),
-                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 25),
-                       IREE_SV("\xe4\xbd\xa0"), 1, 1, 2);
-  EXPECT_EQ(t.get()->error.param_count, 0u);
-  EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
-  ExpectNoInfrastructureStatus(t.get());
+  for (const char* source : {"\xe4\xbd\xa0", "\xef\xbf\xbd"}) {
+    ScopedTokenizer t(source);
+    ExpectNextErrorToken(t.get(),
+                         loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 25),
+                         iree_make_cstring_view(source), 1, 1, 2);
+    EXPECT_EQ(t.get()->error.param_count, 0u);
+    EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
+    ExpectNoInfrastructureStatus(t.get());
+  }
 }
 
 TEST(Tokenizer, Utf8StringFollowedByToken) {

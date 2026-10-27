@@ -452,6 +452,13 @@ typedef enum loom_attr_kind_e {
 // operations while covering practical metadata shapes.
 #define LOOM_ATTR_AGGREGATE_MAX_NESTING_DEPTH 8
 
+// BYTES retains an explicit UTF-8 form independently of its payload. No other
+// attribute kind uses flags. Raw bytes have zero flags, including when their
+// contents happen to be valid UTF-8.
+enum loom_attr_bytes_flag_bits_e {
+  LOOM_ATTR_BYTES_UTF8 = 1u << 0,
+};
+
 // A 16-byte tagged value. Used in operation trailing data, encoding
 // parameters, and anywhere a typed scalar/aggregate is needed.
 //
@@ -463,9 +470,13 @@ typedef enum loom_attr_kind_e {
 // reserved_1 for its family kind. BYTES uses reserved_1 for its byte length and
 // points to immutable bytes.
 typedef struct loom_attribute_t {
+  // Storage kind selecting the active payload member.
   uint8_t kind;
-  uint8_t reserved_0;
+  // Kind-specific loom_attr_bytes_flag_bits_e; zero except for UTF-8 BYTES.
+  uint8_t flags;
+  // Element or slot count for aggregate kinds; zero for scalar kinds.
   uint16_t count;
+  // BYTES byte length or PARAMETERIZED family kind; zero for other kinds.
   uint32_t reserved_1;
   union {
     int64_t i64;
@@ -646,6 +657,24 @@ static inline loom_attribute_t loom_attr_bytes(const uint8_t* bytes,
   attr.reserved_1 = byte_length;
   attr.bytes = byte_length > 0 ? bytes : NULL;
   return attr;
+}
+
+// Constructs a byte payload with explicit UTF-8 form. The text must be valid
+// UTF-8, fit in uint32_t, and outlive the attribute. Embedded NUL is permitted;
+// no terminator is added. Parsers and canonical attribute verification validate
+// UTF-8; copying and target consumers trust the established invariant.
+static inline loom_attribute_t loom_attr_utf8(iree_string_view_t text) {
+  IREE_ASSERT(text.size <= UINT32_MAX);
+  loom_attribute_t attr =
+      loom_attr_bytes((const uint8_t*)text.data, (uint32_t)text.size);
+  attr.flags = LOOM_ATTR_BYTES_UTF8;
+  return attr;
+}
+
+// Returns whether a byte payload retains explicit UTF-8 form.
+static inline bool loom_attr_is_utf8(loom_attribute_t attr) {
+  return attr.kind == LOOM_ATTR_BYTES &&
+         iree_any_bit_set(attr.flags, LOOM_ATTR_BYTES_UTF8);
 }
 
 // Constructs an integer array attribute. The values array must be

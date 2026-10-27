@@ -132,6 +132,7 @@ from loom.ir import (
     TaggedLocation,
     Type,
     TypeKind,
+    Utf8Attr,
     Value,
     binding_element_type,
     parse_scalar_type_kind,
@@ -241,8 +242,8 @@ def _parse_generic_attr_value_from_tokens(
         return tokenizer.next().text
     if (
         tokenizer.at(TokenKind.BARE_IDENT, "bytes")
-        and tokenizer.peek_n(1).kind == TokenKind.LPAREN
-    ):
+        or tokenizer.at(TokenKind.BARE_IDENT, "utf8")
+    ) and tokenizer.peek_n(1).kind == TokenKind.LPAREN:
         return _parse_bytes_attr_value_from_tokens(tokenizer, filename)
     if (
         tokenizer.at(TokenKind.BARE_IDENT, "predicates")
@@ -377,12 +378,18 @@ def _parse_generic_attr_value_from_tokens(
     )
 
 
-def _parse_bytes_attr_value_from_tokens(tokenizer: Tokenizer, filename: str) -> bytes:
-    """Parse bytes("001122ff") as raw bytes."""
-    bytes_token = tokenizer.expect(TokenKind.BARE_IDENT, "bytes")
+def _parse_bytes_attr_value_from_tokens(
+    tokenizer: Tokenizer, filename: str
+) -> bytes | Utf8Attr:
+    """Parse an explicitly raw or UTF-8 byte payload."""
+    bytes_token = tokenizer.expect(TokenKind.BARE_IDENT)
+    if bytes_token.text not in ("bytes", "utf8"):
+        raise ParseError("expected 'bytes' or 'utf8'", bytes_token.location, filename)
     tokenizer.expect(TokenKind.LPAREN)
     hex_text = tokenizer.expect(TokenKind.STRING).text
     tokenizer.expect(TokenKind.RPAREN)
+    if bytes_token.text == "utf8":
+        return Utf8Attr(hex_text)
     if len(hex_text) % 2 != 0:
         raise ParseError(
             "bytes attribute hex string must have even length",

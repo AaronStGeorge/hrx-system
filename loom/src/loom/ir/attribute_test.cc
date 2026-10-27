@@ -7,6 +7,7 @@
 #include "loom/ir/attribute.h"
 
 #include <cstring>
+#include <string>
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -15,6 +16,27 @@ namespace loom {
 namespace {
 
 TEST(AttributeTest, Size) { static_assert(sizeof(loom_attribute_t) == 16); }
+
+TEST(AttributeTest, Utf8IdentityIncludesFormAndExactPayload) {
+  const iree_string_view_t payloads[] = {
+      IREE_SV(""), IREE_SV("text"), IREE_SV("a\0b"), IREE_SV("\xEF\xBF\xBD")};
+  for (auto payload : payloads) {
+    auto text = loom_attr_utf8(payload);
+    auto raw = loom_attr_bytes((const uint8_t*)payload.data, payload.size);
+    EXPECT_EQ(text.kind, LOOM_ATTR_BYTES);
+    EXPECT_TRUE(loom_attr_is_utf8(text));
+    EXPECT_FALSE(loom_attr_is_utf8(raw));
+    EXPECT_FALSE(loom_attribute_equal(&text, &raw));
+    EXPECT_NE(loom_attribute_hash(&text), loom_attribute_hash(&raw));
+    EXPECT_EQ(loom_attr_as_bytes(text).data_length, payload.size);
+
+    std::string copy(payload.data, payload.size);
+    auto same_text =
+        loom_attr_utf8(iree_make_string_view(copy.data(), copy.size()));
+    EXPECT_TRUE(loom_attribute_equal(&text, &same_text));
+    EXPECT_EQ(loom_attribute_hash(&text), loom_attribute_hash(&same_text));
+  }
+}
 
 TEST(AttributeTest, PredicateMetadataCoversEveryKind) {
   static constexpr const char* kNames[] = {

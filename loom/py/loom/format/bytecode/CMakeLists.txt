@@ -66,8 +66,10 @@ iree_py_test(
     "{{$<TARGET_FILE:loom::tools::loom-link::loom-link>}}"
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/format/text/test/predicate_attributes.loom-test}}"
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/format/bytecode/scoped_type_interop.loom-test}}"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/format/text/test/byte_attributes.loom-test}}"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/format/bytecode/scoped_type_interop.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/format/text/test/byte_attributes.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/format/text/test/predicate_attributes.loom-test"
     "loom::tools::loom-format::loom-format"
     "loom::tools::loom-link::loom-link"
@@ -75,6 +77,7 @@ iree_py_test(
     loom::py::loom::format::bytecode::bytecode
     loom::py::loom::dialect::cfg::cfg
     loom::py::loom::dialect::func::func
+    loom::py::loom::dialect::globals::globals
     loom::py::loom::dialect::index::index
     loom::py::loom::dialect::low::low
     loom::py::loom::dialect::scf::scf
