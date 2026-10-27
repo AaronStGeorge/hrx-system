@@ -162,6 +162,11 @@ func.def public @text_bind_request_v1(%state: buffer, %row: i32, %options: buffe
   func.return
 }
 
+func.def public @text_chat_reasoning_v1() -> (i32, i32, i32) {
+  %c0 = scalar.constant 0 : i32
+  func.return %c0, %c0, %c0 : i32, i32, i32
+}
+
 func.def public @text_chat_image_limits_v1() -> (i64, i64, i64, i64, i64) {
   %c0_i64 = scalar.constant 0 : i64
   func.return %c0_i64, %c0_i64, %c0_i64, %c0_i64, %c0_i64 : i64, i64, i64, i64, i64

@@ -59,7 +59,13 @@ def check_response(address, model):
         response = connection.getresponse()
         payload = response.read()
         if response.status != 200:
-            raise RuntimeError(f"chat returned HTTP {response.status}: {payload!r}")
+            connection.request("GET", "/v1/status")
+            status_response = connection.getresponse()
+            status_payload = status_response.read()
+            raise RuntimeError(
+                f"chat returned HTTP {response.status}: {payload!r}\n"
+                f"model status (HTTP {status_response.status}): {status_payload!r}"
+            )
         result = json.loads(payload)
         choice = result["choices"][0]
         if (
