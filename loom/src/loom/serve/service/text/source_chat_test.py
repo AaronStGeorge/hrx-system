@@ -189,6 +189,13 @@ class RequestTest(unittest.TestCase):
     def test_policy_errors_publish_no_partial_success(self):
         requests = [
             self.request(enable_thinking=True),
+            self.request(reasoning_effort="none"),
+            self.request(reasoning_effort="high"),
+            self.request(reasoning_effort=None),
+            self.request(reasoning_effort=False),
+            self.request(reasoning_effort=1),
+            self.request(reasoning_effort={}),
+            self.request(reasoning_effort=[]),
             self.request(model_options={"unknown": True}),
             self.request([{"role": "user", "content": "?"}]),
             self.request(

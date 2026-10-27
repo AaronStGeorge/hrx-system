@@ -892,7 +892,8 @@ static iree_status_t loom_serve_text_chat_request_render(
       {"model_options", LOOM_SERVE_TEXT_CHAT_OBJECT},
       {"top_p", LOOM_SERVE_TEXT_CHAT_NUMBER},
       {"top_k", LOOM_SERVE_TEXT_CHAT_NUMBER},
-      {"seed", LOOM_SERVE_TEXT_CHAT_NUMBER}};
+      {"seed", LOOM_SERVE_TEXT_CHAT_NUMBER},
+      {"reasoning_effort", LOOM_SERVE_TEXT_CHAT_STRING}};
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
       object, IREE_ARRAYSIZE(fields), fields, 0));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[1]));

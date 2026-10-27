@@ -229,10 +229,13 @@ unsupported values reject before admission. The server carries the validated
 policy to the model program without reading logits back to the host. Supported
 sampling algorithms and value ranges belong to the model package.
 
-Sampling is separate from thinking: `enable_thinking` and the `model_options`
-object are passed to source chat policy, which validates their meaning and
-renders the model's framing. Reasoning-aware models return `reasoning_content`
-separately from answer `content`, in both SSE deltas and complete messages.
+Sampling is separate from thinking: the boolean `enable_thinking`, string
+`reasoning_effort`, and `model_options` object are passed to source chat policy,
+which validates their meaning and renders the model's framing. Supported effort
+levels, aliases, and omitted-control defaults belong to the model package;
+unsupported or contradictory controls reject before admission. Reasoning-aware
+models return `reasoning_content` separately from answer `content`, in both SSE
+deltas and complete messages.
 
 `tools` accepts up to 4096 function declarations. Omitted `tool_choice` or
 `"auto"` allows tool calls. `"none"` disables tools for the current response,
