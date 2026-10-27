@@ -617,6 +617,42 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
         *float_conversion_descriptors(evex=True),
         *half_conversion_descriptors(evex=True),
+        *(
+            _avx512_descriptor(
+                Descriptor(
+                    key=f"x86.avx512.{mnemonic}.zmm",
+                    mnemonic=mnemonic,
+                    semantic_tag=f"bits.align_right.{element}x{lane_count}",
+                    operands=(
+                        _zmm_result(),
+                        _zmm_operand("upper"),
+                        _zmm_operand("lower"),
+                    ),
+                    immediates=(
+                        Immediate(
+                            "lanes",
+                            ImmediateKind.UNSIGNED,
+                            bit_width=8,
+                            unsigned_max=255,
+                        ),
+                    ),
+                    asm_forms=_asm(
+                        mnemonic=f"{mnemonic}.zmm",
+                        results=("dst",),
+                        operands=("upper", "lower"),
+                        immediates=("lanes",),
+                    ),
+                    schedule_class=_SCHEDULE_VECTOR_I32_ZMM,
+                    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+                ),
+                instruction,
+                scalar=False,
+            )
+            for mnemonic, element, lane_count, instruction in (
+                ("valignd", "i32", 16, native.VALIGND),
+                ("valignq", "i64", 8, native.VALIGNQ),
+            )
+        ),
         _avx512_descriptor(
             Descriptor(
                 key="x86.avx512.vextractf32x4.xmm.zmm",

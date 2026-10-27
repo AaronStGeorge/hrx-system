@@ -211,6 +211,18 @@ TEST(EncodingTest, PackedAlignConcatenationOrder) {
                        {0xc4, 0xe3, 0x69, 0x0f, 0xcb, 0x05});
 }
 
+TEST(EncodingTest, FullVectorAlignWidths) {
+  loom_x86_encoding_operands_t operands = {
+      .immediate = 5,
+      .result = 1,
+      .inputs = {2, 3},
+  };
+  ExpectVectorEncoding(0x9210, 0xa703, operands,
+                       {0x62, 0xf3, 0x6d, 0x48, 0x03, 0xcb, 0x05});
+  ExpectVectorEncoding(0x9210, 0xb703, operands,
+                       {0x62, 0xf3, 0xed, 0x48, 0x03, 0xcb, 0x05});
+}
+
 TEST(EncodingTest, EvexNdsMemoryBroadcastAndMaskModifiers) {
   // These bytes agree with independent LLVM and GNU assembler outputs.
   constexpr uint16_t kUnaryMerge = VectorRecipe(

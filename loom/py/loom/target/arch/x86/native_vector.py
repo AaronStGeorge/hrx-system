@@ -402,6 +402,20 @@ VADDSS = _instruction(
     _IMMEDIATES_0,
     _encoding(_VEX, _MAP_1, 2, 0, 0x58, (128,)),
 )
+VALIGND = _instruction(
+    "valignd",
+    _NDS_IMMEDIATE,
+    _OPERANDS_16,
+    _IMMEDIATES_5,
+    _encoding(_EVEX, _MAP_3, 1, 0, 0x03, (128, 256, 512)),
+)
+VALIGNQ = _instruction(
+    "valignq",
+    _NDS_IMMEDIATE,
+    _OPERANDS_16,
+    _IMMEDIATES_5,
+    _encoding(_EVEX, _MAP_3, 1, 1, 0x03, (128, 256, 512)),
+)
 VBCSTNEBF162PS_MEMORY = _vex_memory_load_instructions("vbcstnebf162ps", 2, 0xB1)
 VBCSTNESH2PS_MEMORY = _vex_memory_load_instructions("vbcstnesh2ps", 1, 0xB1)
 VBLENDMPD = _instruction(
