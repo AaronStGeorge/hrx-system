@@ -57,37 +57,6 @@ low.func.def target<test.low.core>(@target) @independent_early_write_needs_headr
 
 // ====
 
-// The same fixed occupancy below a direct residency cliff cannot constrain
-// scalar demand. No allocation budget is needed for the virtual pointer class.
-// RUN: emit low-schedule-json @unchanged_residency_headroom strategy=resource-stall cliff=test.ptr:8:15:14 diagnostics=candidates output=none
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @unchanged_residency_headroom(%held: reg<test.ptr x3>, %first_address: reg<test.ptr>, %second_address: reg<test.ptr>) -> (reg<test.ptr x3>, reg<test.ptr>, reg<test.ptr>, reg<test.i32>, reg<test.i32>) asm {
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.const.i32", rejected_packet="test.write.low16.i32"}
-  %increment = test.const.i32 7
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.write.low16.i32", rejected_packet="test.const.i32"}
-  %first_half = test.write.low16.i32 %first_address
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.read.low16.i32", rejected_packet="test.read.low16.i32"}
-  %first = test.read.low16.i32 %first_half
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.add.i32", rejected_packet="test.read.low16.i32"}
-  %sum0 = test.add.i32 %first, %increment
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.add.i32", rejected_packet="test.read.low16.i32"}
-  %sum1 = test.add.i32 %sum0, %increment
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.add.i32", rejected_packet="test.read.low16.i32"}
-  %sum2 = test.add.i32 %sum1, %increment
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.add.i32", rejected_packet="test.read.low16.i32"}
-  %sum3 = test.add.i32 %sum2, %increment
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.add.i32", rejected_packet="test.read.low16.i32"}
-  %sum4 = test.add.i32 %sum3, %increment
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.write.low16.i32", rejected_packet="test.read.low16.i32", chosen_data_ready_stall_cycles="0"}
-  %second_half = test.write.low16.i32 %second_address
-  %second = test.read.low16.i32 %second_half
-  return %held, %first_address, %second_address, %sum4, %second
-}
-
-// ====
-
 // The two register classes jointly occupy five of eight alias-bank units.
 // Both views are held across scalar work, with no new alias-bank allocation.
 // RUN: emit low-schedule-query @unchanged_alias_headroom strategy=resource-stall issue=1,8,2

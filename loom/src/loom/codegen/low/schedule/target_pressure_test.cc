@@ -7,9 +7,104 @@
 #include "loom/codegen/low/schedule/target_pressure.h"
 
 #include "iree/testing/gtest.h"
+#include "loom/target/residency.h"
 
 namespace loom {
 namespace {
+
+TEST(TargetPressureTest, ResidencyHeadroomBelongsToGrowingResources) {
+  const loom_low_reg_class_t classes[] = {
+      {.alloc_unit_bits = 64},
+      {.alloc_unit_bits = 32},
+  };
+  const loom_low_descriptor_set_t descriptors = {
+      .reg_classes = classes,
+      .reg_class_count = IREE_ARRAYSIZE(classes),
+  };
+  const iree_string_view_t resource_names[] = {IREE_SV("pointer"),
+                                               IREE_SV("scalar")};
+  const loom_target_residency_cliff_t cliff = {
+      .resource_id = 0,
+      .cliff_units = 8,
+      .tier_before = 15,
+      .tier_after = 14,
+  };
+  const loom_target_residency_cliff_range_t ranges[] = {
+      {.start = 0, .count = 1},
+      {.start = 1, .count = 0},
+  };
+  const loom_target_residency_model_t residency = {
+      .best_tier = 15,
+      .direct_resources =
+          {
+              .names = resource_names,
+              .cliffs = &cliff,
+              .cliff_count = 1,
+              .cliff_ranges = ranges,
+              .resource_count = IREE_ARRAYSIZE(ranges),
+          },
+  };
+  const loom_low_schedule_options_t options = {
+      .residency = loom_target_residency_view(&residency, UINT32_MAX),
+  };
+  const loom_low_schedule_build_state_t state = {
+      .options = &options,
+      .pressure_cliffs = &residency.direct_resources,
+      .target = {.descriptor_set = &descriptors},
+  };
+  const uint32_t no_cliff = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE;
+  const struct {
+    // Human-readable pressure transition for assertion failures.
+    const char* name;
+    // Whether the candidate's pointer delta is current rather than stale.
+    uint8_t pointer_touched;
+    // Change to the five currently live pointer units.
+    int64_t pointer_delta;
+    // First cliff not already crossed by the source-order baseline.
+    uint32_t first_cliff;
+    // Residency tiers lost by the candidate.
+    uint32_t penalty;
+    // Additional growing-resource units before losing another tier.
+    uint32_t units_until_cliff;
+  } cases[] = {
+      {"untouched pointer bank", 0, 99, 0, 0, no_cliff},
+      {"unchanged pointer bank", 1, 0, 0, 0, no_cliff},
+      {"shrinking pointer bank", 1, -1, 0, 0, no_cliff},
+      {"growing below cliff", 1, 1, 0, 0, 2},
+      {"crossing cliff", 1, 3, 0, 1, no_cliff},
+      {"cliff already crossed by source", 1, 3, 1, 0, no_cliff},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    uint64_t live[] = {5, 0};
+    int64_t delta[] = {test_case.pointer_delta, 1};
+    uint8_t delta_touched[] = {test_case.pointer_touched, 1};
+    uint16_t delta_classes[] = {1, 0};
+    uint16_t block_classes[] = {0};
+    uint8_t block_touched[] = {1, 0};
+    uint32_t first_cliffs[] = {test_case.first_cliff, 1};
+    loom_low_schedule_pressure_state_t pressure = {
+        .current_live_units_by_reg_class = live,
+        .first_actionable_pressure_cliff_indices = first_cliffs,
+        .block_reg_class_ids = block_classes,
+        .block_reg_class_touched_flags = block_touched,
+        .candidate_delta_units_by_reg_class = delta,
+        .candidate_delta_touched_flags = delta_touched,
+        .candidate_delta_touched_reg_class_ids = delta_classes,
+        .candidate_delta_touched_count = 1u + test_case.pointer_touched,
+        .block_reg_class_count = IREE_ARRAYSIZE(block_classes),
+    };
+    loom_low_schedule_candidate_score_t score = {
+        .pressure_cliff_units = no_cliff,
+        .units_until_pressure_cliff = no_cliff,
+    };
+    loom_low_schedule_target_pressure_score_candidate(
+        &state, &pressure, LOOM_LOW_SCHEDULE_NODE_NONE, &score);
+    EXPECT_EQ(score.pressure_cliff_penalty, test_case.penalty);
+    EXPECT_EQ(score.persistent_pressure_cliff_penalty, test_case.penalty);
+    EXPECT_EQ(score.units_until_pressure_cliff, test_case.units_until_cliff);
+  }
+}
 
 class RegisterPackingPressureTest : public ::testing::Test {
  protected:
