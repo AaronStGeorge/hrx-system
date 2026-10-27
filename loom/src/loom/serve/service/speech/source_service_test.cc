@@ -115,8 +115,9 @@ class SourceSpeechServiceTest : public ::testing::TestWithParam<bool> {
           .asset_directory = iree_make_cstring_view(assets_.c_str()),
       };
       IREE_ASSERT_OK(loom_serve_speech_model_allocate(
-          loom_serve_device_group_at(group_, 0), &options, allocator_,
-          &model_));
+          loom_serve_device_group_at(group_, 0),
+          loom_serve_device_pool(loom_serve_device_group_at(group_, 0)),
+          &options, allocator_, &model_));
       generator_ = loom_serve_speech_model_generator(model_);
       EXPECT_EQ(generator_.tokenizer != nullptr, weighted);
       EXPECT_EQ(generator_.format.sample_rate, 24000u);
@@ -488,8 +489,8 @@ TEST_P(SourceSpeechServiceTest,
           },
   };
   loom_serve_speech_model_t* model = nullptr;
-  IREE_ASSERT_OK(
-      loom_serve_speech_model_allocate(device, &options, allocator_, &model));
+  IREE_ASSERT_OK(loom_serve_speech_model_allocate(
+      device, loom_serve_device_pool(device), &options, allocator_, &model));
   const auto release_model = [](loom_serve_speech_model_t* value) {
     IREE_EXPECT_OK(loom_serve_speech_model_free(value));
   };
@@ -1114,7 +1115,9 @@ class SourceVoiceServiceTest : public SourceSpeechServiceTest {
         .options = configuration.options,
     };
     auto status = loom_serve_speech_model_allocate(
-        loom_serve_device_group_at(group_, 0), &options, allocator_, &model_);
+        loom_serve_device_group_at(group_, 0),
+        loom_serve_device_pool(loom_serve_device_group_at(group_, 0)), &options,
+        allocator_, &model_);
     IREE_ASSERT_OK(status);
     generator_ = loom_serve_speech_model_generator(model_);
     EXPECT_EQ(generator_.voice_capacity, 2u);

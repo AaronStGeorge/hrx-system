@@ -66,7 +66,8 @@ class SourceRecognitionStreamTest : public ::testing::Test {
             },
     };
     IREE_ASSERT_OK(loom_serve_recognition_model_allocate(
-        device_, &model_options, allocator_, &model_));
+        device_, loom_serve_device_pool(device_), &model_options, allocator_,
+        &model_));
     actual_ = loom_serve_recognition_model_generator(model_);
     auto observed = actual_;
     observed.self = this;

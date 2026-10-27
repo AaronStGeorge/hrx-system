@@ -118,25 +118,10 @@ iree_string_view_t loom_serve_device_name(const loom_serve_device_t* device);
 loom_serve_device_t* loom_serve_device_group_at(
     loom_serve_device_group_t* group, iree_host_size_t device_index);
 
-// Serving-managed backing across every model sharing this device. Storage and
-// retained have separate native sources; workspace is a breakdown of storage
-// for fixed backing or retained for elastic backing, not additional physical
-// consumption. Virtual statistics are zero for fixed backing. HAL statistics
-// are independent atomic observations, not a coherent device-wide snapshot.
-// Reported commitments exclude host snapshots, loader storage, and driver
-// overhead; HAL providers may also hide physical allocation padding.
-typedef struct loom_serve_device_memory_statistics_t {
-  // Ordinary native buffers, including fixed parameters, state, and workspace.
-  iree_hal_pool_stats_t storage;
-  // All virtual reservations and backing, including weights, state, workspace.
-  loom_serve_memory_statistics_t retained;
-  // Shared command workspace, including reusable idle backing.
-  iree_hal_pool_stats_t workspace;
-} loom_serve_device_memory_statistics_t;
-
-// Called by the host owner; copies observations without waiting for device
-// work.
-loom_serve_device_memory_statistics_t loom_serve_device_memory_statistics(
+// Copies the device's default pool observations without waiting for device
+// work. Models explicitly bound to another pool report through that owner
+// instead.
+loom_serve_pool_statistics_t loom_serve_device_memory_statistics(
     const loom_serve_device_t* device);
 
 // Cold owner-controlled trim toward target_bytes of reported managed backing.

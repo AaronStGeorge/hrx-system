@@ -130,10 +130,10 @@ static iree_status_t loom_serve_text_stages_initialize(
 // Group roots once during binding. The original stage order preserves the
 // identical-layout target prefix in the first domain.
 iree_status_t loom_serve_text_stages_bind(
-    loom_serve_device_t* device, const loom_serve_preparation_t* preparation,
-    iree_host_size_t shared_count, iree_host_size_t stage_count,
-    loom_serve_text_stage_t* stages, loom_serve_text_parameters_t* parameters,
-    iree_allocator_t host_allocator) {
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_serve_preparation_t* preparation, iree_host_size_t shared_count,
+    iree_host_size_t stage_count, loom_serve_text_stage_t* stages,
+    loom_serve_text_parameters_t* parameters, iree_allocator_t host_allocator) {
   iree_host_size_t root_count = 0;
   IREE_RETURN_IF_ERROR(loom_serve_text_stages_initialize(
       stage_count, stages, host_allocator, &root_count));
@@ -196,10 +196,9 @@ iree_status_t loom_serve_text_stages_bind(
           loom_serve_device_handle(device),
           loom_serve_device_transfer_queue(device),
           loom_serve_device_dispatch_queue(device),
-          loom_serve_device_storage_pool(device),
-          loom_serve_device_memory_pool(device),
-          loom_serve_device_weight_geometry(device), NULL,
-          loom_serve_device_workspace(device), domain == 0 ? shared_count : 0,
+          loom_serve_pool_storage(pool), loom_serve_pool_memory(pool),
+          loom_serve_pool_weight_geometry(pool), NULL,
+          loom_serve_pool_workspace(pool), domain == 0 ? shared_count : 0,
           count, roots, host_allocator, &parameters->plans[domain]);
     }
   }

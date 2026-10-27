@@ -111,7 +111,8 @@ class ImageParameterTest : public WeightsTest {
         .specialization_cache = {4, 16 * 1024 * 1024},
     };
     iree::Status status = loom_serve_image_model_allocate(
-        device_owner_, &options, host_allocator_, &model_);
+        device_owner_, loom_serve_device_pool(device_owner_), &options,
+        host_allocator_, &model_);
     if (expected_code != IREE_STATUS_OK) {
       EXPECT_THAT(status.ToString(),
                   ::testing::HasSubstr(

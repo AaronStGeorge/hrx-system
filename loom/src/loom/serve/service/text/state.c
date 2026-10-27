@@ -49,18 +49,19 @@ iree_hal_buffer_t** loom_serve_text_state_allocation(
 
 iree_status_t loom_serve_text_state_allocate(
     loom_serve_text_state_t* state, loom_serve_device_t* device,
-    loom_serve_execution_t* execution) {
+    loom_serve_pool_t* pool, loom_serve_execution_t* execution) {
   if (state->storage.carry_stride &&
       !iree_any_bit_set(state->flags, LOOM_SERVE_TEXT_STATE_FLAG_PACKED)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "source carry requires packed epochs");
   }
   state->device = loom_serve_device_handle(device);
+  state->pool = pool;
   iree_arena_initialize(
       loom_serve_host_block_pool(loom_serve_device_host(device)),
       &state->row_records);
   state->execution = execution;
-  state->memory.pool = loom_serve_device_memory_pool(device);
+  state->memory.pool = loom_serve_pool_memory(pool);
   if (state->memory.pool) {
     IREE_RETURN_IF_ERROR(iree_hal_semaphore_create(
         state->device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
@@ -131,7 +132,7 @@ iree_status_t loom_serve_text_state_allocate(
       }
       if (state->memory.pool && state->cache.capacity && elastic) {
         const loom_serve_memory_geometry_t geometry =
-            loom_serve_device_state_geometry(device);
+            loom_serve_pool_state_geometry(pool);
         status = loom_serve_virtual_buffer_allocate(
             state->memory.pool, geometry,
             iree_device_align(length, geometry.slab_size), alignment,
@@ -161,8 +162,8 @@ iree_status_t loom_serve_text_state_allocate(
   }
   if (iree_status_is_ok(status) && allocation_count) {
     status = loom_serve_execution_alloca_from_pool(
-        execution, loom_serve_device_storage_pool(device), allocation_count,
-        requests, buffers);
+        execution, loom_serve_pool_storage(pool), allocation_count, requests,
+        buffers);
     for (iree_host_size_t i = 0; i < allocation_count; ++i) {
       *targets[i] = buffers[i];
       if (iree_status_is_ok(status)) {

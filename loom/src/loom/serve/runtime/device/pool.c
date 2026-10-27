@@ -130,6 +130,17 @@ iree_status_t loom_serve_pool_allocate(iree_hal_device_group_t* group,
   return status;
 }
 
+loom_serve_pool_statistics_t loom_serve_pool_statistics(
+    const loom_serve_pool_t* pool) {
+  loom_serve_pool_statistics_t statistics = {
+      .workspace = loom_serve_workspace_statistics(pool->workspace)};
+  iree_hal_pool_query_stats(pool->storage, &statistics.storage);
+  if (pool->memory) {
+    statistics.retained = loom_serve_memory_pool_statistics(pool->memory);
+  }
+  return statistics;
+}
+
 bool loom_serve_pool_is_in_use(const loom_serve_pool_t* pool) {
   if (!pool) {
     return false;

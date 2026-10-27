@@ -192,7 +192,6 @@ static iree_status_t loom_serve_text_state_resize_views(
 }
 
 iree_status_t loom_serve_text_state_resize(loom_serve_text_state_t* state,
-                                           loom_serve_device_t* device,
                                            iree_host_size_t row_count,
                                            loom_serve_text_storage_t* storage) {
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -253,7 +252,7 @@ iree_status_t loom_serve_text_state_resize(loom_serve_text_state_t* state,
       const iree_hal_pool_reservation_request_t request =
           iree_hal_make_pool_reservation_request(length, alignment);
       status = loom_serve_execution_alloca_from_pool(
-          state->execution, loom_serve_device_storage_pool(device), 1, &request,
+          state->execution, loom_serve_pool_storage(state->pool), 1, &request,
           &replacement);
     }
     if (iree_status_is_ok(status)) {

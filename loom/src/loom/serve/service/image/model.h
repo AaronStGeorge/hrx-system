@@ -55,7 +55,7 @@ typedef void (*loom_serve_image_load_wake_fn_t)(void* user_data);
 // I/O or work submission. Options' views are borrowed, not copied. A registered
 // but drained deployment can defer creating this operation altogether.
 iree_status_t loom_serve_image_load_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_image_model_options_t* options,
     loom_serve_image_load_wake_fn_t wake, void* user_data,
     iree_allocator_t host_allocator, loom_serve_image_load_t** out_load);
@@ -140,8 +140,8 @@ iree_status_t loom_serve_image_load_free(loom_serve_image_load_t* load);
 // queues. The cold constructor drives the asynchronous load and joins on its
 // outer application caller, never a shared worker. Live registration uses
 // load_advance. Creation indexes parameters and records commands without
-// reading weight payloads. The device owner outlives the model and serializes
-// all model calls. Its physical pool backs parameter roots independently of
+// reading weight payloads. The device and pool outlive the model; the caller
+// serializes all model calls. The pool backs parameter roots independently of
 // cached commands. First generation or explicit activation streams/prepares
 // weights. Active weights remain shared across request specializations; an
 // exact code-cache hit does no JIT or parameter preparation.
@@ -149,7 +149,7 @@ iree_status_t loom_serve_image_load_free(loom_serve_image_load_t* load);
 // evidence is available through load_report; this wrapper performs no
 // process-global output.
 iree_status_t loom_serve_image_model_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_image_model_options_t* options,
     iree_allocator_t host_allocator, loom_serve_image_model_t** out_model);
 

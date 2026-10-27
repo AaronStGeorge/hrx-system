@@ -394,8 +394,9 @@ static iree_status_t loom_serve_image_registration_create(
       .command_quantum = configuration->image.command_quantum,
       .specialization_cache = configuration->specialization_cache};
   iree_status_t status = loom_serve_image_load_allocate(
-      registration->device, &model_options, observer.wake, observer.user_data,
-      host_allocator, &registration->load);
+      registration->device, loom_serve_device_pool(registration->device),
+      &model_options, observer.wake, observer.user_data, host_allocator,
+      &registration->load);
   if (iree_status_is_ok(status)) {
     *out_registration = (loom_serve_registration_t){
         .self = registration,
@@ -592,8 +593,9 @@ static iree_status_t loom_serve_speech_registration_create(
       .asset_directory = configuration->assets,
       .options = configuration->options};
   iree_status_t status = loom_serve_speech_load_allocate(
-      registration->device, &model_options, observer.wake, observer.user_data,
-      host_allocator, &registration->load);
+      registration->device, loom_serve_device_pool(registration->device),
+      &model_options, observer.wake, observer.user_data, host_allocator,
+      &registration->load);
   if (iree_status_is_ok(status)) {
     *out_registration = (loom_serve_registration_t){
         .self = registration,
@@ -771,8 +773,9 @@ static iree_status_t loom_serve_recognition_registration_create(
       .asset_directory = configuration->assets,
       .options = configuration->options};
   iree_status_t status = loom_serve_recognition_load_allocate(
-      registration->device, &model_options, observer.wake, observer.user_data,
-      host_allocator, &registration->load);
+      registration->device, loom_serve_device_pool(registration->device),
+      &model_options, observer.wake, observer.user_data, host_allocator,
+      &registration->load);
   if (iree_status_is_ok(status)) {
     *out_registration = (loom_serve_registration_t){
         .self = registration,
@@ -1059,13 +1062,14 @@ static iree_status_t loom_serve_text_registration_create(
     image_options.sources.prepare = text->image.prepare;
     image_options.sources.control = text->image.control;
     status = loom_serve_finite_component_allocate(
-        registration->device, &image_options, observer, host_allocator,
-        &registration->image);
+        registration->device, loom_serve_device_pool(registration->device),
+        &image_options, observer, host_allocator, &registration->image);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_serve_text_load_allocate(registration->device, &model_options,
-                                           observer.wake, observer.user_data,
-                                           host_allocator, &registration->load);
+    status = loom_serve_text_load_allocate(
+        registration->device, loom_serve_device_pool(registration->device),
+        &model_options, observer.wake, observer.user_data, host_allocator,
+        &registration->load);
   }
   if (iree_status_is_ok(status)) {
     *out_registration = (loom_serve_registration_t){

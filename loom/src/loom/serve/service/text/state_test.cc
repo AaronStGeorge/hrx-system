@@ -118,7 +118,8 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
   iree_status_t Allocate() {
     IREE_RETURN_IF_ERROR(loom_serve_text_storage_initialize(
         &types, results, 2, 17, 32, host_allocator, &state.storage));
-    return loom_serve_text_state_allocate(&state, device, execution);
+    return loom_serve_text_state_allocate(
+        &state, device, loom_serve_device_pool(device), execution);
   }
 
   iree_status_t Upload(iree_hal_buffer_t* buffer, uint64_t offset,
@@ -272,8 +273,7 @@ TEST_P(TextStateTest, OptionalRootsRetainOriginsMapsAndCheckpointCarry) {
     loom_serve_text_storage_t storage;
     IREE_ASSERT_OK(loom_serve_text_storage_initialize(
         &types, results, capacity, 17, 32, host_allocator, &storage));
-    auto status =
-        loom_serve_text_state_resize(&state, device, capacity, &storage);
+    auto status = loom_serve_text_state_resize(&state, capacity, &storage);
     loom_serve_text_storage_deinitialize(&storage);
     IREE_ASSERT_OK(status);
     IREE_ASSERT_OK(loom_serve_execution_drain(execution));

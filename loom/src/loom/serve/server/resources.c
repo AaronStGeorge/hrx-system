@@ -266,7 +266,7 @@ static iree_status_t loom_serve_resources_write_memory(
     const loom_serve_device_t* device, loom_output_stream_t* output) {
   const loom_serve_memory_pool_t* retained =
       loom_serve_device_memory_pool(device);
-  const loom_serve_device_memory_statistics_t memory =
+  const loom_serve_pool_statistics_t memory =
       loom_serve_device_memory_statistics(device);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       output,

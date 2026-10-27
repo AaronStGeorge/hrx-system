@@ -50,8 +50,9 @@ class ElasticTextServiceTest : public SourceTextServiceTest {
     options.context_capacity = slab_size / 8;
     options.pool_capacity = 4 * options.context_capacity;
     loom_serve_text_model_t* source = nullptr;
-    IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                  host_allocator_, &source));
+    IREE_ASSERT_OK(
+        loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                       &options, host_allocator_, &source));
     const auto release_model = [](loom_serve_text_model_t* model) {
       IREE_EXPECT_OK(loom_serve_text_model_free(model));
     };
@@ -358,8 +359,9 @@ TEST_F(ElasticTextServiceTest,
   options.context_capacity = slab_size / 8;
   options.pool_capacity = 3 * slab_size / 4;
   loom_serve_text_model_t* sparse = nullptr;
-  IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                host_allocator_, &sparse));
+  IREE_ASSERT_OK(
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, host_allocator_, &sparse));
   const auto release_model = [](loom_serve_text_model_t* model) {
     IREE_EXPECT_OK(loom_serve_text_model_free(model));
   };
@@ -483,8 +485,9 @@ TEST_F(ElasticTextServiceTest,
   options.pool_capacity =
       loom_serve_test_application_options_default().slab_size / 4;
   loom_serve_text_model_t* retiring = nullptr;
-  IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                host_allocator_, &retiring));
+  IREE_ASSERT_OK(
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, host_allocator_, &retiring));
   const auto release_model = [](loom_serve_text_model_t* model) {
     IREE_EXPECT_OK(loom_serve_text_model_free(model));
   };
@@ -593,8 +596,9 @@ TEST_F(ElasticTextServiceTest, RetirementOwnsAcceptedCheckpointCapture) {
   EXPECT_EQ(memory.retained.releasing_bytes, 0u);
 
   // Same host, queues, and parameter pool remain available to the replacement.
-  IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                host_allocator_, &model_));
+  IREE_ASSERT_OK(
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, host_allocator_, &model_));
   row = loom_serve_text_model_row(model_, 0);
   IREE_ASSERT_OK(
       loom_serve_text_row_prefill(row, tokens.size(), tokens.data()));

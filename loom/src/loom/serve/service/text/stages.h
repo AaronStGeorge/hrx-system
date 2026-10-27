@@ -47,10 +47,10 @@ typedef struct loom_serve_text_parameters_t {
 // On failure the caller still owns every populated plan and fixed-buffer slot.
 // Consumers retire before plans; declarations outlive the returned sources.
 iree_status_t loom_serve_text_stages_bind(
-    loom_serve_device_t* device, const loom_serve_preparation_t* preparation,
-    iree_host_size_t shared_count, iree_host_size_t stage_count,
-    loom_serve_text_stage_t* stages, loom_serve_text_parameters_t* parameters,
-    iree_allocator_t host_allocator);
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_serve_preparation_t* preparation, iree_host_size_t shared_count,
+    iree_host_size_t stage_count, loom_serve_text_stage_t* stages,
+    loom_serve_text_parameters_t* parameters, iree_allocator_t host_allocator);
 
 // Binds replacement code to the original stages' parameter roots. Reflection
 // must preserve parameter keys, placement, alignment and model-buffer arity;

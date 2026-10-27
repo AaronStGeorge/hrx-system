@@ -178,7 +178,7 @@ static iree_status_t loom_serve_text_shared_memory_format(
 }
 
 static const loom_serve_telemetry_event_t text_shared_memory_event = {
-    "shared_device_memory", loom_serve_text_shared_memory_format};
+    "shared_pool_memory", loom_serve_text_shared_memory_format};
 
 static iree_status_t loom_serve_text_activity_format(
     const loom_serve_telemetry_record_t* record,
@@ -349,12 +349,11 @@ static void loom_serve_text_heartbeat_report(
   loom_serve_telemetry_record_weights(heartbeat->stream, record.time_ns,
                                       &state.weight_activity);
   const loom_serve_text_shared_memory_record_t shared_memory = {
-      .retained_committed_bytes = state.device_memory.retained.committed_bytes,
-      .workspace_committed_bytes =
-          state.device_memory.workspace.bytes_committed,
-      .workspace_live_bytes = state.device_memory.workspace.bytes_reserved,
-      .workspace_slab_count = state.device_memory.workspace.slab_count,
-      .workspace_reuse_count = state.device_memory.workspace.reuse_count};
+      .retained_committed_bytes = state.pool_memory.retained.committed_bytes,
+      .workspace_committed_bytes = state.pool_memory.workspace.bytes_committed,
+      .workspace_live_bytes = state.pool_memory.workspace.bytes_reserved,
+      .workspace_slab_count = state.pool_memory.workspace.slab_count,
+      .workspace_reuse_count = state.pool_memory.workspace.reuse_count};
   memset(&record.data, 0, sizeof(record.data));
   record.event = &text_shared_memory_event;
   memcpy(record.data.words, &shared_memory, sizeof(shared_memory));

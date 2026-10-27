@@ -23,19 +23,20 @@ struct loom_serve_text_warmup_t {
 };
 
 iree_status_t loom_serve_text_warmup_allocate(
-    loom_serve_device_t* device, loom_serve_residency_group_t* group,
-    void (*wake)(void* user_data), void* user_data,
-    iree_allocator_t host_allocator, loom_serve_text_warmup_t** out_warmup) {
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    loom_serve_residency_group_t* group, void (*wake)(void* user_data),
+    void* user_data, iree_allocator_t host_allocator,
+    loom_serve_text_warmup_t** out_warmup) {
   *out_warmup = NULL;
   loom_serve_text_warmup_t* warmup = NULL;
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(host_allocator, sizeof(*warmup), (void**)&warmup));
   warmup->host_allocator = host_allocator;
-  iree_status_t status = loom_serve_device_create_execution(
-      device, loom_serve_device_pool(device), &warmup->execution);
+  iree_status_t status =
+      loom_serve_device_create_execution(device, pool, &warmup->execution);
   if (iree_status_is_ok(status)) {
     status = loom_serve_residency_allocate(
-        loom_serve_device_residency_cache(device), warmup->execution, 1, &group,
+        loom_serve_pool_residency_cache(pool), warmup->execution, 1, &group,
         host_allocator, &warmup->residency);
   }
   if (iree_status_is_ok(status)) {

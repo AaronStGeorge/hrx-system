@@ -383,7 +383,8 @@ typedef void (*loom_serve_text_load_wake_fn_t)(void* user_data);
 // Allocates an unstarted operation without source I/O, device reservation or
 // task submission. Option views remain borrowed until terminal advance.
 iree_status_t loom_serve_text_load_allocate(
-    loom_serve_device_t* device, const loom_serve_text_options_t* options,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_serve_text_options_t* options,
     loom_serve_text_load_wake_fn_t wake, void* user_data,
     iree_allocator_t host_allocator, loom_serve_text_load_t** out_load);
 
@@ -422,15 +423,16 @@ void loom_serve_text_load_free(loom_serve_text_load_t* load);
 
 // Cold outer-thread wrapper drives the same asynchronous preparation. Compiles
 // stages, records commands and indexes parameters without loading weight
-// payloads. The shared device owner outlives the model and
-// serializes model calls; its pool supplies elastic backing or explicit fixed
+// payloads. The execution device and storage pool outlive the model; the caller
+// serializes model calls. The pool supplies elastic backing or explicit fixed
 // allocations. Pooled state grows on row/page activation. Options strings are
 // borrowed only for this call. Failure releases partial ownership. Compilation
 // evidence is available through the owner-driven load interface; this wrapper
 // performs no process-global output.
 iree_status_t loom_serve_text_model_allocate(
-    loom_serve_device_t* device, const loom_serve_text_options_t* options,
-    iree_allocator_t host_allocator, loom_serve_text_model_t** out_model);
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_serve_text_options_t* options, iree_allocator_t host_allocator,
+    loom_serve_text_model_t** out_model);
 
 // Begins irreversible removal after service CPU tasks, waits, candidate jobs
 // and external tokenizer borrowers retire, and candidate handles are released.
@@ -456,10 +458,13 @@ iree_status_t loom_serve_text_model_free_retired(
 // row/tokenizer pointers become invalid. NULL is accepted.
 iree_status_t loom_serve_text_model_free(loom_serve_text_model_t* model);
 
-// Borrowed shared device owner, including other models' backing and workspace.
-// Its cold pressure operations require the same serialized host ownership as
-// model invocation; this is not a model-private allocation domain.
+// Borrowed execution device, outliving model work and asynchronous preparation.
 loom_serve_device_t* loom_serve_text_model_device(
+    const loom_serve_text_model_t* model);
+
+// Borrowed storage and residency owner, independent of the execution device.
+// Its pressure operations share the serialized host owner with model work.
+loom_serve_pool_t* loom_serve_text_model_pool(
     const loom_serve_text_model_t* model);
 
 // At a serialized model boundary, release/reload parameter backing while

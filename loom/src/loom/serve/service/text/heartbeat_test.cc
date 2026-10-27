@@ -135,7 +135,7 @@ TEST_F(TextHeartbeatTest, TimerReadinessPublishesCopiedCounters) {
       .released_bytes = 40,
   };
   heartbeat_.snapshot.weight_memory = {200, 90, 30, 15, 50};
-  heartbeat_.snapshot.device_memory.workspace.bytes_committed = 1234;
+  heartbeat_.snapshot.pool_memory.workspace.bytes_committed = 1234;
   const uint32_t previous_count = wake_count_.load(std::memory_order_acquire);
   bool progress = false;
   IREE_ASSERT_OK(

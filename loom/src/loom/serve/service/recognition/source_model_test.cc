@@ -60,7 +60,8 @@ class SourceRecognitionModelTest : public ::testing::Test {
             },
     };
     IREE_ASSERT_OK(loom_serve_recognition_model_allocate(
-        device_, &model_options, allocator_, &model_));
+        device_, loom_serve_device_pool(device_), &model_options, allocator_,
+        &model_));
     generator_ = loom_serve_recognition_model_generator(model_);
     EXPECT_EQ(generator_.format.sample_rate, 16000u);
     EXPECT_EQ(generator_.format.channels, 1u);

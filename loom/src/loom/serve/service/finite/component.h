@@ -29,11 +29,12 @@ typedef enum loom_serve_finite_component_phase_e {
 } loom_serve_finite_component_phase_t;
 
 // Allocates only the dormant owner. No source/checkpoint access, compilation,
-// model allocation, or parameter reservation occurs. Device, options' views,
-// package and observer remain borrowed through retirement and destruction.
-// The observer must schedule the shared owner without reentering this object.
+// model allocation, or parameter reservation occurs. Device, pool, options'
+// views, package and observer remain borrowed through retirement and
+// destruction. The observer must schedule the shared owner without reentering
+// this object.
 iree_status_t loom_serve_finite_component_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_finite_model_options_t* options,
     loom_serve_wake_callback_t observer, iree_allocator_t host_allocator,
     loom_serve_finite_component_t** out_component);

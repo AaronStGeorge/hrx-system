@@ -39,7 +39,7 @@ typedef void (*loom_serve_recognition_load_wake_fn_t)(void* user_data);
 // work. Private preparation/JIT uses the shared host; owner turns alone mutate
 // shared residency and allocation state.
 iree_status_t loom_serve_recognition_load_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_recognition_model_options_t* options,
     loom_serve_recognition_load_wake_fn_t wake, void* user_data,
     iree_allocator_t host_allocator, loom_serve_recognition_load_t** out_load);
@@ -140,10 +140,10 @@ iree_status_t loom_serve_recognition_load_free(
 //
 // Cold outer-owner constructor: joins the same asynchronous load, never on a
 // shared worker. Live registration uses load_advance. Creation reads metadata
-// and compiles stages without loading checkpoint payloads. The shared device
-// outlives the model. Failure leaves *out_model NULL.
+// and compiles stages without loading checkpoint payloads. The execution device
+// and storage pool outlive the model. Failure leaves *out_model NULL.
 iree_status_t loom_serve_recognition_model_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_recognition_model_options_t* options,
     iree_allocator_t host_allocator,
     loom_serve_recognition_model_t** out_model);

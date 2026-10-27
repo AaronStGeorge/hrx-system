@@ -118,8 +118,10 @@ class SourceRecognitionHttpTest : public ::testing::Test {
             },
     };
     IREE_ASSERT_OK(loom_serve_recognition_model_allocate(
-        loom_serve_test_application_device_at(application, 0), &model_options,
-        iree_allocator_system(), &model_));
+        loom_serve_test_application_device_at(application, 0),
+        loom_serve_device_pool(
+            loom_serve_test_application_device_at(application, 0)),
+        &model_options, iree_allocator_system(), &model_));
     const auto server_options = loom_serve_http_server_options_default();
     IREE_ASSERT_OK(loom_serve_http_server_allocate(
         loom_serve_host_proactor_pool(host_), &server_options,

@@ -205,24 +205,23 @@ static void loom_serve_text_load_ready(void* user_data,
 
 static iree_status_t loom_serve_text_load_bind(loom_serve_text_model_t* model) {
   IREE_RETURN_IF_ERROR(loom_serve_device_create_execution(
-      model->device_owner, loom_serve_device_pool(model->device_owner),
-      &model->execution));
+      model->device_owner, model->pool, &model->execution));
   IREE_RETURN_IF_ERROR(loom_serve_text_stages_bind(
-      model->device_owner, model->source.preparation,
+      model->device_owner, model->pool, model->source.preparation,
       model->source.shared_stage_count, model->stage_count, model->stages,
       &model->parameters, model->host_allocator));
   return loom_serve_residency_group_allocate(
-      loom_serve_device_residency_cache(model->device_owner),
-      model->parameters.count, model->parameters.plans, model->host_allocator,
-      &model->parameter_group);
+      loom_serve_pool_residency_cache(model->pool), model->parameters.count,
+      model->parameters.plans, model->host_allocator, &model->parameter_group);
 }
 
 static iree_status_t loom_serve_text_load_activate(
     loom_serve_text_load_t* load) {
   loom_serve_text_model_t* model = load->model;
   IREE_RETURN_IF_ERROR(loom_serve_text_warmup_allocate(
-      model->device_owner, model->parameter_group, load->event.wake,
-      load->event.user_data, load->host_allocator, &model->warmup));
+      model->device_owner, model->pool, model->parameter_group,
+      load->event.wake, load->event.user_data, load->host_allocator,
+      &model->warmup));
   loom_serve_text_warmup_poll(model->warmup);
   return loom_serve_text_warmup_status(model->warmup);
 }
@@ -242,7 +241,7 @@ static iree_status_t loom_serve_text_load_link(loom_serve_text_load_t* load) {
   }
   IREE_RETURN_IF_ERROR(status);
   IREE_RETURN_IF_ERROR(loom_serve_text_state_allocate(
-      &model->state, model->device_owner, model->execution));
+      &model->state, model->device_owner, model->pool, model->execution));
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc_array(model->host_allocator, model->row_count,
                                   sizeof(*model->rows), (void**)&model->rows));
@@ -315,7 +314,8 @@ static iree_status_t loom_serve_text_load_link(loom_serve_text_load_t* load) {
 }
 
 iree_status_t loom_serve_text_load_allocate(
-    loom_serve_device_t* device, const loom_serve_text_options_t* options,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_serve_text_options_t* options,
     loom_serve_text_load_wake_fn_t wake, void* user_data,
     iree_allocator_t host_allocator, loom_serve_text_load_t** out_load) {
   *out_load = NULL;
@@ -392,6 +392,7 @@ iree_status_t loom_serve_text_load_allocate(
     loom_serve_text_model_t* model = load->model;
     model->host_allocator = host_allocator;
     model->device_owner = device;
+    model->pool = pool;
     model->device = loom_serve_device_handle(device);
     model->group = loom_serve_device_group(device);
     model->dispatch = loom_serve_device_dispatch_queue(device);
@@ -488,9 +489,9 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
           // the complete cold working set before optional activation, while
           // device compilation and tokenization can still be running.
           status = loom_serve_residency_allocate(
-              loom_serve_device_residency_cache(model->device_owner),
-              model->execution, 1, &model->parameter_group,
-              model->host_allocator, &model->residency);
+              loom_serve_pool_residency_cache(model->pool), model->execution, 1,
+              &model->parameter_group, model->host_allocator,
+              &model->residency);
           load->phase = TEXT_LOAD_ACTIVATE;
         }
         break;
@@ -594,14 +595,15 @@ static void loom_serve_text_load_notify(void* user_data) {
 }
 
 iree_status_t loom_serve_text_model_allocate(
-    loom_serve_device_t* device, const loom_serve_text_options_t* options,
-    iree_allocator_t host_allocator, loom_serve_text_model_t** out_model) {
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_serve_text_options_t* options, iree_allocator_t host_allocator,
+    loom_serve_text_model_t** out_model) {
   *out_model = NULL;
   iree_notification_t notification;
   iree_notification_initialize(&notification);
   loom_serve_text_load_t* load = NULL;
   iree_status_t status = loom_serve_text_load_allocate(
-      device, options, loom_serve_text_load_notify, &notification,
+      device, pool, options, loom_serve_text_load_notify, &notification,
       host_allocator, &load);
   bool complete = false;
   while (iree_status_is_ok(status) && !complete) {
@@ -733,6 +735,11 @@ iree_status_t loom_serve_text_model_free(loom_serve_text_model_t* model) {
 loom_serve_device_t* loom_serve_text_model_device(
     const loom_serve_text_model_t* model) {
   return model->device_owner;
+}
+
+loom_serve_pool_t* loom_serve_text_model_pool(
+    const loom_serve_text_model_t* model) {
+  return model->pool;
 }
 
 iree_status_t loom_serve_text_model_compile_variant_async(

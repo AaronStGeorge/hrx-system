@@ -111,8 +111,8 @@ iree_status_t loom_serve_text_model_submit_resize(
   IREE_TRACE_ZONE_BEGIN(z0);
   *out_frontier = (loom_serve_execution_frontier_t){0};
   const iree_host_size_t row_count = resize->row_count;
-  iree_status_t status = loom_serve_text_state_resize(
-      &model->state, model->device_owner, row_count, &resize->storage);
+  iree_status_t status =
+      loom_serve_text_state_resize(&model->state, row_count, &resize->storage);
   if (iree_status_is_ok(status)) {
     iree_vm_buffer_release(model->source.control_state);
     model->source.control_state = resize->control_state;

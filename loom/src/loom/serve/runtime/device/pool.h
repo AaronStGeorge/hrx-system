@@ -52,6 +52,27 @@ bool loom_serve_pool_is_in_use(const loom_serve_pool_t* pool);
 // execution, and result consumers retire before the caller destroys the pool.
 iree_status_t loom_serve_pool_free(loom_serve_pool_t* pool);
 
+// Serving-managed backing across every consumer of this owner. Storage and
+// retained have separate native sources; workspace is a breakdown of storage
+// for fixed backing or retained for elastic backing, not additional physical
+// consumption. Virtual statistics are zero for fixed backing. Native statistics
+// are independent atomic observations, not a coherent snapshot. Commitments
+// exclude host snapshots, loader storage, and driver overhead; HAL providers
+// may also hide physical allocation padding.
+typedef struct loom_serve_pool_statistics_t {
+  // Ordinary native buffers, including fixed parameters, state, and workspace.
+  iree_hal_pool_stats_t storage;
+  // All virtual reservations and backing, including weights, state, workspace.
+  loom_serve_memory_statistics_t retained;
+  // Shared command workspace, including reusable idle backing.
+  iree_hal_pool_stats_t workspace;
+} loom_serve_pool_statistics_t;
+
+// Called by the host owner; copies observations without waiting for device
+// work.
+loom_serve_pool_statistics_t loom_serve_pool_statistics(
+    const loom_serve_pool_t* pool);
+
 // Borrowed resources outliving every model, execution, and output using them.
 iree_hal_pool_t* loom_serve_pool_storage(const loom_serve_pool_t* pool);
 loom_serve_workspace_t* loom_serve_pool_workspace(

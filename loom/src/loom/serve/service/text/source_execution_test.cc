@@ -7,6 +7,7 @@
 #include <atomic>
 
 #include "loom/serve/service/text/service_test_fixture.h"
+#include "loom/serve/testing/service_application.h"
 
 namespace {
 
@@ -26,7 +27,7 @@ TEST_F(SourceTextServiceTest, PreparationActivatesWeightsOnlyWithDemand) {
     iree_notification_initialize(&notification);
     loom_serve_text_load_t* load = nullptr;
     IREE_ASSERT_OK(loom_serve_text_load_allocate(
-        device_, &options,
+        device_, loom_serve_device_pool(device_), &options,
         [](void* payload) {
           iree_notification_post(static_cast<iree_notification_t*>(payload),
                                  IREE_ALL_WAITERS);
@@ -109,7 +110,8 @@ TEST_F(SourceTextServiceTest, FailedLinkRetiresAcceptedInitialization) {
   };
   loom_serve_text_load_t* load = nullptr;
   IREE_ASSERT_OK(loom_serve_text_load_allocate(
-      device_, &options, wake, &notification, host_allocator_, &load));
+      device_, loom_serve_device_pool(device_), &options, wake, &notification,
+      host_allocator_, &load));
   bool complete = false;
   iree_status_t status = iree_ok_status();
   while (!complete) {
@@ -169,7 +171,7 @@ TEST_F(SourceTextServiceTest, MissingCheckpointFailsBeforeParameterPlacement) {
   iree_notification_initialize(&notification);
   loom_serve_text_load_t* load = nullptr;
   IREE_ASSERT_OK(loom_serve_text_load_allocate(
-      device_, &options,
+      device_, loom_serve_device_pool(device_), &options,
       [](void* payload) {
         iree_notification_post(static_cast<iree_notification_t*>(payload),
                                IREE_ALL_WAITERS);
@@ -242,6 +244,44 @@ class WideCohortTextServiceTest : public SourceTextServiceTest {
 
 class GrowingTextServiceTest : public SourceTextServiceTest {
  protected:
+  bool NeedsStandaloneModel() const override { return false; }
+
+  void SetUp() override {
+    ASSERT_NO_FATAL_FAILURE(SourceTextServiceTest::SetUp());
+    const auto* dispatch =
+        iree_hal_queue_family(loom_serve_device_dispatch_queue(device_));
+    const auto* transfer =
+        iree_hal_queue_family(loom_serve_device_transfer_queue(device_));
+    const iree_hal_pool_family_access_t families[] = {
+        {
+            .family = dispatch,
+            .usage = IREE_HAL_BUFFER_USAGE_STORAGE |
+                     IREE_HAL_BUFFER_USAGE_TRANSFER |
+                     IREE_HAL_BUFFER_USAGE_DISPATCH_INDIRECT_PARAMETERS,
+        },
+        {.family = transfer, .usage = IREE_HAL_BUFFER_USAGE_TRANSFER},
+    };
+    const auto application_options =
+        loom_serve_test_application_options_default();
+    const loom_serve_pool_options_t pool_options = {
+        .elastic =
+            application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+        .weight_slab_size = application_options.slab_size,
+        .state_slab_size = application_options.slab_size,
+    };
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group_,
+        {.family_count = dispatch == transfer ? 1u : 2u, .families = families},
+        loom_serve_device_transfer_queue(device_), &pool_options, &pool_));
+    const auto options = ModelOptions();
+    IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, pool_, &options,
+                                                  host_allocator_, &model_));
+    EXPECT_EQ(loom_serve_text_model_pool(model_), pool_);
+    EXPECT_EQ(
+        loom_serve_residency_cache(loom_serve_text_model_residency(model_)),
+        loom_serve_pool_residency_cache(pool_));
+  }
+
   loom_serve_text_options_t ModelOptions() const override {
     auto options = SourceTextServiceTest::ModelOptions();
     options.context_capacity = 256;
@@ -251,12 +291,15 @@ class GrowingTextServiceTest : public SourceTextServiceTest {
     return options;
   }
 
+  // Explicit storage owner independent of the execution device's default pool.
+  loom_serve_pool_t* pool_ = nullptr;
   // Large input staging makes 129 residents cross physical slab boundaries,
   // while the actual numerical workload remains a few tokens per resident.
   const loom_serve_packing_shape_t growth_shapes_[1] = {{4096, 129}};
 };
 
 TEST_F(GrowingTextServiceTest, GrowthKeepsLiveHistoriesHandlesAndCheckpoints) {
+  const auto default_before = loom_serve_device_memory_statistics(device_);
   std::vector<Oracle> references(129);
   auto* original = loom_serve_text_model_row(model_, 0);
   const int32_t prompt[] = {0, 1, 2};
@@ -290,9 +333,9 @@ TEST_F(GrowingTextServiceTest, GrowthKeepsLiveHistoriesHandlesAndCheckpoints) {
     loom_serve_text_resize_free(resize);
     IREE_ASSERT_OK(status);
     for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
-      IREE_ASSERT_OK(loom_serve_workspace_wait(
-          loom_serve_device_workspace(device_), frontier.semaphores[i],
-          frontier.values[i]));
+      IREE_ASSERT_OK(loom_serve_workspace_wait(loom_serve_pool_workspace(pool_),
+                                               frontier.semaphores[i],
+                                               frontier.values[i]));
     }
     loom_serve_text_model_complete_resize(model_);
     EXPECT_EQ(loom_serve_text_model_row_count(model_), capacity);
@@ -330,6 +373,11 @@ TEST_F(GrowingTextServiceTest, GrowthKeepsLiveHistoriesHandlesAndCheckpoints) {
   const auto after = loom_serve_text_model_weight_activity(model_);
   EXPECT_EQ(after.activations, activity.activations);
   EXPECT_EQ(after.read_bytes, activity.read_bytes);
+  const auto default_after = loom_serve_device_memory_statistics(device_);
+  EXPECT_EQ(default_after.storage.bytes_reserved,
+            default_before.storage.bytes_reserved);
+  EXPECT_EQ(default_after.retained.reserved_bytes,
+            default_before.retained.reserved_bytes);
 }
 
 TEST_F(WideCohortTextServiceTest, WideEpochsPreserveSparseResidentsAndForks) {
@@ -521,9 +569,10 @@ TEST_F(SourceTextServiceTest, RejectsPoolOutsideSourceIntegerRepresentation) {
   options.pool_capacity =
       static_cast<iree_host_size_t>(uint64_t{INT64_MAX} + 1);
   loom_serve_text_model_t* rejected = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_serve_text_model_allocate(
-                            device_, &options, host_allocator_, &rejected));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, host_allocator_, &rejected));
   EXPECT_EQ(rejected, nullptr);
 }
 
@@ -539,8 +588,9 @@ TEST_F(SourceTextServiceTest, WideSourceEpochsRetainExactHttpHistory) {
     options.pool_capacity = 4 * ((options.context_capacity + 3) / 4 * 4);
     options.epoch_count = IREE_ARRAYSIZE(shapes);
     options.epoch_shapes = shapes;
-    IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                  host_allocator_, &model_));
+    IREE_ASSERT_OK(
+        loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                       &options, host_allocator_, &model_));
     EXPECT_EQ(loom_serve_text_model_prefill_capacity(model_), capacity);
     std::vector<int32_t> tokens(capacity - 9);
     Oracle reference;
@@ -612,29 +662,33 @@ TEST_F(SourceTextServiceTest,
   auto options = ModelOptions();
   options.draft_depth = 3;
   loom_serve_text_model_t* unsupported = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_serve_text_model_allocate(
-                            device_, &options, host_allocator_, &unsupported));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, host_allocator_, &unsupported));
   EXPECT_EQ(unsupported, nullptr);
   options.draft_depth = 0;
   options.options = IREE_SV("{\"unknown\":true}");
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_serve_text_model_allocate(
-                            device_, &options, host_allocator_, &unsupported));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, host_allocator_, &unsupported));
   EXPECT_EQ(unsupported, nullptr);
   options.options = IREE_SV("{}");
   options.pool_capacity = 0;
   options.checkpoint_capacity = 0;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_serve_text_model_allocate(
-                            device_, &options, host_allocator_, &unsupported));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, host_allocator_, &unsupported));
   EXPECT_EQ(unsupported, nullptr);
   IREE_ASSERT_OK(loom_serve_text_model_free(model_));
   model_ = nullptr;
   ASSERT_NO_FATAL_FAILURE(WriteWeights(7));
   options = ModelOptions();
-  IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                host_allocator_, &model_));
+  IREE_ASSERT_OK(
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, host_allocator_, &model_));
   Start();
   const std::string prompt = "axb";
   const std::string actual =
@@ -694,9 +748,10 @@ TEST_F(SourceTextServiceTest, CheckpointMapExtentFailureRetiresTheLoad) {
     const auto expected_status = sizeof(iree_host_size_t) == 4
                                      ? IREE_STATUS_OUT_OF_RANGE
                                      : IREE_STATUS_RESOURCE_EXHAUSTED;
-    IREE_EXPECT_STATUS_IS(expected_status,
-                          loom_serve_text_model_allocate(device_, &options,
-                                                         allocator, &rejected));
+    IREE_EXPECT_STATUS_IS(
+        expected_status,
+        loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                       &options, allocator, &rejected));
     EXPECT_EQ(rejected, nullptr);
     IREE_EXPECT_OK(loom_serve_text_model_free(rejected));
     EXPECT_EQ(allocations.rejected_bytes.load(),
@@ -711,7 +766,8 @@ TEST_F(SourceTextServiceTest, CheckpointMapExtentFailureRetiresTheLoad) {
   options.checkpoint_capacity = 2;
   loom_serve_text_model_t* recovered = nullptr;
   IREE_ASSERT_OK(
-      loom_serve_text_model_allocate(device_, &options, allocator, &recovered));
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, allocator, &recovered));
   const int32_t tokens[] = {0, 1, 2, 0};
   auto* row = loom_serve_text_model_row(recovered, 0);
   IREE_EXPECT_OK(

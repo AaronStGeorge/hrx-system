@@ -156,8 +156,9 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
         .command_quantum = GetParam(),
         .specialization_cache = cache,
     };
-    IREE_ASSERT_OK(
-        loom_serve_image_model_allocate(device_, &options, allocator, &model_));
+    IREE_ASSERT_OK(loom_serve_image_model_allocate(
+        device_, loom_serve_device_pool(device_), &options, allocator,
+        &model_));
   }
 
   void Wait(loom_serve_execution_frontier_t frontier) {
@@ -1464,9 +1465,10 @@ TEST_P(SourceImageServiceTest, TokenizerFailureRetiresCompiledModel) {
   };
   const auto before = loom_serve_device_memory_statistics(device_);
   loom_serve_image_model_t* failed = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
-                        loom_serve_image_model_allocate(
-                            device_, &options, host_allocator_, &failed));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_NOT_FOUND,
+      loom_serve_image_model_allocate(device_, loom_serve_device_pool(device_),
+                                      &options, host_allocator_, &failed));
   EXPECT_EQ(failed, nullptr);
   const auto after = loom_serve_device_memory_statistics(device_);
   EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);

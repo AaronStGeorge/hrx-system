@@ -666,7 +666,7 @@ TEST_F(SourceTextServiceTest, CancelledPreparationRetainsPartialOwnership) {
   iree_notification_initialize(&notification);
   loom_serve_text_load_t* load = nullptr;
   IREE_ASSERT_OK(loom_serve_text_load_allocate(
-      device_, &options,
+      device_, loom_serve_device_pool(device_), &options,
       [](void* payload) {
         iree_notification_post(static_cast<iree_notification_t*>(payload),
                                IREE_ALL_WAITERS);
@@ -706,9 +706,10 @@ TEST_F(SourceTextServiceTest, TokenizerFailureRetiresCompiledModel) {
   auto options = ModelOptions();
   options.tokenizer_path = IREE_SV("absent-tokenizer.json");
   loom_serve_text_model_t* model = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
-                        loom_serve_text_model_allocate(
-                            device_, &options, host_allocator_, &model));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_NOT_FOUND,
+      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
+                                     &options, host_allocator_, &model));
   EXPECT_EQ(model, nullptr);
   const auto after = loom_serve_device_memory_statistics(device_);
   EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);

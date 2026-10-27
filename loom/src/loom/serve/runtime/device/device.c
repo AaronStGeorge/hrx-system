@@ -348,25 +348,16 @@ loom_serve_device_t* loom_serve_device_group_at(
   return &group->devices[device_index];
 }
 
-loom_serve_device_memory_statistics_t loom_serve_device_memory_statistics(
+loom_serve_pool_statistics_t loom_serve_device_memory_statistics(
     const loom_serve_device_t* device) {
-  loom_serve_device_memory_statistics_t statistics = {
-      .workspace = loom_serve_workspace_statistics(
-          loom_serve_pool_workspace(device->pool))};
-  iree_hal_pool_query_stats(loom_serve_pool_storage(device->pool),
-                            &statistics.storage);
-  if (loom_serve_pool_memory(device->pool)) {
-    statistics.retained =
-        loom_serve_memory_pool_statistics(loom_serve_pool_memory(device->pool));
-  }
-  return statistics;
+  return loom_serve_pool_statistics(device->pool);
 }
 
 iree_status_t loom_serve_device_trim(loom_serve_device_t* device,
                                      uint64_t target_bytes) {
   loom_serve_tokenizer_cache_trim(device->owner->tokenizer_cache);
   loom_serve_jit_cache_trim(device->jit_cache);
-  const loom_serve_device_memory_statistics_t memory =
+  const loom_serve_pool_statistics_t memory =
       loom_serve_device_memory_statistics(device);
   const uint64_t committed = loom_serve_pool_memory(device->pool)
                                  ? memory.retained.committed_bytes

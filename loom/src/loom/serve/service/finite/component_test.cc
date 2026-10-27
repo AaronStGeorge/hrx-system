@@ -162,7 +162,8 @@ class FiniteComponentTest : public ::testing::Test {
         .options = IREE_SV("{}"),
     };
     IREE_ASSERT_OK(loom_serve_finite_component_allocate(
-        device_, &options_, owner_.observer(), host_allocator_, &component_));
+        device_, loom_serve_device_pool(device_), &options_, owner_.observer(),
+        host_allocator_, &component_));
   }
 
   void TearDown() override {
@@ -220,7 +221,8 @@ class FiniteComponentTest : public ::testing::Test {
     options_.sources.count = 1;
     providers_[0] = IREE_SV("demand_kernels.loom");
     IREE_ASSERT_OK(loom_serve_finite_component_allocate(
-        device_, &options_, owner_.observer(), host_allocator_, &component_));
+        device_, loom_serve_device_pool(device_), &options_, owner_.observer(),
+        host_allocator_, &component_));
   }
 
   iree_status_t Retire(loom_serve_finite_component_t* component) {
@@ -351,7 +353,8 @@ class FiniteComponentTest : public ::testing::Test {
 
     loom_serve_finite_component_t* peer = nullptr;
     IREE_ASSERT_OK(loom_serve_finite_component_allocate(
-        device_, &options_, owner_.observer(), host_allocator_, &peer));
+        device_, loom_serve_device_pool(device_), &options_, owner_.observer(),
+        host_allocator_, &peer));
     loom_serve_finite_model_t* peer_model = nullptr;
     IREE_ASSERT_OK(Prepare(peer, &peer_model));
     ASSERT_NO_FATAL_FAILURE(PrepareBatch(peer_model, 0, 2 * kSlabSize));
@@ -565,7 +568,8 @@ TEST_F(FiniteComponentTest, ComponentReleasePreservesResidentPeer) {
   ASSERT_NO_FATAL_FAILURE(Invoke(model));
   loom_serve_finite_component_t* peer = nullptr;
   IREE_ASSERT_OK(loom_serve_finite_component_allocate(
-      device_, &options_, owner_.observer(), host_allocator_, &peer));
+      device_, loom_serve_device_pool(device_), &options_, owner_.observer(),
+      host_allocator_, &peer));
   loom_serve_finite_model_t* peer_model = nullptr;
   IREE_ASSERT_OK(Prepare(peer, &peer_model));
   ASSERT_NO_FATAL_FAILURE(Invoke(peer_model));
@@ -657,7 +661,8 @@ TEST_F(FiniteComponentTest, UnjoinedDemandReadsRetireWithRejectedInvocation) {
   IREE_ASSERT_OK(Retire(component_));
   loom_serve_finite_component_free(std::exchange(component_, nullptr));
   IREE_ASSERT_OK(loom_serve_finite_component_allocate(
-      device_, &options_, owner_.observer(), host_allocator_, &component_));
+      device_, loom_serve_device_pool(device_), &options_, owner_.observer(),
+      host_allocator_, &component_));
   IREE_ASSERT_OK(Prepare(component_, &model));
   ASSERT_NO_FATAL_FAILURE(Submit(model, 1));
   ASSERT_NO_FATAL_FAILURE(CheckResult(1, 4.0f));
@@ -694,7 +699,8 @@ TEST_F(FiniteComponentTest, PeerAdmissionWaitsForCapturedOutputRetirement) {
 
   loom_serve_finite_component_t* peer = nullptr;
   IREE_ASSERT_OK(loom_serve_finite_component_allocate(
-      device_, &options_, owner_.observer(), host_allocator_, &peer));
+      device_, loom_serve_device_pool(device_), &options_, owner_.observer(),
+      host_allocator_, &peer));
   loom_serve_finite_model_t* peer_model = nullptr;
   IREE_ASSERT_OK(Prepare(peer, &peer_model));
   auto* peer_residency = loom_serve_finite_model_residency(peer_model);

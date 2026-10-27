@@ -21,9 +21,10 @@ typedef struct loom_serve_text_warmup_t loom_serve_text_warmup_t;
 
 // Allocates unstarted ownership. No parameter I/O or capacity admission occurs.
 iree_status_t loom_serve_text_warmup_allocate(
-    loom_serve_device_t* device, loom_serve_residency_group_t* group,
-    void (*wake)(void* user_data), void* user_data,
-    iree_allocator_t host_allocator, loom_serve_text_warmup_t** out_warmup);
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    loom_serve_residency_group_t* group, void (*wake)(void* user_data),
+    void* user_data, iree_allocator_t host_allocator,
+    loom_serve_text_warmup_t** out_warmup);
 
 // Attempts admission once, or joins a published completion without waiting.
 // Capacity denial withdraws this startup opportunity; request admission owns

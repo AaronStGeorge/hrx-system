@@ -39,8 +39,10 @@ struct loom_serve_image_model_t {
   uint32_t command_quantum;
   // Immutable tokenizer reused by each independent request encoder.
   loom_serve_tokenizer_t* tokenizer;
-  // Borrowed shared device/backing owner, outliving the model.
+  // Borrowed execution device, outliving the model.
   loom_serve_device_t* owner;
+  // Borrowed storage and residency owner, independent of execution placement.
+  loom_serve_pool_t* pool;
   // Owned model work and feedback timelines, independent of other models.
   loom_serve_execution_t* execution;
   // Owned checkpoint roots and plans, outliving borrowing invocation
@@ -511,12 +513,12 @@ static iree_status_t loom_serve_image_model_bind(
     loom_serve_image_model_t* model) {
   IREE_RETURN_IF_ERROR(loom_serve_image_check_layouts(model));
   IREE_RETURN_IF_ERROR(loom_serve_device_create_execution(
-      model->owner, loom_serve_device_pool(model->owner), &model->execution));
+      model->owner, model->pool, &model->execution));
   const loom_cmd_program_t* program =
       loom_serve_jit_stage_program(model->stages.values[0]);
-  return loom_serve_parameter_bank_allocate(
-      model->owner, loom_serve_device_pool(model->owner), program,
-      model->host_allocator, &model->parameters);
+  return loom_serve_parameter_bank_allocate(model->owner, model->pool, program,
+                                            model->host_allocator,
+                                            &model->parameters);
 }
 
 static iree_status_t loom_serve_image_model_link(
@@ -527,11 +529,11 @@ static iree_status_t loom_serve_image_model_link(
   loom_serve_residency_group_t* group =
       loom_serve_parameter_bank_group(model->parameters);
   IREE_RETURN_IF_ERROR(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(model->owner), model->execution,
+      loom_serve_pool_residency_cache(model->pool), model->execution,
       group ? 1 : 0, &group, host_allocator, &model->residency));
   const loom_serve_executable_options_t options = {
       .device = model->owner,
-      .pool = loom_serve_device_pool(model->owner),
+      .pool = model->pool,
       .jit = model->jit,
       .sources = sources,
       .execution = model->execution,
@@ -698,7 +700,7 @@ static void loom_serve_image_load_compiled(void* user_data,
 }
 
 iree_status_t loom_serve_image_load_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_image_model_options_t* options,
     loom_serve_image_load_wake_fn_t wake, void* user_data,
     iree_allocator_t host_allocator, loom_serve_image_load_t** out_load) {
@@ -730,6 +732,7 @@ iree_status_t loom_serve_image_load_allocate(
   if (iree_status_is_ok(status)) {
     load->model->host_allocator = host_allocator;
     load->model->owner = device;
+    load->model->pool = pool;
     load->model->command_quantum = options->command_quantum;
     load->model->specialization_cache = options->specialization_cache;
     *out_load = load;
@@ -878,7 +881,7 @@ static void loom_serve_image_load_notify(void* user_data) {
 }
 
 iree_status_t loom_serve_image_model_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_image_model_options_t* options,
     iree_allocator_t host_allocator, loom_serve_image_model_t** out_model) {
   *out_model = NULL;
@@ -886,7 +889,7 @@ iree_status_t loom_serve_image_model_allocate(
   iree_notification_initialize(&notification);
   loom_serve_image_load_t* load = NULL;
   iree_status_t status = loom_serve_image_load_allocate(
-      device, options, loom_serve_image_load_notify, &notification,
+      device, pool, options, loom_serve_image_load_notify, &notification,
       host_allocator, &load);
   bool complete = false;
   while (iree_status_is_ok(status) && !complete) {

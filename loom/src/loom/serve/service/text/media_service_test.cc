@@ -40,7 +40,8 @@ class MediaServiceTest : public SourceTextServiceTest {
         loom_serve_http_server_notification(server_),
     };
     IREE_ASSERT_OK(loom_serve_finite_component_allocate(
-        device_, &options, observer, host_allocator_, &image_));
+        device_, loom_serve_device_pool(device_), &options, observer,
+        host_allocator_, &image_));
     auto service_options = ServiceOptions();
     service_options.image = image_;
     IREE_ASSERT_OK(loom_serve_text_service_allocate(
