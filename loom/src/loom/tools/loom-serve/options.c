@@ -28,16 +28,19 @@ IREE_FLAG(string, weight_slab_bytes, "",
           "workspace (default 1 GiB). Coarse slabs reduce native allocation "
           "and mapping work; loading streams through independent bounded "
           "read windows. Zero selects "
-          "the allocator recommendation. Ignored for fixed backing.");
+          "the allocator recommendation. Accepts byte counts or size strings "
+          "such as 1gib. Ignored for fixed backing.");
 IREE_FLAG(string, state_slab_bytes, "",
           "Physical commitment/reclamation granularity for elastic mutable "
           "state (default 64 MiB). Logical tensor and KV block sizes are "
           "unchanged. Zero selects the allocator recommendation. Ignored "
-          "for fixed backing.");
+          "for fixed backing. Accepts byte counts or size strings such as "
+          "64mib.");
 IREE_FLAG(string, memory_bytes, "",
           "Shared physical parameter/state/workspace budget; a nonzero limit "
           "requires elastic backing and one device. Zero imposes no serving "
-          "limit. Host snapshots and driver overhead are outside this budget.");
+          "limit. Host snapshots and driver overhead are outside this budget. "
+          "Accepts byte counts or size strings such as 64gib.");
 IREE_FLAG(string, workspace_idle_ms, "",
           "Single-device workspace idle expiry in milliseconds; default zero "
           "disables automatic release.");
@@ -99,19 +102,33 @@ static iree_status_t loom_serve_device_configuration_from_flags(
   const char* values[] = {FLAG_weight_slab_bytes, FLAG_state_slab_bytes,
                           FLAG_memory_bytes, FLAG_workspace_idle_ms,
                           FLAG_parameter_idle_ms};
+  const char* names[] = {"weight_slab_bytes", "state_slab_bytes",
+                         "memory_bytes", "workspace_idle_ms",
+                         "parameter_idle_ms"};
   uint64_t numbers[] = {options->weight_slab_size, options->state_slab_size, 0,
                         0, 0};
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(values); ++i) {
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(values) && iree_status_is_ok(status); ++i) {
     if (values[i][0]) {
-      IREE_RETURN_IF_ERROR(iree_json_parse_uint64(
-          iree_make_cstring_view(values[i]), &numbers[i]));
+      if (i < 3) {
+        iree_device_size_t size = 0;
+        status = iree_string_view_parse_device_size(
+            iree_make_cstring_view(values[i]), &size);
+        numbers[i] = size;
+      } else {
+        status = iree_json_parse_uint64(iree_make_cstring_view(values[i]),
+                                        &numbers[i]);
+      }
+      if (!iree_status_is_ok(status)) {
+        status = iree_status_annotate_f(status, "--%s", names[i]);
+      }
     }
   }
-  if (numbers[0] > IREE_DEVICE_SIZE_MAX || numbers[1] > IREE_DEVICE_SIZE_MAX ||
-      numbers[3] > INT64_MAX / 1000000 || numbers[4] > INT64_MAX / 1000000) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "device slab size or idle interval is out of range");
+  IREE_RETURN_IF_ERROR(status);
+  if (numbers[3] > INT64_MAX / 1000000 || numbers[4] > INT64_MAX / 1000000) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "device idle interval is out of range");
   }
   options->weight_slab_size = (iree_device_size_t)numbers[0];
   options->state_slab_size = (iree_device_size_t)numbers[1];

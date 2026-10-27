@@ -55,6 +55,12 @@ The backing, slab, memory, and idle flags apply only to the `--device` shortcut.
 With `--devices`, those settings belong to each JSON entry; mixing the file with
 any single-device flag is rejected, including explicit default values.
 
+`--memory_bytes`, `--weight_slab_bytes`, and `--state_slab_bytes` accept decimal
+byte counts or lowercase size suffixes: `b`, `kb`, `kib`, `mb`, `mib`, `gb`, and
+`gib`. For example, `--memory_bytes=64gib` sets a 68,719,476,736-byte allowance;
+`64gb` instead means 64,000,000,000 bytes. Values must be nonnegative whole
+numbers, with no spaces, signs, or fractional units. Overflow is rejected.
+
 Model, connection and body capacities must be positive. Holding credit must
 remain below connection capacity. Heartbeat/idle intervals, slab sizes and memory
 limits are nonnegative. A nonzero memory limit requires elastic backing.
@@ -78,7 +84,7 @@ For multiple devices, a machine-local file gives each member a key:
     "gpu": {
       "uri": "amdgpu://0",
       "pool_backing": "elastic",
-      "memory_bytes": 51539607552,
+      "memory_bytes": "48gib",
       "workspace_idle_ms": 30000,
       "parameter_idle_ms": 300000
     },
@@ -102,9 +108,12 @@ implicit device nor falls back to a different backend.
 
 Each device entry requires `uri`. Optional `pool_backing`, `weight_slab_bytes`,
 `state_slab_bytes`, `memory_bytes`, `workspace_idle_ms`, and `parameter_idle_ms`
-have the same defaults and units as the single-device flags above. Unknown or
-duplicate fields, duplicate device keys, empty keys, and malformed values fail
-startup. Keys use nonempty visible ASCII; numeric device selectors are rejected.
+have the same defaults and units as the single-device flags above. Byte counts
+can be JSON integers or strings such as `"64gib"`, `"64mib"`, or `"4096"`.
+Strings preserve exact counts when a JSON client uses floating-point numbers.
+Idle durations remain JSON integers in milliseconds. Unknown or duplicate
+fields, duplicate device keys, empty keys, and malformed values fail startup.
+Keys use nonempty visible ASCII; numeric device selectors are rejected.
 The file describes one group, not another set of servers or model lifecycles.
 
 Memory limits belong to individual serving device pools. Two devices accessing
