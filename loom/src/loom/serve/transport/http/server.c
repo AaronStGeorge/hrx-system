@@ -426,6 +426,21 @@ bool loom_serve_http_server_is_stopping(loom_serve_http_server_t* server) {
   return stopping;
 }
 
+bool loom_serve_http_server_has_pending_responses(
+    loom_serve_http_server_t* server) {
+  iree_slim_mutex_lock(&server->mutex);
+  bool pending = false;
+  for (iree_host_size_t i = 0;
+       i < server->options.connection_capacity && !pending; ++i) {
+    const loom_serve_http_connection_flags_t flags =
+        server->connections[i].flags;
+    pending = iree_any_bit_set(flags, HTTP_CONNECTION_FINISHED) &&
+              !iree_any_bit_set(flags, HTTP_CONNECTION_DRAINED);
+  }
+  iree_slim_mutex_unlock(&server->mutex);
+  return pending;
+}
+
 iree_async_semaphore_t* loom_serve_http_server_capacity_semaphore(
     loom_serve_http_server_t* server) {
   return server->capacity_semaphore;

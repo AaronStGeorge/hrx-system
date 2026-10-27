@@ -160,6 +160,20 @@ TEST_P(HttpRouterTest, IdleObserverDoesNotProduceCompletionDrivenEmptyFrames) {
   resumed.Join();
 }
 
+TEST_P(HttpRouterTest, FinishedErrorResponseRetainsTransportUntilSent) {
+  ObservationClient client;
+  ASSERT_NO_FATAL_FAILURE(client.Open(server_, "Last-Event-ID: bad\r\n"));
+  client.WaitCredit(false);
+  // A subsequent owner turn has finished the rejected request. Its response
+  // still belongs to the transport because the client has not consumed it.
+  EXPECT_EQ(Read(Send("GET", "/healthz")).find("HTTP/1.1 200"), 0u);
+  EXPECT_TRUE(loom_serve_http_server_has_pending_responses(server_));
+  loom_serve_http_server_request_stop(server_);
+  EXPECT_EQ(client.Response().find("HTTP/1.1 400"), 0u);
+  owner_.join();
+  EXPECT_FALSE(loom_serve_http_server_has_pending_responses(server_));
+}
+
 TEST_P(HttpRouterTest, MetricsCopyHeldAndQueuedOwnershipWithEscapedLabels) {
   const int held = Send("POST", "/v1/test", R"({"model":"held"})");
   held_.WaitSubmitted();

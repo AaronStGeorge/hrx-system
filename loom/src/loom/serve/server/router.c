@@ -1634,7 +1634,8 @@ static void loom_serve_router_advance(loom_serve_router_t* router,
                (router->stopping && model->incarnation &&
                 model->phase != LOOM_SERVE_REGISTRATION_RELEASE_FAILED);
   }
-  if (router->stopping && !pending) {
+  if (router->stopping && !pending &&
+      !loom_serve_http_server_has_pending_responses(router->server)) {
     loom_serve_maintenance_set_observer(&router->maintenance,
                                         (loom_serve_wake_callback_t){0});
     loom_serve_resources_set_observer(&router->resources,
