@@ -13,6 +13,7 @@
 #include "loom/analysis/vector_memory_footprint.h"
 #include "loom/codegen/low/lower/context.h"
 #include "loom/codegen/low/lower/contract_query.h"
+#include "loom/codegen/low/lower/control_carriers.h"
 #include "loom/codegen/low/lower/function_boundary.h"
 #include "loom/codegen/low/lower/realization.h"
 #include "loom/codegen/low/lower/report.h"
@@ -139,6 +140,7 @@ static iree_status_t loom_low_lower_map_blocks(
     }
   }
   IREE_RETURN_IF_ERROR(loom_low_lower_realizations_map_blocks(context));
+  IREE_RETURN_IF_ERROR(loom_low_lower_control_carriers_map_blocks(context));
   return loom_low_lower_control_create_blocks(context);
 }
 
@@ -586,6 +588,8 @@ IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_low_lower_structural_op(
       if (loom_low_lower_structural_branch_exact_bool(context, source_op,
                                                       &condition)) {
         loom_block_t* low_dest = condition ? low_true_dest : low_false_dest;
+        IREE_RETURN_IF_ERROR(loom_low_lower_control_carriers_emit_edge_forwards(
+            context, source_op));
         loom_op_t* low_br_op = NULL;
         return loom_low_br_build(&context->builder, low_dest, NULL, 0,
                                  source_op->location, &low_br_op);
@@ -1085,27 +1089,32 @@ static iree_status_t loom_low_lower_emit_region_ops(
           "emission");
       IREE_BUILTIN_UNREACHABLE();
     }
+    if (map_source_blocks) {
+      loom_low_lower_control_carriers_enter_block(context, source_block);
+    }
     loom_low_lower_emission_scope_begin(context);
     status = loom_low_lower_realizations_emit_entry(context, source_block);
     loom_low_lower_emission_scope_end(context);
-    if (!iree_status_is_ok(status)) {
-      break;
+    if (iree_status_is_ok(status)) {
+      loom_op_t* source_op = NULL;
+      loom_block_for_each_op(source_block, source_op) {
+        loom_low_lower_emission_scope_begin(context);
+        status = loom_low_lower_emit_source_op(context, source_op);
+        if (iree_status_is_ok(status)) {
+          status = loom_low_lower_realizations_emit_after(context, source_op);
+        }
+        // Builders copy all caller-provided arrays and attribute payloads into
+        // module-owned storage. Nested structured emission may reset this arena
+        // while its parent is active because the parent builder has already
+        // consumed every temporary before entering a child region.
+        loom_low_lower_emission_scope_end(context);
+        if (!iree_status_is_ok(status)) {
+          break;
+        }
+      }
     }
-    loom_op_t* source_op = NULL;
-    loom_block_for_each_op(source_block, source_op) {
-      loom_low_lower_emission_scope_begin(context);
-      status = loom_low_lower_emit_source_op(context, source_op);
-      if (iree_status_is_ok(status)) {
-        status = loom_low_lower_realizations_emit_after(context, source_op);
-      }
-      // Builders copy all caller-provided arrays and attribute payloads into
-      // module-owned storage. Nested structured emission may reset this arena
-      // while its parent is active because the parent builder has already
-      // consumed every temporary before entering a child region.
-      loom_low_lower_emission_scope_end(context);
-      if (!iree_status_is_ok(status)) {
-        break;
-      }
+    if (map_source_blocks) {
+      loom_low_lower_control_carriers_leave_block(context, source_block);
     }
   }
   return status;

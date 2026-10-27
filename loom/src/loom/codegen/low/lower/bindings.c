@@ -157,6 +157,23 @@ iree_status_t loom_low_lower_replace_value_binding(
   return loom_low_lower_copy_value_name(context, source_value_id, low_value_id);
 }
 
+loom_value_id_t loom_low_lower_swap_value_binding(
+    loom_low_lower_context_t* context, loom_value_id_t source_value_id,
+    loom_value_id_t low_value_id) {
+  const loom_value_ordinal_t ordinal =
+      loom_low_lowering_frame_value_ordinal(context->lowering, source_value_id);
+  IREE_ASSERT(
+      loom_low_lower_source_value_has_low_mapping(context, source_value_id));
+  loom_low_lower_value_binding_t* binding =
+      &context->lowering->value_bindings[ordinal];
+  const loom_value_id_t previous = binding->value;
+  IREE_ASSERT(
+      loom_type_equal(loom_module_value_type(context->module, previous),
+                      loom_module_value_type(context->module, low_value_id)));
+  binding->value = low_value_id;
+  return previous;
+}
+
 iree_status_t loom_low_lower_bind_value_alias(loom_low_lower_context_t* context,
                                               loom_value_id_t source_value_id,
                                               loom_value_id_t result_value_id) {

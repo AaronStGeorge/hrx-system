@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/diagnostics.h"
+#include "loom/codegen/low/lower/control_carriers.h"
 #include "loom/codegen/low/lower/realization.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/error/error_catalog.h"
@@ -802,7 +803,14 @@ iree_status_t loom_low_lower_remap_successor_args(
   *out_low_args = (loom_value_slice_t){0};
   const uint16_t supplemental_count =
       loom_low_lower_realization_edge_count(context, source_terminator);
-  const uint16_t low_arg_count = source_arg_count + supplemental_count;
+  const loom_low_lower_block_ref_t destination =
+      loom_low_lower_control_successor(context, source_terminator, 0);
+  const loom_low_lower_control_carrier_slice_t carriers =
+      loom_low_lower_control_block_carriers(context, destination);
+  const uint32_t low_arg_count_wide =
+      (uint32_t)source_arg_count + supplemental_count + carriers.count;
+  IREE_ASSERT_LE(low_arg_count_wide, UINT16_MAX);
+  const uint16_t low_arg_count = (uint16_t)low_arg_count_wide;
   IREE_ASSERT_EQ(low_arg_count, low_dest->arg_count);
   if (low_arg_count == 0) {
     return iree_ok_status();
@@ -825,6 +833,10 @@ iree_status_t loom_low_lower_remap_successor_args(
   if (supplemental_count != 0) {
     loom_low_lower_realization_edge_values(context, source_terminator,
                                            low_args + source_arg_count);
+  }
+  for (uint16_t i = 0; i < carriers.count; ++i) {
+    low_args[source_arg_count + supplemental_count + i] =
+        loom_low_lower_lookup_value(context, carriers.values[i]);
   }
   *out_low_args =
       (loom_value_slice_t){.values = low_args, .count = low_arg_count};

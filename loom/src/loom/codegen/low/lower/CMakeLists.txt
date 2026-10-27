@@ -18,6 +18,7 @@ loom_cc_library(
     "context.h"
     "contract_query.h"
     "contract_selection.h"
+    "control_carriers.h"
     "control_plan.h"
     "execution.h"
     "function_boundary.h"
@@ -54,6 +55,7 @@ loom_cc_library(
     "context.c"
     "contract_query.c"
     "contract_selection.c"
+    "control_carriers.c"
     "control_plan.c"
     "execution.c"
     "function_boundary.c"
@@ -98,6 +100,7 @@ loom_cc_library(
     loom::analysis::integer_relation
     loom::analysis::kernel_barrier_lifetime
     loom::analysis::kernel_synchronization_legality
+    loom::analysis::liveness_dataflow
     loom::analysis::motion
     loom::analysis::native_layout
     loom::analysis::storage_access
@@ -392,6 +395,7 @@ loom_cc_test(
     loom::ir
     loom::ops::cfg
     loom::ops::func
+    loom::ops::index
     loom::ops::low
     loom::ops::scalar
     loom::ops::test
@@ -403,6 +407,7 @@ loom_cc_test(
     loom::target::test::lower
     loom::target::test::target_record_table
     loom::util::fact_table
+    loom::verify
 )
 
 loom_cc_test(

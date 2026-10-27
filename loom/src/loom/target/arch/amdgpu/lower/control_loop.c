@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "iree/base/bitmap.h"
+#include "loom/codegen/low/lower/control_carriers.h"
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
@@ -46,6 +47,10 @@ typedef struct loom_amdgpu_loop_exit_region_plan_t {
   loom_low_lower_block_ref_t continuation;
   // Number of values carried to the shared continuation.
   uint16_t merge_arg_count;
+  // Number of authored and realization values requiring lane-masked merge.
+  // Supplemental control carriers follow these values and are immutable
+  // across both arms.
+  uint16_t source_merge_arg_count;
   // Low-only adapters retaining clean-arm continuation tuples.
   loom_amdgpu_loop_exit_region_adapter_t* clean_adapters;
   // Number of populated clean-arm adapters.
@@ -358,6 +363,8 @@ static iree_status_t loom_amdgpu_try_prepare_loop_exit_region(
           graph->blocks[match.continuation_index].block);
   const uint16_t merge_arg_count =
       loom_low_lower_control_argument_count(context, continuation);
+  const uint16_t source_merge_arg_count =
+      loom_low_lower_control_carrier_argument_offset(context, continuation);
   const uint32_t previous_error_count =
       loom_low_lower_context_error_count(context);
   const loom_amdgpu_mask_merge_constants_t* merge_constants = NULL;
@@ -382,6 +389,7 @@ static iree_status_t loom_amdgpu_try_prepare_loop_exit_region(
       .continuation_index = match.continuation_index,
       .continuation = continuation,
       .merge_arg_count = merge_arg_count,
+      .source_merge_arg_count = source_merge_arg_count,
       .merge_constants = merge_constants,
       .saved_exec = LOOM_VALUE_ID_INVALID,
       .source_condition = LOOM_VALUE_ID_INVALID,
@@ -647,12 +655,55 @@ static iree_status_t loom_amdgpu_finalize_loop_plan(
     return iree_ok_status();
   }
 
+  IREE_ASSERT_LE(plan->exit_plan_count, UINT16_MAX);
+  uint16_t* capture_sources = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      analysis_arena, plan->exit_plan_count, sizeof(*capture_sources),
+      (void**)&capture_sources));
+  for (uint32_t i = 0; i < plan->exit_plan_count; ++i) {
+    capture_sources[i] =
+        plan->exit_plans[i].source_op->parent_block->region_index;
+  }
+  for (uint32_t i = 0; i < plan->exit_plan_count; ++i) {
+    loom_amdgpu_loop_exit_plan_t* exit = &plan->exit_plans[i];
+    if (!exit->is_divergent) {
+      continue;
+    }
+    const uint8_t repeat_successor = exit->exit_successor_mask == 1 ? 1 : 0;
+    const loom_block_t* repeat_block =
+        exit->region != NULL
+            ? graph->blocks[exit->region->continuation_index].block
+            : loom_op_const_successors(exit->source_op)[repeat_successor];
+    IREE_RETURN_IF_ERROR(loom_low_lower_control_retain_resume_closure(
+        context, repeat_block, capture_sources,
+        (uint16_t)plan->exit_plan_count));
+  }
+  for (uint32_t i = 0; i < plan->exit_plan_count; ++i) {
+    loom_amdgpu_loop_exit_region_plan_t* region = plan->exit_plans[i].region;
+    if (region != NULL) {
+      region->merge_arg_count =
+          loom_low_lower_control_argument_count(context, region->continuation);
+    }
+  }
+  plan->capture_value_count =
+      loom_low_lower_control_argument_count(context, low_continuation);
+
   uint32_t resume_arg_count = 0;
   for (uint32_t i = 0; i < plan->exit_plan_count; ++i) {
     const loom_amdgpu_loop_exit_plan_t* exit = &plan->exit_plans[i];
-    if (exit->region != NULL) {
-      resume_arg_count += exit->region->merge_arg_count;
+    if (!exit->is_divergent) {
+      continue;
     }
+    const uint8_t repeat_successor = exit->exit_successor_mask == 1 ? 1 : 0;
+    const loom_block_t* repeat_block =
+        exit->region != NULL
+            ? graph->blocks[exit->region->continuation_index].block
+            : loom_op_const_successors(exit->source_op)[repeat_successor];
+    resume_arg_count +=
+        exit->region != NULL
+            ? exit->region->merge_arg_count
+            : loom_low_lower_control_source_carriers(context, repeat_block)
+                  .count;
   }
   if (resume_arg_count > UINT16_MAX) {
     return loom_low_lower_emit_branch_constraint(
@@ -682,26 +733,55 @@ static iree_status_t loom_amdgpu_finalize_loop_plan(
   if (plan->divergent_exit_count > 1) {
     private_types[private_index++] = plan->selector_type;
   }
-  plan->resume_arg_offset = plan->capture_value_count + private_index;
+  const uint16_t resume_private_offset = private_index;
   for (uint32_t i = 0; i < plan->exit_plan_count; ++i) {
     loom_amdgpu_loop_exit_plan_t* exit = &plan->exit_plans[i];
-    if (exit->region == NULL) {
+    if (!exit->is_divergent) {
       continue;
     }
-    exit->resume_arg_count = exit->region->merge_arg_count;
-    exit->resume_arg_offset = plan->capture_value_count + private_index;
+    const uint8_t repeat_successor = exit->exit_successor_mask == 1 ? 1 : 0;
+    const loom_block_t* repeat_block =
+        exit->region != NULL
+            ? graph->blocks[exit->region->continuation_index].block
+            : loom_op_const_successors(exit->source_op)[repeat_successor];
     const loom_low_lower_block_ref_t resume_signature =
-        loom_low_lower_control_source_block(
-            graph->blocks[exit->region->continuation_index].block);
-    for (uint16_t j = 0; j < exit->resume_arg_count; ++j) {
-      private_types[private_index++] =
-          loom_low_lower_control_argument_type(context, resume_signature, j);
+        loom_low_lower_control_source_block(repeat_block);
+    exit->resume_arg_count =
+        exit->region != NULL
+            ? exit->region->merge_arg_count
+            : loom_low_lower_control_source_carriers(context, repeat_block)
+                  .count;
+    if (exit->region != NULL) {
+      for (uint16_t j = 0; j < exit->resume_arg_count; ++j) {
+        private_types[private_index++] =
+            loom_low_lower_control_argument_type(context, resume_signature, j);
+      }
+    } else {
+      const loom_low_lower_control_carrier_slice_t carriers =
+          loom_low_lower_control_source_carriers(context, repeat_block);
+      for (uint16_t j = 0; j < carriers.count; ++j) {
+        private_types[private_index++] =
+            loom_low_lower_control_carrier_type(context, carriers.values[j]);
+      }
     }
   }
   IREE_ASSERT_EQ(private_index, private_type_count);
   IREE_RETURN_IF_ERROR(loom_low_lower_control_add_block_with_appended_arguments(
       context, /*before=*/0, low_continuation, private_types,
       private_type_count, &plan->capture_block));
+  plan->resume_arg_offset =
+      (uint16_t)(plan->capture_value_count + resume_private_offset);
+  private_index = resume_private_offset;
+  for (uint32_t i = 0; i < plan->exit_plan_count; ++i) {
+    loom_amdgpu_loop_exit_plan_t* exit = &plan->exit_plans[i];
+    if (!exit->is_divergent) {
+      continue;
+    }
+    exit->resume_arg_offset =
+        (uint16_t)(plan->capture_value_count + private_index);
+    private_index += exit->resume_arg_count;
+  }
+  IREE_ASSERT_EQ(private_index, private_type_count);
   IREE_RETURN_IF_ERROR(loom_low_lower_control_add_block(
       context, /*before=*/0, /*signature=*/0, &plan->restore_block));
   plan->restore_dest = low_continuation;
@@ -788,7 +868,7 @@ static iree_status_t loom_amdgpu_finalize_loop_plan(
     IREE_RETURN_IF_ERROR(loom_low_lower_control_add_block(
         context, /*before=*/0, /*signature=*/0, &exit->no_exit_block));
     const uint8_t repeat_successor = exit->exit_successor_mask == 1 ? 1 : 0;
-    IREE_RETURN_IF_ERROR(loom_low_lower_control_interpose_successor(
+    IREE_RETURN_IF_ERROR(loom_low_lower_control_interpose_argless_successor(
         context, exit->source_op, repeat_successor, exit->no_exit_block,
         &exit->source_repeat_dest));
     exit->repeat_dest =
@@ -920,6 +1000,23 @@ static iree_status_t loom_amdgpu_emit_loop_capture_branch(
       loom_low_lower_control_block(context, plan->capture_block);
   IREE_ASSERT(capture_block != NULL);
   IREE_ASSERT_EQ(payload_count, plan->capture_value_count);
+
+  loom_value_id_t* direct_resume_args = NULL;
+  if (exit->is_divergent && exit->region == NULL &&
+      exit->resume_arg_count != 0 && resume_args == NULL) {
+    const loom_low_lower_control_carrier_slice_t carriers =
+        loom_low_lower_control_block_carriers(context, exit->repeat_dest);
+    IREE_ASSERT_EQ(carriers.count, exit->resume_arg_count);
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_emission_array(
+        context, carriers.count, sizeof(*direct_resume_args),
+        (void**)&direct_resume_args));
+    for (uint16_t i = 0; i < carriers.count; ++i) {
+      direct_resume_args[i] =
+          loom_low_lower_lookup_value(context, carriers.values[i]);
+    }
+    resume_args = direct_resume_args;
+    resume_arg_count = carriers.count;
+  }
   IREE_ASSERT_EQ(resume_arg_count, exit->resume_arg_count);
 
   const uint16_t capture_arg_count = capture_block->arg_count;
@@ -978,6 +1075,21 @@ static iree_status_t loom_amdgpu_emit_loop_capture_branch(
   }
 
   loom_op_t* branch_op = NULL;
+  uint16_t identity_start = exit->resume_arg_offset;
+  uint16_t identity_count = exit->resume_arg_count;
+  if (exit->region != NULL) {
+    IREE_ASSERT_LE(exit->region->source_merge_arg_count,
+                   exit->region->merge_arg_count);
+    identity_start += exit->region->source_merge_arg_count;
+    identity_count =
+        exit->region->merge_arg_count - exit->region->source_merge_arg_count;
+  }
+  if (identity_count != 0) {
+    return loom_low_br_identity_build(
+        loom_low_lower_context_builder(context), identity_start, identity_count,
+        capture_block, capture_args, capture_arg_count, source_op->location,
+        &branch_op);
+  }
   return loom_low_br_build(loom_low_lower_context_builder(context),
                            capture_block, capture_args, capture_arg_count,
                            source_op->location, &branch_op);
@@ -1054,15 +1166,15 @@ static iree_status_t loom_amdgpu_emit_loop_exit_region_no_clean_block(
         context, dispatch->arg_count, sizeof(*args), (void**)&args);
   }
   loom_amdgpu_zero_placeholder_t* placeholders = NULL;
-  if (iree_status_is_ok(status) && plan->merge_arg_count != 0) {
+  if (iree_status_is_ok(status) && plan->source_merge_arg_count != 0) {
     status = loom_low_lower_allocate_emission_array(
-        context, plan->merge_arg_count, sizeof(*placeholders),
+        context, plan->source_merge_arg_count, sizeof(*placeholders),
         (void**)&placeholders);
   }
   uint16_t placeholder_count = 0;
   loom_module_t* module = loom_low_lower_context_module(context);
-  for (uint16_t i = 0; i < plan->merge_arg_count && iree_status_is_ok(status);
-       ++i) {
+  for (uint16_t i = 0;
+       i < plan->source_merge_arg_count && iree_status_is_ok(status); ++i) {
     const loom_type_t type =
         loom_module_value_type(module, loom_block_arg_id(dispatch, i));
     args[i] = LOOM_VALUE_ID_INVALID;
@@ -1082,6 +1194,15 @@ static iree_status_t loom_amdgpu_emit_loop_exit_region_no_clean_block(
         };
       }
     }
+  }
+  const loom_low_lower_control_carrier_slice_t carriers =
+      loom_low_lower_control_block_carriers(context, plan->continuation);
+  IREE_ASSERT_EQ(
+      (uint16_t)(plan->merge_arg_count - plan->source_merge_arg_count),
+      carriers.count);
+  for (uint16_t i = 0; i < carriers.count && iree_status_is_ok(status); ++i) {
+    args[plan->source_merge_arg_count + i] =
+        loom_low_lower_lookup_value(context, carriers.values[i]);
   }
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_emit_zero_native_i1_mask(
@@ -1213,8 +1334,8 @@ static iree_status_t loom_amdgpu_emit_loop_exit_region_merge_blocks(
         (void**)&merged_args);
   }
   loom_module_t* module = loom_low_lower_context_module(context);
-  for (uint16_t i = 0; i < plan->merge_arg_count && iree_status_is_ok(status);
-       ++i) {
+  for (uint16_t i = 0;
+       i < plan->source_merge_arg_count && iree_status_is_ok(status); ++i) {
     const loom_value_id_t clean_value = loom_block_arg_id(dispatch, i);
     const loom_value_id_t exit_value = loom_block_arg_id(merge, i);
     const loom_value_id_t false_value =
@@ -1227,6 +1348,10 @@ static iree_status_t loom_amdgpu_emit_loop_exit_region_merge_blocks(
                               : (loom_amdgpu_mask_merge_constants_t){0},
         false_value, true_value, plan->source_condition,
         loom_module_value_type(module, clean_value), &merged_args[i]);
+  }
+  for (uint16_t i = plan->source_merge_arg_count; i < plan->merge_arg_count;
+       ++i) {
+    merged_args[i] = loom_block_arg_id(merge, i);
   }
 
   loom_op_t* returned_op = NULL;
@@ -1405,9 +1530,16 @@ static iree_status_t loom_amdgpu_emit_loop_no_exit_block(
       &restore_op);
   if (iree_status_is_ok(status)) {
     if (exit->region == NULL) {
+      loom_value_slice_t repeat_args = {0};
+      status = loom_low_lower_control_append_carrier_arguments(
+          context, exit->repeat_dest, /*prefix_values=*/NULL,
+          /*prefix_count=*/0, &repeat_args);
       loom_op_t* branch_op = NULL;
-      status = loom_low_br_build(builder, repeat_dest, /*args=*/NULL, 0,
-                                 exit->source_op->location, &branch_op);
+      if (iree_status_is_ok(status)) {
+        status = loom_low_br_build(builder, repeat_dest, repeat_args.values,
+                                   repeat_args.count, exit->source_op->location,
+                                   &branch_op);
+      }
     } else {
       const loom_amdgpu_loop_plan_t* plan = exit->loop;
       const uint16_t local_arg_count = repeat_dest->arg_count;

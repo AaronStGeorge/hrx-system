@@ -93,6 +93,13 @@ iree_status_t loom_low_lower_replace_value_binding(
     loom_low_lower_context_t* context, loom_value_id_t source_value_id,
     loom_value_id_t low_value_id);
 
+// Replaces one materialized binding without changing source value names and
+// returns its previous Low identity. Used by block-scoped control carriers;
+// both values must have the producer-selected native type.
+loom_value_id_t loom_low_lower_swap_value_binding(
+    loom_low_lower_context_t* context, loom_value_id_t source_value_id,
+    loom_value_id_t low_value_id);
+
 // Binds an alias to the producer's already materialized Low value.
 iree_status_t loom_low_lower_bind_value_alias(loom_low_lower_context_t* context,
                                               loom_value_id_t source_value_id,

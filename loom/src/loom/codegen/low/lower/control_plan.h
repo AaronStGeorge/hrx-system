@@ -38,6 +38,12 @@ iree_host_size_t loom_low_lower_control_block_count(
 loom_low_lower_block_ref_t loom_low_lower_control_source_block(
     const loom_block_t* source_block);
 
+// Returns the authored source block supplying |block|'s copied signature, or
+// NULL when the block has no authored signature. Target-private appended
+// arguments are not part of the returned source block.
+const loom_block_t* loom_low_lower_control_signature_source_block(
+    const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block);
+
 // Plans one synthetic block. A nonzero |before| inserts it immediately before
 // that block; zero appends it. |signature| names an already planned block whose
 // complete argument tuple is copied, including supplemental carried values.
@@ -64,6 +70,18 @@ loom_type_t loom_low_lower_control_argument_type(
     const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block,
     uint16_t argument_index);
 
+// Validates the frozen argument widths of every authored and synthetic block.
+// Targets may create synthetic signatures before supplemental carriers are
+// known, so this must run after carrier closure has finished.
+iree_status_t loom_low_lower_control_validate_argument_counts(
+    const loom_low_lower_context_t* context);
+
+// Returns the argument offset at which the supplemental carrier tuple begins.
+// Authored and realization arguments precede the offset. Target-private
+// arguments appended to synthetic blocks follow the carrier tuple.
+uint16_t loom_low_lower_control_carrier_argument_offset(
+    const loom_low_lower_context_t* context, loom_low_lower_block_ref_t block);
+
 // Returns the effective planned destination of an authored successor.
 loom_low_lower_block_ref_t loom_low_lower_control_successor(
     const loom_low_lower_context_t* context, const loom_op_t* source_terminator,
@@ -72,6 +90,15 @@ loom_low_lower_block_ref_t loom_low_lower_control_successor(
 // Interposes a planned block with the same payload on an authored edge. Returns
 // the previous destination so nested expansions preserve their continuations.
 iree_status_t loom_low_lower_control_interpose_successor(
+    loom_low_lower_context_t* context, const loom_op_t* source_terminator,
+    uint8_t successor_index, loom_low_lower_block_ref_t block,
+    loom_low_lower_block_ref_t* out_previous);
+
+// Interposes an argument-free adapter on an authored successor edge. The
+// adapter owns forwarding to the previous destination, so their signatures
+// intentionally differ. This is used when the source branch form cannot carry
+// the previous destination's supplemental payload.
+iree_status_t loom_low_lower_control_interpose_argless_successor(
     loom_low_lower_context_t* context, const loom_op_t* source_terminator,
     uint8_t successor_index, loom_low_lower_block_ref_t block,
     loom_low_lower_block_ref_t* out_previous);
