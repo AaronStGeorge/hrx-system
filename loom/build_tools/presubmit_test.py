@@ -251,7 +251,11 @@ class LoomPresubmitTest(unittest.TestCase):
         self.assertEqual(run_command.call_count, 2)
         discover_command = run_command.call_args_list[0].args[0]
         self.assertEqual(discover_command[:3], ["bazel", "query", "--output=label"])
-        self.assertEqual(discover_command[-1], "tests(//loom/...)")
+        self.assertEqual(
+            discover_command[-1],
+            "let tests = tests(//loom/...) in "
+            r'$tests except attr(tags, "(^|, |\[)manual(,|\]|$)", $tests)',
+        )
         dependency_command = run_command.call_args_list[1].args[0]
         self.assertEqual(dependency_command[:2], ["bazel", "cquery"])
         self.assertIn("--config=presubmit", dependency_command)

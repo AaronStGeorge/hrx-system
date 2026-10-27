@@ -829,6 +829,8 @@ TEST(CompileReportFormatTest, KeepsImpreciseSourceLowMemoryIntervalEnvelopes) {
 TEST(CompileReportFormatTest, FormatsSourceLowMemoryIntervals) {
   loom_target_compile_report_t report;
   loom_target_compile_report_initialize(&report, iree_allocator_system());
+  report.requested_detail_flags =
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
   testing::MemoryReportBatch report_memory(&report);
 
   loom_target_compile_report_source_low_memory_row_t row = {
@@ -1332,6 +1334,70 @@ TEST(CompileReportMemoryTest, OrdersDuplicatesBeforeOrAfterConflictingPackets) {
               conflict_first ? 1u : 2u);
     EXPECT_EQ(summary->interval_envelope.unique_byte_count, 8u);
     loom_target_compile_report_deinitialize(&report);
+  }
+}
+
+TEST(CompileReportMemoryTest, SummaryRetainsProofsWithoutPacketProvenance) {
+  std::string summary_json;
+  for (auto mode : {LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY,
+                    LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS}) {
+    loom_target_compile_report_t source;
+    loom_target_compile_report_initialize(&source, iree_allocator_system());
+    source.requested_detail_flags =
+        loom_target_compile_report_requested_detail_flags(mode);
+    {
+      testing::MemoryReportBatch batch(&source);
+      for (int64_t begin : {0, 4, 16}) {
+        const bool store = begin == 16;
+        auto row = MakeMemoryRow(IREE_SV("vector.memory"), 43,
+                                 store ? IREE_SV("store") : IREE_SV("load"),
+                                 IREE_SV("test.memory"), begin, 2,
+                                 store ? 0 : 8, store ? 8 : 0, 0, 4,
+                                 MakeExactSourceInterval(begin, begin + 8));
+        IREE_ASSERT_OK(batch.Append(&row));
+        // The producer reuses its conversion row before the batch is finished.
+        row = {};
+      }
+      IREE_ASSERT_OK(batch.Finish());
+    }
+    EXPECT_EQ(source.source_low_memory_rows.count,
+              mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS ? 3u : 0u);
+    loom_target_compile_report_t merged;
+    loom_target_compile_report_initialize(&merged, iree_allocator_system());
+    merged.requested_detail_flags =
+        loom_target_compile_report_requested_detail_flags(
+            LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY);
+    IREE_ASSERT_OK(
+        loom_target_compile_report_record_entry_report(&merged, &source));
+    loom_target_compile_report_deinitialize(&source);
+    EXPECT_EQ(merged.source_low_memory_rows.count, 0u);
+    EXPECT_EQ(merged.source_low_memory_rows.head, nullptr);
+    const auto* root = GetOnlySourceLowMemoryRootSummary(&merged);
+    ASSERT_NE(root, nullptr);
+    EXPECT_EQ(root->packet_count, 3u);
+    EXPECT_EQ(root->interval_envelope.unique_byte_count, 20u);
+    EXPECT_EQ(root->read_interval_envelope.unique_byte_count, 12u);
+    EXPECT_EQ(root->write_interval_envelope.unique_byte_count, 8u);
+    EXPECT_EQ(root->dynamic_source_byte_count, 24u);
+
+    iree_string_builder_t builder;
+    iree_string_builder_initialize(iree_allocator_system(), &builder);
+    loom_output_stream_t stream;
+    loom_output_stream_for_builder(&builder, &stream);
+    const loom_target_compile_report_format_options_t options = {
+        .mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY,
+    };
+    IREE_ASSERT_OK(
+        loom_target_compile_report_format_json(&merged, &options, &stream));
+    const std::string json(iree_string_builder_buffer(&builder),
+                           iree_string_builder_size(&builder));
+    if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY) {
+      summary_json = json;
+    } else {
+      EXPECT_EQ(json, summary_json);
+    }
+    iree_string_builder_deinitialize(&builder);
+    loom_target_compile_report_deinitialize(&merged);
   }
 }
 

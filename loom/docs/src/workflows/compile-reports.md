@@ -30,9 +30,11 @@ loom-compile kernel.loom \
 
 `summary` is the routine tuning product. `details` adds row-level provenance
 for source selections, schedule bands, pressure origins, allocations, spills,
-waits, target capabilities, and other focused investigations. Text report modes
-exist for direct terminal output, but structured JSON is the composable input
-to report tools and automation.
+waits, target capabilities, and other focused investigations. Summary capture
+retains grouped source selections and memory traffic, access, and reuse facts;
+individual selection and memory-packet records require `details`. Text report
+modes exist for direct terminal output, but structured JSON is the composable
+input to report tools and automation.
 
 Compile reports are version-zero compiler evidence. Analyze and compare reports
 with the same Loom tool version that produced them. A schema mismatch fails

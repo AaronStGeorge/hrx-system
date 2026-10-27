@@ -47,8 +47,19 @@ typedef enum loom_report_memory_direction_e {
 } loom_report_memory_direction_t;
 
 typedef struct loom_report_memory_entry_t {
-  // Stable retained packet with the report's existing borrowed-string lifetime.
-  const loom_target_compile_report_source_low_memory_row_t* row;
+  // Packet interval facts needed until the batch completes unique-byte proofs.
+  struct {
+    // Inclusive lower bound on the packet's byte start.
+    int64_t begin_min_bytes;
+    // Exclusive upper bound on the packet's byte end.
+    int64_t end_max_bytes;
+    // Exact symbolic packet width, used when its envelope is unambiguous.
+    uint64_t exact_length_bytes;
+    // Function-local identity of the symbolic start expression.
+    uint32_t begin_expr_id;
+    // Function-local identity of the symbolic end expression.
+    uint32_t end_expr_id;
+  } interval;
   // Root summary established while recording this packet.
   loom_target_compile_report_source_low_memory_root_summary_t* root;
   // Argument summary, or NULL for a non-argument root.
@@ -174,14 +185,14 @@ static uint32_t loom_report_memory_begin_id(
     const loom_report_memory_entry_t* entry) {
   return entry->kind == LOOM_TARGET_COMPILE_REPORT_MEMORY_INTERVAL_UNIQUE_STATIC
              ? UINT32_MAX
-             : entry->row->source_interval.begin_expr_id;
+             : entry->interval.begin_expr_id;
 }
 
 static uint32_t loom_report_memory_end_id(
     const loom_report_memory_entry_t* entry) {
   return entry->kind == LOOM_TARGET_COMPILE_REPORT_MEMORY_INTERVAL_UNIQUE_STATIC
              ? UINT32_MAX
-             : entry->row->source_interval.end_expr_id;
+             : entry->interval.end_expr_id;
 }
 
 static void loom_report_memory_witnesses_append(
@@ -393,16 +404,14 @@ static iree_status_t loom_report_memory_finish_root(
   if (count == 1) {
     const loom_report_memory_entry_t* entry =
         *loom_report_memory_entry_at(entries, 0);
-    const loom_target_compile_report_memory_interval_t* interval =
-        &entry->row->source_interval;
     const loom_target_compile_report_memory_interval_unique_delta_t delta = {
         .kind = entry->kind,
         .unique_byte_delta =
             entry->kind ==
                     LOOM_TARGET_COMPILE_REPORT_MEMORY_INTERVAL_UNIQUE_STATIC
-                ? (uint64_t)interval->end_max_bytes -
-                      (uint64_t)interval->begin_min_bytes
-                : interval->exact_length_bytes,
+                ? (uint64_t)entry->interval.end_max_bytes -
+                      (uint64_t)entry->interval.begin_min_bytes
+                : entry->interval.exact_length_bytes,
     };
     loom_report_memory_apply_unique(entry, LOOM_REPORT_MEMORY_ALL, delta);
     if (entry->direction != LOOM_REPORT_MEMORY_ALL) {
@@ -423,12 +432,10 @@ static iree_status_t loom_report_memory_finish_root(
   for (iree_host_size_t i = 0; i < count; ++i) {
     loom_report_memory_entry_t* entry =
         *loom_report_memory_entry_at(entries, i);
-    const loom_target_compile_report_memory_interval_t* interval =
-        &entry->row->source_interval;
     *loom_report_memory_coordinate_at(&coordinates, 2 * i) =
-        loom_report_memory_coordinate(interval->begin_min_bytes);
+        loom_report_memory_coordinate(entry->interval.begin_min_bytes);
     *loom_report_memory_coordinate_at(&coordinates, 2 * i + 1) =
-        loom_report_memory_coordinate(interval->end_max_bytes);
+        loom_report_memory_coordinate(entry->interval.end_max_bytes);
     entry->sort_key = ((uint64_t)loom_report_memory_begin_id(entry) << 32) |
                       loom_report_memory_end_id(entry);
   }
@@ -454,14 +461,12 @@ static iree_status_t loom_report_memory_finish_root(
   for (iree_host_size_t i = 0; i < count; ++i) {
     loom_report_memory_entry_t* entry =
         *loom_report_memory_entry_at(entries, i);
-    const loom_target_compile_report_memory_interval_t* interval =
-        &entry->row->source_interval;
     entry->span.begin = loom_report_memory_coordinate_rank(
         &coordinates, coordinate_count,
-        loom_report_memory_coordinate(interval->begin_min_bytes));
+        loom_report_memory_coordinate(entry->interval.begin_min_bytes));
     entry->span.end = loom_report_memory_coordinate_rank(
         &coordinates, coordinate_count,
-        loom_report_memory_coordinate(interval->end_max_bytes));
+        loom_report_memory_coordinate(entry->interval.end_max_bytes));
     direction_mask |= 1u << entry->direction;
     if (entry->kind ==
         LOOM_TARGET_COMPILE_REPORT_MEMORY_INTERVAL_UNIQUE_STATIC) {
@@ -516,8 +521,6 @@ static iree_status_t loom_report_memory_finish_root(
           entry->direction != direction) {
         continue;
       }
-      const loom_target_compile_report_memory_interval_t* interval =
-          &entry->row->source_interval;
       const loom_report_memory_entry_t* prior =
           loom_report_memory_query(&tree, 0, 0, tree.segment_count, entry);
       prior =
@@ -533,13 +536,13 @@ static iree_status_t loom_report_memory_finish_root(
             entry->kind ==
                     LOOM_TARGET_COMPILE_REPORT_MEMORY_INTERVAL_UNIQUE_STATIC
                 ? added
-                : interval->exact_length_bytes;
+                : entry->interval.exact_length_bytes;
       } else if (
           entry->kind ==
               LOOM_TARGET_COMPILE_REPORT_MEMORY_INTERVAL_UNIQUE_SYMBOLIC &&
           prior->kind == entry->kind &&
-          loom_report_memory_begin_id(prior) == interval->begin_expr_id &&
-          loom_report_memory_end_id(prior) == interval->end_expr_id) {
+          loom_report_memory_begin_id(prior) == entry->interval.begin_expr_id &&
+          loom_report_memory_end_id(prior) == entry->interval.end_expr_id) {
         delta.kind = entry->kind;
       }
       loom_report_memory_apply_unique(entry, direction, delta);
@@ -683,7 +686,14 @@ iree_status_t loom_target_compile_report_memory_intervals_append(
     return iree_ok_status();
   }
   const loom_report_memory_entry_t entry = {
-      .row = row,
+      .interval =
+          {
+              .begin_min_bytes = row->source_interval.begin_min_bytes,
+              .end_max_bytes = row->source_interval.end_max_bytes,
+              .exact_length_bytes = row->source_interval.exact_length_bytes,
+              .begin_expr_id = row->source_interval.begin_expr_id,
+              .end_expr_id = row->source_interval.end_expr_id,
+          },
       .root = root,
       .argument = argument,
       .ordinal = entries->count,

@@ -96,8 +96,24 @@ TEST(LoopPipelineReportTest, EntryMergeOwnsScheduleRows) {
   IREE_ASSERT_OK(loom_target_compile_report_record_loop_pipelines(
       &source, module, &versions));
 
+  loom_target_compile_report_t summary;
+  loom_target_compile_report_initialize(&summary, iree_allocator_system());
+  summary.requested_detail_flags =
+      loom_target_compile_report_requested_detail_flags(
+          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY);
+  IREE_ASSERT_OK(loom_target_compile_report_record_loop_pipelines(
+      &summary, module, &versions));
+  EXPECT_EQ(summary.loop_pipeline_rows.count, 1u);
+  EXPECT_EQ(summary.loop_pipeline_stage_rows.count, 0u);
+  IREE_ASSERT_OK(
+      loom_target_compile_report_record_entry_report(&summary, &source));
+  EXPECT_EQ(summary.loop_pipeline_rows.count, 2u);
+  EXPECT_EQ(summary.loop_pipeline_stage_rows.head, nullptr);
+  loom_target_compile_report_deinitialize(&summary);
+
   loom_target_compile_report_t merged;
   loom_target_compile_report_initialize(&merged, iree_allocator_system());
+  merged.requested_detail_flags = source.requested_detail_flags;
   IREE_ASSERT_OK(
       loom_target_compile_report_record_entry_report(&merged, &source));
   loom_target_compile_report_deinitialize(&source);

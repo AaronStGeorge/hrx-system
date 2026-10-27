@@ -1094,10 +1094,13 @@ loom_target_compile_report_record_source_low_subgroup_access_summary(
 iree_status_t loom_target_compile_report_merge_source_low_memory_details(
     loom_target_compile_report_t* target,
     const loom_target_compile_report_t* source) {
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append_all(
-      &target->source_low_memory_rows, &source->source_low_memory_rows,
-      sizeof(loom_target_compile_report_source_low_memory_row_t),
-      target->allocator));
+  if (loom_target_compile_report_wants_details(
+          target, LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append_all(
+        &target->source_low_memory_rows, &source->source_low_memory_rows,
+        sizeof(loom_target_compile_report_source_low_memory_row_t),
+        target->allocator));
+  }
   for (const loom_target_compile_report_vec_t* vec =
            source->source_low_memory_root_summaries.head;
        vec != NULL; vec = vec->next) {
@@ -1387,8 +1390,11 @@ iree_status_t loom_target_compile_report_memory_batch_append(
     const loom_target_compile_report_source_low_memory_row_t* row) {
   loom_target_compile_report_t* report = batch->report;
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append(
-      &report->source_low_memory_rows, sizeof(*row), report->allocator, row));
+  if (loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append(
+        &report->source_low_memory_rows, sizeof(*row), report->allocator, row));
+  }
   loom_target_compile_report_accumulate_source_low_memory_summary(
       &report->source_low_memory_summary, row);
   loom_target_compile_report_accumulate_bank_service_summary(
@@ -1435,11 +1441,6 @@ iree_status_t loom_target_compile_report_memory_batch_append(
   if (root == NULL) {
     return iree_ok_status();
   }
-  loom_target_compile_report_vec_t* tail = report->source_low_memory_rows.tail;
-  const loom_target_compile_report_source_low_memory_row_t* retained_row =
-      (const loom_target_compile_report_source_low_memory_row_t*)
-          loom_target_compile_report_vec_const_rows(tail) +
-      tail->count - 1;
   return loom_target_compile_report_memory_intervals_append(
-      &batch->entries, retained_row, root, argument, batch->arena);
+      &batch->entries, row, root, argument, batch->arena);
 }

@@ -436,9 +436,16 @@ TEST(CompileReportFormatTest,
      SelectionSummariesRetainPeakExpansionAcrossEntries) {
   loom_target_compile_report_t report = {};
   loom_target_compile_report_initialize(&report, iree_allocator_system());
+  report.requested_detail_flags =
+      loom_target_compile_report_requested_detail_flags(
+          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY);
   for (uint32_t entry_index = 0; entry_index < 2; ++entry_index) {
     loom_target_compile_report_t entry = {};
     loom_target_compile_report_initialize(&entry, iree_allocator_system());
+    entry.requested_detail_flags =
+        loom_target_compile_report_requested_detail_flags(
+            entry_index == 0 ? LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY
+                             : LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS);
     entry.function_name =
         entry_index == 0 ? IREE_SV("first") : IREE_SV("second");
     loom_target_compile_report_source_low_row_t selection = {
@@ -463,10 +470,13 @@ TEST(CompileReportFormatTest,
     entry.source_low_emitted_op_count += selection.emitted_low_op_count;
     IREE_ASSERT_OK(
         loom_target_compile_report_record_source_low_row(&entry, &selection));
+    EXPECT_EQ(entry.source_low_rows.count, entry_index == 0 ? 0u : 101u);
     IREE_ASSERT_OK(
         loom_target_compile_report_record_entry_report(&report, &entry));
     loom_target_compile_report_deinitialize(&entry);
   }
+  EXPECT_EQ(report.source_low_rows.count, 0u);
+  EXPECT_EQ(report.source_low_rows.head, nullptr);
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);

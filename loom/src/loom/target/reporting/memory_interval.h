@@ -14,9 +14,9 @@
 extern "C" {
 #endif  // __cplusplus
 
-// Retains eligible interval evidence in |entries| using |arena|. The packet and
-// its non-NULL root summary remain stable until finish; |argument| is optional.
-// Entries borrow those report-owned objects and never retain ownership of them.
+// Copies eligible interval evidence into |entries| using |arena|. The input
+// packet can be released immediately. Entries borrow the non-NULL root summary
+// and optional argument summary, which remain stable until finish.
 iree_status_t loom_target_compile_report_memory_intervals_append(
     loom_target_compile_report_row_list_t* entries,
     const loom_target_compile_report_source_low_memory_row_t* row,

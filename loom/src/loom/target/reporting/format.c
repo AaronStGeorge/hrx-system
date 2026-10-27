@@ -32,8 +32,7 @@ loom_target_compile_report_requested_detail_flags(
     loom_target_compile_report_format_mode_t mode) {
   const loom_target_compile_report_detail_flags_t summary_flags =
       LOOM_TARGET_COMPILE_REPORT_DETAIL_RESIDENCY_CONSTRAINTS |
-      LOOM_TARGET_COMPILE_REPORT_DETAIL_CONFIG_BINDING_ROWS |
-      LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_CONFIG_BINDING_ROWS;
   switch (mode) {
     case LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE:
       return LOOM_TARGET_COMPILE_REPORT_DETAIL_NONE;
@@ -41,6 +40,7 @@ loom_target_compile_report_requested_detail_flags(
       return summary_flags;
     case LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS:
       return summary_flags | LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
+             LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
              LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS |
              LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS |
              LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_SUMMARY_ROWS |
