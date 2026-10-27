@@ -121,10 +121,9 @@ stack: 8 bytes, alignment 16
 
 // ====
 
-// Every SysV SIMD and mask register is volatile. The profile-wide ZMM range
-// aliases this live YMM value, while the K range includes the rotated K0 slot.
-// Both values therefore require retained stack storage across the call.
-// RUN: emit x86-frame @vector_call_clobbers
+// Every SysV SIMD register is volatile. The profile-wide ZMM clobber range
+// aliases this live YMM value, which needs a spill and reload across the call.
+// RUN: emit x86-native-bytes @vector_call_clobbers
 x86.target<avx512> @target
 
 low.func.decl target<x86.avx512.core>(@target) @volatile_callee(%output: reg<x86.gpr64>) -> (reg<x86.gpr64>)
@@ -137,26 +136,25 @@ low.func.def target<x86.avx512.core>(@target) @vector_call_clobbers(%input: reg<
 }
 
 // ----
-callee-preserved: none
-stack: 40 bytes, alignment 16
-upper-state-call-cleanups: 1
-upper-state-cleanup: vzeroupper
+code: 48 83 ec 28 c5 fe 6f 07 c5 fc 11 04 24 48 8b fe c5 f8 77 e8 00 00 00 00 c5 fc 10 04 24 c5 fe 7f 00 48 83 c4 28 c5 f8 77 c3
 
 // ====
 
 // A half-precision value crosses the platform boundary in XMM while its Low
-// carrier occupies four-byte GPR storage. With no physical GPR32 capacity, the
-// entry and return both exercise direct cross-class storage transport.
-// RUN: emit x86-frame @stored_half x86.gpr32=0
+// carrier occupies four-byte GPR storage. The explicit spill and reload fold
+// into entry and return transport without an intermediate GPR.
+// RUN: emit x86-native-bytes @stored_half
 x86.target<avx2> @target
 
 low.func.def target<x86.avx2.core>(@target) abi_layout({signature = (f16) -> (f16)}) @stored_half(%value: reg<x86.gpr32>) -> (reg<x86.gpr32>) asm {
-  return %value
+  %slot = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.spill %value, %slot : reg<x86.gpr32>, low.storage<private>
+  %restored = low.reload %slot : low.storage<private> -> reg<x86.gpr32>
+  return %restored
 }
 
 // ----
-callee-preserved: none
-stack: 8 bytes, alignment 8
+code: 48 83 ec 08 c5 f9 7e 04 24 c5 f9 6e 04 24 48 83 c4 08 c3
 
 // ====
 

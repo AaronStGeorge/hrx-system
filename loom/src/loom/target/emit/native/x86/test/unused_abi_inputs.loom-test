@@ -104,7 +104,7 @@ code: 55 48 8b ef c5 fc 10 44 24 10 c5 fe 7f 45 00 5d c5 f8 77 c3
 
 // Dynamic realignment retains caller RSP in the restoration slot. R11 reloads
 // that pointer only for the live post-move vector stack input.
-// RUN: emit x86-native-bytes @realigned_vector_stack fixed=%output:physical_register:7:1 fixed=%v8:physical_register:0:1
+// RUN: emit x86-native-bytes @realigned_vector_stack
 x86.target<avx2> @target
 
 low.func.def target<x86.avx2.core>(@target) abi_layout({signature = (buffer, buffer, vector<8xi32>, vector<8xi32>, vector<8xi32>, vector<8xi32>, vector<8xi32>, vector<8xi32>, vector<8xi32>, vector<8xi32>, vector<8xi32>) -> (vector<8xi32>)}) @realigned_vector_stack(%output: reg<x86.gpr64>, %input: reg<x86.gpr64>, %v0: reg<x86.ymm>, %v1: reg<x86.ymm>, %v2: reg<x86.ymm>, %v3: reg<x86.ymm>, %v4: reg<x86.ymm>, %v5: reg<x86.ymm>, %v6: reg<x86.ymm>, %v7: reg<x86.ymm>, %v8: reg<x86.ymm>) -> (reg<x86.ymm>) asm {
