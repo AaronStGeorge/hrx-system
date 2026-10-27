@@ -121,6 +121,14 @@ TEST_F(GroupEmbeddingServiceTest, EmbeddingsCompleteBeforeOtherDeviceRetires) {
   EXPECT_EQ(
       loom_serve_device_memory_statistics(first).workspace.reservation_count,
       1u);
+  const auto held = loom_serve_device_memory_statistics(first);
+  EXPECT_GT(held.workspace.bytes_committed, 0u);
+  if (!loom_serve_device_memory_pool(first)) {
+    // Fixed workspace is backed by the ordinary storage source, not a second
+    // physical commitment to add to it.
+    EXPECT_GE(held.storage.bytes_committed, held.workspace.bytes_committed);
+    EXPECT_EQ(held.retained.committed_bytes, 0u);
+  }
   IREE_ASSERT_OK(iree_hal_semaphore_signal(gate_, 1, nullptr));
   IREE_ASSERT_OK(loom_serve_execution_drain(execution_));
   for (uint32_t word : output_) {
@@ -129,6 +137,8 @@ TEST_F(GroupEmbeddingServiceTest, EmbeddingsCompleteBeforeOtherDeviceRetires) {
   IREE_ASSERT_OK(loom_serve_test_device_trim_and_drain(first, 0));
   EXPECT_EQ(
       loom_serve_device_memory_statistics(first).workspace.bytes_committed, 0u);
+  EXPECT_EQ(loom_serve_device_memory_statistics(first).storage.bytes_committed,
+            0u);
 }
 
 }  // namespace loom_serve::testing::embedding

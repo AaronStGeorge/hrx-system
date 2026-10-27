@@ -270,12 +270,20 @@ content.
 
 ## Interpret memory and packing evidence
 
-`server.resources.devices[].memory.retained` reports the shared elastic backing
-for parameters, mutable state and invocation workspace on that device.
-`memory.workspace` describes the workspace portion of that same backing,
-including reusable idle ranges; adding it to `retained` double-counts storage.
-Fixed retained accounting is `null`, not zero. An elastic `limit_bytes:null`
-means unbounded by serving policy.
+`server.resources.devices[].memory` reports serving-owned backing on that
+device:
+
+| Field | What it counts |
+| --- | --- |
+| `storage` | Ordinary native buffers, including fixed parameters and state. With fixed backing, this also includes workspace backing. |
+| `retained` | Shared elastic backing for parameters, mutable state, and workspace. It is `null` with fixed backing; an elastic `limit_bytes:null` means unbounded by serving policy. |
+| `workspace` | The workspace portion of `storage` (fixed) or `retained` (elastic), including reusable idle ranges. This is a breakdown, not an additional allocation. |
+
+`storage.committed_bytes` plus non-null `retained.committed_bytes` describes
+managed backing. Adding `workspace.committed_bytes` again double-counts it.
+`storage.reserved_bytes` counts backing charged to live native reservations;
+`storage.abandoned_bytes` is the subset of committed backing whose native return
+failed, not reusable capacity. Native release can lag logical buffer retirement.
 
 Workspace values are independent HAL observations, not one coherent device-wide
 snapshot. Its cumulative acquire/release/reuse counters survive model removal
@@ -285,10 +293,10 @@ followed by growth and success; it is not a failed-request counter.
 
 Virtual `reserved_bytes` can remain nonzero after physical backing is trimmed:
 the reusable addresses are still owned without retaining those physical pages.
-Neither scope includes all host allocations, fixed buffers, executable/driver
-storage or hidden physical padding. These values are not peak process RAM,
-whole-device VRAM or immediately available memory. Status does not poll hardware
-sensors.
+These scopes exclude host snapshots, compiler/tokenizer allocations,
+executable/driver storage, and hidden physical padding. These values are not
+peak process RAM, whole-device VRAM or immediately available memory. Status
+does not poll hardware sensors.
 
 | Question | Useful evidence |
 | --- | --- |

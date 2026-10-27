@@ -6,8 +6,10 @@
 
 #include "loom/serve/server/resources.h"
 
+#include <memory>
 #include <string>
 
+#include "iree/hal/api.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -67,7 +69,41 @@ TEST_F(ResourcesTest, EveryRecordOfOneCpuGroupIsPublishedWithoutModelWork) {
   const loom_serve_resources_t resources = {.device_group = group_};
   EXPECT_EQ(
       Write(resources),
-      R"({"listeners":[],"devices":[{"key":"first","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}},{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}]})");
+      R"({"listeners":[],"devices":[{"key":"first","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"storage":{"reserved_bytes":0,"committed_bytes":0,"abandoned_bytes":0},"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}},{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"storage":{"reserved_bytes":0,"committed_bytes":0,"abandoned_bytes":0},"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}]})");
+}
+
+TEST_F(ResourcesTest, FixedStorageIsVisibleWithoutWorkspaceOrElasticBacking) {
+  IREE_ASSERT_OK(CreateCpuGroup());
+  auto* device = loom_serve_device_group_at(group_, 0);
+  auto* peer = loom_serve_device_group_at(group_, 1);
+  iree_hal_buffer_t* raw_buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+      loom_serve_device_storage_pool(device),
+      iree_hal_make_pool_reservation_request(4096, 256),
+      iree_infinite_timeout(), &raw_buffer));
+  std::unique_ptr<iree_hal_buffer_t, decltype(&iree_hal_buffer_release)> buffer(
+      raw_buffer, iree_hal_buffer_release);
+
+  const auto memory = loom_serve_device_memory_statistics(device);
+  EXPECT_GE(memory.storage.bytes_reserved, 4096u);
+  EXPECT_GE(memory.storage.bytes_committed, memory.storage.bytes_reserved);
+  EXPECT_EQ(memory.storage.bytes_abandoned, 0u);
+  EXPECT_EQ(memory.workspace.bytes_committed, 0u);
+  EXPECT_EQ(memory.retained.committed_bytes, 0u);
+  EXPECT_EQ(loom_serve_device_memory_statistics(peer).storage.bytes_committed,
+            0u);
+  const auto response = Write({.device_group = group_});
+  EXPECT_NE(response.find(
+                "\"retained\":null,\"storage\":{\"reserved_bytes\":" +
+                std::to_string(memory.storage.bytes_reserved) +
+                ",\"committed_bytes\":" +
+                std::to_string(memory.storage.bytes_committed) +
+                ",\"abandoned_bytes\":0},\"workspace\":{\"reserved_bytes\":0"),
+            std::string::npos);
+
+  buffer.reset();
+  EXPECT_EQ(loom_serve_device_memory_statistics(device).storage.bytes_reserved,
+            0u);
 }
 
 TEST_F(ResourcesTest, TrimRequiresExplicitDeviceAndIntegerTarget) {
@@ -149,7 +185,7 @@ TEST_F(ResourcesTest, TrimReportsSelectedResourceWithoutModelOwnership) {
   auto value = iree_string_builder_view(&output_);
   EXPECT_EQ(
       std::string(value.data, value.size),
-      R"({"target_bytes":18446744073709551615,"device":{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}})");
+      R"({"target_bytes":18446744073709551615,"device":{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"storage":{"reserved_bytes":0,"committed_bytes":0,"abandoned_bytes":0},"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}})");
 }
 
 }  // namespace

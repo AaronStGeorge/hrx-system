@@ -399,6 +399,7 @@ loom_serve_device_memory_statistics_t loom_serve_device_memory_statistics(
     const loom_serve_device_t* device) {
   loom_serve_device_memory_statistics_t statistics = {
       .workspace = loom_serve_workspace_statistics(device->workspace)};
+  iree_hal_pool_query_stats(device->storage_pool, &statistics.storage);
   if (device->memory_pool) {
     statistics.retained =
         loom_serve_memory_pool_statistics(device->memory_pool);
