@@ -64,7 +64,12 @@ BAZEL_TEST_CONFIGURATION_ARGS = (
     *BAZEL_CONFIGURATION_ARGS,
 )
 BAZEL_FULL_TEST_TARGET = "//loom/..."
-BAZEL_ALL_TESTS_QUERY = f"tests({BAZEL_FULL_TEST_TARGET})"
+# Match the execution tag filter before configured dependency analysis: manual
+# SDK tests can require configurations that ordinary presubmits do not select.
+BAZEL_TESTS_QUERY = (
+    f"let tests = tests({BAZEL_FULL_TEST_TARGET}) in "
+    r'$tests except attr(tags, "(^|, |\[)manual(,|\]|$)", $tests)'
+)
 LOOM_FORMAT_BAZEL_TARGET = "//loom/src/loom/tools/loom-format:loom-format"
 LOOM_FORMAT_CMAKE_TARGET = "loom::tools::loom-format"
 LOOM_LINT_PYTHON_SOURCE = "loom/py/loom/tools/source_lint.py"
@@ -419,7 +424,7 @@ def query_affected_bazel_test_targets(source_labels: set[str]) -> list[str]:
                 "query",
                 "--output=label",
                 f"--output_file={test_targets_path}",
-                BAZEL_ALL_TESTS_QUERY,
+                BAZEL_TESTS_QUERY,
             ],
             "Discover Bazel test targets",
         ):
