@@ -244,6 +244,22 @@ loom_cc_library(
 endif()
 
 if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
+loom_cc_library(
+  NAME
+    check_provider
+  HDRS
+    "check/provider.h"
+  SRCS
+    "check/provider.c"
+  DEPS
+    ::loom_check
+    iree::base
+    loom::tools::loom-check::provider
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_check_test_suite(
   NAME
     loom_check_file_test
@@ -274,7 +290,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARTIFACT_X86_ELF)
 iree_py_test(
   NAME
     report_test
@@ -302,7 +318,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     callable_object
@@ -321,7 +337,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     vector_callable_object
@@ -340,7 +356,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     runtime_division_object
@@ -359,7 +375,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     avx512_callable_object
@@ -378,7 +394,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     avx512_bf16_callable_object
@@ -397,7 +413,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     packed_dot_callable_object
@@ -416,7 +432,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     callable_link_test
@@ -438,7 +454,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     runtime_division_link_test
@@ -475,7 +491,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64")
+if(LOOM_ROUTE_X86_TASK_HAL AND IREE_ARCH STREQUAL "x86_64")
 iree_native_test(
   NAME
     "hal_dispatch_test"
@@ -507,7 +523,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64")
+if(LOOM_ROUTE_X86_TASK_HAL AND IREE_ARCH STREQUAL "x86_64")
 iree_native_test(
   NAME
     "hal_dispatch_c_api_test"

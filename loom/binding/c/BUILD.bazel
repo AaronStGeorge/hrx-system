@@ -480,7 +480,7 @@ loomc_shared_libraries(
         ],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/arch:vm": [
+        "//loom/config/emit:vm_binary": [
             "//loom/binding/c/target/vm",
         ],
         "//conditions:default": [],
@@ -490,7 +490,7 @@ loomc_shared_libraries(
         ],
         "//conditions:default": [],
     }) + select({
-        "//loom/config/arch:x86": [
+        "//loom/config/emit:x86_elf": [
             "//loom/binding/c/target/x86",
         ],
         "//conditions:default": [],

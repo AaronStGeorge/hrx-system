@@ -10,6 +10,7 @@ import struct
 import pytest
 
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
+from loom.target.arch.wasm.float_extension import float_extension_rules
 from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
@@ -18,7 +19,6 @@ from loom.target.contracts import (
     ValueRef,
     descriptor_by_key,
 )
-from loom.target.emit.wasm.float_extension import float_extension_rules
 
 
 def _descriptor(key):

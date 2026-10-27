@@ -5,14 +5,14 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
+from loom.target.arch.wasm.vector_integer_arithmetic import (
+    integer_arithmetic_rules,
+)
 from loom.target.contracts import (
     DescriptorRule,
     Guard,
     GuardKind,
     descriptor_by_key,
-)
-from loom.target.emit.wasm.vector_integer_arithmetic import (
-    integer_arithmetic_rules,
 )
 
 

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ARCH_VM)
+if(LOOM_EXECUTE_IREE_VM AND LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     buffer
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_EXECUTE_IREE_VM AND LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     buffer_test
@@ -44,7 +44,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     loom_check
@@ -61,7 +61,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     check_provider
@@ -77,7 +77,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_VM)
 loom_cc_library(
   NAME
     testbench
@@ -99,7 +99,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_VM)
 loom_generated_file(
   NAME
     imports_binary
@@ -118,7 +118,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY)
 iree_c_embed_data(
   NAME
     imports_bytecode
@@ -135,7 +135,7 @@ iree_c_embed_data(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     imports_test
@@ -166,7 +166,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_VM)
 loom_generated_file(
   NAME
     native_references_binary
@@ -185,7 +185,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY)
 iree_c_embed_data(
   NAME
     native_references_bytecode
@@ -217,7 +217,7 @@ iree_c_embed_data(
   PUBLIC
 )
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     emission_test
@@ -239,7 +239,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_VM)
 loom_cc_test(
   NAME
     native_references_test

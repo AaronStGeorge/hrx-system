@@ -64,7 +64,7 @@ iree_execution_test_suite(
     ],
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/execute:aie2p_xdna_hal",
-        "//loom/config/arch:vm",
+        "//loom/config/execute:vm_iree_vm",
     ]),
     tools = {
         "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
@@ -87,7 +87,7 @@ iree_execution_test_suite(
     ],
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/execute:aie2p_xdna_hal",
-        "//loom/config/arch:vm",
+        "//loom/config/execute:vm_iree_vm",
     ]),
     tools = {"loom-test": "//loom/src/loom/tools/loom-test"},
 )

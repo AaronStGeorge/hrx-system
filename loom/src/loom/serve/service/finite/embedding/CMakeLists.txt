@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     protocol
@@ -30,7 +30,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
     source_service_fixture
@@ -72,7 +72,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
     source_management_tests
@@ -91,7 +91,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
     source_execution_tests
@@ -113,7 +113,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
     direct_dispatch_tests
@@ -132,7 +132,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
     checkpoint_preparation_tests
@@ -151,7 +151,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
     elastic_storage_tests
@@ -171,7 +171,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
     pool_binding_tests
@@ -209,7 +209,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     protocol_test
@@ -223,6 +223,7 @@ loom_cc_test(
     iree::vm
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 

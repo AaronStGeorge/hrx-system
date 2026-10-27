@@ -19,7 +19,7 @@ loom_test_module(
 endif()
 
 if(LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     allocation_instances_test_execute_vm_reference_test
@@ -27,6 +27,8 @@ loom_execution_test(
     "::allocation_instances_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -45,7 +47,7 @@ loom_test_module(
 endif()
 
 if(LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     buffer_selection_test_execute_vm_reference_test
@@ -53,6 +55,8 @@ loom_execution_test(
     "::buffer_selection_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -71,7 +75,7 @@ loom_test_module(
 endif()
 
 if(LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     callable_returns_test_execute_vm_reference_test
@@ -79,6 +83,8 @@ loom_execution_test(
     "::callable_returns_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -97,7 +103,7 @@ loom_test_module(
 endif()
 
 if(LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     callable_storage_test_execute_vm_reference_test
@@ -105,6 +111,8 @@ loom_execution_test(
     "::callable_storage_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -123,7 +131,7 @@ loom_test_module(
 endif()
 
 if(LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     view_bitcast_test_execute_vm_reference_test
@@ -131,6 +139,8 @@ loom_execution_test(
     "::view_bitcast_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -139,7 +149,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ROUTE_VM_IREE_VM)
 iree_execution_test_suite(
   NAME
     tools_test

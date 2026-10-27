@@ -10,6 +10,7 @@ from collections.abc import Callable
 
 from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.vector import defs as vector
+from loom.target.arch.wasm.packed_i32 import PackedI32Program
 from loom.target.contracts import (
     DescriptorResultType,
     DescriptorRule,
@@ -41,7 +42,6 @@ from loom.target.emit.float_narrowing import (
     build_integer_bits_to_narrow_float_emits,
     build_representable_f32_to_bf16_emits,
 )
-from loom.target.emit.wasm.packed_i32 import PackedI32Program
 from loom.target.low_descriptors import Descriptor
 
 _F8E4M3 = Scalar("f8E4M3")

@@ -6,8 +6,8 @@
 
 // loom-check provider for x86 target-low tests.
 
-#ifndef LOOM_TARGET_ARCH_X86_CHECK_PROVIDER_H_
-#define LOOM_TARGET_ARCH_X86_CHECK_PROVIDER_H_
+#ifndef LOOM_TARGET_EMIT_NATIVE_X86_CHECK_PROVIDER_H_
+#define LOOM_TARGET_EMIT_NATIVE_X86_CHECK_PROVIDER_H_
 
 #include "loom/tools/loom-check/provider.h"
 
@@ -16,10 +16,10 @@ extern "C" {
 #endif
 
 // x86 native emission inspection handlers.
-extern const loom_check_provider_t loom_x86_check_provider;
+extern const loom_check_provider_t loom_x86_native_check_provider;
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_X86_CHECK_PROVIDER_H_
+#endif  // LOOM_TARGET_EMIT_NATIVE_X86_CHECK_PROVIDER_H_

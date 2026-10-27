@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/wasm/lower/predicate_representation.h"
+#include "loom/target/arch/wasm/lower/predicate_representation.h"
 
 #include <cstdint>
 #include <iterator>

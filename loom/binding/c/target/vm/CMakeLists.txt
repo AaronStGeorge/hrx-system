@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     vm

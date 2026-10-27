@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/wasm/lower/predicate_representation.h"
+#include "loom/target/arch/wasm/lower/predicate_representation.h"
 
 #include "loom/ops/vector/ops.h"
-#include "loom/target/emit/wasm/lower/vector_dynamic_slice.h"
+#include "loom/target/arch/wasm/lower/vector_dynamic_slice.h"
 
 typedef enum loom_wasm_predicate_representation_action_e {
   LOOM_WASM_PREDICATE_REPRESENTATION_ACTION_FLEXIBLE_RESULT = 0,

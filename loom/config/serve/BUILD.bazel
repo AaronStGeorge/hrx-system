@@ -64,7 +64,7 @@ selects.config_setting_group(
     match_all = [
         ":image_input_requested",
         ":media_host",
-        "//loom/config/arch:vm",
+        "//loom/config/emit:vm_binary",
     ],
 )
 
@@ -129,7 +129,7 @@ iree_string_list_flag(
         name = codec,
         match_all = [
             ":media_host",
-            "//loom/config/arch:vm",
+            "//loom/config/emit:vm_binary",
             ":" + codec + "_requested",
         ],
     )

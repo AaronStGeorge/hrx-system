@@ -71,7 +71,7 @@ iree_execution_test_suite(
         "runtime-resource=amd-gpu",
     ],
     target_compatible_with = _LEGACY_AMDGPU_EXECUTION_COMPATIBLE_WITH + loom_config_compatible_with([
-        "//loom/config/arch:vm",
+        "//loom/config/execute:vm_iree_vm",
     ]),
     tools = {"benchmark": "//loom/src/loom/tools/loom-benchmark"},
 )
@@ -86,7 +86,7 @@ iree_execution_test_suite(
         "runtime-resource=amd-gpu",
     ],
     target_compatible_with = _LEGACY_AMDGPU_EXECUTION_COMPATIBLE_WITH + loom_config_compatible_with([
-        "//loom/config/arch:vm",
+        "//loom/config/execute:vm_iree_vm",
     ]),
     tools = {"loom-benchmark": "//loom/src/loom/tools/loom-benchmark"},
 )

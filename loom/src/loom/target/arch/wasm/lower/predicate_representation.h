@@ -10,7 +10,7 @@
 #define LOOM_TARGET_EMIT_WASM_LOWER_PREDICATE_REPRESENTATION_H_
 
 #include "loom/codegen/low/lower/representation_observer.h"
-#include "loom/target/emit/wasm/lower/vector_carrier.h"
+#include "loom/target/arch/wasm/lower/vector_carrier.h"
 
 #ifdef __cplusplus
 extern "C" {

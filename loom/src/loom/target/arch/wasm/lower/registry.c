@@ -5,14 +5,14 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ir/module.h"
+#include "loom/target/arch/wasm/contracts/core_simd128.h"
+#include "loom/target/arch/wasm/contracts/core_simd128_lower_rules.h"
 #include "loom/target/arch/wasm/descriptors/descriptors.h"
-#include "loom/target/emit/wasm/contracts/core_simd128.h"
-#include "loom/target/emit/wasm/contracts/core_simd128_lower_rules.h"
-#include "loom/target/emit/wasm/error_catalog.h"
-#include "loom/target/emit/wasm/lower/lower.h"
-#include "loom/target/emit/wasm/lower/predicate_representation.h"
-#include "loom/target/emit/wasm/lower/vector_carrier.h"
-#include "loom/target/emit/wasm/lower/vector_structural.h"
+#include "loom/target/arch/wasm/error_catalog.h"
+#include "loom/target/arch/wasm/lower/lower.h"
+#include "loom/target/arch/wasm/lower/predicate_representation.h"
+#include "loom/target/arch/wasm/lower/vector_carrier.h"
+#include "loom/target/arch/wasm/lower/vector_structural.h"
 
 static bool loom_wasm_type_is_i32_register(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {
@@ -275,7 +275,7 @@ static iree_status_t loom_wasm_emit_op(void* user_data,
   IREE_BUILTIN_UNREACHABLE();
 }
 
-#include "loom/target/emit/wasm/contracts/tables.inl"
+#include "loom/target/arch/wasm/contracts/tables.inl"
 
 static const uint16_t kWasmVectorPacketBitCounts[] = {128u};
 static const uint16_t kWasmVectorPacketLaneCounts[] = {16u, 8u, 4u, 2u};

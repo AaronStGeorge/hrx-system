@@ -27,6 +27,7 @@ load(
     "ARCH_X86",
     "ARTIFACT_AMDGPU_ELF",
     "ARTIFACT_SPIRV_BINARY",
+    "ARTIFACT_VM_BINARY",
     "ARTIFACT_WASM_BINARY",
     "ARTIFACT_X86_ELF",
     "IMPORT_CXX",
@@ -56,7 +57,7 @@ PACKAGE_POLICIES = [
             "loom/src/loom/tooling/target/spirv/serve/...",
             "loom/src/loom/tools/loom-serve/...",
         ],
-        build_requirements = [ARCH_VM],
+        build_requirements = [ARCH_VM, ARTIFACT_VM_BINARY],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/amd/xdna/..."],
@@ -101,7 +102,7 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/vm/..."],
-        build_requirements = [ARCH_VM],
+        build_requirements = [ARCH_VM, ARTIFACT_VM_BINARY],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/wasm/..."],

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     test_compiler
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARTIFACT_SPIRV_BINARY AND IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY AND IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV)
 loom_cc_binary(
   NAME
     loom-serve-test-tool
@@ -37,7 +37,7 @@ loom_cc_binary(
 )
 endif()
 
-if(IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
+if(IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     test_device
@@ -54,7 +54,7 @@ loom_cc_library(
 )
 endif()
 
-if(IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
+if(IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     memory_test
@@ -67,6 +67,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -74,7 +75,7 @@ loom_cc_test(
 )
 endif()
 
-if(IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
+if(IREE_HAL_DRIVER_VULKAN AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     execution_queues_test
@@ -87,6 +88,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -94,7 +96,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     control_test
@@ -131,6 +133,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -138,7 +141,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     finite_component_test
@@ -161,6 +164,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -168,7 +172,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_image_service_test
@@ -189,6 +193,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -196,7 +201,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_recognition_model_test
@@ -215,6 +220,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -222,7 +228,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_recognition_stream_test
@@ -241,6 +247,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -248,7 +255,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     registry_speech_test
@@ -273,6 +280,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -280,7 +288,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     registry_recognition_test
@@ -299,6 +307,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -306,7 +315,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_speech_service_test
@@ -336,6 +345,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -343,7 +353,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_speech_service_parallel_test
@@ -374,6 +384,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -381,7 +392,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 iree_py_test(
   NAME
     catalog_test
@@ -442,6 +453,7 @@ iree_py_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   PACKAGE_DIRS
@@ -455,7 +467,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_decision_service_test
@@ -482,6 +494,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -489,7 +502,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_embedding_service_test
@@ -517,6 +530,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -524,7 +538,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_service_test
@@ -546,6 +560,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -553,7 +568,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_media_test
@@ -591,6 +606,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP
@@ -598,7 +614,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     native_text_service_test
@@ -620,6 +636,7 @@ loom_cc_test(
   LABELS
     "iree-run-requirement=vulkan.resource.device"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
     "iree-build-requirement=loom.arch.spirv"
     "iree-build-requirement=loom.artifact.spirv_binary"
   RESOURCE_GROUP

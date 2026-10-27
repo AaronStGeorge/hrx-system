@@ -451,12 +451,14 @@ loom_corpus_test(
   LABELS
     "loom-corpus"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
     "loom-executor=reference"
   REQUIRES
-    LOOM_ARCH_VM
+    LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM
 )
 
 loom_test_module(
@@ -468,7 +470,7 @@ loom_test_module(
     "loom::test::corpus::numeric::inverse_hyperbolic_narrow"
 )
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     inverse_hyperbolic_stress_execute_vm_reference_test
@@ -479,6 +481,8 @@ loom_execution_test(
     "manual"
     "stress"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"

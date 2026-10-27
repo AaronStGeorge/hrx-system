@@ -42,13 +42,15 @@ _ARTIFACT_SPIRV_BINARY_CHECK_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_TARGET_VM_CHECK_COPTS = iree_select({
-    "//loom/config/arch:vm": ["-DLOOM_CHECK_HAVE_TARGET_VM=1"],
+_ARTIFACT_VM_BINARY_CHECK_COPTS = iree_select({
+    "//loom/config/emit:vm_binary": [
+        "-DLOOM_CHECK_HAVE_ARTIFACT_VM_BINARY=1",
+    ],
     "//conditions:default": [],
 })
 
-_TARGET_VM_CHECK_DEPS = iree_select({
-    "//loom/config/arch:vm": [
+_ARTIFACT_VM_BINARY_CHECK_DEPS = iree_select({
+    "//loom/config/emit:vm_binary": [
         "//loom/src/loom/tooling/target/vm:check_provider",
     ],
     "//conditions:default": [],
@@ -68,16 +70,16 @@ _ARTIFACT_WASM_BINARY_CHECK_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_TARGET_X86_CHECK_COPTS = iree_select({
-    "//loom/config/arch:x86": [
-        "-DLOOM_CHECK_HAVE_TARGET_X86=1",
+_ARTIFACT_X86_ELF_CHECK_COPTS = iree_select({
+    "//loom/config/emit:x86_elf": [
+        "-DLOOM_CHECK_HAVE_ARTIFACT_X86_ELF=1",
     ],
     "//conditions:default": [],
 })
 
-_TARGET_X86_CHECK_DEPS = iree_select({
-    "//loom/config/arch:x86": [
-        "//loom/src/loom/target/arch/x86/check:check_provider",
+_ARTIFACT_X86_ELF_CHECK_DEPS = iree_select({
+    "//loom/config/emit:x86_elf": [
+        "//loom/src/loom/target/emit/native/x86:check_provider",
     ],
     "//conditions:default": [],
 })
@@ -104,18 +106,18 @@ _TARGET_XDNA_CHECK_TEST_DEPS = iree_select({
 _LOOM_CHECK_PROVIDER_COPTS = (
     _ARTIFACT_AMDGPU_ELF_CHECK_COPTS +
     _ARTIFACT_SPIRV_BINARY_CHECK_COPTS +
-    _TARGET_VM_CHECK_COPTS +
+    _ARTIFACT_VM_BINARY_CHECK_COPTS +
     _ARTIFACT_WASM_BINARY_CHECK_COPTS +
-    _TARGET_X86_CHECK_COPTS +
+    _ARTIFACT_X86_ELF_CHECK_COPTS +
     _TARGET_XDNA_CHECK_COPTS
 )
 
 _LOOM_CHECK_PROVIDER_DEPS = (
     _ARTIFACT_AMDGPU_ELF_CHECK_DEPS +
     _ARTIFACT_SPIRV_BINARY_CHECK_DEPS +
-    _TARGET_VM_CHECK_DEPS +
+    _ARTIFACT_VM_BINARY_CHECK_DEPS +
     _ARTIFACT_WASM_BINARY_CHECK_DEPS +
-    _TARGET_X86_CHECK_DEPS +
+    _ARTIFACT_X86_ELF_CHECK_DEPS +
     _TARGET_XDNA_CHECK_DEPS
 )
 

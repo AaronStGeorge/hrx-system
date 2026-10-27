@@ -9,8 +9,6 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_config_compatible_with",
-    "loom_generated_cc_library",
 )
 
 package(
@@ -22,23 +20,6 @@ package(
 #===------------------------------------------------------------------------===#
 # Wasm emission
 #===------------------------------------------------------------------------===#
-
-loom_generated_cc_library(
-    name = "error_defs",
-    args = [
-        "--catalog-symbol=loom_wasm_error_catalog",
-        "--fallback-catalog-symbol=loom_error_catalog_core",
-        "--fallback-public-header=loom/error/error_catalog.h",
-        "--public-header=loom/target/emit/wasm/error_catalog.h",
-        "--shard=wasm",
-    ],
-    generated_hdr_flags = ["--header"],
-    generated_hdrs = ["error_catalog.h"],
-    generator = "//loom/py/loom/gen/error:c_errors",
-    source = "error_catalog.c",
-    visibility = ["//loom/src/loom/target/emit/wasm/lower:__pkg__"],
-    deps = ["//loom/src/loom/error:error_defs"],
-)
 
 loom_cc_library(
     name = "binary_writer",
@@ -146,9 +127,6 @@ iree_assert_dependency_boundary(
 loom_cc_test(
     name = "module_compiler_test",
     srcs = ["module_compiler_test.cc"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/arch:wasm",
-    ]),
     deps = [
         ":module_compiler",
         "//loom/src/loom/target:selection",

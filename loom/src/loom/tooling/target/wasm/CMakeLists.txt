@@ -22,6 +22,7 @@ iree_execution_test_suite(
 )
 endif()
 
+if(LOOM_EXECUTE_WASM_HOST)
 iree_wasm_cc_library(
   NAME
     host_js
@@ -31,8 +32,9 @@ iree_wasm_cc_library(
     "loom_wasm_host"
   PUBLIC
 )
+endif()
 
-if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
+if(LOOM_EXECUTE_WASM_HOST AND LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     host
@@ -47,7 +49,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
+if(LOOM_ROUTE_WASM_HOSTED AND LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     testbench

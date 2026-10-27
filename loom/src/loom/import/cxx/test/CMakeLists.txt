@@ -260,7 +260,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     boolean_storage_test_execute_vm_reference_test
@@ -268,6 +268,8 @@ loom_execution_test(
     "::boolean_storage_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -286,7 +288,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     check_close_test_execute_vm_reference_test
@@ -294,6 +296,8 @@ loom_execution_test(
     "::check_close_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -312,7 +316,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     check_record_values_test_execute_vm_reference_test
@@ -320,6 +324,8 @@ loom_execution_test(
     "::check_record_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -338,7 +344,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     condition_values_test_execute_vm_reference_test
@@ -346,6 +352,8 @@ loom_execution_test(
     "::condition_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -364,7 +372,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     switch_values_test_execute_vm_reference_test
@@ -372,6 +380,8 @@ loom_execution_test(
     "::switch_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -399,7 +409,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     exponent_values_test_execute_vm_reference_test
@@ -407,6 +417,8 @@ loom_execution_test(
     "::exponent_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -416,7 +428,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     integer_intrinsics_test_execute_vm_reference_test
@@ -424,6 +436,8 @@ loom_execution_test(
     "::integer_intrinsics_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -442,7 +456,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     immutable_objects_test_execute_vm_reference_test
@@ -450,6 +464,8 @@ loom_execution_test(
     "::immutable_objects_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -471,7 +487,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     immutable_object_link_test_execute_vm_reference_test
@@ -482,6 +498,8 @@ loom_execution_test(
     "--case=immutable_object_link_identity"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -500,7 +518,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     local_addresses_test_execute_vm_reference_test
@@ -508,6 +526,8 @@ loom_execution_test(
     "::local_addresses_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -526,7 +546,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     local_arrays_test_execute_vm_reference_test
@@ -534,6 +554,8 @@ loom_execution_test(
     "::local_arrays_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -552,7 +574,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     operator_values_test_execute_vm_reference_test
@@ -560,6 +582,8 @@ loom_execution_test(
     "::operator_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -578,7 +602,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     reference_accessors_test_execute_vm_reference_test
@@ -586,6 +610,8 @@ loom_execution_test(
     "::reference_accessors_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -604,7 +630,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     array_records_test_execute_vm_reference_test
@@ -612,6 +638,8 @@ loom_execution_test(
     "::array_records_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -668,7 +696,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     function_link_test_execute_vm_reference_test
@@ -679,6 +707,8 @@ loom_execution_test(
     "--case=function_link"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -697,7 +727,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     local_names_test_execute_vm_reference_test
@@ -705,6 +735,8 @@ loom_execution_test(
     "::local_names_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -726,7 +758,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     pointer_origins_test_execute_vm_reference_test
@@ -734,6 +766,8 @@ loom_execution_test(
     "::pointer_origins_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -752,7 +786,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     constexpr_values_test_execute_vm_reference_test
@@ -760,6 +794,8 @@ loom_execution_test(
     "::constexpr_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -783,7 +819,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     atomic_values_test_execute_vm_reference_test
@@ -791,6 +827,8 @@ loom_execution_test(
     "::atomic_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -810,7 +848,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     storage_values_test_execute_vm_reference_test
@@ -818,6 +856,8 @@ loom_execution_test(
     "::storage_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -837,7 +877,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     packed_memory_values_test_execute_vm_reference_test
@@ -845,6 +885,8 @@ loom_execution_test(
     "::packed_memory_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -864,7 +906,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     record_memory_values_test_execute_vm_reference_test
@@ -872,6 +914,8 @@ loom_execution_test(
     "::record_memory_values_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -891,7 +935,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     volatile_values_test_execute_vm_reference_test
@@ -902,6 +946,8 @@ loom_execution_test(
     "--case=volatile_values"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -920,7 +966,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     config_values_test_five_execute_vm_reference_test
@@ -933,6 +979,8 @@ loom_execution_test(
     "--case=five"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -940,7 +988,7 @@ loom_execution_test(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     config_values_test_nine_execute_vm_reference_test
@@ -953,6 +1001,8 @@ loom_execution_test(
     "--case=nine"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -989,7 +1039,7 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     address_counted_loops_test_execute_vm_reference_test
@@ -1000,6 +1050,8 @@ loom_execution_test(
     "--case=address_counted_loops_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1009,7 +1061,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     assumptions_test_execute_vm_reference_test
@@ -1020,6 +1072,8 @@ loom_execution_test(
     "--case=assumptions_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1029,7 +1083,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     comparison_functions_test_execute_vm_reference_test
@@ -1040,6 +1094,8 @@ loom_execution_test(
     "--case=comparison_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1049,7 +1105,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     constant_loops_test_execute_vm_reference_test
@@ -1060,6 +1116,8 @@ loom_execution_test(
     "--case=constant_loops_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1069,7 +1127,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     enum_values_test_execute_vm_reference_test
@@ -1080,6 +1138,8 @@ loom_execution_test(
     "--case=enum_values_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1089,7 +1149,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     increment_values_test_execute_vm_reference_test
@@ -1100,6 +1160,8 @@ loom_execution_test(
     "--case=increment_values_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1109,7 +1171,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     integer_functions_test_execute_vm_reference_test
@@ -1120,6 +1182,8 @@ loom_execution_test(
     "--case=integer_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1129,7 +1193,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     padded_vectors_test_execute_vm_reference_test
@@ -1140,6 +1204,8 @@ loom_execution_test(
     "--case=padded_vectors_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1149,7 +1215,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     record_values_test_execute_vm_reference_test
@@ -1160,6 +1226,8 @@ loom_execution_test(
     "--case=record_values_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1169,7 +1237,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     schedule_values_test_execute_vm_reference_test
@@ -1180,6 +1248,8 @@ loom_execution_test(
     "--case=schedule_values_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1189,7 +1259,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     shaped_intrinsics_test_execute_vm_reference_test
@@ -1200,6 +1270,8 @@ loom_execution_test(
     "--case=shaped_intrinsics_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1209,7 +1281,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     structured_break_test_execute_vm_reference_test
@@ -1220,6 +1292,8 @@ loom_execution_test(
     "--case=structured_break_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1229,7 +1303,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     structured_continue_test_execute_vm_reference_test
@@ -1240,6 +1314,8 @@ loom_execution_test(
     "--case=structured_continue_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1249,7 +1325,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     vector_initializers_test_execute_vm_reference_test
@@ -1260,6 +1336,8 @@ loom_execution_test(
     "--case=vector_initializers_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1269,7 +1347,7 @@ endif()
 endif()
 
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     vector_values_test_functions_execute_vm_reference_test
@@ -1280,6 +1358,8 @@ loom_execution_test(
     "--case=vector_values_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
@@ -1287,7 +1367,7 @@ loom_execution_test(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     vector_values_test_signed_functions_execute_vm_reference_test
@@ -1298,6 +1378,8 @@ loom_execution_test(
     "--case=vector_values_signed_functions"
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"

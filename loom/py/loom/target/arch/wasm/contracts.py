@@ -36,6 +36,23 @@ from loom.error.wasm import (
     ERR_WASM_006,
 )
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
+from loom.target.arch.wasm.float_extension import float_extension_rules
+from loom.target.arch.wasm.float_narrowing import float_narrowing_rules
+from loom.target.arch.wasm.predicate import (
+    FLOAT_PREDICATE_RECIPES,
+    FLOAT_PREDICATES,
+    NATIVE_FLOAT_PREDICATE_OPERATIONS,
+    NNAN_FLOAT_PREDICATES,
+    predicate_rules,
+)
+from loom.target.arch.wasm.vector_integer_arithmetic import (
+    integer_arithmetic_rules,
+)
+from loom.target.arch.wasm.vector_integer_extension import integer_extension_rules
+from loom.target.arch.wasm.vector_shifts import (
+    uniform_shift_rules,
+    varying_shift_rules,
+)
 from loom.target.contracts import (
     AttrProject,
     Buffer,
@@ -68,23 +85,6 @@ from loom.target.contracts import (
 from loom.target.contracts.templates import (
     ReductionDescriptorCase,
     reduction_descriptor_rules,
-)
-from loom.target.emit.wasm.float_extension import float_extension_rules
-from loom.target.emit.wasm.float_narrowing import float_narrowing_rules
-from loom.target.emit.wasm.predicate import (
-    FLOAT_PREDICATE_RECIPES,
-    FLOAT_PREDICATES,
-    NATIVE_FLOAT_PREDICATE_OPERATIONS,
-    NNAN_FLOAT_PREDICATES,
-    predicate_rules,
-)
-from loom.target.emit.wasm.vector_integer_arithmetic import (
-    integer_arithmetic_rules,
-)
-from loom.target.emit.wasm.vector_integer_extension import integer_extension_rules
-from loom.target.emit.wasm.vector_shifts import (
-    uniform_shift_rules,
-    varying_shift_rules,
 )
 from loom.target.low_descriptors import Descriptor
 
@@ -1652,7 +1652,7 @@ WASM_CORE_SIMD128_CONTRACT_DIALECT_OPS = {
 WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
     name="wasm.core.simd128",
     descriptor_set=WASM_CORE_SIMD128_DESCRIPTOR_SET,
-    public_header="loom/target/emit/wasm/contracts/core_simd128.h",
+    public_header="loom/target/arch/wasm/contracts/core_simd128.h",
     cases=(
         *uniform_shift_rules(),
         *_view_carrier_rules(),

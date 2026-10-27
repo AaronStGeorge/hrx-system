@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     native_allocator
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     worker_gate
@@ -39,7 +39,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     compiler
@@ -58,7 +58,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     device
@@ -78,7 +78,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     jit
@@ -104,7 +104,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     jit_module
@@ -129,7 +129,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     service_application
@@ -151,7 +151,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     server_test_tool
@@ -168,7 +168,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
     http_harness
@@ -186,7 +186,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     model_wait
@@ -200,7 +200,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     stalled_http_client
@@ -219,7 +219,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     http_harness_test
@@ -235,10 +235,11 @@ loom_cc_test(
     loom::serve::transport::http::server
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     model
@@ -254,7 +255,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     package
@@ -270,7 +271,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
     stalled_stderr
@@ -283,7 +284,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_library(
   NAME
     chat
@@ -294,7 +295,7 @@ iree_py_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     text_policy
@@ -323,7 +324,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_binary(
   NAME
     text_request_check
@@ -344,7 +345,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_test(
   NAME
     chat_test
@@ -356,6 +357,7 @@ iree_py_test(
     loom::serve::testing::chat
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -365,7 +367,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_library(
   NAME
     workload
@@ -378,7 +380,7 @@ iree_py_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_library(
   NAME
     replay
@@ -391,7 +393,7 @@ iree_py_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_test(
   NAME
     workload_test
@@ -404,6 +406,7 @@ iree_py_test(
     loom::serve::testing::workload
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -413,7 +416,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_library(
   NAME
     logs
@@ -424,7 +427,7 @@ iree_py_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_test(
   NAME
     logs_test
@@ -436,6 +439,7 @@ iree_py_test(
     loom::serve::testing::logs
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -445,7 +449,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_library(
   NAME
     http
@@ -459,7 +463,7 @@ iree_py_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_library(
   NAME
     model_staging
@@ -473,7 +477,7 @@ iree_py_library(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_test(
   NAME
     http_test
@@ -486,6 +490,7 @@ iree_py_test(
     loom::serve::testing::logs
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -495,7 +500,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_test(
   NAME
     process_test
@@ -507,6 +512,7 @@ iree_py_test(
     loom::serve::testing::http
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"

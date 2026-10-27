@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
+if(LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     wasm

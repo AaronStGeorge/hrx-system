@@ -10,6 +10,29 @@
 iree_add_all_subdirs()
 
 if(LOOM_ARCH_WASM)
+loom_generated_cc_library(
+  NAME
+    error_defs
+  GENERATOR
+    loom::py::loom::gen::error::c_errors
+  SOURCE
+    "error_catalog.c"
+  GENERATED_HDR_FLAGS
+    "--header"
+  GENERATED_HDRS
+    "error_catalog.h"
+  ARGS
+    "--catalog-symbol=loom_wasm_error_catalog"
+    "--fallback-catalog-symbol=loom_error_catalog_core"
+    "--fallback-public-header=loom/error/error_catalog.h"
+    "--public-header=loom/target/arch/wasm/error_catalog.h"
+    "--shard=wasm"
+  DEPS
+    loom::error::error_defs
+)
+endif()
+
+if(LOOM_ARCH_WASM)
 loom_cc_library(
   NAME
     math_policy
@@ -87,9 +110,9 @@ loom_cc_library(
     loom::ops::view
     loom::target::arch::wasm::descriptors
     loom::target::arch::wasm::descriptors::low_registry
+    loom::target::arch::wasm::lower
     loom::target::arch::wasm::ops
     loom::target::arch::wasm::records::target_records
-    loom::target::emit::wasm::lower
     loom::target::legalization
     loom::target::provider
     loom::transforms::scalar::target_legalization

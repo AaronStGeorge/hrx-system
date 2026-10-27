@@ -12,6 +12,7 @@ from loom.dialect.scf import defs as scf
 from loom.dialect.vector import defs as vector
 from loom.ir import ScalarType
 from loom.scalar_type import ScalarTypeKind, scalar_type_name
+from loom.target.arch.wasm.contracts import WASM_CORE_SIMD128_CONTRACT_FRAGMENT
 from loom.target.contracts import (
     DescriptorEmitForm,
     DescriptorRule,
@@ -23,7 +24,6 @@ from loom.target.contracts import (
     ValueRef,
     Vector,
 )
-from loom.target.emit.wasm.contracts import WASM_CORE_SIMD128_CONTRACT_FRAGMENT
 
 _FLOAT_KINDS = frozenset(
     {

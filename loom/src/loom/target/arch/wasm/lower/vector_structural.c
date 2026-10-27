@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/wasm/lower/vector_structural.h"
+#include "loom/target/arch/wasm/lower/vector_structural.h"
 
 #include <string.h>
 
@@ -17,10 +17,10 @@
 #include "loom/ops/vector/interleave.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/wasm/descriptors/descriptors.h"
-#include "loom/target/emit/wasm/error_catalog.h"
-#include "loom/target/emit/wasm/lower/predicate_representation.h"
-#include "loom/target/emit/wasm/lower/vector_carrier.h"
-#include "loom/target/emit/wasm/lower/vector_dynamic_slice.h"
+#include "loom/target/arch/wasm/error_catalog.h"
+#include "loom/target/arch/wasm/lower/predicate_representation.h"
+#include "loom/target/arch/wasm/lower/vector_carrier.h"
+#include "loom/target/arch/wasm/lower/vector_dynamic_slice.h"
 
 enum {
   LOOM_WASM_VECTOR_STRUCTURAL_PLAN_INTERLEAVE = 0x501,

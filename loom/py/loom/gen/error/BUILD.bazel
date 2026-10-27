@@ -18,7 +18,7 @@ GENERATOR_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu:__pkg__",
     "//loom/src/loom/target/arch/amd/xdna:__pkg__",
     "//loom/src/loom/target/arch/spirv:__pkg__",
-    "//loom/src/loom/target/emit/wasm:__pkg__",
+    "//loom/src/loom/target/arch/wasm:__pkg__",
 ]
 
 iree_py_binary(

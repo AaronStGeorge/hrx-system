@@ -34,15 +34,15 @@
 #ifndef LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
 #define LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY 0
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
-#ifndef LOOM_CHECK_HAVE_TARGET_VM
-#define LOOM_CHECK_HAVE_TARGET_VM 0
-#endif  // LOOM_CHECK_HAVE_TARGET_VM
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
+#define LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
 #ifndef LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
 #define LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY 0
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
-#ifndef LOOM_CHECK_HAVE_TARGET_X86
-#define LOOM_CHECK_HAVE_TARGET_X86 0
-#endif  // LOOM_CHECK_HAVE_TARGET_X86
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
+#define LOOM_CHECK_HAVE_ARTIFACT_X86_ELF 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
 #ifndef LOOM_CHECK_HAVE_TARGET_XDNA
 #define LOOM_CHECK_HAVE_TARGET_XDNA 0
 #endif  // LOOM_CHECK_HAVE_TARGET_XDNA
@@ -53,15 +53,15 @@
 #if LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
 #include "loom/tooling/target/spirv/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
-#if LOOM_CHECK_HAVE_TARGET_VM
+#if LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
 #include "loom/tooling/target/vm/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_TARGET_VM
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
 #if LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
 #include "loom/tooling/target/wasm/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
-#if LOOM_CHECK_HAVE_TARGET_X86
-#include "loom/target/arch/x86/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_TARGET_X86
+#if LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
+#include "loom/target/emit/native/x86/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
 #if LOOM_CHECK_HAVE_TARGET_XDNA
 #include "loom/target/arch/amd/xdna/aie2p/check/provider.h"
 #if LOOM_CHECK_HAVE_TEST_PROVIDER
@@ -82,15 +82,15 @@ static const loom_check_provider_t* const kLoomCheckProviders[] = {
 #if LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
     &loom_spirv_emit_check_provider,
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
-#if LOOM_CHECK_HAVE_TARGET_VM
+#if LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
     &loom_vm_emit_check_provider,
-#endif  // LOOM_CHECK_HAVE_TARGET_VM
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
 #if LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
     &loom_wasm_emit_check_provider,
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
-#if LOOM_CHECK_HAVE_TARGET_X86
-    &loom_x86_check_provider,
-#endif  // LOOM_CHECK_HAVE_TARGET_X86
+#if LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
+    &loom_x86_native_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
 #if LOOM_CHECK_HAVE_TARGET_XDNA
     &loom_aie2p_check_provider,
 #if LOOM_CHECK_HAVE_TEST_PROVIDER

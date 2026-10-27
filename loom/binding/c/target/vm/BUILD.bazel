@@ -23,7 +23,7 @@ loom_cc_library(
     hdrs = ["//loom/binding/c:include/loomc/target/vm.h"],
     linkstatic = True,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/arch:vm",
+        "//loom/config/emit:vm_binary",
     ]),
     deps = [
         "//loom/binding/c:loomc",

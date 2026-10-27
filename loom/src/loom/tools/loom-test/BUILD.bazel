@@ -240,7 +240,9 @@ iree_execution_test_suite(
     data = ["testdata/scenario_cases.loom"],
     manifests = ["scenario_execution.test.json"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:vm_iree_vm",
+    ]),
     tools = {
         "loom-test": ":loom-test",
     },

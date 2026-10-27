@@ -52,11 +52,8 @@ loom_cc_test(
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = _ROCR_TEST_TAGS,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/arch:x86",
-        "//loom/config/emit:amdgpu_elf",
-        "//runtime/config/hal:driver_amdgpu",
-        "//runtime/config/hal:driver_task",
-        "//runtime/config/hal:executable_loader_embedded_elf",
+        "//loom/config/execute:amdgpu_hal",
+        "//loom/config/execute:x86_task_hal",
     ]) + ["@platforms//cpu:x86_64"] + select({
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -94,8 +91,7 @@ loom_cc_binary(
     name = "loom-serve-test-tool",
     testonly = True,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:amdgpu_elf",
-        "//runtime/config/hal:driver_amdgpu",
+        "//loom/config/execute:amdgpu_hal",
     ]),
     deps = [
         ":test_compiler",
@@ -225,8 +221,8 @@ loom_cc_library(
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
         tags = runtime_tags,
         target_compatible_with = loom_config_compatible_with([
-            "//loom/config/arch:vm",
             "//loom/config/execute:amdgpu_hal",
+            "//loom/config/execute:vm_iree_vm",
         ] + runtime_requirements),
         deps = [
             ":test_compiler",
@@ -508,8 +504,8 @@ loom_cc_test(
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
         tags = runtime_tags,
         target_compatible_with = loom_config_compatible_with([
-            "//loom/config/arch:vm",
             "//loom/config/execute:amdgpu_hal",
+            "//loom/config/execute:vm_iree_vm",
         ] + runtime_requirements) + select({
             "@platforms//os:linux": [],
             "//conditions:default": ["@platforms//:incompatible"],
@@ -535,8 +531,8 @@ loom_cc_test(
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
         tags = runtime_tags,
         target_compatible_with = loom_config_compatible_with([
-            "//loom/config/arch:vm",
             "//loom/config/execute:amdgpu_hal",
+            "//loom/config/execute:vm_iree_vm",
         ] + runtime_requirements) + select({
             "@platforms//os:linux": [],
             "//conditions:default": ["@platforms//:incompatible"],

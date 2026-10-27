@@ -9,6 +9,7 @@ import struct
 from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.vector import defs as vector
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
+from loom.target.arch.wasm.float_narrowing import float_narrowing_rules
 from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
@@ -17,7 +18,6 @@ from loom.target.contracts import (
     ValueRef,
     descriptor_by_key,
 )
-from loom.target.emit.wasm.float_narrowing import float_narrowing_rules
 
 
 def _descriptor(key):

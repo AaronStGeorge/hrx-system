@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ROUTE_AMDGPU_HAL AND IREE_HAL_DRIVER_AMDGPU AND LOOM_ARCH_VM)
+if(LOOM_ROUTE_AMDGPU_HAL AND IREE_HAL_DRIVER_AMDGPU AND LOOM_ROUTE_VM_IREE_VM)
 iree_execution_test_suite(
   NAME
     benchmark_scenario_correctness_test
@@ -28,7 +28,7 @@ iree_execution_test_suite(
 )
 endif()
 
-if(LOOM_ROUTE_AMDGPU_HAL AND IREE_HAL_DRIVER_AMDGPU AND LOOM_ARCH_VM)
+if(LOOM_ROUTE_AMDGPU_HAL AND IREE_HAL_DRIVER_AMDGPU AND LOOM_ROUTE_VM_IREE_VM)
 iree_execution_test_suite(
   NAME
     benchmark_profile_policy_test

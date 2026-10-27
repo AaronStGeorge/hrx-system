@@ -7,6 +7,10 @@
 import pytest
 
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
+from loom.target.arch.wasm.vector_shifts import (
+    uniform_shift_rules,
+    varying_shift_rules,
+)
 from loom.target.contracts import (
     DescriptorEmitForm,
     DescriptorRule,
@@ -18,10 +22,6 @@ from loom.target.contracts import (
     ValueProjectKind,
     ValueRef,
     descriptor_by_key,
-)
-from loom.target.emit.wasm.vector_shifts import (
-    uniform_shift_rules,
-    varying_shift_rules,
 )
 
 ScalarOrVector = int | tuple[int, ...]

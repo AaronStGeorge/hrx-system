@@ -5,8 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
+from loom.target.arch.wasm.vector_integer_extension import integer_extension_rules
 from loom.target.contracts import Guard, GuardKind, descriptor_by_key
-from loom.target.emit.wasm.vector_integer_extension import integer_extension_rules
 
 
 def _descriptor(key):

@@ -39,7 +39,7 @@ iree_execution_test_suite(
 )
 endif()
 
-if(LOOM_ROUTE_AIE2P_XDNA_HAL AND LOOM_ARCH_VM)
+if(LOOM_ROUTE_AIE2P_XDNA_HAL AND LOOM_ROUTE_VM_IREE_VM)
 iree_execution_test_suite(
   NAME
     hal_execution_test
@@ -60,7 +60,7 @@ iree_execution_test_suite(
 )
 endif()
 
-if(LOOM_ROUTE_AIE2P_XDNA_HAL AND LOOM_ARCH_VM)
+if(LOOM_ROUTE_AIE2P_XDNA_HAL AND LOOM_ROUTE_VM_IREE_VM)
 iree_execution_test_suite(
   NAME
     channel_fanout_execution_test

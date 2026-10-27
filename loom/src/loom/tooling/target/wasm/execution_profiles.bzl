@@ -11,7 +11,10 @@ load(
     "//loom/requirements:defs.bzl",
     "ARCH_VM",
     "ARCH_WASM",
+    "ARTIFACT_VM_BINARY",
     "ARTIFACT_WASM_BINARY",
+    "EXECUTE_IREE_VM",
+    "EXECUTE_WASM_HOST",
 )
 
 WASM_HOSTED_PROFILE = loom_execution_profile(
@@ -19,7 +22,10 @@ WASM_HOSTED_PROFILE = loom_execution_profile(
     build_requirements = [
         ARCH_VM,
         ARCH_WASM,
+        ARTIFACT_VM_BINARY,
         ARTIFACT_WASM_BINARY,
+        EXECUTE_IREE_VM,
+        EXECUTE_WASM_HOST,
     ],
     executor = "hosted",
     runner = "//loom/src/loom/tools/loom-test:loom-test-wasi",

@@ -18,7 +18,7 @@ GENERATOR_VISIBILITY = [
     "//loom/src/loom/target/arch/amd/xdna/aie2p/contracts:__pkg__",
     "//loom/src/loom/target/arch/spirv/contracts:__pkg__",
     "//loom/src/loom/target/arch/x86/contracts:__pkg__",
-    "//loom/src/loom/target/emit/wasm/contracts:__pkg__",
+    "//loom/src/loom/target/arch/wasm/contracts:__pkg__",
     "//loom/src/loom/target/test/contracts:__pkg__",
 ]
 
@@ -152,7 +152,7 @@ iree_py_binary(
     visibility = GENERATOR_VISIBILITY,
     deps = [
         ":contract_table_family",
-        "//loom/py/loom/target/emit/wasm:contracts",
+        "//loom/py/loom/target/arch/wasm:contracts",
     ],
 )
 

@@ -48,7 +48,7 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY)
 iree_execution_test_suite(
   NAME
     compile_xfails_execution_test

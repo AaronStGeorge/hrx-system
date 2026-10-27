@@ -10,7 +10,7 @@
 #define LOOM_TARGET_EMIT_WASM_LOWER_VECTOR_DYNAMIC_SLICE_H_
 
 #include "loom/ir/ir.h"
-#include "loom/target/emit/wasm/lower/vector_carrier.h"
+#include "loom/target/arch/wasm/lower/vector_carrier.h"
 
 #ifdef __cplusplus
 extern "C" {

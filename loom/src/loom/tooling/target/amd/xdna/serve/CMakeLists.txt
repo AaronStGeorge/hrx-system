@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     test_compiler
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(IREE_HAL_DRIVER_AMD_XDNA AND LOOM_ARCH_VM)
+if(IREE_HAL_DRIVER_AMD_XDNA AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     test_device
@@ -42,7 +42,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ROUTE_AIE2P_XDNA_HAL AND LOOM_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_AIE2P_XDNA_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_embedding_service_test
@@ -74,6 +74,7 @@ loom_cc_test(
     "iree-run-requirement=libamdf.resource.xdna"
     "runtime-resource=amd-xdna"
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
   RESOURCE_GROUP
     gpu-device
 )

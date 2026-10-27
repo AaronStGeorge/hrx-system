@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.vector import defs as vector
+from loom.target.arch.wasm.packed_i32 import PackedI32Program
 from loom.target.contracts import (
     DescriptorEmitForm,
     DescriptorRule,
@@ -21,7 +22,6 @@ from loom.target.contracts import (
     ValueRef,
     Vector,
 )
-from loom.target.emit.wasm.packed_i32 import PackedI32Program
 from loom.target.low_descriptors import Descriptor
 
 _I32 = Scalar("i32")

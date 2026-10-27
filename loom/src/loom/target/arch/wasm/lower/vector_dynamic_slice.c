@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/wasm/lower/vector_dynamic_slice.h"
+#include "loom/target/arch/wasm/lower/vector_dynamic_slice.h"
 
 #include "loom/ir/module.h"
 #include "loom/ops/vector/ops.h"

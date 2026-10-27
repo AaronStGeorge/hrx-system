@@ -95,7 +95,7 @@ loom_cc_library(
         "lower.h",
         "vector_structural.h",
     ],
-    textual_hdrs = ["//loom/src/loom/target/emit/wasm/contracts:tables.inl"],
+    textual_hdrs = ["//loom/src/loom/target/arch/wasm/contracts:tables.inl"],
     visibility = ["//loom/src/loom/target/arch/wasm:__pkg__"],
     deps = [
         ":predicate_representation",
@@ -108,9 +108,9 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target/arch/wasm:error_defs",
+        "//loom/src/loom/target/arch/wasm/contracts",
         "//loom/src/loom/target/arch/wasm/descriptors:descriptors_ids",
-        "//loom/src/loom/target/emit/wasm:error_defs",
-        "//loom/src/loom/target/emit/wasm/contracts",
         "//runtime/src/iree/base",
     ],
 )

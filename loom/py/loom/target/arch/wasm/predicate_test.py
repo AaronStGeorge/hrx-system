@@ -9,8 +9,7 @@
 from loom.dialect.scf import defs as scf
 from loom.dialect.vector import defs as vector
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
-from loom.target.contracts import DescriptorRule, Guard, GuardKind, TypePattern
-from loom.target.emit.wasm.predicate import (
+from loom.target.arch.wasm.predicate import (
     FLOAT_PREDICATE_RECIPES,
     FLOAT_PREDICATES,
     INTEGER_PREDICATES,
@@ -23,6 +22,7 @@ from loom.target.emit.wasm.predicate import (
     _predicate_conversion_lanes,
     predicate_rules,
 )
+from loom.target.contracts import DescriptorRule, Guard, GuardKind, TypePattern
 from loom.target.low_descriptors import Descriptor
 
 

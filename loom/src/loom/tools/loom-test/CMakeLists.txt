@@ -166,7 +166,7 @@ iree_execution_test_suite(
     "hostonly"
 )
 
-if(LOOM_ARCH_VM)
+if(LOOM_ROUTE_VM_IREE_VM)
 iree_execution_test_suite(
   NAME
     scenario_execution_test
