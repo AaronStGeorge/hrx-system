@@ -82,7 +82,8 @@ iree_status_t iree_async_proactor_iocp_acquire_carrier(
 // carrier count. The carrier must not be referenced after this call.
 void iree_async_proactor_iocp_release_carrier(
     iree_async_proactor_iocp_t* proactor, iree_async_iocp_carrier_t* carrier) {
-  IREE_ASSERT(carrier->type != IREE_ASYNC_IOCP_CARRIER_DIRECT ||
+  IREE_ASSERT((carrier->type != IREE_ASYNC_IOCP_CARRIER_DIRECT &&
+               carrier->type != IREE_ASYNC_IOCP_CARRIER_IO_RESULT) ||
               iree_status_is_ok(carrier->data.direct.status));
   iree_atomic_fetch_sub(&proactor->outstanding_carrier_count, 1,
                         iree_memory_order_relaxed);
@@ -111,16 +112,18 @@ static DWORD iree_async_proactor_iocp_build_wsabuf(
 static void iree_async_proactor_iocp_post_direct_completion(
     iree_async_proactor_iocp_t* proactor, iree_async_iocp_carrier_t* carrier,
     iree_status_t status) {
-  carrier->operation->next = NULL;
-  carrier->type = IREE_ASYNC_IOCP_CARRIER_DIRECT;
+  if (carrier->type == IREE_ASYNC_IOCP_CARRIER_DIRECT) {
+    carrier->operation->next = NULL;
+  } else {
+    carrier->type = IREE_ASYNC_IOCP_CARRIER_IO_RESULT;
+  }
   carrier->data.direct.status = status;
 
   DWORD error_code = ERROR_SUCCESS;
   if (!iree_async_iocp_completion_port_try_post(&proactor->completion_port, 0,
                                                 0, &carrier->overlapped,
                                                 &error_code)) {
-    iree_async_iocp_carrier_slist_push(&proactor->fallback_completion_queue,
-                                       carrier);
+    iree_async_iocp_carrier_slist_push(&proactor->pending_completions, carrier);
     iree_async_iocp_completion_port_request_fallback_wake(
         &proactor->completion_port);
   }
@@ -146,7 +149,6 @@ static void iree_async_proactor_iocp_commit_socket_accept(
     iree_async_iocp_carrier_t* carrier) {
   iree_async_socket_t* listen_socket = accept_op->listen_socket;
   SOCKET listen_sock = (SOCKET)listen_socket->primitive.value.win32_handle;
-  carrier->io_handle = (uintptr_t)listen_sock;
 
   accept_op->accepted_socket = NULL;
   memset(&accept_op->peer_address, 0, sizeof(accept_op->peer_address));
@@ -275,7 +277,6 @@ static void iree_async_proactor_iocp_commit_socket_connect(
     iree_async_iocp_carrier_t* carrier) {
   iree_async_socket_t* socket = connect_op->socket;
   SOCKET sock = (SOCKET)socket->primitive.value.win32_handle;
-  carrier->io_handle = (uintptr_t)sock;
 
   // Auto-bind if needed (ConnectEx requires a bound socket; UDP connect also
   // needs it when the socket hasn't been explicitly bound yet).
@@ -336,7 +337,6 @@ static void iree_async_proactor_iocp_commit_socket_recv(
     iree_async_iocp_carrier_t* carrier) {
   iree_async_socket_t* socket = recv_op->socket;
   SOCKET sock = (SOCKET)socket->primitive.value.win32_handle;
-  carrier->io_handle = (uintptr_t)sock;
 
   recv_op->bytes_received = 0;
 
@@ -365,7 +365,6 @@ static void iree_async_proactor_iocp_commit_socket_send(
     iree_async_iocp_carrier_t* carrier) {
   iree_async_socket_t* socket = send_op->socket;
   SOCKET sock = (SOCKET)socket->primitive.value.win32_handle;
-  carrier->io_handle = (uintptr_t)sock;
 
   send_op->bytes_sent = 0;
 
@@ -395,7 +394,6 @@ static void iree_async_proactor_iocp_commit_socket_sendto(
     iree_async_iocp_carrier_t* carrier) {
   iree_async_socket_t* socket = sendto_op->socket;
   SOCKET sock = (SOCKET)socket->primitive.value.win32_handle;
-  carrier->io_handle = (uintptr_t)sock;
 
   sendto_op->bytes_sent = 0;
 
@@ -426,7 +424,6 @@ static void iree_async_proactor_iocp_commit_socket_recvfrom(
     iree_async_iocp_carrier_t* carrier) {
   iree_async_socket_t* socket = recvfrom_op->socket;
   SOCKET sock = (SOCKET)socket->primitive.value.win32_handle;
-  carrier->io_handle = (uintptr_t)sock;
 
   recvfrom_op->bytes_received = 0;
   memset(&recvfrom_op->sender, 0, sizeof(recvfrom_op->sender));
@@ -465,7 +462,6 @@ static void iree_async_proactor_iocp_commit_socket_recv_pool(
     iree_async_iocp_carrier_t* carrier) {
   iree_async_socket_t* socket = recv_pool_op->socket;
   SOCKET sock = (SOCKET)socket->primitive.value.win32_handle;
-  carrier->io_handle = (uintptr_t)sock;
 
   recv_pool_op->bytes_received = 0;
   memset(&recv_pool_op->lease, 0, sizeof(recv_pool_op->lease));
@@ -663,23 +659,9 @@ iree_status_t iree_async_proactor_iocp_finish_file_issue(
     iree_async_proactor_iocp_t* proactor, iree_async_iocp_carrier_t* carrier,
     uint32_t error_code) {
   if (error_code == ERROR_SUCCESS || error_code == ERROR_IO_PENDING) {
-    // The RMW pairs with cancel's flag publication. Either we observe intent
-    // that preceded native admission, or cancel's native call follows this
-    // already-issued request. A load alone cannot establish that ordering.
-    const int32_t flags = iree_atomic_fetch_or(
-        &carrier->operation->internal_flags, 0, iree_memory_order_acq_rel);
-    if (iree_any_bit_set(flags, IREE_ASYNC_IOCP_INTERNAL_FLAG_CANCELLED) &&
-        !CancelIoEx((HANDLE)carrier->io_handle, &carrier->overlapped)) {
-      DWORD error = GetLastError();
-      if (error != ERROR_NOT_FOUND) {
-        return iree_make_status(iree_status_code_from_win32_error(error),
-                                "CancelIoEx after file admission failed: %lu",
-                                (unsigned long)error);
-      }
-    }
     // Immediate success also produces an IOCP packet. Only that packet returns
     // ownership, just as for a request that reports IO_PENDING.
-    return iree_ok_status();
+    return iree_async_proactor_iocp_finish_io_issue(carrier);
   }
   const bool read =
       carrier->operation->type == IREE_ASYNC_OPERATION_TYPE_FILE_READ;
@@ -791,7 +773,6 @@ static iree_status_t iree_async_proactor_iocp_commit_file_read(
     iree_async_iocp_carrier_t* carrier) {
   iree_async_file_t* file = read_op->file;
   HANDLE file_handle = (HANDLE)file->primitive.value.win32_handle;
-  carrier->io_handle = (uintptr_t)file_handle;
 
   read_op->bytes_read = 0;
 
@@ -814,7 +795,6 @@ static iree_status_t iree_async_proactor_iocp_commit_file_write(
     iree_async_iocp_carrier_t* carrier) {
   iree_async_file_t* file = write_op->file;
   HANDLE file_handle = (HANDLE)file->primitive.value.win32_handle;
-  carrier->io_handle = (uintptr_t)file_handle;
 
   write_op->bytes_written = 0;
 
@@ -885,11 +865,9 @@ iree_status_t iree_async_proactor_iocp_drain_file_submissions(
     iree_async_operation_t* operation = carrier->operation;
     if (iree_any_bit_set(iree_async_operation_load_internal_flags(operation),
                          IREE_ASYNC_IOCP_INTERNAL_FLAG_CANCELLED)) {
-      operation->next = NULL;
-      iree_async_proactor_iocp_release_carrier(proactor, carrier);
-      iree_async_proactor_iocp_dispatch_completion(
-          proactor, operation, iree_status_from_code(IREE_STATUS_CANCELLED),
-          IREE_ASYNC_COMPLETION_FLAG_NONE, completed_count);
+      iree_async_proactor_iocp_complete_io_result(
+          proactor, carrier, iree_status_from_code(IREE_STATUS_CANCELLED),
+          completed_count);
       continue;
     }
     switch (operation->type) {
@@ -971,6 +949,43 @@ static bool iree_async_proactor_iocp_carrier_type_for_operation(
   }
 }
 
+// Snapshots the cancellation handle before publishing the reserved carrier.
+// The accepted operation retains its resource through carrier retirement.
+static HANDLE iree_async_proactor_iocp_handle_from_io_operation(
+    iree_async_operation_t* operation) {
+  switch (operation->type) {
+    case IREE_ASYNC_OPERATION_TYPE_SOCKET_ACCEPT:
+      return (HANDLE)((iree_async_socket_accept_operation_t*)operation)
+          ->listen_socket->primitive.value.win32_handle;
+    case IREE_ASYNC_OPERATION_TYPE_SOCKET_CONNECT:
+      return (HANDLE)((iree_async_socket_connect_operation_t*)operation)
+          ->socket->primitive.value.win32_handle;
+    case IREE_ASYNC_OPERATION_TYPE_SOCKET_RECV:
+      return (HANDLE)((iree_async_socket_recv_operation_t*)operation)
+          ->socket->primitive.value.win32_handle;
+    case IREE_ASYNC_OPERATION_TYPE_SOCKET_SEND:
+      return (HANDLE)((iree_async_socket_send_operation_t*)operation)
+          ->socket->primitive.value.win32_handle;
+    case IREE_ASYNC_OPERATION_TYPE_SOCKET_SENDTO:
+      return (HANDLE)((iree_async_socket_sendto_operation_t*)operation)
+          ->socket->primitive.value.win32_handle;
+    case IREE_ASYNC_OPERATION_TYPE_SOCKET_RECVFROM:
+      return (HANDLE)((iree_async_socket_recvfrom_operation_t*)operation)
+          ->socket->primitive.value.win32_handle;
+    case IREE_ASYNC_OPERATION_TYPE_SOCKET_RECV_POOL:
+      return (HANDLE)((iree_async_socket_recv_pool_operation_t*)operation)
+          ->socket->primitive.value.win32_handle;
+    case IREE_ASYNC_OPERATION_TYPE_FILE_READ:
+      return (HANDLE)((iree_async_file_read_operation_t*)operation)
+          ->file->primitive.value.win32_handle;
+    case IREE_ASYNC_OPERATION_TYPE_FILE_WRITE:
+      return (HANDLE)((iree_async_file_write_operation_t*)operation)
+          ->file->primitive.value.win32_handle;
+    default:
+      return NULL;
+  }
+}
+
 static iree_status_t iree_async_proactor_iocp_reserve_operation(
     iree_async_proactor_iocp_t* proactor, iree_async_operation_t* operation) {
   if (operation->type == IREE_ASYNC_OPERATION_TYPE_MESSAGE) {
@@ -992,7 +1007,9 @@ static iree_status_t iree_async_proactor_iocp_reserve_operation(
 
   iree_async_iocp_carrier_t* carrier = NULL;
   IREE_RETURN_IF_ERROR(iree_async_proactor_iocp_acquire_carrier(
-      proactor, carrier_type, operation, /*io_handle=*/0, &carrier));
+      proactor, carrier_type, operation,
+      (uintptr_t)iree_async_proactor_iocp_handle_from_io_operation(operation),
+      &carrier));
   operation->next = (iree_async_operation_t*)carrier;
   return iree_ok_status();
 }

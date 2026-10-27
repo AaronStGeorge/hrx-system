@@ -160,6 +160,14 @@ class IocpProactorTest : public ::testing::Test {
   iree_async_proactor_t* proactor_ = nullptr;
 };
 
+struct ReleaseIoCancellation {
+  void operator()(iree_async_iocp_carrier_t* carrier) const {
+    iree_async_proactor_iocp_release_io_cancel(carrier->proactor, carrier);
+  }
+};
+using IoCancellationBorrow =
+    std::unique_ptr<iree_async_iocp_carrier_t, ReleaseIoCancellation>;
+
 struct FileIssueResultCase {
   // Native read or write whose admission returned this result.
   iree_async_operation_type_t type;
@@ -212,6 +220,53 @@ TEST_P(IocpFileIssueResultTest, ImmediateResultReturnsCarrierExactlyOnce) {
       IREE_STATUS_DEADLINE_EXCEEDED,
       iree_async_proactor_poll(proactor_, iree_immediate_timeout(), nullptr));
   EXPECT_EQ(completion.call_count, 1);
+}
+
+TEST_P(IocpFileIssueResultTest, ImmediateResultJoinsCancellationBeforeReuse) {
+  const auto test_case = GetParam();
+  CompletionState completion;
+  iree_async_file_read_operation_t read;
+  iree_async_file_write_operation_t write;
+  InitializeOperation(&read, IREE_ASYNC_OPERATION_TYPE_FILE_READ, &completion);
+  InitializeOperation(&write, IREE_ASYNC_OPERATION_TYPE_FILE_WRITE,
+                      &completion);
+  iree_async_operation_t* operation =
+      test_case.type == IREE_ASYNC_OPERATION_TYPE_FILE_READ ? &read.base
+                                                            : &write.base;
+  iree_async_iocp_carrier_t* carrier = nullptr;
+  IREE_ASSERT_OK(iree_async_proactor_iocp_acquire_carrier(
+      iocp(), IREE_ASYNC_IOCP_CARRIER_FILE_IO, operation, 0, &carrier));
+  operation->next = reinterpret_cast<iree_async_operation_t*>(carrier);
+  IoCancellationBorrow cancellation(
+      iree_async_proactor_iocp_acquire_io_cancel(operation));
+  ASSERT_EQ(cancellation.get(), carrier);
+
+  // Return an immediate native result while cancellation still holds the
+  // OVERLAPPED identity. Posting the result must not sever that ownership.
+  IREE_ASSERT_OK(iree_async_proactor_iocp_finish_file_issue(
+      iocp(), carrier, test_case.error_code));
+  while (!iree_any_bit_set(iree_async_operation_load_internal_flags(operation),
+                           IREE_ASYNC_IOCP_INTERNAL_FLAG_IO_RETIRED)) {
+    IREE_ASSERT_OK(
+        iree_async_proactor_poll(proactor_, iree_infinite_timeout(), nullptr));
+  }
+  EXPECT_EQ(completion.call_count, 0);
+  EXPECT_EQ(operation->next,
+            reinterpret_cast<iree_async_operation_t*>(carrier));
+  EXPECT_EQ(iree_atomic_load(&iocp()->outstanding_carrier_count,
+                             iree_memory_order_relaxed),
+            1);
+  cancellation.reset();
+  while (!completion.call_count) {
+    IREE_ASSERT_OK(
+        iree_async_proactor_poll(proactor_, iree_infinite_timeout(), nullptr));
+  }
+  EXPECT_EQ(completion.call_count, 1);
+  EXPECT_EQ(completion.status_code, test_case.expected_status);
+  EXPECT_EQ(operation->next, nullptr);
+  EXPECT_EQ(iree_atomic_load(&iocp()->outstanding_carrier_count,
+                             iree_memory_order_relaxed),
+            0);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -409,9 +464,10 @@ TEST_P(IocpFileAdmissionTest, ProducerOnlyPublishesReservedOwnership) {
   IREE_ASSERT_OK(status);
   auto* carrier = reinterpret_cast<iree_async_iocp_carrier_t*>(operation->next);
   ASSERT_NE(carrier, nullptr);
-  // Native admission establishes io_handle. The producer has reserved and
-  // retained the request but has not touched the native file.
-  EXPECT_EQ(carrier->io_handle, uintptr_t{0});
+  // Reservation captures the cancellation handle, but the producer only
+  // queues admission. The poll owner has not issued the native file request.
+  EXPECT_EQ(carrier->io_handle, file_->primitive.value.win32_handle);
+  EXPECT_EQ(data_, (std::array<uint8_t, 4>{5, 6, 7, 8}));
   EXPECT_EQ(iree_atomic_ref_count_load(&file_->ref_count), 2);
   EXPECT_EQ(completed.call_count, 0);
   PollUntil(completed);
@@ -437,6 +493,87 @@ TEST_P(IocpFileAdmissionTest, CancelBeforePollNeverIssuesNativeIo) {
   EXPECT_EQ(data_, (std::array<uint8_t, 4>{5, 6, 7, 8}));
   EXPECT_EQ(iree_atomic_ref_count_load(&file_->ref_count), 1);
   ExpectFileContents(initial_);
+}
+
+TEST_P(IocpFileAdmissionTest, CancellationHoldsOnlyItsOwnTerminalResult) {
+  for (bool issue_before_cancel : {false, true}) {
+    SCOPED_TRACE(issue_before_cancel);
+    CompletionState completed;
+    iree_async_operation_t* operation = Prepare(&completed);
+    IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, operation));
+    if (issue_before_cancel) {
+      iree_host_size_t completed_count = 0;
+      IREE_ASSERT_OK(iree_async_proactor_iocp_drain_file_submissions(
+          iocp(), &completed_count));
+      EXPECT_EQ(completed_count, 0);
+    }
+
+    // Hold the actual native cancellation boundary across owner progression.
+    // Two callers must both return before either the carrier or the retained
+    // file can be reused. No native failure or race is injected.
+    IoCancellationBorrow first(
+        iree_async_proactor_iocp_acquire_io_cancel(operation));
+    IoCancellationBorrow second(
+        iree_async_proactor_iocp_acquire_io_cancel(operation));
+    ASSERT_NE(first.get(), nullptr);
+    ASSERT_EQ(first.get(), second.get());
+    while (
+        !iree_any_bit_set(iree_async_operation_load_internal_flags(operation),
+                          IREE_ASYNC_IOCP_INTERNAL_FLAG_IO_RETIRED)) {
+      IREE_ASSERT_OK(iree_async_proactor_poll(
+          proactor_, iree_infinite_timeout(), nullptr));
+    }
+    EXPECT_EQ(completed.call_count, 0);
+    EXPECT_EQ(iree_atomic_ref_count_load(&file_->ref_count), 2);
+
+    // A different request on this same native handle continues to completion.
+    // Its carrier cannot alias the one still held by cancellation.
+    CompletionState independent_completed;
+    iree_async_file_read_operation_t independent;
+    InitializeOperation(&independent, IREE_ASYNC_OPERATION_TYPE_FILE_READ,
+                        &independent_completed);
+    std::array<uint8_t, 4> independent_data = {};
+    independent.file = file_;
+    independent.buffer = iree_async_span_from_ptr(independent_data.data(),
+                                                  independent_data.size());
+    IREE_ASSERT_OK(
+        iree_async_proactor_submit_one(proactor_, &independent.base));
+    EXPECT_NE(independent.base.next, operation->next);
+    PollUntil(independent_completed);
+    EXPECT_EQ(independent_completed.status_code, IREE_STATUS_OK);
+    EXPECT_EQ(completed.call_count, 0);
+    EXPECT_EQ(iree_atomic_ref_count_load(&file_->ref_count), 2);
+
+    first.reset();
+    // Cancelling a result already held for retirement cannot acquire another
+    // native borrow or make the first result available prematurely.
+    IREE_EXPECT_OK(iree_async_proactor_cancel(proactor_, operation));
+    EXPECT_EQ(completed.call_count, 0);
+    EXPECT_EQ(iree_atomic_load(&iocp()->outstanding_carrier_count,
+                               iree_memory_order_relaxed),
+              1);
+    std::jthread canceller([&] { second.reset(); });
+    // Poll must be woken by the cancelling thread's return, without another
+    // native completion or a timer to make the terminal result progress.
+    PollUntil(completed);
+    canceller.join();
+    EXPECT_EQ(completed.call_count, 1);
+    EXPECT_EQ(completed.status_code, IREE_STATUS_CANCELLED);
+    EXPECT_EQ(iree_atomic_ref_count_load(&file_->ref_count), 1);
+    EXPECT_EQ(operation->next, nullptr);
+    IREE_EXPECT_OK(iree_async_proactor_cancel(proactor_, operation));
+
+    // Caller-owned storage is reusable after both completion and cancel return.
+    completed = {};
+    operation = Prepare(&completed);
+    IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, operation));
+    PollUntil(completed);
+    EXPECT_EQ(completed.call_count, 1);
+    EXPECT_EQ(completed.status_code, IREE_STATUS_OK);
+    EXPECT_EQ(iree_atomic_load(&iocp()->outstanding_carrier_count,
+                               iree_memory_order_relaxed),
+              0);
+  }
 }
 
 TEST_P(IocpFileAdmissionTest, RejectedBatchDoesNotRetainOrIssueFileIo) {
@@ -543,6 +680,100 @@ INSTANTIATE_TEST_SUITE_P(
     FileDirections, IocpFileAdmissionTest,
     ::testing::Values(IREE_ASYNC_OPERATION_TYPE_FILE_READ,
                       IREE_ASYNC_OPERATION_TYPE_FILE_WRITE));
+
+TEST_F(IocpProactorTest, MultishotRearmJoinsTerminalCancellationBorrow) {
+  iree_async_socket_t* socket = nullptr;
+  IREE_ASSERT_OK(iree_async_socket_create(proactor_, IREE_ASYNC_SOCKET_TYPE_UDP,
+                                          IREE_ASYNC_SOCKET_OPTION_NONE,
+                                          &socket));
+  std::unique_ptr<iree_async_socket_t, decltype(&iree_async_socket_release)>
+      socket_owner(socket, iree_async_socket_release);
+  iree_async_address_t address;
+  IREE_ASSERT_OK(iree_async_address_from_ipv4(
+      iree_make_cstring_view("127.0.0.1"), 0, &address));
+  IREE_ASSERT_OK(iree_async_socket_bind(socket, &address));
+  IREE_ASSERT_OK(iree_async_socket_query_local_address(socket, &address));
+  CompletionState connected;
+  iree_async_socket_connect_operation_t connect;
+  InitializeOperation(&connect, IREE_ASYNC_OPERATION_TYPE_SOCKET_CONNECT,
+                      &connected);
+  connect.socket = socket;
+  connect.address = address;
+  IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &connect.base));
+  while (!connected.call_count) {
+    IREE_ASSERT_OK(
+        iree_async_proactor_poll(proactor_, iree_infinite_timeout(), nullptr));
+  }
+  ASSERT_EQ(connected.status_code, IREE_STATUS_OK);
+
+  struct ReceiveState {
+    // Number of complete datagrams delivered before cancellation.
+    int more_count = 0;
+    // Held across terminal delivery to model an outstanding native cancel.
+    IoCancellationBorrow cancellation;
+    // Terminal callback, distinct from the intermediate datagrams.
+    CompletionState terminal;
+  } received;
+  uint8_t received_byte = 0;
+  iree_async_span_t receive_span =
+      iree_async_span_from_ptr(&received_byte, sizeof(received_byte));
+  iree_async_socket_recv_operation_t receive;
+  InitializeOperation(&receive, IREE_ASYNC_OPERATION_TYPE_SOCKET_RECV, nullptr);
+  receive.base.flags = IREE_ASYNC_OPERATION_FLAG_MULTISHOT;
+  receive.base.user_data = &received;
+  receive.base.completion_fn =
+      +[](void* user_data, iree_async_operation_t* operation,
+          iree_status_t status, iree_async_completion_flags_t flags) {
+        auto* state = static_cast<ReceiveState*>(user_data);
+        if (iree_any_bit_set(flags, IREE_ASYNC_COMPLETION_FLAG_MORE)) {
+          IREE_EXPECT_OK(status);
+          if (++state->more_count == 2) {
+            state->cancellation.reset(
+                iree_async_proactor_iocp_acquire_io_cancel(operation));
+          }
+        } else {
+          RecordCompletion(&state->terminal, operation, status, flags);
+        }
+      };
+  receive.socket = socket;
+  receive.buffers = iree_async_span_list_make(&receive_span, 1);
+  IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &receive.base));
+
+  // The first packet rearms normally. Cancellation during the second MORE
+  // callback cannot target that finished native issue, but must prevent a
+  // third issue and join the terminal result before releasing the socket.
+  for (uint8_t value : {1, 2}) {
+    CompletionState sent;
+    iree_async_socket_send_operation_t send;
+    InitializeOperation(&send, IREE_ASYNC_OPERATION_TYPE_SOCKET_SEND, &sent);
+    iree_async_span_t send_span =
+        iree_async_span_from_ptr(&value, sizeof(value));
+    send.socket = socket;
+    send.buffers = iree_async_span_list_make(&send_span, 1);
+    IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &send.base));
+    while (!sent.call_count || received.more_count < value) {
+      IREE_ASSERT_OK(iree_async_proactor_poll(
+          proactor_, iree_infinite_timeout(), nullptr));
+    }
+    EXPECT_EQ(sent.status_code, IREE_STATUS_OK);
+    EXPECT_EQ(received_byte, value);
+  }
+  EXPECT_NE(received.cancellation.get(), nullptr);
+  EXPECT_EQ(received.terminal.call_count, 0);
+  EXPECT_EQ(iree_atomic_ref_count_load(&socket->ref_count), 2);
+  received.cancellation.reset();
+  while (!received.terminal.call_count) {
+    IREE_ASSERT_OK(
+        iree_async_proactor_poll(proactor_, iree_infinite_timeout(), nullptr));
+  }
+  EXPECT_EQ(received.more_count, 2);
+  EXPECT_EQ(received.terminal.call_count, 1);
+  EXPECT_EQ(received.terminal.status_code, IREE_STATUS_CANCELLED);
+  EXPECT_EQ(iree_atomic_ref_count_load(&socket->ref_count), 1);
+  EXPECT_EQ(iree_atomic_load(&iocp()->outstanding_carrier_count,
+                             iree_memory_order_relaxed),
+            0);
+}
 
 TEST_F(IocpProactorTest, DirectPostFailureCompletesAcceptedSignal) {
   iree_async_notification_t* notification = nullptr;
