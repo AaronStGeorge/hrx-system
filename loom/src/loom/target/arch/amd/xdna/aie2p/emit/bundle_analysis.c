@@ -73,21 +73,54 @@ loom_aie2p_bundle_plan_terminator_from_structure_kind(
   }
 }
 
-static iree_host_size_t loom_aie2p_bundle_plan_move_slot_count(
-    const loom_low_emission_frame_t* frame, loom_low_move_range_t range) {
-  iree_host_size_t slot_count = 0;
+static iree_status_t loom_aie2p_bundle_plan_analyze_move_range(
+    const loom_low_emission_frame_t* frame, loom_low_move_range_t range,
+    const loom_op_t* op, iree_diagnostic_emitter_t diagnostic_emitter,
+    loom_aie2p_bundle_plan_analysis_t* analysis, bool* out_accepted) {
+  *out_accepted = false;
+  const loom_low_descriptor_set_t* descriptor_set =
+      frame->target.descriptor_set;
   for (iree_host_size_t i = 0; i < range.count; ++i) {
-    const loom_low_move_t* move = &frame->allocation.moves[range.start + i];
-    loom_aie2p_register_move_t parts[2];
-    slot_count += loom_aie2p_descriptor_move_parts(
-        (loom_aie2p_register_move_t){
-            .source = (loom_aie2p_physical_register_id_t)move->source.location,
-            .destination =
-                (loom_aie2p_physical_register_id_t)move->destination.location,
-        },
-        parts);
+    const iree_host_size_t move_index = range.start + i;
+    const loom_low_move_t* move = &frame->allocation.moves[move_index];
+    loom_aie2p_move_route_id_t route_id =
+        analysis->move_route_ids_by_move[move_index];
+    if (route_id == LOOM_AIE2P_MOVE_ROUTE_ID_INVALID) {
+      route_id = loom_aie2p_descriptor_resolve_move_route(
+          (loom_aie2p_physical_register_id_t)move->source.location,
+          (loom_aie2p_physical_register_id_t)move->destination.location);
+      if (route_id == LOOM_AIE2P_MOVE_ROUTE_ID_INVALID) {
+        const iree_string_view_t source_register =
+            loom_low_descriptor_set_string(
+                descriptor_set,
+                descriptor_set->physical_registers[move->source.location]
+                    .name_string_ref);
+        const iree_string_view_t destination_register =
+            loom_low_descriptor_set_string(
+                descriptor_set,
+                descriptor_set->physical_registers[move->destination.location]
+                    .name_string_ref);
+        const loom_diagnostic_param_t params[] = {
+            loom_param_string(loom_low_diagnostic_function_name(
+                frame->module, frame->function_op)),
+            loom_param_string(source_register),
+            loom_param_string(destination_register),
+        };
+        const loom_diagnostic_emission_t emission = {
+            .op = op,
+            .error = LOOM_ERR_XDNA_061,
+            .params = params,
+            .param_count = IREE_ARRAYSIZE(params),
+        };
+        return iree_diagnostic_emit(diagnostic_emitter, &emission);
+      }
+      analysis->move_route_ids_by_move[move_index] = route_id;
+    }
+    analysis->move_slot_count +=
+        loom_aie2p_descriptor_move_route_step_count(route_id);
   }
-  return slot_count;
+  *out_accepted = true;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_aie2p_bundle_plan_analyze_storage_address(
@@ -323,6 +356,16 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
                                 sizeof(*blocks), (void**)&blocks));
   memset(blocks, 0,
          frame->schedule.block_count * sizeof(loom_aie2p_block_analysis_t));
+  if (frame->allocation.move_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        scratch_arena, frame->allocation.move_count,
+        sizeof(*out_analysis->move_route_ids_by_move),
+        (void**)&out_analysis->move_route_ids_by_move));
+    memset(out_analysis->move_route_ids_by_move,
+           LOOM_AIE2P_MOVE_ROUTE_ID_INVALID,
+           frame->allocation.move_count *
+               sizeof(*out_analysis->move_route_ids_by_move));
+  }
   const iree_host_size_t expected_storage_fixup_count =
       frame->schedule.requirements.storage_address_count;
   if (expected_storage_fixup_count != 0) {
@@ -338,8 +381,13 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
            frame->schedule.scheduled_node_count *
                sizeof(*out_analysis->storage_fixup_indices_by_packet));
   }
-  out_analysis->move_slot_count = loom_aie2p_bundle_plan_move_slot_count(
-      frame, frame->allocation.entry_moves.moves);
+  bool accepted = false;
+  IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+      frame, frame->allocation.entry_moves.moves, frame->function_op,
+      diagnostic_emitter, out_analysis, &accepted));
+  if (!accepted) {
+    return iree_ok_status();
+  }
   // Destination marks may be set before a block's own analysis. Each iteration
   // preserves those marks in the once-initialized table.
   for (iree_host_size_t block_index = 0;
@@ -381,7 +429,7 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
       if (structure_kind == LOOM_AIE2P_CORE_STRUCTURE_STORAGE_ADDRESS) {
         IREE_ASSERT_LT(out_analysis->storage_fixup_count,
                        expected_storage_fixup_count);
-        bool accepted = false;
+        accepted = false;
         IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_storage_address(
             frame, &packet, diagnostic_emitter,
             &out_analysis->storage_fixups[out_analysis->storage_fixup_count],
@@ -397,9 +445,13 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
         const loom_low_allocation_packet_move_group_t* group =
             loom_aie2p_bundle_plan_packet_move_group(frame, &packet);
         if (group != NULL) {
-          out_analysis->move_slot_count +=
-              loom_aie2p_bundle_plan_move_slot_count(frame,
-                                                     group->move_group.moves);
+          accepted = false;
+          IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+              frame, group->move_group.moves, packet.node->op,
+              diagnostic_emitter, out_analysis, &accepted));
+          if (!accepted) {
+            return iree_ok_status();
+          }
         }
         continue;
       }
@@ -412,10 +464,20 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
               IREE_STATUS_FAILED_PRECONDITION,
               "AIE2P direct call requires an allocation call contract");
         }
-        out_analysis->move_slot_count += loom_aie2p_bundle_plan_move_slot_count(
-            frame, call_moves->arguments);
-        out_analysis->move_slot_count +=
-            loom_aie2p_bundle_plan_move_slot_count(frame, call_moves->results);
+        accepted = false;
+        IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+            frame, call_moves->arguments, packet.node->op, diagnostic_emitter,
+            out_analysis, &accepted));
+        if (!accepted) {
+          return iree_ok_status();
+        }
+        accepted = false;
+        IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+            frame, call_moves->results, packet.node->op, diagnostic_emitter,
+            out_analysis, &accepted));
+        if (!accepted) {
+          return iree_ok_status();
+        }
         const iree_host_size_t control_bundle_count =
             loom_aie2p_bundle_plan_control_bundle_count(
                 descriptor_set, AIE2P_CORE_DESCRIPTOR_REF_CALL_DIRECT);
@@ -551,8 +613,14 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
           loom_low_allocation_find_edge_copy_group_by_source_ordinal(
               &frame->allocation, terminator_packet.node_index);
       if (edge_copy_group != NULL) {
-        out_analysis->move_slot_count += loom_aie2p_bundle_plan_move_slot_count(
-            frame, edge_copy_group->move_group.moves);
+        accepted = false;
+        IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+            frame, edge_copy_group->move_group.moves,
+            terminator_packet.node->op, diagnostic_emitter, out_analysis,
+            &accepted));
+        if (!accepted) {
+          return iree_ok_status();
+        }
       }
     }
   }

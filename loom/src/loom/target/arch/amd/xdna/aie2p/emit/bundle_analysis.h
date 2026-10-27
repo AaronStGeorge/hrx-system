@@ -9,6 +9,7 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/frame.h"
+#include "loom/target/arch/amd/xdna/aie2p/descriptors/encoding.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/leaf_program.h"
 
 #ifdef __cplusplus
@@ -78,6 +79,8 @@ typedef struct loom_aie2p_block_analysis_t {
 typedef struct loom_aie2p_bundle_plan_analysis_t {
   // Per-block control and cycle summaries in source block order.
   loom_aie2p_block_analysis_t* blocks;
+  // Resolved route for each allocation move, owned by construction scratch.
+  loom_aie2p_move_route_id_t* move_route_ids_by_move;
   // Native instruction slots required by packet and edge allocation moves.
   iree_host_size_t move_slot_count;
   // Conservative branch, return, and delay-bundle capacity.

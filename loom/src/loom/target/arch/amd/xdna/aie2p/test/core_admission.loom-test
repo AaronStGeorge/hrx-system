@@ -98,3 +98,16 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @oversized_storage_address() a
   %address = storage_address %allocation : low.storage<private> -> reg<aie2p.ep>
   return
 }
+
+// ====
+// Final allocation must select physical registers connected by a complete
+// value-preserving native move route.
+// RUN: emit aie2p-leaf @unsupported_physical_move
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @unsupported_physical_move(%source: reg<aie2p.ed>) -> (reg<aie2p.ed>, reg<aie2p.edm>) asm {
+  // ERROR@+1: XDNA/061 {function_name="unsupported_physical_move", source_register="d0", destination_register="dm0"}
+  %copy = copy %source {detached = true} : reg<aie2p.ed> -> reg<aie2p.edm>
+  return %source, %copy
+}
