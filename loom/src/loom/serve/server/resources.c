@@ -141,7 +141,7 @@ iree_status_t loom_serve_resources_sample(
       loom_serve_device_group_at(resources->device_group, device_index);
   const loom_serve_memory_pool_t* retained =
       loom_serve_device_memory_pool(device);
-  const loom_serve_device_memory_statistics_t memory =
+  const loom_serve_pool_statistics_t memory =
       loom_serve_device_memory_statistics(device);
   IREE_RETURN_IF_ERROR(
       loom_serve_resources_pool_topic("storage", &memory.storage, sink));

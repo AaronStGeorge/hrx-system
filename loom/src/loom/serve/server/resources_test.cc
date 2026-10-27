@@ -138,7 +138,8 @@ TEST_F(ResourcesTest, NoPublishedResourcesDoesNotInventHardware) {
 TEST_F(ResourcesTest, FixedBackingObservesNativeStorageAndNestedWorkspace) {
   IREE_ASSERT_OK(CreateCpuGroup());
   auto* device = loom_serve_device_group_at(group_, 0);
-  IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device, loom_serve_device_pool(device), &execution_));
   IREE_ASSERT_OK(loom_serve_execution_reserve_workspace(execution_, 65536, 16));
   const auto request = iree_hal_make_pool_reservation_request(4096, 16);
   IREE_ASSERT_OK(loom_serve_execution_alloca_from_pool(
