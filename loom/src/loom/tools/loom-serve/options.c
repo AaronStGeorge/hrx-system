@@ -17,7 +17,8 @@
 IREE_FLAG(int32_t, workers, 8,
           "Shared CPU workers for compilation, scheduling and media jobs.");
 IREE_FLAG(string, devices, "",
-          "Device-group JSON file keyed by device names. Mutually exclusive "
+          "Machine JSON with named devices and explicit storage pools. "
+          "Mutually exclusive "
           "with --device and single-device memory/idle options.");
 IREE_FLAG(string, pool_backing, "",
           "elastic shares demand-committed parameter/state/workspace slabs; "
@@ -38,7 +39,8 @@ IREE_FLAG(string, state_slab_bytes, "",
           "64mib.");
 IREE_FLAG(string, memory_bytes, "",
           "Shared physical parameter/state/workspace budget; a nonzero limit "
-          "requires elastic backing and one device. Zero imposes no serving "
+          "requires elastic backing. Single-device shortcut; use --devices "
+          "for named shared pools. Zero imposes no serving "
           "limit. Host snapshots and driver overhead are outside this budget. "
           "Accepts byte counts or size strings such as 64gib.");
 IREE_FLAG(string, workspace_idle_ms, "",
@@ -92,9 +94,9 @@ static iree_status_t loom_serve_device_configuration_from_flags(
   }
   IREE_RETURN_IF_ERROR(loom_serve_device_configuration_initialize_uri(
       devices.values[0], host_allocator, out_configuration));
-  loom_serve_device_options_t* options = &out_configuration->options[0];
+  loom_serve_pool_options_t* options = &out_configuration->pools[0].options;
   if (!strcmp(FLAG_pool_backing, "fixed")) {
-    options->backing = LOOM_SERVE_DEVICE_BACKING_FIXED;
+    options->elastic = false;
   } else if (FLAG_pool_backing[0] && strcmp(FLAG_pool_backing, "elastic")) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "pool_backing must be elastic or fixed");
@@ -128,12 +130,12 @@ static iree_status_t loom_serve_device_configuration_from_flags(
   IREE_RETURN_IF_ERROR(status);
   if (numbers[3] > INT64_MAX / 1000000 || numbers[4] > INT64_MAX / 1000000) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "device idle interval is out of range");
+                            "pool idle interval is out of range");
   }
   options->weight_slab_size = (iree_device_size_t)numbers[0];
   options->state_slab_size = (iree_device_size_t)numbers[1];
   options->memory_limit = numbers[2];
-  out_configuration->idle[0] = (loom_serve_device_idle_policy_t){
+  out_configuration->idle[0] = (loom_serve_pool_idle_policy_t){
       .workspace_timeout = (iree_duration_t)numbers[3] * 1000000,
       .parameter_timeout = (iree_duration_t)numbers[4] * 1000000};
   return iree_ok_status();
@@ -187,11 +189,23 @@ iree_status_t loom_serve_device_group_allocate_from_flags(
     status = loom_serve_device_group_allocate(
         host, out_configuration->count, options, host_allocator, out_group);
   }
+  for (iree_host_size_t i = 0;
+       i < out_configuration->pool_count && iree_status_is_ok(status); ++i) {
+    const loom_serve_pool_configuration_t* declaration =
+        &out_configuration->pools[i];
+    loom_serve_pool_t* pool = NULL;
+    status = loom_serve_device_group_create_pool(
+        *out_group, declaration->binding, &declaration->options, &pool);
+  }
   for (iree_host_size_t i = 0; i < driver_count; ++i) {
     iree_hal_driver_release(drivers[i].handle);
   }
   for (iree_host_size_t i = 0; i < out_configuration->count; ++i) {
     options[i].driver = NULL;
+  }
+  if (!iree_status_is_ok(status)) {
+    status = iree_status_join(status, loom_serve_device_group_free(*out_group));
+    *out_group = NULL;
   }
   return status;
 }

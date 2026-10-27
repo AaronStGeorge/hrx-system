@@ -99,6 +99,8 @@ struct loom_serve_recognition_model_t {
   loom_serve_tokenizer_t* tokenizer;
   // Borrowed shared device, outliving this model.
   loom_serve_device_t* owner;
+  // Borrowed storage and residency owner, independent of execution placement.
+  loom_serve_pool_t* pool;
   // Independent model work and feedback timelines on shared queues.
   loom_serve_execution_t* execution;
   // Stable source-addressed input/history and reusable conditioning ownership.
@@ -777,11 +779,11 @@ static iree_status_t loom_serve_recognition_bind_parameters(
         loom_serve_device_handle(model->owner),
         loom_serve_device_transfer_queue(model->owner),
         loom_serve_device_dispatch_queue(model->owner),
-        loom_serve_device_storage_pool(model->owner),
-        loom_serve_device_memory_pool(model->owner),
-        loom_serve_device_weight_geometry(model->owner), NULL,
-        loom_serve_device_workspace(model->owner), 0, count, roots,
-        host_allocator, &model->weights.plans[domain]);
+        loom_serve_pool_storage(model->pool),
+        loom_serve_pool_memory(model->pool),
+        loom_serve_pool_weight_geometry(model->pool), NULL,
+        loom_serve_pool_workspace(model->pool), 0, count, roots, host_allocator,
+        &model->weights.plans[domain]);
   }
   iree_allocator_free(host_allocator, roots);
   iree_allocator_free(host_allocator, bindings);
@@ -791,8 +793,8 @@ static iree_status_t loom_serve_recognition_bind_parameters(
 static iree_status_t loom_serve_recognition_model_bind(
     loom_serve_recognition_model_t* model) {
   IREE_RETURN_IF_ERROR(loom_serve_recognition_check_layouts(model));
-  IREE_RETURN_IF_ERROR(
-      loom_serve_device_create_execution(model->owner, &model->execution));
+  IREE_RETURN_IF_ERROR(loom_serve_device_create_execution(
+      model->owner, model->pool, &model->execution));
   return loom_serve_recognition_bind_parameters(model);
 }
 
@@ -802,10 +804,10 @@ static iree_status_t loom_serve_recognition_model_link(
   const iree_allocator_t host_allocator = model->host_allocator;
   iree_hal_queue_t* dispatch = loom_serve_device_dispatch_queue(model->owner);
   IREE_RETURN_IF_ERROR(loom_serve_residency_group_allocate(
-      loom_serve_device_residency_cache(model->owner), model->weights.count,
+      loom_serve_pool_residency_cache(model->pool), model->weights.count,
       model->weights.plans, host_allocator, &model->parameter_group));
   IREE_RETURN_IF_ERROR(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(model->owner), model->execution, 1,
+      loom_serve_pool_residency_cache(model->pool), model->execution, 1,
       &model->parameter_group, host_allocator, &model->residency));
   for (uint32_t i = 0; i < model->stages.count; ++i) {
     loom_serve_recognition_model_stage_t* stage = &model->stages.values[i];
@@ -822,8 +824,8 @@ static iree_status_t loom_serve_recognition_model_link(
       iree_max(model->batch_input_capacity, model->output_capacity),
       LOOM_SERVE_RECOGNITION_BUFFER_ALIGNMENT));
   IREE_RETURN_IF_ERROR(loom_serve_rows_allocate(
-      &model->state, model->owner, model->execution, model->request_capacity,
-      model->input_capacity, model->stream_capacity,
+      &model->state, model->owner, model->pool, model->execution,
+      model->request_capacity, model->input_capacity, model->stream_capacity,
       model->conditioning_capacity, LOOM_SERVE_RECOGNITION_BUFFER_ALIGNMENT));
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
       host_allocator, model->request_capacity,
@@ -956,7 +958,7 @@ static void loom_serve_recognition_load_compiled(
 }
 
 iree_status_t loom_serve_recognition_load_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_recognition_model_options_t* options,
     loom_serve_recognition_load_wake_fn_t wake, void* user_data,
     iree_allocator_t host_allocator, loom_serve_recognition_load_t** out_load) {
@@ -984,6 +986,7 @@ iree_status_t loom_serve_recognition_load_allocate(
     load->model->host_allocator = host_allocator;
     loom_serve_rows_initialize(host_allocator, &load->model->state);
     load->model->owner = device;
+    load->model->pool = pool;
     *out_load = load;
   } else {
     iree_slim_mutex_deinitialize(&load->event.mutex);
@@ -1131,7 +1134,7 @@ static void loom_serve_recognition_load_notify(void* user_data) {
 }
 
 iree_status_t loom_serve_recognition_model_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_recognition_model_options_t* options,
     iree_allocator_t host_allocator,
     loom_serve_recognition_model_t** out_model) {
@@ -1140,7 +1143,7 @@ iree_status_t loom_serve_recognition_model_allocate(
   iree_notification_initialize(&notification);
   loom_serve_recognition_load_t* load = NULL;
   iree_status_t status = loom_serve_recognition_load_allocate(
-      device, options, loom_serve_recognition_load_notify, &notification,
+      device, pool, options, loom_serve_recognition_load_notify, &notification,
       host_allocator, &load);
   bool complete = false;
   while (iree_status_is_ok(status) && !complete) {

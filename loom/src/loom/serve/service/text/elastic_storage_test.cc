@@ -18,7 +18,7 @@ class ElasticTextServiceTest : public SourceTextServiceTest {
   void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(SourceTextServiceTest::SetUp());
     // Cold-allocation holds must not depend on a previous test's cached slabs.
-    auto* pool = loom_serve_device_memory_pool(device_);
+    auto* pool = loom_serve_pool_memory(storage_owner_);
     loom_serve_memory_pool_trim(pool, 0);
     IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   }
@@ -26,7 +26,7 @@ class ElasticTextServiceTest : public SourceTextServiceTest {
   void WaitFrontier(const loom_serve_execution_frontier_t& frontier) {
     for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
       IREE_ASSERT_OK(loom_serve_workspace_wait(
-          loom_serve_device_workspace(device_), frontier.semaphores[i],
+          loom_serve_pool_workspace(storage_owner_), frontier.semaphores[i],
           frontier.values[i]));
     }
   }
@@ -50,8 +50,8 @@ class ElasticTextServiceTest : public SourceTextServiceTest {
     options.context_capacity = slab_size / 8;
     options.pool_capacity = 4 * options.context_capacity;
     loom_serve_text_model_t* source = nullptr;
-    IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                  host_allocator_, &source));
+    IREE_ASSERT_OK(loom_serve_text_model_allocate(
+        device_, storage_owner_, &options, host_allocator_, &source));
     const auto release_model = [](loom_serve_text_model_t* model) {
       IREE_EXPECT_OK(loom_serve_text_model_free(model));
     };
@@ -358,8 +358,8 @@ TEST_F(ElasticTextServiceTest,
   options.context_capacity = slab_size / 8;
   options.pool_capacity = 3 * slab_size / 4;
   loom_serve_text_model_t* sparse = nullptr;
-  IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                host_allocator_, &sparse));
+  IREE_ASSERT_OK(loom_serve_text_model_allocate(
+      device_, storage_owner_, &options, host_allocator_, &sparse));
   const auto release_model = [](loom_serve_text_model_t* model) {
     IREE_EXPECT_OK(loom_serve_text_model_free(model));
   };
@@ -405,7 +405,7 @@ TEST_F(ElasticTextServiceTest,
   const auto wait_frontier = [&] {
     ASSERT_NO_FATAL_FAILURE(WaitFrontier(frontier));
   };
-  auto* pool = loom_serve_device_memory_pool(device_);
+  auto* pool = loom_serve_pool_memory(storage_owner_);
   IREE_ASSERT_OK(loom_serve_text_model_submit_trim(sparse, &result, &frontier));
   ASSERT_NO_FATAL_FAILURE(wait_frontier());
   IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
@@ -415,7 +415,7 @@ TEST_F(ElasticTextServiceTest,
     loom_serve_memory_pool_trim(pool, 0);
     gate.WaitEntered();
     const auto physical = loom_serve_memory_pool_statistics(
-        loom_serve_device_memory_pool(device_));
+        loom_serve_pool_memory(storage_owner_));
     const auto returned = loom_serve_text_model_memory_statistics(sparse);
     EXPECT_EQ(returned.committed_bytes, before.committed_bytes - slab_size);
     EXPECT_EQ(returned.releasing_bytes, 0u);
@@ -441,7 +441,7 @@ TEST_F(ElasticTextServiceTest,
     loom_serve_memory_pool_trim(pool, 0);
     gate.WaitEntered();
     const auto physical = loom_serve_memory_pool_statistics(
-        loom_serve_device_memory_pool(device_));
+        loom_serve_pool_memory(storage_owner_));
     const auto returned = loom_serve_text_model_memory_statistics(sparse);
     EXPECT_EQ(returned.committed_bytes, 2 * slab_size);
     EXPECT_EQ(returned.releasing_bytes, 0u);
@@ -483,8 +483,8 @@ TEST_F(ElasticTextServiceTest,
   options.pool_capacity =
       loom_serve_test_application_options_default().slab_size / 4;
   loom_serve_text_model_t* retiring = nullptr;
-  IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                host_allocator_, &retiring));
+  IREE_ASSERT_OK(loom_serve_text_model_allocate(
+      device_, storage_owner_, &options, host_allocator_, &retiring));
   const auto release_model = [](loom_serve_text_model_t* model) {
     IREE_EXPECT_OK(loom_serve_text_model_free(model));
   };
@@ -505,7 +505,7 @@ TEST_F(ElasticTextServiceTest,
   IREE_ASSERT_OK(
       loom_serve_text_model_submit_trim(retiring, &result, &frontier));
   ASSERT_NO_FATAL_FAILURE(WaitFrontier(frontier));
-  auto* pool = loom_serve_device_memory_pool(device_);
+  auto* pool = loom_serve_pool_memory(storage_owner_);
   IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   {
     loom_serve::testing::ScopedNativeHold gate(device_,
@@ -533,7 +533,7 @@ TEST_F(ElasticTextServiceTest,
         retiring, iree_infinite_timeout()));
     IREE_ASSERT_OK(loom_serve_text_model_free_retired(owner.release()));
     EXPECT_GT(loom_serve_memory_pool_statistics(
-                  loom_serve_device_memory_pool(device_))
+                  loom_serve_pool_memory(storage_owner_))
                   .releasing_bytes,
               0u);
   }
@@ -582,19 +582,19 @@ TEST_F(ElasticTextServiceTest, RetirementOwnsAcceptedCheckpointCapture) {
   model_ = nullptr;
   iree_notification_deinitialize(&notification);
   // Physical capacity returns at the outer pool join, not model retirement.
-  IREE_ASSERT_OK(loom_serve_test_device_trim_and_drain(device_, 0));
-  const auto memory = loom_serve_device_memory_statistics(device_);
-  EXPECT_EQ(
-      memory.retained.reserved_bytes,
-      loom_serve_workspace_memory_usage(loom_serve_device_workspace(device_))
-          .reserved_bytes);
+  IREE_ASSERT_OK(loom_serve_test_pool_trim_and_drain(storage_owner_, 0));
+  const auto memory = loom_serve_pool_statistics(storage_owner_);
+  EXPECT_EQ(memory.retained.reserved_bytes,
+            loom_serve_workspace_memory_usage(
+                loom_serve_pool_workspace(storage_owner_))
+                .reserved_bytes);
   EXPECT_EQ(memory.retained.pending_bytes, 0u);
   EXPECT_EQ(memory.retained.committed_bytes, 0u);
   EXPECT_EQ(memory.retained.releasing_bytes, 0u);
 
   // Same host, queues, and parameter pool remain available to the replacement.
-  IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                host_allocator_, &model_));
+  IREE_ASSERT_OK(loom_serve_text_model_allocate(
+      device_, storage_owner_, &options, host_allocator_, &model_));
   row = loom_serve_text_model_row(model_, 0);
   IREE_ASSERT_OK(
       loom_serve_text_row_prefill(row, tokens.size(), tokens.data()));

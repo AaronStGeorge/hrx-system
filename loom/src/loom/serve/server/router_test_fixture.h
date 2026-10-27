@@ -222,6 +222,10 @@ class ObservationClient {
       Poll();
     }
   }
+  std::string Response() {
+    Join();
+    return std::exchange(received_, {});
+  }
   static std::string Cursor(const std::string& frame) {
     const auto start = frame.find("\nid: ");
     EXPECT_NE(start, std::string::npos);

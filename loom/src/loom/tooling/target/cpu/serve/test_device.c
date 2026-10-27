@@ -10,7 +10,7 @@ const loom_serve_test_device_t* loom_serve_test_device(void) {
   static const loom_serve_test_device_t device = {
       .driver_name = IREE_SVL("task"),
       .device_uri = IREE_SVL("task"),
-      .service_backing = LOOM_SERVE_DEVICE_BACKING_FIXED,
+      .service_backing = LOOM_SERVE_POOL_BACKING_FIXED,
   };
   return &device;
 }

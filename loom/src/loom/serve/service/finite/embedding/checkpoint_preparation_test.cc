@@ -39,7 +39,7 @@ TEST_F(SourceEmbeddingServiceTest,
   {
     StalledStderr stalled;
     ASSERT_NO_FATAL_FAILURE(stalled.Begin());
-    status = load.Run(device_, options);
+    status = load.Run(device_, storage_owner_, options);
   }
   retained_ = load.model;
   IREE_ASSERT_OK(status);

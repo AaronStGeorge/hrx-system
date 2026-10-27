@@ -23,9 +23,9 @@ class ImageParameterTest : public WeightsTest {
  protected:
   void SetUpDevice() override {
     ASSERT_NO_FATAL_FAILURE(WeightsTest::SetUpDevice());
-    const uint64_t root_bytes =
-        loom_serve_device_weight_geometry(loom_serve_device_group_at(group_, 0))
-            .minimum_size;
+    const uint64_t root_bytes = loom_serve_pool_weight_geometry(
+                                    loom_serve_device_group_pool_at(group_, 0))
+                                    .minimum_size;
     // Three parameter ranges plus one shared activation/execution workspace.
     IREE_ASSERT_OK(
         AcquireWeightDeviceGroup(true, kSlabBytes, 4 * root_bytes, &group_));
@@ -111,7 +111,7 @@ class ImageParameterTest : public WeightsTest {
         .specialization_cache = {4, 16 * 1024 * 1024},
     };
     iree::Status status = loom_serve_image_model_allocate(
-        device_owner_, &options, host_allocator_, &model_);
+        device_owner_, storage_owner_, &options, host_allocator_, &model_);
     if (expected_code != IREE_STATUS_OK) {
       EXPECT_THAT(status.ToString(),
                   ::testing::HasSubstr(

@@ -35,6 +35,11 @@ iree_status_t loom_serve_residency_cache_allocate(
 // Removes pressure policy.
 void loom_serve_residency_cache_free(loom_serve_residency_cache_t* cache);
 
+// No registered models, parameter banks, or downstream outputs still borrow
+// this owner. Called on the serialized owner; NULL is empty. This is a lifetime
+// query, not an admission or native allocation-availability query.
+bool loom_serve_residency_cache_is_empty(loom_serve_residency_cache_t* cache);
+
 // Final output retirement wakes the serialized admission owner. Detachment
 // joins callback access; observers never wait or reenter the cache.
 void loom_serve_residency_cache_set_observer(

@@ -23,57 +23,79 @@ class DeviceConfigurationTest : public ::testing::Test {
         iree_make_string_view(json.data(), json.size()),
         iree_allocator_system(), &configuration_);
   }
+  iree_status_t ParsePool(const std::string& fields) {
+    return Parse(R"({"devices":{"gpu":{"uri":"task"}},"pools":{"agents":{)" +
+                 fields + "}}}");
+  }
   static std::string String(iree_string_view_t value) {
     return std::string(value.data, value.size);
   }
-  // Owned decoded configuration, independent of the input document lifetime.
+  void ExpectEmpty() {
+    EXPECT_EQ(configuration_.count, 0u);
+    EXPECT_EQ(configuration_.pool_count, 0u);
+    EXPECT_EQ(configuration_.strings, nullptr);
+    EXPECT_EQ(configuration_.pools, nullptr);
+    EXPECT_EQ(configuration_.idle, nullptr);
+  }
+  // Owned declarations, independent of the input document lifetime.
   loom_serve_device_configuration_t configuration_ = {};
 };
 
-TEST_F(DeviceConfigurationTest,
-       OwnsNamedIndependentPoliciesWithoutOpeningDevices) {
-  std::string json = R"({"devices":{
-    "g\u0070u":{"uri":"amdgpu://0?queue_count=4","memory_bytes":8589934592,
-      "weight_slab_bytes":2097152,"state_slab_bytes":65536,
-      "workspace_idle_ms":2000,"parameter_idle_ms":60000},
-    "npu":{"uri":"xdna://0","pool_backing":"fixed"}
-  }})";
+TEST_F(DeviceConfigurationTest, OwnsIndependentDeviceAndPoolInventories) {
+  std::string json = R"({
+    "pools":{
+      "agents":{"devices":["gpu","npu"],"memory_bytes":"64gib",
+        "weight_slab_bytes":2097152,"state_slab_bytes":65536,
+        "workspace_idle_ms":2000,"parameter_idle_ms":60000},
+      "images":{"devices":["gpu"],"memory_bytes":"16gib"},
+      "audio":{"devices":["npu"],"pool_backing":"fixed"}},
+    "devices":{
+      "g\u0070u":{"uri":"amdgpu://0?queue_count=4"},
+      "npu":{"uri":"xdna://0"}}
+  })";
   IREE_ASSERT_OK(Parse(json));
   json.assign(json.size(), 'x');
   ASSERT_EQ(configuration_.count, 2u);
-  const auto& gpu = configuration_.options[0];
-  const auto& npu = configuration_.options[1];
-  EXPECT_EQ(String(gpu.name), "gpu");
-  EXPECT_EQ(String(gpu.uri), "amdgpu://0?queue_count=4");
-  EXPECT_EQ(gpu.driver, nullptr);
-  EXPECT_EQ(gpu.backing, LOOM_SERVE_DEVICE_BACKING_ELASTIC);
-  EXPECT_EQ(gpu.memory_limit, UINT64_C(8589934592));
-  EXPECT_EQ(gpu.weight_slab_size, 2097152u);
-  EXPECT_EQ(gpu.state_slab_size, 65536u);
+  ASSERT_EQ(configuration_.pool_count, 3u);
+  EXPECT_EQ(String(configuration_.options[0].name), "gpu");
+  EXPECT_EQ(String(configuration_.options[0].uri), "amdgpu://0?queue_count=4");
+  EXPECT_EQ(configuration_.options[0].driver, nullptr);
+  EXPECT_EQ(String(configuration_.options[1].name), "npu");
+  EXPECT_EQ(String(configuration_.options[1].uri), "xdna://0");
+  EXPECT_EQ(configuration_.options[1].driver, nullptr);
+  const auto& agents = configuration_.pools[0];
+  EXPECT_EQ(String(agents.binding.name), "agents");
+  EXPECT_EQ(agents.binding.device_mask, 3u);
+  EXPECT_TRUE(agents.options.elastic);
+  EXPECT_EQ(agents.options.memory_limit, UINT64_C(64) << 30);
+  EXPECT_EQ(agents.options.weight_slab_size, 2097152u);
+  EXPECT_EQ(agents.options.state_slab_size, 65536u);
   EXPECT_EQ(configuration_.idle[0].workspace_timeout,
             iree_make_duration_ms(2000));
   EXPECT_EQ(configuration_.idle[0].parameter_timeout,
             iree_make_duration_ms(60000));
-  EXPECT_EQ(String(npu.name), "npu");
-  EXPECT_EQ(String(npu.uri), "xdna://0");
-  EXPECT_EQ(npu.driver, nullptr);
-  EXPECT_EQ(npu.backing, LOOM_SERVE_DEVICE_BACKING_FIXED);
-  EXPECT_EQ(npu.memory_limit, 0u);
-  EXPECT_EQ(configuration_.idle[1].workspace_timeout, 0);
-  EXPECT_EQ(configuration_.idle[1].parameter_timeout, 0);
+  EXPECT_EQ(configuration_.pools[1].binding.device_mask, 1u);
+  EXPECT_EQ(configuration_.pools[1].options.memory_limit, UINT64_C(16) << 30);
+  EXPECT_EQ(configuration_.pools[2].binding.device_mask, 2u);
+  EXPECT_FALSE(configuration_.pools[2].options.elastic);
+  EXPECT_EQ(configuration_.pools[2].options.memory_limit, 0u);
+  EXPECT_EQ(configuration_.idle[2].workspace_timeout, 0);
 }
 
-TEST_F(DeviceConfigurationTest, UriConvenienceUsesTheSameDefaults) {
-  IREE_ASSERT_OK(Parse(R"({"devices":{"device":{"uri":"task"}}})"));
+TEST_F(DeviceConfigurationTest, UriConvenienceCreatesOneExplicitPool) {
+  IREE_ASSERT_OK(Parse(R"({"devices":{"device":{"uri":"task"}},
+    "pools":{"pool":{"devices":["device"]}}})"));
   loom_serve_device_configuration_t convenience = {};
   IREE_ASSERT_OK(loom_serve_device_configuration_initialize_uri(
       IREE_SV("task"), iree_allocator_system(), &convenience));
-  EXPECT_EQ(convenience.count, configuration_.count);
-  const auto& actual = convenience.options[0];
-  const auto& expected = configuration_.options[0];
-  EXPECT_EQ(String(actual.name), String(expected.name));
-  EXPECT_EQ(String(actual.uri), String(expected.uri));
-  EXPECT_EQ(actual.backing, expected.backing);
+  EXPECT_EQ(convenience.count, 1u);
+  EXPECT_EQ(convenience.pool_count, 1u);
+  EXPECT_EQ(String(convenience.options[0].name), "device");
+  EXPECT_EQ(String(convenience.options[0].uri), "task");
+  EXPECT_EQ(String(convenience.pools[0].binding.name), "pool");
+  EXPECT_EQ(convenience.pools[0].binding.device_mask, 1u);
+  const auto& actual = convenience.pools[0].options;
+  EXPECT_EQ(actual.elastic, configuration_.pools[0].options.elastic);
   EXPECT_EQ(actual.weight_slab_size, UINT64_C(1) << 30);
   EXPECT_EQ(actual.state_slab_size, UINT64_C(64) << 20);
   EXPECT_EQ(actual.memory_limit, 0u);
@@ -81,125 +103,132 @@ TEST_F(DeviceConfigurationTest, UriConvenienceUsesTheSameDefaults) {
 }
 
 TEST_F(DeviceConfigurationTest, ByteSizeStringsDecodeToExactCounts) {
-  IREE_ASSERT_OK(Parse(R"({"devices":{"gpu":{"uri":"task",
+  IREE_ASSERT_OK(ParsePool(R"("devices":["gpu"],
     "pool_backing":"el\u0061stic","memory_bytes":"64\u0067ib",
     "weight_slab_bytes":"1gb","state_slab_bytes":"64mib",
-    "workspace_idle_ms":1000}}})"));
-  EXPECT_EQ(configuration_.options[0].memory_limit, UINT64_C(64) << 30);
-  EXPECT_EQ(configuration_.options[0].weight_slab_size, UINT64_C(1000000000));
-  EXPECT_EQ(configuration_.options[0].state_slab_size, UINT64_C(64) << 20);
+    "workspace_idle_ms":1000)"));
+  EXPECT_EQ(configuration_.pools[0].options.memory_limit, UINT64_C(64) << 30);
+  EXPECT_EQ(configuration_.pools[0].options.weight_slab_size,
+            UINT64_C(1000000000));
+  EXPECT_EQ(configuration_.pools[0].options.state_slab_size, UINT64_C(64)
+                                                                 << 20);
   EXPECT_EQ(configuration_.idle[0].workspace_timeout,
             iree_make_duration_ms(1000));
-
-  // Strings avoid rounding by JSON producers that represent numbers as doubles.
-  IREE_ASSERT_OK(Parse(R"({"devices":{"gpu":{"uri":"task",
+  IREE_ASSERT_OK(ParsePool(R"("devices":["gpu"],
     "memory_bytes":"9007199254740993","weight_slab_bytes":4096,
-    "state_slab_bytes":"004096"}}})"));
-  EXPECT_EQ(configuration_.options[0].memory_limit, UINT64_C(9007199254740993));
-  EXPECT_EQ(configuration_.options[0].weight_slab_size, 4096u);
-  EXPECT_EQ(configuration_.options[0].state_slab_size, 4096u);
+    "state_slab_bytes":"004096")"));
+  EXPECT_EQ(configuration_.pools[0].options.memory_limit,
+            UINT64_C(9007199254740993));
+  EXPECT_EQ(configuration_.pools[0].options.weight_slab_size, 4096u);
+  EXPECT_EQ(configuration_.pools[0].options.state_slab_size, 4096u);
 }
 
-TEST_F(DeviceConfigurationTest,
-       ByteSizeStringsRejectMalformedOrOverflowingValues) {
+TEST_F(DeviceConfigurationTest, ByteSizeErrorsNamePoolAndField) {
+  const iree::Status status(
+      ParsePool(R"("devices":["gpu"],"memory_bytes":"123fb")"));
+  EXPECT_EQ(status.code(), iree::StatusCode::kInvalidArgument);
+  EXPECT_NE(status.ToString().find("pool 'agents' field 'memory_bytes'"),
+            std::string::npos);
+  ExpectEmpty();
+}
+
+TEST_F(DeviceConfigurationTest, RejectsMalformedPoolFieldsAndConsumerSets) {
+  const char* invalid[] = {
+      "",
+      R"("devices":[])",
+      R"("devices":"gpu")",
+      R"("devices":[0])",
+      R"("devices":["missing"])",
+      R"("devices":["gpu","g\u0070u"])",
+      R"("devices":["gpu"],"devices":["gpu"])",
+      R"("devices":["gpu"],"memory_bytes":1,"pool_backing":"fixed")",
+      R"("devices":["gpu"],"memory_bytes":"1gib","pool_backing":"fixed")",
+      R"("devices":["gpu"],"pool_backing":"automatic")",
+      R"("devices":["gpu"],"memory_bytes":1,"memory_bytes":"4kib")",
+      R"("devices":["gpu"],"parameter_idle_ms":false)",
+      R"("devices":["gpu"],"parameter_idle_ms":"1000")",
+      R"("devices":["gpu"],"workspace_idle_ms":-1)",
+      R"("devices":["gpu"],"unknown":1)",
+  };
+  for (const char* fields : invalid) {
+    SCOPED_TRACE(fields);
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, ParsePool(fields));
+    ExpectEmpty();
+  }
   for (const char* field :
        {"weight_slab_bytes", "state_slab_bytes", "memory_bytes"}) {
     for (const char* value :
          {R"("")", R"("-1")", R"("1.5gib")", R"("1e3")", R"("123fb")",
-          R"("64gib extra")", R"("1\u0000gb")", "true", "null", "[]", "{}"}) {
-      const auto json = std::string(R"({"devices":{"gpu":{"uri":"task",")") +
-                        field + "\":" + value + "}}}";
-      SCOPED_TRACE(json);
-      IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(json));
-      EXPECT_EQ(configuration_.count, 0u);
-      EXPECT_EQ(configuration_.strings, nullptr);
-    }
-    for (const char* value :
-         {R"("18446744073709551616")", R"("17179869184gib")"}) {
-      const auto json = std::string(R"({"devices":{"gpu":{"uri":"task",")") +
-                        field + "\":" + value + "}}}";
-      SCOPED_TRACE(json);
-      IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, Parse(json));
-      EXPECT_EQ(configuration_.count, 0u);
-      EXPECT_EQ(configuration_.strings, nullptr);
+          R"("64gib extra")", R"("1\u0000gb")", "-1", "1.5", "1e3", "true",
+          "null", "[]", "{}"}) {
+      const std::string fields =
+          std::string(R"("devices":["gpu"],")") + field + "\":" + value;
+      SCOPED_TRACE(fields);
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, ParsePool(fields));
+      ExpectEmpty();
     }
   }
 }
 
-TEST_F(DeviceConfigurationTest, ByteSizeErrorsNameTheDeviceAndField) {
-  const iree::Status status(Parse(R"({"devices":{
-    "first":{"uri":"task"},
-    "gpu":{"uri":"task","memory_bytes":"123fb"}}})"));
-  EXPECT_EQ(status.code(), iree::StatusCode::kInvalidArgument);
-  EXPECT_NE(status.ToString().find("device 'gpu' field 'memory_bytes'"),
-            std::string::npos);
-  EXPECT_EQ(configuration_.count, 0u);
-  EXPECT_EQ(configuration_.strings, nullptr);
-}
-
 TEST_F(DeviceConfigurationTest,
-       RejectsMalformedDeclarationsWithoutPartialOwners) {
-  const char* invalid[] = {
-      "",
-      "[]",
-      "{}",
-      R"({"devices":{}})",
-      R"({"devices":[]})",
-      R"({"devices":{},"devices":{}})",
-      R"({"devices":{},"unknown":0})",
-      R"({"devices":{"gpu":{}}})",
-      R"({"devices":{"gpu":[]}})",
-      R"({"devices":{"":{"uri":"task"}}})",
-      R"({"devices":{"bad key":{"uri":"task"}}})",
-      R"({"devices":{"gpu":{"uri":"task"},"g\u0070u":{"uri":"task"}}})",
-      R"({"devices":{"gpu":{"uri":""}}})",
-      R"({"devices":{"gpu":{"uri":0}}})",
-      R"({"devices":{"gpu":{"uri":"task\u0000"}}})",
-      R"({"devices":{"gpu":{"uri":"task","uri":"xdna"}}})",
-      R"({"devices":{"gpu":{"uri":"task","memory_bytes":"4kib","memory_bytes":4096}}})",
-      R"({"devices":{"gpu":{"uri":"task","memory_bytes":-1}}})",
-      R"({"devices":{"gpu":{"uri":"task","memory_bytes":1.5}}})",
-      R"({"devices":{"gpu":{"uri":"task","memory_bytes":1e3}}})",
-      R"({"devices":{"gpu":{"uri":"task","memory_bytes":1,"pool_backing":"fixed"}}})",
-      R"({"devices":{"gpu":{"uri":"task","memory_bytes":"1gib","pool_backing":"fixed"}}})",
-      R"({"devices":{"gpu":{"uri":"task","pool_backing":"automatic"}}})",
-      R"({"devices":{"gpu":{"uri":"task","parameter_idle_ms":false}}})",
-      R"({"devices":{"gpu":{"uri":"task","parameter_idle_ms":"1000"}}})",
-      R"({"devices":{"gpu":{"uri":"task","workspace_idle_ms":"1gib"}}})",
-      R"({"devices":{"gpu":{"uri":"task","workspace_idle_ms":-1}}})",
-      R"({"devices":{"gpu":{"uri":"task","unknown":1}}})",
-      R"({"devices":{"gpu":{"uri":"task"}}} trailing)",
-  };
-  for (const char* json : invalid) {
+       RejectsMalformedInventoriesBeforeOpeningDevices) {
+  for (const char* devices :
+       {R"([])", R"({})", R"({"gpu":{}})", R"({"gpu":[]})",
+        R"({"":{"uri":"task"}})", R"({"bad key":{"uri":"task"}})",
+        R"({"gpu":{"uri":"task"},"g\u0070u":{"uri":"task"}})",
+        R"({"gpu":{"uri":""}})", R"({"gpu":{"uri":0}})",
+        R"({"gpu":{"uri":"task\u0000"}})",
+        R"({"gpu":{"uri":"task","uri":"xdna"}})",
+        R"({"gpu":{"uri":"task","memory_bytes":"64gib"}})"}) {
+    const std::string json = std::string(R"({"devices":)") + devices +
+                             R"(,"pools":{"pool":{"devices":["gpu"]}}})";
     SCOPED_TRACE(json);
     IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(json));
-    EXPECT_EQ(configuration_.count, 0u);
-    EXPECT_EQ(configuration_.strings, nullptr);
+    ExpectEmpty();
+  }
+  for (const char* pools :
+       {R"([])", R"({})", R"({"pool":0})", R"({"bad key":{"devices":["gpu"]}})",
+        R"({"pool":{"devices":["gpu"]},"p\u006fol":{"devices":["gpu"]}})"}) {
+    const std::string json =
+        std::string(R"({"devices":{"gpu":{"uri":"task"}},"pools":)") + pools +
+        "}";
+    SCOPED_TRACE(json);
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(json));
+    ExpectEmpty();
+  }
+  for (const char* json :
+       {"", "[]", "{}", R"({"devices":{}})", R"({"pools":{}})",
+        R"({"devices":{},"devices":{},"pools":{}})",
+        R"({"devices":{},"pools":{},"pools":{}})",
+        R"({"devices":{},"pools":{},"unknown":0})",
+        R"({"devices":{},"pools":{}} trailing)"}) {
+    SCOPED_TRACE(json);
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse(json));
+    ExpectEmpty();
   }
 }
 
 TEST_F(DeviceConfigurationTest, RejectsOverflowAndAcceptsExplicitZero) {
   for (const char* fields : {R"("memory_bytes":18446744073709551616)",
+                             R"("memory_bytes":"18446744073709551616")",
+                             R"("memory_bytes":"17179869184gib")",
                              R"("workspace_idle_ms":9223372036855)",
                              R"("parameter_idle_ms":9223372036855)"}) {
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_OUT_OF_RANGE,
-        Parse(std::string(R"({"devices":{"gpu":{"uri":"task",)") + fields +
-              "}}}"));
-    EXPECT_EQ(configuration_.count, 0u);
-    EXPECT_EQ(configuration_.strings, nullptr);
+        ParsePool(std::string(R"("devices":["gpu"],)") + fields));
+    ExpectEmpty();
   }
-  IREE_ASSERT_OK(Parse(R"({"devices":{"gpu":{"uri":"task",
+  IREE_ASSERT_OK(ParsePool(R"("devices":["gpu"],
     "weight_slab_bytes":0,"state_slab_bytes":0,"memory_bytes":0,
-    "parameter_idle_ms":0,"workspace_idle_ms":0}}})"));
-  EXPECT_EQ(configuration_.options[0].weight_slab_size, 0u);
-  EXPECT_EQ(configuration_.options[0].state_slab_size, 0u);
-  IREE_ASSERT_OK(Parse(R"({"devices":{"gpu":{"uri":"task",
+    "parameter_idle_ms":0,"workspace_idle_ms":0)"));
+  EXPECT_EQ(configuration_.pools[0].options.weight_slab_size, 0u);
+  EXPECT_EQ(configuration_.pools[0].options.state_slab_size, 0u);
+  IREE_ASSERT_OK(ParsePool(R"("devices":["gpu"],
     "pool_backing":"fixed","weight_slab_bytes":"0b",
-    "state_slab_bytes":"0mib","memory_bytes":"0"}}})"));
-  EXPECT_EQ(configuration_.options[0].weight_slab_size, 0u);
-  EXPECT_EQ(configuration_.options[0].state_slab_size, 0u);
-  EXPECT_EQ(configuration_.options[0].memory_limit, 0u);
+    "state_slab_bytes":"0mib","memory_bytes":"0")"));
+  EXPECT_FALSE(configuration_.pools[0].options.elastic);
+  EXPECT_EQ(configuration_.pools[0].options.memory_limit, 0u);
 }
 
 }  // namespace

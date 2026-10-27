@@ -199,7 +199,12 @@ class MemoryLossTest : public ::testing::Test {
     loom_serve_host_release(host);
     IREE_ASSERT_OK(status);
     auto* device = loom_serve_device_group_at(group_, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution_));
+    const loom_serve_pool_options_t storage_options = {};
+    loom_serve_pool_t* storage_owner = nullptr;
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group_, {IREE_SV("pool"), 1}, &storage_options, &storage_owner));
+    IREE_ASSERT_OK(
+        loom_serve_device_create_execution(device, storage_owner, &execution_));
     auto* group = loom_serve_device_group(device);
     auto* queue = loom_serve_device_transfer_queue(device);
     iree_hal_pool_family_access_t family = {

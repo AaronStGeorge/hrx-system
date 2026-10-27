@@ -657,6 +657,10 @@ static iree_status_t loom_serve_router_describe_service(
         admission->incarnation, loom_serve_registry_phase(admission)));
     IREE_RETURN_IF_ERROR(
         loom_serve_router_quote(output, admission->configuration.device));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(output, ",\"pool\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_serve_router_quote(output, admission->configuration.pool));
     if (!iree_status_is_ok(admission->status)) {
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           output, ",\"error\":{\"code\":%d,\"message\":",
@@ -1075,12 +1079,16 @@ static iree_status_t loom_serve_router_register(
 
 static iree_status_t loom_serve_router_trim(
     loom_serve_router_t* router, loom_serve_http_connection_t* connection,
-    const loom_serve_http_request_t* request) {
-  iree_host_size_t device_index = 0;
+    const loom_serve_http_request_t* request, bool programs) {
+  iree_host_size_t resource_index = 0;
   uint64_t target_bytes = 0;
-  iree_status_t status = loom_serve_resources_parse_trim(
-      &router->resources, request->body, router->host_allocator, &device_index,
-      &target_bytes);
+  iree_status_t status =
+      programs ? loom_serve_resources_parse_trim_programs(
+                     &router->resources, request->body, router->host_allocator,
+                     &resource_index)
+               : loom_serve_resources_parse_trim(
+                     &router->resources, request->body, router->host_allocator,
+                     &resource_index, &target_bytes);
   if (!iree_status_is_ok(status)) {
     return loom_serve_http_response_error(router->server, connection, status,
                                           &router->output);
@@ -1093,8 +1101,11 @@ static iree_status_t loom_serve_router_trim(
   if (iree_status_is_ok(status)) {
     loom_output_stream_t output;
     loom_output_stream_for_builder(&router->output, &output);
-    status = loom_serve_resources_trim(&router->resources, device_index,
-                                       target_bytes, &output);
+    status = programs
+                 ? loom_serve_resources_trim_programs(&router->resources,
+                                                      resource_index, &output)
+                 : loom_serve_resources_trim(&router->resources, resource_index,
+                                             target_bytes, &output);
   }
   if (iree_status_is_ok(status)) {
     loom_serve_http_response_send(router->server, connection,
@@ -1356,8 +1367,12 @@ static iree_status_t loom_serve_router_accept(
     return loom_serve_router_register(router, connection, request);
   }
   if (post &&
+      iree_string_view_equal(request->target, IREE_SV("/v1/pools/trim"))) {
+    return loom_serve_router_trim(router, connection, request, false);
+  }
+  if (post &&
       iree_string_view_equal(request->target, IREE_SV("/v1/devices/trim"))) {
-    return loom_serve_router_trim(router, connection, request);
+    return loom_serve_router_trim(router, connection, request, true);
   }
   iree_string_view_t name;
   loom_serve_removal_t removal = LOOM_SERVE_REMOVAL_DRAIN;
@@ -1634,7 +1649,8 @@ static void loom_serve_router_advance(loom_serve_router_t* router,
                (router->stopping && model->incarnation &&
                 model->phase != LOOM_SERVE_REGISTRATION_RELEASE_FAILED);
   }
-  if (router->stopping && !pending) {
+  if (router->stopping && !pending &&
+      !loom_serve_http_server_has_pending_responses(router->server)) {
     loom_serve_maintenance_set_observer(&router->maintenance,
                                         (loom_serve_wake_callback_t){0});
     loom_serve_resources_set_observer(&router->resources,

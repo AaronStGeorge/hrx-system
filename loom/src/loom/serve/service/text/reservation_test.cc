@@ -98,7 +98,7 @@ TEST_P(TextReservationTest,
   ASSERT_EQ(admitted, LOOM_SERVE_TEXT_RESERVE_ACQUIRED);
   for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
     IREE_ASSERT_OK(
-        loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+        loom_serve_workspace_wait(loom_serve_pool_workspace(storage_owner_),
                                   frontier.semaphores[i], frontier.values[i]));
   }
   loom_serve_text_row_complete_reserve(branch);
@@ -117,7 +117,7 @@ TEST_P(TextReservationTest,
 INSTANTIATE_TEST_SUITE_P(
     ResidentAndSuspended, TextReservationTest,
     ::testing::ValuesIn(loom_serve_test_device()->service_backing ==
-                                LOOM_SERVE_DEVICE_BACKING_ELASTIC
+                                LOOM_SERVE_POOL_BACKING_ELASTIC
                             ? std::vector<bool>{false, true}
                             : std::vector<bool>{false}));
 

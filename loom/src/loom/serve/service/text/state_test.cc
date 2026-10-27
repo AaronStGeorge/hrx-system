@@ -33,14 +33,17 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
     };
     loom_serve_text_state_initialize(&options, host_allocator, &state);
     auto application_options = loom_serve_test_application_options_default();
-    if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
+    if (application_options.backing == LOOM_SERVE_POOL_BACKING_ELASTIC) {
       application_options.memory_limit = 64 * 1024 * 1024;
     }
     loom_serve_test_application_t* application = nullptr;
     IREE_ASSERT_OK(loom_serve_test_application_acquire(
         &application_options, host_allocator, &application));
     device = loom_serve_test_application_device_at(application, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution));
+    storage_owner = loom_serve_device_group_pool_at(
+        loom_serve_test_application_device_group(application), 0);
+    IREE_ASSERT_OK(
+        loom_serve_device_create_execution(device, storage_owner, &execution));
     IREE_ASSERT_OK(iree_vm_environment_allocate(host_allocator, &environment));
     IREE_ASSERT_OK(iree_vm_ref_types_resolve(
         iree_vm_environment_lookup_ref_type_table(environment, IREE_SV("vm")),
@@ -117,7 +120,8 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
   iree_status_t Allocate() {
     IREE_RETURN_IF_ERROR(loom_serve_text_storage_initialize(
         &types, results, 2, 17, 32, host_allocator, &state.storage));
-    return loom_serve_text_state_allocate(&state, device, execution);
+    return loom_serve_text_state_allocate(&state, device, storage_owner,
+                                          execution);
   }
 
   iree_status_t Upload(iree_hal_buffer_t* buffer, uint64_t offset,
@@ -205,6 +209,8 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
   const iree_allocator_t host_allocator = iree_allocator_system();
   // Borrowed process-wide device used by this physical-target test suite.
   loom_serve_device_t* device = nullptr;
+  // Explicit storage selected for retained state and execution workspace.
+  loom_serve_pool_t* storage_owner = nullptr;
   // Owned serialized model execution domain.
   loom_serve_execution_t* execution = nullptr;
   // VM buffer type owner for the source bootstrap values.
@@ -271,8 +277,7 @@ TEST_P(TextStateTest, OptionalRootsRetainOriginsMapsAndCheckpointCarry) {
     loom_serve_text_storage_t storage;
     IREE_ASSERT_OK(loom_serve_text_storage_initialize(
         &types, results, capacity, 17, 32, host_allocator, &storage));
-    auto status =
-        loom_serve_text_state_resize(&state, device, capacity, &storage);
+    auto status = loom_serve_text_state_resize(&state, capacity, &storage);
     loom_serve_text_storage_deinitialize(&storage);
     IREE_ASSERT_OK(status);
     IREE_ASSERT_OK(loom_serve_execution_drain(execution));

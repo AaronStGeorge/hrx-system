@@ -33,7 +33,7 @@ class MediaExecutionTest : public SourceTextServiceTest {
         .options = IREE_SV("{}"),
     };
     IREE_ASSERT_OK(loom_serve_finite_model_allocate(
-        device_, &options, host_allocator_, &producer_));
+        device_, storage_owner_, &options, host_allocator_, &producer_));
   }
 
   void TearDown() override {
@@ -61,7 +61,7 @@ class MediaExecutionTest : public SourceTextServiceTest {
   void Wait(loom_serve_execution_frontier_t ready) {
     for (size_t i = 0; i < IREE_ARRAYSIZE(ready.semaphores); ++i) {
       IREE_ASSERT_OK(
-          loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+          loom_serve_workspace_wait(loom_serve_pool_workspace(storage_owner_),
                                     ready.semaphores[i], ready.values[i]));
     }
   }
@@ -301,7 +301,8 @@ TEST_F(MediaExecutionTest,
   std::memset(packet_.packet_record_bytes.data, 0x5A,
               packet_.packet_record_bytes.data_length);
 
-  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
+  IREE_ASSERT_OK(
+      loom_serve_device_create_execution(device_, storage_owner_, &consumer_));
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       loom_serve_device_handle(device_), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
       IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &gate_));
@@ -334,7 +335,7 @@ TEST_F(MediaExecutionTest,
                                                      buffers_[1], &value));
   EXPECT_EQ(packet_.transfer.operations, nullptr);
   ASSERT_NO_FATAL_FAILURE(RemoveProducer());
-  IREE_ASSERT_OK(loom_serve_device_trim(device_, 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
   output_.resize(packet_.device_length);
   const iree_hal_transfer_operation_t download = {
       .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,

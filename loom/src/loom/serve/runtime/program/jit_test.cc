@@ -198,7 +198,7 @@ void JitConcurrentTest::CheckConcurrent(bool direct_dispatch) {
     EXPECT_EQ(dispatches_[0], dispatches_[1]);
   }
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(input_), 0),
       iree_infinite_timeout(), &buffer_));
   const iree_hal_transfer_operation_t upload = {
@@ -247,7 +247,7 @@ INSTANTIATE_TEST_SUITE_P(SharedWorkers, JitConcurrentTest,
 TEST_P(JitTest, LogicalScalarCommandArgumentsReachNativeKernels) {
   IREE_ASSERT_OK(Compile(nullptr, 0, IREE_SV("boolean_arguments")));
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(input_), 0),
       iree_infinite_timeout(), &buffer_));
   const iree_hal_transfer_operation_t upload = {
@@ -355,7 +355,7 @@ class JitCacheTest : public JitTest {
     // The independently retained consumers still execute after every compiled
     // stage has retired.
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-        loom_serve_device_storage_pool(device_owner_),
+        loom_serve_pool_storage(storage_owner_),
         iree_hal_make_pool_reservation_request(sizeof(input_), 0),
         iree_infinite_timeout(), &buffer_));
     const iree_hal_transfer_operation_t upload = {
@@ -490,6 +490,7 @@ INSTANTIATE_TEST_SUITE_P(SharedWorkers, JitCacheTest, ::testing::Values(1, 4));
 TEST_P(JitTest, DeviceCacheSharesCompleteStagesAcrossModelCatalogs) {
   loom_serve_jit_release(jit_);
   jit_ = nullptr;
+  loom_serve_device_trim_programs(device_owner_);
   const iree_string_view_t providers[] = {IREE_SV("config.loom"),
                                           IREE_SV("stage.loom")};
   const loom_serve_sources_t sources = {
@@ -523,9 +524,14 @@ TEST_P(JitTest, DeviceCacheSharesCompleteStagesAcrossModelCatalogs) {
   loom_serve_jit_release(jit_);
   jit_ = nullptr;
 
+  // Reclaiming storage must not discard device-owned compiled generations.
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
+
   loom_serve_compilation_report_t second_report = {};
   IREE_ASSERT_OK(loom_serve_device_create_jit(device_owner_, &sources, nullptr,
                                               &second_report, &jit_));
+  // A live catalog also protects its generation against device program trim.
+  loom_serve_device_trim_programs(device_owner_);
   loom_serve_jit_stage_t* second = nullptr;
   IREE_ASSERT_OK(
       loom_serve_jit_compile(jit_, IREE_SV("advance"), &config, &second));
@@ -553,6 +559,19 @@ TEST_P(JitTest, DeviceCacheSharesCompleteStagesAcrossModelCatalogs) {
   loom_serve_jit_stage_free(first_direct);
   loom_serve_jit_stage_free(second);
   loom_serve_jit_stage_free(first);
+  loom_serve_jit_release(jit_);
+  jit_ = nullptr;
+  loom_serve_device_trim_programs(device_owner_);
+
+  // With all catalogs retired, explicit device trim drops cached products.
+  loom_serve_compilation_report_t rebuilt_report = {};
+  IREE_ASSERT_OK(loom_serve_device_create_jit(device_owner_, &sources, nullptr,
+                                              &rebuilt_report, &jit_));
+  loom_serve_jit_stage_t* rebuilt = nullptr;
+  IREE_ASSERT_OK(
+      loom_serve_jit_compile(jit_, IREE_SV("advance"), &config, &rebuilt));
+  EXPECT_GT(rebuilt_report.kernels, 0u);
+  loom_serve_jit_stage_free(rebuilt);
 }
 
 TEST_P(JitTest, SourceFailureOutlivesUnconstructedCatalogAndVm) {
@@ -654,7 +673,7 @@ TEST_P(JitTest, CompletedCatalogsRetireWithoutClosingSharedCompilerQueue) {
   EXPECT_EQ(peer_report.kernels, 8u);
   EXPECT_EQ(peer_report.reused_kernels, 0u);
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(input_), 0),
       iree_infinite_timeout(), &buffer_));
   iree_hal_transfer_operation_t upload = {

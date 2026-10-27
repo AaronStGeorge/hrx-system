@@ -336,12 +336,13 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(SetUpDevice());
     device_owner_ = loom_serve_device_group_at(group_, 0);
+    storage_owner_ = loom_serve_device_group_pool_at(group_, 0);
     device_ = loom_serve_device_handle(device_owner_);
     dispatch_ = loom_serve_device_dispatch_queue(device_owner_);
     transfer_ = loom_serve_device_transfer_queue(device_owner_);
-    IREE_ASSERT_OK(
-        loom_serve_device_create_execution(device_owner_, &execution_));
-    pool_ = loom_serve_device_memory_pool(device_owner_);
+    IREE_ASSERT_OK(loom_serve_device_create_execution(
+        device_owner_, storage_owner_, &execution_));
+    pool_ = loom_serve_pool_memory(storage_owner_);
     directory_ =
         std::filesystem::path(WeightSourcePath()).parent_path().string();
     const iree_string_view_t providers[] = {IREE_SV("stages.loom"),
@@ -356,7 +357,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
         nullptr, &compilation_, host_allocator_, &jit_));
     WriteCheckpoint(path_.path(), 0);
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-        loom_serve_device_storage_pool(device_owner_),
+        loom_serve_pool_storage(storage_owner_),
         iree_hal_make_pool_reservation_request(sizeof(output_), 0),
         iree_infinite_timeout(), &output_buffer_));
   }
@@ -428,12 +429,12 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     loom_serve_execution_release(shared_execution_);
     loom_serve_execution_release(execution_);
     iree_hal_semaphore_release(consumer_gate_);
-    IREE_EXPECT_OK(loom_serve_device_trim(device_owner_, 0));
+    IREE_EXPECT_OK(loom_serve_pool_trim(storage_owner_, 0));
     DrainNativeReturns();
-    const auto memory = loom_serve_device_memory_statistics(device_owner_);
+    const auto memory = loom_serve_pool_statistics(storage_owner_);
     EXPECT_EQ(memory.retained.reserved_bytes,
               loom_serve_workspace_memory_usage(
-                  loom_serve_device_workspace(device_owner_))
+                  loom_serve_pool_workspace(storage_owner_))
                   .reserved_bytes);
     EXPECT_EQ(memory.retained.committed_bytes, 0u);
     EXPECT_EQ(memory.workspace.bytes_committed, 0u);
@@ -492,7 +493,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
 
   loom_serve_residency_cache_t* ResidencyCache() {
     return owned_cache_ ? owned_cache_
-                        : loom_serve_device_residency_cache(device_owner_);
+                        : loom_serve_pool_residency_cache(storage_owner_);
   }
 
   iree_status_t Compile(iree_host_size_t index, const char* root) {
@@ -523,10 +524,9 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
       const char* policy_name) {
     auto** plan = &plans_[plan_count_++];
     IREE_RETURN_IF_ERROR(loom_serve_weights_allocate(
-        device_, transfer_, dispatch_,
-        loom_serve_device_storage_pool(device_owner_), pool_,
-        loom_serve_device_weight_geometry(device_owner_), arena_,
-        loom_serve_device_workspace(device_owner_), shared_count, root_count,
+        device_, transfer_, dispatch_, loom_serve_pool_storage(storage_owner_),
+        pool_, loom_serve_pool_weight_geometry(storage_owner_), arena_,
+        loom_serve_pool_workspace(storage_owner_), shared_count, root_count,
         roots, host_allocator_, plan));
     return PrepareSources(*plan, sources, policy_name);
   }
@@ -636,7 +636,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
                             loom_serve_memory_pool_await(pool_));
     }
     IREE_ASSERT_OK(
-        loom_serve_test_device_trim_and_drain(device_owner_, UINT64_MAX));
+        loom_serve_test_pool_trim_and_drain(storage_owner_, UINT64_MAX));
   }
 
   iree_status_t Load(iree_host_size_t shared_count, iree_host_size_t count) {
@@ -695,6 +695,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   loom_serve_device_group_t* group_ = nullptr;
   // Borrowed device record within the application group.
   loom_serve_device_t* device_owner_ = nullptr;
+  // Explicit fixed or elastic owner used by the fixture's parameter banks.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Borrowed live GPU used by compilation and execution.
   iree_hal_device_t* device_ = nullptr;
   // Exact dispatch queue borrowed from device.

@@ -6,6 +6,7 @@
 #ifndef LOOM_SERVE_RUNTIME_DEVICE_DEVICE_H_
 #define LOOM_SERVE_RUNTIME_DEVICE_DEVICE_H_
 
+#include "loom/serve/runtime/device/pool.h"
 #include "loom/serve/runtime/execution/execution.h"
 #include "loom/serve/runtime/host/host.h"
 #include "loom/serve/runtime/parameter/residency.h"
@@ -22,19 +23,11 @@ extern "C" {
 // edges and implies no cross-device buffer visibility.
 typedef struct loom_serve_device_group_t loom_serve_device_group_t;
 
-// Borrowed device record within the application group. Its queues, workspace,
-// physical-memory budget and residency cache are independent of other records.
-// One task owner serializes model calls and physical residency transitions;
-// models sharing this record share its allocation budget, not their timelines.
+// Borrowed execution record within the application group. Queues and compiled
+// products belong to the device; model storage belongs to explicitly bound
+// pools. One task owner serializes model calls and pool residency transitions.
 typedef struct loom_serve_device_t loom_serve_device_t;
 typedef struct loom_serve_tokenizer_cache_t loom_serve_tokenizer_cache_t;
-
-typedef enum loom_serve_device_backing_e {
-  // Ordinary fixed allocations, including device address sanitizer use.
-  LOOM_SERVE_DEVICE_BACKING_FIXED = 0,
-  // Stable virtual roots with independently reclaimable physical slabs.
-  LOOM_SERVE_DEVICE_BACKING_ELASTIC = 1,
-} loom_serve_device_backing_t;
 
 typedef struct loom_serve_device_options_t {
   // HAL driver selected by the application, borrowed during creation.
@@ -44,30 +37,23 @@ typedef struct loom_serve_device_options_t {
   // Application-selected key, copied at creation. Empty is accepted only for
   // a singleton group, where the key is "device". Keys are visible ASCII.
   iree_string_view_t name;
-  // Physical backing strategy for all models sharing this owner.
-  loom_serve_device_backing_t backing;
-  // Parameter/workspace slab bytes; zero selects the allocator recommendation.
-  iree_device_size_t weight_slab_size;
-  // Sparse state slab bytes; zero selects the allocator recommendation.
-  iree_device_size_t state_slab_size;
-  // Maximum committed virtual-pool bytes; zero imposes no serving limit.
-  uint64_t memory_limit;
 } loom_serve_device_options_t;
 
 // Creates every requested HAL device from its application-selected driver,
-// seals one group, then constructs each record's pools and selects its first
-// provisioned dispatch/transfer families. The first queue in each family serves
-// preparation; model executions share the families' entire fixed inventory.
-// Missing roles fail creation. device_count must be nonzero and within the HAL
-// topology limit; options are borrowed only during creation. This establishes
-// runtime ownership, not compiler support or cross-device tensor access.
-// Pass loom_serve_host_task_driver(host) for task devices so CPU queues share
-// the host executor instead of creating private workers.
-// Devices provision feedback for authored kernel assertions; sanitizer runtime
-// state remains a separate driver policy. Runtime-service allocations are
-// driver overhead outside the serving-memory budget. Retains host through all
-// device and asynchronous service lifetimes. Failure returns no group and
-// releases partial state, including earlier devices.
+// seals one group, then constructs each record's JIT cache and selects its
+// first provisioned dispatch/transfer families. The first queue in each family
+// serves preparation; model executions share the families' entire fixed
+// inventory. Storage pools are constructed separately before models or
+// observers attach. Missing roles fail creation. device_count must be nonzero
+// and within the HAL topology limit; options are borrowed only during creation.
+// This establishes runtime ownership, not compiler support or cross-device
+// tensor access. Pass loom_serve_host_task_driver(host) for task devices so CPU
+// queues share the host executor instead of creating private workers. Devices
+// provision feedback for authored kernel assertions; sanitizer runtime state
+// remains a separate driver policy. Runtime-service allocations are driver
+// overhead outside the serving-memory budget. Retains host through all device
+// and asynchronous service lifetimes. Failure returns no group and releases
+// partial state, including earlier devices.
 iree_status_t loom_serve_device_group_allocate(
     loom_serve_host_t* host, iree_host_size_t device_count,
     const loom_serve_device_options_t* options, iree_allocator_t host_allocator,
@@ -76,11 +62,33 @@ iree_status_t loom_serve_device_group_allocate(
 // Releases all device resources and the host reference without an implicit
 // device wait. The caller first drains every model domain and releases all
 // model/JIT/VM resources while host I/O remains alive. NULL is permitted.
-// Outstanding model reservations preserve the entire group and return failure
-// before partial teardown. The group's own idle workspace reservations are
+// Outstanding models, banks, results, or elastic reservations preserve the
+// entire group and return failure before partial teardown. Idle workspace is
 // released before its physical owner; a native cleanup error preserves the
 // remaining group resources for outer-owner cleanup.
 iree_status_t loom_serve_device_group_free(loom_serve_device_group_t* group);
+
+// Constructs a named group-owned pool with explicit consumers and policy.
+// Called only during application setup, before resource observers and services
+// attach. The group owns the returned pool; models borrow it through
+// retirement. Pool identity, not device membership or physical location,
+// establishes sharing. Qualifies simultaneous access from every selected
+// device's dispatch/transfer families before creating payload. Copies the name;
+// rejects empty/duplicate names, invalid membership, and incompatible device
+// sanitizer policies.
+iree_status_t loom_serve_device_group_create_pool(
+    loom_serve_device_group_t* group, loom_serve_pool_binding_t binding,
+    const loom_serve_pool_options_t* options, loom_serve_pool_t** out_pool);
+
+// Application pool inventory; immutable after setup. Indices are resolved by
+// the caller and are independent of execution device indices.
+iree_host_size_t loom_serve_device_group_pool_count(
+    const loom_serve_device_group_t* group);
+loom_serve_pool_t* loom_serve_device_group_pool_at(
+    const loom_serve_device_group_t* group, iree_host_size_t pool_index);
+// Borrowed immutable pool names and device membership in pool inventory order.
+const loom_serve_pool_binding_t* loom_serve_device_group_pool_bindings(
+    const loom_serve_device_group_t* group);
 
 // Number of immutable device records owned by the group.
 iree_host_size_t loom_serve_device_group_count(
@@ -98,72 +106,15 @@ iree_string_view_t loom_serve_device_name(const loom_serve_device_t* device);
 loom_serve_device_t* loom_serve_device_group_at(
     loom_serve_device_group_t* group, iree_host_size_t device_index);
 
-// Serving-managed backing across every model sharing this device. Storage and
-// retained have separate native sources; workspace is a breakdown of storage
-// for fixed backing or retained for elastic backing, not additional physical
-// consumption. Virtual statistics are zero for fixed backing. HAL statistics
-// are independent atomic observations, not a coherent device-wide snapshot.
-// Reported commitments exclude host snapshots, loader storage, and driver
-// overhead; HAL providers may also hide physical allocation padding.
-typedef struct loom_serve_device_memory_statistics_t {
-  // Ordinary native buffers, including fixed parameters, state, and workspace.
-  iree_hal_pool_stats_t storage;
-  // All virtual reservations and backing, including weights, state, workspace.
-  loom_serve_memory_statistics_t retained;
-  // Shared command workspace, including reusable idle backing.
-  iree_hal_pool_stats_t workspace;
-} loom_serve_device_memory_statistics_t;
-
-// Called by the host owner; copies observations without waiting for device
-// work.
-loom_serve_device_memory_statistics_t loom_serve_device_memory_statistics(
-    const loom_serve_device_t* device);
-
-// Cold owner-controlled trim toward target_bytes of reported managed backing.
-// Releases idle workspace first, then unpinned parameter groups in LRU order.
-// Live workspace, pinned parameters and model-owned mutable state survive.
-// An unreachable target is not an error; statistics expose the reached extent.
-// Consumers pin parameter groups through retirement; only those already
-// retired are eligible. Does not wait for live workspace or destroy queues.
-// Detached native returns do not reduce the
-// parameter budget, though statistics may still report those bytes until the
-// cache's queued sweep runs.
-// Platform unmap/free failures propagate to the owner.
-iree_status_t loom_serve_device_trim(loom_serve_device_t* device,
-                                     uint64_t target_bytes);
-
-// Independent idle policies, applied by the serialized serving owner. Zero
-// disables a policy. Both durations must be nonnegative. Mutable model state,
-// sessions, and prefix history are outside these policies.
-typedef struct loom_serve_device_idle_policy_t {
-  // Idle interval after the last command workspace root retires.
-  iree_duration_t workspace_timeout;
-  // Idle interval after the last invocation or explicit parameter pin releases.
-  // Only elastic parameter backing can be deactivated independently.
-  iree_duration_t parameter_timeout;
-} loom_serve_device_idle_policy_t;
-
-// Schedules expired backing releases without waiting for native maintenance.
-// Returns pending while enabled resources await retirement or idle expiry;
-// native releases already scheduled use the ordinary capacity observer.
-// Live invocation pins and explicit parameter pins prevent deactivation.
-iree_status_t loom_serve_device_trim_idle(
-    loom_serve_device_t* device, loom_serve_device_idle_policy_t policy,
-    iree_time_t now, bool* out_pending);
+// Releases unused device-local compiled products and group-wide immutable
+// tokenizers. Live model/load borrowers preserve their entries. These caches
+// are independent of model storage and its pool policies.
+// Called on the serialized host owner; does not wait for device work.
+void loom_serve_device_trim_programs(loom_serve_device_t* device);
 
 // Borrowed handles valid through group destruction. Every device record returns
 // the same HAL group; execution bindings retain their shared queue inventory.
 iree_hal_device_t* loom_serve_device_handle(const loom_serve_device_t* device);
-// Borrowed native source for retained model buffers. Access is qualified for
-// this record's dispatch and transfer families, including indirect dispatch
-// parameters, without public host mappings.
-// All allocated buffers must retire before the group is destroyed. Command
-// transients use the execution workspace instead of this unbounded source.
-iree_hal_pool_t* loom_serve_device_storage_pool(
-    const loom_serve_device_t* device);
-// Borrowed shared transient backing for execution and weight preparation.
-loom_serve_workspace_t* loom_serve_device_workspace(
-    const loom_serve_device_t* device);
 // Borrowed application host, which outlives this device and its models.
 loom_serve_host_t* loom_serve_device_host(const loom_serve_device_t* device);
 // Exact immutable tokenizers shared by every model in the application group.
@@ -175,7 +126,7 @@ iree_hal_queue_t* loom_serve_device_dispatch_queue(
     const loom_serve_device_t* device);
 iree_hal_queue_t* loom_serve_device_transfer_queue(
     const loom_serve_device_t* device);
-// Creates an owned model timeline over this device's shared workspace. The
+// Creates an owned model timeline over the explicitly selected pool. The
 // serialized device owner assigns the least borrowed provisioned queues;
 // final execution release returns that binding, including retained result and
 // VM references. A shared family supplies one exact queue for both roles.
@@ -183,19 +134,8 @@ iree_hal_queue_t* loom_serve_device_transfer_queue(
 // introduces no dependency edges between models. Queue placement counts live
 // executions, not requests or priority, and adds no native queues.
 iree_status_t loom_serve_device_create_execution(
-    loom_serve_device_t* device, loom_serve_execution_t** out_execution);
-// Borrowed shared physical owner, or NULL for explicitly fixed backing.
-loom_serve_memory_pool_t* loom_serve_device_memory_pool(
-    const loom_serve_device_t* device);
-// Qualified parameter replacement geometry; zero for fixed backing.
-loom_serve_memory_geometry_t loom_serve_device_weight_geometry(
-    const loom_serve_device_t* device);
-// Qualified mutable-state replacement geometry; zero for fixed backing.
-loom_serve_memory_geometry_t loom_serve_device_state_geometry(
-    const loom_serve_device_t* device);
-// Borrowed parameter admission, pinning and LRU policy shared by all models.
-loom_serve_residency_cache_t* loom_serve_device_residency_cache(
-    const loom_serve_device_t* device);
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    loom_serve_execution_t** out_execution);
 
 // Creates a model-local source catalog backed by this device's immutable
 // compilation cache. The model retains the returned catalog and its private

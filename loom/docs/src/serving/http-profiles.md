@@ -44,7 +44,8 @@ header.
 | `POST /v1/models/variants` | Stage native providers against a ready base without selecting them. |
 | `POST /v1/models/variants/select` | Select a ready candidate with expected-current protection. |
 | `POST /v1/models/variants/remove` | Remove an unused terminal candidate. |
-| `POST /v1/devices/trim` | `{"device":"gpu0","target_bytes":0}` selects a configured device key; HTTP 200 schedules eligible reclamation and returns current resource accounting. |
+| `POST /v1/pools/trim` | `{"pool":"interactive","target_bytes":0}` selects an explicit pool; HTTP 200 schedules eligible reclamation and returns that pool's current resource accounting. |
+| `POST /v1/devices/trim` | `{"device":"gpu"}` prunes unused compiled generations on that device without trimming any pool. Live model catalogs retain their compiled products. |
 | `GET /metrics` | Prometheus text counters and ownership gauges. |
 | `GET /logz`, `GET /logz/stream` | Bounded JSONL polling or SSE with independent cursors. |
 | `GET /v1/requests`, `GET /v1/sessions` | Bounded live owner inspection; sessions require a retained-text service. |

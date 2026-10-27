@@ -84,8 +84,8 @@ void loom_serve_text_observe(loom_serve_text_service_t* service,
       loom_serve_text_model_weight_statistics(service->model);
   state->weight_activity =
       loom_serve_text_model_weight_activity(service->model);
-  state->device_memory = loom_serve_device_memory_statistics(
-      loom_serve_text_model_device(service->model));
+  state->pool_memory =
+      loom_serve_pool_statistics(loom_serve_text_model_pool(service->model));
   state->prefill_rows = prefill;
   state->decode_rows = decode;
   state->backpressured_rows = backpressured;

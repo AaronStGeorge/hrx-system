@@ -30,9 +30,10 @@ static uint8_t* loom_serve_parameter_bank_alignments(
 }
 
 static iree_status_t loom_serve_parameter_bank_allocate_range(
-    loom_serve_device_t* device, const loom_cmd_program_t* program,
-    uint32_t first, uint32_t count, loom_serve_memory_arena_t* arena,
-    iree_allocator_t host_allocator, loom_serve_parameter_bank_t** out_bank) {
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_cmd_program_t* program, uint32_t first, uint32_t count,
+    loom_serve_memory_arena_t* arena, iree_allocator_t host_allocator,
+    loom_serve_parameter_bank_t** out_bank) {
   *out_bank = NULL;
   if (!count) {
     return iree_ok_status();
@@ -56,39 +57,39 @@ static iree_status_t loom_serve_parameter_bank_allocate_range(
             iree_max(reflected.minimum_alignment, 1));
     const loom_serve_weight_root_t root = {program, reflected,
                                            &bank->buffers[i]};
-    status =
-        loom_serve_weights_allocate(loom_serve_device_handle(device),
-                                    loom_serve_device_transfer_queue(device),
-                                    loom_serve_device_dispatch_queue(device),
-                                    loom_serve_device_storage_pool(device),
-                                    loom_serve_device_memory_pool(device),
-                                    loom_serve_device_weight_geometry(device),
-                                    arena, loom_serve_device_workspace(device),
-                                    0, 1, &root, host_allocator, &plans[i]);
+    status = loom_serve_weights_allocate(
+        loom_serve_device_handle(device),
+        loom_serve_device_transfer_queue(device),
+        loom_serve_device_dispatch_queue(device), loom_serve_pool_storage(pool),
+        loom_serve_pool_memory(pool), loom_serve_pool_weight_geometry(pool),
+        arena, loom_serve_pool_workspace(pool), 0, 1, &root, host_allocator,
+        &plans[i]);
   }
   if (iree_status_is_ok(status)) {
     status = loom_serve_residency_group_allocate(
-        loom_serve_device_residency_cache(device), count, plans, host_allocator,
+        loom_serve_pool_residency_cache(pool), count, plans, host_allocator,
         &bank->group);
   }
   return status;
 }
 
 iree_status_t loom_serve_parameter_bank_allocate(
-    loom_serve_device_t* device, const loom_cmd_program_t* program,
-    iree_allocator_t host_allocator, loom_serve_parameter_bank_t** out_bank) {
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_cmd_program_t* program, iree_allocator_t host_allocator,
+    loom_serve_parameter_bank_t** out_bank) {
   return loom_serve_parameter_bank_allocate_range(
-      device, program, 0,
+      device, pool, program, 0,
       program ? program->requirements.fixed_buffer_count : 0, NULL,
       host_allocator, out_bank);
 }
 
 iree_status_t loom_serve_parameter_bank_allocate_domain(
-    loom_serve_device_t* device, const loom_cmd_program_t* program,
-    uint32_t domain, loom_serve_memory_arena_t* arena,
-    iree_allocator_t host_allocator, loom_serve_parameter_bank_t** out_bank) {
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_cmd_program_t* program, uint32_t domain,
+    loom_serve_memory_arena_t* arena, iree_allocator_t host_allocator,
+    loom_serve_parameter_bank_t** out_bank) {
   return loom_serve_parameter_bank_allocate_range(
-      device, program, domain, 1, arena, host_allocator, out_bank);
+      device, pool, program, domain, 1, arena, host_allocator, out_bank);
 }
 
 iree_host_size_t loom_serve_parameter_bank_count(

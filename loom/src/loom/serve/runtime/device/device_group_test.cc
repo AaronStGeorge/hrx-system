@@ -84,30 +84,30 @@ TEST_F(DeviceGroupTest, LaterDeviceFailureReleasesEarlierHandle) {
   EXPECT_EQ(group_, nullptr);
 }
 
-TEST_F(DeviceGroupTest, LaterPoolFailureReleasesSealedGroupAndEarlierPool) {
+TEST_F(DeviceGroupTest, RejectedPoolPreservesEarlierPoolAndGroup) {
+  const loom_serve_device_options_t device_options = {
+      .driver = driver_,
+      .uri = loom_serve_test_device()->device_uri,
+  };
+  IREE_ASSERT_OK(loom_serve_device_group_allocate(
+      host_, 1, &device_options, iree_allocator_system(), &group_));
+  loom_serve_pool_options_t options = {
+      .elastic = true,
+      .weight_slab_size = kSlabBytes,
+      .state_slab_size = kSlabBytes,
+  };
+  loom_serve_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+      group_, {IREE_SV("first"), 1}, &options, &pool));
   for (const uint64_t invalid_size : {UINT64_MAX, 3 * kSlabBytes}) {
-    const loom_serve_device_options_t options[] = {
-        {
-            .driver = driver_,
-            .uri = loom_serve_test_device()->device_uri,
-            .name = IREE_SV("first"),
-            .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-            .weight_slab_size = kSlabBytes,
-            .state_slab_size = kSlabBytes,
-        },
-        {
-            .driver = driver_,
-            .uri = loom_serve_test_device()->device_uri,
-            .name = IREE_SV("second"),
-            .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-            .weight_slab_size = invalid_size,
-            .state_slab_size = invalid_size,
-        }};
-    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                          loom_serve_device_group_allocate(
-                              host_, IREE_ARRAYSIZE(options), options,
-                              iree_allocator_system(), &group_));
-    EXPECT_EQ(group_, nullptr);
+    options.weight_slab_size = invalid_size;
+    options.state_slab_size = invalid_size;
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        loom_serve_device_group_create_pool(group_, {IREE_SV("invalid"), 1},
+                                            &options, &pool));
+    EXPECT_EQ(pool, nullptr);
+    EXPECT_EQ(loom_serve_device_group_pool_count(group_), 1u);
   }
 }
 
@@ -116,23 +116,27 @@ TEST_F(DeviceGroupTest, IndependentSlabSizesPreserveShortTails) {
   const loom_serve_device_options_t options = {
       .driver = driver_,
       .uri = loom_serve_test_device()->device_uri,
-      .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-      .weight_slab_size = slab_size,
-      .state_slab_size = kSlabBytes,
   };
   IREE_ASSERT_OK(loom_serve_device_group_allocate(
       host_, 1, &options, iree_allocator_system(), &group_));
-  auto* device = loom_serve_device_group_at(group_, 0);
-  const auto weights = loom_serve_device_weight_geometry(device);
-  const auto state = loom_serve_device_state_geometry(device);
+  const loom_serve_pool_options_t pool_options = {
+      .elastic = true,
+      .weight_slab_size = slab_size,
+      .state_slab_size = kSlabBytes,
+  };
+  loom_serve_pool_t* storage_owner = nullptr;
+  IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+      group_, {IREE_SV("pool"), 1}, &pool_options, &storage_owner));
+  const auto weights = loom_serve_pool_weight_geometry(storage_owner);
+  const auto state = loom_serve_pool_state_geometry(storage_owner);
   EXPECT_EQ(weights.slab_size, slab_size);
   EXPECT_EQ(state.slab_size, kSlabBytes);
   EXPECT_EQ(weights.granularity, state.granularity);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      loom_serve_device_memory_pool(device), weights, slab_size + 1, 256,
+      loom_serve_pool_memory(storage_owner), weights, slab_size + 1, 256,
       &statistics_[0], &reservations_[0]));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      loom_serve_device_memory_pool(device), state, 1, 256, &statistics_[1],
+      loom_serve_pool_memory(storage_owner), state, 1, 256, &statistics_[1],
       &reservations_[1]));
   EXPECT_EQ(loom_serve_virtual_buffer_slab_count(reservations_[0]), 2u);
   const auto demand =
@@ -153,41 +157,43 @@ TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
           .driver = driver_,
           .uri = loom_serve_test_device()->device_uri,
           .name = IREE_SV("first"),
-          .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-          .weight_slab_size = kSlabBytes,
-          .state_slab_size = kSlabBytes,
-          .memory_limit = kSlabBytes,
       },
       {
           .driver = driver_,
           .uri = loom_serve_test_device()->device_uri,
           .name = IREE_SV("second"),
-          .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-          .weight_slab_size = kSlabBytes,
-          .state_slab_size = kSlabBytes,
-          .memory_limit = 2 * kSlabBytes,
       }};
   IREE_ASSERT_OK(
       loom_serve_device_group_allocate(host_, IREE_ARRAYSIZE(options), options,
                                        iree_allocator_system(), &group_));
   auto* first = loom_serve_device_group_at(group_, 0);
   auto* second = loom_serve_device_group_at(group_, 1);
+  loom_serve_pool_t* pools[2] = {};
+  for (iree_host_size_t i = 0; i < 2; ++i) {
+    const loom_serve_pool_options_t pool_options = {
+        .elastic = true,
+        .weight_slab_size = kSlabBytes,
+        .state_slab_size = kSlabBytes,
+        .memory_limit = (i + 1) * kSlabBytes,
+    };
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group_, {options[i].name, UINT64_C(1) << i}, &pool_options, &pools[i]));
+  }
   EXPECT_EQ(loom_serve_device_group(first), loom_serve_device_group(second));
-  EXPECT_NE(loom_serve_device_memory_pool(first),
-            loom_serve_device_memory_pool(second));
-  EXPECT_NE(loom_serve_device_residency_cache(first),
-            loom_serve_device_residency_cache(second));
+  EXPECT_NE(loom_serve_pool_memory(pools[0]), loom_serve_pool_memory(pools[1]));
+  EXPECT_NE(loom_serve_pool_residency_cache(pools[0]),
+            loom_serve_pool_residency_cache(pools[1]));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      loom_serve_device_memory_pool(second),
-      loom_serve_device_state_geometry(second), 2 * kSlabBytes, 256,
+      loom_serve_pool_memory(pools[1]),
+      loom_serve_pool_state_geometry(pools[1]), 2 * kSlabBytes, 256,
       &statistics_[1], &reservations_[1]));
   // Only the last record has a reservation. Rejection must preserve the first
   // record's resources too; it can still admit work after the failed teardown.
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         loom_serve_device_group_free(group_));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      loom_serve_device_memory_pool(first),
-      loom_serve_device_state_geometry(first), 2 * kSlabBytes, 256,
+      loom_serve_pool_memory(pools[0]),
+      loom_serve_pool_state_geometry(pools[0]), 2 * kSlabBytes, 256,
       &statistics_[0], &reservations_[0]));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(reservations_[0], 0, 4));
   IREE_ASSERT_OK(
@@ -197,7 +203,8 @@ TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
       loom_serve_virtual_buffer_commit(reservations_[0], kSlabBytes, 4));
   for (iree_host_size_t i = 0; i < 2; ++i) {
     auto* device = loom_serve_device_group_at(group_, i);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &executions_[i]));
+    IREE_ASSERT_OK(
+        loom_serve_device_create_execution(device, pools[i], &executions_[i]));
     auto* buffer = loom_serve_virtual_buffer_handle(reservations_[i]);
     const uint32_t pattern = 0x12345678u + i;
     const iree_hal_transfer_operation_t fill = {
@@ -229,11 +236,11 @@ TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
   }
   loom_serve_virtual_buffer_begin_trim(reservations_[1]);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(reservations_[1]));
-  EXPECT_EQ(loom_serve_device_memory_statistics(first).retained.committed_bytes,
+  EXPECT_EQ(loom_serve_pool_statistics(pools[0]).retained.committed_bytes,
             kSlabBytes);
   IREE_ASSERT_OK(
-      loom_serve_memory_pool_await(loom_serve_device_memory_pool(second)));
-  const auto detached = loom_serve_device_memory_statistics(second).retained;
+      loom_serve_memory_pool_await(loom_serve_pool_memory(pools[1])));
+  const auto detached = loom_serve_pool_statistics(pools[1]).retained;
   EXPECT_EQ(detached.committed_bytes, 2 * kSlabBytes);
   EXPECT_EQ(detached.cached_bytes, 2 * kSlabBytes);
 }

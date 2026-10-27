@@ -58,7 +58,9 @@ class SnapshotTest : public ::testing::Test {
     const loom_serve_device_options_t options = {
         .driver = environment->driver,
         .uri = loom_serve_test_device()->device_uri,
-        .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+    };
+    const loom_serve_pool_options_t pool_options = {
+        .elastic = true,
         .weight_slab_size = kSlabSize,
         .state_slab_size = kSlabSize,
         .memory_limit = 256 * kSlabSize,
@@ -66,9 +68,12 @@ class SnapshotTest : public ::testing::Test {
     auto status = loom_serve_device_group_allocate(
         environment->host, 1, &options, iree_allocator_system(), &group);
     IREE_ASSERT_OK(status);
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group, {IREE_SV("pool"), 1}, &pool_options, &storage_owner));
     device = loom_serve_device_group_at(group, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution));
-    pool = loom_serve_device_memory_pool(device);
+    IREE_ASSERT_OK(
+        loom_serve_device_create_execution(device, storage_owner, &execution));
+    pool = loom_serve_pool_memory(storage_owner);
   }
 
   void TearDown() override {
@@ -97,6 +102,8 @@ class SnapshotTest : public ::testing::Test {
   loom_serve_device_group_t* group = nullptr;
   // Borrowed device record within the application group.
   loom_serve_device_t* device = nullptr;
+  // Independent storage owner selected for every reservation.
+  loom_serve_pool_t* storage_owner = nullptr;
   // Owned model submission timeline.
   loom_serve_execution_t* execution = nullptr;
   // Physical budget enclosing both independent roots.
@@ -118,8 +125,8 @@ class SnapshotTest : public ::testing::Test {
 TEST_F(SnapshotTest, LogicalRangesSurviveSourceDestructionAndFreshPlacement) {
   for (size_t i = 0; i < roots.size(); ++i) {
     IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-        pool, loom_serve_device_state_geometry(device), kHighOffset + kSlabSize,
-        256, &statistics, &reservations[i]));
+        pool, loom_serve_pool_state_geometry(storage_owner),
+        kHighOffset + kSlabSize, 256, &statistics, &reservations[i]));
     roots[i] = loom_serve_virtual_buffer_handle(reservations[i]);
     iree_hal_buffer_retain(roots[i]);
     IREE_ASSERT_OK(loom_serve_retirement_track(&retirement, &roots[i],
@@ -158,7 +165,7 @@ TEST_F(SnapshotTest, LogicalRangesSurviveSourceDestructionAndFreshPlacement) {
   EXPECT_EQ(statistics.reserved_bytes, 0u);
   for (size_t i = 0; i < roots.size(); ++i) {
     IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-        pool, loom_serve_device_state_geometry(device), kSlabSize, 256,
+        pool, loom_serve_pool_state_geometry(storage_owner), kSlabSize, 256,
         &statistics, &reservations[i]));
     roots[i] = loom_serve_virtual_buffer_handle(reservations[i]);
     iree_hal_buffer_retain(roots[i]);
@@ -202,7 +209,7 @@ TEST_F(SnapshotTest, LargeSparseStateSurvivesBackingReuseAndFreshPlacement) {
       kStateBytes + kPageBytes * kPageCount + 12 + 2048 + 32 + 20480;
   for (size_t i = 0; i < roots.size(); ++i) {
     IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-        pool, loom_serve_device_state_geometry(device),
+        pool, loom_serve_pool_state_geometry(storage_owner),
         kCacheOrigin + kPlaneStride * 32, 256, &statistics, &reservations[i]));
     roots[i] = loom_serve_virtual_buffer_handle(reservations[i]);
     iree_hal_buffer_retain(roots[i]);
@@ -505,8 +512,8 @@ TEST_P(AsyncSnapshotTest, OneWorkerSubmitsAndReleasesBeforeNativeRetirement) {
       loom_serve_host_proactor_pool(host), 0, &transfer.proactor));
   for (size_t i = 0; i < transfer.roots.size(); ++i) {
     IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-        pool, loom_serve_device_state_geometry(device), kHighOffset + kSlabSize,
-        256, &statistics, &reservations[i]));
+        pool, loom_serve_pool_state_geometry(storage_owner),
+        kHighOffset + kSlabSize, 256, &statistics, &reservations[i]));
     IREE_ASSERT_OK(
         loom_serve_virtual_buffer_commit(reservations[i], kHighOffset, 32768));
     transfer.roots[i] = loom_serve_virtual_buffer_handle(reservations[i]);

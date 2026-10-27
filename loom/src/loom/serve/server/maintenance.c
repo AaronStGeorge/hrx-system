@@ -10,7 +10,7 @@
 
 iree_status_t loom_serve_maintenance_initialize(
     loom_serve_device_group_t* group, iree_host_size_t policy_count,
-    const loom_serve_device_idle_policy_t* policies,
+    const loom_serve_pool_idle_policy_t* policies,
     loom_serve_maintenance_t* out_maintenance) {
   *out_maintenance =
       (loom_serve_maintenance_t){.group = group, .policies = policies};
@@ -19,13 +19,14 @@ iree_status_t loom_serve_maintenance_initialize(
     return iree_ok_status();
   }
   if (!group || !policies ||
-      policy_count != loom_serve_device_group_count(group)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "idle policies must cover the entire device group");
+      policy_count != loom_serve_device_group_pool_count(group)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "idle policies must cover the entire pool inventory");
   }
   iree_duration_t interval = IREE_DURATION_INFINITE;
   for (iree_host_size_t i = 0; i < policy_count; ++i) {
-    const loom_serve_device_idle_policy_t policy = policies[i];
+    const loom_serve_pool_idle_policy_t policy = policies[i];
     if (policy.workspace_timeout < 0 || policy.parameter_timeout < 0) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "idle timeouts must be nonnegative");
@@ -67,13 +68,13 @@ iree_status_t loom_serve_maintenance_advance(
     IREE_TRACE_ZONE_BEGIN(z0);
     const iree_time_t now = iree_time_now();
     const iree_host_size_t count =
-        loom_serve_device_group_count(maintenance->group);
+        loom_serve_device_group_pool_count(maintenance->group);
     for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status); ++i) {
-      bool device_pending = false;
-      status = loom_serve_device_trim_idle(
-          loom_serve_device_group_at(maintenance->group, i),
-          maintenance->policies[i], now, &device_pending);
-      pending |= device_pending;
+      bool pool_pending = false;
+      status = loom_serve_pool_trim_idle(
+          loom_serve_device_group_pool_at(maintenance->group, i),
+          maintenance->policies[i], now, &pool_pending);
+      pending |= pool_pending;
     }
     IREE_TRACE_ZONE_END(z0);
   }

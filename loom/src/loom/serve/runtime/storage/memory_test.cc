@@ -70,13 +70,13 @@ TEST_F(MemoryTest, GeometryRespectsFiniteBackingCapacity) {
 
 TEST_F(MemoryTest, DetachedSlabsServeTwoModelsThenReturnToOriginalAddresses) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 3 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 3 * kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[1], &second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 2 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 2 * kSlabSize, 256,
       &statistics[2], &third));
   auto* const original = loom_serve_virtual_buffer_handle(first);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 3 * kSlabSize));
@@ -136,8 +136,8 @@ TEST_F(MemoryTest, DetachedSlabsServeTwoModelsThenReturnToOriginalAddresses) {
 }
 
 TEST_F(MemoryTest, WeightTailReusesStateClassAcrossTwoCompleteSwaps) {
-  const auto bulk = loom_serve_device_weight_geometry(device);
-  const auto state = loom_serve_device_state_geometry(device);
+  const auto bulk = loom_serve_pool_weight_geometry(storage_owner);
+  const auto state = loom_serve_pool_state_geometry(storage_owner);
   const uint64_t bytes = 2 * bulk.slab_size + state.slab_size;
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, bulk, bytes, 256,
                                                     &statistics[0], &first));
@@ -189,10 +189,10 @@ TEST_F(MemoryTest, WeightTailReusesStateClassAcrossTwoCompleteSwaps) {
 
 TEST_F(MemoryTest, PhysicalPeakSurvivesCachedSlabDisposal) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_state_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_state_geometry(storage_owner), kSlabSize, 256,
       &statistics[1], &second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
   loom_serve_virtual_buffer_begin_trim(first);
@@ -217,7 +217,7 @@ TEST_F(MemoryTest, PhysicalPeakSurvivesCachedSlabDisposal) {
 TEST_F(MemoryTest, ReservationGrowthPreservesSparseBackingWithoutCopying) {
   ASSERT_NO_FATAL_FAILURE(UseBacking(false, 2 * kSlabSize, nullptr));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 3 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 3 * kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
   IREE_ASSERT_OK(
@@ -261,7 +261,7 @@ TEST_F(MemoryTest, FailedReservationGrowthKeepsBackingUntilCheckedDetach) {
   mapping_queue.Initialize(loom_serve_device_transfer_queue(device));
   ASSERT_NO_FATAL_FAILURE(UseBacking(false, kSlabSize, &mapping_queue));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
   RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
@@ -283,8 +283,8 @@ TEST_F(MemoryTest, FailedReservationGrowthKeepsBackingUntilCheckedDetach) {
 
 TEST_F(DedicatedNativeWorkerMemoryTest,
        HeldGrowthAndUnrelatedReturnDoNotCreateOtherClassCredit) {
-  const auto bulk = loom_serve_device_weight_geometry(device);
-  const auto state = loom_serve_device_state_geometry(device);
+  const auto bulk = loom_serve_pool_weight_geometry(storage_owner);
+  const auto state = loom_serve_pool_state_geometry(storage_owner);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, bulk, kSlabSize, 256,
                                                     &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, bulk, kSlabSize, 256,
@@ -328,8 +328,8 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
 
 TEST_F(DedicatedNativeWorkerMemoryTest,
        IncompatibleIdleSlabsStayChargedUntilNativeDisposal) {
-  const auto bulk = loom_serve_device_weight_geometry(device);
-  const auto state = loom_serve_device_state_geometry(device);
+  const auto bulk = loom_serve_pool_weight_geometry(storage_owner);
+  const auto state = loom_serve_pool_state_geometry(storage_owner);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
       pool, bulk, 3 * kSlabSize, 256, &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
@@ -362,8 +362,8 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
 
 TEST_F(DedicatedNativeWorkerMemoryTest,
        FailedAcquisitionPreservesAnAdmittedStreamingCohort) {
-  const auto bulk = loom_serve_device_weight_geometry(device);
-  const auto state = loom_serve_device_state_geometry(device);
+  const auto bulk = loom_serve_pool_weight_geometry(storage_owner);
+  const auto state = loom_serve_pool_state_geometry(storage_owner);
   const uint64_t failed_bytes = 2 * state.slab_size;
   const uint64_t cohort_bytes = 6 * state.slab_size;
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
@@ -446,8 +446,8 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
 
 TEST_F(DedicatedNativeWorkerMemoryTest,
        ExplicitTrimSettlesBeforeStreamingCohortAdmission) {
-  const auto bulk = loom_serve_device_weight_geometry(device);
-  const auto state = loom_serve_device_state_geometry(device);
+  const auto bulk = loom_serve_pool_weight_geometry(storage_owner);
+  const auto state = loom_serve_pool_state_geometry(storage_owner);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
       pool, bulk, bulk.slab_size, 256, &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
@@ -494,8 +494,8 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
 }
 
 TEST_F(MemoryTest, MixedSlabsAndShortTailsShareExactNativeBudget) {
-  const auto bulk = loom_serve_device_weight_geometry(device);
-  const auto state = loom_serve_device_state_geometry(device);
+  const auto bulk = loom_serve_pool_weight_geometry(storage_owner);
+  const auto state = loom_serve_pool_state_geometry(storage_owner);
   const uint64_t tail_bytes = state.slab_size;
   const uint64_t first_bytes = bulk.slab_size + tail_bytes;
   const uint64_t committed_bytes = first_bytes + state.slab_size;
@@ -594,10 +594,10 @@ TEST_F(MemoryTest, MixedSlabsAndShortTailsShareExactNativeBudget) {
 TEST_F(MemoryTest, PendingReleaseRetainsBudgetAndLeavesKeptSlabsUsable) {
   ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 3 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 3 * kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 2 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 2 * kSlabSize, 256,
       &statistics[1], &second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 3 * kSlabSize));
   ASSERT_NO_FATAL_FAILURE(
@@ -679,7 +679,7 @@ TEST_F(MemoryTest, PendingReleaseRetainsBudgetAndLeavesKeptSlabsUsable) {
 TEST_F(DedicatedNativeWorkerMemoryTest,
        PoolObserverDetachesFromAlreadyAcceptedNativeWork) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[0], &first));
   std::atomic<uint32_t> wakes = 0;
   loom_serve_memory_pool_set_observer(
@@ -734,10 +734,10 @@ TEST_F(DeviceMemoryTest, SparseGrowthTrimRegrowthAndSharedAdmission) {
                  << " bytes; this case requires offsets above four GiB";
   }
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kHighOffset + kSlabSize,
-      256, &statistics[0], &first));
+      pool, loom_serve_pool_weight_geometry(storage_owner),
+      kHighOffset + kSlabSize, 256, &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 2 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 2 * kSlabSize, 256,
       &statistics[1], &second));
   auto* const identity = loom_serve_virtual_buffer_handle(first);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
@@ -783,10 +783,10 @@ TEST_F(DeviceMemoryTest, SparseGrowthTrimRegrowthAndSharedAdmission) {
 
 TEST_F(MemoryTest, CohortAdmissionCountsUniqueSlabsAndLeavesDenialUntouched) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 3 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 3 * kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 2 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 2 * kSlabSize, 256,
       &statistics[1], &second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 256));
   RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
@@ -847,7 +847,7 @@ TEST_F(MemoryTest, RecommittedSlabsPublishEveryWordOfTheNewGeneration) {
                                                                      &second};
   for (size_t i = 0; i < destinations.size(); ++i) {
     IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-        pool, loom_serve_device_weight_geometry(device),
+        pool, loom_serve_pool_weight_geometry(storage_owner),
         kOrigin + 4 * kSlabSize, 256, &statistics[i], destinations[i]));
   }
   const std::array<iree_hal_buffer_t*, 2> handles = {
@@ -924,10 +924,10 @@ TEST_F(MemoryTest, RecommittedSlabsPublishEveryWordOfTheNewGeneration) {
 
 TEST_F(MemoryTest, FailedReclamationRetainsSharedFailureAndRemainingOwnership) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[1], &second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 256));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(second, 0, 256));
@@ -971,7 +971,7 @@ TEST_F(MemoryTest, FailedReclamationRetainsSharedFailureAndRemainingOwnership) {
 
 TEST_F(DeviceMemoryTest, StateAndWorkspaceReuseOnePhysicalSlab) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[0], &first));
   auto* const state = loom_serve_virtual_buffer_handle(first);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
@@ -988,7 +988,7 @@ TEST_F(DeviceMemoryTest, StateAndWorkspaceReuseOnePhysicalSlab) {
   IREE_ASSERT_OK(
       loom_serve_execution_alloca(execution, 1, &request, &workspace));
   RoundTrip(workspace, 0, 0xABCDEF01);
-  const auto active = loom_serve_device_memory_statistics(device);
+  const auto active = loom_serve_pool_statistics(storage_owner);
   EXPECT_EQ(active.retained.committed_bytes, kSlabSize);
   EXPECT_EQ(active.retained.cached_bytes, 0u);
   EXPECT_EQ(active.workspace.bytes_committed, kSlabSize);
@@ -999,7 +999,7 @@ TEST_F(DeviceMemoryTest, StateAndWorkspaceReuseOnePhysicalSlab) {
   iree_hal_buffer_release(workspace);
   workspace = nullptr;
   IREE_ASSERT_OK(loom_serve_execution_drain(execution));
-  auto* shared_workspace = loom_serve_device_workspace(device);
+  auto* shared_workspace = loom_serve_pool_workspace(storage_owner);
   iree_device_size_t retained = 0;
   IREE_ASSERT_OK(loom_serve_workspace_trim(shared_workspace, &retained));
   EXPECT_EQ(retained, 0u);
@@ -1020,12 +1020,12 @@ TEST_F(DeviceMemoryTest, StateAndWorkspaceReuseOnePhysicalSlab) {
 TEST_F(DeviceMemoryTest, AdmissionIncludesWorkspaceSlabGranularity) {
   const uint64_t state_bytes = 5 * kSlabSize / 2;
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_state_geometry(device), state_bytes, 256,
+      pool, loom_serve_pool_state_geometry(storage_owner), state_bytes, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, state_bytes));
   loom_serve_residency_t* residency = nullptr;
   IREE_ASSERT_OK(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(device), execution, 0, nullptr,
+      loom_serve_pool_residency_cache(storage_owner), execution, 0, nullptr,
       iree_allocator_system(), &residency));
   std::unique_ptr<loom_serve_residency_t, decltype(&loom_serve_residency_free)>
       claim(residency, loom_serve_residency_free);
@@ -1054,12 +1054,12 @@ TEST_F(DeviceMemoryTest, AdmissionIncludesWorkspaceSlabGranularity) {
   workspace = nullptr;
   IREE_ASSERT_OK(loom_serve_execution_drain(execution));
   loom_serve_residency_release(residency);
-  IREE_ASSERT_OK(loom_serve_test_device_trim_and_drain(device, 0));
+  IREE_ASSERT_OK(loom_serve_test_pool_trim_and_drain(storage_owner, 0));
 }
 
-TEST_F(DeviceMemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
+TEST_F(DeviceMemoryTest, PoolTrimPreservesLiveWorkspaceAndMutableState) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 256));
   RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0xABCDEF01);
@@ -1073,12 +1073,12 @@ TEST_F(DeviceMemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
     IREE_ASSERT_OK(
         loom_serve_execution_alloca(execution, 1, &request, &workspace));
     RoundTrip(workspace, 0, 0x12345678);
-    const auto before = loom_serve_device_memory_statistics(device);
+    const auto before = loom_serve_pool_statistics(storage_owner);
     EXPECT_EQ(before.retained.committed_bytes, 2 * kSlabSize);
     EXPECT_EQ(before.workspace.bytes_committed, kSlabSize);
     EXPECT_EQ(before.workspace.reservation_count, 1u);
-    IREE_ASSERT_OK(loom_serve_test_device_trim_and_drain(device, 0));
-    const auto live = loom_serve_device_memory_statistics(device);
+    IREE_ASSERT_OK(loom_serve_test_pool_trim_and_drain(storage_owner, 0));
+    const auto live = loom_serve_pool_statistics(storage_owner);
     EXPECT_EQ(live.retained.committed_bytes, 2 * kSlabSize);
     EXPECT_EQ(live.workspace.bytes_committed, kSlabSize);
     EXPECT_EQ(live.workspace.reservation_count, 1u);
@@ -1093,12 +1093,13 @@ TEST_F(DeviceMemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
     workspace = nullptr;
     IREE_ASSERT_OK(loom_serve_execution_drain(execution));
     IREE_ASSERT_OK(
-        loom_serve_test_device_trim_and_drain(device, 2 * kSlabSize));
+        loom_serve_test_pool_trim_and_drain(storage_owner, 2 * kSlabSize));
     EXPECT_EQ(
-        loom_serve_device_memory_statistics(device).workspace.bytes_committed,
+        loom_serve_pool_statistics(storage_owner).workspace.bytes_committed,
         kSlabSize);
-    IREE_ASSERT_OK(loom_serve_test_device_trim_and_drain(device, kSlabSize));
-    const auto idle = loom_serve_device_memory_statistics(device);
+    IREE_ASSERT_OK(
+        loom_serve_test_pool_trim_and_drain(storage_owner, kSlabSize));
+    const auto idle = loom_serve_pool_statistics(storage_owner);
     EXPECT_EQ(idle.retained.committed_bytes, kSlabSize);
     EXPECT_EQ(idle.workspace.bytes_committed, 0u);
     EXPECT_EQ(idle.workspace.reservation_count, 0u);
@@ -1109,10 +1110,10 @@ TEST_F(DeviceMemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
 TEST_F(DedicatedNativeWorkerMemoryTest,
        NativeAllocationPublicationDoesNotDoubleChargeAdmission) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 2 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 2 * kSlabSize, 256,
       &statistics[1], &second));
   std::array<loom_serve_memory_operation_t*, 2> operations = {};
   {
@@ -1167,10 +1168,10 @@ TEST_F(DedicatedNativeWorkerMemoryTest,
 TEST_F(MemoryTest, PendingCommitChargesBudgetAndLeavesPublishedStorageUsable) {
   ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 3 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 3 * kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[1], &second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
   RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
@@ -1238,10 +1239,10 @@ TEST_F(MemoryTest, PendingCommitChargesBudgetAndLeavesPublishedStorageUsable) {
 TEST_F(MemoryTest, FailedReadinessDoesNotReleaseNativeOperationOwnership) {
   ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 2 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 2 * kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[1], &second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(second, 0, kSlabSize));
   RoundTrip(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
@@ -1292,10 +1293,10 @@ TEST_F(MemoryTest, DisjointMappingsFollowTheirReservationNotTheSharedPool) {
   mapping_queue.Initialize(loom_serve_device_transfer_queue(device));
   ASSERT_NO_FATAL_FAILURE(UseBacking(false, 4 * kSlabSize, &mapping_queue));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), 3 * kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), 3 * kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[1], &second));
   // Captures borrow private semaphores from the operations kept alive below.
   auto& mapping_waits = mapping_queue.mapping_waits;
@@ -1383,7 +1384,7 @@ TEST_F(MemoryTest, DisjointMappingsFollowTheirReservationNotTheSharedPool) {
 TEST_F(MemoryTest, ArenaRangesShareMappingOrderButNotPhysicalOwnership) {
   mapping_queue.Initialize(loom_serve_device_transfer_queue(device));
   ASSERT_NO_FATAL_FAILURE(UseBacking(false, 3 * kSlabSize, &mapping_queue));
-  const auto geometry = loom_serve_device_weight_geometry(device);
+  const auto geometry = loom_serve_pool_weight_geometry(storage_owner);
   IREE_ASSERT_OK(
       loom_serve_memory_arena_allocate(pool, geometry, 2 * kSlabSize, &arena));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate_in_arena(
@@ -1443,7 +1444,7 @@ TEST_F(MemoryTest, ArenaRangesShareMappingOrderButNotPhysicalOwnership) {
 TEST_F(MemoryTest, TrimmedArenaRangeRecyclesWhilePeerMappingIsPending) {
   mapping_queue.Initialize(loom_serve_device_transfer_queue(device));
   ASSERT_NO_FATAL_FAILURE(UseBacking(false, 2 * kSlabSize, &mapping_queue));
-  const auto geometry = loom_serve_device_weight_geometry(device);
+  const auto geometry = loom_serve_pool_weight_geometry(storage_owner);
   IREE_ASSERT_OK(
       loom_serve_memory_arena_allocate(pool, geometry, 2 * kSlabSize, &arena));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate_in_arena(
@@ -1501,7 +1502,7 @@ TEST_F(MemoryTest, TrimmedArenaRangeRecyclesWhilePeerMappingIsPending) {
 TEST_F(MemoryTest, FailedArenaEditRequiresOwnerDetachBeforeRangeRelease) {
   mapping_queue.Initialize(loom_serve_device_transfer_queue(device));
   ASSERT_NO_FATAL_FAILURE(UseBacking(false, 3 * kSlabSize, &mapping_queue));
-  const auto geometry = loom_serve_device_weight_geometry(device);
+  const auto geometry = loom_serve_pool_weight_geometry(storage_owner);
   IREE_ASSERT_OK(
       loom_serve_memory_arena_allocate(pool, geometry, 3 * kSlabSize, &arena));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate_in_arena(
@@ -1541,10 +1542,10 @@ TEST_F(MemoryTest, FailedArenaEditRequiresOwnerDetachBeforeRangeRelease) {
 
 TEST_F(MemoryTest, NativeAllocationFailurePreservesWarmWorkAndAllowsRetry) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[1], &second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
   RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
@@ -1569,10 +1570,10 @@ TEST_F(MemoryTest, FailedMappingKeepsSourcesUntilCheckedDetach) {
   ASSERT_NO_FATAL_FAILURE(
       UseDeferredBacking(kMappingBytes + kSlabSize, &mapping_queue));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kMappingBytes, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kMappingBytes, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_weight_geometry(device), kSlabSize, 256,
+      pool, loom_serve_pool_weight_geometry(storage_owner), kSlabSize, 256,
       &statistics[1], &second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(second, 0, kSlabSize));
   RoundTrip(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);

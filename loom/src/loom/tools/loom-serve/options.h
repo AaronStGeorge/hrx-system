@@ -23,7 +23,8 @@ iree_status_t loom_serve_host_create_from_flags(
     iree_allocator_t host_allocator, loom_serve_host_t** out_host);
 
 // CLI leaf constructing the application group from a keyed --devices file or
-// one explicit --device URI. Each file entry owns its backing and idle policy.
+// one explicit --device URI. Pool entries own backing and idle policy,
+// independently of their declared execution-device consumers.
 // Models resolve their own bindings; the entry point destroys the group after
 // every model retires. URI interpretation belongs to the HAL driver, with no
 // implicit local device or backend fallback. The caller deinitializes

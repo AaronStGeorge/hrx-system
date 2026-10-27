@@ -126,7 +126,8 @@ class EpochUploadTest : public SourceTextServiceTest {
 
   void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(SourceTextServiceTest::SetUp());
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &execution_));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(device_, storage_owner_,
+                                                      &execution_));
     IREE_ASSERT_OK(
         loom_serve_execution_reserve_workspace(execution_, kCapacity, 256));
     uint64_t completion = 0;

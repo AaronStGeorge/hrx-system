@@ -160,6 +160,20 @@ TEST_P(HttpRouterTest, IdleObserverDoesNotProduceCompletionDrivenEmptyFrames) {
   resumed.Join();
 }
 
+TEST_P(HttpRouterTest, FinishedErrorResponseRetainsTransportUntilSent) {
+  ObservationClient client;
+  ASSERT_NO_FATAL_FAILURE(client.Open(server_, "Last-Event-ID: bad\r\n"));
+  client.WaitCredit(false);
+  // A subsequent owner turn has finished the rejected request. Its response
+  // still belongs to the transport because the client has not consumed it.
+  EXPECT_EQ(Read(Send("GET", "/healthz")).find("HTTP/1.1 200"), 0u);
+  EXPECT_TRUE(loom_serve_http_server_has_pending_responses(server_));
+  loom_serve_http_server_request_stop(server_);
+  EXPECT_EQ(client.Response().find("HTTP/1.1 400"), 0u);
+  owner_.join();
+  EXPECT_FALSE(loom_serve_http_server_has_pending_responses(server_));
+}
+
 TEST_P(HttpRouterTest, MetricsCopyHeldAndQueuedOwnershipWithEscapedLabels) {
   const int held = Send("POST", "/v1/test", R"({"model":"held"})");
   held_.WaitSubmitted();
@@ -553,7 +567,7 @@ TEST_P(HttpRouterTest, UnrelatedCapacityNeverWaitsForHeldCompletion) {
       "\"server\":{\"worker_count\":" + std::to_string(GetParam()) +
       R"(,"model_capacity":5,"connection_capacity":64,"request_limits":{"header_byte_capacity":16384,"body_byte_capacity":8388608,"header_capacity":64,"multipart_header_byte_capacity":65536,"multipart_part_capacity":1024},"held_request_capacity":2,"held_requests":0,"observer_capacity":63,"observers":0,"resources":{"listeners":[{"address":")" +
       std::string(address.data, address.size) +
-      R"(","waiting_for_capacity":false}],"devices":[]}})";
+      R"(","waiting_for_capacity":false}],"devices":[],"pools":[]}})";
   EXPECT_NE(state.find(expected), std::string::npos) << state;
   EXPECT_NE(
       state.find(R"("phase":"held","queued_requests":0,"active_requests":1)"),
@@ -788,15 +802,31 @@ TEST_P(HttpRouterTest, AdmissionControlRejectsInvalidSelectorsWithoutClosing) {
       std::string::npos);
 }
 
-TEST_P(HttpRouterTest, TrimCannotSelectAnExternallyOwnedDevice) {
-  for (const auto* body : {"{}", R"({"device":0,"target_bytes":0})",
-                           R"({"device":"device","target_bytes":-1})"}) {
+TEST_P(HttpRouterTest, TrimCannotSelectAnExternallyOwnedPool) {
+  for (const auto* body : {"{}", R"({"pool":0,"target_bytes":0})",
+                           R"({"pool":"pool","target_bytes":-1})"}) {
+    SCOPED_TRACE(body);
+    EXPECT_EQ(Read(Send("POST", "/v1/pools/trim", body)).find("HTTP/1.1 400"),
+              0u);
+  }
+  EXPECT_EQ(Read(Send("POST", "/v1/pools/trim",
+                      R"({"pool":"pool","target_bytes":0})"))
+                .find("HTTP/1.1 404"),
+            0u);
+  EXPECT_EQ(Read(Send("GET", "/v1/pools/trim", "")).find("HTTP/1.1 404"), 0u);
+  EXPECT_NE(
+      Read(Send("POST", "/v1/test", R"({"model":"a"})")).find("a:/v1/test:"),
+      std::string::npos);
+}
+
+TEST_P(HttpRouterTest, ProgramTrimCannotSelectAnExternallyOwnedDevice) {
+  for (const auto* body :
+       {"{}", R"({"device":0})", R"({"device":"device","target_bytes":0})"}) {
     SCOPED_TRACE(body);
     EXPECT_EQ(Read(Send("POST", "/v1/devices/trim", body)).find("HTTP/1.1 400"),
               0u);
   }
-  EXPECT_EQ(Read(Send("POST", "/v1/devices/trim",
-                      R"({"device":"device","target_bytes":0})"))
+  EXPECT_EQ(Read(Send("POST", "/v1/devices/trim", R"({"device":"device"})"))
                 .find("HTTP/1.1 404"),
             0u);
   EXPECT_EQ(Read(Send("GET", "/v1/devices/trim", "")).find("HTTP/1.1 404"), 0u);

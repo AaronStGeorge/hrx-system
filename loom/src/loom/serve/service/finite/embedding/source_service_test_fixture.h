@@ -41,12 +41,15 @@ struct loom_serve_test_embedding_model_lifecycle_t {
   static void Release(iree_task_process_t* process);
 
   iree_status_t Run(loom_serve_device_t* device,
+                    loom_serve_pool_t* storage_owner,
                     const loom_serve_finite_model_options_t& options,
                     iree_allocator_t host_allocator = iree_allocator_system());
 
-  iree_status_t Retire(loom_serve_device_t* device);
+  iree_status_t Retire(loom_serve_device_t* device,
+                       loom_serve_pool_t* storage_owner);
 
-  iree_status_t RunOwner(loom_serve_device_t* device);
+  iree_status_t RunOwner(loom_serve_device_t* device,
+                         loom_serve_pool_t* storage_owner);
 
   // Borrowed shared executor for both owner turns and private preparation.
   iree_task_executor_t* executor = nullptr;
@@ -163,6 +166,8 @@ class SourceEmbeddingServiceTest : public ::testing::Test {
   loom_serve_device_group_t* group_ = nullptr;
   // Borrowed placement of the source-defined embedding model.
   loom_serve_device_t* device_ = nullptr;
+  // Explicit storage owner selected independently from execution placement.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Shared source-JIT finite model.
   loom_serve_finite_model_t* model_ = nullptr;
   // A second actual model retaining parameter capacity during the pressure

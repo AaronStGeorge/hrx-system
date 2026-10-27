@@ -123,6 +123,10 @@ typedef struct loom_serve_registration_factory_t {
   uint32_t kinds;
   // Borrowed immutable group keys, live through registry destruction.
   iree_string_view_list_t device_names;
+  // Number of immutable storage owners, independent of device count.
+  iree_host_size_t pool_count;
+  // Borrowed pool keys and qualified consumer membership through destruction.
+  const loom_serve_pool_binding_t* pools;
   // Shared cold-work sink for resolving local model cards before create.
   // An empty sink supports direct declarations only.
   loomc_task_sink_t resolution_sink;

@@ -12,7 +12,7 @@ const loom_serve_test_device_t* loom_serve_test_device(void) {
       .driver_register = iree_hal_vulkan_driver_module_register,
       .driver_name = IREE_SVL("vulkan"),
       .device_uri = IREE_SVL("vulkan"),
-      .service_backing = LOOM_SERVE_DEVICE_BACKING_FIXED,
+      .service_backing = LOOM_SERVE_POOL_BACKING_FIXED,
   };
   return &device;
 }

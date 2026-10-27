@@ -83,12 +83,12 @@ def check_parameter_residency(client, backing, workers):
 
     def settled_retained_memory():
         # Model deactivation can finish before its accepted native releases.
-        # Compare device totals only after those releases have retired.
+        # Compare pool totals only after those releases have retired.
         while True:
-            devices = client.request("/v1/status")["server"]["resources"]["devices"]
-            assert len(devices) == 1, devices
-            assert devices[0]["memory"]["backing"] == backing, devices
-            retained = devices[0]["memory"]["retained"]
+            pools = client.request("/v1/status")["server"]["resources"]["pools"]
+            assert len(pools) == 1, pools
+            assert pools[0]["memory"]["backing"] == backing, pools
+            retained = pools[0]["memory"]["retained"]
             if retained is None or retained["releasing_bytes"] == 0:
                 return retained
 
@@ -416,7 +416,7 @@ def check_workload_replay(client):
     )
 
 
-def check_device_trim(client, backing, workers):
+def check_pool_trim(client, backing, workers):
     """Release eligible shared backing while a retained continuation is held."""
     selector = {"model": "fixture-text"}
     root = [{"role": "user", "content": "abxa"}]
@@ -437,17 +437,17 @@ def check_device_trim(client, backing, workers):
         assert "error" not in state, state
         return state
 
-    def settled_device():
+    def settled_pool():
         # Trim accepts asynchronous native returns. Compare the two completed
         # trims so the first return cannot be attributed to the second.
         while True:
-            device = client.request("/v1/status")["server"]["resources"]["devices"][0]
-            retained = device["memory"]["retained"]
+            pool = client.request("/v1/status")["server"]["resources"]["pools"][0]
+            retained = pool["memory"]["retained"]
             if retained is None or not retained["releasing_bytes"]:
-                return device
+                return pool
 
     before = snapshot()
-    workspace_before = client.idle()["server"]["resources"]["devices"][0]["memory"][
+    workspace_before = client.idle()["server"]["resources"]["pools"][0]["memory"][
         "workspace"
     ]
     counter_names = (
@@ -475,32 +475,32 @@ def check_device_trim(client, backing, workers):
                 held_requests=1,
             )
             pinned = client.request(
-                "/v1/devices/trim", {"device": "device", "target_bytes": 0}
+                "/v1/pools/trim", {"pool": "pool", "target_bytes": 0}
             )
-            assert (
-                pinned["target_bytes"] == 0 and pinned["device"]["key"] == "device"
-            ), pinned
+            assert pinned["target_bytes"] == 0 and pinned["pool"]["key"] == "pool", (
+                pinned
+            )
             assert snapshot()["parameters"]["primary"] == {
                 **before["parameters"]["primary"],
                 "pinned": True,
             }
-            memory_pinned = settled_device()["memory"]["retained"]
+            memory_pinned = settled_pool()["memory"]["retained"]
             unpinned = client.request("/v1/models/unpin", selector)["loom"]
             assert (
                 unpinned["parameters"]["primary"] == before["parameters"]["primary"]
             ), unpinned
             trimmed = client.request(
-                "/v1/devices/trim", {"device": "device", "target_bytes": 0}
+                "/v1/pools/trim", {"pool": "pool", "target_bytes": 0}
             )
-            device = settled_device()
-            memory_cold = device["memory"]["retained"]
+            pool = settled_pool()
+            memory_cold = pool["memory"]["retained"]
             cold = snapshot()
             assert cold["incarnation"] == before["incarnation"], cold
             assert cold["compilation"] == before["compilation"], cold
             assert cold["status"]["admission"] == "drained", cold
             assert cold["status"]["held_requests"] == 1, cold
-            workspace_cold = device["memory"]["workspace"]
-            # Counter ownership is the device, not a trim generation or model.
+            workspace_cold = pool["memory"]["workspace"]
+            # Counters belong to the pool, not a trim generation or model.
             for name in counter_names:
                 assert workspace_cold[name] >= workspace_before[name], (
                     name,
@@ -531,7 +531,7 @@ def check_device_trim(client, backing, workers):
                 assert (
                     cold["parameters"]["primary"] == before["parameters"]["primary"]
                 ), cold
-            client.request("/v1/devices/trim", {"device": "device", "target_bytes": 0})
+            client.request("/v1/pools/trim", {"pool": "pool", "target_bytes": 0})
             assert snapshot()["parameters"]["primary"] == cold["parameters"]["primary"]
             assert not continuation.done()
         finally:
@@ -550,7 +550,7 @@ def check_device_trim(client, backing, workers):
         "/v1/embeddings", {"model": "vectors", "input": "ab", "dimensions": 2}
     )
     assert vectors["data"][0]["embedding"] == [3, 2], vectors
-    workspace_after = client.idle()["server"]["resources"]["devices"][0]["memory"][
+    workspace_after = client.idle()["server"]["resources"]["pools"][0]["memory"][
         "workspace"
     ]
     assert workspace_after["reserve_count"] > workspace_cold["reserve_count"], (
@@ -723,12 +723,15 @@ def check_empty_server(server_command, directory, device, backing):
             ], resources
             assert len(resources["devices"]) == 1, resources
             actual = resources["devices"][0]
-            assert actual["idle"] == {"workspace_ms": 0, "parameter_ms": 0}, actual
             assert actual["key"] == "device" and actual["driver"] == device, actual
             assert actual["id"] and actual["name"] and actual["backend"], actual
             assert actual["physical_devices"], actual
             for physical in actual["physical_devices"]:
                 assert physical["ordinal"] >= 0 and physical["name"], physical
+            assert len(resources["pools"]) == 1, resources
+            actual = resources["pools"][0]
+            assert actual["key"] == "pool" and actual["devices"] == [0], actual
+            assert actual["idle"] == {"workspace_ms": 0, "parameter_ms": 0}, actual
             memory = actual["memory"]
             assert memory["backing"] == backing, memory
             # The elastic workspace reserves reusable addresses at device
@@ -772,16 +775,16 @@ def check_empty_server(server_command, directory, device, backing):
             }, memory
             for target in (0, 2**64 - 1):
                 assert client.request(
-                    "/v1/devices/trim", {"device": "device", "target_bytes": target}
-                ) == {"target_bytes": target, "device": actual}
+                    "/v1/pools/trim", {"pool": "pool", "target_bytes": target}
+                ) == {"target_bytes": target, "pool": actual}
             for value in (
                 {},
-                {"device": 1, "target_bytes": 0},
-                {"device": "device", "target_bytes": -1},
-                {"device": "device", "target_bytes": 1.5},
-                {"device": "device", "target_bytes": 2**64},
+                {"pool": 1, "target_bytes": 0},
+                {"pool": "pool", "target_bytes": -1},
+                {"pool": "pool", "target_bytes": 1.5},
+                {"pool": "pool", "target_bytes": 2**64},
             ):
-                client.request("/v1/devices/trim", value, status=400)
+                client.request("/v1/pools/trim", value, status=400)
             for target in ("/v1/embeddings", "/tokenize", "/detokenize"):
                 rejected = client.request(target, {"model": "absent"}, status=404)
                 assert rejected == {
@@ -1446,16 +1449,16 @@ def check_dynamic_catalog(
         assert retired_status["resources"]["listeners"] == [
             {"address": address, "waiting_for_capacity": False}
         ]
-        for device in retired_status["resources"]["devices"]:
-            retained = device["memory"]["retained"]
+        for pool in retired_status["resources"]["pools"]:
+            retained = pool["memory"]["retained"]
             if retained is not None:
                 # Removing every model preserves shared workspace addresses
                 # and reusable backing, not any model-owned physical storage.
                 assert retained["reserved_bytes"] > 0, retained
                 assert retained["committed_bytes"] == (
                     retained["cached_bytes"]
-                    + device["memory"]["workspace"]["committed_bytes"]
-                ), device["memory"]
+                    + pool["memory"]["workspace"]["committed_bytes"]
+                ), pool["memory"]
                 assert retained["pending_bytes"] == retained["releasing_bytes"] == 0, (
                     retained
                 )
@@ -1537,21 +1540,22 @@ def check_multiple_bindings(server_command, directory, catalog, connection_count
                 assert response.status == 200
                 unix_resources = json.loads(response.read())["server"]["resources"]
         assert unix_resources["listeners"] == resources["listeners"]
-        for tcp_device, unix_device in zip(
-            resources["devices"], unix_resources["devices"], strict=True
+        assert unix_resources["devices"] == resources["devices"]
+        for tcp_pool, unix_pool in zip(
+            resources["pools"], unix_resources["pools"], strict=True
         ):
             # Atomic workspace observations may change between owner turns.
             assert {
-                key: value for key, value in tcp_device.items() if key != "memory"
-            } == {key: value for key, value in unix_device.items() if key != "memory"}
+                key: value for key, value in tcp_pool.items() if key != "memory"
+            } == {key: value for key, value in unix_pool.items() if key != "memory"}
         connection = http.client.HTTPConnection("localhost")
         connection.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             connection.sock.connect(str(socket_path))
             connection.request(
                 "POST",
-                "/v1/devices/trim",
-                json.dumps({"device": "device", "target_bytes": 0}),
+                "/v1/pools/trim",
+                json.dumps({"pool": "pool", "target_bytes": 0}),
                 {"Content-Type": "application/json"},
             )
             response = connection.getresponse()
@@ -1559,7 +1563,7 @@ def check_multiple_bindings(server_command, directory, catalog, connection_count
             trimmed = json.loads(response.read())
         finally:
             connection.close()
-        assert trimmed["target_bytes"] == 0 and trimmed["device"]["key"] == "device", (
+        assert trimmed["target_bytes"] == 0 and trimmed["pool"]["key"] == "pool", (
             trimmed
         )
         assert [
@@ -1742,7 +1746,7 @@ def run_from_command_line(*, stress=False):
                 )
             check_counters(client, arguments.rounds)
             check_parameter_residency(client, arguments.pool_backing, workers)
-            check_device_trim(client, arguments.pool_backing, workers)
+            check_pool_trim(client, arguments.pool_backing, workers)
             check_workload_replay(client)
         print(
             json.dumps(

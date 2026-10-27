@@ -42,7 +42,7 @@ class ServerTest(unittest.TestCase):
                 self.assertIsNotNone(bound_address, log.read_text())
                 address = urlsplit(f"http://{bound_address}")
                 snapshot = control(address, "GET", "/v1/status", 200)
-                memory = snapshot["server"]["resources"]["devices"][0]["memory"]
+                memory = snapshot["server"]["resources"]["pools"][0]["memory"]
                 self.assertEqual(memory["retained"]["limit_bytes"], 64 << 30)
                 self.assertEqual(memory["retained"]["committed_bytes"], 0)
             self.assertEqual(process.returncode, 0, log.read_text())
@@ -249,7 +249,7 @@ class ServerTest(unittest.TestCase):
                     self.assertEqual(
                         control(address, "GET", "/v1/status", 200)["server"][
                             "resources"
-                        ]["devices"][0]["idle"],
+                        ]["pools"][0]["idle"],
                         {"workspace_ms": 1, "parameter_ms": 0},
                     )
                     registration = self.post(
@@ -326,12 +326,14 @@ class ServerTest(unittest.TestCase):
             directory = Path(temporary)
             documents = []
             device_keys = ("cpu.primary", "cpu.secondary")
+            pool_keys = ("foreground", "background", "isolated")
             for index, name in enumerate(("alpha", "beta")):
                 package = directory / "models" / name
                 shutil.copytree(PACKAGE, package, copy_function=shutil.copyfile)
                 document = json.loads((package / "model.json").read_text())
                 document["name"] = name
                 document["device"] = device_keys[index]
+                document["pool"] = pool_keys[1 - index]
                 (package / "model.json").write_text(json.dumps(document))
                 documents.append((package, document))
             settings = directory / "settings"
@@ -339,10 +341,14 @@ class ServerTest(unittest.TestCase):
             (settings / "devices.json").write_text(
                 json.dumps(
                     {
-                        "devices": {
-                            device_keys[0]: {"uri": "task", "pool_backing": "fixed"},
-                            device_keys[1]: {
-                                "uri": "task",
+                        "devices": {key: {"uri": "task"} for key in device_keys},
+                        "pools": {
+                            pool_keys[0]: {
+                                "devices": list(device_keys),
+                                "pool_backing": "fixed",
+                            },
+                            pool_keys[1]: {
+                                "devices": list(device_keys),
                                 "pool_backing": "fixed",
                                 "weight_slab_bytes": "1gib",
                                 "state_slab_bytes": "64mib",
@@ -350,7 +356,11 @@ class ServerTest(unittest.TestCase):
                                 "workspace_idle_ms": 60000,
                                 "parameter_idle_ms": 120000,
                             },
-                        }
+                            pool_keys[2]: {
+                                "devices": [device_keys[0]],
+                                "pool_backing": "fixed",
+                            },
+                        },
                     }
                 )
             )
@@ -374,18 +384,28 @@ class ServerTest(unittest.TestCase):
                 address = urlsplit(f"http://{bound_address}")
                 snapshot = control(address, "GET", "/v1/status", 200)
                 devices = snapshot["server"]["resources"]["devices"]
+                pools = snapshot["server"]["resources"]["pools"]
                 self.assertEqual(
                     [device["key"] for device in devices], list(device_keys)
                 )
+                self.assertEqual([pool["key"] for pool in pools], list(pool_keys))
                 self.assertEqual(
-                    [device["idle"] for device in devices],
+                    [pool["devices"] for pool in pools], [[0, 1], [0, 1], [0]]
+                )
+                self.assertEqual(
+                    [pool["idle"] for pool in pools],
                     [
                         {"workspace_ms": 0, "parameter_ms": 0},
                         {"workspace_ms": 60000, "parameter_ms": 120000},
+                        {"workspace_ms": 0, "parameter_ms": 0},
                     ],
                 )
                 self.assertEqual(
                     [device["driver"] for device in devices], ["task", "task"]
+                )
+                self.assertEqual(
+                    {entry["id"]: entry["loom"]["pool"] for entry in snapshot["data"]},
+                    {"alpha": pool_keys[1], "beta": pool_keys[0]},
                 )
                 self.assertEqual(
                     {
@@ -408,36 +428,61 @@ class ServerTest(unittest.TestCase):
                             **binding,
                         )
                         self.post(address, "/v1/models/register", invalid, expected=400)
+                    for binding in (
+                        {},
+                        {"pool": "absent"},
+                        {"pool": 0},
+                        {"pool": pool_keys[2]},
+                    ):
+                        invalid = dict(documents[1][1])
+                        invalid.pop("pool")
+                        invalid.update(
+                            name="invalid",
+                            admission=admission,
+                            base_directory=str(documents[1][0]),
+                            **binding,
+                        )
+                        self.post(address, "/v1/models/register", invalid, expected=400)
                 self.assertEqual(
                     len(control(address, "GET", "/v1/status", 200)["data"]), 2
                 )
                 self.post(
                     address,
-                    "/v1/devices/trim",
+                    "/v1/pools/trim",
                     {
-                        "device": 0,
+                        "pool": 0,
                         "target_bytes": 0,
                     },
                     expected=400,
                 )
                 self.post(
                     address,
-                    "/v1/devices/trim",
+                    "/v1/pools/trim",
                     {
-                        "device": "absent",
+                        "pool": "absent",
                         "target_bytes": 0,
                     },
                     expected=404,
                 )
                 trimmed = self.post(
                     address,
-                    "/v1/devices/trim",
+                    "/v1/pools/trim",
                     {
-                        "device": device_keys[1],
+                        "pool": pool_keys[1],
                         "target_bytes": 0,
                     },
                 )
-                self.assertEqual(trimmed["device"], devices[1])
+                self.assertEqual(trimmed["pool"], pools[1])
+                programs_trimmed = self.post(
+                    address, "/v1/devices/trim", {"device": device_keys[1]}
+                )
+                self.assertEqual(programs_trimmed, {"device": devices[1]})
+                self.assertEqual(
+                    control(address, "GET", "/v1/status", 200)["server"]["resources"][
+                        "pools"
+                    ],
+                    pools,
+                )
                 self.assertEqual(
                     control(address, "GET", "/healthz", 200), {"status": "ready"}
                 )
@@ -445,8 +490,8 @@ class ServerTest(unittest.TestCase):
                 def reservations():
                     snapshot = control(address, "GET", "/v1/status", 200)
                     return [
-                        device["memory"]["workspace"]["reserve_count"]
-                        for device in snapshot["server"]["resources"]["devices"]
+                        pool["memory"]["workspace"]["reserve_count"]
+                        for pool in snapshot["server"]["resources"]["pools"]
                     ]
 
                 for index, name in enumerate(("alpha", "beta")):
@@ -458,8 +503,9 @@ class ServerTest(unittest.TestCase):
                     )
                     self.assertEqual(result["data"][0]["embedding"], [3, 2])
                     after = reservations()
-                    self.assertGreater(after[index], before[index])
-                    self.assertEqual(after[1 - index], before[1 - index])
+                    self.assertGreater(after[1 - index], before[1 - index])
+                    self.assertEqual(after[index], before[index])
+                    self.assertEqual(after[2], before[2])
                 self.post(
                     address, "/v1/models/unregister", {"model": "alpha"}, expected=202
                 )
@@ -476,19 +522,26 @@ class ServerTest(unittest.TestCase):
                 )
                 self.assertEqual(result["data"][0]["embedding"], [6, 3])
                 after = reservations()
-                self.assertEqual(after[0], before[0])
-                self.assertGreater(after[1], before[1])
+                self.assertGreater(after[0], before[0])
+                self.assertEqual(after[1:], before[1:])
                 package, document = documents[0]
                 # HTTP has no file containing the object to supply its base.
                 self.post(address, "/v1/models/register", document, expected=400)
                 document["base_directory"] = str(package)
+                # Two execution devices now use the same explicit owner. No
+                # second pool or copied payload is introduced for the binding.
+                document["pool"] = pool_keys[0]
                 self.post(address, "/v1/models/register", document, expected=202)
+                before = reservations()
                 result = self.post(
                     address,
                     "/v1/embeddings",
                     {"model": "alpha", "input": "bbb", "dimensions": 2},
                 )
                 self.assertEqual(result["data"][0]["embedding"], [6, 3])
+                after = reservations()
+                self.assertGreater(after[0], before[0])
+                self.assertEqual(after[1:], before[1:])
             self.assertEqual(process.returncode, 0, log.read_text())
 
     @staticmethod

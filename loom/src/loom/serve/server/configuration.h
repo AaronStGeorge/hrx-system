@@ -7,6 +7,7 @@
 #ifndef LOOM_SERVE_SERVER_CONFIGURATION_H_
 #define LOOM_SERVE_SERVER_CONFIGURATION_H_
 
+#include "loom/serve/runtime/device/pool.h"
 #include "loom/serve/runtime/program/sources.h"
 #include "loom/serve/runtime/program/variant_pool.h"
 #include "loom/serve/service/kind.h"
@@ -107,6 +108,10 @@ typedef struct loom_serve_model_configuration_t {
   iree_string_view_t device;
   // Resolved group ordinal, assigned once by registry admission. Not authored.
   iree_host_size_t device_index;
+  // Owned machine-local pool key; independent of execution placement.
+  iree_string_view_t pool;
+  // Resolved storage owner ordinal, assigned once by registry admission.
+  iree_host_size_t pool_index;
   // Owned program paths, provider array/strings, local directory base, and
   // retained source package when registration supplied one.
   loom_serve_sources_t sources;
@@ -168,7 +173,7 @@ void loom_serve_model_configuration_deinitialize(
 // Resolves a pending local card on a preparation worker, then reapplies the
 // authored deployment over its canonical execution defaults. Returns a wholly
 // independent declaration. The original remains owned by its registration.
-// Device binding is preserved; no device resources are created here.
+// Device and pool bindings are preserved; no native resources are created here.
 iree_status_t loom_serve_model_configuration_resolve(
     const loom_serve_model_configuration_t* model,
     iree_allocator_t host_allocator,
@@ -193,6 +198,13 @@ iree_status_t loom_serve_model_configuration_load(
 iree_status_t loom_serve_model_configuration_resolve_device(
     const loom_serve_model_configuration_t* model,
     iree_string_view_list_t device_names, iree_host_size_t* out_device_index);
+
+// Resolves storage independently, then verifies that its declared consumers
+// include the already-resolved execution device. Omission requires one pool.
+iree_status_t loom_serve_model_configuration_resolve_pool(
+    const loom_serve_model_configuration_t* model, iree_host_size_t pool_count,
+    const loom_serve_pool_binding_t* pools, iree_host_size_t device_index,
+    iree_host_size_t* out_pool_index);
 
 #ifdef __cplusplus
 }  // extern "C"

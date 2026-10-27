@@ -113,22 +113,22 @@ void loom_serve_test_embedding_model_lifecycle_t::Release(
 }
 
 iree_status_t loom_serve_test_embedding_model_lifecycle_t::Run(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* storage_owner,
     const loom_serve_finite_model_options_t& options,
     iree_allocator_t host_allocator) {
   IREE_RETURN_IF_ERROR(loom_serve_finite_load_allocate(
-      device, &options, Wake, this, host_allocator, &load));
-  return RunOwner(device);
+      device, storage_owner, &options, Wake, this, host_allocator, &load));
+  return RunOwner(device, storage_owner);
 }
 
 iree_status_t loom_serve_test_embedding_model_lifecycle_t::Retire(
-    loom_serve_device_t* device) {
+    loom_serve_device_t* device, loom_serve_pool_t* storage_owner) {
   retiring = true;
-  return RunOwner(device);
+  return RunOwner(device, storage_owner);
 }
 
 iree_status_t loom_serve_test_embedding_model_lifecycle_t::RunOwner(
-    loom_serve_device_t* device) {
+    loom_serve_device_t* device, loom_serve_pool_t* storage_owner) {
   executor = loom_serve_host_executor(loom_serve_device_host(device));
   iree_task_process_initialize(Drain, 0, 1, &process);
   process.user_data = this;
@@ -136,8 +136,8 @@ iree_status_t loom_serve_test_embedding_model_lifecycle_t::RunOwner(
   if (service) {
     service->set_observer(service->self, {Wake, this});
   }
-  pool = loom_serve_device_memory_pool(device);
-  workspace = loom_serve_device_workspace(device);
+  pool = loom_serve_pool_memory(storage_owner);
+  workspace = loom_serve_pool_workspace(storage_owner);
   loom_serve_workspace_set_observer(workspace, {Wake, this});
   if (pool) {
     loom_serve_memory_pool_set_observer(pool, Wake, this);
@@ -159,7 +159,7 @@ void SourceEmbeddingServiceTest::SetUp() {
   iree_notification_initialize(&notification_);
   auto application_options = loom_serve_test_application_options_default();
   application_options.device_count = DeviceCount();
-  if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
+  if (application_options.backing == LOOM_SERVE_POOL_BACKING_ELASTIC) {
     // One parameter slab plus one shared workspace slab fits. The concurrent
     // pressure cases use 32-unit invocations so two pack into that workspace.
     // Two parameter slabs plus invocation workspace do not fit.
@@ -173,6 +173,7 @@ void SourceEmbeddingServiceTest::SetUp() {
   group_ = loom_serve_test_application_device_group(application);
   device_ =
       loom_serve_test_application_device_at(application, DeviceCount() - 1);
+  storage_owner_ = loom_serve_device_group_pool_at(group_, DeviceCount() - 1);
   const char* source_path = std::getenv("LOOM_SERVE_TEST_MODEL_SOURCE");
   ASSERT_NE(source_path, nullptr);
   const std::string source = source_path;
@@ -219,7 +220,7 @@ void SourceEmbeddingServiceTest::CreateModel(const std::string& directory) {
       .options = iree_make_string_view(options.data(), options.size()),
   };
   loom_serve_test_embedding_model_lifecycle_t load;
-  IREE_ASSERT_OK(load.Run(device_, model_options));
+  IREE_ASSERT_OK(load.Run(device_, storage_owner_, model_options));
   model_ = load.model;
   EXPECT_EQ(loom_serve_finite_model_batch_limit(model_), BatchUnits());
 }
@@ -231,7 +232,7 @@ void SourceEmbeddingServiceTest::CreateService(
       16, heartbeat_interval, nullptr, host_allocator_, &service_));
   interface_ = loom_serve_finite_service_interface(service_);
   EXPECT_EQ(interface_.capacity_domain,
-            loom_serve_device_residency_cache(device_));
+            loom_serve_pool_residency_cache(storage_owner_));
   const loom_serve_wake_callback_t observer = {
       [](void* self) {
         auto* test = static_cast<SourceEmbeddingServiceTest*>(self);
@@ -240,9 +241,9 @@ void SourceEmbeddingServiceTest::CreateService(
       },
       this};
   interface_.set_observer(interface_.self, observer);
-  loom_serve_workspace_set_observer(loom_serve_device_workspace(device_),
+  loom_serve_workspace_set_observer(loom_serve_pool_workspace(storage_owner_),
                                     observer);
-  if (auto* pool = loom_serve_device_memory_pool(device_)) {
+  if (auto* pool = loom_serve_pool_memory(storage_owner_)) {
     loom_serve_memory_pool_set_observer(pool, observer.wake,
                                         observer.user_data);
   }
@@ -261,8 +262,9 @@ void SourceEmbeddingServiceTest::TearDown() {
   loom_serve_http_server_free(server_);
   IREE_EXPECT_OK(loom_serve_finite_model_free(model_));
   IREE_EXPECT_OK(loom_serve_finite_model_free(retained_));
-  loom_serve_workspace_set_observer(loom_serve_device_workspace(device_), {});
-  if (auto* pool = loom_serve_device_memory_pool(device_)) {
+  loom_serve_workspace_set_observer(loom_serve_pool_workspace(storage_owner_),
+                                    {});
+  if (auto* pool = loom_serve_pool_memory(storage_owner_)) {
     loom_serve_memory_pool_set_observer(pool, nullptr, nullptr);
   }
   iree_notification_deinitialize(&notification_);
@@ -310,11 +312,11 @@ void SourceEmbeddingServiceTest::Accept(
 
 bool SourceEmbeddingServiceTest::Step(loom_serve_service_flags_t flags) {
   const uint64_t previous = wakes_.load();
-  auto* workspace = loom_serve_device_workspace(device_);
+  auto* workspace = loom_serve_pool_workspace(storage_owner_);
   IREE_EXPECT_OK(loom_serve_workspace_advance(workspace));
   bool progress = false;
   IREE_EXPECT_OK(interface_.advance(interface_.self, flags, &progress));
-  auto* pool = loom_serve_device_memory_pool(device_);
+  auto* pool = loom_serve_pool_memory(storage_owner_);
   if (interface_.is_active(interface_.self) ||
       loom_serve_workspace_is_pending(workspace) ||
       (pool && loom_serve_memory_pool_is_pending(pool))) {
@@ -526,7 +528,7 @@ void SourceEmbeddingServiceTest::CheckInvalidSubmissionRetirement(
   EXPECT_EQ(retired_counters_.cancelled, 0u);
   // Queue allocation records may still own backing after model retirement.
   // Trim is nonblocking; group destruction joins the remaining records.
-  IREE_ASSERT_OK(loom_serve_device_trim(device_, 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
 }
 
 uint64_t SourceEmbeddingServiceTest::CompletedRequests() {

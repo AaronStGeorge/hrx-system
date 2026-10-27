@@ -33,19 +33,19 @@ class NativeAllocator {
     condition_.wait(
         lock, [&] { return live_allocations_ == 0 && active_calls_ == 0; });
   }
-  iree_status_t Observe(loom_serve_device_t* device) {
+  iree_status_t Observe(loom_serve_pool_t* pool) {
     {
       std::lock_guard<std::mutex> lock(mutex_);
       observing_ = true;
     }
     iree_hal_buffer_t* probe = nullptr;
     iree_status_t status = iree_hal_pool_allocate_buffer(
-        loom_serve_device_storage_pool(device),
+        loom_serve_pool_storage(pool),
         iree_hal_make_pool_reservation_request(4096, 0),
         iree_infinite_timeout(), &probe);
     iree_hal_buffer_release(probe);
     if (iree_status_is_ok(status)) {
-      status = loom_serve_test_device_trim_and_drain(device, 0);
+      status = loom_serve_test_pool_trim_and_drain(pool, 0);
     }
     {
       std::lock_guard<std::mutex> lock(mutex_);

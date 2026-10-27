@@ -349,7 +349,7 @@ int loom_serve_main(int argc, char** argv,
         (loom_serve_router_options_t){
             .request_quota = (iree_host_size_t)FLAG_connections,
             .resources = {.device_group = group,
-                          .idle_policy_count = devices.count,
+                          .idle_policy_count = devices.pool_count,
                           .idle_policies = devices.idle,
                           .listener_count = listener_count,
                           .listeners = listeners},

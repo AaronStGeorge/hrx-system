@@ -13,7 +13,7 @@ using VirtualPoolTest = loom_serve::testing::memory::MemoryTest;
 TEST_F(VirtualPoolTest,
        VirtualCommandPoolReusesRetainedSlabsAcrossTrimAndRegrowth) {
   ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
-  const auto geometry = loom_serve_device_weight_geometry(device);
+  const auto geometry = loom_serve_pool_weight_geometry(storage_owner);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
       pool, geometry, 2 * kSlabSize, 256, &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
@@ -82,7 +82,7 @@ TEST_F(VirtualPoolTest,
     second_buffer.reset();
     IREE_ASSERT_OK(loom_serve_execution_drain(execution));
     // Collect retired queue roots after joining their device uses.
-    loom_serve_workspace_statistics(loom_serve_device_workspace(device));
+    loom_serve_workspace_statistics(loom_serve_pool_workspace(storage_owner));
   };
   for (int cycle = 0; cycle < 2; ++cycle) {
     IREE_ASSERT_OK(
@@ -130,7 +130,7 @@ TEST_F(VirtualPoolTest,
 
 TEST_F(VirtualPoolTest, QueueDrivenVirtualBackingReusesRetainedSlabs) {
   ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
-  const auto geometry = loom_serve_device_weight_geometry(device);
+  const auto geometry = loom_serve_pool_weight_geometry(storage_owner);
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
       pool, geometry, 2 * kSlabSize, 256, &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 2 * kSlabSize));
@@ -289,7 +289,7 @@ TEST_F(VirtualPoolTest, VirtualBackingWaitsForIncompatibleNativeReturn) {
   ASSERT_NO_FATAL_FAILURE(
       UseDeferredBacking(3 * kSlabSize, nullptr, /*distinct_classes=*/true));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_state_geometry(device), 3 * kSlabSize, 256,
+      pool, loom_serve_pool_state_geometry(storage_owner), 3 * kSlabSize, 256,
       &statistics[0], &first));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 3 * kSlabSize));
   ASSERT_NO_FATAL_FAILURE(

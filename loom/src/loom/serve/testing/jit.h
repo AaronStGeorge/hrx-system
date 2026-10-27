@@ -91,6 +91,8 @@ class JitTest : public ::testing::TestWithParam<int> {
   loom_serve_device_group_t* group_ = nullptr;
   // Borrowed device record within the application group.
   loom_serve_device_t* device_owner_ = nullptr;
+  // Explicit group-owned storage used by this fixture's executions.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Borrowed live device used for profile extraction.
   iree_hal_device_t* device_ = nullptr;
   // Exact dispatch queue borrowed from device.

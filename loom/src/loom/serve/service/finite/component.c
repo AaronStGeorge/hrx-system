@@ -9,8 +9,10 @@
 struct loom_serve_finite_component_t {
   // Allocator owning the handle and its preparation operation.
   iree_allocator_t host_allocator;
-  // Borrowed shared physical owner, surviving final model retirement.
+  // Borrowed execution device, surviving final model retirement.
   loom_serve_device_t* device;
+  // Borrowed storage owner, preserved across lazy preparation and reload.
+  loom_serve_pool_t* pool;
   // Borrowed definition and package, independent of any requesting connection.
   loom_serve_finite_model_options_t options;
   // Immutable owner wake target, live until all callbacks have retired.
@@ -52,7 +54,7 @@ static void loom_serve_finite_component_set_phase(
 }
 
 iree_status_t loom_serve_finite_component_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_finite_model_options_t* options,
     loom_serve_wake_callback_t observer, iree_allocator_t host_allocator,
     loom_serve_finite_component_t** out_component) {
@@ -62,6 +64,7 @@ iree_status_t loom_serve_finite_component_allocate(
                                              (void**)&component));
   component->host_allocator = host_allocator;
   component->device = device;
+  component->pool = pool;
   component->options = *options;
   component->observer = observer;
   *out_component = component;
@@ -170,9 +173,9 @@ iree_status_t loom_serve_finite_component_prepare(
     loom_serve_finite_component_set_phase(
         component, LOOM_SERVE_FINITE_COMPONENT_PREPARING);
     component->status = loom_serve_finite_load_allocate(
-        component->device, &component->options, component->observer.wake,
-        component->observer.user_data, component->host_allocator,
-        &component->load);
+        component->device, component->pool, &component->options,
+        component->observer.wake, component->observer.user_data,
+        component->host_allocator, &component->load);
     if (!iree_status_is_ok(component->status)) {
       loom_serve_finite_component_set_phase(component,
                                             LOOM_SERVE_FINITE_COMPONENT_FAILED);

@@ -22,7 +22,7 @@ typedef struct loom_serve_test_application_options_t {
   // Number of devices in the immutable HAL group.
   iree_host_size_t device_count;
   // Physical backing strategy shared by every device.
-  loom_serve_device_backing_t backing;
+  loom_serve_pool_backing_t backing;
   // Physical slab bytes; zero selects the allocator recommendation.
   iree_device_size_t slab_size;
   // Maximum committed virtual-pool bytes; zero imposes no serving limit.

@@ -45,7 +45,7 @@ class ResourcesTest : public ::testing::Test {
     return std::string(value.data, value.size);
   }
   iree_status_t CreateCpuGroup(
-      loom_serve_device_backing_t backing = LOOM_SERVE_DEVICE_BACKING_FIXED,
+      loom_serve_pool_backing_t backing = LOOM_SERVE_POOL_BACKING_FIXED,
       iree_string_view_t first_name = IREE_SV("first"),
       iree_string_view_t second_name = IREE_SV("second")) {
     IREE_RETURN_IF_ERROR(
@@ -55,29 +55,38 @@ class ResourcesTest : public ::testing::Test {
             .driver = loom_serve_host_task_driver(host_),
             .uri = IREE_SV("task"),
             .name = first_name,
-            .backing = backing,
-            .weight_slab_size =
-                backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC ? 65536u : 0u,
-            .state_slab_size =
-                backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC ? 65536u : 0u,
-            .memory_limit =
-                backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC ? 1048576u : 0u,
         },
         {
             .driver = loom_serve_host_task_driver(host_),
             .uri = IREE_SV("task"),
             .name = second_name,
         }};
-    return loom_serve_device_group_allocate(host_, IREE_ARRAYSIZE(options),
-                                            options, iree_allocator_system(),
-                                            &group_);
+    IREE_RETURN_IF_ERROR(loom_serve_device_group_allocate(
+        host_, IREE_ARRAYSIZE(options), options, iree_allocator_system(),
+        &group_));
+    const loom_serve_pool_options_t pool_options = {
+        .elastic = backing == LOOM_SERVE_POOL_BACKING_ELASTIC,
+        .weight_slab_size =
+            backing == LOOM_SERVE_POOL_BACKING_ELASTIC ? 65536u : 0u,
+        .state_slab_size =
+            backing == LOOM_SERVE_POOL_BACKING_ELASTIC ? 65536u : 0u,
+        .memory_limit =
+            backing == LOOM_SERVE_POOL_BACKING_ELASTIC ? 1048576u : 0u,
+    };
+    loom_serve_pool_t* pool = nullptr;
+    IREE_RETURN_IF_ERROR(loom_serve_device_group_create_pool(
+        group_, {first_name, 3}, &pool_options, &pool));
+    const loom_serve_pool_options_t fixed_options = {};
+    return loom_serve_device_group_create_pool(group_, {second_name, 2},
+                                               &fixed_options, &pool);
   }
 
-  std::map<std::string, uint64_t> Observe(iree_host_size_t device_index) {
+  std::map<std::string, uint64_t> Observe(iree_host_size_t pool_index) {
     iree_string_builder_reset(&output_);
     const loom_serve_resources_t resources = {.device_group = group_};
     IREE_CHECK_OK(loom_serve_resources_write_observation(
-        &resources, device_index, &output_));
+        &resources, loom_serve_device_group_count(group_) + pool_index,
+        &output_));
     const auto json = iree_string_builder_view(&output_);
     iree_string_view_t topics;
     IREE_CHECK_OK(
@@ -130,7 +139,7 @@ class ResourcesTest : public ::testing::Test {
 };
 
 TEST_F(ResourcesTest, NoPublishedResourcesDoesNotInventHardware) {
-  EXPECT_EQ(Write({}), R"({"listeners":[],"devices":[]})");
+  EXPECT_EQ(Write({}), R"({"listeners":[],"devices":[],"pools":[]})");
   const loom_serve_resources_t resources = {};
   EXPECT_EQ(loom_serve_resources_observation_count(&resources), 0u);
 }
@@ -138,11 +147,13 @@ TEST_F(ResourcesTest, NoPublishedResourcesDoesNotInventHardware) {
 TEST_F(ResourcesTest, FixedBackingObservesNativeStorageAndNestedWorkspace) {
   IREE_ASSERT_OK(CreateCpuGroup());
   auto* device = loom_serve_device_group_at(group_, 0);
-  IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution_));
+  auto* storage_owner = loom_serve_device_group_pool_at(group_, 0);
+  IREE_ASSERT_OK(
+      loom_serve_device_create_execution(device, storage_owner, &execution_));
   IREE_ASSERT_OK(loom_serve_execution_reserve_workspace(execution_, 65536, 16));
   const auto request = iree_hal_make_pool_reservation_request(4096, 16);
   IREE_ASSERT_OK(loom_serve_execution_alloca_from_pool(
-      execution_, loom_serve_device_storage_pool(device), 1, &request,
+      execution_, loom_serve_pool_storage(storage_owner), 1, &request,
       &storage_buffer_));
   IREE_ASSERT_OK(
       loom_serve_execution_alloca(execution_, 1, &request, &workspace_buffer_));
@@ -151,8 +162,8 @@ TEST_F(ResourcesTest, FixedBackingObservesNativeStorageAndNestedWorkspace) {
   const auto values = Observe(0);
   EXPECT_EQ(values.size(), 34u);
   iree_hal_pool_stats_t native;
-  iree_hal_pool_query_stats(loom_serve_device_storage_pool(device), &native);
-  const auto workspace = loom_serve_device_memory_statistics(device).workspace;
+  iree_hal_pool_query_stats(loom_serve_pool_storage(storage_owner), &native);
+  const auto workspace = loom_serve_pool_statistics(storage_owner).workspace;
   EXPECT_EQ(values.at("storage.committed_bytes"), native.bytes_committed);
   EXPECT_EQ(values.at("workspace.committed_bytes"), workspace.bytes_committed);
   EXPECT_GT(values.at("storage.committed_bytes"),
@@ -163,7 +174,7 @@ TEST_F(ResourcesTest, FixedBackingObservesNativeStorageAndNestedWorkspace) {
 }
 
 TEST_F(ResourcesTest, ElasticBackingHasAnIndependentBudgetAndStorageOwner) {
-  IREE_ASSERT_OK(CreateCpuGroup(LOOM_SERVE_DEVICE_BACKING_ELASTIC));
+  IREE_ASSERT_OK(CreateCpuGroup(LOOM_SERVE_POOL_BACKING_ELASTIC));
   const auto values = Observe(0);
   EXPECT_EQ(values.size(), 43u);
   EXPECT_EQ(values.at("elastic.budget_limit"), 1048576u);
@@ -175,12 +186,12 @@ TEST_F(ResourcesTest, ElasticBackingHasAnIndependentBudgetAndStorageOwner) {
   EXPECT_EQ(fixed.count("elastic.budget_limit"), 0u);
 }
 
-TEST_F(ResourcesTest, TruncatedDisplayKeysDoNotMergeDeviceIdentities) {
+TEST_F(ResourcesTest, TruncatedDisplayKeysDoNotMergePoolIdentities) {
   const std::string prefix(256, 'a');
   const std::string first = prefix + "first";
   const std::string second = prefix + "second";
   IREE_ASSERT_OK(
-      CreateCpuGroup(LOOM_SERVE_DEVICE_BACKING_FIXED,
+      CreateCpuGroup(LOOM_SERVE_POOL_BACKING_FIXED,
                      iree_make_string_view(first.data(), first.size()),
                      iree_make_string_view(second.data(), second.size())));
   for (iree_host_size_t index = 0; index < 2; ++index) {
@@ -205,7 +216,7 @@ TEST_F(ResourcesTest, TruncatedDisplayKeysDoNotMergeDeviceIdentities) {
 TEST_F(ResourcesTest, DevicePagesHaveBoundedSamplingAndSharedCopiedStorage) {
   IREE_ASSERT_OK(CreateCpuGroup());
   const loom_serve_resources_t resources = {.device_group = group_};
-  EXPECT_EQ(loom_serve_resources_observation_count(&resources), 2u);
+  EXPECT_EQ(loom_serve_resources_observation_count(&resources), 4u);
   loom_serve_registry_t* registry = nullptr;
   IREE_ASSERT_OK(loom_serve_registry_allocate(
       0, nullptr, 130, {}, iree_allocator_system(), &registry));
@@ -226,25 +237,25 @@ TEST_F(ResourcesTest, DevicePagesHaveBoundedSamplingAndSharedCopiedStorage) {
   iree_string_builder_initialize_with_storage(storage, sizeof(storage),
                                               &scratch);
   iree_host_size_t cursor = 0;
-  for (iree_time_t now = 100; now <= 300; now += 100) {
+  for (iree_time_t now = 100; now <= 500; now += 100) {
     IREE_ASSERT_OK(
         loom_serve_observation_sample(observation, now, &cursor, &scratch));
     EXPECT_EQ(cursor, static_cast<iree_host_size_t>(now / 100));
   }
-  // The two device sources consumed two separate scheduler steps. Empty model
+  // Devices and pools each consumed separate scheduler steps. Empty model
   // ranges still advance by at most 64 slots per subsequent step.
   IREE_ASSERT_OK(
-      loom_serve_observation_sample(observation, 400, &cursor, &scratch));
-  EXPECT_EQ(cursor, 67u);
+      loom_serve_observation_sample(observation, 600, &cursor, &scratch));
+  EXPECT_EQ(cursor, 69u);
   while (cursor) {
     IREE_ASSERT_OK(
-        loom_serve_observation_sample(observation, 400, &cursor, &scratch));
+        loom_serve_observation_sample(observation, 600, &cursor, &scratch));
   }
   const auto allocations = allocator.allocation_count();
   const auto revision = loom_serve_observation_revision(observation);
   for (size_t reader = 0; reader < 64; ++reader) {
     cursor = 0;
-    for (iree_host_size_t index = 0; index < 3; ++index) {
+    for (iree_host_size_t index = 0; index < 5; ++index) {
       iree_string_builder_reset(&scratch);
       loom_serve_observation_version_t version;
       IREE_ASSERT_OK(loom_serve_observation_write_page(observation, &cursor,
@@ -255,7 +266,7 @@ TEST_F(ResourcesTest, DevicePagesHaveBoundedSamplingAndSharedCopiedStorage) {
           iree_string_builder_view(&scratch),
           index ? IREE_SV("key") : IREE_SV("type"), &identity));
       EXPECT_EQ(std::string(identity.data, identity.size), index == 0 ? "server"
-                                                           : index == 1
+                                                           : index % 2 == 1
                                                                ? "first"
                                                                : "second");
     }
@@ -263,7 +274,7 @@ TEST_F(ResourcesTest, DevicePagesHaveBoundedSamplingAndSharedCopiedStorage) {
   cursor = 0;
   do {
     IREE_ASSERT_OK(
-        loom_serve_observation_sample(observation, 500, &cursor, &scratch));
+        loom_serve_observation_sample(observation, 700, &cursor, &scratch));
   } while (cursor);
   EXPECT_EQ(loom_serve_observation_revision(observation), revision);
   EXPECT_EQ(allocator.allocation_count(), allocations);
@@ -274,13 +285,13 @@ TEST_F(ResourcesTest, DevicePagesHaveBoundedSamplingAndSharedCopiedStorage) {
   cursor = 1;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_RESOURCE_EXHAUSTED,
-      loom_serve_observation_sample(observation, 600, &cursor, &small));
+      loom_serve_observation_sample(observation, 800, &cursor, &small));
   EXPECT_EQ(cursor, 1u);
   iree_string_builder_reset(&scratch);
   loom_serve_observation_version_t version;
   IREE_ASSERT_OK(loom_serve_observation_write_page(observation, &cursor,
                                                    &scratch, &version));
-  EXPECT_EQ(version.time_ns, 500);
+  EXPECT_EQ(version.time_ns, 700);
   iree_string_builder_deinitialize(&small);
   iree_string_builder_deinitialize(&scratch);
 }
@@ -290,29 +301,28 @@ TEST_F(ResourcesTest, EveryRecordOfOneCpuGroupIsPublishedWithoutModelWork) {
   const loom_serve_resources_t resources = {.device_group = group_};
   EXPECT_EQ(
       Write(resources),
-      R"({"listeners":[],"devices":[{"key":"first","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"storage":{"reserved_bytes":0,"committed_bytes":0,"abandoned_bytes":0},"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}},{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"storage":{"reserved_bytes":0,"committed_bytes":0,"abandoned_bytes":0},"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}]})");
+      R"({"listeners":[],"devices":[{"key":"first","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}]},{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}]}],"pools":[{"key":"first","devices":[0,1],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"storage":{"reserved_bytes":0,"committed_bytes":0,"abandoned_bytes":0},"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}},{"key":"second","devices":[1],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"storage":{"reserved_bytes":0,"committed_bytes":0,"abandoned_bytes":0},"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}]})");
 }
 
 TEST_F(ResourcesTest, FixedStorageIsVisibleWithoutWorkspaceOrElasticBacking) {
   IREE_ASSERT_OK(CreateCpuGroup());
-  auto* device = loom_serve_device_group_at(group_, 0);
-  auto* peer = loom_serve_device_group_at(group_, 1);
+  auto* storage_owner = loom_serve_device_group_pool_at(group_, 0);
+  auto* peer = loom_serve_device_group_pool_at(group_, 1);
   iree_hal_buffer_t* raw_buffer = nullptr;
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device),
+      loom_serve_pool_storage(storage_owner),
       iree_hal_make_pool_reservation_request(4096, 256),
       iree_infinite_timeout(), &raw_buffer));
   std::unique_ptr<iree_hal_buffer_t, decltype(&iree_hal_buffer_release)> buffer(
       raw_buffer, iree_hal_buffer_release);
 
-  const auto memory = loom_serve_device_memory_statistics(device);
+  const auto memory = loom_serve_pool_statistics(storage_owner);
   EXPECT_GE(memory.storage.bytes_reserved, 4096u);
   EXPECT_GE(memory.storage.bytes_committed, memory.storage.bytes_reserved);
   EXPECT_EQ(memory.storage.bytes_abandoned, 0u);
   EXPECT_EQ(memory.workspace.bytes_committed, 0u);
   EXPECT_EQ(memory.retained.committed_bytes, 0u);
-  EXPECT_EQ(loom_serve_device_memory_statistics(peer).storage.bytes_committed,
-            0u);
+  EXPECT_EQ(loom_serve_pool_statistics(peer).storage.bytes_committed, 0u);
   const auto response = Write({.device_group = group_});
   EXPECT_NE(response.find(
                 "\"retained\":null,\"storage\":{\"reserved_bytes\":" +
@@ -323,11 +333,11 @@ TEST_F(ResourcesTest, FixedStorageIsVisibleWithoutWorkspaceOrElasticBacking) {
             std::string::npos);
 
   buffer.reset();
-  EXPECT_EQ(loom_serve_device_memory_statistics(device).storage.bytes_reserved,
+  EXPECT_EQ(loom_serve_pool_statistics(storage_owner).storage.bytes_reserved,
             0u);
 }
 
-TEST_F(ResourcesTest, TrimRequiresExplicitDeviceAndIntegerTarget) {
+TEST_F(ResourcesTest, TrimRequiresExplicitPoolAndIntegerTarget) {
   IREE_ASSERT_OK(CreateCpuGroup());
   const loom_serve_resources_t resources = {.device_group = group_};
   for (const auto* value : {
@@ -335,21 +345,21 @@ TEST_F(ResourcesTest, TrimRequiresExplicitDeviceAndIntegerTarget) {
            "[]",
            "null",
            "{}",
-           R"({"device":"first"})",
+           R"({"pool":"first"})",
            R"({"target_bytes":0})",
-           R"({"device":0,"target_bytes":0})",
-           R"({"device":"first","target_bytes":null})",
-           R"({"device":true,"target_bytes":0})",
-           R"({"device":"first","target_bytes":[]})",
-           R"({"device":"first","target_bytes":0,"unknown":1})",
-           R"({"device":"first","device":"second","target_bytes":0})",
-           R"({"device":"first","target_bytes":0,"target_bytes":1})",
-           R"({"device":0.0,"target_bytes":0})",
-           R"({"device":-1,"target_bytes":0})",
-           R"({"device":"first","target_bytes":-1})",
-           R"({"device":"first","target_bytes":0.5})",
-           R"({"device":"first","target_bytes":1e3})",
-           R"({"device":"first","target_bytes":0} trailing)",
+           R"({"pool":0,"target_bytes":0})",
+           R"({"pool":"first","target_bytes":null})",
+           R"({"pool":true,"target_bytes":0})",
+           R"({"pool":"first","target_bytes":[]})",
+           R"({"pool":"first","target_bytes":0,"unknown":1})",
+           R"({"pool":"first","pool":"second","target_bytes":0})",
+           R"({"pool":"first","target_bytes":0,"target_bytes":1})",
+           R"({"pool":0.0,"target_bytes":0})",
+           R"({"pool":-1,"target_bytes":0})",
+           R"({"pool":"first","target_bytes":-1})",
+           R"({"pool":"first","target_bytes":0.5})",
+           R"({"pool":"first","target_bytes":1e3})",
+           R"({"pool":"first","target_bytes":0} trailing)",
        }) {
     SCOPED_TRACE(value);
     iree_host_size_t index = 99;
@@ -363,7 +373,7 @@ TEST_F(ResourcesTest, TrimRequiresExplicitDeviceAndIntegerTarget) {
   }
 }
 
-TEST_F(ResourcesTest, TrimResolvesOnlyPublishedDeviceNames) {
+TEST_F(ResourcesTest, TrimResolvesOnlyPublishedPoolNames) {
   IREE_ASSERT_OK(CreateCpuGroup());
   const loom_serve_resources_t empty = {};
   const loom_serve_resources_t populated = {.device_group = group_};
@@ -373,7 +383,7 @@ TEST_F(ResourcesTest, TrimResolvesOnlyPublishedDeviceNames) {
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_NOT_FOUND,
         loom_serve_resources_parse_trim(
-            resources, IREE_SV(R"({"device":"absent","target_bytes":0})"),
+            resources, IREE_SV(R"({"pool":"absent","target_bytes":0})"),
             iree_allocator_system(), &index, &target));
     EXPECT_EQ(index, 99u);
     EXPECT_EQ(target, 99u);
@@ -382,7 +392,7 @@ TEST_F(ResourcesTest, TrimResolvesOnlyPublishedDeviceNames) {
       IREE_STATUS_OUT_OF_RANGE,
       loom_serve_resources_parse_trim(
           &populated,
-          IREE_SV(R"({"device":"first","target_bytes":18446744073709551616})"),
+          IREE_SV(R"({"pool":"first","target_bytes":18446744073709551616})"),
           iree_allocator_system(), &index, &target));
   EXPECT_EQ(index, 99u);
   EXPECT_EQ(target, 99u);
@@ -395,8 +405,7 @@ TEST_F(ResourcesTest, TrimReportsSelectedResourceWithoutModelOwnership) {
   uint64_t target = 0;
   IREE_ASSERT_OK(loom_serve_resources_parse_trim(
       &resources,
-      IREE_SV(
-          R"({"target_bytes":18446744073709551615,"device":"sec\u006fnd"})"),
+      IREE_SV(R"({"target_bytes":18446744073709551615,"pool":"sec\u006fnd"})"),
       iree_allocator_system(), &index, &target));
   EXPECT_EQ(index, 1u);
   EXPECT_EQ(target, UINT64_MAX);
@@ -406,7 +415,50 @@ TEST_F(ResourcesTest, TrimReportsSelectedResourceWithoutModelOwnership) {
   auto value = iree_string_builder_view(&output_);
   EXPECT_EQ(
       std::string(value.data, value.size),
-      R"({"target_bytes":18446744073709551615,"device":{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"storage":{"reserved_bytes":0,"committed_bytes":0,"abandoned_bytes":0},"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}})");
+      R"({"target_bytes":18446744073709551615,"pool":{"key":"second","devices":[1],"idle":{"workspace_ms":0,"parameter_ms":0},"memory":{"backing":"fixed","retained":null,"storage":{"reserved_bytes":0,"committed_bytes":0,"abandoned_bytes":0},"workspace":{"reserved_bytes":0,"committed_bytes":0,"free_bytes":0,"quarantined_bytes":0,"budget_limit":0,"reservation_count":0,"slab_count":0,"reserve_count":0,"release_count":0,"reuse_count":0,"reuse_miss_count":0,"fresh_count":0,"exhausted_count":0,"over_budget_count":0,"wait_count":0,"quarantine_eviction_count":0}}}})");
+}
+
+TEST_F(ResourcesTest, ProgramTrimRequiresOnlyAnExplicitDevice) {
+  IREE_ASSERT_OK(CreateCpuGroup());
+  const loom_serve_resources_t resources = {.device_group = group_};
+  for (const auto* value : {
+           "",
+           "[]",
+           "null",
+           "{}",
+           R"({"device":0})",
+           R"({"device":""})",
+           R"({"pool":"first"})",
+           R"({"device":"first","target_bytes":0})",
+           R"({"device":"first","device":"second"})",
+           R"({"device":"first"} trailing)",
+       }) {
+    SCOPED_TRACE(value);
+    iree_host_size_t index = 99;
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          loom_serve_resources_parse_trim_programs(
+                              &resources, iree_make_cstring_view(value),
+                              iree_allocator_system(), &index));
+    EXPECT_EQ(index, 99u);
+  }
+  iree_host_size_t index = 99;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                        loom_serve_resources_parse_trim_programs(
+                            &resources, IREE_SV(R"({"device":"absent"})"),
+                            iree_allocator_system(), &index));
+  EXPECT_EQ(index, 99u);
+  IREE_ASSERT_OK(loom_serve_resources_parse_trim_programs(
+      &resources, IREE_SV(R"({"device":"sec\u006fnd"})"),
+      iree_allocator_system(), &index));
+  EXPECT_EQ(index, 1u);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&output_, &stream);
+  IREE_ASSERT_OK(
+      loom_serve_resources_trim_programs(&resources, index, &stream));
+  const auto value = iree_string_builder_view(&output_);
+  EXPECT_EQ(
+      std::string(value.data, value.size),
+      R"({"device":{"key":"second","id":"task","name":"task","driver":"task","backend":"task","physical_devices":[{"ordinal":0,"name":"task","path":"task"}]}})");
 }
 
 }  // namespace

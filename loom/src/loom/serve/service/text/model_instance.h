@@ -37,7 +37,9 @@ struct loom_serve_text_model_t {
   loom_serve_compilation_report_t compilation;
   // Borrowed shared owner outliving every model resource and host I/O payload.
   loom_serve_device_t* device_owner;
-  // GPU device and allocation domain borrowed from device_owner.
+  // Borrowed storage and residency owner, independent of execution placement.
+  loom_serve_pool_t* pool;
+  // Native execution device borrowed from device_owner.
   iree_hal_device_t* device;
   // Semaphore namespace borrowed from device_owner.
   iree_hal_device_group_t* group;

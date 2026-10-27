@@ -115,7 +115,8 @@ class SourceSpeechServiceTest : public ::testing::TestWithParam<bool> {
           .asset_directory = iree_make_cstring_view(assets_.c_str()),
       };
       IREE_ASSERT_OK(loom_serve_speech_model_allocate(
-          loom_serve_device_group_at(group_, 0), &options, allocator_,
+          loom_serve_device_group_at(group_, 0),
+          loom_serve_device_group_pool_at(group_, 0), &options, allocator_,
           &model_));
       generator_ = loom_serve_speech_model_generator(model_);
       EXPECT_EQ(generator_.tokenizer != nullptr, weighted);
@@ -302,7 +303,7 @@ class SourceSpeechServiceTest : public ::testing::TestWithParam<bool> {
     iree_status_t status = iree_ok_status();
     for (size_t i = 0; i < 2 && iree_status_is_ok(status); ++i) {
       status = loom_serve_workspace_wait(
-          loom_serve_device_workspace(loom_serve_device_group_at(group_, 0)),
+          loom_serve_pool_workspace(loom_serve_device_group_pool_at(group_, 0)),
           frontier.semaphores[i], frontier.values[i]);
     }
     return status;
@@ -417,8 +418,8 @@ TEST_P(SourceSpeechServiceTest, SourceStagesPublishVariableAndEmptyBlocks) {
 }
 
 TEST_P(SourceSpeechServiceTest, RowCapacityDenialLeavesParametersCold) {
-  auto* device = loom_serve_device_group_at(group_, 0);
-  auto* pool = loom_serve_device_memory_pool(device);
+  auto* storage_owner = loom_serve_device_group_pool_at(group_, 0);
+  auto* pool = loom_serve_pool_memory(storage_owner);
   auto* residency = loom_serve_speech_model_residency(model_);
   loom_serve_memory_statistics_t peer_statistics = {};
   const auto release_peer = [](loom_serve_virtual_buffer_t* buffer) {
@@ -435,7 +436,7 @@ TEST_P(SourceSpeechServiceTest, RowCapacityDenialLeavesParametersCold) {
         2 * kSpeechSlabSize;
     loom_serve_virtual_buffer_t* buffer = nullptr;
     IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-        pool, loom_serve_device_state_geometry(device), peer_bytes, 16,
+        pool, loom_serve_pool_state_geometry(storage_owner), peer_bytes, 16,
         &peer_statistics, &buffer));
     peer.reset(buffer);
     IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(buffer, 0, peer_bytes));
@@ -477,6 +478,7 @@ TEST_P(SourceSpeechServiceTest,
 
   auto* device = loom_serve_device_group_at(group_, 0);
   const iree_string_view_t providers[] = {IREE_SVL("generate.loom")};
+  auto* storage_owner = loom_serve_device_group_pool_at(group_, 0);
   const loom_serve_speech_model_options_t options = {
       .sources =
           {
@@ -488,8 +490,8 @@ TEST_P(SourceSpeechServiceTest,
           },
   };
   loom_serve_speech_model_t* model = nullptr;
-  IREE_ASSERT_OK(
-      loom_serve_speech_model_allocate(device, &options, allocator_, &model));
+  IREE_ASSERT_OK(loom_serve_speech_model_allocate(
+      device, storage_owner, &options, allocator_, &model));
   const auto release_model = [](loom_serve_speech_model_t* value) {
     IREE_EXPECT_OK(loom_serve_speech_model_free(value));
   };
@@ -520,7 +522,7 @@ TEST_P(SourceSpeechServiceTest,
     ASSERT_EQ(admission, LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
     if (SpeechElasticBacking()) {
       EXPECT_EQ(
-          loom_serve_device_memory_statistics(device).retained.pending_bytes,
+          loom_serve_pool_statistics(storage_owner).retained.pending_bytes,
           3 * kSpeechSlabSize);
     }
     IREE_ASSERT_OK(Generate(warm, 6, &warm_samples, &warm_blocks));
@@ -556,7 +558,7 @@ TEST_P(SourceSpeechServiceTest,
     EXPECT_EQ(complete, !SpeechElasticBacking());
     if (SpeechElasticBacking()) {
       EXPECT_EQ(
-          loom_serve_device_memory_statistics(device).retained.releasing_bytes,
+          loom_serve_pool_statistics(storage_owner).retained.releasing_bytes,
           2 * kSpeechSlabSize);
     }
     IREE_ASSERT_OK(Generate(warm, SIZE_MAX, &warm_samples, &warm_blocks));
@@ -667,10 +669,10 @@ TEST_P(SourceSpeechServiceTest, CohortsPreserveIndependentResidentProgress) {
   size_t largest_cohort = 0;
   size_t paused_samples = 0;
   uint64_t full_live_bytes = 0;
-  auto* device = loom_serve_device_group_at(group_, 0);
-  const auto initial = loom_serve_device_memory_statistics(device).retained;
-  const auto workspace =
-      loom_serve_workspace_memory_usage(loom_serve_device_workspace(device));
+  auto* storage_owner = loom_serve_device_group_pool_at(group_, 0);
+  const auto initial = loom_serve_pool_statistics(storage_owner).retained;
+  const auto workspace = loom_serve_workspace_memory_usage(
+      loom_serve_pool_workspace(storage_owner));
   EXPECT_EQ(initial.committed_bytes,
             initial.cached_bytes + workspace.committed_bytes);
   bool live = true;
@@ -700,7 +702,7 @@ TEST_P(SourceSpeechServiceTest, CohortsPreserveIndependentResidentProgress) {
       ASSERT_NO_FATAL_FAILURE(run(selected, tick == 4 ? 1 : SIZE_MAX));
     }
     if (tick == 3) {
-      const auto memory = loom_serve_device_memory_statistics(device).retained;
+      const auto memory = loom_serve_pool_statistics(storage_owner).retained;
       full_live_bytes = memory.committed_bytes - memory.cached_bytes;
     }
     if (tick >= 4 && tick < 9) {
@@ -715,8 +717,8 @@ TEST_P(SourceSpeechServiceTest, CohortsPreserveIndependentResidentProgress) {
   EXPECT_EQ(largest_cohort, 4u);
   if (SpeechElasticBacking()) {
     IREE_ASSERT_OK(
-        loom_serve_memory_pool_await(loom_serve_device_memory_pool(device)));
-    const auto idle = loom_serve_device_memory_statistics(device).retained;
+        loom_serve_memory_pool_await(loom_serve_pool_memory(storage_owner)));
+    const auto idle = loom_serve_pool_statistics(storage_owner).retained;
     // Releasing an individual row cannot trim slabs shared by live neighbors.
     // The last release reclaims input/history; reusable conditioning survives.
     EXPECT_EQ(idle.reserved_bytes, initial.reserved_bytes);
@@ -1114,7 +1116,9 @@ class SourceVoiceServiceTest : public SourceSpeechServiceTest {
         .options = configuration.options,
     };
     auto status = loom_serve_speech_model_allocate(
-        loom_serve_device_group_at(group_, 0), &options, allocator_, &model_);
+        loom_serve_device_group_at(group_, 0),
+        loom_serve_device_group_pool_at(group_, 0), &options, allocator_,
+        &model_);
     IREE_ASSERT_OK(status);
     generator_ = loom_serve_speech_model_generator(model_);
     EXPECT_EQ(generator_.voice_capacity, 2u);

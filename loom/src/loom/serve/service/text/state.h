@@ -108,6 +108,8 @@ struct loom_serve_text_state_t {
   iree_allocator_t host_allocator;
   // Borrowed device, outliving this state and all virtual reservations.
   iree_hal_device_t* device;
+  // Borrowed storage owner, preserved across state growth and compaction.
+  loom_serve_pool_t* pool;
   // Borrowed model timelines shared by its state maintenance and model work.
   loom_serve_execution_t* execution;
   // Final queue ownership enclosing host payloads and virtual backing.
@@ -239,6 +241,7 @@ void loom_serve_text_state_initialize(const loom_serve_text_options_t* options,
 // retirement on failure. Later model work depends on this initialization.
 iree_status_t loom_serve_text_state_allocate(loom_serve_text_state_t* state,
                                              loom_serve_device_t* device,
+                                             loom_serve_pool_t* pool,
                                              loom_serve_execution_t* execution);
 
 // Source slot to its owned root, shared by allocation and cold maintenance.
@@ -250,7 +253,6 @@ iree_hal_buffer_t** loom_serve_text_state_allocation(
 // The caller has joined CPU/device consumers and prepared reservations.
 // Accepted copies and mappings remain owned through normal terminal cleanup.
 iree_status_t loom_serve_text_state_resize(loom_serve_text_state_t* state,
-                                           loom_serve_device_t* device,
                                            iree_host_size_t row_count,
                                            loom_serve_text_storage_t* storage);
 

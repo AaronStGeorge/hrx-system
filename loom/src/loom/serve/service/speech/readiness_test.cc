@@ -71,7 +71,9 @@ class SpeechReadinessTest : public ::testing::Test {
     batch_.reserve(capacity);
     IREE_ASSERT_OK(AcquireApplication(allocator_, &host_, &group_));
     auto* device = loom_serve_device_group_at(group_, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution_));
+    auto* storage_owner = loom_serve_device_group_pool_at(group_, 0);
+    IREE_ASSERT_OK(
+        loom_serve_device_create_execution(device, storage_owner, &execution_));
     IREE_ASSERT_OK(loom_serve_execution_reserve_workspace(
         execution_, frames * format.channels * sizeof(float) * capacity, 16));
     IREE_ASSERT_OK(iree_hal_semaphore_create(
@@ -775,7 +777,7 @@ TEST_F(SpeechReadinessTest, ClosedNativeHandleRetainsAcceptedEncodingStorage) {
   const auto frontier = loom_serve_execution_frontier(execution_);
   for (size_t i = 0; i < 2; ++i) {
     IREE_ASSERT_OK(loom_serve_workspace_wait(
-        loom_serve_device_workspace(loom_serve_device_group_at(group_, 0)),
+        loom_serve_pool_workspace(loom_serve_device_group_pool_at(group_, 0)),
         frontier.semaphores[i], frontier.values[i]));
   }
   for (int i = 0; i < SpeechWorkerCount(); ++i) {

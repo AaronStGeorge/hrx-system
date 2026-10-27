@@ -17,20 +17,21 @@ extern "C" {
 
 // One owned bank of immutable checkpoint roots. Plans and their fixed-buffer
 // views belong to the bank; execution residencies borrow its physical group.
-// All operations share the device's serialized parameter owner, except for
+// All operations share the pool's serialized parameter owner, except for
 // exclusive source preparation of individual plans on the shared cold worker.
 typedef struct loom_serve_parameter_bank_t loom_serve_parameter_bank_t;
 
 // Allocates roots from a checked command layout without loading checkpoint
 // payloads or compiling preparation policy. Parameter-free programs, including
 // NULL, return a NULL bank without allocating storage.
-// Device outlives the bank and every borrowing residency. Reflection is
+// Device and pool outlive the bank and every borrowing residency. Reflection is
 // borrowed only during this call. On failure a non-NULL output remains
 // caller-owned: fixed backing may already have been accepted and requires
 // normal retirement.
 iree_status_t loom_serve_parameter_bank_allocate(
-    loom_serve_device_t* device, const loom_cmd_program_t* program,
-    iree_allocator_t host_allocator, loom_serve_parameter_bank_t** out_bank);
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_cmd_program_t* program, iree_allocator_t host_allocator,
+    loom_serve_parameter_bank_t** out_bank);
 
 // Allocates only the selected domain of a checked program. The resulting bank
 // has one domain at index zero, independent of its original binding ordinal.
@@ -41,9 +42,10 @@ iree_status_t loom_serve_parameter_bank_allocate(
 // group deactivation before free, or checked whole-arena detach after a failed
 // mapping and retirement of every arena consumer.
 iree_status_t loom_serve_parameter_bank_allocate_domain(
-    loom_serve_device_t* device, const loom_cmd_program_t* program,
-    uint32_t domain, loom_serve_memory_arena_t* arena,
-    iree_allocator_t host_allocator, loom_serve_parameter_bank_t** out_bank);
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    const loom_cmd_program_t* program, uint32_t domain,
+    loom_serve_memory_arena_t* arena, iree_allocator_t host_allocator,
+    loom_serve_parameter_bank_t** out_bank);
 
 // Domain count and borrowed plans in allocation order.
 // A NULL bank has zero domains.

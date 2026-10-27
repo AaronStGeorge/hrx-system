@@ -64,13 +64,14 @@ void loom_serve_rows_initialize(iree_allocator_t host_allocator,
 // strides are positive alignment multiples; row_count * stride fits the device
 // address domain.
 // Elastic backing reserves addresses only; fixed backing allocates all rows.
-// The shared device and physical pool outlive state. On failure, state owns
-// partial construction and remains safe to retire and deinitialize.
+// The execution device and explicitly selected pool outlive state. On failure,
+// state owns partial construction and remains safe to retire and deinitialize.
 iree_status_t loom_serve_rows_allocate(
     loom_serve_rows_t* state, loom_serve_device_t* device,
-    loom_serve_execution_t* execution, iree_host_size_t row_count,
-    iree_device_size_t input_stride, iree_device_size_t stream_stride,
-    iree_device_size_t conditioning_length, iree_device_size_t alignment);
+    loom_serve_pool_t* pool, loom_serve_execution_t* execution,
+    iree_host_size_t row_count, iree_device_size_t input_stride,
+    iree_device_size_t stream_stride, iree_device_size_t conditioning_length,
+    iree_device_size_t alignment);
 
 // Borrows a tracked whole-arena root until state retirement. The index names
 // one of the state buffers above; row offsets remain source-owned facts.

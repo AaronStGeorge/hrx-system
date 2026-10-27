@@ -68,7 +68,7 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
     const char* source_path = std::getenv("LOOM_SERVE_TEST_MODEL_SOURCE");
     ASSERT_NE(source_path, nullptr);
     auto application_options = loom_serve_test_application_options_default();
-    if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
+    if (application_options.backing == LOOM_SERVE_POOL_BACKING_ELASTIC) {
       // Small fixture images fit, but a 64x64 float image does not.
       application_options.slab_size = 4096;
       application_options.memory_limit = 32 * 1024;
@@ -79,6 +79,8 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
     host_ = loom_serve_test_application_host(application);
     group_ = loom_serve_test_application_device_group(application);
     device_ = loom_serve_test_application_device_at(application, 0);
+    storage_owner_ = loom_serve_device_group_pool_at(
+        loom_serve_test_application_device_group(application), 0);
     const std::string source = source_path;
     directory_ = source.substr(0, source.find_last_of('/'));
     auto options = loom_serve_http_server_options_default();
@@ -107,7 +109,7 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
       const loom_serve_image_generator_t generator =
           loom_serve_image_model_generator(model_);
       EXPECT_EQ(generator.capacity_domain,
-                loom_serve_device_residency_cache(device_));
+                loom_serve_pool_residency_cache(storage_owner_));
       const loom_serve_image_service_options_t options = {
           .name = loom_serve_image_model_name(model_),
           .width = kWidth,
@@ -156,14 +158,14 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
         .command_quantum = GetParam(),
         .specialization_cache = cache,
     };
-    IREE_ASSERT_OK(
-        loom_serve_image_model_allocate(device_, &options, allocator, &model_));
+    IREE_ASSERT_OK(loom_serve_image_model_allocate(
+        device_, storage_owner_, &options, allocator, &model_));
   }
 
   void Wait(loom_serve_execution_frontier_t frontier) {
     for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
       IREE_ASSERT_OK(loom_serve_workspace_wait(
-          loom_serve_device_workspace(device_), frontier.semaphores[i],
+          loom_serve_pool_workspace(storage_owner_), frontier.semaphores[i],
           frontier.values[i]));
     }
   }
@@ -583,6 +585,8 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
   loom_serve_device_group_t* group_ = nullptr;
   // Borrowed device record within the application group.
   loom_serve_device_t* device_ = nullptr;
+  // Explicit storage owner selected independently from execution placement.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Source and tokenizer package borrowed by cold and HTTP registration.
   std::string directory_;
   // Real source-JIT model with two kernels and reflected private workspace.
@@ -1037,7 +1041,7 @@ TEST_P(SourceImageServiceTest, ImpossibleWorkingSetLeavesModelUsable) {
   const auto large = Read(Send(
       "POST", "/v1/images/generations",
       R"({"model":"fixture-image","prompt":"aba","seed":1,"size":"64x64"})"));
-  if (loom_serve_device_memory_pool(device_)) {
+  if (loom_serve_pool_memory(storage_owner_)) {
     ASSERT_EQ(large.find("HTTP/1.1 503"), 0u) << large;
     EXPECT_NE(large.find("invocation working set"), std::string::npos);
   } else {
@@ -1462,13 +1466,14 @@ TEST_P(SourceImageServiceTest, TokenizerFailureRetiresCompiledModel) {
       .text_tokens = 32,
       .command_quantum = GetParam(),
   };
-  const auto before = loom_serve_device_memory_statistics(device_);
+  const auto before = loom_serve_pool_statistics(storage_owner_);
   loom_serve_image_model_t* failed = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
-                        loom_serve_image_model_allocate(
-                            device_, &options, host_allocator_, &failed));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_NOT_FOUND,
+      loom_serve_image_model_allocate(device_, storage_owner_, &options,
+                                      host_allocator_, &failed));
   EXPECT_EQ(failed, nullptr);
-  const auto after = loom_serve_device_memory_statistics(device_);
+  const auto after = loom_serve_pool_statistics(storage_owner_);
   EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
   EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
 
@@ -1811,7 +1816,7 @@ TEST_P(ImageSpecializationTest, PeerAdmissionRetainsWholeInvocationWorkingSet) {
     IREE_ASSERT_OK(peer.try_admit(peer.self, &admission));
     // Each image's float output is 19,200 bytes. Both fit individually, but
     // together exceed the bounded domain's 32 KiB before input and scratch.
-    EXPECT_EQ(admission, loom_serve_device_memory_pool(device_)
+    EXPECT_EQ(admission, loom_serve_pool_memory(storage_owner_)
                              ? LOOM_SERVE_RESIDENCY_ADMISSION_CAPACITY
                              : LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED);
     if (admission == LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {

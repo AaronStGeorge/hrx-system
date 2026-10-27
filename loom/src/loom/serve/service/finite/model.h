@@ -56,9 +56,11 @@ typedef void (*loom_serve_finite_load_wake_fn_t)(void* user_data);
 
 // Allocates an unstarted operation without model storage reservation, source
 // I/O or work submission. Options' views are borrowed, not copied. A registered
-// but drained deployment can defer creating this operation altogether.
+// but drained deployment can defer creating this operation altogether. Device
+// and pool are separate borrowed bindings; the pool's complete access scope
+// includes the device's execution and transfer families.
 iree_status_t loom_serve_finite_load_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_finite_model_options_t* options,
     loom_serve_finite_load_wake_fn_t wake, void* user_data,
     iree_allocator_t host_allocator, loom_serve_finite_load_t** out_load);
@@ -132,7 +134,7 @@ iree_status_t loom_serve_finite_load_free(loom_serve_finite_load_t* load);
 // through load_report; this wrapper performs no process-global output. Live
 // owners use load_advance instead.
 iree_status_t loom_serve_finite_model_allocate(
-    loom_serve_device_t* device,
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
     const loom_serve_finite_model_options_t* options,
     iree_allocator_t host_allocator, loom_serve_finite_model_t** out_model);
 

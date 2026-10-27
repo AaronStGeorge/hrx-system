@@ -77,7 +77,7 @@ typedef struct loom_serve_text_heartbeat_snapshot_t {
   // Cumulative parameter read/preparation submissions, not device timings.
   loom_serve_weight_activity_t weight_activity;
   // Shared owner accounting, including other models and pooled command scratch.
-  loom_serve_device_memory_statistics_t device_memory;
+  loom_serve_pool_statistics_t pool_memory;
   // Active requests still consuming prompt input.
   iree_host_size_t prefill_rows;
   // Active requests generating output.

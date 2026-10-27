@@ -22,6 +22,7 @@
 namespace {
 
 const iree_string_view_t kDeviceNames[] = {IREE_SV("first"), IREE_SV("second")};
+const loom_serve_pool_binding_t kPools[] = {{IREE_SV("pool"), 3}};
 
 TEST(RegistryTimeTest, BorrowedServicesShareRegistrationTimestamp) {
   const loom_serve_service_t services[] = {{.name = IREE_SV("first")},
@@ -88,6 +89,8 @@ class RegistryTest : public ::testing::TestWithParam<bool> {
     const loom_serve_registration_factory_t factory = {
         .kinds = 1u << LOOM_SERVE_MODEL_KIND_EMBEDDING,
         .device_names = {2, kDeviceNames},
+        .pool_count = 1,
+        .pools = kPools,
         .create =
             [](void* self,
                const loom_serve_model_configuration_t* configuration,
@@ -162,6 +165,8 @@ TEST_P(RegistryTest, FileRegistrationOwnsAuthoredPathsAndSelectedBase) {
   EXPECT_EQ(String(model->service.name), "vectors");
   EXPECT_STREQ(model->service.endpoint, "/v1/embeddings");
   EXPECT_EQ(model->configuration.device_index, 1u);
+  EXPECT_EQ(model->configuration.pool_index, 0u);
+  EXPECT_EQ(String(model->configuration.pool), "pool");
   const auto& sources = model->configuration.sources;
   EXPECT_EQ(String(sources.base_directory), expected_base);
   EXPECT_EQ(String(sources.prepare), "boot.loombc");

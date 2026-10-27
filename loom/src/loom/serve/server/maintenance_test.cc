@@ -5,6 +5,7 @@
 
 #include "loom/serve/server/maintenance.h"
 
+#include "iree/hal/api.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -26,7 +27,7 @@ TEST(MaintenanceTest, DisabledPolicyNeedsNoGroupOrWakeTarget) {
 }
 
 TEST(MaintenanceTest, InvalidConfigurationAcceptsNoAsynchronousWork) {
-  const loom_serve_device_idle_policy_t policies[] = {
+  const loom_serve_pool_idle_policy_t policies[] = {
       {.workspace_timeout = -1},
       {.parameter_timeout = -1},
       {.workspace_timeout = 1},
@@ -42,25 +43,28 @@ TEST(MaintenanceTest, InvalidConfigurationAcceptsNoAsynchronousWork) {
   }
 }
 
-TEST(MaintenanceTest, OneTimerUsesTheShortestEnabledDevicePolicy) {
+TEST(MaintenanceTest, OneTimerUsesTheShortestEnabledPoolPolicy) {
   loom_serve_host_t* host = nullptr;
   IREE_ASSERT_OK(
       loom_serve_host_create(1, nullptr, iree_allocator_system(), &host));
-  const loom_serve_device_options_t options[] = {
-      {
-          .driver = loom_serve_host_task_driver(host),
-          .uri = IREE_SV("task"),
-          .name = IREE_SV("first"),
-      },
-      {
-          .driver = loom_serve_host_task_driver(host),
-          .uri = IREE_SV("task"),
-          .name = IREE_SV("second"),
-      }};
+  const loom_serve_device_options_t options = {
+      .driver = loom_serve_host_task_driver(host),
+      .uri = IREE_SV("task"),
+  };
   loom_serve_device_group_t* group = nullptr;
   IREE_ASSERT_OK(loom_serve_device_group_allocate(
-      host, IREE_ARRAYSIZE(options), options, iree_allocator_system(), &group));
-  loom_serve_device_idle_policy_t policies[2] = {};
+      host, 1, &options, iree_allocator_system(), &group));
+  const loom_serve_pool_options_t pool_options = {};
+  loom_serve_pool_t* first_pool = nullptr;
+  IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+      group, {IREE_SV("first"), 1}, &pool_options, &first_pool));
+  loom_serve_pool_t* second_pool = nullptr;
+  IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+      group, {IREE_SV("second"), 1}, &pool_options, &second_pool));
+  EXPECT_EQ(loom_serve_device_group_count(group), 1u);
+  EXPECT_EQ(loom_serve_device_group_pool_count(group), 2u);
+  EXPECT_EQ(loom_serve_device_group_pool_at(group, 1), second_pool);
+  loom_serve_pool_idle_policy_t policies[2] = {};
   loom_serve_maintenance_t maintenance;
   IREE_ASSERT_OK(
       loom_serve_maintenance_initialize(group, 2, policies, &maintenance));
@@ -76,7 +80,7 @@ TEST(MaintenanceTest, OneTimerUsesTheShortestEnabledDevicePolicy) {
   EXPECT_FALSE(loom_serve_maintenance_is_pending(&maintenance));
   loom_serve_maintenance_deinitialize(&maintenance);
 
-  policies[0].parameter_timeout = iree_make_duration_ms(100);
+  policies[1].parameter_timeout = iree_make_duration_ms(100);
   IREE_ASSERT_OK(
       loom_serve_maintenance_initialize(group, 2, policies, &maintenance));
   EXPECT_EQ(maintenance.timer.interval, iree_make_duration_ms(100));

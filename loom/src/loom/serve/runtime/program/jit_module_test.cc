@@ -61,7 +61,7 @@ TEST_P(JitModuleTest, SourceDefaultsAndOverridesShareVmAndGpuState) {
   EXPECT_EQ(compilation_.workers, GetParam());
   EXPECT_GT(compilation_.stage_duration_sum_ns, 0u);
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(input_), 0),
       iree_infinite_timeout(), &buffer_));
   iree_hal_transfer_operation_t upload = {
@@ -118,7 +118,7 @@ TEST_P(JitModuleTest, RebindingChangesWorkspaceWithoutRelinkingVm) {
   EXPECT_EQ(loom_serve_module_workspace_requirement(native_).allocation_size,
             transients_[0].required_byte_length);
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(input_), 0),
       iree_infinite_timeout(), &buffer_));
   const iree_hal_transfer_operation_t upload = {
@@ -230,7 +230,7 @@ TEST_P(JitModuleTest, DirectStagesReuseExactInputsAndOutliveCatalog) {
   EXPECT_EQ(compilation_.entries, 3u);
   IREE_ASSERT_OK(PrepareVm());
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(input_), 0),
       iree_infinite_timeout(), &buffer_));
   iree_hal_transfer_operation_t upload = {

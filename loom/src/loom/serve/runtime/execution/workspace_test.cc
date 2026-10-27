@@ -478,8 +478,11 @@ TEST_P(WorkspaceTest,
 
 TEST_P(WorkspaceTest, PersistentStateDoesNotKeepTransientWorkspaceActive) {
   const auto timeout = iree_make_duration_ms(3600000);
-  auto* storage =
-      loom_serve_device_storage_pool(loom_serve_device_group_at(group_, 0));
+  const loom_serve_pool_options_t pool_options = {};
+  loom_serve_pool_t* owner = nullptr;
+  IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+      group_, {IREE_SV("persistent"), 1}, &pool_options, &owner));
+  auto* storage = loom_serve_pool_storage(owner);
   const auto request =
       iree_hal_make_pool_reservation_request(sizeof(consumer_.output), 16);
   IREE_ASSERT_OK(loom_serve_execution_alloca_from_pool(

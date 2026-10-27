@@ -31,7 +31,7 @@ class PixelProjectorExecutionTest : public SourceTextServiceTest {
         .specialization_cache = {2, 1024 * 1024},
     };
     IREE_ASSERT_OK(loom_serve_finite_model_allocate(
-        device_, &options, host_allocator_, &projector_));
+        device_, storage_owner_, &options, host_allocator_, &projector_));
     loom_serve_finite_model_set_observer(
         projector_, {[](void* data) {
                        iree_notification_post(
@@ -56,7 +56,7 @@ class PixelProjectorExecutionTest : public SourceTextServiceTest {
   void Wait(loom_serve_execution_frontier_t ready) {
     for (size_t i = 0; i < IREE_ARRAYSIZE(ready.semaphores); ++i) {
       IREE_ASSERT_OK(
-          loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+          loom_serve_workspace_wait(loom_serve_pool_workspace(storage_owner_),
                                     ready.semaphores[i], ready.values[i]));
     }
   }

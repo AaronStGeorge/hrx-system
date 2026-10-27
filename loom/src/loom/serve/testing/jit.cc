@@ -58,18 +58,28 @@ iree_status_t AcquireJitTestApplication(iree_host_size_t worker_count,
       loom_serve_test_host_create(worker_count, host_allocator, &host));
   iree_hal_driver_t* driver = nullptr;
   iree_status_t status = loom_serve_test_driver_acquire(host, &driver);
+  loom_serve_device_group_t* group = nullptr;
   if (iree_status_is_ok(status)) {
     const loom_serve_device_options_t options = {
         .driver = driver,
         .uri = loom_serve_test_device()->device_uri,
     };
     status = loom_serve_device_group_allocate(host, 1, &options, host_allocator,
-                                              &selected->group);
+                                              &group);
+    if (iree_status_is_ok(status)) {
+      const loom_serve_pool_options_t pool_options = {};
+      loom_serve_pool_t* pool = nullptr;
+      status = loom_serve_device_group_create_pool(group, {IREE_SV("pool"), 1},
+                                                   &pool_options, &pool);
+    }
   }
   iree_hal_driver_release(driver);
   loom_serve_host_release(host);
   if (iree_status_is_ok(status)) {
-    *out_group = selected->group;
+    selected->group = group;
+    *out_group = group;
+  } else {
+    status = iree_status_join(status, loom_serve_device_group_free(group));
   }
   return status;
 }
@@ -159,14 +169,14 @@ void JitTest::SetUp() {
   IREE_ASSERT_OK(
       AcquireJitTestApplication(GetParam(), host_allocator_, &group_));
   device_owner_ = loom_serve_device_group_at(group_, 0);
+  storage_owner_ = loom_serve_device_group_pool_at(group_, 0);
   device_ = loom_serve_device_handle(device_owner_);
   dispatch_ = loom_serve_device_dispatch_queue(device_owner_);
-  workspace_baseline_ =
-      loom_serve_device_memory_statistics(device_owner_).workspace;
+  workspace_baseline_ = loom_serve_pool_statistics(storage_owner_).workspace;
   ASSERT_EQ(workspace_baseline_.reservation_count, 0u);
   ASSERT_EQ(workspace_baseline_.bytes_committed, 0u);
-  IREE_ASSERT_OK(
-      loom_serve_device_create_execution(device_owner_, &execution_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_owner_, storage_owner_, &execution_));
   directory_ = std::filesystem::path(FLAG_jit_sources).parent_path().string();
   const iree_string_view_t providers[] = {IREE_SV("config.loom"),
                                           IREE_SV("stage.loom")};
@@ -195,9 +205,10 @@ void JitTest::TearDown() {
   loom_serve_jit_release(jit_);
   loom_serve_execution_release(execution_);
   if (device_owner_) {
-    IREE_EXPECT_OK(loom_serve_test_device_trim_and_drain(device_owner_, 0));
-    const auto workspace =
-        loom_serve_device_memory_statistics(device_owner_).workspace;
+    // Each case starts cold without recycling its native device.
+    loom_serve_device_trim_programs(device_owner_);
+    IREE_EXPECT_OK(loom_serve_test_pool_trim_and_drain(storage_owner_, 0));
+    const auto workspace = loom_serve_pool_statistics(storage_owner_).workspace;
     EXPECT_EQ(workspace.reservation_count, 0u);
     EXPECT_EQ(workspace.bytes_committed, 0u);
   }

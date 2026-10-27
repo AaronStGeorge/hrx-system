@@ -57,13 +57,15 @@ class GroupEmbeddingServiceTest : public SourceEmbeddingServiceTest {
 
 TEST_F(GroupEmbeddingServiceTest, EmbeddingsCompleteBeforeOtherDeviceRetires) {
   auto* first = loom_serve_device_group_at(group_, 0);
+  auto* first_pool = loom_serve_device_group_pool_at(group_, 0);
   EXPECT_EQ(loom_serve_device_group_count(group_), 2u);
   EXPECT_EQ(loom_serve_device_group(first), loom_serve_device_group(device_));
   EXPECT_EQ(iree_hal_device_group_device_count(loom_serve_device_group(first)),
             2u);
-  EXPECT_NE(loom_serve_device_residency_cache(first),
-            loom_serve_device_residency_cache(device_));
-  IREE_ASSERT_OK(loom_serve_device_create_execution(first, &execution_));
+  EXPECT_NE(loom_serve_pool_residency_cache(first_pool),
+            loom_serve_pool_residency_cache(storage_owner_));
+  IREE_ASSERT_OK(
+      loom_serve_device_create_execution(first, first_pool, &execution_));
   IREE_ASSERT_OK(loom_serve_execution_reserve_workspace(execution_, 64, 16));
   const iree_hal_pool_reservation_request_t request = {
       .allocation_size = 64,
@@ -117,13 +119,12 @@ TEST_F(GroupEmbeddingServiceTest, EmbeddingsCompleteBeforeOtherDeviceRetires) {
   uint64_t observed = 0;
   IREE_ASSERT_OK(iree_hal_semaphore_query(frontier.semaphores[1], &observed));
   EXPECT_LT(observed, frontier.values[1]);
-  IREE_ASSERT_OK(loom_serve_device_trim(first, 0));
-  EXPECT_EQ(
-      loom_serve_device_memory_statistics(first).workspace.reservation_count,
-      1u);
-  const auto held = loom_serve_device_memory_statistics(first);
+  IREE_ASSERT_OK(loom_serve_pool_trim(first_pool, 0));
+  EXPECT_EQ(loom_serve_pool_statistics(first_pool).workspace.reservation_count,
+            1u);
+  const auto held = loom_serve_pool_statistics(first_pool);
   EXPECT_GT(held.workspace.bytes_committed, 0u);
-  if (!loom_serve_device_memory_pool(first)) {
+  if (!loom_serve_pool_memory(first_pool)) {
     // Fixed workspace is backed by the ordinary storage source, not a second
     // physical commitment to add to it.
     EXPECT_GE(held.storage.bytes_committed, held.workspace.bytes_committed);
@@ -134,11 +135,10 @@ TEST_F(GroupEmbeddingServiceTest, EmbeddingsCompleteBeforeOtherDeviceRetires) {
   for (uint32_t word : output_) {
     EXPECT_EQ(word, pattern);
   }
-  IREE_ASSERT_OK(loom_serve_test_device_trim_and_drain(first, 0));
-  EXPECT_EQ(
-      loom_serve_device_memory_statistics(first).workspace.bytes_committed, 0u);
-  EXPECT_EQ(loom_serve_device_memory_statistics(first).storage.bytes_committed,
+  IREE_ASSERT_OK(loom_serve_test_pool_trim_and_drain(first_pool, 0));
+  EXPECT_EQ(loom_serve_pool_statistics(first_pool).workspace.bytes_committed,
             0u);
+  EXPECT_EQ(loom_serve_pool_statistics(first_pool).storage.bytes_committed, 0u);
 }
 
 }  // namespace loom_serve::testing::embedding

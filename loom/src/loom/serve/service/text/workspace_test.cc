@@ -65,7 +65,7 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
                 loom_serve_text_variant_free);
   IREE_ASSERT_OK(completion.status);
 
-  auto* pool = loom_serve_device_memory_pool(device_);
+  auto* pool = loom_serve_pool_memory(storage_owner_);
   loom_serve_memory_statistics_t peer_statistics = {};
   const auto release_peer = [](loom_serve_virtual_buffer_t* buffer) {
     IREE_EXPECT_OK(loom_serve_virtual_buffer_free(buffer));
@@ -81,7 +81,7 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
                                 loom_serve_memory_pool_live_bytes(pool) - 4096;
     loom_serve_virtual_buffer_t* buffer = nullptr;
     IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-        pool, loom_serve_device_state_geometry(device_), peer_bytes, 16,
+        pool, loom_serve_pool_state_geometry(storage_owner_), peer_bytes, 16,
         &peer_statistics, &buffer));
     peer.reset(buffer);
     IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(buffer, 0, peer_bytes));
@@ -100,19 +100,20 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
   EXPECT_EQ(loom_serve_text_row_token(row), oracle.Predict());
 
   loom_serve_execution_t* peer_execution = nullptr;
-  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &peer_execution));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, storage_owner_,
+                                                    &peer_execution));
   std::unique_ptr<loom_serve_execution_t,
                   decltype(&loom_serve_execution_release)>
       peer_timeline(peer_execution, loom_serve_execution_release);
   loom_serve_residency_t* peer_residency = nullptr;
   IREE_ASSERT_OK(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(device_), peer_execution, 0, nullptr,
-      host_allocator_, &peer_residency));
+      loom_serve_pool_residency_cache(storage_owner_), peer_execution, 0,
+      nullptr, host_allocator_, &peer_residency));
   std::unique_ptr<loom_serve_residency_t, decltype(&loom_serve_residency_free)>
       peer_claim(peer_residency, loom_serve_residency_free);
   const auto peer_bytes = [&] {
-    const auto workspace =
-        loom_serve_workspace_memory_usage(loom_serve_device_workspace(device_));
+    const auto workspace = loom_serve_workspace_memory_usage(
+        loom_serve_pool_workspace(storage_owner_));
     // Logical claims reuse workspace backing; only retained model state and
     // parameters consume capacity independently of those claims.
     const uint64_t available = loom_serve_memory_pool_limit(pool) -
@@ -120,7 +121,7 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
                                workspace.committed_bytes +
                                workspace.pending_bytes;
     const uint64_t slab_size =
-        loom_serve_device_weight_geometry(device_).slab_size;
+        loom_serve_pool_weight_geometry(storage_owner_).slab_size;
     // A partial physical slab cannot back the peer. Leave room for the
     // original command inside the complete slabs available to both claims.
     return (available / slab_size) * slab_size - 4096;
@@ -158,8 +159,8 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
   options.sources.count = IREE_ARRAYSIZE(providers);
   options.sources.values = providers;
   loom_serve_text_model_t* cold_model = nullptr;
-  IREE_ASSERT_OK(loom_serve_text_model_allocate(device_, &options,
-                                                host_allocator_, &cold_model));
+  IREE_ASSERT_OK(loom_serve_text_model_allocate(
+      device_, storage_owner_, &options, host_allocator_, &cold_model));
   const auto release_model = [](loom_serve_text_model_t* model) {
     IREE_EXPECT_OK(loom_serve_text_model_free(model));
   };

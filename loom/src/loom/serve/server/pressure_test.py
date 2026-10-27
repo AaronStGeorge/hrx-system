@@ -241,10 +241,8 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
         before = control(address, "GET", "/v1/status", 200)
         second_status, second = completion(address, "beta", messages, "peer")
         after = control(address, "GET", "/v1/status", 200)
-        memory_before = before["server"]["resources"]["devices"][0]["memory"][
-            "retained"
-        ]
-        memory_after = after["server"]["resources"]["devices"][0]["memory"]["retained"]
+        memory_before = before["server"]["resources"]["pools"][0]["memory"]["retained"]
+        memory_after = after["server"]["resources"]["pools"][0]["memory"]["retained"]
         result = {
             "workers": workers,
             "memory_bytes": memory_bytes,
@@ -421,7 +419,7 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
         )
         while True:
             final = control(address, "GET", "/v1/status", 200)
-            memory = final["server"]["resources"]["devices"][0]["memory"]["retained"]
+            memory = final["server"]["resources"]["pools"][0]["memory"]["retained"]
             if (
                 not final["data"]
                 and memory["committed_bytes"] == memory["cached_bytes"]
@@ -437,14 +435,14 @@ def check(server, source, directory, device, workers, memory_bytes, retention):
         control(
             address,
             "POST",
-            "/v1/devices/trim",
+            "/v1/pools/trim",
             200,
-            body=json.dumps({"device": "device", "target_bytes": 0}),
+            body=json.dumps({"pool": "pool", "target_bytes": 0}),
             headers={"Content-Type": "application/json"},
         )
         while memory["committed_bytes"]:
             final = control(address, "GET", "/v1/status", 200)
-            memory = final["server"]["resources"]["devices"][0]["memory"]["retained"]
+            memory = final["server"]["resources"]["pools"][0]["memory"]["retained"]
         assert memory["reserved_bytes"] == workspace_virtual_bytes, memory
         assert memory["committed_bytes"] == 0, memory
         assert memory["peak_bytes"] <= memory_bytes, memory

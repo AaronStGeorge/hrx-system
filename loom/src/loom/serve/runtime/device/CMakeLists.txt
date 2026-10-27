@@ -18,6 +18,7 @@ loom_cc_library(
   SRCS
     "device.c"
   DEPS
+    ::pool
     iree::async
     iree::async::util::proactor_pool
     iree::base
@@ -31,6 +32,24 @@ loom_cc_library(
     loom::serve::runtime::parameter::residency
     loom::serve::runtime::program::jit
     loom::serve::runtime::program::tokenizer_cache
+    loom::serve::runtime::storage::memory
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    pool
+  HDRS
+    "pool.h"
+  SRCS
+    "pool.c"
+  DEPS
+    iree::base
+    iree::hal
+    loom::serve::runtime::execution::workspace
+    loom::serve::runtime::parameter::residency
     loom::serve::runtime::storage::memory
     loom::serve::runtime::storage::virtual_pool
   PUBLIC

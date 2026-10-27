@@ -66,7 +66,7 @@ class MediaProjectorTest : public ::testing::Test {
     iree_notification_initialize(&notification_);
     iree_string_builder_initialize(host_allocator_, &chat_.images.metadata);
     auto options = loom_serve_test_application_options_default();
-    options.backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC;
+    options.backing = LOOM_SERVE_POOL_BACKING_ELASTIC;
     options.slab_size = 4096;
     options.memory_limit = 16 * 1024;
     loom_serve_test_application_t* application = nullptr;
@@ -74,6 +74,8 @@ class MediaProjectorTest : public ::testing::Test {
         &options, host_allocator_, &application));
     auto* host = loom_serve_test_application_host(application);
     device_ = loom_serve_test_application_device_at(application, 0);
+    storage_owner_ = loom_serve_device_group_pool_at(
+        loom_serve_test_application_device_group(application), 0);
     const char* source = std::getenv("LOOM_SERVE_TEST_PROJECTOR_SOURCE");
     ASSERT_NE(source, nullptr);
     IREE_ASSERT_OK(document_.Load(source));
@@ -82,8 +84,8 @@ class MediaProjectorTest : public ::testing::Test {
         .asset_directory = IREE_SV("."),
         .options = IREE_SV("{}"),
     };
-    IREE_ASSERT_OK(loom_serve_finite_model_allocate(device_, &model_options,
-                                                    host_allocator_, &model_));
+    IREE_ASSERT_OK(loom_serve_finite_model_allocate(
+        device_, storage_owner_, &model_options, host_allocator_, &model_));
     iree_async_proactor_t* proactor = nullptr;
     IREE_ASSERT_OK(iree_async_proactor_pool_get(
         loom_serve_host_proactor_pool(host), 0, &proactor));
@@ -94,7 +96,7 @@ class MediaProjectorTest : public ::testing::Test {
         },
         &notification_,
     };
-    loom_serve_workspace_set_observer(loom_serve_device_workspace(device_),
+    loom_serve_workspace_set_observer(loom_serve_pool_workspace(storage_owner_),
                                       observer);
     IREE_ASSERT_OK(loom_serve_text_media_projector_allocate(
         model_, requests_.size(), loom_serve_host_executor(host), proactor,
@@ -134,7 +136,8 @@ class MediaProjectorTest : public ::testing::Test {
       loom_serve_text_media_projector_free(projector_);
     }
     IREE_EXPECT_OK(loom_serve_finite_model_free(model_));
-    loom_serve_workspace_set_observer(loom_serve_device_workspace(device_), {});
+    loom_serve_workspace_set_observer(loom_serve_pool_workspace(storage_owner_),
+                                      {});
     iree_notification_deinitialize(&notification_);
     iree_string_builder_deinitialize(&chat_.images.metadata);
   }
@@ -144,8 +147,8 @@ class MediaProjectorTest : public ::testing::Test {
     while (!ready()) {
       const auto ticket = iree_notification_prepare_wait(&notification_);
       bool progress = false;
-      auto status =
-          loom_serve_workspace_advance(loom_serve_device_workspace(device_));
+      auto status = loom_serve_workspace_advance(
+          loom_serve_pool_workspace(storage_owner_));
       status = iree_status_join(status, loom_serve_text_media_projector_advance(
                                             projector_, 0, &progress));
       if (ready() || progress || !iree_status_is_ok(status)) {
@@ -174,6 +177,8 @@ class MediaProjectorTest : public ::testing::Test {
   loom_serve::testing::ModelDocument document_;
   // Borrowed device whose workspace is driven by this serialized owner.
   loom_serve_device_t* device_ = nullptr;
+  // Explicit storage owner selected independently from execution placement.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Actual source-defined pixel producer, not a mocked projection service.
   loom_serve_finite_model_t* model_ = nullptr;
   // Serialized preparation/cohort/publication owner under test.
@@ -229,7 +234,7 @@ TEST_F(MediaProjectorTest, PublishesAccordingToPhaseFootprintAndKeepsOrdinals) {
                                                    &snapshot, &ready));
   for (size_t i = 0; i < IREE_ARRAYSIZE(ready.semaphores); ++i) {
     IREE_EXPECT_OK(
-        loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+        loom_serve_workspace_wait(loom_serve_pool_workspace(storage_owner_),
                                   ready.semaphores[i], ready.values[i]));
   }
   const std::array<float, 4> expected = {513, 0, 0, 3};

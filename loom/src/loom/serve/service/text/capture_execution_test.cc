@@ -33,7 +33,7 @@ class SourceEncodingExecutionTest : public SourceTextServiceTest {
   void Wait(loom_serve_execution_frontier_t ready) {
     for (size_t i = 0; i < IREE_ARRAYSIZE(ready.semaphores); ++i) {
       IREE_ASSERT_OK(
-          loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+          loom_serve_workspace_wait(loom_serve_pool_workspace(storage_owner_),
                                     ready.semaphores[i], ready.values[i]));
     }
   }

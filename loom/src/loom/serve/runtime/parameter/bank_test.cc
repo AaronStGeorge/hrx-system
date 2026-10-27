@@ -51,14 +51,14 @@ TEST_P(ParameterBankTest, RecordingsRetainPreparedRootsAfterBankRetirement) {
   WriteCheckpoint(adapter_path_.path(), 100);
   IREE_ASSERT_OK(Compile(0, "domains"));
   IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
-      device_owner_, loom_serve_jit_stage_program(compiled_[0]),
+      device_owner_, storage_owner_, loom_serve_jit_stage_program(compiled_[0]),
       host_allocator_, &bank_));
   ASSERT_EQ(loom_serve_parameter_bank_count(bank_), 2u);
   IREE_ASSERT_OK(Prepare(0, path_.path().c_str()));
   IREE_ASSERT_OK(Prepare(1, adapter_path_.path().c_str()));
   auto* group = loom_serve_parameter_bank_group(bank_);
   IREE_ASSERT_OK(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(device_owner_), execution_, 1, &group,
+      loom_serve_pool_residency_cache(storage_owner_), execution_, 1, &group,
       host_allocator_, &bank_residency_));
   IREE_ASSERT_OK(loom_serve_jit_stage_record(
       compiled_[0], iree_hal_queue_family(dispatch_),
@@ -84,7 +84,7 @@ TEST_P(ParameterBankTest, RecordingsRetainPreparedRootsAfterBankRetirement) {
 TEST_P(ParameterBankTest, FailedDomainPreparationRetiresAllOwnedRoots) {
   IREE_ASSERT_OK(Compile(0, "domains"));
   IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
-      device_owner_, loom_serve_jit_stage_program(compiled_[0]),
+      device_owner_, storage_owner_, loom_serve_jit_stage_program(compiled_[0]),
       host_allocator_, &bank_));
   IREE_ASSERT_OK(Prepare(0, path_.path().c_str()));
   IREE_ASSERT_STATUS_IS(IREE_STATUS_NOT_FOUND,
@@ -104,8 +104,8 @@ TEST_P(ParameterBankTest, ChecksRetainedLayoutAfterCompilerProductRetires) {
   WriteCheckpoint(adapter_path_.path(), 100);
   IREE_ASSERT_OK(Compile(0, "domains"));
   const auto* original = loom_serve_jit_stage_program(compiled_[0]);
-  IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(device_owner_, original,
-                                                    host_allocator_, &bank_));
+  IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
+      device_owner_, storage_owner_, original, host_allocator_, &bank_));
   EXPECT_EQ(loom_cmd_program_parameter_at(original, 0).fixed_buffer_index, 0u);
   IREE_ASSERT_OK(Prepare(0, path_.path().c_str()));
   IREE_ASSERT_OK(Prepare(1, adapter_path_.path().c_str()));
@@ -118,7 +118,7 @@ TEST_P(ParameterBankTest, ChecksRetainedLayoutAfterCompilerProductRetires) {
   IREE_ASSERT_OK(loom_serve_parameter_bank_check_layout(bank_, candidate));
   auto* group = loom_serve_parameter_bank_group(bank_);
   IREE_ASSERT_OK(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(device_owner_), execution_, 1, &group,
+      loom_serve_pool_residency_cache(storage_owner_), execution_, 1, &group,
       host_allocator_, &bank_residency_));
   IREE_ASSERT_OK(loom_serve_jit_stage_record(
       compiled_[1], iree_hal_queue_family(dispatch_),
@@ -132,7 +132,7 @@ TEST_P(ParameterBankTest, ChecksRetainedLayoutAfterCompilerProductRetires) {
 TEST_P(ParameterBankTest, RejectsDifferentParameterKeysAndExtents) {
   IREE_ASSERT_OK(Compile(0, "target"));
   IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
-      device_owner_, loom_serve_jit_stage_program(compiled_[0]),
+      device_owner_, storage_owner_, loom_serve_jit_stage_program(compiled_[0]),
       host_allocator_, &bank_));
   IREE_ASSERT_OK(Compile(1, "partial"));
   IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
@@ -148,13 +148,13 @@ TEST_P(ParameterBankTest, SelectedDomainReusesBaseAtChangedBindingOrdinal) {
   WriteCheckpoint(adapter_path_.path(), 100);
   IREE_ASSERT_OK(Compile(0, "raw"));
   IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
-      device_owner_, loom_serve_jit_stage_program(compiled_[0]),
+      device_owner_, storage_owner_, loom_serve_jit_stage_program(compiled_[0]),
       host_allocator_, &bank_));
   IREE_ASSERT_OK(Prepare(0, path_.path().c_str()));
   auto* base = loom_serve_parameter_bank_buffers(bank_)[0];
   auto* base_group = loom_serve_parameter_bank_group(bank_);
   IREE_ASSERT_OK(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(device_owner_), execution_, 1,
+      loom_serve_pool_residency_cache(storage_owner_), execution_, 1,
       &base_group, host_allocator_, &bank_residency_));
   IREE_ASSERT_OK(loom_serve_jit_stage_record(
       compiled_[0], iree_hal_queue_family(dispatch_),
@@ -167,17 +167,17 @@ TEST_P(ParameterBankTest, SelectedDomainReusesBaseAtChangedBindingOrdinal) {
   bank_residency_ = nullptr;
   loom_serve_jit_stage_free(compiled_[0]);
   compiled_[0] = nullptr;
-  const auto before = loom_serve_device_memory_statistics(device_owner_);
+  const auto before = loom_serve_pool_statistics(storage_owner_);
 
   IREE_ASSERT_OK(Compile(1, "domains"));
   IREE_ASSERT_OK(loom_serve_parameter_bank_allocate_domain(
-      device_owner_, loom_serve_jit_stage_program(compiled_[1]), 1, nullptr,
-      host_allocator_, &adapter_bank_));
+      device_owner_, storage_owner_, loom_serve_jit_stage_program(compiled_[1]),
+      1, nullptr, host_allocator_, &adapter_bank_));
   ASSERT_EQ(loom_serve_parameter_bank_count(adapter_bank_), 1u);
-  const auto after = loom_serve_device_memory_statistics(device_owner_);
+  const auto after = loom_serve_pool_statistics(storage_owner_);
   EXPECT_EQ(after.retained.reserved_bytes - before.retained.reserved_bytes,
             GetParam()
-                ? loom_serve_device_weight_geometry(device_owner_).minimum_size
+                ? loom_serve_pool_weight_geometry(storage_owner_).minimum_size
                 : 0u);
   IREE_ASSERT_OK(PrepareBank(adapter_bank_, 0, adapter_path_.path().c_str()));
   loom_serve_jit_stage_free(compiled_[1]);
@@ -196,7 +196,7 @@ TEST_P(ParameterBankTest, SelectedDomainReusesBaseAtChangedBindingOrdinal) {
   loom_serve_residency_group_t* groups[] = {
       base_group, loom_serve_parameter_bank_group(adapter_bank_)};
   IREE_ASSERT_OK(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(device_owner_), execution_,
+      loom_serve_pool_residency_cache(storage_owner_), execution_,
       IREE_ARRAYSIZE(groups), groups, host_allocator_, &bank_residency_));
   IREE_ASSERT_OK(loom_serve_residency_acquire_wait(bank_residency_));
   ASSERT_NO_FATAL_FAILURE(Run(2, 290));
@@ -215,7 +215,7 @@ TEST_P(ParameterBankTest, SelectedDomainReusesBaseAtChangedBindingOrdinal) {
 TEST_P(ParameterBankTest, RejectsChangedDomainCount) {
   IREE_ASSERT_OK(Compile(0, "domains"));
   IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
-      device_owner_, loom_serve_jit_stage_program(compiled_[0]),
+      device_owner_, storage_owner_, loom_serve_jit_stage_program(compiled_[0]),
       host_allocator_, &bank_));
   IREE_ASSERT_OK(Compile(1, "raw"));
   IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
@@ -230,7 +230,7 @@ TEST_P(ParameterBankTest, RejectsChangedDomainCount) {
 TEST_P(ParameterBankTest, ChecksMoreDomainsThanInlineCursorStorage) {
   IREE_ASSERT_OK(Compile(0, "many_domains"));
   IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
-      device_owner_, loom_serve_jit_stage_program(compiled_[0]),
+      device_owner_, storage_owner_, loom_serve_jit_stage_program(compiled_[0]),
       host_allocator_, &bank_));
   ASSERT_EQ(loom_serve_parameter_bank_count(bank_), 9u);
   loom_serve_jit_stage_free(compiled_[0]);
@@ -241,16 +241,16 @@ TEST_P(ParameterBankTest, ChecksMoreDomainsThanInlineCursorStorage) {
 }
 
 TEST_P(ParameterBankTest, ParameterFreeBankNeedsNoNativeBacking) {
-  const auto before = loom_serve_device_memory_statistics(device_owner_);
-  IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(device_owner_, nullptr,
-                                                    host_allocator_, &bank_));
+  const auto before = loom_serve_pool_statistics(storage_owner_);
+  IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
+      device_owner_, storage_owner_, nullptr, host_allocator_, &bank_));
   EXPECT_EQ(bank_, nullptr);
   EXPECT_EQ(loom_serve_parameter_bank_count(bank_), 0u);
   EXPECT_EQ(loom_serve_parameter_bank_buffers(bank_), nullptr);
   EXPECT_EQ(loom_serve_parameter_bank_group(bank_), nullptr);
   IREE_EXPECT_OK(loom_serve_parameter_bank_check_layout(bank_, nullptr));
   EXPECT_TRUE(loom_serve_parameter_bank_is_retired(bank_));
-  const auto after = loom_serve_device_memory_statistics(device_owner_);
+  const auto after = loom_serve_pool_statistics(storage_owner_);
   EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
   EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
 }

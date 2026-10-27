@@ -41,8 +41,8 @@ class SourceRecognitionStreamTest : public ::testing::Test {
     iree_notification_initialize(&notification_);
     auto options = loom_serve_test_application_options_default();
     options.worker_count = FLAG_test_workers;
-    options.backing = FLAG_test_elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
-                                        : LOOM_SERVE_DEVICE_BACKING_FIXED;
+    options.backing = FLAG_test_elastic ? LOOM_SERVE_POOL_BACKING_ELASTIC
+                                        : LOOM_SERVE_POOL_BACKING_FIXED;
     // Cache native-page state extents so explicit trim owns physical disposal.
     options.slab_size = FLAG_test_elastic ? 4096 : 0;
     loom_serve_test_application_t* application = nullptr;
@@ -52,6 +52,8 @@ class SourceRecognitionStreamTest : public ::testing::Test {
     resources_.device_group =
         loom_serve_test_application_device_group(application);
     device_ = loom_serve_test_application_device_at(application, 0);
+    storage_owner_ = loom_serve_device_group_pool_at(
+        loom_serve_test_application_device_group(application), 0);
     const auto directory =
         std::filesystem::path(FLAG_model_source).parent_path().string();
     const iree_string_view_t sources[] = {IREE_SVL("generate.loom")};
@@ -66,7 +68,7 @@ class SourceRecognitionStreamTest : public ::testing::Test {
             },
     };
     IREE_ASSERT_OK(loom_serve_recognition_model_allocate(
-        device_, &model_options, allocator_, &model_));
+        device_, storage_owner_, &model_options, allocator_, &model_));
     actual_ = loom_serve_recognition_model_generator(model_);
     auto observed = actual_;
     observed.self = this;
@@ -339,6 +341,8 @@ class SourceRecognitionStreamTest : public ::testing::Test {
   loom_serve_host_t* host_ = nullptr;
   // Borrowed physical device, also used for independent failure readiness.
   loom_serve_device_t* device_ = nullptr;
+  // Explicit storage owner selected independently from execution placement.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Borrowed application resources progressed by this test's router role.
   loom_serve_resources_t resources_ = {};
   // Real source owner, destroyed only after service callbacks retire.
@@ -851,14 +855,14 @@ TEST_F(SourceRecognitionStreamTest, CloseReturnsRowBeforeNativeCapacity) {
       service_, false, false, &progress));
   EXPECT_TRUE(progress);
   ASSERT_NO_FATAL_FAILURE(AdvanceUntil([&] { return released_[0] == 1; }));
-  auto* pool = loom_serve_device_memory_pool(device_);
+  auto* pool = loom_serve_pool_memory(storage_owner_);
   IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   loom_serve::testing::ScopedNativeHold gate(device_,
                                              IREE_ALLOCATOR_COMMAND_FREE);
   loom_serve_memory_pool_trim(pool, 0);
   gate.WaitEntered();
   EXPECT_GT(
-      loom_serve_memory_pool_statistics(loom_serve_device_memory_pool(device_))
+      loom_serve_memory_pool_statistics(loom_serve_pool_memory(storage_owner_))
           .releasing_bytes,
       0u);
 

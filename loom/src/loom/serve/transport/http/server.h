@@ -125,6 +125,13 @@ void loom_serve_http_server_request_stop(loom_serve_http_server_t* server);
 // True after request_stop, independent of individual listener lifetimes.
 bool loom_serve_http_server_is_stopping(loom_serve_http_server_t* server);
 
+// True while a finished response still owns transport work. The application
+// joins this retirement before destroying the server, even after every model
+// releases its requests. Claimed requests and idle incoming connections are
+// excluded. Send completion and carrier retirement wake the installed observer.
+bool loom_serve_http_server_has_pending_responses(
+    loom_serve_http_server_t* server);
+
 // Borrowed capacity timeline, live until server destruction. Its value advances
 // when the owner reclaims a connection or closes admission. Callers can park an
 // asynchronous wait using the value returned by try_accept without a lost wake.
