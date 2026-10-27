@@ -19,13 +19,14 @@ Usage: loom-serve-sandbox [sandbox options] -- [loom-serve arguments]
 Run the Linux SDK server without host networking or implicit host file access.
 The HTTP API, dashboard, and WebSocket feeds use SOCKET_DIR/serve.sock.
 
-  --socket-dir=DIR       Existing private directory for the socket (required).
+  --socket-dir=DIR       Private socket directory; created if absent (required).
   --ro-bind=PATH         Mount an absolute file/directory path read-only at the
                         same path; repeatable. Files are never copied.
   --rw-bind=PATH         Mount an existing output file/directory read-write at
                         the same absolute path; repeatable and opt-in.
-  --gpu=RENDER_NODE      Expose one AMD /dev/dri/renderD* node and /dev/kfd.
-  --npu=ACCEL_NODE       Expose one /dev/accel/accel* node. Repeat for more devices.
+  --gpu=all|RENDER_NODE  Expose all AMD GPUs or one /dev/dri/renderD* node.
+  --npu=all|ACCEL_NODE   Expose all AMD NPUs or one /dev/accel/accel* node.
+                        Repeat for subsets; omission exposes none of that class.
   --binary=PATH          Installed SDK binary; default is beside this launcher.
   --bwrap=PATH           Trusted bubblewrap binary; default /usr/bin/bwrap.
   --help                Show this help without initializing devices.
@@ -33,20 +34,22 @@ The HTTP API, dashboard, and WebSocket feeds use SOCKET_DIR/serve.sock.
 All arguments after -- pass unchanged to loom-serve. The launcher adds
 --listen=unix:/run/loom/serve.sock. Use absolute sandbox paths for --model,
 --devices, and --flagfile; their document-relative references work normally.
-The socket directory must be owned by your user with mode 0700. Its contents
-are writable from inside the sandbox; use a dedicated directory. Ctrl-C,
+The socket directory is created with mode 0700; its parent must exist. An
+existing directory must be owned by your user with mode 0700 and is never
+chmodded. Its contents are writable from inside the sandbox. Ctrl-C,
 SIGTERM, and SIGHUP request normal server shutdown and wait for it to finish.
 Keep writable output directories separate from read-only model/weight trees.
 
 Example (after installing bubblewrap and the Linux Loom SDK):
-  install -d -m 700 ./serve-socket
   loom-serve-sandbox --socket-dir=./serve-socket \
-    --ro-bind=/srv/models --ro-bind=/srv/weights \
-    --gpu=/dev/dri/renderD128 -- \
-    --device=amdgpu --model=/srv/models/chat/model.json
+    --ro-bind=/srv/serve --ro-bind=/srv/weights \
+    --gpu=all --npu=all -- \
+    --devices=/srv/serve/devices.json --model=/srv/serve/chat/model.json
   curl --unix-socket ./serve-socket/serve.sock http://localhost/v1/models
 
-Only explicit accelerator nodes and read-only discovery metadata are exposed.
+The all selector grants matching devices present at startup, not hotplug access.
+An absent class is reported as empty; discovery and permission errors fail.
+GPU grants include /dev/kfd. Required discovery metadata is read-only.
 The host kernel and drivers remain trusted. This is not a CPU/RAM/device quota
 or a defense against driver bugs. No raw bubblewrap options are accepted.
 EOF
@@ -107,15 +110,38 @@ while (($#)); do
         --binary) server=$value ;;
         --bwrap) bubblewrap=$value ;;
         --gpu|--npu)
-          node=$(realpath -e -- "$value") || fail "device not found: $value; check the host driver and device node"
-          if [[ $option == --gpu ]]; then
-            [[ $node =~ ^/dev/dri/renderD[0-9]+$ ]] || fail '--gpu requires an AMD DRM render node, not a card node'
-            gpu=1
+          selected_nodes=()
+          if [[ $value == all ]]; then
+            if [[ $option == --gpu ]]; then
+              class_directory=/sys/class/drm node_directory=/dev/dri node_prefix=renderD expected_driver=amdgpu
+            else
+              class_directory=/sys/class/accel node_directory=/dev/accel node_prefix=accel expected_driver=amdxdna
+            fi
+            [[ -d /sys/class && -r /sys/class && -x /sys/class ]] || fail 'device discovery requires readable /sys/class; check the host and outer sandbox policy'
+            if [[ -e $class_directory || -L $class_directory ]]; then
+              [[ -d $class_directory && -r $class_directory && -x $class_directory ]] || fail "cannot enumerate devices: $class_directory"
+              for endpoint in "$class_directory/$node_prefix"[0-9]*; do
+                [[ -e $endpoint || -L $endpoint ]] || continue
+                driver=$(realpath -e -- "$endpoint/device/driver") || fail "cannot identify device driver: $endpoint"
+                if [[ ${driver##*/} == "$expected_driver" ]]; then
+                  selected_nodes+=("$node_directory/${endpoint##*/}")
+                fi
+              done
+            fi
+            printf 'loom-serve-sandbox: %s=all: %s\n' "$option" "${selected_nodes[*]:-none present}" >&2
           else
-            [[ $node =~ ^/dev/accel/accel[0-9]+$ ]] || fail '--npu requires an accelerator node under /dev/accel'
-            npu=1
+            node=$(realpath -e -- "$value") || fail "device not found: $value; check the host driver and device node"
+            if [[ $option == --gpu ]]; then
+              [[ $node =~ ^/dev/dri/renderD[0-9]+$ ]] || fail '--gpu requires an AMD DRM render node, not a card node'
+            else
+              [[ $node =~ ^/dev/accel/accel[0-9]+$ ]] || fail '--npu requires an accelerator node under /dev/accel'
+            fi
+            selected_nodes+=("$node")
           fi
-          device_nodes+=("$node") ;;
+          for node in "${selected_nodes[@]}"; do
+            if [[ " ${device_nodes[*]} " != *" $node "* ]]; then device_nodes+=("$node"); fi
+            if [[ $option == --gpu ]]; then gpu=1; else npu=1; fi
+          done ;;
       esac
       shift ;;
     *) fail "unknown sandbox option: $1; use --option=value, with loom-serve arguments after --" ;;
@@ -123,9 +149,12 @@ while (($#)); do
 done
 
 [[ -x $bubblewrap ]] || fail "bubblewrap not found: $bubblewrap; install your distribution's bubblewrap package or select its binary with --bwrap=PATH"
-[[ -n $socket_directory ]] || fail '--socket-dir is required; create a dedicated directory with install -d -m 700 PATH'
-socket_directory=$(realpath -e -- "$socket_directory") || fail 'socket directory does not exist; create it with install -d -m 700 PATH'
-[[ -d $socket_directory && $(stat -Lc '%u:%a' -- "$socket_directory") == "$EUID:700" ]] || fail '--socket-dir must be an existing directory owned by your user with mode 0700'
+[[ -n $socket_directory ]] || fail '--socket-dir is required; select a dedicated socket directory'
+if [[ ! -e $socket_directory && ! -L $socket_directory ]]; then
+  mkdir -m 700 -- "$socket_directory" || fail 'cannot create socket directory; its parent must already exist and be writable'
+fi
+socket_directory=$(realpath -e -- "$socket_directory") || fail 'cannot resolve socket directory'
+[[ -d $socket_directory && $(stat -Lc '%u:%a' -- "$socket_directory") == "$EUID:700" ]] || fail '--socket-dir must be a directory owned by your user with mode 0700; existing permissions are never changed'
 if [[ -z $server ]]; then
   server=$(dirname -- "$(realpath -e -- "${BASH_SOURCE[0]}")")/loom-serve
 fi

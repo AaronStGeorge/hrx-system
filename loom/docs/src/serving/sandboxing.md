@@ -14,12 +14,24 @@ distribution's `bubblewrap` package. The launcher uses Bash, GNU coreutils, and
 container or host security policy can prohibit them even when the kernel
 supports them. Run as an ordinary user with access to the selected devices.
 
-Start an empty CPU server:
+With a [named-device configuration](index.md#devices-and-listeners) at
+`/srv/serve/devices.json` and a deployment at `/srv/serve/chat/model.json`,
+start the server with read-only configuration and weights:
 
 ```sh
-install -d -m 700 ./serve-socket
-loom-serve-sandbox --socket-dir=./serve-socket -- \
-  --device=task --pool_backing=fixed
+loom-serve-sandbox --socket-dir=./serve-socket \
+  --ro-bind=/srv/serve --ro-bind=/srv/weights \
+  --gpu=all --npu=all -- \
+  --devices=/srv/serve/devices.json --model=/srv/serve/chat/model.json
+```
+
+The device configuration selects where models run and their memory policy;
+the sandbox flags grant access to hardware without changing those choices.
+An absent GPU or NPU class is reported as empty. For a quick check without a
+configuration file, model, or accelerator, start an empty CPU server instead:
+
+```sh
+loom-serve-sandbox --socket-dir=./serve-socket -- --device=task
 ```
 
 In another terminal:
@@ -36,10 +48,12 @@ and WebSocket traffic to it without giving the server network access. The
 [observation workflow](workflows/observe-model-server.md#watch-the-live-dashboard)
 describes relaying the dashboard.
 
-The directory must already exist, belong to your user, and have mode `0700`.
-Its contents are writable by the server. Ctrl-C, SIGTERM, or SIGHUP requests
-normal shutdown and waits for accepted work to retire; the server removes its
-socket on successful teardown. An occupied socket path is an error, not
+The launcher creates a missing socket directory with mode `0700`; its parent
+must already exist. An existing directory must belong to your user and have
+mode `0700`; its permissions are never changed. Its contents are writable by
+the server. Ctrl-C, SIGTERM, or SIGHUP requests normal shutdown and waits for
+accepted work to retire; the server removes its socket on successful teardown.
+An occupied socket path is an error, not
 permission to delete another server's socket.
 
 ### Mount models and weights
@@ -51,7 +65,7 @@ read-only at its existing absolute path:
 ```sh
 loom-serve-sandbox --socket-dir=./serve-socket \
   --ro-bind=/srv/models --ro-bind=/srv/weights \
-  --gpu=/dev/dri/renderD128 -- \
+  --gpu=all -- \
   --device=amdgpu --model=/srv/models/chat/model.json
 ```
 
@@ -80,18 +94,26 @@ options.
 
 ### Select accelerators
 
-`--gpu=/dev/dri/renderD128` exposes that render node and `/dev/kfd`.
-`--npu=/dev/accel/accel0` exposes that accelerator node. Both options are
-repeatable and can be combined. The launcher supplies read-only device discovery
-metadata, including sysfs symlink targets and NUMA information. It does not mount
-all of `/dev`, change host permissions, or install drivers.
+`--gpu=all` exposes the AMD GPU render nodes present at startup and `/dev/kfd`.
+`--npu=all` exposes the AMD NPU nodes present at startup. Selection uses the
+`amdgpu` and `amdxdna` kernel drivers; other device types are not granted.
+Omitting either flag exposes none of that class. An absent class is reported as
+empty, while discovery failures and inaccessible selected nodes fail startup.
+The launcher binds individual nodes, not device directories, so later hotplug
+does not expand access.
+
+To select a subset, use `--gpu=/dev/dri/renderD128` or
+`--npu=/dev/accel/accel0`. Both options are repeatable and can be combined;
+duplicate grants are harmless. The launcher supplies read-only discovery
+metadata, including sysfs symlink targets and NUMA information. It does not
+change host permissions or install drivers.
 
 For an XDNA-compatible package:
 
 ```sh
 loom-serve-sandbox --socket-dir=./serve-socket \
   --ro-bind=/srv/models --ro-bind=/srv/weights \
-  --npu=/dev/accel/accel0 -- \
+  --npu=all -- \
   --device=xdna --pool_backing=fixed --model=/srv/models/npu/model.json
 ```
 
@@ -101,6 +123,10 @@ and use `--devices=/absolute/path/devices.json` after `--`. Device exposure and
 server placement are separate: the mount permits access; the device URI and
 deployment select where work runs. Discovery metadata can describe devices
 whose nodes have not been granted.
+
+Elastic backing is the server default and needs no extra flag. Device-specific
+exceptions such as XDNA fixed backing belong in the device configuration, not
+the sandbox launcher.
 
 ### Write profiling captures
 
@@ -112,7 +138,7 @@ from model and weight trees:
 install -d -m 700 ./captures
 loom-serve-sandbox --socket-dir=./serve-socket \
   --ro-bind=/srv/models --ro-bind=/srv/weights \
-  --rw-bind="$PWD/captures" --gpu=/dev/dri/renderD128 -- \
+  --rw-bind="$PWD/captures" --gpu=all -- \
   --device=amdgpu --model=/srv/models/chat/model.json \
   --device_profiling_mode=queue-events \
   --device_profiling_output="$PWD/captures/serve.ireeprof"

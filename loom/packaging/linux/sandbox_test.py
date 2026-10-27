@@ -9,6 +9,7 @@
 import json
 import os
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -104,6 +105,8 @@ class SandboxTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("--ro-bind=PATH", result.stdout)
         self.assertIn("--rw-bind=PATH", result.stdout)
+        self.assertIn("--gpu=all|RENDER_NODE", result.stdout)
+        self.assertIn("--npu=all|ACCEL_NODE", result.stdout)
 
     def test_arguments_mounts_environment_and_descriptors(self):
         source = self.directory / "weight store"
@@ -182,6 +185,78 @@ class SandboxTest(unittest.TestCase):
         for path in (outputs, output):
             self.assertIn(["--bind", str(path), str(path)], triples)
 
+    def test_all_grants_follow_host_drivers_without_duplicates(self):
+        # The launcher only reads discovery metadata; the substituted bwrap
+        # records grants without opening any host device. This also covers
+        # CPU-only runners, absent device classes, and restricted outer mounts.
+        nodes = []
+        metadata = []
+        diagnostic = None
+        if not os.access("/sys/class", os.R_OK | os.X_OK):
+            diagnostic = "device discovery requires readable /sys/class"
+        else:
+            for kind, prefix, driver, directory in (
+                ("drm", "renderD", "amdgpu", "/dev/dri"),
+                ("accel", "accel", "amdxdna", "/dev/accel"),
+            ):
+                path = Path("/sys/class") / kind
+                if not path.exists():
+                    continue
+                if not os.access(path, os.R_OK | os.X_OK):
+                    diagnostic = "cannot enumerate devices"
+                    break
+                selected = []
+                for endpoint in sorted(path.glob(prefix + "[0-9]*")):
+                    try:
+                        bound_driver = (endpoint / "device/driver").resolve(strict=True)
+                    except OSError:
+                        diagnostic = "cannot identify device driver"
+                        break
+                    if bound_driver.name == driver:
+                        selected.append(str(Path(directory) / endpoint.name))
+                if diagnostic:
+                    break
+                if selected:
+                    nodes.extend(selected)
+                    metadata.append(str(path))
+                    if kind == "drm":
+                        metadata.append("/sys/class/kfd")
+            if not diagnostic and nodes:
+                metadata += ["/sys/devices", "/sys/dev/char"]
+                if "/sys/class/kfd" in metadata:
+                    nodes.append("/dev/kfd")
+                if any(not os.access(path, os.R_OK | os.X_OK) for path in metadata):
+                    diagnostic = "required device discovery metadata is unavailable"
+                elif any(
+                    not Path(node).is_char_device()
+                    or not os.access(node, os.R_OK | os.W_OK)
+                    for node in nodes
+                ):
+                    diagnostic = "device requires read/write access"
+        result = self.run_launcher(
+            "--gpu=all",
+            "--npu=all",
+            "--gpu=all",
+            "--npu=all",
+            "--",
+            expected=1 if diagnostic else 0,
+        )
+        if diagnostic:
+            self.assertIn(diagnostic, result.stderr)
+            self.assertFalse(self.record.exists())
+        else:
+            launch = self.calls()[1]
+            granted = [
+                launch[i + 1] for i, flag in enumerate(launch) if flag == "--dev-bind"
+            ]
+            self.assertCountEqual(granted, nodes)
+            for path in ("/dev", "/dev/dri", "/dev/accel"):
+                self.assertNotIn(path, granted)
+            if not nodes:
+                self.assertIn("--gpu=all: none present", result.stderr)
+                self.assertIn("--npu=all: none present", result.stderr)
+                self.assertNotIn("/sys/devices", launch)
+
     def test_output_must_already_exist_and_be_writable(self):
         output = self.directory / "output"
         result = self.run_launcher("--rw-bind=" + str(output), expected=1)
@@ -240,6 +315,39 @@ class SandboxTest(unittest.TestCase):
         self.sockets.chmod(0o755)
         result = self.run_launcher("--", expected=1)
         self.assertIn("mode 0700", result.stderr)
+        self.assertEqual(stat.S_IMODE(self.sockets.stat().st_mode), 0o755)
+        self.assertFalse(self.record.exists())
+
+    def test_socket_directory_created_once_without_touching_contents(self):
+        self.sockets = self.directory / "new socket directory"
+        self.run_launcher("--")
+        self.assertEqual(stat.S_IMODE(self.sockets.stat().st_mode), 0o700)
+        self.assertEqual(self.sockets.stat().st_uid, os.geteuid())
+        sentinel = self.sockets / "serve.sock"
+        sentinel.write_bytes(b"owned by another server")
+        self.run_launcher("--")
+        self.assertEqual(sentinel.read_bytes(), b"owned by another server")
+
+    def test_socket_directory_needs_an_existing_parent(self):
+        self.sockets = self.directory / "missing parent" / "socket"
+        result = self.run_launcher("--", expected=1)
+        self.assertIn("parent must already exist", result.stderr)
+        self.assertFalse(self.sockets.parent.exists())
+        self.assertFalse(self.record.exists())
+
+    def test_socket_directory_rejects_files_and_dangling_symlinks(self):
+        target = self.directory / "not a directory"
+        target.write_text("preserved")
+        self.sockets = target
+        result = self.run_launcher("--", expected=1)
+        self.assertIn("must be a directory", result.stderr)
+        self.assertEqual(target.read_text(), "preserved")
+        self.sockets = self.directory / "dangling"
+        destination = self.directory / "absent"
+        self.sockets.symlink_to(destination)
+        result = self.run_launcher("--", expected=1)
+        self.assertIn("cannot resolve socket directory", result.stderr)
+        self.assertFalse(destination.exists())
         self.assertFalse(self.record.exists())
 
     def test_unsupported_platform_and_missing_bubblewrap(self):

@@ -165,6 +165,7 @@ def main(
             assert os.access(installed, os.X_OK), name
             help_text = run(name, "--help")
             assert "--binary=PATH" in help_text and "--rw-bind=PATH" in help_text
+            assert "--gpu=all|" in help_text and "--npu=all|" in help_text
         native_names = command_files - shell_commands
         companions = (
             {"iree.dll", "loomc.dll"}
