@@ -21,7 +21,6 @@ package(
 )
 
 _WASM_PROVIDER_VISIBILITY = [
-    "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
     "//loom/src/loom/target/emit/wasm:__pkg__",
 ]

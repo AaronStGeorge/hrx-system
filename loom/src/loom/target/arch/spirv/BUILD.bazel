@@ -50,7 +50,6 @@ _SPIRV_OPS_VISIBILITY = ["//loom/src/loom/target/arch/spirv/ops:__pkg__"]
 _SPIRV_RECORDS_VISIBILITY = ["//loom/src/loom/target/arch/spirv/records:__pkg__"]
 
 _SPIRV_PROVIDER_VISIBILITY = [
-    "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
     "//loom/src/loom/tooling/target/spirv:__pkg__",
 ] + _SPIRV_C_API_VISIBILITY

@@ -34,7 +34,6 @@ _X86_FACTS_VISIBILITY = _X86_NATIVE_VISIBILITY + _X86_OPS_VISIBILITY + [
 ]
 
 _X86_PROVIDER_VISIBILITY = [
-    "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
 ]
 
