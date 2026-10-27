@@ -160,17 +160,17 @@ APPROVED_STATEMENTS = [
     ApprovedStatement(
         "loom/src/loom/format/text/printer/name_plan.c",
         re.compile(
-            r"\biree_arena_allocate_array\s*\(\s*&out_plan->arena,\s*"
-            r"module->values\.count,\s*sizeof\(\*out_plan->resolutions\)"
+            r"\biree_arena_allocate_array\s*\(\s*&printer->arena,\s*"
+            r"module->values\.count,\s*sizeof\(\*printer->resolutions\)"
         ),
         "canonical per-print SSA name resolution indexed by value ID",
     ),
     ApprovedStatement(
         "loom/src/loom/format/text/printer/name_plan.c",
         re.compile(
-            r"\bmemset\s*\(\s*out_plan->resolutions,\s*0,\s*"
+            r"\bmemset\s*\(\s*printer->resolutions,\s*0,\s*"
             r"module->values\.count\s*\*\s*"
-            r"sizeof\(\*out_plan->resolutions\)"
+            r"sizeof\(\*printer->resolutions\)"
         ),
         "canonical per-print SSA name resolution initialization",
     ),

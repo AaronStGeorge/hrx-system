@@ -64,28 +64,32 @@ class NamePlanTest : public ::testing::Test {
                                loom_dim_pack_dynamic(value_id), 0);
   }
 
-  std::string Reference(loom_print_name_plan_t* plan,
-                        loom_value_id_t value_id) {
+  std::string Reference(loom_text_printer_t* plan, loom_value_id_t value_id) {
     iree_string_builder_t output;
     iree_string_builder_initialize(iree_allocator_system(), &output);
     loom_output_stream_t stream;
     loom_output_stream_for_builder(&output, &stream);
     IREE_EXPECT_OK(
-        loom_print_name_plan_write_value_ref(plan, &stream, module_, value_id));
+        loom_print_name_plan_write_value_ref(plan, &stream, value_id));
     std::string result(iree_string_builder_buffer(&output),
                        iree_string_builder_size(&output));
     iree_string_builder_deinitialize(&output);
     return result;
   }
 
+  iree_status_t Prepare(loom_text_printer_t* printer) {
+    loom_text_printer_initialize(module_, printer);
+    return loom_print_name_plan_prepare(printer);
+  }
+
   std::vector<std::string> Names() {
-    loom_print_name_plan_t plan;
-    IREE_CHECK_OK(loom_print_name_plan_initialize(module_, &plan));
+    loom_text_printer_t plan;
+    IREE_CHECK_OK(Prepare(&plan));
     std::vector<std::string> names;
     for (iree_host_size_t i = 0; i < module_->values.count; ++i) {
       names.push_back(Reference(&plan, (loom_value_id_t)i));
     }
-    loom_print_name_plan_deinitialize(&plan);
+    loom_text_printer_deinitialize(&plan);
     return names;
   }
 
@@ -141,25 +145,25 @@ class NamePlanTest : public ::testing::Test {
 TEST_F(NamePlanTest, UnnamedValuesRequireNoNamePlanAllocation) {
   Constant();
   Constant();
-  loom_print_name_plan_t plan;
-  IREE_ASSERT_OK(loom_print_name_plan_initialize(module_, &plan));
+  loom_text_printer_t plan;
+  IREE_ASSERT_OK(Prepare(&plan));
   EXPECT_EQ(plan.arena.block_pool, module_->arena.block_pool);
   EXPECT_EQ(plan.arena.total_allocation_size, 0u);
   EXPECT_EQ(Reference(&plan, 0), "%0");
   EXPECT_EQ(Reference(&plan, 1), "%1");
-  loom_print_name_plan_deinitialize(&plan);
+  loom_text_printer_deinitialize(&plan);
 }
 
 TEST_F(NamePlanTest, NamedValuesUseModuleBlockPool) {
   Constant("extent");
-  loom_print_name_plan_t plan;
-  IREE_ASSERT_OK(loom_print_name_plan_initialize(module_, &plan));
+  loom_text_printer_t plan;
+  IREE_ASSERT_OK(Prepare(&plan));
   EXPECT_EQ(plan.arena.block_pool, module_->arena.block_pool);
   EXPECT_NE(plan.resolutions, nullptr);
   EXPECT_GT(plan.arena.used_allocation_size, 0u);
   EXPECT_EQ(plan.arena.total_allocation_size, pool_.total_block_size);
   EXPECT_EQ(Reference(&plan, 0), "%extent");
-  loom_print_name_plan_deinitialize(&plan);
+  loom_text_printer_deinitialize(&plan);
 }
 
 TEST_F(NamePlanTest, DuplicateExplicitNames) {
@@ -272,7 +276,7 @@ TEST_F(NamePlanTest, NamePlanningDoesNotChangeIR) {
 TEST_F(NamePlanTest, LazyPlanIsSharedByReferences) {
   Constant("extent");
   Constant("extent");
-  loom_print_name_plan_t plan = {};
+  loom_text_printer_t plan = {.module = module_};
   EXPECT_EQ(Reference(&plan, 0), "%extent$0");
   auto* resolutions = plan.resolutions;
   auto allocated_size = plan.arena.total_allocation_size;
@@ -280,14 +284,14 @@ TEST_F(NamePlanTest, LazyPlanIsSharedByReferences) {
   EXPECT_EQ(Reference(&plan, 1), "%extent$1");
   EXPECT_EQ(plan.resolutions, resolutions);
   EXPECT_EQ(plan.arena.total_allocation_size, allocated_size);
-  loom_print_name_plan_deinitialize(&plan);
+  loom_text_printer_deinitialize(&plan);
 }
 
 TEST_F(NamePlanTest, InvalidReferenceDoesNotPreparePlan) {
-  loom_print_name_plan_t plan = {};
+  loom_text_printer_t plan = {.module = module_};
   EXPECT_EQ(Reference(&plan, LOOM_VALUE_ID_INVALID), "%?");
   EXPECT_EQ(plan.arena.block_pool, nullptr);
-  loom_print_name_plan_deinitialize(&plan);
+  loom_text_printer_deinitialize(&plan);
 }
 
 TEST_F(NamePlanTest, AllocationFailuresLeaveAnEmptyPlan) {
@@ -299,12 +303,11 @@ TEST_F(NamePlanTest, AllocationFailuresLeaveAnEmptyPlan) {
        ++successful_allocations) {
     iree_arena_block_pool_trim(&pool_);
     allocations_until_failure_ = successful_allocations;
-    loom_print_name_plan_t plan = {};
-    IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
-                          loom_print_name_plan_initialize(module_, &plan));
+    loom_text_printer_t plan = {.module = module_};
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, Prepare(&plan));
     EXPECT_EQ(plan.resolutions, nullptr);
     EXPECT_EQ(plan.arena.block_pool, nullptr);
-    loom_print_name_plan_deinitialize(&plan);
+    loom_text_printer_deinitialize(&plan);
   }
 }
 
@@ -325,6 +328,16 @@ TEST_F(NamePlanTest, StaticAtomsDoNotAllocateNamePlans) {
   IREE_ASSERT_OK(loom_text_print_type(tensor, module_, &stream));
   loom_attribute_t attribute = loom_attr_i64(42);
   IREE_ASSERT_OK(loom_text_print_attribute(&attribute, module_, &stream));
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module_, &printer);
+  IREE_EXPECT_OK(
+      loom_text_printer_write_type(&printer, scalar, &stream, nullptr));
+  IREE_EXPECT_OK(
+      loom_text_printer_write_type(&printer, tensor, &stream, nullptr));
+  IREE_EXPECT_OK(
+      loom_text_printer_write_attribute(&printer, &attribute, &stream));
+  EXPECT_EQ(printer.arena.block_pool, nullptr);
+  loom_text_printer_deinitialize(&printer);
   EXPECT_EQ(allocation_count_, allocation_count);
 }
 
@@ -340,21 +353,20 @@ TEST_F(NamePlanTest, CaptureScratchAllocationFailuresLeaveAnEmptyPlan) {
   }
   iree_arena_block_pool_trim(&pool_);
   const size_t before = allocation_count_;
-  loom_print_name_plan_t plan = {};
-  IREE_ASSERT_OK(loom_print_name_plan_initialize(module_, &plan));
+  loom_text_printer_t plan = {.module = module_};
+  IREE_ASSERT_OK(Prepare(&plan));
   const size_t allocation_count = allocation_count_ - before;
-  loom_print_name_plan_deinitialize(&plan);
+  loom_text_printer_deinitialize(&plan);
   EXPECT_GE(allocation_count, 4u);
   for (size_t successful_allocations = 0;
        successful_allocations < allocation_count; ++successful_allocations) {
     SCOPED_TRACE(successful_allocations);
     iree_arena_block_pool_trim(&pool_);
     allocations_until_failure_ = static_cast<int>(successful_allocations);
-    IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
-                          loom_print_name_plan_initialize(module_, &plan));
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, Prepare(&plan));
     EXPECT_EQ(plan.resolutions, nullptr);
     EXPECT_EQ(plan.arena.block_pool, nullptr);
-    loom_print_name_plan_deinitialize(&plan);
+    loom_text_printer_deinitialize(&plan);
   }
 }
 
@@ -422,6 +434,125 @@ TEST_F(NamePlanTest, StandaloneCompositeTypesAndAttributesShareCanonicalNames) {
   IREE_EXPECT_OK(loom_text_print_attribute(&attribute, module_, &stream));
   EXPECT_EQ(std::string(iree_string_builder_buffer(&output)), expected);
   iree_string_builder_deinitialize(&output);
+}
+
+TEST_F(NamePlanTest, ScopedWritesShareNamesAcrossOperationsTypesAndAttributes) {
+  const loom_value_id_t first = Constant("extent");
+  const loom_value_id_t second = Constant("extent");
+  Constant("extent$0");
+  const loom_op_t* first_op =
+      loom_value_def_op(loom_module_value(module_, first));
+  const loom_op_t* second_op =
+      loom_value_def_op(loom_module_value(module_, second));
+  const iree_string_view_t comments[] = {IREE_SV("dynamic extent")};
+  IREE_ASSERT_OK(loom_module_attach_op_comments(module_, second_op, comments,
+                                                IREE_ARRAYSIZE(comments)));
+  const loom_type_t type = DimensionType(first);
+  loom_type_id_t type_id;
+  IREE_ASSERT_OK(loom_module_intern_type_id(module_, type, &type_id));
+  const loom_attribute_t attribute = loom_attr_type(type_id);
+
+  iree_string_builder_t expected;
+  iree_string_builder_initialize(iree_allocator_system(), &expected);
+  loom_output_stream_t expected_stream;
+  loom_output_stream_for_builder(&expected, &expected_stream);
+  IREE_ASSERT_OK(loom_text_print_operation(module_, second_op, &expected_stream,
+                                           LOOM_TEXT_PRINT_DEFAULT));
+  IREE_ASSERT_OK(loom_text_print_type(type, module_, &expected_stream));
+  IREE_ASSERT_OK(
+      loom_text_print_attribute(&attribute, module_, &expected_stream));
+  IREE_ASSERT_OK(loom_text_print_operation(module_, first_op, &expected_stream,
+                                           LOOM_TEXT_PRINT_DEFAULT));
+
+  iree_string_builder_t output;
+  iree_string_builder_initialize(iree_allocator_system(), &output);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&output, &stream);
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module_, &printer);
+  EXPECT_EQ(printer.arena.block_pool, nullptr);
+  IREE_ASSERT_OK(
+      loom_text_printer_write_operation(&printer, second_op, &stream, nullptr));
+  const auto* resolutions = printer.resolutions;
+  const size_t allocation_count = allocation_count_;
+  const auto retained_bytes = printer.arena.used_allocation_size;
+  IREE_EXPECT_OK(
+      loom_text_printer_write_type(&printer, type, &stream, nullptr));
+  IREE_EXPECT_OK(
+      loom_text_printer_write_attribute(&printer, &attribute, &stream));
+  IREE_EXPECT_OK(
+      loom_text_printer_write_operation(&printer, first_op, &stream, nullptr));
+  EXPECT_EQ(printer.resolutions, resolutions);
+  EXPECT_EQ(printer.arena.used_allocation_size, retained_bytes);
+  EXPECT_EQ(allocation_count_, allocation_count);
+  EXPECT_EQ(std::string(iree_string_builder_buffer(&output)),
+            std::string(iree_string_builder_buffer(&expected)));
+  loom_text_printer_deinitialize(&printer);
+  iree_string_builder_deinitialize(&output);
+  iree_string_builder_deinitialize(&expected);
+}
+
+TEST_F(NamePlanTest, ScopedWritesDoNotRetainStreamOrLayoutOptions) {
+  loom_op_t* function = Function("body", 1);
+  SetName(loom_block_arg_id(
+              loom_region_entry_block(loom_test_func_body(function)), 0),
+          "extent");
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module_, &printer);
+  for (loom_text_print_flags_t flags :
+       {LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_SKIP_REGIONS,
+        LOOM_TEXT_PRINT_DEFAULT, 0}) {
+    const loom_text_print_options_t options = {.flags = flags};
+    iree_string_builder_t expected;
+    iree_string_builder_initialize(iree_allocator_system(), &expected);
+    IREE_ASSERT_OK(loom_text_print_operation_to_builder_with_options(
+        module_, function, &expected, &options));
+    iree_string_builder_t output;
+    iree_string_builder_initialize(iree_allocator_system(), &output);
+    loom_output_stream_t stream;
+    loom_output_stream_for_builder(&output, &stream);
+    IREE_EXPECT_OK(loom_text_printer_write_operation(&printer, function,
+                                                     &stream, &options));
+    EXPECT_EQ(std::string(iree_string_builder_buffer(&output)),
+              std::string(iree_string_builder_buffer(&expected)));
+    iree_string_builder_deinitialize(&output);
+    iree_string_builder_deinitialize(&expected);
+  }
+  loom_text_printer_deinitialize(&printer);
+}
+
+TEST_F(NamePlanTest, ScopedFailureAndCleanupPreservePoolReuse) {
+  const auto value = Constant("extent");
+  const loom_op_t* op = loom_value_def_op(loom_module_value(module_, value));
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module_, &printer);
+  loom_output_stream_t stream;
+  loom_output_stream_null(&stream);
+  iree_arena_block_pool_trim(&pool_);
+  allocations_until_failure_ = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_text_printer_write_operation(&printer, op, &stream, nullptr));
+  EXPECT_EQ(printer.module, module_);
+  EXPECT_EQ(printer.resolutions, nullptr);
+  EXPECT_EQ(printer.arena.block_pool, nullptr);
+  allocations_until_failure_ = -1;
+  stream.write = [](void*, iree_string_view_t) {
+    return iree_status_from_code(IREE_STATUS_ABORTED);
+  };
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ABORTED,
+      loom_text_printer_write_operation(&printer, op, &stream, nullptr));
+  EXPECT_NE(printer.resolutions, nullptr);
+  EXPECT_EQ(stream.offset, 0u);
+  loom_text_printer_deinitialize(&printer);
+  const size_t allocation_count = allocation_count_;
+  loom_text_printer_initialize(module_, &printer);
+  loom_output_stream_null(&stream);
+  IREE_EXPECT_OK(
+      loom_text_printer_write_operation(&printer, op, &stream, nullptr));
+  EXPECT_EQ(allocation_count_, allocation_count);
+  loom_text_printer_deinitialize(&printer);
 }
 
 }  // namespace

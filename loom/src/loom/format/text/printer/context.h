@@ -23,7 +23,7 @@ typedef struct loom_print_context_t {
   // Module whose string, type, value, and location tables are printed.
   const loom_module_t* module;
   // Canonical module value-name resolutions.
-  loom_print_name_plan_t* name_plan;
+  loom_text_printer_t* printer;
   // Flag bitset controlling layout and optional annotations.
   loom_text_print_flags_t flags;
   // Representation codec and assembly interface for Low functions.

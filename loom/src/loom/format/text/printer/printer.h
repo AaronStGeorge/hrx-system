@@ -22,6 +22,7 @@
 #define LOOM_FORMAT_TEXT_PRINTER_PRINTER_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "loom/format/text/low_asm.h"
 #include "loom/ir/ir.h"
 #include "loom/util/stream.h"
@@ -70,6 +71,56 @@ typedef struct loom_text_print_options_t {
   // modules may omit it; printing a Low wrapper requires it.
   loom_text_low_asm_environment_t low_asm_environment;
 } loom_text_print_options_t;
+
+typedef struct loom_print_name_resolution_t loom_print_name_resolution_t;
+
+// Invocation-scoped printing state for an immutable module. Repeated operation,
+// type, and attribute writes share canonical SSA names without retaining
+// layout, stream, or target options between writes. The module must outlive
+// this state and remain unchanged, except for locations captured by the
+// printer.
+//
+// Name resolutions are prepared once when required, using the module block
+// pool. Construction scratch is returned immediately; deinitialize returns the
+// retained resolutions. The initialized owner must not be copied. Separate
+// printers may read the same immutable module concurrently without location
+// capture.
+typedef struct loom_text_printer_t {
+  // Borrowed module supplying strings, types, values, and locations.
+  const loom_module_t* module;
+  // Value-indexed canonical SSA name resolutions; NULL until prepared or when
+  // the module has no explicit value names.
+  loom_print_name_resolution_t* resolutions;
+  // Scoped name storage. A NULL block pool marks an unprepared name plan.
+  iree_arena_allocator_t arena;
+} loom_text_printer_t;
+
+// Initializes lazy printing state without allocation or module traversal.
+void loom_text_printer_initialize(const loom_module_t* module,
+                                  loom_text_printer_t* out_printer);
+
+// Returns all printing storage to the module block pool.
+void loom_text_printer_deinitialize(loom_text_printer_t* printer);
+
+// Writes one operation and its comments. NULL options use the default flags.
+// Each write starts fresh layout state and propagates allocation/output errors.
+iree_status_t loom_text_printer_write_operation(
+    loom_text_printer_t* printer, const loom_op_t* op,
+    loom_output_stream_t* stream, const loom_text_print_options_t* options);
+
+// Writes a type, preparing names only if it contains SSA references. NULL
+// options use diagnostic spelling, including numeric register identities.
+// Explicit options require descriptors for register types, as in operation
+// printing.
+iree_status_t loom_text_printer_write_type(
+    loom_text_printer_t* printer, loom_type_t type,
+    loom_output_stream_t* stream, const loom_text_print_options_t* options);
+
+// Writes a standalone attribute with diagnostic type spelling and raw numeric
+// enum values, since no operation field descriptor is available.
+iree_status_t loom_text_printer_write_attribute(loom_text_printer_t* printer,
+                                                const loom_attribute_t* attr,
+                                                loom_output_stream_t* stream);
 
 // Prints a complete module to canonical text via the output stream.
 iree_status_t loom_text_print_module(const loom_module_t* module,

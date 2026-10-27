@@ -17,8 +17,8 @@
 
 iree_status_t loom_print_value_ref(const loom_print_context_t* ctx,
                                    loom_value_id_t value_id) {
-  return loom_print_name_plan_write_value_ref(ctx->name_plan, ctx->stream,
-                                              ctx->module, value_id);
+  return loom_print_name_plan_write_value_ref(ctx->printer, ctx->stream,
+                                              value_id);
 }
 
 static iree_status_t loom_print_predicate_arg(const loom_print_context_t* ctx,
@@ -357,7 +357,7 @@ static iree_status_t loom_print_dim(loom_output_stream_t* stream,
   if (loom_dim_is_dynamic(packed)) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
     IREE_RETURN_IF_ERROR(loom_print_name_plan_write_value_ref(
-        ctx->name_plan, stream, module, loom_dim_value_id(packed)));
+        ctx->printer, stream, loom_dim_value_id(packed)));
     return loom_output_stream_write_char(stream, ']');
   }
   return loom_output_stream_write_format(stream, "%" PRId64,
@@ -386,7 +386,7 @@ loom_print_shaped_interior(loom_output_stream_t* stream, loom_type_t type,
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
     if (loom_type_has_ssa_encoding(type)) {
       IREE_RETURN_IF_ERROR(loom_print_name_plan_write_value_ref(
-          ctx->name_plan, stream, module, loom_type_encoding_value_id(type)));
+          ctx->printer, stream, loom_type_encoding_value_id(type)));
     } else {
       IREE_RETURN_IF_ERROR(
           loom_print_static_encoding(stream, module, type.encoding_id, ctx));
@@ -676,15 +676,11 @@ iree_status_t loom_text_print_type(loom_type_t type,
   if (loom_type_kind(type) == LOOM_TYPE_SCALAR) {
     return loom_print_scalar_type(stream, loom_type_element_type(type));
   }
-  loom_print_name_plan_t name_plan = {0};
-  loom_print_context_t ctx = {
-      .stream = stream,
-      .module = module,
-      .name_plan = &name_plan,
-      .print_raw_register_types = true,
-  };
-  iree_status_t status = loom_text_print_type_impl(type, module, stream, &ctx);
-  loom_print_name_plan_deinitialize(&name_plan);
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module, &printer);
+  iree_status_t status =
+      loom_text_printer_write_type(&printer, type, stream, NULL);
+  loom_text_printer_deinitialize(&printer);
   return status;
 }
 
@@ -694,18 +690,33 @@ iree_status_t loom_text_print_type_with_options(
   if (loom_type_kind(type) == LOOM_TYPE_SCALAR) {
     return loom_print_scalar_type(stream, loom_type_element_type(type));
   }
-  loom_print_name_plan_t name_plan = {0};
+  const loom_text_print_options_t default_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+  };
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module, &printer);
+  iree_status_t status = loom_text_printer_write_type(
+      &printer, type, stream, options ? options : &default_options);
+  loom_text_printer_deinitialize(&printer);
+  return status;
+}
+
+iree_status_t loom_text_printer_write_type(
+    loom_text_printer_t* printer, loom_type_t type,
+    loom_output_stream_t* stream, const loom_text_print_options_t* options) {
+  if (loom_type_kind(type) == LOOM_TYPE_SCALAR) {
+    return loom_print_scalar_type(stream, loom_type_element_type(type));
+  }
   loom_print_context_t ctx = {0};
   ctx.stream = stream;
-  ctx.module = module;
-  ctx.name_plan = &name_plan;
-  ctx.flags = options ? options->flags : LOOM_TEXT_PRINT_DEFAULT;
+  ctx.module = printer->module;
+  ctx.printer = printer;
+  ctx.print_raw_register_types = !options;
   if (options) {
+    ctx.flags = options->flags;
     ctx.low_asm_environment = options->low_asm_environment;
   }
-  iree_status_t status = loom_text_print_type_impl(type, module, stream, &ctx);
-  loom_print_name_plan_deinitialize(&name_plan);
-  return status;
+  return loom_text_print_type_impl(type, printer->module, stream, &ctx);
 }
 
 iree_status_t loom_print_type(loom_print_context_t* ctx, loom_type_t type) {
@@ -1356,16 +1367,24 @@ iree_status_t loom_print_parameterized_attr_parameters(
 iree_status_t loom_text_print_attribute(const loom_attribute_t* attr,
                                         const loom_module_t* module,
                                         loom_output_stream_t* stream) {
-  loom_print_name_plan_t name_plan = {0};
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module, &printer);
+  iree_status_t status =
+      loom_text_printer_write_attribute(&printer, attr, stream);
+  loom_text_printer_deinitialize(&printer);
+  return status;
+}
+
+iree_status_t loom_text_printer_write_attribute(loom_text_printer_t* printer,
+                                                const loom_attribute_t* attr,
+                                                loom_output_stream_t* stream) {
   loom_print_context_t ctx = {0};
   ctx.stream = stream;
-  ctx.module = module;
-  ctx.name_plan = &name_plan;
+  ctx.module = printer->module;
+  ctx.printer = printer;
   ctx.print_raw_register_types = true;
-  iree_status_t status =
-      loom_print_attr_impl(stream, attr, module, /*descriptor=*/NULL, &ctx);
-  loom_print_name_plan_deinitialize(&name_plan);
-  return status;
+  return loom_print_attr_impl(stream, attr, printer->module,
+                              /*descriptor=*/NULL, &ctx);
 }
 
 iree_status_t loom_print_encoding_aliases(loom_print_context_t* ctx,

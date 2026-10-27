@@ -206,25 +206,33 @@ static iree_status_t loom_check_emit_write_source_low_artifacts(
   loom_text_print_options_t print_options = {0};
   loom_check_emit_initialize_source_low_print_options(
       descriptor_registry, &low_asm_environment, &print_options);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(output, &stream);
+  loom_text_printer_t printer;
+  loom_text_printer_initialize(module, &printer);
   bool has_artifact = false;
   const loom_block_t* block = loom_region_const_entry_block(module->body);
-  const loom_op_t* op = NULL;
-  loom_block_for_each_op(block, op) {
+  iree_status_t status = iree_ok_status();
+  for (const loom_op_t* op = block->first_op; op && iree_status_is_ok(status);
+       op = op->next_op) {
     if (loom_op_dialect_id(op->kind) != LOOM_DIALECT_LOW) {
       continue;
     }
     if (has_artifact) {
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
+      status = loom_output_stream_write_char(&stream, '\n');
     }
-    IREE_RETURN_IF_ERROR(loom_text_print_operation_to_builder_with_options(
-        module, op, output, &print_options));
+    if (iree_status_is_ok(status)) {
+      status = loom_text_printer_write_operation(&printer, op, &stream,
+                                                 &print_options);
+    }
     has_artifact = true;
   }
-  if (!has_artifact) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "source-low produced no low artifacts");
+  loom_text_printer_deinitialize(&printer);
+  if (iree_status_is_ok(status) && !has_artifact) {
+    status = iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "source-low produced no low artifacts");
   }
-  return iree_ok_status();
+  return status;
 }
 
 static bool loom_check_emit_has_low_function(const loom_module_t* module) {

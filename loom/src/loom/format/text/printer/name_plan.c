@@ -372,10 +372,12 @@ static uint32_t loom_print_name_resolve_suffix(
   return suffix;
 }
 
-iree_status_t loom_print_name_plan_initialize(
-    const loom_module_t* module, loom_print_name_plan_t* out_plan) {
-  memset(out_plan, 0, sizeof(*out_plan));
-  iree_arena_initialize(module->arena.block_pool, &out_plan->arena);
+iree_status_t loom_print_name_plan_prepare(loom_text_printer_t* printer) {
+  if (printer->arena.block_pool) {
+    return iree_ok_status();
+  }
+  const loom_module_t* module = printer->module;
+  iree_arena_initialize(module->arena.block_pool, &printer->arena);
   if (module->values.count == 0) {
     return iree_ok_status();
   }
@@ -403,14 +405,14 @@ iree_status_t loom_print_name_plan_initialize(
   }
 
   iree_status_t status = iree_arena_allocate_array(
-      &out_plan->arena, module->values.count, sizeof(*out_plan->resolutions),
-      (void**)&out_plan->resolutions);
+      &printer->arena, module->values.count, sizeof(*printer->resolutions),
+      (void**)&printer->resolutions);
   if (!iree_status_is_ok(status)) {
-    loom_print_name_plan_deinitialize(out_plan);
+    loom_print_name_plan_discard(printer);
     return status;
   }
-  memset(out_plan->resolutions, 0,
-         module->values.count * sizeof(*out_plan->resolutions));
+  memset(printer->resolutions, 0,
+         module->values.count * sizeof(*printer->resolutions));
 
   if (indexed_name_count == 0) {
     return iree_ok_status();
@@ -419,7 +421,7 @@ iree_status_t loom_print_name_plan_initialize(
   iree_host_size_t index_capacity =
       iree_host_size_next_power_of_two((indexed_name_count * 4 + 2) / 3);
   if (index_capacity == 0) {
-    loom_print_name_plan_deinitialize(out_plan);
+    loom_print_name_plan_discard(printer);
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "SSA name index capacity exceeds storage limit");
   }
@@ -434,7 +436,7 @@ iree_status_t loom_print_name_plan_initialize(
   iree_host_size_t candidate_buffer_offset = 0;
   iree_host_size_t temporary_size = 0;
   iree_arena_checkpoint_t temporary_checkpoint =
-      iree_arena_checkpoint_save(&out_plan->arena);
+      iree_arena_checkpoint_save(&printer->arena);
   status = IREE_STRUCT_LAYOUT(
       0, &temporary_size,
       IREE_STRUCT_FIELD_ALIGNED(index_capacity, loom_print_name_index_entry_t,
@@ -445,12 +447,12 @@ iree_status_t loom_print_name_plan_initialize(
       IREE_STRUCT_FIELD(LOOM_PRINT_NAME_SUFFIX_BUFFER_SIZE, char, NULL));
   void* temporary_storage = NULL;
   if (iree_status_is_ok(status)) {
-    status = iree_arena_allocate(&out_plan->arena, temporary_size,
+    status = iree_arena_allocate(&printer->arena, temporary_size,
                                  &temporary_storage);
   }
   if (!iree_status_is_ok(status)) {
     iree_arena_checkpoint_restore(&temporary_checkpoint);
-    loom_print_name_plan_deinitialize(out_plan);
+    loom_print_name_plan_discard(printer);
     return status;
   }
 
@@ -483,19 +485,19 @@ iree_status_t loom_print_name_plan_initialize(
   if (shared_spelling) {
     loom_print_name_capture_state_t state = {
         .module = module,
-        .resolutions = out_plan->resolutions,
+        .resolutions = printer->resolutions,
     };
-    status = iree_arena_allocate_array(&out_plan->arena, module->strings.count,
+    status = iree_arena_allocate_array(&printer->arena, module->strings.count,
                                        sizeof(*state.active_values),
                                        (void**)&state.active_values);
     if (iree_status_is_ok(status)) {
-      status = iree_arena_allocate_array(&out_plan->arena, indexed_name_count,
+      status = iree_arena_allocate_array(&printer->arena, indexed_name_count,
                                          sizeof(*state.bindings),
                                          (void**)&state.bindings);
     }
     if (!iree_status_is_ok(status)) {
       iree_arena_checkpoint_restore(&temporary_checkpoint);
-      loom_print_name_plan_deinitialize(out_plan);
+      loom_print_name_plan_discard(printer);
       return status;
     }
     memset(state.active_values, 0xFF,
@@ -508,7 +510,7 @@ iree_status_t loom_print_name_plan_initialize(
     const void* scope = loom_print_name_parse_scope(module, value_id);
     loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
     if (!loom_print_name_value_has_name(module, value_id, &name_id)) {
-      out_plan->resolutions[i].suffix = loom_print_name_resolve_suffix(
+      printer->resolutions[i].suffix = loom_print_name_resolve_suffix(
           module, explicit_names, value_id, iree_string_view_empty(), 0,
           candidate_buffer, candidate_buffer_capacity);
       continue;
@@ -519,10 +521,10 @@ iree_status_t loom_print_name_plan_initialize(
     const bool duplicated =
         entry && (entry->duplicated ||
                   !loom_print_name_value_is_printable(module, value_id));
-    if (!duplicated && out_plan->resolutions[i].suffix == 0) {
+    if (!duplicated && printer->resolutions[i].suffix == 0) {
       continue;
     }
-    out_plan->resolutions[i].suffix = loom_print_name_resolve_suffix(
+    printer->resolutions[i].suffix = loom_print_name_resolve_suffix(
         module, explicit_names, value_id,
         loom_string_table_get(&module->strings, name_id), 1, candidate_buffer,
         candidate_buffer_capacity);
@@ -532,9 +534,9 @@ iree_status_t loom_print_name_plan_initialize(
   return iree_ok_status();
 }
 
-void loom_print_name_plan_deinitialize(loom_print_name_plan_t* plan) {
+void loom_print_name_plan_discard(loom_text_printer_t* plan) {
   iree_arena_deinitialize(&plan->arena);
-  memset(plan, 0, sizeof(*plan));
+  *plan = (loom_text_printer_t){.module = plan->module};
 }
 
 static iree_status_t loom_print_name_write_resolution(
@@ -555,15 +557,15 @@ static iree_status_t loom_print_name_write_resolution(
                                             sizeof(buffer)));
 }
 
-iree_status_t loom_print_name_plan_write_value_ref(loom_print_name_plan_t* plan,
+iree_status_t loom_print_name_plan_write_value_ref(loom_text_printer_t* plan,
                                                    loom_output_stream_t* stream,
-                                                   const loom_module_t* module,
                                                    loom_value_id_t value_id) {
+  const loom_module_t* module = plan->module;
   if (!module || value_id >= module->values.count) {
     return loom_output_stream_write_cstring(stream, "%?");
   }
   if (!plan->arena.block_pool) {
-    IREE_RETURN_IF_ERROR(loom_print_name_plan_initialize(module, plan));
+    IREE_RETURN_IF_ERROR(loom_print_name_plan_prepare(plan));
   }
   if (!plan->resolutions) {
     return loom_output_stream_write_format(stream, "%%%" PRIu32, value_id);
