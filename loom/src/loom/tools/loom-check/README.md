@@ -146,9 +146,11 @@ helpers. This lets a file-level RUN select one target across cases with differen
 entry names.
 `output=low` compares the resulting Low assembly;
 `output=module` includes the rest of the module, and `output=none` checks only
-source-located diagnostics. Functions with authored target bindings can use the
-existing whole-module form without a function or target option. Pipeline-text
-outputs describe the pipeline itself and do not accept specialization requests.
+source-located diagnostics. Both IR output modes prepare target pseudos for
+assembly without advancing to ABI and emission preparation. Functions with
+authored target bindings can use the existing whole-module form without a
+function or target option. Pipeline-text outputs describe the pipeline itself
+and do not accept specialization requests.
 
 Pass, pass-report, and compile-report modes verify input before any target
 specialization or transformation, and verify successful pipeline output before
