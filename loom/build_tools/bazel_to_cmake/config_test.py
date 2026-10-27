@@ -56,6 +56,10 @@ class ConfigTest(unittest.TestCase):
                 "LOOM_ARTIFACT_AIE2P_ELF",
             ),
             (
+                "//loom/config/emit:native_object",
+                "LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_X86_ELF",
+            ),
+            (
                 "//loom/config/arch/amdgpu:descriptor_set_gfx11_generic_core",
                 "LOOM_ARCH_AMDGPU_DESCRIPTOR_SET_GFX11_GENERIC_CORE",
             ),

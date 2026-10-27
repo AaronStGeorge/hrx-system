@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(LOOM_ARTIFACT_AMDGPU_ELF AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_library(
   NAME
     assembly
@@ -25,7 +26,9 @@ loom_cc_library(
     loom::ops::op_defs
   PUBLIC
 )
+endif()
 
+if((LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_library(
   NAME
     elf
@@ -41,7 +44,9 @@ loom_cc_library(
     iree::io::stream
   PUBLIC
 )
+endif()
 
+if((LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_X86_ELF) AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_library(
   NAME
     contribution
@@ -54,7 +59,9 @@ loom_cc_library(
     iree::base::internal::arena
   PUBLIC
 )
+endif()
 
+if((LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_X86_ELF) AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_library(
   NAME
     elf_sections
@@ -68,7 +75,9 @@ loom_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if((LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_X86_ELF) AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_library(
   NAME
     object
@@ -81,7 +90,9 @@ loom_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(LOOM_ARTIFACT_X86_ELF AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_library(
   NAME
     object_elf
@@ -101,7 +112,9 @@ loom_cc_library(
     iree::io::stream
   PUBLIC
 )
+endif()
 
+if(LOOM_ARTIFACT_X86_ELF AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_library(
   NAME
     module
@@ -125,7 +138,9 @@ loom_cc_library(
     loom::target::reporting::report
   PUBLIC
 )
+endif()
 
+if(LOOM_ARTIFACT_X86_ELF AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_library(
   NAME
     task_library
@@ -142,7 +157,9 @@ loom_cc_library(
     loom::target::abi::task::state_layout
   PUBLIC
 )
+endif()
 
+if((LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_test(
   NAME
     elf_symbols_test
@@ -154,8 +171,12 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.emit.native"
 )
+endif()
 
+if((LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_test(
   NAME
     elf_test
@@ -168,8 +189,12 @@ loom_cc_test(
     iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.emit.native"
 )
+endif()
 
+if((LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_X86_ELF) AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_test(
   NAME
     object_test
@@ -182,8 +207,12 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.emit.native"
 )
+endif()
 
+if((LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_X86_ELF) AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_test(
   NAME
     contribution_test
@@ -195,8 +224,12 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.emit.native"
 )
+endif()
 
+if((LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_X86_ELF) AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_test(
   NAME
     elf_sections_test
@@ -207,8 +240,12 @@ loom_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.emit.native"
 )
+endif()
 
+if(LOOM_ARTIFACT_X86_ELF AND (LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF))
 loom_cc_test(
   NAME
     object_elf_test
@@ -221,6 +258,9 @@ loom_cc_test(
     iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.emit.native"
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -89,6 +89,13 @@ def _loom_amdgpu_config_cmake_options():
     return options
 
 
+_LOOM_NATIVE_ELF_CMAKE_CONDITION = (
+    "LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF"
+)
+_LOOM_NATIVE_OBJECT_ELF_CMAKE_CONDITION = (
+    "LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_X86_ELF"
+)
+
 _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config:shared_tools_enabled": "LOOM_LINK_SHARED_TOOLS",
     "//loom/config/arch:aie2p": "LOOM_ARCH_AIE2P",
@@ -107,6 +114,10 @@ _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config/emit:vm_binary": "LOOM_ARTIFACT_VM_BINARY",
     "//loom/config/emit:wasm_binary": "LOOM_ARTIFACT_WASM_BINARY",
     "//loom/config/emit:x86_elf": "LOOM_ARTIFACT_X86_ELF",
+    "//loom/config/emit:native": _LOOM_NATIVE_ELF_CMAKE_CONDITION,
+    "//loom/config/emit:native_elf": _LOOM_NATIVE_ELF_CMAKE_CONDITION,
+    "//loom/config/emit:native_object": _LOOM_NATIVE_OBJECT_ELF_CMAKE_CONDITION,
+    "//loom/config/emit:native_object_elf": _LOOM_NATIVE_OBJECT_ELF_CMAKE_CONDITION,
     "//loom/config/execute:iree_hal": "LOOM_EXECUTE_IREE_HAL",
     "//loom/config/execute:iree_vm": "LOOM_EXECUTE_IREE_VM",
     "//loom/config/execute:wasm_host": "LOOM_EXECUTE_WASM_HOST",

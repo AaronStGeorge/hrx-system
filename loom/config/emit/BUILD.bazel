@@ -48,6 +48,32 @@ iree_string_list_flag(
     ]
 ]
 
+# Internal native-emission joins describe implementation reuse across artifact
+# providers. They are derived facts rather than user-configurable capabilities.
+_NATIVE_ELF_ARTIFACTS = [
+    ":aie2p_elf",
+    ":amdgpu_elf",
+    ":x86_elf",
+]
+
+_NATIVE_OBJECT_ELF_ARTIFACTS = [
+    ":aie2p_elf",
+    ":x86_elf",
+]
+
+[
+    selects.config_setting_group(
+        name = name,
+        match_any = artifacts,
+    )
+    for name, artifacts in [
+        ("native", _NATIVE_ELF_ARTIFACTS),
+        ("native_elf", _NATIVE_ELF_ARTIFACTS),
+        ("native_object", _NATIVE_OBJECT_ELF_ARTIFACTS),
+        ("native_object_elf", _NATIVE_OBJECT_ELF_ARTIFACTS),
+    ]
+]
+
 [
     selects.config_setting_group(
         name = format + "_binary",

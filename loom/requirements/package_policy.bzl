@@ -34,6 +34,7 @@ load(
     "IMPORT_CXX",
     "IMPORT_MLIR",
     "IMPORT_TILELANG",
+    "NATIVE_EMISSION",
 )
 
 PACKAGE_POLICIES = [
@@ -87,6 +88,10 @@ PACKAGE_POLICIES = [
     package_policy(
         packages = ["loom/src/loom/target/arch/x86/..."],
         build_requirements = [ARCH_X86],
+    ),
+    package_policy(
+        packages = ["loom/src/loom/target/emit/native"],
+        build_requirements = [NATIVE_EMISSION],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/native/amdgpu/..."],

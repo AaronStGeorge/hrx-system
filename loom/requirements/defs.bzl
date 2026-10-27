@@ -53,6 +53,16 @@ ARTIFACT_X86_ELF = build_requirement(
     cmake_condition = "LOOM_ARTIFACT_X86_ELF",
 )
 
+NATIVE_EMISSION = build_requirement(
+    id = "loom.emit.native",
+    label = Label("//loom/requirements:emit_native"),
+    enabled_by = Label("//loom/config/emit:native"),
+    cmake_condition = (
+        "LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR " +
+        "LOOM_ARTIFACT_X86_ELF"
+    ),
+)
+
 EXECUTE_IREE_HAL = build_requirement(
     id = "loom.execute.iree_hal",
     label = Label("//loom/requirements:execute_iree_hal"),
@@ -150,6 +160,7 @@ REQUIREMENTS = [
     ARTIFACT_VM_BINARY,
     ARTIFACT_WASM_BINARY,
     ARTIFACT_X86_ELF,
+    NATIVE_EMISSION,
     EXECUTE_IREE_HAL,
     EXECUTE_IREE_VM,
     EXECUTE_WASM_HOST,
