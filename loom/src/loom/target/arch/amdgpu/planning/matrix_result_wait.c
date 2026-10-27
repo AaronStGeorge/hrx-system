@@ -773,7 +773,7 @@ loom_amdgpu_matrix_result_match_t loom_amdgpu_matrix_result_wait_inspect(
     return match;
   }
   if (packet->descriptor == NULL &&
-      (loom_low_br_isa(packet->node->op) ||
+      (loom_direct_branch_isa(packet->node->op) ||
        !iree_any_bit_set(structural->flags,
                          LOOM_AMDGPU_STRUCTURAL_PACKET_FLAG_MATERIALIZES))) {
     return match;

@@ -1381,6 +1381,35 @@ iree_status_t loom_low_br_verify(const loom_module_t* module,
                                         args.count);
 }
 
+iree_status_t loom_low_br_identity_verify(const loom_module_t* module,
+                                          const loom_op_t* op,
+                                          iree_diagnostic_emitter_t emitter) {
+  const loom_value_slice_t args = loom_low_br_identity_args(op);
+  IREE_RETURN_IF_ERROR(loom_ops_verify_successor_args(
+      module, emitter, op, IREE_SV("low.br.identity"), 0,
+      loom_low_br_identity_dest(op), args.values, args.count));
+
+  const int64_t start = loom_low_br_identity_start(op);
+  const int64_t count = loom_low_br_identity_count(op);
+  if (count <= 0 || count > UINT16_MAX) {
+    return loom_low_emit_attr_value_error(
+        op, loom_low_br_identity_count_diagnostic_ref(), IREE_SV("count"),
+        count, IREE_SV("positive u16"), emitter);
+  }
+  if (start < 0 || start > UINT16_MAX || (uint64_t)start >= args.count) {
+    return loom_low_emit_attr_value_error(
+        op, loom_low_br_identity_start_diagnostic_ref(), IREE_SV("start"),
+        start, IREE_SV("payload position containing the identity range"),
+        emitter);
+  }
+  if ((uint64_t)count > args.count - (uint64_t)start) {
+    return loom_low_emit_attr_value_error(
+        op, loom_low_br_identity_count_diagnostic_ref(), IREE_SV("count"),
+        count, IREE_SV("range contained by the branch payload"), emitter);
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_cond_br_verify(const loom_module_t* module,
                                       const loom_op_t* op,
                                       iree_diagnostic_emitter_t emitter) {

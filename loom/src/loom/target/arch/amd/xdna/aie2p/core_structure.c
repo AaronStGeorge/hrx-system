@@ -13,6 +13,9 @@ loom_aie2p_core_structure_kind_t loom_aie2p_core_structure_classify(
   if (loom_traits_are_compile_time_only(op->traits)) {
     return LOOM_AIE2P_CORE_STRUCTURE_COMPILE_TIME;
   }
+  if (loom_direct_branch_isa(op)) {
+    return LOOM_AIE2P_CORE_STRUCTURE_BRANCH;
+  }
   switch (op->kind) {
     case LOOM_OP_LOW_COPY:
     case LOOM_OP_LOW_MOVE:
@@ -26,8 +29,6 @@ loom_aie2p_core_structure_kind_t loom_aie2p_core_structure_classify(
       return LOOM_AIE2P_CORE_STRUCTURE_DECLARATION;
     case LOOM_OP_LOW_STORAGE_ADDRESS:
       return LOOM_AIE2P_CORE_STRUCTURE_STORAGE_ADDRESS;
-    case LOOM_OP_LOW_BR:
-      return LOOM_AIE2P_CORE_STRUCTURE_BRANCH;
     case LOOM_OP_LOW_COND_BR:
       return LOOM_AIE2P_CORE_STRUCTURE_CONDITIONAL_BRANCH;
     case LOOM_OP_LOW_RETURN:

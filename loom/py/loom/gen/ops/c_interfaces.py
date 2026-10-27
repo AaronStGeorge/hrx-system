@@ -21,6 +21,7 @@ from loom.dsl import (
     CachePolicyInterface,
     CallLikeInterface,
     CallLikeKind,
+    DirectBranchInterface,
     EffectKind,
     FuncLikeInterface,
     LoopLikeInterface,
@@ -60,6 +61,10 @@ _MEMORY_ACCESS_OPERATION_KIND_MAP: dict[MemoryAccessOperationKind, str] = {
 #
 # The generator code is entirely table-driven off INTERFACES. Adding an
 # interface does not require any changes to the emission loops.
+#
+# DirectBranchInterface is a compact structural interface: its declaration is
+# validated here, while membership is emitted as a vtable flag and cached on
+# each operation instance. Its constrained shape needs no per-kind vtable.
 
 
 @dataclass(frozen=True, slots=True)
@@ -689,6 +694,29 @@ def _validate_region_branch_interface(op: Op, iface: RegionBranchInterface, inte
         raise ValueError(f"{interface_name} on {op.name!r}: true_region and false_region must be declared together")
     if iface.true_region is not None and iface.true_region == iface.false_region:
         raise ValueError(f"{interface_name} on {op.name!r}: true_region and false_region must be distinct")
+
+
+def op_implements_direct_branch(op: Op) -> bool:
+    """Validates and returns DirectBranchInterface membership for ``op``."""
+    iface = c_queries.find_interface(op, DirectBranchInterface)
+    if iface is None:
+        return False
+    interface_name = "DirectBranchInterface"
+    if not op.has_trait("Terminator"):
+        raise ValueError(f"{interface_name} on {op.name!r}: operation must be a terminator")
+    if op.successor_selector is not None:
+        raise ValueError(f"{interface_name} on {op.name!r}: operation cannot declare a successor selector")
+    if len(op.successors) != 1 or op.successors[0].name != iface.dest:
+        raise ValueError(f"{interface_name} on {op.name!r}: dest {iface.dest!r} must name the sole successor")
+    if op.results or op.regions:
+        raise ValueError(f"{interface_name} on {op.name!r}: operation cannot have results or regions")
+    if iface.args is None:
+        if op.operands:
+            raise ValueError(f"{interface_name} on {op.name!r}: args=None requires an operandless operation")
+        return True
+    if len(op.operands) != 1 or op.operands[0].name != iface.args or not op.operands[0].variadic:
+        raise ValueError(f"{interface_name} on {op.name!r}: args {iface.args!r} must name the sole variadic operand field")
+    return True
 
 
 def _interface_field_initializers(op: Op, spec: InterfaceSpec, iface: Any, ops_by_name: dict[str, Op]) -> list[str]:

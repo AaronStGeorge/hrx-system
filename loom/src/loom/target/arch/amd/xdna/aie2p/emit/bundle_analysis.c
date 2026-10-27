@@ -401,7 +401,8 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
         control_bundle_count = loom_aie2p_bundle_plan_control_bundle_count(
             descriptor_set, AIE2P_CORE_DESCRIPTOR_REF_BRANCH_DIRECT);
         const uint32_t target_block_index = loom_low_packet_block_index(
-            &frame->schedule, loom_low_br_dest(terminator_packet.node->op));
+            &frame->schedule,
+            loom_direct_branch_dest(terminator_packet.node->op));
         if (target_block_index != next_block_index) {
           block_analysis->branches.values[block_analysis->branches.count++] =
               (loom_aie2p_block_branch_t){

@@ -87,6 +87,7 @@ from loom.dsl import (
     ConditionForwardedCountMatchesBlockArgs,
     ConditionForwardedTypesMatchBlockArgs,
     Dialect,
+    DirectBranchInterface,
     EnumCase,
     EnumDef,
     FuncLikeInterface,
@@ -813,6 +814,7 @@ low_br = Op(
     ],
     successors=[Successor("dest", doc="Destination low block.")],
     traits=[TERMINATOR, STORAGE_RELATION],
+    interfaces=[DirectBranchInterface(args="args", dest="dest")],
     verify="loom_low_br_verify",
     format=[
         BlockRef("dest"),
@@ -824,6 +826,63 @@ low_br = Op(
     examples=[
         "low.br ^done",
         "low.br ^join(%value: reg<test.i32>)",
+    ],
+)
+
+# ============================================================================
+# low.br.identity — branch with a required physical-storage identity range
+# ============================================================================
+
+low_br_identity = Op(
+    "low.br.identity",
+    group=low_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Unconditional branch whose contiguous identity payload range shares "
+        "exact physical storage with the corresponding destination block "
+        "arguments. Other payload values use ordinary edge transfers. This "
+        "preserves register contents when destination participation includes "
+        "lanes that did not execute the branch."
+    ),
+    operands=[
+        Operand(
+            "args",
+            REGISTER,
+            variadic=True,
+            doc="Register values forwarded to the destination block arguments.",
+        )
+    ],
+    attrs=[
+        AttrDef(
+            "start",
+            ATTR_TYPE_I64,
+            doc="First payload position sharing destination storage.",
+        ),
+        AttrDef(
+            "count",
+            ATTR_TYPE_I64,
+            doc="Number of payload positions sharing destination storage.",
+        ),
+    ],
+    successors=[Successor("dest", doc="Destination low block.")],
+    traits=[TERMINATOR, STORAGE_RELATION],
+    interfaces=[DirectBranchInterface(args="args", dest="dest")],
+    verify="loom_low_br_identity_verify",
+    format=[
+        GLUE,
+        LPAREN,
+        Attr("start"),
+        COMMA,
+        Attr("count"),
+        RPAREN,
+        BlockRef("dest"),
+        OptionalGroup(
+            [GLUE, LPAREN, TypedRefs("args"), RPAREN],
+            anchor="args",
+        ),
+    ],
+    examples=[
+        "low.br.identity(2, 1) ^capture(%result: reg<test.i32>, %mask: reg<test.i32>, %retained: reg<test.i32>)",
     ],
 )
 
@@ -1933,4 +1992,6 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_op_cond_br,
     low_func_exit,
     low_unreachable,
+    # Appended to preserve every existing serialized Low operation ordinal.
+    low_br_identity,
 )

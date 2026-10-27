@@ -100,8 +100,8 @@ loom_amdgpu_structural_packet_info_t loom_amdgpu_structural_packet_analyze(
     info.vector_alu_instruction_count = 1;
     return info;
   }
-  if (loom_low_br_isa(op)) {
-    if (allocation != NULL && loom_low_br_args(op).count != 0) {
+  if (loom_direct_branch_isa(op)) {
+    if (allocation != NULL && loom_direct_branch_args(op).count != 0) {
       const loom_low_allocation_edge_copy_group_t* group =
           loom_low_allocation_find_edge_copy_group_by_source_ordinal(
               allocation, node_index);

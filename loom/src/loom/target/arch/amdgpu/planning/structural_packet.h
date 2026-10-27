@@ -77,9 +77,9 @@ static inline uint64_t loom_amdgpu_structural_packet_control_transfer_count(
   if (loom_low_return_isa(op) || loom_low_unreachable_isa(op)) {
     return 1;
   }
-  if (loom_low_br_isa(op)) {
+  if (loom_direct_branch_isa(op)) {
     const uint32_t destination_block_index =
-        loom_low_packet_block_index(schedule, loom_low_br_dest(op));
+        loom_low_packet_block_index(schedule, loom_direct_branch_dest(op));
     return destination_block_index == node->block_index + 1 ? 0 : 1;
   }
   if (!loom_low_cond_br_isa(op)) {

@@ -483,6 +483,14 @@ TEST_F(CfgGraphTest, TerminatorPayloadForSuccessorUsesSingleSuccessorOperands) {
   loom_value_id_t payload = BuildConstant(42, i32);
   loom_op_t* branch_op = BuildBranchWithArgs(target, &payload, 1);
 
+  EXPECT_TRUE(loom_direct_branch_isa(branch_op));
+  EXPECT_EQ(loom_direct_branch_dest(branch_op), target);
+  loom_value_slice_t branch_args = loom_direct_branch_args(branch_op);
+  ASSERT_EQ(branch_args.count, 1u);
+  EXPECT_EQ(branch_args.values[0], payload);
+  loom_op_refresh_effective_traits(module_, branch_op);
+  EXPECT_TRUE(loom_direct_branch_isa(branch_op));
+
   const loom_value_id_t* args = nullptr;
   uint16_t arg_count = 0;
   EXPECT_TRUE(loom_cfg_terminator_payload_for_successor(branch_op, target,
@@ -500,6 +508,7 @@ TEST_F(CfgGraphTest,
   SetBlock(entry);
   loom_op_t* branch_op = BuildConditionalBranch(then_block, else_block);
 
+  EXPECT_FALSE(loom_direct_branch_isa(branch_op));
   loom_value_id_t sentinel = 123;
   const loom_value_id_t* args = &sentinel;
   uint16_t arg_count = 1;

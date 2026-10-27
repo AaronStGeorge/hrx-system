@@ -117,7 +117,7 @@ loom_target_compile_report_pressure_origin_from_low_op(const loom_op_t* op) {
   if (loom_low_spill_isa(op) || loom_low_reload_isa(op)) {
     return LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SPILL_RELOAD;
   }
-  if (loom_low_br_isa(op) || loom_low_cond_br_isa(op) ||
+  if (loom_direct_branch_isa(op) || loom_low_cond_br_isa(op) ||
       loom_low_return_isa(op) || loom_low_unreachable_isa(op)) {
     return LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONTROL;
   }

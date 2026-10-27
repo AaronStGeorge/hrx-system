@@ -54,6 +54,13 @@ class LowStorageRelationTest : public ::testing::Test {
     return value_id;
   }
 
+  loom_value_id_t AddBlockArgument(loom_block_t* block,
+                                   uint32_t unit_count = 1) {
+    const loom_value_id_t value_id = DefineRegister(unit_count);
+    IREE_CHECK_OK(loom_block_add_arg(module_, block, value_id));
+    return value_id;
+  }
+
   std::vector<loom_low_storage_relation_t> Collect(const loom_op_t* op) {
     loom_low_storage_relation_iterator_t iterator;
     loom_low_storage_relation_iterator_initialize(module_, op, &iterator);
@@ -116,6 +123,56 @@ TEST_F(LowStorageRelationTest, ProjectsSharedLoopEdgesWithoutBypassAffinity) {
             LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_SCF_YIELD);
   EXPECT_EQ(yield_relations[1].cause,
             LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_SCF_YIELD);
+}
+
+TEST_F(LowStorageRelationTest, DirectBranchIdentityRangeIsMandatory) {
+  loom_region_t* region = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate_region(module_, 3, &region));
+  region->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_block_t* identity_source = loom_region_block(region, 0);
+  loom_block_t* ordinary_source = loom_region_block(region, 1);
+  loom_block_t* destination = loom_region_block(region, 2);
+
+  loom_value_id_t identity_args[3];
+  loom_value_id_t ordinary_args[3];
+  loom_value_id_t destination_args[3];
+  for (uint16_t i = 0; i < 3; ++i) {
+    identity_args[i] = AddBlockArgument(identity_source);
+    ordinary_args[i] = AddBlockArgument(ordinary_source);
+    destination_args[i] = AddBlockArgument(destination);
+  }
+
+  loom_builder_set_block(&builder_, identity_source);
+  loom_op_t* identity_branch = nullptr;
+  IREE_ASSERT_OK(loom_low_br_identity_build(
+      &builder_, /*start=*/1, /*count=*/1, destination, identity_args,
+      IREE_ARRAYSIZE(identity_args), LOOM_LOCATION_UNKNOWN, &identity_branch));
+  loom_builder_set_block(&builder_, ordinary_source);
+  loom_op_t* ordinary_branch = nullptr;
+  IREE_ASSERT_OK(loom_low_br_build(&builder_, destination, ordinary_args,
+                                   IREE_ARRAYSIZE(ordinary_args),
+                                   LOOM_LOCATION_UNKNOWN, &ordinary_branch));
+
+  const std::vector<loom_low_storage_relation_t> identity_relations =
+      Collect(identity_branch);
+  ASSERT_EQ(identity_relations.size(), 3u);
+  for (uint16_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(identity_relations[i].source_value_id, identity_args[i]);
+    EXPECT_EQ(identity_relations[i].destination_value_id, destination_args[i]);
+    EXPECT_EQ(identity_relations[i].source_operand_index, i);
+    EXPECT_EQ(identity_relations[i].cause,
+              LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_BRANCH);
+    EXPECT_EQ(identity_relations[i].flags,
+              i == 1 ? LOOM_LOW_STORAGE_RELATION_FLAG_HARD
+                     : LOOM_LOW_STORAGE_RELATION_FLAG_PREFERRED);
+  }
+
+  const std::vector<loom_low_storage_relation_t> ordinary_relations =
+      Collect(ordinary_branch);
+  ASSERT_EQ(ordinary_relations.size(), 3u);
+  for (const loom_low_storage_relation_t& relation : ordinary_relations) {
+    EXPECT_EQ(relation.flags, LOOM_LOW_STORAGE_RELATION_FLAG_PREFERRED);
+  }
 }
 
 }  // namespace

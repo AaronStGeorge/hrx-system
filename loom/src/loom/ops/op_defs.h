@@ -1292,6 +1292,32 @@ loom_value_id_t loom_loop_like_step(loom_loop_like_t loop);
 bool loom_loop_like_has_counted_range(loom_loop_like_t loop);
 
 //===----------------------------------------------------------------------===//
+// DirectBranch interface
+//===----------------------------------------------------------------------===//
+
+// Returns true if |op| implements the generated DirectBranch interface.
+// Interface membership is cached on the operation during construction, while
+// generation proves the fixed one-successor/all-operands-payload shape.
+static inline bool loom_direct_branch_isa(const loom_op_t* op) {
+  return op && iree_any_bit_set(op->flags, LOOM_OP_FLAG_DIRECT_BRANCH);
+}
+
+// Returns the sole destination of a direct branch.
+static inline loom_block_t* loom_direct_branch_dest(const loom_op_t* op) {
+  IREE_ASSERT(loom_direct_branch_isa(op));
+  return loom_op_const_successors(op)[0];
+}
+
+// Returns the complete positional payload forwarded by a direct branch.
+static inline loom_value_slice_t loom_direct_branch_args(const loom_op_t* op) {
+  IREE_ASSERT(loom_direct_branch_isa(op));
+  return (loom_value_slice_t){
+      .values = loom_op_operands(op),
+      .count = op->operand_count,
+  };
+}
+
+//===----------------------------------------------------------------------===//
 // RegionBranch interface
 //===----------------------------------------------------------------------===//
 

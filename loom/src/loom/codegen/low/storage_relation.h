@@ -51,7 +51,7 @@ enum loom_low_storage_relation_cause_e {
   LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_SLICE = 4,
   // low.concat source/result contiguous packing affinity.
   LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_CONCAT = 5,
-  // low.br edge payload source/block-argument affinity.
+  // Low direct-branch payload source/block-argument affinity.
   LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_BRANCH = 6,
   // Structured-loop initial iter_arg/entry-argument affinity.
   LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_SCF_LOOP_ENTRY = 7,

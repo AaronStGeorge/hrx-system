@@ -83,6 +83,16 @@ low.func.def target<test.low.core>(@test_target) @typed_call_and_branch(%value: 
 
 test.target<low_core> @test_target
 
+low.func.def target<test.low.core>(@test_target) @identity_branch(%ordinary: reg<test.i32>, %retained: reg<test.i32>, %tail: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  low.br.identity(1, 1) ^exit(%ordinary: reg<test.i32>, %retained: reg<test.i32>, %tail: reg<test.i32>)
+^exit(%ordinary_result: reg<test.i32>, %retained_result: reg<test.i32>, %tail_result: reg<test.i32>):
+  return %ordinary_result, %retained_result, %tail_result
+}
+
+// ====
+
+test.target<low_core> @test_target
+
 low.func.def target<test.low.core>(@test_target) @storage_view(%value: reg<test.i32>) -> (reg<test.i32>) asm {
   %storage = storage {byte_alignment = 16, byte_length = 64} : low.storage<scratch>
   %whole = storage_view %storage {byte_length = 64} : low.storage<scratch> -> low.storage<scratch>

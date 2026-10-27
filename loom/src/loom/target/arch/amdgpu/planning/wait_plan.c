@@ -441,7 +441,7 @@ static iree_status_t loom_amdgpu_wait_plan_append_dependency_link(
 
 static bool loom_amdgpu_wait_plan_node_has_wait_consuming_operands(
     const loom_low_schedule_node_t* node) {
-  return node->op == NULL || !loom_low_br_isa(node->op);
+  return node->op == NULL || !loom_direct_branch_isa(node->op);
 }
 
 static const loom_low_allocation_edge_copy_group_t*
@@ -452,7 +452,7 @@ loom_amdgpu_wait_plan_edge_copy_group(
     return NULL;
   }
   const loom_low_schedule_node_t* node = &builder->schedule->nodes[node_index];
-  if (node->op == NULL || !loom_low_br_isa(node->op)) {
+  if (node->op == NULL || !loom_direct_branch_isa(node->op)) {
     return NULL;
   }
   return loom_low_allocation_find_edge_copy_group_by_source_ordinal(
@@ -753,12 +753,12 @@ static iree_status_t loom_amdgpu_wait_plan_build_edge_copy_dependency_links(
   if (group == NULL) {
     const loom_low_schedule_node_t* node =
         &builder->schedule->nodes[consumer_node];
-    if (node->op != NULL && loom_low_br_isa(node->op) &&
-        loom_low_br_args(node->op).count != 0) {
+    if (node->op != NULL && loom_direct_branch_isa(node->op) &&
+        loom_direct_branch_args(node->op).count != 0) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU wait planning requires allocation edge copies for low.br "
-          "payloads");
+          "AMDGPU wait planning requires allocation edge copies for Low "
+          "direct-branch payloads");
     }
     return iree_ok_status();
   }
@@ -1192,7 +1192,7 @@ static iree_status_t loom_amdgpu_wait_plan_build_dependency_links(
                                                          consumer_node)) {
       continue;
     }
-    if (node->op != NULL && loom_low_br_isa(node->op)) {
+    if (node->op != NULL && loom_direct_branch_isa(node->op)) {
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_wait_plan_build_edge_copy_dependency_links(
               builder, producer_nodes, value_count, consumer_node));

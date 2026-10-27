@@ -277,6 +277,7 @@ __all__ = [
     "CachePolicyInterface",
     "CallLikeInterface",
     "CallLikeKind",
+    "DirectBranchInterface",
     "FuncLikeInterface",
     "InlinePolicy",
     "LoopLikeInterface",
@@ -5777,6 +5778,22 @@ class CallLikeInterface(NamedTuple):
     inline_policy: str | None = None
     # Semantic class used by analyses to opt into only the call shapes they own.
     kind: CallLikeKind = CallLikeKind.SEMANTIC
+
+
+class DirectBranchInterface(NamedTuple):
+    """Interface for unconditional CFG branches with one destination.
+
+    Implementing operations expose their complete operand list as the
+    positional payload forwarded to one successor block. The generator proves
+    the fixed structural shape, allowing C consumers to use one cached marker
+    bit and the generic operation storage instead of an interface vtable.
+    """
+
+    # Variadic operand field holding the complete successor payload. None is
+    # valid only for operandless branches.
+    args: str | None
+    # Sole successor field naming the destination block.
+    dest: str
 
 
 class FuncLikeInterface(NamedTuple):

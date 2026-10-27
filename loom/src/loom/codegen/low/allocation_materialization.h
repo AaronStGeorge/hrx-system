@@ -225,8 +225,8 @@ typedef struct loom_low_allocation_materialization_result_t {
 // incoming edges before the branch, and reloads are inserted immediately before
 // each remaining original operand use. Materialized function-region non-entry
 // block arguments are removed from the block signature and from all predecessor
-// low.br payloads. Nested-region block arguments are register ABI values and
-// never appear in a spill plan.
+// Low direct-branch payloads. Nested-region block arguments are register ABI
+// values and never appear in a spill plan.
 iree_status_t loom_low_allocation_materialize_spills(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_spill_plan_t* spill_plans,

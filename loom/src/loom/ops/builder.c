@@ -651,6 +651,18 @@ static iree_status_t loom_builder_allocate_op_storage(
   return iree_ok_status();
 }
 
+// Caches immutable generated interfaces implemented only by successor-bearing
+// operations. Keeping this out of the shared allocation routine leaves
+// ordinary operation construction unchanged.
+static void loom_builder_initialize_successor_interfaces(
+    const loom_builder_t* builder, loom_op_t* op) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(builder->module, op);
+  if (vtable &&
+      iree_any_bit_set(vtable->vtable_flags, LOOM_OP_VTABLE_DIRECT_BRANCH)) {
+    op->flags |= LOOM_OP_FLAG_DIRECT_BRANCH;
+  }
+}
+
 iree_status_t loom_builder_allocate_op(
     loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
     uint16_t result_count, uint8_t region_count, uint16_t tied_result_count,
@@ -666,10 +678,14 @@ iree_status_t loom_builder_allocate_op_with_successors(
     uint16_t result_count, uint8_t successor_count, uint8_t region_count,
     uint16_t tied_result_count, uint8_t attribute_count,
     loom_location_id_t location, loom_op_t** out_op) {
-  return loom_builder_allocate_op_storage(
+  iree_status_t status = loom_builder_allocate_op_storage(
       builder, kind, operand_count, /*operand_segment_counts=*/NULL,
       /*operand_segment_count=*/0, result_count, successor_count, region_count,
       tied_result_count, attribute_count, location, out_op);
+  if (iree_status_is_ok(status)) {
+    loom_builder_initialize_successor_interfaces(builder, *out_op);
+  }
+  return status;
 }
 
 iree_status_t loom_builder_allocate_segmented_op(
@@ -689,10 +705,14 @@ iree_status_t loom_builder_allocate_segmented_op_with_successors(
     uint16_t result_count, uint8_t successor_count, uint8_t region_count,
     uint16_t tied_result_count, uint8_t attribute_count,
     loom_location_id_t location, loom_op_t** out_op) {
-  return loom_builder_allocate_op_storage(
+  iree_status_t status = loom_builder_allocate_op_storage(
       builder, kind, operand_count, operand_segment_counts,
       operand_segment_count, result_count, successor_count, region_count,
       tied_result_count, attribute_count, location, out_op);
+  if (iree_status_is_ok(status)) {
+    loom_builder_initialize_successor_interfaces(builder, *out_op);
+  }
+  return status;
 }
 
 //===----------------------------------------------------------------------===//

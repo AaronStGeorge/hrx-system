@@ -52,7 +52,7 @@ loom_low_allocation_edge_copy_branch_relation(
     }
   }
   IREE_ASSERT_UNREACHABLE(
-      "verified low.br payload must have a placement relation");
+      "verified Low direct-branch payload must have a placement relation");
   return NULL;
 }
 
@@ -198,13 +198,14 @@ static iree_status_t loom_low_allocation_edge_copy_record_group(
     const loom_liveness_operation_point_t* operation_point,
     uint32_t source_ordinal) {
   const loom_op_t* op = operation_point->op;
-  const loom_value_slice_t args = loom_low_br_args(op);
+  const loom_value_slice_t args = loom_direct_branch_args(op);
   if (args.count == 0) {
     return iree_ok_status();
   }
-  const loom_block_t* destination_block = loom_low_br_dest(op);
+  const loom_block_t* destination_block = loom_direct_branch_dest(op);
   IREE_ASSERT_EQ(args.count, destination_block->arg_count,
-                 "verified low.br payload must match destination arguments");
+                 "verified Low direct-branch payload must match destination "
+                 "arguments");
   loom_low_allocation_edge_copy_group_t* group =
       &builder->plan.groups[builder->plan.group_count++];
   *group = (loom_low_allocation_edge_copy_group_t){
@@ -240,7 +241,7 @@ static iree_status_t loom_low_allocation_edge_copy_record_region(
       const loom_liveness_operation_point_t* operation_point =
           loom_low_allocation_move_plan_next_operation(
               builder->context->move_plan, op, &builder->cursor);
-      if (loom_low_br_isa(op)) {
+      if (loom_direct_branch_isa(op)) {
         IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_record_group(
             builder, operation_point, *inout_source_ordinal));
         if (move_context->target_constraints->error_count != 0) {

@@ -40,7 +40,7 @@ typedef enum loom_low_placement_cause_bits_e {
   LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE = 4,
   // low.concat source/result contiguous packing affinity.
   LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT = 5,
-  // low.br edge payload source/block-argument affinity.
+  // Low direct-branch payload source/block-argument affinity.
   LOOM_LOW_PLACEMENT_CAUSE_LOW_BRANCH = 6,
   // Structured-loop initial iter_arg/entry-argument affinity.
   LOOM_LOW_PLACEMENT_CAUSE_LOW_SCF_LOOP_ENTRY = 7,
@@ -319,9 +319,9 @@ typedef struct loom_low_placement_table_t {
   uint32_t packet_move_group_count;
   // Total units covered by low.copy/move/slice/concat relations.
   iree_host_size_t packet_move_unit_count;
-  // Number of low.br operations that may require edge copies.
+  // Number of Low direct branches that may require edge copies.
   uint32_t edge_copy_group_count;
-  // Total units covered by low.br relations.
+  // Total units covered by Low direct-branch relations.
   iree_host_size_t branch_unit_count;
   // Maximum raw move units contributed by any one packet or branch operation.
   iree_host_size_t max_move_group_unit_count;

@@ -26,6 +26,7 @@ from loom.dsl import (
     ConditionForwardedTypesMatchBlockArgs,
     Constraint,
     Dialect,
+    DirectBranchInterface,
     EnumCase,
     EnumDef,
     FuncLikeInterface,
@@ -39,12 +40,69 @@ from loom.dsl import (
     RegionDef,
     RegionExecution,
     Result,
+    Successor,
     TargetFactSpecialization,
     TargetLikeInterface,
+    Trait,
     YieldCountMatches,
     YieldTypesMatch,
 )
 from loom.gen.ops.c_metadata_tables import generate_tables_c
+
+
+def _direct_branch_test_op(
+    *,
+    interface: DirectBranchInterface | None = None,
+    operands: list[Operand] | None = None,
+    successors: list[Successor] | None = None,
+    traits: list[Trait] | None = None,
+) -> Op:
+    return Op(
+        "test.br",
+        group=Dialect("test"),
+        operands=([Operand("args", ANY, variadic=True)] if operands is None else operands),
+        successors=([Successor("dest")] if successors is None else successors),
+        traits=[TERMINATOR] if traits is None else traits,
+        interfaces=[interface or DirectBranchInterface(args="args", dest="dest")],
+    )
+
+
+def test_generate_tables_marks_direct_branch_interface() -> None:
+    source = generate_tables_c("test", 0, [_direct_branch_test_op()])
+
+    assert "LOOM_OP_VTABLE_DIRECT_BRANCH" in source
+
+
+def test_generate_tables_rejects_direct_branch_without_terminator() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"DirectBranchInterface on 'test\.br': operation must be a terminator",
+    ):
+        generate_tables_c("test", 0, [_direct_branch_test_op(traits=[])])
+
+
+def test_generate_tables_rejects_direct_branch_without_complete_payload() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"args 'args' must name the sole variadic operand field",
+    ):
+        generate_tables_c(
+            "test",
+            0,
+            [_direct_branch_test_op(operands=[Operand("condition", INTEGER)])],
+        )
+
+
+def test_generate_tables_rejects_direct_branch_with_multiple_successors() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"dest 'dest' must name the sole successor",
+    ):
+        generate_tables_c(
+            "test",
+            0,
+            [_direct_branch_test_op(successors=[Successor("dest"), Successor("other")])],
+        )
 
 
 def _target_projection_test_op(

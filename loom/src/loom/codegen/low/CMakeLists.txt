@@ -547,6 +547,21 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    storage_identity_test
+  SRCS
+    "storage_identity_test.cc"
+  DEPS
+    ::storage_identity
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::low
+    loom::target::registers
+)
+
 loom_cc_library(
   NAME
     storage_relation

@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "loom/ir/context.h"
+#include "loom/ops/op_defs.h"
 
 static iree_status_t loom_cfg_graph_count_edges(const loom_region_t* region,
                                                 loom_cfg_graph_t* graph) {
@@ -172,13 +173,14 @@ bool loom_cfg_terminator_payload_for_successor(const loom_op_t* terminator,
   IREE_ASSERT_ARGUMENT(out_arg_count);
   *out_args = NULL;
   *out_arg_count = 0;
-  if (!terminator || !successor || terminator->successor_count != 1 ||
-      loom_op_const_successors(terminator)[0] != successor ||
+  if (!loom_direct_branch_isa(terminator) || !successor ||
+      loom_direct_branch_dest(terminator) != successor ||
       terminator->operand_count != successor->arg_count) {
     return false;
   }
-  *out_args = loom_op_const_operands(terminator);
-  *out_arg_count = terminator->operand_count;
+  const loom_value_slice_t payload = loom_direct_branch_args(terminator);
+  *out_args = payload.values;
+  *out_arg_count = payload.count;
   return true;
 }
 

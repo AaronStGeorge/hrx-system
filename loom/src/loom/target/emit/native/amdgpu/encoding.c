@@ -1781,8 +1781,8 @@ static iree_status_t loom_amdgpu_encode_branch_groups_before_packet(
 static iree_status_t loom_amdgpu_encode_branch_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   const loom_op_t* op = packet->node->op;
-  const loom_block_t* dest = loom_low_br_dest(op);
-  loom_value_slice_t args = loom_low_br_args(op);
+  const loom_block_t* dest = loom_direct_branch_dest(op);
+  loom_value_slice_t args = loom_direct_branch_args(op);
   if (args.count != 0) {
     const loom_low_allocation_edge_copy_group_t* group =
         loom_low_allocation_find_edge_copy_group_by_source_ordinal(
@@ -2079,6 +2079,9 @@ static iree_status_t loom_amdgpu_encode_packet(
     return loom_amdgpu_encode_wait_states(state, packet, 1);
   }
   const loom_op_t* op = packet->node->op;
+  if (loom_direct_branch_isa(op)) {
+    return loom_amdgpu_encode_branch_packet(state, packet);
+  }
   switch (op->kind) {
     case LOOM_OP_LOW_LIVE_IN:
       return loom_amdgpu_encode_live_in_packet(state, packet);
@@ -2095,8 +2098,6 @@ static iree_status_t loom_amdgpu_encode_packet(
       return loom_amdgpu_encode_concat_packet(state, packet);
     case LOOM_OP_LOW_STORAGE_ADDRESS:
       return loom_amdgpu_encode_storage_address_packet(state, packet);
-    case LOOM_OP_LOW_BR:
-      return loom_amdgpu_encode_branch_packet(state, packet);
     case LOOM_OP_LOW_COND_BR:
       return loom_amdgpu_encode_cond_branch_packet(state, packet);
     case LOOM_OP_LOW_RETURN:
@@ -2170,8 +2171,8 @@ loom_amdgpu_query_branch_measurement_requirements(
     const loom_low_packet_view_t packet = loom_low_packet_at_block_ordinal(
         schedule, block_index, block->scheduled_node_count - 1u);
     const loom_op_t* op = packet.node->op;
-    if (loom_low_br_isa(op)) {
-      const loom_block_t* target_block = loom_low_br_dest(op);
+    if (loom_direct_branch_isa(op)) {
+      const loom_block_t* target_block = loom_direct_branch_dest(op);
       const uint32_t target_block_index =
           loom_low_packet_block_index(schedule, target_block);
       IREE_ASSERT_NE(target_block_index, LOOM_LOW_PACKET_INDEX_NONE);

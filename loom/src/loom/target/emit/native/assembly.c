@@ -132,8 +132,8 @@ static void loom_native_assembly_truncate_builder(
 
 static bool loom_native_assembly_op_branches_to(const loom_op_t* op,
                                                 const loom_block_t* block) {
-  if (loom_low_br_isa(op)) {
-    return loom_low_br_dest(op) == block;
+  if (loom_direct_branch_isa(op)) {
+    return loom_direct_branch_dest(op) == block;
   }
   if (loom_low_cond_br_isa(op)) {
     return loom_low_cond_br_true_dest(op) == block ||

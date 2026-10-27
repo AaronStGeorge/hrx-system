@@ -529,6 +529,20 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "storage_identity_test",
+    srcs = ["storage_identity_test.cc"],
+    deps = [
+        ":storage_identity",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "storage_relation",
     srcs = ["storage_relation.c"],

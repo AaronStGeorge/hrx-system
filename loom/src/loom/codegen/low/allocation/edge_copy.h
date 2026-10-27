@@ -32,20 +32,20 @@ typedef struct loom_low_allocation_edge_copy_context_t {
 
 // Branch edge-copy table rows.
 typedef struct loom_low_allocation_edge_copy_plan_t {
-  // Edge-copy records grouped by low.br terminator source order.
+  // Edge-copy records grouped by Low direct-branch terminator source order.
   loom_low_allocation_edge_copy_t* copies;
   // Number of records in |copies|.
   iree_host_size_t copy_count;
   // First coalesced incoming copy by local value ordinal, or NULL when not
   // retained.
   uint32_t* first_coalesced_incoming_copy_by_value_ordinal;
-  // Per-low.br groups indexing |copies|.
+  // Per-direct-branch groups indexing |copies|.
   loom_low_allocation_edge_copy_group_t* groups;
   // Number of records in |groups|.
   iree_host_size_t group_count;
 } loom_low_allocation_edge_copy_plan_t;
 
-// Builds branch edge-copy groups and final physical rows for low.br payloads.
+// Builds edge-copy groups and final physical rows for Low direct branches.
 iree_status_t loom_low_allocation_edge_copy_plan_build(
     const loom_low_allocation_edge_copy_context_t* context,
     iree_arena_allocator_t* arena,
