@@ -40,20 +40,19 @@ loom_aie2p_bundle_encoding_packet_move_group(
 
 // Encodes one descriptor-backed packet with its allocated operands. A symbolic
 // constant-data address is encoded as zero and reported for later relocation.
-iree_status_t loom_aie2p_bundle_encoding_encode_packet(
+void loom_aie2p_bundle_encoding_encode_packet(
     const loom_low_emission_frame_t* frame,
     const loom_low_packet_view_t* packet,
     loom_aie2p_encoded_slot_t* out_encoded_slot,
     uint32_t* out_read_only_data_ordinal);
 
-// Encodes one compiler-owned local-storage address and returns its detached
-// storage-space relocation target.
-iree_status_t loom_aie2p_bundle_encoding_encode_storage_address(
+// Encodes one admitted compiler-owned local-storage address. Bundle analysis
+// retains its detached storage-space relocation target.
+void loom_aie2p_bundle_encoding_encode_storage_address(
     const loom_low_emission_frame_t* frame,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_packet_view_t* packet,
-    loom_aie2p_encoded_slot_t* out_encoded_slot,
-    loom_storage_space_t* out_storage_space, uint64_t* out_byte_offset);
+    loom_aie2p_encoded_slot_t* out_encoded_slot);
 
 // Encodes a structural descriptor with no represented operands or immediates.
 loom_aie2p_encoded_slot_t
@@ -66,11 +65,6 @@ loom_aie2p_encoded_slot_t
 loom_aie2p_bundle_encoding_encode_loop_setup_descriptor(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal, int64_t immediate);
-
-// Encodes one allocation-planned move between native registers.
-iree_status_t loom_aie2p_bundle_encoding_encode_move(
-    const loom_low_emission_frame_t* frame, loom_aie2p_register_move_t move,
-    loom_aie2p_encoded_slot_t* out_encoded_slot);
 
 #ifdef __cplusplus
 }  // extern "C"

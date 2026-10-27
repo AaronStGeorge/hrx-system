@@ -788,7 +788,6 @@ def _loop_setup_descriptor_specs() -> tuple[_DescriptorSpec, ...]:
             storage_overrides=(("dst", register_class),),
             implicit_outputs=("dst",),
             asm_mnemonic=mnemonic,
-            symbolic_immediates=(("i",) if symbolic else ()),
             flags=(DescriptorFlag.STATE_ASSIGNMENT,),
         )
         for (
@@ -798,7 +797,6 @@ def _loop_setup_descriptor_specs() -> tuple[_DescriptorSpec, ...]:
             itinerary,
             register_class,
             mnemonic,
-            symbolic,
         ) in (
             (
                 "MOVA",
@@ -807,7 +805,6 @@ def _loop_setup_descriptor_specs() -> tuple[_DescriptorSpec, ...]:
                 "II_MOVA_mLCaCg",
                 "mLCaCg",
                 "set.loop-count.short",
-                False,
             ),
             (
                 "MOVXM",
@@ -816,7 +813,6 @@ def _loop_setup_descriptor_specs() -> tuple[_DescriptorSpec, ...]:
                 "II_MOVXM_mLCmCg",
                 "mLCmCg",
                 "set.loop-count.long",
-                False,
             ),
             (
                 "MOVXM",
@@ -825,7 +821,6 @@ def _loop_setup_descriptor_specs() -> tuple[_DescriptorSpec, ...]:
                 "II_MOVXM_mLSm",
                 "mLSm",
                 "set.loop-start-address",
-                True,
             ),
             (
                 "MOVXM",
@@ -834,7 +829,6 @@ def _loop_setup_descriptor_specs() -> tuple[_DescriptorSpec, ...]:
                 "II_MOVXM_mLEm",
                 "mLEm",
                 "set.loop-end-address",
-                True,
             ),
         )
     )
@@ -1847,6 +1841,7 @@ _BASE_DESCRIPTOR_SPECS = (
         (("dst", "eP"),),
         asm_mnemonic="mov.local-address",
         symbolic_immediates=("i",),
+        read_only_data_immediates=("i",),
         rematerializable=True,
         flags=(DescriptorFlag.SAFE_TO_SPECULATE,),
     ),

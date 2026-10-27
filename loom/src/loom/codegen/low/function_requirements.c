@@ -156,6 +156,9 @@ iree_status_t loom_low_function_requirements_build(
         case LOOM_OP_LOW_RETURN:
           ++out_requirements->return_count;
           break;
+        case LOOM_OP_LOW_STORAGE_ADDRESS:
+          ++out_requirements->storage_address_count;
+          break;
         case LOOM_OP_LOW_FUNC_CALL: {
           IREE_RETURN_IF_ERROR(
               loom_low_function_requirements_append_direct_callee(

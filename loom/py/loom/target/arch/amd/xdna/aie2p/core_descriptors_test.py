@@ -55,7 +55,27 @@ def test_native_immediates_match_canonical_attribute_positions() -> None:
                 ImmediateKind.UNSIGNED,
                 ImmediateKind.ORDINAL,
             )
-            assert set(immediate.flags) <= {ImmediateFlag.SYMBOLIC}
+            assert set(immediate.flags) <= {
+                ImmediateFlag.SYMBOLIC,
+                ImmediateFlag.READ_ONLY_DATA,
+            }
+            assert (
+                ImmediateFlag.READ_ONLY_DATA not in immediate.flags
+                or ImmediateFlag.SYMBOLIC in immediate.flags
+            )
+
+    symbolic_immediates = {
+        (descriptor.key, immediate.field_name): immediate.flags
+        for descriptor in AIE2P_CORE_DESCRIPTOR_SET.descriptors
+        for immediate in descriptor.immediates
+        if ImmediateFlag.SYMBOLIC in immediate.flags
+    }
+    assert symbolic_immediates == {
+        (
+            "amd.xdna.aie2p.materialize.local-address.i32",
+            "i",
+        ): (ImmediateFlag.SYMBOLIC, ImmediateFlag.READ_ONLY_DATA),
+    }
 
 
 def test_core_descriptor_closure_is_complete() -> None:
@@ -884,7 +904,10 @@ def test_descriptor_encoding_ids_and_adapters_are_materialized() -> None:
     assert local_address.immediates[0].field_name == "i"
     assert local_address.immediates[0].bit_width == 32
     assert local_address.immediates[0].kind is ImmediateKind.ORDINAL
-    assert local_address.immediates[0].flags == (ImmediateFlag.SYMBOLIC,)
+    assert local_address.immediates[0].flags == (
+        ImmediateFlag.SYMBOLIC,
+        ImmediateFlag.READ_ONLY_DATA,
+    )
     assert local_address.effects == ()
     assert Constraint(ConstraintKind.REMATERIALIZABLE, 0) in local_address.constraints
 

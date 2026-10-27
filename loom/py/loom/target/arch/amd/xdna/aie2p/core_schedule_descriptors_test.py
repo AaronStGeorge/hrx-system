@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 from itertools import combinations, product
 
@@ -35,21 +36,25 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
     _SLOT_RESOURCE_KINDS,
     _STICKY_UPDATE_ENDPOINTS,
     AIE2P_CORE_DESCRIPTOR_SET,
+    AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES,
     _bundle_exclusion_resource_name,
     _itinerary,
     _memory_event_name,
     _pipeline_resource_name,
     _register_event_name,
+    _scalar_move_schedule_class,
     _slot_resource_name,
+    _validate_bundle_stream_widths,
+    _validate_call_delay_transport_timing,
     _validate_control_issue_timing,
 )
 from loom.target.arch.amd.xdna.aie2p.core_encoding_data import CORE_ENCODING_TABLE
 from loom.target.arch.amd.xdna.aie2p.core_machine_data import CORE_MACHINE_TABLE
+from loom.target.arch.amd.xdna.aie2p.core_move_topology import SCALAR_MOVE_TOPOLOGY
 from loom.target.arch.amd.xdna.aie2p.core_schedule_data import CORE_SCHEDULE_TABLE
 from loom.target.low_descriptors import (
     DescriptorFlag,
     EffectKind,
-    ImmediateFlag,
     ImmediateKind,
     InstructionClass,
     IssueUseKind,
@@ -60,8 +65,46 @@ from loom.target.low_descriptors import (
 )
 
 
+def test_scalar_move_resource_fragments_exactly_cover_native_itineraries() -> None:
+    schedule_classes = {
+        row.name: row for row in AIE2P_CORE_DESCRIPTOR_SET.schedule_classes
+    }
+    assert len(AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES) == len(
+        SCALAR_MOVE_TOPOLOGY.itinerary_names
+    )
+    for itinerary_row, fragment_row in zip(
+        SCALAR_MOVE_TOPOLOGY.itinerary_names,
+        AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES,
+        strict=True,
+    ):
+        assert len(fragment_row) == len(itinerary_row)
+        for itinerary, fragment_names in zip(itinerary_row, fragment_row, strict=True):
+            assert 1 <= len(fragment_names) <= 3
+            expected = Counter(_scalar_move_schedule_class(itinerary).issue_uses)
+            actual = Counter(
+                issue_use
+                for name in fragment_names
+                for issue_use in schedule_classes[name].issue_uses
+            )
+            assert actual == expected
+
+
+def test_bundle_stream_requires_two_byte_packet_granularity() -> None:
+    first_format = CORE_ENCODING_TABLE.bundle_formats[0]
+    changed = replace(
+        CORE_ENCODING_TABLE,
+        bundle_formats=(
+            replace(first_format, bit_count=first_format.bit_count + 8),
+            *CORE_ENCODING_TABLE.bundle_formats[1:],
+        ),
+    )
+    with pytest.raises(ValueError, match="bundle width is not 16-bit aligned"):
+        _validate_bundle_stream_widths(changed)
+
+
 @pytest.mark.parametrize(
-    "suffix", ["return", "branch.direct", "branch.zero", "branch.nonzero"]
+    "suffix",
+    ["return", "branch.direct", "branch.zero", "branch.nonzero", "call.direct"],
 )
 def test_control_timing_requires_issue_stage_only_resources(suffix: str) -> None:
     descriptor_set = AIE2P_CORE_DESCRIPTOR_SET
@@ -104,12 +147,18 @@ def test_control_tail_placement_requires_read_only_registers(suffix: str) -> Non
         _validate_control_issue_timing(replace(descriptor_set, descriptors=changed))
 
 
-def test_control_window_covers_its_outgoing_register_events() -> None:
+@pytest.mark.parametrize("suffix", ["return", "call.direct"])
+def test_control_window_covers_its_outgoing_register_events(suffix: str) -> None:
     descriptor_set = AIE2P_CORE_DESCRIPTOR_SET
-    returned = next(
-        row for row in descriptor_set.descriptors if row.key.endswith(".return")
+    control = next(
+        row for row in descriptor_set.descriptors if row.key.endswith("." + suffix)
     )
-    event = returned.operands[0].read_event
+    event = next(
+        event
+        for operand in control.operands
+        for event in (operand.read_event, operand.write_event)
+        if event is not None
+    )
     changed = tuple(
         replace(row, minimum_issue_separation_cycles=7)
         if row.producer_event == event
@@ -120,6 +169,43 @@ def test_control_window_covers_its_outgoing_register_events() -> None:
         ValueError, match="control window does not cover its outgoing events"
     ):
         _validate_control_issue_timing(
+            replace(descriptor_set, event_separations=changed)
+        )
+
+
+def test_call_delay_transport_requires_one_cycle_resources() -> None:
+    descriptor_set = AIE2P_CORE_DESCRIPTOR_SET
+    move = next(
+        row for row in descriptor_set.descriptors if row.key.endswith(".move.scalar")
+    )
+    changed = tuple(
+        replace(
+            row, issue_uses=(replace(row.issue_uses[0], stage=1), *row.issue_uses[1:])
+        )
+        if row.name == move.schedule_class
+        else row
+        for row in descriptor_set.schedule_classes
+    )
+    with pytest.raises(ValueError, match="requires one-cycle issue resources"):
+        _validate_call_delay_transport_timing(
+            replace(descriptor_set, schedule_classes=changed)
+        )
+
+
+def test_call_delay_transport_requires_one_cycle_register_events() -> None:
+    descriptor_set = AIE2P_CORE_DESCRIPTOR_SET
+    move = next(
+        row for row in descriptor_set.descriptors if row.key.endswith(".move.scalar")
+    )
+    write_event = move.operands[0].write_event
+    changed = tuple(
+        replace(row, minimum_issue_separation_cycles=2)
+        if row.producer_event == write_event
+        else row
+        for row in descriptor_set.event_separations
+    )
+    with pytest.raises(ValueError, match="requires one-cycle register events"):
+        _validate_call_delay_transport_timing(
             replace(descriptor_set, event_separations=changed)
         )
 
@@ -386,7 +472,7 @@ def test_direct_branch_forms_retain_exact_control_contracts() -> None:
         immediate = descriptor.immediates[0]
         assert immediate.field_name == "i"
         assert immediate.kind is ImmediateKind.ORDINAL
-        assert immediate.flags == (ImmediateFlag.SYMBOLIC,)
+        assert immediate.flags == ()
         assert immediate.bit_width == 20
         assert immediate.value_step == 1
         assert immediate.signed_min == 0
@@ -424,7 +510,7 @@ def test_direct_call_retains_link_write_and_delay_contract() -> None:
     immediate = call.immediates[0]
     assert immediate.field_name == "i"
     assert immediate.kind is ImmediateKind.ORDINAL
-    assert immediate.flags == (ImmediateFlag.SYMBOLIC,)
+    assert immediate.flags == ()
     assert immediate.bit_width == 20
     assert immediate.value_step == 1
     assert immediate.signed_min == 0
@@ -476,8 +562,8 @@ def test_zero_overhead_loop_setup_owns_architectural_state() -> None:
             "II_MOVXM_mLSm",
             "aie2p.mlsm",
             "ls",
-            ImmediateKind.ORDINAL,
-            (ImmediateFlag.SYMBOLIC,),
+            ImmediateKind.SIGNED,
+            (),
             32,
         ),
         "amd.xdna.aie2p.state.loop-end-address": (
@@ -485,8 +571,8 @@ def test_zero_overhead_loop_setup_owns_architectural_state() -> None:
             "II_MOVXM_mLEm",
             "aie2p.mlem",
             "le",
-            ImmediateKind.ORDINAL,
-            (ImmediateFlag.SYMBOLIC,),
+            ImmediateKind.SIGNED,
+            (),
             32,
         ),
     }

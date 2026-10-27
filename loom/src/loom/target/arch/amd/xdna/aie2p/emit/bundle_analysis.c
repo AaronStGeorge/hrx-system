@@ -9,14 +9,19 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/loop_execution.h"
 #include "loom/codegen/low/packet.h"
+#include "loom/codegen/low/storage_layout.h"
+#include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/type_builders.h"
 #include "loom/target/arch/amd/xdna/aie2p/core_structure.h"
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/core_descriptors.h"
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/encoding.h"
 #include "loom/target/arch/amd/xdna/aie2p/encoding/encoding.h"
+#include "loom/target/arch/amd/xdna/error_catalog.h"
 
 static uint32_t loom_aie2p_bundle_plan_descriptor_ordinal(
     const loom_low_descriptor_set_t* descriptor_set,
@@ -53,20 +58,6 @@ loom_aie2p_bundle_plan_packet_move_group(const loom_low_emission_frame_t* frame,
       &frame->allocation, packet->node_index);
 }
 
-static bool loom_aie2p_bundle_plan_physical_control_descriptor(
-    uint32_t descriptor_ordinal) {
-  switch (descriptor_ordinal) {
-    case AIE2P_CORE_DESCRIPTOR_REF_BRANCH_DIRECT:
-    case AIE2P_CORE_DESCRIPTOR_REF_BRANCH_NONZERO:
-    case AIE2P_CORE_DESCRIPTOR_REF_BRANCH_ZERO:
-    case AIE2P_CORE_DESCRIPTOR_REF_RETURN_:
-    case AIE2P_CORE_DESCRIPTOR_REF_CALL_DIRECT:
-      return true;
-    default:
-      return false;
-  }
-}
-
 static loom_aie2p_block_terminator_t
 loom_aie2p_bundle_plan_terminator_from_structure_kind(
     loom_aie2p_core_structure_kind_t structure_kind) {
@@ -82,21 +73,102 @@ loom_aie2p_bundle_plan_terminator_from_structure_kind(
   }
 }
 
-static iree_host_size_t loom_aie2p_bundle_plan_move_slot_count(
-    const loom_low_emission_frame_t* frame, loom_low_move_range_t range) {
-  iree_host_size_t slot_count = 0;
+static iree_status_t loom_aie2p_bundle_plan_analyze_move_range(
+    const loom_low_emission_frame_t* frame, loom_low_move_range_t range,
+    const loom_op_t* op, iree_diagnostic_emitter_t diagnostic_emitter,
+    loom_aie2p_bundle_plan_analysis_t* analysis, bool* out_accepted) {
+  *out_accepted = false;
+  const loom_low_descriptor_set_t* descriptor_set =
+      frame->target.descriptor_set;
   for (iree_host_size_t i = 0; i < range.count; ++i) {
-    const loom_low_move_t* move = &frame->allocation.moves[range.start + i];
-    loom_aie2p_register_move_t parts[2];
-    slot_count += loom_aie2p_descriptor_move_parts(
-        (loom_aie2p_register_move_t){
-            .source = (loom_aie2p_physical_register_id_t)move->source.location,
-            .destination =
-                (loom_aie2p_physical_register_id_t)move->destination.location,
-        },
-        parts);
+    const iree_host_size_t move_index = range.start + i;
+    const loom_low_move_t* move = &frame->allocation.moves[move_index];
+    loom_aie2p_move_route_id_t route_id =
+        analysis->move_route_ids_by_move[move_index];
+    if (route_id == LOOM_AIE2P_MOVE_ROUTE_ID_INVALID) {
+      route_id = loom_aie2p_descriptor_resolve_move_route(
+          (loom_aie2p_physical_register_id_t)move->source.location,
+          (loom_aie2p_physical_register_id_t)move->destination.location);
+      if (route_id == LOOM_AIE2P_MOVE_ROUTE_ID_INVALID) {
+        const iree_string_view_t source_register =
+            loom_low_descriptor_set_string(
+                descriptor_set,
+                descriptor_set->physical_registers[move->source.location]
+                    .name_string_ref);
+        const iree_string_view_t destination_register =
+            loom_low_descriptor_set_string(
+                descriptor_set,
+                descriptor_set->physical_registers[move->destination.location]
+                    .name_string_ref);
+        const loom_diagnostic_param_t params[] = {
+            loom_param_string(loom_low_diagnostic_function_name(
+                frame->module, frame->function_op)),
+            loom_param_string(source_register),
+            loom_param_string(destination_register),
+        };
+        const loom_diagnostic_emission_t emission = {
+            .op = op,
+            .error = LOOM_ERR_XDNA_061,
+            .params = params,
+            .param_count = IREE_ARRAYSIZE(params),
+        };
+        return iree_diagnostic_emit(diagnostic_emitter, &emission);
+      }
+      analysis->move_route_ids_by_move[move_index] = route_id;
+    }
+    analysis->move_slot_count +=
+        loom_aie2p_descriptor_move_route_step_count(route_id);
   }
-  return slot_count;
+  *out_accepted = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_aie2p_bundle_plan_analyze_storage_address(
+    const loom_low_emission_frame_t* frame,
+    const loom_low_packet_view_t* packet,
+    iree_diagnostic_emitter_t diagnostic_emitter,
+    loom_aie2p_planned_storage_fixup_t* out_fixup, bool* out_accepted) {
+  *out_accepted = false;
+  const loom_op_t* op = packet->node->op;
+  const loom_low_storage_layout_t* layout =
+      &frame->schedule.requirements.storage_layout;
+  loom_low_storage_layout_reference_t reference;
+  loom_low_storage_layout_lookup_reference(&layout->index, layout->records,
+                                           loom_low_storage_address_storage(op),
+                                           &reference);
+  const int64_t operation_offset = loom_low_storage_address_offset(op);
+  IREE_ASSERT_GE(operation_offset, 0);
+  IREE_ASSERT_LE(reference.reservation.byte_offset,
+                 UINT64_MAX - reference.byte_offset);
+  const uint64_t reference_offset =
+      reference.reservation.byte_offset + reference.byte_offset;
+  IREE_ASSERT_LE((uint64_t)operation_offset, UINT64_MAX - reference_offset);
+  const uint64_t byte_offset = reference_offset + (uint64_t)operation_offset;
+  if (byte_offset <= INT64_MAX) {
+    *out_fixup = (loom_aie2p_planned_storage_fixup_t){
+        .bundle_index = LOOM_AIE2P_BUNDLE_PLAN_PACKET_NONE,
+        .storage_space = reference.reservation.space,
+        .byte_offset = byte_offset,
+    };
+    *out_accepted = true;
+    return iree_ok_status();
+  }
+
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(
+          loom_low_diagnostic_function_name(frame->module, frame->function_op)),
+      loom_param_string(
+          loom_low_storage_type_space_name(reference.reservation.space)),
+      loom_param_u64(byte_offset),
+      loom_param_u64(INT64_MAX),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = LOOM_ERR_XDNA_060,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(diagnostic_emitter, &emission);
 }
 
 static bool loom_aie2p_bundle_plan_header_is_hardware_loop_only(
@@ -270,18 +342,52 @@ static void loom_aie2p_bundle_plan_analyze_hardware_loops(
 }
 
 iree_status_t loom_aie2p_bundle_plan_analyze(
-    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena,
-    loom_aie2p_bundle_plan_analysis_t* out_analysis) {
+    const loom_low_emission_frame_t* frame,
+    iree_diagnostic_emitter_t diagnostic_emitter,
+    iree_arena_allocator_t* plan_arena, iree_arena_allocator_t* scratch_arena,
+    loom_aie2p_bundle_plan_analysis_t* out_analysis, bool* out_accepted) {
   *out_analysis = (loom_aie2p_bundle_plan_analysis_t){0};
+  *out_accepted = false;
   const loom_low_descriptor_set_t* descriptor_set =
       loom_aie2p_core_descriptor_set();
   loom_aie2p_block_analysis_t* blocks = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, frame->schedule.block_count, sizeof(*blocks), (void**)&blocks));
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(scratch_arena, frame->schedule.block_count,
+                                sizeof(*blocks), (void**)&blocks));
   memset(blocks, 0,
          frame->schedule.block_count * sizeof(loom_aie2p_block_analysis_t));
-  out_analysis->move_slot_count = loom_aie2p_bundle_plan_move_slot_count(
-      frame, frame->allocation.entry_moves.moves);
+  if (frame->allocation.move_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        scratch_arena, frame->allocation.move_count,
+        sizeof(*out_analysis->move_route_ids_by_move),
+        (void**)&out_analysis->move_route_ids_by_move));
+    memset(out_analysis->move_route_ids_by_move,
+           LOOM_AIE2P_MOVE_ROUTE_ID_INVALID,
+           frame->allocation.move_count *
+               sizeof(*out_analysis->move_route_ids_by_move));
+  }
+  const iree_host_size_t expected_storage_fixup_count =
+      frame->schedule.requirements.storage_address_count;
+  if (expected_storage_fixup_count != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(plan_arena, expected_storage_fixup_count,
+                                  sizeof(*out_analysis->storage_fixups),
+                                  (void**)&out_analysis->storage_fixups));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        scratch_arena, frame->schedule.scheduled_node_count,
+        sizeof(*out_analysis->storage_fixup_indices_by_packet),
+        (void**)&out_analysis->storage_fixup_indices_by_packet));
+    memset(out_analysis->storage_fixup_indices_by_packet, 0xFF,
+           frame->schedule.scheduled_node_count *
+               sizeof(*out_analysis->storage_fixup_indices_by_packet));
+  }
+  bool accepted = false;
+  IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+      frame, frame->allocation.entry_moves.moves, frame->function_op,
+      diagnostic_emitter, out_analysis, &accepted));
+  if (!accepted) {
+    return iree_ok_status();
+  }
   // Destination marks may be set before a block's own analysis. Each iteration
   // preserves those marks in the once-initialized table.
   for (iree_host_size_t block_index = 0;
@@ -316,33 +422,36 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
             ++out_analysis->read_only_data_fixup_count;
           }
         }
-        if (!loom_aie2p_bundle_plan_physical_control_descriptor(
-                descriptor_ordinal)) {
-          continue;
-        }
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "AIE2P physical control is materialized from structural Low CFG; "
-            "descriptor-backed control packets are not accepted");
+        continue;
       }
       const loom_aie2p_core_structure_kind_t structure_kind =
           loom_aie2p_core_structure_classify(packet.node->op);
       if (structure_kind == LOOM_AIE2P_CORE_STRUCTURE_STORAGE_ADDRESS) {
-        if (out_analysis->storage_fixup_count == IREE_HOST_SIZE_MAX) {
-          return iree_make_status(
-              IREE_STATUS_OUT_OF_RANGE,
-              "AIE2P local-storage fixup count exceeds host size");
+        IREE_ASSERT_LT(out_analysis->storage_fixup_count,
+                       expected_storage_fixup_count);
+        accepted = false;
+        IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_storage_address(
+            frame, &packet, diagnostic_emitter,
+            &out_analysis->storage_fixups[out_analysis->storage_fixup_count],
+            &accepted));
+        if (!accepted) {
+          return iree_ok_status();
         }
-        ++out_analysis->storage_fixup_count;
+        out_analysis->storage_fixup_indices_by_packet[packet.packet_index] =
+            (uint32_t)out_analysis->storage_fixup_count++;
         continue;
       }
       if (structure_kind == LOOM_AIE2P_CORE_STRUCTURE_REGISTER_MOVE) {
         const loom_low_allocation_packet_move_group_t* group =
             loom_aie2p_bundle_plan_packet_move_group(frame, &packet);
         if (group != NULL) {
-          out_analysis->move_slot_count +=
-              loom_aie2p_bundle_plan_move_slot_count(frame,
-                                                     group->move_group.moves);
+          accepted = false;
+          IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+              frame, group->move_group.moves, packet.node->op,
+              diagnostic_emitter, out_analysis, &accepted));
+          if (!accepted) {
+            return iree_ok_status();
+          }
         }
         continue;
       }
@@ -350,15 +459,22 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
         const loom_low_allocation_call_moves_t* call_moves =
             loom_low_allocation_find_call_moves_by_source_ordinal(
                 &frame->allocation, packet.node_index);
-        if (call_moves == NULL) {
-          return iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "AIE2P direct call requires an allocation call contract");
+        IREE_ASSERT(call_moves != NULL &&
+                    "admitted AIE2P call must retain ABI transport");
+        accepted = false;
+        IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+            frame, call_moves->arguments, packet.node->op, diagnostic_emitter,
+            out_analysis, &accepted));
+        if (!accepted) {
+          return iree_ok_status();
         }
-        out_analysis->move_slot_count += loom_aie2p_bundle_plan_move_slot_count(
-            frame, call_moves->arguments);
-        out_analysis->move_slot_count +=
-            loom_aie2p_bundle_plan_move_slot_count(frame, call_moves->results);
+        accepted = false;
+        IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+            frame, call_moves->results, packet.node->op, diagnostic_emitter,
+            out_analysis, &accepted));
+        if (!accepted) {
+          return iree_ok_status();
+        }
         const iree_host_size_t control_bundle_count =
             loom_aie2p_bundle_plan_control_bundle_count(
                 descriptor_set, AIE2P_CORE_DESCRIPTOR_REF_CALL_DIRECT);
@@ -494,12 +610,21 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
           loom_low_allocation_find_edge_copy_group_by_source_ordinal(
               &frame->allocation, terminator_packet.node_index);
       if (edge_copy_group != NULL) {
-        out_analysis->move_slot_count += loom_aie2p_bundle_plan_move_slot_count(
-            frame, edge_copy_group->move_group.moves);
+        accepted = false;
+        IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
+            frame, edge_copy_group->move_group.moves,
+            terminator_packet.node->op, diagnostic_emitter, out_analysis,
+            &accepted));
+        if (!accepted) {
+          return iree_ok_status();
+        }
       }
     }
   }
+  IREE_ASSERT_EQ(out_analysis->storage_fixup_count,
+                 expected_storage_fixup_count);
   out_analysis->blocks = blocks;
   loom_aie2p_bundle_plan_analyze_hardware_loops(frame, out_analysis);
+  *out_accepted = true;
   return iree_ok_status();
 }

@@ -903,6 +903,51 @@ ERR_XDNA_059 = ErrorDef(
     fix_hint="Compile the source through the shared callable inliner before emission.",
 )
 
+# ERR_XDNA_060: An AIE2P local address exceeds the native relocation range.
+ERR_XDNA_060 = ErrorDef(
+    domain=ErrorDomain.XDNA,
+    code=60,
+    severity=Severity.ERROR,
+    summary="AIE2P local address exceeds the native relocation range.",
+    message=(
+        "AIE2P tile program '@{function_name}' materializes {storage_space} "
+        "storage byte offset {byte_offset}, but native local-address "
+        "relocations support at most {maximum_byte_offset}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("storage_space", ParamKind.STRING),
+        ErrorParam("byte_offset", ParamKind.U64),
+        ErrorParam("maximum_byte_offset", ParamKind.U64),
+    ),
+    fix_hint=(
+        "Reduce or split function-local storage so every referenced address "
+        "fits the native relocation range."
+    ),
+)
+
+# ERR_XDNA_061: Final AIE2P allocation requires an unsupported physical move.
+ERR_XDNA_061 = ErrorDef(
+    domain=ErrorDomain.XDNA,
+    code=61,
+    severity=Severity.ERROR,
+    summary="AIE2P allocation requires an unsupported physical move.",
+    message=(
+        "AIE2P tile program '@{function_name}' requires a value-preserving "
+        "move from physical register {source_register} to "
+        "{destination_register}, but the target has no native move route"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("source_register", ParamKind.STRING),
+        ErrorParam("destination_register", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Constrain the value to register classes connected by a native AIE2P "
+        "move route."
+    ),
+)
+
 ALL_XDNA_ERRORS = (
     ERR_XDNA_001,
     ERR_XDNA_005,
@@ -955,4 +1000,6 @@ ALL_XDNA_ERRORS = (
     ERR_XDNA_057,
     ERR_XDNA_058,
     ERR_XDNA_059,
+    ERR_XDNA_060,
+    ERR_XDNA_061,
 )

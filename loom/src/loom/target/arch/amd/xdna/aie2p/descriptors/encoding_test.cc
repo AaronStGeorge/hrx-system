@@ -9,6 +9,7 @@
 #include <array>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "iree/testing/gtest.h"
@@ -729,7 +730,7 @@ TEST(DescriptorEncodingTest, PredicatePartsMatchOracleInstructionEncodings) {
   EXPECT_EQ(complete_program, (std::vector<uint8_t>{0x18, 0x88, 0x00, 0x00}));
 }
 
-TEST(DescriptorEncodingTest, MoveLookupMatchesEveryPhysicalRegisterPair) {
+TEST(DescriptorEncodingTest, DirectMoveRoutesMatchEveryDescriptorPair) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_aie2p_core_descriptor_set();
   std::vector<uint32_t> move_descriptors;
@@ -770,12 +771,318 @@ TEST(DescriptorEncodingTest, MoveLookupMatchesEveryPhysicalRegisterPair) {
           break;
         }
       }
-      EXPECT_EQ(loom_aie2p_descriptor_select_move(
-                    (loom_aie2p_physical_register_id_t)source,
-                    (loom_aie2p_physical_register_id_t)destination),
-                expected)
-          << "source=" << source << " destination=" << destination;
+      if (expected != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+        const loom_aie2p_register_move_t move = {
+            .source = (loom_aie2p_physical_register_id_t)source,
+            .destination = (loom_aie2p_physical_register_id_t)destination,
+        };
+        const loom_aie2p_move_route_id_t route_id =
+            loom_aie2p_descriptor_resolve_move_route(move.source,
+                                                     move.destination);
+        ASSERT_NE(route_id, LOOM_AIE2P_MOVE_ROUTE_ID_INVALID);
+        ASSERT_EQ(loom_aie2p_descriptor_move_route_step_count(route_id), 1);
+        const loom_aie2p_move_route_step_t step =
+            loom_aie2p_descriptor_move_route_step(route_id, move, 0);
+        const loom_aie2p_move_step_profile_t profile =
+            loom_aie2p_descriptor_move_step_profile(step.profile_id);
+        EXPECT_EQ(step.move.source, move.source);
+        EXPECT_EQ(step.move.destination, move.destination);
+        EXPECT_EQ(profile.descriptor_ordinal, expected);
+        EXPECT_EQ(profile.resource_schedule_class_count, 0);
+        EXPECT_EQ(profile.encoding, LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR);
+      }
     }
+  }
+}
+
+TEST(DescriptorEncodingTest, ScalarMoveRoutesCoverNativeOperandAdapters) {
+  auto adapter_candidates = [](std::string_view name) {
+    std::vector<loom_aie2p_physical_register_id_t> result;
+    const auto adapter_id = loom_aie2p_machine_find_register_adapter(
+        iree_make_string_view(name.data(), name.size()));
+    EXPECT_NE(adapter_id, LOOM_AIE2P_REGISTER_ADAPTER_ID_INVALID);
+    loom_aie2p_register_adapter_info_t adapter_info;
+    if (!loom_aie2p_machine_query_register_adapter(adapter_id, &adapter_info)) {
+      ADD_FAILURE() << "missing adapter " << name;
+      return result;
+    }
+    loom_aie2p_register_class_info_t class_info;
+    if (!loom_aie2p_machine_query_register_class(adapter_info.register_class_id,
+                                                 &class_info)) {
+      ADD_FAILURE() << "missing adapter class " << name;
+      return result;
+    }
+    for (uint8_t i = 0; i < class_info.candidate_count; ++i) {
+      result.push_back(loom_aie2p_machine_register_class_candidate(
+          adapter_info.register_class_id, i));
+    }
+    return result;
+  };
+  const auto sources = adapter_candidates("OP_mMvSclSrc");
+  const auto destinations = adapter_candidates("OP_mMvSclDst");
+  ASSERT_FALSE(sources.empty());
+  ASSERT_FALSE(destinations.empty());
+
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_aie2p_core_descriptor_set();
+  const uint32_t scalar_descriptor = loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("amd.xdna.aie2p.move.scalar"));
+  ASSERT_NE(scalar_descriptor, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
+  for (const auto source : sources) {
+    for (const auto destination : destinations) {
+      const loom_aie2p_register_move_t move = {
+          .source = source,
+          .destination = destination,
+      };
+      const loom_aie2p_move_route_id_t route_id =
+          loom_aie2p_descriptor_resolve_move_route(source, destination);
+      ASSERT_NE(route_id, LOOM_AIE2P_MOVE_ROUTE_ID_INVALID)
+          << "source=" << source << " destination=" << destination;
+      ASSERT_EQ(loom_aie2p_descriptor_move_route_step_count(route_id), 1);
+      const loom_aie2p_move_route_step_t step =
+          loom_aie2p_descriptor_move_route_step(route_id, move, 0);
+      const loom_aie2p_move_step_profile_t profile =
+          loom_aie2p_descriptor_move_step_profile(step.profile_id);
+      EXPECT_EQ(step.move.source, source);
+      EXPECT_EQ(step.move.destination, destination);
+      EXPECT_EQ(profile.encoding, LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR);
+      if (profile.resource_schedule_class_count == 0) {
+        EXPECT_TRUE(iree_any_bit_set(
+            descriptor_set->descriptors[profile.descriptor_ordinal].flags,
+            LOOM_LOW_DESCRIPTOR_FLAG_ALLOCATION_MOVE));
+      } else {
+        EXPECT_EQ(profile.descriptor_ordinal, scalar_descriptor);
+        EXPECT_GE(profile.resource_schedule_class_count, 1);
+        EXPECT_LE(profile.resource_schedule_class_count,
+                  LOOM_AIE2P_MOVE_STEP_MAX_RESOURCE_CLASS_COUNT);
+        for (uint8_t i = 0; i < profile.resource_schedule_class_count; ++i) {
+          EXPECT_LT(profile.resource_schedule_class_ids[i],
+                    descriptor_set->schedule_class_count);
+        }
+      }
+    }
+  }
+}
+
+TEST(DescriptorEncodingTest, AggregateMoveRoutesPreserveNativeComponentOrder) {
+  struct TestCase {
+    std::string_view source;
+    std::string_view destination;
+    std::vector<std::pair<std::string_view, std::string_view>> steps;
+    std::string_view event_descriptor;
+    loom_aie2p_move_step_encoding_t encoding;
+  };
+  const std::vector<TestCase> test_cases = {
+      {"l8",
+       "l9",
+       {{"r16", "r18"}, {"r17", "r19"}},
+       "amd.xdna.aie2p.move.scalar",
+       LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR},
+      {"d0",
+       "d1",
+       {{"dc0", "dc1"}, {"dn0", "dn1"}, {"dj0", "dj1"}, {"m0", "m1"}},
+       "amd.xdna.aie2p.move.scalar",
+       LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR},
+      {"d0_3d",
+       "d1_3d",
+       {{"dc0", "dc1"},
+        {"dn0", "dn1"},
+        {"dj0", "dj1"},
+        {"m0", "m1"},
+        {"dc4", "dc5"},
+        {"dn4", "dn5"},
+        {"dj4", "dj5"}},
+       "amd.xdna.aie2p.move.scalar",
+       LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR},
+      {"dm0",
+       "dm1",
+       {{"cml0", "cml1"}, {"cmh0", "cmh1"}},
+       "amd.xdna.aie2p.move.accumulator512",
+       LOOM_AIE2P_MOVE_STEP_ENCODING_ACCUMULATOR_1024},
+      {"lf0",
+       "sf",
+       {{"lfl0", "sfl"}, {"lfh0", "sfh"}},
+       "amd.xdna.aie2p.move.accumulator512",
+       LOOM_AIE2P_MOVE_STEP_ENCODING_FIFO_512},
+  };
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_aie2p_core_descriptor_set();
+  auto register_id = [](std::string_view name) {
+    return loom_aie2p_machine_find_physical_register(
+        iree_make_string_view(name.data(), name.size()));
+  };
+  for (const TestCase& test_case : test_cases) {
+    const loom_aie2p_register_move_t move = {
+        .source = register_id(test_case.source),
+        .destination = register_id(test_case.destination),
+    };
+    ASSERT_NE(move.source, LOOM_AIE2P_PHYSICAL_REGISTER_ID_INVALID);
+    ASSERT_NE(move.destination, LOOM_AIE2P_PHYSICAL_REGISTER_ID_INVALID);
+    const loom_aie2p_move_route_id_t route_id =
+        loom_aie2p_descriptor_resolve_move_route(move.source, move.destination);
+    ASSERT_NE(route_id, LOOM_AIE2P_MOVE_ROUTE_ID_INVALID);
+    ASSERT_EQ(loom_aie2p_descriptor_move_route_step_count(route_id),
+              test_case.steps.size());
+    const uint32_t expected_descriptor =
+        loom_low_descriptor_set_lookup_descriptor(
+            descriptor_set,
+            iree_make_string_view(test_case.event_descriptor.data(),
+                                  test_case.event_descriptor.size()));
+    ASSERT_NE(expected_descriptor, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
+    for (uint8_t i = 0; i < test_case.steps.size(); ++i) {
+      const loom_aie2p_move_route_step_t step =
+          loom_aie2p_descriptor_move_route_step(route_id, move, i);
+      const loom_aie2p_move_step_profile_t profile =
+          loom_aie2p_descriptor_move_step_profile(step.profile_id);
+      EXPECT_EQ(step.move.source, register_id(test_case.steps[i].first));
+      EXPECT_EQ(step.move.destination, register_id(test_case.steps[i].second));
+      EXPECT_EQ(profile.descriptor_ordinal, expected_descriptor);
+      EXPECT_EQ(profile.encoding, test_case.encoding);
+      EXPECT_GE(profile.resource_schedule_class_count, 1);
+      EXPECT_LE(profile.resource_schedule_class_count,
+                LOOM_AIE2P_MOVE_STEP_MAX_RESOURCE_CLASS_COUNT);
+      for (uint8_t resource = 0;
+           resource < profile.resource_schedule_class_count; ++resource) {
+        EXPECT_LT(profile.resource_schedule_class_ids[resource],
+                  descriptor_set->schedule_class_count);
+      }
+    }
+  }
+}
+
+TEST(DescriptorEncodingTest, AggregateMoveRoutesCoverAllocatedFamilies) {
+  struct Family {
+    std::array<uint16_t, 2> register_classes;
+    uint8_t register_class_count;
+    uint8_t step_count;
+    loom_aie2p_move_step_encoding_t encoding;
+  };
+  const Family families[] = {
+      {{{AIE2P_CORE_REG_CLASS_ID_AIE2P_ELPREDICATE,
+         AIE2P_CORE_REG_CLASS_ID_AIE2P_ML8M}},
+       2,
+       2,
+       LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR},
+      {{{AIE2P_CORE_REG_CLASS_ID_AIE2P_ED, 0}},
+       1,
+       4,
+       LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR},
+      {{{AIE2P_CORE_REG_CLASS_ID_AIE2P_EDS, 0}},
+       1,
+       7,
+       LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR},
+      {{{AIE2P_CORE_REG_CLASS_ID_AIE2P_EDM, 0}},
+       1,
+       2,
+       LOOM_AIE2P_MOVE_STEP_ENCODING_ACCUMULATOR_1024},
+      {{{AIE2P_CORE_REG_CLASS_ID_AIE2P_ELDFIFOREG,
+         AIE2P_CORE_REG_CLASS_ID_AIE2P_MSTFIFO}},
+       2,
+       2,
+       LOOM_AIE2P_MOVE_STEP_ENCODING_FIFO_512},
+  };
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_aie2p_core_descriptor_set();
+  for (const Family& family : families) {
+    for (uint8_t source_class_index = 0;
+         source_class_index < family.register_class_count;
+         ++source_class_index) {
+      const loom_low_reg_class_t* source_class =
+          &descriptor_set
+               ->reg_classes[family.register_classes[source_class_index]];
+      for (uint8_t destination_class_index = 0;
+           destination_class_index < family.register_class_count;
+           ++destination_class_index) {
+        const loom_low_reg_class_t* destination_class =
+            &descriptor_set->reg_classes
+                 [family.register_classes[destination_class_index]];
+        for (uint16_t source_ordinal = 0;
+             source_ordinal < source_class->allocatable_count;
+             ++source_ordinal) {
+          const uint16_t source =
+              descriptor_set->physical_register_candidate_ids
+                  [source_class->physical_register_candidate_start +
+                   source_ordinal];
+          for (uint16_t destination_ordinal = 0;
+               destination_ordinal < destination_class->allocatable_count;
+               ++destination_ordinal) {
+            const uint16_t destination =
+                descriptor_set->physical_register_candidate_ids
+                    [destination_class->physical_register_candidate_start +
+                     destination_ordinal];
+            const loom_aie2p_move_route_id_t route_id =
+                loom_aie2p_descriptor_resolve_move_route(source, destination);
+            ASSERT_NE(route_id, LOOM_AIE2P_MOVE_ROUTE_ID_INVALID);
+            ASSERT_EQ(loom_aie2p_descriptor_move_route_step_count(route_id),
+                      family.step_count);
+            for (uint8_t step_index = 0; step_index < family.step_count;
+                 ++step_index) {
+              const loom_aie2p_move_route_step_t step =
+                  loom_aie2p_descriptor_move_route_step(
+                      route_id,
+                      loom_aie2p_register_move_t{
+                          .source = source,
+                          .destination = destination,
+                      },
+                      step_index);
+              EXPECT_EQ(loom_aie2p_descriptor_move_step_profile(step.profile_id)
+                            .encoding,
+                        family.encoding);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+TEST(DescriptorEncodingTest, AggregateMoveStepsMatchNativeEncodings) {
+  struct TestCase {
+    std::string_view source;
+    std::string_view destination;
+    std::array<uint64_t, 2> expected_values;
+  };
+  const TestCase test_cases[] = {
+      {"dm0", "dm1", {UINT64_C(0x00080457), UINT64_C(0x000c1457)}},
+      {"lf0", "sf", {UINT64_C(0x001b2c97), UINT64_C(0x00330c97)}},
+  };
+  auto register_id = [](std::string_view name) {
+    return loom_aie2p_machine_find_physical_register(
+        iree_make_string_view(name.data(), name.size()));
+  };
+  for (const TestCase& test_case : test_cases) {
+    const loom_aie2p_register_move_t move = {
+        .source = register_id(test_case.source),
+        .destination = register_id(test_case.destination),
+    };
+    ASSERT_NE(move.source, LOOM_AIE2P_PHYSICAL_REGISTER_ID_INVALID);
+    ASSERT_NE(move.destination, LOOM_AIE2P_PHYSICAL_REGISTER_ID_INVALID);
+    const loom_aie2p_move_route_id_t route_id =
+        loom_aie2p_descriptor_resolve_move_route(move.source, move.destination);
+    ASSERT_NE(route_id, LOOM_AIE2P_MOVE_ROUTE_ID_INVALID);
+    ASSERT_EQ(loom_aie2p_descriptor_move_route_step_count(route_id), 2);
+    for (uint8_t i = 0; i < 2; ++i) {
+      const loom_aie2p_encoded_slot_t encoded =
+          loom_aie2p_descriptor_encode_move_step(
+              loom_aie2p_core_descriptor_set(),
+              loom_aie2p_descriptor_move_route_step(route_id, move, i));
+      EXPECT_EQ(encoded.slot, LOOM_AIE2P_SLOT_MV);
+      EXPECT_EQ(encoded.value, test_case.expected_values[i]);
+    }
+  }
+}
+
+TEST(DescriptorEncodingTest, IncompatibleAggregateMoveRoutesAreAbsent) {
+  auto register_id = [](std::string_view name) {
+    return loom_aie2p_machine_find_physical_register(
+        iree_make_string_view(name.data(), name.size()));
+  };
+  for (const auto& [source, destination] :
+       std::array<std::pair<std::string_view, std::string_view>, 3>{
+           {{"d0", "dm0"}, {"dm0", "lf0"}, {"l8", "d0"}}}) {
+    EXPECT_EQ(loom_aie2p_descriptor_resolve_move_route(
+                  register_id(source), register_id(destination)),
+              LOOM_AIE2P_MOVE_ROUTE_ID_INVALID);
   }
 }
 
@@ -793,21 +1100,21 @@ TEST(DescriptorEncodingTest, ScalarPairMovesPreserveBothWords) {
           .source = register_id("l" + std::to_string(source)),
           .destination = register_id("l" + std::to_string(destination)),
       };
-      loom_aie2p_register_move_t parts[2];
-      ASSERT_EQ(loom_aie2p_descriptor_move_parts(move, parts), 2);
+      const loom_aie2p_move_route_id_t route_id =
+          loom_aie2p_descriptor_resolve_move_route(move.source,
+                                                   move.destination);
+      ASSERT_NE(route_id, LOOM_AIE2P_MOVE_ROUTE_ID_INVALID);
+      ASSERT_EQ(loom_aie2p_descriptor_move_route_step_count(route_id), 2);
       for (unsigned part = 0; part < 2; ++part) {
-        EXPECT_EQ(parts[part].source,
+        const loom_aie2p_move_route_step_t step =
+            loom_aie2p_descriptor_move_route_step(route_id, move, part);
+        EXPECT_EQ(step.move.source,
                   register_id("r" + std::to_string(source * 2 + part)));
-        EXPECT_EQ(parts[part].destination,
+        EXPECT_EQ(step.move.destination,
                   register_id("r" + std::to_string(destination * 2 + part)));
-        EXPECT_EQ(loom_aie2p_descriptor_select_move(parts[part].source,
-                                                    parts[part].destination),
+        EXPECT_EQ(loom_aie2p_descriptor_move_step_profile(step.profile_id)
+                      .descriptor_ordinal,
                   scalar_move);
-        loom_aie2p_register_move_t scalar_parts[2];
-        ASSERT_EQ(loom_aie2p_descriptor_move_parts(parts[part], scalar_parts),
-                  1);
-        EXPECT_EQ(scalar_parts[0].source, parts[part].source);
-        EXPECT_EQ(scalar_parts[0].destination, parts[part].destination);
       }
     }
   }

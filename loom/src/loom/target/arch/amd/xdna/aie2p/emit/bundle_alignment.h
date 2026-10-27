@@ -69,10 +69,13 @@ iree_status_t loom_aie2p_bundle_alignment_try_loop_boundary(
     iree_host_size_t boundary_bundle_index, bool* out_aligned);
 
 // Widens a direct call and its five architectural delay packets so the return
-// address is aligned without changing their issue positions.
+// address is aligned. When widening cannot reach the required residue, inserts
+// the minimum implicit NOP prefix and shifts the closed call window. Returns
+// that physical-cycle increase in |out_inserted_nop_count|.
 iree_status_t loom_aie2p_bundle_alignment_align_call_continuation(
     loom_aie2p_bundle_alignment_storage_t* storage,
-    iree_host_size_t call_bundle_index, uint32_t continuation_cycle);
+    iree_host_size_t call_bundle_index, uint32_t continuation_cycle,
+    uint8_t* out_inserted_nop_count);
 
 #ifdef __cplusplus
 }  // extern "C"

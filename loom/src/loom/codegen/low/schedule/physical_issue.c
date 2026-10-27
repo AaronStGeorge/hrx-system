@@ -146,15 +146,11 @@ static bool loom_low_physical_events_require_separation(
   return separation != NULL && separation->minimum_issue_separation_cycles > 0;
 }
 
-bool loom_low_physical_issue_group_fits(
+static bool loom_low_physical_issue_events_fit(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_schedule_model_t* schedule_model,
     const loom_low_physical_instruction_t* instructions, uint16_t count) {
-  const loom_low_schedule_class_t** classes =
-      (const loom_low_schedule_class_t**)iree_alloca(count * sizeof(*classes));
   for (uint16_t i = 0; i < count; ++i) {
-    classes[i] =
-        loom_low_physical_instruction_class(schedule_model, &instructions[i]);
     const loom_low_descriptor_t* consumer =
         &descriptor_set->descriptors[instructions[i].descriptor_ordinal];
     for (uint16_t j = 0; j < i; ++j) {
@@ -183,7 +179,34 @@ bool loom_low_physical_issue_group_fits(
       }
     }
   }
-  return loom_low_schedule_resource_group_fits(schedule_model, classes, count);
+  return true;
+}
+
+bool loom_low_physical_issue_group_fits(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
+    const loom_low_physical_instruction_t* instructions, uint16_t count) {
+  const loom_low_schedule_class_t** classes =
+      (const loom_low_schedule_class_t**)iree_alloca(count * sizeof(*classes));
+  for (uint16_t i = 0; i < count; ++i) {
+    classes[i] =
+        loom_low_physical_instruction_class(schedule_model, &instructions[i]);
+  }
+  return loom_low_physical_issue_group_fits_with_resource_classes(
+      descriptor_set, schedule_model, instructions, count, classes, count);
+}
+
+bool loom_low_physical_issue_group_fits_with_resource_classes(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
+    const loom_low_physical_instruction_t* instructions,
+    uint16_t instruction_count,
+    const loom_low_schedule_class_t* const* resource_classes,
+    uint16_t resource_class_count) {
+  return loom_low_physical_issue_events_fit(descriptor_set, schedule_model,
+                                            instructions, instruction_count) &&
+         loom_low_schedule_resource_group_fits(schedule_model, resource_classes,
+                                               resource_class_count);
 }
 
 uint32_t loom_low_physical_issue_register_ready_cycle(
@@ -222,15 +245,27 @@ uint32_t loom_low_physical_issue_find_earliest_issue_cycle(
     classes[i] =
         loom_low_physical_instruction_class(schedule_model, &instructions[i]);
   }
-  const uint32_t cycle = iree_max(
-      proposed_cycle,
-      loom_low_physical_issue_register_ready_cycle(issue, instructions, count));
-  uint16_t bottleneck = LOOM_LOW_RESOURCE_NONE;
-  return loom_low_schedule_resource_calendar_find_earliest_issue_cycle(
-      &issue->resources, classes, count, cycle, &bottleneck);
+  return loom_low_physical_issue_find_earliest_issue_cycle_with_resource_classes(
+      issue, instructions, count, classes, count, proposed_cycle);
 }
 
-iree_status_t loom_low_physical_issue_commit(
+uint32_t
+loom_low_physical_issue_find_earliest_issue_cycle_with_resource_classes(
+    const loom_low_physical_issue_t* issue,
+    const loom_low_physical_instruction_t* instructions,
+    uint16_t instruction_count,
+    const loom_low_schedule_class_t* const* resource_classes,
+    uint16_t resource_class_count, uint32_t proposed_cycle) {
+  const uint32_t cycle =
+      iree_max(proposed_cycle, loom_low_physical_issue_register_ready_cycle(
+                                   issue, instructions, instruction_count));
+  uint16_t bottleneck = LOOM_LOW_RESOURCE_NONE;
+  return loom_low_schedule_resource_calendar_find_earliest_issue_cycle(
+      &issue->resources, resource_classes, resource_class_count, cycle,
+      &bottleneck);
+}
+
+static iree_status_t loom_low_physical_issue_commit_events(
     loom_low_physical_issue_t* issue,
     const loom_low_physical_instruction_t* instructions, uint16_t count,
     uint32_t issue_cycle) {
@@ -238,14 +273,6 @@ iree_status_t loom_low_physical_issue_commit(
       issue->events.descriptor_set;
   const loom_low_schedule_model_t* schedule_model =
       issue->events.schedule_model;
-  const loom_low_schedule_class_t** classes =
-      (const loom_low_schedule_class_t**)iree_alloca(count * sizeof(*classes));
-  for (uint16_t i = 0; i < count; ++i) {
-    classes[i] =
-        loom_low_physical_instruction_class(schedule_model, &instructions[i]);
-  }
-  IREE_RETURN_IF_ERROR(loom_low_schedule_resource_calendar_commit(
-      &issue->resources, classes, count, issue_cycle));
   iree_status_t status = iree_ok_status();
   for (uint16_t i = 0; i < count && iree_status_is_ok(status); ++i) {
     const loom_low_descriptor_t* descriptor =
@@ -288,4 +315,32 @@ iree_status_t loom_low_physical_issue_commit(
     }
   }
   return status;
+}
+
+iree_status_t loom_low_physical_issue_commit(
+    loom_low_physical_issue_t* issue,
+    const loom_low_physical_instruction_t* instructions, uint16_t count,
+    uint32_t issue_cycle) {
+  const loom_low_schedule_model_t* schedule_model =
+      issue->events.schedule_model;
+  const loom_low_schedule_class_t** classes =
+      (const loom_low_schedule_class_t**)iree_alloca(count * sizeof(*classes));
+  for (uint16_t i = 0; i < count; ++i) {
+    classes[i] =
+        loom_low_physical_instruction_class(schedule_model, &instructions[i]);
+  }
+  return loom_low_physical_issue_commit_with_resource_classes(
+      issue, instructions, count, classes, count, issue_cycle);
+}
+
+iree_status_t loom_low_physical_issue_commit_with_resource_classes(
+    loom_low_physical_issue_t* issue,
+    const loom_low_physical_instruction_t* instructions,
+    uint16_t instruction_count,
+    const loom_low_schedule_class_t* const* resource_classes,
+    uint16_t resource_class_count, uint32_t issue_cycle) {
+  IREE_RETURN_IF_ERROR(loom_low_schedule_resource_calendar_commit(
+      &issue->resources, resource_classes, resource_class_count, issue_cycle));
+  return loom_low_physical_issue_commit_events(issue, instructions,
+                                               instruction_count, issue_cycle);
 }

@@ -1098,6 +1098,7 @@ loom_check_test_suite(
     "test/configuration_contracts.loom-test"
     "test/configuration_entry.loom-test"
     "test/configuration_measurement.loom-test"
+    "test/core_admission.loom-test"
     "test/descriptors/bf16_comparison.loom-test"
     "test/descriptors/bfp_move.loom-test"
     "test/descriptors/cascade.loom-test"
@@ -1132,6 +1133,7 @@ loom_check_test_suite(
     "test/math_contraction.loom-test"
     "test/math_policy_activations.loom-test"
     "test/module_contracts.loom-test"
+    "test/move_routes.loom-test"
     "test/native_bindings.loom-test"
     "test/native_completion.loom-test"
     "test/native_dma_completions.loom-test"
@@ -1370,14 +1372,21 @@ loom_cc_library(
     ::core_structure
     ::descriptor_encoding
     ::encoding
+    ::leaf_program
     iree::base
     iree::base::internal
     iree::base::internal::arena
+    loom::codegen::low::diagnostics
     loom::codegen::low::frame
     loom::codegen::low::loop_execution
     loom::codegen::low::packet
+    loom::codegen::low::storage_layout
+    loom::error::diagnostic
+    loom::error::emitter
     loom::ir
     loom::ops::low
+    loom::ops::type_builders
+    loom::target::arch::amd::xdna::error_defs
   PUBLIC
 )
 endif()
@@ -1419,7 +1428,6 @@ loom_cc_library(
     loom::codegen::low::frame
     loom::codegen::low::function_requirements
     loom::codegen::low::packet
-    loom::codegen::low::storage_layout
     loom::ops::low
   PUBLIC
 )

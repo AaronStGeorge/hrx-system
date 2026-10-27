@@ -1,0 +1,113 @@
+// AIE local storage addresses use one native pointer register.
+// RUN: verify
+
+low.func.def target<amd.xdna.aie2p.core> @storage_address_results() asm {
+  %scalar_storage = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  // ERROR@+1: TYPE/004 {actual_type="reg<aie2p.er>", expected_constraint="register class in [aie2p.ep] with 1 unit(s)"}
+  %scalar = storage_address %scalar_storage : low.storage<private> -> reg<aie2p.er>
+  %wide_storage = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  // ERROR@+1: TYPE/004 {actual_type="reg<aie2p.ep x2>", expected_constraint="register class in [aie2p.ep] with 1 unit(s)"}
+  %wide = storage_address %wide_storage : low.storage<private> -> reg<aie2p.ep x2>
+  return
+}
+
+// ====
+// AIE conditional control consumes one scalar register predicate.
+// RUN: verify
+
+low.func.def target<amd.xdna.aie2p.core> @pointer_condition(%condition: reg<aie2p.ep>) asm {
+  // ERROR@+1: TARGET/035 {actual_type="reg<aie2p.ep>", type_constraint="reg<aie2p.er>"}
+  low.cond_br %condition, ^true, ^false : reg<aie2p.ep>
+^true:
+  return
+^false:
+  return
+}
+
+// ====
+// RUN: verify
+
+low.func.def target<amd.xdna.aie2p.core> @wide_condition(%condition: reg<aie2p.er x2>) asm {
+  // ERROR@+1: TARGET/035 {actual_type="reg<aie2p.er x2>", type_constraint="reg<aie2p.er>"}
+  low.cond_br %condition, ^true, ^false : reg<aie2p.er x2>
+^true:
+  return
+^false:
+  return
+}
+
+// ====
+// Physical control instructions are compiler-owned realizations of structural
+// Low control flow and cannot be authored as descriptor packets.
+// RUN: verify
+
+low.func.def target<amd.xdna.aie2p.core> @physical_control(%condition: reg<aie2p.er>) asm {
+  // ERROR@+1: TARGET/032 {op_constraint="structural Low control flow"}
+  j 0
+  // ERROR@+1: TARGET/032 {op_constraint="structural Low control flow"}
+  jl 0
+  // ERROR@+1: TARGET/032 {op_constraint="structural Low control flow"}
+  jnz %condition, 0
+  // ERROR@+1: TARGET/032 {op_constraint="structural Low control flow"}
+  jz %condition, 0
+  // ERROR@+1: TARGET/032 {op_constraint="structural Low control flow"}
+  ret
+  return
+}
+
+// ====
+// Loop address state is synthesized from the structural CFG. Its descriptor
+// immediates remain numeric placeholders rather than source relocations.
+// RUN: verify
+
+global.rodata.def @loop_target = align(4) bytes("00000000")
+
+low.func.def target<amd.xdna.aie2p.core> @symbolic_loop_state() asm {
+  // ERROR@+1: TARGET/049 {immediate_name="i", actual_kind="7", expected_kind="i64 signed integer"}
+  set.loop-start-address @loop_target
+  // ERROR@+1: TARGET/049 {immediate_name="i", actual_kind="7", expected_kind="i64 signed integer"}
+  set.loop-end-address @loop_target
+  return
+}
+
+// ====
+// Symbolic local addresses relocate retained read-only data, not code symbols.
+// RUN: verify
+
+low.func.def target<amd.xdna.aie2p.core> @code_symbol() asm {
+  return
+}
+
+low.func.def target<amd.xdna.aie2p.core> @non_rodata_local_address() asm {
+  // ERROR@+1: SYMBOL/003 {symbol_name="code_symbol", actual_kind="low.func.def", expected_kind="global.rodata.def"}
+  %address = mov.local-address @code_symbol
+  return
+}
+
+// ====
+// Final storage packing may place an otherwise valid address beyond the
+// signed addend carried by native local-address relocations.
+// RUN: emit aie2p-leaf @oversized_storage_address
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @oversized_storage_address() asm {
+  %prefix = storage {byte_alignment = 1, byte_length = 9223372036854775807} : low.storage<private>
+  %allocation = storage {byte_alignment = 2, byte_length = 1} : low.storage<private>
+  // ERROR@+1: XDNA/060 {function_name="oversized_storage_address", storage_space="private", byte_offset="9223372036854775808", maximum_byte_offset="9223372036854775807"}
+  %address = storage_address %allocation : low.storage<private> -> reg<aie2p.ep>
+  return
+}
+
+// ====
+// Final allocation must select physical registers connected by a complete
+// value-preserving native move route.
+// RUN: emit aie2p-leaf @unsupported_physical_move
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @unsupported_physical_move(%source: reg<aie2p.ed>) -> (reg<aie2p.ed>, reg<aie2p.edm>) asm {
+  // ERROR@+1: XDNA/061 {function_name="unsupported_physical_move", source_register="d0", destination_register="dm0"}
+  %copy = copy %source {detached = true} : reg<aie2p.ed> -> reg<aie2p.edm>
+  return %source, %copy
+}

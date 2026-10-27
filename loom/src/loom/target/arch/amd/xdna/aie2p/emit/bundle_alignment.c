@@ -609,10 +609,11 @@ static bool loom_aie2p_bundle_alignment_call_format_accepts_packet(
   return true;
 }
 
-static iree_status_t loom_aie2p_bundle_alignment_select_call_formats(
+static void loom_aie2p_bundle_alignment_select_call_formats(
     loom_aie2p_call_alignment_packet_t* packets,
     const loom_aie2p_planned_slot_t* original_slots,
-    iree_host_size_t encoded_byte_length) {
+    iree_host_size_t encoded_byte_length, uint8_t nop_byte_length,
+    uint8_t* out_inserted_nop_count) {
   loom_aie2p_call_alignment_state_t
       states[LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT + 1]
             [LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT + 1];
@@ -669,24 +670,38 @@ static iree_status_t loom_aie2p_bundle_alignment_select_call_formats(
     }
   }
 
-  const iree_host_size_t required_added_byte_count =
-      (LOOM_AIE2P_CALL_RETURN_ALIGNMENT -
-       encoded_byte_length % LOOM_AIE2P_CALL_RETURN_ALIGNMENT) %
-      LOOM_AIE2P_CALL_RETURN_ALIGNMENT;
-  iree_host_size_t selected_added_byte_count = required_added_byte_count;
-  while (
-      selected_added_byte_count <=
-          LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT &&
-      !states[LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT][selected_added_byte_count]
-           .reachable) {
-    selected_added_byte_count += LOOM_AIE2P_CALL_RETURN_ALIGNMENT;
+  IREE_ASSERT_NE(nop_byte_length, 0u);
+  IREE_ASSERT_EQ(LOOM_AIE2P_CALL_RETURN_ALIGNMENT % nop_byte_length, 0u);
+  IREE_ASSERT_EQ(encoded_byte_length % nop_byte_length, 0u);
+  const uint8_t prefix_residue_count =
+      LOOM_AIE2P_CALL_RETURN_ALIGNMENT / nop_byte_length;
+  iree_host_size_t selected_added_byte_count =
+      LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT + 1u;
+  uint8_t inserted_nop_count = 0;
+  for (; inserted_nop_count < prefix_residue_count; ++inserted_nop_count) {
+    const iree_host_size_t prefixed_byte_length =
+        encoded_byte_length + inserted_nop_count * nop_byte_length;
+    const iree_host_size_t required_added_byte_count =
+        (LOOM_AIE2P_CALL_RETURN_ALIGNMENT -
+         prefixed_byte_length % LOOM_AIE2P_CALL_RETURN_ALIGNMENT) %
+        LOOM_AIE2P_CALL_RETURN_ALIGNMENT;
+    selected_added_byte_count = required_added_byte_count;
+    while (selected_added_byte_count <=
+               LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT &&
+           !states[LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT]
+                  [selected_added_byte_count]
+                      .reachable) {
+      selected_added_byte_count += LOOM_AIE2P_CALL_RETURN_ALIGNMENT;
+    }
+    if (selected_added_byte_count <=
+        LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT) {
+      break;
+    }
   }
-  if (selected_added_byte_count >
-      LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "AIE2P call packets cannot form an aligned return address");
-  }
+  // The original formats make zero added bytes reachable. Two-byte bundle and
+  // NOP granularity therefore let one of the eight prefixes align every stream.
+  IREE_ASSERT_LT(inserted_nop_count, prefix_residue_count);
+  *out_inserted_nop_count = inserted_nop_count;
   for (iree_host_size_t packet_index = LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT;
        packet_index != 0; --packet_index) {
     const loom_aie2p_call_alignment_state_t* state =
@@ -694,12 +709,13 @@ static iree_status_t loom_aie2p_bundle_alignment_select_call_formats(
     packets[packet_index - 1].selected_format = state->format;
     selected_added_byte_count = state->previous_added_byte_count;
   }
-  return iree_ok_status();
 }
 
 iree_status_t loom_aie2p_bundle_alignment_align_call_continuation(
     loom_aie2p_bundle_alignment_storage_t* builder,
-    iree_host_size_t call_bundle_index, uint32_t continuation_cycle) {
+    iree_host_size_t call_bundle_index, uint32_t continuation_cycle,
+    uint8_t* out_inserted_nop_count) {
+  *out_inserted_nop_count = 0;
   if (builder->encoded_byte_length % LOOM_AIE2P_CALL_RETURN_ALIGNMENT == 0) {
     return iree_ok_status();
   }
@@ -769,19 +785,29 @@ iree_status_t loom_aie2p_bundle_alignment_align_call_continuation(
   IREE_ASSERT_EQ(region_slot_start + original_slot_count, builder->slot_count);
   IREE_ASSERT_EQ(byte_offset, builder->encoded_byte_length);
 
-  IREE_RETURN_IF_ERROR(loom_aie2p_bundle_alignment_select_call_formats(
-      packets, original_slots, builder->encoded_byte_length));
-  iree_host_size_t aligned_byte_length = call_bundle.byte_offset;
+  uint8_t inserted_nop_count = 0;
+  loom_aie2p_bundle_alignment_select_call_formats(
+      packets, original_slots, builder->encoded_byte_length, nop_byte_length,
+      &inserted_nop_count);
+  if (continuation_cycle > UINT32_MAX - inserted_nop_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AIE2P call alignment exceeds cycle domain");
+  }
+  const iree_host_size_t prefix_byte_length =
+      inserted_nop_count * nop_byte_length;
+  iree_host_size_t aligned_byte_length =
+      call_bundle.byte_offset + prefix_byte_length;
   for (uint8_t i = 0; i < LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT; ++i) {
     loom_aie2p_bundle_format_info_t format_info;
     const bool found = loom_aie2p_encoding_query_bundle_format_info(
         packets[i].selected_format, &format_info);
     IREE_ASSERT(found && format_info.bit_count % 8 == 0);
     aligned_byte_length += format_info.bit_count / 8;
+    packets[i].bundle.issue_cycle += inserted_nop_count;
   }
   builder->bundle_count = call_bundle_index;
   builder->slot_count = region_slot_start;
-  builder->encoded_byte_length = call_bundle.byte_offset;
+  builder->encoded_byte_length = call_bundle.byte_offset + prefix_byte_length;
   for (uint8_t packet_index = 0;
        packet_index < LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT; ++packet_index) {
     loom_aie2p_call_alignment_packet_t* packet = &packets[packet_index];
@@ -845,5 +871,6 @@ iree_status_t loom_aie2p_bundle_alignment_align_call_continuation(
   IREE_ASSERT_EQ(builder->encoded_byte_length, aligned_byte_length);
   IREE_ASSERT_EQ(
       builder->encoded_byte_length % LOOM_AIE2P_CALL_RETURN_ALIGNMENT, 0u);
+  *out_inserted_nop_count = inserted_nop_count;
   return iree_ok_status();
 }

@@ -956,6 +956,38 @@ low.func.def target<test.low.core> @physical_reuse(%seed: reg<test.phys>) -> (re
   EXPECT_TRUE(loom_low_physical_issue_group_fits(
       frame.target.descriptor_set, frame.target.schedule_model, pair, 2));
 
+  const uint32_t serial_ordinal = loom_low_descriptor_set_lookup_descriptor(
+      frame.target.descriptor_set, IREE_SV("test.resource.serial.i32"));
+  ASSERT_NE(serial_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
+  const loom_low_descriptor_view_t* serial_view =
+      loom_low_descriptor_set_descriptor_view_at(frame.target.descriptor_set,
+                                                 serial_ordinal);
+  const loom_low_schedule_class_t* serial_class =
+      loom_low_schedule_model_schedule_class(frame.target.schedule_model,
+                                             serial_view);
+  const loom_low_schedule_class_t* explicit_resources[] = {serial_class,
+                                                           serial_class};
+  EXPECT_FALSE(loom_low_physical_issue_group_fits_with_resource_classes(
+      frame.target.descriptor_set, frame.target.schedule_model, pair, 2,
+      explicit_resources, IREE_ARRAYSIZE(explicit_resources)));
+
+  loom_low_physical_issue_t resource_issue = {};
+  IREE_ASSERT_OK(loom_low_physical_issue_initialize(&frame.schedule, &arena_,
+                                                    &resource_issue));
+  const loom_low_schedule_class_t* one_resource[] = {serial_class};
+  EXPECT_EQ(
+      loom_low_physical_issue_find_earliest_issue_cycle_with_resource_classes(
+          &resource_issue, pair, 1, one_resource, IREE_ARRAYSIZE(one_resource),
+          0),
+      0u);
+  IREE_ASSERT_OK(loom_low_physical_issue_commit_with_resource_classes(
+      &resource_issue, pair, 1, one_resource, IREE_ARRAYSIZE(one_resource), 0));
+  EXPECT_EQ(
+      loom_low_physical_issue_find_earliest_issue_cycle_with_resource_classes(
+          &resource_issue, pair, 1, one_resource, IREE_ARRAYSIZE(one_resource),
+          0),
+      4u);
+
   // A negative hardware RAW permits early native issue, but semantic source
   // edges retain producer-before-consumer issue order in this admission model.
   loom_low_physical_issue_t semantic_issue = {};

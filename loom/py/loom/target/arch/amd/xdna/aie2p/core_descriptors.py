@@ -8,11 +8,13 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections import Counter
+from dataclasses import dataclass, replace
 from itertools import combinations, product
 from math import gcd
 from pathlib import Path
 
+from loom.target.arch.amd.xdna.aie.encoding import EncodingTable
 from loom.target.arch.amd.xdna.aie.machine import (
     MachineForm,
     MachineOperand,
@@ -39,6 +41,9 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptor_constraints import (
 )
 from loom.target.arch.amd.xdna.aie2p.core_encoding_data import CORE_ENCODING_TABLE
 from loom.target.arch.amd.xdna.aie2p.core_machine_data import CORE_MACHINE_TABLE
+from loom.target.arch.amd.xdna.aie2p.core_move_topology import (
+    SCALAR_MOVE_TOPOLOGY,
+)
 from loom.target.arch.amd.xdna.aie2p.core_schedule_data import CORE_SCHEDULE_TABLE
 from loom.target.arch.amd.xdna.aie2p.core_stream_descriptors import (
     _SCALAR_STREAM_ISSUE_EVENT,
@@ -1133,15 +1138,18 @@ def _immediate(
     spec: descriptor_specs._DescriptorSpec, operand: MachineOperand
 ) -> Immediate:
     immediate = _MACHINE_IMMEDIATES[operand.type_name]
-    if immediate.allows_symbol_reference or operand.name in spec.symbolic_immediates:
+    source_symbolic = operand.name in spec.symbolic_immediates
+    if immediate.allows_symbol_reference or source_symbolic:
         kind = ImmediateKind.ORDINAL
-        flags = (ImmediateFlag.SYMBOLIC,)
+        flags = (ImmediateFlag.SYMBOLIC,) if source_symbolic else ()
     elif immediate.is_signed:
         kind = ImmediateKind.SIGNED
         flags = ()
     else:
         kind = ImmediateKind.UNSIGNED
         flags = ()
+    if operand.name in spec.read_only_data_immediates:
+        flags = (*flags, ImmediateFlag.READ_ONLY_DATA)
     fixed_zero_bits = immediate.step.bit_length() - 1
     if immediate.is_negative:
         minimum = -(1 << (immediate.encoded_width_bits + fixed_zero_bits))
@@ -1438,6 +1446,16 @@ def _descriptor(spec: descriptor_specs._DescriptorSpec) -> Descriptor:
         raise ValueError(
             f"{form.name}: symbolic immediates name unknown machine immediates "
             f"{sorted(unknown_symbolic_immediates)}"
+        )
+    if len(set(spec.read_only_data_immediates)) != len(spec.read_only_data_immediates):
+        raise ValueError(f"{form.name}: read-only data immediate names must be unique")
+    non_symbolic_read_only_data = set(spec.read_only_data_immediates) - set(
+        spec.symbolic_immediates
+    )
+    if non_symbolic_read_only_data:
+        raise ValueError(
+            f"{form.name}: read-only data immediates must be symbolic "
+            f"{sorted(non_symbolic_read_only_data)}"
         )
     implicit_inputs = tuple(
         operand for operand in form.inputs if operand.name in spec.implicit_inputs
@@ -2065,6 +2083,27 @@ def _schedule_class(spec: descriptor_specs._DescriptorSpec) -> ScheduleClass:
     )
 
 
+_NON_SCALAR_NATIVE_MOVE_SCHEDULE_SPECS = (
+    descriptor_specs._DescriptorSpec(
+        "VMOV_alu_mv_mv_cm",
+        f"{descriptor_specs._TARGET_KEY}.native-move.accumulator1024",
+        "register.move.native.accumulator1024",
+        "II_VMOV_alu_mv_mv_cm",
+        storage_overrides=(("dst", "eCML"), ("src", "eCML")),
+    ),
+    descriptor_specs._DescriptorSpec(
+        "VMOV_alu_mv_mv_x",
+        f"{descriptor_specs._TARGET_KEY}.native-move.fifo512",
+        "register.move.native.fifo512",
+        "II_VMOV_alu_mv_mv_x_eLdFifoLReg_eLdFifoLReg",
+        storage_overrides=(
+            ("dst", "eLdFifoLReg"),
+            ("src", "eLdFifoLReg"),
+        ),
+    ),
+)
+
+
 def _schedule_classes() -> tuple[
     dict[tuple[str, str], str],
     tuple[ScheduleClass, ...],
@@ -2081,7 +2120,196 @@ def _schedule_classes() -> tuple[
     return names, tuple(classes[name] for name in sorted(classes))
 
 
-_SCHEDULE_CLASS_NAMES, _SCHEDULE_CLASSES = _schedule_classes()
+def _scalar_move_schedule_class(itinerary_name: str) -> ScheduleClass:
+    return _schedule_class(
+        descriptor_specs._DescriptorSpec(
+            "MOV_alu_mv_mv_mv_scl",
+            f"{descriptor_specs._TARGET_KEY}.native-move.scalar",
+            "register.move.native.scalar",
+            itinerary_name,
+            storage_overrides=(("dst", "eR"), ("src", "eR")),
+        )
+    )
+
+
+def _intersect_issue_uses(
+    rows: tuple[Counter[IssueUse], ...],
+) -> Counter[IssueUse]:
+    result = rows[0].copy()
+    for row in rows[1:]:
+        result &= row
+    return result
+
+
+def _issue_use_sort_key(row: IssueUse) -> tuple[object, ...]:
+    return (row.resource, row.stage, row.cycles, row.units, row.kind.value)
+
+
+def _schedule_fragment(name: str, uses: Counter[IssueUse]) -> ScheduleClass | None:
+    if not uses:
+        return None
+    issue_uses = tuple(
+        use
+        for use, count in sorted(
+            uses.items(), key=lambda item: _issue_use_sort_key(item[0])
+        )
+        for _ in range(count)
+    )
+    return ScheduleClass(
+        name,
+        LatencyKind.EXACT,
+        ModelQuality.EXACT,
+        latency_cycles=max(1, *(use.stage + use.cycles for use in issue_uses)),
+        issue_uses=issue_uses,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _NativeMoveScheduleClasses:
+    scalar_cells: tuple[tuple[tuple[str, ...], ...], ...]
+    scalar_common: str
+    scalar_destinations: tuple[str | None, ...]
+    scalar_sources: tuple[str | None, ...]
+    scalar_core_id: str
+    accumulator_1024: str
+    fifo_512: str
+    rows: tuple[ScheduleClass, ...]
+
+
+def _native_move_schedule_classes(
+    schedule_class_names: dict[tuple[str, str], str],
+) -> _NativeMoveScheduleClasses:
+    """Factors exact move resources without retaining the full product matrix."""
+
+    specialized_rows = tuple(
+        tuple(
+            Counter(_scalar_move_schedule_class(itinerary).issue_uses)
+            for itinerary in row[:-1]
+        )
+        for row in SCALAR_MOVE_TOPOLOGY.itinerary_names
+    )
+    common_uses = _intersect_issue_uses(
+        tuple(uses for row in specialized_rows for uses in row)
+    )
+    destination_uses = tuple(
+        _intersect_issue_uses(row) - common_uses for row in specialized_rows
+    )
+    source_uses = tuple(
+        _intersect_issue_uses(tuple(row[source_index] for row in specialized_rows))
+        - common_uses
+        for source_index in range(len(specialized_rows[0]))
+    )
+    if any(
+        specialized_rows[destination_index][source_index]
+        != common_uses + destination_uses[destination_index] + source_uses[source_index]
+        for destination_index in range(len(specialized_rows))
+        for source_index in range(len(specialized_rows[0]))
+    ):
+        raise ValueError("AIE2P scalar move schedules are not exactly factorable")
+
+    common = _schedule_fragment(
+        f"{descriptor_specs._TARGET_KEY}.schedule.native-move.scalar.common",
+        common_uses,
+    )
+    if common is None:
+        raise ValueError("AIE2P scalar moves have no common issue resources")
+    destinations = tuple(
+        _schedule_fragment(
+            f"{descriptor_specs._TARGET_KEY}.schedule.native-move.scalar.destination.{index}",
+            uses,
+        )
+        for index, uses in enumerate(destination_uses)
+    )
+    sources = tuple(
+        _schedule_fragment(
+            f"{descriptor_specs._TARGET_KEY}.schedule.native-move.scalar.source.{index}",
+            uses,
+        )
+        for index, uses in enumerate(source_uses)
+    )
+    scalar_fragments = (
+        common,
+        *(row for row in destinations if row is not None),
+        *(row for row in sources if row is not None),
+    )
+    scalar_schedule_class_names = tuple(
+        (
+            *(
+                tuple(
+                    fragment.name
+                    for fragment in (common, destination, source)
+                    if fragment is not None
+                )
+                for source in sources
+            ),
+            (schedule_class_names[("MOV_alu_mv_mv_mv_scl", itineraries[-1])],),
+        )
+        for itineraries, destination in zip(
+            SCALAR_MOVE_TOPOLOGY.itinerary_names, destinations, strict=True
+        )
+    )
+
+    non_scalar_classes = tuple(
+        _schedule_class(spec) for spec in _NON_SCALAR_NATIVE_MOVE_SCHEDULE_SPECS
+    )
+    accumulator_name, fifo_name = (row.name for row in non_scalar_classes)
+    classes = (*scalar_fragments, *non_scalar_classes)
+    if len({row.name for row in classes}) != len(classes):
+        raise ValueError("AIE2P native move schedule-class name collision")
+    return _NativeMoveScheduleClasses(
+        scalar_cells=scalar_schedule_class_names,
+        scalar_common=common.name,
+        scalar_destinations=tuple(
+            row.name if row is not None else None for row in destinations
+        ),
+        scalar_sources=tuple(row.name if row is not None else None for row in sources),
+        scalar_core_id=scalar_schedule_class_names[0][-1][0],
+        accumulator_1024=accumulator_name,
+        fifo_512=fifo_name,
+        rows=tuple(classes),
+    )
+
+
+_SCHEDULE_CLASS_NAMES, _BASE_SCHEDULE_CLASSES = _schedule_classes()
+_NATIVE_MOVE_SCHEDULE_TOPOLOGY = _native_move_schedule_classes(_SCHEDULE_CLASS_NAMES)
+AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES = _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_cells
+AIE2P_SCALAR_MOVE_COMMON_SCHEDULE_CLASS_NAME = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_common
+)
+AIE2P_SCALAR_MOVE_DESTINATION_SCHEDULE_CLASS_NAMES = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_destinations
+)
+AIE2P_SCALAR_MOVE_SOURCE_SCHEDULE_CLASS_NAMES = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_sources
+)
+AIE2P_SCALAR_MOVE_CORE_ID_SCHEDULE_CLASS_NAME = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_core_id
+)
+AIE2P_ACCUMULATOR_1024_MOVE_SCHEDULE_CLASS_NAME = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.accumulator_1024
+)
+AIE2P_FIFO_512_MOVE_SCHEDULE_CLASS_NAME = _NATIVE_MOVE_SCHEDULE_TOPOLOGY.fifo_512
+_NATIVE_MOVE_SCHEDULE_CLASSES = _NATIVE_MOVE_SCHEDULE_TOPOLOGY.rows
+_SCHEDULE_CLASSES = tuple(
+    sorted(
+        (*_BASE_SCHEDULE_CLASSES, *_NATIVE_MOVE_SCHEDULE_CLASSES),
+        key=lambda row: row.name,
+    )
+)
+AIE2P_NATIVE_MOVE_SCHEDULE_CLASS_NAMES = tuple(
+    sorted(
+        {
+            name
+            for row in AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES
+            for cell in row
+            for name in cell
+        }
+        | {
+            AIE2P_ACCUMULATOR_1024_MOVE_SCHEDULE_CLASS_NAME,
+            AIE2P_FIFO_512_MOVE_SCHEDULE_CLASS_NAME,
+        }
+    )
+)
 
 
 AIE2P_CORE_DESCRIPTOR_SET = DescriptorSet(
@@ -2115,8 +2343,18 @@ AIE2P_CORE_DESCRIPTOR_SET = DescriptorSet(
 )
 
 
+def _validate_bundle_stream_widths(encoding_table: EncodingTable) -> None:
+    """Proves every packet preserves the core's two-byte stream granularity."""
+    for bundle_format in encoding_table.bundle_formats:
+        if bundle_format.bit_count % 16:
+            raise ValueError(
+                f"{bundle_format.name}: AIE2P bundle width is not 16-bit aligned"
+            )
+
+
 def _validate_control_issue_timing(descriptor_set: DescriptorSet) -> None:
     """Proves the fixed native control-window contracts used by emission."""
+    _validate_bundle_stream_widths(CORE_ENCODING_TABLE)
     descriptors = {
         descriptor.key: descriptor for descriptor in descriptor_set.descriptors
     }
@@ -2130,11 +2368,13 @@ def _validate_control_issue_timing(descriptor_set: DescriptorSet) -> None:
             maximum_separations.get(separation.producer_event, 0),
             separation.minimum_issue_separation_cycles,
         )
-    controls = tuple(
+    tail_controls = tuple(
         descriptors[f"{descriptor_specs._TARGET_KEY}.{suffix}"]
         for suffix in ("return", "branch.direct", "branch.zero", "branch.nonzero")
     )
-    for descriptor in controls:
+    call = descriptors[f"{descriptor_specs._TARGET_KEY}.call.direct"]
+    window_controls = (*tail_controls, call)
+    for descriptor in window_controls:
         control_cycles = encodings[descriptor.encoding_id].delay_slot_count + 1
         schedule = classes[descriptor.schedule_class]
         events = [
@@ -2155,16 +2395,19 @@ def _validate_control_issue_timing(descriptor_set: DescriptorSet) -> None:
             raise ValueError(
                 f"{descriptor.key}: control window does not cover its resource stages"
             )
-        if any(
-            effect.kind is not EffectKind.CONTROL for effect in descriptor.effects
-        ) or any(operand.write_event is not None for operand in descriptor.operands):
+        if any(effect.kind is not EffectKind.CONTROL for effect in descriptor.effects):
+            raise ValueError(
+                f"{descriptor.key}: control window requires control-only effects"
+            )
+    for descriptor in tail_controls:
+        if any(operand.write_event is not None for operand in descriptor.operands):
             raise ValueError(
                 f"{descriptor.key}: control tail placement requires read-only "
                 "registers and control effects"
             )
     control_resources = {
         use.resource
-        for descriptor in controls
+        for descriptor in window_controls
         for use in classes[descriptor.schedule_class].issue_uses
     }
     resources = {row.name: row for row in descriptor_set.resources}
@@ -2197,4 +2440,80 @@ def _validate_control_issue_timing(descriptor_set: DescriptorSet) -> None:
         )
 
 
+def _validate_call_delay_transport_timing(descriptor_set: DescriptorSet) -> None:
+    """Proves call-argument moves can issue in consecutive delay positions."""
+    classes = {row.name: row for row in descriptor_set.schedule_classes}
+    reg_classes = {row.name: row for row in descriptor_set.reg_classes}
+    allocation_moves = tuple(
+        descriptor
+        for descriptor in descriptor_set.descriptors
+        if DescriptorFlag.ALLOCATION_MOVE in descriptor.flags
+    )
+
+    def operand_registers(operand: Operand) -> frozenset[str]:
+        register_class = operand.reg_alts[0].reg_class
+        if register_class is None:
+            raise ValueError("allocation move operand has no register class")
+        return frozenset(reg_classes[register_class].physical_registers)
+
+    move_registers = tuple(
+        (
+            descriptor,
+            operand_registers(descriptor.operands[0]),
+            operand_registers(descriptor.operands[1]),
+        )
+        for descriptor in allocation_moves
+        if len(descriptor.operands) == 2
+    )
+
+    selected_moves: dict[str, Descriptor] = {}
+    for carrier_class_name in ("aie2p.er", "aie2p.ep"):
+        carrier_class = reg_classes[carrier_class_name]
+        for source, destination in product(carrier_class.physical_registers, repeat=2):
+            selected = next(
+                (
+                    descriptor
+                    for descriptor, destinations, sources in move_registers
+                    if destination in destinations and source in sources
+                ),
+                None,
+            )
+            if selected is None:
+                raise ValueError(
+                    f"{carrier_class_name}: direct-call carrier pair "
+                    f"{source}->{destination} has no direct move"
+                )
+            selected_moves[selected.key] = selected
+
+    maximum_separations: dict[str, int] = {}
+    for separation in descriptor_set.event_separations:
+        maximum_separations[separation.producer_event] = max(
+            maximum_separations.get(separation.producer_event, 0),
+            separation.minimum_issue_separation_cycles,
+        )
+    for descriptor in selected_moves.values():
+        schedule = classes[descriptor.schedule_class]
+        if any(use.stage != 0 or use.cycles != 1 for use in schedule.issue_uses):
+            raise ValueError(
+                f"{descriptor.key}: direct-call transport requires "
+                "one-cycle issue resources"
+            )
+        events = (
+            event
+            for operand in descriptor.operands
+            for event in (operand.read_event, operand.write_event)
+            if event is not None
+        )
+        if any(maximum_separations.get(event, 0) > 1 for event in events):
+            raise ValueError(
+                f"{descriptor.key}: direct-call transport requires "
+                "one-cycle register events"
+            )
+        if descriptor.effects:
+            raise ValueError(
+                f"{descriptor.key}: direct-call transport must not carry effects"
+            )
+
+
 _validate_control_issue_timing(AIE2P_CORE_DESCRIPTOR_SET)
+_validate_call_delay_transport_timing(AIE2P_CORE_DESCRIPTOR_SET)

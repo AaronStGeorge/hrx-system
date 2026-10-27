@@ -28,6 +28,7 @@ from loom.target.arch.amd.xdna.aie.encoding import (
     instruction_fixed_pattern_overlaps,
     validate_encoding_table,
 )
+from loom.target.arch.amd.xdna.aie.machine import MachineOperandKind
 from loom.target.arch.amd.xdna.aie2p.array_descriptors import (
     AIE2P_ARRAY_DESCRIPTOR_SET,
 )
@@ -35,7 +36,14 @@ from loom.target.arch.amd.xdna.aie2p.configuration_descriptors import (
     AIE2P_CONFIGURATION_DESCRIPTOR_SET,
 )
 from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
+    AIE2P_ACCUMULATOR_1024_MOVE_SCHEDULE_CLASS_NAME,
     AIE2P_CORE_DESCRIPTOR_SET,
+    AIE2P_FIFO_512_MOVE_SCHEDULE_CLASS_NAME,
+    AIE2P_NATIVE_MOVE_SCHEDULE_CLASS_NAMES,
+    AIE2P_SCALAR_MOVE_COMMON_SCHEDULE_CLASS_NAME,
+    AIE2P_SCALAR_MOVE_CORE_ID_SCHEDULE_CLASS_NAME,
+    AIE2P_SCALAR_MOVE_DESTINATION_SCHEDULE_CLASS_NAMES,
+    AIE2P_SCALAR_MOVE_SOURCE_SCHEDULE_CLASS_NAMES,
 )
 from loom.target.arch.amd.xdna.aie2p.core_encoding_data import (
     CORE_ENCODING_TABLE,
@@ -46,6 +54,11 @@ from loom.target.arch.amd.xdna.aie2p.core_encoding_data import (
 from loom.target.arch.amd.xdna.aie2p.core_machine_data import (
     CORE_MACHINE_TABLE,
     DIMENSION_FIELDS,
+)
+from loom.target.arch.amd.xdna.aie2p.core_move_topology import (
+    AGGREGATE_MOVE_COMPONENT_FORMS,
+    AGGREGATE_MOVE_RECIPES,
+    SCALAR_MOVE_TOPOLOGY,
 )
 from loom.target.low_descriptors import DescriptorFlag
 
@@ -372,7 +385,7 @@ def _emit_encoding_tables() -> str:
     return "\n".join(lines)
 
 
-def _register_part_unit_masks() -> list[int]:
+def _register_part_unit_masks(compiled) -> list[int]:
     """Projects semantic parts onto physical atomic-unit ordinals once."""
     spec = AIE2P_CORE_DESCRIPTOR_SET
     registers = {row.name: row for row in CORE_MACHINE_TABLE.physical_registers}
@@ -389,7 +402,7 @@ def _register_part_unit_masks() -> list[int]:
     if any(len(row.atomic_units) > 32 for row in registers.values()):
         raise ValueError("AIE2P register units exceed uint32 ordinal masks")
     result = []
-    for part in compile_descriptor_set(spec).register_parts:
+    for part in compiled.register_parts:
         if part.mask >> len(paths[part.reg_class]):
             raise ValueError(f"{part.name}: register part has no physical projection")
         masks = set()
@@ -415,6 +428,10 @@ def _register_part_unit_masks() -> list[int]:
 def _emit_register_tables() -> str:
     """Indexes native moves and register parts by their producer-owned IDs."""
     spec = AIE2P_CORE_DESCRIPTOR_SET
+    compiled = compile_descriptor_set(
+        spec,
+        required_schedule_class_names=AIE2P_NATIVE_MOVE_SCHEDULE_CLASS_NAMES,
+    )
     moves = tuple((ordinal, descriptor) for ordinal, descriptor in enumerate(spec.descriptors) if DescriptorFlag.ALLOCATION_MOVE in descriptor.flags)
     if not moves or len(moves) > 8:
         raise ValueError("AIE2P allocation moves must fit nonempty uint8 route masks")
@@ -437,31 +454,218 @@ def _emit_register_tables() -> str:
     ]
     for name, values in zip(("Destination", "Source"), masks, strict=True):
         lines.extend((f"static const uint8_t kMove{name}Masks[] = {{", *(f"    0x{value:02x}," for value in values), "};", ""))
-    # Scalar L values have no direct move instruction. Retain their exact
-    # native R subregisters so emission never searches the machine hierarchy.
+
+    def category_table(categories: tuple[tuple[str, ...], ...], name: str) -> list[int]:
+        values = [0xFF] * len(register_ids)
+        for category, registers in enumerate(categories):
+            for register in registers:
+                register_id = register_ids[register]
+                if values[register_id] != 0xFF:
+                    raise ValueError(f"{register}: duplicate {name} move category")
+                values[register_id] = category
+        return values
+
+    scalar_destination_categories = category_table(SCALAR_MOVE_TOPOLOGY.destination_categories, "destination")
+    scalar_source_categories = category_table(SCALAR_MOVE_TOPOLOGY.source_categories, "source")
+    lines.extend(
+        (
+            "static const uint8_t kMoveScalarDestinationCategories[] = {",
+            *(f"    {value}," for value in scalar_destination_categories),
+            "};",
+            "",
+            "static const uint8_t kMoveScalarSourceCategories[] = {",
+            *(f"    {value}," for value in scalar_source_categories),
+            "};",
+            "",
+        )
+    )
+
     native_classes = {row.name: row for row in CORE_MACHINE_TABLE.register_classes}
     native_registers = {row.name: row for row in CORE_MACHINE_TABLE.physical_registers}
-    scalar_registers = set(native_classes["eR"].candidates)
-    pairs = [(0, 0)]
-    pair_indices = [0] * len(register_ids)
-    for name in native_classes["eL"].candidates:
-        register = native_registers[name]
-        if len(register.subregisters) != 2 or not set(register.subregisters) <= scalar_registers:
-            raise ValueError(f"{name}: scalar pair must contain two native R registers")
-        units = tuple(unit for part in register.subregisters for unit in native_registers[part].atomic_units)
-        if units != register.atomic_units:
-            raise ValueError(f"{name}: scalar parts must cover native storage in order")
-        pair_indices[register_ids[name]] = len(pairs)
-        pairs.append(tuple(register_ids[part] for part in register.subregisters))
-    if len(pairs) > 256:
-        raise ValueError("AIE2P scalar pair indices exceed uint8")
-    for source_pair in pairs[1:]:
-        for destination_pair in pairs[1:]:
-            if any(not (masks[1][source] & masks[0][destination]) for source, destination in zip(source_pair, destination_pair, strict=True)):
-                raise ValueError("AIE2P scalar pair parts need direct native moves")
-    lines.extend(("static const uint8_t kMoveScalarPairIndices[] = {", *(f"    {value}," for value in pair_indices), "};", ""))
-    lines.extend(("static const uint16_t kMoveScalarPairs[][2] = {", *(f"    {{{low}, {high}}}," for low, high in pairs), "};", ""))
-    lines.extend(("static const uint8_t kRegisterPartAtomicUnitMasks[] = {", *(f"    0x{mask:02x}," for mask in _register_part_unit_masks()), "};", ""))
+    projections_by_register: dict[str, tuple[int, tuple[int, ...]]] = {}
+    for recipe_index, recipe in enumerate(AGGREGATE_MOVE_RECIPES):
+        for class_name in recipe.machine_classes:
+            for register_name in native_classes[class_name].candidates:
+                register = native_registers[register_name]
+                components = []
+                for path in recipe.component_paths:
+                    component = register
+                    for step in path:
+                        component = native_registers[component.subregisters[component.subregister_indices.index(step)]]
+                    components.append(register_ids[component.name])
+                projection = (recipe_index, tuple(components))
+                previous = projections_by_register.setdefault(register_name, projection)
+                if previous != projection:
+                    raise ValueError(f"{register_name}: conflicting aggregate move projections")
+
+    direct_route_first = 1
+    scalar_route_first = direct_route_first + len(moves)
+    scalar_route_count = len(SCALAR_MOVE_TOPOLOGY.destination_categories) * len(SCALAR_MOVE_TOPOLOGY.source_categories)
+    aggregate_route_first = scalar_route_first + scalar_route_count
+    route_limit = aggregate_route_first + len(AGGREGATE_MOVE_RECIPES)
+    if route_limit > 256:
+        raise ValueError("AIE2P move routes exceed uint8 identifiers")
+    lines.extend(
+        (
+            "enum {",
+            f"  kMoveRouteDirectFirst = {direct_route_first},",
+            f"  kMoveRouteScalarFirst = {scalar_route_first},",
+            f"  kMoveRouteScalarSourceCount = {len(SCALAR_MOVE_TOPOLOGY.source_categories)},",
+            f"  kMoveRouteScalarDestinationCount = {len(SCALAR_MOVE_TOPOLOGY.destination_categories)},",
+            f"  kMoveRouteAggregateFirst = {aggregate_route_first},",
+            f"  kMoveRouteLimit = {route_limit},",
+            "};",
+            "",
+        )
+    )
+
+    projection_indices = [0] * len(register_ids)
+    projection_rows = [(0, 0, 0)]
+    component_registers: list[int] = []
+    for register_name, register_id in register_ids.items():
+        projection = projections_by_register.get(register_name)
+        if projection is None:
+            continue
+        recipe_index, components = projection
+        if len(component_registers) > 0xFFFF:
+            raise ValueError("AIE2P move projection components exceed uint16 offsets")
+        projection_indices[register_id] = len(projection_rows)
+        projection_rows.append(
+            (
+                len(component_registers),
+                len(components),
+                aggregate_route_first + recipe_index,
+            )
+        )
+        component_registers.extend(components)
+    if len(projection_rows) > 256:
+        raise ValueError("AIE2P move projections exceed uint8 identifiers")
+    lines.extend(
+        (
+            "static const uint8_t kMoveProjectionIndices[] = {",
+            *(f"    {value}," for value in projection_indices),
+            "};",
+            "",
+            "static const loom_aie2p_move_projection_t kMoveProjections[] = {",
+            *(f"    {{{component_start}, {component_count}, {route_id}}}," for component_start, component_count, route_id in projection_rows),
+            "};",
+            "",
+            "static const uint16_t kMoveProjectionComponents[] = {",
+            *(f"    {value}," for value in component_registers),
+            "};",
+            "",
+        )
+    )
+
+    descriptor_ordinals = {descriptor.key: ordinal for ordinal, descriptor in enumerate(spec.descriptors)}
+    scalar_descriptor_ordinal = descriptor_ordinals["amd.xdna.aie2p.move.scalar"]
+    event_descriptor_ordinal = descriptor_ordinals["amd.xdna.aie2p.move.accumulator512"]
+    encoding_kinds = {
+        "scalar": "LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR",
+        "accumulator_1024": "LOOM_AIE2P_MOVE_STEP_ENCODING_ACCUMULATOR_1024",
+        "fifo_512": "LOOM_AIE2P_MOVE_STEP_ENCODING_FIFO_512",
+    }
+    schedule_class_names = {
+        "scalar": None,
+        "accumulator_1024": AIE2P_ACCUMULATOR_1024_MOVE_SCHEDULE_CLASS_NAME,
+        "fifo_512": AIE2P_FIFO_512_MOVE_SCHEDULE_CLASS_NAME,
+    }
+
+    instructions = tuple(sorted(CORE_ENCODING_TABLE.instructions, key=lambda row: row.name))
+    instruction_ids = {instruction.name: index for index, instruction in enumerate(instructions, start=1)}
+    field_ids = {
+        name: index
+        for index, name in enumerate(
+            sorted({field.name for instruction in instructions for field in instruction.fields}),
+            start=1,
+        )
+    }
+    forms = {form.name: form for form in CORE_MACHINE_TABLE.forms}
+    adapter_ids = {
+        adapter.name: index
+        for index, adapter in enumerate(
+            sorted(CORE_MACHINE_TABLE.register_adapters, key=lambda row: row.name),
+            start=1,
+        )
+    }
+
+    aggregate_encoding_infos = []
+    for recipe in AGGREGATE_MOVE_RECIPES:
+        if recipe.component_kind == "scalar":
+            aggregate_encoding_infos.append((0, 0, 0, 0, 0))
+            continue
+        form_name = AGGREGATE_MOVE_COMPONENT_FORMS[recipe.component_kind]
+        form = forms[form_name]
+        instruction = next(row for row in instructions if row.name == form_name)
+        if (
+            len(form.outputs) != 1
+            or len(form.inputs) != 1
+            or form.outputs[0].name != "dst"
+            or form.inputs[0].name != "src"
+            or form.outputs[0].kind is not MachineOperandKind.REGISTER_ADAPTER
+            or form.inputs[0].kind is not MachineOperandKind.REGISTER_ADAPTER
+            or {field.name for field in instruction.fields} != {"dst", "src"}
+        ):
+            raise ValueError(f"{form_name}: aggregate move encoding must have adapted dst/src fields")
+        aggregate_encoding_infos.append(
+            (
+                instruction_ids[form_name],
+                field_ids["dst"],
+                field_ids["src"],
+                adapter_ids[form.outputs[0].type_name],
+                adapter_ids[form.inputs[0].type_name],
+            )
+        )
+    lines.extend(
+        (
+            f"static const uint16_t kMoveScalarDescriptorOrdinal = {scalar_descriptor_ordinal};",
+            f"static const uint16_t kMoveEventDescriptorOrdinal = {event_descriptor_ordinal};",
+            "",
+            "static const uint8_t kMoveAggregateStepCounts[] = {",
+            *(f"    {len(recipe.component_paths)}," for recipe in AGGREGATE_MOVE_RECIPES),
+            "};",
+            "",
+            "static const uint8_t kMoveAggregateEncodingKinds[] = {",
+            *(f"    {encoding_kinds[recipe.component_kind]}," for recipe in AGGREGATE_MOVE_RECIPES),
+            "};",
+            "",
+            "static const uint16_t kMoveAggregateScheduleClassIds[] = {",
+            *(
+                "    UINT16_MAX," if schedule_class_names[recipe.component_kind] is None else f"    {compiled.schedule_class_ids[schedule_class_names[recipe.component_kind]]},"
+                for recipe in AGGREGATE_MOVE_RECIPES
+            ),
+            "};",
+            "",
+            "static const loom_aie2p_move_step_encoding_info_t",
+            "    kMoveAggregateEncodingInfos[] = {",
+            *(
+                f"    {{{instruction_id}, {destination_field_id}, {source_field_id}, {destination_adapter_id}, {source_adapter_id}}},"
+                for instruction_id, destination_field_id, source_field_id, destination_adapter_id, source_adapter_id in aggregate_encoding_infos
+            ),
+            "};",
+            "",
+        )
+    )
+
+    def schedule_class_id(name: str | None) -> str:
+        return "UINT16_MAX" if name is None else str(compiled.schedule_class_ids[name])
+
+    lines.extend(
+        (
+            f"static const uint16_t kMoveScalarCommonScheduleClassId = {compiled.schedule_class_ids[AIE2P_SCALAR_MOVE_COMMON_SCHEDULE_CLASS_NAME]};",
+            "static const uint16_t kMoveScalarDestinationScheduleClassIds[] = {",
+            *(f"    {schedule_class_id(name)}," for name in AIE2P_SCALAR_MOVE_DESTINATION_SCHEDULE_CLASS_NAMES),
+            "};",
+            "",
+            "static const uint16_t kMoveScalarSourceScheduleClassIds[] = {",
+            *(f"    {schedule_class_id(name)}," for name in AIE2P_SCALAR_MOVE_SOURCE_SCHEDULE_CLASS_NAMES),
+            "};",
+            "",
+            f"static const uint16_t kMoveScalarCoreIdScheduleClassId = {compiled.schedule_class_ids[AIE2P_SCALAR_MOVE_CORE_ID_SCHEDULE_CLASS_NAME]};",
+            "",
+        )
+    )
+    lines.extend(("static const uint8_t kRegisterPartAtomicUnitMasks[] = {", *(f"    0x{mask:02x}," for mask in _register_part_unit_masks(compiled)), "};", ""))
     return "\n".join(lines)
 
 
@@ -531,7 +735,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         CORE_MACHINE_TABLE,
         CORE_ENCODING_TABLE,
     )
-    generated_descriptors = generate_descriptor_set(AIE2P_CORE_DESCRIPTOR_SET)
+    generated_descriptors = generate_descriptor_set(
+        AIE2P_CORE_DESCRIPTOR_SET,
+        required_schedule_class_names=AIE2P_NATIVE_MOVE_SCHEDULE_CLASS_NAMES,
+    )
     generated_array_descriptors = generate_descriptor_set(AIE2P_ARRAY_DESCRIPTOR_SET)
     generated_configuration_descriptors = generate_descriptor_set(AIE2P_CONFIGURATION_DESCRIPTOR_SET)
     register_contents = _emit_register_tables()

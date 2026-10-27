@@ -155,12 +155,14 @@ def generate_descriptor_set(
     allowlist: DescriptorAllowlist | None = None,
     *,
     shared_strings: CStringBank | None = None,
+    required_schedule_class_names: Sequence[str] = (),
 ) -> GeneratedDescriptorSet:
     (
-        required_schedule_class_names,
+        model_schedule_class_names,
         required_resource_names,
         required_timing_event_names,
     ) = _schedule_model_vocabulary((spec,))
+    required_schedule_class_names = tuple(sorted(set(required_schedule_class_names) | set(model_schedule_class_names)))
     compiled = compiler.compile_descriptor_set(
         spec,
         allowlist,
