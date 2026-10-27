@@ -13,7 +13,7 @@ load("//loom/build_tools/bazel:defs.bzl", "LoomModelInfo", "loom_library", "loom
 _PACKAGE = "loom/build_tools/bazel/test/"
 _CARD = "//loom/src/loom/serve/fixture/text:native.card.json"
 
-def _declare_composition(name, input_form, library_form):
+def _declare_composition(name, form):
     loom_library(
         name = name + "_leaf",
         srcs = ["link_kernels.loom", "dependency_checks.loom"],
@@ -39,8 +39,7 @@ def _declare_composition(name, input_form, library_form):
         card = _CARD,
         inputs = [":" + name + "_primary"],
         libraries = [":" + name + "_branch"],
-        input_form = input_form,
-        library_form = library_form,
+        form = form,
         programs = "selected",
         preset = "check",
         model_name = "fixture",
@@ -48,20 +47,20 @@ def _declare_composition(name, input_form, library_form):
         tags = ["manual"],
     )
 
-def _expect_composition(env, target, input_form, library_form):
+def _expect_composition(env, target, form):
     info = target[LoomModelInfo]
     stem = target.label.name.removesuffix("_subject")
     primary = {
         "data": [_PACKAGE + "model_provider.h"],
-        "format": "loombc" if input_form == "module" else "cxx",
-        "path": _PACKAGE + (stem + "_primary.loombc" if input_form == "module" else "model_provider.cxx"),
+        "format": "loombc" if form == "module" else "cxx",
+        "path": _PACKAGE + (stem + "_primary.loombc" if form == "module" else "model_provider.cxx"),
     }
-    if input_form == "sources":
+    if form == "sources":
         primary["options"] = ["cxx:fp-model=fast"]
     libraries = [
         {"format": "loombc", "path": _PACKAGE + stem + "_branch.loombc"},
         {"format": "loombc", "path": _PACKAGE + stem + "_leaf.loombc"},
-    ] if library_form == "module" else [
+    ] if form == "module" else [
         _PACKAGE + "profile_benchmarks.loom",
         _PACKAGE + "link_kernels.loom",
         _PACKAGE + "dependency_checks.loom",
@@ -83,32 +82,18 @@ def _expect_composition(env, target, input_form, library_form):
     env.expect.that_int(len(paths)).equals(len(expected_files) + 2)
 
 def _test_sources(name, **kwargs):
-    _declare_composition(name, "sources", "sources")
+    _declare_composition(name, "sources")
     analysis_test(name = name, target = ":" + name + "_subject", impl = _sources_impl, **kwargs)
 
 def _sources_impl(env, target):
-    _expect_composition(env, target, "sources", "sources")
+    _expect_composition(env, target, "sources")
 
 def _test_modules(name, **kwargs):
-    _declare_composition(name, "module", "module")
+    _declare_composition(name, "module")
     analysis_test(name = name, target = ":" + name + "_subject", impl = _modules_impl, **kwargs)
 
 def _modules_impl(env, target):
-    _expect_composition(env, target, "module", "module")
-
-def _test_mixed(name, **kwargs):
-    _declare_composition(name, "sources", "module")
-    analysis_test(name = name, target = ":" + name + "_subject", impl = _mixed_impl, **kwargs)
-
-def _mixed_impl(env, target):
-    _expect_composition(env, target, "sources", "module")
-
-def _test_module_inputs_source_libraries(name, **kwargs):
-    _declare_composition(name, "module", "sources")
-    analysis_test(name = name, target = ":" + name + "_subject", impl = _module_sources_impl, **kwargs)
-
-def _module_sources_impl(env, target):
-    _expect_composition(env, target, "module", "sources")
+    _expect_composition(env, target, "module")
 
 def _test_bytecode_is_an_original_source(name, **kwargs):
     loom_library(name = name + "_module", srcs = ["link_kernels.loom"], tags = ["manual"])
@@ -177,8 +162,6 @@ def loom_model_rules_test_suite(name):
     test_suite(name = name, tests = [
         _test_sources,
         _test_modules,
-        _test_mixed,
-        _test_module_inputs_source_libraries,
         _test_bytecode_is_an_original_source,
         _test_external_files_fail,
         _test_conflicting_importers_fail,

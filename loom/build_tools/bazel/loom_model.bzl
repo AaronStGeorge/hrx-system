@@ -55,14 +55,14 @@ def _program_composition(ctx):
         order = "preorder",
     ).to_list()
     groups = [
-        ("inputs", ctx.attr.input_form, [info.component for info in primary]),
-        ("libraries", ctx.attr.library_form, [component for component in dependencies if component.label not in primary_labels]),
+        ("inputs", [info.component for info in primary]),
+        ("libraries", [component for component in dependencies if component.label not in primary_labels]),
     ]
     program = {"inputs": [], "libraries": []}
     files = {}
     data = {}
     providers = {}
-    for role, form, components in groups:
+    for role, components in groups:
         for component in components:
             if component.label.workspace_name != ctx.label.workspace_name:
                 fail("%s: external repository provider %s is not supported in model composition" % (ctx.label, component.label))
@@ -73,10 +73,10 @@ def _program_composition(ctx):
                     fail("conflicting model auxiliary file: %s" % path)
                 data[path] = file
                 auxiliary.append(path)
-            for file in component.sources if form == "sources" else [component.module]:
+            for file in component.sources if ctx.attr.form == "sources" else [component.module]:
                 path = _repository_path(ctx, file)
                 provider = {"path": path}
-                if form == "module":
+                if ctx.attr.form == "module":
                     provider["format"] = "loombc"
                 else:
                     if component.input_format:
@@ -192,9 +192,9 @@ loom_model = rule(
     Provider composition uses inputs and libraries of loom_library targets. Each
     provider owns its sources, data, importer settings, and direct dependencies;
     analysis derives the complete ordered closure with repository-relative paths.
-    input_form and library_form independently select original sources or merged
-    modules. Sources may themselves be bytecode. Primary providers reached again
-    as dependencies retain their primary form and appear only once.
+    form selects original sources or merged modules for the complete composition.
+    Sources may themselves be bytecode. Primary providers reached again as
+    dependencies retain their primary role and appear only once.
 
     LoomModelInfo exposes the generated inputs/libraries for card synchronization
     through cquery without executing any build action. The package action checks
@@ -212,10 +212,9 @@ loom_model = rule(
         "data": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected providers' auxiliary files, mapped to card paths. These are compiler inputs and runtime runfiles, separate from parameter/tokenizer acquisition."),
         "encoding": attr.string(default = "bc", values = ["text", "bc", "preserve"], doc = "Normalize providers to Loom text/bytecode, or preserve their bytes, formats, and import options."),
         "files": attr.label_keyed_string_dict(allow_files = True, doc = "Exactly the selected inputs and libraries, mapped to card paths; preserved as symlinks or normalized with the configured linker."),
-        "input_form": attr.string(default = "sources", values = ["sources", "module"], doc = "Select original declared files or merged modules for primary providers."),
+        "form": attr.string(default = "sources", values = ["sources", "module"], doc = "Select original declared files or merged modules for every provider."),
         "inputs": attr.label_list(providers = [LoomLibraryInfo], doc = "Ordered primary providers. Their direct and transitive dependencies become libraries automatically."),
         "libraries": attr.label_list(providers = [LoomLibraryInfo], doc = "Additional runtime-selected library roots; their dependency closure is included automatically."),
-        "library_form": attr.string(default = "sources", values = ["sources", "module"], doc = "Select original declared files or merged modules for library providers."),
         "lockfile": attr.label(allow_single_file = True, doc = "Authored acquisition lock carried as a test dependency. Changes invalidate dependent tests without reading runtime assets or recompiling providers. This is not the publication lock of normalized outputs."),
         "model_name": attr.string(mandatory = True),
         "partition": attr.string(doc = "Executable partition override within the selected variant."),

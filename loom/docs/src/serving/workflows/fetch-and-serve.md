@@ -247,7 +247,7 @@ determines the request contract:
 
 A program set can contain several Loom text or bytecode files and libraries.
 The server links the selected providers together and specializes them for the
-device. A publisher may offer source, bytecode, or mixed sets; `--programs`
+device. A publisher may offer source or bytecode sets; `--programs`
 overrides a preset only when another compatible set is actually published.
 The source checkout in this example publishes the source set. Its bytecode
 choices require a separately built publication.
