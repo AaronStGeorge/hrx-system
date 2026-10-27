@@ -434,7 +434,7 @@ static iree_status_t loom_value_fact_table_join_loop_backedge(
     const loom_type_t* types, const loom_value_facts_t* init_facts,
     const loom_value_facts_t* yielded_facts, const loom_value_facts_t* current,
     uint16_t count, const loom_value_fact_loop_equations_t* forwarding,
-    loom_value_fact_loop_observation_t observation, uint32_t iteration,
+    loom_value_fact_loop_observation_t observation, uint32_t feedback_round,
     loom_value_facts_t* next, bool* out_changed) {
   *out_changed = false;
   for (uint16_t ordinal = 0; ordinal < count; ++ordinal) {
@@ -448,8 +448,8 @@ static iree_status_t loom_value_fact_table_join_loop_backedge(
         table, module, types[i], table, init_facts[i], table, yielded,
         &joined));
     IREE_RETURN_IF_ERROR(loom_value_fact_table_widen_for_type(
-        table, module, types[i], table, current[i], table, joined, iteration,
-        &next[i]));
+        table, module, types[i], table, current[i], table, joined,
+        feedback_round, &next[i]));
     if (i == forwarding->domain.index) {
       next[i] = loom_value_facts_clamp_domain(
           next[i], forwarding->domain.range.range_lo,
@@ -595,8 +595,8 @@ static iree_status_t loom_value_fact_table_compute_counted_loop_summary(
           : LOOM_LOOP_TRIP_COUNT_BOUNDED;
   bool converged = false;
   bool exact_replayed = false;
-  for (uint32_t iteration = 0; iteration < LOOM_VALUE_FACT_LOOP_MAX_ITERATIONS;
-       ++iteration) {
+  for (uint32_t feedback_round = 0;
+       feedback_round < LOOM_VALUE_FACT_LOOP_MAX_ITERATIONS; ++feedback_round) {
     IREE_RETURN_IF_ERROR(loom_value_fact_table_define_loop_entry_args(
         table, module, body, carried_arg_offset, current_facts, count));
     IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_region_tree(
@@ -608,7 +608,7 @@ static iree_status_t loom_value_fact_table_compute_counted_loop_summary(
     loom_value_fact_table_collect_terminator_operands(
         table, yield, /*operand_offset=*/0, yielded_facts, count);
 
-    if (iteration == 0 && trip_count_bounded) {
+    if (feedback_round == 0 && trip_count_bounded) {
       IREE_RETURN_IF_ERROR(loom_value_fact_loop_build_recurrences(
           table, module, loop, scratch_arena, &forwarding.recurrences));
       forwarding.domain.trip_count = trip_count;
@@ -629,7 +629,7 @@ static iree_status_t loom_value_fact_table_compute_counted_loop_summary(
     bool changed = false;
     IREE_RETURN_IF_ERROR(loom_value_fact_table_join_loop_backedge(
         table, module, types, init_facts, yielded_facts, current_facts, count,
-        &forwarding, LOOM_VALUE_FACT_LOOP_OBSERVATION_BODY, iteration,
+        &forwarding, LOOM_VALUE_FACT_LOOP_OBSERVATION_BODY, feedback_round,
         next_facts, &changed));
     memcpy(current_facts, next_facts, count * sizeof(loom_value_facts_t));
     if (!changed) {
@@ -936,8 +936,8 @@ static iree_status_t loom_value_fact_table_compute_condition_loop_summary(
   loom_loop_recurrence_facts_t recurrence =
       loom_value_fact_induction_facts(table, module, &induction);
   bool converged = false;
-  for (uint32_t iteration = 0; iteration < LOOM_VALUE_FACT_LOOP_MAX_ITERATIONS;
-       ++iteration) {
+  for (uint32_t feedback_round = 0;
+       feedback_round < LOOM_VALUE_FACT_LOOP_MAX_ITERATIONS; ++feedback_round) {
     IREE_RETURN_IF_ERROR(loom_value_fact_table_define_loop_entry_args(
         table, module, condition_region, /*arg_offset=*/0, current_facts,
         header_count));
@@ -960,7 +960,7 @@ static iree_status_t loom_value_fact_table_compute_condition_loop_summary(
     loom_value_fact_table_collect_terminator_operands(
         table, yield, /*operand_offset=*/0, yielded_facts, header_count);
 
-    if (iteration == 0) {
+    if (feedback_round == 0) {
       IREE_RETURN_IF_ERROR(loom_value_fact_loop_build_condition_induction(
           table, module, loop, scratch_arena, &induction));
       recurrence = loom_value_fact_induction_facts(table, module, &induction);
@@ -989,7 +989,7 @@ static iree_status_t loom_value_fact_table_compute_condition_loop_summary(
     IREE_RETURN_IF_ERROR(loom_value_fact_table_join_loop_backedge(
         table, module, types, init_facts, yielded_facts, current_facts,
         header_count, &forwarding, LOOM_VALUE_FACT_LOOP_OBSERVATION_HEADER,
-        iteration, next_facts, &changed));
+        feedback_round, next_facts, &changed));
     if (header_count != 0) {
       memcpy(current_facts, next_facts,
              header_count * sizeof(loom_value_facts_t));

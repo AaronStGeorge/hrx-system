@@ -282,11 +282,11 @@ static iree_status_t loom_storage_widen_extension(
     loom_type_t type, loom_value_fact_table_t* target,
     const loom_value_fact_table_t* previous_table, loom_value_facts_t previous,
     const loom_value_fact_table_t* next_table, loom_value_facts_t next,
-    uint32_t iteration, loom_value_facts_t* inout_facts) {
+    uint32_t feedback_round, loom_value_facts_t* inout_facts) {
   (void)domain;
   (void)module;
   (void)type;
-  (void)iteration;
+  (void)feedback_round;
   loom_storage_reference_facts_t previous_reference = {0};
   loom_storage_reference_facts_t next_reference = {0};
   if (!loom_storage_facts_query_reference_from_table(previous_table, previous,

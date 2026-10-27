@@ -112,8 +112,8 @@ static iree_status_t loom_buffer_widen_reference_extension(
     loom_type_t type, loom_value_fact_table_t* target,
     const loom_value_fact_table_t* previous_table, loom_value_facts_t previous,
     const loom_value_fact_table_t* next_table, loom_value_facts_t next,
-    uint32_t iteration, loom_value_facts_t* inout_facts) {
-  (void)iteration;
+    uint32_t feedback_round, loom_value_facts_t* inout_facts) {
+  (void)feedback_round;
   return loom_buffer_meet_reference_extension(domain, module, type, target,
                                               previous_table, previous,
                                               next_table, next, inout_facts);

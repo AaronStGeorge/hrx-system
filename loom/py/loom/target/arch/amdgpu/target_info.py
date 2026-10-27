@@ -860,8 +860,9 @@ AMDGPU_KERNEL_ENTRY_INFO_INITIAL_VMEM_REPLAY = AmdgpuProcessorKernelEntryInfo(
     profile=AMDGPU_KERNEL_ENTRY_PROFILE_INITIAL_VMEM_REPLAY
 )
 
-# These facts mirror LLVM's AMDGPU::IsaInfo occupancy model:
-# - GFX10+ SGPR allocation never limits occupancy.
+# These facts combine physical target resources with LLVM's occupancy model:
+# - GFX10+ SGPR allocation never limits occupancy. The modeled GFX11+ rows
+#   reserve one 128-SGPR backing slot for each of 16 resident waves.
 # - Feature1536VGPRs selects 1536/24 VGPRs for wave32 and 768/12 for
 #   wave64; other GFX10+ targets use 1024/16 and 512/8.
 # - GFX10.3+ targets expose at most 16 resident waves per SIMD.
@@ -869,7 +870,7 @@ AMDGPU_OCCUPANCY_REGISTER_CLASS_SGPR_CDNA = AmdgpuOccupancyRegisterClassInfo(
     "amdgpu.sgpr", 800, 16
 )
 AMDGPU_OCCUPANCY_REGISTER_CLASS_SGPR_RDNA = AmdgpuOccupancyRegisterClassInfo(
-    "amdgpu.sgpr", 800, 106, limits_occupancy=False
+    "amdgpu.sgpr", 2048, 128, limits_occupancy=False
 )
 AMDGPU_OCCUPANCY_REGISTER_CLASS_AGPR_CDNA = AmdgpuOccupancyRegisterClassInfo(
     "amdgpu.agpr", 256, 4, limits_occupancy=False
@@ -887,10 +888,13 @@ AMDGPU_OCCUPANCY_DOMAIN_CDNA4 = AmdgpuOccupancyDomainInfo(
     local_memory_allocation_granularity=1280,
     max_barrier_workgroup_count=16,
 )
+# This is the physical allocation granularity used for residency, not the
+# 512-byte COMPUTE_PGM_RSRC2 encoding unit. GFX10.3+ allocates at least 1 KiB
+# of LDS per workgroup even when the encoded request is one unit.
 AMDGPU_OCCUPANCY_DOMAIN_RDNA = AmdgpuOccupancyDomainInfo(
     simd_count=4,
     local_memory_bytes=128 * 1024,
-    local_memory_allocation_granularity=512,
+    local_memory_allocation_granularity=1024,
     max_barrier_workgroup_count=32,
 )
 AMDGPU_OCCUPANCY_DOMAIN_GFX125X = AmdgpuOccupancyDomainInfo(

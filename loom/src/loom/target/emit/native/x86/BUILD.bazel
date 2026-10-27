@@ -203,6 +203,7 @@ loom_cc_library(
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
+        "test/branch_edge_coalescing.loom-test",
         "test/float_integer_native_bytes.loom-test",
         "test/function.loom-test",
         "test/operand_ties.loom-test",

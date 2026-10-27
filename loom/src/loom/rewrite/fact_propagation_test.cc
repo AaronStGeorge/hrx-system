@@ -405,6 +405,84 @@ TEST_F(FactPropagationTest, CyclicFactsNarrowAfterSemanticUpdates) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(FactPropagationTest, CyclicFeedbackPrecisionSurvivesSemanticUpdates) {
+  const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_region_t* body = loom_func_like_body(function_);
+  body->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_op_t* seed = nullptr;
+  loom_op_t* mask = nullptr;
+  IREE_ASSERT_OK(loom_index_constant_build(&builder_, loom_attr_i64(0), type,
+                                           LOOM_LOCATION_UNKNOWN, &seed));
+  IREE_ASSERT_OK(loom_index_constant_build(&builder_, loom_attr_i64(5760), type,
+                                           LOOM_LOCATION_UNKNOWN, &mask));
+  loom_block_t* header = nullptr;
+  IREE_ASSERT_OK(loom_region_append_block(module_, body, &header));
+  loom_value_id_t carried = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_define_block_arg(&builder_, header, type, &carried));
+  const loom_value_id_t seed_value = loom_index_constant_result(seed);
+  loom_op_t* branch = nullptr;
+  IREE_ASSERT_OK(loom_cfg_br_build(&builder_, header, &seed_value, 1,
+                                   LOOM_LOCATION_UNKNOWN, &branch));
+  loom_builder_set_block(&builder_, header);
+  loom_op_t* xor_op = nullptr;
+  IREE_ASSERT_OK(loom_index_xori_build(&builder_, carried,
+                                       loom_index_constant_result(mask),
+                                       LOOM_LOCATION_UNKNOWN, &xor_op));
+  const loom_value_id_t next = loom_index_xori_result(xor_op);
+  IREE_ASSERT_OK(loom_cfg_br_build(&builder_, header, &next, 1,
+                                   LOOM_LOCATION_UNKNOWN, &branch));
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_pass_value_fact_owner_t owner;
+  loom_pass_value_fact_owner_initialize(&block_pool_, &owner);
+  loom_value_fact_table_t* facts = nullptr;
+  IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
+      &owner, module_, loom_pass_value_fact_scope_function(function_), &facts));
+  loom_rewriter_t rewriter;
+  loom_rewriter_initialize(&rewriter, module_, &arena);
+  IREE_ASSERT_OK(loom_rewriter_enable_worklist(&rewriter));
+  loom_rewriter_attach_value_facts(&rewriter, facts);
+
+  auto check = [&](int64_t expected_upper, int64_t expected_divisor) {
+    while (loom_op_t* op = loom_rewriter_pop(&rewriter)) {
+      bool folded = false;
+      IREE_ASSERT_OK(loom_rewriter_try_fold(&rewriter, op, &folded));
+      EXPECT_FALSE(folded);
+    }
+    loom_pass_value_fact_owner_t fresh_owner;
+    loom_pass_value_fact_owner_initialize(&block_pool_, &fresh_owner);
+    loom_value_fact_table_t* fresh = nullptr;
+    IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
+        &fresh_owner, module_, loom_pass_value_fact_scope_function(function_),
+        &fresh));
+    for (loom_value_id_t value : {carried, next}) {
+      SCOPED_TRACE(value);
+      const loom_value_facts_t actual =
+          loom_rewriter_value_facts(&rewriter, value);
+      EXPECT_EQ(actual.range_lo, 0);
+      EXPECT_EQ(actual.range_hi, expected_upper);
+      EXPECT_EQ(actual.known_divisor, expected_divisor);
+      EXPECT_TRUE(loom_value_fact_table_facts_equal_for_type(
+          module_, type, facts, actual, fresh,
+          loom_value_fact_table_lookup(fresh, value)));
+    }
+    loom_pass_value_fact_owner_deinitialize(&fresh_owner);
+  };
+
+  check(8064, 128);
+  for (int64_t mask_value : {3840, 5760}) {
+    IREE_ASSERT_OK(
+        loom_rewriter_set_attr(&rewriter, mask, 0, loom_attr_i64(mask_value)));
+    check(mask_value == 3840 ? 3840 : 8064, mask_value == 3840 ? 256 : 128);
+  }
+
+  loom_rewriter_deinitialize(&rewriter);
+  loom_pass_value_fact_owner_deinitialize(&owner);
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(FactPropagationTest, InductionFactsTrackSemanticAndTopologyEdits) {
   const auto type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
   const auto offset_type = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);

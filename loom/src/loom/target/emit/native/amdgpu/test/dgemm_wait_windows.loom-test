@@ -407,8 +407,7 @@ low.func.def target<amdgpu.cdna2.core>(@target) @independent_join_paths(%lhs: re
   v_mfma_f64_4x4x4f64 v[6:7], v[0:1], v[2:3], v[6:7]
   s_branch .Lbb3
 .Lbb2:
-  v_add_f32 v0, v4, v5
-  v_mov_b32 v4, v0
+  v_add_f32 v4, v4, v5
 .Lbb3:
   global_store_dword v8, v4, s[0:1] offset:0
   s_waitcnt vmcnt(0) lgkmcnt(15)

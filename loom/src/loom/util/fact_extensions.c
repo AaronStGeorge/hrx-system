@@ -1446,7 +1446,7 @@ iree_status_t loom_value_fact_table_widen_for_type(
     loom_value_fact_table_t* target, const loom_module_t* module,
     loom_type_t type, const loom_value_fact_table_t* previous_table,
     loom_value_facts_t previous, const loom_value_fact_table_t* next_table,
-    loom_value_facts_t next, uint32_t iteration,
+    loom_value_facts_t next, uint32_t feedback_round,
     loom_value_facts_t* out_facts) {
   if (loom_value_fact_table_facts_equal_for_type(module, type, previous_table,
                                                  previous, next_table, next)) {
@@ -1454,7 +1454,7 @@ iree_status_t loom_value_fact_table_widen_for_type(
                                                      type, next, out_facts);
   }
 
-  if (iteration < 2) {
+  if (feedback_round < 2) {
     return loom_value_fact_table_meet_for_type(target, module, type,
                                                previous_table, previous,
                                                next_table, next, out_facts);
@@ -1464,7 +1464,7 @@ iree_status_t loom_value_fact_table_widen_for_type(
   if (loom_value_facts_is_float(previous) || loom_value_facts_is_float(next)) {
     // Classifications have finite height. Retained intervals do not: a loop
     // can expand one endpoint on every visit. Keep a stable interval, but
-    // forget changing bounds after the two precise join iterations above.
+    // forget changing bounds after the two precise feedback rounds above.
     const loom_scalar_type_t scalar_type = loom_type_element_type(type);
     double previous_lo = 0.0;
     double previous_hi = 0.0;
@@ -1520,7 +1520,7 @@ iree_status_t loom_value_fact_table_widen_for_type(
       loom_value_fact_domain_for_type(target, module, type);
   if (domain && domain->widen_extension) {
     return domain->widen_extension(domain, module, type, target, previous_table,
-                                   previous, next_table, next, iteration,
+                                   previous, next_table, next, feedback_round,
                                    out_facts);
   }
   if (loom_value_fact_table_extensions_equal_for_type(

@@ -704,12 +704,12 @@ static iree_status_t loom_vector_widen_extension(
     loom_type_t type, loom_value_fact_table_t* target,
     const loom_value_fact_table_t* previous_table, loom_value_facts_t previous,
     const loom_value_fact_table_t* next_table, loom_value_facts_t next,
-    uint32_t iteration, loom_value_facts_t* inout_facts) {
+    uint32_t feedback_round, loom_value_facts_t* inout_facts) {
   (void)domain;
   (void)module;
   (void)type;
-  (void)iteration;
-  // The generic solver calls this only after its two precise meet iterations.
+  (void)feedback_round;
+  // The generic solver calls this only after its two precise feedback rounds.
   // Stable extensions still clone below, and matrix fragment roles form a
   // finite join. Aggregate component ranges can otherwise expand on every
   // backedge, so changing aggregate summaries deliberately degrade here.

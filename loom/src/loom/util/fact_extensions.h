@@ -433,13 +433,14 @@ struct loom_value_fact_domain_t {
 
   // Widens a loop-carried extension fact. The default domain-free behavior is
   // conservative: stable extensions are preserved, changing extensions degrade
-  // to no extension. |iteration| is zero-based for the loop summary solver.
+  // to no extension. |feedback_round| is zero-based and excludes any producer
+  // seeding traversal performed before the first backedge join.
   iree_status_t (*widen_extension)(
       const loom_value_fact_domain_t* domain, const loom_module_t* module,
       loom_type_t type, loom_value_fact_table_t* target,
       const loom_value_fact_table_t* previous_table,
       loom_value_facts_t previous, const loom_value_fact_table_t* next_table,
-      loom_value_facts_t next, uint32_t iteration,
+      loom_value_facts_t next, uint32_t feedback_round,
       loom_value_facts_t* inout_facts);
 };
 
@@ -503,12 +504,14 @@ iree_status_t loom_value_fact_table_meet_for_type(
 // convergence accelerator for summary solvers, not a scalar transfer function.
 // Expanding integer endpoints stop at the signed or nonnegative 32-bit carrier
 // boundary before reaching their scalar type domain. Stable endpoints remain
-// bounded independently of other changing facts.
+// bounded independently of other changing facts. |feedback_round| is
+// zero-based and excludes producer seeding before the first backedge join.
 iree_status_t loom_value_fact_table_widen_for_type(
     loom_value_fact_table_t* target, const loom_module_t* module,
     loom_type_t type, const loom_value_fact_table_t* previous_table,
     loom_value_facts_t previous, const loom_value_fact_table_t* next_table,
-    loom_value_facts_t next, uint32_t iteration, loom_value_facts_t* out_facts);
+    loom_value_facts_t next, uint32_t feedback_round,
+    loom_value_facts_t* out_facts);
 
 //===----------------------------------------------------------------------===//
 // Fact extensions

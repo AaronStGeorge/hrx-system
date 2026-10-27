@@ -120,11 +120,11 @@ static iree_status_t loom_view_widen_reference_extension(
     loom_type_t type, loom_value_fact_table_t* target,
     const loom_value_fact_table_t* previous_table, loom_value_facts_t previous,
     const loom_value_fact_table_t* next_table, loom_value_facts_t next,
-    uint32_t iteration, loom_value_facts_t* inout_facts) {
+    uint32_t feedback_round, loom_value_facts_t* inout_facts) {
   (void)domain;
   (void)module;
   (void)type;
-  (void)iteration;
+  (void)feedback_round;
   loom_value_fact_view_reference_t previous_reference = {0};
   loom_value_fact_view_reference_t next_reference = {0};
   inout_facts->extension_id = LOOM_VALUE_FACT_EXTENSION_ID_NONE;
