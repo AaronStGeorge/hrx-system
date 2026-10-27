@@ -2368,11 +2368,13 @@ def _validate_control_issue_timing(descriptor_set: DescriptorSet) -> None:
             maximum_separations.get(separation.producer_event, 0),
             separation.minimum_issue_separation_cycles,
         )
-    controls = tuple(
+    tail_controls = tuple(
         descriptors[f"{descriptor_specs._TARGET_KEY}.{suffix}"]
         for suffix in ("return", "branch.direct", "branch.zero", "branch.nonzero")
     )
-    for descriptor in controls:
+    call = descriptors[f"{descriptor_specs._TARGET_KEY}.call.direct"]
+    window_controls = (*tail_controls, call)
+    for descriptor in window_controls:
         control_cycles = encodings[descriptor.encoding_id].delay_slot_count + 1
         schedule = classes[descriptor.schedule_class]
         events = [
@@ -2393,16 +2395,19 @@ def _validate_control_issue_timing(descriptor_set: DescriptorSet) -> None:
             raise ValueError(
                 f"{descriptor.key}: control window does not cover its resource stages"
             )
-        if any(
-            effect.kind is not EffectKind.CONTROL for effect in descriptor.effects
-        ) or any(operand.write_event is not None for operand in descriptor.operands):
+        if any(effect.kind is not EffectKind.CONTROL for effect in descriptor.effects):
+            raise ValueError(
+                f"{descriptor.key}: control window requires control-only effects"
+            )
+    for descriptor in tail_controls:
+        if any(operand.write_event is not None for operand in descriptor.operands):
             raise ValueError(
                 f"{descriptor.key}: control tail placement requires read-only "
                 "registers and control effects"
             )
     control_resources = {
         use.resource
-        for descriptor in controls
+        for descriptor in window_controls
         for use in classes[descriptor.schedule_class].issue_uses
     }
     resources = {row.name: row for row in descriptor_set.resources}
@@ -2435,4 +2440,80 @@ def _validate_control_issue_timing(descriptor_set: DescriptorSet) -> None:
         )
 
 
+def _validate_call_delay_transport_timing(descriptor_set: DescriptorSet) -> None:
+    """Proves call-argument moves can issue in consecutive delay positions."""
+    classes = {row.name: row for row in descriptor_set.schedule_classes}
+    reg_classes = {row.name: row for row in descriptor_set.reg_classes}
+    allocation_moves = tuple(
+        descriptor
+        for descriptor in descriptor_set.descriptors
+        if DescriptorFlag.ALLOCATION_MOVE in descriptor.flags
+    )
+
+    def operand_registers(operand: Operand) -> frozenset[str]:
+        register_class = operand.reg_alts[0].reg_class
+        if register_class is None:
+            raise ValueError("allocation move operand has no register class")
+        return frozenset(reg_classes[register_class].physical_registers)
+
+    move_registers = tuple(
+        (
+            descriptor,
+            operand_registers(descriptor.operands[0]),
+            operand_registers(descriptor.operands[1]),
+        )
+        for descriptor in allocation_moves
+        if len(descriptor.operands) == 2
+    )
+
+    selected_moves: dict[str, Descriptor] = {}
+    for carrier_class_name in ("aie2p.er", "aie2p.ep"):
+        carrier_class = reg_classes[carrier_class_name]
+        for source, destination in product(carrier_class.physical_registers, repeat=2):
+            selected = next(
+                (
+                    descriptor
+                    for descriptor, destinations, sources in move_registers
+                    if destination in destinations and source in sources
+                ),
+                None,
+            )
+            if selected is None:
+                raise ValueError(
+                    f"{carrier_class_name}: direct-call carrier pair "
+                    f"{source}->{destination} has no direct move"
+                )
+            selected_moves[selected.key] = selected
+
+    maximum_separations: dict[str, int] = {}
+    for separation in descriptor_set.event_separations:
+        maximum_separations[separation.producer_event] = max(
+            maximum_separations.get(separation.producer_event, 0),
+            separation.minimum_issue_separation_cycles,
+        )
+    for descriptor in selected_moves.values():
+        schedule = classes[descriptor.schedule_class]
+        if any(use.stage != 0 or use.cycles != 1 for use in schedule.issue_uses):
+            raise ValueError(
+                f"{descriptor.key}: direct-call transport requires "
+                "one-cycle issue resources"
+            )
+        events = (
+            event
+            for operand in descriptor.operands
+            for event in (operand.read_event, operand.write_event)
+            if event is not None
+        )
+        if any(maximum_separations.get(event, 0) > 1 for event in events):
+            raise ValueError(
+                f"{descriptor.key}: direct-call transport requires "
+                "one-cycle register events"
+            )
+        if descriptor.effects:
+            raise ValueError(
+                f"{descriptor.key}: direct-call transport must not carry effects"
+            )
+
+
 _validate_control_issue_timing(AIE2P_CORE_DESCRIPTOR_SET)
+_validate_call_delay_transport_timing(AIE2P_CORE_DESCRIPTOR_SET)

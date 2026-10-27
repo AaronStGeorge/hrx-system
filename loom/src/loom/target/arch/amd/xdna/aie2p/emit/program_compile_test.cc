@@ -58,6 +58,24 @@ low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @entry() 
 }
 )";
 
+constexpr char kRegisterDeadlineCallSource[] = R"(
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @add_five(%a: reg<aie2p.er>, %b: reg<aie2p.er>, %c: reg<aie2p.er>, %d: reg<aie2p.er>, %e: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+  %ab = add.rr %a, %b
+  %abc = add.rr %ab, %c
+  %abcd = add.rr %abc, %d
+  %abcde = add.rr %abcd, %e
+  return %abcde
+}
+
+low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @entry(%input: reg<aie2p.ep>, %a: reg<aie2p.er>, %b: reg<aie2p.er>, %c: reg<aie2p.er>, %d: reg<aie2p.er>, %e: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+  %dead = lda %input, 0
+  %sum = low.func.call pure @add_five(%a, %b, %c, %d, %e) : (reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>, reg<aie2p.er>) -> (reg<aie2p.er>)
+  return %sum
+}
+)";
+
 constexpr char kPointerHelperSource[] = R"(
 aie2p.target<core> @target
 
@@ -397,6 +415,85 @@ TEST_F(Aie2pProgramCompileTest, RetainsHelperObjectsAcrossProgramCompilations) {
     ASSERT_EQ(other_contribution.object.section_count, 2u);
     EXPECT_NE(other_contribution.object.sections[1].contents.data,
               helper_contents);
+  }
+}
+
+TEST_F(Aie2pProgramCompileTest, FillsCallDelayWindowAfterRegisterDeadline) {
+  ModulePtr module = ParseModule(IREE_SV(kRegisterDeadlineCallSource));
+  loom_op_t* entry = FindFunction(module.get(), IREE_SV("entry"));
+  ASSERT_NE(entry, nullptr);
+  uint16_t argument_count = 0;
+  const loom_value_id_t* arguments = loom_func_like_arg_ids(
+      loom_func_like_cast(module.get(), entry), &argument_count);
+  ASSERT_EQ(argument_count, 6u);
+  const char* fixed_register_names[] = {"r18", "r19", "r20", "r21", "r22"};
+  loom_low_allocation_fixed_value_t fixed_values[6];
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(fixed_register_names); ++i) {
+    fixed_values[i] = loom_low_allocation_fixed_value_t{
+        .value_id = arguments[i + 1],
+        .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+        .location_base = loom_aie2p_machine_find_physical_register(
+            iree_make_cstring_view(fixed_register_names[i])),
+        .location_count = 1,
+    };
+  }
+  loom_block_t* entry_block =
+      loom_region_entry_block(loom_low_func_def_body(entry));
+  ASSERT_NE(entry_block, nullptr);
+  fixed_values[5] = loom_low_allocation_fixed_value_t{
+      .value_id = loom_op_results(loom_block_op(entry_block, 0))[0],
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = loom_aie2p_machine_find_physical_register(IREE_SV("r0")),
+      .location_count = 1,
+  };
+  const loom_aie2p_leaf_compile_options_t options = {
+      .descriptor_registry = &low_registry_.registry,
+      .allocation_fixed_values = fixed_values,
+      .allocation_fixed_value_count = IREE_ARRAYSIZE(fixed_values),
+  };
+  bool compiled = false;
+  loom_aie2p_leaf_contribution_t contribution = {};
+  IREE_ASSERT_OK(
+      CompileProgram(module.get(), entry, &options, &compiled, &contribution));
+  ASSERT_TRUE(compiled);
+
+  const loom_native_object_symbol_t& entry_symbol =
+      contribution.object.symbols[contribution.realization.entry_symbol_index];
+  std::vector<DecodedProgramBundle> bundles;
+  IREE_ASSERT_OK(DecodeProgram(
+      contribution.object.sections[entry_symbol.section_contribution_index]
+          .contents,
+      &bundles));
+  const loom_aie2p_instruction_id_t call =
+      loom_aie2p_encoding_find_instruction(IREE_SV("JL_lng"));
+  const loom_aie2p_instruction_id_t load =
+      loom_aie2p_encoding_find_instruction(IREE_SV("LDA_dms_lda_idx_imm"));
+  iree_host_size_t call_bundle = IREE_HOST_SIZE_MAX;
+  iree_host_size_t load_bundle = IREE_HOST_SIZE_MAX;
+  for (iree_host_size_t i = 0; i < bundles.size(); ++i) {
+    if (BundleHasInstruction(bundles[i], call)) {
+      call_bundle = i;
+    }
+    if (BundleHasInstruction(bundles[i], load)) {
+      load_bundle = i;
+    }
+  }
+  ASSERT_NE(call_bundle, IREE_HOST_SIZE_MAX);
+  ASSERT_NE(load_bundle, IREE_HOST_SIZE_MAX);
+  EXPECT_LT(load_bundle, call_bundle);
+  ASSERT_GE(bundles.size(), call_bundle + 6u);
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_aie2p_core_descriptor_set();
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(fixed_register_names); ++i) {
+    const loom_aie2p_physical_register_id_t source =
+        loom_aie2p_machine_find_physical_register(
+            iree_make_cstring_view(fixed_register_names[i]));
+    const loom_aie2p_physical_register_id_t destination =
+        loom_low_descriptor_set_physical_register_candidate(
+            descriptor_set, AIE2P_CORE_REG_CLASS_ID_AIE2P_ER, (uint16_t)i);
+    EXPECT_TRUE(
+        BundleHasEncodedSlot(bundles[call_bundle + i + 1u],
+                             EncodeMove(descriptor_set, source, destination)));
   }
 }
 

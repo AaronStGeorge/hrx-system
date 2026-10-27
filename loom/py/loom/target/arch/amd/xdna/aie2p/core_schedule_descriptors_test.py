@@ -45,6 +45,7 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
     _scalar_move_schedule_class,
     _slot_resource_name,
     _validate_bundle_stream_widths,
+    _validate_call_delay_transport_timing,
     _validate_control_issue_timing,
 )
 from loom.target.arch.amd.xdna.aie2p.core_encoding_data import CORE_ENCODING_TABLE
@@ -102,7 +103,8 @@ def test_bundle_stream_requires_two_byte_packet_granularity() -> None:
 
 
 @pytest.mark.parametrize(
-    "suffix", ["return", "branch.direct", "branch.zero", "branch.nonzero"]
+    "suffix",
+    ["return", "branch.direct", "branch.zero", "branch.nonzero", "call.direct"],
 )
 def test_control_timing_requires_issue_stage_only_resources(suffix: str) -> None:
     descriptor_set = AIE2P_CORE_DESCRIPTOR_SET
@@ -145,12 +147,18 @@ def test_control_tail_placement_requires_read_only_registers(suffix: str) -> Non
         _validate_control_issue_timing(replace(descriptor_set, descriptors=changed))
 
 
-def test_control_window_covers_its_outgoing_register_events() -> None:
+@pytest.mark.parametrize("suffix", ["return", "call.direct"])
+def test_control_window_covers_its_outgoing_register_events(suffix: str) -> None:
     descriptor_set = AIE2P_CORE_DESCRIPTOR_SET
-    returned = next(
-        row for row in descriptor_set.descriptors if row.key.endswith(".return")
+    control = next(
+        row for row in descriptor_set.descriptors if row.key.endswith("." + suffix)
     )
-    event = returned.operands[0].read_event
+    event = next(
+        event
+        for operand in control.operands
+        for event in (operand.read_event, operand.write_event)
+        if event is not None
+    )
     changed = tuple(
         replace(row, minimum_issue_separation_cycles=7)
         if row.producer_event == event
@@ -161,6 +169,43 @@ def test_control_window_covers_its_outgoing_register_events() -> None:
         ValueError, match="control window does not cover its outgoing events"
     ):
         _validate_control_issue_timing(
+            replace(descriptor_set, event_separations=changed)
+        )
+
+
+def test_call_delay_transport_requires_one_cycle_resources() -> None:
+    descriptor_set = AIE2P_CORE_DESCRIPTOR_SET
+    move = next(
+        row for row in descriptor_set.descriptors if row.key.endswith(".move.scalar")
+    )
+    changed = tuple(
+        replace(
+            row, issue_uses=(replace(row.issue_uses[0], stage=1), *row.issue_uses[1:])
+        )
+        if row.name == move.schedule_class
+        else row
+        for row in descriptor_set.schedule_classes
+    )
+    with pytest.raises(ValueError, match="requires one-cycle issue resources"):
+        _validate_call_delay_transport_timing(
+            replace(descriptor_set, schedule_classes=changed)
+        )
+
+
+def test_call_delay_transport_requires_one_cycle_register_events() -> None:
+    descriptor_set = AIE2P_CORE_DESCRIPTOR_SET
+    move = next(
+        row for row in descriptor_set.descriptors if row.key.endswith(".move.scalar")
+    )
+    write_event = move.operands[0].write_event
+    changed = tuple(
+        replace(row, minimum_issue_separation_cycles=2)
+        if row.producer_event == write_event
+        else row
+        for row in descriptor_set.event_separations
+    )
+    with pytest.raises(ValueError, match="requires one-cycle register events"):
+        _validate_call_delay_transport_timing(
             replace(descriptor_set, event_separations=changed)
         )
 

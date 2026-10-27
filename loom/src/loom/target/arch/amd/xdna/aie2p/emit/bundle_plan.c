@@ -394,6 +394,15 @@ static void loom_aie2p_bundle_plan_complete_instruction_group(
                  LOOM_AIE2P_BUNDLE_PLAN_MAX_RESOURCE_CLASS_COUNT);
 }
 
+static void loom_aie2p_bundle_plan_prepare_single_instruction(
+    loom_aie2p_bundle_plan_builder_t* builder,
+    const loom_aie2p_planned_slot_t* slot,
+    loom_aie2p_slot_realization_t realization) {
+  builder->move_step_profile_mask = 0;
+  loom_aie2p_bundle_plan_instruction(builder, slot, realization, 0);
+  loom_aie2p_bundle_plan_complete_instruction_group(builder, 1);
+}
+
 static bool loom_aie2p_bundle_plan_instruction_group_fits(
     const loom_aie2p_bundle_plan_builder_t* builder,
     uint16_t instruction_count) {
@@ -775,9 +784,8 @@ static iree_status_t loom_aie2p_bundle_plan_flush_pending(
 static iree_status_t loom_aie2p_bundle_plan_admit_instruction(
     loom_aie2p_bundle_plan_builder_t* builder, uint32_t logical_issue_cycle,
     loom_aie2p_planned_slot_t slot, loom_aie2p_slot_realization_t realization) {
-  builder->move_step_profile_mask = 0;
-  loom_aie2p_bundle_plan_instruction(builder, &slot, realization, 0);
-  loom_aie2p_bundle_plan_complete_instruction_group(builder, 1);
+  loom_aie2p_bundle_plan_prepare_single_instruction(builder, &slot,
+                                                    realization);
   uint32_t proposed_cycle =
       iree_max(builder->pending.minimum_issue_cycle, builder->next_issue_cycle);
   if (slot.scheduled_packet_index != LOOM_AIE2P_BUNDLE_PLAN_PACKET_NONE) {
@@ -906,9 +914,9 @@ static iree_status_t loom_aie2p_bundle_plan_try_place_control(
           candidate_cycle) {
     return iree_ok_status();
   }
-  // Structural control only reads registers, and its resources are shared
-  // only with issue-stage uses, as validated with the target tables. The
-  // group check and retained register frontier therefore prove retrospective
+  // Generated validation limits shared control resources to issue-stage uses.
+  // The group check and retained frontier cover every concrete register read
+  // and write, including JL's link write, and therefore prove retrospective
   // placement among already-timed tail bundles without replaying the block.
 
   const uint8_t old_byte_length =
@@ -1157,6 +1165,91 @@ static iree_status_t loom_aie2p_bundle_plan_append_move_range(
   return status;
 }
 
+// Finds one common start at which the retained move steps can issue on
+// consecutive cycles. Generated descriptor validation proves that ER/EP call
+// transport has one-cycle resources and events, so only predecessor history
+// participates in these queries. The range contains at most one JL delay
+// window and this work is independent of source-program size.
+static iree_status_t loom_aie2p_bundle_plan_find_call_move_start_cycle(
+    loom_aie2p_bundle_plan_builder_t* builder, loom_low_move_range_t moves,
+    uint8_t step_count, uint32_t proposed_cycle, uint32_t* out_start_cycle) {
+  if (step_count == 0) {
+    *out_start_cycle = proposed_cycle;
+    return iree_ok_status();
+  }
+
+  // Most calls arrive after predecessor state is already quiescent. Generated
+  // validation proves that the retained moves can then issue on consecutive
+  // cycles, so only the exceptional overlapping-latency case needs exact
+  // instruction admission probes.
+  if (loom_low_physical_issue_quiescent_cycle(&builder->issue) <=
+      proposed_cycle) {
+    *out_start_cycle = proposed_cycle;
+    return iree_ok_status();
+  }
+
+  uint32_t start_cycle = proposed_cycle;
+  while (true) {
+    if (start_cycle > UINT32_MAX - step_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AIE2P call delay window exceeds cycle domain");
+    }
+    uint32_t required_start_cycle = start_cycle;
+    uint8_t step_ordinal = 0;
+    for (iree_host_size_t i = 0; i < moves.count; ++i) {
+      const iree_host_size_t move_index = moves.start + i;
+      IREE_ASSERT_LT(move_index, builder->frame->allocation.move_count);
+      const loom_low_move_t* allocation_move =
+          &builder->frame->allocation.moves[move_index];
+      const loom_aie2p_register_move_t move = {
+          .source = (loom_aie2p_physical_register_id_t)
+                        allocation_move->source.location,
+          .destination = (loom_aie2p_physical_register_id_t)
+                             allocation_move->destination.location,
+      };
+      const loom_aie2p_move_route_id_t route_id =
+          builder->move_route_ids_by_move[move_index];
+      IREE_ASSERT(route_id != LOOM_AIE2P_MOVE_ROUTE_ID_INVALID);
+      const uint8_t route_step_count =
+          loom_aie2p_descriptor_move_route_step_count(route_id);
+      for (uint8_t j = 0; j < route_step_count; ++j) {
+        IREE_ASSERT_LT(step_ordinal, step_count);
+        const loom_aie2p_move_route_step_t step =
+            loom_aie2p_descriptor_move_route_step(route_id, move, j);
+        const loom_aie2p_planned_slot_t slot = {
+            .scheduled_packet_index = LOOM_AIE2P_BUNDLE_PLAN_PACKET_NONE,
+            .flags = LOOM_AIE2P_PLANNED_SLOT_FLAG_STRUCTURAL_MOVE,
+            .move_step_profile_id = step.profile_id,
+        };
+        loom_aie2p_bundle_plan_prepare_single_instruction(
+            builder, &slot, (loom_aie2p_slot_realization_t){.move = step.move});
+        const uint32_t proposed_step_cycle = start_cycle + step_ordinal;
+        const uint32_t earliest_step_cycle =
+            loom_aie2p_bundle_plan_find_earliest_issue_cycle(
+                builder, 1, proposed_step_cycle);
+        if (earliest_step_cycle > proposed_step_cycle) {
+          const uint32_t candidate_start_cycle =
+              earliest_step_cycle - step_ordinal;
+          if (candidate_start_cycle > UINT32_MAX - step_count) {
+            return iree_make_status(
+                IREE_STATUS_OUT_OF_RANGE,
+                "AIE2P call delay window exceeds cycle domain");
+          }
+          required_start_cycle =
+              iree_max(required_start_cycle, candidate_start_cycle);
+        }
+        ++step_ordinal;
+      }
+    }
+    IREE_ASSERT_EQ(step_ordinal, step_count);
+    if (required_start_cycle == start_cycle) {
+      *out_start_cycle = start_cycle;
+      return iree_ok_status();
+    }
+    start_cycle = required_start_cycle;
+  }
+}
+
 static iree_status_t loom_aie2p_bundle_plan_copy_call_target(
     loom_aie2p_bundle_plan_builder_t* builder, const loom_op_t* call,
     iree_string_view_t* out_name) {
@@ -1230,13 +1323,13 @@ static iree_status_t loom_aie2p_bundle_plan_append_call(
   IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_flush_pending(
       builder, builder->pending.end_cycle));
 
-  uint32_t required_delay_end =
-      iree_max(builder->next_issue_cycle, source_ready_cycle);
-  if (required_delay_end > UINT32_MAX - delay_move_slot_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AIE2P call delay window exceeds cycle domain");
-  }
-  required_delay_end += (uint32_t)delay_move_slot_count;
+  uint32_t delay_move_start_cycle = 0;
+  IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_find_call_move_start_cycle(
+      builder, delay_moves, (uint8_t)delay_move_slot_count,
+      iree_max(builder->next_issue_cycle, source_ready_cycle),
+      &delay_move_start_cycle));
+  const uint32_t required_delay_end =
+      delay_move_start_cycle + (uint32_t)delay_move_slot_count;
   const uint32_t minimum_call_issue_cycle = iree_max(
       builder->execution_issue_cycle, required_delay_end > control_cycles
                                           ? required_delay_end - control_cycles
@@ -1262,13 +1355,9 @@ static iree_status_t loom_aie2p_bundle_plan_append_call(
       builder, delay_moves, logical_issue_cycle));
   IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_flush_pending(
       builder, builder->pending.end_cycle));
-  if (builder->next_issue_cycle > continuation_cycle ||
-      loom_low_physical_issue_quiescent_cycle(&builder->issue) >
-          continuation_cycle) {
-    return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
-        "AIE2P argument transport does not fit the direct-call delay window");
-  }
+  IREE_ASSERT_LE(builder->next_issue_cycle, continuation_cycle);
+  IREE_ASSERT_LE(loom_low_physical_issue_quiescent_cycle(&builder->issue),
+                 continuation_cycle);
   while (builder->next_issue_cycle < continuation_cycle) {
     IREE_RETURN_IF_ERROR(
         loom_aie2p_bundle_plan_append_nop_bundle(builder, logical_issue_cycle));
