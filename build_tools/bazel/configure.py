@@ -18,6 +18,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from build_tools.bazel import configure_project
 
 LOOM_EXECUTE_SUBSTRATES = configure_project.LOOM_EXECUTION_SUBSTRATES

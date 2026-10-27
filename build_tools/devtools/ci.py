@@ -542,6 +542,18 @@ def cmake_configure_step(
     extra_options: tuple[str, ...] = (),
 ) -> CiStep:
     enabled_driver_set = validate_enabled_drivers(enabled_drivers)
+    loom_capability_axes = (
+        enabled_loom_architectures,
+        enabled_loom_artifact_formats,
+        enabled_loom_execution_substrates,
+    )
+    if any(axis is not None for axis in loom_capability_axes) and any(
+        axis is None for axis in loom_capability_axes
+    ):
+        raise ValueError(
+            "CMake Loom capability selection requires architecture, artifact, "
+            "and execution lists together"
+        )
     tests_enabled = (
         cmake_tests_enabled(sanitizer) if build_tests is None else build_tests
     )
@@ -561,6 +573,7 @@ def cmake_configure_step(
     for driver, define in CMAKE_HAL_DRIVER_DEFINES:
         command.append(f"-D{define}={'ON' if driver in enabled_driver_set else 'OFF'}")
     if enabled_loom_architectures is not None:
+        command.append("-DLOOM_TARGET_DEFAULT=OFF")
         enabled_loom_architecture_set = frozenset(enabled_loom_architectures)
         for architecture, define in CMAKE_LOOM_ARCH_DEFINES:
             command.append(

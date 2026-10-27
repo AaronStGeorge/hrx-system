@@ -1065,6 +1065,7 @@ class CiTest(unittest.TestCase):
             ["Configure CMake", "Build repository", "Test repository smoke"],
         )
         configure_step = steps[0]
+        self.assertIn("-DLOOM_TARGET_DEFAULT=OFF", configure_step.argv)
         for _driver, define in ci.CMAKE_HAL_DRIVER_DEFINES:
             self.assertIn(f"-D{define}=ON", configure_step.argv)
         for _architecture, define in ci.CMAKE_LOOM_ARCH_DEFINES:
@@ -1103,6 +1104,13 @@ class CiTest(unittest.TestCase):
                 for arg in smoke_step.argv
             )
         )
+
+    def test_cmake_configure_rejects_partial_loom_capability_selection(self):
+        with self.assertRaisesRegex(ValueError, "requires architecture"):
+            ci.cmake_configure_step(
+                "iree-cmake-test",
+                enabled_loom_architectures=("x86",),
+            )
 
     def test_cmake_build_honors_standard_parallelism_environment(self):
         with mock.patch.dict(os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "40"}):

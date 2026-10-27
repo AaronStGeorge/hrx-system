@@ -624,9 +624,19 @@ class LoomPresubmitTest(unittest.TestCase):
             mock.patch.object(
                 self.presubmit.project_presubmit,
                 "cmake_cache_value",
-                side_effect=lambda _build_dir, key: (
-                    "OFF" if key == "LOOM_EMIT_WASM" else "ON"
-                ),
+                side_effect=lambda _build_dir, key: {
+                    "LOOM_RESOLVED_ARCHITECTURES": ";".join(
+                        self.presubmit.capability_presets.ARCHITECTURES
+                    ),
+                    "LOOM_RESOLVED_ARTIFACT_FORMATS": ";".join(
+                        value
+                        for value in self.presubmit.capability_presets.ARTIFACT_FORMATS
+                        if value != "wasm"
+                    ),
+                    "LOOM_RESOLVED_EXECUTION_SUBSTRATES": ";".join(
+                        self.presubmit.capability_presets.EXECUTION_SUBSTRATES
+                    ),
+                }[key],
             ),
             contextlib.redirect_stdout(output),
         ):
@@ -636,8 +646,7 @@ class LoomPresubmitTest(unittest.TestCase):
 
         diagnostic = output.getvalue()
         self.assertIn("missing: artifact wasm", diagnostic)
-        self.assertIn("-DLOOM_EMIT_WASM=ON", diagnostic)
-        self.assertNotIn("-DLOOM_ARCH_WASM=ON", diagnostic)
+        self.assertIn("-DLOOM_TARGET_ALL=ON", diagnostic)
         self.assertIn("IREE_CMAKE_BUILD_DIR", diagnostic)
 
     def test_cmake_source_format_accepts_full_target_provider_set(self):
@@ -655,7 +664,17 @@ class LoomPresubmitTest(unittest.TestCase):
             mock.patch.object(
                 self.presubmit.project_presubmit,
                 "cmake_cache_value",
-                return_value="ON",
+                side_effect=lambda _build_dir, key: {
+                    "LOOM_RESOLVED_ARCHITECTURES": ";".join(
+                        self.presubmit.capability_presets.ARCHITECTURES
+                    ),
+                    "LOOM_RESOLVED_ARTIFACT_FORMATS": ";".join(
+                        self.presubmit.capability_presets.ARTIFACT_FORMATS
+                    ),
+                    "LOOM_RESOLVED_EXECUTION_SUBSTRATES": ";".join(
+                        self.presubmit.capability_presets.EXECUTION_SUBSTRATES
+                    ),
+                }[key],
             ),
         ):
             self.assertTrue(self.presubmit.validate_cmake_source_format_configuration())

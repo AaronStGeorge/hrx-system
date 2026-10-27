@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -37,6 +38,25 @@ class ConfigureBazelTest(unittest.TestCase):
         rocm_root = Path(temporary_directory) / "rocm"
         (rocm_root / "include").mkdir(parents=True)
         return rocm_root
+
+    def test_direct_script_entrypoint_loads_project_contributors(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "configured.bazelrc"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(CONFIGURE_BAZEL_PATH),
+                    "--output",
+                    str(output),
+                    "-DLOOM_TARGET_ALL_CPU=ON",
+                ],
+                check=True,
+            )
+
+            config = output.read_text(encoding="utf-8")
+
+        self.assertIn("# Loom target selection: cpu", config)
+        self.assertIn("build --//loom/config/arch:enable=vm,x86", config)
 
     def test_loom_image_configuration_is_portable_and_independent(self):
         for arguments in (

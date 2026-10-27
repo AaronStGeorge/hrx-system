@@ -9,6 +9,7 @@
 Usage:
     python3 loom/py/loom/gen/run.py builders_pyi --in-place
     python3 loom/py/loom/gen/run.py builders_pyi --check
+    python3 loom/py/loom/gen/run.py capability_presets --check
     python3 loom/py/loom/gen/run.py checked_in_artifacts --check
     python3 loom/py/loom/gen/run.py checked_in_artifacts --in-place
     python3 loom/py/loom/gen/run.py c_errors --check
@@ -31,6 +32,7 @@ import bootstrap  # type: ignore[import-not-found]
 
 GENERATORS = {
     "builders_pyi": "loom.gen.python.builders_pyi",
+    "capability_presets": "loom.gen.target.capability_presets",
     "c_errors": "loom.gen.error.c_errors",
     "c_tables": "loom.gen.ops.c_tables",
     "cxx_intrinsics": "loom.gen.cxx.intrinsics",

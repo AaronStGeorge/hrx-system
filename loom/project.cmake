@@ -10,6 +10,7 @@ list(APPEND CMAKE_MODULE_PATH
 )
 
 include(loom_amdgpu_selectors)
+include(loom_target_presets)
 
 if(NOT DEFINED LOOM_BUILD)
   option(LOOM_BUILD
@@ -26,61 +27,13 @@ if(LOOM_LINK_SHARED_TOOLS AND BUILD_SHARED_LIBS)
     "LOOM_LINK_SHARED_TOOLS requires BUILD_SHARED_LIBS=OFF so the bundle owns its component implementations.")
 endif()
 
-option(LOOM_ARCH_AIE2P
-  "Build Loom AIE2P architecture records and lowering support." ON)
-option(LOOM_ARCH_AMDGPU
-  "Build Loom AMDGPU architecture records and lowering support." ON)
-option(LOOM_ARCH_SPIRV
-  "Build Loom SPIR-V architecture records and lowering support." ON)
-option(LOOM_ARCH_VM
-  "Build Loom VM architecture records and lowering support." ON)
-option(LOOM_ARCH_WASM
-  "Build Loom WebAssembly architecture records and lowering support." OFF)
-option(LOOM_ARCH_X86
-  "Build Loom x86 architecture records and lowering support." ON)
+loom_resolve_target_presets()
 
 if(NOT DEFINED LOOM_ARCH_AMDGPU_TARGETS)
   set(LOOM_ARCH_AMDGPU_TARGETS
     ${_LOOM_AMDGPU_DEFAULT_TARGET_SELECTORS}
     CACHE STRING
     "AMDGPU architecture selectors compiled into Loom target support.")
-endif()
-
-option(LOOM_EMIT_ELF
-  "Build Loom ELF object and image emission support." ON)
-option(LOOM_EMIT_SPIRV
-  "Build Loom SPIR-V binary emission support." ON)
-option(LOOM_EMIT_VM
-  "Build Loom VM binary emission support." ON)
-option(LOOM_EMIT_WASM
-  "Build Loom WebAssembly binary emission support." OFF)
-
-option(LOOM_EXECUTE_IREE_HAL
-  "Build Loom execution providers using IREE HAL." ON)
-option(LOOM_EXECUTE_IREE_VM
-  "Build Loom execution providers using IREE VM." ON)
-option(LOOM_EXECUTE_WASM_HOST
-  "Build Loom execution providers using a WebAssembly host." OFF)
-
-# LOOM_BUILD is the compiler ownership boundary. Preserve canonical selections
-# in the cache while making their effective values false in runtime-only builds.
-if(NOT LOOM_BUILD)
-  foreach(_capability
-      LOOM_ARCH_AIE2P
-      LOOM_ARCH_AMDGPU
-      LOOM_ARCH_SPIRV
-      LOOM_ARCH_VM
-      LOOM_ARCH_WASM
-      LOOM_ARCH_X86
-      LOOM_EMIT_ELF
-      LOOM_EMIT_SPIRV
-      LOOM_EMIT_VM
-      LOOM_EMIT_WASM
-      LOOM_EXECUTE_IREE_HAL
-      LOOM_EXECUTE_IREE_VM
-      LOOM_EXECUTE_WASM_HOST)
-    set(${_capability} OFF)
-  endforeach()
 endif()
 
 if(LOOM_ARCH_AMDGPU)

@@ -145,6 +145,13 @@ _iree_cmake_integration_test(
 
 _iree_cmake_integration_test(
   NAME
+    cmake_loom_target_presets_test
+  SRCS
+    cmake_loom_target_presets_test.py
+)
+
+_iree_cmake_integration_test(
+  NAME
     cmake_python_dependencies_test
   SRCS
     cmake_python_dependencies_test.py

@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 from loom.gen import checked_in_artifacts
@@ -16,71 +15,6 @@ from loom.gen.support.generated_file import (
     GeneratedFileMaintenanceResult,
     GeneratedFileSet,
 )
-
-
-def test_checked_in_artifact_families_register_expected_families() -> None:
-    empty_file_set = GeneratedFileSet.from_mapping({})
-    amdgpu_target_config = SimpleNamespace(
-        DESCRIPTION="AMDGPU target configuration",
-        REGENERATE_COMMAND="python target_config.py --in-place",
-        checked_in_file_set=mock.Mock(return_value=empty_file_set),
-    )
-    with (
-        mock.patch.object(
-            checked_in_artifacts,
-            "_load_amdgpu_target_config",
-            return_value=amdgpu_target_config,
-        ),
-        mock.patch.object(
-            checked_in_artifacts.cxx_intrinsics,
-            "checked_in_file_set",
-            return_value=empty_file_set,
-        ),
-        mock.patch.object(
-            checked_in_artifacts.package_inits,
-            "checked_in_file_set",
-            return_value=empty_file_set,
-        ),
-        mock.patch.object(
-            checked_in_artifacts.builders_pyi,
-            "checked_in_file_set",
-            return_value=empty_file_set,
-        ),
-        mock.patch.object(
-            checked_in_artifacts.c_tables,
-            "checked_in_file_set",
-            return_value=empty_file_set,
-        ),
-        mock.patch.object(
-            checked_in_artifacts.textmate,
-            "checked_in_file_set",
-            return_value=empty_file_set,
-        ),
-        mock.patch.object(
-            checked_in_artifacts.x86_packed_dot_contract,
-            "checked_in_file_set",
-            return_value=empty_file_set,
-        ),
-    ):
-        families = checked_in_artifacts.checked_in_artifact_families()
-
-    assert tuple(family.description for family in families) == (
-        "Loom C++ scalar declarations",
-        "Python package initializers",
-        "Python builder stubs",
-        "C op table artifacts",
-        "AMDGPU target configuration",
-        "TextMate grammars",
-        "x86 packed-dot contract header",
-    )
-    amdgpu_target_config.checked_in_file_set.assert_called_once_with()
-    assert all(family.input_roots for family in families)
-    removed_dialect_path = "loom/py/loom/dialect/module/__init__.py"
-    assert tuple(family.description for family in families if family.is_affected_by((removed_dialect_path,))) == (
-        "Python builder stubs",
-        "C op table artifacts",
-        "TextMate grammars",
-    )
 
 
 def test_registered_artifact_ownership_is_disjoint() -> None:

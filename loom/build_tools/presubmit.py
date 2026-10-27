@@ -26,6 +26,7 @@ from loom.tools.source_inventory import is_format_source_path, is_lint_source_pa
 from build_tools.devtools import project_presubmit
 from build_tools.devtools.command_line import batch_path_commands
 from build_tools.devtools.source_lock import NonEmptyTrackedFileSnapshot
+from loom.target import capability_presets
 
 PROJECT_NAME = "loom"
 PROJECT_ROOT = "loom/"
@@ -38,20 +39,22 @@ GLOBAL_TEST_TRIGGERS = (
     "requirements",
 )
 CTEST_RESOURCE_LABEL_EXCLUDE_REGEX = "runtime-resource="
-CMAKE_SOURCE_FORMAT_CAPABILITY_DEFINES = (
-    ("architecture aie2p", "LOOM_ARCH_AIE2P"),
-    ("architecture amdgpu", "LOOM_ARCH_AMDGPU"),
-    ("architecture spirv", "LOOM_ARCH_SPIRV"),
-    ("architecture vm", "LOOM_ARCH_VM"),
-    ("architecture wasm", "LOOM_ARCH_WASM"),
-    ("architecture x86", "LOOM_ARCH_X86"),
-    ("artifact elf", "LOOM_EMIT_ELF"),
-    ("artifact spirv", "LOOM_EMIT_SPIRV"),
-    ("artifact vm", "LOOM_EMIT_VM"),
-    ("artifact wasm", "LOOM_EMIT_WASM"),
-    ("execution iree_hal", "LOOM_EXECUTE_IREE_HAL"),
-    ("execution iree_vm", "LOOM_EXECUTE_IREE_VM"),
-    ("execution wasm_host", "LOOM_EXECUTE_WASM_HOST"),
+CMAKE_SOURCE_FORMAT_CAPABILITY_SETS = (
+    (
+        "architecture",
+        "LOOM_RESOLVED_ARCHITECTURES",
+        capability_presets.ARCHITECTURES,
+    ),
+    (
+        "artifact",
+        "LOOM_RESOLVED_ARTIFACT_FORMATS",
+        capability_presets.ARTIFACT_FORMATS,
+    ),
+    (
+        "execution",
+        "LOOM_RESOLVED_EXECUTION_SUBSTRATES",
+        capability_presets.EXECUTION_SUBSTRATES,
+    ),
 )
 # Formatting, hygiene, dependency selection, and tests share one build
 # configuration so successive phases retain Bazel's configured analysis graph.
@@ -221,29 +224,36 @@ def validate_cmake_source_format_configuration() -> bool:
     if not project_presubmit.validate_cmake_build_tree(PROJECT_NAME, build_dir):
         return False
 
-    cmake_true_values = frozenset({"1", "ON", "TRUE", "YES", "Y"})
-    missing_capabilities = [
-        (capability, define)
-        for capability, define in CMAKE_SOURCE_FORMAT_CAPABILITY_DEFINES
-        if (project_presubmit.cmake_cache_value(build_dir, define) or "").upper()
-        not in cmake_true_values
-    ]
+    missing_capabilities = []
+    for (
+        capability_kind,
+        cache_key,
+        required_values,
+    ) in CMAKE_SOURCE_FORMAT_CAPABILITY_SETS:
+        resolved_values = set(
+            filter(
+                None,
+                (project_presubmit.cmake_cache_value(build_dir, cache_key) or "").split(
+                    ";"
+                ),
+            )
+        )
+        missing_capabilities.extend(
+            f"{capability_kind} {value}"
+            for value in required_values
+            if value not in resolved_values
+        )
     if not missing_capabilities:
         return True
 
-    missing_names = ", ".join(
-        capability for capability, _define in missing_capabilities
-    )
-    missing_options = " ".join(
-        f"-D{define}=ON" for _capability, define in missing_capabilities
-    )
+    missing_names = ", ".join(missing_capabilities)
     print(
         "loom presubmit: canonical source formatting requires the CMake "
         f"build tree to enable every Loom capability; missing: {missing_names}"
     )
     print(
         "loom presubmit: reconfigure that tree with "
-        f"`{missing_options}` or select a full-target tree with "
+        "`-DLOOM_TARGET_ALL=ON` or select a full-target tree with "
         f"{project_presubmit.CMAKE_BUILD_DIR_ENV}"
     )
     return False
