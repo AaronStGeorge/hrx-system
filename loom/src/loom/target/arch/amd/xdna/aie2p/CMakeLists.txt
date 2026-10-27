@@ -820,20 +820,27 @@ loom_cc_library(
     check_test_provider
   HDRS
     "check/configuration.h"
+    "check/test_provider.h"
   SRCS
     "check/configuration.c"
+    "check/test_provider.c"
   DEPS
     ::artifact
+    ::check_provider
     ::leaf_compile
     ::program_compile
     ::target_facts
     iree::base
     loom::analysis::symbol_facts
     loom::codegen::low::target_binding
+    loom::error::error_defs
+    loom::error::parameter
     loom::ops::low
     loom::pass::report
     loom::target::pass_environment
     loom::target::provider
+    loom::tools::loom-check::execute
+    loom::tools::loom-check::provider
   TESTONLY
   PUBLIC
 )
@@ -1051,6 +1058,7 @@ loom_check_test_suite(
     "test/array_plan/multicast.loom-test"
     "test/array_plan/multicast_ownership.loom-test"
     "test/array_plan/multicast_prefix.loom-test"
+    "test/array_plan/non_error_diagnostics.loom-test"
     "test/array_plan/packed_record.loom-test"
     "test/array_plan/pipeline_record_shapes.loom-test"
     "test/array_plan/pipeline_views.loom-test"

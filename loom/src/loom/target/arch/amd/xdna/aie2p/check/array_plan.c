@@ -82,11 +82,13 @@ static bool loom_aie2p_array_plan_check_has_contract(
 static iree_status_t loom_aie2p_array_plan_check_collect_leaves(
     const loom_aie2p_array_plan_check_context_t* context,
     iree_diagnostic_emitter_t diagnostic_emitter,
-    loom_aie2p_array_leaf_t** out_leaves, iree_host_size_t* out_leaf_count) {
+    loom_aie2p_array_leaf_t** out_leaves, iree_host_size_t* out_leaf_count,
+    bool* out_valid) {
   const loom_check_emit_provider_request_t* request = context->request;
   const loom_module_t* module = context->module;
   *out_leaves = NULL;
   *out_leaf_count = 0;
+  *out_valid = false;
   iree_host_size_t leaf_count = 0;
   const loom_symbol_t* symbol = NULL;
   loom_module_for_each_symbol(module, symbol) {
@@ -130,6 +132,7 @@ static iree_status_t loom_aie2p_array_plan_check_collect_leaves(
   }
   *out_leaves = leaves;
   *out_leaf_count = leaf_count;
+  *out_valid = true;
   return iree_ok_status();
 }
 
@@ -832,9 +835,10 @@ static iree_status_t loom_aie2p_array_plan_check_consume(
 
   loom_aie2p_array_leaf_t* leaves = NULL;
   iree_host_size_t leaf_count = 0;
+  bool leaves_valid = false;
   IREE_RETURN_IF_ERROR(loom_aie2p_array_plan_check_collect_leaves(
-      &context, diagnostic_emitter, &leaves, &leaf_count));
-  if (request->diagnostic_collector->count != 0) {
+      &context, diagnostic_emitter, &leaves, &leaf_count, &leaves_valid));
+  if (!leaves_valid) {
     return iree_ok_status();
   }
 
