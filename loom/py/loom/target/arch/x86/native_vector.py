@@ -159,6 +159,10 @@ _OPERANDS_18 = (
 )
 _OPERANDS_19 = (*_OPERANDS_18, _operand(OperandRole.RESOURCE, _GPR64))
 _OPERANDS_20 = (_operand(OperandRole.RESULT, _SIMD),)
+_OPERANDS_21 = (
+    _operand(OperandRole.RESULT, _K),
+    _operand(OperandRole.OPERAND, _K),
+)
 
 _IMMEDIATES_0: tuple[VectorImmediateShape, ...] = ()
 _IMMEDIATES_1 = (VectorImmediateShape(ImmediateKind.ORDINAL, 32),)
@@ -350,6 +354,13 @@ KORQ = _instruction(
     _OPERANDS_6,
     _IMMEDIATES_0,
     _encoding(_VEX, _MAP_1, 0, 1, 0x45, fixed=1),
+)
+KSHIFTRQ = _instruction(
+    "kshiftrq",
+    _UNARY_IMMEDIATE,
+    _OPERANDS_21,
+    _IMMEDIATES_5,
+    _encoding(_VEX, _MAP_3, 1, 1, 0x31, fixed=0),
 )
 KXORQ = _instruction(
     "kxorq",

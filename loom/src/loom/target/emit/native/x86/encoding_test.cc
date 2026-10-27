@@ -223,6 +223,17 @@ TEST(EncodingTest, FullVectorAlignWidths) {
                        {0x62, 0xf3, 0xed, 0x48, 0x03, 0xcb, 0x05});
 }
 
+TEST(EncodingTest, MaskShiftRight) {
+  loom_x86_encoding_operands_t operands = {
+      .immediate = 5,
+      .result = 1,
+      .inputs = {2},
+  };
+  // LLVM spells this as kshiftrq k1,k2,5.
+  ExpectVectorEncoding(0x9140, 0x1731, operands,
+                       {0xc4, 0xe3, 0xf9, 0x31, 0xca, 0x05});
+}
+
 TEST(EncodingTest, EvexNdsMemoryBroadcastAndMaskModifiers) {
   // These bytes agree with independent LLVM and GNU assembler outputs.
   constexpr uint16_t kUnaryMerge = VectorRecipe(

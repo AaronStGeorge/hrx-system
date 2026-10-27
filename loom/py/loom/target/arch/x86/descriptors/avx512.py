@@ -1289,6 +1289,30 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
         _vex_descriptor(
             Descriptor(
+                key="x86.avx512.kshiftrq",
+                mnemonic="kshiftrq",
+                semantic_tag="mask.shift_right.i64",
+                operands=(_k_result(), _k_operand("source")),
+                immediates=(
+                    Immediate(
+                        "shift",
+                        ImmediateKind.UNSIGNED,
+                        bit_width=8,
+                        unsigned_max=63,
+                    ),
+                ),
+                asm_forms=_asm(
+                    results=("dst",),
+                    operands=("source",),
+                    immediates=("shift",),
+                ),
+                schedule_class=_SCHEDULE_MASK,
+                flags=(DescriptorFlag.DEAD_REMOVABLE,),
+            ),
+            native.KSHIFTRQ,
+        ),
+        _vex_descriptor(
+            Descriptor(
                 key="x86.avx512.kxorq",
                 mnemonic="kxorq",
                 semantic_tag="mask.xor.i64",
