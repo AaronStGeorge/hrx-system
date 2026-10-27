@@ -238,27 +238,27 @@ low.kernel.def target<amdgpu.rdna4.core> abi_layout({constant_count = 0, direct_
   %lhs_view = resource<hal_binding> {extent = 1024, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %rhs_view = resource<hal_binding> {extent = 1024, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {extent = 1024, index = 2, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %49 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %51 = v_lshlrev_b32_src0_inline %lane, 4
-  %lhs = global_load_b128_saddr %51, %lhs_view
-  ds_write_b128 %51, %lhs
-  %lhs_cached = ds_read_b128 %51
-  %rhs = global_load_b128_saddr %51, %rhs_view
-  %58 = v_mov_b32 0
-  %63 = slice %lhs_cached[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %64 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %66 = v_dot4_i32_iu8_u8s8 %63, %64, %58
-  %67 = slice %lhs_cached[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %68 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %70 = v_dot4_i32_iu8_u8s8 %67, %68, %58
-  %71 = slice %lhs_cached[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %72 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %74 = v_dot4_i32_iu8_u8s8 %71, %72, %58
-  %75 = slice %lhs_cached[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %76 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %78 = v_dot4_i32_iu8_u8s8 %75, %76, %58
-  %dot = concat(%66, %70, %74, %78) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128_saddr %51, %dot, %output_view
+  %33 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %35 = v_lshlrev_b32_src0_inline %lane, 4
+  %lhs = global_load_b128_saddr %35, %lhs_view
+  ds_write_b128 %35, %lhs
+  %lhs_cached = ds_read_b128 %35
+  %rhs = global_load_b128_saddr %35, %rhs_view
+  %42 = v_mov_b32 0
+  %47 = slice %lhs_cached[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %48 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %50 = v_dot4_i32_iu8_u8s8 %47, %48, %42
+  %51 = slice %lhs_cached[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %52 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %54 = v_dot4_i32_iu8_u8s8 %51, %52, %42
+  %55 = slice %lhs_cached[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %56 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %58 = v_dot4_i32_iu8_u8s8 %55, %56, %42
+  %59 = slice %lhs_cached[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %60 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %62 = v_dot4_i32_iu8_u8s8 %59, %60, %42
+  %dot = concat(%50, %54, %58, %62) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128_saddr %35, %dot, %output_view
   return
 }
 

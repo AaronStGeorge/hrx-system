@@ -118,15 +118,15 @@ func.def @scalar_mixed_rank2_i32(%input: buffer, %output: buffer, %base: offset,
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @scalar_mixed_rank2_i32(%base_aligned: reg<aie2p.er>, %row_bounded: reg<aie2p.er>, %column_bounded: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
   %input_aligned = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %output_aligned = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
-  %27 = mov.short 8
-  %28 = copy %column_bounded : reg<aie2p.er> -> reg<aie2p.er>
-  %29 = mac %28, %row_bounded, %27
-  %30 = mov.i32 2
-  %31 = lshl %29, %30
-  %32 = add.nc %31, %base_aligned
-  %33 = mov.address-index %32
-  %loaded = lda.i32.index %input_aligned, %33
-  st.i32.index %loaded, %output_aligned, %33
+  %25 = mov.short 8
+  %26 = copy %column_bounded : reg<aie2p.er> -> reg<aie2p.er>
+  %27 = mac %26, %row_bounded, %25
+  %28 = mov.i32 2
+  %29 = lshl %27, %28
+  %30 = add.nc %29, %base_aligned
+  %31 = mov.address-index %30
+  %loaded = lda.i32.index %input_aligned, %31
+  st.i32.index %loaded, %output_aligned, %31
   return %loaded
 }
 

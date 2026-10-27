@@ -21,23 +21,23 @@ func.def @ranked_exchange(%input: buffer, %output: buffer, %row_input: index, %c
 
 // ----
 low.func.def target<x86.avx2.core> abi(object_function) @ranked_exchange(%input: reg<x86.gpr64>, %output: reg<x86.gpr64>, %row: reg<x86.gpr64>, %column: reg<x86.gpr64>, %replacement: reg<x86.gpr32>, %base: reg<x86.gpr64>) -> (reg<x86.gpr32>) asm {
-  %34 = mov.imm64 19
-  %35 = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
+  %30 = mov.imm64 19
+  %31 = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
+  %32 = imul.gpr64 %31, %30
+  %33 = lea %32, %column
+  %34 = mov.imm64 4
+  %35 = copy %33 : reg<x86.gpr64> -> reg<x86.gpr64>
   %36 = imul.gpr64 %35, %34
-  %37 = lea %36, %column
-  %38 = mov.imm64 4
-  %39 = copy %37 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %40 = imul.gpr64 %39, %38
-  %41 = copy %40 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %42 = add.gpr64 %41, %base
-  %first = mov.load.indexed.gpr32<volatile> %input, %42 {disp32 = 0, scale = 1}
-  %45 = copy %37 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %46 = imul.gpr64 %45, %38
-  %47 = copy %46 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %48 = add.gpr64 %47, %base
-  %packet = vmovdqu32.load.indexed.xmm<volatile> %input, %48 {disp32 = 0, scale = 1}
-  vmovdqu32.store.indexed.xmm<volatile> %packet, %input, %48 {disp32 = 0, scale = 1}
-  mov.store.indexed.gpr32<volatile> %replacement, %output, %42 {disp32 = 16, scale = 1}
+  %37 = copy %36 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %38 = add.gpr64 %37, %base
+  %first = mov.load.indexed.gpr32<volatile> %input, %38 {disp32 = 0, scale = 1}
+  %41 = copy %33 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %42 = imul.gpr64 %41, %34
+  %43 = copy %42 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %44 = add.gpr64 %43, %base
+  %packet = vmovdqu32.load.indexed.xmm<volatile> %input, %44 {disp32 = 0, scale = 1}
+  vmovdqu32.store.indexed.xmm<volatile> %packet, %input, %44 {disp32 = 0, scale = 1}
+  mov.store.indexed.gpr32<volatile> %replacement, %output, %38 {disp32 = 16, scale = 1}
   return %first
 }
 

@@ -1,4 +1,4 @@
-// RUN: emit source-low output=low sanitizer=access sanitizer-reporting=trap
+// RUN: emit source-low output=low sanitizer=access sanitizer-reporting=trap diagnostics=operand-forms
 
 amdgpu.target<gfx11-generic> @target
 

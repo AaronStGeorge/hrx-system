@@ -336,69 +336,69 @@ low.kernel.def target<amdgpu.cdna3.core>(@target) abi_layout({constant_count = 0
   %integer_source = resource<hal_binding> {extent = 256, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %float_destination = resource<hal_binding> {extent = 512, index = 2, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %integer_destination = resource<hal_binding> {extent = 256, index = 3, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %43 = v_lshlrev_b32_src0_inline %lane, 4
-  %float_values = global_load_dwordx4_saddr %43, %float_source : reg<amdgpu.vgpr x4>
-  %45 = v_lshlrev_b32_src0_inline %lane, 3
-  %integer_values = global_load_dwordx2_saddr %45, %integer_source : reg<amdgpu.vgpr x2>
-  %47 = slice %float_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %48 = slice %float_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %49 = slice %float_values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %50 = slice %float_values[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %51 = v_add_f32_dpp %47, %47 {dpp_ctrl = 177}
-  %52 = v_add_f32_dpp %48, %48 {dpp_ctrl = 177}
-  %53 = v_add_f32_dpp %49, %49 {dpp_ctrl = 177}
-  %54 = v_add_f32_dpp %50, %50 {dpp_ctrl = 177}
-  %55 = v_add_f32_dpp %51, %51 {dpp_ctrl = 78}
-  %56 = v_add_f32_dpp %52, %52 {dpp_ctrl = 78}
-  %57 = v_add_f32_dpp %53, %53 {dpp_ctrl = 78}
-  %58 = v_add_f32_dpp %54, %54 {dpp_ctrl = 78}
-  %59 = v_add_f32_dpp %55, %55 {dpp_ctrl = 321}
-  %60 = v_add_f32_dpp %56, %56 {dpp_ctrl = 321}
-  %61 = v_add_f32_dpp %57, %57 {dpp_ctrl = 321}
-  %62 = v_add_f32_dpp %58, %58 {dpp_ctrl = 321}
-  %63 = v_add_f32_dpp %59, %59 {dpp_ctrl = 320}
-  %64 = v_add_f32_dpp %60, %60 {dpp_ctrl = 320}
-  %65 = v_add_f32_dpp %61, %61 {dpp_ctrl = 320}
-  %66 = v_add_f32_dpp %62, %62 {dpp_ctrl = 320}
-  %67 = v_xor_b32_src0_inline %lane, 16
-  %68 = v_lshlrev_b32_src0_inline %67, 2
-  %69 = ds_bpermute_b32 %68, %63
-  %70 = v_add_f32 %63, %69
-  %71 = ds_bpermute_b32 %68, %64
-  %72 = v_add_f32 %64, %71
-  %73 = ds_bpermute_b32 %68, %65
-  %74 = v_add_f32 %65, %73
-  %75 = ds_bpermute_b32 %68, %66
-  %76 = v_add_f32 %66, %75
-  %sum = concat(%70, %72, %74, %76) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %78 = slice %integer_values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %79 = slice %integer_values[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %80 = v_mov_b32_dpp %78 {dpp_ctrl = 177}
-  %81 = v_min_i32 %78, %80
-  %82 = v_mov_b32_dpp %79 {dpp_ctrl = 177}
+  %31 = v_lshlrev_b32_src0_inline %lane, 4
+  %float_values = global_load_dwordx4_saddr %31, %float_source : reg<amdgpu.vgpr x4>
+  %33 = v_lshlrev_b32_src0_inline %lane, 3
+  %integer_values = global_load_dwordx2_saddr %33, %integer_source : reg<amdgpu.vgpr x2>
+  %35 = slice %float_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %36 = slice %float_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %37 = slice %float_values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %38 = slice %float_values[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %39 = v_add_f32_dpp %35, %35 {dpp_ctrl = 177}
+  %40 = v_add_f32_dpp %36, %36 {dpp_ctrl = 177}
+  %41 = v_add_f32_dpp %37, %37 {dpp_ctrl = 177}
+  %42 = v_add_f32_dpp %38, %38 {dpp_ctrl = 177}
+  %43 = v_add_f32_dpp %39, %39 {dpp_ctrl = 78}
+  %44 = v_add_f32_dpp %40, %40 {dpp_ctrl = 78}
+  %45 = v_add_f32_dpp %41, %41 {dpp_ctrl = 78}
+  %46 = v_add_f32_dpp %42, %42 {dpp_ctrl = 78}
+  %47 = v_add_f32_dpp %43, %43 {dpp_ctrl = 321}
+  %48 = v_add_f32_dpp %44, %44 {dpp_ctrl = 321}
+  %49 = v_add_f32_dpp %45, %45 {dpp_ctrl = 321}
+  %50 = v_add_f32_dpp %46, %46 {dpp_ctrl = 321}
+  %51 = v_add_f32_dpp %47, %47 {dpp_ctrl = 320}
+  %52 = v_add_f32_dpp %48, %48 {dpp_ctrl = 320}
+  %53 = v_add_f32_dpp %49, %49 {dpp_ctrl = 320}
+  %54 = v_add_f32_dpp %50, %50 {dpp_ctrl = 320}
+  %55 = v_xor_b32_src0_inline %lane, 16
+  %56 = v_lshlrev_b32_src0_inline %55, 2
+  %57 = ds_bpermute_b32 %56, %51
+  %58 = v_add_f32 %51, %57
+  %59 = ds_bpermute_b32 %56, %52
+  %60 = v_add_f32 %52, %59
+  %61 = ds_bpermute_b32 %56, %53
+  %62 = v_add_f32 %53, %61
+  %63 = ds_bpermute_b32 %56, %54
+  %64 = v_add_f32 %54, %63
+  %sum = concat(%58, %60, %62, %64) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %66 = slice %integer_values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %67 = slice %integer_values[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %68 = v_mov_b32_dpp %66 {dpp_ctrl = 177}
+  %69 = v_min_i32 %66, %68
+  %70 = v_mov_b32_dpp %67 {dpp_ctrl = 177}
+  %71 = v_min_i32 %67, %70
+  %72 = v_mov_b32_dpp %69 {dpp_ctrl = 78}
+  %73 = v_min_i32 %69, %72
+  %74 = v_mov_b32_dpp %71 {dpp_ctrl = 78}
+  %75 = v_min_i32 %71, %74
+  %76 = v_mov_b32_dpp %73 {dpp_ctrl = 321}
+  %77 = v_min_i32 %73, %76
+  %78 = v_mov_b32_dpp %75 {dpp_ctrl = 321}
+  %79 = v_min_i32 %75, %78
+  %80 = v_mov_b32_dpp %77 {dpp_ctrl = 320}
+  %81 = v_min_i32 %77, %80
+  %82 = v_mov_b32_dpp %79 {dpp_ctrl = 320}
   %83 = v_min_i32 %79, %82
-  %84 = v_mov_b32_dpp %81 {dpp_ctrl = 78}
-  %85 = v_min_i32 %81, %84
-  %86 = v_mov_b32_dpp %83 {dpp_ctrl = 78}
-  %87 = v_min_i32 %83, %86
-  %88 = v_mov_b32_dpp %85 {dpp_ctrl = 321}
-  %89 = v_min_i32 %85, %88
-  %90 = v_mov_b32_dpp %87 {dpp_ctrl = 321}
-  %91 = v_min_i32 %87, %90
-  %92 = v_mov_b32_dpp %89 {dpp_ctrl = 320}
-  %93 = v_min_i32 %89, %92
-  %94 = v_mov_b32_dpp %91 {dpp_ctrl = 320}
-  %95 = v_min_i32 %91, %94
-  %96 = v_xor_b32_src0_inline %lane, 16
-  %97 = v_lshlrev_b32_src0_inline %96, 2
-  %98 = ds_bpermute_b32 %97, %93
-  %99 = v_min_i32 %93, %98
-  %100 = ds_bpermute_b32 %97, %95
-  %101 = v_min_i32 %95, %100
-  %minimum = concat(%99, %101) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %103 = v_lshlrev_b32_src0_inline %lane, 4
-  global_store_dwordx4_saddr %103, %sum, %float_destination
-  %104 = v_lshlrev_b32_src0_inline %lane, 3
-  global_store_dwordx2_saddr %104, %minimum, %integer_destination
+  %84 = v_xor_b32_src0_inline %lane, 16
+  %85 = v_lshlrev_b32_src0_inline %84, 2
+  %86 = ds_bpermute_b32 %85, %81
+  %87 = v_min_i32 %81, %86
+  %88 = ds_bpermute_b32 %85, %83
+  %89 = v_min_i32 %83, %88
+  %minimum = concat(%87, %89) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %91 = v_lshlrev_b32_src0_inline %lane, 4
+  global_store_dwordx4_saddr %91, %sum, %float_destination
+  %92 = v_lshlrev_b32_src0_inline %lane, 3
+  global_store_dwordx2_saddr %92, %minimum, %integer_destination
   return
 }

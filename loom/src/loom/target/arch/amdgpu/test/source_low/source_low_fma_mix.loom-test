@@ -66,20 +66,20 @@ low.kernel.def target<amdgpu.gfx11.generic.core>(@gfx11_target) abi_layout({cons
   %scale_view = resource<hal_binding> {extent = 512, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %bias_view = resource<hal_binding> {extent = 512, index = 2, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {extent = 512, index = 3, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %21 = v_lshlrev_b32_src0_inline %tid, 3
-  %x = global_load_b64_saddr %21, %input_view
-  %scale = global_load_b64_saddr %21, %scale_view
-  %bias = global_load_b64_saddr %21, %bias_view
-  %27 = slice %bias[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %28 = slice %x[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %29 = slice %scale[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %30 = v_pk_fmac_f16 %27, %28, %29
-  %31 = slice %bias[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %32 = slice %x[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %33 = slice %scale[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %34 = v_pk_fmac_f16 %31, %32, %33
-  %result = concat(%30, %34) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  global_store_b64_saddr %21, %result, %output_view
+  %30 = v_lshlrev_b32_src0_inline %tid, 3
+  %x = global_load_b64_saddr %30, %input_view
+  %scale = global_load_b64_saddr %30, %scale_view
+  %bias = global_load_b64_saddr %30, %bias_view
+  %36 = slice %bias[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %37 = slice %x[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %38 = slice %scale[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %39 = v_pk_fmac_f16 %36, %37, %38
+  %40 = slice %bias[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %41 = slice %x[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %42 = slice %scale[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %43 = v_pk_fmac_f16 %40, %41, %42
+  %result = concat(%39, %43) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  global_store_b64_saddr %30, %result, %output_view
   return
 }
 
@@ -606,11 +606,11 @@ func.def target(@gfx11_target) @vector_f32_mulf_from_elements_extf(%q: vector<2x
 
 // ----
 low.func.def target<amdgpu.gfx11.generic.core>(@gfx11_target) abi(hal_kernel) @vector_f32_mulf_from_elements_extf(%q: reg<amdgpu.vgpr x2>, %scale_half: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
-  %9 = slice %q[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %10 = v_fma_mix_f32_f16lo_f32_f32_src2_lit %scale_half, %9, 0
-  %11 = slice %q[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %12 = v_fma_mix_f32_f16lo_f32_f32_src2_lit %scale_half, %11, 0
-  %result = concat(%10, %12) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %10 = slice %q[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %11 = v_fma_mix_f32_f16lo_f32_f32_src2_lit %scale_half, %10, 0
+  %12 = slice %q[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %13 = v_fma_mix_f32_f16lo_f32_f32_src2_lit %scale_half, %12, 0
+  %result = concat(%11, %13) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %result
 }
 

@@ -90,10 +90,6 @@ typedef enum loom_check_compile_source_low_pipeline_e {
   LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_DEFAULT = 0,
   // Full target pipeline prepared for required low-asm output.
   LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_ARTIFACT = 1,
-  // Raw diagnostic boundary prepared for required low-asm output.
-  LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_DIAGNOSTIC_ARTIFACT = 2,
-  // Raw source-to-Low diagnostic pass without target pipeline preparation.
-  LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_DIAGNOSTIC = 3,
 } loom_check_compile_source_low_pipeline_t;
 
 // One source-to-Low checker compilation request.

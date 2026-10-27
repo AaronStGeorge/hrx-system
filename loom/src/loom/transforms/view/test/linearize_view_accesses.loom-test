@@ -48,6 +48,9 @@ func.def @linearize_dense_load_preserves_sanitizer_site_location(%input: buffer,
 
 // ====
 
+// RUN: pass linearize-view-accesses,dce
+
+// Shared prefixes are constructed once, without a subsequent CSE pass.
 func.def @linearize_dense_store_shares_inner_index(%key_input: buffer, %value_input: buffer, %key_output: buffer, %value_output: buffer, %zero_bytes: offset, %position0: index, %head0: index, %head_dim0: index) {
   %position = index.assume %position0 [range(%position0, 0, 32767)] : index
   %head = index.assume %head0 [range(%head0, 0, 3)] : index
@@ -76,10 +79,10 @@ func.def @linearize_dense_store_shares_inner_index(%key_input: buffer, %value_in
   %18 = index.madd %head, %17, %head_dim : index
   %key = view.load %key_input_view[%18] : view<512xf16> -> f16
   %value = view.load %value_input_view[%18] : view<512xf16> -> f16
-  %27 = index.constant 512 : index
-  %28 = index.madd %position, %27, %18 : index
-  view.store %key, %key_cache[%28] : f16, view<16777216xf16>
-  view.store %value, %value_cache[%28] : f16, view<16777216xf16>
+  %23 = index.constant 512 : index
+  %24 = index.madd %position, %23, %18 : index
+  view.store %key, %key_cache[%24] : f16, view<16777216xf16>
+  view.store %value, %value_cache[%24] : f16, view<16777216xf16>
   func.return
 }
 
@@ -171,13 +174,13 @@ func.def @linearize_dense_tile_and_strided_vector_loads(%input: buffer, %zero_by
   %12 = index.constant 16 : index
   %13 = index.madd %row, %12, %column : index
   %14 = vector.load %dense_view[%13] : view<128xf32> -> vector<4xf32>
-  %18 = index.add %13, %12 : index
-  %19 = vector.load %dense_view[%18] : view<128xf32> -> vector<4xf32>
-  %20 = vector.concat<0> %14, %19 : vector<4xf32>, vector<4xf32> -> vector<8xf32>
-  %rank2 = vector.bitcast %20 : vector<8xf32> to vector<2x4xf32>
-  %22 = index.constant 64 : index
-  %23 = index.madd %row, %22, %column : index
-  %strided = vector.load %strided_view[%23] : view<464xf32> -> vector<4xf32>
+  %15 = index.add %13, %12 : index
+  %16 = vector.load %dense_view[%15] : view<128xf32> -> vector<4xf32>
+  %17 = vector.concat<0> %14, %16 : vector<4xf32>, vector<4xf32> -> vector<8xf32>
+  %rank2 = vector.bitcast %17 : vector<8xf32> to vector<2x4xf32>
+  %19 = index.constant 64 : index
+  %20 = index.madd %row, %19, %column : index
+  %strided = vector.load %strided_view[%20] : view<464xf32> -> vector<4xf32>
   test.use %rank2, %strided : vector<2x4xf32>, vector<4xf32>
   func.return
 }
@@ -203,8 +206,8 @@ func.def @linearize_dense_rank2_vector_store(%output: buffer, %zero_bytes: offse
   %12 = index.madd %row, %11, %column : index
   vector.store %10, %output_view[%12] : vector<4xf32>, view<128xf32>
   %13 = vector.slice %9[4] : vector<8xf32> -> vector<4xf32>
-  %17 = index.add %12, %11 : index
-  vector.store %13, %output_view[%17] : vector<4xf32>, view<128xf32>
+  %14 = index.add %12, %11 : index
+  vector.store %13, %output_view[%14] : vector<4xf32>, view<128xf32>
   func.return
 }
 
@@ -279,10 +282,10 @@ func.def @linearize_strided_vector_tile(%input: buffer, %output: buffer, %origin
   %12 = index.constant 20 : index
   %13 = index.madd %row, %12, %column : index
   %14 = vector.load %source[%13] : view<156xf32> -> vector<4xf32>
-  %18 = index.add %13, %12 : index
-  %19 = vector.load %source[%18] : view<156xf32> -> vector<4xf32>
+  %15 = index.add %13, %12 : index
+  %16 = vector.load %source[%15] : view<156xf32> -> vector<4xf32>
   vector.store %14, %destination[%13] : vector<4xf32>, view<156xf32>
-  vector.store %19, %destination[%18] : vector<4xf32>, view<156xf32>
+  vector.store %16, %destination[%15] : vector<4xf32>, view<156xf32>
   func.return
 }
 
@@ -484,19 +487,19 @@ func.def @linearize_rank3_boundary_tile(%input: buffer, %output: buffer, %origin
   %15 = index.constant 12 : index
   %16 = index.add %14, %15 : index
   %17 = vector.load %source[%16] : view<512xf32> -> vector<4xf32>
-  %22 = index.constant 28 : index
-  %23 = index.add %14, %22 : index
-  %24 = vector.load %source[%23] : view<512xf32> -> vector<4xf32>
-  %29 = index.constant 140 : index
-  %30 = index.add %14, %29 : index
-  %31 = vector.load %source[%30] : view<512xf32> -> vector<4xf32>
-  %36 = index.constant 156 : index
-  %37 = index.add %14, %36 : index
-  %38 = vector.load %source[%37] : view<512xf32> -> vector<4xf32>
+  %18 = index.constant 28 : index
+  %19 = index.add %14, %18 : index
+  %20 = vector.load %source[%19] : view<512xf32> -> vector<4xf32>
+  %21 = index.constant 140 : index
+  %22 = index.add %14, %21 : index
+  %23 = vector.load %source[%22] : view<512xf32> -> vector<4xf32>
+  %24 = index.constant 156 : index
+  %25 = index.add %14, %24 : index
+  %26 = vector.load %source[%25] : view<512xf32> -> vector<4xf32>
   vector.store %17, %destination[%16] : vector<4xf32>, view<512xf32>
-  vector.store %24, %destination[%23] : vector<4xf32>, view<512xf32>
-  vector.store %31, %destination[%30] : vector<4xf32>, view<512xf32>
-  vector.store %38, %destination[%37] : vector<4xf32>, view<512xf32>
+  vector.store %20, %destination[%19] : vector<4xf32>, view<512xf32>
+  vector.store %23, %destination[%22] : vector<4xf32>, view<512xf32>
+  vector.store %26, %destination[%25] : vector<4xf32>, view<512xf32>
   func.return
 }
 
@@ -557,4 +560,260 @@ func.def @reject_partial_tile_guard(%input: buffer, %output: buffer, %base: offs
     vector.store %value, %destination[%row, 12] : vector<2x4xf32>, view<8x16xf32>
   }
   func.return
+}
+
+// ====
+
+// RUN: pass specialize-target-callgraph,linearize-view-accesses,dce
+
+// Target-bound powers of two are shifts immediately. Memory effects and cache
+// policy remain on each access even when its address computation is shared.
+test.target<quirky> @target32
+
+test.target<low_core> @target64
+
+func.def target(@target32) @share_vector_address(%input: buffer, %output: buffer, %origin: offset, %row0: index) {
+  %row = index.assume %row0 [range(%row0, 0, 63)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<64x4xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<64x4xi32>
+  %value = vector.load<volatile> %source[%row, 0] {cache_scope = system, cache_temporal = bypass} : view<64x4xi32> -> vector<4xi32>
+  vector.store<volatile> %value, %destination[%row, 0] {cache_scope = device, cache_temporal = writeback} : vector<4xi32>, view<64x4xi32>
+  func.return
+}
+
+func.def target(@target64) @share_scalar_address(%input: buffer, %output: buffer, %origin: offset, %row0: index) {
+  %row = index.assume %row0 [range(%row0, 0, 63)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<64x4xf16>
+  %destination = buffer.view %output[%origin] : buffer -> view<64x4xf16>
+  %value = view.load %source[%row, 0] : view<64x4xf16> -> f16
+  view.store %value, %destination[%row, 0] : f16, view<64x4xf16>
+  func.return
+}
+
+// ----
+test.target<quirky> @target32
+
+test.target<low_core> @target64
+
+func.def target(@target32) @share_vector_address(%input: buffer, %output: buffer, %origin: offset, %row0: index) {
+  %row = index.assume %row0 [range(%row0, 0, 63)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<256xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<256xi32>
+  %16 = index.constant 2 : index
+  %17 = index.shli %row, %16 : index
+  %value = vector.load<volatile> %source[%17] {cache_scope = system, cache_temporal = bypass} : view<256xi32> -> vector<4xi32>
+  vector.store<volatile> %value, %destination[%17] {cache_scope = device, cache_temporal = writeback} : vector<4xi32>, view<256xi32>
+  func.return
+}
+
+func.def target(@target64) @share_scalar_address(%input: buffer, %output: buffer, %origin: offset, %row0: index) {
+  %row = index.assume %row0 [range(%row0, 0, 63)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<256xf16>
+  %destination = buffer.view %output[%origin] : buffer -> view<256xf16>
+  %21 = index.constant 2 : index
+  %22 = index.shli %row, %21 : index
+  %value = view.load %source[%22] : view<256xf16> -> f16
+  view.store %value, %destination[%22] : f16, view<256xf16>
+  func.return
+}
+
+// ====
+
+// RUN: pass linearize-view-accesses,dce
+
+// A non-power-of-two scale and each row displacement are shared across tile
+// load/store materialization, without building them once per row and access.
+func.def @share_strided_tile_address(%input: buffer, %output: buffer, %origin: offset, %row0: index) {
+  %row = index.assume %row0 [range(%row0, 0, 5)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<8x4xi16, #encoding.layout.strided<strides=[7, 1]>>
+  %destination = buffer.view %output[%origin] : buffer -> view<8x4xi16, #encoding.layout.strided<strides=[7, 1]>>
+  %value = vector.load %source[%row, 0] : view<8x4xi16, #encoding.layout.strided<strides=[7, 1]>> -> vector<3x4xi16>
+  vector.store %value, %destination[%row, 0] : vector<3x4xi16>, view<8x4xi16, #encoding.layout.strided<strides=[7, 1]>>
+  func.return
+}
+
+// ----
+func.def @share_strided_tile_address(%input: buffer, %output: buffer, %origin: offset, %row0: index) {
+  %row = index.assume %row0 [range(%row0, 0, 5)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<53xi16>
+  %destination = buffer.view %output[%origin] : buffer -> view<53xi16>
+  %9 = index.constant 7 : index
+  %10 = index.mul %row, %9 : index
+  %11 = vector.load %source[%10] : view<53xi16> -> vector<4xi16>
+  %12 = index.add %10, %9 : index
+  %13 = vector.load %source[%12] : view<53xi16> -> vector<4xi16>
+  %14 = index.constant 14 : index
+  %15 = index.add %10, %14 : index
+  %16 = vector.load %source[%15] : view<53xi16> -> vector<4xi16>
+  %17 = vector.concat<0> %11, %13, %16 : vector<4xi16>, vector<4xi16>, vector<4xi16> -> vector<12xi16>
+  %value = vector.bitcast %17 : vector<12xi16> to vector<3x4xi16>
+  %20 = vector.bitcast %value : vector<3x4xi16> to vector<12xi16>
+  %21 = vector.slice %20[0] : vector<12xi16> -> vector<4xi16>
+  vector.store %21, %destination[%10] : vector<4xi16>, view<53xi16>
+  %22 = vector.slice %20[4] : vector<12xi16> -> vector<4xi16>
+  vector.store %22, %destination[%12] : vector<4xi16>, view<53xi16>
+  %23 = vector.slice %20[8] : vector<12xi16> -> vector<4xi16>
+  vector.store %23, %destination[%15] : vector<4xi16>, view<53xi16>
+  func.return
+}
+
+// ====
+
+// RUN: pass linearize-view-accesses,dce
+
+// Reuse never crosses sibling or nested blocks. Returning to the outer block
+// still reuses its earlier producer, which dominates the final access.
+func.def @scope_address_reuse(%input: buffer, %origin: offset, %row0: index, %condition: i1) {
+  %row = index.assume %row0 [range(%row0, 0, 7)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<8x4xi32>
+  %before = view.load<volatile> %source[%row, 0] : view<8x4xi32> -> i32
+  scf.if %condition {
+    %left = view.load<volatile> %source[%row, 0] : view<8x4xi32> -> i32
+    test.use %left : i32
+  } else {
+    %right = view.load<volatile> %source[%row, 0] : view<8x4xi32> -> i32
+    test.use %right : i32
+  }
+  %after = view.load<volatile> %source[%row, 0] : view<8x4xi32> -> i32
+  test.use %before, %after : i32, i32
+  func.return
+}
+
+// ----
+func.def @scope_address_reuse(%input: buffer, %origin: offset, %row0: index, %condition: i1) {
+  %row = index.assume %row0 [range(%row0, 0, 7)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<32xi32>
+  %10 = index.constant 4 : index
+  %11 = index.mul %row, %10 : index
+  %before = view.load<volatile> %source[%11] : view<32xi32> -> i32
+  scf.if %condition {
+    %14 = index.constant 4 : index
+    %15 = index.mul %row, %14 : index
+    %left = view.load<volatile> %source[%15] : view<32xi32> -> i32
+    test.use %left : i32
+  } else {
+    %17 = index.constant 4 : index
+    %18 = index.mul %row, %17 : index
+    %right = view.load<volatile> %source[%18] : view<32xi32> -> i32
+    test.use %right : i32
+  }
+  %after = view.load<volatile> %source[%11] : view<32xi32> -> i32
+  test.use %before, %after : i32, i32
+  func.return
+}
+
+// ====
+
+// RUN: pass linearize-view-accesses,dce
+
+// A zero stride needs no arithmetic, but still needs its coordinate proof.
+func.def @zero_stride_keeps_footprint_proof(%input: buffer, %origin: offset, %row0: index, %column0: index) {
+  %row = index.assume %row0 [range(%row0, 0, 7)] : index
+  %column = index.assume %column0 [range(%column0, 0, 15)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<8x16xf32, #encoding.layout.strided<strides=[0, 1]>>
+  %proved = view.load %source[%row, %column] : view<8x16xf32, #encoding.layout.strided<strides=[0, 1]>> -> f32
+  %unproved = view.load %source[%row0, %column] : view<8x16xf32, #encoding.layout.strided<strides=[0, 1]>> -> f32
+  test.use %proved, %unproved : f32, f32
+  func.return
+}
+
+// ----
+func.def @zero_stride_keeps_footprint_proof(%input: buffer, %origin: offset, %row0: index, %column0: index) {
+  %column = index.assume %column0 [range(%column0, 0, 15)] : index
+  %source$6 = buffer.view %input[%origin] : buffer -> view<8x16xf32, #encoding.layout.strided<strides=[0, 1]>>
+  %source$9 = buffer.view %input[%origin] : buffer -> view<16xf32>
+  %proved = view.load %source$9[%column] : view<16xf32> -> f32
+  %unproved = view.load %source$6[%row0, %column] : view<8x16xf32, #encoding.layout.strided<strides=[0, 1]>> -> f32
+  test.use %proved, %unproved : f32, f32
+  func.return
+}
+
+// ====
+
+// RUN: pass linearize-view-accesses,dce
+
+// Both CFG blocks reuse the flat view, but address expressions are only shared
+// within a block. Cross-block availability belongs to the ordinary CSE pass.
+func.def @separate_cfg_addresses(%input: buffer, %origin: offset, %row0: index) {
+  %row = index.assume %row0 [range(%row0, 0, 7)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<8x4xi32>
+  cfg.br ^first_access
+^first_access:
+  %initial = view.load<volatile> %source[%row, 0] : view<8x4xi32> -> i32
+  test.use %initial : i32
+  cfg.br ^following_access
+^following_access:
+  %first = view.load<volatile> %source[%row, 0] : view<8x4xi32> -> i32
+  %second = view.load<volatile> %source[%row, 0] : view<8x4xi32> -> i32
+  test.use %first, %second : i32, i32
+  func.return
+}
+
+// ----
+func.def @separate_cfg_addresses(%input: buffer, %origin: offset, %row0: index) {
+  %row = index.assume %row0 [range(%row0, 0, 7)] : index
+  %source = buffer.view %input[%origin] : buffer -> view<32xi32>
+  cfg.br ^first_access
+^first_access:
+  %8 = index.constant 4 : index
+  %9 = index.mul %row, %8 : index
+  %initial = view.load<volatile> %source[%9] : view<32xi32> -> i32
+  test.use %initial : i32
+  cfg.br ^following_access
+^following_access:
+  %12 = index.constant 4 : index
+  %13 = index.mul %row, %12 : index
+  %first = view.load<volatile> %source[%13] : view<32xi32> -> i32
+  %second = view.load<volatile> %source[%13] : view<32xi32> -> i32
+  test.use %first, %second : i32, i32
+  func.return
+}
+
+// ====
+
+// RUN: pass specialize-target-callgraph,linearize-view-accesses,dce
+
+// Forming a shift respects each worker's carrier width, not its enclosing
+// pipeline's target. A shift by 32 is only valid in the 64-bit worker.
+test.target<low_core> @target32 {index_bitwidth = 32}
+
+test.target<low_core> @target64 {index_bitwidth = 64}
+
+pipeline.def public target(@target64) @worker_scales() run(%input: buffer, %origin: offset, %row0: index) {
+  pipeline.strand target(@target32) workers([0], [1], [1]) {
+    %row32 = index.assume %row0 [range(%row0, 0, 1)] : index
+    %source32 = buffer.view %input[%origin] : buffer -> view<2x4294967296xi8>
+    %value32 = view.load<volatile> %source32[%row32, 0] : view<2x4294967296xi8> -> i8
+    test.use %value32 : i8
+  }
+  pipeline.strand target(@target64) workers([1], [1], [1]) {
+    %row64 = index.assume %row0 [range(%row0, 0, 1)] : index
+    %source64 = buffer.view %input[%origin] : buffer -> view<2x4294967296xi8>
+    %value64 = view.load<volatile> %source64[%row64, 0] : view<2x4294967296xi8> -> i8
+    test.use %value64 : i8
+  }
+}
+
+// ----
+test.target<low_core> @target32 {index_bitwidth = 32}
+
+test.target<low_core> @target64 {index_bitwidth = 64}
+
+pipeline.def public target(@target64) @worker_scales() run(%input: buffer, %origin: offset, %row0: index) {
+  pipeline.strand target(@target32) workers([0], [1], [1]) {
+    %row32 = index.assume %row0 [range(%row0, 0, 1)] : index
+    %source32 = buffer.view %input[%origin] : buffer -> view<8589934592xi8>
+    %9 = index.constant 4294967296 : index
+    %10 = index.mul %row32, %9 : index
+    %value32 = view.load<volatile> %source32[%10] : view<8589934592xi8> -> i8
+    test.use %value32 : i8
+  }
+  pipeline.strand target(@target64) workers([1], [1], [1]) {
+    %row64 = index.assume %row0 [range(%row0, 0, 1)] : index
+    %source64 = buffer.view %input[%origin] : buffer -> view<8589934592xi8>
+    %13 = index.constant 32 : index
+    %14 = index.shli %row64, %13 : index
+    %value64 = view.load<volatile> %source64[%14] : view<8589934592xi8> -> i8
+    test.use %value64 : i8
+  }
 }

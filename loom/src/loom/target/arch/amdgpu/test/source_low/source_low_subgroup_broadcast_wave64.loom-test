@@ -59,23 +59,23 @@ low.kernel.def target<amdgpu.rdna3_5.core>(@target) abi_layout({constant_count =
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {extent = 1024, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {extent = 1024, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %25 = v_lshlrev_b32_src0_inline %tid, 4
-  %value = global_load_b128_saddr %25, %input_view
-  %27 = slice %value[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19 = v_lshlrev_b32_src0_inline %tid, 4
+  %value = global_load_b128_saddr %19, %input_view
+  %21 = slice %value[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %22 = v_readlane_b32_src1_inline %21, 47
+  %23 = v_mov_b32_copy %22
+  %24 = slice %value[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %25 = v_readlane_b32_src1_inline %24, 47
+  %26 = v_mov_b32_copy %25
+  %27 = slice %value[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %28 = v_readlane_b32_src1_inline %27, 47
   %29 = v_mov_b32_copy %28
-  %30 = slice %value[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %30 = slice %value[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %31 = v_readlane_b32_src1_inline %30, 47
   %32 = v_mov_b32_copy %31
-  %33 = slice %value[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %34 = v_readlane_b32_src1_inline %33, 47
-  %35 = v_mov_b32_copy %34
-  %36 = slice %value[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %37 = v_readlane_b32_src1_inline %36, 47
-  %38 = v_mov_b32_copy %37
-  %broadcast = concat(%29, %32, %35, %38) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %40 = v_lshlrev_b32_src0_inline %tid, 4
-  global_store_b128_saddr %40, %broadcast, %output_view
+  %broadcast = concat(%23, %26, %29, %32) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %34 = v_lshlrev_b32_src0_inline %tid, 4
+  global_store_b128_saddr %34, %broadcast, %output_view
   return
 }
 

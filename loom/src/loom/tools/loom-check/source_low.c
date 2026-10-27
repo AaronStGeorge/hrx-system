@@ -413,26 +413,14 @@ iree_status_t loom_check_source_low_execute(
                                                           provider_request);
   }
 
-  if (loom_sanitizer_options_is_enabled(&request.sanitizer) &&
-      iree_any_bit_set(request.options,
-                       LOOM_CHECK_SOURCE_LOW_OPTION_DIAGNOSTICS)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "source-low option 'sanitizer' cannot be combined with "
-        "'diagnostics' for module or low output");
-  }
-
+  // Diagnostics observe the same source normalization and lowering regardless
+  // of output scope. Only assembly printing needs extra artifact preparation.
   loom_check_compile_source_low_pipeline_t pipeline =
       LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_DEFAULT;
-  if (iree_any_bit_set(request.options,
-                       LOOM_CHECK_SOURCE_LOW_OPTION_DIAGNOSTICS) &&
-      request.output != LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
-    pipeline = LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_DIAGNOSTIC;
-  } else if (request.output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
-    pipeline = iree_any_bit_set(request.options,
-                                LOOM_CHECK_SOURCE_LOW_OPTION_DIAGNOSTICS)
-                   ? LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_DIAGNOSTIC_ARTIFACT
-                   : LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_ARTIFACT;
+  if (request.output != LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_NONE) {
+    // Both IR output scopes require assembly-ready Low, without materializing
+    // the target ABI or otherwise advancing to prepared-Low.
+    pipeline = LOOM_CHECK_COMPILE_SOURCE_LOW_PIPELINE_ARTIFACT;
   }
   const loom_check_compile_source_low_options_t compile_options = {
       .pipeline = pipeline,
