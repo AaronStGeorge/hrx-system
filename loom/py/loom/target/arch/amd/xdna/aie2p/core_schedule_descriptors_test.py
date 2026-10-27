@@ -44,6 +44,7 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
     _register_event_name,
     _scalar_move_schedule_class,
     _slot_resource_name,
+    _validate_bundle_stream_widths,
     _validate_control_issue_timing,
 )
 from loom.target.arch.amd.xdna.aie2p.core_encoding_data import CORE_ENCODING_TABLE
@@ -85,6 +86,19 @@ def test_scalar_move_resource_fragments_exactly_cover_native_itineraries() -> No
                 for issue_use in schedule_classes[name].issue_uses
             )
             assert actual == expected
+
+
+def test_bundle_stream_requires_two_byte_packet_granularity() -> None:
+    first_format = CORE_ENCODING_TABLE.bundle_formats[0]
+    changed = replace(
+        CORE_ENCODING_TABLE,
+        bundle_formats=(
+            replace(first_format, bit_count=first_format.bit_count + 8),
+            *CORE_ENCODING_TABLE.bundle_formats[1:],
+        ),
+    )
+    with pytest.raises(ValueError, match="bundle width is not 16-bit aligned"):
+        _validate_bundle_stream_widths(changed)
 
 
 @pytest.mark.parametrize(

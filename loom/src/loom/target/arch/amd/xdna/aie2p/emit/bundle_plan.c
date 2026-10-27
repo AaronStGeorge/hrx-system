@@ -269,9 +269,11 @@ static iree_status_t loom_aie2p_bundle_plan_align_call_continuation(
     iree_host_size_t call_bundle_index, uint32_t continuation_cycle) {
   loom_aie2p_bundle_alignment_storage_t storage =
       loom_aie2p_bundle_plan_alignment_storage(builder);
+  uint8_t inserted_nop_count = 0;
   IREE_RETURN_IF_ERROR(loom_aie2p_bundle_alignment_align_call_continuation(
-      &storage, call_bundle_index, continuation_cycle));
+      &storage, call_bundle_index, continuation_cycle, &inserted_nop_count));
   loom_aie2p_bundle_plan_commit_alignment_storage(builder, &storage);
+  builder->next_issue_cycle += inserted_nop_count;
   return iree_ok_status();
 }
 
@@ -1271,6 +1273,11 @@ static iree_status_t loom_aie2p_bundle_plan_append_call(
     IREE_RETURN_IF_ERROR(
         loom_aie2p_bundle_plan_append_nop_bundle(builder, logical_issue_cycle));
   }
+
+  // The closed call window is semantically complete. Alignment may shift the
+  // entire window behind an implicit NOP prefix, so discard its absolute-cycle
+  // resource history before applying that representation-only delay.
+  loom_low_physical_issue_reset_execution_state(&builder->issue);
   IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_align_call_continuation(
       builder, call_bundle_index, continuation_cycle));
 
@@ -1282,8 +1289,7 @@ static iree_status_t loom_aie2p_bundle_plan_append_call(
 
   // The callee begins after the closed JL delay window and returns only after
   // its own physical stream is quiescent. Its exact clobbers were consumed by
-  // allocation; caller-side timing history therefore restarts at continuation.
-  loom_low_physical_issue_reset_execution_state(&builder->issue);
+  // allocation; caller-side timing starts fresh at the shifted continuation.
   builder->execution_bundle_start = builder->bundle_count;
   if (builder->next_issue_cycle >
       UINT32_MAX - LOOM_AIE2P_RETURN_CONTROL_GAP_CYCLES) {
@@ -1400,11 +1406,7 @@ static iree_status_t loom_aie2p_bundle_plan_align_next_block(
     *out_byte_offset = (uint32_t)aligned_offset;
     return iree_ok_status();
   }
-  if ((builder->encoded_byte_length & 1u) != 0) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AIE2P bundle stream cannot reach 16-byte block alignment");
-  }
+  IREE_ASSERT_EQ(builder->encoded_byte_length & 1u, 0u);
   while ((builder->encoded_byte_length & 15u) != 0) {
     IREE_RETURN_IF_ERROR(
         loom_aie2p_bundle_plan_append_nop_bundle(builder, logical_issue_cycle));

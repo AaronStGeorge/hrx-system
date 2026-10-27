@@ -459,11 +459,8 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
         const loom_low_allocation_call_moves_t* call_moves =
             loom_low_allocation_find_call_moves_by_source_ordinal(
                 &frame->allocation, packet.node_index);
-        if (call_moves == NULL) {
-          return iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "AIE2P direct call requires an allocation call contract");
-        }
+        IREE_ASSERT(call_moves != NULL &&
+                    "admitted AIE2P call must retain ABI transport");
         accepted = false;
         IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
             frame, call_moves->arguments, packet.node->op, diagnostic_emitter,

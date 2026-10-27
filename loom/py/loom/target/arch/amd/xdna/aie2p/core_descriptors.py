@@ -14,6 +14,7 @@ from itertools import combinations, product
 from math import gcd
 from pathlib import Path
 
+from loom.target.arch.amd.xdna.aie.encoding import EncodingTable
 from loom.target.arch.amd.xdna.aie.machine import (
     MachineForm,
     MachineOperand,
@@ -2342,8 +2343,18 @@ AIE2P_CORE_DESCRIPTOR_SET = DescriptorSet(
 )
 
 
+def _validate_bundle_stream_widths(encoding_table: EncodingTable) -> None:
+    """Proves every packet preserves the core's two-byte stream granularity."""
+    for bundle_format in encoding_table.bundle_formats:
+        if bundle_format.bit_count % 16:
+            raise ValueError(
+                f"{bundle_format.name}: AIE2P bundle width is not 16-bit aligned"
+            )
+
+
 def _validate_control_issue_timing(descriptor_set: DescriptorSet) -> None:
     """Proves the fixed native control-window contracts used by emission."""
+    _validate_bundle_stream_widths(CORE_ENCODING_TABLE)
     descriptors = {
         descriptor.key: descriptor for descriptor in descriptor_set.descriptors
     }
