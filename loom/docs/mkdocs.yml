@@ -104,6 +104,7 @@ nav:
       - Embed kernel JIT compilation: integration/jit-kernel.md
   - Serving:
       - loom-serve: serving/index.md
+      - Sandboxing: serving/sandboxing.md
       - Model documents: serving/model-documents.md
       - Author model programs: serving/model-programs.md
       - HTTP profiles: serving/http-profiles.md

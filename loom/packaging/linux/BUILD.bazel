@@ -1,0 +1,20 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# bazel-to-cmake: skip
+
+load("//build_tools/bazel:python.bzl", "iree_py_test")
+
+exports_files(["loom-serve-sandbox"])
+
+iree_py_test(
+    name = "sandbox_test",
+    size = "small",
+    srcs = ["sandbox_test.py"],
+    args = ["$(rootpath :loom-serve-sandbox)"],
+    data = ["loom-serve-sandbox"],
+    target_compatible_with = ["@platforms//os:linux"],
+)

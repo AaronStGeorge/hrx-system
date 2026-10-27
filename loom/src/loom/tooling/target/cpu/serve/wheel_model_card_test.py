@@ -150,11 +150,23 @@ def main(
         assert shutil.which("bazel", path=environment["PATH"]) is None
         assert shutil.which("bazelisk", path=environment["PATH"]) is None
         with ZipFile(wheel) as archive:
-            native_names = {
+            command_files = {
                 Path(entry.filename).name
                 for entry in archive.infolist()
                 if not entry.is_dir() and ".data/scripts/" in entry.filename
             }
+        shell_commands = {"loom-serve-sandbox"} if os.name != "nt" else set()
+        assert shell_commands <= command_files, command_files
+        if os.name == "nt":
+            assert "loom-serve-sandbox" not in command_files, command_files
+        for name in shell_commands:
+            installed = scripts / name
+            assert installed.read_bytes().startswith(b"#!/usr/bin/env bash\n"), name
+            assert os.access(installed, os.X_OK), name
+            help_text = run(name, "--help")
+            assert "--binary=PATH" in help_text and "--rw-bind=PATH" in help_text
+            assert "--gpu=all|" in help_text and "--npu=all|" in help_text
+        native_names = command_files - shell_commands
         companions = (
             {"iree.dll", "loomc.dll"}
             if os.name == "nt"

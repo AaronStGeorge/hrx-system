@@ -29,6 +29,10 @@ The [operation](workflows/operate-model-server.md) and
 [observation](workflows/observe-model-server.md) workflows describe lifecycle
 controls, pressure, counters and telemetry cursors.
 
+[Sandboxing](sandboxing.md) runs the Linux SDK server without host networking,
+with read-only model mounts and explicit GPU/NPU access. The portable commands
+above remain the ordinary entry point on every platform.
+
 ## Process options
 
 | Flag | Default | Meaning |
