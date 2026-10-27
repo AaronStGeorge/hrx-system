@@ -18,18 +18,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 
-LOOM_EXECUTE_SUBSTRATES = ("iree_hal", "iree_vm", "wasm_host")
+from build_tools.bazel import configure_project
+
+LOOM_EXECUTE_SUBSTRATES = configure_project.LOOM_EXECUTION_SUBSTRATES
 LOOM_IMPORTERS = ("cxx", "mlir", "tilelang")
 LOOM_IMAGE_CODECS = ("png", "jpeg", "gif", "webp")
 LOOM_AUDIO_CODECS = ("wav", "mp3", "flac")
-LOOM_ARCHITECTURES = ("aie2p", "amdgpu", "spirv", "vm", "wasm", "x86")
-LOOM_ARTIFACT_FORMATS = ("elf", "spirv", "vm", "wasm")
+LOOM_ARCHITECTURES = configure_project.LOOM_ARCHITECTURES
+LOOM_ARTIFACT_FORMATS = configure_project.LOOM_ARTIFACT_FORMATS
 AMDF_FAMILIES = ("rdna", "cdna", "xdna")
 HOST_DRIVERS = ("task",)
 DEFAULT_DRIVERS = (*HOST_DRIVERS, "amd")
-DEFAULT_LOOM_EXECUTE = ("iree_hal", "iree_vm")
-DEFAULT_LOOM_ARCHITECTURES = ("aie2p", "amdgpu", "spirv", "vm", "x86")
-DEFAULT_LOOM_ARTIFACT_FORMATS = ("elf", "spirv", "vm")
 
 SDK_DRIVER_PACKAGES = {
     "amdgpu": (
@@ -70,25 +69,6 @@ DRIVER_DEFINES = {
     "IREE_HAL_DRIVER_AMD": "amd",
     "IREE_HAL_DRIVER_AMD_GPU": "amd-gpu",
     "IREE_HAL_DRIVER_AMD_XDNA": "amd-xdna",
-}
-LOOM_ARCH_DEFINES = {
-    "LOOM_ARCH_AIE2P": "aie2p",
-    "LOOM_ARCH_AMDGPU": "amdgpu",
-    "LOOM_ARCH_SPIRV": "spirv",
-    "LOOM_ARCH_VM": "vm",
-    "LOOM_ARCH_WASM": "wasm",
-    "LOOM_ARCH_X86": "x86",
-}
-LOOM_EMIT_DEFINES = {
-    "LOOM_EMIT_ELF": "elf",
-    "LOOM_EMIT_SPIRV": "spirv",
-    "LOOM_EMIT_VM": "vm",
-    "LOOM_EMIT_WASM": "wasm",
-}
-LOOM_EXECUTE_DEFINES = {
-    "LOOM_EXECUTE_IREE_HAL": "iree_hal",
-    "LOOM_EXECUTE_IREE_VM": "iree_vm",
-    "LOOM_EXECUTE_WASM_HOST": "wasm_host",
 }
 LOOM_IMPORT_DEFINES = {
     "LOOM_IMPORT_CXX": "cxx",
@@ -132,13 +112,9 @@ class ConfigRequest:
     amd_engine_overrides: dict[str, bool] = field(default_factory=dict)
     dependency_mode: str = "pinned"
     rocm_dependency_mode: str | None = None
-    enabled_loom_architectures: set[str] = field(
-        default_factory=lambda: set(DEFAULT_LOOM_ARCHITECTURES)
-    )
+    enabled_loom_architectures: set[str] = field(default_factory=set)
     runtime_amdgpu_targets: set[str] | None = None
-    enabled_loom_execute: set[str] = field(
-        default_factory=lambda: set(DEFAULT_LOOM_EXECUTE)
-    )
+    enabled_loom_execute: set[str] = field(default_factory=set)
     loom_execute_source: str | None = None
     loom_emit_source: str | None = None
     loom_import_source: str | None = None
@@ -156,9 +132,7 @@ class ConfigRequest:
     loom_audio_codecs_source: str | None = None
     loom_arch_source: str | None = None
     loom_amdgpu_targets: set[str] | None = None
-    enabled_loom_artifact_formats: set[str] = field(
-        default_factory=lambda: set(DEFAULT_LOOM_ARTIFACT_FORMATS)
-    )
+    enabled_loom_artifact_formats: set[str] = field(default_factory=set)
     enabled_loom_importers: set[str] = field(default_factory=set)
     amdf_build: bool = False
     amdf_build_source: str | None = None
@@ -177,6 +151,8 @@ class ConfigRequest:
     # Option spelling used for native RDMA selection.
     rdma_source: str | None = None
     rocm_path: str | None = None
+    # Opaque state owned by repository project configuration contributors.
+    project_state: dict[str, object] = field(default_factory=dict)
 
     def set_driver(self, driver: str, enabled: bool) -> None:
         if self.driver_source == "native":
@@ -592,17 +568,10 @@ def resolve_rocm_path(path: str) -> str:
 
 def apply_define(request: ConfigRequest, define: str) -> None:
     name, value = parse_define(define)
+    if configure_project.apply_define(request, name, value, parse_bool):
+        return
     if name in DRIVER_DEFINES:
         request.set_driver(DRIVER_DEFINES[name], parse_bool(name, value))
-        return
-    if name in LOOM_ARCH_DEFINES:
-        request.set_loom_arch(LOOM_ARCH_DEFINES[name], parse_bool(name, value))
-        return
-    if name in LOOM_EMIT_DEFINES:
-        request.set_loom_emit(LOOM_EMIT_DEFINES[name], parse_bool(name, value))
-        return
-    if name in LOOM_EXECUTE_DEFINES:
-        request.set_loom_execute(LOOM_EXECUTE_DEFINES[name], parse_bool(name, value))
         return
     if name in LOOM_IMPORT_DEFINES:
         request.set_loom_importer(LOOM_IMPORT_DEFINES[name], parse_bool(name, value))
@@ -662,6 +631,8 @@ def apply_native_bazel_arg(request: ConfigRequest, arg: str) -> None:
     check_removed_option(arg)
     if arg == "--":
         raise SystemExit("build_tools/bazel/configure.py does not use a -- separator.")
+    if configure_project.apply_native_bazel_arg(request, arg):
+        return
     if arg.startswith(NATIVE_LOOM_IMAGE_INPUT_FLAG + "="):
         request.set_loom_image_input(
             parse_bool(NATIVE_LOOM_IMAGE_INPUT_FLAG, arg.split("=", 1)[1]), "native"
@@ -780,10 +751,12 @@ def apply_native_bazel_arg(request: ConfigRequest, arg: str) -> None:
 
 def request_from_args(args: argparse.Namespace) -> ConfigRequest:
     request = ConfigRequest(output=args.output)
+    configure_project.initialize_request(request)
     for define in args.defines:
         apply_define(request, define)
     for native_bazel_arg in args.native_bazel_args:
         apply_native_bazel_arg(request, native_bazel_arg)
+    configure_project.finalize_request(request)
     if "amd" in request.enabled_drivers:
         request.enabled_drivers.remove("amd")
         request.enabled_drivers.update(AMD_ENGINES)
@@ -936,6 +909,7 @@ def generate_config(args: argparse.Namespace) -> str:
         ),
         "",
         "# Loom architecture, artifact, execution, and importer scope.",
+        *("# " + line for line in configure_project.request_summary(request)),
         bazelrc_line(
             "build",
             NATIVE_LOOM_IMAGE_INPUT_FLAG + "=" + str(request.loom_image_input).lower(),

@@ -559,6 +559,46 @@ class ConfigureBazelTest(unittest.TestCase):
         self.assertIn("build --//loom/config/emit:enable=elf,spirv,vm", config)
         self.assertIn("build --//loom/config/execute:enable=iree_hal,iree_vm", config)
         self.assertIn("build --//loom/config/import:enable=", config)
+        self.assertIn("# Loom target selection: default", config)
+
+    def test_family_preset_replaces_the_default_fallback(self):
+        args = self.configure_bazel.parse_arguments(["-DLOOM_TARGET_ALL_CPU=ON"])
+        config = self.configure_bazel.generate_config(args)
+
+        self.assertIn("build --//loom/config/arch:enable=vm,x86", config)
+        self.assertIn("build --//loom/config/emit:enable=elf,vm", config)
+        self.assertIn("build --//loom/config/execute:enable=iree_hal,iree_vm", config)
+        self.assertIn("# Loom target selection: cpu", config)
+
+    def test_family_presets_compose_by_union(self):
+        args = self.configure_bazel.parse_arguments(
+            [
+                "-DLOOM_TARGET_ALL_CPU=ON",
+                "-DLOOM_TARGET_ALL_AMD_NPU=ON",
+            ]
+        )
+        config = self.configure_bazel.generate_config(args)
+
+        self.assertIn("build --//loom/config/arch:enable=aie2p,vm,x86", config)
+        self.assertIn("build --//loom/config/emit:enable=elf,vm", config)
+        self.assertIn("build --//loom/config/execute:enable=iree_hal,iree_vm", config)
+        self.assertIn("# Loom target selection: cpu,amd_npu", config)
+
+    def test_default_can_be_replaced_by_explicit_leaves(self):
+        args = self.configure_bazel.parse_arguments(
+            [
+                "-DLOOM_TARGET_DEFAULT=OFF",
+                "-DLOOM_ARCH_X86=ON",
+                "-DLOOM_EMIT_ELF=ON",
+                "-DLOOM_EXECUTE_IREE_HAL=ON",
+            ]
+        )
+        config = self.configure_bazel.generate_config(args)
+
+        self.assertIn("build --//loom/config/arch:enable=x86", config)
+        self.assertIn("build --//loom/config/emit:enable=elf", config)
+        self.assertIn("build --//loom/config/execute:enable=iree_hal", config)
+        self.assertIn("# Loom target selection: explicit leaves", config)
 
     def test_portable_wasm_options_configure_complete_scope(self):
         args = self.configure_bazel.parse_arguments(
@@ -596,26 +636,41 @@ class ConfigureBazelTest(unittest.TestCase):
         self.assertIn("build --//loom/config/emit:enable=elf,vm", config)
         self.assertIn("build --//loom/config/execute:enable=iree_hal,iree_vm", config)
 
-    def test_portable_loom_arch_option_removes_default_architecture(self):
-        args = self.configure_bazel.parse_arguments(["-DLOOM_ARCH_AMDGPU=OFF"])
+    def test_disabled_leaf_does_not_subtract_from_a_preset(self):
+        args = self.configure_bazel.parse_arguments(
+            [
+                "-DLOOM_ARCH_AMDGPU=OFF",
+                "-DLOOM_EMIT_SPIRV=OFF",
+                "-DLOOM_EXECUTE_IREE_HAL=OFF",
+            ]
+        )
         config = self.configure_bazel.generate_config(args)
 
         self.assertIn(
-            "build --//loom/config/arch:enable=aie2p,spirv,vm,x86",
+            "build --//loom/config/arch:enable=aie2p,amdgpu,spirv,vm,x86",
             config,
         )
+        self.assertIn("build --//loom/config/emit:enable=elf,spirv,vm", config)
+        self.assertIn("build --//loom/config/execute:enable=iree_hal,iree_vm", config)
 
-    def test_portable_loom_execute_option_configures_execute_scope(self):
-        args = self.configure_bazel.parse_arguments(["-DLOOM_EXECUTE_IREE_HAL=OFF"])
-        config = self.configure_bazel.generate_config(args)
+    def test_native_capability_lists_must_be_complete(self):
+        args = self.configure_bazel.parse_arguments(["--//loom/config/arch:enable=x86"])
 
-        self.assertIn("build --//loom/config/execute:enable=iree_vm", config)
+        with self.assertRaisesRegex(SystemExit, "must name complete"):
+            self.configure_bazel.generate_config(args)
 
-    def test_portable_loom_emit_option_removes_default_format(self):
-        args = self.configure_bazel.parse_arguments(["-DLOOM_EMIT_SPIRV=OFF"])
-        config = self.configure_bazel.generate_config(args)
+    def test_target_preset_conflicts_with_native_capability_lists(self):
+        args = self.configure_bazel.parse_arguments(
+            [
+                "-DLOOM_TARGET_ALL_CPU=ON",
+                "--//loom/config/arch:enable=x86",
+                "--//loom/config/emit:enable=elf",
+                "--//loom/config/execute:enable=iree_hal",
+            ]
+        )
 
-        self.assertIn("build --//loom/config/emit:enable=elf,vm", config)
+        with self.assertRaisesRegex(SystemExit, "Do not mix Loom target presets"):
+            self.configure_bazel.generate_config(args)
 
     def test_portable_loom_import_option_configures_importer_scope(self):
         args = self.configure_bazel.parse_arguments(["-DLOOM_IMPORT_TILELANG=ON"])
