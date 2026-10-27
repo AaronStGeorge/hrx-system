@@ -473,10 +473,9 @@ static inline void iree_tracing_context_message_literal(
 static inline void iree_tracing_context_message_dynamic(
     iree_tracing_context_t* context, uint64_t timestamp, const char* value,
     iree_host_size_t value_length) {}
-static void iree_tracing_context_plot_config(iree_tracing_context_t* context,
-                                             const char* name_literal,
-                                             uint8_t type, bool step, bool fill,
-                                             uint32_t color) {}
+static inline void iree_tracing_context_plot_config(
+    iree_tracing_context_t* context, const char* name_literal, uint8_t type,
+    bool step, bool fill, uint32_t color) {}
 static inline void iree_tracing_context_plot_value_i64(
     iree_tracing_context_t* context, uint64_t timestamp, const char* plot_name,
     int64_t value) {}
