@@ -27,6 +27,7 @@
 #include "loom/transforms/vector/packet_legalization.h"
 #include "loom/transforms/vector/packet_plan.h"
 #include "loom/transforms/vector/reduction_legalization.h"
+#include "loom/transforms/vector/signed_unary_legalization.h"
 #include "loom/transforms/vector/to_scalar.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/numeric_format.h"
@@ -1555,6 +1556,18 @@ static iree_status_t loom_vector_legalize_workgroup_reduce(
 }
 
 static const loom_target_legalizer_rule_t kVectorLegalizerRules[] = {
+    {
+        .root_kind = LOOM_OP_VECTOR_NEGI,
+        .legalize = loom_vector_legalize_signed_unary,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_ABSI,
+        .legalize = loom_vector_legalize_signed_unary,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_SIGNI,
+        .legalize = loom_vector_legalize_signed_unary,
+    },
     {
         .root_kind = LOOM_OP_KERNEL_WORKGROUP_REDUCE,
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REWRITE_LEGAL,
