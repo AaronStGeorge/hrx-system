@@ -75,9 +75,6 @@ loom_cc_benchmark(
         "pass_program_benchmark.cc",
         "targetless_compile_throughput_benchmark.cc",
     ],
-    args = [
-        "--benchmark_filter=Smoke",
-    ],
     deps = [
         ":benchmark_support",
         ":compile_throughput_benchmark_harness",
@@ -90,9 +87,6 @@ loom_cc_benchmark(
 loom_cc_benchmark(
     name = "link_throughput_benchmark",
     srcs = ["link_throughput_benchmark.cc"],
-    args = [
-        "--benchmark_filter=Smoke",
-    ],
     deps = [
         ":benchmark_support",
         "//loom/binding/c:loomc",
@@ -104,9 +98,6 @@ loom_cc_benchmark(
 loom_cc_benchmark(
     name = "link_request_benchmark",
     srcs = ["link_request_benchmark.cc"],
-    args = [
-        "--benchmark_filter=Smoke",
-    ],
     deps = [
         ":benchmark_support",
         "//loom/binding/c:loomc",
@@ -118,10 +109,6 @@ loom_cc_benchmark(
 loom_cc_benchmark(
     name = "link_sources_benchmark",
     srcs = ["link_sources_benchmark.cc"],
-    args = [
-        "--benchmark_filter=Bytecode/1/1/1",
-        "--benchmark_min_time=1x",
-    ],
     deps = [
         ":benchmark_support",
         "//loom/binding/c:loomc",
@@ -133,9 +120,6 @@ loom_cc_benchmark(
 loom_cc_benchmark(
     name = "product_throughput_benchmark",
     srcs = ["product_throughput_benchmark.cc"],
-    args = [
-        "--benchmark_filter=Smoke",
-    ],
     deps = [
         ":benchmark_support",
         "//loom/binding/c:loomc",
@@ -155,9 +139,6 @@ if(IREE_TARGET_HAS_THREADS)
 loom_cc_benchmark(
     name = "task_queue_benchmark",
     srcs = ["task_queue_benchmark.cc"],
-    args = [
-        "--benchmark_filter=BM_TaskQueueSubmitOnly/4/64",
-    ],
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c:task_pool",

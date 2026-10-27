@@ -135,8 +135,6 @@ loom_cc_benchmark(
     loom::util::fact_table
     loom::util::stream
     loom::verify
-  ARGS
-    "--benchmark_filter=BM_.*Encoding.*/32"
   TESTONLY
 )
 

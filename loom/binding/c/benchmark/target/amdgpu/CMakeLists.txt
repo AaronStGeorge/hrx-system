@@ -30,8 +30,6 @@ loom_cc_benchmark(
     loom::binding::c::benchmark::workload_compile_benchmark
     loom::binding::c::loomc
     loom::binding::c::target::amdgpu
-  ARGS
-    "--benchmark_filter=Smoke"
   TESTONLY
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"

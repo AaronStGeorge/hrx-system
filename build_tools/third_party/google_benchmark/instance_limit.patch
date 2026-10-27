@@ -1,0 +1,66 @@
+Generated benchmark smoke tests need to exercise every registered benchmark
+family without expanding every argument, thread, and iteration variant. Expose
+the family identity already assigned to each expanded instance as a general
+runner limit so callers do not need to duplicate benchmark names in build
+metadata.
+
+diff --git a/src/benchmark.cc b/src/benchmark.cc
+--- a/src/benchmark.cc
++++ b/src/benchmark.cc
+@@ -68,6 +68,10 @@
+ // linked into the binary are run.
+ BM_DEFINE_string(benchmark_filter, "");
+
++// The maximum number of matching instances to run from each registered
++// benchmark family. A value of zero runs every matching instance.
++BM_DEFINE_int32(benchmark_max_instances_per_family, 0);
++
+ // Specification of how long to run the benchmark.
+ //
+ // It can be either an exact number of iterations (specified as `<integer>x`),
+@@ -659,6 +663,18 @@
+     return 0;
+   }
+
++  if (FLAGS_benchmark_max_instances_per_family > 0) {
++    std::vector<internal::BenchmarkInstance> selected_benchmarks;
++    selected_benchmarks.reserve(benchmarks.size());
++    for (auto& benchmark : benchmarks) {
++      if (benchmark.per_family_instance_index() <
++          FLAGS_benchmark_max_instances_per_family) {
++        selected_benchmarks.push_back(std::move(benchmark));
++      }
++    }
++    benchmarks.swap(selected_benchmarks);
++  }
++
+   if (benchmarks.empty()) {
+     Err << "Failed to match any benchmarks against regex: " << spec << "\n";
+     Out.flush();
+@@ -757,6 +773,8 @@
+     if (ParseBoolFlag(argv[i], "benchmark_list_tests",
+                       &FLAGS_benchmark_list_tests) ||
+         ParseStringFlag(argv[i], "benchmark_filter", &FLAGS_benchmark_filter) ||
++        ParseInt32Flag(argv[i], "benchmark_max_instances_per_family",
++                       &FLAGS_benchmark_max_instances_per_family) ||
+         ParseStringFlag(argv[i], "benchmark_min_time",
+                         &FLAGS_benchmark_min_time) ||
+         ParseDoubleFlag(argv[i], "benchmark_min_warmup_time",
+@@ -800,6 +818,9 @@
+       PrintUsageAndExit();
+     }
+   }
++  if (FLAGS_benchmark_max_instances_per_family < 0) {
++    PrintUsageAndExit();
++  }
+   SetDefaultTimeUnitFromFlag(FLAGS_benchmark_time_unit);
+   if (FLAGS_benchmark_color.empty()) {
+     PrintUsageAndExit();
+@@ -877,6 +898,7 @@
+           "benchmark"
+           " [--benchmark_list_tests={true|false}]\n"
+           "          [--benchmark_filter=<regex>]\n"
++          "          [--benchmark_max_instances_per_family=<count>]\n"
+           "          [--benchmark_min_time=`<integer>x` OR `<float>s` ]\n"
+           "          [--benchmark_min_warmup_time=<min_warmup_time>]\n"
+           "          [--benchmark_repetitions=<num_repetitions>]\n"

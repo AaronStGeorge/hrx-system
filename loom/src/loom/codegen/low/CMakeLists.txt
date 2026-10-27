@@ -734,8 +734,6 @@ loom_cc_benchmark(
     loom::ops::test
     loom::target::test::low_registry
     loom::verify
-  ARGS
-    "--benchmark_filter=^LowAllocation/(linear/model/length:8/components:1/width:1|loop/allocation/length:8/components:1/width:1|loop_relocation/allocation/length:1/components:32/width:1|leased_alias_tree/allocation/length:32/components:1/width:1)"
   TESTONLY
 )
 
@@ -1205,8 +1203,6 @@ loom_cc_benchmark(
     loom::ops::test
     loom::ops::vector
     loom::util::fact_table
-  ARGS
-    "--benchmark_filter=^(BM_AnalyzeAndPlanSymbolicMemory/16/16|BM_AnalyzeAndPlanDigitMemory/(ConstantDivisor|RuntimeDivisor)/1/|BM_AnalyzeAndPlanRefinedMemory/1/8/1)"
   TESTONLY
 )
 

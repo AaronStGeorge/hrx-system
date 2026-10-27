@@ -838,7 +838,7 @@ def amd_client_steps(targets: tuple[str, ...], config: str | None) -> list[CiSte
             + ci_config.AMD_GPU_WINDOWS_TEST_TAG_FILTERS
         )
         native_options = (
-            ci_config.AMD_GPU_BAZEL_OPTIONS + amd_gpu_device_compiler_options()
+            ci_config.AMD_CLIENT_GPU_BAZEL_OPTIONS + amd_gpu_device_compiler_options()
         )
     additional_steps = []
     if sys.platform == "win32" and not targets:
@@ -879,11 +879,11 @@ def amdgpu_test_steps(
     scoped_targets = targets + ci_config.AMDGPU_BAZEL_TARGET_EXCLUDES
     bazel_options = (
         ci_config.AMDGPU_BAZEL_OPTIONS
-        + ci_config.AMD_GPU_BAZEL_OPTIONS
         + amd_gpu_device_compiler_options()
         + (
-            # Hardware fixtures and HIP images follow the execution selector;
-            # compiler-only coverage keeps its independent target selection.
+            # Compiler compatibility and hardware execution share one target
+            # selector so other architectures are rejected during analysis.
+            "--//loom/config/target/amdgpu:targets=" + target_selector,
             "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
             "--//runtime/src/iree/hal/drivers/amd/gpu:targets=" + target_selector,
             "--//runtime/config/hal:drivers=task,amd-gpu",
@@ -920,9 +920,14 @@ def amdgpu_windows_steps(
 ) -> list[CiStep]:
     options = (
         ci_config.AMDGPU_WINDOWS_BAZEL_OPTIONS
-        + ci_config.AMD_GPU_BAZEL_OPTIONS
         + amd_gpu_device_compiler_options()
-        + ("--//runtime/src/iree/hal/drivers/amd/gpu:targets=" + target_selector,)
+        + (
+            "--//loom/config/target/amdgpu:targets=" + target_selector,
+            # Loom's IREE HAL representation compatibility reads the shared
+            # AMDGPU selector even when native execution uses the AMD GPU HAL.
+            "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
+            "--//runtime/src/iree/hal/drivers/amd/gpu:targets=" + target_selector,
+        )
     )
     config_name = f" / {config.upper()}" if config is not None else ""
     # A required finite PM4 copy establishes the exact GPU and usable native
@@ -1291,8 +1296,7 @@ def cmake_amdgpu_steps(
                 "-DLOOM_BUILD=ON",
                 "-DIREE_HAL_AMDGPU_TARGETS=" + target_selector,
                 "-DIREE_HAL_AMD_GPU_TARGETS=" + target_selector,
-                "-DLOOM_TARGET_AMDGPU_TARGETS="
-                + ";".join(ci_config.AMD_GPU_LOOM_TARGETS),
+                "-DLOOM_TARGET_AMDGPU_TARGETS=" + target_selector,
             )
             + cmake_amdgpu_device_binary_options(),
         ),

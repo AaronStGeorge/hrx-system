@@ -85,8 +85,6 @@ loom_cc_benchmark(
     iree::base
     iree::testing::benchmark_main
     loom::binding::c::loomc
-  ARGS
-    "--benchmark_filter=Smoke"
   TESTONLY
 )
 
@@ -100,8 +98,6 @@ loom_cc_benchmark(
     iree::base
     iree::testing::benchmark_main
     loom::binding::c::loomc
-  ARGS
-    "--benchmark_filter=Smoke"
   TESTONLY
 )
 
@@ -115,8 +111,6 @@ loom_cc_benchmark(
     iree::base
     iree::testing::benchmark_main
     loom::binding::c::loomc
-  ARGS
-    "--benchmark_filter=Smoke"
   TESTONLY
 )
 
@@ -130,9 +124,6 @@ loom_cc_benchmark(
     iree::base
     iree::testing::benchmark_main
     loom::binding::c::loomc
-  ARGS
-    "--benchmark_filter=Bytecode/1/1/1"
-    "--benchmark_min_time=1x"
   TESTONLY
 )
 
@@ -147,8 +138,6 @@ loom_cc_benchmark(
     iree::testing::benchmark_main
     loom::binding::c::loomc
     loom::binding::c::target::cmd
-  ARGS
-    "--benchmark_filter=Smoke"
   TESTONLY
 )
 
@@ -166,8 +155,6 @@ loom_cc_benchmark(
     loom::binding::c::loomc
     loom::binding::c::task_pool
     loom::binding::c::task_queue
-  ARGS
-    "--benchmark_filter=BM_TaskQueueSubmitOnly/4/64"
   TESTONLY
 )
 

@@ -901,7 +901,6 @@ void RegisterAttentionCompileBenchmarks(const WorkloadCompileTarget& target,
                  "CanonicalizeLastUnrolled", {1, 2, 4, 8});
   register_phase(AttentionCompilePhase::kCseUnrolled, "CseUnrolled",
                  {1, 2, 4, 8});
-  register_phase(AttentionCompilePhase::kSourceLow, "SourceLowSmoke", {1});
   register_phase(AttentionCompilePhase::kSourceLow, "SourceLow", {1, 2, 4, 8});
   register_phase(AttentionCompilePhase::kPreparedLow, "PreparedLow", {1, 2, 4});
   register_phase(AttentionCompilePhase::kCompileAndEmit, "CompileAndEmit",
@@ -934,8 +933,6 @@ void RegisterInputScalingCompileBenchmarks(
     registration->UseRealTime();
   };
 
-  register_phase(InputScalingCompilePhase::kSourceLow, "SourceLowSmoke",
-                 {*input_sizes.begin()});
   register_phase(InputScalingCompilePhase::kSourceLow, "SourceLow",
                  input_sizes);
   register_phase(InputScalingCompilePhase::kPreparedLow, "PreparedLow",
@@ -978,20 +975,16 @@ void RegisterPipelineCompileBenchmarks(const WorkloadCompileTarget& target,
                  LOOMC_COMPILE_REPORT_MODE_NONE, {8, 16, 32, 64, 128, 256, 512},
                  false);
   register_phase(PipelineCompilePhase::kPipeline, "Transform",
-                 LOOMC_COMPILE_REPORT_MODE_NONE, {8, 16, 32, 64, 128, 256, 512},
-                 false);
-  register_phase(PipelineCompilePhase::kPipeline, "TransformSmoke",
-                 LOOMC_COMPILE_REPORT_MODE_NONE, {2}, false);
+                 LOOMC_COMPILE_REPORT_MODE_NONE,
+                 {2, 8, 16, 32, 64, 128, 256, 512}, false);
   register_phase(PipelineCompilePhase::kCompileAndEmit, "CompileAndEmit",
-                 LOOMC_COMPILE_REPORT_MODE_NONE, {8, 16, 32, 64}, false);
+                 LOOMC_COMPILE_REPORT_MODE_NONE, {2, 8, 16, 32, 64}, false);
   register_phase(PipelineCompilePhase::kCompileAndEmit, "CompileAndEmitSummary",
-                 LOOMC_COMPILE_REPORT_MODE_SUMMARY, {8, 16, 32, 64}, false);
+                 LOOMC_COMPILE_REPORT_MODE_SUMMARY, {2, 8, 16, 32, 64}, false);
   register_phase(PipelineCompilePhase::kCompileAndEmit, "CompileAndEmitDetails",
-                 LOOMC_COMPILE_REPORT_MODE_DETAILS, {8, 16, 32, 64}, false);
-  register_phase(PipelineCompilePhase::kCompileAndEmit, "CompileAndEmitSmoke",
-                 LOOMC_COMPILE_REPORT_MODE_DETAILS, {2}, false);
+                 LOOMC_COMPILE_REPORT_MODE_DETAILS, {2, 8, 16, 32, 64}, false);
   register_phase(PipelineCompilePhase::kCompileAndEmit, "ColdWorkspace",
-                 LOOMC_COMPILE_REPORT_MODE_NONE, {8, 16, 32, 64}, true);
+                 LOOMC_COMPILE_REPORT_MODE_NONE, {2, 8, 16, 32, 64}, true);
 }
 
 }  // namespace loomc::bench

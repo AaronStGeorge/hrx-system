@@ -79,7 +79,8 @@ def _test_cc_benchmark_smoke_test_args_and_tags(name, **kwargs):
 def _test_cc_benchmark_smoke_test_args_and_tags_impl(env, target):
     attrs = target[TestingAspectInfo].attrs
     expected_args = [
-        "--benchmark_min_time=0s",
+        "--benchmark_dry_run",
+        "--benchmark_max_instances_per_family=1",
         "--benchmark_filter=BM_Thing",
     ]
     if attrs.args != expected_args:

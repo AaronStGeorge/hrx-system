@@ -6,4 +6,7 @@
 
 # bazel-to-cmake: skip
 
-exports_files(["source_version.patch"])
+exports_files([
+    "instance_limit.patch",
+    "source_version.patch",
+])

@@ -217,10 +217,6 @@ void BM_PassProgramRun(benchmark::State& state) {
   BenchmarkPreparedExecution<Operation::kRun>(state);
 }
 BENCHMARK(BM_PassProgramRun)->Args({1, 16})->Args({32, 128});
-BENCHMARK(BM_PassProgramRun)
-    ->Name("BM_PassProgramRunSmoke")
-    ->Args({1, 16})
-    ->Iterations(1);
 
 void BM_PassProgramRunReport(benchmark::State& state) {
   BenchmarkPreparedExecution<Operation::kRunReport>(state);
@@ -236,19 +232,11 @@ void BM_CompileModule(benchmark::State& state) {
   BenchmarkPreparedExecution<Operation::kCompile>(state);
 }
 BENCHMARK(BM_CompileModule)->Args({1, 16})->Args({32, 128});
-BENCHMARK(BM_CompileModule)
-    ->Name("BM_CompileModuleSmoke")
-    ->Args({1, 16})
-    ->Iterations(1);
 
 void BM_ModuleVerify(benchmark::State& state) {
   BenchmarkPreparedExecution<Operation::kVerify>(state);
 }
 BENCHMARK(BM_ModuleVerify)->Args({1, 16})->Args({32, 128});
-BENCHMARK(BM_ModuleVerify)
-    ->Name("BM_ModuleVerifySmoke")
-    ->Args({1, 16})
-    ->Iterations(1);
 
 }  // namespace
 }  // namespace loomc::bench

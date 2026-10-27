@@ -10,17 +10,40 @@ import json
 import os
 import threading
 from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 from loom.model import ManifestError, ModelCard
 from loom.model.fetch import check_output, install, plan_fetch, plan_lock, update_lock
-from loom.model.fetch_main import main
+from loom.model.fetch_main import _cache_directory, main
 from loom.model.fetch_source import Document, FetchError
 from loom.model.fetch_storage import ContentCache
 from loom.model.http_test_server import serving_http
 from loom.model.lock import FileIdentity, ModelLock
+
+
+def test_platform_cache_directory_does_not_resolve_an_unused_home(tmp_path):
+    for platform_name, environment_name in (
+        ("nt", "LOCALAPPDATA"),
+        ("posix", "XDG_CACHE_HOME"),
+    ):
+        platform_cache = tmp_path / platform_name
+        with (
+            patch(
+                "loom.model.fetch_main.os",
+                SimpleNamespace(
+                    environ={environment_name: str(platform_cache)},
+                    name=platform_name,
+                ),
+            ),
+            patch(
+                "loom.model.fetch_main.Path.home",
+                side_effect=AssertionError("unused home directory lookup"),
+            ),
+        ):
+            assert _cache_directory() == platform_cache / "loom"
 
 
 def test_catalog_receipt_is_owned_verified_and_published_with_the_card(tmp_path):

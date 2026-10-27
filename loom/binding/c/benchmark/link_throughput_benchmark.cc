@@ -612,24 +612,6 @@ static void LinkScales(benchmark::Benchmark* benchmark) {
   benchmark->Args({4096, 512, 388});
 }
 
-static void BM_LinkIndexBuild_Smoke(benchmark::State& state) {
-  BM_LinkIndexBuild(state);
-}
-
-static void BM_LinkIndexBuildModule_Smoke(benchmark::State& state) {
-  BM_LinkIndexBuildModule(state);
-}
-
-static void BM_LinkIndexBuildBytecode_Smoke(benchmark::State& state) {
-  BM_LinkIndexBuildBytecode(state);
-}
-
-static void BM_LinkBatch_Smoke(benchmark::State& state) { BM_LinkBatch(state); }
-
-static void BM_LinkBatchBytecode_Smoke(benchmark::State& state) {
-  BM_LinkBatchBytecode(state);
-}
-
 BENCHMARK(BM_LinkIndexBuild)
     ->Apply(CatalogScales)
     ->ArgNames({"catalog_roots", "values_per_root"});
@@ -646,30 +628,16 @@ BENCHMARK(BM_LinkBatchBytecode)
     ->Apply(LinkScales)
     ->ArgNames({"catalog_roots", "values_per_root", "links_per_batch"});
 BENCHMARK(BM_IndexOnceAndLinkBatch)
+    ->Args({16, 16, 4})
     ->Args({512, 256, 388})
     ->Args({4096, 512, 80})
     ->Args({4096, 512, 388})
     ->ArgNames({"catalog_roots", "values_per_root", "links_per_batch"});
 BENCHMARK(BM_IndexOnceAndLinkBatchBytecode)
+    ->Args({16, 16, 4})
     ->Args({512, 256, 388})
     ->Args({4096, 512, 80})
     ->Args({4096, 512, 388})
-    ->ArgNames({"catalog_roots", "values_per_root", "links_per_batch"});
-
-BENCHMARK(BM_LinkIndexBuild_Smoke)
-    ->Args({16, 16})
-    ->ArgNames({"catalog_roots", "values_per_root"});
-BENCHMARK(BM_LinkIndexBuildModule_Smoke)
-    ->Args({16, 16})
-    ->ArgNames({"catalog_roots", "values_per_root"});
-BENCHMARK(BM_LinkIndexBuildBytecode_Smoke)
-    ->Args({16, 16})
-    ->ArgNames({"catalog_roots", "values_per_root"});
-BENCHMARK(BM_LinkBatch_Smoke)
-    ->Args({16, 16, 4})
-    ->ArgNames({"catalog_roots", "values_per_root", "links_per_batch"});
-BENCHMARK(BM_LinkBatchBytecode_Smoke)
-    ->Args({16, 16, 4})
     ->ArgNames({"catalog_roots", "values_per_root", "links_per_batch"});
 
 }  // namespace
