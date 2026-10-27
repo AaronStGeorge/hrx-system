@@ -38,6 +38,10 @@
 #define TRACY_NO_VERIFY 1
 #endif  // NDEBUG
 
+// Virtualized hosts may not expose invariant TSC. Keep the hardware timer when
+// available and use Tracy's OS timer otherwise instead of aborting at startup.
+#define TRACY_TIMER_FALLBACK 1
+
 // Force callstack capture on all zones (even those without the C suffix).
 #if (IREE_TRACING_FEATURES &                             \
      IREE_TRACING_FEATURE_INSTRUMENTATION_CALLSTACKS) || \
