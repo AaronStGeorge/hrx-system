@@ -428,6 +428,13 @@ Loom verifies and shares those bytes without another payload cache. HTTP transfe
 validate status, framing, byte count, and locked hash; redirect destinations never
 replace logical source coordinates.
 
+Native transfer and cache-write failures report the selected repository file,
+the SDK cache directory, and the provider's error. Credentials and signed URLs are redacted.
+The SDK cache can be on a different volume from `--output`; its location follows
+the Hugging Face configuration, including `HF_HUB_CACHE`. A failed download does
+not clear that cache or switch transports, so another invocation can reuse the
+SDK's resumable data.
+
 HF `blob` and `resolve` model-card URLs resolve one immutable repository snapshot.
 The sibling lock and card-relative files retain that snapshot, including cached
 offline reads. Named floating HF origins resolve once per operation, and lock

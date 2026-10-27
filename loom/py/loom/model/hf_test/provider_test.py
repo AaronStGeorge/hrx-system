@@ -21,7 +21,60 @@ from loom.model.fetch_hf import (
     hf_url_source,
 )
 from loom.model.fetch_source import FetchError
-from loom.model.hf_test.hub import running_hub
+from loom.model.fetch_transfer import run_transfer
+from loom.model.hf_test.hub import failed_sdk_download, running_hub
+
+
+@pytest.mark.parametrize(
+    ("message", "reason", "secrets"),
+    [
+        (
+            "Data processing error: IO Error: No space left on device (os error 28)",
+            "No space left on device (os error 28)",
+            [],
+        ),
+        (
+            "Reqwest(reqwest::Error { kind: Status(403), url: "
+            '"https://transfer.example/blob?Policy=private-policy&Signature=private-signature", '
+            "source: TimedOut }) credential=fixture-secret",
+            "source: TimedOut",
+            [
+                "transfer.example",
+                "private-policy",
+                "private-signature",
+                "fixture-secret",
+            ],
+        ),
+        (
+            "HTTP status client error (401 Unauthorized) "
+            "Authorization: Bearer private-xet-token; token=hf_privatehubtoken",
+            "401 Unauthorized",
+            ["private-xet-token", "hf_privatehubtoken"],
+        ),
+        (
+            r"IO error: request to https:\/\/cdn.example\/blob?Signature=private-signature "
+            "failed; Authorization: Basic private-base64; token=hf_oauth_private",
+            "IO error",
+            ["cdn.example", "private-signature", "private-base64", "hf_oauth_private"],
+        ),
+    ],
+)
+def test_native_download_failure_survives_worker_without_secrets(
+    tmp_path, message, reason, secrets
+):
+    cache_directory = str(tmp_path / "hf-cache")
+    with pytest.raises(FetchError) as failure:
+        run_transfer(
+            failed_sdk_download,
+            (message, "fixture-secret", cache_directory),
+            threading.Event(),
+        )
+    diagnostic = str(failure.value)
+    assert reason in diagnostic
+    assert "fixture/model/parameter/model.gguf" in diagnostic
+    assert cache_directory in diagnostic
+    assert all(secret not in diagnostic for secret in secrets)
+    assert "unexpected transfer failure" not in diagnostic
 
 
 def test_download_progress_uses_real_provider_counters_without_logs(tmp_path):

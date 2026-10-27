@@ -19,7 +19,22 @@ from urllib.parse import unquote, urlsplit
 
 import huggingface_hub.constants as hf_constants
 
+from loom.model.fetch_hf import _hub_request
 from loom.model.http_test_server import serving_http
+
+
+def failed_sdk_download(message, token, cache_directory):
+    """Injects a native SDK error inside the real provider's owned interpreter."""
+    with patch("huggingface_hub.hf_hub_download", side_effect=RuntimeError(message)):
+        return _hub_request(
+            "download",
+            {
+                "repo_id": "fixture/model",
+                "filename": "parameter/model.gguf",
+                "token": token,
+                "cache_dir": cache_directory,
+            },
+        )
 
 
 class Hub:
