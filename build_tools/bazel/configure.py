@@ -477,13 +477,12 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         ),
         epilog="""Examples:
   python build_tools/bazel/configure.py
-  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON
-  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
-  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_DEPENDENCY_MODE=pinned
-  python build_tools/bazel/configure.py --//runtime/config/hal:drivers=amdgpu,task --repo_env=IREE_ROCM_PATH=/opt/rocm
+  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMD_XDNA=OFF
+  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMD=OFF
+  python build_tools/bazel/configure.py --//runtime/config/hal:drivers=amd-gpu,task
   python build_tools/bazel/configure.py -DAMDF_BUILD=ON -DAMDF_FAMILY_CDNA=OFF
   python build_tools/bazel/configure.py --config=loom-target-cpu
-  python build_tools/bazel/configure.py --config=loom-target-amd-gpu -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
+  python build_tools/bazel/configure.py --config=loom-target-amd-gpu
   python build_tools/bazel/configure.py --config=loom-target-all
   python build_tools/bazel/configure.py -DLOOM_IMPORT_TILELANG=ON
 

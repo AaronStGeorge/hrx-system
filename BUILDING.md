@@ -108,7 +108,7 @@ iree-bazel-build //runtime/...
 iree-bazel-cquery 'kind(cc_library, //runtime/...)'
 iree-bazel-info execution_root
 iree-bazel-run //runtime/src/iree/base:allocator_benchmark
-iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON
+iree-cmake-configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
 iree-cmake-test -R hrx
 ```
 
@@ -701,7 +701,11 @@ package mode; without a ROCm path it inherits the global mode. To consume a
 ROCm or TheRock SDK while keeping other source dependencies pinned, set
 `IREE_ROCM_PATH` and leave `IREE_DEPENDENCY_MODE=pinned`.
 
-### ROCm
+### Legacy ROCr HAL and ROCm
+
+The native AMD GPU HAL is enabled by default and requires neither ROCr nor a
+ROCm SDK. This section applies only to the legacy `legacy-amdgpu` HAL and to
+development that explicitly needs ROCm device tooling.
 
 Pinned mode is the default. It lets AMDGPU host-side code compile without a
 ROCm/TheRock root; Bazel writes `IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=none` when no
@@ -888,23 +892,22 @@ python dev.py cmake configure \
 ```
 
 Execution options describe the runtime substrate available to Loom tools, not a
-compilation target by themselves. For example, AMDGPU execution needs the
-AMDGPU Loom target, the IREE HAL execution substrate, and the AMDGPU runtime
-HAL driver:
+compilation target by themselves. The AMD GPU preset includes HAL execution,
+and ordinary builds already include the native AMD GPU HAL. A build narrowed to
+one GPU processor uses:
 
 ```bash
 python dev.py bazel configure \
   --config=loom-target-amd-gpu \
-  -DIREE_HAL_DRIVER_AMDGPU=ON \
-  --//runtime/src/iree/hal/drivers/amdgpu:targets=gfx942 \
-  --//loom/config/arch/amdgpu:targets=gfx942 \
-  -DIREE_ROCM_PATH=/opt/rocm
+  --//runtime/src/iree/hal/drivers/amd/gpu:targets=gfx942 \
+  --//loom/config/arch/amdgpu:targets=gfx942
 ```
 
-Compiling for AMDGPU does not require a GPU. Enable the runtime HAL only when
-execution support is needed. The architecture, emission, and execution lists
-remain independent so source-to-low tools, offline artifact producers, and
-runtime-enabled tools can select only the capabilities they consume.
+Use `--device=amdgpu`, `--device=rdna`, or `--device=cdna` to select the native
+driver at runtime. Compiling for AMDGPU does not require a GPU. The architecture,
+emission, execution, and runtime-driver selections remain independent so
+source-to-low tools, offline artifact producers, and runtime-enabled tools can
+select only the capabilities they consume.
 
 ### Loom importers
 

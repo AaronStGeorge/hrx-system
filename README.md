@@ -41,6 +41,10 @@ and install libraries under `lib`.
 The blessed local command path uses `dev.py` to keep setup, hook configuration,
 and build-lane selection consistent:
 
+The native AMD GPU and XDNA HAL engines are enabled by default. The public HRX
+compatibility distribution below additionally enables the legacy ROCr HAL
+because LibHRX GPU execution currently depends on it.
+
 ```bash
 python dev.py cmake setup
 python dev.py cmake configure \
@@ -104,7 +108,7 @@ Useful options:
 | `LIBHRX_BUILD_PASSTHROUGH` | `ON` on Linux, `OFF` elsewhere | Build HIP passthrough/interception tools. |
 | `IREE_BUILD_TESTS` | ON | Build IREE runtime tests and CTS targets. |
 | `HRX_INSTALL_TESTS` | `${IREE_BUILD_TESTS}` | Install a relocatable CTest tree. |
-| `IREE_HAL_DRIVER_AMDGPU` | ON | Build the AMDGPU runtime HAL driver. |
+| `IREE_HAL_DRIVER_AMDGPU` | OFF | Build the legacy ROCr HAL driver used by LibHRX GPU compatibility. |
 | `IREE_ROCM_DEPENDENCY_MODE` | empty | Overrides ROCm header dependency resolution: `pinned`, `package`, or `auto`; empty selects package mode when `IREE_ROCM_PATH` is set. |
 | `IREE_ROCM_PATH` | empty | ROCm or TheRock SDK root used for package-mode ROCm headers and device tooling. |
 | `IREE_HAL_AMDGPU_TARGETS` | checked-in AMDGPU generic set | AMDGPU target selectors supported by the runtime build. |
