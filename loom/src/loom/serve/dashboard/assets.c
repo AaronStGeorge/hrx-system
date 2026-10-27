@@ -34,6 +34,64 @@ bool loom_serve_dashboard_handles(iree_string_view_t target) {
          loom_serve_dashboard_lookup(target) != NULL;
 }
 
+// Only a positive RFC 9110 qvalue permits the compressed representation.
+// Invalid weights cannot accidentally turn an explicit refusal into acceptance.
+static bool loom_serve_dashboard_positive_quality(iree_string_view_t value) {
+  if (!value.size || value.size > 5 ||
+      (value.data[0] != '0' && value.data[0] != '1') ||
+      (value.size > 1 && value.data[1] != '.')) {
+    return false;
+  }
+  bool positive = value.data[0] == '1';
+  for (iree_host_size_t i = 2; i < value.size; ++i) {
+    const char digit = value.data[i];
+    if (digit < '0' || digit > '9' || (value.data[0] == '1' && digit != '0')) {
+      return false;
+    }
+    positive |= digit != '0';
+  }
+  return positive;
+}
+
+static bool loom_serve_dashboard_accepts_gzip(
+    const loom_serve_http_request_t* request) {
+  iree_string_view_t remaining;
+  if (!loom_serve_http_request_lookup_header(
+          request, IREE_SV("Accept-Encoding"), &remaining)) {
+    return true;
+  }
+  // An explicit coding overrides '*'; a refusal wins among repeated entries.
+  int gzip = -1;
+  int wildcard = -1;
+  while (remaining.size) {
+    iree_string_view_t entry, coding, weight;
+    iree_string_view_split(remaining, ',', &entry, &remaining);
+    const bool has_weight =
+        iree_string_view_split(entry, ';', &coding, &weight) >= 0;
+    coding = iree_string_view_trim(coding);
+    int* accepted = NULL;
+    if (iree_string_view_equal_case(coding, IREE_SV("gzip")) ||
+        iree_string_view_equal_case(coding, IREE_SV("x-gzip"))) {
+      accepted = &gzip;
+    } else if (iree_string_view_equal(coding, IREE_SV("*"))) {
+      accepted = &wildcard;
+    } else {
+      continue;
+    }
+    bool positive = true;
+    if (has_weight) {
+      iree_string_view_t name, value;
+      iree_string_view_split(weight, '=', &name, &value);
+      positive =
+          iree_string_view_equal_case(iree_string_view_trim(name),
+                                      IREE_SV("q")) &&
+          loom_serve_dashboard_positive_quality(iree_string_view_trim(value));
+    }
+    *accepted = positive && *accepted != 0;
+  }
+  return (gzip >= 0 ? gzip : wildcard) > 0;
+}
+
 typedef struct loom_serve_dashboard_response_t {
   // Stack header borrowed by the synchronous generated-send writer.
   iree_string_view_t header;
@@ -52,13 +110,22 @@ static iree_status_t loom_serve_dashboard_write(void* self,
 
 void loom_serve_dashboard_send(loom_serve_http_server_t* server,
                                loom_serve_http_connection_t* connection,
-                               iree_string_view_t target) {
+                               const loom_serve_http_request_t* request) {
+  const iree_string_view_t target = request->target;
   if (iree_string_view_equal(target, IREE_SV("/")) ||
       iree_string_view_equal(target, IREE_SV("/dashboard"))) {
     loom_serve_http_response_send(
         server, connection,
         IREE_SV("HTTP/1.1 302 Found\r\nLocation: ./dashboard/\r\n"
                 "Content-Length: 0\r\nConnection: close\r\n\r\n"));
+    return;
+  }
+  if (!loom_serve_dashboard_accepts_gzip(request)) {
+    loom_serve_http_response_send(
+        server, connection,
+        IREE_SV("HTTP/1.1 406 Not Acceptable\r\nContent-Length: 0\r\n"
+                "Vary: Accept-Encoding\r\nCache-Control: no-cache\r\n"
+                "Connection: close\r\n\r\n"));
     return;
   }
   const iree_file_toc_t* file = loom_serve_dashboard_lookup(target);
@@ -74,6 +141,7 @@ void loom_serve_dashboard_send(loom_serve_http_server_t* server,
   iree_status_t status = iree_string_builder_append_format(
       &output,
       "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
+      "Content-Encoding: gzip\r\nVary: Accept-Encoding\r\n"
       "Cache-Control: no-cache\r\nX-Content-Type-Options: nosniff\r\n"
       "Content-Security-Policy: default-src 'none'; script-src 'self'; "
       "style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors "

@@ -260,6 +260,7 @@ loom_cc_test(
     iree::testing::gtest_main
     iree::tokenizer
     iree::tokenizer::format::huggingface::tokenizer_json
+    loom::serve::dashboard::files
     loom::serve::runtime::host::wake
     loom::serve::runtime::program::variant_pool
     loom::serve::telemetry::latency

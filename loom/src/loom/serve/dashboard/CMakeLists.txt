@@ -10,13 +10,112 @@
 iree_add_all_subdirs()
 
 if(LOOM_TARGET_ARCH_VM)
+iree_py_library(
+  NAME
+    gzip_file
+  MAIN
+    "gzip_file.py"
+  SRCS
+    "gzip_file.py"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_generated_file(
+  NAME
+    gzip_app_js
+  GENERATOR
+    ::gzip_file
+  OUTPUT
+    "gzip/app.js"
+  OUTPUT_FLAG
+    "--output"
+  ARGS
+    "--input=${PROJECT_SOURCE_DIR}/loom/src/loom/serve/dashboard/app.js"
+  INPUTS
+    "app.js"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_generated_file(
+  NAME
+    gzip_index_html
+  GENERATOR
+    ::gzip_file
+  OUTPUT
+    "gzip/index.html"
+  OUTPUT_FLAG
+    "--output"
+  ARGS
+    "--input=${PROJECT_SOURCE_DIR}/loom/src/loom/serve/dashboard/index.html"
+  INPUTS
+    "index.html"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_generated_file(
+  NAME
+    gzip_style_css
+  GENERATOR
+    ::gzip_file
+  OUTPUT
+    "gzip/style.css"
+  OUTPUT_FLAG
+    "--output"
+  ARGS
+    "--input=${PROJECT_SOURCE_DIR}/loom/src/loom/serve/dashboard/style.css"
+  INPUTS
+    "style.css"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+iree_py_test(
+  NAME
+    gzip_file_test
+  MAIN
+    "gzip_file_test.py"
+  SRCS
+    "gzip_file.py"
+    "gzip_file_test.py"
+  ARGS
+    "--asset"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/dashboard/app.js}}"
+    "{{${CMAKE_CURRENT_BINARY_DIR}/gzip/app.js}}"
+    "--asset"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/dashboard/index.html}}"
+    "{{${CMAKE_CURRENT_BINARY_DIR}/gzip/index.html}}"
+    "--asset"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/dashboard/style.css}}"
+    "{{${CMAKE_CURRENT_BINARY_DIR}/gzip/style.css}}"
+  DATA
+    "${CMAKE_CURRENT_BINARY_DIR}/gzip/app.js"
+    "${CMAKE_CURRENT_BINARY_DIR}/gzip/index.html"
+    "${CMAKE_CURRENT_BINARY_DIR}/gzip/style.css"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/dashboard/app.js"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/dashboard/index.html"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/dashboard/style.css"
+  IMPORTS
+    "."
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
 iree_c_embed_data(
   NAME
     files
   SRCS
-    "app.js"
-    "index.html"
-    "style.css"
+    "${CMAKE_CURRENT_BINARY_DIR}/gzip/app.js"
+    "${CMAKE_CURRENT_BINARY_DIR}/gzip/index.html"
+    "${CMAKE_CURRENT_BINARY_DIR}/gzip/style.css"
   C_FILE_OUTPUT
     "files.c"
   H_FILE_OUTPUT
@@ -41,6 +140,7 @@ loom_cc_library(
     iree::base
     iree::net::carrier
     loom::serve::server::http::response
+    loom::serve::transport::http::request
     loom::serve::transport::http::server
   PUBLIC
 )

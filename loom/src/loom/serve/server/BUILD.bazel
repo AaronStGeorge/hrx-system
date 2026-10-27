@@ -223,6 +223,7 @@ loom_cc_test(
     deps = [
         ":registry",
         ":router",
+        "//loom/src/loom/serve/dashboard:files",
         "//loom/src/loom/serve/runtime/host:wake",
         "//loom/src/loom/serve/runtime/program:variant_pool",
         "//loom/src/loom/serve/telemetry:latency",

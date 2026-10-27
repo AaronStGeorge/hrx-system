@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_config_compatible_with", "loom_generated_source")
+load("//loom/build_tools/bazel:python.bzl", "loom_py_binary", "loom_py_test")
 
 package(
     default_visibility = ["//loom/src/loom/serve:implementation"],
@@ -10,13 +11,54 @@ package(
     licenses = ["notice"],
 )
 
+_ASSETS = [
+    "app.js",
+    "index.html",
+    "style.css",
+]
+
+loom_py_binary(
+    name = "gzip_file",
+    srcs = ["gzip_file.py"],
+    main = "gzip_file.py",
+    visibility = ["//visibility:private"],
+)
+
+[
+    loom_generated_source(
+        name = "gzip_" + asset.replace(".", "_"),
+        args = ["--input=$(location " + asset + ")"],
+        generator = ":gzip_file",
+        inputs = [asset],
+        output = "gzip/" + asset,
+        output_flag = "--output",
+    )
+    for asset in _ASSETS
+]
+
+loom_py_test(
+    name = "gzip_file_test",
+    srcs = [
+        "gzip_file.py",
+        "gzip_file_test.py",
+    ],
+    args = [
+        argument
+        for asset in _ASSETS
+        for argument in [
+            "--asset",
+            "$(location " + asset + ")",
+            "$(location :gzip/" + asset + ")",
+        ]
+    ],
+    data = _ASSETS + [":gzip/" + asset for asset in _ASSETS],
+    imports = ["."],
+    main = "gzip_file_test.py",
+)
+
 iree_c_embed_data(
     name = "files",
-    srcs = [
-        "app.js",
-        "index.html",
-        "style.css",
-    ],
+    srcs = [":gzip/" + asset for asset in _ASSETS],
     c_file_output = "files.c",
     flatten = True,
     h_file_output = "files.h",
@@ -31,6 +73,7 @@ loom_cc_library(
     deps = [
         ":files",
         "//loom/src/loom/serve/server/http:response",
+        "//loom/src/loom/serve/transport/http:request",
         "//loom/src/loom/serve/transport/http:server",
         "//runtime/src/iree/base",
         "//runtime/src/iree/net:carrier",

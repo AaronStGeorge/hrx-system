@@ -6,6 +6,7 @@
 
 #include <tuple>
 
+#include "loom/serve/dashboard/files.h"
 #include "loom/serve/server/router_test_fixture.h"
 #include "loom/serve/transport/http/multipart.h"
 
@@ -297,10 +298,11 @@ TEST_P(HttpRouterTest, DashboardAssetsUseTheExistingCarrierAndRelativePaths) {
     EXPECT_EQ(response.find("HTTP/1.1 302"), 0u);
     EXPECT_NE(response.find("Location: ./dashboard/\r\n"), std::string::npos);
   }
-  for (const auto& [path, type, marker] :
-       {std::tuple{"/dashboard/", "text/html", "href=\"style.css\""},
-        std::tuple{"/dashboard/style.css", "text/css", "--cyan:"},
-        std::tuple{"/dashboard/app.js", "text/javascript", "class Ring"}}) {
+  for (const auto& [path, type, name] :
+       {std::tuple{"/dashboard/", "text/html", "index.html"},
+        std::tuple{"/dashboard/index.html", "text/html", "index.html"},
+        std::tuple{"/dashboard/style.css", "text/css", "style.css"},
+        std::tuple{"/dashboard/app.js", "text/javascript", "app.js"}}) {
     SCOPED_TRACE(path);
     const auto response = Read(Send("GET", path));
     EXPECT_EQ(response.find("HTTP/1.1 200"), 0u);
@@ -308,14 +310,76 @@ TEST_P(HttpRouterTest, DashboardAssetsUseTheExistingCarrierAndRelativePaths) {
               std::string::npos);
     EXPECT_NE(response.find("Content-Security-Policy: default-src 'none';"),
               std::string::npos);
-    EXPECT_NE(response.find(marker), std::string::npos);
+    EXPECT_NE(response.find("Content-Encoding: gzip\r\n"), std::string::npos);
+    EXPECT_NE(response.find("Vary: Accept-Encoding\r\n"), std::string::npos);
     const auto header = response.find("Content-Length: ");
     ASSERT_NE(header, std::string::npos);
-    const auto body = response.find("\r\n\r\n") + 4;
+    const auto separator = response.find("\r\n\r\n");
+    ASSERT_NE(separator, std::string::npos);
+    const auto body = separator + 4;
     EXPECT_EQ(std::stoul(response.substr(header + 16)), response.size() - body);
+    const iree_file_toc_t* file = nullptr;
+    const auto* files = loom_serve_dashboard_files_create();
+    for (size_t i = 0; i < loom_serve_dashboard_files_size(); ++i) {
+      if (std::string(files[i].name) == name) {
+        file = &files[i];
+      }
+    }
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(
+        response.substr(body),
+        std::string(reinterpret_cast<const char*>(file->data), file->size));
+    EXPECT_EQ(response.substr(body, 3), std::string("\x1f\x8b\x08", 3));
   }
   EXPECT_EQ(Read(Send("GET", "/dashboard/../app.js")).find("HTTP/1.1 404"), 0u);
   EXPECT_EQ(Read(Send("GET", "/healthz")).find("HTTP/1.1 200"), 0u);
+}
+
+TEST_P(HttpRouterTest, DashboardNegotiatesItsCompressedRepresentation) {
+  for (const auto& [value, accepted] : {
+           std::pair{"gzip", true},
+           std::pair{"br, gzip, deflate", true},
+           std::pair{"GZip ; Q=0.001", true},
+           std::pair{"gzip;q=1.000", true},
+           std::pair{"gzip;q=1.", true},
+           std::pair{"x-gzip", true},
+           std::pair{"*", true},
+           std::pair{"*;q=0.5", true},
+           std::pair{"gzip;q=0.1, *;q=0", true},
+           std::pair{"*;q=0, gzip;q=0.1", true},
+           std::pair{"identity;q=1, gzip;q=0.1", true},
+           std::pair{", gzip, ,", true},
+           std::pair{"", false},
+           std::pair{"identity", false},
+           std::pair{"br, deflate", false},
+           std::pair{"not-gzip", false},
+           std::pair{"gzip;q=0", false},
+           std::pair{"gzip;q=0.", false},
+           std::pair{"gzip;q=0.000", false},
+           std::pair{"gzip;q=0, *;q=1", false},
+           std::pair{"*;q=1, gzip;q=0", false},
+           std::pair{"*;q=0", false},
+           std::pair{"gzip, gzip;q=0", false},
+           std::pair{"gzip;q=0, gzip", false},
+           std::pair{"gzip;q=", false},
+           std::pair{"gzip;q=1.001", false},
+           std::pair{"gzip;q=0.0001", false},
+           std::pair{"gzip;q=2", false},
+           std::pair{"gzip;q=-1", false},
+           std::pair{"gzip;q=nan", false},
+           std::pair{"gzip;q=0x1", false},
+           std::pair{"gzip;q=1;other=1", false},
+           std::pair{"gzip;other=1", false},
+       }) {
+    SCOPED_TRACE(value);
+    const auto response =
+        Read(Send("GET", "/dashboard/", "",
+                  std::string("aCcEpT-eNcOdInG: ") + value + "\r\n"));
+    EXPECT_EQ(response.find(accepted ? "HTTP/1.1 200" : "HTTP/1.1 406"), 0u);
+    EXPECT_NE(response.find("Vary: Accept-Encoding\r\n"), std::string::npos);
+    EXPECT_EQ(response.find("Content-Encoding: gzip\r\n") != std::string::npos,
+              accepted);
+  }
 }
 
 TEST_P(HttpRouterTest, InvalidLiveAcknowledgementOnlyClosesItsPeer) {
