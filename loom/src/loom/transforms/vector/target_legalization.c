@@ -1619,6 +1619,11 @@ static const loom_target_legalizer_rule_t kVectorLegalizerRules[] = {
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
         .legalize = loom_vector_legalize_f32_extrema,
     },
+    {
+        .root_kind = LOOM_OP_VECTOR_SUBI,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+        .legalize = loom_vector_legalize_descriptor,
+    },
     // Combining operations share one complete reference family. Native target
     // contracts retain precedence; explicit rejection selects the ordinary
     // scalar lane recipe. Keep this list aligned with loom_combining_kind_t.

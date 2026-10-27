@@ -54,6 +54,20 @@ class VectorElement:
 
 
 @dataclass(frozen=True, slots=True)
+class VectorUnaryFamily:
+    """One source unary operation and its native packed instruction family."""
+
+    # Source integer operation selected by this family.
+    source_operation: str
+    # Native instruction spelling shared by descriptors and contracts.
+    mnemonic: str
+    # Native descriptor semantics.
+    semantic: str
+    # Logical integer lane type.
+    element: VectorElement
+
+
+@dataclass(frozen=True, slots=True)
 class VectorBinaryFamily:
     source_operation: str
     mnemonic: str
@@ -275,6 +289,14 @@ X86_VECTOR_STORAGE_FAMILIES = (
 )
 
 AVX2_SHUFFLE_FAMILIES = X86_VECTOR_STORAGE_FAMILIES
+
+# Negation and sign have shared vector compositions. Packed absolute value is
+# directly native for byte through dword lanes on AVX2, and qwords on AVX-512.
+AVX512_INTEGER_UNARY_FAMILIES = tuple(
+    VectorUnaryFamily("absi", f"vpabs{suffix}", "integer.abs", element)
+    for element, suffix in zip(INTEGER_ELEMENTS, ("b", "w", "d", "q"), strict=True)
+)
+AVX2_INTEGER_UNARY_FAMILIES = AVX512_INTEGER_UNARY_FAMILIES[:3]
 
 AVX2_INTEGER_BINARY_FAMILIES = (
     *(

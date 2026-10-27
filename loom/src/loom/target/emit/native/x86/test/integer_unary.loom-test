@@ -1,0 +1,75 @@
+// RUN: emit x86-native-bytes @absolute_xmm
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) @absolute_xmm(%input: reg<x86.xmm>) -> (reg<x86.xmm>) asm {
+  %bytes = vpabsb.xmm %input
+  %words = vpabsw.xmm %bytes
+  %dwords = vpabsd.xmm %words
+  return %dwords
+}
+
+// ----
+code: c4 e2 79 1c c0 c4 e2 79 1d c0 c4 e2 79 1e c0 c3
+
+// ====
+
+// RUN: emit x86-native-bytes @absolute_ymm
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) @absolute_ymm(%input: reg<x86.ymm>) -> (reg<x86.ymm>) asm {
+  %bytes = vpabsb.ymm %input
+  %words = vpabsw.ymm %bytes
+  %dwords = vpabsd.ymm %words
+  return %dwords
+}
+
+// ----
+code: c4 e2 7d 1c c0 c4 e2 7d 1d c0 c4 e2 7d 1e c0 c3
+
+// ====
+
+// RUN: emit x86-native-bytes @absolute_evex_xmm
+x86.target<avx512> @target
+
+low.func.def target<x86.avx512.core>(@target) @absolute_evex_xmm(%input: reg<x86.xmm>) -> (reg<x86.xmm>) asm {
+  %bytes = avx512.vpabsb.xmm %input
+  %words = avx512.vpabsw.xmm %bytes
+  %dwords = avx512.vpabsd.xmm %words
+  %qwords = avx512.vpabsq.xmm %dwords
+  return %qwords
+}
+
+// ----
+code: 62 f2 7d 08 1c c0 62 f2 7d 08 1d c0 62 f2 7d 08 1e c0 62 f2 fd 08 1f c0 c3
+
+// ====
+
+// RUN: emit x86-native-bytes @absolute_evex_ymm
+x86.target<avx512> @target
+
+low.func.def target<x86.avx512.core>(@target) @absolute_evex_ymm(%input: reg<x86.ymm>) -> (reg<x86.ymm>) asm {
+  %bytes = avx512.vpabsb.ymm %input
+  %words = avx512.vpabsw.ymm %bytes
+  %dwords = avx512.vpabsd.ymm %words
+  %qwords = avx512.vpabsq.ymm %dwords
+  return %qwords
+}
+
+// ----
+code: 62 f2 7d 28 1c c0 62 f2 7d 28 1d c0 62 f2 7d 28 1e c0 62 f2 fd 28 1f c0 c3
+
+// ====
+
+// RUN: emit x86-native-bytes @absolute_zmm
+x86.target<avx512> @target
+
+low.func.def target<x86.avx512.core>(@target) @absolute_zmm(%input: reg<x86.zmm>) -> (reg<x86.zmm>) asm {
+  %bytes = avx512.vpabsb.zmm %input
+  %words = avx512.vpabsw.zmm %bytes
+  %dwords = avx512.vpabsd.zmm %words
+  %qwords = avx512.vpabsq.zmm %dwords
+  return %qwords
+}
+
+// ----
+code: 62 f2 7d 48 1c c0 62 f2 7d 48 1d c0 62 f2 7d 48 1e c0 62 f2 fd 48 1f c0 c3

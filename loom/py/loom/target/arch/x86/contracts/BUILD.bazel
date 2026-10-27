@@ -36,6 +36,7 @@ iree_py_library(
         "integer_float.py",
         "integer_reduction.py",
         "integer_rotation.py",
+        "integer_unary.py",
         "lane_movement.py",
         "memory.py",
         "packed_dot.py",
@@ -65,6 +66,24 @@ iree_py_library(
         "//loom/py/loom/target/arch/x86:vector_families",
         "//loom/py/loom/target/contracts",
         "//loom/py/loom/target/emit:float_narrowing",
+    ],
+)
+
+iree_py_test(
+    name = "integer_unary_test",
+    srcs = [
+        "integer_unary_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.target.arch.x86.contracts.integer_unary_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":contracts",
+        "//loom/py/loom/dialect/vector",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86:target_info",
+        "//loom/py/loom/target/contracts",
     ],
 )
 

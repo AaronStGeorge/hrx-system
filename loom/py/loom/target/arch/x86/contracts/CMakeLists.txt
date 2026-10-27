@@ -35,6 +35,7 @@ iree_py_library(
     "integer_float.py"
     "integer_reduction.py"
     "integer_rotation.py"
+    "integer_unary.py"
     "lane_movement.py"
     "memory.py"
     "packed_dot.py"
@@ -63,6 +64,29 @@ iree_py_library(
     loom::py::loom::target::arch::x86::vector_families
     loom::py::loom::target::contracts::contracts
     loom::py::loom::target::emit::float_narrowing
+)
+
+iree_py_test(
+  NAME
+    integer_unary_test
+  MAIN
+    "../../../../tools/pytest_style_runner.py"
+  SRCS
+    "integer_unary_test.py"
+    "../../../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.target.arch.x86.contracts.integer_unary_test"
+  DEPS
+    loom::py::loom::target::arch::x86::contracts::contracts
+    loom::py::loom::dialect::vector::vector
+    loom::py::loom::target::low_descriptors
+    loom::py::loom::target::arch::x86::descriptors
+    loom::py::loom::target::arch::x86::target_info
+    loom::py::loom::target::contracts::contracts
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
 )
 
 iree_py_test(
