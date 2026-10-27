@@ -663,6 +663,7 @@ iree_cc_test(
   SRCS
     "native_test.cc"
   DEPS
+    ::native_transfer_test_base
     ::test_device
     iree::async
     iree::base
@@ -679,6 +680,48 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=runtime.hal.amd_gpu"
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+    "iree-run-requirement=libamdf.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    gpu-device
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_library(
+  NAME
+    native_transfer_test_base
+  HDRS
+    "native_transfer_test_base.h"
+  SRCS
+    "native_transfer_test_base.cc"
+  DEPS
+    ::test_device
+    iree::base
+    iree::hal
+    iree::hal::cts::util::test_base
+    iree::testing::gtest
+  TESTONLY
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMD_GPU AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    native_transfer_stress
+  SRCS
+    "native_transfer_stress.cc"
+  DEPS
+    ::native_transfer_test_base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "manual"
+    "stress"
     "iree-build-requirement=runtime.hal.amd_gpu"
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
