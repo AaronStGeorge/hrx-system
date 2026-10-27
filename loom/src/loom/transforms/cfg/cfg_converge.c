@@ -8,6 +8,7 @@
 
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/value_refs.h"
+#include "loom/ir/value_replacement.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/special_values.h"
@@ -201,7 +202,11 @@ static iree_status_t loom_cfg_converge_isolate_loop_exit_frontier(
         continue;
       }
       const loom_cfg_region_t* region = &facts->regions.blocks[target];
+      // An externally entered exit region would leave the new gateway shared
+      // too, so it cannot isolate this loop's frontier.
       if (visited_targets[target] ||
+          !loom_cfg_dominance_block_dominates(&facts->dominance,
+                                              loop->header_index, target) ||
           region->continuation_index != continuation ||
           region->exit_edges.count == 0) {
         supported = false;
@@ -258,6 +263,9 @@ static iree_status_t loom_cfg_converge_isolate_loop_exit_frontier(
           loom_module_value_type(module, continuation_block->arg_ids[i]),
           &argument));
     }
+    IREE_RETURN_IF_ERROR(loom_module_assign_value_types(
+        module, continuation_block->arg_ids, gateway->arg_ids,
+        continuation_block->arg_count));
     loom_op_t* branch = NULL;
     IREE_RETURN_IF_ERROR(loom_cfg_br_build(
         builder, continuation_block, gateway->arg_ids, gateway->arg_count,

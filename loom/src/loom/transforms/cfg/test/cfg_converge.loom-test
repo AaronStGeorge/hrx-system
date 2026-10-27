@@ -1097,3 +1097,79 @@ func.def @loop_exit_under_outer_bypass(%early: i1, %running: i1, %matched: i1, %
 ^result(%value: i32):
   func.return %value : i32
 }
+
+// ====
+
+// RUN: pass cfg-converge,cfg-converge
+
+// Shared exit regions are not owned by either loop. A gateway after them would
+// still be shared, so it cannot isolate either loop's exit frontier.
+func.def @shared_loop_exit_regions(%left: i1, %running: i1, %matched: i1, %early_value: i32, %fallback: i32) -> (i32) {
+  cfg.cond_br %left, ^left_header, ^right_header
+^left_header:
+  cfg.cond_br %running, ^left_body, ^normal
+^left_body:
+  cfg.cond_br %matched, ^found, ^left_latch
+^left_latch:
+  cfg.br ^left_header
+^right_header:
+  cfg.cond_br %running, ^right_body, ^normal
+^right_body:
+  cfg.cond_br %matched, ^found, ^right_latch
+^right_latch:
+  cfg.br ^right_header
+^found:
+  cfg.br ^result(%early_value: i32)
+^normal:
+  cfg.br ^result(%fallback: i32)
+^result(%value: i32):
+  func.return %value : i32
+}
+
+
+// ====
+
+// RUN: pass cfg-converge,cfg-converge
+
+// A gateway instantiates the continuation's complete type scheme: its tile
+// refers to its own extent argument, which dominates the forwarded use.
+func.def @dependent_loop_frontier(%early: i1, %running: i1, %matched: i1, %size: index, %tile: tile<[%size]xf32>) {
+  cfg.cond_br %early, ^early_exit, ^header
+^early_exit:
+  cfg.br ^result(%size: index, %tile: tile<[%size]xf32>)
+^header:
+  cfg.cond_br %running, ^body, ^normal_exit
+^body:
+  cfg.cond_br %matched, ^matched_exit, ^latch
+^matched_exit:
+  cfg.br ^result(%size: index, %tile: tile<[%size]xf32>)
+^latch:
+  cfg.br ^header
+^normal_exit:
+  cfg.br ^result(%size: index, %tile: tile<[%size]xf32>)
+^result(%extent: index, %payload: tile<[%extent]xf32>):
+  test.use %payload : tile<[%extent]xf32>
+  func.return
+}
+
+// ----
+func.def @dependent_loop_frontier(%early: i1, %running: i1, %matched: i1, %size: index, %tile: tile<[%size]xf32>) {
+  cfg.cond_br %early, ^early_exit, ^header
+^early_exit:
+  cfg.br ^result(%size: index, %tile: tile<[%size]xf32>)
+^header:
+  cfg.cond_br %running, ^body, ^normal_exit
+^body:
+  cfg.cond_br %matched, ^matched_exit, ^latch
+^matched_exit:
+  cfg.br ^_bb7(%size: index, %tile: tile<[%size]xf32>)
+^latch:
+  cfg.br ^header
+^normal_exit:
+  cfg.br ^_bb7(%size: index, %tile: tile<[%size]xf32>)
+^_bb7(%7: index, %8: tile<[%7]xf32>):
+  cfg.br ^result(%7: index, %8: tile<[%7]xf32>)
+^result(%extent: index, %payload: tile<[%extent]xf32>):
+  test.use %payload : tile<[%extent]xf32>
+  func.return
+}
