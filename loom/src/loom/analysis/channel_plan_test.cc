@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/cfg/ops.h"
 #include "loom/ops/channel/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
@@ -29,6 +30,7 @@ class ChannelPlanTest : public ::testing::Test {
     loom_context_initialize(iree_allocator_system(), &context_);
     IREE_ASSERT_OK(loom_type_registry_register_common_types(&context_));
     Register(LOOM_DIALECT_CHANNEL, loom_channel_dialect_vtables);
+    Register(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables);
     Register(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     Register(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
@@ -176,6 +178,7 @@ TEST_F(ChannelPlanTest, CallableSummaryTracksNewReadsFromFormalChannels) {
                                         LOOM_LOCATION_UNKNOWN, &exit));
   const loom_channel_identity_t formal_identity = {formal};
   const auto formal_plan = Analyze(callee, {{formal, &formal_identity}});
+  EXPECT_EQ(loom_channel_plan_admission(&formal_plan, read), read);
   loom_channel_plan_callable_t summary;
   loom_channel_plan_rejection_t rejection;
   IREE_ASSERT_OK(loom_channel_plan_summarize(&formal_plan, callee, &arena_,
@@ -216,9 +219,101 @@ TEST_F(ChannelPlanTest, CallableSummaryTracksNewReadsFromFormalChannels) {
   for (size_t i = 0; i < 3; ++i) {
     const auto* expected = &instances[i % 2];
     EXPECT_EQ(loom_channel_plan_channel(&plan, reads[i]), expected);
+    EXPECT_EQ(loom_channel_plan_admission(&plan, reads[i]),
+              LOOM_VALUE_ID_INVALID);
     EXPECT_EQ(plan.actions[2 * i].callable, &summary);
     EXPECT_EQ(plan.actions[2 * i + 1].channel, expected);
   }
+}
+
+TEST_F(ChannelPlanTest, RetainedAdmissionSurvivesFanoutAndLoopArguments) {
+  loom_op_t* function = Function(
+      "retained", {channel_type_, loom_type_scalar(LOOM_SCALAR_TYPE_I1)});
+  loom_region_t* region = loom_func_def_body(function);
+  const auto* arguments = loom_region_entry_block(region)->arg_ids;
+  const loom_value_id_t channel = arguments[0];
+  const loom_value_id_t condition = arguments[1];
+  loom_op_t* admission;
+  IREE_ASSERT_OK(loom_channel_accept_build(&builder_, 0, 0, channel, read_type_,
+                                           LOOM_LOCATION_UNKNOWN, &admission));
+  const loom_value_id_t initial = loom_channel_accept_read(admission);
+  loom_block_t* header;
+  loom_block_t* body;
+  loom_block_t* finish;
+  IREE_ASSERT_OK(loom_region_append_block(module_, region, &header));
+  IREE_ASSERT_OK(loom_region_append_block(module_, region, &body));
+  IREE_ASSERT_OK(loom_region_append_block(module_, region, &finish));
+  loom_value_id_t current;
+  IREE_ASSERT_OK(
+      loom_builder_define_block_arg(&builder_, header, read_type_, &current));
+  loom_op_t* op;
+  IREE_ASSERT_OK(loom_cfg_br_build(&builder_, header, &initial, 1,
+                                   LOOM_LOCATION_UNKNOWN, &op));
+  loom_builder_set_block(&builder_, header);
+  IREE_ASSERT_OK(loom_cfg_cond_br_build(&builder_, condition, body, finish,
+                                        LOOM_LOCATION_UNKNOWN, &op));
+  loom_builder_set_block(&builder_, body);
+  const loom_type_t results[] = {read_type_, read_type_};
+  loom_op_t* fanout;
+  IREE_ASSERT_OK(loom_channel_fanout_build(&builder_, current, results, 2,
+                                           nullptr, 0, LOOM_LOCATION_UNKNOWN,
+                                           &fanout));
+  const loom_value_id_t retained = loom_op_results(fanout)[0];
+  const loom_value_id_t consumed = loom_op_results(fanout)[1];
+  IREE_ASSERT_OK(loom_channel_release_build(&builder_, consumed,
+                                            LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_cfg_br_build(&builder_, header, &retained, 1,
+                                   LOOM_LOCATION_UNKNOWN, &op));
+  loom_builder_set_block(&builder_, finish);
+  IREE_ASSERT_OK(loom_channel_release_build(&builder_, current,
+                                            LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_func_return_build(&builder_, nullptr, 0,
+                                        LOOM_LOCATION_UNKNOWN, &op));
+  const loom_channel_identity_t identity = {channel};
+  const auto plan = Analyze(function, {{channel, &identity}});
+  for (const loom_value_id_t value : {initial, current, retained, consumed}) {
+    EXPECT_EQ(loom_channel_plan_admission(&plan, value), initial);
+  }
+}
+
+TEST_F(ChannelPlanTest, ChannelEqualityDoesNotEstablishAnAdmissionAtAJoin) {
+  loom_op_t* function =
+      Function("join", {channel_type_, loom_type_scalar(LOOM_SCALAR_TYPE_I1)});
+  loom_region_t* region = loom_func_def_body(function);
+  const auto* arguments = loom_region_entry_block(region)->arg_ids;
+  const loom_value_id_t channel = arguments[0];
+  loom_block_t* branches[2];
+  loom_block_t* join;
+  IREE_ASSERT_OK(loom_region_append_block(module_, region, &branches[0]));
+  IREE_ASSERT_OK(loom_region_append_block(module_, region, &branches[1]));
+  IREE_ASSERT_OK(loom_region_append_block(module_, region, &join));
+  loom_value_id_t selected;
+  IREE_ASSERT_OK(
+      loom_builder_define_block_arg(&builder_, join, read_type_, &selected));
+  loom_op_t* op;
+  IREE_ASSERT_OK(loom_cfg_cond_br_build(&builder_, arguments[1], branches[0],
+                                        branches[1], LOOM_LOCATION_UNKNOWN,
+                                        &op));
+  for (loom_block_t* branch : branches) {
+    loom_builder_set_block(&builder_, branch);
+    loom_op_t* admission;
+    IREE_ASSERT_OK(loom_channel_accept_build(&builder_, 0, 0, channel,
+                                             read_type_, LOOM_LOCATION_UNKNOWN,
+                                             &admission));
+    const loom_value_id_t read = loom_channel_accept_read(admission);
+    IREE_ASSERT_OK(loom_cfg_br_build(&builder_, join, &read, 1,
+                                     LOOM_LOCATION_UNKNOWN, &op));
+  }
+  loom_builder_set_block(&builder_, join);
+  IREE_ASSERT_OK(loom_channel_release_build(&builder_, selected,
+                                            LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_func_return_build(&builder_, nullptr, 0,
+                                        LOOM_LOCATION_UNKNOWN, &op));
+  const loom_channel_identity_t identity = {channel};
+  const auto plan = Analyze(function, {{channel, &identity}});
+  EXPECT_EQ(loom_channel_plan_channel(&plan, selected), &identity);
+  EXPECT_EQ(loom_channel_plan_admission(&plan, selected),
+            LOOM_VALUE_ID_INVALID);
 }
 
 }  // namespace

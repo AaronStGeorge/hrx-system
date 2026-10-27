@@ -83,11 +83,14 @@ typedef struct loom_pipeline_transport_block_t {
 // family remains ordinary instruction-executing channel use.
 static iree_status_t loom_pipeline_transport_cohorts(
     loom_module_t* module, iree_arena_allocator_t* arena,
-    const loom_channel_plan_t* plan,
+    const loom_value_fact_cfg_region_t* structure,
+    const loom_pipeline_worker_t* worker,
+    const loom_pipeline_transport_step_t* steps, iree_host_size_t step_count,
     const loom_pipeline_transport_cohort_t** out_cohorts,
     iree_host_size_t* out_cohort_count) {
   *out_cohorts = NULL;
   *out_cohort_count = 0;
+  const loom_channel_plan_t* plan = &worker->channels;
   if (!plan->action_count) {
     return iree_ok_status();
   }
@@ -97,83 +100,189 @@ static iree_status_t loom_pipeline_transport_cohorts(
       arena, plan->action_count, sizeof(*cohorts), (void**)&cohorts));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, plan->action_count, sizeof(*destinations), (void**)&destinations));
+  uint32_t* cohort_indices;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, plan->value_count,
+                                                 sizeof(*cohort_indices),
+                                                 (void**)&cohort_indices));
   iree_host_size_t cohort_count = 0;
-  iree_host_size_t destination_count = 0;
-  iree_host_size_t accounted_action_count = 0;
-  for (iree_host_size_t i = 0; i < plan->action_count; ++i) {
-    const loom_channel_plan_action_t* admission = &plan->actions[i];
-    if (!loom_channel_acquire_isa(admission->op) &&
-        !loom_channel_accept_isa(admission->op)) {
+  for (iree_host_size_t i = 0; i < step_count; ++i) {
+    const loom_channel_plan_action_t* action = steps[i].source.channel;
+    const loom_op_t* op = action->op;
+    if (loom_channel_acquire_isa(op) || loom_channel_accept_isa(op)) {
+      if (loom_channel_acquire_isa(op) &&
+          !loom_value_has_no_uses(
+              loom_module_value(module, loom_channel_acquire_view(op)))) {
+        return iree_ok_status();
+      }
+      const loom_value_id_t read = loom_op_const_results(op)[0];
+      cohort_indices[loom_local_value_domain_ordinal(
+          plan->value_domain, read)] = (uint32_t)cohort_count;
+      const uint64_t admissions =
+          worker->block_execution_counts
+              ? worker->block_execution_counts[op->parent_block->region_index]
+              : 1;
+      if (!admissions) {
+        return iree_ok_status();
+      }
+      cohorts[cohort_count++] = (loom_pipeline_transport_cohort_t){
+          .admission = action, .admissions = admissions};
+    } else if (loom_channel_reserve_isa(op)) {
+      if (!loom_value_has_no_uses(
+              loom_module_value(module, loom_channel_reserve_view(op)))) {
+        return iree_ok_status();
+      }
+    } else if (!loom_channel_fanout_isa(op) && !loom_channel_copy_isa(op) &&
+               !loom_channel_release_isa(op)) {
+      return iree_ok_status();
+    }
+  }
+  uint32_t previous_copy = 0;
+  uint16_t copy_loop = LOOM_CFG_LOOP_NEST_NONE;
+  bool has_copy = false;
+  // Membership owns forwarding through CFG arguments and nested fanouts.
+  // A common source site alone does not establish one dynamic record: copies
+  // must stay in its admission scope or in nested replay loops, with final
+  // release back in that same admission scope.
+  for (iree_host_size_t i = 0; i < step_count; ++i) {
+    const loom_op_t* op = steps[i].op;
+    const bool release = loom_channel_release_isa(op);
+    if (!release && !loom_channel_copy_isa(op)) {
       continue;
     }
-    const bool acquire = loom_channel_acquire_isa(admission->op);
-    const loom_value_id_t admitted_read =
-        acquire ? loom_channel_acquire_read(admission->op)
-                : loom_channel_accept_read(admission->op);
-    const loom_use_t* admitted_use =
-        loom_value_single_use(loom_module_value(module, admitted_read));
-    if ((acquire && !loom_value_has_no_uses(loom_module_value(
-                        module, loom_channel_acquire_view(admission->op)))) ||
-        !admitted_use || loom_use_operand_index(*admitted_use) != 0) {
+    const loom_value_id_t source_admission = loom_channel_plan_admission(
+        plan,
+        release ? loom_channel_release_read(op) : loom_channel_copy_source(op));
+    if (source_admission == LOOM_VALUE_ID_INVALID) {
       return iree_ok_status();
     }
-    loom_op_t* fanout = NULL;
-    loom_op_t* admitted_user = loom_use_user_op(*admitted_use);
-    if (loom_channel_fanout_isa(admitted_user)) {
-      fanout = admitted_user;
-    } else if (!loom_channel_copy_isa(admitted_user)) {
+    const uint32_t index = cohort_indices[loom_local_value_domain_ordinal(
+        plan->value_domain, source_admission)];
+    loom_pipeline_transport_cohort_t* cohort = &cohorts[index];
+    const uint16_t admission_block =
+        cohort->admission->op->parent_block->region_index;
+    const uint16_t block = op->parent_block->region_index;
+    const uint16_t admission_loop =
+        loom_cfg_loop_nest_innermost(&structure->loops, admission_block);
+    const uint16_t operation_loop =
+        loom_cfg_loop_nest_innermost(&structure->loops, block);
+    const uint64_t executions = worker->block_execution_counts
+                                    ? worker->block_execution_counts[block]
+                                    : 1;
+    if (release) {
+      if (cohort->release || admission_loop != operation_loop ||
+          executions != cohort->admissions) {
+        return iree_ok_status();
+      }
+      cohort->release = op;
+      continue;
+    }
+    if (executions < cohort->admissions || executions % cohort->admissions ||
+        (admission_loop != LOOM_CFG_LOOP_NEST_NONE &&
+         !loom_cfg_loop_nest_contains(&structure->loops, admission_loop,
+                                      block)) ||
+        (cohort->transfers && cohort->transfers != executions)) {
       return iree_ok_status();
     }
-
-    const iree_host_size_t first_destination = destination_count;
-    const iree_host_size_t result_count = fanout ? fanout->result_count : 1;
-    for (iree_host_size_t j = 0; j < result_count; ++j) {
-      const loom_value_id_t source_read =
-          fanout ? loom_op_const_results(fanout)[j] : admitted_read;
-      const loom_use_t* source_use =
-          loom_value_single_use(loom_module_value(module, source_read));
-      loom_op_t* copy = source_use ? loom_use_user_op(*source_use) : NULL;
-      if (!source_use || loom_use_operand_index(*source_use) != 0 ||
-          !loom_channel_copy_isa(copy)) {
-        return iree_ok_status();
-      }
-      const loom_value_id_t destination_write =
-          loom_channel_copy_destination(copy);
-      const loom_value_t* destination_value =
-          loom_module_value(module, destination_write);
-      if (loom_value_is_block_arg(destination_value)) {
-        return iree_ok_status();
-      }
-      loom_op_t* reservation = loom_value_def_op(destination_value);
-      const loom_use_t* destination_use =
-          loom_value_single_use(destination_value);
-      const loom_channel_identity_t* destination_channel =
-          loom_channel_plan_channel(plan, destination_write);
-      if (!loom_channel_reserve_isa(reservation) || !destination_use ||
-          !loom_value_has_no_uses(loom_module_value(
-              module, loom_channel_reserve_view(reservation)))) {
-        return iree_ok_status();
-      }
-      destinations[destination_count++] =
-          (loom_pipeline_transport_destination_t){
-              .reservation = reservation,
-              .copy = copy,
-              .channel = destination_channel};
+    const loom_value_id_t destination_admission =
+        loom_channel_plan_admission(plan, loom_channel_copy_destination(op));
+    if (destination_admission == LOOM_VALUE_ID_INVALID) {
+      return iree_ok_status();
     }
-    const iree_host_size_t cohort_destination_count =
-        destination_count - first_destination;
-    accounted_action_count +=
-        1 + (fanout ? 1 : 0) + cohort_destination_count * 2;
-    cohorts[cohort_count++] = (loom_pipeline_transport_cohort_t){
-        .admission = admission,
-        .destinations = &destinations[first_destination],
-        .destination_count = cohort_destination_count};
+    const loom_op_t* reservation =
+        loom_value_def_op(loom_module_value(module, destination_admission));
+    if (loom_cfg_loop_nest_innermost(&structure->loops,
+                                     reservation->parent_block->region_index) !=
+        operation_loop) {
+      return iree_ok_status();
+    }
+    if (has_copy && (index < previous_copy || operation_loop != copy_loop)) {
+      return iree_ok_status();
+    }
+    previous_copy = index;
+    copy_loop = operation_loop;
+    has_copy = true;
+    cohort->transfers = executions;
+    ++cohort->destination_count;
   }
-  if (!cohort_count || accounted_action_count != plan->action_count) {
-    return iree_ok_status();
+  iree_host_size_t destination_count = 0;
+  for (iree_host_size_t i = 0; i < cohort_count; ++i) {
+    if (!cohorts[i].destination_count ||
+        (cohorts[i].transfers != cohorts[i].admissions &&
+         !cohorts[i].release)) {
+      return iree_ok_status();
+    }
+    cohorts[i].destinations = &destinations[destination_count];
+    destination_count += cohorts[i].destination_count;
+    cohorts[i].destination_count = 0;
+  }
+  for (iree_host_size_t i = 0; i < step_count; ++i) {
+    const loom_channel_plan_action_t* action = steps[i].source.channel;
+    const loom_op_t* copy = action->op;
+    if (!loom_channel_copy_isa(copy)) {
+      continue;
+    }
+    const loom_value_id_t source_admission =
+        loom_channel_plan_admission(plan, loom_channel_copy_source(copy));
+    const loom_value_id_t destination_admission =
+        loom_channel_plan_admission(plan, loom_channel_copy_destination(copy));
+    const uint32_t index = cohort_indices[loom_local_value_domain_ordinal(
+        plan->value_domain, source_admission)];
+    loom_pipeline_transport_cohort_t* cohort = &cohorts[index];
+    const iree_host_size_t destination_index =
+        (cohort->destinations - destinations) + cohort->destination_count++;
+    destinations[destination_index] = (loom_pipeline_transport_destination_t){
+        .reservation =
+            loom_value_def_op(loom_module_value(module, destination_admission)),
+        .copy = copy,
+        .channel = action->destination_channel};
   }
   *out_cohorts = cohorts;
   *out_cohort_count = cohort_count;
+  return iree_ok_status();
+}
+
+// Group adjacent records only when their source lifetime and complete
+// destination order agree. The cohort owner has already proved record identity,
+// scope, and ordered copies; physical selection consumes these batches
+// directly.
+static iree_status_t loom_pipeline_transport_batches(
+    iree_arena_allocator_t* arena,
+    const loom_pipeline_transport_cohort_t* cohorts,
+    iree_host_size_t cohort_count,
+    const loom_pipeline_transport_batch_t** out_batches,
+    iree_host_size_t* out_count) {
+  loom_pipeline_transport_batch_t* batches;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, cohort_count, sizeof(*batches), (void**)&batches));
+  iree_host_size_t count = 0;
+  for (iree_host_size_t i = 0; i < cohort_count; ++i) {
+    const loom_pipeline_transport_cohort_t* record = &cohorts[i];
+    bool append = count != 0;
+    if (append) {
+      const loom_pipeline_transport_cohort_t* first =
+          batches[count - 1].records;
+      append = first->admission->channel == record->admission->channel &&
+               first->admissions == record->admissions &&
+               first->transfers == record->transfers &&
+               (first->release != NULL) == (record->release != NULL) &&
+               first->destination_count == record->destination_count;
+      for (iree_host_size_t j = 0; append && j < first->destination_count;
+           ++j) {
+        append =
+            first->destinations[j].channel == record->destinations[j].channel;
+      }
+    }
+    if (append) {
+      ++batches[count - 1].record_count;
+    } else {
+      batches[count++] = (loom_pipeline_transport_batch_t){
+          .records = record,
+          .record_count = 1,
+          .replays = record->transfers / record->admissions};
+    }
+  }
+  *out_batches = batches;
+  *out_count = count;
   return iree_ok_status();
 }
 
@@ -183,15 +292,16 @@ static iree_status_t loom_pipeline_worker_transport(
     loom_pipeline_worker_t* worker) {
   const loom_cfg_graph_t* graph = worker->graph;
   if ((!worker->asynchronous.streams && !worker->channels.action_count) ||
-      (graph->has_cycles &&
-       (!worker->block_execution_counts || structure->loops.loop_count != 1))) {
+      (graph->has_cycles && !worker->block_execution_counts)) {
     return iree_ok_status();
   }
   for (iree_host_size_t i = 0; i < graph->reverse_postorder.count; ++i) {
     const uint16_t block = graph->reverse_postorder.values[i];
+    const uint16_t loop =
+        loom_cfg_loop_nest_innermost(&structure->loops, block);
     if (graph->blocks[block].successor_count > 1 &&
-        (!graph->has_cycles ||
-         structure->loops.loops[0].header_index != block)) {
+        (loop == LOOM_CFG_LOOP_NEST_NONE ||
+         structure->loops.loops[loop].header_index != block)) {
       return iree_ok_status();
     }
   }
@@ -261,7 +371,10 @@ static iree_status_t loom_pipeline_worker_transport(
   }
   const loom_value_fact_induction_t* induction = NULL;
   uint64_t repetitions = 1;
-  if (graph->has_cycles) {
+  if (graph->has_cycles && stream_count) {
+    if (structure->loops.loop_count != 1) {
+      return iree_ok_status();
+    }
     induction = &structure->inductions[0];
     for (iree_host_size_t i = 0; i < count; ++i) {
       const uint16_t block = steps[i].op->parent_block->region_index;
@@ -276,11 +389,18 @@ static iree_status_t loom_pipeline_worker_transport(
   const loom_pipeline_transport_cohort_t* cohorts = NULL;
   iree_host_size_t cohort_count = 0;
   if (!stream_count) {
-    IREE_RETURN_IF_ERROR(loom_pipeline_transport_cohorts(
-        module, arena, &worker->channels, &cohorts, &cohort_count));
+    IREE_RETURN_IF_ERROR(
+        loom_pipeline_transport_cohorts(module, arena, structure, worker, steps,
+                                        count, &cohorts, &cohort_count));
     if (!cohort_count) {
       return iree_ok_status();
     }
+  }
+  const loom_pipeline_transport_batch_t* batches = NULL;
+  iree_host_size_t batch_count = 0;
+  if (cohort_count) {
+    IREE_RETURN_IF_ERROR(loom_pipeline_transport_batches(
+        arena, cohorts, cohort_count, &batches, &batch_count));
   }
   worker->transport = (loom_pipeline_transport_t){.steps = steps,
                                                   .count = count,
@@ -288,6 +408,8 @@ static iree_status_t loom_pipeline_worker_transport(
                                                   .stream_count = stream_count,
                                                   .cohorts = cohorts,
                                                   .cohort_count = cohort_count,
+                                                  .batches = batches,
+                                                  .batch_count = batch_count,
                                                   .repetitions = repetitions,
                                                   .induction = induction};
   return iree_ok_status();

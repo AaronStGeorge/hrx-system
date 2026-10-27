@@ -846,6 +846,7 @@ loom_cc_test(
         ":channel_plan",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:type_registry",
+        "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/channel",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/index",

@@ -2,6 +2,24 @@
   "version": 1,
   "cases": [
     {
+      "name": "replays retained record batches through nested fanout helpers",
+      "run": {
+        "tool": "loom-test",
+        "args": [
+          "{srcdir}/retained_replay.loom",
+          "--device=xdna://0?columns=1"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"trial_count\":3",
+          "\"failed_trial_count\":0",
+          "\"planning_issue_count\":0",
+          "\"failure_count\":0"
+        ]
+      }
+    },
+    {
       "name": "executes finite strided and repeated ingress with replay",
       "run": {
         "tool": "loom-test",

@@ -248,7 +248,7 @@ pipeline.def<kernel> public retain target(@device) @shared_distribution_reader()
     %first_read, %first_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
     %left_write, %left_payload = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
     channel.copy %first_read -> %left_write : read<tile<16xi32>>, write<tile<16xi32>>
-    // ERROR@+1: XDNA/051 {requirement="one static channel-copy site per FIFO read or write cursor"}
+    // ERROR@+1: XDNA/051 {requirement="one ordered transport stream per FIFO read or write cursor"}
     %second_read, %second_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
     %right_write, %right_payload = channel.reserve %right : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
     channel.copy %second_read -> %right_write : read<tile<16xi32>>, write<tile<16xi32>>
@@ -286,7 +286,7 @@ pipeline.def<kernel> public retain target(@device) @shared_distribution_writer()
     %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
     %first, %second = channel.fanout %read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
     %first_write, %first_payload = channel.reserve %destination : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-    // ERROR@+1: XDNA/051 {requirement="one static channel-copy site per FIFO read or write cursor"}
+    // ERROR@+1: XDNA/051 {requirement="one ordered transport stream per FIFO read or write cursor"}
     %second_write, %second_payload = channel.reserve %destination : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
     channel.copy %first -> %first_write : read<tile<16xi32>>, write<tile<16xi32>>
     channel.copy %second -> %second_write : read<tile<16xi32>>, write<tile<16xi32>>

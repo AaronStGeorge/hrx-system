@@ -20,11 +20,50 @@ typedef struct loom_channel_plan_membership_t {
   const loom_channel_identity_t** channels;
   // Borrowed summaries indexed by module symbol ID, or NULL.
   const loom_channel_plan_callable_t* const* callables;
+  // Disjoint-set forwarding classes for owned accesses, excluding channels.
+  loom_value_ordinal_t* admission_parents;
+  // Source admission for each class, or INVALID for an ambiguous class.
+  loom_value_id_t* admissions;
+  // Whether a value receives an owned access through a forwarding edge.
+  bool* admission_forwarded;
+  // Number of distinct roots in each class, saturated at two for ambiguity.
+  uint8_t* admission_origins;
 } loom_channel_plan_membership_t;
 
 static bool loom_channel_plan_tracks_type(loom_type_t type) {
   return loom_channel_type_isa(type) || loom_read_type_isa(type) ||
          loom_write_type_isa(type);
+}
+
+static loom_value_ordinal_t loom_channel_plan_admission_representative(
+    loom_channel_plan_membership_t* membership, loom_value_ordinal_t ordinal) {
+  while (membership->admission_parents[ordinal] != ordinal) {
+    membership->admission_parents[ordinal] =
+        membership->admission_parents[membership->admission_parents[ordinal]];
+    ordinal = membership->admission_parents[ordinal];
+  }
+  return ordinal;
+}
+
+static void loom_channel_plan_forward_admission(
+    loom_channel_plan_membership_t* membership, loom_value_id_t source,
+    loom_value_id_t destination) {
+  membership->admission_forwarded[loom_local_value_domain_ordinal(
+      membership->domain, destination)] = true;
+  loom_value_ordinal_t lhs = loom_channel_plan_admission_representative(
+      membership, loom_local_value_domain_ordinal(membership->domain, source));
+  loom_value_ordinal_t rhs = loom_channel_plan_admission_representative(
+      membership,
+      loom_local_value_domain_ordinal(membership->domain, destination));
+  if (lhs == rhs) {
+    return;
+  }
+  if (rhs < lhs) {
+    const loom_value_ordinal_t temporary = lhs;
+    lhs = rhs;
+    rhs = temporary;
+  }
+  membership->admission_parents[rhs] = lhs;
 }
 
 static loom_value_ordinal_t loom_channel_plan_representative(
@@ -84,6 +123,8 @@ static bool loom_channel_plan_collect_membership(
   }
   if (loom_channel_fanout_isa(op)) {
     for (uint16_t i = 0; i < op->result_count; ++i) {
+      loom_channel_plan_forward_admission(
+          membership, loom_channel_fanout_read(op), loom_op_results(op)[i]);
       if (!loom_channel_plan_connect(membership, loom_channel_fanout_read(op),
                                      loom_op_results(op)[i], op, rejection)) {
         return false;
@@ -164,6 +205,13 @@ static bool loom_channel_plan_collect_membership(
       continue;
     }
     forwards_channel = true;
+    const loom_type_t destination_type =
+        loom_module_value_type(module, relation.destination_value_id);
+    if (loom_read_type_isa(destination_type) ||
+        loom_write_type_isa(destination_type)) {
+      loom_channel_plan_forward_admission(membership, relation.source_value_id,
+                                          relation.destination_value_id);
+    }
     if (!loom_channel_plan_connect(membership, relation.source_value_id,
                                    relation.destination_value_id, op,
                                    rejection)) {
@@ -210,9 +258,25 @@ iree_status_t loom_channel_plan_build(
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, value_count,
                                                  sizeof(*membership.channels),
                                                  (void**)&membership.channels));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, value_count, sizeof(*membership.admission_parents),
+      (void**)&membership.admission_parents));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, value_count, sizeof(*membership.admissions),
+      (void**)&membership.admissions));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, value_count, sizeof(*membership.admission_forwarded),
+      (void**)&membership.admission_forwarded));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, value_count, sizeof(*membership.admission_origins),
+      (void**)&membership.admission_origins));
   for (loom_value_ordinal_t i = 0; i < value_count; ++i) {
     membership.parents[i] = i;
     membership.channels[i] = NULL;
+    membership.admission_parents[i] = i;
+    membership.admissions[i] = LOOM_VALUE_ID_INVALID;
+    membership.admission_forwarded[i] = false;
+    membership.admission_origins[i] = 0;
   }
   for (iree_host_size_t i = 0; i < binding_count; ++i) {
     membership.channels[loom_local_value_domain_ordinal(
@@ -283,12 +347,45 @@ iree_status_t loom_channel_plan_build(
   // cannot disturb identities still needed by later values.
   for (loom_value_ordinal_t i = 0; i < value_count; ++i) {
     membership.parents[i] = loom_channel_plan_representative(&membership, i);
+    membership.admission_parents[i] =
+        loom_channel_plan_admission_representative(&membership, i);
+  }
+  // Seed only after all forwarding classes are complete. The local value
+  // domain already identifies definitions; no source or use-chain rescan is
+  // needed. A class with multiple origins cannot name one admission.
+  for (loom_value_ordinal_t i = 0; i < value_count; ++i) {
+    if (membership.admission_forwarded[i]) {
+      continue;
+    }
+    const loom_value_id_t value_id = value_domain->value_ids[i];
+    const loom_type_t type = loom_module_value_type(module, value_id);
+    if (!loom_read_type_isa(type) && !loom_write_type_isa(type)) {
+      continue;
+    }
+    const loom_value_t* value = loom_module_value(module, value_id);
+    const loom_op_t* op =
+        loom_value_is_block_arg(value) ? NULL : loom_value_def_op(value);
+    const bool known =
+        i < value_domain->definition_count && op &&
+        (loom_channel_acquire_isa(op) || loom_channel_accept_isa(op) ||
+         loom_channel_reserve_isa(op));
+    const loom_value_ordinal_t representative = membership.admission_parents[i];
+    if (known && membership.admission_origins[representative] == 0) {
+      membership.admission_origins[representative] = 1;
+      membership.admissions[representative] = value_id;
+    } else {
+      membership.admission_origins[representative] = 2;
+      membership.admissions[representative] = LOOM_VALUE_ID_INVALID;
+    }
   }
   for (loom_value_ordinal_t i = 0; i < value_count; ++i) {
     const loom_value_id_t value = value_domain->value_ids[i];
     const loom_channel_identity_t* channel =
         membership.channels[membership.parents[i]];
     membership.channels[i] = channel;
+    const loom_value_id_t admission =
+        membership.admissions[membership.admission_parents[i]];
+    membership.admissions[i] = admission;
     if (!channel &&
         loom_channel_plan_tracks_type(loom_module_value_type(module, value))) {
       *out_rejection = (loom_channel_plan_rejection_t){
@@ -301,6 +398,7 @@ iree_status_t loom_channel_plan_build(
   loom_channel_plan_t plan = {
       .value_domain = value_domain,
       .channels = membership.channels,
+      .admissions = membership.admissions,
       .value_count = value_count,
       .actions = actions,
       .action_count = action_count,
