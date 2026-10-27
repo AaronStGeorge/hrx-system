@@ -1,0 +1,48 @@
+// The input occupies XMM0 when the empty-path identity is defined, so the
+// identity initially takes XMM1. The nonempty result can share XMM1 because
+// the two values are live on mutually exclusive predecessor paths. Anchoring
+// the later result to its already-assigned sibling removes the join-edge copy;
+// the final vmovaps is the independent SysV return transport into XMM0.
+// RUN: emit x86-native-bytes @identity_producer_first
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) @identity_producer_first(%condition: reg<x86.gpr32>, %input: reg<x86.xmm>) -> (reg<x86.xmm>) asm {
+  %identity = vxorps.zero.xmm
+  low.cond_br %condition, ^nonempty, ^empty : reg<x86.gpr32>
+^nonempty:
+  %computed = vaddps.xmm %input, %input
+  low.br ^join(%computed: reg<x86.xmm>)
+^empty:
+  low.br ^join(%identity: reg<x86.xmm>)
+^join(%result: reg<x86.xmm>):
+  return %result
+}
+
+// ----
+code: c5 f0 57 c9 85 ff 0f 84 09 00 00 00 c5 f8 58 c8 e9 00 00 00 00 c5 f8 28 c1 c3
+
+// ====
+
+// Defining the nonempty result first reverses the producer allocation order.
+// The following store keeps the input live and the result in XMM1; the later
+// identity follows that already-assigned sibling. Neither edge transports its
+// value before the shared return move.
+// RUN: emit x86-native-bytes @computed_producer_first
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) @computed_producer_first(%condition: reg<x86.gpr32>, %input: reg<x86.xmm>, %output: reg<x86.gpr64>) -> (reg<x86.xmm>) asm {
+  low.cond_br %condition, ^nonempty, ^empty : reg<x86.gpr32>
+^nonempty:
+  %computed = vaddps.xmm %input, %input
+  %offset = mov.imm64 0
+  vmovdqu32.store.indexed.xmm %input, %output, %offset {disp32 = 0, scale = 1}
+  low.br ^join(%computed: reg<x86.xmm>)
+^empty:
+  %identity = vxorps.zero.xmm
+  low.br ^join(%identity: reg<x86.xmm>)
+^join(%result: reg<x86.xmm>):
+  return %result
+}
+
+// ----
+code: 85 ff 0f 84 13 00 00 00 c5 f8 58 c8 b8 00 00 00 00 c5 fa 7f 04 06 e9 04 00 00 00 c5 f0 57 c9 c5 f8 28 c1 c3

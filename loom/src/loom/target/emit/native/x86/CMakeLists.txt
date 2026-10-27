@@ -227,6 +227,7 @@ loom_check_test_suite(
   NAME
     loom_check_file_test
   SRCS
+    "test/branch_edge_coalescing.loom-test"
     "test/float_integer_native_bytes.loom-test"
     "test/function.loom-test"
     "test/operand_ties.loom-test"
