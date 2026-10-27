@@ -47,6 +47,13 @@ loom_value_fact_table_query_signed_integer_literal_order(
     const loom_value_fact_table_t* table, loom_value_id_t value,
     int64_t literal);
 
+// Tightens integer interval endpoints using retained literal exclusions and
+// scalar nonzero facts. Work is bounded by the excluded endpoint values, not
+// the interval width; interior holes do not change the interval.
+void loom_value_fact_table_refine_integer_exclusions(
+    const loom_value_fact_table_t* table, loom_value_id_t value,
+    loom_value_facts_t* inout_facts);
+
 // Visitor for one constrained retained relation from an alias to a canonical
 // counterpart. |outcomes| is the nonempty, non-universal set of possible
 // signed comparison outcomes for the alias relative to |counterpart|.

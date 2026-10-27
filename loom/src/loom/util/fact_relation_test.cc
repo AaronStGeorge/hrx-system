@@ -23,7 +23,9 @@ namespace loom {
 namespace {
 
 struct VisitedRelation {
+  // Canonical value constrained by the scoped alias.
   loom_value_id_t counterpart;
+  // Possible signed comparison outcomes for that alias.
   loom_integer_order_outcome_bits_t outcomes;
 };
 
@@ -317,9 +319,64 @@ TEST_F(FactRelationTest, LiteralExclusionsInternAndInheritAsPersistentSets) {
   }
 }
 
+TEST_F(FactRelationTest, LiteralExclusionsRefineNarrowedIntervalEndpoints) {
+  for (uint32_t excluded = 0; excluded < 32; ++excluded) {
+    std::vector<loom_predicate_t> predicates;
+    for (int64_t value = -2; value <= 2; ++value) {
+      if (excluded & (1u << (value + 2))) {
+        predicates.push_back(
+            LiteralPredicate(LOOM_PREDICATE_NE, inputs_[0], value));
+      }
+    }
+    loom_op_t* assume = nullptr;
+    IREE_ASSERT_OK(BuildAssume({inputs_[0]}, predicates, &assume));
+    IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, assume));
+    const auto result = loom_index_assume_results(assume).values[0];
+    for (int64_t lower = -3; lower <= 3; ++lower) {
+      for (int64_t upper = lower; upper <= 3; ++upper) {
+        std::vector<int64_t> allowed;
+        for (int64_t value = lower; value <= upper; ++value) {
+          if (value < -2 || value > 2 || !(excluded & (1u << (value + 2)))) {
+            allowed.push_back(value);
+          }
+        }
+        if (allowed.empty()) {
+          continue;
+        }
+        auto facts = loom_value_facts_make(lower, upper, 1);
+        loom_value_fact_table_refine_integer_exclusions(&table_, result,
+                                                        &facts);
+        EXPECT_EQ(facts.range_lo, allowed.front());
+        EXPECT_EQ(facts.range_hi, allowed.back());
+      }
+    }
+  }
+}
+
+TEST_F(FactRelationTest, LiteralExclusionRefinementPreservesIntegerLimits) {
+  for (bool lower : {false, true}) {
+    const int64_t edge = lower ? INT64_MIN : INT64_MAX;
+    const int64_t neighbor = lower ? edge + 1 : edge - 1;
+    loom_op_t* assume = nullptr;
+    IREE_ASSERT_OK(
+        BuildAssume({inputs_[0]},
+                    {LiteralPredicate(LOOM_PREDICATE_NE, inputs_[0], edge),
+                     LiteralPredicate(LOOM_PREDICATE_NE, inputs_[0], neighbor)},
+                    &assume));
+    IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, assume));
+    const auto result = loom_index_assume_results(assume).values[0];
+    auto facts = loom_value_facts_unknown();
+    loom_value_fact_table_refine_integer_exclusions(&table_, result, &facts);
+    EXPECT_EQ(facts.range_lo, lower ? INT64_MIN + 2 : INT64_MIN);
+    EXPECT_EQ(facts.range_hi, lower ? INT64_MAX : INT64_MAX - 2);
+  }
+}
+
 TEST_F(FactRelationTest, SignedRelationsRetainEveryOrientation) {
   struct RelationCase {
+    // Authored signed predicate.
     loom_predicate_kind_t predicate_kind;
+    // Expected retained comparison semantics.
     loom_symbolic_integer_relation_t relation;
   };
   const RelationCase cases[] = {
@@ -355,6 +412,16 @@ TEST_F(FactRelationTest, SignedRelationsRetainEveryOrientation) {
     EXPECT_EQ(loom_value_fact_table_query_signed_integer_order(
                   &table_, inputs_[0], inputs_[1]),
               LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
+    for (int side = 0; side < 2; ++side) {
+      std::vector<VisitedRelation> visited;
+      EXPECT_TRUE(loom_value_fact_table_for_each_signed_integer_relation_while(
+          &table_, results.values[side], CollectRelation, &visited));
+      ASSERT_EQ(visited.size(), 1u);
+      EXPECT_EQ(visited[0].counterpart, inputs_[1 - side]);
+      EXPECT_EQ(
+          visited[0].outcomes,
+          side == 0 ? expected : loom_integer_order_outcomes_swap(expected));
+    }
     const loom_predicate_t repeated = RelationPredicate(
         relation_case.predicate_kind, results.values[0], results.values[1]);
     EXPECT_EQ(loom_value_fact_table_evaluate_predicate(&table_, &repeated),
@@ -534,6 +601,19 @@ TEST_F(FactRelationTest, RelationMutationUndefinitionAndScopeReuse) {
                                                              assume, &changed));
   EXPECT_FALSE(changed);
   const loom_value_slice_t results = loom_index_assume_results(assume);
+  auto expect_enumeration = [&](loom_integer_order_outcome_bits_t expected) {
+    std::vector<VisitedRelation> visited;
+    EXPECT_TRUE(loom_value_fact_table_for_each_signed_integer_relation_while(
+        &table_, results.values[0], CollectRelation, &visited));
+    if (expected == LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL) {
+      EXPECT_TRUE(visited.empty());
+    } else {
+      ASSERT_EQ(visited.size(), 1u);
+      EXPECT_EQ(visited[0].counterpart, inputs_[1]);
+      EXPECT_EQ(visited[0].outcomes, expected);
+    }
+  };
+  expect_enumeration(LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS);
 
   const auto first = Snapshot(results.values[0]);
   predicate.kind = LOOM_PREDICATE_GT;
@@ -545,6 +625,7 @@ TEST_F(FactRelationTest, RelationMutationUndefinitionAndScopeReuse) {
   EXPECT_EQ(loom_value_fact_table_query_signed_integer_order(
                 &table_, results.values[0], results.values[1]),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER);
+  expect_enumeration(LOOM_INTEGER_ORDER_OUTCOME_BIT_GREATER);
 
   auto current = Snapshot(results.values[0]);
   EXPECT_FALSE(loom_value_fact_auxiliary_snapshot_equal(&first, &current));
@@ -557,6 +638,7 @@ TEST_F(FactRelationTest, RelationMutationUndefinitionAndScopeReuse) {
   EXPECT_EQ(loom_value_fact_table_query_signed_integer_order(
                 &table_, results.values[0], results.values[1]),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
+  expect_enumeration(LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
 
   current = Snapshot(results.values[0]);
   EXPECT_FALSE(loom_value_fact_auxiliary_snapshot_equal(&first, &current));
@@ -569,12 +651,14 @@ TEST_F(FactRelationTest, RelationMutationUndefinitionAndScopeReuse) {
   EXPECT_EQ(loom_value_fact_table_query_signed_integer_order(
                 &table_, results.values[0], inputs_[1]),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
+  expect_enumeration(LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
   IREE_ASSERT_OK(loom_value_fact_table_compute_op_and_report(&table_, module_,
                                                              assume, &changed));
   EXPECT_TRUE(changed);
   EXPECT_EQ(loom_value_fact_table_query_signed_integer_order(
                 &table_, results.values[0], inputs_[1]),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS);
+  expect_enumeration(LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS);
 
   current = Snapshot(results.values[0]);
   EXPECT_TRUE(loom_value_fact_auxiliary_snapshot_equal(&first, &current));
@@ -584,6 +668,7 @@ TEST_F(FactRelationTest, RelationMutationUndefinitionAndScopeReuse) {
   EXPECT_EQ(loom_value_fact_table_query_signed_integer_order(
                 &table_, results.values[0], inputs_[1]),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
+  expect_enumeration(LOOM_INTEGER_ORDER_OUTCOME_BIT_ALL);
 }
 
 TEST_F(FactRelationTest, LiteralRelationLifecycleAndTransfer) {
@@ -671,6 +756,14 @@ TEST_F(FactRelationTest, CloneAndSeedPreserveSelectedRelationScope) {
   EXPECT_EQ(loom_value_fact_table_query_signed_integer_order(&seed, result,
                                                              inputs_[1]),
             LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS);
+  for (auto* selected : {&clone, &seed}) {
+    std::vector<VisitedRelation> visited;
+    EXPECT_TRUE(loom_value_fact_table_for_each_signed_integer_relation_while(
+        selected, result, CollectRelation, &visited));
+    ASSERT_EQ(visited.size(), 1u);
+    EXPECT_EQ(visited[0].counterpart, inputs_[1]);
+    EXPECT_EQ(visited[0].outcomes, LOOM_INTEGER_ORDER_OUTCOME_BIT_LESS);
+  }
 }
 
 TEST_F(FactRelationTest, LargeTupleUsesGroupedRelationPlan) {

@@ -68,6 +68,15 @@ inline loom_condition_integer_relation_t ValueRelation(
   return result;
 }
 
+inline loom_condition_integer_relation_t LiteralRelation(
+    loom_symbolic_integer_relation_t relation, loom_value_id_t left,
+    int64_t right) {
+  auto result = ValueRelation(relation, left, LOOM_VALUE_ID_INVALID);
+  result.right.kind = LOOM_CONDITION_INTEGER_OPERAND_CONSTANT;
+  result.right.constant = right;
+  return result;
+}
+
 inline bool EvaluateIntegerRelation(loom_symbolic_integer_relation_t relation,
                                     int64_t left, int64_t right) {
   switch (relation) {

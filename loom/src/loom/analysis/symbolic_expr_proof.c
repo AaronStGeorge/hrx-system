@@ -143,9 +143,8 @@ static iree_status_t loom_symbolic_expr_term_facts(
   IREE_RETURN_IF_ERROR(loom_symbolic_value_lookup_condition_refined_facts(
       context, term.relation_value_id, &relation_facts));
   facts = loom_symbolic_expr_intersect_integer_facts(facts, relation_facts);
-  IREE_RETURN_IF_ERROR(
-      loom_symbolic_value_apply_identity_chain_predicates_to_facts(
-          context, term.relation_value_id, &facts));
+  IREE_RETURN_IF_ERROR(loom_symbolic_value_refine_retained_relations(
+      context, term.relation_value_id, &facts));
   *out_facts = facts;
   return iree_ok_status();
 }
