@@ -4,15 +4,28 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
 load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
 
 loom_check_test_suite(
     name = "test",
     srcs = [
-        "pipeline_workers.loom-test",
         "storage_calls.loom-test",
         "storage_globals.loom-test",
         "storage_instances.loom-test",
         "storage_interference.loom-test",
     ],
+)
+
+# The production XDNA realization supplies the concrete inventory to the
+# shared analysis. These fixtures observe source proofs before target selection.
+loom_check_test_suite(
+    name = "pipeline_transport_test",
+    srcs = [
+        "pipeline_transport.loom-test",
+        "pipeline_transport_control.loom-test",
+    ],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/arch:aie2p",
+    ]),
 )

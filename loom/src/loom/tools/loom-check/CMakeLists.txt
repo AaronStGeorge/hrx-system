@@ -378,7 +378,6 @@ loom_cc_library(
     iree::base
     loom::tools::loom-check::test::config::providers
     loom::tools::loom-check::test::low::providers
-    loom::tools::loom-check::test::pipeline_workers
   TESTONLY
   PUBLIC
 )
