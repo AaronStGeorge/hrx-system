@@ -251,11 +251,34 @@ class PressureAliasTest : public ::testing::Test {
       }
       EXPECT_EQ(transferred, shared_units);
       EXPECT_EQ(values[2].live_unit_count, values[2].unit_count);
-      loom_low_schedule_pressure_alias_deactivate_result(&state, &pressure, 2);
+      if (source_first) {
+        loom_low_schedule_pressure_alias_deactivate_result(&state, &pressure,
+                                                           2);
+        for (uint16_t i = 0; i < source_count; ++i) {
+          EXPECT_EQ(pressure.storage_aliases.source_unit_counts[i], 0u);
+        }
+        EXPECT_EQ(values[2].flags, LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE);
+      }
+
+      // Block boundaries discard claims even when their result is still live.
+      // The pressure owner clears value flags separately from the alias index.
+      loom_low_schedule_pressure_alias_reset(&pressure.storage_aliases);
+      values[2].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
+      EXPECT_EQ(pressure.storage_aliases.source_count, 0u);
       for (uint16_t i = 0; i < source_count; ++i) {
         EXPECT_EQ(pressure.storage_aliases.source_unit_counts[i], 0u);
+        EXPECT_EQ(pressure.storage_aliases.source_heads[i],
+                  LOOM_LOW_SCHEDULE_NODE_NONE);
       }
-      EXPECT_EQ(values[2].flags, LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE);
+      EXPECT_EQ(loom_low_schedule_pressure_alias_append_source_baseline_result(
+                    &state, &pressure, 0, 2),
+                0u);
+      transferred = 0;
+      for (uint16_t i = 0; i < source_count; ++i) {
+        transferred += loom_low_schedule_pressure_alias_transfer_to_source(
+            &state, &pressure, i);
+      }
+      EXPECT_EQ(transferred, shared_units);
     }
   }
 

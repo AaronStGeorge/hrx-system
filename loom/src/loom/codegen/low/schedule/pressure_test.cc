@@ -54,10 +54,16 @@ TEST(PressureTest, SourceCliffFloorRetainsReadWriteHighWater) {
         {.unit_count = test_case.output_units, .register_class_id = 0},
     };
     loom_local_value_domain_t domain = {.value_count = IREE_ARRAYSIZE(values)};
+    const loom_liveness_block_relation_t block_liveness = {};
+    const loom_liveness_dataflow_t liveness = {
+        .blocks = &block_liveness,
+        .block_count = 1,
+    };
     loom_low_schedule_build_state_t state = {
         .pressure_cliffs = &resources,
         .target = {.descriptor_set = &descriptors},
         .value_domain = &domain,
+        .liveness_dataflow = &liveness,
         .values = values,
     };
     uint64_t live_units[] = {0};
@@ -98,9 +104,9 @@ TEST(PressureTest, SourceCliffFloorRetainsReadWriteHighWater) {
     EXPECT_EQ(pressure.block_value_count, 2u);
     EXPECT_EQ(first_cliffs[0], test_case.first_cliff);
 
-    // Finishing the source sweep clears live state, but cannot make a pressure
+    // Starting another block clears live state, but cannot make a pressure
     // threshold already reached by the authored order actionable again.
-    loom_low_schedule_reset_source_pressure_sweep(&state, &pressure);
+    loom_low_schedule_initialize_source_pressure_block(&state, &pressure, 0);
     EXPECT_EQ(pressure.current_live_units, 0u);
     EXPECT_EQ(live_units[0], 0u);
     EXPECT_EQ(pressure.block_value_count, 0u);
@@ -114,6 +120,9 @@ TEST(PressureTest, SourceCliffFloorRetainsReadWriteHighWater) {
                                                    &consumer);
     EXPECT_EQ(first_cliffs[0], test_case.first_cliff);
     EXPECT_EQ(pressure.current_live_units, test_case.output_units);
+    loom_low_schedule_reset_source_pressure_sweep(&state, &pressure);
+    EXPECT_EQ(pressure.current_live_units, 0u);
+    EXPECT_EQ(first_cliffs[0], test_case.first_cliff);
   }
 }
 

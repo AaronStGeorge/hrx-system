@@ -95,9 +95,11 @@ class's exact peak live units and values. These compact outputs use ordinary
 exact goldens.
 
 Schedule queries build the production function model and scheduler directly.
-Tests of unavoidable register debt or explicit residency cliffs use
-`emit low-schedule-json ... diagnostics=candidates output=none` with inline
-decision annotations. `emit low-allocation ... diagnostics=placement-decisions`
+`emit low-schedule-json ... diagnostics=candidates output=none` compares
+candidate-decision diagnostics through inline annotations. Native residency
+policy tests supply resource curves directly to their owning C APIs; authored
+IR tests observe the program's dependencies, liveness, and scheduling results.
+`emit low-allocation ... diagnostics=placement-decisions`
 similarly checks storage affinities directly instead of pinning incidental
 value IDs, interval endpoints, and physical register choices in JSON.
 

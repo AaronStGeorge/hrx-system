@@ -46,7 +46,7 @@
 //                           output -> compare. Source lowering uses source-low.
 //                           Analysis targets include liveness-json @function,
 //                           low-schedule-json @function [strategy=...]
-//                           [diagnostics=...] [cliff=<reg-class>:...],
+//                           [diagnostics=...],
 //                           low-allocation @function
 //                           [diagnostics=...] [class=units...]
 //                           [fixed=%value:<kind>:<base>:<count>],

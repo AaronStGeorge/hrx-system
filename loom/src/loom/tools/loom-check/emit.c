@@ -18,7 +18,6 @@
 #include "loom/codegen/low/schedule/json.h"
 #include "loom/codegen/low/schedule/run.h"
 #include "loom/codegen/low/schedule/types.h"
-#include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/error_catalog.h"
 #include "loom/error/source.h"
@@ -49,10 +48,6 @@ typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_STORAGE_INTERFERENCE,
 } loom_check_emit_format_t;
 
-enum {
-  LOOM_CHECK_EMIT_MAX_SCHEDULE_PRESSURE_CLIFFS = 16,
-};
-
 typedef struct loom_check_emit_entry_location_spec_t {
   // Original formal-argument ordinal from the RUN line.
   uint32_t argument_ordinal;
@@ -68,17 +63,6 @@ typedef struct loom_check_emit_entry_locations_t {
   // Number of parsed entry options.
   iree_host_size_t count;
 } loom_check_emit_entry_locations_t;
-
-typedef struct loom_check_emit_pressure_cliff_spec_t {
-  // Stable register-class name.
-  iree_string_view_t register_class;
-  // Live allocation units at which this cliff is crossed.
-  uint32_t cliff_units;
-  // Occupancy or throughput tier before crossing the cliff.
-  uint32_t tier_before;
-  // Occupancy or throughput tier after crossing the cliff.
-  uint32_t tier_after;
-} loom_check_emit_pressure_cliff_spec_t;
 
 typedef struct loom_check_emit_low_allocation_summary_row_t {
   // Number of assignments mapped to this descriptor register class.
@@ -126,11 +110,6 @@ typedef struct loom_check_emit_request_t {
   bool has_low_allocation_diagnostics_option;
   // Low scheduler diagnostic feedback requested by the RUN line.
   loom_low_schedule_diagnostic_flags_t low_schedule_diagnostic_flags;
-  // Low scheduler pressure cliffs parsed from the RUN line.
-  loom_check_emit_pressure_cliff_spec_t low_schedule_pressure_cliff_specs
-      [LOOM_CHECK_EMIT_MAX_SCHEDULE_PRESSURE_CLIFFS];
-  // Number of entries in |low_schedule_pressure_cliff_specs|.
-  iree_host_size_t low_schedule_pressure_cliff_spec_count;
   // True once a low scheduler diagnostics option has been parsed.
   bool has_low_schedule_diagnostics_option;
   // Low scheduler candidate-selection strategy requested by the RUN line.
@@ -296,59 +275,6 @@ static iree_status_t loom_check_emit_parse_low_schedule_option(
   if (iree_string_view_equal(name, IREE_SV("output"))) {
     return loom_check_emit_parse_json_output_option(
         IREE_SV("low-schedule-json"), value, request);
-  }
-  if (iree_string_view_equal(name, IREE_SV("cliff"))) {
-    if (request->low_schedule_pressure_cliff_spec_count >=
-        IREE_ARRAYSIZE(request->low_schedule_pressure_cliff_specs)) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "too many low-schedule-json pressure cliffs");
-    }
-    iree_string_view_t register_class = iree_string_view_empty();
-    iree_string_view_t units_and_tiers = iree_string_view_empty();
-    iree_string_view_split(value, ':', &register_class, &units_and_tiers);
-    register_class = iree_string_view_trim(register_class);
-    units_and_tiers = iree_string_view_trim(units_and_tiers);
-
-    iree_string_view_t units_text = iree_string_view_empty();
-    iree_string_view_t tiers_text = iree_string_view_empty();
-    iree_string_view_split(units_and_tiers, ':', &units_text, &tiers_text);
-    units_text = iree_string_view_trim(units_text);
-    tiers_text = iree_string_view_trim(tiers_text);
-
-    iree_string_view_t tier_before_text = iree_string_view_empty();
-    iree_string_view_t tier_after_text = iree_string_view_empty();
-    iree_string_view_split(tiers_text, ':', &tier_before_text,
-                           &tier_after_text);
-    tier_before_text = iree_string_view_trim(tier_before_text);
-    tier_after_text = iree_string_view_trim(tier_after_text);
-    if (iree_string_view_is_empty(register_class) ||
-        iree_string_view_is_empty(units_text) ||
-        iree_string_view_is_empty(tier_before_text) ||
-        iree_string_view_is_empty(tier_after_text) ||
-        iree_string_view_find_char(tier_after_text, ':', 0) !=
-            IREE_STRING_VIEW_NPOS) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low-schedule-json option 'cliff' must have the form "
-          "<register-class>:<units>:<tier-before>:<tier-after>");
-    }
-    uint32_t cliff_units = 0;
-    uint32_t tier_before = 0;
-    uint32_t tier_after = 0;
-    if (!iree_string_view_atoi_uint32(units_text, &cliff_units) ||
-        !iree_string_view_atoi_uint32(tier_before_text, &tier_before) ||
-        !iree_string_view_atoi_uint32(tier_after_text, &tier_after)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "invalid low-schedule-json pressure cliff");
-    }
-    loom_check_emit_pressure_cliff_spec_t* spec =
-        &request->low_schedule_pressure_cliff_specs
-             [request->low_schedule_pressure_cliff_spec_count++];
-    spec->register_class = register_class;
-    spec->cliff_units = cliff_units;
-    spec->tier_before = tier_before;
-    spec->tier_after = tier_after;
-    return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("strategy"))) {
     if (request->has_low_schedule_strategy_option) {
@@ -788,104 +714,11 @@ static iree_status_t loom_check_emit_write_function_analysis(
                                   &result->actual_output);
 }
 
-static iree_status_t loom_check_emit_index_pressure_cliffs(
-    const loom_target_residency_cliff_t* values, iree_host_size_t count,
-    const loom_low_descriptor_set_t* descriptor_set,
-    iree_arena_allocator_t* arena,
-    loom_target_residency_direct_resource_table_t* out_table,
-    uint32_t* out_best_tier) {
-  *out_table = (loom_target_residency_direct_resource_table_t){0};
-  *out_best_tier = 0;
-  const iree_host_size_t descriptor_reg_class_count =
-      descriptor_set->reg_class_count;
-  loom_target_residency_cliff_range_t* ranges = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, descriptor_reg_class_count, sizeof(*ranges), (void**)&ranges));
-  memset(ranges, 0, descriptor_reg_class_count * sizeof(*ranges));
-  iree_string_view_t* names = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, descriptor_reg_class_count, sizeof(*names), (void**)&names));
-  for (uint16_t reg_class_id = 0; reg_class_id < descriptor_reg_class_count;
-       ++reg_class_id) {
-    names[reg_class_id] = loom_low_descriptor_set_string(
-        descriptor_set,
-        descriptor_set->reg_classes[reg_class_id].name_string_ref);
-  }
-
-  uint16_t previous_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-  uint32_t previous_cliff_units = 0;
-  uint32_t previous_tier_after = 0;
-  const uint32_t best_tier = values[0].tier_before;
-  for (iree_host_size_t i = 0; i < count; ++i) {
-    const loom_target_residency_cliff_t* cliff = &values[i];
-    if (cliff->resource_id >= descriptor_reg_class_count) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low-schedule-json pressure cliff references an invalid register "
-          "class");
-    }
-    if (cliff->cliff_units == 0) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low-schedule-json pressure cliff units must be nonzero");
-    }
-    if (cliff->tier_after >= cliff->tier_before) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low-schedule-json pressure cliff must lower the target tier");
-    }
-    if (i != 0 && (cliff->resource_id < previous_reg_class_id ||
-                   (cliff->resource_id == previous_reg_class_id &&
-                    cliff->cliff_units <= previous_cliff_units))) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low-schedule-json pressure cliffs must be sorted by register "
-          "class and units");
-    }
-    if ((cliff->resource_id != previous_reg_class_id &&
-         cliff->tier_before != best_tier) ||
-        (cliff->resource_id == previous_reg_class_id &&
-         cliff->tier_before != previous_tier_after)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low-schedule-json pressure cliffs must form contiguous tier "
-          "chains from one best tier");
-    }
-    previous_reg_class_id = cliff->resource_id;
-    previous_cliff_units = cliff->cliff_units;
-    previous_tier_after = cliff->tier_after;
-  }
-
-  iree_host_size_t cliff_index = 0;
-  for (uint16_t reg_class_id = 0; reg_class_id < descriptor_reg_class_count;
-       ++reg_class_id) {
-    loom_target_residency_cliff_range_t* range = &ranges[reg_class_id];
-    range->start = (uint32_t)cliff_index;
-    while (cliff_index < count &&
-           values[cliff_index].resource_id == reg_class_id) {
-      ++range->count;
-      ++cliff_index;
-    }
-  }
-
-  *out_table = (loom_target_residency_direct_resource_table_t){
-      .names = names,
-      .cliffs = values,
-      .cliff_count = count,
-      .cliff_ranges = ranges,
-      .resource_count = (uint16_t)descriptor_reg_class_count,
-  };
-  *out_best_tier = best_tier;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_check_emit_write_low_schedule_json(
     loom_module_t* module, iree_string_view_t symbol_name,
     const loom_low_descriptor_registry_t* descriptor_registry,
     const loom_test_case_t* test_case, iree_string_view_t filename,
     loom_check_diagnostic_collector_t* diagnostic_collector,
-    const loom_check_emit_pressure_cliff_spec_t* pressure_cliff_specs,
-    iree_host_size_t pressure_cliff_spec_count,
     const loom_low_allocation_budget_t* budgets, iree_host_size_t budget_count,
     loom_low_schedule_diagnostic_flags_t diagnostic_flags,
     loom_low_schedule_strategy_t strategy, iree_diagnostic_emitter_t emitter,
@@ -897,72 +730,7 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
   if (!low_function) {
     return iree_ok_status();
   }
-  loom_target_residency_direct_resource_table_t pressure_cliffs = {0};
-  uint32_t best_tier = 0;
-  if (pressure_cliff_spec_count != 0) {
-    loom_symbol_fact_table_t symbol_facts = {0};
-    loom_symbol_fact_table_initialize(&symbol_facts, analysis_arena);
-    loom_low_resolved_target_t target = {0};
-    IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
-        module, &symbol_facts, low_function,
-        /*function_target_facts=*/NULL, descriptor_registry, emitter, &target));
-    if (!target.descriptor_set) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "low-schedule-json target did not resolve descriptor set");
-    }
-    loom_target_residency_cliff_t* resolved_cliffs = NULL;
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        analysis_arena, pressure_cliff_spec_count, sizeof(*resolved_cliffs),
-        (void**)&resolved_cliffs));
-    bool pressure_cliffs_resolved = true;
-    for (iree_host_size_t i = 0; i < pressure_cliff_spec_count; ++i) {
-      const loom_check_emit_pressure_cliff_spec_t* spec =
-          &pressure_cliff_specs[i];
-      uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-      bool found_reg_class = loom_low_descriptor_set_lookup_register_class(
-          target.descriptor_set, spec->register_class, &reg_class_id, NULL);
-      if (!found_reg_class) {
-        loom_diagnostic_param_t params[] = {
-            loom_param_string(loom_low_diagnostic_target_key(&target)),
-            loom_param_string(loom_low_diagnostic_export_name(&target)),
-            loom_param_string(loom_low_diagnostic_config_key(&target)),
-            loom_param_string(
-                loom_low_diagnostic_function_name(module, low_function)),
-            loom_param_string(spec->register_class),
-            loom_param_string(target.descriptor_set_key),
-        };
-        const loom_diagnostic_emission_t emission = {
-            .op = low_function,
-            .error = LOOM_ERR_BACKEND_039,
-            .params = params,
-            .param_count = IREE_ARRAYSIZE(params),
-        };
-        IREE_RETURN_IF_ERROR(iree_diagnostic_emit(emitter, &emission));
-        pressure_cliffs_resolved = false;
-        continue;
-      }
-      resolved_cliffs[i] = (loom_target_residency_cliff_t){
-          .resource_id = reg_class_id,
-          .cliff_units = spec->cliff_units,
-          .tier_before = spec->tier_before,
-          .tier_after = spec->tier_after,
-      };
-    }
-    if (!pressure_cliffs_resolved) {
-      return iree_ok_status();
-    }
-    IREE_RETURN_IF_ERROR(loom_check_emit_index_pressure_cliffs(
-        resolved_cliffs, pressure_cliff_spec_count, target.descriptor_set,
-        analysis_arena, &pressure_cliffs, &best_tier));
-  }
-  const loom_target_residency_model_t residency_model = {
-      .best_tier = best_tier,
-      .direct_resources = pressure_cliffs,
-  };
   loom_low_schedule_options_t options = {
-      .residency = loom_target_residency_view(
-          pressure_cliff_spec_count != 0 ? &residency_model : NULL, UINT32_MAX),
       .allocation_budgets = budgets,
       .allocation_budget_count = budget_count,
       .emitter = emitter,
@@ -1489,8 +1257,6 @@ static iree_status_t loom_check_emit_core_native_module(
         native_module->module, request->analysis_symbol_name,
         &provider_request->low_registry->registry, provider_request->test_case,
         provider_request->filename, diagnostic_collector,
-        request->low_schedule_pressure_cliff_specs,
-        request->low_schedule_pressure_cliff_spec_count,
         request->low_allocation_budgets, request->low_allocation_budget_count,
         request->low_schedule_diagnostic_flags, request->low_schedule_strategy,
         emitter, diagnostic_collector->arena, result);

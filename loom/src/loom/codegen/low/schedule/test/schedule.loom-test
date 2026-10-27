@@ -1322,41 +1322,6 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_opens_load_on_r
 }
 
 // ====
-// RUN: emit low-schedule-json @resource_stall_accounts_for_cfg_live_through_pressure strategy=resource-stall diagnostics=candidates cliff=test.i32:9:15:14 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_accounts_for_cfg_live_through_pressure(%pad: reg<test.i32 x8>, %ptr0: reg<test.ptr>, %ptr1: reg<test.ptr>, %lhs: reg<test.i32 x4>) -> (reg<test.i32 x8>, reg<test.i32 x4>) asm {
-  low.br ^schedule
-^schedule:
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", scored_candidate_count="2", chosen_packet="test.load.v4i32", rejected_packet="test.load.v4i32"}
-  %load0 = test.load.v4i32 %ptr0
-  %use0 = test.add.v4i32 %load0, %lhs
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_packet="test.load.v4i32", rejected_packet="test.add.v4i32", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="0"}
-  %load1 = test.load.v4i32 %ptr1
-  %use1 = test.add.v4i32 %load1, %use0
-  low.br ^exit
-^exit:
-  return %pad, %use1
-}
-
-// ====
-// RUN: emit low-schedule-json @resource_stall_ends_cfg_block_arguments_at_definition strategy=resource-stall diagnostics=candidates cliff=test.i32:14:15:14 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_ends_cfg_block_arguments_at_definition(%seed: reg<test.i32 x8>, %ptr0: reg<test.ptr>, %ptr1: reg<test.ptr>) -> (reg<test.i32 x8>, reg<test.i32>, reg<test.i32 x4>) asm {
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", scored_candidate_count="2", chosen_packet="test.load.v4i32", rejected_packet="test.load.v4i32"}
-  %load0 = test.load.v4i32 %ptr0
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_packet="test.extract_lane.i32", rejected_packet="test.load.v4i32", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="1", rejected_pressure_cliff_units="14"}
-  %lane = test.extract_lane.i32 %load0, 0
-  %load1 = test.load.v4i32 %ptr1
-  low.br ^exit(%seed: reg<test.i32 x8>, %lane: reg<test.i32>, %load1: reg<test.i32 x4>)
-^exit(%state: reg<test.i32 x8>, %result_lane: reg<test.i32>, %result_load: reg<test.i32 x4>):
-  return %state, %result_lane, %result_load
-}
-
-// ====
 // RUN: emit low-schedule-json @resource_stall_accounts_for_shared_alias_capacity strategy=resource-stall diagnostics=candidates output=none
 
 test.target<low_core> @test_target
@@ -1545,26 +1510,6 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_reuses_released
   %second = copy %source : reg<test.i32 x4> -> reg<test.i32 x4>
   %load = test.load.v4i32 %ptr
   return %pad, %source, %second, %load
-}
-
-// ====
-// RUN: emit low-schedule-json @resource_stall_resets_aliases_at_cfg_handoffs strategy=resource-stall diagnostics=candidates cliff=test.i32:67:15:14 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_resets_aliases_at_cfg_handoffs(%pad: reg<test.i32 x60>, %source: reg<test.i32 x4>, %ptr: reg<test.ptr>) -> (reg<test.i32 x60>, reg<test.i32>, reg<test.i32 x4>) asm {
-  low.br ^body(%pad: reg<test.i32 x60>, %source: reg<test.i32 x4>)
-^body(%block_pad: reg<test.i32 x60>, %block_source: reg<test.i32 x4>):
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_packet="low.copy", rejected_packet="test.load.v4i32", chosen_produced_live_units="0", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="1", rejected_pressure_cliff_units="67"}
-  %copy = copy %block_source : reg<test.i32 x4> -> reg<test.i32 x4>
-  // REMARK@+1: BACKEND/015
-  %discarded = test.add.v4i32 %block_source, %copy
-  // REMARK@+1: BACKEND/015
-  %lane = test.extract_lane.i32 %copy, 0
-  %load = test.load.v4i32 %ptr
-  low.br ^exit(%block_pad: reg<test.i32 x60>, %lane: reg<test.i32>, %load: reg<test.i32 x4>)
-^exit(%result_pad: reg<test.i32 x60>, %result_lane: reg<test.i32>, %result_load: reg<test.i32 x4>):
-  return %result_pad, %result_lane, %result_load
 }
 
 // ====
