@@ -19,7 +19,7 @@ from loom.target.arch.amd.xdna.aie2p.core_schedule_data import CORE_SCHEDULE_TAB
 
 _SCALAR_MOVE_ITINERARY_PREFIX = "II_MOV_alu_mv_mv_mv_scl_"
 _SCALAR_MOVE_GENERIC_ITINERARY = "II_MOV_alu_mv_mv_mv_scl"
-_COMPONENT_MOVE_FORMS = {
+AGGREGATE_MOVE_COMPONENT_FORMS = {
     "scalar": "MOV_alu_mv_mv_mv_scl",
     "accumulator_1024": "VMOV_alu_mv_mv_cm",
     "fifo_512": "VMOV_alu_mv_mv_x",
@@ -199,7 +199,7 @@ def _validate_aggregate_move_recipes(
     forms = {row.name: row for row in CORE_MACHINE_TABLE.forms}
     classified_classes = set()
     for recipe in recipes:
-        form = forms[_COMPONENT_MOVE_FORMS[recipe.component_kind]]
+        form = forms[AGGREGATE_MOVE_COMPONENT_FORMS[recipe.component_kind]]
         if len(form.outputs) != 1 or len(form.inputs) != 1:
             raise ValueError(f"{form.name}: component move must have two operands")
         destination_registers = {
@@ -257,7 +257,7 @@ def _validate_aggregate_move_recipes(
 AGGREGATE_MOVE_RECIPES = (
     AggregateMoveRecipe(
         name="scalar_pair",
-        machine_classes=("eLPredicate", "mL8m"),
+        machine_classes=("eL", "eLPredicate", "mL8m"),
         component_paths=(("sub_l_even",), ("sub_l_odd",)),
         component_kind="scalar",
     ),

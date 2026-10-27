@@ -1,0 +1,85 @@
+// Generated move routes retain exact target encodings for each distinct native
+// mechanism: factored scalar resources, scalar pairs, dimension aggregates,
+// accumulator halves, and FIFO halves.
+
+// RUN: emit aie2p-leaf @scalar_cross_bank report=code
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @scalar_cross_bank(%source: reg<aie2p.er>) -> (reg<aie2p.er>, reg<aie2p.es>) asm {
+  %copy = copy %source {detached = true} : reg<aie2p.er> -> reg<aie2p.es>
+  return %source, %copy
+}
+
+// ----
+code: f8 20 e0 18 18 00 28 10 00 00 00 00 00 00 00 00 00 00
+
+// ====
+
+// RUN: emit aie2p-leaf @scalar_pair report=code
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @scalar_pair(%source: reg<aie2p.elpredicate>) -> (reg<aie2p.elpredicate>, reg<aie2p.elpredicate>) asm {
+  %copy = copy %source {detached = true} : reg<aie2p.elpredicate> -> reg<aie2p.elpredicate>
+  return %source, %copy
+}
+
+// ----
+code: f8 20 98 1c f8 a0 d8 1c 18 00 28 10 00 00 00 00 00 00 00 00 00 00
+
+// ====
+
+// RUN: emit aie2p-leaf @dimension_2d report=code
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @dimension_2d(%source: reg<aie2p.ed>) -> (reg<aie2p.ed>, reg<aie2p.ed>) asm {
+  %copy = copy %source {detached = true} : reg<aie2p.ed> -> reg<aie2p.ed>
+  return %source, %copy
+}
+
+// ----
+code: f8 80 c1 19 f8 80 40 19 f8 00 81 19 f8 00 00 19 18 00 28 10 00 00 00 00 00 00 00 00 00 00
+
+// ====
+
+// RUN: emit aie2p-leaf @dimension_3d report=code
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @dimension_3d(%source: reg<aie2p.eds>) -> (reg<aie2p.eds>, reg<aie2p.eds>) asm {
+  %copy = copy %source {detached = true} : reg<aie2p.eds> -> reg<aie2p.eds>
+  return %source, %copy
+}
+
+// ----
+code: f8 80 c1 19 f8 80 40 19 f8 00 81 19 f8 00 00 19 f8 80 c9 1d f8 80 48 1d f8 00 89 1d 18 00 28 10 00 00 00 00 00 00 00 00 00 00
+
+// ====
+
+// RUN: emit aie2p-leaf @accumulator_2048 report=code
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @accumulator_2048(%source: reg<aie2p.edm>) -> (reg<aie2p.edm>, reg<aie2p.edm>) asm {
+  %copy = copy %source {detached = true} : reg<aie2p.edm> -> reg<aie2p.edm>
+  return %source, %copy
+}
+
+// ----
+code: e4 15 01 02 00 05 f8 8a 82 19 00 00 00 00 00 00 00 00
+
+// ====
+
+// RUN: emit aie2p-leaf @fifo_1024 report=code
+
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @fifo_1024(%source: reg<aie2p.eldfiforeg>) -> (reg<aie2p.eldfiforeg>, reg<aie2p.mstfifo>) asm {
+  %copy = copy %source {detached = true} : reg<aie2p.eldfiforeg> -> reg<aie2p.mstfifo>
+  return %source, %copy
+}
+
+// ----
+code: e4 25 cb 06 00 05 f8 92 61 1e 00 00 00 00 00 00 00 00

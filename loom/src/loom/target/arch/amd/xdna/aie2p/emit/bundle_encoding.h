@@ -66,11 +66,6 @@ loom_aie2p_bundle_encoding_encode_loop_setup_descriptor(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal, int64_t immediate);
 
-// Encodes one allocation-planned move between native registers.
-iree_status_t loom_aie2p_bundle_encoding_encode_move(
-    const loom_low_emission_frame_t* frame, loom_aie2p_register_move_t move,
-    loom_aie2p_encoded_slot_t* out_encoded_slot);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif

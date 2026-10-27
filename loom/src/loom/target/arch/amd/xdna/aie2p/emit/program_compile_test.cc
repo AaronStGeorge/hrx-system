@@ -236,27 +236,18 @@ loom_aie2p_encoded_slot_t EncodeMove(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_aie2p_physical_register_id_t source,
     loom_aie2p_physical_register_id_t destination) {
-  const uint32_t descriptor_ordinal =
-      loom_aie2p_descriptor_select_move(source, destination);
-  EXPECT_NE(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
-  const loom_low_allocation_assignment_t destination_assignment = {
-      .unit_count = 1,
-      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-      .location_base = destination,
-      .location_count = 1,
-  };
-  const loom_low_allocation_assignment_t source_assignment = {
-      .unit_count = 1,
-      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-      .location_base = source,
-      .location_count = 1,
-  };
-  const loom_low_allocation_assignment_t* assignments[] = {
-      &destination_assignment,
-      &source_assignment,
-  };
-  return loom_aie2p_descriptor_encode(descriptor_set, descriptor_ordinal,
-                                      assignments, nullptr);
+  const loom_aie2p_move_route_id_t route_id =
+      loom_aie2p_descriptor_resolve_move_route(source, destination);
+  EXPECT_NE(route_id, LOOM_AIE2P_MOVE_ROUTE_ID_INVALID);
+  EXPECT_EQ(loom_aie2p_descriptor_move_route_step_count(route_id), 1);
+  return loom_aie2p_descriptor_encode_move_step(
+      descriptor_set,
+      loom_aie2p_descriptor_move_route_step(route_id,
+                                            loom_aie2p_register_move_t{
+                                                .source = source,
+                                                .destination = destination,
+                                            },
+                                            0));
 }
 
 bool BundleHasEncodedSlot(const DecodedProgramBundle& bundle,
@@ -914,28 +905,8 @@ TEST_F(Aie2pProgramCompileTest,
       loom_aie2p_machine_find_physical_register(IREE_SV("p2"));
   ASSERT_NE(p0, LOOM_AIE2P_PHYSICAL_REGISTER_ID_INVALID);
   ASSERT_NE(p2, LOOM_AIE2P_PHYSICAL_REGISTER_ID_INVALID);
-  const uint32_t move_descriptor = loom_aie2p_descriptor_select_move(p2, p0);
-  ASSERT_NE(move_descriptor, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
-  const loom_low_allocation_assignment_t p0_assignment = {
-      .unit_count = 1,
-      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-      .location_base = p0,
-      .location_count = 1,
-  };
-  const loom_low_allocation_assignment_t p2_assignment = {
-      .unit_count = 1,
-      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-      .location_base = p2,
-      .location_count = 1,
-  };
-  const loom_low_allocation_assignment_t* move_assignments[] = {
-      &p0_assignment,
-      &p2_assignment,
-  };
   const loom_aie2p_encoded_slot_t expected_entry_move =
-      loom_aie2p_descriptor_encode(loom_aie2p_core_descriptor_set(),
-                                   move_descriptor, move_assignments,
-                                   /*immediate_values=*/nullptr);
+      EncodeMove(loom_aie2p_core_descriptor_set(), p2, p0);
   EXPECT_EQ(entry_move->slot, expected_entry_move.slot);
   EXPECT_EQ(entry_move->value, expected_entry_move.value);
 

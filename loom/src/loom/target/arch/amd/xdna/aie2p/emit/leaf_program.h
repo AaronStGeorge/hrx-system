@@ -50,7 +50,12 @@ typedef struct loom_aie2p_planned_slot_t {
   uint32_t scheduled_packet_index;
   // Planner provenance flags.
   loom_aie2p_planned_slot_flags_t flags;
+  // Generated move-step profile retained for structural moves; zero otherwise.
+  uint8_t move_step_profile_id;
 } loom_aie2p_planned_slot_t;
+
+static_assert(sizeof(loom_aie2p_planned_slot_t) == 24,
+              "planned AIE2P slots must remain 24 bytes");
 
 // One variable-width physical VLIW bundle.
 typedef struct loom_aie2p_planned_bundle_t {

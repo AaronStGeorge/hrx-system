@@ -8,44 +8,46 @@
 
 #include "iree/base/internal/math.h"
 
+// Component projection shared by every physical register in one aggregate
+// move family.
+typedef struct loom_aie2p_move_projection_t {
+  // First physical component in the generated component table.
+  uint16_t component_start;
+  // Number of physical components in this register.
+  uint8_t component_count;
+  // Generated route realizing the aggregate move.
+  uint8_t route_id;
+} loom_aie2p_move_projection_t;
+
+// Exact raw-encoding metadata for one aggregate move-step mechanism.
+typedef struct loom_aie2p_move_step_encoding_info_t {
+  // Native instruction form selected for the move step.
+  loom_aie2p_instruction_id_t instruction_id;
+  // Instruction field receiving the destination register encoding.
+  loom_aie2p_encoding_field_id_t destination_field_id;
+  // Instruction field receiving the source register encoding.
+  loom_aie2p_encoding_field_id_t source_field_id;
+  // Machine adapter mapping the destination physical register.
+  loom_aie2p_register_adapter_id_t destination_adapter_id;
+  // Machine adapter mapping the source physical register.
+  loom_aie2p_register_adapter_id_t source_adapter_id;
+} loom_aie2p_move_step_encoding_info_t;
+
 // Allocation move membership and register-part projections are resolved from
 // the owned machine tables at generation time.
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/register_tables.inl"
 
 #define LOOM_AIE2P_DESCRIPTOR_MAX_ENCODING_FIELD_COUNT 16u
 
+static_assert(sizeof(loom_aie2p_move_projection_t) == 4,
+              "AIE2P move projections must remain compact");
+static_assert(sizeof(loom_aie2p_move_step_encoding_info_t) == 10,
+              "AIE2P move encoding rows must remain compact");
+
 uint32_t loom_aie2p_descriptor_register_part_units(uint16_t register_part_id) {
   return register_part_id == LOOM_LOW_REGISTER_PART_NONE
              ? UINT32_MAX
              : kRegisterPartAtomicUnitMasks[register_part_id];
-}
-
-uint32_t loom_aie2p_descriptor_select_move(
-    loom_aie2p_physical_register_id_t source,
-    loom_aie2p_physical_register_id_t destination) {
-  const uint32_t candidates =
-      kMoveSourceMasks[source] & kMoveDestinationMasks[destination];
-  return candidates != 0
-             ? kMoveDescriptorOrdinals[iree_math_count_trailing_zeros_u32(
-                   candidates)]
-             : LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
-
-uint8_t loom_aie2p_descriptor_move_parts(
-    loom_aie2p_register_move_t move, loom_aie2p_register_move_t out_parts[2]) {
-  const uint8_t source_pair = kMoveScalarPairIndices[move.source];
-  const uint8_t destination_pair = kMoveScalarPairIndices[move.destination];
-  if (source_pair != 0 && destination_pair != 0) {
-    for (uint8_t i = 0; i < 2; ++i) {
-      out_parts[i] = (loom_aie2p_register_move_t){
-          .source = kMoveScalarPairs[source_pair][i],
-          .destination = kMoveScalarPairs[destination_pair][i],
-      };
-    }
-    return 2;
-  }
-  out_parts[0] = move;
-  return 1;
 }
 
 loom_aie2p_move_route_id_t loom_aie2p_descriptor_resolve_move_route(
@@ -64,9 +66,9 @@ loom_aie2p_move_route_id_t loom_aie2p_descriptor_resolve_move_route(
       kMoveScalarDestinationCategories[destination];
   if (source_category != UINT8_MAX && destination_category != UINT8_MAX) {
     return (loom_aie2p_move_route_id_t)(kMoveRouteScalarFirst +
-                                        destination_category *
-                                            kMoveRouteScalarSourceCount +
-                                        source_category);
+                                        source_category *
+                                            kMoveRouteScalarDestinationCount +
+                                        destination_category);
   }
 
   const loom_aie2p_move_projection_t* source_projection =
@@ -89,30 +91,62 @@ uint8_t loom_aie2p_descriptor_move_route_step_count(
 }
 
 static void loom_aie2p_descriptor_append_move_resource_class(
-    uint16_t schedule_class_id, loom_aie2p_move_route_step_t* step) {
+    uint16_t schedule_class_id, loom_aie2p_move_step_profile_t* profile) {
   if (schedule_class_id == UINT16_MAX) {
     return;
   }
-  IREE_ASSERT_LT(step->resource_schedule_class_count,
+  IREE_ASSERT_LT(profile->resource_schedule_class_count,
                  LOOM_AIE2P_MOVE_STEP_MAX_RESOURCE_CLASS_COUNT);
-  step->resource_schedule_class_ids[step->resource_schedule_class_count++] =
+  profile
+      ->resource_schedule_class_ids[profile->resource_schedule_class_count++] =
       schedule_class_id;
 }
 
 static void loom_aie2p_descriptor_set_scalar_move_resources(
     uint8_t source_category, uint8_t destination_category,
-    loom_aie2p_move_route_step_t* step) {
+    loom_aie2p_move_step_profile_t* profile) {
   if (source_category + 1u == kMoveRouteScalarSourceCount) {
     loom_aie2p_descriptor_append_move_resource_class(
-        kMoveScalarCoreIdScheduleClassId, step);
+        kMoveScalarCoreIdScheduleClassId, profile);
     return;
   }
   loom_aie2p_descriptor_append_move_resource_class(
-      kMoveScalarCommonScheduleClassId, step);
+      kMoveScalarCommonScheduleClassId, profile);
   loom_aie2p_descriptor_append_move_resource_class(
-      kMoveScalarDestinationScheduleClassIds[destination_category], step);
+      kMoveScalarDestinationScheduleClassIds[destination_category], profile);
   loom_aie2p_descriptor_append_move_resource_class(
-      kMoveScalarSourceScheduleClassIds[source_category], step);
+      kMoveScalarSourceScheduleClassIds[source_category], profile);
+}
+
+loom_aie2p_move_step_profile_t loom_aie2p_descriptor_move_step_profile(
+    loom_aie2p_move_step_profile_id_t profile_id) {
+  IREE_ASSERT(profile_id != LOOM_AIE2P_MOVE_STEP_PROFILE_ID_INVALID &&
+              profile_id < kMoveRouteLimit);
+  loom_aie2p_move_step_profile_t profile = {
+      .encoding = LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR,
+  };
+  if (profile_id < kMoveRouteScalarFirst) {
+    profile.descriptor_ordinal =
+        kMoveDescriptorOrdinals[profile_id - kMoveRouteDirectFirst];
+    return profile;
+  }
+  if (profile_id < kMoveRouteAggregateFirst) {
+    const uint8_t scalar_route = profile_id - kMoveRouteScalarFirst;
+    profile.descriptor_ordinal = kMoveScalarDescriptorOrdinal;
+    loom_aie2p_descriptor_set_scalar_move_resources(
+        scalar_route / kMoveRouteScalarDestinationCount,
+        scalar_route % kMoveRouteScalarDestinationCount, &profile);
+    return profile;
+  }
+
+  const uint8_t aggregate_route = profile_id - kMoveRouteAggregateFirst;
+  profile.descriptor_ordinal = kMoveEventDescriptorOrdinal;
+  profile.encoding = kMoveAggregateEncodingKinds[aggregate_route];
+  IREE_ASSERT(profile.encoding != LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR &&
+              "scalar aggregate steps retain their exact scalar profile");
+  loom_aie2p_descriptor_append_move_resource_class(
+      kMoveAggregateScheduleClassIds[aggregate_route], &profile);
+  return profile;
 }
 
 loom_aie2p_move_route_step_t loom_aie2p_descriptor_move_route_step(
@@ -124,19 +158,13 @@ loom_aie2p_move_route_step_t loom_aie2p_descriptor_move_route_step(
                  loom_aie2p_descriptor_move_route_step_count(route_id));
   loom_aie2p_move_route_step_t step = {
       .move = move,
-      .encoding = LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR,
   };
   if (route_id < kMoveRouteScalarFirst) {
-    step.descriptor_ordinal =
-        kMoveDescriptorOrdinals[route_id - kMoveRouteDirectFirst];
+    step.profile_id = route_id;
     return step;
   }
   if (route_id < kMoveRouteAggregateFirst) {
-    const uint8_t scalar_route = route_id - kMoveRouteScalarFirst;
-    step.descriptor_ordinal = kMoveScalarDescriptorOrdinal;
-    loom_aie2p_descriptor_set_scalar_move_resources(
-        scalar_route % kMoveRouteScalarSourceCount,
-        scalar_route / kMoveRouteScalarSourceCount, &step);
+    step.profile_id = route_id;
     return step;
   }
 
@@ -154,21 +182,21 @@ loom_aie2p_move_route_step_t loom_aie2p_descriptor_move_route_step(
           kMoveProjectionComponents[destination_projection->component_start +
                                     step_index],
   };
-  step.encoding = kMoveAggregateEncodingKinds[aggregate_route];
-  if (step.encoding == LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR) {
-    step.descriptor_ordinal = kMoveScalarDescriptorOrdinal;
+  if (kMoveAggregateEncodingKinds[aggregate_route] ==
+      LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR) {
     const uint8_t source_category =
         kMoveScalarSourceCategories[step.move.source];
     const uint8_t destination_category =
         kMoveScalarDestinationCategories[step.move.destination];
     IREE_ASSERT(source_category != UINT8_MAX &&
                 destination_category != UINT8_MAX);
-    loom_aie2p_descriptor_set_scalar_move_resources(
-        source_category, destination_category, &step);
+    step.profile_id =
+        (loom_aie2p_move_step_profile_id_t)(kMoveRouteScalarFirst +
+                                            source_category *
+                                                kMoveRouteScalarDestinationCount +
+                                            destination_category);
   } else {
-    step.descriptor_ordinal = kMoveEventDescriptorOrdinal;
-    loom_aie2p_descriptor_append_move_resource_class(
-        kMoveAggregateScheduleClassIds[aggregate_route], &step);
+    step.profile_id = route_id;
   }
   return step;
 }
@@ -239,4 +267,51 @@ loom_aie2p_encoded_slot_t loom_aie2p_descriptor_encode(
 
   return loom_aie2p_encoding_pack_verified_instruction(
       descriptor->encoding_id, field_values, field_count);
+}
+
+loom_aie2p_encoded_slot_t loom_aie2p_descriptor_encode_move_step(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_aie2p_move_route_step_t step) {
+  const loom_aie2p_move_step_profile_t profile =
+      loom_aie2p_descriptor_move_step_profile(step.profile_id);
+  if (profile.encoding == LOOM_AIE2P_MOVE_STEP_ENCODING_DESCRIPTOR) {
+    const loom_low_allocation_assignment_t destination_assignment = {
+        .unit_count = 1,
+        .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+        .location_base = step.move.destination,
+        .location_count = 1,
+    };
+    const loom_low_allocation_assignment_t source_assignment = {
+        .unit_count = 1,
+        .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+        .location_base = step.move.source,
+        .location_count = 1,
+    };
+    const loom_low_allocation_assignment_t* operand_assignments[] = {
+        &destination_assignment,
+        &source_assignment,
+    };
+    return loom_aie2p_descriptor_encode(
+        descriptor_set, profile.descriptor_ordinal, operand_assignments, NULL);
+  }
+
+  const iree_host_size_t aggregate_route =
+      step.profile_id - kMoveRouteAggregateFirst;
+  const loom_aie2p_move_step_encoding_info_t* encoding =
+      &kMoveAggregateEncodingInfos[aggregate_route];
+  IREE_ASSERT(encoding->instruction_id != 0);
+  const loom_aie2p_encoding_field_value_t fields[] = {
+      {
+          .field_id = encoding->destination_field_id,
+          .value = loom_aie2p_machine_adapt_allocated_register(
+              encoding->destination_adapter_id, step.move.destination),
+      },
+      {
+          .field_id = encoding->source_field_id,
+          .value = loom_aie2p_machine_adapt_allocated_register(
+              encoding->source_adapter_id, step.move.source),
+      },
+  };
+  return loom_aie2p_encoding_pack_verified_instruction(
+      encoding->instruction_id, fields, IREE_ARRAYSIZE(fields));
 }

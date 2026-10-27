@@ -1133,6 +1133,7 @@ loom_check_test_suite(
     "test/math_contraction.loom-test"
     "test/math_policy_activations.loom-test"
     "test/module_contracts.loom-test"
+    "test/move_routes.loom-test"
     "test/native_bindings.loom-test"
     "test/native_completion.loom-test"
     "test/native_dma_completions.loom-test"

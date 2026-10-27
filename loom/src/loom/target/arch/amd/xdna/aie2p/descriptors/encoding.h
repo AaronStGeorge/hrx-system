@@ -37,25 +37,16 @@ typedef struct loom_aie2p_register_move_t {
   loom_aie2p_physical_register_id_t destination;
 } loom_aie2p_register_move_t;
 
-// Selects the native descriptor for one allocation move between valid AIE2P
-// physical registers. Returns LOOM_LOW_DESCRIPTOR_ORDINAL_NONE when no direct
-// move is declared. When several moves apply, descriptor order determines the
-// selected encoding. The result also identifies the move's operand timing and
-// resource requirements for physical scheduling.
-uint32_t loom_aie2p_descriptor_select_move(
-    loom_aie2p_physical_register_id_t source,
-    loom_aie2p_physical_register_id_t destination);
-
-// Decomposes an allocated move into native register operands. L registers
-// require two scalar moves in low-to-high order; other registers retain one
-// move. The caller preserves allocation's sequential move order and selects
-// each instruction with loom_aie2p_descriptor_select_move.
-uint8_t loom_aie2p_descriptor_move_parts(
-    loom_aie2p_register_move_t move, loom_aie2p_register_move_t out_parts[2]);
-
 // Dense generated route selected for one complete physical allocation move.
 typedef uint8_t loom_aie2p_move_route_id_t;
 #define LOOM_AIE2P_MOVE_ROUTE_ID_INVALID ((loom_aie2p_move_route_id_t)0)
+
+// Dense generated behavior profile for one native step in a physical move.
+// Profiles are retained after route expansion so later issue and encoding
+// stages consume the selected facts without resolving the move again.
+typedef uint8_t loom_aie2p_move_step_profile_id_t;
+#define LOOM_AIE2P_MOVE_STEP_PROFILE_ID_INVALID \
+  ((loom_aie2p_move_step_profile_id_t)0)
 
 enum loom_aie2p_move_step_encoding_e {
   // Encode through the selected Low descriptor.
@@ -69,10 +60,8 @@ typedef uint8_t loom_aie2p_move_step_encoding_t;
 
 #define LOOM_AIE2P_MOVE_STEP_MAX_RESOURCE_CLASS_COUNT 3u
 
-// One native instruction in a generated physical move route.
-typedef struct loom_aie2p_move_route_step_t {
-  // Concrete native source and destination registers.
-  loom_aie2p_register_move_t move;
+// Complete generated behavior shared by every use of one native move step.
+typedef struct loom_aie2p_move_step_profile_t {
   // Descriptor providing register-event behavior for physical issue.
   uint32_t descriptor_ordinal;
   // Canonical schedule classes whose union is the complete resource demand.
@@ -83,6 +72,14 @@ typedef struct loom_aie2p_move_route_step_t {
   uint8_t resource_schedule_class_count;
   // Native instruction encoding selected for the step.
   loom_aie2p_move_step_encoding_t encoding;
+} loom_aie2p_move_step_profile_t;
+
+// One native instruction in a generated physical move route.
+typedef struct loom_aie2p_move_route_step_t {
+  // Concrete native source and destination registers.
+  loom_aie2p_register_move_t move;
+  // Indexed descriptor, resource, and encoding facts selected by analysis.
+  loom_aie2p_move_step_profile_id_t profile_id;
 } loom_aie2p_move_route_step_t;
 
 // Resolves a complete native route for valid final physical registers. Direct
@@ -101,6 +98,15 @@ uint8_t loom_aie2p_descriptor_move_route_step_count(
 loom_aie2p_move_route_step_t loom_aie2p_descriptor_move_route_step(
     loom_aie2p_move_route_id_t route_id, loom_aie2p_register_move_t move,
     uint8_t step_index);
+
+// Returns the complete generated facts for a valid retained step profile.
+loom_aie2p_move_step_profile_t loom_aie2p_descriptor_move_step_profile(
+    loom_aie2p_move_step_profile_id_t profile_id);
+
+// Encodes one route-expanded move step from its retained generated profile.
+loom_aie2p_encoded_slot_t loom_aie2p_descriptor_encode_move_step(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_aie2p_move_route_step_t step);
 
 // Returns the mask of atomic-unit ordinals touched by a register part within
 // any physical register in its declared class. NONE selects all units. The
