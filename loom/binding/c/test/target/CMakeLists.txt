@@ -34,7 +34,7 @@ loom_cc_library(
   PUBLIC
 )
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     iree_hal_test
@@ -51,7 +51,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     spirv_test
@@ -66,7 +66,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     vm_test
@@ -81,7 +81,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_test(
   NAME
     wasm_test

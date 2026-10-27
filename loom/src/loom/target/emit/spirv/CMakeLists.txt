@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     binary_format
@@ -21,7 +21,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     binary_writer
@@ -35,7 +35,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     module_builder
@@ -54,7 +54,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     module_types
@@ -74,7 +74,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     module_values
@@ -92,7 +92,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     program
@@ -109,7 +109,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     module_instructions
@@ -126,7 +126,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     module_abi
@@ -155,7 +155,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     module_storage
@@ -182,7 +182,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     module_emitter
@@ -219,7 +219,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
     module_compiler
@@ -258,7 +258,23 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
+loom_cc_library(
+  NAME
+    binary_compiler_provider
+  HDRS
+    "binary_compiler_provider.h"
+  SRCS
+    "binary_compiler_provider.c"
+  DEPS
+    ::module_compiler
+    loom::target::arch::spirv::provider
+    loom::target::provider
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_ARCH_SPIRV)
 loom_cc_test(
   NAME
     module_compiler_test
@@ -284,12 +300,12 @@ loom_cc_test(
     loom::testing::byte_sequence
     loom::testing::module_ptr
   LABELS
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     module_builder_test
@@ -303,12 +319,12 @@ loom_cc_test(
     loom::target::arch::spirv::features
     loom::target::arch::spirv::records::target_records
   LABELS
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_test(
   NAME
     module_values_test
@@ -326,12 +342,12 @@ loom_cc_test(
     loom::target::arch::spirv::records::target_records
     loom::target::arch::spirv::scalar_types
   LABELS
-    "iree-build-requirement=loom.target.arch.spirv"
-    "iree-build-requirement=loom.emit.spirv"
+    "iree-build-requirement=loom.arch.spirv"
+    "iree-build-requirement=loom.artifact.spirv_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_check_test_suite(
   NAME
     loom_check_file_test

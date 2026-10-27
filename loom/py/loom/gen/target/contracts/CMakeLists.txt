@@ -136,7 +136,7 @@ iree_py_library(
     "loom.gen.target.contracts.contract_table_family"
   DEPS
     loom::py::loom::gen::target::contracts::contract_table_family
-    loom::py::loom::target::emit::wasm::contracts
+    loom::py::loom::target::arch::wasm::contracts
 )
 
 iree_py_library(

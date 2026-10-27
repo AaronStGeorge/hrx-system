@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     multipart
@@ -23,7 +23,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     multipart_test
@@ -35,11 +35,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     request
@@ -54,7 +55,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     request_test
@@ -67,11 +68,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     origin
@@ -87,7 +89,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     origin_test
@@ -100,11 +102,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     server
@@ -126,7 +129,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     receive_cache
@@ -143,7 +146,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     receive_cache_test
@@ -157,11 +160,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     listener
@@ -182,7 +186,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     server_test
@@ -201,7 +205,8 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::serve::telemetry::stream
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 

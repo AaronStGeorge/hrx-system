@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     digest
@@ -21,7 +21,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     image_codec
@@ -35,7 +35,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     image_metadata
@@ -49,7 +49,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_SERVE_IMAGE_INPUT AND LOOM_TARGET_ARCH_VM)
+if(LOOM_BUILD AND LOOM_SERVE_IMAGE_INPUT AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     image_pam
@@ -62,7 +62,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_SERVE_IMAGE_CODEC_PNG AND LOOM_TARGET_ARCH_VM)
+if(LOOM_SERVE_IMAGE_CODEC_PNG AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     image_png
@@ -77,7 +77,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_SERVE_IMAGE_CODEC_JPEG AND LOOM_TARGET_ARCH_VM)
+if(LOOM_SERVE_IMAGE_CODEC_JPEG AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     image_jpeg
@@ -92,7 +92,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_SERVE_IMAGE_CODEC_GIF AND LOOM_TARGET_ARCH_VM)
+if(LOOM_SERVE_IMAGE_CODEC_GIF AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     image_gif
@@ -107,7 +107,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_SERVE_IMAGE_CODEC_WEBP AND LOOM_TARGET_ARCH_VM)
+if(LOOM_SERVE_IMAGE_CODEC_WEBP AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     image_webp
@@ -122,7 +122,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 set(_image_codecs_platform_defines "")
 if(LOOM_BUILD AND LOOM_SERVE_IMAGE_INPUT)
   list(APPEND _image_codecs_platform_defines "LOOM_SERVE_IMAGE_INPUT=1")
@@ -180,7 +180,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     image
@@ -199,7 +199,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     image_test
@@ -214,11 +214,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     image_request
@@ -234,7 +235,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_SERVE_IMAGE_INPUT AND LOOM_TARGET_ARCH_VM)
+if(LOOM_BUILD AND LOOM_SERVE_IMAGE_INPUT AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     image_pam_test
@@ -247,11 +248,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     image_request_test
@@ -266,11 +268,12 @@ loom_cc_test(
     iree::vm
     iree::vm::test_support
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_fuzz(
   NAME
     image_fuzz
@@ -285,12 +288,13 @@ loom_cc_fuzz(
     iree::base::internal::base64
     iree::vm
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
 file(GLOB _GLOB_TESTDATA_IMAGE_FUZZ_X_TXT LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS testdata/image_fuzz/*.txt)
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     audio_source
@@ -304,7 +308,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     audio_source_test
@@ -316,11 +320,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     audio_resampler
@@ -335,7 +340,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     audio_resampler_test
@@ -347,11 +352,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 set(_audio_decoder_platform_srcs "")
 if(LOOM_SERVE_AUDIO_DECODING)
   list(APPEND _audio_decoder_platform_srcs "audio_decoder.c")
@@ -376,7 +382,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     audio_recording
@@ -392,7 +398,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 set(_audio_recording_test_platform_defines "")
 if(LOOM_SERVE_AUDIO_CODEC_WAV)
   list(APPEND _audio_recording_test_platform_defines "LOOM_TEST_AUDIO_WAV=1")
@@ -414,13 +420,14 @@ loom_cc_test(
     iree::testing::gtest_main
     iree::vm::test_support
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
 file(GLOB _GLOB_TESTDATA_AUDIO_X LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS testdata/audio/*)
 list(TRANSFORM _GLOB_TESTDATA_AUDIO_X PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/" OUTPUT_VARIABLE _GLOB_TESTDATA_AUDIO_X_ABSOLUTE)
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 set(_audio_decoder_test_platform_defines "")
 if(LOOM_SERVE_AUDIO_CODEC_WAV)
   list(APPEND _audio_decoder_test_platform_defines "LOOM_TEST_AUDIO_WAV=1")
@@ -456,7 +463,8 @@ loom_cc_test(
   ARGS
     "--audio_fixture={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/media/testdata/audio/sample.flac}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 

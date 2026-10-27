@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_file_family(
   NAME
     contract_tables_gen
@@ -39,7 +39,7 @@ loom_target_contract_file_family(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     instruction_strings
@@ -53,7 +53,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     arithmetic
@@ -70,7 +70,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     async
@@ -82,7 +82,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     buffer
@@ -95,7 +95,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     config
@@ -107,7 +107,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     compare
@@ -124,7 +124,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     dot
@@ -139,7 +139,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     integer
@@ -157,7 +157,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     matrix
@@ -170,7 +170,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     reduce
@@ -185,7 +185,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     sanitizer
@@ -197,7 +197,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_target_contract_cc_libraries(
   NAME
     view
@@ -209,7 +209,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     contracts

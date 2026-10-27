@@ -40,14 +40,12 @@ shows handwritten cases and benchmarks.
 
 ```sh
 iree-bazel-test --config=asan --config=loom-importer-cxx \
-  --//loom/config/target:enable=amdgpu \
+  --config=loom-target-amd-gpu \
   --//runtime/config/hal:drivers=amdgpu \
-  --//loom/config/emit:enable=amdgpu \
-  --//loom/config/execute:enable=iree_hal \
   //loom/src/loom/tooling/target/amdgpu/test/cxx:kernels_test
 
 iree-bazel-test --config=asan --config=loom-importer-cxx \
-  --//loom/config/target:enable=vm \
+  --config=loom-target-vm \
   //loom/src/loom/import/cxx/test:functions_test
 ```
 

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_file_family(
   NAME
     contract_tables_gen
@@ -44,7 +44,7 @@ loom_target_contract_file_family(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     instruction_strings
@@ -58,7 +58,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     bmi2
@@ -71,7 +71,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     scalar
@@ -90,7 +90,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     scalar_read_memory
@@ -103,7 +103,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     avx2
@@ -119,7 +119,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     avx512
@@ -133,7 +133,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     avx512_bf16
@@ -148,7 +148,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     avx512_fp16
@@ -164,7 +164,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     avx_ne_convert
@@ -178,7 +178,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     f16c
@@ -192,7 +192,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_target_contract_cc_libraries(
   NAME
     packed_dot
@@ -204,7 +204,7 @@ loom_target_contract_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     contracts
@@ -254,7 +254,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARCH_X86)
 loom_check_test_suite(
   NAME
     loom_check_file_test

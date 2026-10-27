@@ -417,8 +417,16 @@ def clang_tidy_configuration_args(targets: list[str]) -> list[str]:
         )
     if target_patterns_select_project(targets, "loom"):
         args.append(
-            f"{bazel_configure.NATIVE_LOOM_TARGET_FLAG}="
-            + ",".join(bazel_configure.LOOM_TARGETS)
+            f"{bazel_configure.NATIVE_LOOM_ARCH_FLAG}="
+            + ",".join(bazel_configure.LOOM_ARCHITECTURES)
+        )
+        args.append(
+            f"{bazel_configure.NATIVE_LOOM_EMIT_FLAG}="
+            + ",".join(bazel_configure.LOOM_ARTIFACT_FORMATS)
+        )
+        args.append(
+            f"{bazel_configure.NATIVE_LOOM_EXECUTE_FLAG}="
+            + ",".join(bazel_configure.LOOM_EXECUTE_SUBSTRATES)
         )
         args.append(f"{bazel_configure.NATIVE_LOOM_IMPORT_FLAG}=cxx")
     return args

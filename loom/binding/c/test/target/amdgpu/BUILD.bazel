@@ -22,7 +22,7 @@ package(
 )
 
 _AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/emit:amdgpu_artifacts",
+    "//loom/config/emit:amdgpu_elf",
 ])
 
 _AMDGPU_HAL_COMPATIBLE_WITH = loom_config_compatible_with([

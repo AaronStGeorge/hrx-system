@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_library(
   NAME
     gzip_file
@@ -20,7 +20,7 @@ iree_py_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_generated_file(
   NAME
     gzip_app_js
@@ -37,7 +37,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_generated_file(
   NAME
     gzip_index_html
@@ -54,7 +54,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_generated_file(
   NAME
     gzip_style_css
@@ -71,7 +71,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_py_test(
   NAME
     gzip_file_test
@@ -100,7 +100,8 @@ iree_py_test(
   IMPORTS
     "."
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -108,7 +109,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 iree_c_embed_data(
   NAME
     files
@@ -127,7 +128,7 @@ iree_c_embed_data(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     assets

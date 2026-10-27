@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_config_compatible_with",
     "loom_generated_cc_library",
 )
 load(
@@ -23,6 +24,10 @@ package(
 
 _X86_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/x86/lower:__pkg__"]
 
+_X86_ELF_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:x86_elf",
+])
+
 _X86_NATIVE_VISIBILITY = ["//loom/src/loom/target/emit/native/x86:__pkg__"]
 
 _X86_RECORDS_VISIBILITY = ["//loom/src/loom/target/arch/x86/records:__pkg__"]
@@ -34,8 +39,8 @@ _X86_FACTS_VISIBILITY = _X86_NATIVE_VISIBILITY + _X86_OPS_VISIBILITY + [
 ]
 
 _X86_PROVIDER_VISIBILITY = [
-    "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
+    "//loom/src/loom/target/emit/native/x86:__pkg__",
 ]
 
 #===------------------------------------------------------------------------===#
@@ -271,23 +276,6 @@ loom_cc_test(
     ],
 )
 
-loom_cc_library(
-    name = "compiler_provider",
-    srcs = ["compiler_provider.c"],
-    hdrs = ["compiler_provider.h"],
-    visibility = [
-        "//loom/binding/c/target/x86:__pkg__",
-        "//loom/src/loom/target/configured:__pkg__",
-    ],
-    deps = [
-        ":facts",
-        ":provider",
-        "//loom/src/loom/target:provider",
-        "//loom/src/loom/target/arch/x86/ops",
-        "//loom/src/loom/target/emit/native/x86:module",
-    ],
-)
-
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
@@ -297,7 +285,6 @@ loom_check_test_suite(
         "test/instruction_immediates.loom-test",
         "test/low_avx512_bf16.loom-test",
         "test/low_bmi2_variable_shift.loom-test",
-        "test/register_classes.loom-test",
         "test/source_low/allocation.loom-test",
         "test/source_low/buffer_bulk.loom-test",
         "test/source_low/buffer_raw.loom-test",
@@ -425,6 +412,12 @@ loom_check_test_suite(
         "test/target_features.loom-test",
     ],
     test_name_prefix_to_strip = "test/source_low/",
+)
+
+loom_check_test_suite(
+    name = "artifact_loom_check_file_test",
+    srcs = ["test/register_classes.loom-test"],
+    target_compatible_with = _X86_ELF_COMPATIBLE_WITH,
 )
 
 #===------------------------------------------------------------------------===#

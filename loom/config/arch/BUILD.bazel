@@ -1,0 +1,30 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:settings.bzl", "iree_string_list_flag")
+load(
+    "//loom/config:capabilities.bzl",
+    "LOOM_ARCHITECTURES",
+    "LOOM_DEFAULT_ARCHITECTURES",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+iree_string_list_flag(
+    name = "enable",
+    build_setting_default = LOOM_DEFAULT_ARCHITECTURES,
+    values = LOOM_ARCHITECTURES,
+)
+
+[
+    config_setting(
+        name = value,
+        flag_values = {
+            ":enable": value,
+        },
+    )
+    for value in LOOM_ARCHITECTURES
+]

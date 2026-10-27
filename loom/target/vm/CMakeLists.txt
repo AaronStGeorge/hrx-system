@@ -17,11 +17,11 @@ loom_target_profile(
   SELECTOR
     "core"
   REQUIRES
-    LOOM_TARGET_ARCH_VM
+    LOOM_ARCH_VM
 )
 
 set(_all_platform_targets "")
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM)
   list(APPEND _all_platform_targets loom::target::vm::core)
 endif()
 loom_target_set(

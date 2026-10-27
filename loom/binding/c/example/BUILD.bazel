@@ -24,23 +24,23 @@ package(
 )
 
 LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:spirv",
-    "//loom/config/emit:spirv",
+    "//loom/config/arch:spirv",
+    "//loom/config/emit:spirv_binary",
 ])
 
 LOOMC_TARGET_AMDGPU_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:amdgpu",
-    "//loom/config/emit:amdgpu",
+    "//loom/config/arch:amdgpu",
+    "//loom/config/emit:amdgpu_elf",
 ])
 
 LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
     "//build_tools/vulkan/config:available",
-    "//loom/config/target/arch:spirv",
-    "//loom/config/emit:spirv",
+    "//loom/config/arch:spirv",
+    "//loom/config/emit:spirv_binary",
 ])
 
 LOOMC_TARGET_SPIRV_IREE_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/emit:spirv_vulkan_artifacts",
+    "//loom/config/execute:spirv_vulkan_hal",
 ])
 
 loom_cc_binary(

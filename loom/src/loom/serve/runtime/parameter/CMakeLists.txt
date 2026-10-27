@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     bank
@@ -29,7 +29,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     activation
@@ -48,7 +48,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     residency
@@ -68,7 +68,7 @@ loom_cc_library(
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     activation_test
@@ -85,11 +85,12 @@ loom_cc_test(
     loom::serve::runtime::execution
     loom::serve::runtime::host
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     sources
@@ -108,7 +109,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     gather
@@ -124,7 +125,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     module
@@ -143,7 +144,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     gather_tests
@@ -176,7 +177,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     inputs
@@ -195,7 +196,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     sources_test
@@ -210,11 +211,12 @@ loom_cc_test(
     iree::testing::temp_file
     loom::serve::runtime::program::sources
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     weights
@@ -247,7 +249,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     inputs_test
@@ -272,11 +274,12 @@ loom_cc_test(
   ARGS
     "--input_policy={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/inputs.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     telemetry
@@ -293,7 +296,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     telemetry_test
@@ -307,7 +310,8 @@ loom_cc_test(
     loom::serve::telemetry::record
     loom::serve::telemetry::stream
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 

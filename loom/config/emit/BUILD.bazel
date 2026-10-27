@@ -6,59 +6,85 @@
 
 load("@bazel_skylib//lib:selects.bzl", "selects")
 load("//build_tools/bazel:settings.bzl", "iree_string_list_flag")
-load("//loom/config/target:targets.bzl", "LOOM_SPLIT_ARTIFACT_TARGETS")
+load(
+    "//loom/config:capabilities.bzl",
+    "LOOM_ARTIFACT_FORMATS",
+    "LOOM_DEFAULT_ARTIFACT_FORMATS",
+)
 
 package(default_visibility = ["//visibility:public"])
 
-# Advanced artifact-family slices. Public //loom/config/target values imply the
-# emitters required for that target.
-DEFAULT_ENABLED = []
-
 iree_string_list_flag(
     name = "enable",
-    build_setting_default = DEFAULT_ENABLED,
-    values = LOOM_SPLIT_ARTIFACT_TARGETS,
+    build_setting_default = LOOM_DEFAULT_ARTIFACT_FORMATS,
+    values = LOOM_ARTIFACT_FORMATS,
 )
 
 [
     config_setting(
-        name = "explicit_" + value,
+        name = value,
         flag_values = {
             ":enable": value,
         },
     )
-    for value in LOOM_SPLIT_ARTIFACT_TARGETS
+    for value in LOOM_ARTIFACT_FORMATS
 ]
 
+# Complete artifact capabilities combine one architecture with its selected
+# serialized format. Consumers name the supported intersection instead of
+# recovering a product identity from either leaf.
 [
     selects.config_setting_group(
-        name = value,
-        match_any = [
-            "//loom/config/target:" + value,
-            ":explicit_" + value,
-        ],
-    )
-    for value in LOOM_SPLIT_ARTIFACT_TARGETS
-]
-
-# Complete artifact capabilities combine an emitter with the architecture data
-# it consumes. Source embedders can select these advanced leaves independently
-# of the public production target settings.
-[
-    selects.config_setting_group(
-        name = value + "_artifacts",
+        name = architecture + "_elf",
         match_all = [
-            "//loom/config/target/arch:" + value,
-            ":" + value,
+            "//loom/config/arch:" + architecture,
+            ":elf",
         ],
     )
-    for value in LOOM_SPLIT_ARTIFACT_TARGETS
+    for architecture in [
+        "aie2p",
+        "amdgpu",
+        "x86",
+    ]
 ]
 
-selects.config_setting_group(
-    name = "spirv_vulkan_artifacts",
-    match_all = [
-        ":spirv_artifacts",
-        "//runtime/config/hal:driver_vulkan",
-    ],
-)
+# Internal native-emission joins describe implementation reuse across artifact
+# providers. They are derived facts rather than user-configurable capabilities.
+_NATIVE_ELF_ARTIFACTS = [
+    ":aie2p_elf",
+    ":amdgpu_elf",
+    ":x86_elf",
+]
+
+_NATIVE_OBJECT_ELF_ARTIFACTS = [
+    ":aie2p_elf",
+    ":x86_elf",
+]
+
+[
+    selects.config_setting_group(
+        name = name,
+        match_any = artifacts,
+    )
+    for name, artifacts in [
+        ("native", _NATIVE_ELF_ARTIFACTS),
+        ("native_elf", _NATIVE_ELF_ARTIFACTS),
+        ("native_object", _NATIVE_OBJECT_ELF_ARTIFACTS),
+        ("native_object_elf", _NATIVE_OBJECT_ELF_ARTIFACTS),
+    ]
+]
+
+[
+    selects.config_setting_group(
+        name = format + "_binary",
+        match_all = [
+            "//loom/config/arch:" + format,
+            ":" + format,
+        ],
+    )
+    for format in [
+        "spirv",
+        "vm",
+        "wasm",
+    ]
+]

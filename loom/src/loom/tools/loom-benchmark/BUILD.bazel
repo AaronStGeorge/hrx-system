@@ -50,32 +50,32 @@ _SPIRV_VULKAN_TARGET_DEPS = iree_select({
 })
 
 _XDNA_TARGET_COPTS = iree_select({
-    "//loom/config/execute:xdna_hal": ["-DLOOM_BENCHMARK_HAVE_XDNA=1"],
+    "//loom/config/execute:aie2p_xdna_hal": ["-DLOOM_BENCHMARK_HAVE_XDNA=1"],
     "//conditions:default": [],
 })
 
 _XDNA_TARGET_DEPS = iree_select({
-    "//loom/config/execute:xdna_hal": ["//loom/binding/c/target/amd/xdna:iree_hal"],
+    "//loom/config/execute:aie2p_xdna_hal": ["//loom/binding/c/target/amd/xdna:iree_hal"],
     "//conditions:default": [],
 })
 
 _TASK_TARGET_COPTS = iree_select({
-    "//loom/config/execute:task_hal": ["-DLOOM_BENCHMARK_HAVE_TASK=1"],
+    "//loom/config/execute:x86_task_hal": ["-DLOOM_BENCHMARK_HAVE_TASK=1"],
     "//conditions:default": [],
 })
 
 _TASK_TARGET_DEPS = iree_select({
-    "//loom/config/execute:task_hal": ["//loom/binding/c/target/cpu:iree_hal"],
+    "//loom/config/execute:x86_task_hal": ["//loom/binding/c/target/cpu:iree_hal"],
     "//conditions:default": [],
 })
 
 _VM_TARGET_COPTS = iree_select({
-    "//loom/config/target/arch:vm": ["-DLOOM_BENCHMARK_HAVE_VM=1"],
+    "//loom/config/execute:vm_iree_vm": ["-DLOOM_BENCHMARK_HAVE_VM=1"],
     "//conditions:default": [],
 })
 
 _VM_TARGET_DEPS = iree_select({
-    "//loom/config/target/arch:vm": [
+    "//loom/config/execute:vm_iree_vm": [
         "//loom/src/loom/tooling/target/vm:testbench",
     ],
     "//conditions:default": [],

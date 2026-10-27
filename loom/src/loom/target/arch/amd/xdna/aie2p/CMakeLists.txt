@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_generated_file_family(
   NAME
     target_tables_gen
@@ -38,7 +38,7 @@ loom_generated_file_family(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     target_facts
@@ -56,7 +56,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     target_profile
@@ -79,7 +79,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     facts_test
@@ -96,11 +96,11 @@ loom_cc_test(
     loom::target::facts_builder
     loom::target::profile
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     array_descriptors
@@ -114,7 +114,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     array_abi_layout
@@ -131,7 +131,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     configuration_descriptors
@@ -145,7 +145,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     encoding
@@ -161,7 +161,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     machine
@@ -178,7 +178,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     core_descriptors
@@ -192,7 +192,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     core_structure
@@ -208,7 +208,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     vector_carrier
@@ -222,7 +222,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     gather
@@ -243,7 +243,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     descriptor_encoding
@@ -264,7 +264,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     legalization
@@ -299,7 +299,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     low_registry
@@ -319,7 +319,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     low_verify
@@ -351,7 +351,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     math_policy
@@ -366,7 +366,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     array_local_memory
@@ -381,7 +381,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     array_plan
@@ -427,7 +427,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     array_program
@@ -446,7 +446,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     array_resident
@@ -478,7 +478,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     record_defs
@@ -490,7 +490,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     target_records
@@ -505,7 +505,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     lower
@@ -567,7 +567,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     call_abi
@@ -584,7 +584,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     ir_provider
@@ -602,7 +602,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     provider
@@ -630,7 +630,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     pipeline_worker
@@ -652,7 +652,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     pipeline_pass
@@ -695,7 +695,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     pipeline_dma_plan
@@ -714,7 +714,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     pipeline_native
@@ -768,34 +768,27 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     check_provider
   HDRS
     "check/array_plan.h"
-    "check/artifact.h"
     "check/leaf.h"
     "check/provider.h"
   SRCS
     "check/array_plan.c"
-    "check/artifact.c"
     "check/leaf.c"
     "check/provider.c"
   DEPS
     ::array_plan
     ::array_program
     ::array_resident
-    ::bundle_encoding
     ::core_descriptors
-    ::descriptor_encoding
-    ::encoding
     ::leaf_compile
     ::machine
     iree::base
-    iree::schemas::xdna_executable
     loom::analysis::symbol_facts
-    loom::binding::c::loomc
     loom::codegen::low::diagnostics
     loom::codegen::low::function_requirements
     loom::codegen::low::storage_layout
@@ -806,7 +799,6 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::ops::op_defs
-    loom::target::provider
     loom::target::reporting::report
     loom::tools::loom-check::execute
     loom::tools::loom-check::provider
@@ -814,7 +806,29 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_ARCH_AIE2P)
+loom_cc_library(
+  NAME
+    artifact_check
+  HDRS
+    "check/artifact.h"
+  SRCS
+    "check/artifact.c"
+  DEPS
+    ::bundle_encoding
+    ::core_descriptors
+    ::descriptor_encoding
+    ::encoding
+    ::machine
+    iree::base
+    iree::schemas::xdna_executable
+    loom::binding::c::loomc
+    loom::tools::loom-check::execute
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     check_test_provider
@@ -846,7 +860,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 iree_py_test(
   NAME
     vector_construct_family_test
@@ -867,7 +881,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 iree_py_test(
   NAME
     vector_construct_family_exhaustive_test
@@ -892,7 +906,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 iree_py_test(
   NAME
     interleave_family_test
@@ -913,7 +927,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 iree_py_test(
   NAME
     interleave_family_exhaustive_test
@@ -938,7 +952,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 iree_py_test(
   NAME
     transpose_family_test
@@ -959,7 +973,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 iree_py_test(
   NAME
     transpose_family_exhaustive_test
@@ -984,7 +998,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND AMDF_BUILD)
+if(LOOM_ARTIFACT_AIE2P_ELF AND AMDF_BUILD)
 iree_execution_test_suite(
   NAME
     native_allocation_report_test
@@ -1001,7 +1015,7 @@ iree_execution_test_suite(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND AMDF_BUILD)
+if(LOOM_ARTIFACT_AIE2P_ELF AND AMDF_BUILD)
 iree_execution_test_suite(
   NAME
     failed_helper_report_test
@@ -1019,7 +1033,7 @@ iree_execution_test_suite(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND AMDF_BUILD)
+if(LOOM_ARTIFACT_AIE2P_ELF AND AMDF_BUILD)
 iree_execution_test_suite(
   NAME
     native_program_capacity_test
@@ -1036,7 +1050,7 @@ iree_execution_test_suite(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_check_test_suite(
   NAME
     loom_check_file_test
@@ -1080,14 +1094,10 @@ loom_check_test_suite(
     "test/array_plan/worker_rate_admission.loom-test"
     "test/array_plan/worker_storage_admission.loom-test"
     "test/canonicalize/adjacent_add.loom-test"
-    "test/configuration.loom-test"
     "test/configuration_calls.loom-test"
     "test/configuration_contracts.loom-test"
-    "test/configuration_data.loom-test"
     "test/configuration_entry.loom-test"
-    "test/configuration_limits.loom-test"
     "test/configuration_measurement.loom-test"
-    "test/configuration_report.loom-test"
     "test/descriptors/bf16_comparison.loom-test"
     "test/descriptors/bfp_move.loom-test"
     "test/descriptors/cascade.loom-test"
@@ -1110,33 +1120,23 @@ loom_check_test_suite(
     "test/descriptors/scalar_stream.loom-test"
     "test/descriptors/vector_push.loom-test"
     "test/expansion_report.loom-test"
-    "test/hardware_loops.loom-test"
     "test/kernel_realization.loom-test"
     "test/leaf_alignment.loom-test"
     "test/leaf_allocation.loom-test"
     "test/leaf_expansion_timing.loom-test"
     "test/leaf_immediates.loom-test"
     "test/leaf_interfaces.loom-test"
-    "test/leaf_rematerialization.loom-test"
     "test/leaf_schedule.loom-test"
     "test/leaf_state_read_timing.loom-test"
     "test/low_calls.loom-test"
     "test/math_contraction.loom-test"
     "test/math_policy_activations.loom-test"
     "test/module_contracts.loom-test"
-    "test/native_admission.loom-test"
     "test/native_bindings.loom-test"
-    "test/native_calls.loom-test"
     "test/native_completion.loom-test"
-    "test/native_distribution.loom-test"
     "test/native_dma_completions.loom-test"
     "test/native_dma_descriptors.loom-test"
-    "test/native_endpoint_addresses.loom-test"
-    "test/native_helper_effects.loom-test"
     "test/native_local_buffers.loom-test"
-    "test/native_program_capacity.loom-test"
-    "test/native_repetition.loom-test"
-    "test/native_strands.loom-test"
     "test/native_stream_routes.loom-test"
     "test/operand_ties.loom-test"
     "test/source_low/bf16_vectors.loom-test"
@@ -1296,7 +1296,29 @@ loom_check_test_suite(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_ARCH_AIE2P)
+loom_check_test_suite(
+  NAME
+    artifact_loom_check_file_test
+  SRCS
+    "test/configuration.loom-test"
+    "test/configuration_data.loom-test"
+    "test/configuration_limits.loom-test"
+    "test/configuration_report.loom-test"
+    "test/hardware_loops.loom-test"
+    "test/leaf_rematerialization.loom-test"
+    "test/native_admission.loom-test"
+    "test/native_calls.loom-test"
+    "test/native_distribution.loom-test"
+    "test/native_endpoint_addresses.loom-test"
+    "test/native_helper_effects.loom-test"
+    "test/native_program_capacity.loom-test"
+    "test/native_repetition.loom-test"
+    "test/native_strands.loom-test"
+)
+endif()
+
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     leaf_program
@@ -1312,7 +1334,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     leaf_plan_metadata
@@ -1335,7 +1357,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     bundle_analysis
@@ -1360,7 +1382,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     bundle_alignment
@@ -1381,7 +1403,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     bundle_encoding
@@ -1403,7 +1425,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     bundle_fixup
@@ -1418,7 +1440,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     bundle_plan
@@ -1450,7 +1472,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     relocation
@@ -1469,7 +1491,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     leaf_object
@@ -1489,7 +1511,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     program_capacity
@@ -1508,7 +1530,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     leaf_compile
@@ -1539,7 +1561,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     program_object
@@ -1556,7 +1578,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     program_compile
@@ -1579,7 +1601,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     tile_link
@@ -1598,7 +1620,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     executable_program
@@ -1611,7 +1633,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     xdna_product
@@ -1633,7 +1655,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     configuration_storage
@@ -1653,7 +1675,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
     artifact
@@ -1711,7 +1733,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     xdna_product_test
@@ -1728,11 +1750,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::arch::amd::xdna::device_profile
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND AMDF_BUILD AND LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARTIFACT_AIE2P_ELF AND AMDF_BUILD AND LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     artifact_test
@@ -1757,11 +1779,11 @@ loom_cc_test(
     loom::testing::module_ptr
   LABELS
     "iree-build-requirement=libamdf"
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     call_abi_test
@@ -1776,11 +1798,11 @@ loom_cc_test(
     loom::ir
     loom::target::registers
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     provider_test
@@ -1792,11 +1814,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::provider
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     pipeline_dma_plan_test
@@ -1812,11 +1834,11 @@ loom_cc_test(
     loom::target::arch::amd::xdna::array_facts
     loom::target::arch::amd::xdna::array_registers
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     pipeline_switch_test
@@ -1834,11 +1856,11 @@ loom_cc_test(
     loom::target::arch::amd::xdna::array_registers
     loom::testing::diagnostic_matchers
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     array_program_test
@@ -1851,11 +1873,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::function_requirements
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     array_local_memory_test
@@ -1867,11 +1889,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::arch::amd::xdna::array_facts
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     array_channel_resources_test
@@ -1883,11 +1905,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::arch::amd::xdna::array_facts
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     encoding_test
@@ -1898,11 +1920,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     bundle_alignment_test
@@ -1915,11 +1937,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     leaf_object_test
@@ -1933,11 +1955,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     program_compile_test
@@ -1967,11 +1989,11 @@ loom_cc_test(
     loom::target::emit::native::object
     loom::testing::module_ptr
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     program_object_test
@@ -1984,11 +2006,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     machine_test
@@ -2000,11 +2022,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     descriptor_encoding_test
@@ -2019,11 +2041,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::descriptors
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_XDNA)
+if(LOOM_ARCH_AIE2P)
 loom_cc_test(
   NAME
     tile_link_test
@@ -2038,7 +2060,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::emit::native::object
   LABELS
-    "iree-build-requirement=loom.target.arch.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
 )
 endif()
 

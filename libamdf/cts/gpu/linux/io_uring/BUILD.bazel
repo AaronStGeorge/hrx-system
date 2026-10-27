@@ -23,7 +23,7 @@ exports_files([
 # The single-invocation file-I/O programs use PM4 and RDNA descriptor sets.
 # The separate staged-file corpus uses AQL and the complete GPU target matrix.
 _RDNA_COMPATIBILITY = {
-    "//loom/config/target/amdgpu:" + capability: []
+    "//loom/config/arch/amdgpu:" + capability: []
     for capability in LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES
     if capability.startswith("descriptor_set_rdna")
 }
@@ -45,10 +45,10 @@ _FILE_IO_HOST_COMPATIBILITY = [
 ]
 
 _COMPLETED_TICK_CONFIGS = [
-    "//loom/config/target/amdgpu:descriptor_set_gfx11_generic_core",
-    "//loom/config/target/amdgpu:descriptor_set_gfx12_generic_core",
-    "//loom/config/target/amdgpu:descriptor_set_gfx12_5_generic_core",
-    "//loom/config/target/amdgpu:descriptor_set_rdna4m_core",
+    "//loom/config/arch/amdgpu:descriptor_set_gfx11_generic_core",
+    "//loom/config/arch/amdgpu:descriptor_set_gfx12_generic_core",
+    "//loom/config/arch/amdgpu:descriptor_set_gfx12_5_generic_core",
+    "//loom/config/arch/amdgpu:descriptor_set_rdna4m_core",
 ]
 
 _COMPLETED_TICK_COMPATIBILITY = loom_config_compatible_with(_COMPLETED_TICK_CONFIGS)

@@ -115,33 +115,33 @@ loom_check_test_suite(
     name = "collective_arithmetic_tests",
     srcs = ["collective_arithmetic_test.loom-test"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_artifacts"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_binary"]),
 )
 
 loom_check_test_suite(
     name = "workgroup_reduce_tests",
     srcs = ["workgroup_reduce_test.loom-test"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_artifacts"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_binary"]),
 )
 
 loom_check_test_suite(
     name = "cooperative_initializer_tests",
     srcs = ["cooperative_initializer_test.loom-test"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_artifacts"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_binary"]),
 )
 
 loom_check_test_suite(
     name = "cooperative_memory_tests",
     srcs = ["cooperative_memory_test.loom-test"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_artifacts"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_binary"]),
 )
 
 loom_check_test_suite(
     name = "matrix_tests",
     srcs = ["matrix_test.loom-test"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_artifacts"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:spirv_binary"]),
 )

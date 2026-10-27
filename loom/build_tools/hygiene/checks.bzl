@@ -6,7 +6,11 @@
 
 """Read-only validation actions with source and tool identity in their keys."""
 
-load("//loom/config/target:targets.bzl", "LOOM_TARGETS")
+load(
+    "//loom/config:capabilities.bzl",
+    "LOOM_ARCHITECTURES",
+    "LOOM_ARTIFACT_FORMATS",
+)
 
 # Repository formatting owns every checked-in Loom source, independent of the
 # product targets selected by its caller. Canonicalize the formatter's target
@@ -14,18 +18,16 @@ load("//loom/config/target:targets.bzl", "LOOM_TARGETS")
 # execution-tool action graph.
 def _repository_format_transition_impl(_settings, _attr):
     return {
-        "//loom/config/emit:enable": [],
-        "//loom/config/target/arch:enable": [],
-        "//loom/config/target:enable": LOOM_TARGETS,
+        "//loom/config/arch:enable": LOOM_ARCHITECTURES,
+        "//loom/config/emit:enable": LOOM_ARTIFACT_FORMATS,
     }
 
 _repository_format_transition = transition(
     implementation = _repository_format_transition_impl,
     inputs = [],
     outputs = [
+        "//loom/config/arch:enable",
         "//loom/config/emit:enable",
-        "//loom/config/target:enable",
-        "//loom/config/target/arch:enable",
     ],
 )
 

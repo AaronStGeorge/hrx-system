@@ -131,8 +131,8 @@ loom_corpus_test(
     "loom-corpus"
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.xdna"
-    "iree-build-requirement=loom.target.arch.xdna"
-    "iree-build-requirement=loom.emit.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
+    "iree-build-requirement=loom.artifact.aie2p_elf"
     "iree-build-requirement=loom.execute.iree_hal"
     "iree-build-requirement=runtime.hal.amd_xdna"
     "iree-run-requirement=libamdf.resource.xdna"
@@ -144,7 +144,7 @@ loom_corpus_test(
   RESOURCE_GROUP
     "gpu-device"
   REQUIRES
-    AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_TARGET_ARCH_XDNA AND LOOM_BUILD AND LOOM_EMIT_XDNA AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA
+    AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

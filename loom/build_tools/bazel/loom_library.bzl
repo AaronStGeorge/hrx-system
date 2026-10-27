@@ -15,6 +15,10 @@ load(
     "RUNFILES_PATH_BEGIN",
     "RUNFILES_PATH_END",
 )
+load(
+    "//loom/requirements:package_policy.bzl",
+    "apply_loom_target_policy",
+)
 load(":loom_binary.bzl", "LoomBinaryInfo", "loom_kernel_binary")
 load(":loom_check.bzl", "loom_check_compile_tests")
 load(
@@ -59,6 +63,16 @@ _LoomTestModuleInfo = provider(
         "module": "Linked Loom bytecode module consumed by execution and plan runners.",
     },
 )
+
+def _apply_package_policy(name, tags, target_compatible_with):
+    attributes = apply_loom_target_policy({
+        "tags": tags,
+        "target_compatible_with": target_compatible_with,
+    }, name = name)
+    return struct(
+        tags = attributes["tags"],
+        target_compatible_with = attributes["target_compatible_with"],
+    )
 
 def _reject_workload_args(name, args):
     for arg in args:
@@ -863,6 +877,11 @@ def loom_library(
     transitive closure. The ``dependency_reports`` output group contains the
     schema-versioned JSON analysis report.
     """
+    package_attributes = _apply_package_policy(
+        name,
+        tags,
+        target_compatible_with,
+    )
     _declare_library(
         name = name,
         srcs = srcs,
@@ -875,8 +894,8 @@ def loom_library(
         plan_benchmarks = False,
         module_testonly = False,
         module_visibility = visibility,
-        tags = tags,
-        target_compatible_with = target_compatible_with,
+        tags = package_attributes.tags,
+        target_compatible_with = package_attributes.target_compatible_with,
         visibility = visibility,
     )
 
@@ -979,6 +998,11 @@ def loom_test_module(
       visibility: Bazel visibility of the reusable module.
       target_compatible_with: Source-provider build configuration constraints.
     """
+    package_attributes = _apply_package_policy(
+        name,
+        tags,
+        target_compatible_with,
+    )
     _declare_test_module(
         name = name,
         srcs = srcs,
@@ -986,16 +1010,21 @@ def loom_test_module(
         data = data,
         input_format = input_format,
         inputopts = inputopts,
-        tags = tags,
+        tags = package_attributes.tags,
         visibility = visibility,
-        target_compatible_with = target_compatible_with,
+        target_compatible_with = package_attributes.target_compatible_with,
     )
-    tests = _declare_source_tests(name, srcs, tags, target_compatible_with)
+    tests = _declare_source_tests(
+        name,
+        srcs,
+        package_attributes.tags,
+        package_attributes.target_compatible_with,
+    )
     if tests:
         native.test_suite(
             name = name + "_test",
             tests = tests,
-            tags = tags,
+            tags = package_attributes.tags,
             visibility = visibility,
         )
 
@@ -1073,6 +1102,15 @@ def loom_test(
     if not execution_profiles and not compile_targets:
         fail("%s requires execution_profiles or compile_targets" % name)
     _reject_workload_args(name, args)
+    requested_tags = tags
+    requested_target_compatible_with = target_compatible_with
+    package_attributes = _apply_package_policy(
+        name,
+        tags,
+        target_compatible_with,
+    )
+    tags = package_attributes.tags
+    target_compatible_with = package_attributes.target_compatible_with
     workloads = _test_variants(name, configs, case, variants)
     tests = []
     if not module:
@@ -1113,9 +1151,9 @@ def loom_test(
             targets = compile_targets,
             args = config_args,
             size = size,
-            tags = tags,
+            tags = requested_tags,
             visibility = visibility,
-            target_compatible_with = target_compatible_with,
+            target_compatible_with = requested_target_compatible_with,
         ))
     native.test_suite(
         name = name,
@@ -1145,6 +1183,7 @@ def loom_kernel_library(
     library as its direct input, so only this library's exports become roots
     while dependencies remain closure-only candidates.
     """
+    package_attributes = _apply_package_policy(name, tags, [])
     _declare_library(
         name = name,
         srcs = srcs,
@@ -1157,6 +1196,7 @@ def loom_kernel_library(
         plan_benchmarks = True,
         module_testonly = False,
         module_visibility = visibility,
-        tags = tags,
+        tags = package_attributes.tags,
+        target_compatible_with = package_attributes.target_compatible_with,
         visibility = visibility,
     )

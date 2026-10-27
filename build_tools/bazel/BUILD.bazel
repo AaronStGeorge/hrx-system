@@ -64,7 +64,11 @@ exports_files([
 
 py_library(
     name = "configure",
-    srcs = ["configure.py"],
+    srcs = [
+        "configure.py",
+        "configure_project.py",
+    ],
+    deps = ["//loom/py/loom/target:capability_presets"],
 )
 
 py_test(

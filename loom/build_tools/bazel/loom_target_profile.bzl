@@ -152,7 +152,7 @@ def loom_amdgpu_target_profile(name, target, **kwargs):
         selector = target,
         target_compatible_with = target_compatible_with +
                                  loom_config_compatible_with([
-                                     "//loom/config/target/arch:amdgpu",
+                                     "//loom/config/arch:amdgpu",
                                  ]) +
                                  loom_amdgpu_descriptor_set_compatible_with(
                                      descriptor_set_capability,

@@ -16,6 +16,9 @@ extern "C" {
 // SPIR-V target-low descriptor and record package.
 extern const loom_target_provider_t loom_spirv_target_provider;
 
+// Static fact identity accepted by SPIR-V artifact providers.
+extern const loom_target_fact_type_t loom_spirv_target_fact_type;
+
 // Provider set containing only the SPIR-V target package.
 extern const loom_target_provider_set_t loom_spirv_target_provider_set;
 

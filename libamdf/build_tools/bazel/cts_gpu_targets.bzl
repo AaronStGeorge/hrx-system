@@ -25,14 +25,14 @@ AMDF_CTS_GPU_PM4_TARGETS = [
 # The alternate wave64 cases require a physical target supporting both widths.
 # Identical select values include a case only once across enabled capabilities.
 AMDF_CTS_GPU_DUAL_WAVE_CONFIGS = [
-    "//loom/config/target/amdgpu:descriptor_set_rdna3_core",
-    "//loom/config/target/amdgpu:descriptor_set_rdna3_5_core",
-    "//loom/config/target/amdgpu:descriptor_set_rdna4_core",
-    "//loom/config/target/amdgpu:descriptor_set_rdna4m_core",
+    "//loom/config/arch/amdgpu:descriptor_set_rdna3_core",
+    "//loom/config/arch/amdgpu:descriptor_set_rdna3_5_core",
+    "//loom/config/arch/amdgpu:descriptor_set_rdna4_core",
+    "//loom/config/arch/amdgpu:descriptor_set_rdna4m_core",
 ]
 
 AMDF_CTS_GPU_DUAL_WAVE_TARGETS = [
     target
     for target in AMDF_CTS_GPU_PM4_TARGETS
-    if "//loom/config/target/amdgpu:" + LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_TARGET[target] in AMDF_CTS_GPU_DUAL_WAVE_CONFIGS
+    if "//loom/config/arch/amdgpu:" + LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_TARGET[target] in AMDF_CTS_GPU_DUAL_WAVE_CONFIGS
 ]

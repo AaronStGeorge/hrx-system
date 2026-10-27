@@ -26,12 +26,14 @@ package(
 )
 
 _XDNA_TARGET_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:xdna",
+    "//loom/config/arch:aie2p",
 ])
 
-_XDNA_IMAGE_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/emit:xdna_artifacts",
-]) + loom_config_compatible_with([
+_XDNA_ARTIFACT_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:aie2p_elf",
+])
+
+_XDNA_IMAGE_COMPATIBLE_WITH = _XDNA_ARTIFACT_COMPATIBLE_WITH + loom_config_compatible_with([
     LIBAMDF.enabled_by,
 ])
 
@@ -659,13 +661,11 @@ loom_cc_library(
     name = "check_provider",
     srcs = [
         "check/array_plan.c",
-        "check/artifact.c",
         "check/leaf.c",
         "check/provider.c",
     ],
     hdrs = [
         "check/array_plan.h",
-        "check/artifact.h",
         "check/leaf.h",
         "check/provider.h",
     ],
@@ -674,13 +674,9 @@ loom_cc_library(
         ":array_plan",
         ":array_program",
         ":array_resident",
-        ":bundle_encoding",
         ":core_descriptors",
-        ":descriptor_encoding",
-        ":encoding",
         ":leaf_compile",
         ":machine",
-        "//loom/binding/c:loomc",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:function_requirements",
@@ -692,10 +688,27 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:provider",
         "//loom/src/loom/target/reporting:report",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:provider",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "artifact_check",
+    srcs = ["check/artifact.c"],
+    hdrs = ["check/artifact.h"],
+    target_compatible_with = _XDNA_ARTIFACT_COMPATIBLE_WITH,
+    visibility = ["//loom/src/loom/target/emit/native/aie2p:__pkg__"],
+    deps = [
+        ":bundle_encoding",
+        ":core_descriptors",
+        ":descriptor_encoding",
+        ":encoding",
+        ":machine",
+        "//loom/binding/c:loomc",
+        "//loom/src/loom/tools/loom-check:execute",
         "//runtime/src/iree/base",
         "//runtime/src/iree/schemas:xdna_executable",
     ],
@@ -893,14 +906,10 @@ loom_check_test_suite(
         "test/array_plan/worker_rate_admission.loom-test",
         "test/array_plan/worker_storage_admission.loom-test",
         "test/canonicalize/adjacent_add.loom-test",
-        "test/configuration.loom-test",
         "test/configuration_calls.loom-test",
         "test/configuration_contracts.loom-test",
-        "test/configuration_data.loom-test",
         "test/configuration_entry.loom-test",
-        "test/configuration_limits.loom-test",
         "test/configuration_measurement.loom-test",
-        "test/configuration_report.loom-test",
         "test/descriptors/bf16_comparison.loom-test",
         "test/descriptors/bfp_move.loom-test",
         "test/descriptors/cascade.loom-test",
@@ -923,33 +932,23 @@ loom_check_test_suite(
         "test/descriptors/scalar_stream.loom-test",
         "test/descriptors/vector_push.loom-test",
         "test/expansion_report.loom-test",
-        "test/hardware_loops.loom-test",
         "test/kernel_realization.loom-test",
         "test/leaf_alignment.loom-test",
         "test/leaf_allocation.loom-test",
         "test/leaf_expansion_timing.loom-test",
         "test/leaf_immediates.loom-test",
         "test/leaf_interfaces.loom-test",
-        "test/leaf_rematerialization.loom-test",
         "test/leaf_schedule.loom-test",
         "test/leaf_state_read_timing.loom-test",
         "test/low_calls.loom-test",
         "test/math_contraction.loom-test",
         "test/math_policy_activations.loom-test",
         "test/module_contracts.loom-test",
-        "test/native_admission.loom-test",
         "test/native_bindings.loom-test",
-        "test/native_calls.loom-test",
         "test/native_completion.loom-test",
-        "test/native_distribution.loom-test",
         "test/native_dma_completions.loom-test",
         "test/native_dma_descriptors.loom-test",
-        "test/native_endpoint_addresses.loom-test",
-        "test/native_helper_effects.loom-test",
         "test/native_local_buffers.loom-test",
-        "test/native_program_capacity.loom-test",
-        "test/native_repetition.loom-test",
-        "test/native_strands.loom-test",
         "test/native_stream_routes.loom-test",
         "test/operand_ties.loom-test",
         "test/source_low/bf16_vectors.loom-test",
@@ -1106,6 +1105,27 @@ loom_check_test_suite(
         "test/vector_reduce_axes.loom-test",
     ],
     test_name_prefix_to_strip = "test/source_low/",
+)
+
+loom_check_test_suite(
+    name = "artifact_loom_check_file_test",
+    srcs = [
+        "test/configuration.loom-test",
+        "test/configuration_data.loom-test",
+        "test/configuration_limits.loom-test",
+        "test/configuration_report.loom-test",
+        "test/hardware_loops.loom-test",
+        "test/leaf_rematerialization.loom-test",
+        "test/native_admission.loom-test",
+        "test/native_calls.loom-test",
+        "test/native_distribution.loom-test",
+        "test/native_endpoint_addresses.loom-test",
+        "test/native_helper_effects.loom-test",
+        "test/native_program_capacity.loom-test",
+        "test/native_repetition.loom-test",
+        "test/native_strands.loom-test",
+    ],
+    target_compatible_with = _XDNA_ARTIFACT_COMPATIBLE_WITH,
 )
 
 loom_cc_library(
@@ -1396,11 +1416,7 @@ loom_cc_library(
         "emit/artifact.h",
         "emit/configuration.h",
     ],
-    visibility = [
-        "//loom/binding/c/target/amd/xdna:__pkg__",
-        "//loom/src/loom/target/configured:__pkg__",
-        "//loom/src/loom/tooling/target/amd/xdna:__pkg__",
-    ],
+    visibility = ["//loom/src/loom/target/emit/native/aie2p:__pkg__"],
     deps = [
         ":array_abi_layout",
         ":array_plan",

@@ -24,7 +24,7 @@ package(
 )
 
 _XDNA_COMPILE_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/emit:xdna_artifacts",
+    "//loom/config/emit:aie2p_elf",
 ])
 
 iree_execution_test_suite(
@@ -63,8 +63,8 @@ iree_execution_test_suite(
         "runtime-resource=amd-xdna",
     ],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/execute:xdna_hal",
-        "//loom/config/target/arch:vm",
+        "//loom/config/execute:aie2p_xdna_hal",
+        "//loom/config/execute:vm_iree_vm",
     ]),
     tools = {
         "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
@@ -86,8 +86,8 @@ iree_execution_test_suite(
         "runtime-resource=amd-xdna",
     ],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/execute:xdna_hal",
-        "//loom/config/target/arch:vm",
+        "//loom/config/execute:aie2p_xdna_hal",
+        "//loom/config/execute:vm_iree_vm",
     ]),
     tools = {"loom-test": "//loom/src/loom/tools/loom-test"},
 )
@@ -182,7 +182,7 @@ loom_cc_binary(
     name = "temporal_fold_test_bin",
     testonly = True,
     srcs = ["temporal_fold_test.cc"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/execute:xdna_hal"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/execute:aie2p_xdna_hal"]),
     deps = [
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
@@ -211,7 +211,7 @@ iree_executable_test(
         "iree-run-requirement=libamdf.resource.xdna",
         "runtime-resource=amd-xdna",
     ],
-    target_compatible_with = _XDNA_COMPILE_COMPATIBLE_WITH + loom_config_compatible_with(["//loom/config/execute:xdna_hal"]),
+    target_compatible_with = _XDNA_COMPILE_COMPATIBLE_WITH + loom_config_compatible_with(["//loom/config/execute:aie2p_xdna_hal"]),
 )
 
 loom_check_test(

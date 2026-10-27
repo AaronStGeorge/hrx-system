@@ -10,6 +10,7 @@ load(
     "loom_cc_instance_library",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_config_compatible_with",
     "loom_generated_cc_library",
 )
 load(
@@ -44,12 +45,15 @@ _AMDGPU_PLANNING_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/planning:__pk
 
 _AMDGPU_RECORDS_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/records:__pkg__"]
 
+_AMDGPU_ELF_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:amdgpu_elf",
+])
+
 _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 
 _AMDGPU_BINDING_VISIBILITY = ["//loom/binding/c/target/amdgpu:__pkg__"]
 
 _AMDGPU_PROVIDER_VISIBILITY = [
-    "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
     "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
     "//loom/src/loom/tooling/target/amdgpu:__pkg__",
@@ -597,6 +601,87 @@ loom_cc_library(
     ],
 )
 
+_AMDGPU_ARTIFACT_CHECK_TESTS = [
+    "test/source_low/low_alias_pressure.loom-test",
+    "test/source_low/low_allocation.loom-test",
+    "test/source_low/low_allocation_fixed_identity_splitting.loom-test",
+    "test/source_low/low_allocation_rematerialization.loom-test",
+    "test/source_low/low_atomic_coherence_cdna.loom-test",
+    "test/source_low/low_atomic_replay.loom-test",
+    "test/source_low/low_buffer_scalar_capture.loom-test",
+    "test/source_low/low_cluster_gfx1250.loom-test",
+    "test/source_low/low_completion_schedule.loom-test",
+    "test/source_low/low_conversion_gfx1200.loom-test",
+    "test/source_low/low_conversion_gfx1250.loom-test",
+    "test/source_low/low_conversion_gfx950.loom-test",
+    "test/source_low/low_copy_sources.loom-test",
+    "test/source_low/low_descriptor_assembly.loom-test",
+    "test/source_low/low_destination_selection_wait.loom-test",
+    "test/source_low/low_dpp_legacy.loom-test",
+    "test/source_low/low_edge_copy_wait.loom-test",
+    "test/source_low/low_exec_mask_encoding.loom-test",
+    "test/source_low/low_f64_native_assembly_gfx942.loom-test",
+    "test/source_low/low_lds_pair_gfx1250.loom-test",
+    "test/source_low/low_loop_vector_relocation.loom-test",
+    "test/source_low/low_mask_allocation.loom-test",
+    "test/source_low/low_mask_control_flow.loom-test",
+    "test/source_low/low_mask_modes.loom-test",
+    "test/source_low/low_mask_write_encoding.loom-test",
+    "test/source_low/low_mask_write_reset.loom-test",
+    "test/source_low/low_mask_write_wait.loom-test",
+    "test/source_low/low_matrix_coexecution.loom-test",
+    "test/source_low/low_memory_observations.loom-test",
+    "test/source_low/low_memory_scalar_capture.loom-test",
+    "test/source_low/low_message_clock.loom-test",
+    "test/source_low/low_mfma_execution_passes.loom-test",
+    "test/source_low/low_mfma_formats_gfx950.loom-test",
+    "test/source_low/low_mfma_result_dependencies.loom-test",
+    "test/source_low/low_mfma_schedule.loom-test",
+    "test/source_low/low_packed_float_add_signs.loom-test",
+    "test/source_low/low_partial_tuple_liveness.loom-test",
+    "test/source_low/low_preserved_readiness.loom-test",
+    "test/source_low/low_pressure_resource_schedule.loom-test",
+    "test/source_low/low_rdna35_dpp16.loom-test",
+    "test/source_low/low_rdna35_dpp8.loom-test",
+    "test/source_low/low_rdna35_dpp_integer_compare.loom-test",
+    "test/source_low/low_register_debt.loom-test",
+    "test/source_low/low_scalar_read_lifetimes.loom-test",
+    "test/source_low/low_scalar_shift_operands.loom-test",
+    "test/source_low/low_schedule_scopes.loom-test",
+    "test/source_low/low_state_rematerialization.loom-test",
+    "test/source_low/low_storage_continuation.loom-test",
+    "test/source_low/low_storage_continuation_order.loom-test",
+    "test/source_low/low_storage_identity.loom-test",
+    "test/source_low/low_storage_observations.loom-test",
+    "test/source_low/low_store_data_wait.loom-test",
+    "test/source_low/low_system_scope_store_wait.loom-test",
+    "test/source_low/low_tensor_gfx1250.loom-test",
+    "test/source_low/low_tuple_alignment.loom-test",
+    "test/source_low/low_tuple_capture.loom-test",
+    "test/source_low/low_valu_schedule.loom-test",
+    "test/source_low/low_valu_sgpr_timing.loom-test",
+    "test/source_low/low_vcc_dpp.loom-test",
+    "test/source_low/low_vinterp.loom-test",
+    "test/source_low/low_vmem_result_order.loom-test",
+    "test/source_low/low_volatile_completion.loom-test",
+    "test/source_low/low_vopd_schedule.loom-test",
+    "test/source_low/low_wait_completed_result.loom-test",
+    "test/source_low/low_wait_completion.loom-test",
+    "test/source_low/low_wait_continuous_pipeline.loom-test",
+    "test/source_low/low_wait_counter_limits.loom-test",
+    "test/source_low/low_wait_incoming_completion.loom-test",
+    "test/source_low/low_wait_incoming_suffix.loom-test",
+    "test/source_low/low_wait_loop_frontier.loom-test",
+    "test/source_low/low_wait_packet_transfers.loom-test",
+    "test/source_low/low_wait_plan.loom-test",
+    "test/source_low/low_wait_retained_order.loom-test",
+    "test/source_low/low_wait_storage_reuse.loom-test",
+    "test/source_low/low_wmma_schedule.loom-test",
+    "test/source_low/low_workgroup_cmpxchg.loom-test",
+    "test/source_low/low_xcnt_gfx1250.loom-test",
+    "test/source_low/source_low_control_flow.loom-test",
+]
+
 loom_check_test(
     name = "memory_stability",
     src = "test/source_low/memory_stability.loom-test",
@@ -610,7 +695,7 @@ loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = glob(
         ["test/source_low/*.loom-test"],
-        exclude = [
+        exclude = _AMDGPU_ARTIFACT_CHECK_TESTS + [
             "test/source_low/memory_stability.loom-test",
         ],
     ),
@@ -691,6 +776,13 @@ loom_check_test_suite(
             for target in LOOM_AMDGPU_SUPPORTED_TARGETS
         ],
     },
+    test_name_prefix_to_strip = "test/source_low/",
+)
+
+loom_check_test_suite(
+    name = "artifact_loom_check_file_test",
+    srcs = _AMDGPU_ARTIFACT_CHECK_TESTS,
+    target_compatible_with = _AMDGPU_ELF_COMPATIBLE_WITH,
     test_name_prefix_to_strip = "test/source_low/",
 )
 

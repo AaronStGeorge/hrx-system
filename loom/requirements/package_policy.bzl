@@ -19,24 +19,28 @@ load(
 )
 load(
     "//loom/requirements:defs.bzl",
-    "EMIT_AMDGPU",
-    "EMIT_SPIRV",
-    "EMIT_WASM",
+    "ARCH_AIE2P",
+    "ARCH_AMDGPU",
+    "ARCH_SPIRV",
+    "ARCH_VM",
+    "ARCH_WASM",
+    "ARCH_X86",
+    "ARTIFACT_AIE2P_ELF",
+    "ARTIFACT_AMDGPU_ELF",
+    "ARTIFACT_SPIRV_BINARY",
+    "ARTIFACT_VM_BINARY",
+    "ARTIFACT_WASM_BINARY",
+    "ARTIFACT_X86_ELF",
     "IMPORT_CXX",
     "IMPORT_MLIR",
     "IMPORT_TILELANG",
-    "TARGET_ARCH_AMDGPU",
-    "TARGET_ARCH_SPIRV",
-    "TARGET_ARCH_VM",
-    "TARGET_ARCH_WASM",
-    "TARGET_ARCH_X86",
-    "TARGET_ARCH_XDNA",
+    "NATIVE_EMISSION",
 )
 
 PACKAGE_POLICIES = [
     package_policy(
         packages = ["loom/binding/c/target/spirv/vulkan/..."],
-        build_requirements = [TARGET_ARCH_SPIRV, VULKAN_API],
+        build_requirements = [ARCH_SPIRV, VULKAN_API],
     ),
     package_policy(
         packages = [
@@ -55,15 +59,15 @@ PACKAGE_POLICIES = [
             "loom/src/loom/tooling/target/spirv/serve/...",
             "loom/src/loom/tools/loom-serve/...",
         ],
-        build_requirements = [TARGET_ARCH_VM],
+        build_requirements = [ARCH_VM, ARTIFACT_VM_BINARY],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/amd/xdna/..."],
-        build_requirements = [TARGET_ARCH_XDNA],
+        build_requirements = [ARCH_AIE2P],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/amdgpu/..."],
-        build_requirements = [TARGET_ARCH_AMDGPU],
+        build_requirements = [ARCH_AMDGPU],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/amdgpu/hal"],
@@ -71,62 +75,78 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/spirv/..."],
-        build_requirements = [TARGET_ARCH_SPIRV],
+        build_requirements = [ARCH_SPIRV],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/vm/..."],
-        build_requirements = [TARGET_ARCH_VM],
+        build_requirements = [ARCH_VM],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/wasm/..."],
-        build_requirements = [TARGET_ARCH_WASM],
+        build_requirements = [ARCH_WASM],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/x86/..."],
-        build_requirements = [TARGET_ARCH_X86],
+        build_requirements = [ARCH_X86],
+    ),
+    package_policy(
+        packages = ["loom/src/loom/target/emit/native"],
+        build_requirements = [NATIVE_EMISSION],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/native/amdgpu/..."],
-        build_requirements = [TARGET_ARCH_AMDGPU, EMIT_AMDGPU],
+        build_requirements = [ARCH_AMDGPU, ARTIFACT_AMDGPU_ELF],
         forbidden_deps = ["//runtime/src/iree/hal/drivers/amdgpu/..."],
     ),
     package_policy(
+        packages = ["loom/src/loom/target/emit/native/aie2p/..."],
+        build_requirements = [ARCH_AIE2P, ARTIFACT_AIE2P_ELF],
+    ),
+    package_policy(
         packages = ["loom/src/loom/target/emit/native/x86/..."],
-        build_requirements = [TARGET_ARCH_X86],
+        build_requirements = [ARCH_X86, ARTIFACT_X86_ELF],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/spirv/..."],
-        build_requirements = [TARGET_ARCH_SPIRV, EMIT_SPIRV],
+        build_requirements = [ARCH_SPIRV, ARTIFACT_SPIRV_BINARY],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/vm/..."],
-        build_requirements = [TARGET_ARCH_VM],
+        build_requirements = [ARCH_VM, ARTIFACT_VM_BINARY],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/wasm/..."],
-        build_requirements = [TARGET_ARCH_WASM, EMIT_WASM],
+        build_requirements = [ARCH_WASM, ARTIFACT_WASM_BINARY],
+    ),
+    package_policy(
+        packages = ["loom/src/loom/tooling/target/amd/xdna/..."],
+        build_requirements = [ARCH_AIE2P, ARTIFACT_AIE2P_ELF],
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/amdgpu/..."],
         build_requirements = [
-            TARGET_ARCH_AMDGPU,
-            EMIT_AMDGPU,
+            ARCH_AMDGPU,
+            ARTIFACT_AMDGPU_ELF,
         ],
+    ),
+    package_policy(
+        packages = ["loom/src/loom/tooling/target/cpu/..."],
+        build_requirements = [ARCH_X86, ARTIFACT_X86_ELF],
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/spirv/..."],
         build_requirements = [
-            TARGET_ARCH_SPIRV,
-            EMIT_SPIRV,
+            ARCH_SPIRV,
+            ARTIFACT_SPIRV_BINARY,
         ],
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/vm/..."],
-        build_requirements = [TARGET_ARCH_VM],
+        build_requirements = [ARCH_VM, ARTIFACT_VM_BINARY],
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/wasm/..."],
-        build_requirements = [TARGET_ARCH_WASM, EMIT_WASM],
+        build_requirements = [ARCH_WASM, ARTIFACT_WASM_BINARY],
     ),
     package_policy(
         packages = ["loom/py/loom/importers/mlir/..."],
@@ -138,15 +158,15 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/binding/c/benchmark/target/amdgpu/..."],
-        build_requirements = [TARGET_ARCH_AMDGPU, EMIT_AMDGPU],
+        build_requirements = [ARCH_AMDGPU, ARTIFACT_AMDGPU_ELF],
     ),
     package_policy(
         packages = ["loom/binding/c/benchmark/target/spirv/..."],
-        build_requirements = [TARGET_ARCH_SPIRV, EMIT_SPIRV],
+        build_requirements = [ARCH_SPIRV, ARTIFACT_SPIRV_BINARY],
     ),
     package_policy(
         packages = ["loom/binding/c/test/target/spirv/..."],
-        build_requirements = [TARGET_ARCH_SPIRV],
+        build_requirements = [ARCH_SPIRV],
     ),
 ]
 

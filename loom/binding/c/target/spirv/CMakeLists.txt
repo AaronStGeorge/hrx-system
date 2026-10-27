@@ -9,7 +9,31 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_ARCH_SPIRV)
+loom_cc_library(
+  NAME
+    profile
+  HDRS
+    "${PROJECT_SOURCE_DIR}/loom/binding/c/include/loomc/target/spirv/base.h"
+    "${PROJECT_SOURCE_DIR}/loom/binding/c/include/loomc/target/spirv/profile.h"
+    "profile_rows.h"
+  SRCS
+    "profile.c"
+    "profile_rows.c"
+  DEPS
+    iree::base
+    loom::binding::c::loomc
+    loom::error::error_defs
+    loom::target::arch::spirv::cooperative_properties
+    loom::target::arch::spirv::features
+    loom::target::arch::spirv::profile
+    loom::target::arch::spirv::records::target_records
+    loom::target::types
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_SPIRV AND LOOM_ARTIFACT_SPIRV_BINARY)
 loom_cc_library(
   NAME
     spirv
@@ -18,27 +42,18 @@ loom_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/binding/c/include/loomc/target/spirv/base.h"
     "${PROJECT_SOURCE_DIR}/loom/binding/c/include/loomc/target/spirv/emit.h"
     "${PROJECT_SOURCE_DIR}/loom/binding/c/include/loomc/target/spirv/profile.h"
-    "profile_rows.h"
   SRCS
-    "profile.c"
-    "profile_rows.c"
     "spirv.c"
   DEPS
-    iree::base
+    ::profile
     loom::binding::c::loomc
-    loom::error::error_defs
-    loom::target::arch::spirv::compiler_provider
-    loom::target::arch::spirv::cooperative_properties
-    loom::target::arch::spirv::features
-    loom::target::arch::spirv::profile
-    loom::target::arch::spirv::records::target_records
-    loom::target::types
+    loom::target::emit::spirv::binary_compiler_provider
   ALWAYSLINK
   PUBLIC
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL)
 loom_cc_library(
   NAME
     iree_hal
@@ -47,6 +62,7 @@ loom_cc_library(
   SRCS
     "iree_hal.c"
   DEPS
+    ::profile
     ::spirv
     iree::hal
     iree::hal::drivers::vulkan::device_spec

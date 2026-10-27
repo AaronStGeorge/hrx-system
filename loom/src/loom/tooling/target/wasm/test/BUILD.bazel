@@ -28,8 +28,8 @@ iree_executable_test(
     ],
     data = ["hosted_scenario.loom"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:vm",
-        "//loom/config/target/arch:wasm",
+        "//loom/config/execute:vm_iree_vm",
+        "//loom/config/execute:wasm_hosted",
     ]),
 )
 
@@ -42,8 +42,8 @@ iree_execution_test_suite(
     ],
     manifests = ["hosted_diagnostics.test.json"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:vm",
-        "//loom/config/target/arch:wasm",
+        "//loom/config/execute:vm_iree_vm",
+        "//loom/config/execute:wasm_hosted",
     ]),
     tools = {
         "loom-test": "//loom/src/loom/tools/loom-test:loom-test-wasi",

@@ -1,0 +1,228 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+include("${CMAKE_CURRENT_LIST_DIR}/../../config/target_presets.cmake")
+
+function(_loom_migrate_legacy_target_capability_cache)
+  if(DEFINED LOOM_TARGET_PRESET_SCHEMA_VERSION)
+    return()
+  endif()
+
+  set(_legacy_cache_complete ON)
+  set(_legacy_architectures "")
+  foreach(_architecture IN LISTS _LOOM_CAPABILITY_ARCHITECTURES)
+    string(TOUPPER "${_architecture}" _architecture_upper)
+    set(_option_name "LOOM_ARCH_${_architecture_upper}")
+    if(NOT DEFINED CACHE{${_option_name}})
+      set(_legacy_cache_complete OFF)
+    elseif($CACHE{${_option_name}})
+      list(APPEND _legacy_architectures "${_architecture}")
+    endif()
+  endforeach()
+  set(_legacy_artifacts "")
+  foreach(_artifact IN LISTS _LOOM_CAPABILITY_ARTIFACT_FORMATS)
+    string(TOUPPER "${_artifact}" _artifact_upper)
+    set(_option_name "LOOM_EMIT_${_artifact_upper}")
+    if(NOT DEFINED CACHE{${_option_name}})
+      set(_legacy_cache_complete OFF)
+    elseif($CACHE{${_option_name}})
+      list(APPEND _legacy_artifacts "${_artifact}")
+    endif()
+  endforeach()
+  set(_legacy_execution "")
+  foreach(_execution IN LISTS _LOOM_CAPABILITY_EXECUTION_SUBSTRATES)
+    string(TOUPPER "${_execution}" _execution_upper)
+    set(_option_name "LOOM_EXECUTE_${_execution_upper}")
+    if(NOT DEFINED CACHE{${_option_name}})
+      set(_legacy_cache_complete OFF)
+    elseif($CACHE{${_option_name}})
+      list(APPEND _legacy_execution "${_execution}")
+    endif()
+  endforeach()
+
+  # Earlier build trees cached effective leaves instead of additive inputs.
+  # Preserve custom matrices exactly and collapse the ordinary matrix back to
+  # the default preset so a newly selected family can replace it.
+  if(_legacy_cache_complete)
+    if(_legacy_architectures STREQUAL
+        "${_LOOM_TARGET_PRESET_DEFAULT_ARCHITECTURES}" AND
+        _legacy_artifacts STREQUAL
+        "${_LOOM_TARGET_PRESET_DEFAULT_ARTIFACTS}" AND
+        _legacy_execution STREQUAL
+        "${_LOOM_TARGET_PRESET_DEFAULT_EXECUTION}")
+      foreach(_architecture IN LISTS _LOOM_CAPABILITY_ARCHITECTURES)
+        string(TOUPPER "${_architecture}" _architecture_upper)
+        set(LOOM_ARCH_${_architecture_upper} OFF CACHE BOOL
+          "Explicit additive Loom architecture capability." FORCE)
+      endforeach()
+      foreach(_artifact IN LISTS _LOOM_CAPABILITY_ARTIFACT_FORMATS)
+        string(TOUPPER "${_artifact}" _artifact_upper)
+        set(LOOM_EMIT_${_artifact_upper} OFF CACHE BOOL
+          "Explicit additive Loom artifact capability." FORCE)
+      endforeach()
+      foreach(_execution IN LISTS _LOOM_CAPABILITY_EXECUTION_SUBSTRATES)
+        string(TOUPPER "${_execution}" _execution_upper)
+        set(LOOM_EXECUTE_${_execution_upper} OFF CACHE BOOL
+          "Explicit additive Loom execution capability." FORCE)
+      endforeach()
+      set(LOOM_TARGET_DEFAULT ON CACHE BOOL
+        "Build the ordinary non-WebAssembly Loom target set." FORCE)
+    else()
+      set(LOOM_TARGET_DEFAULT OFF CACHE BOOL
+        "Build the ordinary non-WebAssembly Loom target set." FORCE)
+    endif()
+  endif()
+
+  set(LOOM_TARGET_PRESET_SCHEMA_VERSION 1 CACHE INTERNAL
+    "Loom target preset cache schema." FORCE)
+endfunction()
+
+macro(loom_resolve_target_presets)
+  _loom_migrate_legacy_target_capability_cache()
+
+  set(_LOOM_EXPLICIT_ARCHITECTURES "")
+  foreach(_architecture IN LISTS _LOOM_CAPABILITY_ARCHITECTURES)
+    string(TOUPPER "${_architecture}" _architecture_upper)
+    set(_option_name "LOOM_ARCH_${_architecture_upper}")
+    option(${_option_name}
+      "Add Loom ${_architecture} architecture support to the selected target presets." OFF)
+    if(${_option_name})
+      list(APPEND _LOOM_EXPLICIT_ARCHITECTURES "${_architecture}")
+    endif()
+  endforeach()
+
+  set(_LOOM_EXPLICIT_ARTIFACTS "")
+  foreach(_artifact IN LISTS _LOOM_CAPABILITY_ARTIFACT_FORMATS)
+    string(TOUPPER "${_artifact}" _artifact_upper)
+    set(_option_name "LOOM_EMIT_${_artifact_upper}")
+    option(${_option_name}
+      "Add Loom ${_artifact} artifact emission to the selected target presets." OFF)
+    if(${_option_name})
+      list(APPEND _LOOM_EXPLICIT_ARTIFACTS "${_artifact}")
+    endif()
+  endforeach()
+
+  set(_LOOM_EXPLICIT_EXECUTION "")
+  foreach(_execution IN LISTS _LOOM_CAPABILITY_EXECUTION_SUBSTRATES)
+    string(TOUPPER "${_execution}" _execution_upper)
+    set(_option_name "LOOM_EXECUTE_${_execution_upper}")
+    option(${_option_name}
+      "Add Loom ${_execution} execution support to the selected target presets." OFF)
+    if(${_option_name})
+      list(APPEND _LOOM_EXPLICIT_EXECUTION "${_execution}")
+    endif()
+  endforeach()
+
+  foreach(_preset_key IN LISTS _LOOM_TARGET_PRESET_KEYS)
+    set(_option_variable "_LOOM_TARGET_PRESET_${_preset_key}_OPTION")
+    set(_description_variable "_LOOM_TARGET_PRESET_${_preset_key}_DESCRIPTION")
+    set(_option_default OFF)
+    if(_preset_key STREQUAL "DEFAULT")
+      set(_option_default ON)
+    endif()
+    option(${${_option_variable}}
+      "${${_description_variable}}" ${_option_default})
+  endforeach()
+
+  set(_LOOM_SELECTED_TARGET_PRESETS "")
+  foreach(_preset_key IN LISTS _LOOM_TARGET_FAMILY_PRESET_KEYS)
+    set(_option_variable "_LOOM_TARGET_PRESET_${_preset_key}_OPTION")
+    if(${${_option_variable}})
+      list(APPEND _LOOM_SELECTED_TARGET_PRESETS "${_preset_key}")
+    endif()
+  endforeach()
+  if(NOT _LOOM_SELECTED_TARGET_PRESETS AND LOOM_TARGET_DEFAULT)
+    list(APPEND _LOOM_SELECTED_TARGET_PRESETS "DEFAULT")
+  endif()
+
+  set(_LOOM_REQUESTED_ARCHITECTURES ${_LOOM_EXPLICIT_ARCHITECTURES})
+  set(_LOOM_REQUESTED_ARTIFACTS ${_LOOM_EXPLICIT_ARTIFACTS})
+  set(_LOOM_REQUESTED_EXECUTION ${_LOOM_EXPLICIT_EXECUTION})
+  foreach(_preset_key IN LISTS _LOOM_SELECTED_TARGET_PRESETS)
+    set(_architectures_variable
+      "_LOOM_TARGET_PRESET_${_preset_key}_ARCHITECTURES")
+    set(_artifacts_variable "_LOOM_TARGET_PRESET_${_preset_key}_ARTIFACTS")
+    set(_execution_variable "_LOOM_TARGET_PRESET_${_preset_key}_EXECUTION")
+    list(APPEND _LOOM_REQUESTED_ARCHITECTURES ${${_architectures_variable}})
+    list(APPEND _LOOM_REQUESTED_ARTIFACTS ${${_artifacts_variable}})
+    list(APPEND _LOOM_REQUESTED_EXECUTION ${${_execution_variable}})
+  endforeach()
+
+  set(_LOOM_RESOLVED_ARCHITECTURES "")
+  foreach(_architecture IN LISTS _LOOM_CAPABILITY_ARCHITECTURES)
+    if("${_architecture}" IN_LIST _LOOM_REQUESTED_ARCHITECTURES)
+      list(APPEND _LOOM_RESOLVED_ARCHITECTURES "${_architecture}")
+    endif()
+  endforeach()
+  set(_LOOM_RESOLVED_ARTIFACTS "")
+  foreach(_artifact IN LISTS _LOOM_CAPABILITY_ARTIFACT_FORMATS)
+    if("${_artifact}" IN_LIST _LOOM_REQUESTED_ARTIFACTS)
+      list(APPEND _LOOM_RESOLVED_ARTIFACTS "${_artifact}")
+    endif()
+  endforeach()
+  set(_LOOM_RESOLVED_EXECUTION "")
+  foreach(_execution IN LISTS _LOOM_CAPABILITY_EXECUTION_SUBSTRATES)
+    if("${_execution}" IN_LIST _LOOM_REQUESTED_EXECUTION)
+      list(APPEND _LOOM_RESOLVED_EXECUTION "${_execution}")
+    endif()
+  endforeach()
+
+  if(NOT LOOM_BUILD)
+    set(_LOOM_RESOLVED_ARCHITECTURES "")
+    set(_LOOM_RESOLVED_ARTIFACTS "")
+    set(_LOOM_RESOLVED_EXECUTION "")
+  endif()
+
+  set(LOOM_RESOLVED_ARCHITECTURES "${_LOOM_RESOLVED_ARCHITECTURES}"
+    CACHE INTERNAL "Resolved Loom target architectures." FORCE)
+  set(LOOM_RESOLVED_ARTIFACT_FORMATS "${_LOOM_RESOLVED_ARTIFACTS}"
+    CACHE INTERNAL "Resolved Loom target artifact formats." FORCE)
+  set(LOOM_RESOLVED_EXECUTION_SUBSTRATES "${_LOOM_RESOLVED_EXECUTION}"
+    CACHE INTERNAL "Resolved Loom target execution substrates." FORCE)
+
+  foreach(_architecture IN LISTS _LOOM_CAPABILITY_ARCHITECTURES)
+    string(TOUPPER "${_architecture}" _architecture_upper)
+    set(LOOM_ARCH_${_architecture_upper} OFF)
+  endforeach()
+  foreach(_architecture IN LISTS LOOM_RESOLVED_ARCHITECTURES)
+    string(TOUPPER "${_architecture}" _architecture_upper)
+    set(LOOM_ARCH_${_architecture_upper} ON)
+  endforeach()
+  foreach(_artifact IN LISTS _LOOM_CAPABILITY_ARTIFACT_FORMATS)
+    string(TOUPPER "${_artifact}" _artifact_upper)
+    set(LOOM_EMIT_${_artifact_upper} OFF)
+  endforeach()
+  foreach(_artifact IN LISTS LOOM_RESOLVED_ARTIFACT_FORMATS)
+    string(TOUPPER "${_artifact}" _artifact_upper)
+    set(LOOM_EMIT_${_artifact_upper} ON)
+  endforeach()
+  foreach(_execution IN LISTS _LOOM_CAPABILITY_EXECUTION_SUBSTRATES)
+    string(TOUPPER "${_execution}" _execution_upper)
+    set(LOOM_EXECUTE_${_execution_upper} OFF)
+  endforeach()
+  foreach(_execution IN LISTS LOOM_RESOLVED_EXECUTION_SUBSTRATES)
+    string(TOUPPER "${_execution}" _execution_upper)
+    set(LOOM_EXECUTE_${_execution_upper} ON)
+  endforeach()
+
+  set(_LOOM_TARGET_PRESET_LABELS "")
+  foreach(_preset_key IN LISTS _LOOM_SELECTED_TARGET_PRESETS)
+    string(TOLOWER "${_preset_key}" _preset_label)
+    list(APPEND _LOOM_TARGET_PRESET_LABELS "${_preset_label}")
+  endforeach()
+  if(_LOOM_TARGET_PRESET_LABELS)
+    list(JOIN _LOOM_TARGET_PRESET_LABELS "," _LOOM_TARGET_SELECTION_SUMMARY)
+  else()
+    set(_LOOM_TARGET_SELECTION_SUMMARY "explicit leaves")
+  endif()
+  list(JOIN LOOM_RESOLVED_ARCHITECTURES "," _LOOM_ARCHITECTURE_SUMMARY)
+  list(JOIN LOOM_RESOLVED_ARTIFACT_FORMATS "," _LOOM_ARTIFACT_SUMMARY)
+  list(JOIN LOOM_RESOLVED_EXECUTION_SUBSTRATES "," _LOOM_EXECUTION_SUMMARY)
+  message(STATUS "Loom target selection: ${_LOOM_TARGET_SELECTION_SUMMARY}")
+  message(STATUS "Loom architectures: ${_LOOM_ARCHITECTURE_SUMMARY}")
+  message(STATUS "Loom artifact formats: ${_LOOM_ARTIFACT_SUMMARY}")
+  message(STATUS "Loom execution substrates: ${_LOOM_EXECUTION_SUMMARY}")
+endmacro()

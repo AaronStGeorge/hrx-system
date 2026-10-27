@@ -42,4 +42,18 @@ loom_check_test_suite(
     "storage_transport.loom-test"
 )
 
+if(LOOM_ARCH_AMDGPU)
+iree_native_test(
+  NAME
+    "allocation_spill_storage_amdgpu"
+  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
+  ARGS
+    "{{${CMAKE_CURRENT_SOURCE_DIR}/allocation_spill_storage_amdgpu.loom-test}}"
+  SRC
+    loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

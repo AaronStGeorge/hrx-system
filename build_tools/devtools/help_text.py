@@ -167,18 +167,19 @@ active.""",
                 arguments="Portable -D project options or documented native Bazel rc options.",
                 epilog="""Examples:
   python dev.py bazel configure
-  python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON
-  python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=pinned
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMD=OFF
-  python dev.py bazel configure -DLOOM_TARGET_AMDGPU=ON
+  python dev.py bazel configure --config=loom-target-amd-gpu
+  python dev.py bazel configure --config=loom-target-all
   python dev.py bazel configure --importer-env tilelang
   python dev.py bazel configure --importer-env mlir
-  python dev.py bazel configure --//runtime/config/hal:drivers=amdgpu,task --repo_env=IREE_ROCM_PATH=/opt/rocm
+  python dev.py bazel configure --//runtime/config/hal:drivers=amd-gpu,task
 
 The default includes task and native AMD GPU/XDNA drivers. This writes
-.bazelrc.configured. Published portable build options live in
-BUILDING.md. Use .bazelrc.local for checkout-specific Bazel overrides.
+.bazelrc.configured. Loom target presets resolve to complete architecture,
+artifact, and execution sets, which are printed in the configure summary.
+Published portable build options and exact-selection rules live in BUILDING.md.
+Use .bazelrc.local for checkout-specific Bazel overrides.
 `--importer-env <name>` writes the matching Loom importer build setting
 without adding frontend packages to the base module lock.""",
             )
@@ -189,10 +190,11 @@ without adding frontend packages to the base module lock.""",
   python dev.py cmake configure
   python dev.py cmake configure --fresh
   python dev.py cmake configure -DCMAKE_BUILD_TYPE=Debug
-  python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DLIBHRX_BUILD=OFF
-  python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=package
   python dev.py cmake configure -DAMDF_BUILD=ON -DIREE_HAL_DRIVER_AMD=OFF -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF -DLOOM_BUILD=OFF
   python dev.py cmake configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
+  python dev.py cmake configure -DIREE_HAL_DRIVER_AMD=OFF -DLIBHRX_BUILD=OFF
+  python dev.py cmake configure -DLOOM_TARGET_ALL_CPU=ON
+  python dev.py cmake configure -DLOOM_TARGET_ALL=ON
   python dev.py cmake configure --importer-env tilelang
   python dev.py cmake configure --importer-env mlir
   python dev.py --cmake-build-dir build/cmake-asan cmake configure -DIREE_ENABLE_ASAN=ON
@@ -627,11 +629,9 @@ such as `//runtime/src/iree/base/...`, not `:target`.
 
 ```bash
 iree-bazel-configure
-iree-bazel-configure -DIREE_HAL_DRIVER_AMDGPU=ON
-iree-bazel-configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=pinned
 iree-bazel-configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
 iree-bazel-configure -DIREE_HAL_DRIVER_AMD=OFF
-iree-bazel-configure --//runtime/config/hal:drivers=amdgpu,task --repo_env=IREE_ROCM_PATH=/opt/rocm --repo_env=IREE_ROCM_DEPENDENCY_MODE=pinned
+iree-bazel-configure --//runtime/config/hal:drivers=amd-gpu,task
 iree-bazel-build [targets...]
 iree-bazel-test [targets...]
 iree-bazel-query 'deps(//runtime/src/iree/base)'
@@ -663,10 +663,9 @@ maps to `cmake --build ... --target TARGET`.
 iree-cmake-configure
 iree-cmake-configure --fresh
 iree-cmake-configure --fresh -GNinja
-iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON
-iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=package
 iree-cmake-configure -DAMDF_BUILD=ON -DIREE_HAL_DRIVER_AMD=OFF -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF -DLOOM_BUILD=OFF
-iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF
+iree-cmake-configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
+iree-cmake-configure -DIREE_HAL_DRIVER_AMD=OFF -DLIBHRX_BUILD=OFF
 iree-cmake-build hrx::hrx
 iree-cmake-test -R hrx
 iree-cmake-run iree::tools::iree-dump-cpuinfo -- --help
@@ -700,9 +699,8 @@ personal Bazel overrides in `.bazelrc.local`.
 
 ```bash
 iree-bazel-configure
-iree-bazel-configure -DIREE_HAL_DRIVER_AMDGPU=ON
-iree-bazel-configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=pinned
-iree-bazel-configure --//runtime/config/hal:drivers=amdgpu,task --repo_env=IREE_ROCM_PATH=/opt/rocm --repo_env=IREE_ROCM_DEPENDENCY_MODE=pinned
+iree-bazel-configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
+iree-bazel-configure --//runtime/config/hal:drivers=amd-gpu,task
 ```
 
 Published portable configuration options live in `BUILDING.md`."""
@@ -951,9 +949,8 @@ Configure the CMake package/install-test build tree for this checkout.
 
 ```bash
 iree-cmake-configure
-iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON
-iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=package
-iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF
+iree-cmake-configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
+iree-cmake-configure -DIREE_HAL_DRIVER_AMD=OFF -DLIBHRX_BUILD=OFF
 ```
 
 The first configure uses `build/cmake` unless `--cmake-build-dir` or

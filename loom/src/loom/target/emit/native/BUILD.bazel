@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_config_compatible_with",
 )
 
 package(
@@ -24,6 +25,26 @@ _NATIVE_AIE2P_VISIBILITY = ["//loom/src/loom/target/arch/amd/xdna/aie2p:__pkg__"
 
 _NATIVE_X86_VISIBILITY = ["//loom/src/loom/target/emit/native/x86:__pkg__"]
 
+_NATIVE_ASSEMBLY_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:amdgpu_elf",
+])
+
+_NATIVE_ELF_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:native_elf",
+])
+
+_NATIVE_OBJECT_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:native_object",
+])
+
+_NATIVE_OBJECT_ELF_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:native_object_elf",
+])
+
+_X86_ELF_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:x86_elf",
+])
+
 #===------------------------------------------------------------------------===#
 # Native assembly fragments
 #===------------------------------------------------------------------------===#
@@ -32,7 +53,8 @@ loom_cc_library(
     name = "assembly",
     srcs = ["assembly.c"],
     hdrs = ["assembly.h"],
-    visibility = _NATIVE_AMDGPU_VISIBILITY + _NATIVE_X86_VISIBILITY,
+    target_compatible_with = _NATIVE_ASSEMBLY_COMPATIBLE_WITH,
+    visibility = _NATIVE_AMDGPU_VISIBILITY,
     deps = [
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/ir",
@@ -53,6 +75,7 @@ loom_cc_library(
         "elf.h",
         "elf_symbols.h",
     ],
+    target_compatible_with = _NATIVE_ELF_COMPATIBLE_WITH,
     visibility = _NATIVE_AMDGPU_VISIBILITY + _NATIVE_XDNA_VISIBILITY,
     deps = [
         "//runtime/src/iree/base",
@@ -65,6 +88,7 @@ loom_cc_library(
     name = "contribution",
     srcs = ["contribution.c"],
     hdrs = ["contribution.h"],
+    target_compatible_with = _NATIVE_OBJECT_COMPATIBLE_WITH,
     visibility = _NATIVE_AIE2P_VISIBILITY,
     deps = [
         "//runtime/src/iree/base",
@@ -76,6 +100,7 @@ loom_cc_library(
     name = "elf_sections",
     srcs = ["elf_sections.c"],
     hdrs = ["elf_sections.h"],
+    target_compatible_with = _NATIVE_OBJECT_ELF_COMPATIBLE_WITH,
     visibility = _NATIVE_AIE2P_VISIBILITY,
     deps = [
         ":contribution",
@@ -88,6 +113,7 @@ loom_cc_library(
     name = "object",
     srcs = ["object.c"],
     hdrs = ["object.h"],
+    target_compatible_with = _NATIVE_OBJECT_COMPATIBLE_WITH,
     visibility = _NATIVE_AIE2P_VISIBILITY + _NATIVE_X86_VISIBILITY,
     deps = [
         ":contribution",
@@ -105,6 +131,7 @@ loom_cc_library(
         "image_elf.h",
         "object_elf.h",
     ],
+    target_compatible_with = _X86_ELF_COMPATIBLE_WITH,
     deps = [
         ":contribution",
         ":elf",
@@ -121,6 +148,7 @@ loom_cc_library(
     name = "module",
     srcs = ["module.c"],
     hdrs = ["module.h"],
+    target_compatible_with = _X86_ELF_COMPATIBLE_WITH,
     visibility = _NATIVE_X86_VISIBILITY,
     deps = [
         ":object_elf",
@@ -143,6 +171,7 @@ loom_cc_library(
     name = "task_library",
     srcs = ["task_library.c"],
     hdrs = ["task_library.h"],
+    target_compatible_with = _X86_ELF_COMPATIBLE_WITH,
     deps = [
         ":object",
         "//loom/src/loom/target/abi/task:parameter_layout",
@@ -156,6 +185,7 @@ loom_cc_library(
 loom_cc_test(
     name = "elf_symbols_test",
     srcs = ["elf_symbols_test.cc"],
+    target_compatible_with = _NATIVE_ELF_COMPATIBLE_WITH,
     deps = [
         ":elf",
         "//runtime/src/iree/base",
@@ -168,6 +198,7 @@ loom_cc_test(
 loom_cc_test(
     name = "elf_test",
     srcs = ["elf_test.cc"],
+    target_compatible_with = _NATIVE_ELF_COMPATIBLE_WITH,
     deps = [
         ":elf",
         "//runtime/src/iree/base",
@@ -181,6 +212,7 @@ loom_cc_test(
 loom_cc_test(
     name = "object_test",
     srcs = ["object_test.cc"],
+    target_compatible_with = _NATIVE_OBJECT_COMPATIBLE_WITH,
     deps = [
         ":contribution",
         ":object",
@@ -194,6 +226,7 @@ loom_cc_test(
 loom_cc_test(
     name = "contribution_test",
     srcs = ["contribution_test.cc"],
+    target_compatible_with = _NATIVE_OBJECT_COMPATIBLE_WITH,
     deps = [
         ":contribution",
         "//runtime/src/iree/base",
@@ -206,6 +239,7 @@ loom_cc_test(
 loom_cc_test(
     name = "elf_sections_test",
     srcs = ["elf_sections_test.cc"],
+    target_compatible_with = _NATIVE_OBJECT_ELF_COMPATIBLE_WITH,
     deps = [
         ":elf_sections",
         "//runtime/src/iree/base",
@@ -217,6 +251,7 @@ loom_cc_test(
 loom_cc_test(
     name = "object_elf_test",
     srcs = ["object_elf_test.cc"],
+    target_compatible_with = _X86_ELF_COMPATIBLE_WITH,
     deps = [
         ":object_elf",
         "//runtime/src/iree/base",

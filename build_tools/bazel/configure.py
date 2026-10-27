@@ -18,17 +18,20 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 
-LOOM_EXECUTE_SUBSTRATES = ("iree_hal",)
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from build_tools.bazel import configure_project
+
+LOOM_EXECUTE_SUBSTRATES = configure_project.LOOM_EXECUTION_SUBSTRATES
 LOOM_IMPORTERS = ("cxx", "mlir", "tilelang")
 LOOM_IMAGE_CODECS = ("png", "jpeg", "gif", "webp")
 LOOM_AUDIO_CODECS = ("wav", "mp3", "flac")
-LOOM_TARGETS = ("amdgpu", "spirv", "vm", "wasm", "xdna", "x86")
-LOOM_EMITTERS = ("amdgpu", "spirv", "wasm", "xdna")
+LOOM_ARCHITECTURES = configure_project.LOOM_ARCHITECTURES
+LOOM_ARTIFACT_FORMATS = configure_project.LOOM_ARTIFACT_FORMATS
 AMDF_FAMILIES = ("rdna", "cdna", "xdna")
 HOST_DRIVERS = ("task",)
 DEFAULT_DRIVERS = (*HOST_DRIVERS, "amd")
-DEFAULT_LOOM_EXECUTE = LOOM_EXECUTE_SUBSTRATES
-DEFAULT_LOOM_TARGETS = ("amdgpu", "spirv", "vm", "xdna", "x86")
 
 SDK_DRIVER_PACKAGES = {
     "amdgpu": (
@@ -70,20 +73,6 @@ DRIVER_DEFINES = {
     "IREE_HAL_DRIVER_AMD_GPU": "amd-gpu",
     "IREE_HAL_DRIVER_AMD_XDNA": "amd-xdna",
 }
-LOOM_TARGET_DEFINES = {
-    "LOOM_TARGET_AMDGPU": "amdgpu",
-    "LOOM_TARGET_SPIRV": "spirv",
-    "LOOM_TARGET_VM": "vm",
-    "LOOM_TARGET_WASM": "wasm",
-    "LOOM_TARGET_XDNA": "xdna",
-    "LOOM_TARGET_X86": "x86",
-}
-LOOM_EMIT_DEFINES = {
-    "LOOM_EMIT_XDNA": "xdna",
-}
-LOOM_EXECUTE_DEFINES = {
-    "LOOM_EXECUTE_IREE_HAL": "iree_hal",
-}
 LOOM_IMPORT_DEFINES = {
     "LOOM_IMPORT_CXX": "cxx",
     "LOOM_IMPORT_MLIR": "mlir",
@@ -99,8 +88,8 @@ REMOVED_OPTIONS = frozenset(
 )
 NATIVE_DRIVER_FLAG = "--//runtime/config/hal:drivers"
 NATIVE_RUNTIME_AMDGPU_TARGETS_FLAG = "--//runtime/src/iree/hal/drivers/amdgpu:targets"
-NATIVE_LOOM_TARGET_FLAG = "--//loom/config/target:enable"
-NATIVE_LOOM_AMDGPU_TARGETS_FLAG = "--//loom/config/target/amdgpu:targets"
+NATIVE_LOOM_ARCH_FLAG = "--//loom/config/arch:enable"
+NATIVE_LOOM_AMDGPU_TARGETS_FLAG = "--//loom/config/arch/amdgpu:targets"
 NATIVE_LOOM_EMIT_FLAG = "--//loom/config/emit:enable"
 NATIVE_LOOM_EXECUTE_FLAG = "--//loom/config/execute:enable"
 NATIVE_LOOM_IMPORT_FLAG = "--//loom/config/import:enable"
@@ -126,13 +115,9 @@ class ConfigRequest:
     amd_engine_overrides: dict[str, bool] = field(default_factory=dict)
     dependency_mode: str = "pinned"
     rocm_dependency_mode: str | None = None
-    enabled_loom_targets: set[str] = field(
-        default_factory=lambda: set(DEFAULT_LOOM_TARGETS)
-    )
+    enabled_loom_architectures: set[str] = field(default_factory=set)
     runtime_amdgpu_targets: set[str] | None = None
-    enabled_loom_execute: set[str] = field(
-        default_factory=lambda: set(DEFAULT_LOOM_EXECUTE)
-    )
+    enabled_loom_execute: set[str] = field(default_factory=set)
     loom_execute_source: str | None = None
     loom_emit_source: str | None = None
     loom_import_source: str | None = None
@@ -148,9 +133,9 @@ class ConfigRequest:
     loom_audio_codecs: set[str] = field(default_factory=lambda: set(LOOM_AUDIO_CODECS))
     # Spelling used to select encoded-audio providers.
     loom_audio_codecs_source: str | None = None
-    loom_target_source: str | None = None
+    loom_arch_source: str | None = None
     loom_amdgpu_targets: set[str] | None = None
-    enabled_loom_emitters: set[str] = field(default_factory=set)
+    enabled_loom_artifact_formats: set[str] = field(default_factory=set)
     enabled_loom_importers: set[str] = field(default_factory=set)
     amdf_build: bool = False
     amdf_build_source: str | None = None
@@ -169,6 +154,8 @@ class ConfigRequest:
     # Option spelling used for native RDMA selection.
     rdma_source: str | None = None
     rocm_path: str | None = None
+    # Opaque state owned by repository project configuration contributors.
+    project_state: dict[str, object] = field(default_factory=dict)
 
     def set_driver(self, driver: str, enabled: bool) -> None:
         if self.driver_source == "native":
@@ -203,36 +190,38 @@ class ConfigRequest:
     def set_runtime_amdgpu_target_list(self, targets: set[str]) -> None:
         self.runtime_amdgpu_targets = set(targets)
 
-    def set_loom_target(self, target: str, enabled: bool) -> None:
-        if self.loom_target_source == "native":
+    def set_loom_arch(self, architecture: str, enabled: bool) -> None:
+        if self.loom_arch_source == "native":
             raise SystemExit(
-                "Do not mix portable -DLOOM_TARGET_* options with the "
-                f"native {NATIVE_LOOM_TARGET_FLAG}=... Bazel option."
+                "Do not mix portable -DLOOM_ARCH_* options with the "
+                f"native {NATIVE_LOOM_ARCH_FLAG}=... Bazel option."
             )
-        self.loom_target_source = "portable"
+        self.loom_arch_source = "portable"
         if enabled:
-            self.enabled_loom_targets.add(target)
+            self.enabled_loom_architectures.add(architecture)
         else:
-            self.enabled_loom_targets.discard(target)
+            self.enabled_loom_architectures.discard(architecture)
 
-    def set_loom_target_list(self, targets: set[str]) -> None:
-        if self.loom_target_source == "portable":
+    def set_loom_arch_list(self, architectures: set[str]) -> None:
+        if self.loom_arch_source == "portable":
             raise SystemExit(
-                "Do not mix portable -DLOOM_TARGET_* options with the "
-                f"native {NATIVE_LOOM_TARGET_FLAG}=... Bazel option."
+                "Do not mix portable -DLOOM_ARCH_* options with the "
+                f"native {NATIVE_LOOM_ARCH_FLAG}=... Bazel option."
             )
-        unknown_targets = targets.difference(LOOM_TARGETS)
-        if unknown_targets:
+        unknown_architectures = architectures.difference(LOOM_ARCHITECTURES)
+        if unknown_architectures:
             raise SystemExit(
-                "Unknown Loom target(s): {}".format(", ".join(sorted(unknown_targets)))
+                "Unknown Loom architecture(s): {}".format(
+                    ", ".join(sorted(unknown_architectures))
+                )
             )
-        self.loom_target_source = "native"
-        self.enabled_loom_targets = set(targets)
+        self.loom_arch_source = "native"
+        self.enabled_loom_architectures = set(architectures)
 
     def set_loom_amdgpu_target_list(self, targets: set[str]) -> None:
         self.loom_amdgpu_targets = set(targets)
 
-    def set_loom_emitter(self, emitter: str, enabled: bool) -> None:
+    def set_loom_emit(self, artifact_format: str, enabled: bool) -> None:
         if self.loom_emit_source == "native":
             raise SystemExit(
                 "Do not mix portable -DLOOM_EMIT_* options with the "
@@ -240,25 +229,25 @@ class ConfigRequest:
             )
         self.loom_emit_source = "portable"
         if enabled:
-            self.enabled_loom_emitters.add(emitter)
+            self.enabled_loom_artifact_formats.add(artifact_format)
         else:
-            self.enabled_loom_emitters.discard(emitter)
+            self.enabled_loom_artifact_formats.discard(artifact_format)
 
-    def set_loom_emitter_list(self, emitters: set[str]) -> None:
+    def set_loom_emit_list(self, artifact_formats: set[str]) -> None:
         if self.loom_emit_source == "portable":
             raise SystemExit(
                 "Do not mix portable -DLOOM_EMIT_* options with the "
                 f"native {NATIVE_LOOM_EMIT_FLAG}=... Bazel option."
             )
-        unknown_emitters = emitters.difference(LOOM_EMITTERS)
-        if unknown_emitters:
+        unknown_formats = artifact_formats.difference(LOOM_ARTIFACT_FORMATS)
+        if unknown_formats:
             raise SystemExit(
-                "Unknown explicit Loom emitter(s): {}".format(
-                    ", ".join(sorted(unknown_emitters))
+                "Unknown Loom artifact format(s): {}".format(
+                    ", ".join(sorted(unknown_formats))
                 )
             )
         self.loom_emit_source = "native"
-        self.enabled_loom_emitters = set(emitters)
+        self.enabled_loom_artifact_formats = set(artifact_formats)
 
     def set_loom_execute(self, execute: str, enabled: bool) -> None:
         if self.loom_execute_source == "native":
@@ -488,15 +477,19 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         ),
         epilog="""Examples:
   python build_tools/bazel/configure.py
-  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON
-  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
-  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_DEPENDENCY_MODE=pinned
-  python build_tools/bazel/configure.py --//runtime/config/hal:drivers=amdgpu,task --repo_env=IREE_ROCM_PATH=/opt/rocm
+  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMD_XDNA=OFF
+  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMD=OFF
+  python build_tools/bazel/configure.py --//runtime/config/hal:drivers=amd-gpu,task
   python build_tools/bazel/configure.py -DAMDF_BUILD=ON -DAMDF_FAMILY_CDNA=OFF
-  python build_tools/bazel/configure.py -DLOOM_TARGET_SPIRV=OFF
-  python build_tools/bazel/configure.py -DLOOM_TARGET_AMDGPU=ON -DLOOM_EXECUTE_IREE_HAL=ON -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
-  python build_tools/bazel/configure.py -DLOOM_TARGET_XDNA=ON
+  python build_tools/bazel/configure.py --config=loom-target-cpu
+  python build_tools/bazel/configure.py --config=loom-target-amd-gpu
+  python build_tools/bazel/configure.py --config=loom-target-all
   python build_tools/bazel/configure.py -DLOOM_IMPORT_TILELANG=ON
+
+Loom target presets resolve to complete architecture, artifact, and execution
+sets. Exact native selection must provide all three --//loom/config/...:enable
+lists and cannot be mixed with a target preset. The configure summary prints
+the resolved selection.
 
 Portable -D project options are documented in BUILDING.md. Other Bazel-native
 overrides belong in .bazelrc.local.""",
@@ -582,17 +575,10 @@ def resolve_rocm_path(path: str) -> str:
 
 def apply_define(request: ConfigRequest, define: str) -> None:
     name, value = parse_define(define)
+    if configure_project.apply_define(request, name, value, parse_bool):
+        return
     if name in DRIVER_DEFINES:
         request.set_driver(DRIVER_DEFINES[name], parse_bool(name, value))
-        return
-    if name in LOOM_TARGET_DEFINES:
-        request.set_loom_target(LOOM_TARGET_DEFINES[name], parse_bool(name, value))
-        return
-    if name in LOOM_EMIT_DEFINES:
-        request.set_loom_emitter(LOOM_EMIT_DEFINES[name], parse_bool(name, value))
-        return
-    if name in LOOM_EXECUTE_DEFINES:
-        request.set_loom_execute(LOOM_EXECUTE_DEFINES[name], parse_bool(name, value))
         return
     if name in LOOM_IMPORT_DEFINES:
         request.set_loom_importer(LOOM_IMPORT_DEFINES[name], parse_bool(name, value))
@@ -652,6 +638,8 @@ def apply_native_bazel_arg(request: ConfigRequest, arg: str) -> None:
     check_removed_option(arg)
     if arg == "--":
         raise SystemExit("build_tools/bazel/configure.py does not use a -- separator.")
+    if configure_project.apply_native_bazel_arg(request, arg):
+        return
     if arg.startswith(NATIVE_LOOM_IMAGE_INPUT_FLAG + "="):
         request.set_loom_image_input(
             parse_bool(NATIVE_LOOM_IMAGE_INPUT_FLAG, arg.split("=", 1)[1]), "native"
@@ -675,11 +663,11 @@ def apply_native_bazel_arg(request: ConfigRequest, arg: str) -> None:
         raise SystemExit(
             f"{NATIVE_RUNTIME_AMDGPU_TARGETS_FLAG} must use --flag=value syntax."
         )
-    if arg.startswith(NATIVE_LOOM_TARGET_FLAG + "="):
-        request.set_loom_target_list(parse_string_list(arg.split("=", 1)[1]))
+    if arg.startswith(NATIVE_LOOM_ARCH_FLAG + "="):
+        request.set_loom_arch_list(parse_string_list(arg.split("=", 1)[1]))
         return
-    if arg == NATIVE_LOOM_TARGET_FLAG:
-        raise SystemExit(f"{NATIVE_LOOM_TARGET_FLAG} must use --flag=value syntax.")
+    if arg == NATIVE_LOOM_ARCH_FLAG:
+        raise SystemExit(f"{NATIVE_LOOM_ARCH_FLAG} must use --flag=value syntax.")
     if arg.startswith(NATIVE_LOOM_AMDGPU_TARGETS_FLAG + "="):
         request.set_loom_amdgpu_target_list(parse_string_list(arg.split("=", 1)[1]))
         return
@@ -688,7 +676,7 @@ def apply_native_bazel_arg(request: ConfigRequest, arg: str) -> None:
             f"{NATIVE_LOOM_AMDGPU_TARGETS_FLAG} must use --flag=value syntax."
         )
     if arg.startswith(NATIVE_LOOM_EMIT_FLAG + "="):
-        request.set_loom_emitter_list(parse_string_list(arg.split("=", 1)[1]))
+        request.set_loom_emit_list(parse_string_list(arg.split("=", 1)[1]))
         return
     if arg == NATIVE_LOOM_EMIT_FLAG:
         raise SystemExit(f"{NATIVE_LOOM_EMIT_FLAG} must use --flag=value syntax.")
@@ -770,10 +758,12 @@ def apply_native_bazel_arg(request: ConfigRequest, arg: str) -> None:
 
 def request_from_args(args: argparse.Namespace) -> ConfigRequest:
     request = ConfigRequest(output=args.output)
+    configure_project.initialize_request(request)
     for define in args.defines:
         apply_define(request, define)
     for native_bazel_arg in args.native_bazel_args:
         apply_native_bazel_arg(request, native_bazel_arg)
+    configure_project.finalize_request(request)
     if "amd" in request.enabled_drivers:
         request.enabled_drivers.remove("amd")
         request.enabled_drivers.update(AMD_ENGINES)
@@ -789,12 +779,18 @@ def ordered_driver_set(values: set[str]) -> list[str]:
     return [driver for driver in ALL_DRIVERS if driver in values]
 
 
-def ordered_loom_target_set(values: set[str]) -> list[str]:
-    return [target for target in LOOM_TARGETS if target in values]
+def ordered_loom_arch_set(values: set[str]) -> list[str]:
+    return [
+        architecture for architecture in LOOM_ARCHITECTURES if architecture in values
+    ]
 
 
-def ordered_loom_emitter_set(values: set[str]) -> list[str]:
-    return [emitter for emitter in LOOM_EMITTERS if emitter in values]
+def ordered_loom_emit_set(values: set[str]) -> list[str]:
+    return [
+        artifact_format
+        for artifact_format in LOOM_ARTIFACT_FORMATS
+        if artifact_format in values
+    ]
 
 
 def ordered_loom_execute_set(values: set[str]) -> list[str]:
@@ -813,8 +809,7 @@ def bazelrc_line(command: str, option: str) -> str:
     return f"{command} {shlex.quote(option)}"
 
 
-def generate_config(args: argparse.Namespace) -> str:
-    request = request_from_args(args)
+def render_config(request: ConfigRequest) -> str:
     if request.enabled_drivers.intersection(AMD_ENGINES):
         if request.amdf_build_source is not None and not request.amdf_build:
             raise SystemExit(
@@ -919,7 +914,8 @@ def generate_config(args: argparse.Namespace) -> str:
             ),
         ),
         "",
-        "# Loom target, execute substrate, importer, and explicit emitter scope.",
+        "# Loom architecture, artifact, execution, and importer scope.",
+        *("# " + line for line in configure_project.request_summary(request)),
         bazelrc_line(
             "build",
             NATIVE_LOOM_IMAGE_INPUT_FLAG + "=" + str(request.loom_image_input).lower(),
@@ -936,8 +932,8 @@ def generate_config(args: argparse.Namespace) -> str:
         ),
         bazelrc_line(
             "build",
-            "--//loom/config/target:enable="
-            + ",".join(ordered_loom_target_set(request.enabled_loom_targets)),
+            "--//loom/config/arch:enable="
+            + ",".join(ordered_loom_arch_set(request.enabled_loom_architectures)),
         ),
         *(
             [
@@ -964,7 +960,7 @@ def generate_config(args: argparse.Namespace) -> str:
         bazelrc_line(
             "build",
             "--//loom/config/emit:enable="
-            + ",".join(ordered_loom_emitter_set(request.enabled_loom_emitters)),
+            + ",".join(ordered_loom_emit_set(request.enabled_loom_artifact_formats)),
         ),
         "",
     ]
@@ -1012,14 +1008,21 @@ def generate_config(args: argparse.Namespace) -> str:
     return "\n".join(lines)
 
 
+def generate_config(args: argparse.Namespace) -> str:
+    return render_config(request_from_args(args))
+
+
 def main() -> int:
     args = parse_arguments()
     require_windows_bazel_host()
     if args.check_windows_host:
         return 0
-    config = generate_config(args)
+    request = request_from_args(args)
+    config = render_config(request)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(config, encoding="utf-8")
+    for line in configure_project.request_summary(request):
+        print(line)
     print(f"Wrote {args.output}")
     return 0
 

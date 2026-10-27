@@ -47,7 +47,7 @@ _GFX11_ASSEMBLY_COMPATIBLE_WITH = (
 _CDNA3_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/import:cxx",
     "//loom/config/execute:amdgpu_hal",
-    "//loom/config/target/amdgpu:iree_hal_descriptor_set_cdna3_core",
+    "//loom/config/arch/amdgpu:iree_hal_descriptor_set_cdna3_core",
 ])
 
 # Qualification is explicit: publishing a source module does not imply support
@@ -337,8 +337,8 @@ loom_check_test(
     runner = "//loom/src/loom/tools/loom-check",
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/import:cxx",
-        "//loom/config/target/arch:amdgpu",
-        "//loom/config/target/amdgpu:descriptor_set_cdna3_core",
+        "//loom/config/arch:amdgpu",
+        "//loom/config/arch/amdgpu:descriptor_set_cdna3_core",
     ]),
 )
 
@@ -348,7 +348,7 @@ loom_check_test(
     runner = "//loom/src/loom/tools/loom-check",
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/import:cxx",
-        "//loom/config/target/arch:amdgpu",
+        "//loom/config/arch:amdgpu",
     ]),
 )
 
@@ -359,7 +359,7 @@ loom_check_test(
         runner = "//loom/src/loom/tools/loom-check",
         target_compatible_with = loom_config_compatible_with([
             "//loom/config/import:cxx",
-            "//loom/config/target/arch:amdgpu",
+            "//loom/config/arch:amdgpu",
         ]),
     )
     for name in [

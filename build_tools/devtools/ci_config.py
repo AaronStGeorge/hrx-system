@@ -190,10 +190,10 @@ AMD_CLIENT_BAZEL_OPTIONS = (
     "--//libamdf/config:enabled=true",
     "--//libamdf/config:families=rdna,xdna",
     "--//runtime/config/hal:drivers=task,amd",
-    "--//loom/config/target:enable=amdgpu,vm,xdna,x86",
-    "--//loom/config/execute:enable=iree_hal",
+    "--//loom/config/arch:enable=aie2p,amdgpu,vm,x86",
+    "--//loom/config/execute:enable=iree_hal,iree_vm",
     "--//loom/config/import:enable=",
-    "--//loom/config/emit:enable=",
+    "--//loom/config/emit:enable=elf,vm",
 )
 AMD_CLIENT_BAZEL_TARGETS = (
     *AMDF_BAZEL_TARGETS,
@@ -205,8 +205,8 @@ AMD_CLIENT_WINDOWS_BAZEL_OPTIONS = AMD_CLIENT_BAZEL_OPTIONS + (
     "--//build_tools/vulkan/config:enabled=true",
     "--//build_tools/d3d12/config:enabled=true",
     "--//runtime/config/hal:drivers=task,vulkan,amd",
-    "--//loom/config/target:enable=amdgpu,spirv,vm,xdna,x86",
-    "--//loom/config/emit:enable=amdgpu,spirv,xdna",
+    "--//loom/config/arch:enable=aie2p,amdgpu,spirv,vm,x86",
+    "--//loom/config/emit:enable=elf,spirv,vm",
 )
 AMD_GPU_BAZEL_TARGETS = (
     "//runtime/src/iree/hal/drivers/amd/...",
@@ -239,7 +239,7 @@ AMD_GPU_CTS_TARGET_PREFIXES = {
     "cdna": ("cdna", "gfx9"),
 }
 AMD_CLIENT_GPU_BAZEL_OPTIONS = (
-    "--//loom/config/target/amdgpu:targets=" + ",".join(AMD_CLIENT_GPU_LOOM_TARGETS),
+    "--//loom/config/arch/amdgpu:targets=" + ",".join(AMD_CLIENT_GPU_LOOM_TARGETS),
 )
 AMD_CLIENT_WINDOWS_BAZEL_TARGETS = (
     AMD_CLIENT_BAZEL_TARGETS
@@ -274,10 +274,10 @@ AMDGPU_WINDOWS_BAZEL_OPTIONS = (
     "--//libamdf/config:enabled=true",
     "--//libamdf/config:families=rdna",
     "--//runtime/config/hal:drivers=task,amd-gpu",
-    "--//loom/config/target:enable=amdgpu,vm,x86",
-    "--//loom/config/execute:enable=iree_hal",
+    "--//loom/config/arch:enable=amdgpu,vm,x86",
+    "--//loom/config/execute:enable=iree_hal,iree_vm",
     "--//loom/config/import:enable=",
-    "--//loom/config/emit:enable=amdgpu",
+    "--//loom/config/emit:enable=elf,vm",
 )
 AMDGPU_WINDOWS_RESOURCES = ("libamdf.resource.amd_gpu",)
 AMDGPU_WINDOWS_BAZEL_TARGETS = (

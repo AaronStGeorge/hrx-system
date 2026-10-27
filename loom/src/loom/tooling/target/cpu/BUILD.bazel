@@ -17,9 +17,12 @@ load(
 )
 load(
     "//loom/requirements:defs.bzl",
+    "ARCH_VM",
+    "ARCH_X86",
+    "ARTIFACT_VM_BINARY",
+    "ARTIFACT_X86_ELF",
     "EXECUTE_IREE_HAL",
-    "TARGET_ARCH_VM",
-    "TARGET_ARCH_X86",
+    "EXECUTE_IREE_VM",
 )
 load(
     "//runtime/requirements:defs.bzl",
@@ -36,9 +39,12 @@ package(
 _X86_TASK_HARDWARE_PROFILE = loom_execution_profile(
     name = "x86_task_hardware",
     build_requirements = [
-        TARGET_ARCH_X86,
-        TARGET_ARCH_VM,
+        ARCH_X86,
+        ARCH_VM,
+        ARTIFACT_X86_ELF,
+        ARTIFACT_VM_BINARY,
         EXECUTE_IREE_HAL,
+        EXECUTE_IREE_VM,
         HAL_TASK,
         HAL_EXECUTABLE_LOADER_EMBEDDED_ELF,
     ],
@@ -63,10 +69,7 @@ iree_executable_test(
     ],
     data = [":test/x86_approximate_roots.loom"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/target/arch:vm",
-        "//runtime/config/hal:executable_loader_embedded_elf",
-        "//loom/config/execute:task_hal",
+        "//loom/config/execute:x86_task_hal",
     ]) + ["@platforms//cpu:x86_64"],
 )
 
@@ -78,10 +81,8 @@ iree_execution_test_suite(
     ],
     manifests = ["test/benchmark_scenario_correctness.test.json"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//loom/config/target/arch:vm",
-        "//runtime/config/hal:executable_loader_embedded_elf",
-        "//loom/config/execute:task_hal",
+        "//loom/config/execute:x86_task_hal",
+        "//loom/config/execute:vm_iree_vm",
     ]) + ["@platforms//cpu:x86_64"],
     tools = {"benchmark": "//loom/src/loom/tools/loom-benchmark"},
 )
@@ -101,9 +102,7 @@ iree_executable_test(
     data = ["//loom/src/loom/import/cxx/test:array_records_kernel.cxx"],
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/import:cxx",
-        "//loom/config/target/arch:x86",
-        "//runtime/config/hal:executable_loader_embedded_elf",
-        "//loom/config/execute:task_hal",
+        "//loom/config/execute:x86_task_hal",
     ]) + ["@platforms//cpu:x86_64"],
 )
 
@@ -146,10 +145,8 @@ iree_executable_test(
     ],
     data = ["//loom/src/loom/test/corpus/numeric:integer/bit_count.loom"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-        "//runtime/config/hal:executable_loader_embedded_elf",
-        "//loom/config/execute:task_hal",
-        "//loom/config/target/arch:vm",
+        "//loom/config/execute:x86_task_hal",
+        "//loom/config/execute:vm_iree_vm",
     ]) + ["@platforms//cpu:x86_64"],
 )
 
@@ -165,10 +162,8 @@ iree_executable_test(
         ],
         data = ["//loom/src/loom/test/corpus/numeric:float/" + family + ".loom"],
         target_compatible_with = loom_config_compatible_with([
-            "//loom/config/target/arch:x86",
-            "//loom/config/target/arch:vm",
-            "//runtime/config/hal:executable_loader_embedded_elf",
-            "//loom/config/execute:task_hal",
+            "//loom/config/execute:x86_task_hal",
+            "//loom/config/execute:vm_iree_vm",
         ]) + ["@platforms//cpu:x86_64"],
     )
     for family in [
@@ -191,10 +186,8 @@ iree_executable_test(
         ],
         data = [source],
         target_compatible_with = loom_config_compatible_with([
-            "//loom/config/target/arch:x86",
-            "//runtime/config/hal:executable_loader_embedded_elf",
-            "//loom/config/execute:task_hal",
-            "//loom/config/target/arch:vm",
+            "//loom/config/execute:x86_task_hal",
+            "//loom/config/execute:vm_iree_vm",
         ]) + ["@platforms//cpu:x86_64"],
     )
     for name, source, scenario in [

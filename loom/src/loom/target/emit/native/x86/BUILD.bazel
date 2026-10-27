@@ -25,12 +25,8 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_X86_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/x86/check:__pkg__"]
-
 _TASK_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:x86",
-    "//runtime/config/hal:driver_task",
-    "//runtime/config/hal:executable_loader_embedded_elf",
+    "//loom/config/execute:x86_task_hal",
 ]) + ["@platforms//cpu:x86_64"]
 
 #===------------------------------------------------------------------------===#
@@ -165,7 +161,6 @@ loom_cc_library(
     name = "module",
     srcs = ["module.c"],
     hdrs = ["module.h"],
-    visibility = ["//loom/src/loom/target/arch/x86:__pkg__"],
     deps = [
         ":abi",
         ":function",
@@ -184,10 +179,25 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "elf_compiler_provider",
+    srcs = ["elf_compiler_provider.c"],
+    hdrs = ["elf_compiler_provider.h"],
+    visibility = [
+        "//loom/binding/c/target/x86:__pkg__",
+        "//loom/src/loom/target/configured:__pkg__",
+    ],
+    deps = [
+        ":module",
+        "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/x86:facts",
+        "//loom/src/loom/target/arch/x86:provider",
+    ],
+)
+
+loom_cc_library(
     name = "loom_check",
     srcs = ["check/loom_check.c"],
     hdrs = ["check/loom_check.h"],
-    visibility = _X86_CHECK_VISIBILITY,
     deps = [
         ":abi",
         ":function",
@@ -197,6 +207,18 @@ loom_cc_library(
         "//loom/src/loom/tools/loom-check:execute",
         "//runtime/src/iree/base",
         "//runtime/src/iree/io:stream",
+    ],
+)
+
+loom_cc_library(
+    name = "check_provider",
+    srcs = ["check/provider.c"],
+    hdrs = ["check/provider.h"],
+    visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
+    deps = [
+        ":loom_check",
+        "//loom/src/loom/tools/loom-check:provider",
+        "//runtime/src/iree/base",
     ],
 )
 
@@ -219,9 +241,6 @@ loom_check_test(
     src = "test/native_diagnostics.loom-test",
     args = ["--target=x86:scalar"],
     runner = "//loom/src/loom/tools/loom-check:loom-check",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]),
 )
 
 iree_py_test(
@@ -240,7 +259,7 @@ iree_py_test(
         "//loom/src/loom/tools/loom-compile",
     ],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
+        "//loom/config/emit:x86_elf",
     ]),
     deps = [
         "//loom/py/loom/reporting",
@@ -261,9 +280,7 @@ loom_generated_file(
     inputs = ["test/callable.loom"],
     output = "callable.o",
     output_flag = "--output=",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]) + [
+    target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
@@ -280,9 +297,7 @@ loom_generated_file(
     inputs = ["test/vector_callable.loom"],
     output = "vector_callable.o",
     output_flag = "--output=",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]) + [
+    target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
@@ -299,9 +314,7 @@ loom_generated_file(
     inputs = ["test/runtime_division.loom"],
     output = "runtime_division.o",
     output_flag = "--output=",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]) + [
+    target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
@@ -318,9 +331,7 @@ loom_generated_file(
     inputs = ["test/avx512_callable.loom"],
     output = "avx512_callable.o",
     output_flag = "--output=",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]) + [
+    target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
@@ -337,9 +348,7 @@ loom_generated_file(
     inputs = ["test/avx512_bf16_callable.loom"],
     output = "avx512_bf16_callable.o",
     output_flag = "--output=",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]) + [
+    target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
@@ -356,9 +365,7 @@ loom_generated_file(
     inputs = ["test/packed_dot_callable.loom"],
     output = "packed_dot_callable.o",
     output_flag = "--output=",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]) + [
+    target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
@@ -375,9 +382,7 @@ loom_cc_test(
         "vector_callable.o",
     ],
     copts = ["-mavx2"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]) + [
+    target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
@@ -394,9 +399,7 @@ loom_cc_test(
         "runtime_division_link_test.cc",
     ],
     copts = ["-mavx2"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]) + [
+    target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
@@ -417,9 +420,6 @@ loom_generated_file(
     inputs = ["test/hal_dispatch.loom"],
     output = "hal_dispatch.so",
     output_flag = "--output=",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]),
 )
 
 iree_executable_test(
@@ -441,9 +441,6 @@ loom_generated_file(
     inputs = ["test/hal_dispatch.loom"],
     output = "hal_dispatch_c_api.so",
     output_flag = "{path}",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:x86",
-    ]),
 )
 
 iree_executable_test(

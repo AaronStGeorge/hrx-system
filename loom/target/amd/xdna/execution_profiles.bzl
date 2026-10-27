@@ -11,9 +11,9 @@ load("//libamdf/requirements:defs.bzl", "LIBAMDF", "LIBAMDF_XDNA", "XDNA_RESOURC
 load("//loom/build_tools/bazel:defs.bzl", "loom_execution_profile")
 load(
     "//loom/requirements:defs.bzl",
-    "EMIT_XDNA",
+    "ARCH_AIE2P",
+    "ARTIFACT_AIE2P_ELF",
     "EXECUTE_IREE_HAL",
-    "TARGET_ARCH_XDNA",
 )
 load("//runtime/requirements:defs.bzl", "HAL_AMD_XDNA")
 
@@ -22,8 +22,8 @@ XDNA_HARDWARE_PROFILE = loom_execution_profile(
     build_requirements = [
         LIBAMDF,
         LIBAMDF_XDNA,
-        TARGET_ARCH_XDNA,
-        EMIT_XDNA,
+        ARCH_AIE2P,
+        ARTIFACT_AIE2P_ELF,
         EXECUTE_IREE_HAL,
         HAL_AMD_XDNA,
     ],

@@ -6,21 +6,18 @@
 
 load("@bazel_skylib//lib:selects.bzl", "selects")
 load("//build_tools/bazel:settings.bzl", "iree_string_list_flag")
+load(
+    "//loom/config:capabilities.bzl",
+    "LOOM_DEFAULT_EXECUTION_SUBSTRATES",
+    "LOOM_EXECUTION_SUBSTRATES",
+)
 
 package(default_visibility = ["//visibility:public"])
 
-DEFAULT_ENABLED = [
-    "iree_hal",
-]
-
-SUPPORTED_VALUES = [
-    "iree_hal",
-]
-
 iree_string_list_flag(
     name = "enable",
-    build_setting_default = DEFAULT_ENABLED,
-    values = SUPPORTED_VALUES,
+    build_setting_default = LOOM_DEFAULT_EXECUTION_SUBSTRATES,
+    values = LOOM_EXECUTION_SUBSTRATES,
 )
 
 [
@@ -30,7 +27,7 @@ iree_string_list_flag(
             ":enable": value,
         },
     )
-    for value in SUPPORTED_VALUES
+    for value in LOOM_EXECUTION_SUBSTRATES
 ]
 
 selects.config_setting_group(
@@ -42,55 +39,54 @@ selects.config_setting_group(
 )
 
 selects.config_setting_group(
-    name = "iree_hal_amdgpu",
-    match_all = [
-        ":amdgpu_driver",
-        ":iree_hal",
-    ],
-)
-
-selects.config_setting_group(
-    name = "iree_hal_vulkan",
-    match_all = [
-        ":iree_hal",
-        "//runtime/config/hal:driver_vulkan",
-    ],
-)
-
-selects.config_setting_group(
-    name = "task_hal",
-    match_all = [
-        ":iree_hal",
-        "//runtime/config/hal:driver_task",
-    ],
-)
-
-# Internal execution provider capabilities. Public execution settings choose the
-# substrate; providers also need the matching Loom target/emitter slice.
-selects.config_setting_group(
     name = "amdgpu_hal",
     match_all = [
-        ":iree_hal_amdgpu",
-        "//loom/config/target/arch:amdgpu",
-        "//loom/config/emit:amdgpu",
+        ":iree_hal",
+        ":amdgpu_driver",
+        "//loom/config/emit:amdgpu_elf",
     ],
 )
 
 selects.config_setting_group(
     name = "spirv_vulkan_hal",
     match_all = [
-        ":iree_hal_vulkan",
-        "//loom/config/target/arch:spirv",
-        "//loom/config/emit:spirv",
+        ":iree_hal",
+        "//runtime/config/hal:driver_vulkan",
+        "//loom/config/emit:spirv_binary",
     ],
 )
 
 selects.config_setting_group(
-    name = "xdna_hal",
+    name = "aie2p_xdna_hal",
     match_all = [
         ":iree_hal",
         "//runtime/config/hal:driver_amd_xdna",
-        "//loom/config/target/arch:xdna",
-        "//loom/config/emit:xdna",
+        "//loom/config/emit:aie2p_elf",
+    ],
+)
+
+selects.config_setting_group(
+    name = "x86_task_hal",
+    match_all = [
+        ":iree_hal",
+        "//runtime/config/hal:driver_task",
+        "//runtime/config/hal:executable_loader_embedded_elf",
+        "//loom/config/emit:x86_elf",
+    ],
+)
+
+selects.config_setting_group(
+    name = "vm_iree_vm",
+    match_all = [
+        ":iree_vm",
+        "//loom/config/emit:vm_binary",
+    ],
+)
+
+selects.config_setting_group(
+    name = "wasm_hosted",
+    match_all = [
+        ":wasm_host",
+        "//loom/config/emit:wasm_binary",
     ],
 )

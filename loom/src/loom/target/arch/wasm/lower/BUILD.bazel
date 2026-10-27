@@ -1,0 +1,116 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "vector_carrier",
+    srcs = ["vector_carrier.c"],
+    hdrs = ["vector_carrier.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "vector_carrier_test",
+    srcs = ["vector_carrier_test.cc"],
+    deps = [
+        ":vector_carrier",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "vector_dynamic_slice",
+    srcs = ["vector_dynamic_slice.c"],
+    hdrs = ["vector_dynamic_slice.h"],
+    deps = [
+        ":vector_carrier",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "vector_dynamic_slice_test",
+    srcs = ["vector_dynamic_slice_test.cc"],
+    deps = [
+        ":vector_dynamic_slice",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "predicate_representation",
+    srcs = ["predicate_representation.c"],
+    hdrs = ["predicate_representation.h"],
+    deps = [
+        ":vector_carrier",
+        ":vector_dynamic_slice",
+        "//loom/src/loom/codegen/low/lower:representation_observer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/vector",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "predicate_representation_test",
+    srcs = ["predicate_representation_test.cc"],
+    deps = [
+        ":predicate_representation",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "lower",
+    srcs = [
+        "registry.c",
+        "vector_structural.c",
+    ],
+    hdrs = [
+        "lower.h",
+        "vector_structural.h",
+    ],
+    textual_hdrs = ["//loom/src/loom/target/arch/wasm/contracts:tables.inl"],
+    visibility = ["//loom/src/loom/target/arch/wasm:__pkg__"],
+    deps = [
+        ":predicate_representation",
+        ":vector_carrier",
+        ":vector_dynamic_slice",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low/lower",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target/arch/wasm:error_defs",
+        "//loom/src/loom/target/arch/wasm/contracts",
+        "//loom/src/loom/target/arch/wasm/descriptors:descriptors_ids",
+        "//runtime/src/iree/base",
+    ],
+)

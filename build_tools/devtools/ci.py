@@ -39,13 +39,24 @@ CMAKE_HAL_DRIVER_DEFINES = (
     ("amd-gpu", "IREE_HAL_DRIVER_AMD_GPU"),
     ("amd-xdna", "IREE_HAL_DRIVER_AMD_XDNA"),
 )
-CMAKE_LOOM_TARGET_DEFINES = (
-    ("amdgpu", "LOOM_TARGET_AMDGPU"),
-    ("spirv", "LOOM_TARGET_SPIRV"),
-    ("vm", "LOOM_TARGET_VM"),
-    ("wasm", "LOOM_TARGET_WASM"),
-    ("xdna", "LOOM_TARGET_XDNA"),
-    ("x86", "LOOM_TARGET_X86"),
+CMAKE_LOOM_ARCH_DEFINES = (
+    ("aie2p", "LOOM_ARCH_AIE2P"),
+    ("amdgpu", "LOOM_ARCH_AMDGPU"),
+    ("spirv", "LOOM_ARCH_SPIRV"),
+    ("vm", "LOOM_ARCH_VM"),
+    ("wasm", "LOOM_ARCH_WASM"),
+    ("x86", "LOOM_ARCH_X86"),
+)
+CMAKE_LOOM_EMIT_DEFINES = (
+    ("elf", "LOOM_EMIT_ELF"),
+    ("spirv", "LOOM_EMIT_SPIRV"),
+    ("vm", "LOOM_EMIT_VM"),
+    ("wasm", "LOOM_EMIT_WASM"),
+)
+CMAKE_LOOM_EXECUTE_DEFINES = (
+    ("iree_hal", "LOOM_EXECUTE_IREE_HAL"),
+    ("iree_vm", "LOOM_EXECUTE_IREE_VM"),
+    ("wasm_host", "LOOM_EXECUTE_WASM_HOST"),
 )
 CMAKE_LOOM_IMPORTER_DEFINES = (
     ("cxx", "LOOM_IMPORT_CXX"),
@@ -62,13 +73,19 @@ REPOSITORY_BUILD_HAL_DRIVERS = (
     "vulkan",
     "webgpu",
 )
-REPOSITORY_BUILD_LOOM_TARGETS = (
+REPOSITORY_BUILD_LOOM_ARCHITECTURES = (
+    "aie2p",
     "amdgpu",
     "spirv",
     "vm",
     "wasm",
-    "xdna",
     "x86",
+)
+REPOSITORY_BUILD_LOOM_ARTIFACT_FORMATS = ("elf", "spirv", "vm", "wasm")
+REPOSITORY_BUILD_LOOM_EXECUTION_SUBSTRATES = (
+    "iree_hal",
+    "iree_vm",
+    "wasm_host",
 )
 REPOSITORY_BUILD_LOOM_IMPORTERS = ("cxx", "mlir", "tilelang")
 ROCM_PINNED_DEPENDENCY_MODE_OPTION = "-DIREE_ROCM_DEPENDENCY_MODE=pinned"
@@ -343,7 +360,7 @@ def validate_enabled_drivers(enabled_drivers: tuple[str, ...]) -> frozenset[str]
 def amdgpu_bazel_options(target_selector: str) -> tuple[str, ...]:
     return (
         "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
-        "--//loom/config/target/amdgpu:targets=iree_hal",
+        "--//loom/config/arch/amdgpu:targets=iree_hal",
     )
 
 
@@ -376,7 +393,9 @@ def amd_gpu_windows_weights_step(
 def bazel_configure_step(
     enabled_drivers: tuple[str, ...] = (),
     *,
-    enabled_loom_targets: tuple[str, ...] | None = None,
+    enabled_loom_architectures: tuple[str, ...] | None = None,
+    enabled_loom_artifact_formats: tuple[str, ...] | None = None,
+    enabled_loom_execution_substrates: tuple[str, ...] | None = None,
     enabled_loom_importers: tuple[str, ...] | None = None,
     extra_options: tuple[str, ...] = (),
 ) -> CiStep:
@@ -392,9 +411,18 @@ def bazel_configure_step(
         rocm_root = os.environ.get("HRX_ROCM_ROOT")
         if rocm_root:
             command.append(f"-DIREE_ROCM_PATH={rocm_root}")
-    if enabled_loom_targets is not None:
+    if enabled_loom_architectures is not None:
         command.append(
-            "--//loom/config/target:enable=" + ",".join(enabled_loom_targets)
+            "--//loom/config/arch:enable=" + ",".join(enabled_loom_architectures)
+        )
+    if enabled_loom_artifact_formats is not None:
+        command.append(
+            "--//loom/config/emit:enable=" + ",".join(enabled_loom_artifact_formats)
+        )
+    if enabled_loom_execution_substrates is not None:
+        command.append(
+            "--//loom/config/execute:enable="
+            + ",".join(enabled_loom_execution_substrates)
         )
     if enabled_loom_importers is not None:
         command.append(
@@ -503,7 +531,9 @@ def cmake_configure_step(
     command_name: str,
     *,
     enabled_drivers: tuple[str, ...] = (),
-    enabled_loom_targets: tuple[str, ...] | None = None,
+    enabled_loom_architectures: tuple[str, ...] | None = None,
+    enabled_loom_artifact_formats: tuple[str, ...] | None = None,
+    enabled_loom_execution_substrates: tuple[str, ...] | None = None,
     enabled_loom_importers: tuple[str, ...] | None = None,
     amdgpu_target_selector: str | None = ci_config.DEFAULT_AMDGPU_TARGET_SELECTOR,
     amdgpu_device_binary_mode: str = "source",
@@ -512,6 +542,18 @@ def cmake_configure_step(
     extra_options: tuple[str, ...] = (),
 ) -> CiStep:
     enabled_driver_set = validate_enabled_drivers(enabled_drivers)
+    loom_capability_axes = (
+        enabled_loom_architectures,
+        enabled_loom_artifact_formats,
+        enabled_loom_execution_substrates,
+    )
+    if any(axis is not None for axis in loom_capability_axes) and any(
+        axis is None for axis in loom_capability_axes
+    ):
+        raise ValueError(
+            "CMake Loom capability selection requires architecture, artifact, "
+            "and execution lists together"
+        )
     tests_enabled = (
         cmake_tests_enabled(sanitizer) if build_tests is None else build_tests
     )
@@ -530,11 +572,26 @@ def cmake_configure_step(
     ]
     for driver, define in CMAKE_HAL_DRIVER_DEFINES:
         command.append(f"-D{define}={'ON' if driver in enabled_driver_set else 'OFF'}")
-    if enabled_loom_targets is not None:
-        enabled_loom_target_set = frozenset(enabled_loom_targets)
-        for target, define in CMAKE_LOOM_TARGET_DEFINES:
+    if enabled_loom_architectures is not None:
+        command.append("-DLOOM_TARGET_DEFAULT=OFF")
+        enabled_loom_architecture_set = frozenset(enabled_loom_architectures)
+        for architecture, define in CMAKE_LOOM_ARCH_DEFINES:
             command.append(
-                f"-D{define}={'ON' if target in enabled_loom_target_set else 'OFF'}"
+                f"-D{define}={'ON' if architecture in enabled_loom_architecture_set else 'OFF'}"
+            )
+    if enabled_loom_artifact_formats is not None:
+        enabled_loom_artifact_format_set = frozenset(enabled_loom_artifact_formats)
+        for artifact_format, define in CMAKE_LOOM_EMIT_DEFINES:
+            command.append(
+                f"-D{define}={'ON' if artifact_format in enabled_loom_artifact_format_set else 'OFF'}"
+            )
+    if enabled_loom_execution_substrates is not None:
+        enabled_loom_execution_substrate_set = frozenset(
+            enabled_loom_execution_substrates
+        )
+        for substrate, define in CMAKE_LOOM_EXECUTE_DEFINES:
+            command.append(
+                f"-D{define}={'ON' if substrate in enabled_loom_execution_substrate_set else 'OFF'}"
             )
     if enabled_loom_importers is not None:
         enabled_loom_importer_set = frozenset(enabled_loom_importers)
@@ -546,7 +603,7 @@ def cmake_configure_step(
         command.append(ROCM_PINNED_DEPENDENCY_MODE_OPTION)
         if amdgpu_target_selector is not None:
             command.append(f"-DIREE_HAL_AMDGPU_TARGETS={amdgpu_target_selector}")
-            command.append("-DLOOM_TARGET_AMDGPU_TARGETS=iree_hal")
+            command.append("-DLOOM_ARCH_AMDGPU_TARGETS=iree_hal")
         if amdgpu_device_binary_mode == "source":
             command.extend(cmake_amdgpu_device_binary_options())
         elif amdgpu_device_binary_mode == "prebuilt":
@@ -648,7 +705,9 @@ def cpu_steps(targets: tuple[str, ...]) -> list[CiStep]:
 def repository_configure_step() -> CiStep:
     return bazel_configure_step(
         enabled_drivers=REPOSITORY_BUILD_HAL_DRIVERS,
-        enabled_loom_targets=REPOSITORY_BUILD_LOOM_TARGETS,
+        enabled_loom_architectures=REPOSITORY_BUILD_LOOM_ARCHITECTURES,
+        enabled_loom_artifact_formats=REPOSITORY_BUILD_LOOM_ARTIFACT_FORMATS,
+        enabled_loom_execution_substrates=REPOSITORY_BUILD_LOOM_EXECUTION_SUBSTRATES,
         enabled_loom_importers=REPOSITORY_BUILD_LOOM_IMPORTERS,
         extra_options=ci_config.REPOSITORY_BAZEL_OPTIONS,
     )
@@ -795,11 +854,13 @@ def xdna_steps(targets: tuple[str, ...], config: str | None) -> list[CiStep]:
     options = (
         "--//libamdf/config:families=xdna",
         "--//runtime/config/hal:drivers=task,amd-xdna",
-        "--//loom/config/execute:enable=iree_hal",
     )
     return [
         bazel_configure_step(
-            enabled_loom_targets=("vm", "xdna"), extra_options=options
+            enabled_loom_architectures=("aie2p", "vm"),
+            enabled_loom_artifact_formats=("elf", "vm"),
+            enabled_loom_execution_substrates=("iree_hal", "iree_vm"),
+            extra_options=options,
         ),
         *platform_coverage_build_steps(
             bazel_build_step(
@@ -883,7 +944,7 @@ def amdgpu_test_steps(
         + (
             # Compiler compatibility and hardware execution share one target
             # selector so other architectures are rejected during analysis.
-            "--//loom/config/target/amdgpu:targets=" + target_selector,
+            "--//loom/config/arch/amdgpu:targets=" + target_selector,
             "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
             "--//runtime/src/iree/hal/drivers/amd/gpu:targets=" + target_selector,
             "--//runtime/config/hal:drivers=task,amd-gpu",
@@ -922,7 +983,7 @@ def amdgpu_windows_steps(
         ci_config.AMDGPU_WINDOWS_BAZEL_OPTIONS
         + amd_gpu_device_compiler_options()
         + (
-            "--//loom/config/target/amdgpu:targets=" + target_selector,
+            "--//loom/config/arch/amdgpu:targets=" + target_selector,
             # Loom's IREE HAL representation compatibility reads the shared
             # AMDGPU selector even when native execution uses the AMD GPU HAL.
             "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
@@ -1024,7 +1085,9 @@ def amdgpu_steps(
     return [
         bazel_configure_step(
             enabled_drivers=("amd-gpu",),
-            enabled_loom_targets=("amdgpu", "vm"),
+            enabled_loom_architectures=("amdgpu", "vm"),
+            enabled_loom_artifact_formats=("elf", "vm"),
+            enabled_loom_execution_substrates=("iree_hal", "iree_vm"),
             enabled_loom_importers=enabled_loom_importers,
         ),
         *amdgpu_test_steps(
@@ -1040,7 +1103,11 @@ def amdgpu_steps(
 
 def loom_amdgpu_bazel_steps() -> list[CiStep]:
     return [
-        bazel_configure_step(enabled_loom_targets=("amdgpu", "vm")),
+        bazel_configure_step(
+            enabled_loom_architectures=("amdgpu", "vm"),
+            enabled_loom_artifact_formats=("elf", "vm"),
+            enabled_loom_execution_substrates=("iree_hal", "iree_vm"),
+        ),
         bazel_test_step(
             "Test Loom AMDGPU compile coverage",
             ci_config.LOOM_AMDGPU_BAZEL_COMPILE_TEST_TARGETS,
@@ -1080,7 +1147,9 @@ def vulkan_steps(targets: tuple[str, ...]) -> list[CiStep]:
     return [
         bazel_configure_step(
             enabled_drivers=("vulkan",),
-            enabled_loom_targets=("spirv", "vm"),
+            enabled_loom_architectures=("spirv", "vm"),
+            enabled_loom_artifact_formats=("spirv", "vm"),
+            enabled_loom_execution_substrates=("iree_hal", "iree_vm"),
             extra_options=api_options,
         ),
         *platform_coverage_build_steps(
@@ -1193,7 +1262,9 @@ def cmake_repository_build_steps(command_name: str) -> list[CiStep]:
         cmake_configure_step(
             command_name,
             enabled_drivers=REPOSITORY_BUILD_HAL_DRIVERS,
-            enabled_loom_targets=REPOSITORY_BUILD_LOOM_TARGETS,
+            enabled_loom_architectures=REPOSITORY_BUILD_LOOM_ARCHITECTURES,
+            enabled_loom_artifact_formats=REPOSITORY_BUILD_LOOM_ARTIFACT_FORMATS,
+            enabled_loom_execution_substrates=REPOSITORY_BUILD_LOOM_EXECUTION_SUBSTRATES,
             enabled_loom_importers=REPOSITORY_BUILD_LOOM_IMPORTERS,
             amdgpu_target_selector=None,
             amdgpu_device_binary_mode="prebuilt",
@@ -1226,7 +1297,9 @@ def cmake_xdna_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
         cmake_configure_step(
             command_name,
             enabled_drivers=("amd-xdna",),
-            enabled_loom_targets=("vm", "xdna"),
+            enabled_loom_architectures=("aie2p", "vm"),
+            enabled_loom_artifact_formats=("elf", "vm"),
+            enabled_loom_execution_substrates=("iree_hal", "iree_vm"),
             sanitizer=sanitizer,
             extra_options=(
                 "-DAMDF_FAMILY_RDNA=OFF",
@@ -1286,7 +1359,9 @@ def cmake_amdgpu_steps(
         cmake_configure_step(
             command_name,
             enabled_drivers=("amd-gpu",),
-            enabled_loom_targets=("amdgpu", "vm"),
+            enabled_loom_architectures=("amdgpu", "vm"),
+            enabled_loom_artifact_formats=("elf", "vm"),
+            enabled_loom_execution_substrates=("iree_hal", "iree_vm"),
             sanitizer=sanitizer,
             extra_options=(
                 "-DAMDF_BUILD=ON",
@@ -1296,7 +1371,7 @@ def cmake_amdgpu_steps(
                 "-DLOOM_BUILD=ON",
                 "-DIREE_HAL_AMDGPU_TARGETS=" + target_selector,
                 "-DIREE_HAL_AMD_GPU_TARGETS=" + target_selector,
-                "-DLOOM_TARGET_AMDGPU_TARGETS=" + target_selector,
+                "-DLOOM_ARCH_AMDGPU_TARGETS=" + target_selector,
             )
             + cmake_amdgpu_device_binary_options(),
         ),
@@ -1351,7 +1426,12 @@ def cmake_amdgpu_steps(
 
 def cmake_loom_amdgpu_steps(command_name: str) -> list[CiStep]:
     return [
-        cmake_configure_step(command_name, enabled_loom_targets=("amdgpu", "vm")),
+        cmake_configure_step(
+            command_name,
+            enabled_loom_architectures=("amdgpu", "vm"),
+            enabled_loom_artifact_formats=("elf", "vm"),
+            enabled_loom_execution_substrates=("iree_hal", "iree_vm"),
+        ),
         cmake_test_step(
             command_name,
             "Test Loom CMake AMDGPU compile coverage",
@@ -1371,7 +1451,9 @@ def cmake_vulkan_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
         cmake_configure_step(
             command_name,
             enabled_drivers=("vulkan",),
-            enabled_loom_targets=("spirv", "vm"),
+            enabled_loom_architectures=("spirv", "vm"),
+            enabled_loom_artifact_formats=("spirv", "vm"),
+            enabled_loom_execution_substrates=("iree_hal", "iree_vm"),
             sanitizer=sanitizer,
             extra_options=("-DIREE_ENABLE_VULKAN=ON",),
         ),
@@ -1639,7 +1721,9 @@ def _steps_from_args(args: argparse.Namespace) -> list[CiStep]:
             return [
                 bazel_configure_step(
                     enabled_drivers=("amd-gpu",),
-                    enabled_loom_targets=("amdgpu", "vm"),
+                    enabled_loom_architectures=("amdgpu", "vm"),
+                    enabled_loom_artifact_formats=("elf", "vm"),
+                    enabled_loom_execution_substrates=("iree_hal", "iree_vm"),
                     enabled_loom_importers=enabled_loom_importers,
                 ),
                 *amdgpu_config_steps(

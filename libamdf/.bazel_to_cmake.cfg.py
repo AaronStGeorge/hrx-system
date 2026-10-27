@@ -135,7 +135,7 @@ class AmdfBuildFileFunctions(
                 path
             )
         compatibility = {
-            "//loom/config/target/amdgpu:" + capabilities[target]: []
+            "//loom/config/arch/amdgpu:" + capabilities[target]: []
             for target in targets
         }
         compatibility["//conditions:default"] = ["@platforms//:incompatible"]

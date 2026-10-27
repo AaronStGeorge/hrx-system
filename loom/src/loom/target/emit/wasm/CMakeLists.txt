@@ -9,30 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
-loom_generated_cc_library(
-  NAME
-    error_defs
-  GENERATOR
-    loom::py::loom::gen::error::c_errors
-  SOURCE
-    "error_catalog.c"
-  GENERATED_HDR_FLAGS
-    "--header"
-  GENERATED_HDRS
-    "error_catalog.h"
-  ARGS
-    "--catalog-symbol=loom_wasm_error_catalog"
-    "--fallback-catalog-symbol=loom_error_catalog_core"
-    "--fallback-public-header=loom/error/error_catalog.h"
-    "--public-header=loom/target/emit/wasm/error_catalog.h"
-    "--shard=wasm"
-  DEPS
-    loom::error::error_defs
-)
-endif()
-
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     binary_writer
@@ -46,7 +23,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     types
@@ -61,7 +38,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     program
@@ -76,7 +53,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     function_body
@@ -99,7 +76,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     module_binary
@@ -117,7 +94,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_library(
   NAME
     module_compiler
@@ -148,7 +125,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_test(
   NAME
     module_compiler_test
@@ -160,12 +137,12 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::selection
   LABELS
-    "iree-build-requirement=loom.target.arch.wasm"
-    "iree-build-requirement=loom.emit.wasm"
+    "iree-build-requirement=loom.arch.wasm"
+    "iree-build-requirement=loom.artifact.wasm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARCH_WASM AND LOOM_ARTIFACT_WASM_BINARY)
 loom_cc_test(
   NAME
     descriptor_fields_test
@@ -178,8 +155,8 @@ loom_cc_test(
     loom::ir
     loom::target::arch::wasm::descriptors::descriptors_ids
   LABELS
-    "iree-build-requirement=loom.target.arch.wasm"
-    "iree-build-requirement=loom.emit.wasm"
+    "iree-build-requirement=loom.arch.wasm"
+    "iree-build-requirement=loom.artifact.wasm_binary"
 )
 endif()
 

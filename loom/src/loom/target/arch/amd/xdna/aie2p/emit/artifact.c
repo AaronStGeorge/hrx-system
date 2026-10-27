@@ -23,9 +23,7 @@
 #include "loom/target/arch/amd/xdna/aie2p/emit/program_compile.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/tile_link.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/xdna_product.h"
-#include "loom/target/arch/amd/xdna/aie2p/facts.h"
 #include "loom/target/arch/amd/xdna/aie2p/profile.h"
-#include "loom/target/arch/amd/xdna/aie2p/provider.h"
 #include "loom/target/arch/amd/xdna/aie2p/records/target_records.h"
 #include "loom/target/arch/amd/xdna/device/profile.h"
 #include "loom/target/arch/amd/xdna/error_catalog.h"
@@ -975,28 +973,4 @@ const loom_target_emitter_t loom_aie2p_xdna_artifact_emitter = {
     .default_identifier = IREE_SVL("module.xdna"),
     .target_artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
     .emit = loom_aie2p_xdna_emit_target_artifact,
-};
-
-static const loom_target_emitter_t* const kXdnaArtifactEmitters[] = {
-    &loom_aie2p_xdna_artifact_emitter,
-};
-
-const loom_target_provider_t loom_aie2p_xdna_artifact_provider = {
-    .emitter_list =
-        {
-            .values = kXdnaArtifactEmitters,
-            .count = IREE_ARRAYSIZE(kXdnaArtifactEmitters),
-        },
-    .canonical_kernel_emitter = &loom_aie2p_xdna_artifact_emitter,
-    .canonical_kernel_fact_type = &loom_aie2p_target_fact_type,
-};
-
-static const loom_target_provider_t* const kAie2pCompilerProviders[] = {
-    &loom_aie2p_target_provider,
-    &loom_aie2p_xdna_artifact_provider,
-};
-
-const loom_target_provider_set_t loom_aie2p_compiler_provider_set = {
-    .providers = kAie2pCompilerProviders,
-    .provider_count = IREE_ARRAYSIZE(kAie2pCompilerProviders),
 };

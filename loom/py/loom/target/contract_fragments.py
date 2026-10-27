@@ -137,7 +137,7 @@ CONTRACT_FRAGMENT_REGISTRATIONS = (
     ),
     ContractFragmentRegistration(
         key="wasm.core.simd128",
-        module_name="loom.target.emit.wasm.contracts",
+        module_name="loom.target.arch.wasm.contracts",
         symbol_name="WASM_CORE_SIMD128_CONTRACT_FRAGMENT",
         dialect_ops_symbol_name="WASM_CORE_SIMD128_CONTRACT_DIALECT_OPS",
         aliases=("wasm_core_simd128",),

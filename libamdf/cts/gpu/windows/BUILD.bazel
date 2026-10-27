@@ -19,7 +19,7 @@ amdf_cts_test_suite(
         "@platforms//os:windows",
         "@platforms//cpu:x86_64",
     ] + select({
-        "//loom/config/emit:amdgpu_artifacts": [],
+        "//loom/config/emit:amdgpu_elf": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     visibility = ["//visibility:public"],

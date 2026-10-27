@@ -28,13 +28,23 @@ exports_files(
 
 _WASM_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check:__pkg__"]
 
+_WASM_BINARY_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:wasm_binary",
+])
+
+_WASM_EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:wasm_hosted",
+])
+
+_WASM_HOST_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:wasm_host",
+])
+
 iree_execution_test_suite(
     name = "loom_compile_execution_test",
     manifests = ["loom-compile.test.json"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:wasm_artifacts",
-    ]),
+    target_compatible_with = _WASM_BINARY_COMPATIBLE_WITH,
     tools = {
         "loom-compile": "//loom/src/loom/tools/loom-compile",
     },
@@ -44,12 +54,14 @@ iree_wasm_cc_library(
     name = "host_js",
     srcs = ["host.mjs"],
     module = "loom_wasm_host",
+    target_compatible_with = _WASM_HOST_COMPATIBLE_WITH,
 )
 
 loom_cc_library(
     name = "host",
     srcs = ["host.c"],
     hdrs = ["host.h"],
+    target_compatible_with = _WASM_HOST_COMPATIBLE_WITH,
     deps = [
         ":host_js",
         "//runtime/src/iree/base",
@@ -60,6 +72,7 @@ loom_cc_library(
     name = "testbench",
     srcs = ["testbench.c"],
     hdrs = ["testbench.h"],
+    target_compatible_with = _WASM_EXECUTION_COMPATIBLE_WITH,
     visibility = ["//loom/src/loom/tools/loom-test:__pkg__"],
     deps = [
         ":host",

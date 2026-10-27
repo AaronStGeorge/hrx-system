@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_module(
   NAME
     service_module
@@ -24,7 +24,7 @@ loom_module(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_module(
   NAME
     control_module
@@ -38,7 +38,7 @@ loom_module(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_module(
   NAME
     storage_module
@@ -50,7 +50,7 @@ loom_module(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_module(
   NAME
     advance_module
@@ -147,7 +147,7 @@ iree_py_library(
     "parameters.py"
 )
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_generated_file(
   NAME
     metadata_shard
@@ -163,7 +163,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_generated_file(
   NAME
     bias_shard
@@ -179,7 +179,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_generated_file(
   NAME
     partition_bias_shard
@@ -195,7 +195,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_module(
   NAME
     multimodal

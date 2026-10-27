@@ -10,6 +10,7 @@ list(APPEND CMAKE_MODULE_PATH
 )
 
 include(loom_amdgpu_selectors)
+include(loom_target_presets)
 
 if(NOT DEFINED LOOM_BUILD)
   option(LOOM_BUILD
@@ -26,130 +27,72 @@ if(LOOM_LINK_SHARED_TOOLS AND BUILD_SHARED_LIBS)
     "LOOM_LINK_SHARED_TOOLS requires BUILD_SHARED_LIBS=OFF so the bundle owns its component implementations.")
 endif()
 
-option(LOOM_TARGET_DEFAULTS
-  "Default value for dependency-satisfied Loom production targets." ON)
-if(NOT DEFINED LOOM_TARGET_AMDGPU_DEFAULT)
-  set(LOOM_TARGET_AMDGPU_DEFAULT ${LOOM_TARGET_DEFAULTS})
-endif()
-if(NOT DEFINED LOOM_TARGET_SPIRV_DEFAULT)
-  set(LOOM_TARGET_SPIRV_DEFAULT ${LOOM_TARGET_DEFAULTS})
-endif()
-if(NOT DEFINED LOOM_TARGET_WASM_DEFAULT)
-  set(LOOM_TARGET_WASM_DEFAULT OFF)
-endif()
-if(NOT DEFINED LOOM_TARGET_VM_DEFAULT)
-  set(LOOM_TARGET_VM_DEFAULT ${LOOM_TARGET_DEFAULTS})
-endif()
-if(NOT DEFINED LOOM_TARGET_XDNA_DEFAULT)
-  set(LOOM_TARGET_XDNA_DEFAULT ${LOOM_TARGET_DEFAULTS})
-endif()
-if(NOT DEFINED LOOM_TARGET_X86_DEFAULT)
-  set(LOOM_TARGET_X86_DEFAULT ${LOOM_TARGET_DEFAULTS})
-endif()
-option(LOOM_TARGET_AMDGPU
-  "Enables Loom AMDGPU target support."
-  ${LOOM_TARGET_AMDGPU_DEFAULT})
-if(NOT DEFINED LOOM_TARGET_AMDGPU_TARGETS)
-  set(LOOM_TARGET_AMDGPU_TARGETS
+loom_resolve_target_presets()
+
+if(NOT DEFINED LOOM_ARCH_AMDGPU_TARGETS)
+  set(LOOM_ARCH_AMDGPU_TARGETS
     ${_LOOM_AMDGPU_DEFAULT_TARGET_SELECTORS}
     CACHE STRING
-    "Loom AMDGPU target selectors to compile into AMDGPU target support.")
-endif()
-option(LOOM_TARGET_SPIRV
-  "Enables Loom SPIR-V target support."
-  ${LOOM_TARGET_SPIRV_DEFAULT})
-option(LOOM_TARGET_WASM
-  "Enables Loom WebAssembly target support."
-  ${LOOM_TARGET_WASM_DEFAULT})
-option(LOOM_TARGET_VM
-  "Enables Loom VM target support."
-  ${LOOM_TARGET_VM_DEFAULT})
-option(LOOM_TARGET_XDNA
-  "Enables Loom AMD XDNA target support."
-  ${LOOM_TARGET_XDNA_DEFAULT})
-option(LOOM_TARGET_X86
-  "Enables Loom x86 target support."
-  ${LOOM_TARGET_X86_DEFAULT})
-
-option(LOOM_TARGET_ARCH_AMDGPU
-  "Enables the AMDGPU Loom target architecture slice."
-  OFF)
-option(LOOM_TARGET_ARCH_SPIRV
-  "Enables the SPIR-V Loom target architecture slice."
-  OFF)
-option(LOOM_TARGET_ARCH_WASM
-  "Enables the WebAssembly Loom target architecture slice."
-  OFF)
-option(LOOM_TARGET_ARCH_XDNA
-  "Enables the AMD XDNA Loom target architecture slice."
-  OFF)
-mark_as_advanced(
-  LOOM_TARGET_ARCH_AMDGPU
-  LOOM_TARGET_ARCH_SPIRV
-  LOOM_TARGET_ARCH_WASM
-  LOOM_TARGET_ARCH_XDNA
-)
-
-option(LOOM_EMIT_AMDGPU
-  "Enables the AMDGPU Loom artifact emitter slice."
-  OFF)
-option(LOOM_EMIT_SPIRV
-  "Enables the SPIR-V Loom artifact emitter slice."
-  OFF)
-option(LOOM_EMIT_WASM
-  "Enables the WebAssembly Loom artifact emitter slice."
-  OFF)
-option(LOOM_EMIT_XDNA
-  "Enables the AMD XDNA Loom artifact emitter slice."
-  OFF)
-mark_as_advanced(
-  LOOM_EMIT_AMDGPU
-  LOOM_EMIT_SPIRV
-  LOOM_EMIT_WASM
-  LOOM_EMIT_XDNA
-)
-
-# VM and x86 have no independently selectable artifact emitter. Keep their
-# effective architecture variables for generated package conditions, but derive
-# them exclusively from the public product settings below.
-set(LOOM_TARGET_ARCH_VM OFF)
-set(LOOM_TARGET_ARCH_X86 OFF)
-
-if(LOOM_BUILD AND LOOM_TARGET_AMDGPU)
-  set(LOOM_TARGET_ARCH_AMDGPU ON)
-  set(LOOM_EMIT_AMDGPU ON)
-endif()
-if(LOOM_BUILD AND LOOM_TARGET_SPIRV)
-  set(LOOM_TARGET_ARCH_SPIRV ON)
-  set(LOOM_EMIT_SPIRV ON)
-endif()
-if(LOOM_BUILD AND LOOM_TARGET_WASM)
-  set(LOOM_TARGET_ARCH_WASM ON)
-  set(LOOM_EMIT_WASM ON)
-endif()
-if(LOOM_BUILD AND LOOM_TARGET_VM)
-  set(LOOM_TARGET_ARCH_VM ON)
-endif()
-if(LOOM_BUILD AND LOOM_TARGET_XDNA)
-  set(LOOM_TARGET_ARCH_XDNA ON)
-  set(LOOM_EMIT_XDNA ON)
-endif()
-if(LOOM_BUILD AND LOOM_TARGET_X86)
-  set(LOOM_TARGET_ARCH_X86 ON)
+    "AMDGPU architecture selectors compiled into Loom target support.")
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
   loom_amdgpu_configure_target_selectors()
 endif()
 
-option(LOOM_EXECUTE_DEFAULTS
-  "Default value for dependency-satisfied Loom execution substrates." ON)
-if(NOT DEFINED LOOM_EXECUTE_IREE_HAL_DEFAULT)
-  set(LOOM_EXECUTE_IREE_HAL_DEFAULT ${LOOM_EXECUTE_DEFAULTS})
+set(LOOM_ARTIFACT_AIE2P_ELF OFF)
+set(LOOM_ARTIFACT_AMDGPU_ELF OFF)
+set(LOOM_ARTIFACT_SPIRV_BINARY OFF)
+set(LOOM_ARTIFACT_VM_BINARY OFF)
+set(LOOM_ARTIFACT_WASM_BINARY OFF)
+set(LOOM_ARTIFACT_X86_ELF OFF)
+if(LOOM_ARCH_AIE2P AND LOOM_EMIT_ELF)
+  set(LOOM_ARTIFACT_AIE2P_ELF ON)
 endif()
-option(LOOM_EXECUTE_IREE_HAL
-  "Enables Loom execution providers that use IREE HAL runtime support."
-  ${LOOM_EXECUTE_IREE_HAL_DEFAULT})
+if(LOOM_ARCH_AMDGPU AND LOOM_EMIT_ELF)
+  set(LOOM_ARTIFACT_AMDGPU_ELF ON)
+endif()
+if(LOOM_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+  set(LOOM_ARTIFACT_SPIRV_BINARY ON)
+endif()
+if(LOOM_ARCH_VM AND LOOM_EMIT_VM)
+  set(LOOM_ARTIFACT_VM_BINARY ON)
+endif()
+if(LOOM_ARCH_WASM AND LOOM_EMIT_WASM)
+  set(LOOM_ARTIFACT_WASM_BINARY ON)
+endif()
+if(LOOM_ARCH_X86 AND LOOM_EMIT_ELF)
+  set(LOOM_ARTIFACT_X86_ELF ON)
+endif()
+
+set(LOOM_ROUTE_AIE2P_XDNA_HAL OFF)
+set(LOOM_ROUTE_AMDGPU_HAL OFF)
+set(LOOM_ROUTE_SPIRV_VULKAN_HAL OFF)
+set(LOOM_ROUTE_VM_IREE_VM OFF)
+set(LOOM_ROUTE_WASM_HOSTED OFF)
+set(LOOM_ROUTE_X86_TASK_HAL OFF)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND
+    IREE_HAL_DRIVER_AMD_XDNA)
+  set(LOOM_ROUTE_AIE2P_XDNA_HAL ON)
+endif()
+if(LOOM_ARTIFACT_AMDGPU_ELF AND LOOM_EXECUTE_IREE_HAL AND
+    (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU))
+  set(LOOM_ROUTE_AMDGPU_HAL ON)
+endif()
+if(LOOM_ARTIFACT_SPIRV_BINARY AND LOOM_EXECUTE_IREE_HAL AND
+    IREE_HAL_DRIVER_VULKAN)
+  set(LOOM_ROUTE_SPIRV_VULKAN_HAL ON)
+endif()
+if(LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
+  set(LOOM_ROUTE_VM_IREE_VM ON)
+endif()
+if(LOOM_ARTIFACT_WASM_BINARY AND LOOM_EXECUTE_WASM_HOST)
+  set(LOOM_ROUTE_WASM_HOSTED ON)
+endif()
+if(LOOM_ARTIFACT_X86_ELF AND LOOM_EXECUTE_IREE_HAL AND
+    IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF)
+  set(LOOM_ROUTE_X86_TASK_HAL ON)
+endif()
 
 option(LOOM_IMPORT_CXX
   "Enables the native Loom C/C++ importer, tools, and binding." OFF)
@@ -169,7 +112,7 @@ option(LOOM_SERVE_IMAGE_INPUT
   ${_LOOM_SERVE_MEDIA_HOST})
 set(LOOM_SERVE_IMAGE_CODECS "png;jpeg;gif;webp" CACHE STRING
   "Image input codecs registered in Loom serving deployments.")
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_VM AND LOOM_SERVE_IMAGE_INPUT AND
+if(LOOM_ARCH_VM AND LOOM_SERVE_IMAGE_INPUT AND
     NOT _LOOM_SERVE_MEDIA_HOST)
   message(FATAL_ERROR
     "Loom image input requires Linux, macOS, or Windows. Set LOOM_SERVE_IMAGE_INPUT=OFF to build other serving modalities.")
@@ -177,7 +120,7 @@ endif()
 foreach(_codec png jpeg gif webp)
   string(TOUPPER "${_codec}" _codec_upper)
   set(LOOM_SERVE_IMAGE_CODEC_${_codec_upper} OFF)
-  if(LOOM_BUILD AND LOOM_TARGET_ARCH_VM AND LOOM_SERVE_IMAGE_INPUT AND
+  if(LOOM_ARCH_VM AND LOOM_SERVE_IMAGE_INPUT AND
       _codec IN_LIST LOOM_SERVE_IMAGE_CODECS)
     set(LOOM_SERVE_IMAGE_CODEC_${_codec_upper} ON)
   endif()
@@ -194,7 +137,7 @@ if(_LOOM_SERVE_MEDIA_HOST)
 endif()
 set(LOOM_SERVE_AUDIO_CODECS "${_LOOM_SERVE_AUDIO_CODECS}" CACHE STRING
   "Optional encoded-audio input codecs; empty retains raw PCM transcription.")
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_VM AND LOOM_SERVE_AUDIO_CODECS AND
+if(LOOM_ARCH_VM AND LOOM_SERVE_AUDIO_CODECS AND
     NOT _LOOM_SERVE_MEDIA_HOST)
   message(FATAL_ERROR
     "Loom encoded audio requires Linux, macOS, or Windows. Set LOOM_SERVE_AUDIO_CODECS= to retain raw PCM.")
@@ -203,7 +146,7 @@ set(LOOM_SERVE_AUDIO_DECODING OFF)
 foreach(_codec wav mp3 flac)
   string(TOUPPER "${_codec}" _codec_upper)
   set(LOOM_SERVE_AUDIO_CODEC_${_codec_upper} OFF)
-  if(LOOM_BUILD AND LOOM_TARGET_ARCH_VM AND _LOOM_SERVE_MEDIA_HOST AND
+  if(LOOM_ARCH_VM AND _LOOM_SERVE_MEDIA_HOST AND
       _codec IN_LIST LOOM_SERVE_AUDIO_CODECS)
     set(LOOM_SERVE_AUDIO_CODEC_${_codec_upper} ON)
     set(LOOM_SERVE_AUDIO_DECODING ON)
@@ -215,31 +158,11 @@ foreach(_codec IN LISTS LOOM_SERVE_AUDIO_CODECS)
   endif()
 endforeach()
 
-if(LOOM_EMIT_AMDGPU AND NOT LOOM_TARGET_ARCH_AMDGPU)
-  message(FATAL_ERROR
-    "LOOM_EMIT_AMDGPU=ON requires LOOM_TARGET_ARCH_AMDGPU=ON.")
-endif()
-
-if(LOOM_EMIT_SPIRV AND NOT LOOM_TARGET_ARCH_SPIRV)
-  message(FATAL_ERROR
-    "LOOM_EMIT_SPIRV=ON requires LOOM_TARGET_ARCH_SPIRV=ON.")
-endif()
-
-if(LOOM_EMIT_WASM AND NOT LOOM_TARGET_ARCH_WASM)
-  message(FATAL_ERROR
-    "LOOM_EMIT_WASM=ON requires LOOM_TARGET_ARCH_WASM=ON.")
-endif()
-
-if(LOOM_EMIT_XDNA AND NOT LOOM_TARGET_ARCH_XDNA)
-  message(FATAL_ERROR
-    "LOOM_EMIT_XDNA=ON requires LOOM_TARGET_ARCH_XDNA=ON.")
-endif()
-
 function(loom_configure_project)
   if(LOOM_SERVE_AUDIO_DECODING)
     iree_configure_miniaudio()
   endif()
-  if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+  if(LOOM_ARCH_AMDGPU)
     iree_configure_rocm_hsa_runtime_headers()
   endif()
   if(LOOM_SERVE_IMAGE_CODEC_PNG)

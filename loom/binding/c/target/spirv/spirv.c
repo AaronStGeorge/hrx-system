@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/spirv/compiler_provider.h"
+#include "loom/target/emit/spirv/binary_compiler_provider.h"
 #include "loomc/target/spirv/base.h"
 #include "target.h"
 
@@ -12,5 +12,6 @@ loomc_status_t loomc_target_environment_create_spirv(
     loomc_allocator_t allocator,
     loomc_target_environment_t** out_target_environment) {
   return loomc_target_environment_create_from_provider_set_internal(
-      &loom_spirv_compiler_provider_set, allocator, out_target_environment);
+      &loom_spirv_binary_compiler_provider_set, allocator,
+      out_target_environment);
 }

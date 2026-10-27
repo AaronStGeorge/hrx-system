@@ -55,7 +55,7 @@ PACKAGE_INITS = (
     ),
     PackageInit(
         "loom/py/loom/target/arch/wasm/__init__.py",
-        "Wasm target descriptor inputs.",
+        "Wasm target-family descriptor and contract inputs.",
     ),
     PackageInit(
         "loom/py/loom/target/arch/x86/__init__.py",
@@ -84,10 +84,6 @@ PACKAGE_INITS = (
     PackageInit(
         "loom/py/loom/target/emit/__init__.py",
         "Emission-target descriptor inputs.",
-    ),
-    PackageInit(
-        "loom/py/loom/target/emit/wasm/__init__.py",
-        "Wasm emission target contract data.",
     ),
     PackageInit(
         "loom/py/loom/target/test/__init__.py",

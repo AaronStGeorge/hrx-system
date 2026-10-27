@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_low_descriptor_cc_library(
   NAME
     descriptors
@@ -28,7 +28,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
     low_registry

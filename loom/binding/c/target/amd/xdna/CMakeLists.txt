@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
+if(LOOM_ARTIFACT_AIE2P_ELF)
 loom_cc_library(
   NAME
     xdna
@@ -21,14 +21,14 @@ loom_cc_library(
     "xdna.c"
   DEPS
     loom::binding::c::loomc
-    loom::target::arch::amd::xdna::aie2p::artifact
     loom::target::arch::amd::xdna::aie2p::target_profile
+    loom::target::emit::native::aie2p::elf_compiler_provider
   ALWAYSLINK
   PUBLIC
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
+if(LOOM_ARTIFACT_AIE2P_ELF)
 loom_cc_library(
   NAME
     iree_hal

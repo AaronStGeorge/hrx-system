@@ -48,8 +48,8 @@ def _test_amdgpu_family_set_selects_compatible_profiles(name, **kwargs):
     analysis_test(
         name = name,
         config_settings = {
-            str(Label("//loom/config/target/amdgpu:targets")): ["gfx1201"],
-            str(Label("//loom/config/target:enable")): ["amdgpu"],
+            str(Label("//loom/config/arch/amdgpu:targets")): ["gfx1201"],
+            str(Label("//loom/config/arch:enable")): ["amdgpu"],
         },
         impl = _test_amdgpu_family_set_selects_compatible_profiles_impl,
         target = "//loom/target/amdgpu:all",

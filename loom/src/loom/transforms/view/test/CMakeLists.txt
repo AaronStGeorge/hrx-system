@@ -22,4 +22,18 @@ loom_check_test_suite(
     "transport_offsets.loom-test"
 )
 
+if(LOOM_ARCH_SPIRV)
+iree_native_test(
+  NAME
+    "boundary_transport_spirv"
+  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
+  ARGS
+    "{{${CMAKE_CURRENT_SOURCE_DIR}/boundary_transport_spirv.loom-test}}"
+  SRC
+    loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

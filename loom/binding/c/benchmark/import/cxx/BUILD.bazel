@@ -18,11 +18,11 @@ _IMPORT_COMPATIBLE_WITH = loom_config_compatible_with([
 ])
 
 _AMDGPU_TARGET_COMPATIBLE_WITH = _IMPORT_COMPATIBLE_WITH + loom_config_compatible_with([
-    "//loom/config/target/arch:amdgpu",
+    "//loom/config/arch:amdgpu",
 ])
 
 _AMDGPU_COMPATIBLE_WITH = _IMPORT_COMPATIBLE_WITH + loom_config_compatible_with([
-    "//loom/config/emit:amdgpu",
+    "//loom/config/emit:amdgpu_elf",
 ])
 
 _KERNEL_SOURCES = [

@@ -26,7 +26,7 @@ def iree_hal_amd_gpu_cts_testdata(name, srcs, backend_names, target_compatible_w
       target_compatible_with: Additional constraints on the entire corpus.
     """
     compatibility = target_compatible_with + loom_config_compatible_with([
-        "//loom/config/emit:amdgpu_artifacts",
+        "//loom/config/emit:amdgpu_elf",
         "//runtime/config/hal:driver_amd_gpu",
     ])
     programs = {}
@@ -47,8 +47,8 @@ def iree_hal_amd_gpu_cts_testdata(name, srcs, backend_names, target_compatible_w
         capability = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_TARGET[target]
         profile = "cts_profile_" + target
         profile_compatibility = loom_config_compatible_with([
-            "//loom/config/emit:amdgpu_artifacts",
-            "//loom/config/target/amdgpu:" + capability,
+            "//loom/config/emit:amdgpu_elf",
+            "//loom/config/arch/amdgpu:" + capability,
             "//runtime/config/hal:driver_amd_gpu",
         ])
         if not native.existing_rule(profile):
@@ -87,7 +87,7 @@ def iree_hal_amd_gpu_cts_testdata(name, srcs, backend_names, target_compatible_w
         name = name,
         testonly = True,
         target_compatible_with = compatibility + select(dict(
-            [("//loom/config/target/amdgpu:" + capability, []) for capability in registrations] +
+            [("//loom/config/arch/amdgpu:" + capability, []) for capability in registrations] +
             [("//conditions:default", ["@platforms//:incompatible"])],
         )),
         deps = loom_amdgpu_selected_descriptor_set_values(registrations),

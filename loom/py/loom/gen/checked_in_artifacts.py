@@ -26,6 +26,7 @@ from loom.gen.support.generated_file import (
     GeneratedFileMaintenanceResult,
     maintain_generated_file_families,
 )
+from loom.gen.target import capability_presets
 from loom.gen.target.arch.x86 import x86_packed_dot_contract
 
 _AMDGPU_TARGET_CONFIG_MODULE_NAME = "loom_build_tools_amdgpu_target_config"
@@ -56,6 +57,15 @@ def checked_in_artifact_families(*, repository_root: Path | None = None) -> tupl
     """Returns each family, discovering obsolete files when a root is given."""
     amdgpu_target_config = _load_amdgpu_target_config()
     return (
+        GeneratedFileFamily(
+            description=capability_presets.DESCRIPTION,
+            regenerate_command=capability_presets.REGENERATE_COMMAND,
+            file_set=capability_presets.checked_in_file_set(),
+            input_roots=(
+                "loom/py/loom/gen/target/capability_presets.py",
+                "loom/py/loom/target/capability_presets.py",
+            ),
+        ),
         GeneratedFileFamily(
             description=cxx_intrinsics.DESCRIPTION,
             regenerate_command=cxx_intrinsics.REGENERATE_COMMAND,

@@ -18,17 +18,15 @@ package(
 )
 
 LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:spirv",
-    "//loom/config/emit:spirv",
+    "//loom/config/emit:spirv_binary",
 ])
 
 LOOMC_TARGET_VM_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:vm",
+    "//loom/config/emit:vm_binary",
 ])
 
 LOOMC_TARGET_WASM_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:wasm",
-    "//loom/config/emit:wasm",
+    "//loom/config/emit:wasm_binary",
 ])
 
 loom_cc_library(

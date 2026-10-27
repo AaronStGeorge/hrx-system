@@ -29,7 +29,7 @@ _AMDGPU_COMPATIBLE_WITH = loom_config_compatible_with([
 
 _NATIVE_X86_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/import:cxx",
-    "//loom/config/target/arch:x86",
+    "//loom/config/emit:x86_elf",
 ]) + [
     "@platforms//cpu:x86_64",
     "@platforms//os:linux",

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     kinds
@@ -21,7 +21,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     materializers
@@ -34,7 +34,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_generated_file_family(
   NAME
     fp8_tables_gen
@@ -49,7 +49,7 @@ loom_generated_file_family(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     lower
@@ -367,7 +367,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     memory_bank_service_test
@@ -384,11 +384,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::target_info
     loom::target::types
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     atomic_ordering_test
@@ -401,11 +401,11 @@ loom_cc_test(
     loom::ops::atomic
     loom::target::arch::amdgpu::descriptors::low_registry
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     control_packet_test
@@ -423,11 +423,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     data_symbol_test
@@ -445,11 +445,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     feedback_test
@@ -475,11 +475,11 @@ loom_cc_test(
     loom::target::registers
     loom::verify
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     memory_address_test
@@ -491,11 +491,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::ir::facts
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     fragment_memory_packet_test
@@ -509,11 +509,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::matrix::contract
     loom::target::arch::amdgpu::target_info
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     fragment_memory_transpose_test
@@ -527,11 +527,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::matrix::contract
     loom::target::arch::amdgpu::target_info
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 iree_native_test(
   NAME
     "uniform_predicate_select_test"
@@ -545,7 +545,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 iree_native_test(
   NAME
     "fragment_memory_transpose_loom_test"
@@ -559,7 +559,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "fragment_memory_transpose_loom_test"
@@ -570,7 +570,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 iree_native_test(
   NAME
     "fragment_memory_transpose_gfx950_loom_test"
@@ -584,7 +584,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_check_compile_tests(
   NAME
     "fragment_memory_transpose_gfx950_loom_test"
@@ -595,7 +595,7 @@ loom_check_compile_tests(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     sanitizer_access_test
@@ -621,11 +621,11 @@ loom_cc_test(
     loom::target::registers
     loom::verify
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     sanitizer_report_test
@@ -652,11 +652,11 @@ loom_cc_test(
     loom::target::registers
     loom::verify
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     sanitizer_race_history_layout_test
@@ -668,11 +668,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::target::arch::amdgpu::abi::tsan
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     sanitizer_race_history_policy_test
@@ -683,11 +683,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     sanitizer_race_report_test
@@ -714,11 +714,11 @@ loom_cc_test(
     loom::target::registers
     loom::verify
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     signal_test
@@ -738,11 +738,11 @@ loom_cc_test(
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     system_memory_test
@@ -761,7 +761,7 @@ loom_cc_test(
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
   LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.arch.amdgpu"
 )
 endif()
 

@@ -44,6 +44,7 @@ class LoomPresubmitTest(unittest.TestCase):
         self.assertEqual(source_options[0], "--config=locked")
         self.assertEqual(test_options[0], "--config=presubmit")
         self.assertEqual(source_options[1:], test_options[1:])
+        self.assertIn("--config=loom-target-all", source_options)
         self.assertIn("--//loom/config/import:enable=cxx", source_options)
 
     def test_bazel_tests_preserve_manual_filter_without_hardware_blacklists(self):
@@ -51,10 +52,7 @@ class LoomPresubmitTest(unittest.TestCase):
 
         self.assertEqual(command[:3], ["bazel", "test", "--config=presubmit"])
         self.assertEqual(command[-1], "//loom/...")
-        self.assertIn(
-            "--//loom/config/target:enable=amdgpu,spirv,vm,wasm,xdna,x86",
-            command,
-        )
+        self.assertIn("--config=loom-target-all", command)
         self.assertIn("--//loom/config/import:enable=cxx", command)
 
         tag_filter = next(
@@ -259,14 +257,16 @@ class LoomPresubmitTest(unittest.TestCase):
         dependency_command = run_command.call_args_list[1].args[0]
         self.assertEqual(dependency_command[:2], ["bazel", "cquery"])
         self.assertIn("--config=presubmit", dependency_command)
-        self.assertIn(
-            "--//loom/config/target:enable=amdgpu,spirv,vm,wasm,xdna,x86",
-            dependency_command,
-        )
+        self.assertIn("--config=loom-target-all", dependency_command)
         self.assertIn("--//loom/config/import:enable=cxx", dependency_command)
         self.assertEqual(
             [arg for arg in dependency_command if arg.startswith("--config=")],
-            ["--config=presubmit", "--config=asan", "--config=remote-execution"],
+            [
+                "--config=presubmit",
+                "--config=loom-target-all",
+                "--config=asan",
+                "--config=remote-execution",
+            ],
         )
         self.assertIn("--experimental_explicit_aspects", dependency_command)
         self.assertIn("--output=label", dependency_command)
@@ -603,13 +603,7 @@ class LoomPresubmitTest(unittest.TestCase):
             ],
         )
 
-    def test_cmake_source_format_reports_missing_target_providers(self):
-        cache_values = {
-            "LOOM_TARGET_AMDGPU": "OFF",
-            "LOOM_TARGET_SPIRV": "OFF",
-            "LOOM_TARGET_XDNA": "ON",
-            "LOOM_TARGET_X86": "ON",
-        }
+    def test_cmake_source_format_reports_missing_capability(self):
         output = io.StringIO()
         with (
             mock.patch.object(
@@ -625,7 +619,19 @@ class LoomPresubmitTest(unittest.TestCase):
             mock.patch.object(
                 self.presubmit.project_presubmit,
                 "cmake_cache_value",
-                side_effect=lambda _build_dir, key: cache_values.get(key),
+                side_effect=lambda _build_dir, key: {
+                    "LOOM_RESOLVED_ARCHITECTURES": ";".join(
+                        self.presubmit.capability_presets.ARCHITECTURES
+                    ),
+                    "LOOM_RESOLVED_ARTIFACT_FORMATS": ";".join(
+                        value
+                        for value in self.presubmit.capability_presets.ARTIFACT_FORMATS
+                        if value != "wasm"
+                    ),
+                    "LOOM_RESOLVED_EXECUTION_SUBSTRATES": ";".join(
+                        self.presubmit.capability_presets.EXECUTION_SUBSTRATES
+                    ),
+                }[key],
             ),
             contextlib.redirect_stdout(output),
         ):
@@ -634,11 +640,8 @@ class LoomPresubmitTest(unittest.TestCase):
             )
 
         diagnostic = output.getvalue()
-        self.assertIn("missing: amdgpu, spirv, vm, wasm", diagnostic)
-        self.assertIn("-DLOOM_TARGET_AMDGPU=ON", diagnostic)
-        self.assertIn("-DLOOM_TARGET_SPIRV=ON", diagnostic)
-        self.assertIn("-DLOOM_TARGET_VM=ON", diagnostic)
-        self.assertIn("-DLOOM_TARGET_WASM=ON", diagnostic)
+        self.assertIn("missing: artifact wasm", diagnostic)
+        self.assertIn("-DLOOM_TARGET_ALL=ON", diagnostic)
         self.assertIn("IREE_CMAKE_BUILD_DIR", diagnostic)
 
     def test_cmake_source_format_accepts_full_target_provider_set(self):
@@ -656,7 +659,17 @@ class LoomPresubmitTest(unittest.TestCase):
             mock.patch.object(
                 self.presubmit.project_presubmit,
                 "cmake_cache_value",
-                return_value="ON",
+                side_effect=lambda _build_dir, key: {
+                    "LOOM_RESOLVED_ARCHITECTURES": ";".join(
+                        self.presubmit.capability_presets.ARCHITECTURES
+                    ),
+                    "LOOM_RESOLVED_ARTIFACT_FORMATS": ";".join(
+                        self.presubmit.capability_presets.ARTIFACT_FORMATS
+                    ),
+                    "LOOM_RESOLVED_EXECUTION_SUBSTRATES": ";".join(
+                        self.presubmit.capability_presets.EXECUTION_SUBSTRATES
+                    ),
+                }[key],
             ),
         ):
             self.assertTrue(self.presubmit.validate_cmake_source_format_configuration())
@@ -713,11 +726,7 @@ class LoomPresubmitTest(unittest.TestCase):
             lane="cmake",
             bazel_target="//loom/src/loom/tools/loom-format:loom-format",
             cmake_target="loom::tools::loom-format",
-            bazel_args=(
-                "--config=locked",
-                "--//loom/config/target:enable=amdgpu,spirv,vm,wasm,xdna,x86",
-                "--//loom/config/import:enable=cxx",
-            ),
+            bazel_args=self.presubmit.BAZEL_SOURCE_TOOL_ARGS,
         )
         run_command.assert_called_once_with(
             [

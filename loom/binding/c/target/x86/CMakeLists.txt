@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARTIFACT_X86_ELF)
 loom_cc_library(
   NAME
     x86
@@ -19,13 +19,13 @@ loom_cc_library(
     "x86.c"
   DEPS
     loom::binding::c::loomc
-    loom::target::arch::x86::compiler_provider
+    loom::target::emit::native::x86::elf_compiler_provider
   ALWAYSLINK
   PUBLIC
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     x86_test
@@ -36,7 +36,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
-    loom::target::arch::x86::compiler_provider
+    loom::target::emit::native::x86::elf_compiler_provider
 )
 endif()
 

@@ -26,7 +26,7 @@ class ChangeScopeTest(unittest.TestCase):
             "loom/CMakeLists.txt",
             "loom/BUILD.bazel",
             "loom/build_tools/bazel/rules.bzl",
-            "loom/config/target/BUILD.bazel",
+            "loom/config/arch/BUILD.bazel",
             "loom/requirements/defs.bzl",
         ):
             with self.subTest(path=path):

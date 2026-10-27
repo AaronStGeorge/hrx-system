@@ -16,9 +16,9 @@ load(
 load("//loom/build_tools/bazel:defs.bzl", "loom_execution_profile")
 load(
     "//loom/requirements:defs.bzl",
-    "EMIT_AMDGPU",
+    "ARCH_AMDGPU",
+    "ARTIFACT_AMDGPU_ELF",
     "EXECUTE_IREE_HAL",
-    "TARGET_ARCH_AMDGPU",
 )
 load(
     "//runtime/requirements:defs.bzl",
@@ -39,8 +39,8 @@ def amdgpu_execution_profile(
     return loom_execution_profile(
         name = name,
         build_requirements = [
-            TARGET_ARCH_AMDGPU,
-            EMIT_AMDGPU,
+            ARCH_AMDGPU,
+            ARTIFACT_AMDGPU_ELF,
             EXECUTE_IREE_HAL,
             HAL_AMDGPU,
         ],
@@ -64,8 +64,8 @@ def amd_gpu_execution_profile(name, runner_args = [], tags = [], device = "amdgp
         build_requirements = [
             LIBAMDF,
             LIBAMDF_GPU,
-            TARGET_ARCH_AMDGPU,
-            EMIT_AMDGPU,
+            ARCH_AMDGPU,
+            ARTIFACT_AMDGPU_ELF,
             EXECUTE_IREE_HAL,
             HAL_AMD_GPU,
         ],

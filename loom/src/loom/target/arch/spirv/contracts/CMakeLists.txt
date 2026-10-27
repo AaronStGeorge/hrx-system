@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_target_contract_table_cc_libraries(
   NAME
     logical_core
@@ -41,7 +41,7 @@ loom_target_contract_table_cc_libraries(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
     instruction_strings
@@ -55,7 +55,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 loom_cc_library(
   NAME
     contracts

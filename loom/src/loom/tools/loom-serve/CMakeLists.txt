@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     options
@@ -32,7 +32,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     signals
@@ -49,7 +49,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     signals_test
@@ -64,11 +64,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     activity_tests
@@ -98,7 +99,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     main
@@ -127,31 +128,31 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 set(_loom_serve_platform_copts "")
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ROUTE_X86_TASK_HAL)
   list(APPEND _loom_serve_platform_copts "-DLOOM_SERVE_CONFIG_HAVE_X86=1")
 endif()
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ROUTE_AMDGPU_HAL)
   list(APPEND _loom_serve_platform_copts "-DLOOM_SERVE_CONFIG_HAVE_AMDGPU=1")
 endif()
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL)
   list(APPEND _loom_serve_platform_copts "-DLOOM_SERVE_CONFIG_HAVE_SPIRV=1")
 endif()
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
+if(LOOM_ROUTE_AIE2P_XDNA_HAL)
   list(APPEND _loom_serve_platform_copts "-DLOOM_SERVE_CONFIG_HAVE_XDNA=1")
 endif()
 set(_loom_serve_platform_deps "")
-if(LOOM_TARGET_ARCH_X86)
+if(LOOM_ROUTE_X86_TASK_HAL)
   list(APPEND _loom_serve_platform_deps loom::binding::c::target::cpu::iree_hal)
 endif()
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_ROUTE_AMDGPU_HAL)
   list(APPEND _loom_serve_platform_deps loom::binding::c::target::amdgpu::iree_hal)
 endif()
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_ROUTE_SPIRV_VULKAN_HAL)
   list(APPEND _loom_serve_platform_deps loom::binding::c::target::spirv::iree_hal)
 endif()
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
+if(LOOM_ROUTE_AIE2P_XDNA_HAL)
   list(APPEND _loom_serve_platform_deps loom::binding::c::target::amd::xdna::iree_hal)
 endif()
 loomc_cc_binary(
@@ -171,7 +172,7 @@ loomc_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY)
 iree_execution_test_suite(
   NAME
     execution_test

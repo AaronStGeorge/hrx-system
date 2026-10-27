@@ -62,7 +62,7 @@ iree_execution_test_suite(
     ],
     manifests = ["compile_xfails.test.json"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = loom_config_compatible_with(["//loom/config/emit:vm_binary"]),
     tools = {
         "loom-compile": "//loom/src/loom/tools/loom-compile",
         "loom-corpus-compile-xfails": ":loom-corpus-compile-xfails",

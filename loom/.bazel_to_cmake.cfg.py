@@ -72,41 +72,61 @@ def _loom_amdgpu_config_cmake_options():
     options = {}
     for processor in config["LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS"]:
         processor_upper = processor.upper()
-        options[f"//loom/config/target/amdgpu:processor_{processor}"] = (
-            f"LOOM_TARGET_AMDGPU_PROCESSOR_{processor_upper}"
+        options[f"//loom/config/arch/amdgpu:processor_{processor}"] = (
+            f"LOOM_ARCH_AMDGPU_PROCESSOR_{processor_upper}"
         )
-        options[f"//loom/config/target/amdgpu:iree_hal_processor_{processor}"] = (
-            f"LOOM_TARGET_AMDGPU_IREE_HAL_PROCESSOR_{processor_upper}"
+        options[f"//loom/config/arch/amdgpu:iree_hal_processor_{processor}"] = (
+            f"LOOM_ARCH_AMDGPU_IREE_HAL_PROCESSOR_{processor_upper}"
         )
     for capability in config["LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES"]:
         capability_upper = capability.upper()
-        options[f"//loom/config/target/amdgpu:{capability}"] = (
-            f"LOOM_TARGET_AMDGPU_{capability_upper}"
+        options[f"//loom/config/arch/amdgpu:{capability}"] = (
+            f"LOOM_ARCH_AMDGPU_{capability_upper}"
         )
-        options[f"//loom/config/target/amdgpu:iree_hal_{capability}"] = (
-            f"LOOM_TARGET_AMDGPU_IREE_HAL_{capability_upper}"
+        options[f"//loom/config/arch/amdgpu:iree_hal_{capability}"] = (
+            f"LOOM_ARCH_AMDGPU_IREE_HAL_{capability_upper}"
         )
     return options
 
 
+_LOOM_NATIVE_ELF_CMAKE_CONDITION = (
+    "LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_AMDGPU_ELF OR LOOM_ARTIFACT_X86_ELF"
+)
+_LOOM_NATIVE_OBJECT_ELF_CMAKE_CONDITION = (
+    "LOOM_ARTIFACT_AIE2P_ELF OR LOOM_ARTIFACT_X86_ELF"
+)
+
 _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config:shared_tools_enabled": "LOOM_LINK_SHARED_TOOLS",
-    "//loom/config/emit:amdgpu": "LOOM_EMIT_AMDGPU",
-    "//loom/config/emit:amdgpu_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU",
+    "//loom/config/arch:aie2p": "LOOM_ARCH_AIE2P",
+    "//loom/config/arch:amdgpu": "LOOM_ARCH_AMDGPU",
+    "//loom/config/arch:spirv": "LOOM_ARCH_SPIRV",
+    "//loom/config/arch:vm": "LOOM_ARCH_VM",
+    "//loom/config/arch:wasm": "LOOM_ARCH_WASM",
+    "//loom/config/arch:x86": "LOOM_ARCH_X86",
+    "//loom/config/emit:elf": "LOOM_EMIT_ELF",
     "//loom/config/emit:spirv": "LOOM_EMIT_SPIRV",
-    "//loom/config/emit:spirv_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV",
-    "//loom/config/emit:spirv_vulkan_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN",
+    "//loom/config/emit:vm": "LOOM_EMIT_VM",
     "//loom/config/emit:wasm": "LOOM_EMIT_WASM",
-    "//loom/config/emit:wasm_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM",
-    "//loom/config/emit:xdna": "LOOM_EMIT_XDNA",
-    "//loom/config/emit:xdna_artifacts": "LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA",
-    "//loom/config/execute:amdgpu_hal": "LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)",
+    "//loom/config/emit:aie2p_elf": "LOOM_ARTIFACT_AIE2P_ELF",
+    "//loom/config/emit:amdgpu_elf": "LOOM_ARTIFACT_AMDGPU_ELF",
+    "//loom/config/emit:spirv_binary": "LOOM_ARTIFACT_SPIRV_BINARY",
+    "//loom/config/emit:vm_binary": "LOOM_ARTIFACT_VM_BINARY",
+    "//loom/config/emit:wasm_binary": "LOOM_ARTIFACT_WASM_BINARY",
+    "//loom/config/emit:x86_elf": "LOOM_ARTIFACT_X86_ELF",
+    "//loom/config/emit:native": _LOOM_NATIVE_ELF_CMAKE_CONDITION,
+    "//loom/config/emit:native_elf": _LOOM_NATIVE_ELF_CMAKE_CONDITION,
+    "//loom/config/emit:native_object": _LOOM_NATIVE_OBJECT_ELF_CMAKE_CONDITION,
+    "//loom/config/emit:native_object_elf": _LOOM_NATIVE_OBJECT_ELF_CMAKE_CONDITION,
     "//loom/config/execute:iree_hal": "LOOM_EXECUTE_IREE_HAL",
-    "//loom/config/execute:iree_hal_amdgpu": "LOOM_EXECUTE_IREE_HAL AND (IREE_HAL_DRIVER_AMDGPU OR IREE_HAL_DRIVER_AMD_GPU)",
-    "//loom/config/execute:iree_hal_vulkan": "LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN",
-    "//loom/config/execute:spirv_vulkan_hal": "LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN",
-    "//loom/config/execute:task_hal": "LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK",
-    "//loom/config/execute:xdna_hal": "LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA",
+    "//loom/config/execute:iree_vm": "LOOM_EXECUTE_IREE_VM",
+    "//loom/config/execute:wasm_host": "LOOM_EXECUTE_WASM_HOST",
+    "//loom/config/execute:aie2p_xdna_hal": "LOOM_ROUTE_AIE2P_XDNA_HAL",
+    "//loom/config/execute:amdgpu_hal": "LOOM_ROUTE_AMDGPU_HAL",
+    "//loom/config/execute:spirv_vulkan_hal": "LOOM_ROUTE_SPIRV_VULKAN_HAL",
+    "//loom/config/execute:vm_iree_vm": "LOOM_ROUTE_VM_IREE_VM",
+    "//loom/config/execute:wasm_hosted": "LOOM_ROUTE_WASM_HOSTED",
+    "//loom/config/execute:x86_task_hal": "LOOM_ROUTE_X86_TASK_HAL",
     "//loom/config/import/cxx:embed_includes_enabled": "LOOM_IMPORT_CXX_EMBED_INCLUDES",
     "//loom/config/import:cxx": "LOOM_IMPORT_CXX",
     "//loom/config/import:mlir": "LOOM_IMPORT_MLIR",
@@ -120,18 +140,6 @@ _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config/serve:png": "LOOM_SERVE_IMAGE_CODEC_PNG",
     "//loom/config/serve:wav": "LOOM_SERVE_AUDIO_CODEC_WAV",
     "//loom/config/serve:webp": "LOOM_SERVE_IMAGE_CODEC_WEBP",
-    "//loom/config/target/arch:amdgpu": "LOOM_TARGET_ARCH_AMDGPU",
-    "//loom/config/target/arch:spirv": "LOOM_TARGET_ARCH_SPIRV",
-    "//loom/config/target/arch:vm": "LOOM_TARGET_ARCH_VM",
-    "//loom/config/target/arch:wasm": "LOOM_TARGET_ARCH_WASM",
-    "//loom/config/target/arch:x86": "LOOM_TARGET_ARCH_X86",
-    "//loom/config/target/arch:xdna": "LOOM_TARGET_ARCH_XDNA",
-    "//loom/config/target:amdgpu": "LOOM_TARGET_AMDGPU",
-    "//loom/config/target:spirv": "LOOM_TARGET_SPIRV",
-    "//loom/config/target:vm": "LOOM_TARGET_VM",
-    "//loom/config/target:wasm": "LOOM_TARGET_WASM",
-    "//loom/config/target:x86": "LOOM_TARGET_X86",
-    "//loom/config/target:xdna": "LOOM_TARGET_XDNA",
 }
 _LOOM_CONFIG_CMAKE_OPTIONS.update(_loom_amdgpu_config_cmake_options())
 
@@ -295,8 +303,8 @@ class LoomBuildFileFunctions(
             selector=target,
             target_compatible_with=list(target_compatible_with or [])
             + [
-                "//loom/config/target/arch:amdgpu",
-                "//loom/config/target/amdgpu:" + capability,
+                "//loom/config/arch:amdgpu",
+                "//loom/config/arch/amdgpu:" + capability,
             ],
             **kwargs,
         )
@@ -666,7 +674,7 @@ class LoomBuildFileFunctions(
             )
         if prefix:
             capability = prefix + "_" + capability
-        return "//loom/config/target/amdgpu:" + capability
+        return "//loom/config/arch/amdgpu:" + capability
 
     def _loom_amdgpu_descriptor_set_capabilities_compatible_with(
         self, capabilities, prefix=""

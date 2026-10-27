@@ -6,7 +6,7 @@
 #                                                                              #
 # To disable autogeneration for this file entirely, delete this header.        #
 ################################################################################
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 
 iree_get_spirv_registry_sources(
   _LOOM_SPIRV_CORE_GRAMMAR
@@ -28,7 +28,7 @@ iree_py_library(
     loom::py::loom::dialect::target::target
 )
 
-if(LOOM_TARGET_ARCH_SPIRV)
+if(LOOM_ARCH_SPIRV)
 iree_py_test(
   NAME
     dialect_test

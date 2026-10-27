@@ -13,6 +13,10 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+_VM_BINARY_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:vm_binary",
+])
+
 loom_cc_library(
     name = "records",
     srcs = ["records.c"],
@@ -164,7 +168,6 @@ loom_cc_library(
     ],
     textual_hdrs = ["//loom/src/loom/target/arch/vm/contracts:tables.inl"],
     visibility = [
-        "//loom/src/loom/target/all:__pkg__",
         "//loom/src/loom/target/configured:__pkg__",
         "//loom/src/loom/target/emit/vm:__pkg__",
     ],
@@ -191,18 +194,11 @@ loom_check_test_suite(
     srcs = [
         "test/assembly.loom-test",
         "test/atomic_policy.loom-test",
-        "test/buffer_packets.loom-test",
-        "test/call_overflow.loom-test",
-        "test/calls.loom-test",
         "test/effects.loom-test",
-        "test/emission.loom-test",
-        "test/imports.loom-test",
         "test/inverse_hyperbolic.loom-test",
         "test/math_contraction.loom-test",
         "test/math_policy.loom-test",
-        "test/native_references.loom-test",
         "test/scalar.loom-test",
-        "test/source_low/callable_policy.loom-test",
         "test/source_low/callable_values.loom-test",
         "test/source_low/carried_counter_store.loom-test",
         "test/source_low/loop_counter_offset.loom-test",
@@ -230,9 +226,24 @@ loom_check_test_suite(
         "test/source_low/vector_selection.loom-test",
         "test/source_low/view_boundaries.loom-test",
         "test/source_low/view_root_selection.loom-test",
+    ],
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
+    test_name_prefix_to_strip = "test/",
+)
+
+loom_check_test_suite(
+    name = "artifact_loom_check_file_test",
+    srcs = [
+        "test/buffer_packets.loom-test",
+        "test/call_overflow.loom-test",
+        "test/calls.loom-test",
+        "test/emission.loom-test",
+        "test/imports.loom-test",
+        "test/native_references.loom-test",
+        "test/source_low/callable_policy.loom-test",
         "test/storage.loom-test",
     ],
     compile_targets = {"test/emission.loom-test": ["//loom/target/vm:core"]},
-    target_compatible_with = loom_config_compatible_with(["//loom/config/target/arch:vm"]),
+    target_compatible_with = _VM_BINARY_COMPATIBLE_WITH,
     test_name_prefix_to_strip = "test/",
 )

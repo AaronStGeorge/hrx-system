@@ -910,11 +910,15 @@ class PresubmitTest(unittest.TestCase):
         ]
         command = presubmit.clang_tidy_bazel_command(targets)
 
-        target_flag = next(
-            arg for arg in command if arg.startswith("--//loom/config/target:enable=")
+        architecture_flag = next(
+            arg for arg in command if arg.startswith("--//loom/config/arch:enable=")
         )
         self.assertTrue(
-            {"wasm", "vm"}.issubset(target_flag.split("=", 1)[1].split(","))
+            {"wasm", "vm"}.issubset(architecture_flag.split("=", 1)[1].split(","))
+        )
+        self.assertIn("--//loom/config/emit:enable=elf,spirv,vm,wasm", command)
+        self.assertIn(
+            "--//loom/config/execute:enable=iree_hal,iree_vm,wasm_host", command
         )
         self.assertEqual(command[command.index("--") + 1 :], targets)
 

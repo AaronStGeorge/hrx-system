@@ -9,23 +9,17 @@
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_testing//lib:analysis_test.bzl", "analysis_test")
 load("@rules_testing//lib:truth.bzl", "matching")
-load(
-    "//loom/config/target:targets.bzl",
-    "LOOM_SPLIT_ARTIFACT_TARGETS",
-    "LOOM_TARGETS",
-)
 
-_VALID_VALUES = {
-    "loom/config/emit": LOOM_SPLIT_ARTIFACT_TARGETS,
+_REPRESENTATIVE_VALUES = {
+    "loom/config/arch": ["x86"],
+    "loom/config/emit": ["elf"],
     "loom/config/execute": ["iree_hal"],
     "loom/config/import": ["mlir", "tilelang"],
-    "loom/config/target": LOOM_TARGETS,
-    "loom/config/target/arch": LOOM_SPLIT_ARTIFACT_TARGETS,
 }
 
 def _expect_values(env, target):
     env.expect.that_collection(target[BuildSettingInfo].value).contains_exactly(
-        _VALID_VALUES[target.label.package],
+        _REPRESENTATIVE_VALUES[target.label.package],
     )
 
 def _expect_empty(env, target):
@@ -39,11 +33,6 @@ def _expect_unknown(env, target):
         matching.contains("unknown_option"),
     )
 
-def _expect_unknown_product_family(env, target):
-    env.expect.that_target(target).failures().contains_predicate(
-        matching.contains("amd.xdna.aie2p"),
-    )
-
 def loom_config_flag_test_suite(name):
     """Tests value admission and rejection through real build settings.
 
@@ -51,11 +40,11 @@ def loom_config_flag_test_suite(name):
       name: Aggregate test-suite name and prefix for the individual tests.
     """
     tests = []
-    for package, values in _VALID_VALUES.items():
+    for package, values in _REPRESENTATIVE_VALUES.items():
         flag = Label("//" + package + ":enable")
         suffix = package.removeprefix("loom/config/").replace("/", "_")
         for selection_name, selection, impl in [
-            ("all", values, _expect_values),
+            ("selected", values, _expect_values),
             ("empty", [], _expect_empty),
             ("unknown", values[:1] + ["unknown_option"], _expect_unknown),
         ]:
@@ -68,17 +57,4 @@ def loom_config_flag_test_suite(name):
                 target = flag,
             )
             tests.append(test_name)
-
-    # Target family selectors do not name build-time product capabilities.
-    test_name = name + "_product_rejects_target_family"
-    analysis_test(
-        name = test_name,
-        config_settings = {
-            str(Label("//loom/config/target:enable")): ["x86", "amd.xdna.aie2p"],
-        },
-        expect_failure = True,
-        impl = _expect_unknown_product_family,
-        target = Label("//loom/config/target:enable"),
-    )
-    tests.append(test_name)
     native.test_suite(name = name, tests = tests)

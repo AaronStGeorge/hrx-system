@@ -5,13 +5,22 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:python.bzl", "iree_py_test")
-load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test", "loom_check_test_suite")
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+_AMDGPU_ARCH_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/arch:amdgpu",
+])
+
+_SPIRV_ARCH_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/arch:spirv",
+])
 
 loom_check_test_suite(
     name = "test",
@@ -43,15 +52,25 @@ loom_check_test_suite(
         "packed_memory_consumers.loom-test",
         "reduce_axes_to_scalar.loom-test",
         "reshape_lanes.loom-test",
-        "shape_slices.loom-test",
         "sink_single_use_reads.loom-test",
-        "snapshot_rewrites.loom-test",
         "to_scalar.loom-test",
         "to_scalar_divrem.loom-test",
         "to_scalar_e8m0.loom-test",
         "to_scalar_exponent.loom-test",
         "to_scalar_float_formats.loom-test",
     ],
+)
+
+loom_check_test(
+    name = "shape_slices",
+    src = "shape_slices.loom-test",
+    target_compatible_with = _AMDGPU_ARCH_COMPATIBLE_WITH,
+)
+
+loom_check_test(
+    name = "snapshot_rewrites",
+    src = "snapshot_rewrites.loom-test",
+    target_compatible_with = _SPIRV_ARCH_COMPATIBLE_WITH,
 )
 
 iree_py_test(
@@ -67,6 +86,7 @@ iree_py_test(
         "//loom/src/loom/tools/loom-compile",
     ],
     main = "bitstream_packet_legalization_test.py",
+    target_compatible_with = _SPIRV_ARCH_COMPATIBLE_WITH,
 )
 
 iree_py_test(
@@ -87,4 +107,5 @@ iree_py_test(
         "manual",
         "stress",
     ],
+    target_compatible_with = _SPIRV_ARCH_COMPATIBLE_WITH,
 )

@@ -15,8 +15,8 @@
 extern "C" {
 #endif
 
-// AIE2P array-plan, artifact, and leaf compilation inspection handlers.
-extern const loom_check_provider_t loom_aie2p_check_provider;
+// AIE2P array-plan and leaf compilation inspection handlers.
+extern const loom_check_provider_t loom_aie2p_arch_check_provider;
 
 #ifdef __cplusplus
 }  // extern "C"

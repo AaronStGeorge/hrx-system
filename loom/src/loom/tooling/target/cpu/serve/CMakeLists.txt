@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64" AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND IREE_ARCH STREQUAL "x86_64" AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     activity_test
@@ -35,11 +35,14 @@ loom_cc_test(
     "--pool_backing=fixed"
     "--workers=1"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64" AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND IREE_ARCH STREQUAL "x86_64" AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     activity_parallel_test
@@ -66,11 +69,14 @@ loom_cc_test(
     "--workers=8"
     "--stream_count=8"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_TARGET_ARCH_VM)
+if(LOOM_ARTIFACT_X86_ELF AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86)
 loom_cc_library(
   NAME
     test_compiler
@@ -86,7 +92,7 @@ loom_cc_library(
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_library(
   NAME
     test_device
@@ -100,7 +106,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loomc_cc_binary(
   NAME
     loom-serve-test-tool
@@ -112,7 +118,7 @@ loomc_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64" AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND IREE_ARCH STREQUAL "x86_64" AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     executable_test
@@ -137,11 +143,14 @@ loom_cc_test(
   ARGS
     "--jit_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/jit/config.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64" AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND IREE_ARCH STREQUAL "x86_64" AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 iree_py_test(
   NAME
     serve_command_test
@@ -165,7 +174,10 @@ iree_py_test(
   DEPS
     loom::serve::testing::http
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -175,7 +187,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64" AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND IREE_ARCH STREQUAL "x86_64" AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 iree_py_test(
   NAME
     pressure_test
@@ -205,7 +217,10 @@ iree_py_test(
   DEPS
     loom::serve::testing::http
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -215,7 +230,7 @@ iree_py_test(
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     memory_test
@@ -226,11 +241,14 @@ loom_cc_test(
   ARGS
     "--gtest_filter=-DedicatedNativeWorkerMemoryTest.*"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     execution_queues_test
@@ -239,11 +257,14 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::serve::runtime::execution::queues_tests
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     parameter_gather_test
@@ -252,11 +273,14 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::serve::runtime::parameter::gather_tests
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     finite_component_test
@@ -277,11 +301,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_COMPONENT_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/finite/testdata/component/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 iree_py_test(
   NAME
     text_client_test
@@ -304,7 +331,10 @@ iree_py_test(
   DEPS
     loom::serve::testing::http
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -314,7 +344,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 set(_recognition_client_test_platform_args "")
 if(LOOM_SERVE_AUDIO_CODEC_WAV)
   list(APPEND _recognition_client_test_platform_args "--wav")
@@ -348,7 +378,10 @@ iree_py_test(
   DEPS
     loom::serve::testing::http
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -358,7 +391,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_recognition_http_test
@@ -375,11 +408,14 @@ loom_cc_test(
   ARGS
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_image_service_test
@@ -398,11 +434,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/image/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_recognition_model_test
@@ -419,11 +458,14 @@ loom_cc_test(
   ARGS
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_recognition_stream_test
@@ -440,11 +482,14 @@ loom_cc_test(
   ARGS
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_recognition_stream_parallel_test
@@ -462,11 +507,14 @@ loom_cc_test(
     "--test_workers=4"
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     registry_speech_test
@@ -489,11 +537,14 @@ loom_cc_test(
   ARGS
     "--model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/model.json}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     registry_recognition_test
@@ -510,11 +561,14 @@ loom_cc_test(
   ARGS
     "--model={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/recognition/model.json}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_speech_service_test
@@ -542,11 +596,14 @@ loom_cc_test(
   ARGS
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_speech_service_parallel_test
@@ -575,11 +632,14 @@ loom_cc_test(
     "--test_workers=2"
     "--model_source={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/speech/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_decision_service_test
@@ -604,11 +664,14 @@ loom_cc_test(
     "LOOM_SERVE_TEST_EMBEDDING_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/embedding/prepare.loom}}"
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/decision/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_embedding_service_test
@@ -634,11 +697,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/embedding/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_embedding_management_test
@@ -662,11 +728,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/embedding/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_embedding_pool_test
@@ -690,11 +759,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/embedding/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_embedding_device_group_test
@@ -718,11 +790,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/embedding/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_service_test
@@ -742,11 +817,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     media_projector_test
@@ -765,11 +843,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_PROJECTOR_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/model.json}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_media_test
@@ -805,11 +886,14 @@ loom_cc_test(
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
     "LOOM_SERVE_TEST_PROJECTOR_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/projector/model.json}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     native_text_service_test
@@ -829,11 +913,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_admission_test
@@ -853,11 +940,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_checkpoint_test
@@ -877,11 +967,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_prefix_test
@@ -901,11 +994,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_cache_test
@@ -926,11 +1022,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_test(
   NAME
     source_text_reconfiguration_test
@@ -950,11 +1049,14 @@ loom_cc_test(
   ENV
     "LOOM_SERVE_TEST_MODEL_SOURCE={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     device_group_test
@@ -972,11 +1074,14 @@ loom_cc_test(
     loom::serve::runtime::storage::memory
     loom::serve::testing::device
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     retirement_test
@@ -994,11 +1099,14 @@ loom_cc_test(
     loom::serve::runtime::storage::memory
     loom::serve::testing::device
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     relocation_test
@@ -1018,11 +1126,14 @@ loom_cc_test(
     loom::serve::testing::device
     loom::serve::testing::native_allocator
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(IREE_HAL_DRIVER_TASK AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     snapshot_test
@@ -1044,11 +1155,14 @@ loom_cc_test(
     loom::serve::runtime::storage::snapshot
     loom::serve::testing::device
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     weights_test
@@ -1105,7 +1219,10 @@ loom_cc_test(
     "--gtest_filter=Streaming/*:Backing/WeightPackingTest.InvocationWorkingSet*"
     "--executable_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/testdata/executables/prepare.loom}}"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 

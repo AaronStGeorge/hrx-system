@@ -59,6 +59,7 @@ py_test(
     deps = [
         "//build_tools/devtools",
         "//loom/py/loom/gen:checked_in_artifacts",
+        "//loom/py/loom/target:capability_presets",
         "//loom/py/loom/tools:source_inventory",
     ],
 )

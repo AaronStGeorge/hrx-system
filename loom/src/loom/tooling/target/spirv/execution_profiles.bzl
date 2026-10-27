@@ -11,9 +11,9 @@ load("//build_tools/vulkan/requirements:defs.bzl", "VULKAN_DEVICE_RESOURCE")
 load("//loom/build_tools/bazel:defs.bzl", "loom_execution_profile")
 load(
     "//loom/requirements:defs.bzl",
-    "EMIT_SPIRV",
+    "ARCH_SPIRV",
+    "ARTIFACT_SPIRV_BINARY",
     "EXECUTE_IREE_HAL",
-    "TARGET_ARCH_SPIRV",
 )
 load(
     "//runtime/requirements:defs.bzl",
@@ -26,8 +26,8 @@ def _spirv_vulkan_hardware_profile(
     return loom_execution_profile(
         name = name,
         build_requirements = [
-            TARGET_ARCH_SPIRV,
-            EMIT_SPIRV,
+            ARCH_SPIRV,
+            ARTIFACT_SPIRV_BINARY,
             EXECUTE_IREE_HAL,
             HAL_VULKAN,
         ],

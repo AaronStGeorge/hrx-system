@@ -274,7 +274,7 @@ alias(
     name = "hsa_runtime_headers",
     actual = selects.with_or({
         (
-            "//loom/config/target:amdgpu",
+            "//loom/config/arch:amdgpu",
             "//runtime/config/hal:driver_amdgpu",
         ): "@hsa_runtime_headers//:hsa_runtime_headers",
         "//conditions:default": ":empty_hsa_runtime_headers",
@@ -305,7 +305,7 @@ alias(
     name = "spirv_as",
     actual = selects.with_or({
         (
-            "//loom/config/emit:spirv_artifacts",
+            "//loom/config/emit:spirv_binary",
             "//runtime/config/hal:driver_vulkan",
         ): "@spirv_tools//:spirv-as",
         "//conditions:default": ":empty_spirv_tool",
@@ -322,7 +322,7 @@ alias(
     name = "spirv_dis",
     actual = selects.with_or({
         (
-            "//loom/config/emit:spirv_artifacts",
+            "//loom/config/emit:spirv_binary",
             "//runtime/config/hal:driver_vulkan",
         ): "@spirv_tools//:spirv-dis",
         "//conditions:default": ":empty_spirv_tool",
@@ -339,7 +339,7 @@ alias(
     name = "spirv_val",
     actual = selects.with_or({
         (
-            "//loom/config/emit:spirv_artifacts",
+            "//loom/config/emit:spirv_binary",
             "//runtime/config/hal:driver_vulkan",
         ): "@spirv_tools//:spirv-val",
         "//conditions:default": ":empty_spirv_tool",

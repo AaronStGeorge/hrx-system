@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
+if(LOOM_ARTIFACT_AIE2P_ELF)
 loom_cc_test(
   NAME
     xdna_test
@@ -25,7 +25,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
+if(LOOM_ARTIFACT_AIE2P_ELF)
 loom_cc_test(
   NAME
     iree_hal_test

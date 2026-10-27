@@ -18,4 +18,18 @@ loom_check_test_suite(
     "projection_branch.loom-test"
 )
 
+if(LOOM_ARCH_SPIRV)
+iree_native_test(
+  NAME
+    "projection_branch_spirv"
+  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
+  ARGS
+    "{{${CMAKE_CURRENT_SOURCE_DIR}/projection_branch_spirv.loom-test}}"
+  SRC
+    loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

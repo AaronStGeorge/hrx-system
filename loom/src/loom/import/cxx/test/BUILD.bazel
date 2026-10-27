@@ -316,7 +316,7 @@ _AUTHORED_HOST_VARIANTS = {
 
 _HOST_COMPATIBILITY = loom_config_compatible_with([
     "//loom/config/import:cxx",
-    "//loom/config/target/arch:vm",
+    "//loom/config/arch:vm",
 ])
 
 loom_test(
@@ -627,7 +627,7 @@ loom_check_test_suite(
     ],
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/import:cxx",
-        "//loom/config/target/arch:x86",
+        "//loom/config/arch:x86",
     ]),
 )
 
@@ -640,7 +640,7 @@ loom_check_test_suite(
     ],
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/import:cxx",
-        "//loom/config/target:wasm",
+        "//loom/config/arch:wasm",
     ]),
 )
 

@@ -152,14 +152,14 @@ class RuntimeBuildFileFunctions(
                 'include("${IREE_SOURCE_DIR}/runtime/src/iree/hal/drivers/amd/gpu/cts/testdata.cmake")\n\n'
                 "set(_IREE_HAL_AMD_GPU_CTS_TARGETS\n"
                 + "".join(
-                    f'  "{target}=LOOM_TARGET_AMDGPU_{capability.upper()}"\n'
+                    f'  "{target}=LOOM_ARCH_AMDGPU_{capability.upper()}"\n'
                     for target, capability in capabilities.items()
                 )
                 + ")\n\n"
             )
         kwargs = self._apply_runtime_cmake_policy(kwargs)
         compatibility = (kwargs.pop("target_compatible_with", None) or []) + [
-            "//loom/config/emit:amdgpu_artifacts"
+            "//loom/config/emit:amdgpu_elf"
         ]
         self._emit_platform_guard_begin(compatibility)
         self._converter.body += (

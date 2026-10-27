@@ -28,75 +28,100 @@
 #include "loom/target/test/provider.h"
 #include "loom/tools/loom-check/test_provider.h"
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
-#ifndef LOOM_CHECK_HAVE_EMIT_AMDGPU
-#define LOOM_CHECK_HAVE_EMIT_AMDGPU 0
-#endif  // LOOM_CHECK_HAVE_EMIT_AMDGPU
-#ifndef LOOM_CHECK_HAVE_EMIT_SPIRV
-#define LOOM_CHECK_HAVE_EMIT_SPIRV 0
-#endif  // LOOM_CHECK_HAVE_EMIT_SPIRV
-#ifndef LOOM_CHECK_HAVE_TARGET_VM
-#define LOOM_CHECK_HAVE_TARGET_VM 0
-#endif  // LOOM_CHECK_HAVE_TARGET_VM
-#ifndef LOOM_CHECK_HAVE_EMIT_WASM
-#define LOOM_CHECK_HAVE_EMIT_WASM 0
-#endif  // LOOM_CHECK_HAVE_EMIT_WASM
-#ifndef LOOM_CHECK_HAVE_TARGET_X86
-#define LOOM_CHECK_HAVE_TARGET_X86 0
-#endif  // LOOM_CHECK_HAVE_TARGET_X86
-#ifndef LOOM_CHECK_HAVE_TARGET_XDNA
-#define LOOM_CHECK_HAVE_TARGET_XDNA 0
-#endif  // LOOM_CHECK_HAVE_TARGET_XDNA
-
-#if LOOM_CHECK_HAVE_EMIT_AMDGPU
-#include "loom/target/arch/amdgpu/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_EMIT_AMDGPU
-#if LOOM_CHECK_HAVE_EMIT_SPIRV
-#include "loom/tooling/target/spirv/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_EMIT_SPIRV
-#if LOOM_CHECK_HAVE_TARGET_VM
-#include "loom/tooling/target/vm/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_TARGET_VM
-#if LOOM_CHECK_HAVE_EMIT_WASM
-#include "loom/tooling/target/wasm/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_EMIT_WASM
-#if LOOM_CHECK_HAVE_TARGET_X86
-#include "loom/target/arch/x86/check/provider.h"
-#endif  // LOOM_CHECK_HAVE_TARGET_X86
-#if LOOM_CHECK_HAVE_TARGET_XDNA
+#ifndef LOOM_CHECK_HAVE_ARCH_AIE2P
+#define LOOM_CHECK_HAVE_ARCH_AIE2P 0
+#endif  // LOOM_CHECK_HAVE_ARCH_AIE2P
+#ifndef LOOM_CHECK_HAVE_ARCH_AMDGPU
+#define LOOM_CHECK_HAVE_ARCH_AMDGPU 0
+#endif  // LOOM_CHECK_HAVE_ARCH_AMDGPU
+#ifndef LOOM_CHECK_HAVE_ARCH_SPIRV
+#define LOOM_CHECK_HAVE_ARCH_SPIRV 0
+#endif  // LOOM_CHECK_HAVE_ARCH_SPIRV
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+#define LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#define LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
+#define LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
+#define LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
+#define LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
+#ifndef LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
+#define LOOM_CHECK_HAVE_ARTIFACT_X86_ELF 0
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
+#if LOOM_CHECK_HAVE_ARCH_AIE2P
 #include "loom/target/arch/amd/xdna/aie2p/check/provider.h"
 #if LOOM_CHECK_HAVE_TEST_PROVIDER
 #include "loom/target/arch/amd/xdna/aie2p/check/configuration.h"
 #include "loom/target/arch/amd/xdna/aie2p/check/test_provider.h"
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
-#endif  // LOOM_CHECK_HAVE_TARGET_XDNA
-
+#endif  // LOOM_CHECK_HAVE_ARCH_AIE2P
+#if LOOM_CHECK_HAVE_ARCH_AMDGPU
+#include "loom/target/arch/amdgpu/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARCH_AMDGPU
+#if LOOM_CHECK_HAVE_ARCH_SPIRV
+#include "loom/target/arch/spirv/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARCH_SPIRV
+#if LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+#include "loom/target/emit/native/aie2p/check_provider.h"
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+#if LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#include "loom/target/emit/native/amdgpu/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#if LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
+#include "loom/tooling/target/spirv/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
+#if LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
+#include "loom/tooling/target/vm/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
+#if LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
+#include "loom/tooling/target/wasm/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
+#if LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
+#include "loom/target/emit/native/x86/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
 static const loom_check_provider_t* const kLoomCheckProviders[] = {
     &loom_cxx_export_check_provider,
 #if LOOM_CHECK_HAVE_TEST_PROVIDER
     &loom_check_test_provider,
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
     &loom_cmd_check_provider,
-#if LOOM_CHECK_HAVE_EMIT_AMDGPU
-    &loom_amdgpu_check_provider,
-#endif  // LOOM_CHECK_HAVE_EMIT_AMDGPU
-#if LOOM_CHECK_HAVE_EMIT_SPIRV
-    &loom_spirv_emit_check_provider,
-#endif  // LOOM_CHECK_HAVE_EMIT_SPIRV
-#if LOOM_CHECK_HAVE_TARGET_VM
-    &loom_vm_emit_check_provider,
-#endif  // LOOM_CHECK_HAVE_TARGET_VM
-#if LOOM_CHECK_HAVE_EMIT_WASM
-    &loom_wasm_emit_check_provider,
-#endif  // LOOM_CHECK_HAVE_EMIT_WASM
-#if LOOM_CHECK_HAVE_TARGET_X86
-    &loom_x86_check_provider,
-#endif  // LOOM_CHECK_HAVE_TARGET_X86
-#if LOOM_CHECK_HAVE_TARGET_XDNA
-    &loom_aie2p_check_provider,
+#if LOOM_CHECK_HAVE_ARCH_AIE2P
+    &loom_aie2p_arch_check_provider,
 #if LOOM_CHECK_HAVE_TEST_PROVIDER
     &loom_aie2p_check_test_provider,
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER
-#endif  // LOOM_CHECK_HAVE_TARGET_XDNA
+#endif  // LOOM_CHECK_HAVE_ARCH_AIE2P
+#if LOOM_CHECK_HAVE_ARCH_AMDGPU
+    &loom_amdgpu_arch_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARCH_AMDGPU
+#if LOOM_CHECK_HAVE_ARCH_SPIRV
+    &loom_spirv_arch_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARCH_SPIRV
+#if LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+    &loom_aie2p_artifact_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
+#if LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+    &loom_amdgpu_native_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
+#if LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
+    &loom_spirv_emit_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
+#if LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
+    &loom_vm_emit_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
+#if LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
+    &loom_wasm_emit_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
+#if LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
+    &loom_x86_native_check_provider,
+#endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
 };
 
 // Developer tools accept test.* syntax without synthetic compiler behavior.
@@ -111,9 +136,9 @@ static const loom_target_provider_t kLoomCheckSyntaxProvider = {
 static const loom_target_provider_t* const kLoomCheckTargetExtensions[] = {
 #if LOOM_CHECK_HAVE_TEST_PROVIDER
     &loom_test_target_provider,
-#if LOOM_CHECK_HAVE_TARGET_XDNA
+#if LOOM_CHECK_HAVE_ARCH_AIE2P
     &loom_aie2p_configuration_check_target_provider,
-#endif  // LOOM_CHECK_HAVE_TARGET_XDNA
+#endif  // LOOM_CHECK_HAVE_ARCH_AIE2P
 #else
     &kLoomCheckSyntaxProvider,
 #endif  // LOOM_CHECK_HAVE_TEST_PROVIDER

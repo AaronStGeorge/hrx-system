@@ -17,11 +17,11 @@ loom_target_profile(
   SELECTOR
     "simd128"
   REQUIRES
-    LOOM_BUILD AND LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM
+    LOOM_ARTIFACT_WASM_BINARY
 )
 
 set(_all_platform_targets "")
-if(LOOM_BUILD AND LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+if(LOOM_ARTIFACT_WASM_BINARY)
   list(APPEND _all_platform_targets loom::target::wasm::simd128)
 endif()
 loom_target_set(

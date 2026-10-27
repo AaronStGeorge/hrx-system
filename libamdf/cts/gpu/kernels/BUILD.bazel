@@ -78,10 +78,10 @@ _KERNEL_TARGETS_BY_CAPABILITY = {
 # one source. Compilers with a restricted representation vocabulary omit the
 # dependent CTS products instead of selecting source fragments in the build.
 _COMPLETED_TICK_CONFIGS = [
-    "//loom/config/target/amdgpu:descriptor_set_gfx11_generic_core",
-    "//loom/config/target/amdgpu:descriptor_set_gfx12_generic_core",
-    "//loom/config/target/amdgpu:descriptor_set_gfx12_5_generic_core",
-    "//loom/config/target/amdgpu:descriptor_set_rdna4m_core",
+    "//loom/config/arch/amdgpu:descriptor_set_gfx11_generic_core",
+    "//loom/config/arch/amdgpu:descriptor_set_gfx12_generic_core",
+    "//loom/config/arch/amdgpu:descriptor_set_gfx12_5_generic_core",
+    "//loom/config/arch/amdgpu:descriptor_set_rdna4m_core",
 ]
 
 _COMPLETED_TICK_COMPATIBILITY = loom_config_compatible_with(_COMPLETED_TICK_CONFIGS)
@@ -103,7 +103,7 @@ loom_library(
         family = "amdgpu",
         selector = target,
         target_compatible_with = select({
-            "//loom/config/target/amdgpu:" + LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_TARGET[target]: [],
+            "//loom/config/arch/amdgpu:" + LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_TARGET[target]: [],
             "//conditions:default": ["@platforms//:incompatible"],
         }),
         visibility = ["//visibility:private"],
@@ -704,7 +704,7 @@ amdf_cts_gpu_kernel_set(
 _KERNEL_POLICY = apply_amdf_target_policy({})
 
 _EMBED_TEST_COMPATIBILITY = {
-    "//loom/config/target/amdgpu:" + capability: []
+    "//loom/config/arch/amdgpu:" + capability: []
     for capability, targets in _KERNEL_TARGETS_BY_CAPABILITY.items()
     if targets
 }

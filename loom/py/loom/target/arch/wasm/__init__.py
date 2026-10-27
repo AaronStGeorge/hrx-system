@@ -8,4 +8,4 @@
 # Generator: loom.gen.python.package_inits.
 # Regenerate: python3 loom/py/loom/gen/run.py package_inits --in-place
 
-"""Wasm target descriptor inputs."""
+"""Wasm target-family descriptor and contract inputs."""

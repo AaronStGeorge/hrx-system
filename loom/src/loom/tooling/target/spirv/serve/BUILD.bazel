@@ -23,7 +23,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["test_compiler.c"],
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:spirv_vulkan_artifacts",
+        "//loom/config/execute:spirv_vulkan_hal",
     ]),
     deps = [
         "//loom/binding/c/target/spirv",
@@ -37,7 +37,7 @@ loom_cc_binary(
     name = "loom-serve-test-tool",
     testonly = True,
     target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:spirv_artifacts",
+        "//loom/config/emit:spirv_binary",
         "//runtime/config/hal:driver_vulkan",
     ]),
     deps = [

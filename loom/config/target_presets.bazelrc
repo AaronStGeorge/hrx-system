@@ -1,0 +1,49 @@
+# GENERATED FILE: DO NOT EDIT.
+# Generator: loom.gen.target.capability_presets.
+# Regenerate: python3 loom/py/loom/gen/run.py capability_presets --in-place
+# Each named config writes complete canonical capability lists.
+
+# Build Loom VM compilation and execution support.
+build:loom-target-vm --//loom/config/arch:enable=vm
+build:loom-target-vm --//loom/config/emit:enable=vm
+build:loom-target-vm --//loom/config/execute:enable=iree_vm
+
+# Build Loom CPU and supporting VM capabilities.
+build:loom-target-cpu --//loom/config/arch:enable=vm,x86
+build:loom-target-cpu --//loom/config/emit:enable=elf,vm
+build:loom-target-cpu --//loom/config/execute:enable=iree_hal,iree_vm
+
+# Build Loom AMD GPU and supporting VM capabilities.
+build:loom-target-amd-gpu --//loom/config/arch:enable=amdgpu,vm
+build:loom-target-amd-gpu --//loom/config/emit:enable=elf,vm
+build:loom-target-amd-gpu --//loom/config/execute:enable=iree_hal,iree_vm
+
+# Build Loom AMD NPU and supporting VM capabilities.
+build:loom-target-amd-npu --//loom/config/arch:enable=aie2p,vm
+build:loom-target-amd-npu --//loom/config/emit:enable=elf,vm
+build:loom-target-amd-npu --//loom/config/execute:enable=iree_hal,iree_vm
+
+# Build Loom AMD GPU, NPU, and supporting VM capabilities.
+build:loom-target-amd --//loom/config/arch:enable=aie2p,amdgpu,vm
+build:loom-target-amd --//loom/config/emit:enable=elf,vm
+build:loom-target-amd --//loom/config/execute:enable=iree_hal,iree_vm
+
+# Build Loom SPIR-V and supporting VM capabilities.
+build:loom-target-spirv --//loom/config/arch:enable=spirv,vm
+build:loom-target-spirv --//loom/config/emit:enable=spirv,vm
+build:loom-target-spirv --//loom/config/execute:enable=iree_hal,iree_vm
+
+# Build Loom WebAssembly and supporting VM capabilities.
+build:loom-target-wasm --//loom/config/arch:enable=vm,wasm
+build:loom-target-wasm --//loom/config/emit:enable=vm,wasm
+build:loom-target-wasm --//loom/config/execute:enable=iree_vm,wasm_host
+
+# Build the ordinary non-WebAssembly Loom target set.
+build:loom-target-default --//loom/config/arch:enable=aie2p,amdgpu,spirv,vm,x86
+build:loom-target-default --//loom/config/emit:enable=elf,spirv,vm
+build:loom-target-default --//loom/config/execute:enable=iree_hal,iree_vm
+
+# Build every Loom target capability.
+build:loom-target-all --//loom/config/arch:enable=aie2p,amdgpu,spirv,vm,wasm,x86
+build:loom-target-all --//loom/config/emit:enable=elf,spirv,vm,wasm
+build:loom-target-all --//loom/config/execute:enable=iree_hal,iree_vm,wasm_host

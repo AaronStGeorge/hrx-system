@@ -87,7 +87,7 @@ iree_py_test(
 iree_dependency_pinned_source_allowed(_pinned_source_allowed)
 if(IREE_BUILD_TESTS AND _pinned_source_allowed AND
     (IREE_HAL_DRIVER_VULKAN OR
-      (LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)))
+      LOOM_ARTIFACT_SPIRV_BINARY))
   iree_get_spirv_registry_sources(
     _spirv_core_grammar
     _vulkan_xml_registry)

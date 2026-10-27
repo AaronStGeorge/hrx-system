@@ -127,7 +127,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
 loom_test_module(
   NAME
     source_test_module
@@ -140,15 +140,17 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
-if(LOOM_TARGET_ARCH_VM)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
     source_test_execute_vm_reference_test
   MODULE
     "::source_test_module"
   LABELS
-    "iree-build-requirement=loom.target.arch.vm"
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
+    "iree-build-requirement=loom.execute.iree_vm"
     "loom-execution-profile=vm_reference"
     "loom-target-family=vm"
     "loom-target-class=cpu"
