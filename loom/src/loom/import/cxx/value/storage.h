@@ -211,9 +211,9 @@ class Storage {
   struct Allocation {
     // Declared allocation extent in bytes.
     int64_t byte_length;
-    // Source array type, or null for a scalar/vector allocation.
+    // Source array type, or null for a scalar/vector or raw byte object.
     const cxx::Type* array_type;
-    // Declared allocation origin used to recognize an unchanged array base.
+    // Declared array origin, or invalid when no typed array view is retained.
     loom_value_id_t byte_offset;
     // Direct typed view for a scalar array; aggregate arrays use projections.
     std::optional<loom_value_id_t> array_view;

@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <loomcxx/buffer.h>
 #include <loomcxx/check.h>
 
 // The returned pointer outlives the call that materializes its source literal.
@@ -61,6 +62,28 @@ static unsigned literal_aliases() {
   const auto& reference = "xyz";
   auto* whole = &"xyz";
   return escaped[2] + reference[1] + (*whole)[3] + ""[0];
+}
+
+static unsigned payloads(unsigned position, unsigned replacement) {
+  auto* original = loom::buffer::constant<16>("a\0\xffZ");
+  auto* first =
+      loom::buffer::alloca_init<loom::memory_space::private_, 16>("a\0\xffZ");
+  auto* second =
+      loom::buffer::alloca_init<loom::memory_space::private_, 16>("a\0\xffZ");
+  first[position] = replacement;
+  return first[position] + 256u * second[position] +
+         65536u * original[position];
+}
+
+LOOM_CHECK_CASE(exact_buffer_payloads) {
+  const auto first = payloads(0, 3);
+  const auto zero = payloads(1, 5);
+  const auto binary = payloads(2, 7);
+  const auto repeated = payloads(0, 11);
+  loom::check::expect_equal(first, 3u + 65792u * 97u);
+  loom::check::expect_equal(zero, 5u);
+  loom::check::expect_equal(binary, 7u + 65792u * 255u);
+  loom::check::expect_equal(repeated, 11u + 65792u * 97u);
 }
 
 LOOM_CHECK_CASE(string_objects) {

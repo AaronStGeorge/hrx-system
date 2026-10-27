@@ -3524,6 +3524,11 @@ class Translator final : private Initialization::Evaluation {
         }
         return *called;
       }
+      if (auto* buffer = std::get_if<BufferIntrinsic>(binding);
+          buffer && buffer->has_literal()) {
+        return buffer->call_literal(unit_, diagnostics_,
+                                    call->expressionList->value, storage_, ast);
+      }
       auto* assembly = std::get_if<AssemblyIntrinsic>(binding);
       loom_symbol_ref_t fragment = {};
       auto* expressions = call->expressionList;

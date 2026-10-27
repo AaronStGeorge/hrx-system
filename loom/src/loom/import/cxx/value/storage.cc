@@ -369,7 +369,16 @@ loom_value_id_t Storage::literal(iree_const_byte_span_t contents, bool is_utf8,
     }
   }
   auto root = loom_op_results(op)[0];
-  roots_[root] = {.memory_space = memory_space};
+  roots_[root] = {
+      .memory_space = memory_space,
+      .allocation =
+          Allocation{
+              .byte_length = static_cast<int64_t>(contents.data_length),
+              .array_type = nullptr,
+              .byte_offset = LOOM_VALUE_ID_INVALID,
+              .array_view = std::nullopt,
+          },
+  };
   return root;
 }
 

@@ -160,14 +160,14 @@ void Intrinsics::declaration(cxx::FunctionSymbol* function,
     } else if (KernelCollectiveIntrinsic::supports(
                    selected->arguments[0]->name()) ||
                SubgroupShuffleIntrinsic::supports(
-                   selected->arguments[0]->name())) {
+                   selected->arguments[0]->name()) ||
+               BufferIntrinsic::supports(selected->arguments[0]->name())) {
       // Concrete specialization owns source type and template-argument
       // validation. Retain the complete descriptor until those are known.
     } else if (selected->arguments.size() != 1 ||
                (!ViewIntrinsic::supports(selected->arguments[0]->name()) &&
                 !VectorMemoryIntrinsic::supports(
                     selected->arguments[0]->name()) &&
-                !BufferIntrinsic::supports(selected->arguments[0]->name()) &&
                 !AddressIntrinsic::supports(selected->arguments[0]->name()) &&
                 !DecodeIntrinsic::supports(selected->arguments[0]->name()) &&
                 !FragmentIntrinsic::supports(selected->arguments[0]->name()) &&

@@ -111,6 +111,7 @@ loom_check_test_suite(
     "immutable_strings.cxx-test"
     "index_views.cxx-test"
     "initializer_dependencies.cxx-test"
+    "inline_buffer_payloads.cxx-test"
     "inline_strings.cxx-test"
     "integer_intrinsics.cxx-test"
     "integer_widening.cxx-test"

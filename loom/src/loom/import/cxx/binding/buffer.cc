@@ -6,22 +6,73 @@
 
 #include "loom/import/cxx/binding/buffer.h"
 
+#include <cxx/ast.h>
 #include <cxx/const_value.h>
 #include <cxx/control.h>
+#include <cxx/literals.h>
 #include <cxx/names.h>
 #include <cxx/symbols.h>
 #include <cxx/type_traits.h>
 #include <cxx/types.h>
 
 #include <cstdint>
+#include <string>
 #include <variant>
 
+#include "iree/base/internal/unicode.h"
 #include "loom/import/cxx/source/error.h"
+#include "loom/import/cxx/source/expressions.h"
 
 namespace loom::cxx_import {
+namespace {
+
+int64_t byte_alignment(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
+                       const std::optional<cxx::ConstValue>& value,
+                       std::string_view operation, cxx::AST* owner) {
+  auto* alignment = value ? std::get_if<cxx::ConstInt>(&*value) : nullptr;
+  if (!alignment || alignment->isNegative() ||
+      alignment->toUWide() > INT64_MAX || alignment->toUWide() == 0 ||
+      (alignment->toUWide() & (alignment->toUWide() - 1)) != 0) {
+    diagnostics.reject(
+        unit, owner,
+        std::string(operation) +
+            " alignment must be a positive power-of-two byte count");
+  }
+  return static_cast<int64_t>(alignment->toUIntMax());
+}
+
+loom_value_fact_memory_space_t allocation_space(
+    cxx::TranslationUnit& unit, Diagnostics& diagnostics,
+    const std::optional<cxx::ConstValue>& value, std::string_view operation,
+    cxx::AST* owner) {
+  auto* space = value ? std::get_if<cxx::ConstInt>(&*value) : nullptr;
+  if (!space || space->isNegative() || space->toUWide() > UINT8_MAX) {
+    diagnostics.reject(
+        unit, owner,
+        std::string(operation) + " memory space must be a constant enum");
+  }
+  auto memory_space =
+      static_cast<loom_value_fact_memory_space_t>(space->toUIntMax());
+  switch (memory_space) {
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_HOST:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
+      return memory_space;
+    default:
+      diagnostics.reject(unit, owner,
+                         std::string(operation) +
+                             " requires an allocatable memory space: global, "
+                             "workgroup, private, host, or generic");
+  }
+}
+
+}  // namespace
 
 bool BufferIntrinsic::supports(std::string_view name) {
-  return name == "buffer.alloca" || name == "buffer.assume.alignment" ||
+  return name == "buffer.constant" || name == "buffer.alloca.init" ||
+         name == "buffer.alloca" || name == "buffer.assume.alignment" ||
          name == "buffer.assume.noalias" ||
          name == "buffer.assume.memory_space";
 }
@@ -34,14 +85,71 @@ std::optional<BufferIntrinsic> BufferIntrinsic::resolve(
   if (!supports(name)) {
     return std::nullopt;
   }
-  if (attribute.arguments.size() != 1) {
-    diagnostics.reject(unit, owner, "buffer operation accepts no selectors");
-  }
-
   auto* signature = cxx::type_cast<cxx::FunctionType>(function->type());
   auto parameters = signature->parameterTypes();
   auto* result = cxx::type_cast<cxx::PointerType>(
       types.unqualified(signature->returnType()));
+  if (name == "buffer.constant" || name == "buffer.alloca.init") {
+    const bool immutable = name == "buffer.constant";
+    if (attribute.arguments.size() != 2 ||
+        (attribute.arguments[1]->name() != "bytes" &&
+         attribute.arguments[1]->name() != "utf8")) {
+      diagnostics.reject(unit, owner,
+                         "buffer literal requires a bytes or utf8 selector");
+    }
+    const bool is_utf8 = attribute.arguments[1]->name() == "utf8";
+    auto traits = unit.typeTraits();
+    const cxx::Type* character =
+        is_utf8 ? static_cast<const cxx::Type*>(unit.control()->getChar8Type())
+                : static_cast<const cxx::Type*>(unit.control()->getCharType());
+    auto* expected_result = unit.control()->getUnsignedCharType();
+    auto* parameter =
+        parameters.size() == 1 && traits.is_lvalue_reference(parameters[0])
+            ? traits.remove_reference(parameters[0])
+            : nullptr;
+    auto* array = parameter ? cxx::type_cast<cxx::BoundedArrayType>(
+                                  types.unqualified(parameter))
+                            : nullptr;
+    if (signature->isVariadic() || !array || !array->size() ||
+        !traits.is_const(parameter) || traits.is_volatile(parameter) ||
+        !traits.is_same(types.unqualified(array->elementType()), character) ||
+        !result ||
+        !traits.is_same(
+            result->elementType(),
+            immutable ? traits.add_const(expected_result) : expected_result)) {
+      diagnostics.reject(unit, owner,
+                         "buffer literal requires a const character array "
+                         "reference and an unsigned char pointer result "
+                         "(const for buffer.constant)");
+    }
+    auto arguments = function->templateArguments();
+    const size_t alignment_index = immutable ? 0 : 1;
+    auto extent_value = arguments.size() == alignment_index + 2
+                            ? cxx::template_argument_value(arguments.back())
+                            : std::nullopt;
+    auto* extent =
+        extent_value ? std::get_if<cxx::ConstInt>(&*extent_value) : nullptr;
+    if (!extent || extent->isNegative() || extent->toUWide() != array->size()) {
+      diagnostics.reject(unit, owner,
+                         "buffer literal requires alignment and array extent "
+                         "template arguments, preceded by an allocatable "
+                         "memory space for buffer.alloca.init");
+    }
+    const auto space =
+        immutable ? LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT
+                  : allocation_space(unit, diagnostics,
+                                     cxx::template_argument_value(arguments[0]),
+                                     name, owner);
+    const auto alignment = byte_alignment(
+        unit, diagnostics,
+        cxx::template_argument_value(arguments[alignment_index]), name, owner);
+    return BufferIntrinsic(
+        immutable ? Operation::Constant : Operation::AllocaInit, space,
+        alignment, is_utf8);
+  }
+  if (attribute.arguments.size() != 1) {
+    diagnostics.reject(unit, owner, "buffer operation accepts no selectors");
+  }
   if (name == "buffer.assume.memory_space") {
     if (signature->isVariadic() || parameters.size() != 1 ||
         !unit.typeTraits().is_same(
@@ -190,45 +298,12 @@ std::optional<BufferIntrinsic> BufferIntrinsic::resolve(
     }
   }
 
-  auto space_value = cxx::template_argument_value(arguments[space_argument]);
-  auto* space =
-      space_value ? std::get_if<cxx::ConstInt>(&*space_value) : nullptr;
-  if (!space || space->isNegative() || space->toUWide() > UINT8_MAX) {
-    diagnostics.reject(unit, owner,
-                       "buffer.alloca memory space must be a constant enum");
-  }
-  auto memory_space =
-      static_cast<loom_value_fact_memory_space_t>(space->toUIntMax());
-  switch (memory_space) {
-    case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_HOST:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
-      break;
-    default:
-      diagnostics.reject(
-          unit, owner,
-          "buffer.alloca requires an allocatable memory space: global, "
-          "workgroup, private, host, or generic");
-  }
-
-  auto alignment_value =
-      cxx::template_argument_value(arguments[alignment_argument]);
-  auto* alignment =
-      alignment_value ? std::get_if<cxx::ConstInt>(&*alignment_value) : nullptr;
-  if (!alignment || alignment->isNegative() ||
-      alignment->toUWide() > INT64_MAX) {
-    diagnostics.reject(unit, owner,
-                       "buffer.alloca alignment must be a positive "
-                       "power-of-two byte count");
-  }
-  auto alignment_bytes = static_cast<uint64_t>(alignment->toUIntMax());
-  if (alignment_bytes == 0 || (alignment_bytes & (alignment_bytes - 1)) != 0) {
-    diagnostics.reject(unit, owner,
-                       "buffer.alloca alignment must be a positive "
-                       "power-of-two byte count");
-  }
+  auto memory_space = allocation_space(
+      unit, diagnostics,
+      cxx::template_argument_value(arguments[space_argument]), name, owner);
+  auto alignment_bytes = byte_alignment(
+      unit, diagnostics,
+      cxx::template_argument_value(arguments[alignment_argument]), name, owner);
 
   return allocates_bytes
              ? BufferIntrinsic(memory_space,
@@ -274,8 +349,30 @@ Value BufferIntrinsic::call(std::span<const Value> arguments, ValueArena& arena,
                                          alignment_, owner));
 }
 
+Value BufferIntrinsic::call_literal(cxx::TranslationUnit& unit,
+                                    Diagnostics& diagnostics,
+                                    cxx::ExpressionAST* argument,
+                                    Storage& storage, cxx::AST* owner) const {
+  auto* literal = cxx::ast_cast<cxx::StringLiteralExpressionAST>(
+      unwrap_expression(argument));
+  if (!literal) {
+    diagnostics.reject(unit, argument,
+                       "buffer payload requires a string literal");
+  }
+  auto payload = literal->literal->stringValue();
+  auto text = iree_make_string_view(payload.data(), payload.size());
+  if (is_utf8_ && !iree_unicode_utf8_validate(text)) {
+    diagnostics.reject(unit, argument,
+                       "utf8 buffer payload must be valid UTF-8");
+  }
+  auto root =
+      storage.literal(iree_make_const_byte_span(payload.data(), payload.size()),
+                      is_utf8_, memory_space_, alignment_, owner);
+  return Value(storage.root(root, owner));
+}
+
 bool BufferIntrinsic::equivalent(const BufferIntrinsic& other) const {
-  return operation_ == other.operation_ &&
+  return operation_ == other.operation_ && is_utf8_ == other.is_utf8_ &&
          element_type_ == other.element_type_ &&
          element_count_type_ == other.element_count_type_ &&
          memory_space_ == other.memory_space_ && alignment_ == other.alignment_;

@@ -78,6 +78,34 @@ enum class memory_space {
 
 namespace buffer {
 
+// Borrows immutable executable storage containing the exact literal payload.
+// The implicit C++ terminator is excluded; explicit NUL bytes are retained.
+// Equal payloads may share storage. Alignment is a positive power of two.
+// The char overload carries arbitrary bytes; char8_t requires valid UTF-8.
+template <__SIZE_TYPE__ Alignment = 1, __SIZE_TYPE__ N>
+[[loom::op("buffer.constant", "bytes")]] const unsigned char* constant(
+    const char (&literal)[N]);
+#if defined(__cpp_char8_t)
+template <__SIZE_TYPE__ Alignment = 1, __SIZE_TYPE__ N>
+[[loom::op("buffer.constant",
+           "utf8")]] const unsigned char* constant(const char8_t (&literal)[N]);
+#endif
+
+// Allocates fresh storage initialized with the exact literal payload, excluding
+// its implicit terminator. Workgroup initialization is collective: every
+// invocation participates in uniform control and observes all initialized
+// bytes on return. Other spaces initialize independently per invocation.
+template <loom::memory_space Space, __SIZE_TYPE__ Alignment = 1,
+          __SIZE_TYPE__ N>
+[[loom::op("buffer.alloca.init", "bytes")]] unsigned char* alloca_init(
+    const char (&literal)[N]);
+#if defined(__cpp_char8_t)
+template <loom::memory_space Space, __SIZE_TYPE__ Alignment = 1,
+          __SIZE_TYPE__ N>
+[[loom::op("buffer.alloca.init",
+           "utf8")]] unsigned char* alloca_init(const char8_t (&literal)[N]);
+#endif
+
 // Allocates element_count uninitialized T objects in Space. Each execution
 // produces a distinct buffer root. Alignment is a minimum byte alignment and
 // cannot weaken T's natural alignment.

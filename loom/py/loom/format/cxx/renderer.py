@@ -31,7 +31,31 @@ from loom.ir import (
     ShapedType,
     StaticDim,
     TypeKind,
+    Utf8Attr,
 )
+
+
+def _buffer_payload_literal(contents: bytes | Utf8Attr) -> str:
+    """Quotes exact payload code units without greedy hexadecimal escapes."""
+    text = (
+        contents.value if isinstance(contents, Utf8Attr) else contents.decode("latin1")
+    )
+    prefix = "u8" if isinstance(contents, Utf8Attr) else ""
+    escaped = []
+    for character in text:
+        if character in {'"', "\\"}:
+            escaped.append("\\" + character)
+        elif character in {"\n", "\r", "\t"}:
+            escaped.append({"\n": "\\n", "\r": "\\r", "\t": "\\t"}[character])
+        elif (
+            ord(character) < 32
+            or ord(character) == 127
+            or (not prefix and ord(character) >= 128)
+        ):
+            escaped.append(f"\\{ord(character):03o}")
+        else:
+            escaped.append(character)
+    return prefix + '"' + "".join(escaped) + '"'
 
 
 class CxxRenderer(CxxExpressionRenderer):
@@ -166,6 +190,29 @@ class CxxRenderer(CxxExpressionRenderer):
                 declaration_type="auto",
             )
             return ("static_strides",)
+        if name in {"buffer.constant", "buffer.alloca.init"}:
+            resolved = self._resolved(operation)
+            immutable = name == "buffer.constant"
+            if not immutable and resolved.value_ids("pool"):
+                raise CxxRenderError(
+                    operation, "explicit allocation pools have no C++ projection"
+                )
+            if immutable:
+                alignment = resolved.attr("alignment") or 1
+                callee = f"loom::buffer::constant<{alignment}>"
+                attributes = ("contents", "alignment")
+            else:
+                alignment = resolved.attr("base_alignment")
+                space = _memory_space(resolved.attr("memory_space"))
+                callee = f"loom::buffer::alloca_init<{space}, {alignment}>"
+                attributes = ("contents", "memory_space", "base_alignment")
+            result = resolved.value_id("result")
+            literal = _buffer_payload_literal(resolved.attr("contents"))
+            self._declare(result, f"{callee}({literal})", declaration_type="auto*")
+            self.expression_types[result] = (
+                "const unsigned char*" if immutable else "unsigned char*"
+            )
+            return attributes
         if name == "buffer.alloca":
             resolved = self._resolved(operation)
             if resolved.value_ids("pool"):

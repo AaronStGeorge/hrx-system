@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
 load("//loom/build_tools/bazel:defs.bzl", "loom_library", "loom_test", "loom_test_module")
 load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test", "loom_check_test_suite")
@@ -19,6 +20,20 @@ exports_files([
     "packed_memory.cxx",
     "vector_lookup.cxx",
 ])
+
+iree_execution_test_suite(
+    name = "inline_buffer_roundtrip_test",
+    manifests = ["inline_buffer_roundtrip.test.json"],
+    tags = [
+        "hostonly",
+        "skip-bazel_to_cmake",
+    ],
+    target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
+    tools = {
+        "loom-export-cxx": "//loom/py/loom/tools:loom-export-cxx",
+        "loom-import-cxx": "//loom/src/loom/tools/loom-import-cxx",
+    },
+)
 
 loom_library(
     name = "vector_memory_library",
@@ -116,6 +131,7 @@ loom_check_test_suite(
         "immutable_strings.cxx-test",
         "index_views.cxx-test",
         "initializer_dependencies.cxx-test",
+        "inline_buffer_payloads.cxx-test",
         "inline_strings.cxx-test",
         "integer_intrinsics.cxx-test",
         "integer_widening.cxx-test",
@@ -282,6 +298,17 @@ loom_check_test(
     },
     # CMake exercises the Python tool through its execution-suite smoke; this
     # exact golden requires Bazel's executable runfile for the emit provider.
+    tags = ["skip-bazel_to_cmake"],
+    target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
+)
+
+loom_check_test(
+    name = "inline_buffer_export_test",
+    src = "inline_buffer_export.loom-test",
+    data = ["//loom/py/loom/tools:loom-export-cxx"],
+    env = {
+        "LOOM_EXPORT_CXX": "$(rootpath //loom/py/loom/tools:loom-export-cxx)",
+    },
     tags = ["skip-bazel_to_cmake"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
 )
