@@ -185,7 +185,8 @@ class MemoryTest : public ::testing::Test {
     group = memory_test_environment->group;
     device = loom_serve_device_group_at(group, 0);
     ASSERT_NO_FATAL_FAILURE(SetUpPool());
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(
+        device, loom_serve_device_pool(device), &execution));
   }
 
   virtual void SetUpPool() { UseBacking(false, 3 * kSlabSize, nullptr); }

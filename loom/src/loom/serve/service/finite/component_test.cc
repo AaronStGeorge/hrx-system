@@ -306,7 +306,8 @@ class FiniteComponentTest : public ::testing::Test {
 
   void CheckResult(size_t ordinal, float factor = 2.0f) {
     if (!consumer_) {
-      IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
+      IREE_ASSERT_OK(loom_serve_device_create_execution(
+          device_, loom_serve_device_pool(device_), &consumer_));
     }
     auto ready = loom_serve_finite_result_ready(results_[ordinal]);
     IREE_ASSERT_OK(loom_serve_execution_barrier(
@@ -667,7 +668,8 @@ TEST_F(FiniteComponentTest, PeerAdmissionWaitsForCapturedOutputRetirement) {
   IREE_ASSERT_OK(Prepare(component_, &model));
   ASSERT_NO_FATAL_FAILURE(Submit(model, 0, 2 * kSlabSize));
   EXPECT_EQ(loom_serve_finite_result_output_length(results_[0]), 2 * kSlabSize);
-  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_, loom_serve_device_pool(device_), &consumer_));
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       loom_serve_device_handle(device_), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
       IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &gate_));

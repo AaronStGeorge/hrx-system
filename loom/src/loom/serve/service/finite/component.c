@@ -170,7 +170,8 @@ iree_status_t loom_serve_finite_component_prepare(
     loom_serve_finite_component_set_phase(
         component, LOOM_SERVE_FINITE_COMPONENT_PREPARING);
     component->status = loom_serve_finite_load_allocate(
-        component->device, &component->options, component->observer.wake,
+        component->device, loom_serve_device_pool(component->device),
+        &component->options, component->observer.wake,
         component->observer.user_data, component->host_allocator,
         &component->load);
     if (!iree_status_is_ok(component->status)) {

@@ -63,7 +63,8 @@ TEST_F(GroupEmbeddingServiceTest, EmbeddingsCompleteBeforeOtherDeviceRetires) {
             2u);
   EXPECT_NE(loom_serve_device_residency_cache(first),
             loom_serve_device_residency_cache(device_));
-  IREE_ASSERT_OK(loom_serve_device_create_execution(first, &execution_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      first, loom_serve_device_pool(first), &execution_));
   IREE_ASSERT_OK(loom_serve_execution_reserve_workspace(execution_, 64, 16));
   const iree_hal_pool_reservation_request_t request = {
       .allocation_size = 64,

@@ -613,15 +613,16 @@ iree_status_t loom_serve_residency_cache_allocate(
   return iree_ok_status();
 }
 
+bool loom_serve_residency_cache_is_empty(loom_serve_residency_cache_t* cache) {
+  return !cache || (!cache->oldest && !cache->groups.oldest &&
+                    !loom_serve_residency_cache_is_pending(cache));
+}
+
 void loom_serve_residency_cache_free(loom_serve_residency_cache_t* cache) {
   if (!cache) {
     return;
   }
-  IREE_ASSERT(!cache->oldest);
-  IREE_ASSERT(!cache->groups.oldest);
-  iree_slim_mutex_lock(&cache->output_mutex);
-  IREE_ASSERT(!cache->output_bytes);
-  iree_slim_mutex_unlock(&cache->output_mutex);
+  IREE_ASSERT(loom_serve_residency_cache_is_empty(cache));
   iree_slim_mutex_deinitialize(&cache->output_mutex);
   if (cache->pool) {
     loom_serve_memory_pool_set_reclaimer(cache->pool,

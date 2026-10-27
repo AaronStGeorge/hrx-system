@@ -43,8 +43,9 @@ class SourceDecisionServiceTest : public ::testing::Test {
         .asset_directory = IREE_SV("."),
         .options = IREE_SV("{\"batch_units\":64}"),
     };
-    IREE_ASSERT_OK(loom_serve_finite_model_allocate(device_, &options,
-                                                    host_allocator_, output));
+    IREE_ASSERT_OK(loom_serve_finite_model_allocate(
+        device_, loom_serve_device_pool(device_), &options, host_allocator_,
+        output));
   }
   void SetUp() override {
     const char* model_source = std::getenv("LOOM_SERVE_TEST_MODEL_SOURCE");

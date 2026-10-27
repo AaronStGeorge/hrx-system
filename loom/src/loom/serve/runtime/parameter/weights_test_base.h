@@ -339,8 +339,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     device_ = loom_serve_device_handle(device_owner_);
     dispatch_ = loom_serve_device_dispatch_queue(device_owner_);
     transfer_ = loom_serve_device_transfer_queue(device_owner_);
-    IREE_ASSERT_OK(
-        loom_serve_device_create_execution(device_owner_, &execution_));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(
+        device_owner_, loom_serve_device_pool(device_owner_), &execution_));
     pool_ = loom_serve_device_memory_pool(device_owner_);
     directory_ =
         std::filesystem::path(WeightSourcePath()).parent_path().string();

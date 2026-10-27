@@ -158,7 +158,9 @@ class ImageServiceFixture : public ::testing::Test {
     for (iree_host_size_t i = 0; i < loom_serve_device_group_count(group_);
          ++i) {
       IREE_ASSERT_OK(loom_serve_device_create_execution(
-          loom_serve_device_group_at(group_, i), &executions_[i]));
+          loom_serve_device_group_at(group_, i),
+          loom_serve_device_pool(loom_serve_device_group_at(group_, i)),
+          &executions_[i]));
     }
     auto* device = loom_serve_device_group_at(group_, 0);
     IREE_ASSERT_OK(iree_hal_semaphore_create(

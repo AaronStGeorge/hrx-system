@@ -197,7 +197,8 @@ TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
       loom_serve_virtual_buffer_commit(reservations_[0], kSlabBytes, 4));
   for (iree_host_size_t i = 0; i < 2; ++i) {
     auto* device = loom_serve_device_group_at(group_, i);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &executions_[i]));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(
+        device, loom_serve_device_pool(device), &executions_[i]));
     auto* buffer = loom_serve_virtual_buffer_handle(reservations_[i]);
     const uint32_t pattern = 0x12345678u + i;
     const iree_hal_transfer_operation_t fill = {

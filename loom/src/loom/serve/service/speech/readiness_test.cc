@@ -71,7 +71,8 @@ class SpeechReadinessTest : public ::testing::Test {
     batch_.reserve(capacity);
     IREE_ASSERT_OK(AcquireApplication(allocator_, &host_, &group_));
     auto* device = loom_serve_device_group_at(group_, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution_));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(
+        device, loom_serve_device_pool(device), &execution_));
     IREE_ASSERT_OK(loom_serve_execution_reserve_workspace(
         execution_, frames * format.channels * sizeof(float) * capacity, 16));
     IREE_ASSERT_OK(iree_hal_semaphore_create(

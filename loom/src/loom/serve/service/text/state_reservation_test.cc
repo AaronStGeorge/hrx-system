@@ -27,7 +27,8 @@ class TextStateReservationTest
                                                 &compilation_, &jit_));
     IREE_ASSERT_OK(loom_serve_text_source_initialize(
         jit_, &options, host_allocator_, &source_, &state_.storage));
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &execution_));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(
+        device_, loom_serve_device_pool(device_), &execution_));
     IREE_ASSERT_OK(
         loom_serve_text_state_allocate(&state_, device_, execution_));
     IREE_ASSERT_OK(loom_serve_execution_drain(execution_));

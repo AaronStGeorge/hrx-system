@@ -40,7 +40,8 @@ class TextStateTest : public ::testing::TestWithParam<uint32_t> {
     IREE_ASSERT_OK(loom_serve_test_application_acquire(
         &application_options, host_allocator, &application));
     device = loom_serve_test_application_device_at(application, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(
+        device, loom_serve_device_pool(device), &execution));
     IREE_ASSERT_OK(iree_vm_environment_allocate(host_allocator, &environment));
     IREE_ASSERT_OK(iree_vm_ref_types_resolve(
         iree_vm_environment_lookup_ref_type_table(environment, IREE_SV("vm")),

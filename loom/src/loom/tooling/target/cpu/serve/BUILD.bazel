@@ -1220,6 +1220,27 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "source_embedding_pool_test",
+    data = EMBEDDING_SOURCES + EMBEDDING_VARIANT_SOURCES,
+    env = {
+        "LOOM_SERVE_TEST_MODEL_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/embedding:prepare.loom)",
+    },
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/target/arch:x86",
+        "//loom/config/execute:task_hal",
+    ]) + select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":test_compiler",
+        ":test_device",
+        "//loom/src/loom/serve/service/finite/embedding:pool_binding_tests",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "source_embedding_device_group_test",
     data = EMBEDDING_SOURCES + EMBEDDING_VARIANT_SOURCES,
     env = {

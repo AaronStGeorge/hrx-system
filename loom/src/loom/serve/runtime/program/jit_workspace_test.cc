@@ -130,8 +130,8 @@ TEST_P(JitWorkspaceTest, UnequalPrivateWorkspacesPreservePoolPolicyAndOutput) {
   EXPECT_GT(statistics.bytes_committed, 0u);
   // A different model has no dependency edge to the retired producer. HAL's
   // completed-frontier query must recover reuse without a device-wide chain.
-  IREE_ASSERT_OK(
-      loom_serve_device_create_execution(device_owner_, &held_.execution));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_owner_, loom_serve_device_pool(device_owner_), &held_.execution));
   const iree_hal_pool_reservation_request_t request = {
       .allocation_size = 4160,
       .min_alignment = 16,
@@ -207,8 +207,8 @@ TEST_P(JitWorkspaceTest, UnequalPrivateWorkspacesPreservePoolPolicyAndOutput) {
 TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
   IREE_ASSERT_OK(Compile("5", 0));
   IREE_ASSERT_OK(Compile("7", 1, IREE_SV("temporary_advance"), "4160"));
-  IREE_ASSERT_OK(
-      loom_serve_device_create_execution(device_owner_, &held_.execution));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_owner_, loom_serve_device_pool(device_owner_), &held_.execution));
   IREE_ASSERT_OK(
       loom_serve_execution_reserve_workspace(held_.execution, 64, 16));
   const iree_hal_pool_reservation_request_t request = {
@@ -311,8 +311,8 @@ TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
 }
 
 TEST_P(JitWorkspaceTest, RetiredModelDoesNotJoinRawQueueAllocationCaptures) {
-  IREE_ASSERT_OK(
-      loom_serve_device_create_execution(device_owner_, &held_.execution));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_owner_, loom_serve_device_pool(device_owner_), &held_.execution));
   IREE_ASSERT_OK(
       loom_serve_execution_reserve_workspace(held_.execution, 64, 16));
   IREE_ASSERT_OK(

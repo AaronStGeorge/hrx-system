@@ -966,7 +966,7 @@ static iree_status_t loom_serve_checkpoint_allocate(
   executables->parameters.entries = checkpoint;
   *out_checkpoint = checkpoint;
   iree_status_t status = loom_serve_parameter_bank_allocate_domain(
-      executables->options.device, program, domain,
+      executables->options.device, executables->options.pool, program, domain,
       arena ? arena->memory : NULL, executables->host_allocator,
       &checkpoint->bank);
   if (iree_status_is_ok(status)) {
@@ -1175,7 +1175,7 @@ static iree_status_t loom_serve_choice_prepare_arenas(
                                                         (uint32_t)i);
     } else {
       loom_serve_memory_pool_t* pool =
-          loom_serve_device_memory_pool(executables->options.device);
+          loom_serve_pool_memory(executables->options.pool);
       if (!pool) {
         status = iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                                   "parameter arenas require elastic storage");
@@ -1185,8 +1185,7 @@ static iree_status_t loom_serve_choice_prepare_arenas(
       }
       if (iree_status_is_ok(status)) {
         status = loom_serve_memory_arena_allocate(
-            pool,
-            loom_serve_device_weight_geometry(executables->options.device),
+            pool, loom_serve_pool_weight_geometry(executables->options.pool),
             loom_serve_preparation_arena_capacity(
                 executables->options.preparation, declaration->arena - 1),
             &arena->memory);
@@ -1414,7 +1413,7 @@ static iree_status_t loom_serve_choice_allocate_residency(
     }
   }
   return loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(executables->options.device),
+      loom_serve_pool_residency_cache(executables->options.pool),
       executables->options.execution, distinct_count, groups,
       executables->host_allocator, &choice->residency);
 }

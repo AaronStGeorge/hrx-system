@@ -545,7 +545,8 @@ TEST_P(GenerationSelectionTest,
   ASSERT_NO_FATAL_FAILURE(SubmitPrepared(1));
   ASSERT_NO_FATAL_FAILURE(Complete(1));
 
-  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_, loom_serve_device_pool(device_), &consumer_));
   for (size_t i = 0; i < results_.size(); ++i) {
     auto ready = loom_serve_finite_result_ready(results_[i]);
     IREE_ASSERT_OK(loom_serve_execution_barrier(
@@ -966,7 +967,8 @@ TEST_F(DeviceResultTest, RaggedCohortsComposeBeforeProducerRetirement) {
   ASSERT_NO_FATAL_FAILURE(Complete(0));
   ASSERT_NO_FATAL_FAILURE(Submit({R"({"model":"fixture","input":[0]})"}, 1));
 
-  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_, loom_serve_device_pool(device_), &consumer_));
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       loom_serve_device_handle(device_), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
       IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &gate_));

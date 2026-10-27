@@ -320,8 +320,9 @@ TEST_P(WeightsTest, SharedActivationImportsReadinessWithoutReloading) {
   IREE_ASSERT_OK(Compile(0, "target"));
   const auto root = Root(0, 0);
   IREE_ASSERT_OK(CreateRoots(0, 1, &root, {path_.path()}));
-  IREE_ASSERT_OK(
-      loom_serve_device_create_execution(device_owner_, &shared_execution_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_owner_, loom_serve_device_pool(device_owner_),
+      &shared_execution_));
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       device_, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
       IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &consumer_gate_));
@@ -579,8 +580,9 @@ TEST_P(WeightsTest, SharedWorkingSetsAdmitAtomicallyAndEvictOnlyIdleGroups) {
     IREE_ASSERT_OK(loom_serve_residency_group_allocate(
         cache, 1, &plans_[i], host_allocator_, &parameter_groups_[i]));
   }
-  IREE_ASSERT_OK(
-      loom_serve_device_create_execution(device_owner_, &shared_execution_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_owner_, loom_serve_device_pool(device_owner_),
+      &shared_execution_));
   loom_serve_residency_group_t* first[] = {parameter_groups_[0],
                                            parameter_groups_[1]};
   loom_serve_residency_group_t* second[] = {parameter_groups_[0],

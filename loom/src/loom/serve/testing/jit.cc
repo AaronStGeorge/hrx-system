@@ -165,8 +165,8 @@ void JitTest::SetUp() {
       loom_serve_device_memory_statistics(device_owner_).workspace;
   ASSERT_EQ(workspace_baseline_.reservation_count, 0u);
   ASSERT_EQ(workspace_baseline_.bytes_committed, 0u);
-  IREE_ASSERT_OK(
-      loom_serve_device_create_execution(device_owner_, &execution_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_owner_, loom_serve_device_pool(device_owner_), &execution_));
   directory_ = std::filesystem::path(FLAG_jit_sources).parent_path().string();
   const iree_string_view_t providers[] = {IREE_SV("config.loom"),
                                           IREE_SV("stage.loom")};

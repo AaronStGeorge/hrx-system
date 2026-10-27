@@ -174,6 +174,24 @@ endif()
 if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 loom_cc_library(
   NAME
+    pool_binding_tests
+  SRCS
+    "pool_binding_test.cc"
+  DEPS
+    ::protocol
+    ::source_service_fixture
+    iree::testing::gtest
+    iree::testing::temp_file
+    loom::serve::testing::model
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_cc_library(
+  NAME
     device_group_tests
   SRCS
     "device_group_test.cc"

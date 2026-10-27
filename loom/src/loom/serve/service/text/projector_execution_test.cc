@@ -31,7 +31,8 @@ class PixelProjectorExecutionTest : public SourceTextServiceTest {
         .specialization_cache = {2, 1024 * 1024},
     };
     IREE_ASSERT_OK(loom_serve_finite_model_allocate(
-        device_, &options, host_allocator_, &projector_));
+        device_, loom_serve_device_pool(device_), &options, host_allocator_,
+        &projector_));
     loom_serve_finite_model_set_observer(
         projector_, {[](void* data) {
                        iree_notification_post(

@@ -252,8 +252,9 @@ TEST_P(WeightPackingTest,
   EXPECT_EQ(before.read_bytes, 6u * (32u + 16u));
   EXPECT_EQ(before.prepared_bytes, 6u * 24u);
   EXPECT_EQ(before.groups, 12u);
-  IREE_ASSERT_OK(
-      loom_serve_device_create_execution(device_owner_, &shared_execution_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_owner_, loom_serve_device_pool(device_owner_),
+      &shared_execution_));
   IREE_ASSERT_OK(loom_serve_weights_activate(plans_[0]));
   IREE_ASSERT_OK(
       loom_serve_weights_import_readiness(plans_[0], shared_execution_));

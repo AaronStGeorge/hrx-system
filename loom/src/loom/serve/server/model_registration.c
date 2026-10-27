@@ -213,8 +213,9 @@ static iree_status_t loom_serve_finite_registration_create(
       .options = configuration->options,
       .specialization_cache = configuration->specialization_cache};
   iree_status_t status = loom_serve_finite_load_allocate(
-      registration->device, &model_options, observer.wake, observer.user_data,
-      host_allocator, &registration->load);
+      registration->device, loom_serve_device_pool(registration->device),
+      &model_options, observer.wake, observer.user_data, host_allocator,
+      &registration->load);
   if (iree_status_is_ok(status)) {
     *out_registration = (loom_serve_registration_t){
         .self = registration,

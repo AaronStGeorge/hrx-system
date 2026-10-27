@@ -791,8 +791,8 @@ static iree_status_t loom_serve_recognition_bind_parameters(
 static iree_status_t loom_serve_recognition_model_bind(
     loom_serve_recognition_model_t* model) {
   IREE_RETURN_IF_ERROR(loom_serve_recognition_check_layouts(model));
-  IREE_RETURN_IF_ERROR(
-      loom_serve_device_create_execution(model->owner, &model->execution));
+  IREE_RETURN_IF_ERROR(loom_serve_device_create_execution(
+      model->owner, loom_serve_device_pool(model->owner), &model->execution));
   return loom_serve_recognition_bind_parameters(model);
 }
 

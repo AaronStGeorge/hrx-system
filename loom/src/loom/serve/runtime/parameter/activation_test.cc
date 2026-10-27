@@ -41,7 +41,8 @@ class ActivationTest : public ::testing::TestWithParam<uint32_t> {
     IREE_ASSERT_OK(loom_serve_device_group_allocate(
         host_, 1, &options, iree_allocator_system(), &group_));
     auto* device = loom_serve_device_group_at(group_, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution_));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(
+        device, loom_serve_device_pool(device), &execution_));
     IREE_ASSERT_OK(loom_serve_residency_allocate(
         loom_serve_device_residency_cache(device), execution_, 0, nullptr,
         iree_allocator_system(), &residency_));

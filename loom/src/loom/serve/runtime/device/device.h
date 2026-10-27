@@ -6,6 +6,7 @@
 #ifndef LOOM_SERVE_RUNTIME_DEVICE_DEVICE_H_
 #define LOOM_SERVE_RUNTIME_DEVICE_DEVICE_H_
 
+#include "loom/serve/runtime/device/pool.h"
 #include "loom/serve/runtime/execution/execution.h"
 #include "loom/serve/runtime/host/host.h"
 #include "loom/serve/runtime/parameter/residency.h"
@@ -22,10 +23,9 @@ extern "C" {
 // edges and implies no cross-device buffer visibility.
 typedef struct loom_serve_device_group_t loom_serve_device_group_t;
 
-// Borrowed device record within the application group. Its queues, workspace,
-// physical-memory budget and residency cache are independent of other records.
-// One task owner serializes model calls and physical residency transitions;
-// models sharing this record share its allocation budget, not their timelines.
+// Borrowed execution record within the application group. Queues and compiled
+// products belong to the device; model storage belongs to explicitly bound
+// pools. One task owner serializes model calls and pool residency transitions.
 typedef struct loom_serve_device_t loom_serve_device_t;
 typedef struct loom_serve_tokenizer_cache_t loom_serve_tokenizer_cache_t;
 
@@ -76,11 +76,31 @@ iree_status_t loom_serve_device_group_allocate(
 // Releases all device resources and the host reference without an implicit
 // device wait. The caller first drains every model domain and releases all
 // model/JIT/VM resources while host I/O remains alive. NULL is permitted.
-// Outstanding model reservations preserve the entire group and return failure
-// before partial teardown. The group's own idle workspace reservations are
+// Outstanding models, banks, results, or elastic reservations preserve the
+// entire group and return failure before partial teardown. Idle workspace is
 // released before its physical owner; a native cleanup error preserves the
 // remaining group resources for outer-owner cleanup.
 iree_status_t loom_serve_device_group_free(loom_serve_device_group_t* group);
+
+// Constructs a group-owned pool with explicit access scope and policy. Called
+// only during application setup, before resource observers and services attach.
+// The group owns the returned pool; models borrow it through retirement. Pool
+// identity, not device membership or physical location, establishes sharing.
+iree_status_t loom_serve_device_group_create_pool(
+    loom_serve_device_group_t* group, iree_hal_pool_scope_t scope,
+    iree_hal_queue_t* allocation_queue,
+    const loom_serve_pool_options_t* options, loom_serve_pool_t** out_pool);
+
+// Application pool inventory; immutable after setup. Indices are resolved by
+// the caller and are independent of execution device indices.
+iree_host_size_t loom_serve_device_group_pool_count(
+    const loom_serve_device_group_t* group);
+loom_serve_pool_t* loom_serve_device_group_pool_at(
+    const loom_serve_device_group_t* group, iree_host_size_t pool_index);
+
+// Borrowed default storage binding created with the device options. Models may
+// instead select another group-owned pool qualified for their execution scope.
+loom_serve_pool_t* loom_serve_device_pool(const loom_serve_device_t* device);
 
 // Number of immutable device records owned by the group.
 iree_host_size_t loom_serve_device_group_count(
@@ -175,7 +195,7 @@ iree_hal_queue_t* loom_serve_device_dispatch_queue(
     const loom_serve_device_t* device);
 iree_hal_queue_t* loom_serve_device_transfer_queue(
     const loom_serve_device_t* device);
-// Creates an owned model timeline over this device's shared workspace. The
+// Creates an owned model timeline over the explicitly selected pool. The
 // serialized device owner assigns the least borrowed provisioned queues;
 // final execution release returns that binding, including retained result and
 // VM references. A shared family supplies one exact queue for both roles.
@@ -183,7 +203,8 @@ iree_hal_queue_t* loom_serve_device_transfer_queue(
 // introduces no dependency edges between models. Queue placement counts live
 // executions, not requests or priority, and adds no native queues.
 iree_status_t loom_serve_device_create_execution(
-    loom_serve_device_t* device, loom_serve_execution_t** out_execution);
+    loom_serve_device_t* device, loom_serve_pool_t* pool,
+    loom_serve_execution_t** out_execution);
 // Borrowed shared physical owner, or NULL for explicitly fixed backing.
 loom_serve_memory_pool_t* loom_serve_device_memory_pool(
     const loom_serve_device_t* device);

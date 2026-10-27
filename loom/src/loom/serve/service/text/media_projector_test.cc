@@ -82,8 +82,9 @@ class MediaProjectorTest : public ::testing::Test {
         .asset_directory = IREE_SV("."),
         .options = IREE_SV("{}"),
     };
-    IREE_ASSERT_OK(loom_serve_finite_model_allocate(device_, &model_options,
-                                                    host_allocator_, &model_));
+    IREE_ASSERT_OK(loom_serve_finite_model_allocate(
+        device_, loom_serve_device_pool(device_), &model_options,
+        host_allocator_, &model_));
     iree_async_proactor_t* proactor = nullptr;
     IREE_ASSERT_OK(iree_async_proactor_pool_get(
         loom_serve_host_proactor_pool(host), 0, &proactor));

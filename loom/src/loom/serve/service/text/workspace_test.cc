@@ -100,7 +100,8 @@ TEST_F(SourceTextServiceTest, NativeWorkspaceReplacementPreservesAdmission) {
   EXPECT_EQ(loom_serve_text_row_token(row), oracle.Predict());
 
   loom_serve_execution_t* peer_execution = nullptr;
-  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &peer_execution));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_, loom_serve_device_pool(device_), &peer_execution));
   std::unique_ptr<loom_serve_execution_t,
                   decltype(&loom_serve_execution_release)>
       peer_timeline(peer_execution, loom_serve_execution_release);

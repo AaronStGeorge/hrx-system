@@ -67,7 +67,8 @@ class SnapshotTest : public ::testing::Test {
         environment->host, 1, &options, iree_allocator_system(), &group);
     IREE_ASSERT_OK(status);
     device = loom_serve_device_group_at(group, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(device, &execution));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(
+        device, loom_serve_device_pool(device), &execution));
     pool = loom_serve_device_memory_pool(device);
   }
 

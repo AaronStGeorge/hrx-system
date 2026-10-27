@@ -510,12 +510,13 @@ static iree_status_t loom_serve_image_create_control(
 static iree_status_t loom_serve_image_model_bind(
     loom_serve_image_model_t* model) {
   IREE_RETURN_IF_ERROR(loom_serve_image_check_layouts(model));
-  IREE_RETURN_IF_ERROR(
-      loom_serve_device_create_execution(model->owner, &model->execution));
+  IREE_RETURN_IF_ERROR(loom_serve_device_create_execution(
+      model->owner, loom_serve_device_pool(model->owner), &model->execution));
   const loom_cmd_program_t* program =
       loom_serve_jit_stage_program(model->stages.values[0]);
   return loom_serve_parameter_bank_allocate(
-      model->owner, program, model->host_allocator, &model->parameters);
+      model->owner, loom_serve_device_pool(model->owner), program,
+      model->host_allocator, &model->parameters);
 }
 
 static iree_status_t loom_serve_image_model_link(
@@ -530,6 +531,7 @@ static iree_status_t loom_serve_image_model_link(
       group ? 1 : 0, &group, host_allocator, &model->residency));
   const loom_serve_executable_options_t options = {
       .device = model->owner,
+      .pool = loom_serve_device_pool(model->owner),
       .jit = model->jit,
       .sources = sources,
       .execution = model->execution,

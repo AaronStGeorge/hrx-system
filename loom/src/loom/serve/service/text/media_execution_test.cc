@@ -33,7 +33,8 @@ class MediaExecutionTest : public SourceTextServiceTest {
         .options = IREE_SV("{}"),
     };
     IREE_ASSERT_OK(loom_serve_finite_model_allocate(
-        device_, &options, host_allocator_, &producer_));
+        device_, loom_serve_device_pool(device_), &options, host_allocator_,
+        &producer_));
   }
 
   void TearDown() override {
@@ -301,7 +302,8 @@ TEST_F(MediaExecutionTest,
   std::memset(packet_.packet_record_bytes.data, 0x5A,
               packet_.packet_record_bytes.data_length);
 
-  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
+  IREE_ASSERT_OK(loom_serve_device_create_execution(
+      device_, loom_serve_device_pool(device_), &consumer_));
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       loom_serve_device_handle(device_), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
       IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &gate_));

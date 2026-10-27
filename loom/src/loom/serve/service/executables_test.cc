@@ -170,8 +170,8 @@ class ExecutablesTest : public WeightsTest {
         &parameter_sources_));
     IREE_RETURN_IF_ERROR(Compile(0, root_name));
     IREE_RETURN_IF_ERROR(loom_serve_parameter_bank_allocate(
-        device_owner_, loom_serve_jit_stage_program(compiled_[0]),
-        host_allocator_, &bank_));
+        device_owner_, loom_serve_device_pool(device_owner_),
+        loom_serve_jit_stage_program(compiled_[0]), host_allocator_, &bank_));
     const auto* declaration = loom_serve_preparation_stage(preparation_, 0);
     iree_status_t status = iree_ok_status();
     for (size_t i = 0;
@@ -189,6 +189,7 @@ class ExecutablesTest : public WeightsTest {
         host_allocator_, &residency_));
     loom_serve_executable_options_t options = {
         .device = device_owner_,
+        .pool = loom_serve_device_pool(device_owner_),
         .jit = jit_,
         .sources = &sources_,
         .execution = execution_,

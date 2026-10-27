@@ -184,8 +184,8 @@ int main(int argc, char** argv) {
     return 2;
   }
   loom_serve_parameter_bank_t* bank = nullptr;
-  IREE_CHECK_OK(
-      loom_serve_parameter_bank_allocate(device, program, system, &bank));
+  IREE_CHECK_OK(loom_serve_parameter_bank_allocate(
+      device, loom_serve_device_pool(device), program, system, &bank));
   const auto baseline = allocations.snapshot(true);
   std::printf(
       "{\"stage_bytes\":%zu,\"parameters\":%u,\"baseline_bytes\":%zu}\n",

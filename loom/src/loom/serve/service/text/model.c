@@ -204,8 +204,9 @@ static void loom_serve_text_load_ready(void* user_data,
 }
 
 static iree_status_t loom_serve_text_load_bind(loom_serve_text_model_t* model) {
-  IREE_RETURN_IF_ERROR(loom_serve_device_create_execution(model->device_owner,
-                                                          &model->execution));
+  IREE_RETURN_IF_ERROR(loom_serve_device_create_execution(
+      model->device_owner, loom_serve_device_pool(model->device_owner),
+      &model->execution));
   IREE_RETURN_IF_ERROR(loom_serve_text_stages_bind(
       model->device_owner, model->source.preparation,
       model->source.shared_stage_count, model->stage_count, model->stages,

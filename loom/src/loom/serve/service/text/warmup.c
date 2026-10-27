@@ -31,8 +31,8 @@ iree_status_t loom_serve_text_warmup_allocate(
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(host_allocator, sizeof(*warmup), (void**)&warmup));
   warmup->host_allocator = host_allocator;
-  iree_status_t status =
-      loom_serve_device_create_execution(device, &warmup->execution);
+  iree_status_t status = loom_serve_device_create_execution(
+      device, loom_serve_device_pool(device), &warmup->execution);
   if (iree_status_is_ok(status)) {
     status = loom_serve_residency_allocate(
         loom_serve_device_residency_cache(device), warmup->execution, 1, &group,

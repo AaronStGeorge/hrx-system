@@ -28,6 +28,8 @@ typedef struct loom_serve_executables_t loom_serve_executables_t;
 typedef struct loom_serve_executable_options_t {
   // Shared device and compiler host, borrowed through destruction.
   loom_serve_device_t* device;
+  // Explicit storage and admission owner, borrowed through destruction.
+  loom_serve_pool_t* pool;
   // Original indexed source generation; its report outlives this owner.
   loom_serve_jit_t* jit;
   // Original policy/checkpoint namespace, copied during allocation. Files stay
