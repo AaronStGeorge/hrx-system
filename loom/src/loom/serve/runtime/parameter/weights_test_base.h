@@ -39,12 +39,14 @@ const char* WeightSourcePath();
 // Optional URI including feedback requirements selected by the test target.
 const char* WeightDeviceUri();
 
-// Borrows the current immutable configuration for fixed or elastic backing.
-// All previous borrowers must have retired before changing that policy's slab
-// size or budget; its native device and allocator retire before replacement.
-iree_status_t AcquireWeightDeviceGroup(bool elastic, uint64_t slab_size,
-                                       uint64_t memory_limit,
-                                       loom_serve_device_group_t** out_group);
+// Borrows the process-owned device, independent of each case's storage policy.
+loom_serve_device_t* WeightDevice();
+
+// Allocates a case-owned pool with the device's dispatch/transfer access and
+// sanitizer policy. The fixture retires all consumers before freeing the pool.
+iree_status_t AllocateWeightPool(loom_serve_device_t* device, bool elastic,
+                                 uint64_t slab_size, uint64_t memory_limit,
+                                 loom_serve_pool_t** out_pool);
 
 // Models the loader's owner turn: submit private policy/JIT preparation
 // and return so that the same sole worker can execute the accepted work.
@@ -293,9 +295,13 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
  protected:
   virtual uint64_t SlabSize() const { return kSlabBytes; }
 
-  virtual void SetUpDevice() {
-    IREE_ASSERT_OK(AcquireWeightDeviceGroup(GetParam(), SlabSize(),
-                                            2 * SlabSize(), &group_));
+  virtual void SetUpPool() { AllocatePool(2 * SlabSize()); }
+
+  void AllocatePool(uint64_t memory_limit) {
+    IREE_ASSERT_OK(loom_serve_pool_free(storage_owner_));
+    storage_owner_ = nullptr;
+    IREE_ASSERT_OK(AllocateWeightPool(device_owner_, GetParam(), SlabSize(),
+                                      memory_limit, &storage_owner_));
   }
 
   void WriteCheckpoint(const std::string& path, int32_t offset,
@@ -334,9 +340,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   }
 
   void SetUp() override {
-    ASSERT_NO_FATAL_FAILURE(SetUpDevice());
-    device_owner_ = loom_serve_device_group_at(group_, 0);
-    storage_owner_ = loom_serve_device_group_pool_at(group_, 0);
+    device_owner_ = WeightDevice();
+    ASSERT_NO_FATAL_FAILURE(SetUpPool());
     device_ = loom_serve_device_handle(device_owner_);
     dispatch_ = loom_serve_device_dispatch_queue(device_owner_);
     transfer_ = loom_serve_device_transfer_queue(device_owner_);
@@ -363,7 +368,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   }
 
   void TearDown() override {
-    if (!device_owner_) {
+    if (!storage_owner_) {
       return;
     }
     if (deferred_backing_) {
@@ -438,6 +443,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
                   .reserved_bytes);
     EXPECT_EQ(memory.retained.committed_bytes, 0u);
     EXPECT_EQ(memory.workspace.bytes_committed, 0u);
+    IREE_CHECK_OK(loom_serve_pool_free(storage_owner_));
+    storage_owner_ = nullptr;
     if (path_.Exists()) {
       EXPECT_TRUE(path_.Remove());
     }
@@ -691,11 +698,9 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   iree_allocator_t host_allocator_ = iree_allocator_system();
   // Copied compiler evidence retained beyond individual results.
   loom_serve_compilation_report_t compilation_ = {};
-  // Borrowed process-owned group outliving all compiler, VM and I/O resources.
-  loom_serve_device_group_t* group_ = nullptr;
-  // Borrowed device record within the application group.
+  // Borrowed process-owned device outliving all compiler, VM and I/O resources.
   loom_serve_device_t* device_owner_ = nullptr;
-  // Explicit fixed or elastic owner used by the fixture's parameter banks.
+  // Case-owned fixed or elastic pool used by the fixture's parameter banks.
   loom_serve_pool_t* storage_owner_ = nullptr;
   // Borrowed live GPU used by compilation and execution.
   iree_hal_device_t* device_ = nullptr;

@@ -10,14 +10,13 @@ namespace loom_serve::testing {
 class WindowedWeightsTest : public WeightsTest {
  protected:
   uint64_t SlabSize() const override { return 2 * 1024 * 1024; }
-  void SetUpDevice() override {
+  void SetUpPool() override {
     // The captured-source recipe packs two aligned halves into each of four
     // staging lanes. These overlap both final parameter slabs during loading.
     const uint64_t staging_bytes = 4 * 2 * iree_device_align(1048592, 64);
     const uint64_t memory_limit =
         2 * SlabSize() + iree_device_align(staging_bytes, SlabSize());
-    IREE_ASSERT_OK(AcquireWeightDeviceGroup(GetParam(), SlabSize(),
-                                            memory_limit, &group_));
+    ASSERT_NO_FATAL_FAILURE(AllocatePool(memory_limit));
   }
   void WriteWindowedCheckpoint(const std::string& path, int32_t offset = 0) {
     constexpr size_t kElements = 524296;

@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <array>
-#include <memory>
 
 #include "iree/base/tooling/flags.h"
 #include "loom/serve/runtime/parameter/weights_test_base.h"
@@ -19,111 +18,55 @@ const char* WeightDeviceUri() { return FLAG_weight_device_uri; }
 
 namespace {
 
-struct WeightDeviceGroup {
-  // Requested slab bytes, zero for fixed backing.
-  uint64_t slab_size;
-  // Committed-byte budget, zero for fixed backing.
-  uint64_t memory_limit;
-  // Native allocator dependency outliving all resources allocated through it.
-  NativeAllocator allocator;
-  // Device group borrowed by sequential tests with matching options.
-  loom_serve_device_group_t* group = nullptr;
-  // Retained initialization result while this configuration is selected.
-  iree_status_t status = iree_ok_status();
-};
-
 class WeightDeviceEnvironment : public ::testing::Environment {
  public:
-  iree_status_t Acquire(bool elastic, uint64_t slab_size, uint64_t memory_limit,
-                        loom_serve_device_group_t** out_group) {
-    *out_group = nullptr;
-    if (!elastic) {
-      slab_size = 0;
-      memory_limit = 0;
-    }
-    auto& entry = entries_[elastic ? 1 : 0];
-    if (entry && entry->slab_size == slab_size &&
-        entry->memory_limit == memory_limit) {
-      if (iree_status_is_ok(entry->status)) {
-        *out_group = entry->group;
-      }
-      return iree_status_clone(entry->status);
-    }
-
-    // Fixtures retire their borrowers before changing a policy's configuration.
-    // Retaining one of each policy amortizes alternating fixed/elastic cases
-    // while bounding native queues independently of slab and budget variants.
-    ReleaseGroup(entry);
-    entry = std::make_unique<WeightDeviceGroup>();
-    entry->slab_size = slab_size;
-    entry->memory_limit = memory_limit;
-    auto& status = entry->status;
-    if (!host_) {
-      status = loom_serve_test_host_create(1, iree_allocator_system(), &host_);
-    }
-    if (iree_status_is_ok(status) && !driver_) {
-      status = loom_serve_test_driver_acquire(host_, &driver_);
+  void SetUp() override {
+    loom_serve_host_t* host = nullptr;
+    iree_hal_driver_t* driver = nullptr;
+    auto status =
+        loom_serve_test_host_create(1, iree_allocator_system(), &host);
+    if (iree_status_is_ok(status)) {
+      status = loom_serve_test_driver_acquire(host, &driver);
     }
     if (iree_status_is_ok(status)) {
       const loom_serve_device_options_t options = {
-          .driver = driver_,
+          .driver = driver,
           .uri = WeightDeviceUri()[0]
                      ? iree_make_cstring_view(WeightDeviceUri())
                      : loom_serve_test_device()->device_uri,
       };
-      const loom_serve_pool_options_t pool_options = {
-          .elastic = elastic,
-          .weight_slab_size = slab_size,
-          .state_slab_size = slab_size,
-          .memory_limit = memory_limit,
-      };
       status = loom_serve_device_group_allocate(
-          host_, 1, &options, entry->allocator.allocator(), &entry->group);
-      if (iree_status_is_ok(status)) {
-        loom_serve_pool_t* pool = nullptr;
-        status = loom_serve_device_group_create_pool(
-            entry->group, {IREE_SV("pool"), 1}, &pool_options, &pool);
-      }
+          host, 1, &options, allocator_.allocator(), &group_);
     }
-    if (iree_status_is_ok(status)) {
-      status = entry->allocator.Observe(
-          loom_serve_device_group_pool_at(entry->group, 0));
-    }
-    if (iree_status_is_ok(status)) {
-      *out_group = entry->group;
-    }
-    return iree_status_clone(status);
+    iree_hal_driver_release(driver);
+    loom_serve_host_release(host);
+    IREE_ASSERT_OK(status);
+
+    // Observe the native allocation worker once. Pool policy and memory budgets
+    // vary per case, but neither changes the physical device or its workers.
+    loom_serve_pool_t* pool = nullptr;
+    IREE_ASSERT_OK(AllocateWeightPool(device(), false, 0, 0, &pool));
+    status = allocator_.Observe(pool);
+    IREE_ASSERT_OK(iree_status_join(status, loom_serve_pool_free(pool)));
   }
 
   void TearDown() override {
-    for (auto& entry : entries_) {
-      ReleaseGroup(entry);
-    }
-    iree_hal_driver_release(driver_);
-    driver_ = nullptr;
-    loom_serve_host_release(host_);
-    host_ = nullptr;
+    // Every fixture retires its own pools first. Final release must join native
+    // cleanup before the allocator wrapper can leave scope.
+    IREE_CHECK_OK(loom_serve_device_group_free(group_));
+    group_ = nullptr;
+    allocator_.AwaitReleased();
+  }
+
+  loom_serve_device_t* device() {
+    return loom_serve_device_group_at(group_, 0);
   }
 
  private:
-  void ReleaseGroup(std::unique_ptr<WeightDeviceGroup>& entry) {
-    if (!entry) {
-      return;
-    }
-    // A failed retirement must stop this fixture before its allocator dies or
-    // another native configuration is constructed.
-    IREE_CHECK_OK(loom_serve_device_group_free(entry->group));
-    entry->allocator.AwaitReleased();
-    iree_status_free(entry->status);
-    entry.reset();
-  }
-
-  // Shared host services retained through every native device's final release.
-  loom_serve_host_t* host_ = nullptr;
-  // Retained driver supplying every immutable fixture configuration.
-  iree_hal_driver_t* driver_ = nullptr;
-  // One current configuration per backing policy: fixed, then elastic.
-  std::array<std::unique_ptr<WeightDeviceGroup>, 2> entries_;
+  // Native allocator dependency outliving every device-owned allocation.
+  NativeAllocator allocator_;
+  // One physical device and host retained through the complete test process.
+  loom_serve_device_group_t* group_ = nullptr;
 };
 
 auto* const weight_device_environment = static_cast<WeightDeviceEnvironment*>(
@@ -131,11 +74,45 @@ auto* const weight_device_environment = static_cast<WeightDeviceEnvironment*>(
 
 }  // namespace
 
-iree_status_t AcquireWeightDeviceGroup(bool elastic, uint64_t slab_size,
-                                       uint64_t memory_limit,
-                                       loom_serve_device_group_t** out_group) {
-  return weight_device_environment->Acquire(elastic, slab_size, memory_limit,
-                                            out_group);
+loom_serve_device_t* WeightDevice() {
+  return weight_device_environment->device();
+}
+
+iree_status_t AllocateWeightPool(loom_serve_device_t* device, bool elastic,
+                                 uint64_t slab_size, uint64_t memory_limit,
+                                 loom_serve_pool_t** out_pool) {
+  const auto* dispatch =
+      iree_hal_queue_family(loom_serve_device_dispatch_queue(device));
+  auto* transfer_queue = loom_serve_device_transfer_queue(device);
+  const auto* transfer = iree_hal_queue_family(transfer_queue);
+  const iree_hal_pool_family_access_t families[] = {
+      {
+          .family = dispatch,
+          .usage = IREE_HAL_BUFFER_USAGE_STORAGE |
+                   IREE_HAL_BUFFER_USAGE_TRANSFER |
+                   IREE_HAL_BUFFER_USAGE_DISPATCH_INDIRECT_PARAMETERS,
+      },
+      {.family = transfer, .usage = IREE_HAL_BUFFER_USAGE_TRANSFER},
+  };
+  const iree_hal_pool_scope_t scope = {
+      .family_count = dispatch == transfer ? 1u : 2u,
+      .families = families,
+  };
+  const auto* sanitizer = iree_hal_device_spec_sanitizer(
+      iree_hal_device_spec(loom_serve_device_handle(device)));
+  const loom_serve_pool_options_t options = {
+      .elastic = elastic,
+      .weight_slab_size = slab_size,
+      .state_slab_size = slab_size,
+      .memory_limit = elastic ? memory_limit : 0,
+      .asan = iree_any_bit_set(sanitizer->flags,
+                               IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN)
+                  ? sanitizer->asan.pool_options
+                  : iree_hal_asan_pool_options_t{},
+  };
+  return loom_serve_pool_allocate(
+      loom_serve_device_group(device), scope, transfer_queue, &options,
+      NativeAllocator::ForDevice(device).allocator(), out_pool);
 }
 
 TEST_P(WeightsTest, ConfiguredPreparersAndSharedRootsPrepareEachTensorOnce) {

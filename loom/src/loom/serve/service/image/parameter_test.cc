@@ -21,14 +21,12 @@ namespace loom_serve::testing {
 
 class ImageParameterTest : public WeightsTest {
  protected:
-  void SetUpDevice() override {
-    ASSERT_NO_FATAL_FAILURE(WeightsTest::SetUpDevice());
-    const uint64_t root_bytes = loom_serve_pool_weight_geometry(
-                                    loom_serve_device_group_pool_at(group_, 0))
-                                    .minimum_size;
+  void SetUpPool() override {
+    ASSERT_NO_FATAL_FAILURE(WeightsTest::SetUpPool());
+    const uint64_t root_bytes =
+        loom_serve_pool_weight_geometry(storage_owner_).minimum_size;
     // Three parameter ranges plus one shared activation/execution workspace.
-    IREE_ASSERT_OK(
-        AcquireWeightDeviceGroup(true, kSlabBytes, 4 * root_bytes, &group_));
+    ASSERT_NO_FATAL_FAILURE(AllocatePool(4 * root_bytes));
   }
 
   void TearDown() override {
