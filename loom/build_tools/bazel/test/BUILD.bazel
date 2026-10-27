@@ -38,6 +38,7 @@ load(
     "SERIALIZED_REFERENCE_PROFILE",
     "loom_library_rules_test_suite",
 )
+load(":loom_model_rules_test.bzl", "loom_model_rules_test_suite")
 load(
     ":loom_target_profile_rules_test.bzl",
     "loom_target_profile_rules_test_suite",
@@ -267,6 +268,8 @@ loom_corpus_rules_test_suite(name = "loom_corpus_rules_tests")
 
 loom_library_rules_test_suite(name = "loom_library_rules_tests")
 
+loom_model_rules_test_suite(name = "loom_model_rules_tests")
+
 loom_binary_rules_test_suite(name = "loom_binary_rules_tests")
 
 loom_target_profile_rules_test_suite(name = "loom_target_profile_rules_tests")
@@ -397,6 +400,7 @@ test_suite(
         ":loom_library_aggregate_direct_test",
         ":loom_library_module_direct_test",
         ":loom_library_rules_tests",
+        ":loom_model_rules_tests",
         ":loom_module_direct_test",
         ":loom_target_profile_rules_tests",
         ":profiled_module_test",

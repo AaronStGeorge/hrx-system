@@ -39,6 +39,7 @@ load(
 )
 load(
     ":loom_model.bzl",
+    _LoomModelInfo = "LoomModelInfo",
     _loom_model = "loom_model",
     _loom_model_documentation = "loom_model_documentation",
 )
@@ -63,6 +64,7 @@ LoomBinaryInfo = _LoomBinaryInfo
 LoomCorpusBuildInfo = _LoomCorpusBuildInfo
 LoomExecutionTestInfo = _LoomExecutionTestInfo
 LoomLibraryInfo = _LoomLibraryInfo
+LoomModelInfo = _LoomModelInfo
 LoomTargetProfileInfo = _LoomTargetProfileInfo
 LoomTargetSetInfo = _LoomTargetSetInfo
 loom_amdgpu_target_profile = _loom_amdgpu_target_profile

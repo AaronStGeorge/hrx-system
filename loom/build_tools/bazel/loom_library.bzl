@@ -180,7 +180,20 @@ def _loom_library_impl(ctx):
             dependency_reports = depset([artifacts.dependency_report]),
         ),
         LoomLibraryInfo(
+            component = struct(
+                label = ctx.label,
+                sources = tuple(ctx.files.srcs),
+                data = tuple(ctx.files.data),
+                input_format = ctx.attr.input_format,
+                inputopts = tuple(ctx.attr.inputopts),
+                module = artifacts.module,
+            ),
             module = artifacts.module,
+            transitive_components = depset(
+                direct = [info.component for info in dependency_infos],
+                transitive = [info.transitive_components for info in dependency_infos],
+                order = "preorder",
+            ),
             transitive_dependencies = artifacts.transitive_dependencies,
         ),
     ]
