@@ -38,7 +38,6 @@ loom_check_test_suite(
         "operand_ties.loom-test",
         "root_native_bytes.loom-test",
         "scalar_memory_native_bytes.loom-test",
-        "spill_pressure.loom-test",
         "unused_abi_inputs.loom-test",
     ],
 )

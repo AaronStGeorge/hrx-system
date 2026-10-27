@@ -11,22 +11,8 @@
 #include "iree/base/internal/math.h"
 #include "loom/codegen/low/allocation/call.h"
 #include "loom/codegen/low/allocation/target_constraints.h"
-#include "loom/codegen/low/schedule/pressure.h"
 #include "loom/codegen/low/schedule/target_pressure.h"
 #include "loom/ops/low/ops.h"
-
-typedef struct loom_low_schedule_call_pressure_limit_t {
-  // Register-class or register-packing-resource table ID.
-  uint16_t source_id;
-  // Shared pressure-set ID for a register-class limit, otherwise zero.
-  uint16_t pressure_set_id;
-  // Pressure units that survive the call clobber phase.
-  uint32_t preserved_unit_capacity;
-  // Interpretation of |source_id|.
-  loom_low_schedule_pressure_source_kind_t source_kind;
-  // Whether exceeding this capacity cannot be repaired by spilling.
-  bool requires_hard_capacity;
-} loom_low_schedule_call_pressure_limit_t;
 
 typedef struct loom_low_schedule_call_pressure_record_t {
   // First row in loom_low_schedule_call_pressure_table_t::limits.
@@ -242,12 +228,10 @@ static iree_host_size_t loom_low_schedule_call_pressure_find_call(
 }
 
 static uint64_t loom_low_schedule_call_pressure_crossing_packing_units(
-    const loom_low_schedule_build_state_t* state,
+    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_schedule_pressure_state_t* pressure_state,
     uint16_t resource_id) {
   IREE_ASSERT_NE(pressure_state->current_register_packing_units, NULL);
-  const loom_low_descriptor_set_t* descriptor_set =
-      state->target.descriptor_set;
   const loom_low_register_packing_resource_t* resource =
       &descriptor_set->register_packing_resources[resource_id];
   uint64_t crossing_units =
@@ -276,30 +260,20 @@ static uint64_t loom_low_schedule_call_pressure_crossing_packing_units(
   return crossing_units;
 }
 
-void loom_low_schedule_call_pressure_score_candidate(
-    const loom_low_schedule_build_state_t* state,
+void loom_low_schedule_call_pressure_score_limits(
+    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_schedule_pressure_state_t* pressure_state,
-    uint32_t candidate_node_index, loom_low_schedule_candidate_score_t* score) {
-  if (state->call_pressure == NULL ||
-      candidate_node_index == LOOM_LOW_SCHEDULE_NODE_NONE ||
-      !loom_low_func_call_isa(state->nodes[candidate_node_index].op)) {
-    return;
-  }
-  const iree_host_size_t call_index =
-      loom_low_schedule_call_pressure_find_call(state, candidate_node_index);
-  const loom_low_schedule_call_pressure_record_t* record =
-      &state->call_pressure->records[call_index];
-  const uint32_t limit_end = record->limit_start + record->limit_count;
-  for (uint32_t i = record->limit_start; i < limit_end; ++i) {
-    const loom_low_schedule_call_pressure_limit_t* limit =
-        &state->call_pressure->limits[i];
+    const loom_low_schedule_call_pressure_limit_t* limits, uint32_t limit_count,
+    loom_low_schedule_candidate_score_t* score) {
+  for (uint32_t i = 0; i < limit_count; ++i) {
+    const loom_low_schedule_call_pressure_limit_t* limit = &limits[i];
     uint64_t current_live_units = 0;
     uint64_t killed_live_units = 0;
     if (limit->source_kind ==
         LOOM_LOW_SCHEDULE_PRESSURE_SOURCE_REGISTER_PACKING_RESOURCE) {
       current_live_units =
           loom_low_schedule_call_pressure_crossing_packing_units(
-              state, pressure_state, limit->source_id);
+              descriptor_set, pressure_state, limit->source_id);
     } else if (limit->pressure_set_id != 0) {
       const loom_low_schedule_pressure_set_record_t* pressure_set =
           &pressure_state->pressure_sets.records[limit->pressure_set_id];
@@ -332,4 +306,23 @@ void loom_low_schedule_call_pressure_score_candidate(
       score->units_until_pressure_cliff = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE;
     }
   }
+}
+
+void loom_low_schedule_call_pressure_score_candidate(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_pressure_state_t* pressure_state,
+    uint32_t candidate_node_index, loom_low_schedule_candidate_score_t* score) {
+  if (state->call_pressure == NULL ||
+      candidate_node_index == LOOM_LOW_SCHEDULE_NODE_NONE ||
+      !loom_low_func_call_isa(state->nodes[candidate_node_index].op)) {
+    return;
+  }
+  const iree_host_size_t call_index =
+      loom_low_schedule_call_pressure_find_call(state, candidate_node_index);
+  const loom_low_schedule_call_pressure_record_t* record =
+      &state->call_pressure->records[call_index];
+  loom_low_schedule_call_pressure_score_limits(
+      state->target.descriptor_set, pressure_state,
+      state->call_pressure->limits + record->limit_start, record->limit_count,
+      score);
 }
