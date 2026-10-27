@@ -1,0 +1,85 @@
+// RUN: pass canonicalize
+
+// Unary integer results wrap before they become lane facts. Both predicate
+// values remain possible after negating a runtime predicate.
+func.def @predicate_range(%input: i1) -> (i64, i64) {
+  %values = vector.splat %input : vector<4xi1>
+  %negative = vector.negi %values : vector<4xi1>
+  %lane = vector.extract %negative[0] : vector<4xi1> -> i1
+  %minimum = test.fact_range_lo %lane : i1 -> i64
+  %maximum = test.fact_range_hi %lane : i1 -> i64
+  func.return %minimum, %maximum : i64, i64
+}
+
+// ----
+func.def @predicate_range(%input: i1) -> (i64, i64) {
+  %minimum = scalar.constant 0 : i64
+  %maximum = scalar.constant 1 : i64
+  func.return %minimum, %maximum : i64, i64
+}
+
+// ====
+
+// Uniform summaries preserve signed minimum under negation and absolute value.
+func.def @uniform_minimum() -> (i8, i8, i8) {
+  %values = vector.constant -128 : vector<4xi8>
+  %negative = vector.negi %values : vector<4xi8>
+  %absolute = vector.absi %values : vector<4xi8>
+  %sign = vector.signi %values : vector<4xi8>
+  %n = vector.extract %negative[0] : vector<4xi8> -> i8
+  %a = vector.extract %absolute[0] : vector<4xi8> -> i8
+  %s = vector.extract %sign[0] : vector<4xi8> -> i8
+  func.return %n, %a, %s : i8, i8, i8
+}
+
+// ----
+func.def @uniform_minimum() -> (i8, i8, i8) {
+  %n = scalar.constant -128 : i8
+  %a = scalar.constant -128 : i8
+  %s = scalar.constant -1 : i8
+  func.return %n, %a, %s : i8, i8, i8
+}
+
+// ====
+
+// Small-lane summaries wrap independently at each lane's declared width.
+func.def @mixed_boundaries() -> (i16, i16, i16, i16) {
+  %minimum = scalar.constant -32768 : i16
+  %neighbor = scalar.constant -32767 : i16
+  %values = vector.from_elements %minimum, %neighbor : vector<2xi16>
+  %negative = vector.negi %values : vector<2xi16>
+  %absolute = vector.absi %values : vector<2xi16>
+  %n0 = vector.extract %negative[0] : vector<2xi16> -> i16
+  %n1 = vector.extract %negative[1] : vector<2xi16> -> i16
+  %a0 = vector.extract %absolute[0] : vector<2xi16> -> i16
+  %a1 = vector.extract %absolute[1] : vector<2xi16> -> i16
+  func.return %n0, %n1, %a0, %a1 : i16, i16, i16, i16
+}
+
+// ----
+func.def @mixed_boundaries() -> (i16, i16, i16, i16) {
+  %n0 = scalar.constant -32768 : i16
+  %n1 = scalar.constant 32767 : i16
+  %a0 = scalar.constant -32768 : i16
+  %a1 = scalar.constant 32767 : i16
+  func.return %n0, %n1, %a0, %a1 : i16, i16, i16, i16
+}
+
+// ====
+
+// A range containing signed minimum cannot prove absolute value nonnegative.
+func.def @signed_range(%input: i32) -> (i64, i64) {
+  %values = vector.splat %input : vector<4xi32>
+  %absolute = vector.absi %values : vector<4xi32>
+  %lane = vector.extract %absolute[0] : vector<4xi32> -> i32
+  %minimum = test.fact_range_lo %lane : i32 -> i64
+  %maximum = test.fact_range_hi %lane : i32 -> i64
+  func.return %minimum, %maximum : i64, i64
+}
+
+// ----
+func.def @signed_range(%input: i32) -> (i64, i64) {
+  %minimum = scalar.constant -2147483648 : i64
+  %maximum = scalar.constant 2147483647 : i64
+  func.return %minimum, %maximum : i64, i64
+}

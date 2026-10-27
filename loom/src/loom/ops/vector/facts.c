@@ -3090,14 +3090,16 @@ static iree_status_t loom_vector_integer_binary_summary_facts(
                                                   &result_facts[0]);
 }
 
-static iree_status_t loom_vector_unary_summary_facts(
-    loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
-    loom_value_facts_t* result_facts, loom_vector_unary_transfer_fn_t fn) {
+static iree_status_t loom_vector_integer_unary_summary_facts(
+    loom_fact_context_t* context, int32_t bit_count,
+    const loom_value_facts_t* operand_facts, loom_value_facts_t* result_facts,
+    loom_vector_unary_transfer_fn_t fn) {
   loom_value_facts_t input = {0};
   if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
                                               &input)) {
     loom_value_facts_t element = loom_value_facts_unknown();
     fn(&input, &element);
+    element = loom_value_facts_wrap_integer(element, bit_count);
     return loom_value_facts_make_uniform_element(context, element,
                                                  &result_facts[0]);
   }
@@ -3111,6 +3113,7 @@ static iree_status_t loom_vector_unary_summary_facts(
   loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
   for (iree_host_size_t i = 0; i < input_lanes.count; ++i) {
     fn(&input_lanes.lanes[i], &lanes[i]);
+    lanes[i] = loom_value_facts_wrap_integer(lanes[i], bit_count);
   }
   loom_value_fact_small_static_lanes_t lane_slice = {
       .lanes = lanes,
@@ -3526,13 +3529,15 @@ static iree_status_t loom_vector_float_ternary_summary_facts(
         result_facts, f32_fn, f64_fn, op->instance_flags);                   \
   }
 
-#define LOOM_VECTOR_UNARY_FACTS(name, fn)                              \
+#define LOOM_VECTOR_INTEGER_UNARY_FACTS(name, fn)                      \
   iree_status_t name(loom_fact_context_t* context,                     \
                      const loom_module_t* module, const loom_op_t* op, \
                      const loom_value_facts_t* operand_facts,          \
                      loom_value_facts_t* result_facts) {               \
-    return loom_vector_unary_summary_facts(context, operand_facts,     \
-                                           result_facts, fn);          \
+    const int32_t bit_count = loom_scalar_type_bitwidth(               \
+        loom_vector_result_element_type(module, op));                  \
+    return loom_vector_integer_unary_summary_facts(                    \
+        context, bit_count, operand_facts, result_facts, fn);          \
   }
 
 #define LOOM_VECTOR_BIT_COUNT_FACTS(name, result_accessor, fn)              \
@@ -3814,8 +3819,8 @@ iree_status_t loom_vector_divremui_facts(
       loom_value_facts_remui);
 }
 
-LOOM_VECTOR_UNARY_FACTS(loom_vector_negi_facts, loom_value_facts_negi)
-LOOM_VECTOR_UNARY_FACTS(loom_vector_absi_facts, loom_value_facts_absi)
+LOOM_VECTOR_INTEGER_UNARY_FACTS(loom_vector_negi_facts, loom_value_facts_negi)
+LOOM_VECTOR_INTEGER_UNARY_FACTS(loom_vector_absi_facts, loom_value_facts_absi)
 LOOM_VECTOR_WIDTH_BINARY_FACTS(loom_vector_minsi_facts, loom_value_facts_minsi)
 LOOM_VECTOR_WIDTH_BINARY_FACTS(loom_vector_maxsi_facts, loom_value_facts_maxsi)
 LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_minui_facts,
@@ -3942,7 +3947,8 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_roundevenf_facts,
                               loom_vector_roundeven_f32,
                               loom_vector_roundeven_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_truncf_facts, truncf, trunc)
-LOOM_VECTOR_UNARY_FACTS(loom_vector_signi_facts, loom_vector_signi_transfer)
+LOOM_VECTOR_INTEGER_UNARY_FACTS(loom_vector_signi_facts,
+                                loom_vector_signi_transfer)
 
 iree_status_t loom_vector_index_cast_facts(
     loom_fact_context_t* context, const loom_module_t* module,
@@ -4098,8 +4104,10 @@ iree_status_t loom_vector_extsi_facts(loom_fact_context_t* context,
       input_scalar_type == LOOM_SCALAR_TYPE_I1
           ? loom_vector_sign_extend_i1_transfer
           : loom_vector_passthrough_transfer;
-  IREE_RETURN_IF_ERROR(loom_vector_unary_summary_facts(
-      context, operand_facts, result_facts, transfer_fn));
+  IREE_RETURN_IF_ERROR(loom_vector_integer_unary_summary_facts(
+      context,
+      loom_scalar_type_bitwidth(loom_vector_result_element_type(module, op)),
+      operand_facts, result_facts, transfer_fn));
   IREE_RETURN_IF_ERROR(
       loom_vector_try_define_same_lane_origin(context, module, result, input));
   return loom_vector_try_define_exact_same_lane_origin(context, module, result,
@@ -6029,4 +6037,4 @@ iree_status_t loom_vector_dot4f8_facts(loom_fact_context_t* context,
 #undef LOOM_VECTOR_FLOAT_UNARY_FACTS
 #undef LOOM_VECTOR_BIT_COUNT_FACTS
 #undef LOOM_VECTOR_INTEGER_BINARY_FACTS
-#undef LOOM_VECTOR_UNARY_FACTS
+#undef LOOM_VECTOR_INTEGER_UNARY_FACTS
