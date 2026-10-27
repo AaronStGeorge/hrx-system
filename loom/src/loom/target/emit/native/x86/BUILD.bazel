@@ -165,7 +165,6 @@ loom_cc_library(
     name = "module",
     srcs = ["module.c"],
     hdrs = ["module.h"],
-    visibility = ["//loom/src/loom/target/arch/x86:__pkg__"],
     deps = [
         ":abi",
         ":function",
@@ -180,6 +179,22 @@ loom_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
+    ],
+)
+
+loom_cc_library(
+    name = "elf_compiler_provider",
+    srcs = ["elf_compiler_provider.c"],
+    hdrs = ["elf_compiler_provider.h"],
+    visibility = [
+        "//loom/binding/c/target/x86:__pkg__",
+        "//loom/src/loom/target/configured:__pkg__",
+    ],
+    deps = [
+        ":module",
+        "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/x86:facts",
+        "//loom/src/loom/target/arch/x86:provider",
     ],
 )
 

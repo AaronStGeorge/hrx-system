@@ -28,6 +28,7 @@ load(
     "ARTIFACT_AMDGPU_ELF",
     "ARTIFACT_SPIRV_BINARY",
     "ARTIFACT_WASM_BINARY",
+    "ARTIFACT_X86_ELF",
     "IMPORT_CXX",
     "IMPORT_MLIR",
     "IMPORT_TILELANG",
@@ -92,7 +93,7 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/native/x86/..."],
-        build_requirements = [ARCH_X86],
+        build_requirements = [ARCH_X86, ARTIFACT_X86_ELF],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/spirv/..."],

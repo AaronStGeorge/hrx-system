@@ -33,7 +33,7 @@
    LOOM_CONFIG_COMPILER_HAVE_WASM || LOOM_CONFIG_COMPILER_HAVE_XDNA)
 
 #if LOOM_CONFIG_COMPILER_HAVE_X86
-#include "loom/target/arch/x86/compiler_provider.h"
+#include "loom/target/emit/native/x86/elf_compiler_provider.h"
 #endif  // LOOM_CONFIG_COMPILER_HAVE_X86
 #if LOOM_CONFIG_COMPILER_HAVE_AMDGPU
 #include "loom/target/emit/native/amdgpu/hal_kernel_library.h"
@@ -54,7 +54,7 @@
 #if LOOM_CONFIG_COMPILER_HAVE_ANY_EMITTER
 static const loom_target_provider_t* const kConfiguredEmitterProviders[] = {
 #if LOOM_CONFIG_COMPILER_HAVE_X86
-    &loom_x86_compiler_provider,
+    &loom_x86_elf_compiler_provider,
 #endif  // LOOM_CONFIG_COMPILER_HAVE_X86
 #if LOOM_CONFIG_COMPILER_HAVE_AMDGPU
     &loom_amdgpu_hal_kernel_library_provider,
@@ -115,7 +115,8 @@ static iree_status_t loom_configured_compiler_provider_set_initialize(void) {
 #endif  // LOOM_CONFIG_COMPILER_HAVE_XDNA
 #if LOOM_CONFIG_COMPILER_HAVE_X86
   IREE_RETURN_IF_ERROR(loom_target_provider_set_storage_append_set(
-      &configured_compiler_provider_storage, &loom_x86_compiler_provider_set));
+      &configured_compiler_provider_storage,
+      &loom_x86_elf_compiler_provider_set));
 #endif  // LOOM_CONFIG_COMPILER_HAVE_X86
   return iree_ok_status();
 }

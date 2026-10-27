@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "iree/testing/gtest.h"
-#include "loom/target/arch/x86/compiler_provider.h"
+#include "loom/target/emit/native/x86/elf_compiler_provider.h"
 #include "target.h"
 
 namespace {
@@ -32,7 +32,7 @@ TEST(X86TargetTest, BorrowsX86CompilerProviders) {
       loomc_target_environment_loom_target_environment(environment.get());
   ASSERT_NE(internal_environment, nullptr);
   EXPECT_EQ(internal_environment->provider_set,
-            &loom_x86_compiler_provider_set);
+            &loom_x86_elf_compiler_provider_set);
 }
 
 }  // namespace

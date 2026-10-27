@@ -302,24 +302,6 @@ loom_cc_test(
 endif()
 
 if(LOOM_ARCH_X86)
-loom_cc_library(
-  NAME
-    compiler_provider
-  HDRS
-    "compiler_provider.h"
-  SRCS
-    "compiler_provider.c"
-  DEPS
-    ::facts
-    ::provider
-    loom::target::arch::x86::ops
-    loom::target::emit::native::x86::module
-    loom::target::provider
-  PUBLIC
-)
-endif()
-
-if(LOOM_ARCH_X86)
 loom_check_test_suite(
   NAME
     loom_check_file_test

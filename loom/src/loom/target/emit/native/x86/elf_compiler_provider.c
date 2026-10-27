@@ -4,10 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/x86/compiler_provider.h"
+#include "loom/target/emit/native/x86/elf_compiler_provider.h"
 
 #include "loom/target/arch/x86/facts.h"
-#include "loom/target/arch/x86/ops/ops.h"
 #include "loom/target/arch/x86/provider.h"
 #include "loom/target/emit/native/x86/module.h"
 
@@ -71,7 +70,7 @@ static const loom_target_emitter_t loom_x86_module_emitter = {
     .emit = loom_x86_compiler_emit_module,
 };
 
-const loom_target_provider_t loom_x86_compiler_provider = {
+const loom_target_provider_t loom_x86_elf_compiler_provider = {
     .emitter_list =
         {
             .values =
@@ -86,12 +85,12 @@ const loom_target_provider_t loom_x86_compiler_provider = {
     .canonical_kernel_fact_type = &loom_x86_target_fact_type,
 };
 
-static const loom_target_provider_t* const kLoomX86CompilerProviders[] = {
+static const loom_target_provider_t* const kLoomX86ElfCompilerProviders[] = {
     &loom_x86_target_provider,
-    &loom_x86_compiler_provider,
+    &loom_x86_elf_compiler_provider,
 };
 
-const loom_target_provider_set_t loom_x86_compiler_provider_set = {
-    .providers = kLoomX86CompilerProviders,
-    .provider_count = IREE_ARRAYSIZE(kLoomX86CompilerProviders),
+const loom_target_provider_set_t loom_x86_elf_compiler_provider_set = {
+    .providers = kLoomX86ElfCompilerProviders,
+    .provider_count = IREE_ARRAYSIZE(kLoomX86ElfCompilerProviders),
 };

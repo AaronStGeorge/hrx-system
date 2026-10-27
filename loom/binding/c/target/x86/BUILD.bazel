@@ -19,7 +19,7 @@ package(
 )
 
 _X86_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/arch:x86",
+    "//loom/config/emit:x86_elf",
 ])
 
 loom_cc_library(
@@ -30,7 +30,7 @@ loom_cc_library(
     target_compatible_with = _X86_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
-        "//loom/src/loom/target/arch/x86:compiler_provider",
+        "//loom/src/loom/target/emit/native/x86:elf_compiler_provider",
     ],
     alwayslink = True,
 )
@@ -49,7 +49,7 @@ loom_cc_test(
     deps = [
         ":x86",
         "//loom/binding/c:loomc",
-        "//loom/src/loom/target/arch/x86:compiler_provider",
+        "//loom/src/loom/target/emit/native/x86:elf_compiler_provider",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

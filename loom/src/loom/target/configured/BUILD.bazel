@@ -170,7 +170,7 @@ _CONFIGURED_COMPILER_COPTS = (
 _CONFIGURED_COMPILER_DEPS = (
     iree_select({
         "//loom/config/emit:x86_elf": [
-            "//loom/src/loom/target/arch/x86:compiler_provider",
+            "//loom/src/loom/target/emit/native/x86:elf_compiler_provider",
         ],
         "//conditions:default": [],
     }) +

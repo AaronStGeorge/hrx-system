@@ -6,12 +6,12 @@
 
 #include "loomc/target/x86.h"
 
-#include "loom/target/arch/x86/compiler_provider.h"
+#include "loom/target/emit/native/x86/elf_compiler_provider.h"
 #include "target.h"
 
 loomc_status_t loomc_target_environment_create_x86(
     loomc_allocator_t allocator,
     loomc_target_environment_t** out_target_environment) {
   return loomc_target_environment_create_from_provider_set_internal(
-      &loom_x86_compiler_provider_set, allocator, out_target_environment);
+      &loom_x86_elf_compiler_provider_set, allocator, out_target_environment);
 }

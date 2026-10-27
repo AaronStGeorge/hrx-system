@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_library(
   NAME
     encoding
@@ -23,7 +23,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     encoding_test
@@ -35,10 +35,11 @@ loom_cc_test(
     iree::testing::gtest_main
   LABELS
     "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_library(
   NAME
     transport
@@ -54,7 +55,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     transport_test
@@ -68,10 +69,11 @@ loom_cc_test(
     loom::target::arch::x86::register_classes
   LABELS
     "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_library(
   NAME
     function
@@ -100,7 +102,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     function_test
@@ -115,10 +117,11 @@ loom_cc_test(
     iree::testing::gtest_main
   LABELS
     "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_library(
   NAME
     abi
@@ -140,7 +143,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     abi_test
@@ -172,10 +175,11 @@ loom_cc_test(
     loom::testing::module_ptr
   LABELS
     "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_library(
   NAME
     module
@@ -201,7 +205,24 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
+loom_cc_library(
+  NAME
+    elf_compiler_provider
+  HDRS
+    "elf_compiler_provider.h"
+  SRCS
+    "elf_compiler_provider.c"
+  DEPS
+    ::module
+    loom::target::arch::x86::facts
+    loom::target::arch::x86::provider
+    loom::target::provider
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_library(
   NAME
     loom_check
@@ -222,7 +243,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_check_test_suite(
   NAME
     loom_check_file_test
@@ -238,7 +259,7 @@ loom_check_test_suite(
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 iree_native_test(
   NAME
     "native_diagnostics_test"
@@ -281,7 +302,7 @@ iree_py_test(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     callable_object
@@ -300,7 +321,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     vector_callable_object
@@ -319,7 +340,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     runtime_division_object
@@ -338,7 +359,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     avx512_callable_object
@@ -357,7 +378,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     avx512_bf16_callable_object
@@ -376,7 +397,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     packed_dot_callable_object
@@ -395,7 +416,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     callable_link_test
@@ -413,10 +434,11 @@ loom_cc_test(
     iree::testing::gtest_main
   LABELS
     "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(LOOM_ARCH_X86 AND IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOOM_ARTIFACT_X86_ELF)
 loom_cc_test(
   NAME
     runtime_division_link_test
@@ -430,10 +452,11 @@ loom_cc_test(
     iree::testing::gtest_main
   LABELS
     "iree-build-requirement=loom.arch.x86"
+    "iree-build-requirement=loom.artifact.x86_elf"
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     hal_dispatch_image
@@ -465,7 +488,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_ARCH_X86)
+if(LOOM_ARCH_X86 AND LOOM_ARTIFACT_X86_ELF)
 loom_generated_file(
   NAME
     hal_dispatch_c_api_image
