@@ -79,9 +79,10 @@ TEST(Aie2pLeafObjectTest, EmitsPreparedProgramRepeatedlyWithoutMutation) {
       .minimum_alignment = 32,
   };
   const loom_aie2p_planned_read_only_data_fixup_t read_only_data_fixup = {
-      .bundle_index = 0,
+      .scheduled_packet_index = 0,
       .read_only_data_ordinal = 0,
   };
+  const uint32_t read_only_data_fixup_index = 0;
   const loom_aie2p_planned_code_address_fixup_t code_address_fixup = {
       .bundle_index = 0,
       .target_byte_offset = 4,
@@ -107,6 +108,7 @@ TEST(Aie2pLeafObjectTest, EmitsPreparedProgramRepeatedlyWithoutMutation) {
       .storage_fixup_count = 0,
       .read_only_data_fixups = &read_only_data_fixup,
       .read_only_data_fixup_count = 1,
+      .address_fixup_indices_by_packet = &read_only_data_fixup_index,
       .code_address_fixups = &code_address_fixup,
       .code_address_fixup_count = 1,
       .encoded_byte_length = 6,
