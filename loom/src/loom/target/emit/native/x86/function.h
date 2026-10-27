@@ -55,6 +55,16 @@ typedef struct loom_x86_stack_frame_t {
   } realignment;
 } loom_x86_stack_frame_t;
 
+// Incoming argument addresses retained before the preservation envelope is
+// known. Each row names native instructions, never source operations.
+typedef struct loom_x86_incoming_fixup_t {
+  // Saved pre-alignment pointer load, or UINT32_MAX with static alignment or
+  // a vector input using the shared caller-stack base.
+  uint32_t pointer_instruction;
+  // Argument load with an initial displacement from caller RSP.
+  uint32_t value_instruction;
+} loom_x86_incoming_fixup_t;
+
 // Prepared instructions borrow no IR, schedule, or allocation storage. They
 // remain valid until their arena is reset. The producer consumes each shared
 // packet and its final transport once; byte encoding never revisits the IR.
@@ -113,6 +123,17 @@ bool loom_x86_function_layout_stack(uint32_t storage_byte_length,
                                     uint32_t storage_alignment,
                                     uint16_t saved_registers,
                                     loom_x86_stack_frame_t* out_stack);
+
+// Resolves retained incoming addresses after final stack layout. Argument
+// displacements include callee-save pushes and, without dynamic realignment,
+// the local allocation. Pointer loads address the restoration slot instead.
+// |vector_base_reload_instruction| is the shared vector-base load, or
+// UINT32_MAX when absent. Applies each fixup once without scanning
+// instructions.
+void loom_x86_function_fixup_incoming(loom_x86_function_t* function,
+                                      const loom_x86_incoming_fixup_t* fixups,
+                                      iree_host_size_t fixup_count,
+                                      uint32_t vector_base_reload_instruction);
 
 // Returns the allocator reservations needed by the native function envelope.
 // Descriptor fragments without GPR values need no reservation: the envelope

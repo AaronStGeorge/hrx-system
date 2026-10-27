@@ -275,6 +275,100 @@ TEST(FunctionStackLayoutTest, AdmitsOnlyEncodableAdjustments) {
   EXPECT_FALSE(loom_x86_function_layout_stack(INT32_MAX - 63u, 64, 0, &stack));
 }
 
+TEST(FunctionStackLayoutTest, IncomingAddressesFollowFinalPreservation) {
+  struct IncomingCase {
+    // Local extent before ABI padding and any restoration slot.
+    uint32_t storage_byte_length;
+    // Required body stack alignment.
+    uint32_t alignment;
+    // Architectural callee-saved GPRs written by the body.
+    uint16_t saved_registers;
+    // Displacement added to each argument's caller-stack offset.
+    uint32_t argument_adjustment;
+    // Restoration slot displacement, or zero for static alignment.
+    uint32_t saved_pointer_offset;
+  };
+  const IncomingCase cases[] = {
+      {0, 8, 1u << 5, 16, 0},
+      {32, 8, 0, 40, 0},
+      {32, 16, 0, 48, 0},
+      {32, 16, 1u << 5, 48, 0},
+      {32, 16, (1u << 3) | (1u << 12), 64, 0},
+      {32, 32, 0, 8, 32},
+      {40, 64, 1u << 5, 16, 40},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "storage=" << test_case.storage_byte_length
+                 << " alignment=" << test_case.alignment
+                 << " saved=" << test_case.saved_registers);
+    loom_x86_instruction_t instructions[5] = {};
+    loom_x86_function_t function = {
+        .instructions = instructions,
+        .saved_registers = test_case.saved_registers,
+    };
+    if (test_case.storage_byte_length != 0) {
+      // Local storage is already relative to the final RSP, not caller RSP.
+      loom_x86_function_append(&function, LOOM_X86_ENCODING_FORM_STORE,
+                               0x89 | LOOM_X86_ENCODING_REX_W,
+                               {.immediate = 24, .inputs = {11, 4}},
+                               UINT32_MAX);
+    }
+    const bool realigned = test_case.alignment > 16;
+    uint32_t vector_base = UINT32_MAX;
+    if (realigned) {
+      vector_base = static_cast<uint32_t>(function.instruction_count);
+      loom_x86_function_append(&function, LOOM_X86_ENCODING_FORM_LOAD,
+                               0x8b | LOOM_X86_ENCODING_REX_W,
+                               {.result = 11, .inputs = {4}}, UINT32_MAX);
+    }
+    loom_x86_incoming_fixup_t fixups[2] = {
+        {UINT32_MAX, static_cast<uint32_t>(function.instruction_count)},
+        {UINT32_MAX, 0},
+    };
+    loom_x86_transport_instruction_t vector_load;
+    ASSERT_TRUE(loom_x86_transport_select_abi_storage(
+        LOOM_X86_STORAGE_TRANSFER_LOAD, LOOM_X86_REGISTER_CLASS_YMM, 32, 0,
+        realigned ? 11 : 4, 0, &vector_load));
+    loom_x86_function_append_transport(&function, &vector_load);
+    if (realigned) {
+      fixups[1].pointer_instruction =
+          static_cast<uint32_t>(function.instruction_count);
+      loom_x86_function_append(&function, LOOM_X86_ENCODING_FORM_LOAD,
+                               0x8b | LOOM_X86_ENCODING_REX_W,
+                               {.result = 0, .inputs = {4}}, UINT32_MAX);
+    }
+    fixups[1].value_instruction =
+        static_cast<uint32_t>(function.instruction_count);
+    loom_x86_function_append(
+        &function, LOOM_X86_ENCODING_FORM_LOAD, 0x8b | LOOM_X86_ENCODING_REX_W,
+        {
+            .immediate = 32,
+            .result = 0,
+            .inputs = {static_cast<uint8_t>(realigned ? 0 : 4)},
+        },
+        UINT32_MAX);
+    ASSERT_TRUE(loom_x86_function_layout_stack(
+        test_case.storage_byte_length, test_case.alignment,
+        function.saved_registers, &function.stack));
+    loom_x86_function_fixup_incoming(&function, fixups, IREE_ARRAYSIZE(fixups),
+                                     vector_base);
+    if (test_case.storage_byte_length != 0) {
+      EXPECT_EQ(instructions[0].operands.immediate, 24u);
+    }
+    EXPECT_EQ(instructions[fixups[0].value_instruction].operands.immediate,
+              test_case.argument_adjustment);
+    EXPECT_EQ(instructions[fixups[1].value_instruction].operands.immediate,
+              32u + test_case.argument_adjustment);
+    if (realigned) {
+      EXPECT_EQ(instructions[vector_base].operands.immediate,
+                test_case.saved_pointer_offset);
+      EXPECT_EQ(instructions[fixups[1].pointer_instruction].operands.immediate,
+                test_case.saved_pointer_offset);
+    }
+  }
+}
+
 TEST_F(FunctionTest, DirtyUpperVectorStateCleansBeforeReturn) {
   iree_host_size_t block_starts[] = {0, 0};
   loom_x86_function_t function = {

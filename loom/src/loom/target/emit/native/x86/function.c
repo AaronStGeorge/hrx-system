@@ -24,13 +24,6 @@ enum {
   LOOM_X86_RETAINED_RESULT_POINTER_REGISTER = 15,
 };
 
-typedef struct loom_x86_incoming_fixup_t {
-  // Saved pre-alignment pointer load, or UINT32_MAX with static alignment.
-  uint32_t pointer_instruction;
-  // Incoming argument load whose displacement is relative to caller RSP.
-  uint32_t value_instruction;
-} loom_x86_incoming_fixup_t;
-
 typedef enum loom_x86_incoming_register_group_e {
   LOOM_X86_INCOMING_REGISTER_GROUP_ALL = 0,
   LOOM_X86_INCOMING_REGISTER_GROUP_GPR = 1,
@@ -261,6 +254,33 @@ bool loom_x86_function_layout_stack(uint32_t storage_byte_length,
   return true;
 }
 
+void loom_x86_function_fixup_incoming(loom_x86_function_t* function,
+                                      const loom_x86_incoming_fixup_t* fixups,
+                                      iree_host_size_t fixup_count,
+                                      uint32_t vector_base_reload_instruction) {
+  const uint32_t incoming_offset =
+      8u * (1u + iree_math_count_ones_u32(function->saved_registers));
+  for (iree_host_size_t i = 0; i < fixup_count; ++i) {
+    const loom_x86_incoming_fixup_t* fixup = &fixups[i];
+    loom_x86_instruction_t* load =
+        &function->instructions[fixup->value_instruction];
+    if (fixup->pointer_instruction != UINT32_MAX) {
+      function->instructions[fixup->pointer_instruction].operands.immediate =
+          function->stack.realignment.saved_pointer_offset;
+    }
+    if (function->stack.realignment.mask) {
+      load->operands.immediate += incoming_offset;
+    } else {
+      load->operands.immediate +=
+          incoming_offset + function->stack.allocation_size;
+    }
+  }
+  if (vector_base_reload_instruction != UINT32_MAX) {
+    function->instructions[vector_base_reload_instruction].operands.immediate =
+        function->stack.realignment.saved_pointer_offset;
+  }
+}
+
 static iree_status_t loom_x86_function_stack_frame(
     loom_x86_function_builder_t* builder) {
   loom_x86_function_t* function = builder->function;
@@ -277,27 +297,9 @@ static iree_status_t loom_x86_function_stack_frame(
         builder, LOOM_ERR_X86_004,
         IREE_SV("a stack adjustment within signed 32 bits"));
   }
-  const uint32_t incoming_offset =
-      8u * (1u + iree_math_count_ones_u32(function->saved_registers));
-  for (iree_host_size_t i = 0; i < builder->incoming.count; ++i) {
-    const loom_x86_incoming_fixup_t* fixup = &builder->incoming.fixups[i];
-    loom_x86_instruction_t* load =
-        &function->instructions[fixup->value_instruction];
-    if (fixup->pointer_instruction != UINT32_MAX) {
-      function->instructions[fixup->pointer_instruction].operands.immediate =
-          function->stack.realignment.saved_pointer_offset;
-    }
-    if (function->stack.realignment.mask) {
-      load->operands.immediate += incoming_offset;
-    } else {
-      load->operands.immediate +=
-          incoming_offset + function->stack.allocation_size;
-    }
-  }
-  if (builder->incoming.vector_base_reload_instruction != UINT32_MAX) {
-    function->instructions[builder->incoming.vector_base_reload_instruction]
-        .operands.immediate = function->stack.realignment.saved_pointer_offset;
-  }
+  loom_x86_function_fixup_incoming(
+      function, builder->incoming.fixups, builder->incoming.count,
+      builder->incoming.vector_base_reload_instruction);
   return iree_ok_status();
 }
 
