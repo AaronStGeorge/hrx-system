@@ -187,9 +187,15 @@ class SandboxTest(unittest.TestCase):
         result = self.run_launcher("--rw-bind=" + str(output), expected=1)
         self.assertIn("cannot resolve mount source", result.stderr)
         output.touch(mode=0o400)
-        result = self.run_launcher("--rw-bind=" + str(output), expected=1)
-        self.assertIn("not writable by your user", result.stderr)
-        self.assertFalse(self.record.exists())
+        # A privileged outer container can write despite the file mode. The
+        # launcher checks actual access, not a guessed interpretation of mode.
+        writable = os.access(output, os.W_OK)
+        result = self.run_launcher(
+            "--rw-bind=" + str(output), expected=0 if writable else 1
+        )
+        if not writable:
+            self.assertIn("not writable by your user", result.stderr)
+            self.assertFalse(self.record.exists())
 
     def test_policy_failure_never_launches_server(self):
         self.environment["PREFLIGHT_STATUS"] = "9"

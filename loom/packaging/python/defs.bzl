@@ -56,7 +56,15 @@ def loom_python_wheel(name, version, catalog = "", testonly = False):
         testonly = testonly,
         description_file = Label("//loom/packaging/python:PYPI_README.md"),
         distribution = "hrx-loom",
-        data_files = {Label("//loom/packaging/python:native"): "scripts/"},
+        data_files = select({
+            "@platforms//os:linux": {
+                Label("//loom/packaging/python:native"): "scripts/",
+                Label("//loom/packaging/linux:loom-serve-sandbox"): "scripts/",
+            },
+            "//conditions:default": {
+                Label("//loom/packaging/python:native"): "scripts/",
+            },
+        }),
         entry_points = {"console_scripts": [
             "loom-compile-report = loom.tools.compile_report:main",
             "loom-export-cxx = loom.tools.export_cxx:main",

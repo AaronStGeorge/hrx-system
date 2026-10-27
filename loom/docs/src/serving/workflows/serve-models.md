@@ -12,6 +12,9 @@ It requires an installed `loom-serve` with the CPU target and task HAL enabled,
 plus `curl` and `jq`. [Acquiring Loom](../../getting-started/acquiring-loom.md)
 describes obtaining the tools.
 
+[Sandboxing](../sandboxing.md) provides a Linux launcher for the same server
+over a Unix socket, with explicit file and accelerator access.
+
 For a learned model installed from a single card URL, follow
 [fetch and serve a model](fetch-and-serve.md). The remainder of this page explains
 explicit deployment and runtime registration using the small arithmetic package.

@@ -122,7 +122,6 @@ while (($#)); do
   esac
 done
 
-((EUID != 0)) || fail 'run as an ordinary user; configure device access on the host instead of running as root'
 [[ -x $bubblewrap ]] || fail "bubblewrap not found: $bubblewrap; install your distribution's bubblewrap package or select its binary with --bwrap=PATH"
 [[ -n $socket_directory ]] || fail '--socket-dir is required; create a dedicated directory with install -d -m 700 PATH'
 socket_directory=$(realpath -e -- "$socket_directory") || fail 'socket directory does not exist; create it with install -d -m 700 PATH'

@@ -14,6 +14,11 @@ headers, so it works without a separate compiler or source checkout.
 Linux wheel packaging gives each native file an adjacent-library search path;
 installed commands load their matching companions without Bazel build paths.
 
+Linux wheels also install `loom-serve-sandbox`, a small Bash launcher using the
+host's bubblewrap package. It exposes selected model paths and accelerators to
+a networkless server over a shared Unix socket. See
+[Sandboxing](../../docs/src/serving/sandboxing.md) for setup and the boundary.
+
 The Python APIs use the standard library. The optional `hf` extra enables Hugging
 Face acquisition; local and HTTP model sources work without it. Model weights
 are acquired separately with `loom-fetch`.
