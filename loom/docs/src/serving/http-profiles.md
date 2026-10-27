@@ -237,6 +237,12 @@ unsupported or contradictory controls reject before admission. Reasoning-aware
 models return `reasoning_content` separately from answer `content`, in both SSE
 deltas and complete messages.
 
+`preserve_thinking` is a boolean source-policy control for reasoning in prior
+assistant messages. `chat_template_kwargs` accepts `enable_thinking`,
+`reasoning_effort`, and `preserve_thinking` with the same types. The source policy
+resolves top-level and nested spellings together; contradictory controls reject,
+and the nested object does not enable arbitrary template options or execution.
+
 `tools` accepts up to 4096 function declarations. Omitted `tool_choice` or
 `"auto"` allows tool calls. `"none"` disables tools for the current response,
 including when a client retains its tool catalog and prior tool calls while

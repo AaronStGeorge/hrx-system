@@ -28,6 +28,10 @@ global.rodata.def @thinking = bytes("656e61626c655f7468696e6b696e67")
 
 global.rodata.def @effort = bytes("726561736f6e696e675f6566666f7274")
 
+global.rodata.def @preserve = bytes("70726573657276655f7468696e6b696e67")
+
+global.rodata.def @template = bytes("636861745f74656d706c6174655f6b7761726773")
+
 global.rodata.def @options = bytes("6d6f64656c5f6f7074696f6e73")
 
 global.rodata.def @invalid = bytes("746578742066697874757265206163636570747320612f622f78206d6573736167657320776974686f757420746f6f6c732c20726561736f6e696e67206f72206d6f64656c206f7074696f6e73")
@@ -194,6 +198,8 @@ func.def public @chat_begin(%request: buffer, %tools: buffer) -> (buffer, i64) {
   %records = buffer.view %fields[%c0] : buffer -> view<[%count]x5xi64>
   %thinking = global.load @thinking : buffer
   %effort = global.load @effort : buffer
+  %preserve = global.load @preserve : buffer
+  %template = global.load @template : buffer
   %options = global.load @options : buffer
   scf.for %i = [%c0_index to %count step %c1] {
     %begin64 = view.load %records[%i, 0] : view<[%count]x5xi64> -> i64
@@ -216,9 +222,13 @@ func.def public @chat_begin(%request: buffer, %tools: buffer) -> (buffer, i64) {
     }
     %is_thinking = func.call @equal(%key, %thinking) : (buffer, buffer) -> (i1)
     %is_effort = func.call @equal(%key, %effort) : (buffer, buffer) -> (i1)
+    %is_preserve = func.call @equal(%key, %preserve) : (buffer, buffer) -> (i1)
+    %is_template = func.call @equal(%key, %template) : (buffer, buffer) -> (i1)
+    %history_options = scalar.ori %is_preserve, %is_template : i1
+    %unsupported = scalar.ori %is_effort, %history_options : i1
     %false = scalar.constant false : i1
-    %no_effort = scalar.cmpi eq, %is_effort, %false : i1
-    func.call @check(%no_effort) : (i1)
+    %supported = scalar.cmpi eq, %unsupported, %false : i1
+    func.call @check(%supported) : (i1)
     %is_options = func.call @equal(%key, %options) : (buffer, buffer) -> (i1)
     scf.if %is_thinking {
       %value_type = view.load %records[%i, 4] : view<[%count]x5xi64> -> i64

@@ -893,11 +893,21 @@ static iree_status_t loom_serve_text_chat_request_render(
       {"top_p", LOOM_SERVE_TEXT_CHAT_NUMBER},
       {"top_k", LOOM_SERVE_TEXT_CHAT_NUMBER},
       {"seed", LOOM_SERVE_TEXT_CHAT_NUMBER},
-      {"reasoning_effort", LOOM_SERVE_TEXT_CHAT_STRING}};
+      {"reasoning_effort", LOOM_SERVE_TEXT_CHAT_STRING},
+      {"preserve_thinking", LOOM_SERVE_TEXT_CHAT_BOOL},
+      {"chat_template_kwargs", LOOM_SERVE_TEXT_CHAT_OBJECT}};
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
       object, IREE_ARRAYSIZE(fields), fields, 0));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[1]));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[0]));
+  if (fields[17].value.data) {
+    loom_serve_text_chat_field_t options[] = {
+        {"enable_thinking", LOOM_SERVE_TEXT_CHAT_BOOL},
+        {"reasoning_effort", LOOM_SERVE_TEXT_CHAT_STRING},
+        {"preserve_thinking", LOOM_SERVE_TEXT_CHAT_BOOL}};
+    IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
+        fields[17].value, IREE_ARRAYSIZE(options), options, 0));
+  }
   iree_string_builder_reset(&history->scratch);
   IREE_RETURN_IF_ERROR(
       loom_serve_text_chat_append_decoded(&history->scratch, fields[0].value));
