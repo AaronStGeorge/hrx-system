@@ -1,10 +1,8 @@
-// All native widths reinterpret one immutable payload and reuse its derived pair.
+// All native widths reinterpret one inline payload and reuse its derived pair.
 // RUN: emit source-low target=amd.xdna.aie2p:core output=module
 
-global.rodata.def @table = align(8) bytes("00000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f00")
-
 func.def @immutable_widths(%packed_bf16: vector<32xi8>, %packed_f32: vector<16xi8>, %packed_f64: vector<8xi8>) -> (vector<32xbf16>, vector<16xf32>, vector<8xf64>) {
-  %table = global.load @table : buffer
+  %table = buffer.constant align(8) bytes("00000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f00") : buffer
   %origin = index.constant 0 : offset
   %view_bf16 = buffer.view %table[%origin] : buffer -> view<32xbf16>
   %view_f32 = buffer.view %table[%origin] : buffer -> view<16xf32>
@@ -25,8 +23,6 @@ func.def @immutable_widths(%packed_bf16: vector<32xi8>, %packed_f32: vector<16xi
 }
 
 // ----
-global.rodata.def @table = align(8) bytes("00000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f00")
-
 low.func.def target<amd.xdna.aie2p.core>(@__loom_target_context_0_0) abi(object_function) @immutable_widths(%packed_bf16: reg<aie2p.vec256 x2>, %packed_f32: reg<aie2p.vec256 x2>, %packed_f64: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>) asm {
   %6 = mov.short 31
   %mask_bf16 = vbcst.8 %6
@@ -54,8 +50,8 @@ low.func.def target<amd.xdna.aie2p.core>(@__loom_target_context_0_0) abi(object_
   %27 = vups.4x.w-to-c.unsigned %26, %16
   %28 = slice %27[0] : reg<aie2p.mbms x2> -> reg<aie2p.mbms>
   %indices_f64 = vmov.accumulator512.to.vector512 %28
-  %30 = mov.local-address @table$aie2p$lookup$ab
-  %31 = mov.local-address @table$aie2p$lookup$cd
+  %30 = mov.local-address @__low_rodata_d3e6b51f$aie2p$lookup$ab
+  %31 = mov.local-address @__low_rodata_d3e6b51f$aie2p$lookup$cd
   %32 = mov.address-to-scalar %30
   %33 = mov.address-to-scalar %31
   %34 = vbcst.32 %32
@@ -121,9 +117,11 @@ low.func.def target<amd.xdna.aie2p.core>(@__loom_target_context_0_0) abi(object_
   return %result_bf16, %result_f32, %result_f64
 }
 
-global.rodata.def @table$aie2p$lookup$ab = align(64) conflicts([@table$aie2p$lookup$cd]) bytes("00000100020003000400050006000700080009000a000b000c000d000e000f0000000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f0010001100120013001400150016001700180019001a001b001c001d001e001f00")
+global.rodata.def @__low_rodata_d3e6b51f = align(8) bytes("00000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f00")
 
-global.rodata.def @table$aie2p$lookup$cd = align(64) conflicts([@table$aie2p$lookup$ab]) bytes("00000100020003000400050006000700080009000a000b000c000d000e000f0000000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f0010001100120013001400150016001700180019001a001b001c001d001e001f00")
+global.rodata.def @__low_rodata_d3e6b51f$aie2p$lookup$ab = align(64) conflicts([@__low_rodata_d3e6b51f$aie2p$lookup$cd]) bytes("00000100020003000400050006000700080009000a000b000c000d000e000f0000000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f0010001100120013001400150016001700180019001a001b001c001d001e001f00")
+
+global.rodata.def @__low_rodata_d3e6b51f$aie2p$lookup$cd = align(64) conflicts([@__low_rodata_d3e6b51f$aie2p$lookup$ab]) bytes("00000100020003000400050006000700080009000a000b000c000d000e000f0000000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f0010001100120013001400150016001700180019001a001b001c001d001e001f00")
 
 aie2p.target<core> @__loom_target_context_0_0
 

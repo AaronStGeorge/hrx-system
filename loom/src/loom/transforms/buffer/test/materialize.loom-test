@@ -1,0 +1,148 @@
+// RUN: pass materialize-buffer-constants
+
+// Pool anonymous bytes across functions and forms, retaining UTF8 and the
+// strongest alignment. Explicit named objects keep their own identity.
+global.rodata.def @named = utf8("hello")
+
+func.def @first() -> (buffer, buffer) {
+  %raw = buffer.constant bytes("68656c6c6f") : buffer
+  %text = buffer.constant align(16) utf8("hello") : buffer
+  func.return %raw, %text : buffer, buffer
+}
+
+func.def @second() -> (buffer, buffer) {
+  %same = buffer.constant align(8) utf8("hello") : buffer
+  %empty = buffer.constant utf8("") : buffer
+  func.return %same, %empty : buffer, buffer
+}
+
+// ----
+global.rodata.def @named = utf8("hello")
+
+func.def @first() -> (buffer, buffer) {
+  %raw = global.load @__low_rodata_34dd3478 : buffer
+  %text = global.load @__low_rodata_34dd3478 : buffer
+  func.return %raw, %text : buffer, buffer
+}
+
+func.def @second() -> (buffer, buffer) {
+  %same = global.load @__low_rodata_34dd3478 : buffer
+  %empty = global.load @__low_rodata_050c5d1f : buffer
+  func.return %same, %empty : buffer, buffer
+}
+
+global.rodata.def @__low_rodata_34dd3478 = align(16) utf8("hello")
+
+global.rodata.def @__low_rodata_050c5d1f = align(1) utf8("")
+
+// ====
+
+// Each initialized buffer remains a fresh allocation with its authored pool;
+// only the immutable initial contents are shared.
+func.def @private_initialization(%pool: pool) {
+  %first = buffer.alloca.init<private> align(4) utf8("hello") : buffer
+  %second = buffer.alloca.init<private> pool(%pool) align(8) bytes("68656c6c6f") : buffer
+  %empty = buffer.alloca.init<private> align(1) bytes("") : buffer
+  test.use %first, %second, %empty : buffer, buffer, buffer
+  func.return
+}
+
+// ----
+func.def @private_initialization(%pool: pool) {
+  %4 = global.load @__low_rodata_34dd3478 : buffer
+  %5 = index.constant 5 : offset
+  %first = buffer.alloca<private> align(4) %5 : buffer
+  %7 = index.constant 0 : offset
+  buffer.copy %4[%7], %first[%7], %5
+  %8 = global.load @__low_rodata_34dd3478 : buffer
+  %9 = index.constant 5 : offset
+  %second = buffer.alloca<private> pool(%pool) align(8) %9 : buffer
+  %11 = index.constant 0 : offset
+  buffer.copy %8[%11], %second[%11], %9
+  %12 = global.load @__low_rodata_050c5d1f : buffer
+  %13 = index.constant 0 : offset
+  %empty = buffer.alloca<private> align(1) %13 : buffer
+  test.use %first, %second, %empty : buffer, buffer, buffer
+  func.return
+}
+
+global.rodata.def @__low_rodata_34dd3478 = align(8) utf8("hello")
+
+global.rodata.def @__low_rodata_050c5d1f = align(1) bytes("")
+
+// ====
+// RUN: pass materialize-buffer-constants,canonicalize
+
+// A multidimensional group partitions an odd payload length. This also leaves
+// workitems with zero-length ranges; all participants still reach publication.
+kernel.def @collective_initialization() {
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c2, %c2) : index
+} launch() {
+  %shared = buffer.alloca.init<workgroup> align(4) utf8("hello") : buffer
+  test.use %shared : buffer
+  kernel.return
+}
+
+// ----
+kernel.def @collective_initialization() {
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c2, %c2) : index
+} launch() {
+  %4 = global.load @__low_rodata_34dd3478 : buffer
+  %5 = index.constant 5 : offset
+  %shared = buffer.alloca<workgroup> align(4) %5 : buffer
+  %9 = index.constant 5 : index
+  %10 = kernel.workitem.id<z> : index
+  %15 = kernel.workitem.id<y> : index
+  %38 = index.constant 2 : index
+  %37 = index.madd %10, %38, %15 : index
+  %20 = kernel.workitem.id<x> : index
+  %36 = index.constant 4 : index
+  %35 = index.madd %37, %36, %20 : index
+  %34 = index.constant 1 : index
+  %29 = index.min %35, %9 : index
+  %30 = index.sub %9, %29 : index
+  %31 = index.min %30, %34 : index
+  %32 = index.cast %29 : index to offset
+  %33 = index.cast %31 : index to offset
+  buffer.copy %4[%32], %shared[%32], %33
+  kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+  test.use %shared : buffer
+  kernel.return
+}
+
+global.rodata.def @__low_rodata_34dd3478 = align(4) utf8("hello")
+
+// ====
+// RUN: pass materialize-buffer-constants,canonicalize
+
+// Empty storage still carries the collective rendezvous contract.
+kernel.def @empty_collective() {
+  %c1 = index.constant 1 : index
+  %width = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%width, %c1, %c1) : index
+} launch() {
+  %shared = buffer.alloca.init<workgroup> align(1) bytes("") : buffer
+  test.use %shared : buffer
+  kernel.return
+}
+
+// ----
+kernel.def @empty_collective() {
+  %c1 = index.constant 1 : index
+  %width = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%width, %c1, %c1) : index
+} launch() {
+  %4 = index.constant 0 : offset
+  %shared = buffer.alloca<workgroup> align(1) %4 : buffer
+  kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+  test.use %shared : buffer
+  kernel.return
+}
+
+global.rodata.def @__low_rodata_050c5d1f = align(1) bytes("")

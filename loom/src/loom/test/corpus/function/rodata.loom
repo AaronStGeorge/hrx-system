@@ -3,12 +3,8 @@ global.rodata.def @table = align(64) bytes("1122334480ff007e")
 // Sixteen words follow 7 + 3 * index across two 32-byte table blocks.
 global.rodata.def @gather_words = align(32) bytes("070000000a0000000d000000100000001300000016000000190000001c0000001f0000002200000025000000280000002b0000002e0000003100000034000000")
 
-global.rodata.def @empty = bytes("")
-
-global.rodata.def @suffix = align(2) bytes("aabbcc")
-
 func.def @rodata_table() -> (buffer) {
-  %table = global.load @table : buffer
+  %table = buffer.constant align(64) bytes("1122334480ff007e") : buffer
   func.return %table : buffer
 }
 
@@ -57,8 +53,8 @@ func.def @rodata_copy(%start: i64, %count: i64) -> (i32, i32) {
 }
 
 func.def @rodata_extents() -> (buffer, buffer) {
-  %empty = global.load @empty : buffer
-  %suffix = global.load @suffix : buffer
+  %empty = buffer.constant utf8("") : buffer
+  %suffix = buffer.constant align(2) bytes("aabbcc") : buffer
   func.return %empty, %suffix : buffer, buffer
 }
 
@@ -163,13 +159,11 @@ check.scenario @rodata_extent_values {
   check.return
 }
 
-global.rodata.def @bf16_pairs = align(32) bytes("803f004040408040a040c040e040004110412041304140415041604170418041884190419841a041a841b041b841c041c841d041d841e041e841f041f8410042")
-
 // One immutable table is observed as packed BF16 pairs, individual halfwords,
 // and raw 64-bit values. Runtime masks define each lookup domain.
 func.def @immutable_gather(%input: buffer, %output: buffer) {
   %source, %destination = buffer.assume.alignment %input, %output {minimum_alignment = 64} : buffer, buffer
-  %table = global.load @bf16_pairs : buffer
+  %table = buffer.constant align(32) bytes("803f004040408040a040c040e040004110412041304140415041604170418041884190419841a041a841b041b841c041c841d041d841e041e841f041f8410042") : buffer
   %origin = index.constant 0 : offset
   %table_i32 = buffer.view %table[%origin] : buffer -> view<16xi32>
   %table_bf16 = buffer.view %table[%origin] : buffer -> view<32xbf16>

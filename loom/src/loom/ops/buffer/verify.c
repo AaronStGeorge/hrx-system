@@ -114,6 +114,14 @@ static bool loom_buffer_try_get_local_memory_space_fact(
     *out_memory_space = loom_buffer_alloca_memory_space(defining_op);
     return true;
   }
+  if (loom_buffer_alloca_init_isa(defining_op)) {
+    *out_memory_space = loom_buffer_alloca_init_memory_space(defining_op);
+    return true;
+  }
+  if (loom_buffer_constant_isa(defining_op)) {
+    *out_memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT;
+    return true;
+  }
   if (loom_buffer_assume_memory_space_isa(defining_op)) {
     *out_memory_space =
         loom_buffer_assume_memory_space_memory_space(defining_op);
@@ -147,17 +155,56 @@ static iree_status_t loom_buffer_verify_memory_space_refinement(
       iree_make_cstring_view(expected));
 }
 
+static iree_status_t loom_buffer_verify_alignment(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t name, int64_t alignment) {
+  if (!iree_math_is_power_of_two_i64(alignment)) {
+    return loom_buffer_emit_attribute_value_constraint(
+        emitter, op, name, alignment,
+        IREE_SV("positive power-of-two byte alignment"));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_buffer_constant_verify(const loom_module_t* module,
+                                          const loom_op_t* op,
+                                          iree_diagnostic_emitter_t emitter) {
+  if (!loom_buffer_constant_has_alignment(op)) {
+    return iree_ok_status();
+  }
+  return loom_buffer_verify_alignment(emitter, op, IREE_SV("alignment"),
+                                      loom_buffer_constant_alignment(op));
+}
+
 iree_status_t loom_buffer_alloca_verify(const loom_module_t* module,
                                         const loom_op_t* op,
                                         iree_diagnostic_emitter_t emitter) {
-  int64_t base_alignment = loom_buffer_alloca_base_alignment(op);
-  if (!iree_math_is_power_of_two_i64(base_alignment)) {
-    return loom_buffer_emit_attribute_value_constraint(
-        emitter, op, IREE_SV("base_alignment"), base_alignment,
-        IREE_SV("positive power-of-two byte alignment"));
-  }
+  IREE_RETURN_IF_ERROR(
+      loom_buffer_verify_alignment(emitter, op, IREE_SV("base_alignment"),
+                                   loom_buffer_alloca_base_alignment(op)));
   return loom_buffer_verify_allocatable_memory_space(
       emitter, op, loom_buffer_alloca_memory_space(op));
+}
+
+loom_trait_flags_t loom_buffer_alloca_init_effective_traits(
+    const loom_module_t* module, const loom_op_t* op) {
+  const loom_trait_flags_t collective_traits =
+      LOOM_TRAIT_CONVERGENT | LOOM_TRAIT_MEMORY_FENCE;
+  const loom_trait_flags_t traits = op->traits & ~collective_traits;
+  return loom_buffer_alloca_init_memory_space(op) ==
+                 LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP
+             ? traits | collective_traits
+             : traits;
+}
+
+iree_status_t loom_buffer_alloca_init_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(
+      loom_buffer_verify_alignment(emitter, op, IREE_SV("base_alignment"),
+                                   loom_buffer_alloca_init_base_alignment(op)));
+  return loom_buffer_verify_allocatable_memory_space(
+      emitter, op, loom_buffer_alloca_init_memory_space(op));
 }
 
 iree_status_t loom_buffer_pack_verify(const loom_module_t* module,

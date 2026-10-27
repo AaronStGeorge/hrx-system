@@ -1,0 +1,119 @@
+// RUN: roundtrip
+
+func.def @literal_forms(%pool: pool) {
+  %text = buffer.constant utf8("héllo\u0000") : buffer
+  %bytes = buffer.constant align(32) bytes("00ff80") : buffer
+  %empty = buffer.constant utf8("") : buffer
+  %private = buffer.alloca.init<private> align(1) utf8("ready") : buffer
+  %shared = buffer.alloca.init<workgroup> pool(%pool) align(16) bytes("00010203") : buffer
+  %global = buffer.alloca.init<global> align(4) bytes("00010203") : buffer
+  %host = buffer.alloca.init<host> align(8) bytes("") : buffer
+  %generic = buffer.alloca.init<generic> align(1) utf8("ready") : buffer
+  test.use %text, %bytes, %empty, %private, %shared, %global, %host, %generic : buffer, buffer, buffer, buffer, buffer, buffer, buffer, buffer
+  func.return
+}
+
+// ====
+// RUN: pass canonicalize
+
+func.def @literal_facts() {
+  %text = buffer.constant align(16) utf8("hé\u0000") : buffer
+  %length = buffer.length %text
+  %alignment = test.fact_buffer_min_alignment %text : buffer -> i64
+  %space = test.fact_buffer_memory_space %text : buffer -> i64
+  %empty = buffer.constant bytes("") : buffer
+  %empty_length = buffer.length %empty
+  %empty_alignment = test.fact_buffer_min_alignment %empty : buffer -> i64
+  %private = buffer.alloca.init<private> align(8) bytes("0001020304") : buffer
+  %private_length = buffer.length %private
+  %private_alignment = test.fact_buffer_min_alignment %private : buffer -> i64
+  %private_varying = test.fact_lane_varying %private : buffer -> i1
+  %shared = buffer.alloca.init<workgroup> align(4) utf8("ready") : buffer
+  %shared_length = buffer.length %shared
+  %shared_uniform = test.fact_workgroup_uniform %shared : buffer -> i1
+  test.use %length, %alignment, %space, %empty_length, %empty_alignment, %private_length, %private_alignment, %private_varying, %shared_length, %shared_uniform : offset, i64, i64, offset, i64, offset, i64, i1, offset, i1
+  func.return
+}
+
+// ----
+func.def @literal_facts() {
+  %length = index.constant 4 : offset
+  %alignment = scalar.constant 16 : i64
+  %space = scalar.constant 4 : i64
+  %empty_length = index.constant 0 : offset
+  %empty_alignment = scalar.constant 1 : i64
+  %private_length = index.constant 5 : offset
+  %private_alignment = scalar.constant 8 : i64
+  %private_varying = scalar.constant true : i1
+  %shared = buffer.alloca.init<workgroup> align(4) utf8("ready") : buffer
+  %shared_length = index.constant 5 : offset
+  %shared_uniform = scalar.constant true : i1
+  test.use %length, %alignment, %space, %empty_length, %empty_alignment, %private_length, %private_alignment, %private_varying, %shared_length, %shared_uniform : offset, i64, i64, offset, i64, offset, i64, i1, offset, i1
+  func.return
+}
+
+// ====
+// RUN: pass cse
+
+func.def @fresh_writable_identity() {
+  %constant_a = buffer.constant utf8("abc") : buffer
+  %constant_b = buffer.constant utf8("abc") : buffer
+  %writable_a = buffer.alloca.init<private> align(1) utf8("abc") : buffer
+  %writable_b = buffer.alloca.init<private> align(1) utf8("abc") : buffer
+  test.use %constant_a, %constant_b, %writable_a, %writable_b : buffer, buffer, buffer, buffer
+  func.return
+}
+
+// ----
+func.def @fresh_writable_identity() {
+  %constant_a = buffer.constant utf8("abc") : buffer
+  %writable_a = buffer.alloca.init<private> align(1) utf8("abc") : buffer
+  %writable_b = buffer.alloca.init<private> align(1) utf8("abc") : buffer
+  test.use %constant_a, %constant_a, %writable_a, %writable_b : buffer, buffer, buffer, buffer
+  func.return
+}
+
+// ====
+// RUN: verify
+
+func.def @invalid_constant_alignment() {
+  // ERROR@+1: STRUCTURE/014 "alignment" "3" "positive power-of-two byte alignment"
+  %buffer = buffer.constant align(3) bytes("00") : buffer
+  func.return
+}
+
+// ====
+// RUN: verify
+
+func.def @invalid_initializer_alignment() {
+  // ERROR@+1: STRUCTURE/014 "base_alignment" "0" "positive power-of-two byte alignment"
+  %buffer = buffer.alloca.init<private> align(0) utf8("hello") : buffer
+  func.return
+}
+
+// ====
+// RUN: verify
+
+func.def @readonly_is_not_allocatable() {
+  // ERROR@+1: STRUCTURE/014 "memory_space" "4" "global, workgroup, private, host, or generic memory space"
+  %buffer = buffer.alloca.init<constant> align(1) bytes("00") : buffer
+  func.return
+}
+
+// ====
+// RUN: pass kernel-synchronization-legality
+
+kernel.def @divergent_shared_initializer() {
+  %c1 = index.constant 1 : index
+  %width = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%width, %c1, %c1) : index
+} launch() {
+  %c0 = index.constant 0 : index
+  %lane = kernel.workitem.id<x> : index
+  %leader = index.cmp eq, %lane, %c0 : index
+  scf.if %leader {
+    // ERROR@+1: STRUCTURE/038 {op_name="buffer.alloca.init", required_uniform_scope="workgroup", control_kind="region_selector", control_value="leader", control_op_name="scf.if", control_distribution="lane_predicate"}
+    %shared = buffer.alloca.init<workgroup> align(1) utf8("ready") : buffer
+  }
+  kernel.return
+}

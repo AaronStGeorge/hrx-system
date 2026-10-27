@@ -263,3 +263,82 @@ check.scenario @workgroup_bfloat_payload_bits {
   }
   check.return
 }
+
+// Peer reads cross subgroup boundaries in a 3D workgroup.
+// The large payload has a partial final chunk; the short one leaves most
+// participants idle. Every byte is read after the implicit publication barrier.
+kernel.def @initialized_workgroup_buffers() {
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c4 = index.constant 4 : index
+  %c8 = index.constant 8 : index
+  kernel.launch.config workgroups(%c2, %c1, %c1) workgroup_size(%c8, %c4, %c4) : index
+} launch(%permutation: index, %output: buffer) {
+  %shared = buffer.alloca.init<workgroup> align(16) bytes("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00") : buffer
+  %short = buffer.alloca.init<workgroup> align(1) utf8("xyz") : buffer
+  %x = kernel.workitem.id<x> : index
+  %y = kernel.workitem.id<y> : index
+  %z = kernel.workitem.id<z> : index
+  %group = kernel.workgroup.id<x> : index
+  %c4 = index.constant 4 : index
+  %c8 = index.constant 8 : index
+  %width = index.constant 128 : index
+  %short_size = index.constant 3 : index
+  %mask = index.constant 127 : index
+  %bounded_permutation = index.andi %permutation, %mask : index
+  %row = index.madd %z, %c4, %y : index
+  %lane = index.madd %row, %c8, %x : index
+  %peer = index.xori %lane, %bounded_permutation : index
+  %upper = index.add %peer, %width : index
+  %small_index = index.rem %peer, %short_size : index
+  %base = index.constant 0 : offset
+  %shared_view = buffer.view %shared[%base] : buffer -> view<257xi8>
+  %short_view = buffer.view %short[%base] : buffer -> view<3xi8>
+  %first = view.load %shared_view[%peer] : view<257xi8> -> i8
+  %second = view.load %shared_view[%upper] : view<257xi8> -> i8
+  %tail = view.load %shared_view[256] : view<257xi8> -> i8
+  %small = view.load %short_view[%small_index] : view<3xi8> -> i8
+  %values = vector.from_elements %first, %second, %tail, %small : vector<4xi8>
+  %wide = vector.extui %values : vector<4xi8> to vector<4xi32>
+  %results = buffer.view %output[%base] : buffer -> view<2x128x4xi32>
+  vector.store %wide, %results[%group, %lane, 0] : vector<4xi32>, view<2x128x4xi32>
+  kernel.return
+}
+
+func.def @initialized_workgroup_oracle(%permutation: index, %output: buffer) {
+  %base = index.constant 0 : offset
+  %results = buffer.view %output[%base] : buffer -> view<2x128x4xi32>
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %groups = index.constant 2 : index
+  %width = index.constant 128 : index
+  %short_size = index.constant 3 : index
+  %mask = index.constant 127 : index
+  %bounded_permutation = index.andi %permutation, %mask : index
+  %character_x = index.constant 120 : index
+  %c0 = scalar.constant 0 : i32
+  scf.for %group = [%begin to %groups step %step] {
+    scf.for %lane = [%begin to %width step %step] {
+      %peer = index.xori %lane, %bounded_permutation : index
+      %upper = index.add %peer, %width : index
+      %small_index = index.rem %peer, %short_size : index
+      %character = index.add %small_index, %character_x : index
+      %first = index.cast %peer : index to i32
+      %second = index.cast %upper : index to i32
+      %small = index.cast %character : index to i32
+      %values = vector.from_elements %first, %second, %c0, %small : vector<4xi32>
+      vector.store %values, %results[%group, %lane, 0] : vector<4xi32>, view<2x128x4xi32>
+    }
+  }
+  func.return
+}
+
+check.scenario @initialized_workgroup_values {
+  check.trial[2](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(-1) : tensor<2x128x4xi32>
+    check.compare<@initialized_workgroup_buffers, @initialized_workgroup_oracle>(%trial, %output) : (index, tensor<2x128x4xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<2x128x4xi32>
+    }
+  }
+  check.return
+}

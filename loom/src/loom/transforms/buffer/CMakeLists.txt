@@ -11,6 +11,28 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    materialize
+  HDRS
+    "materialize.h"
+  SRCS
+    "materialize.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::ir
+    loom::ops::buffer
+    loom::ops::global
+    loom::ops::global::rodata_pool
+    loom::ops::index
+    loom::ops::kernel
+    loom::pass::types
+    loom::rewrite::rewriter
+    loom::util::walk
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_legalization
   HDRS
     "target_legalization.h"

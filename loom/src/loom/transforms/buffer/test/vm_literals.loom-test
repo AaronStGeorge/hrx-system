@@ -1,0 +1,43 @@
+// RUN: emit source-low target=vm:core output=module
+
+func.def @literal_byte(%position: offset) -> (i32) {
+  %text = buffer.constant utf8("ready\u0000") : buffer
+  %value = buffer.load.i8.u %text[%position]
+  func.return %value : i32
+}
+
+// ----
+low.func.def target<vm.core>(@__loom_target_context_0_0) abi(vm_function) @literal_byte(%position: reg<vm.value : i64>) -> (reg<vm.value : i32>) asm {
+  %text = buffer.rodata.load @__low_rodata_de9b9ea0 : reg<vm.ref : buffer>
+  %value = buffer.load %text, %position, %position, 0, "i8.x1" : reg<vm.value : i32>
+  return %value
+}
+
+global.rodata.def @__low_rodata_de9b9ea0 = align(1) utf8("ready\u0000")
+
+vm.target<core> @__loom_target_context_0_0
+
+// ====
+
+func.def @initialized_byte(%position: offset, %replacement: i32) -> (i32) {
+  %text = buffer.alloca.init<private> align(1) utf8("ready\u0000") : buffer
+  buffer.store.i8 %replacement, %text[%position]
+  %value = buffer.load.i8.u %text[%position]
+  func.return %value : i32
+}
+
+// ----
+low.func.def target<vm.core>(@__loom_target_context_0_0) abi(vm_function) @initialized_byte(%position: reg<vm.value : i64>, %replacement: reg<vm.value : i32>) -> (reg<vm.value : i32>) asm {
+  %3 = buffer.rodata.load @__low_rodata_de9b9ea0 : reg<vm.ref : buffer>
+  %4 = constant.i64 6
+  %text = buffer.allocate %4, 0 : reg<vm.ref : buffer>
+  %6 = constant.i64 0
+  buffer.copy %text, %6, %3, %6, %4
+  buffer.store %text, %position, %position, %replacement, 0, "i8.x1"
+  %value = buffer.load %text, %position, %position, 0, "i8.x1" : reg<vm.value : i32>
+  return %value
+}
+
+global.rodata.def @__low_rodata_de9b9ea0 = align(1) utf8("ready\u0000")
+
+vm.target<core> @__loom_target_context_0_0

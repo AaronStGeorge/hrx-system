@@ -13,6 +13,25 @@ package(
 )
 
 loom_cc_library(
+    name = "materialize",
+    srcs = ["materialize.c"],
+    hdrs = ["materialize.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/global:rodata_pool",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/pass:types",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/util:walk",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "target_legalization",
     srcs = ["target_legalization.c"],
     hdrs = ["target_legalization.h"],
