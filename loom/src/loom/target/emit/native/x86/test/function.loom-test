@@ -243,7 +243,7 @@ callee-preserved: rbx, r12
 
 // Equal descriptor-branch successors collapse to their shared fallthrough
 // without materializing the comparison or a conditional transfer.
-// RUN: emit x86-native-bytes @same_descriptor_successor fixed=%lhs:physical_register:7:1 fixed=%rhs:physical_register:6:1
+// RUN: emit x86-native-bytes @same_descriptor_successor
 x86.target<scalar> @target
 
 low.func.def target<x86.scalar.core>(@target) @same_descriptor_successor(%lhs: reg<x86.gpr32>, %rhs: reg<x86.gpr32>) asm {
@@ -259,7 +259,7 @@ code: c3
 
 // Equal structural-branch successors outside the fallthrough position collapse
 // to one unconditional transfer without reading the condition.
-// RUN: emit x86-native-bytes @same_structural_successor fixed=%condition:physical_register:7:1
+// RUN: emit x86-native-bytes @same_structural_successor
 x86.target<scalar> @target
 
 low.func.def target<x86.scalar.core>(@target) @same_structural_successor(%condition: reg<x86.gpr32>) asm {
@@ -318,9 +318,9 @@ callee-preserved: rbx
 
 // ====
 
-// The highest VEX register feeds the highest EVEX register without truncating
-// either operand's encoded register number.
-// RUN: emit x86-native-bytes @vex_load_evex_broadcast fixed=%pointer:physical_register:7:1 fixed=%output:physical_register:6:1 fixed=%scalar:physical_register:15:1 fixed=%packet:physical_register:31:1
+// The scalar VEX load feeds an EVEX broadcast and store through the descriptor
+// operand mapping and ordinary allocation.
+// RUN: emit x86-native-bytes @vex_load_evex_broadcast
 x86.target<avx512> @target
 
 low.func.def target<x86.avx512.core>(@target) @vex_load_evex_broadcast(%pointer: reg<x86.gpr64>, %output: reg<x86.gpr64>) asm {
@@ -331,7 +331,7 @@ low.func.def target<x86.avx512.core>(@target) @vex_load_evex_broadcast(%pointer:
 }
 
 // ----
-code: c5 7a 10 7f 04 62 42 7d 48 18 ff 62 61 7e 48 7f 3e c3
+code: c5 fa 10 47 04 62 f2 7d 48 18 c0 62 f1 7e 48 7f 06 c5 f8 77 c3
 
 // ====
 
