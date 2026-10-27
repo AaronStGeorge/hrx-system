@@ -188,6 +188,9 @@ typedef struct loom_kernel_class_classifier_t {
   // Decisions in stable source order.
   const loom_kernel_class_decision_t* decisions;
 
+  // Argument facts already implied by the source kernel contract, in ABI order.
+  const loom_value_facts_t* argument_facts;
+
   // Number of projected source values.
   uint32_t projection_count;
 
@@ -273,6 +276,10 @@ typedef struct loom_kernel_class_t {
 
   // Mandatory staged values shared by every site in this class.
   const loom_kernel_specialization_value_t* specializations;
+
+  // Integer argument facts true at every site in this class, in ABI order.
+  // Context-local extensions are not retained across publication.
+  const loom_value_facts_t* argument_facts;
 
   // Number of launch sites assigned to this class.
   iree_host_size_t member_count;

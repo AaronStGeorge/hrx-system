@@ -350,15 +350,11 @@ kernel.def @classified() {
         class_module->symbols.entries[class_kernel_symbol_id].defining_op);
     loom_block_t* body =
         loom_region_entry_block(loom_func_like_body(class_kernel));
-    iree_host_size_t assume_count = 0;
-    iree_host_size_t scalar_assume_count = 0;
     iree_host_size_t call_count = 0;
     iree_host_size_t zero_result_call_count = 0;
     iree_host_size_t residual_apply_count = 0;
     loom_op_t* op = nullptr;
     loom_block_for_each_op(body, op) {
-      assume_count += loom_index_assume_isa(op);
-      scalar_assume_count += loom_scalar_assume_isa(op);
       if (loom_scf_if_isa(op)) {
         loom_block_t* then_block =
             loom_region_entry_block(loom_scf_if_then_region(op));
@@ -387,8 +383,6 @@ kernel.def @classified() {
     EXPECT_EQ(call_count, 3u);
     EXPECT_EQ(zero_result_call_count, 2u);
     EXPECT_EQ(residual_apply_count, 1u);
-    EXPECT_EQ(assume_count, class_is_large[class_ordinal] ? 1u : 0u);
-    EXPECT_EQ(scalar_assume_count, class_is_large[class_ordinal] ? 1u : 0u);
     if (class_is_large[class_ordinal]) {
       large_member_count = class_member_counts[class_ordinal];
     } else {
@@ -398,6 +392,105 @@ kernel.def @classified() {
   EXPECT_EQ(large_member_count, 874u);
   EXPECT_EQ(small_member_count, 126u);
   iree_arena_deinitialize(&query_arena);
+}
+
+TEST_F(KernelClassMaterializerTest,
+       PublishesOnlyFactsSharedByEveryClassMember) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_symbol_reference_table_t references = {};
+  ModulePtr source = ParseAndVerify(IREE_SV(R"(
+func.decl @consume(%width: index, %offset: index, %unknown: i32)
+kernel.def @classified() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%width: index, %offset: index, %unknown: i32) where [range(%width, 1, 512)] {
+  func.call @consume(%width, %offset, %unknown) : (index, index, i32)
+  kernel.return
+}
+)"),
+                                    &arena, &references);
+  ASSERT_NE(source, nullptr);
+  const loom_symbol_id_t symbol =
+      FindSymbol(source.get(), IREE_SV("classified"));
+  const loom_func_like_t kernel = loom_func_like_cast(
+      source.get(), source->symbols.entries[symbol].defining_op);
+  loom_value_fact_table_t kernel_facts = {};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&kernel_facts, &arena,
+                                                  source->values.count));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_compute(&kernel_facts, source.get(), kernel));
+  loom_symbolic_expr_context_t expressions = {};
+  loom_symbolic_expr_context_initialize(source.get(), nullptr, &kernel_facts,
+                                        &arena, &expressions);
+  loom_template_decision_model_catalog_t decisions = {.module = source.get()};
+  loom_template_applicability_target_t target = {};
+  loom_kernel_class_classifier_t classifier = {};
+  IREE_ASSERT_OK(loom_kernel_class_classifier_build(
+      source.get(), symbol, &references, &decisions, &kernel_facts,
+      &expressions, &target, &arena, &classifier));
+  loom_value_facts_t facts[] = {
+      loom_value_facts_exact_i64(8),  loom_value_facts_exact_i64(16),
+      loom_value_facts_exact_i64(7),  loom_value_facts_exact_i64(8),
+      loom_value_facts_exact_i64(32), loom_value_facts_unknown(),
+  };
+  const loom_value_fact_table_t site_facts = {
+      .entries = facts,
+      .count = 6,
+      .capacity = 6,
+  };
+  const loom_value_id_t arguments[] = {0, 1, 2, 3, 4, 5};
+  const loom_kernel_class_site_t sites[] = {
+      {.facts = &site_facts, .argument_values = arguments},
+      {.facts = &site_facts, .argument_values = arguments + 3},
+  };
+  const auto options = loom_kernel_class_collection_options_default();
+  loom_kernel_class_collection_t collection = {};
+  IREE_ASSERT_OK(loom_kernel_class_classifier_collect(
+      &classifier, nullptr, sites, 2, &options, &arena, &collection));
+  ASSERT_EQ(collection.class_count, 1u);
+  loom_kernel_class_product_t product = {};
+  IREE_ASSERT_OK(
+      loom_kernel_class_materialize(&classifier, &collection, 0, &block_pool_,
+                                    iree_allocator_system(), &product));
+  ModulePtr published(product.module);
+  source.reset();
+  iree_arena_deinitialize(&arena);
+  published = RoundTripBytecode(published.get());
+  ASSERT_NE(published, nullptr);
+  Verify(published.get());
+
+  iree_arena_initialize(&block_pool_, &arena);
+  const auto published_kernel = loom_func_like_cast(
+      published.get(),
+      published->symbols.entries[product.kernel.symbol_id].defining_op);
+  loom_value_fact_table_t retained = {};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&retained, &arena,
+                                                  published->values.count));
+  IREE_ASSERT_OK(loom_value_fact_table_compute(&retained, published.get(),
+                                               published_kernel));
+  loom_op_t* call =
+      loom_region_entry_block(loom_func_like_body(published_kernel))->first_op;
+  while (!loom_call_like_isa(loom_call_like_cast(published.get(), call))) {
+    call = call->next_op;
+    ASSERT_NE(call, nullptr);
+  }
+  const auto* operands = loom_op_const_operands(call);
+  const auto width = loom_value_fact_table_lookup(&retained, operands[0]);
+  EXPECT_TRUE(loom_value_facts_is_exact(width));
+  EXPECT_EQ(width.range_lo, 8);
+  const auto offset = loom_value_fact_table_lookup(&retained, operands[1]);
+  EXPECT_EQ(offset.range_lo, 16);
+  EXPECT_EQ(offset.range_hi, 32);
+  EXPECT_EQ(offset.known_divisor, 16);
+  const auto unknown = loom_value_fact_table_lookup(&retained, operands[2]);
+  EXPECT_FALSE(loom_value_facts_is_exact(unknown));
+  EXPECT_LE(unknown.range_lo, INT32_MIN);
+  EXPECT_GE(unknown.range_hi, INT32_MAX);
+  EXPECT_EQ(
+      loom_region_entry_block(loom_func_like_body(published_kernel))->arg_count,
+      3u);
+  iree_arena_deinitialize(&arena);
 }
 
 TEST_F(KernelClassMaterializerTest,

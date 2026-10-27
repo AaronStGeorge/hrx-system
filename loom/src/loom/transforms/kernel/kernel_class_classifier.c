@@ -312,6 +312,16 @@ iree_status_t loom_kernel_class_classifier_build(
   const loom_value_id_t* kernel_argument_ids =
       loom_func_like_arg_ids(kernel, &kernel_argument_count);
   out_classifier->kernel_argument_count = kernel_argument_count;
+  loom_value_facts_t* argument_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_kernel_class_allocate_array(
+      arena, kernel_argument_count, sizeof(*argument_facts),
+      (void**)&argument_facts));
+  for (uint16_t i = 0; i < kernel_argument_count; ++i) {
+    argument_facts[i] =
+        loom_value_fact_table_lookup(kernel_facts, kernel_argument_ids[i]);
+    argument_facts[i].extension_id = LOOM_VALUE_FACT_EXTENSION_ID_NONE;
+  }
+  out_classifier->argument_facts = argument_facts;
   out_classifier->specialization_count =
       (uint16_t)loom_func_like_specialization_count(kernel);
 
@@ -947,13 +957,35 @@ iree_status_t loom_kernel_class_classifier_collect(
   loom_kernel_class_t* classes = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, partition.class_count, sizeof(*classes), (void**)&classes));
+  loom_value_facts_t* argument_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_kernel_class_allocate_array(
+      arena,
+      (iree_host_size_t)partition.class_count *
+          classifier->kernel_argument_count,
+      sizeof(*argument_facts), (void**)&argument_facts));
   for (loom_decision_class_ordinal_t i = 0; i < partition.class_count; ++i) {
     classes[i] = (loom_kernel_class_t){
         .trace_id = current_trace_ids[i],
+        .argument_facts =
+            argument_facts
+                ? argument_facts +
+                      (iree_host_size_t)i * classifier->kernel_argument_count
+                : NULL,
     };
   }
   for (iree_host_size_t i = 0; i < site_count; ++i) {
     loom_kernel_class_t* entry = &classes[partition.site_classes[i]];
+    loom_value_facts_t* facts = (loom_value_facts_t*)entry->argument_facts;
+    for (uint16_t j = 0; j < classifier->kernel_argument_count; ++j) {
+      loom_value_facts_t observed = loom_value_fact_table_lookup(
+          sites[i].facts, sites[i].argument_values[j]);
+      observed.extension_id = LOOM_VALUE_FACT_EXTENSION_ID_NONE;
+      if (entry->member_count == 0) {
+        facts[j] = observed;
+      } else {
+        loom_value_facts_meet(&facts[j], &observed, &facts[j]);
+      }
+    }
     ++entry->member_count;
     entry->specializations =
         site_specializations ? site_specializations[i] : NULL;

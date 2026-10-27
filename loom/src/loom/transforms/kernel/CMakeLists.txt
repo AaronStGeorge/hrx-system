@@ -113,6 +113,7 @@ loom_cc_library(
     loom::rewrite::module_projection
     loom::rewrite::rewriter
     loom::transforms::symbol::template_rewrite
+    loom::util::predicate_facts
   PUBLIC
 )
 

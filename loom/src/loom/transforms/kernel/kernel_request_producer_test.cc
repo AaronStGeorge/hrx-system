@@ -514,11 +514,25 @@ template.def<@schedule> priority(1) @small(%size: index) {
       uint16_t predicate_count = 0;
       const auto* predicates =
           loom_func_like_predicates(function, &predicate_count);
-      ASSERT_EQ(predicate_count, 2u);
+      ASSERT_GE(predicate_count, 2u);
       EXPECT_EQ(predicates[0].kind, LOOM_PREDICATE_GE);
       EXPECT_EQ(predicates[0].arg_tags[1], LOOM_PRED_ARG_CONST);
       EXPECT_EQ(predicates[0].args[1], request.class_ordinal == 0 ? 64 : 128);
       EXPECT_EQ(predicates[1].kind, LOOM_PREDICATE_FINITE);
+      iree_arena_allocator_t query_arena;
+      iree_arena_initialize(&block_pool_, &query_arena);
+      loom_value_fact_table_t retained = {};
+      IREE_ASSERT_OK(loom_value_fact_table_initialize(
+          &retained, &query_arena, request.product.module->values.count));
+      IREE_ASSERT_OK(loom_value_fact_table_compute(
+          &retained, request.product.module, function));
+      const auto* body = loom_region_entry_block(loom_func_like_body(function));
+      const auto size_facts =
+          loom_value_fact_table_lookup(&retained, body->arg_ids[0]);
+      EXPECT_EQ(size_facts.range_lo, 256);
+      EXPECT_EQ(size_facts.range_hi, 512);
+      EXPECT_EQ(size_facts.known_divisor, 256);
+      iree_arena_deinitialize(&query_arena);
       const auto* first =
           loom_region_entry_block(loom_func_like_body(function))->first_op;
       const auto* assume = first->next_op->next_op;
