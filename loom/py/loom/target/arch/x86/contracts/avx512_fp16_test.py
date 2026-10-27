@@ -103,8 +103,8 @@ def _representation(rule: DescriptorRule, field: str) -> int:
     )
 
 
-def _predicate_representations(lane_count: int) -> set[tuple[str, int]]:
-    representations = {("x86.k", 1)}
+def _predicate_representations(lane_count: int) -> set[int]:
+    representations = {1}
     for vector_bit_width in (16, 32, 64, 128, 256, 512):
         if vector_bit_width % lane_count:
             continue
@@ -113,15 +113,7 @@ def _predicate_representations(lane_count: int) -> set[tuple[str, int]]:
             continue
         if vector_bit_width == 512 and lane_count != 64:
             continue
-        register_class = {
-            16: "x86.xmm",
-            32: "x86.xmm",
-            64: "x86.xmm",
-            128: "x86.xmm",
-            256: "x86.ymm",
-            512: "x86.zmm",
-        }[vector_bit_width]
-        representations.add((register_class, element_bit_width))
+        representations.add(element_bit_width)
     return representations
 
 
@@ -236,7 +228,6 @@ def test_comparisons_cover_scalar_and_every_vector_representation() -> None:
         (
             _value_type(rule, "lhs"),
             _value_type(rule, "result"),
-            _register_class(rule, "result"),
             _representation(rule, "result"),
         )
         for rule in _rules_for(vector.vector_cmpf)
@@ -244,18 +235,16 @@ def test_comparisons_cover_scalar_and_every_vector_representation() -> None:
         (
             Vector("f16", lanes=lane_count),
             Vector("i1", lanes=lane_count),
-            register_class,
             representation,
         )
         for lane_count in (2, 4, 8, 16, 32)
-        for register_class, representation in _predicate_representations(lane_count)
+        for representation in _predicate_representations(lane_count)
     }
 
     assert {
         (
             _value_type(rule, "condition"),
             _value_type(rule, "result"),
-            _register_class(rule, "condition"),
             _representation(rule, "condition"),
         )
         for rule in _rules_for(vector.vector_select)
@@ -263,11 +252,10 @@ def test_comparisons_cover_scalar_and_every_vector_representation() -> None:
         (
             Vector("i1", lanes=lane_count),
             Vector("f16", lanes=lane_count),
-            register_class,
             representation,
         )
         for lane_count in (2, 4)
-        for register_class, representation in _predicate_representations(lane_count)
+        for representation in _predicate_representations(lane_count)
     }
 
 

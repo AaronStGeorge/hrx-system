@@ -165,11 +165,10 @@ def avx2_predicate_register_class(representation_bit_width: int) -> str:
 
 def _predicate_representation_guards(
     field: str, lane_count: int, representation_bit_width: int
-) -> tuple[Guard, Guard]:
+) -> tuple[Guard, ...]:
+    # The selected representation determines the register class. During packet
+    # queries it is still pending, so a callable class is not a constraint.
     return (
-        Guard.low_value_register_class(
-            field, avx2_predicate_register_class(representation_bit_width)
-        ),
         Guard.low_value_representation(
             field,
             avx2_predicate_representation_id(lane_count, representation_bit_width),

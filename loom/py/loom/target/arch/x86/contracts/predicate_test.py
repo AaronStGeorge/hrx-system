@@ -84,11 +84,17 @@ def _type_guard(rule: DescriptorRule, field: str):
     )
 
 
-def _register_class_guard(rule: DescriptorRule, field: str) -> str:
-    return next(
-        guard.register_class
-        for guard in rule.guards
-        if guard.kind == GuardKind.LOW_VALUE_REGISTER_CLASS and guard.field == field
+def _carrier_register_class(rule: DescriptorRule, field: str) -> str:
+    for guard in rule.guards:
+        if guard.kind == GuardKind.LOW_VALUE_REGISTER_CLASS and guard.field == field:
+            return guard.register_class
+    # Predicate type and representation uniquely determine the physical carrier.
+    representation = _representation_guard(rule, field)
+    if representation == 1:
+        return "x86.k"
+    bit_width = _type_guard(rule, field).lanes * representation
+    return (
+        "x86.xmm" if bit_width <= 128 else "x86.ymm" if bit_width == 256 else "x86.zmm"
     )
 
 
@@ -145,7 +151,7 @@ def test_predicate_construction_covers_every_callable_lane_count() -> None:
     assert {
         (
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
             next(
                 (guard.minimum, guard.maximum)
@@ -170,7 +176,7 @@ def test_predicate_construction_covers_every_callable_lane_count() -> None:
     assert {
         (
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
         )
         for rule in splat_rules
@@ -192,10 +198,10 @@ def test_predicate_extensions_cover_every_one_register_integer_result() -> None:
         assert {
             (
                 _type_guard(rule, "input"),
-                _register_class_guard(rule, "input"),
+                _carrier_register_class(rule, "input"),
                 _representation_guard(rule, "input"),
                 _type_guard(rule, "result"),
-                _register_class_guard(rule, "result"),
+                _carrier_register_class(rule, "result"),
             )
             for rule in rules
         } == {
@@ -224,9 +230,9 @@ def test_predicate_truncation_covers_every_one_register_integer_source() -> None
     assert {
         (
             _type_guard(rule, "input"),
-            _register_class_guard(rule, "input"),
+            _carrier_register_class(rule, "input"),
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
         )
         for rule in rules
@@ -259,7 +265,7 @@ def test_predicate_lane_movement_covers_every_representation() -> None:
                 rule,
                 "source" if rule.source_op is vector.vector_extract else "dest",
             ),
-            _register_class_guard(
+            _carrier_register_class(
                 rule,
                 "source" if rule.source_op is vector.vector_extract else "result",
             ),
@@ -291,7 +297,7 @@ def test_integer_comparisons_cover_every_element_predicate_and_carrier() -> None
             _enum_guard(rule, "predicate"),
             _type_guard(rule, "lhs"),
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
         )
         for rule in _rules_for(vector.vector_cmpi)
@@ -328,7 +334,7 @@ def test_float_comparisons_cover_every_element_and_carrier() -> None:
         (
             _type_guard(rule, "lhs"),
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
         )
         for rule in rules
@@ -365,10 +371,10 @@ def test_vector_select_covers_every_condition_and_payload_carrier_pair() -> None
     assert {
         (
             _type_guard(rule, "condition"),
-            _register_class_guard(rule, "condition"),
+            _carrier_register_class(rule, "condition"),
             _representation_guard(rule, "condition"),
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
         )
         for rule in _rules_for(vector.vector_select)
     } == {
@@ -390,7 +396,7 @@ def test_vector_select_covers_every_condition_and_payload_carrier_pair() -> None
 
 def test_whole_vector_select_covers_both_register_widths() -> None:
     rules = _rules_for(scf.scf_select)
-    assert {_register_class_guard(rule, "result") for rule in rules} == {
+    assert {_carrier_register_class(rule, "result") for rule in rules} == {
         "x86.xmm",
         "x86.ymm",
     }
@@ -402,7 +408,7 @@ def test_predicate_logic_preserves_each_physical_representation() -> None:
         (
             rule.source_op,
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
         )
         for source_op in (vector.vector_andi, vector.vector_ori, vector.vector_xori)
@@ -539,7 +545,7 @@ def test_avx512_predicate_construction_is_only_the_missing_delta() -> None:
         (
             rule.source_op,
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
         )
         for rule in (
@@ -563,7 +569,7 @@ def test_avx512_predicate_lane_movement_is_only_the_missing_delta() -> None:
                 rule,
                 "source" if rule.source_op is vector.vector_extract else "dest",
             ),
-            _register_class_guard(
+            _carrier_register_class(
                 rule,
                 "source" if rule.source_op is vector.vector_extract else "result",
             ),
@@ -591,10 +597,10 @@ def test_avx512_predicate_extensions_cover_mask_and_512_bit_deltas() -> None:
         assert {
             (
                 _type_guard(rule, "input"),
-                _register_class_guard(rule, "input"),
+                _carrier_register_class(rule, "input"),
                 _representation_guard(rule, "input"),
                 _type_guard(rule, "result"),
-                _register_class_guard(rule, "result"),
+                _carrier_register_class(rule, "result"),
             )
             for rule in rules
         } == {
@@ -633,9 +639,9 @@ def test_avx512_predicate_truncation_covers_every_result_representation() -> Non
     assert {
         (
             _type_guard(rule, "input"),
-            _register_class_guard(rule, "input"),
+            _carrier_register_class(rule, "input"),
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
         )
         for rule in rules
@@ -673,7 +679,7 @@ def test_avx512_integer_compare_covers_all_widths_elements_and_predicates() -> N
             _enum_set_guard(rule, "predicate"),
             _type_guard(rule, "lhs"),
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
         )
         for rule in _avx512_rules_for(vector.vector_cmpi)
@@ -704,7 +710,7 @@ def test_avx512_float_compare_covers_all_widths_and_elements() -> None:
         (
             _type_guard(rule, "lhs"),
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "result"),
+            _carrier_register_class(rule, "result"),
             _representation_guard(rule, "result"),
         )
         for rule in _avx512_rules_for(vector.vector_cmpf)
@@ -730,7 +736,7 @@ def test_avx512_select_covers_all_widths_and_payload_elements() -> None:
         (
             _type_guard(rule, "condition"),
             _type_guard(rule, "result"),
-            _register_class_guard(rule, "condition"),
+            _carrier_register_class(rule, "condition"),
             _representation_guard(rule, "condition"),
         )
         for rule in _avx512_rules_for(vector.vector_select)
@@ -778,7 +784,7 @@ def test_avx512_predicate_logic_covers_mask_and_missing_carrier() -> None:
         assert {
             (
                 _type_guard(rule, "result"),
-                _register_class_guard(rule, "result"),
+                _carrier_register_class(rule, "result"),
                 _representation_guard(rule, "result"),
             )
             for rule in _avx512_rules_for(source_op)

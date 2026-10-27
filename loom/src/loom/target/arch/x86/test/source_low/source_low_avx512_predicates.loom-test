@@ -289,3 +289,44 @@ low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({s
   %unsigned = avx512.vpsrld.zmm %16, 31
   return %signed, %unsigned
 }
+
+// ====
+
+// Disabling VL selects SIMD predicates for short integer packets while keeping
+// full-width comparisons and blends in mask registers.
+x86.target<avx512> @target {features = [-avx512vl]}
+
+func.def target(@target) @integer_selection_without_vl(%a: vector<4xi64>, %b: vector<4xi64>, %x: vector<8xi64>, %y: vector<8xi64>) -> (vector<4xi64>, vector<8xi64>) {
+  %small_condition = vector.cmpi slt, %a, %b : vector<4xi64> -> vector<4xi1>
+  %small = vector.select %small_condition, %a, %b : vector<4xi64>
+  %large_condition = vector.cmpi slt, %x, %y : vector<8xi64> -> vector<8xi1>
+  %large = vector.select %large_condition, %x, %y : vector<8xi64>
+  func.return %small, %large : vector<4xi64>, vector<8xi64>
+}
+
+// ----
+low.func.def target<x86.avx512_features.core>(@target) abi(object_function) abi_layout({signature = (vector<4xi64>, vector<4xi64>, vector<8xi64>, vector<8xi64>) -> (vector<4xi64>, vector<8xi64>)}) @integer_selection_without_vl(%a: reg<x86.ymm>, %b: reg<x86.ymm>, %x: reg<x86.zmm>, %y: reg<x86.zmm>) -> (reg<x86.ymm>, reg<x86.zmm>) asm {
+  %small_condition = vpcmpgtq.ymm %b, %a
+  %small = vpblendvb.ymm %b, %a, %small_condition
+  %large_condition = vpcmpq %x, %y, 1
+  %large = vpblendmq %large_condition, %x, %y
+  return %small, %large
+}
+
+// ====
+
+// Floating comparisons obey the same short-packet feature boundary.
+x86.target<avx512> @target {features = [-avx512vl]}
+
+func.def target(@target) @float_selection_without_vl(%a: vector<4xf32>, %b: vector<4xf32>) -> (vector<4xf32>) {
+  %condition = vector.cmpf olt, %a, %b : vector<4xf32> -> vector<4xi1>
+  %result = vector.select %condition, %a, %b : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ----
+low.func.def target<x86.avx512_features.core>(@target) abi(object_function) abi_layout({signature = (vector<4xf32>, vector<4xf32>) -> (vector<4xf32>)}) @float_selection_without_vl(%a: reg<x86.xmm>, %b: reg<x86.xmm>) -> (reg<x86.xmm>) asm {
+  %condition = avx2.vcmpps.xmm %a, %b, 17
+  %result = vpblendvb.xmm %b, %a, %condition
+  return %result
+}
