@@ -1102,6 +1102,69 @@ func.def @loop_exit_under_outer_bypass(%early: i1, %running: i1, %matched: i1, %
 
 // RUN: pass cfg-converge,cfg-converge
 
+// Independent loops retain separate, payload-preserving exit gateways even
+// when their exit regions reach the same result block.
+func.def @disjoint_loop_frontiers(%left: i1, %running: i1, %matched: i1, %early_value: i32, %fallback: i32) -> (i32) {
+  cfg.cond_br %left, ^left_header, ^right_header
+^left_header:
+  cfg.cond_br %running, ^left_body, ^left_normal
+^left_body:
+  cfg.cond_br %matched, ^left_matched, ^left_latch
+^left_matched:
+  cfg.br ^result(%early_value: i32)
+^left_latch:
+  cfg.br ^left_header
+^left_normal:
+  cfg.br ^result(%fallback: i32)
+^right_header:
+  cfg.cond_br %running, ^right_body, ^right_normal
+^right_body:
+  cfg.cond_br %matched, ^right_matched, ^right_latch
+^right_matched:
+  cfg.br ^result(%fallback: i32)
+^right_latch:
+  cfg.br ^right_header
+^right_normal:
+  cfg.br ^result(%early_value: i32)
+^result(%value: i32):
+  func.return %value : i32
+}
+
+// ----
+func.def @disjoint_loop_frontiers(%left: i1, %running: i1, %matched: i1, %early_value: i32, %fallback: i32) -> (i32) {
+  cfg.cond_br %left, ^left_header, ^right_header
+^left_header:
+  cfg.cond_br %running, ^left_body, ^left_normal
+^left_body:
+  cfg.cond_br %matched, ^left_matched, ^left_latch
+^left_matched:
+  cfg.br ^_bb12(%early_value: i32)
+^left_latch:
+  cfg.br ^left_header
+^left_normal:
+  cfg.br ^_bb12(%fallback: i32)
+^right_header:
+  cfg.cond_br %running, ^right_body, ^right_normal
+^right_body:
+  cfg.cond_br %matched, ^right_matched, ^right_latch
+^right_matched:
+  cfg.br ^_bb11(%fallback: i32)
+^right_latch:
+  cfg.br ^right_header
+^right_normal:
+  cfg.br ^_bb11(%early_value: i32)
+^_bb11(%7: i32):
+  cfg.br ^result(%7: i32)
+^_bb12(%8: i32):
+  cfg.br ^result(%8: i32)
+^result(%value: i32):
+  func.return %value : i32
+}
+
+// ====
+
+// RUN: pass cfg-converge,cfg-converge
+
 // Shared exit regions are not owned by either loop. A gateway after them would
 // still be shared, so it cannot isolate either loop's exit frontier.
 func.def @shared_loop_exit_regions(%left: i1, %running: i1, %matched: i1, %early_value: i32, %fallback: i32) -> (i32) {
@@ -1125,7 +1188,6 @@ func.def @shared_loop_exit_regions(%left: i1, %running: i1, %matched: i1, %early
 ^result(%value: i32):
   func.return %value : i32
 }
-
 
 // ====
 
@@ -1172,4 +1234,75 @@ func.def @dependent_loop_frontier(%early: i1, %running: i1, %matched: i1, %size:
 ^result(%extent: index, %payload: tile<[%extent]xf32>):
   test.use %payload : tile<[%extent]xf32>
   func.return
+}
+
+// ====
+
+// RUN: pass cfg-converge,cfg-converge
+
+// The first loop's exit region contains the second loop's frontier. Publish
+// one gateway before replanning the overlapping frontier against the new CFG.
+func.def @overlapping_loop_frontiers(%early: i1, %running: i1, %matched: i1, %enable_tail: i1, %found: i32, %fallback: i32) -> (i32) {
+  cfg.cond_br %early, ^early_exit, ^first_header
+^early_exit:
+  cfg.br ^result(%fallback: i32)
+^first_header:
+  cfg.cond_br %running, ^first_body, ^after_first
+^first_body:
+  cfg.cond_br %matched, ^first_exit, ^first_latch
+^first_latch:
+  cfg.br ^first_header
+^first_exit:
+  cfg.br ^result(%found: i32)
+^after_first:
+  cfg.cond_br %enable_tail, ^tail_header, ^tail_bypass
+^tail_bypass:
+  cfg.br ^result(%fallback: i32)
+^tail_header:
+  cfg.cond_br %running, ^tail_body, ^tail_normal
+^tail_body:
+  cfg.cond_br %matched, ^tail_found, ^tail_latch
+^tail_latch:
+  cfg.br ^tail_header
+^tail_found:
+  cfg.br ^result(%found: i32)
+^tail_normal:
+  cfg.br ^result(%fallback: i32)
+^result(%value: i32):
+  func.return %value : i32
+}
+
+// ----
+func.def @overlapping_loop_frontiers(%early: i1, %running: i1, %matched: i1, %enable_tail: i1, %found: i32, %fallback: i32) -> (i32) {
+  cfg.cond_br %early, ^early_exit, ^first_header
+^early_exit:
+  cfg.br ^result(%fallback: i32)
+^first_header:
+  cfg.cond_br %running, ^first_body, ^after_first
+^first_body:
+  cfg.cond_br %matched, ^first_exit, ^first_latch
+^first_latch:
+  cfg.br ^first_header
+^first_exit:
+  cfg.br ^_bb14(%found: i32)
+^after_first:
+  cfg.cond_br %enable_tail, ^tail_header, ^tail_bypass
+^tail_bypass:
+  cfg.br ^_bb14(%fallback: i32)
+^tail_header:
+  cfg.cond_br %running, ^tail_body, ^tail_normal
+^tail_body:
+  cfg.cond_br %matched, ^tail_found, ^tail_latch
+^tail_latch:
+  cfg.br ^tail_header
+^tail_found:
+  cfg.br ^_bb13(%found: i32)
+^tail_normal:
+  cfg.br ^_bb13(%fallback: i32)
+^_bb13(%8: i32):
+  cfg.br ^_bb14(%8: i32)
+^_bb14(%9: i32):
+  cfg.br ^result(%9: i32)
+^result(%value: i32):
+  func.return %value : i32
 }
