@@ -6,9 +6,12 @@
 
 #include "loom/import/cxx/symbol/immutable_objects.h"
 
+#include <cxx/ast.h>
 #include <cxx/ast_interpreter.h>
 #include <cxx/binder.h>
 #include <cxx/control.h>
+#include <cxx/initialization.h>
+#include <cxx/literals.h>
 #include <cxx/memory_layout.h>
 #include <cxx/names.h>
 #include <cxx/symbols.h>
@@ -19,7 +22,9 @@
 #include <cctype>
 #include <string>
 
+#include "iree/base/internal/unicode.h"
 #include "loom/import/cxx/source/error.h"
+#include "loom/import/cxx/source/expressions.h"
 #include "loom/ops/global/ops.h"
 
 namespace loom::cxx_import {
@@ -125,6 +130,25 @@ int64_t explicit_alignment(cxx::VariableSymbol* variable) {
   return alignment;
 }
 
+bool is_utf8_string_object(const cxx::TypeTraits& traits,
+                           cxx::VariableSymbol* definition,
+                           iree_string_view_t contents) {
+  auto* type = definition->type();
+  if (!traits.is_array(type) ||
+      !traits.is_char_type(traits.remove_cv(traits.get_element_type(type)))) {
+    return false;
+  }
+  auto arguments = cxx::Initializer(definition->initializer()).arguments();
+  if (arguments.size() != 1) {
+    return false;
+  }
+  auto* literal = cxx::ast_cast<cxx::StringLiteralExpressionAST>(
+      unwrap_expression(arguments.front()));
+  // Numeric escapes can produce arbitrary code units even in a u8 literal.
+  return literal && literal->literal->codeUnitSize() == 1 &&
+         iree_unicode_utf8_validate(contents);
+}
+
 }  // namespace
 
 void ImmutableObjects::retain_definition(cxx::VariableSymbol* variable,
@@ -179,6 +203,7 @@ ImmutableObject ImmutableObjects::reference(cxx::VariableSymbol* variable,
     diagnostics_.reject(unit_, owner, "unknown immutable object alignment");
   }
   EmissionKind kind;
+  bool is_utf8 = false;
   std::vector<uint8_t> contents;
   std::string spelling;
   if (!definition) {
@@ -200,6 +225,10 @@ ImmutableObject ImmutableObjects::reference(cxx::VariableSymbol* variable,
           "copyable, address-free object representation");
     }
     contents = std::move(*representation);
+    is_utf8 = is_utf8_string_object(
+        traits, definition,
+        iree_make_string_view(reinterpret_cast<const char*>(contents.data()),
+                              contents.size()));
     if (has_internal_linkage) {
       kind = EmissionKind::PrivateDefinition;
       spelling = names_.unique(private_object_name(definition));
@@ -229,6 +258,7 @@ ImmutableObject ImmutableObjects::reference(cxx::VariableSymbol* variable,
   emissions_.push_back({
       .object = object,
       .kind = kind,
+      .is_utf8 = is_utf8,
       .contents = std::move(contents),
       .source = owner,
   });
@@ -265,6 +295,15 @@ void ImmutableObjects::build(loom_builder_t* builder) {
         iree_make_const_byte_span(emission.contents.data(),
                                   emission.contents.size()),
         locations_.get(emission.source), &op));
+    if (emission.is_utf8) {
+      // Reuse the builder-owned object bytes, including terminator and padding.
+      auto contents = loom_global_rodata_def_contents(op);
+      check(loom_global_rodata_def_set_contents(
+          module_, op,
+          loom_attr_utf8(iree_make_string_view(
+              reinterpret_cast<const char*>(contents.data),
+              contents.data_length))));
+    }
   }
 }
 

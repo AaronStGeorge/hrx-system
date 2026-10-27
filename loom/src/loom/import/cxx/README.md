@@ -787,6 +787,22 @@ payload bodies while linking. Linkable object template specializations remain
 unsupported because their readable source name does not identify a concrete
 specialization.
 
+Character arrays initialized by narrow or `u8` string literals retain readable
+UTF-8 payloads when their bytes form valid UTF-8:
+
+```cpp
+extern const char message[] = "ready";
+```
+
+```loom
+global.rodata.def public @message = utf8("ready\u0000")
+```
+
+The payload includes the C++ terminator, embedded NULs, and any zero padding
+from a larger declared array. Numeric escapes can produce non-UTF-8 bytes even
+inside a `u8` literal; those objects use `bytes("hex")`. Wide, UTF-16, and UTF-32
+arrays also retain their source ABI object bytes in the raw form.
+
 `loom::import` binds a bodyless function to a runtime module or service instead
 of another Loom definition. The first string names the service. An optional
 second string names its external function; omitting it reuses the local Loom

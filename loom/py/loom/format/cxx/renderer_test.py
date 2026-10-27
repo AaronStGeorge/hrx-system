@@ -1154,15 +1154,23 @@ def test_rejects_float_comparisons_without_native_binary_operators(
         render_module(_module_with_float_comparison(predicate))
 
 
-def test_rejects_top_level_definitions_that_would_be_omitted() -> None:
-    module = load_module(
-        ("func.def @helper() {\n  func.return\n}\n\n" + SOURCE_MODULE).encode()
-    )
+@pytest.mark.parametrize(
+    ("definition", "operation"),
+    [
+        ("func.def @helper() {\n  func.return\n}", "func.def"),
+        ('global.rodata.def @payload = bytes("4c6f6f6d")', "global.rodata.def"),
+        ('global.rodata.def @payload = utf8("Loom")', "global.rodata.def"),
+    ],
+)
+def test_rejects_top_level_definitions_that_would_be_omitted(
+    definition: str, operation: str
+) -> None:
+    module = load_module((definition + "\n\n" + SOURCE_MODULE).encode())
 
     with pytest.raises(
         CxxRenderError,
         match=(
-            "cannot project func.def: a top-level definition would be omitted "
+            f"cannot project {operation}: a top-level definition would be omitted "
             r"from the C\+\+ projection"
         ),
     ):

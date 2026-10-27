@@ -113,6 +113,7 @@ loom_check_test_suite(
         "functions.cxx-test",
         "immutable_objects.cxx-test",
         "immutable_objects_invalid.cxx-test",
+        "immutable_strings.cxx-test",
         "index_views.cxx-test",
         "initializer_dependencies.cxx-test",
         "integer_intrinsics.cxx-test",

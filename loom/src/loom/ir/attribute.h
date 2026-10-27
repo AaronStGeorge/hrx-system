@@ -661,8 +661,8 @@ static inline loom_attribute_t loom_attr_bytes(const uint8_t* bytes,
 
 // Constructs a byte payload with explicit UTF-8 form. The text must be valid
 // UTF-8, fit in uint32_t, and outlive the attribute. Embedded NUL is permitted;
-// no terminator is added. Module verification validates UTF-8; copying and
-// target consumers preserve the established invariant without rescanning.
+// no terminator is added. Parsers and canonical attribute verification validate
+// UTF-8; copying and target consumers trust the established invariant.
 static inline loom_attribute_t loom_attr_utf8(iree_string_view_t text) {
   IREE_ASSERT(text.size <= UINT32_MAX);
   loom_attribute_t attr =

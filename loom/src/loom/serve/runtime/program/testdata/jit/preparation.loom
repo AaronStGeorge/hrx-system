@@ -4,20 +4,15 @@ func.decl import("prepare") @dispatch(%root: buffer, %tag: i64) -> (i32)
 
 func.decl import("prepare") @workspace_limit(%stage: i32, %bytes: i64)
 
-// advance
-global.rodata.def @advance = bytes("616476616e6365")
+global.rodata.def @advance = utf8("advance")
 
-// selected_pair
-global.rodata.def @selected_pair = bytes("73656c65637465645f70616972")
+global.rodata.def @selected_pair = utf8("selected_pair")
 
-// invalid_argument
-global.rodata.def @invalid_argument = bytes("696e76616c69645f617267756d656e74")
+global.rodata.def @invalid_argument = utf8("invalid_argument")
 
-// increment_0
-global.rodata.def @increment_0 = bytes("696e6372656d656e745f30")
+global.rodata.def @increment_0 = utf8("increment_0")
 
-// temporary_advance
-global.rodata.def @temporary_advance = bytes("74656d706f726172795f616476616e6365")
+global.rodata.def @temporary_advance = utf8("temporary_advance")
 
 func.def public @prepare(%fail: i32) {
   %tag = scalar.constant 0 : i64

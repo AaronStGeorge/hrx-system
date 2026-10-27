@@ -183,7 +183,9 @@ global_rodata = Op(
     doc=(
         "Read-only executable data payload. This defines a named artifact "
         "symbol containing uninterpreted bytes, optionally with a stronger "
-        "power-of-two byte alignment requirement. Bank conflicts form a "
+        'power-of-two byte alignment requirement. Contents use utf8("text") '
+        'for UTF-8 text or bytes("hex") for raw binary data; both retain the '
+        "exact bytes without adding a terminator. Bank conflicts form a "
         "reciprocal relation between definitions that must occupy disjoint "
         "target-defined storage banks when retained by one resident function. "
         "It is used for storage-backed immutable source objects and "
@@ -227,6 +229,7 @@ global_rodata = Op(
     ],
     verify="loom_global_rodata_def_verify",
     examples=[
+        'global.rodata.def @message = utf8("ready")',
         'global.rodata.def @loom_sanitizer_sites = align(8) bytes("4c53495401000000")',
         'global.rodata.def public linkonce @lookup = bytes("00010203")',
         'global.rodata.def @empty = bytes("")',

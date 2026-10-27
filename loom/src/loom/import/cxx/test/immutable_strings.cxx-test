@@ -1,0 +1,53 @@
+// RUN: pass canonicalize,cse,dce
+extern const char empty[] = "";
+extern const char ordinary[] = "Loom";
+extern const char concatenated[] = "one" " two";
+extern const char raw[] = R"(one\two)";
+extern const char braced[] = {"value"};
+extern const char padded[8] = "Loom";
+extern const char embedded_nul[] = "a\0b";
+extern const char escaped[] = "\"\\\n\t";
+extern const char8_t unicode[] = u8"café 世界 🧵 �";
+extern const signed char signed_text[] = "Loom";
+extern const unsigned char unsigned_text[] = u8"Loom";
+extern const char binary[] = "\xff";
+extern const char8_t binary_utf8[] = u8"\xff";
+extern const char characters[] = {'L', 'o', 'o', 'm', 0};
+extern const char16_t utf16[] = u"L\U0001F9F5";
+extern const char32_t utf32[] = U"L\U0001F9F5";
+extern const wchar_t wide[] = L"Loom";
+
+// ----
+global.rodata.def public @empty = utf8("\u0000")
+
+global.rodata.def public @ordinary = utf8("Loom\u0000")
+
+global.rodata.def public @concatenated = utf8("one two\u0000")
+
+global.rodata.def public @raw = utf8("one\\two\u0000")
+
+global.rodata.def public @braced = utf8("value\u0000")
+
+global.rodata.def public @padded = utf8("Loom\u0000\u0000\u0000\u0000")
+
+global.rodata.def public @embedded_nul = utf8("a\u0000b\u0000")
+
+global.rodata.def public @escaped = utf8("\"\\\n\t\u0000")
+
+global.rodata.def public @unicode = utf8("café 世界 🧵 �\u0000")
+
+global.rodata.def public @signed_text = utf8("Loom\u0000")
+
+global.rodata.def public @unsigned_text = utf8("Loom\u0000")
+
+global.rodata.def public @binary = bytes("ff00")
+
+global.rodata.def public @binary_utf8 = bytes("ff00")
+
+global.rodata.def public @characters = bytes("4c6f6f6d00")
+
+global.rodata.def public @utf16 = align(2) bytes("4c003ed8f5dd0000")
+
+global.rodata.def public @utf32 = align(4) bytes("4c000000f5f9010000000000")
+
+global.rodata.def public @wide = align(4) bytes("4c0000006f0000006f0000006d00000000000000")
