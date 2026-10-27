@@ -193,6 +193,26 @@ TEST_F(CandidatePolicyTest, PackingRecoveryPreservesStorageHandoff) {
                   storage_handoff, ready_peer);
 }
 
+TEST_F(CandidatePolicyTest, HardCapacityPrecedesReadinessAndAggregateRelief) {
+  const auto fitting = MakeCandidate(4, 1);
+  auto overflowing = MakeCandidate(0, 0);
+  overflowing.killed_live_units = 8;
+  overflowing.produced_live_units = 1;
+  overflowing.killed_live_value_count = 2;
+  overflowing.produced_live_value_count = 1;
+  overflowing.pressure_progress_kind =
+      LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_REDUCTION;
+  overflowing.flags =
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY;
+  for (const auto mode :
+       {LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT,
+        LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
+        LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION}) {
+    SCOPED_TRACE(mode);
+    ExpectPreferred(mode, fitting, overflowing);
+  }
+}
+
 TEST_F(CandidatePolicyTest, PressureReliefSchedulesReadyPeer) {
   auto storage_handoff = MakeConstrainedCandidate(3, 0);
   storage_handoff.flags |= LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_STORAGE;
