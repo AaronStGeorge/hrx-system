@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from itertools import combinations, product
 from math import gcd
 from pathlib import Path
@@ -2163,14 +2163,21 @@ def _schedule_fragment(name: str, uses: Counter[IssueUse]) -> ScheduleClass | No
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _NativeMoveScheduleClasses:
+    scalar_cells: tuple[tuple[tuple[str, ...], ...], ...]
+    scalar_common: str
+    scalar_destinations: tuple[str | None, ...]
+    scalar_sources: tuple[str | None, ...]
+    scalar_core_id: str
+    accumulator_1024: str
+    fifo_512: str
+    rows: tuple[ScheduleClass, ...]
+
+
 def _native_move_schedule_classes(
     schedule_class_names: dict[tuple[str, str], str],
-) -> tuple[
-    tuple[tuple[tuple[str, ...], ...], ...],
-    str,
-    str,
-    tuple[ScheduleClass, ...],
-]:
+) -> _NativeMoveScheduleClasses:
     """Factors exact move resources without retaining the full product matrix."""
 
     specialized_rows = tuple(
@@ -2248,21 +2255,40 @@ def _native_move_schedule_classes(
     classes = (*scalar_fragments, *non_scalar_classes)
     if len({row.name for row in classes}) != len(classes):
         raise ValueError("AIE2P native move schedule-class name collision")
-    return (
-        scalar_schedule_class_names,
-        accumulator_name,
-        fifo_name,
-        tuple(classes),
+    return _NativeMoveScheduleClasses(
+        scalar_cells=scalar_schedule_class_names,
+        scalar_common=common.name,
+        scalar_destinations=tuple(
+            row.name if row is not None else None for row in destinations
+        ),
+        scalar_sources=tuple(row.name if row is not None else None for row in sources),
+        scalar_core_id=scalar_schedule_class_names[0][-1][0],
+        accumulator_1024=accumulator_name,
+        fifo_512=fifo_name,
+        rows=tuple(classes),
     )
 
 
 _SCHEDULE_CLASS_NAMES, _BASE_SCHEDULE_CLASSES = _schedule_classes()
-(
-    AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES,
-    AIE2P_ACCUMULATOR_1024_MOVE_SCHEDULE_CLASS_NAME,
-    AIE2P_FIFO_512_MOVE_SCHEDULE_CLASS_NAME,
-    _NATIVE_MOVE_SCHEDULE_CLASSES,
-) = _native_move_schedule_classes(_SCHEDULE_CLASS_NAMES)
+_NATIVE_MOVE_SCHEDULE_TOPOLOGY = _native_move_schedule_classes(_SCHEDULE_CLASS_NAMES)
+AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES = _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_cells
+AIE2P_SCALAR_MOVE_COMMON_SCHEDULE_CLASS_NAME = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_common
+)
+AIE2P_SCALAR_MOVE_DESTINATION_SCHEDULE_CLASS_NAMES = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_destinations
+)
+AIE2P_SCALAR_MOVE_SOURCE_SCHEDULE_CLASS_NAMES = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_sources
+)
+AIE2P_SCALAR_MOVE_CORE_ID_SCHEDULE_CLASS_NAME = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.scalar_core_id
+)
+AIE2P_ACCUMULATOR_1024_MOVE_SCHEDULE_CLASS_NAME = (
+    _NATIVE_MOVE_SCHEDULE_TOPOLOGY.accumulator_1024
+)
+AIE2P_FIFO_512_MOVE_SCHEDULE_CLASS_NAME = _NATIVE_MOVE_SCHEDULE_TOPOLOGY.fifo_512
+_NATIVE_MOVE_SCHEDULE_CLASSES = _NATIVE_MOVE_SCHEDULE_TOPOLOGY.rows
 _SCHEDULE_CLASSES = tuple(
     sorted(
         (*_BASE_SCHEDULE_CLASSES, *_NATIVE_MOVE_SCHEDULE_CLASSES),
