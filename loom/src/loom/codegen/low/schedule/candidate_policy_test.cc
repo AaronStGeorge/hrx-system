@@ -325,6 +325,18 @@ TEST_F(CandidatePolicyTest, RepairableDebtMustStayWithinRequiredBanks) {
     alternative_debt[1 - word].banks = 1;
     ExpectPreferred(LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
                     required, alternative, 2);
+
+    // A fitting alternative opens no debt and leaves the required bank alone.
+    alternative_debt[0] = {};
+    alternative_debt[1] = {};
+    alternative.flags = 0;
+    alternative.pressure_cliff_penalty = 0;
+    alternative.persistent_pressure_cliff_penalty = 0;
+    alternative.pressure_cliff_units = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE;
+    alternative.pressure_risk = LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE;
+    SCOPED_TRACE("fitting alternative");
+    ExpectPreferred(LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
+                    alternative, required, 2);
   }
 }
 

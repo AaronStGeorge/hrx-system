@@ -7,6 +7,12 @@
 #include "loom/codegen/low/schedule/target_pressure.h"
 
 #include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/schedule/completion_demand.h"
+#include "loom/codegen/low/schedule/dependencies.h"
+#include "loom/codegen/low/schedule/dependency_incoming.h"
+#include "loom/codegen/low/schedule/dependency_index.h"
+#include "loom/codegen/low/schedule/required_pressure.h"
 #include "loom/target/residency.h"
 
 namespace loom {
@@ -103,6 +109,219 @@ TEST(TargetPressureTest, ResidencyHeadroomBelongsToGrowingResources) {
     EXPECT_EQ(score.pressure_cliff_penalty, test_case.penalty);
     EXPECT_EQ(score.persistent_pressure_cliff_penalty, test_case.penalty);
     EXPECT_EQ(score.units_until_pressure_cliff, test_case.units_until_cliff);
+  }
+}
+
+class RegisterDebtPressureTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(), &pool_);
+    iree_arena_initialize(&pool_, &arena_);
+  }
+
+  void TearDown() override {
+    iree_arena_deinitialize(&arena_);
+    iree_arena_block_pool_deinitialize(&pool_);
+  }
+
+  // Owns the empty completion index used by native candidate scoring.
+  iree_arena_block_pool_t pool_;
+  // Scratch for dependency and completion initialization.
+  iree_arena_allocator_t arena_;
+};
+
+TEST_F(RegisterDebtPressureTest, GrowthUsesCanonicalBankAndOwnership) {
+  loom_low_schedule_dependency_graph_t graph;
+  loom_low_schedule_dependency_graph_initialize(&graph);
+  loom_low_schedule_node_t node = {
+      .scheduled_ordinal = LOOM_LOW_SCHEDULE_NODE_NONE,
+  };
+  uint32_t indegree = 0;
+  loom_low_schedule_dependency_index_t dependencies;
+  loom_low_schedule_dependency_detail_index_t details;
+  IREE_ASSERT_OK(loom_low_schedule_dependency_index_initialize(
+      &graph, 1, &arena_, &arena_, &indegree, &dependencies, &details));
+  loom_low_schedule_dependency_incoming_index_t incoming;
+  IREE_ASSERT_OK(loom_low_schedule_dependency_incoming_index_initialize(
+      &dependencies, &node, &arena_, &incoming));
+  loom_low_schedule_completion_demand_t completions;
+  IREE_ASSERT_OK(loom_low_schedule_completion_demand_initialize(
+      &dependencies, &incoming, 2, &arena_, &completions));
+
+  const struct {
+    // Live units in the candidate's bank before scheduling it.
+    uint64_t current_units;
+    // Net change after all input reads and result writes.
+    int64_t delta_units;
+    // Result units written before ordinary input reads.
+    uint64_t early_units;
+    // Dying input units retained through result writes.
+    uint64_t late_units;
+    // Whether the candidate increases demand beyond the bank's capacity.
+    bool opens_debt;
+  } cases[] = {
+      {3, 1, 0, 0, false},  {4, 1, 0, 0, true}, {5, 0, 0, 0, false},
+      {5, -1, 0, 0, false}, {4, 0, 1, 0, true}, {4, 0, 0, 1, true},
+  };
+  for (uint16_t reg_class_id = 0; reg_class_id < 3; ++reg_class_id) {
+    for (bool required : {false, true}) {
+      for (bool unspillable : {false, true}) {
+        for (const auto& test_case : cases) {
+          SCOPED_TRACE(::testing::Message()
+                       << "class=" << reg_class_id << " required=" << required
+                       << " unspillable=" << unspillable
+                       << " current=" << test_case.current_units
+                       << " delta=" << test_case.delta_units
+                       << " early=" << test_case.early_units
+                       << " late=" << test_case.late_units);
+          loom_low_reg_class_t classes[] = {
+              {.alloc_unit_bits = 32, .allocatable_count = 4},
+              {
+                  .alloc_unit_bits = 32,
+                  .allocatable_count = 4,
+                  .alias_set_id = 1,
+              },
+              {
+                  .alloc_unit_bits = 32,
+                  .allocatable_count = 4,
+                  .alias_set_id = 1,
+              },
+          };
+          if (unspillable) {
+            for (auto& reg_class : classes) {
+              reg_class.flags |= LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE;
+            }
+          }
+          const loom_low_descriptor_set_t descriptors = {
+              .reg_classes = classes,
+              .reg_class_count = IREE_ARRAYSIZE(classes),
+          };
+          uint32_t limits[] = {4, 4, 4};
+          loom_low_schedule_pressure_set_limit_t sets[2] = {};
+          sets[1] = {
+              .live_unit_limit = 4,
+              .representative_reg_class_id = 2,
+              .unspillable_completion_domain_id = 1,
+              .all_classes_unspillable = unspillable,
+              .has_multiple_active_reg_classes = 1,
+          };
+          loom_low_schedule_completion_domain_t domains[] = {
+              {.capacity = 4, .reg_class_id = 0},
+              {.capacity = 4, .reg_class_id = 2},
+          };
+          uint16_t domain_ids[] = {0, 1, 1};
+          loom_low_schedule_build_state_t state = {
+              .target = {.descriptor_set = &descriptors},
+              .nodes = &node,
+              .pressure_limits =
+                  {
+                      .by_reg_class = limits,
+                      .pressure_sets = sets,
+                      .pressure_set_count = 1,
+                      .unspillable_completion_domains = domains,
+                      .unspillable_completion_domain_ids_by_reg_class =
+                          domain_ids,
+                      .unspillable_completion_domain_count = 2,
+                  },
+          };
+          uint64_t live[3] = {};
+          live[reg_class_id] = test_case.current_units;
+          int64_t delta[3] = {};
+          delta[reg_class_id] = test_case.delta_units;
+          uint64_t early[3] = {};
+          early[reg_class_id] = test_case.early_units;
+          uint64_t late[3] = {};
+          late[reg_class_id] = test_case.late_units;
+          uint8_t touched[3] = {};
+          touched[reg_class_id] = 1;
+          uint32_t reserves[3] = {};
+          uint32_t activation[2] = {};
+          loom_low_schedule_required_pressure_t required_pressure[2] = {};
+          if (required) {
+            required_pressure[domain_ids[reg_class_id]] = {
+                .candidate_delta_units = 1,
+                .candidate_write_delta_units = 1,
+                .candidate_early_added_units = test_case.early_units,
+                .candidate_opens_lifetime = true,
+            };
+          }
+          loom_low_schedule_pressure_set_record_t shared_pressure[2] = {};
+          if (reg_class_id != 0) {
+            shared_pressure[1] = {
+                .current_live_units = test_case.current_units,
+                .candidate_delta_units = test_case.delta_units,
+                .candidate_lifetime =
+                    {
+                        .early_added_units = test_case.early_units,
+                        .late_released_units = test_case.late_units,
+                    },
+                .flags = LOOM_LOW_SCHEDULE_PRESSURE_SET_FLAG_BLOCK_TOUCHED |
+                         LOOM_LOW_SCHEDULE_PRESSURE_SET_FLAG_CANDIDATE_TOUCHED,
+            };
+          }
+          uint16_t shared_ids[] = {1};
+          loom_low_schedule_pressure_state_t pressure = {
+              .current_live_units_by_reg_class = live,
+              .required_pressure = required_pressure,
+              .packing_reserve_units_by_reg_class = reserves,
+              .pressure_sets =
+                  {
+                      .records = shared_pressure,
+                      .block_ids = shared_ids,
+                      .candidate_delta_touched_ids = shared_ids,
+                      .block_count = reg_class_id != 0 ? 1u : 0u,
+                      .candidate_delta_touched_count =
+                          reg_class_id != 0 ? 1u : 0u,
+                  },
+              .block_reg_class_ids = &reg_class_id,
+              .block_reg_class_touched_flags = touched,
+              .candidate_delta_units_by_reg_class = delta,
+              .candidate_lifetime =
+                  {
+                      .early_added_units = early,
+                      .late_released_units = late,
+                  },
+              .candidate_unspillable_activation_units = activation,
+              .unspillable_completion_demand = completions,
+              .candidate_delta_touched_flags = touched,
+              .candidate_delta_touched_reg_class_ids = &reg_class_id,
+              .candidate_delta_touched_count = 1,
+              .block_reg_class_count = 1,
+          };
+          loom_low_schedule_register_debt_word_t debt = {};
+          loom_low_schedule_candidate_score_t score = {
+              .register_debt = &debt,
+              .pressure_cliff_units = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE,
+              .units_until_pressure_cliff =
+                  LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE,
+              .active_unspillable_completion_capacity = UINT32_MAX,
+              .active_unspillable_transaction_final_capacity = UINT32_MAX,
+          };
+          loom_low_schedule_target_pressure_score_candidate(
+              &state, &pressure, LOOM_LOW_SCHEDULE_NODE_NONE, &score);
+          const uint64_t expected_bank =
+              test_case.opens_debt && !unspillable
+                  ? UINT64_C(1) << (reg_class_id == 0 ? 0 : 2)
+                  : 0;
+          EXPECT_EQ(debt.banks, expected_bank);
+          EXPECT_EQ(debt.required_banks, required ? expected_bank : 0);
+          EXPECT_EQ(iree_any_bit_set(
+                        score.flags,
+                        LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REGISTER_DEBT),
+                    expected_bank != 0);
+          EXPECT_EQ(
+              iree_any_bit_set(
+                  score.flags,
+                  LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REQUIRED_REGISTER_DEBT),
+              required && expected_bank != 0);
+          EXPECT_EQ(
+              iree_any_bit_set(
+                  score.flags,
+                  LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY),
+              unspillable && test_case.opens_debt);
+        }
+      }
+    }
   }
 }
 

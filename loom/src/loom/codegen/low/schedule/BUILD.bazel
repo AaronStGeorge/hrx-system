@@ -273,6 +273,7 @@ loom_cc_test(
         "pressure_alias.h",
         "pressure_test.cc",
         "ready_policy.h",
+        "required_pressure.h",
         "setup_order.h",
         "storage_lifetime.h",
         "storage_relation_index.h",
@@ -280,6 +281,7 @@ loom_cc_test(
         "target_pressure_test.cc",
     ],
     deps = [
+        ":dependencies",
         ":dependency_index",
         ":ready_frontier",
         ":resource_calendar",
