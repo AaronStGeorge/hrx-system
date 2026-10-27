@@ -202,8 +202,8 @@ TEST_F(AmdgpuOccupancyTargetResourcesTest,
   EXPECT_EQ(vgpr->pool_units, 768u);
   EXPECT_EQ(vgpr->reduction_units_to_next_better_tier, 4u);
   EXPECT_EQ(lds->units, 15616u);
-  EXPECT_EQ(lds->rounded_units, 15872u);
-  EXPECT_EQ(lds->allocation_granularity, 512u);
+  EXPECT_EQ(lds->rounded_units, 16384u);
+  EXPECT_EQ(lds->allocation_granularity, 1024u);
   EXPECT_EQ(lds->pool_units, 131072u);
   EXPECT_EQ(lds->reduction_units_to_next_better_tier, 1280u);
   EXPECT_TRUE(iree_string_view_equal(lds->unit, IREE_SV("bytes")));
@@ -222,6 +222,52 @@ TEST_F(AmdgpuOccupancyTargetResourcesTest,
   EXPECT_EQ(Build(IREE_SV("gfx1151"), 64, 36, next_vgpr, 256, next_lds)
                 .resident_waves_per_simd,
             9u);
+}
+
+TEST_F(AmdgpuOccupancyTargetResourcesTest,
+       ReportsPhysicalLocalMemoryGranularityAcrossFamilies) {
+  struct TargetCase {
+    // Exact processor whose final resource report is exercised.
+    const char* processor;
+    // Supported wave width selected for the processor.
+    uint32_t wave_size;
+    // Physical LDS allocation granularity in bytes per workgroup.
+    uint32_t allocation_granularity;
+    // Physical bytes reserved for an 11.5 KiB request.
+    uint32_t rounded_units;
+  };
+  static constexpr TargetCase kCases[] = {
+      {"gfx942", 64, 512, 11776},   {"gfx950", 64, 1280, 12800},
+      {"gfx1100", 64, 1024, 12288}, {"gfx1151", 64, 1024, 12288},
+      {"gfx1201", 64, 1024, 12288}, {"gfx1250", 32, 2048, 12288},
+  };
+
+  for (const TargetCase& test_case : kCases) {
+    SCOPED_TRACE(test_case.processor);
+    loom_target_residency_constraint_list_t constraints = {};
+    Build(iree_make_cstring_view(test_case.processor), test_case.wave_size,
+          /*scalar_register_count=*/4, /*vector_register_count=*/1,
+          /*flat_workgroup_size=*/256, /*local_memory_bytes=*/11776,
+          &constraints);
+    const auto* lds = FindConstraint(constraints, IREE_SV("amdgpu.lds"));
+    ASSERT_NE(lds, nullptr);
+    EXPECT_EQ(lds->units, 11776u);
+    EXPECT_EQ(lds->rounded_units, test_case.rounded_units);
+    EXPECT_EQ(lds->allocation_granularity, test_case.allocation_granularity);
+  }
+}
+
+TEST_F(AmdgpuOccupancyTargetResourcesTest,
+       LimitsRdnaResidencyAtPhysicalLocalMemoryCliff) {
+  for (const auto* processor : {"gfx1100", "gfx1151", "gfx1200", "gfx1201",
+                                "gfx11-generic", "gfx12-generic"}) {
+    SCOPED_TRACE(processor);
+    const auto resources =
+        Build(iree_make_cstring_view(processor), /*wave_size=*/64,
+              /*scalar_register_count=*/4, /*vector_register_count=*/1,
+              /*flat_workgroup_size=*/256, /*local_memory_bytes=*/11776);
+    EXPECT_EQ(resources.resident_waves_per_simd, 10u);
+  }
 }
 
 TEST_F(AmdgpuOccupancyTargetResourcesTest, DistinguishesNonlimitingRegisters) {
@@ -477,7 +523,7 @@ TEST_F(AmdgpuOccupancyTargetResourcesTest,
   EXPECT_EQ(summary.next_better_tier, 5u);
   EXPECT_EQ(summary.limiting_resource_count, 1u);
   EXPECT_EQ(summary.limiting_resource_reduction_units_to_next_better_tier,
-            22016u);
+            22528u);
 }
 
 TEST_F(AmdgpuOccupancyTargetResourcesTest, ReportsCapturedSwiGluLdsTransition) {
@@ -548,7 +594,7 @@ TEST_F(AmdgpuOccupancyTargetResourcesTest, SkipsUnreachableLdsTiers) {
                                /*local_memory_bytes=*/2049);
   const auto& summary = resources.residency_summary;
   EXPECT_TRUE(loom_target_residency_summary_is_valid(&summary));
-  EXPECT_EQ(summary.tier, 13u);
+  EXPECT_EQ(summary.tier, 11u);
   EXPECT_EQ(summary.next_better_tier, 16u);
   EXPECT_EQ(summary.limiting_resource_reduction_units_to_next_better_tier, 1u);
   EXPECT_EQ(

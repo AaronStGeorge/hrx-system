@@ -887,10 +887,13 @@ AMDGPU_OCCUPANCY_DOMAIN_CDNA4 = AmdgpuOccupancyDomainInfo(
     local_memory_allocation_granularity=1280,
     max_barrier_workgroup_count=16,
 )
+# This is the physical allocation granularity used for residency, not the
+# 512-byte COMPUTE_PGM_RSRC2 encoding unit. GFX10.3+ allocates at least 1 KiB
+# of LDS per workgroup even when the encoded request is one unit.
 AMDGPU_OCCUPANCY_DOMAIN_RDNA = AmdgpuOccupancyDomainInfo(
     simd_count=4,
     local_memory_bytes=128 * 1024,
-    local_memory_allocation_granularity=512,
+    local_memory_allocation_granularity=1024,
     max_barrier_workgroup_count=32,
 )
 AMDGPU_OCCUPANCY_DOMAIN_GFX125X = AmdgpuOccupancyDomainInfo(

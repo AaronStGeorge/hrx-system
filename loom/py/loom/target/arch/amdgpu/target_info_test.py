@@ -368,6 +368,50 @@ def test_wave64_valu_mask_write_hazard_covers_gfx11_processors() -> None:
     }
 
 
+def test_occupancy_local_memory_granularity_matches_physical_families() -> None:
+    expected_processors_by_granularity = {
+        512: {"gfx90a", "gfx940", "gfx941", "gfx942", "gfx9-4-generic"},
+        1024: {
+            "gfx1100",
+            "gfx1101",
+            "gfx1102",
+            "gfx1103",
+            "gfx1150",
+            "gfx1151",
+            "gfx1152",
+            "gfx1153",
+            "gfx1170",
+            "gfx1171",
+            "gfx1172",
+            "gfx1200",
+            "gfx1201",
+            "gfx11-generic",
+            "gfx12-generic",
+        },
+        1280: {"gfx950"},
+        2048: {"gfx1250", "gfx1251", "gfx12-5-generic"},
+    }
+    actual_processors_by_granularity: dict[int, set[str]] = {}
+    for processor in AMDGPU_PROCESSOR_INFOS:
+        models = tuple(
+            model
+            for model in (processor.occupancy.wave32, processor.occupancy.wave64)
+            if model is not None
+        )
+        if not models:
+            continue
+        granularities = {
+            model.domain.local_memory_allocation_granularity for model in models
+        }
+        assert len(granularities) == 1
+        granularity = next(iter(granularities))
+        actual_processors_by_granularity.setdefault(granularity, set()).add(
+            processor.processor
+        )
+
+    assert actual_processors_by_granularity == expected_processors_by_granularity
+
+
 def test_generic_descriptor_sets_have_independent_contracts() -> None:
     descriptor_sets_by_key = {info.key: info for info in AMDGPU_DESCRIPTOR_SET_INFOS}
     processors_by_name = {info.processor: info for info in AMDGPU_PROCESSOR_INFOS}
