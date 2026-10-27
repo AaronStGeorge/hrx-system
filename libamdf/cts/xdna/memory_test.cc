@@ -250,7 +250,8 @@ TEST_F(XdnaMemoryTest, OwnsStableAddressAndExplicitHostMapping) {
   ASSERT_TRUE(amdf_status_is_ok(
       api_->host_mapping_query_info(mapping_, &mapping_info)));
   EXPECT_EQ(mapping_info.flags & map_info.flags, map_info.flags);
-  EXPECT_EQ(mapping_info.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(mapping_info.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                      AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   ASSERT_NE(mapping_info.pointer, nullptr);
   EXPECT_EQ(mapping_info.byte_length, map_info.byte_length);
   EXPECT_EQ(mapping_info.memory_byte_offset, map_info.byte_offset);

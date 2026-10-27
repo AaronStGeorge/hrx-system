@@ -173,14 +173,15 @@ class FabricReservationTest : public GpuXdnaDeviceFixture,
         ASSERT_NO_FATAL_FAILURE(
             backing.storage.Create(api_, system_scope_, host));
         create.registered_host_pointer = backing.storage.host.pointer;
-        create.registered_host_cacheability = backing.storage.host.cacheability;
+        create.registered_host_properties = backing.storage.host.properties;
       } else {
         create.required_flags |= AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
       }
       ASSERT_NO_FATAL_FAILURE(
           backing.memory.Create(api_, system_scope_, create));
-      ASSERT_EQ(backing.memory.host.cacheability,
-                AMDF_HOST_CACHEABILITY_WRITE_BACK);
+      ASSERT_EQ(backing.memory.host.properties,
+                (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                 AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
       backing.expected.resize(create.byte_length);
     }
   }

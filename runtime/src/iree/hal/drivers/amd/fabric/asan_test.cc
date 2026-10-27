@@ -184,7 +184,8 @@ struct Native {
       auto* memory = reinterpret_cast<Memory*>(handle);
       out->pointer = memory->bytes.data();
       out->byte_length = memory->bytes.size();
-      out->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      out->properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
       return AMDF_STATUS_OK;
     };
     api.host_mapping_cache_control = [](amdf_host_mapping_t* handle,

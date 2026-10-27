@@ -769,7 +769,8 @@ TEST_P(XdnaFirstWriterTest, NativeConstructionPreparesFirstDeviceWrite) {
         .storage_class = import_class.storage_class,
         .payload = {.host_pointer = registered_storage_},
         .byte_length = allocation_length,
-        .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+        .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
         .maintenance_range = {guard_length, registration_length},
     };
     IREE_ASSERT_OK(iree_hal_pool_import_buffer(

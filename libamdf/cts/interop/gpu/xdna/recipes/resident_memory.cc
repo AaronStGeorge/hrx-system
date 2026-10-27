@@ -263,7 +263,8 @@ void ResidentBuffer::QueryImportedPairs(const amdf_api_t* api,
     auto host_release = memory.host.flush;
     auto host_acquire = memory.host.invalidate;
     if (gpu_peer &&
-        memory.host.cacheability == AMDF_HOST_CACHEABILITY_WRITE_BACK) {
+        memory.host.properties == (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                   AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK)) {
       if (host_release.executor != AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API) {
         host_release = none;
       }

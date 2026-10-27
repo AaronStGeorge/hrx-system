@@ -263,7 +263,8 @@ TEST_P(GpuAsanTest, HostImportEnablesRegisteredEnvelopeAndBypassesQuarantine) {
       .storage_class = {.type = IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER},
       .payload = {.host_pointer = external_.data()},
       .byte_length = external_.size(),
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .maintenance_range = {4096, 4096},
       .release =
           [](void* user_data, iree_hal_external_storage_class_t,

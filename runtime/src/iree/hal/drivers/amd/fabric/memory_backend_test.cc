@@ -12,6 +12,79 @@
 
 namespace iree::hal::amd::fabric {
 
+TEST_F(MemoryBackendTest, RequiredHostGuaranteesUseProspectiveBackingFacts) {
+  const iree_hal_pool_family_access_t family = {
+      .family = families_[0],
+      .usage = IREE_HAL_BUFFER_USAGE_STORAGE,
+  };
+  iree_hal_pool_scope_t scope = {
+      .family_count = 1,
+      .families = &family,
+      .host =
+          {
+              .access = IREE_HAL_MEMORY_ACCESS_ALL,
+              .modes = IREE_HAL_MAPPING_MODE_PERSISTENT,
+          },
+  };
+  for (const auto properties : {IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED,
+                                IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK}) {
+    scope.host.properties = properties;
+    iree_hal_pool_t* pool = nullptr;
+    IREE_ASSERT_OK(iree_hal_slab_pool_create(group_, scope, &pool_options_,
+                                             allocator_, &pool));
+    EXPECT_EQ(native_.create_count, 0);
+    EXPECT_EQ(iree_hal_pool_query_host_access(pool).properties,
+              IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                  IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
+    iree_hal_pool_release(pool);
+  }
+  scope.host.properties = IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED;
+  iree_hal_pool_t* rejected = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
+                        iree_hal_slab_pool_create(group_, scope, &pool_options_,
+                                                  allocator_, &rejected));
+  EXPECT_EQ(rejected, nullptr);
+  EXPECT_EQ(native_.create_count, 0);
+}
+
+TEST_F(MemoryBackendTest, HostGuaranteesIntersectOwnedAndImportedRoutes) {
+  native_.host_properties = AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+                            AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED;
+  native_.registration_enabled = true;
+  const iree_hal_pool_import_class_t import_class = {
+      .storage_class = {IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER, {0, 0}},
+  };
+  pool_options_.imports = {1, &import_class};
+  iree_hal_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, &pool));
+  iree_hal_pool_import_requirements_t requirements;
+  ASSERT_TRUE(iree_hal_pool_query_import_requirements(
+      pool, import_class.storage_class, &requirements));
+  EXPECT_EQ(requirements.host_properties,
+            IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
+  EXPECT_EQ(iree_hal_pool_query_host_access(pool).properties, 0u);
+  EXPECT_EQ(iree_hal_pool_query_host_access(pool).access,
+            IREE_HAL_MEMORY_ACCESS_ALL);
+  iree_hal_buffer_t* buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+      pool, iree_hal_make_pool_reservation_request(4096, 0),
+      iree_infinite_timeout(), &buffer));
+  EXPECT_EQ(iree_hal_buffer_memory_view(buffer).backing->host_properties,
+            IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+                IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED);
+  iree_hal_buffer_release(buffer);
+  iree_hal_pool_release(pool);
+  native_.AwaitEmpty();
+
+  pool_options_.owned.mode = IREE_HAL_SLAB_POOL_IMPORT_ONLY;
+  IREE_ASSERT_OK(CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, &pool));
+  EXPECT_EQ(iree_hal_pool_query_host_access(pool).properties,
+            IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
+  iree_hal_pool_release(pool);
+}
+
 TEST_F(MemoryBackendTest, RegisteredIoRequiresBothFileOwnerAndNativeAdmission) {
   const uint64_t interfaces = UINT64_C(1)
                               << IREE_HAL_BUFFER_INTERFACE_REGISTERED_IO;
@@ -322,8 +395,9 @@ TEST_F(MemoryBackendTest,
     EXPECT_EQ(memory.backing->allocation_alignment, 4096u);
     EXPECT_EQ(memory.backing->maintenance_range.byte_offset, 0u);
     EXPECT_EQ(memory.backing->maintenance_range.byte_length, 4096u);
-    EXPECT_EQ(memory.backing->host_cacheability,
-              IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(memory.backing->host_properties,
+              (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
     EXPECT_EQ(memory.backing->physical_backing_id.words[0], 0xAu);
     EXPECT_EQ(memory.backing->physical_backing_id.words[1], 1u);
 
@@ -473,7 +547,8 @@ TEST_F(MemoryBackendTest, JoinsOwnedAndRegisteredVisibilityAtConstruction) {
   };
   storage.payload.host_pointer = bytes;
   storage.byte_length = 512;
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   storage.maintenance_range = iree_hal_make_buffer_range(128, 256);
   storage.physical_backing_id = {{0xC, 0x1234}};
   iree_hal_buffer_t* imported = nullptr;
@@ -487,8 +562,9 @@ TEST_F(MemoryBackendTest, JoinsOwnedAndRegisteredVisibilityAtConstruction) {
   EXPECT_EQ(memory.backing->native_allocation.byte_offset, 256u);
   EXPECT_EQ(memory.backing->native_allocation.granularity, 4096u);
   EXPECT_EQ(memory.backing->allocation_alignment, 256u);
-  EXPECT_EQ(memory.backing->host_cacheability,
-            IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(memory.backing->host_properties,
+            (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(memory.backing->maintenance_range.byte_offset, 0u);
   EXPECT_EQ(memory.backing->maintenance_range.byte_length, 256u);
   EXPECT_EQ(memory.backing->physical_backing_id.words[0], 0xCu);
@@ -546,6 +622,7 @@ TEST_F(MemoryBackendTest, NativeImportsQualifyExactTransportAndPrivateCpuUses) {
   iree_hal_pool_import_requirements_t requirements;
   ASSERT_TRUE(iree_hal_pool_query_import_requirements(
       pool, import_class.storage_class, &requirements));
+  EXPECT_EQ(requirements.host_properties, 0u);
   EXPECT_EQ(requirements.byte_length_granularity, 12288u);
   iree_hal_pool_release(pool);
   pool = nullptr;
@@ -644,7 +721,9 @@ TEST_F(MemoryBackendTest, HostExportDoesNotGrantPublicMapping) {
                                         storage_class, &exported, &range));
   EXPECT_NE(exported.payload.host_pointer, nullptr);
   EXPECT_EQ(exported.byte_length, 4096u);
-  EXPECT_EQ(exported.host_cacheability, IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(exported.host_properties,
+            (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(exported.release, nullptr);
   EXPECT_EQ(range.byte_offset, 32u);
   EXPECT_EQ(range.byte_length, 64u);
@@ -683,7 +762,8 @@ TEST_F(MemoryBackendTest, WrapperFailureRollsBackBeforeConsumingStorage) {
   };
   storage.payload.host_pointer = bytes;
   storage.byte_length = sizeof(bytes);
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   storage.maintenance_range = iree_hal_make_buffer_range(64, 384);
   storage.release = +[](void* user_data, iree_hal_external_storage_class_t,
                         iree_hal_external_storage_payload_t payload) {
@@ -735,7 +815,8 @@ TEST_F(MemoryBackendTest, RejectsLogicalRangeOutsideRegistrationEnvelope) {
       .storage_class = import_class.storage_class,
       .payload = {.host_pointer = bytes},
       .byte_length = sizeof(bytes),
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .maintenance_range = {128, 256},
   };
   for (const auto logical_range : {iree_hal_make_buffer_range(64, 256),
@@ -892,7 +973,8 @@ TEST_F(MemoryBackendTest, PrivateTransferViewsFollowEachStorageRoute) {
     iree_hal_external_storage_t storage = {.storage_class = storage_class};
     storage.payload.host_pointer = bytes;
     storage.byte_length = sizeof(bytes);
-    storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     storage.maintenance_range = iree_hal_make_buffer_range(128, 512);
     iree_hal_buffer_t* imported = nullptr;
     IREE_ASSERT_OK(iree_hal_pool_import_buffer(
@@ -1174,7 +1256,8 @@ TEST_F(MemoryBackendTest, HostRegistrationKeepsSourcePlacement) {
   };
   storage.payload.host_pointer = bytes;
   storage.byte_length = sizeof(bytes);
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   storage.maintenance_range = iree_hal_make_buffer_range(0, sizeof(bytes));
   iree_hal_buffer_t* imported = nullptr;
   IREE_ASSERT_OK(iree_hal_pool_import_buffer(
@@ -1752,7 +1835,8 @@ TEST_F(MemoryBackendTest, AtomicGuaranteesFollowSitesAndEveryBackingRoute) {
       .storage_class = import_class.storage_class,
       .payload = {.host_pointer = bytes},
       .byte_length = sizeof(bytes),
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .maintenance_range = {0, sizeof(bytes)},
   };
   auto storage = source;

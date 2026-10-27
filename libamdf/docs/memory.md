@@ -227,11 +227,20 @@ Registration preserves the requested subpage offset in each GPU address and
 exposes only the logical range; the caller retains the original storage until
 all native mappings are released.
 
-Registration also supplies `registered_host_cacheability`, established from the
+Registration also supplies `registered_host_properties`, established from the
 caller's allocation or mapping contract and held unchanged for the registration's
-lifetime. The profile reports the accepted class. A raw pointer is insufficient
-to establish cacheability; unknown or incompatible classes fail admission.
-Current registration profiles require ordinary write-back pages.
+lifetime. The profile reports a required property mask; the supplied guarantees
+must include every required bit. A raw pointer establishes none of these facts.
+Current registration profiles require `READ_CACHED | WRITE_BACK`, describing
+ordinary write-back pages.
+
+Host mapping properties describe independent guarantees. `READ_CACHED` and
+`READ_UNCACHED` describe CPU reads; `WRITE_BACK` and `WRITE_COMBINED` refine CPU
+write behavior. An absent bit does not imply its opposite. Prospective profiles
+report guarantees before allocation, and live mappings report guarantees for
+their actual backing. Import transport entries may refine the profile-wide
+guarantees when the exact transport and provenance establish additional facts.
+These properties do not replace visibility recipes or synchronization.
 
 Windows GPU/XDNA sharing uses the same REGISTER request with both devices in
 the consumer list. Each native adapter attaches the original caller pages;
@@ -852,7 +861,7 @@ Import is different: an external owner supplies existing backing and remains
 responsible for its transport's publication and synchronization protocol.
 Import does not silently flush an arbitrary foreign mapping.
 
-A CPU mapping reports its CPU cacheability and the flush/invalidate operations
+A CPU mapping reports its CPU properties and the flush/invalidate operations
 available through that mapping. Those are mechanisms, not requirements for
 every consumer. Ordinary write-back pages can be coherent with a GPU and still
 need flushing before XDNA reads them. An explicit cache-control request performs
@@ -907,7 +916,7 @@ native operations, including Windows allocation-cache publication.
 `memory_scope_query_pair_info` qualifies those recipes before any backing or
 host view exists. Its `amdf_memory_profile_pair_query_t` fixes the scope-local
 profile, backing requirements, complete caller-ordered device/access set and
-registration cache class. A prospective DEVICE site names an access ordinal and
+registration host properties. A prospective DEVICE site names an access ordinal and
 exact queue family; a HOST site declares view permissions and requires
 `HOST_VISIBLE`. Successful constructions with those same inputs can reuse the
 answer across sizes and addresses. The query shares native selection and policy
@@ -931,10 +940,10 @@ XDNA import. Its independent native backing reference survives destruction of
 the exporting resource. The caller preserves the exporter-provided typed value;
 relabeling a foreign descriptor does not establish that contract. Portable
 `DMA_BUF_FD` remains available for external device interoperability, but its
-exporter CPU-access protocol is unqualified. Such host mappings report UNKNOWN
-cacheability and operations; their host pair queries and cache-control
-operations return `UNSUPPORTED`. Device-only qualification remains independent
-of host policy.
+exporter CPU-access protocol is unqualified. Such host mappings report no CPU
+caching guarantees or available cache-control operations; their host pair
+queries and cache-control operations return `UNSUPPORTED`. Device-only
+qualification remains independent of host policy.
 
 Ordering establishes when the consumer may act. Cache coherence does not create
 a producer-to-consumer dependency. The HAL or application supplies that
@@ -970,7 +979,7 @@ platform-owned, length-sealed pages through the optional udmabuf service. The
 original ordinary CPU mapping remains the file buffer; GPU reservations project
 those same pages into independently selected device addresses. Borrowing a
 registered pointer or importing an arbitrary external handle cannot establish the same
-fact from its address or cacheability. A caller with independent knowledge of
+fact from its address or properties. A caller with independent knowledge of
 its registered pages can use the native file API, but the generic registration
 contract does not advertise that additional guarantee.
 
@@ -1380,13 +1389,13 @@ the OS mapping layer, not a device-specific external-memory import format.
 
 1. The worker initializes its selected devices and queries a SYSTEM scope's
    REGISTER profile for the complete consumer set. The profile supplies the
-   source-pointer alignment, length granularity and accepted cacheability.
+   source-pointer alignment, length granularity and accepted properties.
 2. The producer creates compatible shared backing and transfers its native
    handle. The worker opens an independent mapping and acknowledges import
    before the producer releases its mapping and handle. Send completion alone
    does not establish receiver ownership on every platform.
 3. The worker calls `memory_create` with the queried profile, its own mapped
-   base, the pool extent and `registered_host_cacheability`. One memory handle
+   base, the pool extent and `registered_host_properties`. One memory handle
    represents the registered pool; buffer ranges are offsets into it.
 4. The worker resolves device addresses from that handle and its access
    ordinals. Requests identify pool ranges and dependencies, not another

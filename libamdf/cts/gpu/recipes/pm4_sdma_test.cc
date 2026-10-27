@@ -249,8 +249,9 @@ class Pm4SdmaRecipeTest : public Pm4SdmaTest {
     RecordProperty("pm4_sdma_workgroup_size", kernel.workgroup_size());
     RecordProperty("pm4_sdma_kernarg_byte_length",
                    kernel.arguments.byte_length);
-    RecordProperty("pm4_sdma_host_cacheability",
-                   AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    RecordProperty("pm4_sdma_host_properties",
+                   (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                    AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     RecordProperty("pm4_sdma_control_offsets", "0,64,128");
     RecordProperty("pm4_sdma_publication_order",
                    transfer_queues == TransferQueues::kShared

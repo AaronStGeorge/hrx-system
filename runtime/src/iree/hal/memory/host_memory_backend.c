@@ -77,8 +77,9 @@ static const iree_hal_slab_pool_plan_vtable_t
 
 static bool iree_hal_host_memory_access_is_supported(
     iree_hal_pool_host_access_t access) {
-  return access.cacheability == IREE_HAL_HOST_CACHEABILITY_UNKNOWN ||
-         access.cacheability == IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  return iree_all_bits_set(IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+                           access.properties);
 }
 
 static bool iree_hal_host_external_storage_class_is_supported(
@@ -225,7 +226,8 @@ static iree_status_t iree_hal_host_slab_pool_query(
     host.modes |= options->preferences.host.modes;
   }
   if (host.access) {
-    host.cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    host.properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                       IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   }
 
   iree_hal_host_slab_pool_plan_t* plan = NULL;

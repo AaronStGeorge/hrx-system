@@ -107,12 +107,17 @@ static const iree_hal_slab_pool_plan_vtable_t
         .create = iree_hal_amdgpu_slab_pool_plan_create,
 };
 
-// Native pool selection does not expose a host page cacheability guarantee.
+// Native host-cached pools guarantee CPU read caching; write policy is
+// qualified only on the concrete allocation or imported source.
 static bool iree_hal_amdgpu_memory_supports_host_access(
     iree_hal_memory_type_t memory_type, iree_hal_pool_host_access_t host) {
   return !host.access ||
          (iree_any_bit_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_VISIBLE) &&
-          host.cacheability == IREE_HAL_HOST_CACHEABILITY_UNKNOWN);
+          iree_all_bits_set(
+              iree_any_bit_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_CACHED)
+                  ? IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED
+                  : IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
+              host.properties));
 }
 
 static iree_hal_buffer_usage_t iree_hal_amdgpu_memory_mapping_usage(
@@ -422,6 +427,11 @@ static iree_status_t iree_hal_amdgpu_slab_pool_query_memory(
     host.access |= options->preferences.host.access;
     host.modes |= options->preferences.host.modes;
   }
+  host.properties =
+      host.access && iree_any_bit_set(exposed_memory_type,
+                                      IREE_HAL_MEMORY_TYPE_HOST_CACHED)
+          ? IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED
+          : IREE_HAL_HOST_MEMORY_PROPERTY_NONE;
   // Host execution addresses are private native facts, independent of maps.
   const iree_host_size_t host_agent_count =
       options->owned.mode == IREE_HAL_SLAB_POOL_OWNED_ENABLED &&

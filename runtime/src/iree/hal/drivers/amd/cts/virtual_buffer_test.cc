@@ -109,7 +109,7 @@ void FabricXdnaVirtualBufferTest::RunReplacement(
       host_alias ? families.size() : families.size() - 1,
       families.data(),
       {IREE_HAL_MEMORY_ACCESS_ALL, IREE_HAL_MAPPING_MODE_PERSISTENT,
-       IREE_HAL_HOST_CACHEABILITY_UNKNOWN}};
+       IREE_HAL_HOST_MEMORY_PROPERTY_NONE}};
   iree_hal_slab_pool_options_t pool_options;
   iree_hal_slab_pool_options_initialize(&pool_options);
   Ref<iree_hal_pool_t> pool;
@@ -133,7 +133,7 @@ void FabricXdnaVirtualBufferTest::RunReplacement(
       host_alias
           ? iree_hal_pool_host_access_t{IREE_HAL_MEMORY_ACCESS_READ,
                                         IREE_HAL_MAPPING_MODE_PERSISTENT,
-                                        IREE_HAL_HOST_CACHEABILITY_UNKNOWN}
+                                        IREE_HAL_HOST_MEMORY_PROPERTY_NONE}
           : iree_hal_pool_host_access_t{};
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(

@@ -211,8 +211,9 @@ class GpuFileIoTest
     if (registered) {
       alignment =
           std::max(alignment, geometry.registered_host_pointer_alignment);
-      ASSERT_EQ(geometry.registered_host_cacheability,
-                AMDF_HOST_CACHEABILITY_WRITE_BACK);
+      ASSERT_EQ(geometry.registered_host_properties,
+                (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                 AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     }
     ASSERT_LE(alignment, geometry.maximum_alignment);
     ASSERT_GT(geometry.byte_length_granularity, 0u);
@@ -235,7 +236,9 @@ class GpuFileIoTest
       ASSERT_NO_FATAL_FAILURE(
           AllocateHostStorage(byte_length, alignment, &pointer));
       creation.registered_host_pointer = pointer;
-      creation.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      creation.registered_host_properties =
+          (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+           AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     }
     ASSERT_NO_FATAL_FAILURE(CreateMemory(system_scope_, creation, out_memory));
     ASSERT_EQ((*out_memory)->host.features, profile.host_mapping.features);
@@ -605,7 +608,8 @@ TEST_P(GpuFilePoolTest,
   ASSERT_NO_FATAL_FAILURE(CreatePayload(backing, 8 * unit, unit, &pool,
                                         AMDF_MEMORY_FLAG_MAPPING_SOURCE,
                                         capabilities.required_access));
-  ASSERT_EQ(pool->host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  ASSERT_EQ(pool->host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                    AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   ASSERT_EQ(pool->access_info.flags & AMDF_MEMORY_FLAG_HOST_COHERENT, 0u);
   ASSERT_NE(pool->access_info.flags & AMDF_MEMORY_FLAG_MAPPING_SOURCE, 0u);
   ASSERT_NE(projection.address, pool->device_address);
@@ -623,8 +627,7 @@ TEST_P(GpuFilePoolTest,
       .access_count = pool->creation.access_count,
       .required_flags = pool->creation.required_flags,
       .accesses = pool->creation.accesses,
-      .registered_host_cacheability =
-          pool->creation.registered_host_cacheability,
+      .registered_host_properties = pool->creation.registered_host_properties,
   };
   pair_query.producer.kind = AMDF_MEMORY_SITE_KIND_FILE_IO;
   pair_query.producer.value.host_access =

@@ -139,7 +139,7 @@ void iree_hal_amd_gpu_signal_cache_deinitialize(
 
 // Queries the GPU address of an acquired coherent write-back mapping. The
 // admitted allocation policy already proves coherence; this validates the
-// achieved host cacheability. A NULL output checks only that mapping property.
+// achieved host properties. A NULL output checks only that mapping property.
 iree_status_t iree_hal_amd_gpu_backing_query_address(
     const iree_hal_amd_gpu_context_t* context,
     const iree_hal_amd_fabric_memory_t* memory, uint64_t* out_address);

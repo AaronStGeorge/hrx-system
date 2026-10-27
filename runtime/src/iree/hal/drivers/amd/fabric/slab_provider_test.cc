@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <future>
+#include <initializer_list>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -98,8 +99,9 @@ struct FakeNative {
       EXPECT_EQ(info->byte_length % 64, 0u);
       EXPECT_GE(info->minimum_alignment, 64u);
     } else {
-      EXPECT_EQ(info->registered_host_cacheability,
-                AMDF_HOST_CACHEABILITY_WRITE_BACK);
+      EXPECT_EQ(info->registered_host_properties,
+                (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                 AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     }
     EXPECT_LE(info->minimum_alignment, 4096u);
     EXPECT_TRUE(iree_device_size_is_power_of_two(info->minimum_alignment));
@@ -217,7 +219,8 @@ struct FakeNative {
       amdf_host_mapping_t* base_mapping, amdf_host_mapping_info_t* out_info) {
     auto* mapping = reinterpret_cast<FakeMapping*>(base_mapping);
     out_info->flags = AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
-    out_info->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    out_info->properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     out_info->pointer = mapping->memory->data();
     out_info->byte_length = mapping->memory->byte_length;
     out_info->cache_line_size = 64;
@@ -413,8 +416,9 @@ class SlabProviderTest : public ::testing::Test {
       import_route.profile.registration.maximum_byte_length = 4096;
       import_route.profile.registration.byte_length_granularity = 1;
       import_route.profile.registration.registered_host_pointer_alignment = 1;
-      import_route.profile.registration.registered_host_cacheability =
-          AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      import_route.profile.registration.registered_host_properties =
+          (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+           AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
       import_route.profile.registration.minimum_alignment = 1;
       import_route.profile.registration.maximum_alignment = 4096;
       import_route.required_flags = options.memory.required_flags;
@@ -701,7 +705,8 @@ TEST_F(SlabProviderTest, MixedReleaseDetachesImportsAndQueuesOwnedFrees) {
     iree_hal_external_storage_t storage = {.storage_class = storage_class};
     storage.payload.host_pointer = bytes[i];
     storage.byte_length = sizeof(bytes[i]);
-    storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     storage.maintenance_range = iree_hal_make_buffer_range(0, sizeof(bytes[i]));
     iree_hal_imported_slab_t imported = {};
     IREE_ASSERT_OK(
@@ -1152,7 +1157,8 @@ TEST_F(SlabProviderTest, RegisteredStorageUsesOnlyAuthorizedEnvelope) {
   };
   storage.payload.host_pointer = bytes;
   storage.byte_length = sizeof(bytes);
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   storage.maintenance_range = iree_hal_make_buffer_range(64, 128);
   iree_hal_imported_slab_t imported = {};
   IREE_ASSERT_OK(
@@ -1182,7 +1188,9 @@ TEST_F(SlabProviderTest, RegisteredStorageUsesOnlyAuthorizedEnvelope) {
                              storage_class, &exported, &logical_range));
   EXPECT_EQ(exported.payload.host_pointer, bytes + 64);
   EXPECT_EQ(exported.byte_length, 128u);
-  EXPECT_EQ(exported.host_cacheability, IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(exported.host_properties,
+            (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(exported.release, nullptr);
   EXPECT_EQ(logical_range.byte_offset, 24u);
   EXPECT_EQ(logical_range.byte_length, 16u);
@@ -1210,7 +1218,8 @@ TEST_F(SlabProviderTest, FailedRegistrationPublicationPreservesCallerStorage) {
   };
   storage.payload.host_pointer = bytes;
   storage.byte_length = sizeof(bytes);
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   storage.release = +[](void* user_data, iree_hal_external_storage_class_t,
                         iree_hal_external_storage_payload_t) {
     ++*static_cast<int*>(user_data);
@@ -1225,19 +1234,22 @@ TEST_F(SlabProviderTest, FailedRegistrationPublicationPreservesCallerStorage) {
   EXPECT_EQ(release_count, 0);
   storage.maintenance_range =
       iree_hal_make_buffer_range(0, IREE_HAL_WHOLE_BUFFER);
-  for (const auto cacheability : {IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
-                                  IREE_HAL_HOST_CACHEABILITY_WRITE_COMBINED,
-                                  IREE_HAL_HOST_CACHEABILITY_UNCACHED}) {
-    storage.host_cacheability = cacheability;
+  for (const auto properties : std::initializer_list<uint32_t>{
+           IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
+           (IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED),
+           IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED}) {
+    storage.host_properties = properties;
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_FAILED_PRECONDITION,
         iree_hal_slab_provider_import_slab(provider_, &storage, &imported));
     EXPECT_EQ(imported.slab.provider_handle, 0u);
-    EXPECT_EQ(storage.host_cacheability, cacheability);
+    EXPECT_EQ(storage.host_properties, properties);
     EXPECT_EQ(native_.create_count, 0);
     EXPECT_EQ(release_count, 0);
   }
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   native_.fail_second_address = true;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -1373,6 +1385,25 @@ INSTANTIATE_TEST_SUITE_P(
         NativeTransportCase{
             {IREE_HAL_EXTERNAL_STORAGE_TYPE_DEVICE_ADDRESS, {3, 4}},
             AMDF_EXTERNAL_MEMORY_TYPE_DEVICE_ADDRESS}));
+
+TEST_F(SlabProviderTest, QualifiedTransportPreservesHostGuarantees) {
+  const iree_hal_external_storage_class_t storage_class = {
+      IREE_HAL_EXTERNAL_STORAGE_TYPE_OPAQUE_FD, {1, 2}};
+  amdf_memory_profile_t profile = {};
+  profile.import.byte_length_granularity = 1;
+  profile.import.maximum_byte_length = 4096;
+  profile.external_memory_support_count = 1;
+  auto& support = profile.external_memory_support[0];
+  support.type = AMDF_EXTERNAL_MEMORY_TYPE_OPAQUE_FD;
+  support.provenance = {{1, 2}};
+  support.flags = AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_IMPORT;
+  support.byte_length_alignment = 1;
+  support.host_properties = AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK;
+  ASSERT_TRUE(iree_hal_amd_fabric_memory_constrain_profile(storage_class, {},
+                                                           &profile));
+  EXPECT_EQ(profile.host_mapping.properties, support.host_properties);
+}
 
 TEST_F(SlabProviderTest, NativeTransportGeometryCombinesAllRequiredMultiples) {
   const iree_hal_external_storage_class_t source_class = {

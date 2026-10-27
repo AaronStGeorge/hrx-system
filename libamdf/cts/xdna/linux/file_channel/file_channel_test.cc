@@ -359,11 +359,10 @@ class NpuFileChannelTest : public XdnaDeviceFixture,
             .minimum_alignment = geometry.registered_host_pointer_alignment,
         };
         ASSERT_NO_FATAL_FAILURE(backing_[i].Create(api_, system_scope_, host));
-        ASSERT_EQ(backing_[i].host.cacheability,
-                  geometry.registered_host_cacheability);
+        ASSERT_EQ(backing_[i].host.properties,
+                  geometry.registered_host_properties);
         create.registered_host_pointer = backing_[i].host.pointer;
-        create.registered_host_cacheability =
-            geometry.registered_host_cacheability;
+        create.registered_host_properties = geometry.registered_host_properties;
       }
       ASSERT_NO_FATAL_FAILURE(buffers_[i].Create(api_, system_scope_, create));
       ASSERT_EQ(api_->memory_query_address(buffers_[i].memory, 0,

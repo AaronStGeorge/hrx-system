@@ -195,7 +195,7 @@ static iree_status_t iree_hal_amd_fabric_buffer_export_range(
       .storage_class = requested_class,
       .payload = {.host_pointer = memory->contents.data},
       .byte_length = memory->contents.data_length,
-      .host_cacheability = memory->host_cacheability,
+      .host_properties = memory->host_properties,
       .maintenance_range = memory->maintenance_range,
   };
   if (base_buffer->memory.backing) {

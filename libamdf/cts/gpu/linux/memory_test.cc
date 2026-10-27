@@ -224,11 +224,13 @@ class GpuLinuxMemoryTest : public GpuDeviceFixture {
                       AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE),
             AMDF_STATUS_OK);
         ASSERT_NE(mapping_infos_[0].pointer, nullptr);
-        EXPECT_EQ(mapping_infos_[0].cacheability,
+        EXPECT_EQ(mapping_infos_[0].properties,
                   ((info.flags | access_info.flags) &
                    AMDF_MEMORY_FLAG_HOST_COHERENT) != 0
-                      ? AMDF_HOST_CACHEABILITY_WRITE_BACK
-                      : AMDF_HOST_CACHEABILITY_WRITE_COMBINED);
+                      ? (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK)
+                      : (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+                         AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED));
         if (((info.flags | access_info.flags) &
              AMDF_MEMORY_FLAG_HOST_COHERENT) != 0) {
           EXPECT_NE(mapping_infos_[0].cache_line_size, 0u);
@@ -388,8 +390,9 @@ class GpuLinuxMemoryTest : public GpuDeviceFixture {
     EXPECT_EQ(reinterpret_cast<uintptr_t>(mapping_infos_[0].pointer) &
                   (info.alignment - 1),
               0u);
-    EXPECT_EQ(mapping_infos_[0].cacheability,
-              AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(mapping_infos_[0].properties,
+              (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+               AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     EXPECT_NE(mapping_infos_[0].cache_line_size, 0u);
     EXPECT_EQ(mapping_infos_[0].flush.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
     EXPECT_EQ(mapping_infos_[0].invalidate.kind,
@@ -505,7 +508,9 @@ TEST_F(GpuLinuxMemoryTest, UnifiedExecutableStorageRetainsCachedHostAccess) {
   ASSERT_EQ(MapMemory(memories_[0], 0, 0, request.byte_length,
                       AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE),
             AMDF_STATUS_OK);
-  EXPECT_EQ(mapping_infos_[0].cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(mapping_infos_[0].properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   std::memset(mapping_infos_[0].pointer, 0x5A, request.byte_length);
   ASSERT_EQ(api_->host_mapping_cache_control(mappings_[0],
                                              AMDF_HOST_CACHE_OPERATION_FLUSH, 0,
@@ -627,8 +632,9 @@ TEST_F(GpuLinuxMemoryTest, RegistersOverlappingCallerPagesWithExactAccess) {
     create_info.minimum_alignment = 1;
     create_info.registered_host_pointer =
         caller_pages_ + kCallerOffsets[case_ordinal];
-    create_info.registered_host_cacheability =
-        AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    create_info.registered_host_properties =
+        (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     ASSERT_EQ(api_->memory_create(system_scope_, &create_info,
                                   &memories_[case_ordinal], nullptr),
               AMDF_STATUS_OK)
@@ -682,8 +688,9 @@ TEST_F(GpuLinuxMemoryTest, RegistersOverlappingCallerPagesWithExactAccess) {
               create_info.registered_host_pointer);
     EXPECT_EQ(mapping_infos_[case_ordinal].memory_byte_offset, 0u);
     EXPECT_EQ(mapping_infos_[case_ordinal].byte_length, logical_byte_length);
-    EXPECT_EQ(mapping_infos_[case_ordinal].cacheability,
-              AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(mapping_infos_[case_ordinal].properties,
+              (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+               AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     EXPECT_EQ(api_->host_mapping_cache_control(mappings_[case_ordinal],
                                                AMDF_HOST_CACHE_OPERATION_FLUSH,
                                                0, logical_byte_length),
@@ -731,8 +738,9 @@ TEST_F(GpuLinuxMemoryTest, RegistersOverlappingCallerPagesWithExactAccess) {
   invalid_access.byte_length = 1;
   invalid_access.minimum_alignment = 1;
   invalid_access.registered_host_pointer = caller_pages_ + 67;
-  invalid_access.registered_host_cacheability =
-      AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  invalid_access.registered_host_properties =
+      (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   amdf_memory_t* invalid_output =
       reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   EXPECT_EQ(api_->memory_create(system_scope_, &invalid_access, &invalid_output,

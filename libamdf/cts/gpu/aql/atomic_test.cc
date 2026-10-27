@@ -131,7 +131,8 @@ class AqlAtomicTest : public AqlQueueTest,
               capabilities.atomic_operations_32);
     ASSERT_EQ(control->access_info.atomic_operations_64,
               capabilities.atomic_operations_64);
-    ASSERT_EQ(control->host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    ASSERT_EQ(control->host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     for (size_t direction = 0; direction < prospective.size(); ++direction) {
       const auto host = control->HostSite();
       const auto gpu = control->DeviceSite(family_.ordinal);

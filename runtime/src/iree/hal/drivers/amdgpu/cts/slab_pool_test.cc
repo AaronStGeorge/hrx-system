@@ -8,6 +8,7 @@
 #include <array>
 #include <cstring>
 #include <future>
+#include <initializer_list>
 #include <memory>
 
 #include "iree/hal/cts/util/pool_test_util.h"
@@ -306,12 +307,15 @@ TEST_P(AmdgpuSlabPoolTest, PublicHostGrantsAndNativeClassRequirements) {
   }
   families_[1].requirements = 0;
   Ref<iree_hal_pool_t> rejected;
-  for (auto cacheability : {IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
-                            IREE_HAL_HOST_CACHEABILITY_WRITE_COMBINED,
-                            IREE_HAL_HOST_CACHEABILITY_UNCACHED}) {
+  for (auto properties : std::initializer_list<uint32_t>{
+           (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
+           (IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED),
+           IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED}) {
     auto scope = Scope();
     scope.host = {IREE_HAL_MEMORY_ACCESS_READ, IREE_HAL_MAPPING_MODE_SCOPED,
-                  cacheability};
+                  properties};
     IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
                           CreateSource(scope, rejected.out()));
     iree_hal_slab_pool_options_t options;
@@ -526,7 +530,8 @@ TEST_P(AmdgpuSlabPoolTest, ImportsHostStorageWithExactRangeAndOwnership) {
       .storage_class = host_pointer_class,
       .payload = {.host_pointer = host_pointer},
       .byte_length = allocation_length,
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .maintenance_range =
           iree_hal_make_buffer_range(storage_alignment, storage_length),
       .physical_backing_id = {{0xA11C, 0xBACC}},
@@ -548,8 +553,9 @@ TEST_P(AmdgpuSlabPoolTest, ImportsHostStorageWithExactRangeAndOwnership) {
       iree_hal_buffer_memory_view(buffer);
   ASSERT_NE(memory.backing, nullptr);
   EXPECT_EQ(memory.offset, kLogicalOffset);
-  EXPECT_EQ(memory.backing->host_cacheability,
-            IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(memory.backing->host_properties,
+            (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(memory.backing->physical_backing_id.words[0], 0xA11Cu);
   EXPECT_EQ(memory.backing->physical_backing_id.words[1], 0xBACCu);
   EXPECT_EQ(memory.backing->atomic_operations.system_scope_32,
@@ -593,8 +599,9 @@ TEST_P(AmdgpuSlabPoolTest, ImportsHostStorageWithExactRangeAndOwnership) {
   EXPECT_EQ(exported_host.payload.host_pointer,
             static_cast<uint8_t*>(host_pointer) + storage_alignment);
   EXPECT_EQ(exported_host.byte_length, storage_length);
-  EXPECT_EQ(exported_host.host_cacheability,
-            IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(exported_host.host_properties,
+            (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(exported_host.maintenance_range.byte_offset, 0u);
   EXPECT_EQ(exported_host.maintenance_range.byte_length, storage_length);
   EXPECT_EQ(exported_host.physical_backing_id.words[0], 0xA11Cu);

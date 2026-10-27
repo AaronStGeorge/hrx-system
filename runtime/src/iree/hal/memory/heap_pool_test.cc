@@ -19,6 +19,7 @@ TEST(HeapPoolTest, AllocatesMappedHostStorageWithoutProgressOwner) {
   const iree_hal_pool_host_access_t host_access = {
       .access = IREE_HAL_MEMORY_ACCESS_READ | IREE_HAL_MEMORY_ACCESS_WRITE,
       .modes = IREE_HAL_MAPPING_MODE_SCOPED | IREE_HAL_MAPPING_MODE_PERSISTENT,
+      .properties = IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED,
   };
   iree_hal_pool_t* pool = nullptr;
   IREE_ASSERT_OK(iree_hal_heap_pool_create(host_access, iree_allocator_system(),
@@ -29,8 +30,9 @@ TEST(HeapPoolTest, AllocatesMappedHostStorageWithoutProgressOwner) {
       iree_hal_pool_query_host_access(pool);
   EXPECT_EQ(actual_host_access.access, host_access.access);
   EXPECT_EQ(actual_host_access.modes, host_access.modes);
-  EXPECT_EQ(actual_host_access.cacheability,
-            IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(actual_host_access.properties,
+            (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
 
   iree_hal_buffer_t* buffer = nullptr;
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(

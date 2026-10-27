@@ -138,10 +138,10 @@ amdf_memory_flags_t amdf_memory_scope_plan_required_access_flags(
     const amdf_memory_scope_plan_t* plan,
     const amdf_memory_device_access_t* accesses, uint32_t access_ordinal);
 
-// Validates the caller-established cache class before borrowed-page admission.
+// Validates caller-established host guarantees before borrowed-page admission.
 amdf_status_t amdf_memory_scope_plan_validate_registration(
     const amdf_memory_scope_plan_t* plan,
-    amdf_host_cacheability_t registered_host_cacheability);
+    amdf_host_memory_properties_t registered_host_properties);
 
 #ifdef __cplusplus
 }  // extern "C"

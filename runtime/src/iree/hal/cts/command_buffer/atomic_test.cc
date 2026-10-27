@@ -179,7 +179,9 @@ class CommandBufferAtomicTest : public CtsTestBase<> {
         .byte_length = kBufferSize,
     };
     external_buffer.payload.host_pointer = misaligned_ptr;
-    external_buffer.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    external_buffer.host_properties =
+        (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+         IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     external_buffer.maintenance_range =
         iree_hal_make_buffer_range(0, kBufferSize);
     external_buffer.release = NotifyBufferReleased;

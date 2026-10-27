@@ -62,7 +62,7 @@ iree_status_t iree_hal_replay_recorder_create_virtual_buffer(
         .family_count = scope->family_count,
         .host_access = scope->host.access,
         .host_mapping_modes = scope->host.modes,
-        .host_cacheability = scope->host.cacheability,
+        .host_properties = scope->host.properties,
         .host_atomic_device_scope_32 = scope->host.atomics.device_scope_32,
         .host_atomic_device_scope_64 = scope->host.atomics.device_scope_64,
         .host_atomic_system_scope_32 = scope->host.atomics.system_scope_32,

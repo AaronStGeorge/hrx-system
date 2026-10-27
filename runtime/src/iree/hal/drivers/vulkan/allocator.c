@@ -1181,6 +1181,13 @@ static iree_status_t iree_hal_vulkan_allocator_validate_host_allocation_import(
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "Vulkan external storage type is unsupported");
   }
+  if (!iree_all_bits_set(external_buffer->host_properties,
+                         IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "Vulkan host allocation import requires write-back storage");
+  }
   if (!iree_hal_vulkan_allocator_supports_host_allocation_import(allocator)) {
     return iree_make_status(
         IREE_STATUS_UNAVAILABLE,
@@ -1483,7 +1490,8 @@ iree_status_t iree_hal_vulkan_allocator_allocate_staging_buffer(
               .type = IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER,
           },
       .byte_length = aligned_size,
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .maintenance_range = iree_hal_make_buffer_range(0, aligned_size),
       .payload = {.host_pointer = host_pointer},
   };

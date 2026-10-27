@@ -366,7 +366,7 @@ static iree_status_t iree_hal_replay_recorder_pool_import_buffer(
       inout_storage->physical_backing_id.words[0];
   operation_payload.physical_backing_id[1] =
       inout_storage->physical_backing_id.words[1];
-  operation_payload.host_cacheability = inout_storage->host_cacheability;
+  operation_payload.host_properties = inout_storage->host_properties;
   const bool can_record = inout_storage->storage_class.type ==
                               IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER &&
                           inout_storage->byte_length <= IREE_HOST_SIZE_MAX &&
@@ -638,14 +638,14 @@ iree_status_t iree_hal_replay_recorder_create_slab_pool(
       .owned_mode = options->owned.mode,
       .host_access = scope->host.access,
       .host_mapping_modes = scope->host.modes,
-      .host_cacheability = scope->host.cacheability,
+      .host_properties = scope->host.properties,
       .host_atomic_device_scope_32 = scope->host.atomics.device_scope_32,
       .host_atomic_device_scope_64 = scope->host.atomics.device_scope_64,
       .host_atomic_system_scope_32 = scope->host.atomics.system_scope_32,
       .host_atomic_system_scope_64 = scope->host.atomics.system_scope_64,
       .preferred_host_access = options->preferences.host.access,
       .preferred_host_mapping_modes = options->preferences.host.modes,
-      .preferred_host_cacheability = options->preferences.host.cacheability,
+      .preferred_host_properties = options->preferences.host.properties,
       .preferred_host_atomic_device_scope_32 =
           options->preferences.host.atomics.device_scope_32,
       .preferred_host_atomic_device_scope_64 =

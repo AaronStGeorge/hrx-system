@@ -86,7 +86,8 @@ static iree_status_t iree_hal_shared_slab_provider_acquire(
                               .byte_offset = prefix,
                               .granularity = page_size},
         .maintenance_range = {0, slab->mapping.size - prefix},
-        .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+        .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
         .allocation_alignment = alignment,
     };
   } else {

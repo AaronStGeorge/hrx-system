@@ -109,7 +109,7 @@ TEST_P(FabricVirtualBufferTest, CpuAndGpuShareStableViewsAcrossReplacement) {
       families.size(),
       families.data(),
       {IREE_HAL_MEMORY_ACCESS_ALL, IREE_HAL_MAPPING_MODE_PERSISTENT,
-       IREE_HAL_HOST_CACHEABILITY_UNKNOWN}};
+       IREE_HAL_HOST_MEMORY_PROPERTY_NONE}};
   iree_hal_slab_pool_options_t pool_options;
   iree_hal_slab_pool_options_initialize(&pool_options);
   Ref<iree_hal_pool_t> pool;

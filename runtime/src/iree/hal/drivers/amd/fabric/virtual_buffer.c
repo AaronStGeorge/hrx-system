@@ -463,8 +463,9 @@ static iree_status_t iree_hal_amd_fabric_virtual_buffer_prepare(
       !owner->native.instance ||
       scope.family_count >= IREE_HAL_BUFFER_NATIVE_BINDING_INDEX_NONE - 1 ||
       (scope.host.access &&
-       scope.host.cacheability != IREE_HAL_HOST_CACHEABILITY_UNKNOWN &&
-       scope.host.cacheability != IREE_HAL_HOST_CACHEABILITY_WRITE_BACK)) {
+       !iree_all_bits_set(IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                              IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+                          scope.host.properties))) {
     return iree_ok_status();
   }
   const uint32_t access_capacity = (uint32_t)scope.family_count + 1;
@@ -711,7 +712,8 @@ static iree_status_t iree_hal_amd_fabric_virtual_buffer_prepare(
   if (contract && iree_status_is_ok(status)) {
     contract->host = scope.host;
     if (scope.host.access) {
-      contract->host.cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+      contract->host.properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                   IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
       if (iree_any_bit_set(scope.host.modes, IREE_HAL_MAPPING_MODE_SCOPED)) {
         usage |= IREE_HAL_BUFFER_USAGE_MAPPING_SCOPED;
       }

@@ -15,15 +15,15 @@ iree_hal_pool_host_access_validate(iree_hal_pool_host_access_t host) {
   if (iree_any_bit_set(host.access, ~IREE_HAL_MEMORY_ACCESS_ALL) ||
       iree_any_bit_set(host.modes, ~(IREE_HAL_MAPPING_MODE_SCOPED |
                                      IREE_HAL_MAPPING_MODE_PERSISTENT)) ||
-      (uint32_t)host.cacheability > IREE_HAL_HOST_CACHEABILITY_UNCACHED ||
+      !iree_hal_host_memory_properties_is_valid(host.properties) ||
       !iree_hal_atomic_operation_capabilities_are_valid(host.atomics)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid host access, mapping mode, cacheability, "
+                            "invalid host access, mapping mode, properties, "
                             "or atomic operations");
   }
   if ((!host.access != !host.modes) ||
       (!host.access &&
-       (host.cacheability != IREE_HAL_HOST_CACHEABILITY_UNKNOWN ||
+       (host.properties != IREE_HAL_HOST_MEMORY_PROPERTY_NONE ||
         !iree_hal_atomic_operation_capabilities_is_empty(host.atomics)))) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,

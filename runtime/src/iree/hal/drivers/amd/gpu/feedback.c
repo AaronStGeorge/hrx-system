@@ -180,8 +180,8 @@ iree_status_t iree_hal_amd_gpu_feedback_initialize(
   }
   uint64_t control_address = 0;
   if (iree_status_is_ok(status)) {
-    if (out_feedback->control_memory.host_cacheability !=
-        IREE_HAL_HOST_CACHEABILITY_WRITE_BACK) {
+    if (!iree_all_bits_set(out_feedback->control_memory.host_properties,
+                           IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK)) {
       status =
           iree_make_status(IREE_STATUS_UNAVAILABLE,
                            "GPU feedback requires coherent write-back control");

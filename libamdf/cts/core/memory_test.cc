@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <new>
 #include <vector>
 
@@ -124,6 +125,9 @@ TEST_F(HostMemoryTest, ProfileWithoutDevicesDescribesCpuOnlyStorage) {
                                                     nullptr, &live, nullptr),
             AMDF_STATUS_OK);
   EXPECT_EQ(std::memcmp(&live, &expected, sizeof(live)), 0);
+  EXPECT_EQ(live.host_mapping.properties,
+            AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   const amdf_memory_profile_t original = live;
   EXPECT_EQ(amdf_status_code(api_->memory_scope_query_device_profile(
                 scope_, scope_info_.memory_profile_count, 0, nullptr, &live,
@@ -188,7 +192,8 @@ TEST_F(HostMemoryTest, AllocatesOneBackingWithoutAnAccelerator) {
   for (uint64_t i = 0; i < info.byte_length; ++i) {
     ASSERT_EQ(bytes[i], i < 17 ? 0x53 : 0x7b) << i;
   }
-  EXPECT_EQ(first.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(first.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(first.flush.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
   EXPECT_EQ(first.invalidate.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
   amdf_memory_site_t producer = {
@@ -236,7 +241,8 @@ TEST_F(HostMemoryTest, BorrowsCallerStorageWithoutTakingOwnership) {
       .memory_profile_ordinal = profile.ordinal,
       .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE,
       .registered_host_pointer = storage_.data() + 1,
-      .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
   };
   create_info.byte_length = storage_.size() - 2;
   amdf_memory_t* memory = nullptr;
@@ -305,14 +311,16 @@ TEST_F(HostMemoryTest, QualifiesCpuPairsAndRejectsUnestablishedRegistration) {
   amdf_memory_profile_t profile = {};
   ASSERT_NO_FATAL_FAILURE(
       FindProfile(AMDF_MEMORY_PROFILE_ROLE_REGISTER, &profile));
-  EXPECT_EQ(profile.registration.registered_host_cacheability,
-            AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(profile.registration.registered_host_properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   amdf_memory_profile_pair_query_t query = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE_PAIR_QUERY,
       .structure_size = sizeof(query),
       .memory_profile_ordinal = profile.ordinal,
       .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE,
-      .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
   };
   query.producer.kind = AMDF_MEMORY_SITE_KIND_HOST;
   query.producer.value.host_access = AMDF_MEMORY_MAP_FLAG_WRITE;
@@ -333,10 +341,12 @@ TEST_F(HostMemoryTest, QualifiesCpuPairsAndRejectsUnestablishedRegistration) {
               code);
     EXPECT_EQ(std::memcmp(&pair, &original, sizeof(pair)), 0);
   };
-  for (auto cacheability :
-       {AMDF_HOST_CACHEABILITY_UNKNOWN, AMDF_HOST_CACHEABILITY_WRITE_COMBINED,
-        AMDF_HOST_CACHEABILITY_UNCACHED}) {
-    query.registered_host_cacheability = cacheability;
+  for (auto properties : std::initializer_list<uint32_t>{
+           AMDF_HOST_MEMORY_PROPERTY_NONE,
+           (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+            AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED),
+           AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED}) {
+    query.registered_host_properties = properties;
     expect_rejection(AMDF_STATUS_CODE_UNSUPPORTED);
     storage_.resize(4096);
     amdf_memory_create_info_t create = {
@@ -346,7 +356,7 @@ TEST_F(HostMemoryTest, QualifiesCpuPairsAndRejectsUnestablishedRegistration) {
         .byte_length = storage_.size(),
         .registered_host_pointer = storage_.data(),
     };
-    create.registered_host_cacheability = cacheability;
+    create.registered_host_properties = properties;
     auto* sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
     auto* memory = sentinel;
     EXPECT_EQ(amdf_status_code(
@@ -354,7 +364,8 @@ TEST_F(HostMemoryTest, QualifiesCpuPairsAndRejectsUnestablishedRegistration) {
               AMDF_STATUS_CODE_UNSUPPORTED);
     EXPECT_EQ(memory, sentinel);
   }
-  query.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  query.registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                      AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   query.producer.reserved = 1;
   expect_rejection(AMDF_STATUS_CODE_INVALID_ARGUMENT);
   query.producer.reserved = 0;

@@ -366,11 +366,10 @@ class CpuXdnaRecipeTest : public XdnaDeviceFixture {
           const auto bytes = registered_storage_[i].bytes();
           std::fill(bytes.begin(), bytes.end(), 0xA5);
         }
-        ASSERT_EQ(registered_storage_[i].host.cacheability,
-                  geometry.registered_host_cacheability);
+        ASSERT_EQ(registered_storage_[i].host.properties,
+                  geometry.registered_host_properties);
         create.registered_host_pointer = registered_storage_[i].host.pointer;
-        create.registered_host_cacheability =
-            geometry.registered_host_cacheability;
+        create.registered_host_properties = geometry.registered_host_properties;
       }
       ASSERT_NO_FATAL_FAILURE(bindings_[i].Create(api_, system_scope_, create));
     }

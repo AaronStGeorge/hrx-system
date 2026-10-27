@@ -167,7 +167,8 @@ class GpuFilePoolTest : public DispatchTest {
     };
     ASSERT_NO_FATAL_FAILURE(
         pool_.Initialize(this->api_, this->system_scope_, create));
-    EXPECT_EQ(pool_.host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(pool_.host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                      AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     ASSERT_NE(pool_.host.features & AMDF_HOST_MAPPING_FEATURE_FILE_IO, 0u);
     EXPECT_EQ(pool_.device_address != 0,
               (access_flags & AMDF_MEMORY_FLAG_DEVICE_ADDRESS) != 0);

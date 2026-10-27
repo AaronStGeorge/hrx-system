@@ -319,6 +319,10 @@ typedef struct iree_hal_pool_import_requirements_t {
   // Nonzero granularity in bytes. The native attachment byte length must be a
   // multiple of this value, which need not be a power of two.
   iree_device_size_t byte_length_granularity;
+
+  // Required source CPU mapping guarantees for HOST_POINTER imports. Zero for
+  // transports whose provider establishes the mapping from the native handle.
+  iree_hal_host_memory_properties_t host_properties;
 } iree_hal_pool_import_requirements_t;
 
 // Running statistics for a pool. All values are atomic snapshots; they may
@@ -734,7 +738,7 @@ IREE_API_EXPORT iree_status_t iree_hal_pool_import_buffer(
 // Returns false and zeros |out_requirements| when the class was not admitted by
 // the selected native route. A true result means a conforming storage extent
 // may be passed to iree_hal_pool_import_buffer(); payload-specific properties
-// such as handle validity, native addressability, and cacheability are checked
+// such as handle validity, native addressability, and properties are checked
 // during import.
 IREE_API_EXPORT bool iree_hal_pool_query_import_requirements(
     const iree_hal_pool_t* pool,

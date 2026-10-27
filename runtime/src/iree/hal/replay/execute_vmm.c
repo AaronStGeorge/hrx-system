@@ -276,8 +276,8 @@ static iree_status_t iree_hal_replay_executor_virtual_buffer_create(
           {
               .access = (iree_hal_memory_access_t)payload.host_access,
               .modes = (iree_hal_mapping_mode_t)payload.host_mapping_modes,
-              .cacheability =
-                  (iree_hal_host_cacheability_t)payload.host_cacheability,
+              .properties =
+                  (iree_hal_host_memory_properties_t)payload.host_properties,
               .atomics =
                   {
                       .device_scope_32 = payload.host_atomic_device_scope_32,

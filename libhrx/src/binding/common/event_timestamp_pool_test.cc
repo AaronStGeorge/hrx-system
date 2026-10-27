@@ -71,7 +71,8 @@ class EventTimestampPoolTest : public ::testing::Test {
         .access = IREE_HAL_MEMORY_ACCESS_ALL,
         .modes =
             IREE_HAL_MAPPING_MODE_SCOPED | IREE_HAL_MAPPING_MODE_PERSISTENT,
-        .cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+        .properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                       IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
     };
     IREE_ASSERT_OK(
         iree_hal_heap_pool_create(host_access, counter_.AsAllocator(),
@@ -416,7 +417,9 @@ TEST_F(EventTimestampPoolTest, SlabsInheritConfiguredHostAccess) {
   EXPECT_TRUE(iree_all_bits_set(
       host_access.modes,
       IREE_HAL_MAPPING_MODE_SCOPED | IREE_HAL_MAPPING_MODE_PERSISTENT));
-  EXPECT_EQ(IREE_HAL_HOST_CACHEABILITY_WRITE_BACK, host_access.cacheability);
+  EXPECT_EQ((IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
+            host_access.properties);
 
   auto* slot = Acquire();
   EXPECT_NE(nullptr, iree_hal_streaming_event_timestamp_slot_buffer(slot));

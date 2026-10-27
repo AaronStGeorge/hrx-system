@@ -607,10 +607,10 @@ static std::vector<uint8_t> MakeFullFileAtomicReplayStorage(
       .reserved0 = 0,
       .host_access = IREE_HAL_MEMORY_ACCESS_NONE,
       .host_mapping_modes = 0,
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+      .host_properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
       .preferred_host_access = IREE_HAL_MEMORY_ACCESS_NONE,
       .preferred_host_mapping_modes = 0,
-      .preferred_host_cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+      .preferred_host_properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
   };
   const iree_hal_replay_pool_family_access_payload_t family_payload = {
       .device_ordinal = 0,
@@ -1010,7 +1010,7 @@ class ReplayAtomicExecutionTest : public ::testing::Test {
             {
                 .access = IREE_HAL_MEMORY_ACCESS_ALL,
                 .modes = IREE_HAL_MAPPING_MODE_SCOPED,
-                .cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+                .properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
             },
     };
     iree_hal_slab_pool_options_t pool_options;

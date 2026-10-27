@@ -398,7 +398,8 @@ TEST_P(TaskSlabPoolTest, ImportsFiniteExternalRangeWithExactOwnership) {
       .storage_class = host_pointer_class,
       .payload = {.host_pointer = storage_bytes.data()},
       .byte_length = storage_bytes.size(),
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .maintenance_range = iree_hal_make_buffer_range(0, storage_bytes.size()),
       .physical_backing_id = {{0x1234, 0x5678}},
       .release = ExternalStorageRelease::Complete,
@@ -417,8 +418,9 @@ TEST_P(TaskSlabPoolTest, ImportsFiniteExternalRangeWithExactOwnership) {
   EXPECT_EQ(memory.backing->maintenance_range.byte_offset, 0u);
   EXPECT_EQ(memory.backing->maintenance_range.byte_length,
             storage_bytes.size());
-  EXPECT_EQ(memory.backing->host_cacheability,
-            IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(memory.backing->host_properties,
+            (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(memory.backing->physical_backing_id.words[0], 0x1234u);
   EXPECT_EQ(memory.backing->physical_backing_id.words[1], 0x5678u);
 
@@ -434,7 +436,9 @@ TEST_P(TaskSlabPoolTest, ImportsFiniteExternalRangeWithExactOwnership) {
       host_pointer_class, &exported, &exported_range));
   EXPECT_EQ(exported.payload.host_pointer, storage_bytes.data());
   EXPECT_EQ(exported.byte_length, storage_bytes.size());
-  EXPECT_EQ(exported.host_cacheability, IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(exported.host_properties,
+            (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(exported_range.byte_offset, 12u);
   EXPECT_EQ(exported_range.byte_length, 8u);
   EXPECT_EQ(exported.physical_backing_id.words[0], 0x1234u);
@@ -455,7 +459,8 @@ TEST_P(TaskSlabPoolTest, ImportAdmissionIsExplicitAndNativeOnly) {
         .storage_class = host_pointer_class,
         .payload = {.host_pointer = storage_bytes.data()},
         .byte_length = storage_bytes.size(),
-        .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+        .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
         .maintenance_range =
             iree_hal_make_buffer_range(0, storage_bytes.size()),
     };
@@ -496,7 +501,7 @@ TEST_P(TaskSlabPoolTest, ImportAdmissionIsExplicitAndNativeOnly) {
           iree_immediate_timeout(), imported.out()));
 
   storage = make_storage();
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN;
+  storage.host_properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,
       iree_hal_pool_import_buffer(
@@ -528,7 +533,8 @@ TEST_P(TaskSlabPoolTest, PublicHostGrantsRemainIndependentOfExecution) {
   auto scope = Scope();
   scope.host.access = IREE_HAL_MEMORY_ACCESS_READ;
   scope.host.modes = IREE_HAL_MAPPING_MODE_SCOPED;
-  scope.host.cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  scope.host.properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                           IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   iree_hal_slab_pool_options_t options;
   iree_hal_slab_pool_options_initialize(&options);
   Ref<iree_hal_pool_t> source;

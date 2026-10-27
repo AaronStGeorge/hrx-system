@@ -508,14 +508,36 @@ static inline iree_hal_buffer_range_t iree_hal_make_buffer_range(
   };
 }
 
-// Host cache behavior established by the owner of a mapped storage extent.
-// Device coherence is an independent property of each device access path.
-typedef enum iree_hal_host_cacheability_e {
-  IREE_HAL_HOST_CACHEABILITY_UNKNOWN = 0,
-  IREE_HAL_HOST_CACHEABILITY_WRITE_BACK = 1,
-  IREE_HAL_HOST_CACHEABILITY_WRITE_COMBINED = 2,
-  IREE_HAL_HOST_CACHEABILITY_UNCACHED = 3,
-} iree_hal_host_cacheability_t;
+// Independent guarantees about CPU access to a host mapping. Requests name
+// required guarantees; query results name established guarantees. An absent
+// bit makes no promise about that property, including its opposite. Device
+// coherence and release/acquire operations are separate contracts.
+typedef uint32_t iree_hal_host_memory_properties_t;
+enum iree_hal_host_memory_properties_bits_t {
+  IREE_HAL_HOST_MEMORY_PROPERTY_NONE = 0u,
+  // CPU reads use caches.
+  IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED = 1u << 0,
+  // CPU reads bypass caches.
+  IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED = 1u << 1,
+  // CPU writes use write-back caching. Producers also report READ_CACHED.
+  IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK = 1u << 2,
+  // CPU writes may combine into bursts. Producers also report READ_UNCACHED.
+  IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED = 1u << 3,
+};
+
+// Returns whether |properties| contains only compatible, defined guarantees.
+// Requests may require a write property without separately requiring reads.
+static inline bool iree_hal_host_memory_properties_is_valid(
+    iree_hal_host_memory_properties_t properties) {
+  const iree_hal_host_memory_properties_t cached =
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+      IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK;
+  const iree_hal_host_memory_properties_t uncached =
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+      IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED;
+  return !(properties & ~(cached | uncached)) &&
+         (!(properties & cached) || !(properties & uncached));
+}
 
 // Native representation carried by an external storage value. Equal payload
 // bits with different types are different transports and are never silently
@@ -609,8 +631,8 @@ typedef struct iree_hal_external_storage_t {
   iree_hal_external_storage_payload_t payload;
   // Usable extent in this storage coordinate system.
   iree_device_size_t byte_length;
-  // Source-established host mapping class for HOST_POINTER.
-  iree_hal_host_cacheability_t host_cacheability;
+  // Source-established CPU mapping guarantees for HOST_POINTER.
+  iree_hal_host_memory_properties_t host_properties;
   // Source-owned envelope available for cache maintenance and registration.
   iree_hal_buffer_range_t maintenance_range;
   // Physical identity established by the exporter, when available.
@@ -957,8 +979,8 @@ typedef struct iree_hal_buffer_backing_facts_t {
   // Source-owned envelope available for cache maintenance and registration in
   // backing coordinates.
   iree_hal_buffer_range_t maintenance_range;
-  // Source-established host cacheability of the backing storage.
-  iree_hal_host_cacheability_t host_cacheability;
+  // Source-established host properties of the backing storage.
+  iree_hal_host_memory_properties_t host_properties;
   // Physical identity established by the storage source, when available.
   // Identity alone does not establish byte correspondence between attachments.
   iree_hal_physical_memory_id_t physical_backing_id;

@@ -243,7 +243,8 @@ class PeerSdmaSystemTest : public GpuPeerDeviceFixture {
     ASSERT_NO_FATAL_FAILURE(backing_.Create(api_, system_scope_, creation_));
     ASSERT_EQ(backing_.info.memory_class, AMDF_MEMORY_CLASS_SYSTEM);
     ASSERT_EQ(backing_.info.access_count, 2u);
-    ASSERT_EQ(backing_.host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    ASSERT_EQ(backing_.host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     for (size_t i = 0; i < gpu_addresses_.size(); ++i) {
       ASSERT_EQ(
           api_->memory_query_address(

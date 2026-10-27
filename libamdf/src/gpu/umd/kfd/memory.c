@@ -38,8 +38,10 @@ struct amdf_gpu_umd_memory_t {
   amdf_physical_memory_id_t physical_backing_id;
   // Borrowed caller pages or persistent mapping into the owned reservation.
   void* host_pointer;
-  // Construction properties determining native allocation and host policy.
+  // Construction flags determining native allocation.
   amdf_memory_flags_t flags;
+  // CPU mapping guarantees captured from the selected backing profile.
+  amdf_host_memory_properties_t host_properties;
   // Number of unique prepared render-VM source handles in the trailing array.
   uint32_t source_count;
   // Owned DMA-BUF for explicit host aliases, or -1 without that requirement.
@@ -240,14 +242,12 @@ static amdf_status_t amdf_gpu_kfd_memory_prepare_export(
 
 static amdf_memory_host_description_t amdf_gpu_umd_memory_describe_host(
     const void* data, amdf_external_memory_type_t external_memory_type,
-    amdf_memory_flags_t flags) {
+    amdf_memory_flags_t flags, amdf_host_memory_properties_t properties) {
   (void)external_memory_type;
   const amdf_gpu_umd_device_t* device = data;
-  const bool device_local = (flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) != 0;
-  // GTT and caller-owned pages have ordinary CPU mappings independently of
-  // the GPU PTE cache policy. Unified cached SYSTEM storage can also be local
-  // to the GPU; only discrete local VRAM uses a WC aperture.
-  const bool write_back = !device_local || device->topology.integrated;
+  (void)flags;
+  const bool write_back =
+      (properties & AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK) != 0;
   const uint32_t line_size = write_back ? device->cache_line_size : 0;
   amdf_cache_transition_t flush = {0};
   if (write_back) {
@@ -280,8 +280,7 @@ static amdf_memory_host_description_t amdf_gpu_umd_memory_describe_host(
       .range_granularity = line_size,
   };
   return (amdf_memory_host_description_t){
-      .cacheability = write_back ? AMDF_HOST_CACHEABILITY_WRITE_BACK
-                                 : AMDF_HOST_CACHEABILITY_WRITE_COMBINED,
+      .properties = properties,
       .cache_line_size = line_size,
       .flush = flush,
       .invalidate = invalidate,
@@ -319,6 +318,7 @@ amdf_status_t amdf_gpu_umd_memory_prepare_import(
     return status;
   }
   memory->device = device;
+  memory->host_properties = profile->host_mapping.properties;
   memory->host_mapping_source = -1;
   memory->byte_length = (size_t)external_memory->byte_length;
   memory->physical_backing_id = external_memory->physical_backing_id;
@@ -436,6 +436,7 @@ amdf_status_t amdf_gpu_umd_memory_prepare(
     return status;
   }
   memory->device = device;
+  memory->host_properties = profile->host_mapping.properties;
   memory->host_mapping_source = -1;
   *memory_state = memory;
   memory->byte_length = plan.byte_length;
@@ -530,8 +531,8 @@ amdf_status_t amdf_gpu_umd_memory_map(
       .flags = capabilities->supported_access,
       .pointer = (uint8_t*)memory->host_pointer + map_info->byte_offset,
       .byte_length = map_info->byte_length,
-      .visibility =
-          amdf_gpu_umd_memory_describe_host(memory->device, 0, memory->flags),
+      .visibility = amdf_gpu_umd_memory_describe_host(
+          memory->device, 0, memory->flags, memory->host_properties),
   };
   // The common host-view object owns the borrow; the native mapping persists
   // with memory and needs no separate allocation or per-view native resource.
@@ -543,8 +544,7 @@ amdf_status_t amdf_gpu_umd_host_mapping_cache_control(
     amdf_gpu_umd_host_mapping_t* mapping, amdf_host_cache_operation_t operation,
     uint64_t memory_byte_offset, uint64_t byte_length) {
   const amdf_gpu_umd_memory_t* memory = (amdf_gpu_umd_memory_t*)mapping;
-  if ((memory->flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) == 0 ||
-      memory->device->topology.integrated) {
+  if ((memory->host_properties & AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK) != 0) {
     // GPU snooping does not make this backing coherent with other consumers.
     // Explicit CPU operations cover the requested bytes even on coherent GTT.
     amdf_linux_host_cache_transfer(

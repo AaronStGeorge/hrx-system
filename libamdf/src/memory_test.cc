@@ -55,7 +55,8 @@ TEST_F(MemoryTest, HostSitesUseTheSelectedPeerAndPreserveNativeApiOperations) {
   // neither dereference host payload nor perform a cache operation.
   amdf_host_mapping_t mapping = {.memory = memory};
   mapping.info.flags = AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
-  mapping.info.cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  mapping.info.properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   mapping.info.flush.kind = AMDF_CACHE_TRANSITION_KIND_RANGE;
   mapping.info.flush.executor = AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT;
   mapping.info.flush.host_operation = AMDF_HOST_CACHE_OPERATION_FLUSH;
@@ -96,7 +97,8 @@ TEST_F(MemoryTest, HostSitesUseTheSelectedPeerAndPreserveNativeApiOperations) {
   ExpectCacheTransitionEqual(pair.release, mapping.info.flush);
 
   // A range-free WC fence remains necessary even with a coherent peer.
-  mapping.info.cacheability = AMDF_HOST_CACHEABILITY_WRITE_COMBINED;
+  mapping.info.properties = (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+                             AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED);
   mapping.info.flush = {};
   mapping.info.flush.kind = AMDF_CACHE_TRANSITION_KIND_GLOBAL;
   mapping.info.flush.executor = AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT;
@@ -114,7 +116,8 @@ TEST_F(MemoryTest, HostSitesUseTheSelectedPeerAndPreserveNativeApiOperations) {
   EXPECT_EQ(std::memcmp(&pair, &original, sizeof(pair)), 0);
   // Coherence cannot qualify an otherwise unknown host protocol. In
   // particular, an imported mapping may require exporter participation.
-  mapping.info.cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  mapping.info.properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   EXPECT_EQ(
       amdf_status_code(amdf_memory_query_pair_info(&host, &coherent, &pair)),
       AMDF_STATUS_CODE_UNSUPPORTED);
@@ -167,7 +170,8 @@ TEST_F(MemoryTest, FileSitesRequireTheViewFeatureAndPreserveDeviceTransitions) {
 
   amdf_host_mapping_t mapping = {.memory = memory};
   mapping.info.flags = AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
-  mapping.info.cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  mapping.info.properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   mapping.info.flush.kind = AMDF_CACHE_TRANSITION_KIND_RANGE;
   mapping.info.flush.executor = AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API;
   mapping.info.flush.host_operation = AMDF_HOST_CACHE_OPERATION_FLUSH;
@@ -252,8 +256,8 @@ TEST_F(MemoryTest, HostAtomicReachUsesOnlyTheExactPeersSystemWidths) {
   };
 
   struct Case {
-    // Native host cache class established for the view.
-    amdf_host_cacheability_t cacheability;
+    // Native CPU mapping guarantees established for the view.
+    amdf_host_memory_properties_t properties;
     // Qualified device domain; zero denotes no established atomic domain.
     amdf_memory_compatibility_domain_t domain;
     // Independently qualified device widths against this backing.
@@ -262,49 +266,56 @@ TEST_F(MemoryTest, HostAtomicReachUsesOnlyTheExactPeersSystemWidths) {
     amdf_atomic_reach_t expected_reach;
   };
   const Case cases[] = {
-      {AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      {(AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
        {{7, 11}},
        {AMDF_ATOMIC_SCOPE_SYSTEM, AMDF_ATOMIC_SCOPE_SYSTEM},
        {AMDF_ATOMIC_SCOPE_SYSTEM, AMDF_ATOMIC_SCOPE_SYSTEM}},
-      {AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      {(AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
        {{0, 11}},
        {AMDF_ATOMIC_SCOPE_SYSTEM, AMDF_ATOMIC_SCOPE_DEVICE},
        {AMDF_ATOMIC_SCOPE_SYSTEM, AMDF_ATOMIC_SCOPE_NONE}},
-      {AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      {(AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
        {{7, 0}},
        {AMDF_ATOMIC_SCOPE_FABRIC, AMDF_ATOMIC_SCOPE_SYSTEM},
        {AMDF_ATOMIC_SCOPE_NONE, AMDF_ATOMIC_SCOPE_SYSTEM}},
-      {AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      {(AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
        {{7, 11}},
        {AMDF_ATOMIC_SCOPE_DEVICE, AMDF_ATOMIC_SCOPE_FABRIC},
        {AMDF_ATOMIC_SCOPE_NONE, AMDF_ATOMIC_SCOPE_NONE}},
-      {AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      {(AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
        {{7, 11}},
        {AMDF_ATOMIC_SCOPE_NONE, AMDF_ATOMIC_SCOPE_NONE},
        {AMDF_ATOMIC_SCOPE_NONE, AMDF_ATOMIC_SCOPE_NONE}},
-      {AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      {(AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
        {{0, 0}},
        {AMDF_ATOMIC_SCOPE_SYSTEM, AMDF_ATOMIC_SCOPE_SYSTEM},
        {AMDF_ATOMIC_SCOPE_NONE, AMDF_ATOMIC_SCOPE_NONE}},
-      {AMDF_HOST_CACHEABILITY_UNKNOWN,
+      {AMDF_HOST_MEMORY_PROPERTY_NONE,
        {{7, 11}},
        {AMDF_ATOMIC_SCOPE_SYSTEM, AMDF_ATOMIC_SCOPE_SYSTEM},
        {AMDF_ATOMIC_SCOPE_NONE, AMDF_ATOMIC_SCOPE_NONE}},
-      {AMDF_HOST_CACHEABILITY_WRITE_COMBINED,
+      {(AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+        AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED),
        {{7, 11}},
        {AMDF_ATOMIC_SCOPE_SYSTEM, AMDF_ATOMIC_SCOPE_SYSTEM},
        {AMDF_ATOMIC_SCOPE_NONE, AMDF_ATOMIC_SCOPE_NONE}},
-      {AMDF_HOST_CACHEABILITY_UNCACHED,
+      {AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED,
        {{7, 11}},
        {AMDF_ATOMIC_SCOPE_SYSTEM, AMDF_ATOMIC_SCOPE_SYSTEM},
        {AMDF_ATOMIC_SCOPE_NONE, AMDF_ATOMIC_SCOPE_NONE}},
   };
   for (const Case& test_case : cases) {
     SCOPED_TRACE(::testing::Message()
-                 << "cache=" << test_case.cacheability
+                 << "cache=" << test_case.properties
                  << " scope32=" << test_case.device_reach.scope_32
                  << " scope64=" << test_case.device_reach.scope_64);
-    mapping.info.cacheability = test_case.cacheability;
+    mapping.info.properties = test_case.properties;
     native->site_description.atomic_domain = test_case.domain;
     native->site_description.atomic_reach = test_case.device_reach;
     for (bool host_producer : {false, true}) {
@@ -328,7 +339,8 @@ TEST_F(MemoryTest, HostAtomicReachUsesOnlyTheExactPeersSystemWidths) {
     }
   }
 
-  mapping.info.cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  mapping.info.properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   EXPECT_EQ(amdf_memory_query_pair_info(&host, &host, &pair), AMDF_STATUS_OK);
   EXPECT_EQ(pair.atomic_reach.scope_32, AMDF_ATOMIC_SCOPE_NONE);
   EXPECT_EQ(pair.atomic_reach.scope_64, AMDF_ATOMIC_SCOPE_NONE);

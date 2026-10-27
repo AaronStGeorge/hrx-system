@@ -82,7 +82,8 @@ TEST_P(Pm4EventTest, WakesForEveryFiniteBatchIncludingTheIdleTail) {
   GpuMemory* storage = nullptr;
   ASSERT_NO_FATAL_FAILURE(CreateMemory(
       AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE, 4096, &storage));
-  ASSERT_EQ(storage->host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  ASSERT_EQ(storage->host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   std::array<CompletionRecord, kMaximumRecordCount> expected = {};
   for (auto& record : expected) {
     record = {0, kInitialGeneration, kGuard};

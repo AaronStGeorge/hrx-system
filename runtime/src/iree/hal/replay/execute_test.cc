@@ -108,7 +108,7 @@ static iree_status_t CreateTestPool(iree_hal_device_group_t* group,
           {
               .access = host_access,
               .modes = host_mapping_modes,
-              .cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+              .properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
           },
   };
   iree_hal_slab_pool_options_t options;
@@ -1809,7 +1809,7 @@ TEST(ReplayExecuteTest, ExecutesPoolAllocationImportAndTrimRecords) {
       {
           IREE_HAL_MEMORY_ACCESS_READ | IREE_HAL_MEMORY_ACCESS_WRITE,
           IREE_HAL_MAPPING_MODE_SCOPED,
-          /*cacheability=*/IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+          /*properties=*/IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
       },
   };
   const iree_hal_external_storage_class_t host_pointer_class =
@@ -1843,7 +1843,8 @@ TEST(ReplayExecuteTest, ExecutesPoolAllocationImportAndTrimRecords) {
       .byte_length = sizeof(imported_storage),
   };
   external_buffer.payload.host_pointer = imported_storage;
-  external_buffer.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  external_buffer.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   external_buffer.maintenance_range =
       iree_hal_make_buffer_range(0, sizeof(imported_storage));
   iree_hal_buffer_t* imported_buffer = nullptr;
@@ -1900,6 +1901,45 @@ TEST(ReplayExecuteTest, ExecutesPoolAllocationImportAndTrimRecords) {
   IREE_EXPECT_OK(iree_hal_replay_execute_file(GetCapturedFileContents(storage),
                                               replay_group, nullptr,
                                               iree_allocator_system()));
+  // Reconstructing host bytes can satisfy a weaker cached-read guarantee,
+  // but cannot reproduce uncached or write-combined mappings.
+  const auto contents = GetCapturedFileContents(storage);
+  iree_hal_replay_file_header_t header;
+  iree_host_size_t offset = 0;
+  IREE_ASSERT_OK(iree_hal_replay_file_parse_header(contents, &header, &offset));
+  size_t import_count = 0;
+  while (offset < contents.data_length) {
+    iree_hal_replay_file_record_t record;
+    IREE_ASSERT_OK(
+        iree_hal_replay_file_parse_record(contents, offset, &record, &offset));
+    if (record.header.payload_type !=
+        IREE_HAL_REPLAY_PAYLOAD_TYPE_POOL_IMPORT_BUFFER) {
+      continue;
+    }
+    iree_hal_replay_pool_import_buffer_payload_t payload;
+    ASSERT_GE(record.payload.data_length, sizeof(payload));
+    std::memcpy(&payload, record.payload.data, sizeof(payload));
+    const uint32_t properties[] = {
+        IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED,
+        IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED,
+        IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED,
+    };
+    for (uint32_t property : properties) {
+      payload.host_properties = property;
+      std::memcpy(storage.data() + (record.payload.data - storage.data()),
+                  &payload, sizeof(payload));
+      iree_status_t status = iree_hal_replay_execute_file(
+          contents, replay_group, nullptr, iree_allocator_system());
+      IREE_EXPECT_STATUS_IS(
+          property == IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED
+              ? IREE_STATUS_OK
+              : IREE_STATUS_UNIMPLEMENTED,
+          status);
+    }
+    ++import_count;
+  }
+  EXPECT_EQ(import_count, 1u);
   iree_hal_device_group_release(replay_group);
   iree_hal_replay_recorder_release(recorder);
 }

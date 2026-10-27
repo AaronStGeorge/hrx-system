@@ -184,7 +184,8 @@ TEST_P(PoolTest, ImportHostAllocationNullCallback) {
     };
     storage.payload.host_pointer = host_ptr;
     storage.byte_length = allocation_size;
-    storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     storage.maintenance_range = iree_hal_make_buffer_range(0, allocation_size);
     return storage;
   };
@@ -237,7 +238,8 @@ TEST_P(PoolTest, ImportHostAllocationWithCallback) {
   };
   storage.payload.host_pointer = host_ptr;
   storage.byte_length = allocation_size;
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   storage.maintenance_range = iree_hal_make_buffer_range(0, allocation_size);
   storage.release = CountingReleaseCallback;
   storage.release_user_data = &release_count;
@@ -258,7 +260,8 @@ TEST_P(PoolTest, ImportHostAllocationWithCallback) {
   storage.storage_class = storage_class;
   storage.payload.host_pointer = host_ptr;
   storage.byte_length = allocation_size;
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   storage.maintenance_range = iree_hal_make_buffer_range(0, allocation_size);
   IREE_ASSERT_OK(iree_hal_pool_import_buffer(
       pool, &storage, iree_hal_make_buffer_range(0, IREE_HAL_WHOLE_BUFFER),

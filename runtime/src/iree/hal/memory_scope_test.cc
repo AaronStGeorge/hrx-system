@@ -14,6 +14,36 @@
 
 namespace {
 
+TEST(HostMemoryPropertiesTest, ValidatesIndependentRequests) {
+  const uint32_t valid_requests[] = {
+      IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED,
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED,
+      IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+      IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED,
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED,
+  };
+  // Include every combination of defined properties and an undefined bit.
+  for (uint32_t properties = 0; properties < 32; ++properties) {
+    bool expected = false;
+    for (uint32_t valid : valid_requests) {
+      expected |= properties == valid;
+    }
+    const iree_hal_pool_host_access_t host = {
+        .access = IREE_HAL_MEMORY_ACCESS_ALL,
+        .modes = IREE_HAL_MAPPING_MODE_SCOPED,
+        .properties = properties,
+    };
+    SCOPED_TRACE(properties);
+    iree_status_t status = iree_hal_pool_host_access_validate(host);
+    EXPECT_EQ(iree_status_is_ok(status), expected);
+    iree_status_ignore(status);
+  }
+}
+
 class MemoryScopeTest : public ::testing::Test {
  protected:
   void SetUp() override {

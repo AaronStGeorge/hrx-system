@@ -201,7 +201,8 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
       .maximum_byte_length = maximum_byte_length,
       .byte_length_granularity = 1,
       .registered_host_pointer_alignment = 1,
-      .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .minimum_alignment = 1,
       .maximum_alignment = maximum_alignment,
       .native_byte_length_granularity = page_size,
@@ -215,6 +216,8 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
       .minimum_alignment = page_size,
   };
   const amdf_host_mapping_capabilities_t host_mapping = {
+      .properties = AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                    AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK,
       .maximum_byte_length = maximum_byte_length,
       .byte_offset_granularity = 1,
       .byte_length_granularity = 1,
@@ -317,10 +320,9 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.allocation = allocation;
     if ((profile.roles & AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) != 0) {
       profile.host_mapping = host_mapping;
-      if (topology->integrated) {
-        profile.host_mapping.features |=
-            AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS;
-      }
+      profile.host_mapping.properties =
+          AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+          AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED;
     }
     if (amdf_gpu_kfd_supports_legacy_sdma_visibility(topology)) {
       profile.visibility.describe_site = amdf_gpu_kfd_sdma_local_describe_site;

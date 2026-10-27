@@ -249,8 +249,9 @@ TEST_F(AqlDispatchTest, HostPublishesDeviceLocalKernargsAcrossEpochs) {
   GpuMemory* arguments = nullptr;
   ASSERT_NO_FATAL_FAILURE(CreateMemory(local_scope_, creation, &arguments));
   ASSERT_EQ(arguments->info.memory_class, AMDF_MEMORY_CLASS_LOCAL);
-  ASSERT_EQ(arguments->host.cacheability,
-            AMDF_HOST_CACHEABILITY_WRITE_COMBINED);
+  ASSERT_EQ(arguments->host.properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED));
   ASSERT_EQ(arguments->device_address % kernel.arguments.alignment, 0u);
   const auto argument_host = arguments->HostSite();
   const auto argument_device = arguments->DeviceSite(family_.ordinal);

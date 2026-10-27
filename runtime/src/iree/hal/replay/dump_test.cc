@@ -547,10 +547,13 @@ static std::vector<uint8_t> MakePoolReplayFileStorage() {
       .owned_mode = 1,
       .host_access = IREE_HAL_MEMORY_ACCESS_READ,
       .host_mapping_modes = IREE_HAL_MAPPING_MODE_SCOPED,
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .preferred_host_access = IREE_HAL_MEMORY_ACCESS_WRITE,
       .preferred_host_mapping_modes = IREE_HAL_MAPPING_MODE_PERSISTENT,
-      .preferred_host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_COMBINED,
+      .preferred_host_properties =
+          (IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+           IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED),
   };
   iree_hal_replay_pool_family_access_payload_t family = {
       .device_ordinal = 2,
@@ -615,7 +618,8 @@ static std::vector<uint8_t> MakePoolReplayFileStorage() {
   imported.maintenance_length = sizeof(imported_data);
   imported.physical_backing_id[0] = 0x1234;
   imported.data_length = sizeof(imported_data);
-  imported.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  imported.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                              IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   const iree_const_byte_span_t import_iovecs[] = {
       iree_make_const_byte_span(&imported, sizeof(imported)),
       iree_make_const_byte_span(imported_data, sizeof(imported_data)),

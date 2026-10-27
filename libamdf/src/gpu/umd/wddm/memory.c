@@ -398,11 +398,13 @@ static amdf_status_t amdf_windows_gpu_memory_release_native(
 
 static amdf_memory_host_description_t amdf_gpu_umd_memory_describe_host(
     const void* data, amdf_external_memory_type_t external_memory_type,
-    amdf_memory_flags_t flags) {
+    amdf_memory_flags_t flags, amdf_host_memory_properties_t properties) {
   (void)external_memory_type;
   (void)data;
+  (void)properties;
   amdf_memory_host_description_t result = {0};
-  result.cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  result.properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   result.cache_line_size = amdf_windows_host_cache_line_size();
   const bool coherent = (flags & AMDF_MEMORY_FLAG_HOST_COHERENT) != 0;
   result.flush = (amdf_cache_transition_t){
@@ -664,8 +666,8 @@ amdf_status_t amdf_gpu_umd_memory_map(
   result.flags = capabilities->supported_access;
   result.pointer = (uint8_t*)memory->host_pointer + map_info->byte_offset;
   result.byte_length = map_info->byte_length;
-  result.visibility =
-      amdf_gpu_umd_memory_describe_host(memory->device, 0, memory->flags);
+  result.visibility = amdf_gpu_umd_memory_describe_host(
+      memory->device, 0, memory->flags, capabilities->properties);
   *out_result = result;
   // The public view owns the borrow; memory already owns the persistent map.
   *out_mapping = (amdf_gpu_umd_host_mapping_t*)memory;

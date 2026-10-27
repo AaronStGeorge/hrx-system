@@ -53,7 +53,8 @@ class HostMappingTest : public ::testing::Test {
                                  &memory_);
     mapping_.base.info.byte_length = 256;
     mapping_.base.info.memory_byte_offset = 4096;
-    mapping_.base.info.cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    mapping_.base.info.properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     mapping_.base.info.flags =
         AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
     mapping_.base.info.flush.kind = AMDF_CACHE_TRANSITION_KIND_RANGE;

@@ -112,7 +112,7 @@ class ReplayRecorderVirtualBufferTest : public ::testing::Test {
             {
                 .access = IREE_HAL_MEMORY_ACCESS_ALL,
                 .modes = IREE_HAL_MAPPING_MODE_SCOPED,
-                .cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+                .properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
             },
     };
   }

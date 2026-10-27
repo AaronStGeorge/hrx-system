@@ -96,8 +96,10 @@ TEST(LinuxGpuMemoryProfileTest, UnifiedCachedSystemStorageCanBeDeviceLocal) {
   EXPECT_NE(profile.roles & AMDF_MEMORY_PROFILE_ROLE_HOST_MAP, 0u);
   const auto host = profile.visibility.describe_host(
       profile.visibility.data, 0,
-      profile.guaranteed_flags | AMDF_MEMORY_FLAG_DEVICE_LOCAL);
-  EXPECT_EQ(host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+      profile.guaranteed_flags | AMDF_MEMORY_FLAG_DEVICE_LOCAL,
+      profile.host_mapping.properties);
+  EXPECT_EQ(host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                              AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(host.flush.host_instruction,
             AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
   EXPECT_EQ(host.invalidate.host_instruction,
@@ -184,9 +186,13 @@ TEST(LinuxGpuMemoryProfileTest, CachedPayloadAndControlBothSnoopHostCaches) {
   EXPECT_NE(control.atomic_operations_64, 0u);
   // Available host operations still serve other noncoherent consumers. Exact
   // pair queries elide them for this GPU's snooped access.
-  const auto host = cached.visibility.describe_host(cached.visibility.data, 0,
-                                                    cached.guaranteed_flags);
-  EXPECT_EQ(host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  const auto host = cached.visibility.describe_host(
+      cached.visibility.data, 0, cached.guaranteed_flags,
+      cached.host_mapping.properties);
+  EXPECT_EQ(host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                              AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
+  EXPECT_EQ(cached.host_mapping.properties, host.properties);
+  EXPECT_EQ(control.host_mapping.properties, host.properties);
   EXPECT_EQ(host.cache_line_size, 64u);
   EXPECT_EQ(host.flush.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
   EXPECT_EQ(host.flush.host_instruction,
@@ -541,9 +547,11 @@ TEST(LinuxGpuMemoryProfileTest,
   ASSERT_EQ(local.visibility.describe_site(&device_query, &device_site),
             AMDF_STATUS_OK);
 
-  const auto unavailable =
-      local.visibility.describe_host(local.visibility.data, 0, flags);
-  EXPECT_EQ(unavailable.cacheability, AMDF_HOST_CACHEABILITY_WRITE_COMBINED);
+  const auto unavailable = local.visibility.describe_host(
+      local.visibility.data, 0, flags, local.host_mapping.properties);
+  EXPECT_EQ(unavailable.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED));
+  EXPECT_EQ(local.host_mapping.properties, unavailable.properties);
   EXPECT_EQ(unavailable.flush.kind, AMDF_CACHE_TRANSITION_KIND_UNKNOWN);
   EXPECT_EQ(unavailable.invalidate.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
   EXPECT_EQ(unavailable.invalidate.executor,
@@ -558,8 +566,8 @@ TEST(LinuxGpuMemoryProfileTest,
             AMDF_STATUS_CODE_UNSUPPORTED);
 
   device.hdp = reinterpret_cast<amdf_gpu_kfd_hdp_t*>(uintptr_t{1});
-  const auto available =
-      local.visibility.describe_host(local.visibility.data, 0, flags);
+  const auto available = local.visibility.describe_host(
+      local.visibility.data, 0, flags, local.host_mapping.properties);
   EXPECT_EQ(available.flush.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
   EXPECT_EQ(available.flush.executor, AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API);
   EXPECT_EQ(available.flush.host_operation, AMDF_HOST_CACHE_OPERATION_FLUSH);
@@ -607,7 +615,8 @@ TEST(LinuxGpuMemoryProfileTest,
 
   const auto system = QueryProfile(&device, 1);
   const auto system_host = system.visibility.describe_host(
-      system.visibility.data, 0, system.guaranteed_flags);
+      system.visibility.data, 0, system.guaranteed_flags,
+      system.host_mapping.properties);
   EXPECT_EQ(system_host.flush.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
   EXPECT_EQ(system_host.flush.executor,
             AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);

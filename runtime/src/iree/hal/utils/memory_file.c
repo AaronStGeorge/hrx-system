@@ -166,8 +166,12 @@ IREE_API_EXPORT iree_status_t iree_hal_memory_file_wrap(
           IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER);
   iree_hal_pool_import_requirements_t import_requirements;
   const bool can_import =
-      storage_pool && iree_hal_pool_query_import_requirements(
-                          storage_pool, storage_class, &import_requirements);
+      storage_pool &&
+      iree_hal_pool_query_import_requirements(storage_pool, storage_class,
+                                              &import_requirements) &&
+      iree_all_bits_set(IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+                        import_requirements.host_properties);
   if (iree_status_is_ok(status) && can_import) {
     status =
         iree_hal_memory_file_try_import_buffer(file, contents, storage_pool);
@@ -257,7 +261,8 @@ static iree_status_t iree_hal_memory_file_try_import_buffer(
           IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER),
       .payload.host_pointer = contents.data,
       .byte_length = (iree_device_size_t)contents.data_length,
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .maintenance_range = iree_hal_make_buffer_range(
           0, (iree_device_size_t)contents.data_length),
       .release = iree_hal_memory_file_buffer_release,

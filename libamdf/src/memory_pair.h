@@ -62,7 +62,7 @@ typedef struct amdf_memory_site_query_t {
 // Host visibility policy independent of mapping addresses and native handles.
 typedef struct amdf_memory_host_description_t {
   // Host cache behavior established for this view.
-  amdf_host_cacheability_t cacheability;
+  amdf_host_memory_properties_t properties;
   // Host cache-line length in bytes, or zero when not applicable.
   uint32_t cache_line_size;
   // Available flush operation before considering the exact peer's coherence.

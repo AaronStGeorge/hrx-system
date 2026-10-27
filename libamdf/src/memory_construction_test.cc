@@ -87,8 +87,9 @@ class MemoryGroupTest : public MemoryTest,
         AMDF_MEMORY_PROFILE_ROLE_REGISTER | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
     device->profile.registration = device->profile.allocation;
     device->profile.registration.registered_host_pointer_alignment = 1;
-    device->profile.registration.registered_host_cacheability =
-        AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    device->profile.registration.registered_host_properties =
+        (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     device->profile.external_memory_support_count = 0;
   }
 
@@ -98,7 +99,8 @@ class MemoryGroupTest : public MemoryTest,
     if (GetParam() != 0) {
       info.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
       info.registered_host_pointer = pages_.data();
-      info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      info.registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     }
     return info;
   }
@@ -466,13 +468,15 @@ TEST_F(MemoryConstructionTest, HostOnlyPairDoesNotQueryDeviceAtomicReach) {
   FakeDevice device;
   InitializeFakeDevice(1, &instance_, &device);
   amdf_memory_host_description_t host = {
-      .cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      .properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
   };
   host.flush.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
   host.invalidate.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
   device.profile.visibility.data = &host;
   device.profile.visibility.describe_host =
-      [](const void* data, amdf_external_memory_type_t, amdf_memory_flags_t) {
+      [](const void* data, amdf_external_memory_type_t, amdf_memory_flags_t,
+         amdf_host_memory_properties_t) {
         return *static_cast<const amdf_memory_host_description_t*>(data);
       };
   device.profile.visibility.describe_site =
@@ -775,8 +779,9 @@ TEST_F(MemoryConstructionTest,
                                AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
         device.profile.registration = device.profile.allocation;
         device.profile.registration.registered_host_pointer_alignment = 1;
-        device.profile.registration.registered_host_cacheability =
-            AMDF_HOST_CACHEABILITY_WRITE_BACK;
+        device.profile.registration.registered_host_properties =
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
         device.profile.allocation = {};
         device.profile.import = {};
         device.profile.external_memory_support_count = 0;
@@ -801,7 +806,8 @@ TEST_F(MemoryConstructionTest,
       info.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
       info.byte_length = 4099;
       info.registered_host_pointer = pages.data();
-      info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      info.registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
       info.access_count = accesses.size();
       info.accesses = accesses.data();
       auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
@@ -1063,8 +1069,9 @@ TEST_F(MemoryConstructionTest, FailedRegistrationDoesNotChargeCallerStorage) {
   device.profile.roles = AMDF_MEMORY_PROFILE_ROLE_REGISTER;
   device.profile.registration = device.profile.allocation;
   device.profile.registration.registered_host_pointer_alignment = 1;
-  device.profile.registration.registered_host_cacheability =
-      AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  device.profile.registration.registered_host_properties =
+      (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   device.profile.allocation = {};
   device.profile.import = {};
   device.profile.external_memory_support_count = 0;
@@ -1074,7 +1081,9 @@ TEST_F(MemoryConstructionTest, FailedRegistrationDoesNotChargeCallerStorage) {
   create_info.memory_profile_ordinal = 1;
   create_info.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
   create_info.registered_host_pointer = pages;
-  create_info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  create_info.registered_host_properties =
+      (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   device.create_status =
       amdf_make_api_status(AMDF_STATUS_CODE_RESOURCE_EXHAUSTED);
   device.destroy_status = amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
@@ -1149,8 +1158,9 @@ class MemoryHostBackingTest : public MemoryTest {
         AMDF_MEMORY_PROFILE_ROLE_REGISTER | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
     device->profile.registration = device->profile.allocation;
     device->profile.registration.registered_host_pointer_alignment = 1;
-    device->profile.registration.registered_host_cacheability =
-        AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    device->profile.registration.registered_host_properties =
+        (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     device->profile.external_memory_support_count = 0;
   }
 
@@ -1273,7 +1283,8 @@ TEST_F(MemoryHostBackingTest, FileEligibilityBelongsToTheOwnedView) {
 
   create.memory_profile_ordinal = 1;
   create.registered_host_pointer = view->info.pointer;
-  create.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  create.registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   amdf_memory_t* borrowed = nullptr;
   EXPECT_EQ(amdf_status_code(amdf_memory_create(&instance_.system_memory_scope,
                                                 &create, &borrowed, nullptr)),
@@ -1288,7 +1299,7 @@ TEST_F(MemoryHostBackingTest, FileEligibilityBelongsToTheOwnedView) {
   EXPECT_EQ(borrowed_view->info.pointer, view->info.pointer);
   EXPECT_EQ(borrowed_view->info.features & AMDF_HOST_MAPPING_FEATURE_FILE_IO,
             0u);
-  // Equal addresses and declared cacheability cannot recover source provenance.
+  // Equal addresses and declared properties cannot recover source provenance.
   EXPECT_EQ(amdf_host_mapping_destroy(borrowed_view), AMDF_STATUS_OK);
   EXPECT_EQ(amdf_memory_destroy(borrowed, nullptr), AMDF_STATUS_OK);
   EXPECT_EQ(amdf_host_mapping_destroy(view), AMDF_STATUS_OK);
@@ -1373,8 +1384,9 @@ TEST_F(MemoryHostBackingTest,
         device.profile.roles &= ~AMDF_MEMORY_PROFILE_ROLE_REGISTER;
         break;
       case 1:
-        device.profile.registration.registered_host_cacheability =
-            AMDF_HOST_CACHEABILITY_WRITE_COMBINED;
+        device.profile.registration.registered_host_properties =
+            (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED);
         break;
       case 2:
         device.profile.registration.registered_host_pointer_alignment =

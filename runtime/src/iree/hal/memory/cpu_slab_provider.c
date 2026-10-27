@@ -88,7 +88,8 @@ static iree_status_t iree_hal_cpu_slab_provider_acquire_slab(
   out_slab->native_allocation.byte_length = min_length;
   out_slab->native_allocation.granularity = 1;
   out_slab->maintenance_range = iree_hal_make_buffer_range(0, min_length);
-  out_slab->host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  out_slab->host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   out_slab->allocation_alignment =
       iree_max(min_alignment, provider->allocation_alignment);
   return iree_ok_status();
@@ -112,7 +113,9 @@ static iree_status_t iree_hal_cpu_slab_provider_import_slab(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "invalid host pointer storage extent");
   }
-  if (storage->host_cacheability != IREE_HAL_HOST_CACHEABILITY_WRITE_BACK) {
+  if (!iree_all_bits_set(storage->host_properties,
+                         IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "CPU slab import requires write-back host storage");
   }
@@ -125,7 +128,7 @@ static iree_status_t iree_hal_cpu_slab_provider_import_slab(
       .length = storage->byte_length,
       .provider_handle = IREE_HAL_CPU_SLAB_PROVIDER_IMPORTED_HANDLE,
       .maintenance_range = storage->maintenance_range,
-      .host_cacheability = storage->host_cacheability,
+      .host_properties = storage->host_properties,
       .physical_backing_id = storage->physical_backing_id,
       .allocation_alignment = exact_alignment,
   };
@@ -157,6 +160,8 @@ static bool iree_hal_cpu_slab_provider_query_import_requirements(
       .max_byte_length = IREE_HOST_SIZE_MAX,
       .base_alignment = 1,
       .byte_length_granularity = 1,
+      .host_properties = IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                         IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
   };
   return true;
 }

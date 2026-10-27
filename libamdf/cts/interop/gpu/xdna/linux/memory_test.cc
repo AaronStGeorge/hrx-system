@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <utility>
 #include <vector>
 
@@ -551,7 +552,9 @@ void GpuXdnaMemoryInteropTest::ImportGpuSubrangeAndReleaseAllocation() {
             AMDF_STATUS_OK);
   // GPU coherence does not turn CPU cache control into a universal no-op for
   // the XDNA consumer importing these same pages.
-  EXPECT_EQ(gpu_mapping_info.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(gpu_mapping_info.properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(gpu_mapping_info.flush.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
   EXPECT_EQ(gpu_mapping_info.flush.host_instruction,
             AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
@@ -936,8 +939,8 @@ TEST_F(GpuXdnaMemoryInteropTest,
         .access_count = 2,
         .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE,
         .accesses = accesses,
-        .registered_host_cacheability =
-            profile.registration.registered_host_cacheability,
+        .registered_host_properties =
+            profile.registration.registered_host_properties,
     };
     std::array<amdf_memory_pair_info_t, 9> qualified = {};
     for (uint32_t producer = 0; producer < 3; ++producer) {
@@ -983,12 +986,14 @@ TEST_F(GpuXdnaMemoryInteropTest,
       create.registered_host_pointer = caller_pages_.pointer == nullptr
                                            ? nullptr
                                            : caller_pages_.pointer + 3;
-      create.registered_host_cacheability = query.registered_host_cacheability;
+      create.registered_host_properties = query.registered_host_properties;
       if (role == AMDF_MEMORY_PROFILE_ROLE_REGISTER) {
-        for (auto cacheability : {AMDF_HOST_CACHEABILITY_UNKNOWN,
-                                  AMDF_HOST_CACHEABILITY_WRITE_COMBINED,
-                                  AMDF_HOST_CACHEABILITY_UNCACHED}) {
-          create.registered_host_cacheability = cacheability;
+        for (auto properties : std::initializer_list<uint32_t>{
+                 AMDF_HOST_MEMORY_PROPERTY_NONE,
+                 (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+                  AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED),
+                 AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED}) {
+          create.registered_host_properties = properties;
           auto* sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
           amdf_memory_t* rejected = sentinel;
           EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create,
@@ -996,8 +1001,7 @@ TEST_F(GpuXdnaMemoryInteropTest,
                     AMDF_STATUS_CODE_UNSUPPORTED);
           EXPECT_EQ(rejected, sentinel);
         }
-        create.registered_host_cacheability =
-            query.registered_host_cacheability;
+        create.registered_host_properties = query.registered_host_properties;
       }
       ASSERT_EQ(
           api_->memory_create(system_scope_, &create, &gpu_memory_, nullptr),
@@ -1108,7 +1112,8 @@ TEST_F(GpuXdnaMemoryInteropTest,
       .minimum_alignment = 1,
       .registered_host_pointer = static_cast<uint8_t*>(pages) + 3,
       .accesses = devices,
-      .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
   };
   // An exceptional failed construction may leave native pins behind. Preserve
   // caller pages until process exit unless a published owner can release them.
@@ -1174,8 +1179,9 @@ TEST_F(GpuXdnaMemoryInteropTest,
     GTEST_SKIP() << "GPU host registration is unavailable for this lifetime";
   }
   ASSERT_NE(profile.ordinal, AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN);
-  ASSERT_EQ(profile.registration.registered_host_cacheability,
-            AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  ASSERT_EQ(profile.registration.registered_host_properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
 
   const long native_page_size = sysconf(_SC_PAGESIZE);
   ASSERT_GT(native_page_size, 0);
@@ -1221,7 +1227,8 @@ TEST_F(GpuXdnaMemoryInteropTest,
       .minimum_alignment = profile.registration.minimum_alignment,
       .registered_host_pointer = caller_pages_.pointer + page_size,
       .accesses = &gpu_access_,
-      .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
   };
   // GPU USERPTR registration succeeds under this quota. With GPU first in
   // the joint request, an XDNA quota rejection must unwind that preparation.

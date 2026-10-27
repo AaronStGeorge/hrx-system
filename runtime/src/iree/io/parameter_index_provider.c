@@ -854,7 +854,8 @@ static iree_status_t iree_io_parameter_index_provider_load(
             .storage_class = storage_class,
             .payload.host_pointer = host_allocation.data,
             .byte_length = host_allocation.data_length,
-            .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+            .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
             .maintenance_range =
                 iree_hal_make_buffer_range(0, host_allocation.data_length),
             .release = iree_io_file_handle_buffer_release,

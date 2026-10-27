@@ -277,11 +277,24 @@ static bool amdf_memory_merge_granularity(uint64_t a, uint64_t b,
   return true;
 }
 
+static bool amdf_memory_host_properties_are_valid(
+    amdf_host_memory_properties_t properties) {
+  const amdf_host_memory_properties_t cached =
+      AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+      AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK;
+  const amdf_host_memory_properties_t uncached =
+      AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+      AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED;
+  return (properties & ~(cached | uncached)) == 0 &&
+         ((properties & cached) == 0 || (properties & uncached) == 0);
+}
+
 static bool amdf_memory_merge_construction(
     const amdf_memory_construction_capabilities_t* consumer,
     amdf_memory_construction_capabilities_t* backing) {
-  if (backing->registered_host_cacheability !=
-      consumer->registered_host_cacheability) {
+  backing->registered_host_properties |= consumer->registered_host_properties;
+  if (!amdf_memory_host_properties_are_valid(
+          backing->registered_host_properties)) {
     return false;
   }
   backing->maximum_byte_length = amdf_memory_minimum(
@@ -313,6 +326,8 @@ static amdf_memory_native_profile_t amdf_memory_host_profile(
                              AMDF_ADDRESS_DOMAIN_ORDINAL_NONE},
       .host_mapping =
           {
+              .properties = AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK,
               .maximum_byte_length = maximum_byte_length,
               .byte_offset_granularity = 1,
               .byte_length_granularity = 1,
@@ -342,7 +357,8 @@ static amdf_memory_native_profile_t amdf_memory_host_profile(
         .maximum_byte_length = maximum_byte_length,
         .byte_length_granularity = 1,
         .registered_host_pointer_alignment = 1,
-        .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+        .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
         .minimum_alignment = 1,
         .maximum_alignment = granularity,
         .native_byte_length_granularity = 1,
@@ -528,7 +544,7 @@ static amdf_status_t amdf_memory_scope_select_allocation(
 
 // Preserves the backing producer's physical geometry and host view. Other
 // consumers constrain accepted requests and their own address alignment, not
-// the number of physical allocations or the host mapping's cacheability.
+// the number of physical allocations or the host mapping's properties.
 static bool amdf_memory_scope_merge_profile(amdf_memory_profile_roles_t role,
                                             amdf_memory_scope_plan_t* plan) {
   amdf_memory_profile_t* profile = &plan->profile;
@@ -575,8 +591,9 @@ static bool amdf_memory_scope_merge_profile(amdf_memory_profile_roles_t role,
     if (host_registration) {
       // The platform creates ordinary write-back pages; device registration
       // constrains their geometry without taking over physical allocation.
-      if (consumer_construction.registered_host_cacheability !=
-              AMDF_HOST_CACHEABILITY_WRITE_BACK ||
+      if ((consumer_construction.registered_host_properties &
+           ~(AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK)) != 0 ||
           consumer_construction.registered_host_pointer_alignment >
               plan->native_profiles[plan->backing_access_ordinal]
                   .allocation.minimum_alignment ||
@@ -589,8 +606,8 @@ static bool amdf_memory_scope_merge_profile(amdf_memory_profile_roles_t role,
               0) {
         return false;
       }
-      consumer_construction.registered_host_cacheability =
-          AMDF_HOST_CACHEABILITY_UNKNOWN;
+      consumer_construction.registered_host_properties =
+          AMDF_HOST_MEMORY_PROPERTY_NONE;
       consumer_construction.registered_host_pointer_alignment = 0;
     }
     if (!amdf_memory_merge_construction(&consumer_construction, construction)) {
@@ -917,24 +934,18 @@ amdf_memory_flags_t amdf_memory_scope_plan_required_access_flags(
 
 amdf_status_t amdf_memory_scope_plan_validate_registration(
     const amdf_memory_scope_plan_t* plan,
-    amdf_host_cacheability_t registered_host_cacheability) {
+    amdf_host_memory_properties_t registered_host_properties) {
   if (plan->acquisition_role != AMDF_MEMORY_PROFILE_ROLE_REGISTER) {
-    return registered_host_cacheability == AMDF_HOST_CACHEABILITY_UNKNOWN
+    return registered_host_properties == AMDF_HOST_MEMORY_PROPERTY_NONE
                ? AMDF_STATUS_OK
                : amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
   }
-  switch (registered_host_cacheability) {
-    case AMDF_HOST_CACHEABILITY_UNKNOWN:
-    case AMDF_HOST_CACHEABILITY_WRITE_BACK:
-    case AMDF_HOST_CACHEABILITY_WRITE_COMBINED:
-    case AMDF_HOST_CACHEABILITY_UNCACHED:
-      break;
-    default:
-      return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  if (!amdf_memory_host_properties_are_valid(registered_host_properties)) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
   }
-  if (registered_host_cacheability == AMDF_HOST_CACHEABILITY_UNKNOWN ||
-      registered_host_cacheability !=
-          plan->profile.registration.registered_host_cacheability) {
+  const amdf_host_memory_properties_t required =
+      plan->profile.registration.registered_host_properties;
+  if ((registered_host_properties & required) != required) {
     return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
   }
   return AMDF_STATUS_OK;
@@ -1027,7 +1038,8 @@ static amdf_status_t amdf_memory_profile_describe_site(
     // Host-only access has no device visibility edge and no native exporter.
     // REGISTER admission has already established ordinary write-back pages.
     host = (amdf_memory_host_description_t){
-        .cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+        .properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
         .flush = {.kind = AMDF_CACHE_TRANSITION_KIND_NONE},
         .invalidate = {.kind = AMDF_CACHE_TRANSITION_KIND_NONE},
     };
@@ -1046,7 +1058,8 @@ static amdf_status_t amdf_memory_profile_describe_site(
     }
     host = native->visibility.describe_host(
         native->visibility.data, query->external_memory_type,
-        amdf_memory_profile_access_flags(plan, query, ordinal));
+        amdf_memory_profile_access_flags(plan, query, ordinal),
+        native->host_mapping.properties);
   }
   const bool coherent = peer->kind != AMDF_MEMORY_SITE_KIND_DEVICE ||
                         (amdf_memory_profile_access_flags(
@@ -1113,7 +1126,7 @@ amdf_status_t AMDF_CALL amdf_memory_scope_query_pair_info(
   }
   if (amdf_status_is_ok(status)) {
     status = amdf_memory_scope_plan_validate_registration(
-        &plan, query->registered_host_cacheability);
+        &plan, query->registered_host_properties);
   }
   if (amdf_status_is_ok(status)) {
     status = amdf_memory_profile_validate_site(&plan, query->required_flags,

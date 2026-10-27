@@ -770,11 +770,12 @@ static iree_status_t iree_hal_amdgpu_slab_provider_acquire_slab(
     out_slab->native_allocation.granularity = provider->allocation_granule;
     out_slab->maintenance_range =
         iree_hal_make_buffer_range(0, allocation_size);
-    out_slab->host_cacheability =
+    out_slab->host_properties =
         iree_any_bit_set(provider->owned.memory_type,
                          IREE_HAL_MEMORY_TYPE_HOST_CACHED)
-            ? IREE_HAL_HOST_CACHEABILITY_WRITE_BACK
-            : IREE_HAL_HOST_CACHEABILITY_UNKNOWN;
+            ? (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK)
+            : IREE_HAL_HOST_MEMORY_PROPERTY_NONE;
     out_slab->allocation_alignment = provider->allocation_alignment;
     slab_handle->trace = provider->trace;
     iree_hal_memory_trace_alloc(&slab_handle->trace, slab_handle,
@@ -870,7 +871,7 @@ static iree_status_t iree_hal_amdgpu_slab_provider_import_slab(
                   native->atomic_memory_cells),
       };
       out_import->slab.maintenance_range = storage->maintenance_range;
-      out_import->slab.host_cacheability = storage->host_cacheability;
+      out_import->slab.host_properties = storage->host_properties;
       out_import->slab.physical_backing_id = storage->physical_backing_id;
       out_import->slab.allocation_alignment =
           out_import->properties.allocation_alignment;

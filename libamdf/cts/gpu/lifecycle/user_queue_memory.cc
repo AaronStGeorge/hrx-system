@@ -194,7 +194,8 @@ class UserQueueMemoryScenario {
     ASSERT_EQ(mapping_info.byte_length, kMemoryByteLength);
     ASSERT_EQ(mapping_info.flags,
               AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE);
-    ASSERT_EQ(mapping_info.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    ASSERT_EQ(mapping_info.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   }
 
   void DestroyHostMapping(amdf_host_mapping_t*& mapping) {

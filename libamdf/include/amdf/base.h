@@ -112,8 +112,11 @@ typedef uint32_t amdf_abi_version_t;
 /// Adds native host queue publication and per-placement requirements.
 #define AMDF_ABI_VERSION_14 ((amdf_abi_version_t)14)
 
+/// Independent host memory guarantees and prospective mapping properties.
+#define AMDF_ABI_VERSION_15 ((amdf_abi_version_t)15)
+
 /// Latest ABI version implemented by these headers.
-#define AMDF_ABI_VERSION_LATEST AMDF_ABI_VERSION_14
+#define AMDF_ABI_VERSION_LATEST AMDF_ABI_VERSION_15
 
 /// The unmangled symbol used to acquire the immutable API table.
 #define AMDF_QUERY_API_SYMBOL "amdf_query_api"

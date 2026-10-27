@@ -135,7 +135,9 @@ static bool iree_hal_amd_fabric_memory_supports_host_access(
   }
   const amdf_memory_map_flags_t access =
       iree_hal_amd_fabric_memory_host_access(host.access);
-  return host.cacheability == IREE_HAL_HOST_CACHEABILITY_UNKNOWN &&
+  return iree_all_bits_set(iree_hal_amd_fabric_memory_host_properties(
+                               profile->host_mapping.properties),
+                           host.properties) &&
          iree_all_bits_set(profile->roles, AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) &&
          iree_all_bits_set(profile->supported_flags,
                            AMDF_MEMORY_FLAG_HOST_VISIBLE) &&
@@ -494,8 +496,8 @@ static iree_status_t iree_hal_amd_fabric_memory_query_transition(
     query->native.required_flags =
         i < owned_count ? options->memory.required_flags
                         : options->imports[i - owned_count].required_flags;
-    query->native.registered_host_cacheability =
-        profile->registration.registered_host_cacheability;
+    query->native.registered_host_properties =
+        profile->registration.registered_host_properties;
     query->native.external_memory_type = AMDF_EXTERNAL_MEMORY_TYPE_NONE;
     query->native.external_memory_provenance =
         (amdf_external_memory_provenance_t){{0, 0}};
@@ -634,10 +636,7 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
   const iree_hal_pool_host_access_t combined = {
       .access = host.access | preferred.access,
       .modes = host.modes | preferred.modes,
-      .cacheability =
-          preferred.cacheability != IREE_HAL_HOST_CACHEABILITY_UNKNOWN
-              ? preferred.cacheability
-              : host.cacheability,
+      .properties = host.properties | preferred.properties,
       .atomics = iree_hal_atomic_operation_capabilities_union(
           host.atomics, preferred.atomics),
   };
@@ -645,10 +644,16 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
       profile ? iree_hal_amd_fabric_memory_host_atomics(profile)
               : iree_hal_atomic_operation_capabilities_for_host(
                     IREE_HAL_ATOMIC_OPERATION_FLAGS_ALL);
+  iree_hal_host_memory_properties_t host_properties =
+      profile ? iree_hal_amd_fabric_memory_host_properties(
+                    profile->host_mapping.properties)
+              : UINT32_MAX;
   for (iree_host_size_t i = 0; i < query->options->imports.class_count; ++i) {
     host_atomics = iree_hal_atomic_operation_capabilities_intersect(
         host_atomics,
         iree_hal_amd_fabric_memory_host_atomics(&imports[i].profile));
+    host_properties &= iree_hal_amd_fabric_memory_host_properties(
+        imports[i].profile.host_mapping.properties);
   }
   bool preferred_host_added = false;
   bool supports_preferred =
@@ -665,6 +670,9 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
     preferred_host_added = host.access != query->scope.host.access ||
                            host.modes != query->scope.host.modes;
   }
+
+  host.properties =
+      host.access ? host_properties : IREE_HAL_HOST_MEMORY_PROPERTY_NONE;
 
   iree_hal_buffer_usage_t usage = IREE_HAL_BUFFER_USAGE_NONE;
   iree_hal_memory_access_t transfer_access = IREE_HAL_MEMORY_ACCESS_NONE;
@@ -1193,11 +1201,14 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_query_storage(
         policy->storage_class;
     supported = false;
     for (uint32_t p = 0; p < profile_count; ++p) {
-      const amdf_memory_profile_t* profile = &profiles[p];
+      amdf_memory_profile_t candidate = profiles[p];
+      const amdf_memory_profile_t* profile = &candidate;
       if (iree_all_bits_set(profile->supported_flags, query->required_flags) &&
           iree_hal_amd_fabric_memory_supports_import(profile, storage_class) &&
           iree_hal_amd_fabric_memory_supports_exports(profile,
                                                       policy->exports) &&
+          iree_hal_amd_fabric_memory_constrain_profile(
+              storage_class, policy->exports, &candidate) &&
           iree_hal_amd_fabric_memory_supports_mapping(
               profile, query->private_host_access) &&
           iree_hal_amd_fabric_memory_supports_host_access(profile,
@@ -1210,11 +1221,8 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_query_storage(
             .policy = *policy,
             .profile = *profile,
         };
-        supported = iree_hal_amd_fabric_memory_constrain_profile(
-            storage_class, policy->exports, &imports[i].profile);
-        if (supported) {
-          break;
-        }
+        supported = true;
+        break;
       }
     }
   }
@@ -1269,9 +1277,7 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_query(
     iree_hal_slab_pool_plan_callback_t callback,
     iree_allocator_t host_allocator) {
   (void)self;
-  if ((scope.host.access &&
-       scope.host.cacheability != IREE_HAL_HOST_CACHEABILITY_UNKNOWN) ||
-      scope.family_count >= UINT32_MAX) {
+  if (scope.family_count >= UINT32_MAX) {
     return iree_ok_status();
   }
 

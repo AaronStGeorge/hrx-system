@@ -220,6 +220,7 @@ struct FakeNative {
     out_profile->host_mapping.byte_offset_granularity = 1;
     out_profile->host_mapping.byte_length_granularity = 1;
     out_profile->host_mapping.features = self->host_mapping_features;
+    out_profile->host_mapping.properties = self->host_properties;
     out_profile->host_mapping.supported_access =
         !self->host_mappable ? 0
         : self->supports_private_mapping
@@ -230,11 +231,15 @@ struct FakeNative {
       out_profile->roles =
           AMDF_MEMORY_PROFILE_ROLE_REGISTER | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
       out_profile->allocation = {};
+      out_profile->host_mapping.properties =
+          AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+          AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK;
       out_profile->registration.maximum_byte_length = UINT64_C(1) << 30;
       out_profile->registration.byte_length_granularity = 1;
       out_profile->registration.registered_host_pointer_alignment = 1;
-      out_profile->registration.registered_host_cacheability =
-          AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      out_profile->registration.registered_host_properties =
+          (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+           AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
       out_profile->registration.minimum_alignment = 1;
       out_profile->registration.maximum_alignment = 4096;
       out_profile->registration.native_byte_length_granularity = 4096;
@@ -279,9 +284,10 @@ struct FakeNative {
     const bool imported =
         query->memory_profile_ordinal == 1 && self->native_transport_enabled;
     EXPECT_LT(query->memory_profile_ordinal, self->ProfileCount(storage));
-    EXPECT_EQ(query->registered_host_cacheability,
-              registered ? AMDF_HOST_CACHEABILITY_WRITE_BACK
-                         : AMDF_HOST_CACHEABILITY_UNKNOWN);
+    EXPECT_EQ(query->registered_host_properties,
+              registered ? (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK)
+                         : AMDF_HOST_MEMORY_PROPERTY_NONE);
     CheckAccesses(storage, query->access_count, query->accesses);
     EXPECT_EQ(query->required_flags, self->required_flags);
     EXPECT_EQ(query->external_memory_type,
@@ -561,7 +567,7 @@ struct FakeNative {
     auto* memory = reinterpret_cast<Memory*>(mapping);
     info->pointer = memory->data;
     info->byte_length = memory->byte_length;
-    info->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    info->properties = memory->owner->host_properties;
     info->features = memory->owner->host_mapping_features;
     return AMDF_STATUS_OK;
   }
@@ -703,6 +709,10 @@ struct FakeNative {
   bool file_io_enabled = false;
   // Exact capabilities reported by prepared host views.
   amdf_host_mapping_features_t host_mapping_features = 0;
+  // CPU mapping facts supplied by the native backing dependency.
+  amdf_host_memory_properties_t host_properties =
+      AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+      AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK;
   // Native address geometry per live consumer, before addresses are reserved.
   std::array<uint64_t, 2> reservation_granularities = {4096, 4096};
   // Whole-backing preparation required by each native address domain.
@@ -1034,7 +1044,7 @@ class MemoryBackendTest : public ::testing::Test {
     scope.host.modes = host_access ? IREE_HAL_MAPPING_MODE_SCOPED |
                                          IREE_HAL_MAPPING_MODE_PERSISTENT
                                    : 0;
-    scope.host.cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN;
+    scope.host.properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE;
     return iree_hal_slab_pool_create(group_, scope, &pool_options_, allocator_,
                                      out_pool);
   }

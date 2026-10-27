@@ -264,7 +264,7 @@ class ExecutionTest
         .family_count = families_.size(),
         .families = families_.data(),
         .host = {IREE_HAL_MEMORY_ACCESS_READ, IREE_HAL_MAPPING_MODE_PERSISTENT,
-                 IREE_HAL_HOST_CACHEABILITY_UNKNOWN},
+                 IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED},
     };
     iree_hal_virtual_buffer_capabilities_t capabilities;
     IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(

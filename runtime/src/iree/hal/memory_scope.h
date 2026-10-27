@@ -103,8 +103,10 @@ typedef struct iree_hal_pool_host_access_t {
   iree_hal_memory_access_t access;
   // Required mapping modes; zero with access zero disables public maps.
   iree_hal_mapping_mode_t modes;
-  // Required mapping class; UNKNOWN permits the backend to choose.
-  iree_hal_host_cacheability_t cacheability;
+  // Required CPU mapping guarantees on input; common guaranteed properties
+  // across every admitted allocation/import route on pool queries. Zero on
+  // input adds no requirement; absent output bits make no promise.
+  iree_hal_host_memory_properties_t properties;
   // Required atomic operations through the public application host mapping.
   iree_hal_atomic_operation_capabilities_t atomics;
 } iree_hal_pool_host_access_t;
@@ -120,7 +122,7 @@ typedef struct iree_hal_pool_scope_t {
   iree_hal_pool_host_access_t host;
 } iree_hal_pool_scope_t;
 
-// Validates public host permissions and their mapping/cacheability contract.
+// Validates public host permissions and their mapping/properties contract.
 IREE_API_EXPORT iree_status_t
 iree_hal_pool_host_access_validate(iree_hal_pool_host_access_t host);
 

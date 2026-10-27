@@ -356,8 +356,9 @@ static amdf_status_t amdf_memory_prepare(
     if (amdf_status_is_ok(status)) {
       registration.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
       registration.registered_host_pointer = amdf_host_memory_pointer(memory);
-      registration.registered_host_cacheability =
-          AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      registration.registered_host_properties =
+          (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+           AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     }
     const amdf_platform_host_export_t* service =
         plan->shared_external_type != 0
@@ -477,7 +478,7 @@ amdf_status_t AMDF_CALL amdf_memory_create(
   }
   if (amdf_status_is_ok(status)) {
     status = amdf_memory_scope_plan_validate_registration(
-        &plan, create_info->registered_host_cacheability);
+        &plan, create_info->registered_host_properties);
   }
   if (amdf_status_is_ok(status) && registration) {
     const uintptr_t pointer = (uintptr_t)create_info->registered_host_pointer;
@@ -743,7 +744,7 @@ static amdf_status_t amdf_memory_describe_site(
            .info.flags &
        AMDF_MEMORY_FLAG_HOST_COHERENT) != 0;
   const amdf_memory_host_description_t host = {
-      .cacheability = mapping->cacheability,
+      .properties = mapping->properties,
       .cache_line_size = mapping->cache_line_size,
       .flush = mapping->flush,
       .invalidate = mapping->invalidate,

@@ -246,7 +246,8 @@ class VulkanImportedFileTest : public VulkanFileTest {
         .byte_length = storage_length,
     };
     storage.payload.host_pointer = allocation->pointer;
-    storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     storage.maintenance_range =
         iree_hal_make_buffer_range(alignment, registered_length);
     storage.release = ReleaseImportedHostAllocation;

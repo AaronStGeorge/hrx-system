@@ -233,7 +233,7 @@ void GpuXdnaDeviceFixture::QueryProfilePairs(
       .access_count = create.access_count,
       .required_flags = create.required_flags,
       .accesses = create.accesses,
-      .registered_host_cacheability = create.registered_host_cacheability,
+      .registered_host_properties = create.registered_host_properties,
   };
   for (size_t i = 0; i < edges.size(); ++i) {
     SCOPED_TRACE(i);
@@ -287,7 +287,8 @@ void GpuXdnaDeviceFixture::CheckConcretePairs(
     const bool gpu_peer = edges[i].producer == GpuXdnaSite::kGpu ||
                           edges[i].consumer == GpuXdnaSite::kGpu;
     if (gpu_peer &&
-        memory.host.cacheability == AMDF_HOST_CACHEABILITY_WRITE_BACK) {
+        memory.host.properties == (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                   AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK)) {
       if (host_release.executor != AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API) {
         host_release = none;
       }

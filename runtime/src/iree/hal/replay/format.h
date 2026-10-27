@@ -19,9 +19,9 @@ extern "C" {
 // Magic header bytes for IREE HAL replay files: "IRRP".
 #define IREE_HAL_REPLAY_FILE_MAGIC 0x50525249u
 
-// Major version of the IREE HAL replay file format. Version 15 preserves
-// required command-storage placement in dynamic queue acquisition.
-#define IREE_HAL_REPLAY_FILE_VERSION_MAJOR 15u
+// Major version of the IREE HAL replay file format. Version 16 records
+// independent CPU mapping guarantees instead of a scalar cache class.
+#define IREE_HAL_REPLAY_FILE_VERSION_MAJOR 16u
 
 // Minor version of the IREE HAL replay file format. Scoped host mappings have
 // independent identities in related_object_id: map creates the identity,
@@ -328,14 +328,14 @@ typedef struct iree_hal_replay_pool_create_slab_payload_t {
   uint32_t host_access;
   // Required public host mapping modes.
   uint32_t host_mapping_modes;
-  // Required public host cacheability.
-  uint32_t host_cacheability;
+  // Required public host properties.
+  uint32_t host_properties;
   // Preferred additional host memory access bits.
   uint32_t preferred_host_access;
   // Preferred additional host mapping modes.
   uint32_t preferred_host_mapping_modes;
-  // Preferred host cacheability.
-  uint32_t preferred_host_cacheability;
+  // Preferred host properties.
+  uint32_t preferred_host_properties;
   // Required host device scope 32 operations.
   uint32_t host_atomic_device_scope_32;
   // Required host device scope 64 operations.
@@ -371,8 +371,8 @@ typedef struct iree_hal_replay_virtual_buffer_create_payload_t {
   uint32_t host_access;
   // Required host mapping modes.
   uint32_t host_mapping_modes;
-  // Required host cacheability.
-  uint32_t host_cacheability;
+  // Required host properties.
+  uint32_t host_properties;
   // Reserved for future construction policy; must be zero.
   uint32_t reserved0;
   // Required host device scope 32 operations.
@@ -498,8 +498,8 @@ typedef struct iree_hal_replay_pool_import_buffer_payload_t {
   uint64_t physical_backing_id[2];
   // Number of captured data bytes following this header.
   uint64_t data_length;
-  // Source-established host mapping class.
-  uint32_t host_cacheability;
+  // Source-established CPU mapping guarantees.
+  uint32_t host_properties;
   // Reserved for future import metadata; must be zero.
   uint32_t reserved0;
 } iree_hal_replay_pool_import_buffer_payload_t;

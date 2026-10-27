@@ -239,11 +239,14 @@ static iree_status_t iree_hal_vulkan_slab_provider_acquire_slab(
         iree_hal_vulkan_buffer_allocation_info(buffer);
     out_slab->maintenance_range =
         iree_hal_make_buffer_range(0, out_slab->length);
-    out_slab->host_cacheability =
+    out_slab->host_properties =
         iree_any_bit_set(iree_hal_buffer_memory_type(buffer),
                          IREE_HAL_MEMORY_TYPE_HOST_CACHED)
-            ? IREE_HAL_HOST_CACHEABILITY_WRITE_BACK
-            : IREE_HAL_HOST_CACHEABILITY_UNKNOWN;
+            ? IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED
+        : iree_any_bit_set(iree_hal_buffer_memory_type(buffer),
+                           IREE_HAL_MEMORY_TYPE_HOST_VISIBLE)
+            ? IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED
+            : IREE_HAL_HOST_MEMORY_PROPERTY_NONE;
     out_slab->allocation_alignment = iree_max(alignment, native_alignment);
     iree_atomic_fetch_add(&provider->total_acquired, 1,
                           iree_memory_order_relaxed);
@@ -298,7 +301,7 @@ static iree_status_t iree_hal_vulkan_slab_provider_import_slab(
     out_import->properties.supported_usage =
         iree_hal_buffer_allowed_usage(buffer);
     out_import->slab.maintenance_range = storage->maintenance_range;
-    out_import->slab.host_cacheability = storage->host_cacheability;
+    out_import->slab.host_properties = storage->host_properties;
     out_import->slab.physical_backing_id = storage->physical_backing_id;
     out_import->slab.allocation_alignment =
         out_import->properties.allocation_alignment;
@@ -328,6 +331,8 @@ static bool iree_hal_vulkan_slab_provider_query_import_requirements(
       .max_byte_length = 0,
       .base_alignment = provider->min_alignment,
       .byte_length_granularity = provider->min_alignment,
+      .host_properties = IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                         IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
   };
   return true;
 }

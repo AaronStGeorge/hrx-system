@@ -108,7 +108,7 @@ amdf_status_t amdf_linux_xdna_memory_translate_dma_address(
 
 static amdf_memory_host_description_t amdf_xdna_umd_memory_describe_host(
     const void* data, amdf_external_memory_type_t external_memory_type,
-    amdf_memory_flags_t flags) {
+    amdf_memory_flags_t flags, amdf_host_memory_properties_t properties) {
   const amdf_xdna_umd_device_t* device = data;
   (void)flags;
   // A foreign DMA-BUF may require an exporter CPU-access protocol. Its size,
@@ -116,8 +116,10 @@ static amdf_memory_host_description_t amdf_xdna_umd_memory_describe_host(
   if (external_memory_type == AMDF_EXTERNAL_MEMORY_TYPE_DMA_BUF_FD) {
     return (amdf_memory_host_description_t){0};
   }
+  (void)properties;
   amdf_memory_host_description_t result = {0};
-  result.cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  result.properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   result.cache_line_size = device->cache_line_size;
   result.flush = (amdf_cache_transition_t){
       .kind = AMDF_CACHE_TRANSITION_KIND_RANGE,
@@ -199,6 +201,8 @@ void amdf_xdna_umd_context_query_memory_profile(
           },
       .host_mapping =
           {
+              .properties = AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK,
               .maximum_byte_length = heap_byte_length,
               .byte_offset_granularity = 1,
               .byte_length_granularity = 1,
@@ -229,7 +233,7 @@ amdf_status_t amdf_xdna_umd_memory_prepare_private(
     return status;
   }
   memory->device = device;
-  memory->host_visibility = amdf_xdna_umd_memory_describe_host(device, 0, 0);
+  memory->host_visibility = amdf_xdna_umd_memory_describe_host(device, 0, 0, 0);
   *memory_state = memory;
   const size_t byte_length =
       (create_info->byte_length + device->page_size - 1) &
@@ -309,7 +313,7 @@ amdf_status_t amdf_xdna_umd_memory_prepare_import(
   }
   memory->device = device;
   memory->host_visibility =
-      amdf_xdna_umd_memory_describe_host(device, external_memory->type, 0);
+      amdf_xdna_umd_memory_describe_host(device, external_memory->type, 0, 0);
   *memory_state = memory;
   memory->source_byte_offset = external_memory->source_byte_offset;
   memory->physical_backing_id = dma_buf_info.physical_backing_id;
@@ -466,7 +470,7 @@ amdf_status_t amdf_xdna_umd_memory_prepare(
     return status;
   }
   memory->device = device;
-  memory->host_visibility = amdf_xdna_umd_memory_describe_host(device, 0, 0);
+  memory->host_visibility = amdf_xdna_umd_memory_describe_host(device, 0, 0, 0);
   *memory_state = memory;
   memory->source_byte_offset = source_byte_offset;
   if (registers_host) {

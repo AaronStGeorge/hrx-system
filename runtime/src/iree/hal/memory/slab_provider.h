@@ -136,8 +136,8 @@ typedef struct iree_hal_slab_t {
   // extends to slab length; owned slabs may control additional native padding.
   iree_hal_buffer_range_t maintenance_range;
 
-  // Cache class established by the source mapping, or UNKNOWN without a view.
-  iree_hal_host_cacheability_t host_cacheability;
+  // CPU mapping guarantees established by the source; zero without a view.
+  iree_hal_host_memory_properties_t host_properties;
 
   // Native or external-source physical identity, when established.
   iree_hal_physical_memory_id_t physical_backing_id;

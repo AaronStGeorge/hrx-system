@@ -114,14 +114,14 @@ static iree_status_t iree_hal_heap_buffer_export_range(
   out_storage->storage_class = requested_class;
   out_storage->byte_length = base_buffer->allocation_size;
   if (base_buffer->memory.backing) {
-    out_storage->host_cacheability =
-        base_buffer->memory.backing->host_cacheability;
+    out_storage->host_properties = base_buffer->memory.backing->host_properties;
     out_storage->maintenance_range =
         base_buffer->memory.backing->maintenance_range;
     out_storage->physical_backing_id =
         base_buffer->memory.backing->physical_backing_id;
   } else {
-    out_storage->host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    out_storage->host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                    IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     out_storage->maintenance_range = (iree_hal_buffer_range_t){
         .byte_length = base_buffer->allocation_size,
     };

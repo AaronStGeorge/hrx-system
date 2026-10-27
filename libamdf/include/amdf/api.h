@@ -610,7 +610,7 @@ typedef struct amdf_api_t {
   ///
   /// Success supplies sufficient release/acquire recipes for every successful
   /// construction with the same scope, profile, backing requirements, complete
-  /// live consumer set and registration cache class. Host sites require
+  /// live consumer set and registration host properties. Host sites require
   /// HOST_VISIBLE in required_flags. Views must provide the declared
   /// permissions. Allocation size, addresses and host-view ranges may vary
   /// within the profile; callers still satisfy each transition's range and

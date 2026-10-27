@@ -171,8 +171,7 @@ void Pm4SdmaTest::ResolvePairs(
       };
       query.access_count = creation.access_count;
       query.accesses = creation.accesses;
-      query.registered_host_cacheability =
-          creation.registered_host_cacheability;
+      query.registered_host_properties = creation.registered_host_properties;
       query.producer = ProfileSite(edge.producer, AMDF_MEMORY_MAP_FLAG_WRITE);
       query.consumer = ProfileSite(edge.consumer, AMDF_MEMORY_MAP_FLAG_READ);
       ASSERT_EQ(
@@ -245,8 +244,8 @@ void Pm4SdmaTest::PrepareCoherentHandoff(
     ASSERT_EQ(creation.minimum_alignment, backing.creation.minimum_alignment);
     ASSERT_EQ(creation.access_count, 1u);
     ASSERT_EQ(creation.registered_host_pointer, nullptr);
-    ASSERT_EQ(creation.registered_host_cacheability,
-              AMDF_HOST_CACHEABILITY_UNKNOWN);
+    ASSERT_EQ(creation.registered_host_properties,
+              AMDF_HOST_MEMORY_PROPERTY_NONE);
     ASSERT_EQ(memory.attachment.device, device_);
     ASSERT_EQ(memory.attachment.requirements.access,
               backing.attachment.requirements.access);
@@ -260,7 +259,8 @@ void Pm4SdmaTest::PrepareCoherentHandoff(
     ASSERT_EQ(memory.info.memory_class, AMDF_MEMORY_CLASS_SYSTEM);
     ASSERT_NE(memory.info.flags & AMDF_MEMORY_FLAG_HOST_VISIBLE, 0u);
     ASSERT_EQ(memory.info.flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL, 0u);
-    ASSERT_EQ(memory.host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    ASSERT_EQ(memory.host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     ASSERT_EQ(memory.host.flags,
               AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE);
     ASSERT_EQ(memory.host.memory_byte_offset, 0u);

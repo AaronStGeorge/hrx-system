@@ -253,6 +253,14 @@ IREE_API_EXPORT iree_status_t iree_hal_pool_import_buffer(
                             "external storage must be nonempty");
   }
 
+  if (!iree_hal_host_memory_properties_is_valid(
+          inout_storage->host_properties)) {
+    IREE_TRACE_ZONE_END(z0);
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "external storage has incompatible host properties");
+  }
+
   iree_hal_buffer_range_t resolved_range = {0};
   iree_status_t status = iree_hal_buffer_calculate_range(
       0, inout_storage->byte_length, logical_range.byte_offset,

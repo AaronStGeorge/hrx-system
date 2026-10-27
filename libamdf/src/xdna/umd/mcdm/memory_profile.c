@@ -46,6 +46,8 @@ amdf_status_t amdf_windows_xdna_query_memory_profile(
           },
       .host_mapping =
           {
+              .properties = AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK,
               .maximum_byte_length = maximum_byte_length,
               .byte_offset_granularity = 1,
               .byte_length_granularity = 1,
@@ -71,7 +73,8 @@ amdf_status_t amdf_windows_xdna_query_memory_profile(
         .byte_length_granularity = AMDF_WINDOWS_XDNA_ALLOCATION_GRANULARITY,
         .registered_host_pointer_alignment =
             AMDF_WINDOWS_XDNA_ALLOCATION_GRANULARITY,
-        .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+        .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
         .minimum_alignment = AMDF_WINDOWS_XDNA_ADDRESS_ALIGNMENT,
         .maximum_alignment = AMDF_WINDOWS_XDNA_ADDRESS_ALIGNMENT,
         .native_byte_length_granularity =

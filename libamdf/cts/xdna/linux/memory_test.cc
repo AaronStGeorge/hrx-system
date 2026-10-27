@@ -131,7 +131,7 @@ TEST_F(XdnaLinuxMemoryTest, PortableImportDoesNotInheritNativeHostProtocol) {
                                 &memories_[1], nullptr),
             AMDF_STATUS_OK);
   ASSERT_EQ(MapMemory(memories_[1], 1, create.byte_length), AMDF_STATUS_OK);
-  EXPECT_EQ(mapping_infos_[1].cacheability, AMDF_HOST_CACHEABILITY_UNKNOWN);
+  EXPECT_EQ(mapping_infos_[1].properties, AMDF_HOST_MEMORY_PROPERTY_NONE);
   for (auto operation : {AMDF_HOST_CACHE_OPERATION_FLUSH,
                          AMDF_HOST_CACHE_OPERATION_INVALIDATE}) {
     EXPECT_EQ(amdf_status_code(api_->host_mapping_cache_control(
@@ -175,7 +175,8 @@ TEST_F(XdnaLinuxMemoryTest,
       .minimum_alignment = 1,
       .registered_host_pointer = caller_pages_ + 3,
       .accesses = &memory_access_,
-      .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
   };
 
   amdf_memory_t* output = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
@@ -227,10 +228,14 @@ TEST_F(XdnaLinuxMemoryTest,
   ASSERT_EQ(MapMemory(memories_[0], 0, create_info.byte_length),
             AMDF_STATUS_OK);
   EXPECT_EQ(mapping_infos_[0].pointer, create_info.registered_host_pointer);
-  EXPECT_EQ(mapping_infos_[0].cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(mapping_infos_[0].properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
 
   create_info.registered_host_pointer = caller_pages_ + 19;
-  create_info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  create_info.registered_host_properties =
+      (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   create_info.byte_length = caller_byte_length_ / 2;
   ASSERT_EQ(
       api_->memory_create(system_scope_, &create_info, &memories_[1], nullptr),

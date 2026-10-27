@@ -11,6 +11,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <utility>
 #include <vector>
 
@@ -154,7 +155,8 @@ class WindowsGpuXdnaMemoryTest
     create.byte_length = kByteLength;
     create.minimum_alignment = profile_.registration.minimum_alignment;
     create.registered_host_pointer = pages_;
-    create.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    create.registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     return create;
   }
 
@@ -186,8 +188,9 @@ TEST_P(WindowsGpuXdnaMemoryTest, QualifiesSharedPagesBeforeAllocation) {
   EXPECT_EQ(profile_.registration.byte_length_granularity, 65536u);
   EXPECT_EQ(profile_.registration.minimum_alignment, 4096u);
   EXPECT_EQ(profile_.registration.maximum_alignment, 4096u);
-  EXPECT_EQ(profile_.registration.registered_host_cacheability,
-            AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(profile_.registration.registered_host_properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(profile_.external_memory_support_count, 0u);
   for (uint32_t ordinal = 0; ordinal < 2; ++ordinal) {
     const auto& capability = capabilities_[ordinal];
@@ -203,7 +206,8 @@ TEST_P(WindowsGpuXdnaMemoryTest, QualifiesSharedPagesBeforeAllocation) {
   query.access_count = accesses_.size();
   query.accesses = accesses_.data();
   query.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
-  query.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  query.registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                      AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   for (uint32_t producer = 0; producer < 2; ++producer) {
     const uint32_t consumer = 1 - producer;
     query.producer.kind = AMDF_MEMORY_SITE_KIND_DEVICE;
@@ -241,10 +245,12 @@ TEST_P(WindowsGpuXdnaMemoryTest, RejectsInvalidRegistrationWithoutOutput) {
   EXPECT_EQ(api_->memory_create(system_scope_, &create, &output, nullptr),
             amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
-  for (auto cacheability : {AMDF_HOST_CACHEABILITY_UNKNOWN,
-                            AMDF_HOST_CACHEABILITY_WRITE_COMBINED}) {
+  for (auto properties : std::initializer_list<uint32_t>{
+           AMDF_HOST_MEMORY_PROPERTY_NONE,
+           (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+            AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED)}) {
     create = original;
-    create.registered_host_cacheability = cacheability;
+    create.registered_host_properties = properties;
     EXPECT_EQ(api_->memory_create(system_scope_, &create, &output, nullptr),
               amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
     EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
@@ -308,7 +314,8 @@ TEST_P(WindowsGpuXdnaMemoryTest,
               AMDF_STATUS_OK);
     ASSERT_EQ(mapping.pointer, pages_ + map.byte_offset);
     EXPECT_EQ(mapping.byte_length, map.byte_length);
-    EXPECT_EQ(mapping.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(mapping.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                   AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     EXPECT_EQ(static_cast<uint8_t*>(mapping.pointer)[map.byte_length - 1],
               marker);
     ASSERT_EQ(api_->host_mapping_destroy(std::exchange(mapping_, nullptr)),

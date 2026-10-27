@@ -195,12 +195,14 @@ static amdf_status_t amdf_windows_xdna_memory_make_resident(
 
 static amdf_memory_host_description_t amdf_xdna_umd_memory_describe_host(
     const void* data, amdf_external_memory_type_t external_memory_type,
-    amdf_memory_flags_t flags) {
+    amdf_memory_flags_t flags, amdf_host_memory_properties_t properties) {
   (void)external_memory_type;
   (void)data;
   (void)flags;
+  (void)properties;
   amdf_memory_host_description_t result = {0};
-  result.cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  result.properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   result.cache_line_size = amdf_windows_host_cache_line_size();
   result.flush = (amdf_cache_transition_t){
       .kind = AMDF_CACHE_TRANSITION_KIND_RANGE,
@@ -288,6 +290,8 @@ void amdf_xdna_umd_context_query_memory_profile(
           },
       .host_mapping =
           {
+              .properties = AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK,
               .maximum_byte_length = byte_length,
               .byte_offset_granularity = 1,
               .byte_length_granularity = 1,
@@ -487,7 +491,8 @@ amdf_status_t amdf_xdna_umd_memory_map(
   result.flags = capabilities->supported_access;
   result.pointer = (uint8_t*)memory->host_pointer + map_info->byte_offset;
   result.byte_length = map_info->byte_length;
-  result.visibility = amdf_xdna_umd_memory_describe_host(memory->device, 0, 0);
+  result.visibility =
+      amdf_xdna_umd_memory_describe_host(memory->device, 0, 0, 0);
   *out_result = result;
   // The public view owns the borrow; memory already owns the persistent map.
   *out_mapping = (amdf_xdna_umd_host_mapping_t*)memory;

@@ -114,6 +114,64 @@ class GpuNativeAllocationTest : public GpuNativeTest {
   std::array<iree_hal_semaphore_t*, 4> semaphores_ = {};
 };
 
+TEST_F(GpuNativeAllocationTest, CachedHostPoolRetainsGuaranteesThroughCopy) {
+  using iree::hal::cts::Ref;
+  const iree_hal_pool_family_access_t family = {
+      .family = iree_hal_queue_family(queues_[0]),
+      .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
+  };
+  const iree_hal_pool_scope_t scope = {
+      .family_count = 1,
+      .families = &family,
+      .host =
+          {
+              .access = IREE_HAL_MEMORY_ACCESS_ALL,
+              .modes = IREE_HAL_MAPPING_MODE_PERSISTENT,
+              .properties = IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED,
+          },
+  };
+  iree_hal_slab_pool_options_t options;
+  iree_hal_slab_pool_options_initialize(&options);
+  Ref<iree_hal_pool_t> pool;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(
+      group_, scope, &options, iree_allocator_system(), pool.out()));
+  const auto properties = iree_hal_pool_query_host_access(pool).properties;
+  EXPECT_EQ(properties, IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
+  std::array<Ref<iree_hal_buffer_t>, 2> buffers;
+  std::array<iree_hal_buffer_mapping_t, 2> mappings = {};
+  for (size_t i = 0; i < buffers.size(); ++i) {
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        pool, iree_hal_make_pool_reservation_request(4096, 0),
+        iree_infinite_timeout(), buffers[i].out()));
+    EXPECT_EQ(iree_hal_buffer_memory_view(buffers[i]).backing->host_properties,
+              properties);
+    IREE_ASSERT_OK(iree_hal_buffer_map_range(
+        buffers[i], IREE_HAL_MAPPING_MODE_PERSISTENT,
+        IREE_HAL_MEMORY_ACCESS_ALL, IREE_HAL_BUFFER_MAP_FLAG_NONE, 0, 4096,
+        &mappings[i]));
+  }
+  std::array<uint32_t, 1024> expected;
+  for (size_t i = 0; i < expected.size(); ++i) {
+    expected[i] = 0xFED00000u + i;
+  }
+  std::memcpy(mappings[0].contents.data, expected.data(), sizeof(expected));
+  IREE_ASSERT_OK(iree_hal_buffer_mapping_flush_range(&mappings[0], 0, 4096));
+  uint64_t one = 1;
+  IREE_ASSERT_OK(iree_hal_queue_copy(queues_[0], {}, {1, &semaphores_[0], &one},
+                                     buffers[0], 0, buffers[1], 0, 4096,
+                                     nullptr, IREE_HAL_COPY_FLAG_NONE));
+  Wait(semaphores_[0]);
+  IREE_ASSERT_OK(
+      iree_hal_buffer_mapping_invalidate_range(&mappings[1], 0, 4096));
+  EXPECT_EQ(
+      std::memcmp(mappings[1].contents.data, expected.data(), sizeof(expected)),
+      0);
+  for (auto& mapping : mappings) {
+    IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
+  }
+}
+
 class GpuNativeOrderedAllocationTest
     : public GpuNativeAllocationTest,
       public ::testing::WithParamInterface<

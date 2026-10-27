@@ -88,12 +88,12 @@ typedef struct amdf_memory_native_profile_t {
         const amdf_memory_site_query_t* query,
         amdf_memory_site_description_t* out_description);
     // Describes host policy for the exact import transport (NONE for owned or
-    // registered pages) and achieved flags.
+    // registered pages), achieved flags, and the backing mapping properties.
     // NULL means prospective host visibility is unavailable. Mapping creation
     // consumes the same policy after native backing has been established.
     amdf_memory_host_description_t (*describe_host)(
         const void* data, amdf_external_memory_type_t external_memory_type,
-        amdf_memory_flags_t flags);
+        amdf_memory_flags_t flags, amdf_host_memory_properties_t properties);
     // Borrowed immutable native device facts, live for the query's duration.
     const void* data;
   } visibility;

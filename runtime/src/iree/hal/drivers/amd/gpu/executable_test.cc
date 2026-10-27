@@ -45,7 +45,7 @@ struct NativeMemory {
   uint32_t mappings = 0;
   // Number of successful image-publication flushes.
   uint32_t flushes = 0;
-  // Achieved coherence; write-back cacheability alone does not imply this.
+  // Achieved coherence; write-back caching alone does not imply this.
   amdf_memory_flags_t access_flags = AMDF_MEMORY_FLAG_HOST_COHERENT;
   // Thread running the last native allocation, captured for placement checks.
   std::thread::id allocation_thread;
@@ -201,7 +201,8 @@ struct NativeMemory {
     }
     info->pointer = self.bytes.data();
     info->byte_length = self.bytes.size();
-    info->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    info->properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     return AMDF_STATUS_OK;
   }
   static amdf_status_t AMDF_CALL CacheControl(

@@ -98,7 +98,8 @@ hrx_status_t hrx_allocator_import_buffer(hrx_allocator_t allocator,
       .storage_class.type = IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER,
       .byte_length = (iree_device_size_t)size,
       .payload.host_pointer = host_ptr,
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .maintenance_range =
           iree_hal_make_buffer_range(0, (iree_device_size_t)size),
   };

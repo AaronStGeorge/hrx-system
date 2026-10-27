@@ -586,7 +586,7 @@ static iree_status_t iree_hal_amd_gpu_executable_initialize_contracts(
         .modes = host_access ? IREE_HAL_MAPPING_MODE_SCOPED |
                                    IREE_HAL_MAPPING_MODE_PERSISTENT
                              : 0,
-        .cacheability = executable->memories[0].host_cacheability,
+        .properties = executable->memories[0].host_properties,
     };
     if (host_access) {
       contract->scopes[1].interfaces = 1u << IREE_HAL_BUFFER_INTERFACE_HOST;
@@ -685,7 +685,7 @@ static iree_status_t iree_hal_amd_gpu_executable_load_image(
       .notification = options->notification,
       .tracker = options->frontier_tracker,
       .maintenance_range = variant->memory->maintenance_range,
-      .host_cacheability = variant->memory->host_cacheability,
+      .host_properties = variant->memory->host_properties,
       .physical_backing_id =
           {
               {

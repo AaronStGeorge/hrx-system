@@ -176,7 +176,8 @@ class HostReservationTest : public ::testing::TestWithParam<uint64_t> {
     ASSERT_EQ(info.memory_byte_offset, offset);
     ASSERT_EQ(reinterpret_cast<uintptr_t>(info.pointer),
               address_.address + offset);
-    EXPECT_EQ(info.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(info.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     *out_view = mapping;
     *out_pointer = static_cast<uint32_t*>(info.pointer);
   }

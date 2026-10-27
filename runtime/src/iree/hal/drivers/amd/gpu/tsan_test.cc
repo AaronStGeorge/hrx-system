@@ -125,7 +125,8 @@ class TsanPlacementTest : public ::testing::TestWithParam<bool> {
       auto* storage = reinterpret_cast<Scope*>(mapping);
       out->pointer = storage->bytes.data();
       out->byte_length = storage->bytes.size();
-      out->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      out->properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
       return AMDF_STATUS_OK;
     };
     api_.memory_query_address = [](amdf_memory_t*, uint32_t,
