@@ -953,7 +953,7 @@ TEST_F(NativeTextRegistryTest,
   ASSERT_NO_FATAL_FAILURE(AdvanceRegistryUntil([&] {
     return loom_serve_text_checkpoint_control_is_complete(suspended.get());
   }));
-  if (loom_serve_device_memory_pool(loom_serve_device_group_at(group_, 0))) {
+  if (loom_serve_pool_memory(loom_serve_device_group_pool_at(group_, 0))) {
     IREE_ASSERT_OK(loom_serve_text_checkpoint_control_status(suspended.get()));
     const auto* result =
         loom_serve_text_checkpoint_control_result(suspended.get());

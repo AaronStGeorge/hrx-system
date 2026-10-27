@@ -54,29 +54,13 @@ TEST(MaintenanceTest, OneTimerUsesTheShortestEnabledPoolPolicy) {
   loom_serve_device_group_t* group = nullptr;
   IREE_ASSERT_OK(loom_serve_device_group_allocate(
       host, 1, &options, iree_allocator_system(), &group));
-  auto* device = loom_serve_device_group_at(group, 0);
-  const auto* dispatch =
-      iree_hal_queue_family(loom_serve_device_dispatch_queue(device));
-  const auto* transfer =
-      iree_hal_queue_family(loom_serve_device_transfer_queue(device));
-  const iree_hal_pool_family_access_t families[] = {
-      {
-          .family = dispatch,
-          .usage = IREE_HAL_BUFFER_USAGE_STORAGE |
-                   IREE_HAL_BUFFER_USAGE_TRANSFER |
-                   IREE_HAL_BUFFER_USAGE_DISPATCH_INDIRECT_PARAMETERS,
-      },
-      {.family = transfer, .usage = IREE_HAL_BUFFER_USAGE_TRANSFER},
-  };
-  const iree_hal_pool_scope_t scope = {
-      .family_count = dispatch == transfer ? 1u : 2u,
-      .families = families,
-  };
   const loom_serve_pool_options_t pool_options = {};
+  loom_serve_pool_t* first_pool = nullptr;
+  IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+      group, {IREE_SV("first"), 1}, &pool_options, &first_pool));
   loom_serve_pool_t* second_pool = nullptr;
   IREE_ASSERT_OK(loom_serve_device_group_create_pool(
-      group, scope, loom_serve_device_transfer_queue(device), &pool_options,
-      &second_pool));
+      group, {IREE_SV("second"), 1}, &pool_options, &second_pool));
   EXPECT_EQ(loom_serve_device_group_count(group), 1u);
   EXPECT_EQ(loom_serve_device_group_pool_count(group), 2u);
   EXPECT_EQ(loom_serve_device_group_pool_at(group, 1), second_pool);

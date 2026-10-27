@@ -297,7 +297,8 @@ TEST_F(SourceEmbeddingServiceTest, TokenizerFailureRetiresCompiledModel) {
   ASSERT_NO_FATAL_FAILURE(Accept(resident));
   loom_serve_test_embedding_model_lifecycle_t load;
   load.service = &interface_;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, load.Run(device_, options));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                        load.Run(device_, storage_owner_, options));
   EXPECT_EQ(load.model, nullptr);
   EXPECT_GT(load.report.commands, 0u);
   EXPECT_NE(Read(resident).find(R"("embedding":[1,1,1,1])"), std::string::npos);
@@ -334,7 +335,7 @@ TEST_F(SourceEmbeddingServiceTest,
     {
       StalledStderr stalled;
       ASSERT_NO_FATAL_FAILURE(stalled.Begin());
-      status = load.Run(device_, options);
+      status = load.Run(device_, storage_owner_, options);
     }
     IREE_EXPECT_STATUS_IS(
         cancel ? IREE_STATUS_CANCELLED : IREE_STATUS_INVALID_ARGUMENT, status);
@@ -409,7 +410,7 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
     auto ready = loom_serve_finite_result_ready(results_[ordinal]);
     for (size_t i = 0; i < IREE_ARRAYSIZE(ready.semaphores); ++i) {
       IREE_ASSERT_OK(
-          loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+          loom_serve_workspace_wait(loom_serve_pool_workspace(storage_owner_),
                                     ready.semaphores[i], ready.values[i]));
     }
     loom_serve_finite_model_complete(model_);
@@ -545,8 +546,8 @@ TEST_P(GenerationSelectionTest,
   ASSERT_NO_FATAL_FAILURE(SubmitPrepared(1));
   ASSERT_NO_FATAL_FAILURE(Complete(1));
 
-  IREE_ASSERT_OK(loom_serve_device_create_execution(
-      device_, loom_serve_device_pool(device_), &consumer_));
+  IREE_ASSERT_OK(
+      loom_serve_device_create_execution(device_, storage_owner_, &consumer_));
   for (size_t i = 0; i < results_.size(); ++i) {
     auto ready = loom_serve_finite_result_ready(results_[i]);
     IREE_ASSERT_OK(loom_serve_execution_barrier(
@@ -701,7 +702,8 @@ class RequestChoiceTest : public GenerationSelectionTest {
         .specialization_cache = cache,
     };
     loom_serve_test_embedding_model_lifecycle_t load;
-    IREE_ASSERT_OK(load.Run(device_, options, {this, Allocate}));
+    IREE_ASSERT_OK(
+        load.Run(device_, storage_owner_, options, {this, Allocate}));
     model_ = load.model;
     transfer_value_ = 0;
     update_ = loom_serve_finite_model_execution_update(model_);
@@ -771,7 +773,7 @@ class RequestChoiceTest : public GenerationSelectionTest {
     transfer_value_ = ready.values[1];
     for (size_t i = 0; i < IREE_ARRAYSIZE(ready.semaphores); ++i) {
       IREE_EXPECT_OK(
-          loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+          loom_serve_workspace_wait(loom_serve_pool_workspace(storage_owner_),
                                     ready.semaphores[i], ready.values[i]));
     }
     const auto row = loom_serve_finite_snapshot_row(snapshot, 0, 0);
@@ -850,8 +852,7 @@ TEST_P(RequestChoiceTest, AdmissionCeilingsDoNotSizeWorkspaceBacking) {
   const auto run = [&] {
     ASSERT_NO_FATAL_FAILURE(
         RunChoice(R"({"model":"fixture","input":"a"})", false, {1, 1, 1, 1}));
-    const auto workspace =
-        loom_serve_device_memory_statistics(device_).workspace;
+    const auto workspace = loom_serve_pool_statistics(storage_owner_).workspace;
     EXPECT_GT(workspace.bytes_committed, 0u);
     EXPECT_LT(workspace.bytes_committed, kCapacityBytes);
   };
@@ -869,7 +870,7 @@ TEST_P(RequestChoiceTest, AdmissionCeilingsDoNotSizeWorkspaceBacking) {
   IREE_ASSERT_OK(Resolve());
   ASSERT_NO_FATAL_FAILURE(CheckChoice({31, 31, 1, 2}));
   EXPECT_LT(
-      loom_serve_device_memory_statistics(device_).workspace.bytes_committed,
+      loom_serve_pool_statistics(storage_owner_).workspace.bytes_committed,
       kCapacityBytes);
 }
 
@@ -967,8 +968,8 @@ TEST_F(DeviceResultTest, RaggedCohortsComposeBeforeProducerRetirement) {
   ASSERT_NO_FATAL_FAILURE(Complete(0));
   ASSERT_NO_FATAL_FAILURE(Submit({R"({"model":"fixture","input":[0]})"}, 1));
 
-  IREE_ASSERT_OK(loom_serve_device_create_execution(
-      device_, loom_serve_device_pool(device_), &consumer_));
+  IREE_ASSERT_OK(
+      loom_serve_device_create_execution(device_, storage_owner_, &consumer_));
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       loom_serve_device_handle(device_), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
       IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &gate_));
@@ -1027,7 +1028,7 @@ TEST_F(DeviceResultTest, RaggedCohortsComposeBeforeProducerRetirement) {
   }
   // Neither destruction of the producer nor final caller result release may
   // release the allocation captured by the still-blocked consumer.
-  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(device_), 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
   IREE_ASSERT_OK(iree_hal_semaphore_signal(gate_, 1, nullptr));
   const iree_hal_transfer_operation_t download = {
       .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
@@ -1046,9 +1047,9 @@ TEST_F(DeviceResultTest, RaggedCohortsComposeBeforeProducerRetirement) {
   const std::array<float, 14> expected = {1, 1, 1, 3, 6, 3, 2,
                                           3, 4, 2, 1, 1, 1, 1};
   EXPECT_EQ(output_, expected);
-  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(device_), 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
   EXPECT_EQ(
-      loom_serve_device_memory_statistics(device_).workspace.reservation_count,
+      loom_serve_pool_statistics(storage_owner_).workspace.reservation_count,
       0u);
 }
 

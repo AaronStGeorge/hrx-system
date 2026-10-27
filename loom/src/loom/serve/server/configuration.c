@@ -641,6 +641,7 @@ void loom_serve_model_configuration_deinitialize(
   const iree_allocator_t host_allocator = model->host_allocator;
   iree_allocator_free(host_allocator, (void*)model->name.data);
   iree_allocator_free(host_allocator, (void*)model->device.data);
+  iree_allocator_free(host_allocator, (void*)model->pool.data);
   iree_allocator_free(host_allocator, (void*)model->document.data);
   if (model->resolved_sources) {
     loom_serve_sources_free(model->resolved_sources, host_allocator);
@@ -695,6 +696,7 @@ static iree_status_t loom_serve_model_configuration_model_parse(
   *out_model =
       (loom_serve_model_configuration_t){.host_allocator = host_allocator,
                                          .device_index = IREE_HOST_SIZE_MAX,
+                                         .pool_index = IREE_HOST_SIZE_MAX,
                                          .pending_requests = 32};
   if (resolved_sources) {
     IREE_RETURN_IF_ERROR(loom_serve_sources_clone(
@@ -718,7 +720,8 @@ static iree_status_t loom_serve_model_configuration_model_parse(
       {"admission", IREE_JSON_VALUE_TYPE_STRING},
       {"base_directory", IREE_JSON_VALUE_TYPE_STRING},
       {"device", IREE_JSON_VALUE_TYPE_STRING},
-      {"model", IREE_JSON_VALUE_TYPE_OBJECT}};
+      {"model", IREE_JSON_VALUE_TYPE_OBJECT},
+      {"pool", IREE_JSON_VALUE_TYPE_STRING}};
   loom_serve_model_configuration_fields_t context = {IREE_ARRAYSIZE(fields),
                                                      fields};
   IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
@@ -733,6 +736,10 @@ static iree_status_t loom_serve_model_configuration_model_parse(
   if (fields[4].value.data) {
     IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
         &fields[4], host_allocator, &out_model->device));
+  }
+  if (fields[6].value.data) {
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
+        &fields[6], host_allocator, &out_model->pool));
   }
   if (fields[5].value.data && !resolved_sources) {
     loom_serve_model_configuration_field_t reference_fields[] = {
@@ -880,6 +887,7 @@ iree_status_t loom_serve_model_configuration_resolve(
   loom_serve_sources_free(sources, host_allocator);
   if (iree_status_is_ok(status)) {
     out_model->device_index = model->device_index;
+    out_model->pool_index = model->pool_index;
     if (!out_model->device.size && model->device.size) {
       char* name = NULL;
       status = iree_allocator_clone(
@@ -887,6 +895,15 @@ iree_status_t loom_serve_model_configuration_resolve(
           iree_make_const_byte_span(model->device.data, model->device.size),
           (void**)&name);
       out_model->device = iree_make_string_view(name, model->device.size);
+    }
+    if (iree_status_is_ok(status) && !out_model->pool.size &&
+        model->pool.size) {
+      char* name = NULL;
+      status = iree_allocator_clone(
+          host_allocator,
+          iree_make_const_byte_span(model->pool.data, model->pool.size),
+          (void**)&name);
+      out_model->pool = iree_make_string_view(name, model->pool.size);
     }
   }
   if (!iree_status_is_ok(status)) {
@@ -902,6 +919,7 @@ static iree_status_t loom_serve_model_configuration_card(
   *out_model =
       (loom_serve_model_configuration_t){.host_allocator = host_allocator,
                                          .device_index = IREE_HOST_SIZE_MAX,
+                                         .pool_index = IREE_HOST_SIZE_MAX,
                                          .pending_requests = 32};
   const loom_model_selector_t selector = {.preset = preset};
   loom_model_card_t* card = NULL;
@@ -999,4 +1017,39 @@ iree_status_t loom_serve_model_configuration_resolve_device(
                           "model '%.*s' selects unknown device '%.*s'",
                           (int)model->name.size, model->name.data,
                           (int)model->device.size, model->device.data);
+}
+
+iree_status_t loom_serve_model_configuration_resolve_pool(
+    const loom_serve_model_configuration_t* model, iree_host_size_t pool_count,
+    const loom_serve_pool_binding_t* pools, iree_host_size_t device_index,
+    iree_host_size_t* out_pool_index) {
+  if (!model->pool.size && pool_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "model '%.*s' requires an explicit pool name "
+                            "with %zu configured pools",
+                            (int)model->name.size, model->name.data,
+                            pool_count);
+  }
+  iree_host_size_t index = 0;
+  if (model->pool.size) {
+    while (index < pool_count &&
+           !iree_string_view_equal(model->pool, pools[index].name)) {
+      ++index;
+    }
+  }
+  if (index == pool_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "model '%.*s' selects unknown pool '%.*s'",
+                            (int)model->name.size, model->name.data,
+                            (int)model->pool.size, model->pool.data);
+  }
+  if (!(pools[index].device_mask & (UINT64_C(1) << device_index))) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pool '%.*s' does not include model '%.*s' execution device",
+        (int)pools[index].name.size, pools[index].name.data,
+        (int)model->name.size, model->name.data);
+  }
+  *out_pool_index = index;
+  return iree_ok_status();
 }

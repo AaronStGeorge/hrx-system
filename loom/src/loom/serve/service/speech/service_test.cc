@@ -46,8 +46,8 @@ iree_status_t AcquireApplication(iree_allocator_t allocator,
                                  loom_serve_device_group_t** out_group) {
   auto options = loom_serve_test_application_options_default();
   options.worker_count = SpeechWorkerCount();
-  options.backing = SpeechElasticBacking() ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
-                                           : LOOM_SERVE_DEVICE_BACKING_FIXED;
+  options.backing = SpeechElasticBacking() ? LOOM_SERVE_POOL_BACKING_ELASTIC
+                                           : LOOM_SERVE_POOL_BACKING_FIXED;
   options.slab_size = SpeechElasticBacking() ? kSpeechSlabSize : 0;
   options.memory_limit = SpeechElasticBacking() ? 64 * 1024 : 0;
   loom_serve_test_application_t* application = nullptr;

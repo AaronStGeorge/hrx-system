@@ -154,7 +154,7 @@ TEST_F(SourceEmbeddingServiceTest,
   const auto registered = Read(Send(declaration, "/v1/models/register"));
   ASSERT_EQ(registered.find("HTTP/1.1 202"), 0u) << registered;
   const auto response = Read(Send(R"({"model":"large","input":"a"})"));
-  if (loom_serve_device_memory_pool(device_)) {
+  if (loom_serve_pool_memory(storage_owner_)) {
     ASSERT_EQ(response.find("HTTP/1.1 503"), 0u) << response;
     EXPECT_NE(response.find("invocation working set"), std::string::npos);
     const auto state = ModelStatus("large");

@@ -44,7 +44,9 @@ class RetirementTest : public ::testing::TestWithParam<bool> {
     const loom_serve_device_options_t options = {
         .driver = driver,
         .uri = loom_serve_test_device()->device_uri,
-        .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+    };
+    const loom_serve_pool_options_t pool_options = {
+        .elastic = true,
         .weight_slab_size = kSlabBytes,
         .state_slab_size = kSlabBytes,
         .memory_limit = kSlabBytes,
@@ -52,11 +54,13 @@ class RetirementTest : public ::testing::TestWithParam<bool> {
     auto status = loom_serve_device_group_allocate(
         host, 1, &options, iree_allocator_system(), &group);
     IREE_ASSERT_OK(status);
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group, {IREE_SV("pool"), 1}, &pool_options, &storage_owner));
     device = loom_serve_device_group_at(group, 0);
     IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-        loom_serve_device_memory_pool(device),
-        loom_serve_device_state_geometry(device), kSlabBytes, 256, &statistics,
-        &reservation));
+        loom_serve_pool_memory(storage_owner),
+        loom_serve_pool_state_geometry(storage_owner), kSlabBytes, 256,
+        &statistics, &reservation));
     IREE_ASSERT_OK(
         loom_serve_virtual_buffer_commit(reservation, 0, kSlabBytes));
     IREE_ASSERT_OK(
@@ -95,6 +99,8 @@ class RetirementTest : public ::testing::TestWithParam<bool> {
   loom_serve_device_group_t* group = nullptr;
   // Borrowed device record within the application group.
   loom_serve_device_t* device = nullptr;
+  // Independent storage owner selected for every reservation.
+  loom_serve_pool_t* storage_owner = nullptr;
   // Parameter/state-like virtual reservation, independent of view references.
   loom_serve_virtual_buffer_t* reservation = nullptr;
   // Reservation accounting retained through destruction.

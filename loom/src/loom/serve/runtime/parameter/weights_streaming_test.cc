@@ -171,7 +171,7 @@ TEST_P(CoarseWindowWeightsTest, ReadWindowsShareOnePendingSlabAndReload) {
   IREE_ASSERT_OK(Compile(0, "coarse_raw"));
   const auto root = Root(0, 0);
   IREE_ASSERT_OK(CreateRoots(0, 1, &root, {path_.path()}));
-  const auto geometry = loom_serve_device_weight_geometry(device_owner_);
+  const auto geometry = loom_serve_pool_weight_geometry(storage_owner_);
   const auto backing_bytes =
       iree_device_align(kTensorBytes, geometry.granularity);
   ASSERT_LT(backing_bytes, kCoarseSlabBytes);

@@ -32,7 +32,7 @@ void SourceTextServiceTest::EditNativeProvider(const std::string& source_path,
 void SourceTextServiceTest::SetUp() {
   auto application_options = loom_serve_test_application_options_default();
   application_options.worker_count = WorkerCount();
-  if (application_options.backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
+  if (application_options.backing == LOOM_SERVE_POOL_BACKING_ELASTIC) {
     application_options.memory_limit = 64 * 1024 * 1024;
   }
   loom_serve_test_application_t* application = nullptr;
@@ -41,6 +41,8 @@ void SourceTextServiceTest::SetUp() {
   host_ = loom_serve_test_application_host(application);
   group_ = loom_serve_test_application_device_group(application);
   device_ = loom_serve_test_application_device_at(application, 0);
+  storage_owner_ = loom_serve_device_group_pool_at(
+      loom_serve_test_application_device_group(application), 0);
   const char* source_path = std::getenv("LOOM_SERVE_TEST_MODEL_SOURCE");
   ASSERT_NE(source_path, nullptr);
   const std::string source = source_path;
@@ -51,9 +53,8 @@ void SourceTextServiceTest::SetUp() {
   ASSERT_NO_FATAL_FAILURE(WriteWeights(2));
   if (NeedsStandaloneModel()) {
     auto options = ModelOptions();
-    IREE_ASSERT_OK(
-        loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
-                                       &options, host_allocator_, &model_));
+    IREE_ASSERT_OK(loom_serve_text_model_allocate(
+        device_, storage_owner_, &options, host_allocator_, &model_));
   }
   auto server_options = ServerOptions();
   IREE_ASSERT_OK(loom_serve_http_server_allocate(

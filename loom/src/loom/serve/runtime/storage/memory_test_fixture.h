@@ -47,18 +47,25 @@ class MemoryTestEnvironment : public ::testing::Environment {
       const loom_serve_device_options_t options = {
           .driver = driver,
           .uri = loom_serve_test_device()->device_uri,
-          .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+      };
+      const loom_serve_pool_options_t pool_options = {
+          .elastic = true,
           .weight_slab_size = kMemoryTestSlabSize,
           .state_slab_size = kMemoryTestSlabSize / 4,
           .memory_limit = 3 * kMemoryTestSlabSize,
       };
       status = loom_serve_device_group_allocate(host, 1, &options,
                                                 native.allocator(), &group);
+      if (iree_status_is_ok(status)) {
+        loom_serve_pool_t* pool = nullptr;
+        status = loom_serve_device_group_create_pool(
+            group, {IREE_SV("pool"), 1}, &pool_options, &pool);
+      }
     }
     iree_hal_driver_release(driver);
     loom_serve_host_release(host);
     IREE_ASSERT_OK(status);
-    IREE_ASSERT_OK(native.Observe(loom_serve_device_group_at(group, 0)));
+    IREE_ASSERT_OK(native.Observe(loom_serve_device_group_pool_at(group, 0)));
   }
 
   void TearDown() override {
@@ -184,9 +191,10 @@ class MemoryTest : public ::testing::Test {
   void SetUp() override {
     group = memory_test_environment->group;
     device = loom_serve_device_group_at(group, 0);
+    storage_owner = loom_serve_device_group_pool_at(group, 0);
     ASSERT_NO_FATAL_FAILURE(SetUpPool());
-    IREE_ASSERT_OK(loom_serve_device_create_execution(
-        device, loom_serve_device_pool(device), &execution));
+    IREE_ASSERT_OK(
+        loom_serve_device_create_execution(device, storage_owner, &execution));
   }
 
   virtual void SetUpPool() { UseBacking(false, 3 * kSlabSize, nullptr); }
@@ -218,7 +226,8 @@ class MemoryTest : public ::testing::Test {
       // Raw queue captures can retire after timeline readiness.
       while (iree_atomic_ref_count_load(&logical_pool->resource.ref_count) >
              1) {
-        loom_serve_workspace_statistics(loom_serve_device_workspace(device));
+        loom_serve_workspace_statistics(
+            loom_serve_pool_workspace(storage_owner));
         std::this_thread::yield();
       }
       iree_hal_pool_release(logical_pool);
@@ -244,7 +253,7 @@ class MemoryTest : public ::testing::Test {
       const auto statistics = loom_serve_memory_pool_statistics(pool);
       EXPECT_EQ(statistics.committed_bytes, 0u);
       const auto workspace_usage = loom_serve_workspace_memory_usage(
-          loom_serve_device_workspace(device));
+          loom_serve_pool_workspace(storage_owner));
       EXPECT_EQ(statistics.reserved_bytes,
                 owned_pool ? 0u : workspace_usage.reserved_bytes);
     }
@@ -252,7 +261,7 @@ class MemoryTest : public ::testing::Test {
     iree_hal_pool_release(deferred_backing);
     mapping_queue.Reset();
     loom_serve_execution_release(execution);
-    IREE_EXPECT_OK(loom_serve_test_device_trim_and_drain(device, 0));
+    IREE_EXPECT_OK(loom_serve_test_pool_trim_and_drain(storage_owner, 0));
   }
 
   void UseDeferredBacking(uint64_t limit_bytes = 3 * kSlabSize,
@@ -377,7 +386,7 @@ class MemoryTest : public ::testing::Test {
 
   void CreateVirtualPool(bool with_workspace = false) {
     IREE_ASSERT_OK(loom_serve_virtual_pool_allocate(
-        pool, loom_serve_device_weight_geometry(device),
+        pool, loom_serve_pool_weight_geometry(storage_owner),
         iree_allocator_system(), &virtual_pool));
     if (with_workspace) {
       const auto range = iree_hal_make_pool_reservation_request(kSlabSize, 256);
@@ -483,6 +492,8 @@ class MemoryTest : public ::testing::Test {
   loom_serve_device_group_t* group = nullptr;
   // Borrowed device record within the application group.
   loom_serve_device_t* device = nullptr;
+  // Shared test storage owner, independent of its execution record.
+  loom_serve_pool_t* storage_owner = nullptr;
   // Owned model timeline for transfers and workspace allocations.
   loom_serve_execution_t* execution = nullptr;
   // One physical budget shared by the independent reservations.
@@ -512,7 +523,7 @@ using DedicatedNativeWorkerMemoryTest = MemoryTest;
 // cases isolate their statistics and intentional failures in private pools.
 class DeviceMemoryTest : public MemoryTest {
  protected:
-  void SetUpPool() override { pool = loom_serve_device_memory_pool(device); }
+  void SetUpPool() override { pool = loom_serve_pool_memory(storage_owner); }
 };
 
 }  // namespace loom_serve::testing::memory

@@ -28,7 +28,7 @@ typedef struct loom_serve_test_device_t {
   // Default device URI owned by the device leaf.
   iree_string_view_t device_uri;
   // Storage policy used by source service tests for this physical device.
-  loom_serve_device_backing_t service_backing;
+  loom_serve_pool_backing_t service_backing;
 } loom_serve_test_device_t;
 
 // Implemented exactly once by the linked physical-device leaf.
@@ -45,8 +45,8 @@ iree_status_t loom_serve_test_driver_acquire(loom_serve_host_t* host,
 // remains independent: live reservations survive, and callers retire unused
 // buffers before expecting their backing to disappear. Permanently lost backing
 // reports its retained cleanup failure instead of waiting for a native return.
-iree_status_t loom_serve_test_device_trim_and_drain(loom_serve_device_t* device,
-                                                    uint64_t target_bytes);
+iree_status_t loom_serve_test_pool_trim_and_drain(loom_serve_pool_t* owner,
+                                                  uint64_t target_bytes);
 
 #ifdef __cplusplus
 }  // extern "C"

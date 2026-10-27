@@ -10,10 +10,10 @@
 #include "iree/base/internal/json.h"
 #include "iree/base/internal/unicode.h"
 
-static loom_serve_device_options_t loom_serve_device_configuration_defaults(
+static loom_serve_pool_options_t loom_serve_device_configuration_defaults(
     void) {
-  return (loom_serve_device_options_t){
-      .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+  return (loom_serve_pool_options_t){
+      .elastic = true,
       .weight_slab_size = UINT64_C(1) << 30,
       .state_slab_size = UINT64_C(64) << 20,
   };
@@ -38,7 +38,7 @@ static iree_status_t loom_serve_device_configuration_string(
       !iree_unicode_utf8_validate(value)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "device strings must be nonempty UTF-8 without NUL");
+        "configuration strings must be nonempty UTF-8 without NUL");
   }
   parser->next_string += length;
   *out_value = value;
@@ -46,19 +46,15 @@ static iree_status_t loom_serve_device_configuration_string(
 }
 
 typedef struct loom_serve_device_configuration_fields_t {
-  // Decoder owning storage for all string values in this device entry.
+  // Decoder owning storage for string values in one device or pool entry.
   loom_serve_device_configuration_parser_t* parser;
   // Decoded strings or raw JSON numbers; null data marks omission.
   iree_string_view_t values[7];
 } loom_serve_device_configuration_fields_t;
 
 static const char* const loom_serve_device_configuration_field_names[] = {
-    "uri",
-    "pool_backing",
-    "weight_slab_bytes",
-    "state_slab_bytes",
-    "memory_bytes",
-    "workspace_idle_ms",
+    "devices",          "pool_backing", "weight_slab_bytes",
+    "state_slab_bytes", "memory_bytes", "workspace_idle_ms",
     "parameter_idle_ms"};
 
 static iree_status_t loom_serve_device_configuration_field(
@@ -74,23 +70,53 @@ static iree_status_t loom_serve_device_configuration_field(
   }
   if (i == IREE_ARRAYSIZE(loom_serve_device_configuration_field_names)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unknown device field '%.*s'", (int)key.size,
+                            "unknown pool field '%.*s'", (int)key.size,
                             key.data);
   }
-  const bool type_allowed = (type == IREE_JSON_VALUE_TYPE_STRING && i < 5) ||
-                            (type == IREE_JSON_VALUE_TYPE_NUMBER && i >= 2);
+  const bool type_allowed =
+      (type == IREE_JSON_VALUE_TYPE_ARRAY && i == 0) ||
+      (type == IREE_JSON_VALUE_TYPE_STRING && i > 0 && i < 5) ||
+      (type == IREE_JSON_VALUE_TYPE_NUMBER && i >= 2);
   if (fields->values[i].data || !type_allowed) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "duplicate or wrongly typed device field '%s'",
+                            "duplicate or wrongly typed pool field '%s'",
                             loom_serve_device_configuration_field_names[i]);
   }
   if (type == IREE_JSON_VALUE_TYPE_STRING) {
     IREE_RETURN_IF_ERROR(loom_serve_device_configuration_string(
                              fields->parser, value, &fields->values[i]),
-                         "device field '%s'",
+                         "pool field '%s'",
                          loom_serve_device_configuration_field_names[i]);
   } else {
     fields->values[i] = value;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_serve_device_configuration_uri(
+    void* self, iree_string_view_t key, iree_json_value_type_t type,
+    iree_string_view_t value) {
+  loom_serve_device_configuration_fields_t* fields = self;
+  if (!iree_string_view_equal(key, IREE_SV("uri")) ||
+      type != IREE_JSON_VALUE_TYPE_STRING || fields->values[0].data) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "device entries require exactly one 'uri' string");
+  }
+  return loom_serve_device_configuration_string(fields->parser, value,
+                                                &fields->values[0]);
+}
+
+static iree_status_t loom_serve_device_configuration_name(
+    loom_serve_device_configuration_parser_t* parser, iree_string_view_t key,
+    iree_string_view_t* out_name) {
+  IREE_RETURN_IF_ERROR(
+      loom_serve_device_configuration_string(parser, key, out_name));
+  for (iree_host_size_t c = 0; c < out_name->size; ++c) {
+    if ((uint8_t)out_name->data[c] < 0x21 ||
+        (uint8_t)out_name->data[c] > 0x7e) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "device and pool keys must be visible ASCII");
+    }
   }
   return iree_ok_status();
 }
@@ -108,16 +134,8 @@ static iree_status_t loom_serve_device_configuration_entry(
   }
   const iree_host_size_t index = configuration->count;
   loom_serve_device_options_t* options = &configuration->options[index];
-  *options = loom_serve_device_configuration_defaults();
   IREE_RETURN_IF_ERROR(
-      loom_serve_device_configuration_string(parser, key, &options->name));
-  for (iree_host_size_t c = 0; c < options->name.size; ++c) {
-    if ((uint8_t)options->name.data[c] < 0x21 ||
-        (uint8_t)options->name.data[c] > 0x7e) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "device keys must be visible ASCII");
-    }
-  }
+      loom_serve_device_configuration_name(parser, key, &options->name));
   for (iree_host_size_t i = 0; i < index; ++i) {
     if (iree_string_view_equal(configuration->options[i].name, options->name)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -126,19 +144,100 @@ static iree_status_t loom_serve_device_configuration_entry(
     }
   }
   loom_serve_device_configuration_fields_t fields = {.parser = parser};
-  IREE_RETURN_IF_ERROR(
-      iree_json_enumerate_object_typed(
-          value, loom_serve_device_configuration_field, &fields),
-      "device '%.*s'", (int)options->name.size, options->name.data);
+  IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
+                           value, loom_serve_device_configuration_uri, &fields),
+                       "device '%.*s'", (int)options->name.size,
+                       options->name.data);
   if (!fields.values[0].data) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "device '%.*s' requires 'uri'",
                             (int)options->name.size, options->name.data);
   }
   options->uri = fields.values[0];
+  ++configuration->count;
+  return iree_ok_status();
+}
+
+typedef struct loom_serve_device_configuration_members_t {
+  // Decoded configuration and string storage retained through construction.
+  loom_serve_device_configuration_parser_t* parser;
+  // Resolved consumer set; each member must occur exactly once.
+  uint64_t mask;
+} loom_serve_device_configuration_members_t;
+
+static iree_status_t loom_serve_device_configuration_member(
+    void* self, iree_host_size_t index, iree_json_value_type_t type,
+    iree_string_view_t value) {
+  loom_serve_device_configuration_members_t* members = self;
+  if (type != IREE_JSON_VALUE_TYPE_STRING) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pool devices must be an array of device keys");
+  }
+  iree_string_view_t name;
+  IREE_RETURN_IF_ERROR(
+      loom_serve_device_configuration_string(members->parser, value, &name));
+  const loom_serve_device_configuration_t* configuration =
+      members->parser->configuration;
+  for (iree_host_size_t i = 0; i < configuration->count; ++i) {
+    if (!iree_string_view_equal(configuration->options[i].name, name)) {
+      continue;
+    }
+    const uint64_t bit = UINT64_C(1) << i;
+    if (members->mask & bit) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "duplicate pool device '%.*s'", (int)name.size,
+                              name.data);
+    }
+    members->mask |= bit;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown pool device '%.*s'", (int)name.size,
+                          name.data);
+}
+
+static iree_status_t loom_serve_device_configuration_pool(
+    void* self, iree_string_view_t key, iree_json_value_type_t type,
+    iree_string_view_t value) {
+  loom_serve_device_configuration_parser_t* parser = self;
+  loom_serve_device_configuration_t* configuration = parser->configuration;
+  if (type != IREE_JSON_VALUE_TYPE_OBJECT) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pools must contain named objects");
+  }
+  const iree_host_size_t index = configuration->pool_count;
+  loom_serve_pool_configuration_t pool = {
+      .options = loom_serve_device_configuration_defaults()};
+  IREE_RETURN_IF_ERROR(
+      loom_serve_device_configuration_name(parser, key, &pool.binding.name));
+  for (iree_host_size_t i = 0; i < index; ++i) {
+    if (iree_string_view_equal(configuration->pools[i].binding.name,
+                               pool.binding.name)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT, "duplicate pool key '%.*s'",
+          (int)pool.binding.name.size, pool.binding.name.data);
+    }
+  }
+  loom_serve_device_configuration_fields_t fields = {.parser = parser};
+  IREE_RETURN_IF_ERROR(
+      iree_json_enumerate_object_typed(
+          value, loom_serve_device_configuration_field, &fields),
+      "pool '%.*s'", (int)pool.binding.name.size, pool.binding.name.data);
+  loom_serve_device_configuration_members_t members = {.parser = parser};
+  if (fields.values[0].data) {
+    IREE_RETURN_IF_ERROR(iree_json_enumerate_array_typed(
+        fields.values[0], loom_serve_device_configuration_member, &members));
+  }
+  if (!members.mask) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT, "pool '%.*s' requires nonempty 'devices'",
+        (int)pool.binding.name.size, pool.binding.name.data);
+  }
+  pool.binding.device_mask = members.mask;
+  loom_serve_pool_options_t* options = &pool.options;
   if (fields.values[1].data) {
     if (iree_string_view_equal(fields.values[1], IREE_SV("fixed"))) {
-      options->backing = LOOM_SERVE_DEVICE_BACKING_FIXED;
+      options->elastic = false;
     } else if (!iree_string_view_equal(fields.values[1], IREE_SV("elastic"))) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "pool_backing must be elastic or fixed");
@@ -160,8 +259,8 @@ static iree_status_t loom_serve_device_configuration_entry(
       }
       if (!iree_status_is_ok(status)) {
         status = iree_status_annotate_f(
-            status, "device '%.*s' field '%s'", (int)options->name.size,
-            options->name.data,
+            status, "pool '%.*s' field '%s'", (int)pool.binding.name.size,
+            pool.binding.name.data,
             loom_serve_device_configuration_field_names[i + 2]);
       }
     }
@@ -169,33 +268,49 @@ static iree_status_t loom_serve_device_configuration_entry(
   IREE_RETURN_IF_ERROR(status);
   if (numbers[3] > INT64_MAX / 1000000 || numbers[4] > INT64_MAX / 1000000) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "device idle interval is out of range");
+                            "pool idle interval is out of range");
   }
-  if (options->backing == LOOM_SERVE_DEVICE_BACKING_FIXED && numbers[2]) {
+  if (!options->elastic && numbers[2]) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "a physical budget requires elastic backing");
   }
   options->weight_slab_size = (iree_device_size_t)numbers[0];
   options->state_slab_size = (iree_device_size_t)numbers[1];
   options->memory_limit = numbers[2];
+  IREE_RETURN_IF_ERROR(iree_allocator_realloc_array(
+      configuration->host_allocator, index + 1, sizeof(*configuration->pools),
+      (void**)&configuration->pools));
+  IREE_RETURN_IF_ERROR(iree_allocator_realloc_array(
+      configuration->host_allocator, index + 1, sizeof(*configuration->idle),
+      (void**)&configuration->idle));
+  configuration->pools[index] = pool;
   configuration->idle[index] = (loom_serve_pool_idle_policy_t){
       .workspace_timeout = (iree_duration_t)numbers[3] * 1000000,
       .parameter_timeout = (iree_duration_t)numbers[4] * 1000000};
-  ++configuration->count;
+  ++configuration->pool_count;
   return iree_ok_status();
 }
 
 static iree_status_t loom_serve_device_configuration_root(
     void* self, iree_string_view_t key, iree_json_value_type_t type,
     iree_string_view_t value) {
-  iree_string_view_t* devices = self;
-  if (devices->data || !iree_string_view_equal(key, IREE_SV("devices")) ||
-      type != IREE_JSON_VALUE_TYPE_OBJECT) {
+  iree_string_view_t* objects = self;
+  iree_host_size_t index;
+  if (iree_string_view_equal(key, IREE_SV("devices"))) {
+    index = 0;
+  } else if (iree_string_view_equal(key, IREE_SV("pools"))) {
+    index = 1;
+  } else {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown machine configuration field '%.*s'",
+                            (int)key.size, key.data);
+  }
+  if (objects[index].data || type != IREE_JSON_VALUE_TYPE_OBJECT) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "device configuration requires one 'devices' object");
+        "machine configuration requires one 'devices' and one 'pools' object");
   }
-  *devices = value;
+  objects[index] = value;
   return iree_ok_status();
 }
 
@@ -211,12 +326,13 @@ iree_status_t loom_serve_device_configuration_initialize(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "trailing device configuration JSON");
   }
-  iree_string_view_t devices = iree_string_view_empty();
+  iree_string_view_t objects[2] = {0};
   IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
-      object, loom_serve_device_configuration_root, &devices));
-  if (!devices.data) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "device configuration requires 'devices'");
+      object, loom_serve_device_configuration_root, objects));
+  if (!objects[0].data || !objects[1].data) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "machine configuration requires 'devices' and 'pools'");
   }
   char* strings = NULL;
   IREE_RETURN_IF_ERROR(
@@ -227,10 +343,18 @@ iree_status_t loom_serve_device_configuration_initialize(
       .configuration = out_configuration,
       .next_string = out_configuration->strings};
   iree_status_t status = iree_json_enumerate_object_typed(
-      devices, loom_serve_device_configuration_entry, &parser);
+      objects[0], loom_serve_device_configuration_entry, &parser);
   if (iree_status_is_ok(status) && !out_configuration->count) {
     status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "devices must contain at least one named device");
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_json_enumerate_object_typed(
+        objects[1], loom_serve_device_configuration_pool, &parser);
+  }
+  if (iree_status_is_ok(status) && !out_configuration->pool_count) {
+    status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "pools must contain at least one named pool");
   }
   if (!iree_status_is_ok(status)) {
     loom_serve_device_configuration_deinitialize(out_configuration);
@@ -257,15 +381,33 @@ iree_status_t loom_serve_device_configuration_initialize_uri(
   out_configuration->host_allocator = host_allocator;
   out_configuration->strings = strings;
   out_configuration->count = 1;
-  out_configuration->options[0] = loom_serve_device_configuration_defaults();
   out_configuration->options[0].name = IREE_SV("device");
   out_configuration->options[0].uri =
       iree_make_string_view(out_configuration->strings, uri.size);
-  return iree_ok_status();
+  iree_status_t status =
+      iree_allocator_malloc(host_allocator, sizeof(*out_configuration->pools),
+                            (void**)&out_configuration->pools);
+  if (iree_status_is_ok(status)) {
+    status =
+        iree_allocator_malloc(host_allocator, sizeof(*out_configuration->idle),
+                              (void**)&out_configuration->idle);
+  }
+  if (iree_status_is_ok(status)) {
+    out_configuration->pool_count = 1;
+    out_configuration->pools[0] = (loom_serve_pool_configuration_t){
+        .binding = {.name = IREE_SV("pool"), .device_mask = 1},
+        .options = loom_serve_device_configuration_defaults(),
+    };
+  } else {
+    loom_serve_device_configuration_deinitialize(out_configuration);
+  }
+  return status;
 }
 
 void loom_serve_device_configuration_deinitialize(
     loom_serve_device_configuration_t* configuration) {
   iree_allocator_free(configuration->host_allocator, configuration->strings);
+  iree_allocator_free(configuration->host_allocator, configuration->pools);
+  iree_allocator_free(configuration->host_allocator, configuration->idle);
   memset(configuration, 0, sizeof(*configuration));
 }

@@ -43,6 +43,10 @@ IREE_FLAG(string, fixture_activity_device, "device",
           "Named device for the fixture activity model.");
 IREE_FLAG(string, fixture_transcription_device, "device",
           "Named device for the fixture recognizer.");
+IREE_FLAG(string, fixture_activity_pool, "pool",
+          "Named storage pool for the fixture activity model.");
+IREE_FLAG(string, fixture_transcription_pool, "pool",
+          "Named storage pool for the fixture recognizer.");
 IREE_FLAG(int32_t, pre_roll_frames, 12,
           "Test policy: retained onset pre-roll.");
 IREE_FLAG(int32_t, hangover_frames, 18,
@@ -123,7 +127,7 @@ class ActivityEnvironment : public ::testing::Environment {
   loom_serve_host_t* host_ = nullptr;
   // Ordered explicit device records, retained through all model retirement.
   loom_serve_device_group_t* group_ = nullptr;
-  // Decoded per-device policy and URI storage.
+  // Decoded device URIs, pool policies, and consumer bindings.
   loom_serve_device_configuration_t devices_ = {};
 };
 
@@ -198,22 +202,34 @@ class NativeActivityTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_serve_model_configuration_load(
         iree_make_cstring_view(path), iree_string_view_empty(), allocator_,
         &configuration));
+    auto status = iree_ok_status();
     if (FLAG_fixture) {
-      const auto device =
-          iree_make_cstring_view(role ? FLAG_fixture_transcription_device
-                                      : FLAG_fixture_activity_device);
-      iree_allocator_free(allocator_, (void*)configuration.device.data);
-      configuration.device = {};
-      char* name = nullptr;
-      IREE_ASSERT_OK(iree_allocator_clone(
-          allocator_, iree_make_const_byte_span(device.data, device.size),
-          (void**)&name));
-      configuration.device = iree_make_string_view(name, device.size);
+      const char* names[] = {
+          role ? FLAG_fixture_transcription_device
+               : FLAG_fixture_activity_device,
+          role ? FLAG_fixture_transcription_pool : FLAG_fixture_activity_pool,
+      };
+      iree_string_view_t* bindings[] = {&configuration.device,
+                                        &configuration.pool};
+      for (size_t i = 0;
+           i < IREE_ARRAYSIZE(bindings) && iree_status_is_ok(status); ++i) {
+        const auto value = iree_make_cstring_view(names[i]);
+        iree_allocator_free(allocator_, (void*)bindings[i]->data);
+        *bindings[i] = {};
+        char* name = nullptr;
+        status = iree_allocator_clone(
+            allocator_, iree_make_const_byte_span(value.data, value.size),
+            (void**)&name);
+        if (iree_status_is_ok(status)) {
+          *bindings[i] = iree_make_string_view(name, value.size);
+        }
+      }
     }
-    names_[role].assign(configuration.name.data, configuration.name.size);
     iree_host_size_t index = 0;
-    auto status =
-        loom_serve_registry_register(registry_, &configuration, &index);
+    if (iree_status_is_ok(status)) {
+      names_[role].assign(configuration.name.data, configuration.name.size);
+      status = loom_serve_registry_register(registry_, &configuration, &index);
+    }
     loom_serve_model_configuration_deinitialize(&configuration);
     IREE_ASSERT_OK(status);
     EXPECT_EQ(index, role);

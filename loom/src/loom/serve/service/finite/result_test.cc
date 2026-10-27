@@ -169,8 +169,11 @@ class SnapshotLifetimeTest : public ResultTest,
     IREE_ASSERT_OK(loom_serve_device_group_allocate(
         host_, 1, &options, iree_allocator_system(), &group_));
     device_ = loom_serve_device_group_at(group_, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(
-        device_, loom_serve_device_pool(device_), &execution_));
+    const loom_serve_pool_options_t pool_options = {};
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group_, {IREE_SV("pool"), 1}, &pool_options, &storage_owner_));
+    IREE_ASSERT_OK(loom_serve_device_create_execution(device_, storage_owner_,
+                                                      &execution_));
     IREE_ASSERT_OK(loom_serve_execution_reserve_workspace(execution_, 32, 16));
     IREE_ASSERT_OK(iree_hal_semaphore_create(
         loom_serve_device_handle(device_), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY,
@@ -229,6 +232,8 @@ class SnapshotLifetimeTest : public ResultTest,
   loom_serve_device_group_t* group_ = nullptr;
   // Borrowed group device used by the producer and explicit snapshot.
   loom_serve_device_t* device_ = nullptr;
+  // Fixed pool retained through the final result and snapshot references.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Producer timeline with an independent download branch.
   loom_serve_execution_t* execution_ = nullptr;
   // Unsignaled input dependency, independent of failed output readiness.
@@ -282,9 +287,13 @@ class SuballocationLifetimeTest : public ResultTest {
     IREE_ASSERT_OK(loom_serve_device_group_allocate(
         host_, 1, &options, iree_allocator_system(), &group_));
     auto* device = loom_serve_device_group_at(group_, 0);
-    IREE_ASSERT_OK(loom_serve_device_create_execution(
-        device, loom_serve_device_pool(device), &execution_));
-    auto* workspace = loom_serve_device_workspace(device);
+    const loom_serve_pool_options_t pool_options = {};
+    loom_serve_pool_t* storage_owner = nullptr;
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group_, {IREE_SV("pool"), 1}, &pool_options, &storage_owner));
+    IREE_ASSERT_OK(
+        loom_serve_device_create_execution(device, storage_owner, &execution_));
+    auto* workspace = loom_serve_pool_workspace(storage_owner);
     IREE_ASSERT_OK(loom_serve_workspace_reserve(workspace, 2048, 256));
     IREE_ASSERT_OK(loom_serve_workspace_acquire_pool(workspace, &pool_));
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(

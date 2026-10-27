@@ -91,7 +91,7 @@ class ExecutableTest : public JitTest {
       }
       if (!buffer_) {
         IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-            loom_serve_device_storage_pool(device_owner_),
+            loom_serve_pool_storage(storage_owner_),
             iree_hal_make_pool_reservation_request(sizeof(input_), 0),
             iree_infinite_timeout(), &buffer_));
       }

@@ -383,7 +383,7 @@ TEST_F(RegisteredSequenceServiceTest,
        RegistrationReplacementInvalidatesHandles) {
   ASSERT_NO_FATAL_FAILURE(StartManaged());
   const std::string declaration =
-      "{\"name\":\"fixture-text\",\"base_directory\":\"" +
+      "{\"name\":\"fixture-text\",\"pool\":\"pool0\",\"base_directory\":\"" +
       std::filesystem::absolute(directory_).string() +
       R"(","definition":{"kind":"sequence","prepare":"prepare.loom","control":"control.loom","sources":["advance.loom","storage.loom"],"weights":")" +
       weights_ +

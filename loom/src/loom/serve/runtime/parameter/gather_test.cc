@@ -100,6 +100,9 @@ class ParameterGatherTest : public ::testing::TestWithParam<uint32_t> {
                                                    allocator_, &group_);
     iree_hal_driver_release(driver);
     IREE_ASSERT_OK(status);
+    const loom_serve_pool_options_t pool_options = {};
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group_, {IREE_SV("pool"), 1}, &pool_options, &storage_owner_));
     owner_ = loom_serve_device_group_at(group_, 0);
     device_ = loom_serve_device_handle(owner_);
     queue_ = loom_serve_device_transfer_queue(owner_);
@@ -114,7 +117,7 @@ class ParameterGatherTest : public ::testing::TestWithParam<uint32_t> {
                             loom_serve_retirement_t* retirement) {
     iree_hal_buffer_t* buffer = nullptr;
     IREE_CHECK_OK(iree_hal_pool_allocate_buffer(
-        loom_serve_device_storage_pool(owner_),
+        loom_serve_pool_storage(storage_owner_),
         iree_hal_make_pool_reservation_request(length, 256),
         iree_infinite_timeout(), &buffer));
     IREE_CHECK_OK(loom_serve_retirement_track(retirement, &buffer, allocator_));
@@ -340,6 +343,8 @@ class ParameterGatherTest : public ::testing::TestWithParam<uint32_t> {
   loom_serve_device_group_t* group_ = nullptr;
   // Borrowed serving-device capabilities.
   loom_serve_device_t* owner_ = nullptr;
+  // Explicit fixed backing for the gather buffers.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Borrowed physical device.
   iree_hal_device_t* device_ = nullptr;
   // Borrowed exact transfer queue.

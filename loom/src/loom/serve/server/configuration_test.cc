@@ -508,6 +508,64 @@ TEST_F(ConfigurationTest, InvalidDeviceNamesRejectBeforeIo) {
   EXPECT_EQ(model_.name.data, nullptr);
 }
 
+TEST_F(ConfigurationTest, PoolSelectionIsIndependentOfExecutionPlacement) {
+  const loom_serve_pool_binding_t pools[] = {
+      {IREE_SV("shared"), 3},
+      {IREE_SV("foreground"), 1},
+      {IREE_SV("background"), 1},
+  };
+  IREE_ASSERT_OK(Parse(Document("embedding", R"(,"assets":".")")));
+  EXPECT_EQ(model_.pool_index, IREE_HOST_SIZE_MAX);
+  iree_host_size_t resolved = 17;
+  for (iree_host_size_t count : {0u, 3u}) {
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          loom_serve_model_configuration_resolve_pool(
+                              &model_, count, pools, 0, &resolved));
+    EXPECT_EQ(resolved, 17u);
+  }
+  IREE_ASSERT_OK(loom_serve_model_configuration_resolve_pool(&model_, 1, pools,
+                                                             1, &resolved));
+  EXPECT_EQ(resolved, 0u);
+  EXPECT_EQ(model_.pool_index, IREE_HOST_SIZE_MAX);
+
+  for (iree_host_size_t index = 0; index < IREE_ARRAYSIZE(pools); ++index) {
+    IREE_ASSERT_OK(
+        Parse(Document("embedding", R"(,"assets":".")",
+                       ",\"pool\":\"" + String(pools[index].name) + "\"")));
+    IREE_ASSERT_OK(loom_serve_model_configuration_resolve_pool(
+        &model_, IREE_ARRAYSIZE(pools), pools, 0, &resolved));
+    EXPECT_EQ(resolved, index);
+    EXPECT_EQ(String(model_.pool), String(pools[index].name));
+    if (index) {
+      resolved = 17;
+      IREE_EXPECT_STATUS_IS(
+          IREE_STATUS_INVALID_ARGUMENT,
+          loom_serve_model_configuration_resolve_pool(
+              &model_, IREE_ARRAYSIZE(pools), pools, 1, &resolved));
+      EXPECT_EQ(resolved, 17u);
+    }
+  }
+  IREE_ASSERT_OK(
+      Parse(Document("embedding", R"(,"assets":".")", R"(,"pool":"absent")")));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_serve_model_configuration_resolve_pool(
+          &model_, IREE_ARRAYSIZE(pools), pools, 0, &resolved));
+  EXPECT_EQ(resolved, 17u);
+}
+
+TEST_F(ConfigurationTest, InvalidPoolNamesRejectBeforeIo) {
+  for (const char* field :
+       {R"(,"pool":0)", R"(,"pool":"")", R"(,"pool":null)", R"(,"pool":false)",
+        R"(,"pool":[])", R"(,"pool":{})", R"(,"pool":"a","pool":"b")"}) {
+    SCOPED_TRACE(field);
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        Parse(Document("embedding", R"(,"assets":".")", field)));
+    EXPECT_EQ(model_.name.data, nullptr);
+  }
+}
+
 TEST_F(ConfigurationTest, HttpRelativePathsRequireAnExplicitBase) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse(Document("embedding", R"(,"assets":".")"), {}));

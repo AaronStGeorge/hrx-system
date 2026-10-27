@@ -1,6 +1,10 @@
 {
   "devices": {
-    "cpu": {"uri": "task", "pool_backing": "fixed"},
-    "gpu": {"uri": "legacy-amdgpu", "pool_backing": "fixed"}
+    "cpu": {"uri": "task"},
+    "gpu": {"uri": "legacy-amdgpu"}
+  },
+  "pools": {
+    "activity": {"devices": ["cpu"], "pool_backing": "fixed"},
+    "transcription": {"devices": ["gpu"], "pool_backing": "fixed"}
   }
 }

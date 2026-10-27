@@ -35,27 +35,6 @@ TEST_F(DeviceTest, AllocationFailureReturnsNoOwner) {
   IREE_EXPECT_OK(loom_serve_device_group_free(group));
 }
 
-TEST_F(DeviceTest, InvalidBackingRejectsBeforeDeviceCreation) {
-  loom_serve_device_group_t* group = nullptr;
-  loom_serve_device_options_t options = {
-      .driver = loom_serve_host_task_driver(host),
-      .uri = IREE_SV("task"),
-      .memory_limit = 1,
-  };
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_serve_device_group_allocate(host, 1, &options,
-                                       iree_allocator_system(), &group));
-  EXPECT_EQ(group, nullptr);
-  options.memory_limit = 0;
-  options.backing = static_cast<loom_serve_device_backing_t>(2);
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_serve_device_group_allocate(host, 1, &options,
-                                       iree_allocator_system(), &group));
-  EXPECT_EQ(group, nullptr);
-}
-
 TEST_F(DeviceTest, InvalidCountRejectsBeforeReadingOptions) {
   loom_serve_device_group_t* group = nullptr;
   const iree_host_size_t counts[] = {0, IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT + 1};
@@ -66,27 +45,6 @@ TEST_F(DeviceTest, InvalidCountRejectsBeforeReadingOptions) {
                                          iree_allocator_system(), &group));
     EXPECT_EQ(group, nullptr);
   }
-}
-
-TEST_F(DeviceTest, EveryOptionIsValidatedBeforeCreatingDevices) {
-  loom_serve_device_group_t* group = nullptr;
-  const loom_serve_device_options_t options[] = {
-      {
-          .driver = loom_serve_host_task_driver(host),
-          .uri = IREE_SV("task"),
-          .name = IREE_SV("first"),
-      },
-      {
-          .driver = loom_serve_host_task_driver(host),
-          .uri = IREE_SV("task"),
-          .name = IREE_SV("second"),
-          .memory_limit = 1,
-      }};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_serve_device_group_allocate(host, IREE_ARRAYSIZE(options), options,
-                                       iree_allocator_system(), &group));
-  EXPECT_EQ(group, nullptr);
 }
 
 TEST_F(DeviceTest, InvalidNamesRejectBeforeNativeCreation) {

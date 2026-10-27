@@ -36,7 +36,7 @@ class ElasticEmbeddingServiceTest : public SourceEmbeddingServiceTest {
   void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(SourceEmbeddingServiceTest::SetUp());
     // Cold-allocation holds must not depend on a previous test's cached slabs.
-    auto* pool = loom_serve_device_memory_pool(device_);
+    auto* pool = loom_serve_pool_memory(storage_owner_);
     loom_serve_memory_pool_trim(pool, 0);
     IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
   }
@@ -319,9 +319,9 @@ TEST_F(ElasticEmbeddingServiceTest,
             std::string::npos);
   loom_serve_http_server_request_stop(server_);
   IREE_ASSERT_OK(http_.Join());
-  const auto memory = loom_serve_device_memory_statistics(device_).retained;
-  const auto workspace =
-      loom_serve_workspace_memory_usage(loom_serve_device_workspace(device_));
+  const auto memory = loom_serve_pool_statistics(storage_owner_).retained;
+  const auto workspace = loom_serve_workspace_memory_usage(
+      loom_serve_pool_workspace(storage_owner_));
   EXPECT_EQ(memory.reserved_bytes, workspace.reserved_bytes);
   EXPECT_EQ(memory.committed_bytes,
             memory.cached_bytes + workspace.committed_bytes);
@@ -461,7 +461,7 @@ TEST_F(ElasticEmbeddingServiceTest,
   const uint64_t reservation_bytes =
       loom_serve_residency_statistics(residency).reserved_bytes;
   const auto before_removal =
-      loom_serve_device_memory_statistics(device_).retained;
+      loom_serve_pool_statistics(storage_owner_).retained;
   // Retire the model with prepared parameters on the serialized owner that
   // must admit its peer. The one-slab budget cannot hold both parameter sets.
   interface_.set_observer(interface_.self, {});
@@ -477,19 +477,19 @@ TEST_F(ElasticEmbeddingServiceTest,
   {
     StalledStderr stalled;
     ASSERT_NO_FATAL_FAILURE(stalled.Begin());
-    removal_status = removal.Retire(device_);
+    removal_status = removal.Retire(device_, storage_owner_);
   }
   retained_ = removal.model;
   IREE_ASSERT_OK(removal_status);
   EXPECT_EQ(retained_, nullptr);
   EXPECT_NE(Read(peer).find(R"("embedding":[2,2,2,2])"), std::string::npos);
   const auto after_removal =
-      loom_serve_device_memory_statistics(device_).retained;
+      loom_serve_pool_statistics(storage_owner_).retained;
   EXPECT_EQ(after_removal.reserved_bytes,
             before_removal.reserved_bytes - reservation_bytes);
   EXPECT_EQ(after_removal.committed_bytes,
             kSlabBytes + loom_serve_workspace_memory_usage(
-                             loom_serve_device_workspace(device_))
+                             loom_serve_pool_workspace(storage_owner_))
                              .committed_bytes);
 
   // Final removal retains reusable physical backing without any model owning
@@ -497,13 +497,13 @@ TEST_F(ElasticEmbeddingServiceTest,
   loom_serve_finite_service_free(std::exchange(service_, nullptr));
   loom_serve_test_embedding_model_lifecycle_t final_removal;
   final_removal.model = std::exchange(model_, nullptr);
-  removal_status = final_removal.Retire(device_);
+  removal_status = final_removal.Retire(device_, storage_owner_);
   model_ = final_removal.model;
   IREE_ASSERT_OK(removal_status);
   EXPECT_EQ(model_, nullptr);
-  const auto empty = loom_serve_device_memory_statistics(device_).retained;
-  const auto workspace =
-      loom_serve_workspace_memory_usage(loom_serve_device_workspace(device_));
+  const auto empty = loom_serve_pool_statistics(storage_owner_).retained;
+  const auto workspace = loom_serve_workspace_memory_usage(
+      loom_serve_pool_workspace(storage_owner_));
   EXPECT_EQ(empty.reserved_bytes, workspace.reserved_bytes);
   EXPECT_EQ(empty.committed_bytes,
             empty.cached_bytes + workspace.committed_bytes);

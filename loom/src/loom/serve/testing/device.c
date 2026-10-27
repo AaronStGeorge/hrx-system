@@ -68,19 +68,17 @@ static bool loom_serve_test_capacity_complete(void* user_data) {
   return complete;
 }
 
-iree_status_t loom_serve_test_device_trim_and_drain(loom_serve_device_t* device,
-                                                    uint64_t target_bytes) {
-  loom_serve_device_trim_programs(device);
-  IREE_RETURN_IF_ERROR(
-      loom_serve_pool_trim(loom_serve_device_pool(device), target_bytes));
-  loom_serve_memory_pool_t* memory = loom_serve_device_memory_pool(device);
+iree_status_t loom_serve_test_pool_trim_and_drain(loom_serve_pool_t* owner,
+                                                  uint64_t target_bytes) {
+  IREE_RETURN_IF_ERROR(loom_serve_pool_trim(owner, target_bytes));
+  loom_serve_memory_pool_t* memory = loom_serve_pool_memory(owner);
   // A retained admission failure does not prevent already-accepted returns
   // from retiring. Join the native source before returning either diagnosis.
   iree_status_t status =
       memory ? loom_serve_memory_pool_await(memory) : iree_ok_status();
-  status = iree_status_join(status, loom_serve_workspace_advance(
-                                        loom_serve_device_workspace(device)));
-  iree_hal_pool_t* pool = loom_serve_device_storage_pool(device);
+  status = iree_status_join(
+      status, loom_serve_workspace_advance(loom_serve_pool_workspace(owner)));
+  iree_hal_pool_t* pool = loom_serve_pool_storage(owner);
   iree_hal_pool_wait_t* capacity = NULL;
   iree_status_t capacity_status =
       iree_hal_pool_wait_allocate(pool, iree_allocator_system(), &capacity);

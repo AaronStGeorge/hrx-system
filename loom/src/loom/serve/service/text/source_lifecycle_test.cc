@@ -660,13 +660,13 @@ TEST_F(SourceTextServiceTest, MatchedEpochsPreserveRetainedHttpHistory) {
 }
 
 TEST_F(SourceTextServiceTest, CancelledPreparationRetainsPartialOwnership) {
-  const auto before = loom_serve_device_memory_statistics(device_);
+  const auto before = loom_serve_pool_statistics(storage_owner_);
   auto options = ModelOptions();
   iree_notification_t notification;
   iree_notification_initialize(&notification);
   loom_serve_text_load_t* load = nullptr;
   IREE_ASSERT_OK(loom_serve_text_load_allocate(
-      device_, loom_serve_device_pool(device_), &options,
+      device_, storage_owner_, &options,
       [](void* payload) {
         iree_notification_post(static_cast<iree_notification_t*>(payload),
                                IREE_ALL_WAITERS);
@@ -696,22 +696,22 @@ TEST_F(SourceTextServiceTest, CancelledPreparationRetainsPartialOwnership) {
   ASSERT_TRUE(loom_serve_text_model_is_retired(partial));
   IREE_ASSERT_OK(loom_serve_text_model_free_retired(partial));
   iree_notification_deinitialize(&notification);
-  const auto after = loom_serve_device_memory_statistics(device_);
+  const auto after = loom_serve_pool_statistics(storage_owner_);
   EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
   EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
 }
 
 TEST_F(SourceTextServiceTest, TokenizerFailureRetiresCompiledModel) {
-  const auto before = loom_serve_device_memory_statistics(device_);
+  const auto before = loom_serve_pool_statistics(storage_owner_);
   auto options = ModelOptions();
   options.tokenizer_path = IREE_SV("absent-tokenizer.json");
   loom_serve_text_model_t* model = nullptr;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_NOT_FOUND,
-      loom_serve_text_model_allocate(device_, loom_serve_device_pool(device_),
-                                     &options, host_allocator_, &model));
+      loom_serve_text_model_allocate(device_, storage_owner_, &options,
+                                     host_allocator_, &model));
   EXPECT_EQ(model, nullptr);
-  const auto after = loom_serve_device_memory_statistics(device_);
+  const auto after = loom_serve_pool_statistics(storage_owner_);
   EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
   EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
 
@@ -806,7 +806,7 @@ TEST_F(SourceTextServiceTest,
       value, destroy);
   auto interface = loom_serve_text_service_interface(value);
   EXPECT_EQ(interface.capacity_domain,
-            loom_serve_device_residency_cache(device_));
+            loom_serve_pool_residency_cache(storage_owner_));
   Observe(interface);
   auto* notification = loom_serve_http_server_notification(server_);
   uint64_t cursor = 0;

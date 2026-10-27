@@ -94,8 +94,8 @@ class SourceRecognitionHttpTest : public ::testing::Test {
  protected:
   void SetUp() override {
     auto options = loom_serve_test_application_options_default();
-    options.backing = FLAG_test_elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
-                                        : LOOM_SERVE_DEVICE_BACKING_FIXED;
+    options.backing = FLAG_test_elastic ? LOOM_SERVE_POOL_BACKING_ELASTIC
+                                        : LOOM_SERVE_POOL_BACKING_FIXED;
     options.slab_size = FLAG_test_elastic ? 2 * 1024 * 1024 : 0;
     options.worker_count = FLAG_test_workers;
     loom_serve_test_application_t* application = nullptr;
@@ -119,8 +119,8 @@ class SourceRecognitionHttpTest : public ::testing::Test {
     };
     IREE_ASSERT_OK(loom_serve_recognition_model_allocate(
         loom_serve_test_application_device_at(application, 0),
-        loom_serve_device_pool(
-            loom_serve_test_application_device_at(application, 0)),
+        loom_serve_device_group_pool_at(
+            loom_serve_test_application_device_group(application), 0),
         &model_options, iree_allocator_system(), &model_));
     const auto server_options = loom_serve_http_server_options_default();
     IREE_ASSERT_OK(loom_serve_http_server_allocate(

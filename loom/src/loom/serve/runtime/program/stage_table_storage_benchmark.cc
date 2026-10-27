@@ -162,12 +162,15 @@ int main(int argc, char** argv) {
   const loom_serve_device_options_t options = {
       .driver = driver,
       .uri = loom_serve_test_device()->device_uri,
-      .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
   };
   loom_serve_device_group_t* group = nullptr;
   IREE_CHECK_OK(
       loom_serve_device_group_allocate(host, 1, &options, tracked, &group));
   iree_hal_driver_release(driver);
+  const loom_serve_pool_options_t pool_options = {.elastic = true};
+  loom_serve_pool_t* storage_owner = nullptr;
+  IREE_CHECK_OK(loom_serve_device_group_create_pool(
+      group, {IREE_SV("pool"), 1}, &pool_options, &storage_owner));
   auto* device = loom_serve_device_group_at(group, 0);
   loom_serve_compilation_report_t report = {};
   loom_serve_jit_t* jit = nullptr;
@@ -184,8 +187,8 @@ int main(int argc, char** argv) {
     return 2;
   }
   loom_serve_parameter_bank_t* bank = nullptr;
-  IREE_CHECK_OK(loom_serve_parameter_bank_allocate(
-      device, loom_serve_device_pool(device), program, system, &bank));
+  IREE_CHECK_OK(loom_serve_parameter_bank_allocate(device, storage_owner,
+                                                   program, system, &bank));
   const auto baseline = allocations.snapshot(true);
   std::printf(
       "{\"stage_bytes\":%zu,\"parameters\":%u,\"baseline_bytes\":%zu}\n",
@@ -245,7 +248,7 @@ int main(int argc, char** argv) {
     std::printf("{\"quantum\":%u,\"after_free_bytes\":%zu}\n", quantum,
                 allocations.snapshot().live);
   }
-  const auto memory = loom_serve_device_memory_statistics(device);
+  const auto memory = loom_serve_pool_statistics(storage_owner);
   std::printf("{\"parameter_reserved\":%" PRIu64
               ",\"parameter_committed\":%" PRIu64 "}\n",
               memory.retained.reserved_bytes, memory.retained.committed_bytes);

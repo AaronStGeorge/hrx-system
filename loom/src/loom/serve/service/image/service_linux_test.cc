@@ -147,6 +147,14 @@ class ImageServiceFixture : public ::testing::Test {
       status = loom_serve_device_group_allocate(
           host, device_count, options, iree_allocator_system(), out_group);
     }
+    const loom_serve_pool_options_t pool_options = {};
+    for (iree_host_size_t i = 0; i < device_count && iree_status_is_ok(status);
+         ++i) {
+      loom_serve_pool_t* pool = nullptr;
+      status = loom_serve_device_group_create_pool(
+          *out_group, {options[i].name, UINT64_C(1) << i}, &pool_options,
+          &pool);
+    }
     iree_hal_driver_release(driver);
     loom_serve_host_release(host);
     return status;
@@ -159,8 +167,7 @@ class ImageServiceFixture : public ::testing::Test {
          ++i) {
       IREE_ASSERT_OK(loom_serve_device_create_execution(
           loom_serve_device_group_at(group_, i),
-          loom_serve_device_pool(loom_serve_device_group_at(group_, i)),
-          &executions_[i]));
+          loom_serve_device_group_pool_at(group_, i), &executions_[i]));
     }
     auto* device = loom_serve_device_group_at(group_, 0);
     IREE_ASSERT_OK(iree_hal_semaphore_create(
@@ -247,8 +254,9 @@ class ImageServiceFixture : public ::testing::Test {
         .try_admit = loom_serve_test_image_gate_t::Admit,
         .submit = loom_serve_test_image_gate_t::Submit,
         .complete = loom_serve_test_image_gate_t::Complete,
-        .capacity_domain = loom_serve_device_residency_cache(
-            loom_serve_device_group_at(group_, executions_[1] ? index : 0)),
+        .capacity_domain =
+            loom_serve_pool_residency_cache(loom_serve_device_group_pool_at(
+                group_, executions_[1] ? index : 0)),
     };
     const loom_serve_image_service_options_t options = {
         .name = name,
@@ -633,8 +641,10 @@ class ImageAdmissionTestBase
       EXPECT_EQ(loom_serve_device_group_count(this->group_), 2u);
       EXPECT_EQ(loom_serve_device_group(first),
                 loom_serve_device_group(second));
-      EXPECT_NE(loom_serve_device_residency_cache(first),
-                loom_serve_device_residency_cache(second));
+      EXPECT_NE(loom_serve_pool_residency_cache(
+                    loom_serve_device_group_pool_at(this->group_, 0)),
+                loom_serve_pool_residency_cache(
+                    loom_serve_device_group_pool_at(this->group_, 1)));
     }
     for (size_t i = 0; i < 2; ++i) {
       const bool separate = i == 1 && independent;

@@ -288,6 +288,7 @@ loom_cc_library(
     iree::base::internal::path
     iree::base::internal::unicode
     iree::io::file_handle
+    loom::serve::runtime::device::pool
     loom::serve::runtime::program::sources
     loom::serve::runtime::program::variant_pool
     loom::serve::service::kind

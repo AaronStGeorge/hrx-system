@@ -119,21 +119,34 @@ iree_status_t loom_serve_test_application_acquire(
           .driver = driver,
           .uri = device_uri,
           .name = iree_make_cstring_view(device_names[i].c_str()),
-          .backing = options->backing,
-          .weight_slab_size = options->slab_size,
-          .state_slab_size = options->slab_size,
-          .memory_limit = options->memory_limit,
       };
     }
     status = loom_serve_device_group_allocate(
         host, options->device_count, device_options.data(),
         application.native_allocator->allocator(), &group);
+    const loom_serve_pool_options_t pool_options = {
+        .elastic = options->backing == LOOM_SERVE_POOL_BACKING_ELASTIC,
+        .weight_slab_size = options->slab_size,
+        .state_slab_size = options->slab_size,
+        .memory_limit = options->memory_limit,
+    };
+    for (iree_host_size_t i = 0;
+         i < options->device_count && iree_status_is_ok(status); ++i) {
+      const std::string name = "pool" + std::to_string(i);
+      const loom_serve_pool_binding_t binding = {
+          .name = iree_make_cstring_view(name.c_str()),
+          .device_mask = UINT64_C(1) << i,
+      };
+      loom_serve_pool_t* pool = nullptr;
+      status = loom_serve_device_group_create_pool(group, binding,
+                                                   &pool_options, &pool);
+    }
     if (iree_status_is_ok(status) &&
-        options->backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
+        options->backing == LOOM_SERVE_POOL_BACKING_ELASTIC) {
       for (iree_host_size_t i = 0;
            i < options->device_count && iree_status_is_ok(status); ++i) {
         status = application.native_allocator->Observe(
-            loom_serve_device_group_at(group, i));
+            loom_serve_device_group_pool_at(group, i));
       }
     }
   }

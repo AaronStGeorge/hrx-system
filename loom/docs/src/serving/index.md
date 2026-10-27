@@ -33,8 +33,8 @@ controls, pressure, counters and telemetry cursors.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--device=URI` | None | Single-device shortcut, with the key `device`. Mutually exclusive with `--devices`. |
-| `--devices=path` | None | Machine-local JSON file declaring named devices and each device's memory and idle policy. |
+| `--device=URI` | None | Shortcut constructing device `device` and pool `pool`. Mutually exclusive with `--devices`. |
+| `--devices=path` | None | Machine-local JSON declaring named devices and independent pools with their consumer membership, memory limits, and idle policy. |
 | `--model=path` | None, repeatable | A local model card or serving deployment document; omission starts empty. |
 | `--preset=name` | Card selection | Select a preset when loading one card directly. Fetched cards retain the selection made during acquisition. |
 | `--listen=address` | `127.0.0.1:8080`, repeatable | Numeric IPv4 `host:port`, IPv6 `[host]:port`, or `unix:path`. |
@@ -44,7 +44,7 @@ controls, pressure, counters and telemetry cursors.
 | `--held_requests=N` | `-1` | Closed-gate holding credit; `-1` selects half the connection limit, `0` rejects rather than holds. |
 | `--request_body_bytes=N` | `8388608` | Maximum HTTP body bytes per connection. |
 | `--heartbeat_ms=N` | `1000` | Per-model stderr JSONL heartbeat interval; `0` disables periodic reporting, not cumulative counters. |
-| `--workspace_idle_ms=N` | `0` | Trim reusable command-workspace backing after the device's last workspace allocation retires and stays idle for this interval; `0` disables expiry. |
+| `--workspace_idle_ms=N` | `0` | Trim reusable command-workspace backing after the pool's last workspace allocation retires and stays idle for this interval; `0` disables expiry. |
 | `--parameter_idle_ms=N` | `0` | Deactivate unpinned elastic model weights after this idle interval; `0` disables expiry. Sessions and KV/prefix history survive. |
 | `--pool_backing=elastic\|fixed` | `elastic` | Shared demand-committed parameter/state/workspace slabs or eagerly backed retained storage. |
 | `--weight_slab_bytes=N` | `1073741824` | Reusable elastic parameter and shared-workspace slab size in bytes (1 GiB); loading uses independent bounded read windows. `0` uses the allocator recommendation. Ignored for fixed backing. |
@@ -52,7 +52,7 @@ controls, pressure, counters and telemetry cursors.
 | `--memory_bytes=N` | `0` | Shared serving-managed physical parameter/state/workspace limit; `0` imposes no serving limit. |
 
 The backing, slab, memory, and idle flags apply only to the `--device` shortcut.
-With `--devices`, those settings belong to each JSON entry; mixing the file with
+With `--devices`, those settings belong to each pool entry; mixing the file with
 any single-device flag is rejected, including explicit default values.
 
 `--memory_bytes`, `--weight_slab_bytes`, and `--state_slab_bytes` accept decimal
@@ -76,19 +76,25 @@ Unexpected positional arguments fail instead of being interpreted as models.
 ## Devices and listeners
 
 Exactly one of `--device` or `--devices` supplies the server's device group.
-For multiple devices, a machine-local file gives each member a key:
+For explicit placement, a machine-local file names execution devices and storage
+pools independently. This example keeps two policies separate even when both
+consume the same physical RAM:
 
 ```json
 {
   "devices": {
-    "gpu": {
-      "uri": "amdgpu://0",
+    "gpu": {"uri": "amdgpu://0"},
+    "npu": {"uri": "xdna://0"}
+  },
+  "pools": {
+    "interactive": {
+      "devices": ["gpu"],
       "pool_backing": "elastic",
       "memory_bytes": "48gib",
       "workspace_idle_ms": 30000,
       "parameter_idle_ms": 300000
     },
-    "npu": {"uri": "xdna://0", "pool_backing": "fixed"}
+    "embeddings": {"devices": ["npu"], "pool_backing": "fixed"}
   }
 }
 ```
@@ -98,29 +104,40 @@ loom-serve --devices=devices.json --model=chat-deployment.json
 ```
 
 The keys are operator-chosen names, not hardware types or ordinals. `gpu0` and
-`gpu1` can refer to different drivers. Each deployment selects a member with a
-top-level string such as `"device": "gpu"`; omission is accepted only for a
-singleton group. The portable model card and its programs contain no machine
-placement. The same card can back several deployments with different names
-and devices. `/v1/status` publishes these keys in `server.resources.devices`.
+`gpu1` can refer to different drivers. Each deployment selects execution with
+`"device": "gpu"` and storage with `"pool": "interactive"`. Each selector may be
+omitted only when its inventory contains exactly one entry. Pool membership must
+include the selected execution device. The portable model card and its programs
+contain no machine placement. The same card can back several deployments with
+different names, devices, or pools. `/v1/status` publishes the independent inventories in
+`server.resources.devices` and `server.resources.pools`.
 A URI is resolved by its linked HAL driver. The server neither chooses an
 implicit device nor falls back to a different backend.
 
-Each device entry requires `uri`. Optional `pool_backing`, `weight_slab_bytes`,
+Each device entry contains `uri`. Each pool requires a nonempty `devices` array.
+Optional pool fields `pool_backing`, `weight_slab_bytes`,
 `state_slab_bytes`, `memory_bytes`, `workspace_idle_ms`, and `parameter_idle_ms`
 have the same defaults and units as the single-device flags above. Byte counts
 can be JSON integers or strings such as `"64gib"`, `"64mib"`, or `"4096"`.
 Strings preserve exact counts when a JSON client uses floating-point numbers.
 Idle durations remain JSON integers in milliseconds. Unknown or duplicate
-fields, duplicate device keys, empty keys, and malformed values fail startup.
+fields, duplicate keys or pool members, unknown devices, empty keys, and malformed values fail startup.
 Keys use nonempty visible ASCII; numeric device selectors are rejected.
 The file describes one group, not another set of servers or model lifecycles.
 
-Memory limits belong to individual serving device pools. Two devices accessing
-the same physical RAM still have independent limits; their sum is not a shared
-RAM cap. Conversely, a discrete GPU's limit does not account for another GPU's
-VRAM or host RAM. Hardware identity and model placement do not imply a common
-allocation or coherency domain.
+One pool can list several devices, such as `"devices": ["gpu", "npu"]`. The HAL
+qualifies storage access for the complete consumer set during startup; an
+unsupported combination fails before loading model payloads. Models selecting
+that pool share its backing, admission allowance, and reclamation policy. Pool
+sharing does not insert copies or make unsupported memory coherency implicit.
+
+Several pools may list the same device. For example, separate `interactive` and
+`background` pools can have different limits and idle timeouts. Their names
+express policy ownership, not physical-memory equivalence or execution priority.
+Limits are independent: the server does not infer an aggregate RAM cap from
+hardware identity. The operator sizes their combined allowances to fit the
+machine. Conversely, a discrete GPU pool does not budget another GPU's VRAM or
+host RAM. No extra per-device pools are created behind this configuration.
 
 Device URI query parameters request immutable runtime services. `feedback`
 provisions device-to-host diagnostics used by authored kernel assertions and
@@ -132,7 +149,7 @@ a specific device. `?feedback&asan&tsan` is also valid; explicit `feedback`
 adds general authored diagnostics to the sanitizer services. A backend that
 cannot provide a requested service rejects the URI during device creation.
 
-Models on one device share its memory budget and provisioned queues. Each
+Models on one device share its provisioned queues, independently of their pools. Each
 loaded model holds a queue assignment until its last execution reference
 retires. New assignments choose the fewest live model executions in each
 selected queue family; removing and reloading a model reuses the available
@@ -147,8 +164,8 @@ loom-serve --device=amdgpu://0 \
   --model=models/chat/model.json --model=models/speech/model.json
 ```
 
-Both model documents select the same device and share its storage and residency
-policy. The provisioned queue count remains fixed for the device lifetime;
+With this shortcut, both model documents select the same device and pool.
+The provisioned queue count remains fixed for the device lifetime;
 an explicit URI parameter such as `?queue_count=1` overrides the default.
 Separate queues allow independent submissions to overlap, but
 do not reserve compute or memory bandwidth and provide no latency guarantee.

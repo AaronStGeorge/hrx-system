@@ -247,12 +247,14 @@ the server reads its `path` and `format` without interpreting that transform.
 | `model` | Optional local card reference with `path` and optional `preset`, `service`, `variant`, `partition`, and `programs` selectors. Programs and assets then come from the card. |
 | `admission` | `"open"` by default; `"drained"` registers metadata without reading programs, loading weights or allocating model storage. |
 | `device` | String key in the server's named device configuration; required when the group has more than one member. The `--device=URI` shortcut uses the key `device`. |
+| `pool` | String key in the server's pool inventory; required when more than one pool is configured. Its permitted devices must include the selected execution device. The `--device=URI` shortcut uses the key `pool`. |
 | `base_directory` | Optional local file base; relative values resolve from the containing document. |
 
 Placement is a deployment property, outside the reusable `definition`. Drained
-registrations still require a valid device selection. Names are resolved
-before publication or model I/O; `/v1/status` publishes the ordered group under
-`server.resources.devices`, with each entry's `key` identifying the selection.
+registrations still require valid device and pool selections. Names are resolved
+before publication or model I/O; `/v1/status` publishes the inventories under
+`server.resources.devices` and `server.resources.pools`, with each entry's `key`
+identifying the selection.
 A deployment executes on one selected device. The fetched model card can remain
 unchanged while separate deployment documents select different devices:
 
@@ -260,6 +262,7 @@ unchanged while separate deployment documents select different devices:
 {
   "name": "scout",
   "device": "gpu0",
+  "pool": "interactive",
   "model": {"path": "models/chat/model.json"},
   "definition": {"kind": "text"}
 }
@@ -267,7 +270,7 @@ unchanged while separate deployment documents select different devices:
 
 The selected card preset supplies the programs, assets, and settings omitted
 from `definition`. A second deployment can reference the same card with a
-different routing name and `device` key. Device configuration is described in
+different routing name, `device`, or `pool` key. Machine configuration is described in
 the [command reference](index.md#devices-and-listeners).
 
 Unknown fields, duplicate keys, wrong JSON types and wrong-modality fields

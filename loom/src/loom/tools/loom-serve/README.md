@@ -22,10 +22,12 @@ iree-bazel-run //loom/src/loom/tools/loom-serve -- \
 
 The installed command is `loom-serve` with the same arguments and no subcommand.
 An explicit HAL device URI or `--devices=devices.json` file is required. The
-file declares one group with named entries and per-device memory and idle
-policy. Deployment documents select a top-level `device` string key when the
-group has multiple members; portable model cards contain no placement. The
-single-device shortcut uses the key `device`. A URI is interpreted by its linked HAL driver,
+file declares one group with named devices and independent pools. Pools own
+their memory limits, idle policy, and permitted device membership. Deployment
+documents select top-level `device` and `pool` string keys; either selector may
+be omitted only when its inventory has one entry. Portable model cards contain
+no placement. The single-device shortcut creates device `device` and pool `pool`.
+A URI is interpreted by its linked HAL driver,
 without an implicit local device or fallback. Fixed backing needs no virtual
 reservation. Elastic backing demand-commits retained slabs through the HAL
 memory-scope virtual-memory contract. Task uses host VMM where available;

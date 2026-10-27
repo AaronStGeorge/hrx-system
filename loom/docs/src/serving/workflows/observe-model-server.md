@@ -40,13 +40,15 @@ elastic text-state bytes exclude fixed buffers, weights, and workspace. A modali
 without a particular observation leaves it unavailable rather than inventing a
 value.
 
-Model badges link to their configured device. The Devices section groups current
+Model badges link to their execution device and storage pool. The Devices section groups current
 request activity by that placement; these counts are not hardware utilization or
 native queue depth. Device and pool cards remain when models are unregistered.
 
-Memory pools show committed serving allocations, retained peaks, reusable backing,
-and commitment histories. Native storage and elastic backing are separate owners;
-workspace is shown inside its backing pool, not added to the total. Elastic
+Each named pool appears once, even when multiple devices consume it. Its card
+shows committed serving allocations, observed peaks, reusable backing, and
+commitment histories, with links to the permitted devices. Native storage and
+elastic backing are distinct backing owners within the pool; their commitment
+adds. Workspace is shown as included, never added again. Elastic
 virtual reservations are address space, not physical RAM. These views exclude
 driver allocations and other processes, and do not invent a shared RAM capacity
 or a weights/KV/workspace partition from overlapping observations. Expand a pool
@@ -365,8 +367,8 @@ content.
 
 ## Interpret memory and packing evidence
 
-`server.resources.devices[].memory` reports serving-owned backing on that
-device:
+`server.resources.pools[].memory` reports each explicit serving pool's backing,
+independently of its consumer devices:
 
 | Field | What it counts |
 | --- | --- |

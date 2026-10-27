@@ -55,7 +55,7 @@ TEST_F(AutomaticCacheTextServiceTest,
   IREE_ASSERT_OK(status);
   for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
     IREE_ASSERT_OK(
-        loom_serve_workspace_wait(loom_serve_device_workspace(device_),
+        loom_serve_workspace_wait(loom_serve_pool_workspace(storage_owner_),
                                   frontier.semaphores[i], frontier.values[i]));
   }
   loom_serve_text_model_complete_resize(model_);

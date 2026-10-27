@@ -61,7 +61,7 @@ bool loom_serve_resources_is_pending(const loom_serve_resources_t* resources);
 // storage for fixed backing or retained for elastic backing, not an additional
 // amount. Pool values are independent atomic observations, not a coherent
 // total. Acquisition/release counters accumulate across models and retired pool
-// generations for the device owner's lifetime.
+// generations for the pool owner's lifetime.
 // wait_count counts reservations needing a reuse prerequisite, not host waits
 // or elapsed time. These values exclude host snapshots, loader/driver storage,
 // and hidden padding; they cannot be interpreted as device-wide usage or
@@ -69,40 +69,41 @@ bool loom_serve_resources_is_pending(const loom_serve_resources_t* resources);
 iree_status_t loom_serve_resources_write_json(
     const loom_serve_resources_t* resources, loom_output_stream_t* output);
 
-// Immutable device-source count, independent of model registration/residency.
+// Immutable device-and-pool source count, independent of model residency.
 iree_host_size_t loom_serve_resources_observation_count(
     const loom_serve_resources_t* resources);
 
-// Copies one device's pool facts to a transport-independent numeric sink.
-// Index comes from observation_count. Runs on the serialized serving owner
+// Copies one pool's facts to a transport-independent numeric sink.
+// Index comes from the group's pool inventory. Runs on the serialized owner
 // without hardware polling or waiting; only sink failure can propagate.
 // Descriptors and values are borrowed only through the synchronous emit call.
 iree_status_t loom_serve_resources_sample(
-    const loom_serve_resources_t* resources, iree_host_size_t device_index,
+    const loom_serve_resources_t* resources, iree_host_size_t pool_index,
     loom_serve_telemetry_sample_sink_t sink);
 
-// Copies one device's identity and source-owned numeric pool topics. Index is
-// from observation_count and identifies this source for the resources lifetime.
-// Deployment keys are bounded display labels; indices identify owners.
-// Native storage and elastic backing are distinct pools. Workspace borrows
-// storage with fixed backing or elastic backing otherwise; its bytes are not
-// additive to that parent. These are serving-pool facts, not device-wide usage.
+// Copies one device identity or one pool's identity and numeric topics. Index
+// is from observation_count: devices first, then pools in inventory order.
+// Each page identifies its owner by the corresponding inventory index; bounded
+// deployment keys are display labels. Native storage and elastic backing are
+// distinct backing owners within a serving pool. Workspace borrows storage
+// with fixed backing or elastic backing otherwise; its bytes are not additive
+// to that parent. These are serving-pool facts, not device-wide usage.
 // Runs on the serialized serving owner without hardware polling or waiting.
 // Failure is only output/allocation failure; no resource borrow escapes.
 iree_status_t loom_serve_resources_write_observation(
-    const loom_serve_resources_t* resources, iree_host_size_t device_index,
+    const loom_serve_resources_t* resources, iree_host_size_t resource_index,
     iree_string_builder_t* output);
 
-// Parses exactly {"device": <key>, "target_bytes": <unsigned integer>} and
-// resolves the device key against immutable membership. Performs no mutation.
+// Parses exactly {"pool": <key>, "target_bytes": <unsigned integer>} and
+// resolves the pool key against immutable membership. Performs no mutation.
 // Outputs are valid only on success and through this resource view's lifetime.
 iree_status_t loom_serve_resources_parse_trim(
     const loom_serve_resources_t* resources, iree_string_view_t value,
-    iree_allocator_t host_allocator, iree_host_size_t* out_device_index,
+    iree_allocator_t host_allocator, iree_host_size_t* out_pool_index,
     uint64_t* out_target_bytes);
 
 // Executes a validated trim request on the serialized serving owner and writes
-// {"target_bytes": ..., "device": <resource object>} with current accounting.
+// {"target_bytes": ..., "pool": <resource object>} with current accounting.
 // Schedules release of eligible idle workspace and unpinned parameters without
 // waiting for live work, evicting mutable state, or changing the configured
 // budget. The target may remain unreachable. Output is copied and retains no
@@ -110,9 +111,24 @@ iree_status_t loom_serve_resources_parse_trim(
 // caller must stop admission and drain accepted work, not retry inference
 // against that backing.
 iree_status_t loom_serve_resources_trim(const loom_serve_resources_t* resources,
-                                        iree_host_size_t device_index,
+                                        iree_host_size_t pool_index,
                                         uint64_t target_bytes,
                                         loom_output_stream_t* output);
+
+// Parses exactly {"device": <key>} and resolves the immutable device inventory.
+// Leaves the output unchanged on failure and performs no mutation.
+iree_status_t loom_serve_resources_parse_trim_programs(
+    const loom_serve_resources_t* resources, iree_string_view_t value,
+    iree_allocator_t host_allocator, iree_host_size_t* out_device_index);
+
+// Prunes source generations with no active catalog on the selected device and
+// unused group-wide tokenizers, then writes {"device": <resource object>}.
+// Live model/load borrowers preserve their entries. Does not trim any pool or
+// wait for work. Runs on the serialized serving owner; only output failure can
+// propagate.
+iree_status_t loom_serve_resources_trim_programs(
+    const loom_serve_resources_t* resources, iree_host_size_t device_index,
+    loom_output_stream_t* output);
 
 #ifdef __cplusplus
 }  // extern "C"

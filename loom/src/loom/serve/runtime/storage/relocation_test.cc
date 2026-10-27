@@ -31,7 +31,9 @@ class RelocationTest : public ::testing::Test {
     const loom_serve_device_options_t options = {
         .driver = driver,
         .uri = loom_serve_test_device()->device_uri,
-        .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+    };
+    const loom_serve_pool_options_t pool_options = {
+        .elastic = true,
         .weight_slab_size = 2 * 1024 * 1024,
         .state_slab_size = 2 * 1024 * 1024,
     };
@@ -40,11 +42,13 @@ class RelocationTest : public ::testing::Test {
     iree_hal_driver_release(driver);
     loom_serve_host_release(host);
     IREE_ASSERT_OK(status);
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group, {IREE_SV("pool"), 1}, &pool_options, &storage_owner));
     device = loom_serve_device_group_at(group, 0);
-    pool = loom_serve_device_memory_pool(device);
-    IREE_ASSERT_OK(native.Observe(device));
-    IREE_ASSERT_OK(loom_serve_device_create_execution(
-        device, loom_serve_device_pool(device), &execution));
+    pool = loom_serve_pool_memory(storage_owner);
+    IREE_ASSERT_OK(native.Observe(storage_owner));
+    IREE_ASSERT_OK(
+        loom_serve_device_create_execution(device, storage_owner, &execution));
   }
 
   void TearDown() override {
@@ -65,6 +69,8 @@ class RelocationTest : public ::testing::Test {
   loom_serve_device_group_t* group = nullptr;
   // Borrowed device record within the application group.
   loom_serve_device_t* device = nullptr;
+  // Independent storage owner selected for every reservation.
+  loom_serve_pool_t* storage_owner = nullptr;
   // Owned model work/feedback retirement domain.
   loom_serve_execution_t* execution = nullptr;
   // Physical owner of the sparse plane reservation.
@@ -87,7 +93,7 @@ TEST_F(RelocationTest, RepeatedPlanesCrossBatchAndAddressBoundaries) {
   constexpr uint32_t kLiveBlocks = 35;
   constexpr uint32_t kBlockCount = kLiveBlocks * 2;
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool, loom_serve_device_state_geometry(device),
+      pool, loom_serve_pool_state_geometry(storage_owner),
       region.origin + 2 * region.stride + kBlockCount * region.block_bytes, 256,
       &statistics, &buffer));
   auto* const handle = loom_serve_virtual_buffer_handle(buffer);

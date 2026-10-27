@@ -18,6 +18,23 @@ extern "C" {
 // group and allocation queue outlive the pool and all of its consumers.
 typedef struct loom_serve_pool_t loom_serve_pool_t;
 
+typedef enum loom_serve_pool_backing_e {
+  // Ordinary fixed allocations, including device address sanitizer use.
+  LOOM_SERVE_POOL_BACKING_FIXED = 0,
+  // Stable virtual roots with independently reclaimable physical slabs.
+  LOOM_SERVE_POOL_BACKING_ELASTIC = 1,
+} loom_serve_pool_backing_t;
+
+// Application-selected identity and complete set of consumers. Device bits
+// index the immutable application group, not native driver ordinals. Several
+// pools may name the same devices without sharing storage or admission policy.
+typedef struct loom_serve_pool_binding_t {
+  // Application key, borrowed from its owner through pool retirement.
+  iree_string_view_t name;
+  // Nonempty set of device records allowed to execute against this pool.
+  uint64_t device_mask;
+} loom_serve_pool_binding_t;
+
 typedef struct loom_serve_pool_options_t {
   // Stable virtual roots with independently reclaimable physical backing.
   bool elastic;

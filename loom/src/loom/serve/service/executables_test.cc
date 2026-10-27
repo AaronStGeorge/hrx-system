@@ -29,9 +29,10 @@ class ExecutablesTest : public WeightsTest {
     // configuration with the required number of physical slabs.
     ASSERT_NO_FATAL_FAILURE(WeightsTest::SetUpDevice());
     if (GetParam()) {
-      const uint64_t root_bytes = loom_serve_device_weight_geometry(
-                                      loom_serve_device_group_at(group_, 0))
-                                      .minimum_size;
+      const uint64_t root_bytes =
+          loom_serve_pool_weight_geometry(
+              loom_serve_device_group_pool_at(group_, 0))
+              .minimum_size;
       IREE_ASSERT_OK(AcquireWeightDeviceGroup(
           true, kSlabBytes, SlabCount() * root_bytes, &group_));
     }
@@ -170,7 +171,7 @@ class ExecutablesTest : public WeightsTest {
         &parameter_sources_));
     IREE_RETURN_IF_ERROR(Compile(0, root_name));
     IREE_RETURN_IF_ERROR(loom_serve_parameter_bank_allocate(
-        device_owner_, loom_serve_device_pool(device_owner_),
+        device_owner_, storage_owner_,
         loom_serve_jit_stage_program(compiled_[0]), host_allocator_, &bank_));
     const auto* declaration = loom_serve_preparation_stage(preparation_, 0);
     iree_status_t status = iree_ok_status();
@@ -185,11 +186,11 @@ class ExecutablesTest : public WeightsTest {
     IREE_RETURN_IF_ERROR(status);
     auto* group = loom_serve_parameter_bank_group(bank_);
     IREE_RETURN_IF_ERROR(loom_serve_residency_allocate(
-        loom_serve_device_residency_cache(device_owner_), execution_, 1, &group,
+        loom_serve_pool_residency_cache(storage_owner_), execution_, 1, &group,
         host_allocator_, &residency_));
     loom_serve_executable_options_t options = {
         .device = device_owner_,
-        .pool = loom_serve_device_pool(device_owner_),
+        .pool = storage_owner_,
         .jit = jit_,
         .sources = &sources_,
         .execution = execution_,
@@ -605,7 +606,7 @@ TEST_P(ExecutablesTest, ParameterByteBudgetRetiresRecordingsAndBank) {
   const auto first = loom_serve_executables_parameters(executables_);
   EXPECT_EQ(first.activity.activations, 2u);
   const uint64_t root_bytes =
-      GetParam() ? loom_serve_device_weight_geometry(device_owner_).minimum_size
+      GetParam() ? loom_serve_pool_weight_geometry(storage_owner_).minimum_size
                  : 0;
   EXPECT_EQ(first.memory.reserved_bytes, root_bytes);
   EXPECT_EQ(first.memory.committed_bytes, root_bytes);
@@ -641,7 +642,7 @@ TEST_P(ExecutablesTest, RetainedCheckpointsDoNotAddIndependentPeaks) {
   ASSERT_NO_FATAL_FAILURE(Execute(990));
   const auto memory = loom_serve_executables_parameters(executables_).memory;
   const uint64_t root_bytes =
-      loom_serve_device_weight_geometry(device_owner_).minimum_size;
+      loom_serve_pool_weight_geometry(storage_owner_).minimum_size;
   EXPECT_EQ(memory.reserved_bytes, 3 * root_bytes);
   EXPECT_EQ(memory.committed_bytes, 2 * root_bytes);
   EXPECT_EQ(memory.released_bytes, root_bytes);
@@ -729,7 +730,7 @@ TEST_P(ExecutablesTest, PinnedBanksSurviveCodeEvictionAndDrainReloads) {
   const auto before = loom_serve_executables_parameters(executables_);
   EXPECT_EQ(before.activity.activations, 2u);
   IREE_ASSERT_OK(loom_serve_residency_cache_trim(
-      loom_serve_device_residency_cache(device_owner_), 0));
+      loom_serve_pool_residency_cache(storage_owner_), 0));
   EXPECT_EQ(
       loom_serve_executables_parameters(executables_).memory.committed_bytes,
       before.memory.committed_bytes);
@@ -881,7 +882,7 @@ class ArenaExecutablesTest : public ExecutablesTest {
   iree_status_t CreateArena(uint64_t banks) {
     return Create(
         4, 16 * 1024 * 1024, 16, 1024 * 1024, true,
-        banks * loom_serve_device_weight_geometry(device_owner_).minimum_size);
+        banks * loom_serve_pool_weight_geometry(storage_owner_).minimum_size);
   }
 
   iree_status_t BeginBanks(const std::vector<std::string>& paths,
@@ -931,7 +932,7 @@ class ArenaExecutablesTest : public ExecutablesTest {
     iree_hal_buffer_release(workspace_);
     workspace_ = nullptr;
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-        loom_serve_device_storage_pool(device_owner_),
+        loom_serve_pool_storage(storage_owner_),
         iree_hal_make_pool_reservation_request(payload.size(), 8),
         iree_infinite_timeout(), &workspace_));
     auto* residency = loom_serve_executables_residency(executables_);

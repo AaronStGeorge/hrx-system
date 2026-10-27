@@ -173,7 +173,7 @@ TEST_P(WeightPackingTest,
   loom_serve_memory_range_t range = {};
   if (pool_) {
     IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-        pool_, loom_serve_device_weight_geometry(device_owner_), 2 * kSlabBytes,
+        pool_, loom_serve_pool_weight_geometry(storage_owner_), 2 * kSlabBytes,
         256, &state_statistics_, &state_));
     range = {state_, 0, 2 * kSlabBytes};
     // Either resource fits alone. Their union plus activation staging does
@@ -235,12 +235,12 @@ TEST_P(WeightPackingTest,
                                    "packing_policy.loom"));
   EXPECT_EQ(compilation_.commands, 3u);
   const auto initial_workspace =
-      loom_serve_device_memory_statistics(device_owner_).workspace;
+      loom_serve_pool_statistics(storage_owner_).workspace;
   IREE_ASSERT_OK(loom_serve_weights_activate(plans_[0]));
   IREE_ASSERT_OK(loom_serve_weights_import_readiness(plans_[0], execution_));
   CheckPackedOn(execution_);
   const auto packed_workspace =
-      loom_serve_device_memory_statistics(device_owner_).workspace;
+      loom_serve_pool_statistics(storage_owner_).workspace;
   EXPECT_EQ(packed_workspace.reserve_count,
             initial_workspace.reserve_count + 1);
   EXPECT_EQ(packed_workspace.release_count,
@@ -253,8 +253,7 @@ TEST_P(WeightPackingTest,
   EXPECT_EQ(before.prepared_bytes, 6u * 24u);
   EXPECT_EQ(before.groups, 12u);
   IREE_ASSERT_OK(loom_serve_device_create_execution(
-      device_owner_, loom_serve_device_pool(device_owner_),
-      &shared_execution_));
+      device_owner_, storage_owner_, &shared_execution_));
   IREE_ASSERT_OK(loom_serve_weights_activate(plans_[0]));
   IREE_ASSERT_OK(
       loom_serve_weights_import_readiness(plans_[0], shared_execution_));
@@ -266,7 +265,7 @@ TEST_P(WeightPackingTest,
   EXPECT_EQ(after.groups, before.groups);
   EXPECT_EQ(compilation_.commands, 3u);
   const auto warm_workspace =
-      loom_serve_device_memory_statistics(device_owner_).workspace;
+      loom_serve_pool_statistics(storage_owner_).workspace;
   EXPECT_EQ(warm_workspace.reserve_count, packed_workspace.reserve_count);
   EXPECT_EQ(warm_workspace.release_count, packed_workspace.release_count);
 }
@@ -297,8 +296,7 @@ TEST_P(WeightPackingTest,
     IREE_ASSERT_OK(loom_serve_activation_advance(
         activation, LOOM_SERVE_ACTIVATION_FLAG_CANCEL, &phase));
     EXPECT_EQ(phase, LOOM_SERVE_ACTIVATION_LOADING);
-    IREE_ASSERT_OK(
-        loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
+    IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
   }
   // The outer physical owner services cold staging while joining the accepted
   // activation; its completion callback still owns the cancellation boundary.
@@ -312,12 +310,10 @@ TEST_P(WeightPackingTest,
   CheckPackedOn(execution_);
   EXPECT_EQ(loom_serve_weights_activity(plans_[0]).activations, 1u);
   loom_serve_residency_release(residencies_[0]);
-  IREE_ASSERT_OK(
-      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
   DrainNativeReturns();
-  EXPECT_EQ(loom_serve_device_memory_statistics(device_owner_)
-                .workspace.bytes_committed,
-            0u);
+  EXPECT_EQ(
+      loom_serve_pool_statistics(storage_owner_).workspace.bytes_committed, 0u);
   // Elastic eviction drops only the result backing, not indexes or commands.
   IREE_ASSERT_OK(loom_serve_residency_acquire(residencies_[0]));
   CheckPackedOn(execution_);

@@ -53,31 +53,8 @@ class PoolBindingTest : public SourceEmbeddingServiceTest {
   }
 
   void CreatePool(loom_serve_pool_t** out_pool) {
-    iree_hal_pool_family_access_t families[4];
-    iree_host_size_t family_count = 0;
-    for (iree_host_size_t i = 0; i < 2; ++i) {
-      auto* device = loom_serve_device_group_at(group_, i);
-      const auto* dispatch =
-          iree_hal_queue_family(loom_serve_device_dispatch_queue(device));
-      const auto* transfer =
-          iree_hal_queue_family(loom_serve_device_transfer_queue(device));
-      families[family_count++] = {
-          .family = dispatch,
-          .usage = IREE_HAL_BUFFER_USAGE_STORAGE |
-                   IREE_HAL_BUFFER_USAGE_TRANSFER |
-                   IREE_HAL_BUFFER_USAGE_DISPATCH_INDIRECT_PARAMETERS,
-      };
-      if (dispatch != transfer) {
-        families[family_count++] = {
-            .family = transfer,
-            .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
-        };
-      }
-    }
-    const iree_hal_pool_scope_t scope = {
-        .family_count = family_count,
-        .families = families,
-    };
+    const std::string name =
+        "pool" + std::to_string(loom_serve_device_group_pool_count(group_));
     const loom_serve_pool_options_t options = {
         .elastic = true,
         .weight_slab_size = 4096,
@@ -85,8 +62,7 @@ class PoolBindingTest : public SourceEmbeddingServiceTest {
         .memory_limit = 8192,
     };
     IREE_ASSERT_OK(loom_serve_device_group_create_pool(
-        group_, scope, loom_serve_device_transfer_queue(device_), &options,
-        out_pool));
+        group_, {iree_make_cstring_view(name.c_str()), 3}, &options, out_pool));
   }
 
   void Load(const std::string& package, loom_serve_device_t* device,
@@ -242,6 +218,10 @@ TEST_F(PoolBindingTest, LastResultOutlivesEveryModelInItsPool) {
 }
 
 TEST_F(PoolBindingTest, TrimReclaimsOnlyTheSelectedPoolAndPreservesReload) {
+  const auto* tokenizer = loom_serve_finite_model_tokenizer(producer_);
+  ASSERT_NE(tokenizer, nullptr);
+  EXPECT_EQ(loom_serve_finite_model_tokenizer(peer_), tokenizer);
+  EXPECT_EQ(loom_serve_finite_model_tokenizer(model_), tokenizer);
   for (const auto& [model, pool] :
        {std::pair{producer_, shared_}, std::pair{model_, isolated_}}) {
     ASSERT_NO_FATAL_FAILURE(Prepare(model));
@@ -266,6 +246,13 @@ TEST_F(PoolBindingTest, TrimReclaimsOnlyTheSelectedPoolAndPreservesReload) {
   EXPECT_EQ(loom_serve_pool_statistics(shared_).retained.committed_bytes, 0u);
   EXPECT_EQ(loom_serve_pool_statistics(isolated_).retained.committed_bytes,
             before.retained.committed_bytes);
+
+  // Storage eviction and code trimming preserve live tokenizer borrowers,
+  // including models on another execution device or in another storage pool.
+  loom_serve_device_trim_programs(device_);
+  EXPECT_EQ(loom_serve_finite_model_tokenizer(producer_), tokenizer);
+  EXPECT_EQ(loom_serve_finite_model_tokenizer(peer_), tokenizer);
+  EXPECT_EQ(loom_serve_finite_model_tokenizer(model_), tokenizer);
 
   ASSERT_NO_FATAL_FAILURE(Prepare(producer_));
   loom_serve_residency_admission_t admission;

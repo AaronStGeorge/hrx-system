@@ -10,6 +10,7 @@
 namespace {
 
 const iree_string_view_t kDeviceNames[] = {IREE_SV("device")};
+const loom_serve_pool_binding_t kPools[] = {{IREE_SV("pool"), 1}};
 
 using loom_serve::testing::HttpRouterTest;
 using loom_serve::testing::loom_serve_test_model_service_t;
@@ -221,6 +222,8 @@ class HttpRouterVariantTest : public HttpRouterTest {
         .self = &model_,
         .kinds = 1u << LOOM_SERVE_MODEL_KIND_EMBEDDING,
         .device_names = {1, kDeviceNames},
+        .pool_count = 1,
+        .pools = kPools,
         .create = loom_serve_test_variant_dependency_t::Create,
     };
     HttpRouterTest::SetUp();

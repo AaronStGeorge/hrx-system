@@ -15,7 +15,7 @@ empty startup, registration, output and removal with an installed executable.
 [Configuration](configuration.h) parses one complete JSON model document for
 both startup files and HTTP registration. The definition contains program and
 asset references, modality capacities and source-owned options. The deployment
-adds its name, admission state and device-group index. Parsing copies the
+adds its name, admission state, execution-device key, and storage-pool key. Parsing copies the
 document's strings and preserves authored references separately from their
 local directory base; it does not load numerical programs or weights.
 
@@ -43,8 +43,11 @@ require activity output, and publish no HTTP inference endpoint. Compound source
 can satisfy both recognition output families without a second scheduler or model
 registration. Source capability checks occur before the service is published.
 
-Each deployment selects a member of one application-owned device group. The
-group and its host outlive every registration. Weight pinning, activation and
+Each deployment selects a member of one application-owned device group and an
+independent storage pool qualified for that device. Several devices may share
+one pool; several pools may serve one device with independent allowances and
+reclamation policies. The group owns both inventories and outlives every
+registration. Weight pinning, activation and
 deactivation operate through the registration's parameter owner without
 discarding mutable sessions. A failed platform release retains the owning
 resources and shared parents; it never authorizes callback-thread destruction
@@ -103,7 +106,8 @@ readiness to exercise disconnect, removal, shutdown and saturated credit.
 ## Observation and failures
 
 [Resources](resources.h) publishes the application's listeners, immutable
-device identities and serving-managed memory accounting. Status and metrics
+device identities and independent pool identities/accounting. Models reference
+both selected owners; shared pools are sampled once. Status and metrics
 copy owner state without polling hardware or waiting for device completion.
 `/healthz` and `/readyz` report server availability, not readiness of every
 registered model; `/v1/status` carries each model's preparation and failure

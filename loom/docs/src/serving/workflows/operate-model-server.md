@@ -181,7 +181,7 @@ loom-serve --device=amdgpu --model=/srv/models/scout/model.json \
 ```
 
 Each duration is independent; `0` disables that policy. Workspace expiry applies
-to each device's shared command pool after its last allocation actually retires.
+to each pool's shared command workspace after its last allocation actually retires.
 Weight expiry starts when a model's last invocation pin or explicit parameter
 pin is released. Polling status, receiving telemetry, and leaving a client
 connected do not keep idle resources hot. Explicitly pinned weights and active
@@ -194,10 +194,10 @@ Registrations, sessions, KV/prefix history, and named checkpoints stay intact:
 these policies release reloadable backing, not conversation history. They
 therefore need not reduce an idle process to its minimum possible footprint.
 
-With `--devices=devices.json`, each entry supplies its own `workspace_idle_ms`
+With `--devices=devices.json`, each pool supplies its own `workspace_idle_ms`
 and `parameter_idle_ms` instead of global flags. `/v1/status` publishes the
-durations in each `server.resources.devices` entry's `idle.workspace_ms` and
-`idle.parameter_ms`. Device workspace commitment and per-model
+durations in each `server.resources.pools` entry's `idle.workspace_ms` and
+`idle.parameter_ms`. Pool workspace commitment and per-model
 parameter activity/accounting show reclamation and subsequent reloads. Expiry
 checks use the smaller enabled duration, capped at one second; physical release
 finishes asynchronously. When nothing awaits retirement or expiry, maintenance
@@ -286,7 +286,7 @@ Process limits and model capacities constrain different resources:
 | Text `context_capacity` | Logical token ceiling of one context. |
 | Text `pool_capacity` | Shared logical KV capacity, independent of maximum context times row count. |
 | Text `variant_capacity` | Native choices, including the original, pending JITs and failed attempts. |
-| `--memory_bytes` | Shared physical parameter/state/workspace backing under elastic policy on one device. |
+| Pool `memory_bytes` / shortcut `--memory_bytes` | Shared physical parameter/state/workspace backing under the selected pool's elastic policy. |
 
 Holding capacity stays below connection capacity so held inference cannot
 consume every control connection. Live log streams and waiting variant-management
@@ -303,13 +303,13 @@ Zero selects FIFO. This bounds successful overtakes, not elapsed waiting time:
 a slow active reader can retain its reservation.
 
 Elastic parameters, mutable state, invocation input/output, and command scratch
-share one physical pool. Admission uses the model's prepared working-set peak
+share the deployment's selected pool. Admission uses the model's prepared working-set peak
 and outstanding work, rather than probing free HAL memory. Command scratch can
 be reused after its ordered release; an escaping output remains charged until
 both its producer and final consumer retire, even if its model is removed.
 
 Elastic pressure first reclaims idle workspace, then idle unpinned weights and
-eligible idle text history across models sharing the same device pool. Accepted
+eligible idle text history across models sharing the same pool. Accepted
 work, prepared continuations, and explicit checkpoint references remain protected.
 An evicted session can replay its full input history; a session name is not
 durable storage.
@@ -320,12 +320,12 @@ overload rather than reclaiming live storage.
 ## Trim without changing the budget
 
 ```sh
-curl --fail --silent --show-error http://127.0.0.1:8080/v1/devices/trim \
-  -H 'Content-Type: application/json' -d '{"device":"device","target_bytes":0}'
+curl --fail --silent --show-error http://127.0.0.1:8080/v1/pools/trim \
+  -H 'Content-Type: application/json' -d '{"pool":"pool","target_bytes":0}'
 ```
 
-Here `device` is the key assigned by the single-device shortcut. With a named
-device configuration, use the key shown in `/v1/status`, such as `gpu0`.
+Here `pool` is the key assigned by the single-device shortcut. With a named
+configuration, use a pool key shown in `/v1/status`, such as `interactive`.
 This requests reduction of eligible serving-managed commitment toward the
 target. It releases idle workspace and unpinned reloadable parameters, not
 active work or retained conversations. HTTP 200 returns current accounting,
@@ -333,6 +333,21 @@ including accepted native releases that have not completed. `/v1/status`
 reports subsequent completion; protected storage can prevent reaching the target.
 Fixed weights are not reclaimable. Trim does not change the configured limit or
 discard compiled code.
+
+Compiled products belong to execution devices, independently of the storage
+pools used by their models. To discard cached generations with no live model
+catalog, select the device separately:
+
+```sh
+curl --fail --silent --show-error http://127.0.0.1:8080/v1/devices/trim \
+  -H 'Content-Type: application/json' -d '{"device":"device"}'
+```
+
+Here `device` is the single-device shortcut's key. This operation neither
+changes pool residency nor interrupts live models. It also prunes unused
+tokenizers from the group-wide cache; live models and pending loads preserve
+their tokenizer references. A subsequent registration may need to compile
+products or reload tokenizers that were removed.
 
 The [observation workflow](observe-model-server.md) explains shared backing and
 its workspace subset. Adding those counters double-counts workspace; neither

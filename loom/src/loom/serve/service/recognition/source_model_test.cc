@@ -38,8 +38,8 @@ class SourceRecognitionModelTest : public ::testing::Test {
 
   void SetUp() override {
     auto options = loom_serve_test_application_options_default();
-    options.backing = FLAG_test_elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
-                                        : LOOM_SERVE_DEVICE_BACKING_FIXED;
+    options.backing = FLAG_test_elastic ? LOOM_SERVE_POOL_BACKING_ELASTIC
+                                        : LOOM_SERVE_POOL_BACKING_FIXED;
     options.slab_size = FLAG_test_elastic ? kRecognitionSlabSize : 0;
     options.memory_limit = FLAG_test_elastic ? 64 * 1024 : 0;
     loom_serve_test_application_t* application = nullptr;
@@ -48,23 +48,6 @@ class SourceRecognitionModelTest : public ::testing::Test {
     device_ = loom_serve_test_application_device_at(application, 0);
     auto* group = loom_serve_test_application_device_group(application);
     if (loom_serve_device_group_pool_count(group) == 1) {
-      const auto* dispatch =
-          iree_hal_queue_family(loom_serve_device_dispatch_queue(device_));
-      const auto* transfer =
-          iree_hal_queue_family(loom_serve_device_transfer_queue(device_));
-      const iree_hal_pool_family_access_t families[] = {
-          {
-              .family = dispatch,
-              .usage = IREE_HAL_BUFFER_USAGE_STORAGE |
-                       IREE_HAL_BUFFER_USAGE_TRANSFER |
-                       IREE_HAL_BUFFER_USAGE_DISPATCH_INDIRECT_PARAMETERS,
-          },
-          {.family = transfer, .usage = IREE_HAL_BUFFER_USAGE_TRANSFER},
-      };
-      const iree_hal_pool_scope_t scope = {
-          .family_count = dispatch == transfer ? 1u : 2u,
-          .families = families,
-      };
       const loom_serve_pool_options_t pool_options = {
           .elastic = FLAG_test_elastic,
           .weight_slab_size = options.slab_size,
@@ -72,12 +55,12 @@ class SourceRecognitionModelTest : public ::testing::Test {
           .memory_limit = options.memory_limit,
       };
       IREE_ASSERT_OK(loom_serve_device_group_create_pool(
-          group, scope, loom_serve_device_transfer_queue(device_),
-          &pool_options, &storage_owner_));
+          group, {IREE_SV("recognition"), 1}, &pool_options, &storage_owner_));
     } else {
       storage_owner_ = loom_serve_device_group_pool_at(group, 1);
     }
-    default_memory_ = loom_serve_device_memory_statistics(device_);
+    unused_owner_ = loom_serve_device_group_pool_at(group, 0);
+    default_memory_ = loom_serve_pool_statistics(unused_owner_);
     const auto directory =
         std::filesystem::path(FLAG_model_source).parent_path().string();
     const iree_string_view_t sources[] = {IREE_SVL("generate.loom")};
@@ -93,7 +76,7 @@ class SourceRecognitionModelTest : public ::testing::Test {
     };
     IREE_ASSERT_OK(loom_serve_recognition_model_allocate(
         device_, storage_owner_, &model_options, allocator_, &model_));
-    const auto prepared_memory = loom_serve_device_memory_statistics(device_);
+    const auto prepared_memory = loom_serve_pool_statistics(unused_owner_);
     EXPECT_EQ(prepared_memory.storage.bytes_reserved,
               default_memory_.storage.bytes_reserved);
     EXPECT_EQ(prepared_memory.retained.reserved_bytes,
@@ -123,7 +106,7 @@ class SourceRecognitionModelTest : public ::testing::Test {
       EXPECT_GT(deferred_release_count_, 0u);
     }
     IREE_EXPECT_OK(loom_serve_recognition_model_free(model_));
-    const auto memory = loom_serve_device_memory_statistics(device_);
+    const auto memory = loom_serve_pool_statistics(unused_owner_);
     EXPECT_EQ(memory.storage.bytes_reserved,
               default_memory_.storage.bytes_reserved);
     EXPECT_EQ(memory.storage.bytes_committed,
@@ -258,6 +241,8 @@ class SourceRecognitionModelTest : public ::testing::Test {
   loom_serve_device_t* device_ = nullptr;
   // Independent process-owned pool selected for weights, rows, and workspace.
   loom_serve_pool_t* storage_owner_ = nullptr;
+  // Unselected pool whose accounting must remain unchanged.
+  loom_serve_pool_t* unused_owner_ = nullptr;
   // Device-default pool must remain untouched throughout the model lifecycle.
   loom_serve_pool_statistics_t default_memory_ = {};
   loom_serve_recognition_model_t* model_ = nullptr;

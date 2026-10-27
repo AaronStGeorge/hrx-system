@@ -12,24 +12,36 @@
 extern "C" {
 #endif
 
-// Machine-local device declarations, independent of portable model programs.
+typedef struct loom_serve_pool_configuration_t {
+  // Machine-local key and resolved consumer membership.
+  loom_serve_pool_binding_t binding;
+  // Storage, admission, and reclamation policy for this owner.
+  loom_serve_pool_options_t options;
+} loom_serve_pool_configuration_t;
+
+// Machine-local device and pool declarations, independent of model programs.
 // Native drivers are resolved by the application after parsing succeeds.
 typedef struct loom_serve_device_configuration_t {
   // Allocator owning decoded strings.
   iree_allocator_t host_allocator;
   // Single allocation holding all decoded strings.
   char* strings;
-  // Number of populated entries in both arrays below.
+  // Number of populated device entries.
   iree_host_size_t count;
   // Native creation inputs; driver remains NULL until application resolution.
   loom_serve_device_options_t options[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
-  // Independent owner-side idle policies in the same order as options.
-  loom_serve_pool_idle_policy_t idle[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
+  // Number of independent pool owners, unrelated to device count.
+  iree_host_size_t pool_count;
+  // Owned pool declarations; each membership bit indexes options above.
+  loom_serve_pool_configuration_t* pools;
+  // Owned idle policies in pool declaration order.
+  loom_serve_pool_idle_policy_t* idle;
 } loom_serve_device_configuration_t;
 
-// Parses {"devices":{"key":{"uri":"...",...}}}. Device entries support
+// Parses independent nonempty "devices" and "pools" maps. Device entries
+// contain a HAL "uri". Pool entries name a nonempty "devices" array and support
 // pool_backing, weight_slab_bytes, state_slab_bytes, memory_bytes,
-// workspace_idle_ms, and parameter_idle_ms. Defaults are elastic backing,
+// workspace_idle_ms, and parameter_idle_ms. Pool defaults are elastic backing,
 // 1 GiB weight slabs, 64 MiB state slabs, no byte limit, and disabled expiry.
 // Byte counts accept integer JSON numbers or strings parsed by
 // iree_string_view_parse_device_size, such as "64gib". Idle durations remain
@@ -41,8 +53,8 @@ iree_status_t loom_serve_device_configuration_initialize(
     iree_string_view_t json, iree_allocator_t host_allocator,
     loom_serve_device_configuration_t* out_configuration);
 
-// Constructs the single-device convenience declaration, named "device", with
-// the same defaults as JSON. Copies the URI; does not resolve or open hardware.
+// Constructs one device named "device" and one pool named "pool", with the
+// same defaults as JSON. Copies the URI; does not resolve or open hardware.
 iree_status_t loom_serve_device_configuration_initialize_uri(
     iree_string_view_t uri, iree_allocator_t host_allocator,
     loom_serve_device_configuration_t* out_configuration);

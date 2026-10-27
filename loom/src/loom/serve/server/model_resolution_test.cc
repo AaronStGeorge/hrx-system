@@ -16,6 +16,7 @@
 namespace {
 
 const iree_string_view_t kDeviceNames[] = {IREE_SV("device")};
+const loom_serve_pool_binding_t kPools[] = {{IREE_SV("pool"), 1}};
 
 constexpr char kCard[] = R"json({
   "schema_version": 1,
@@ -100,12 +101,18 @@ class ModelResolutionTest : public ::testing::Test {
 
 TEST_F(ModelResolutionTest, ResolvesDefaultsOnWorkerAndOwnsResult) {
   std::string deployment = kDeployment;
-  deployment.insert(deployment.find("\"name\""), R"("device":"gpu1",)");
+  deployment.insert(deployment.find("\"name\""),
+                    R"("device":"gpu1","pool":"shared",)");
   Initialize(kCard, deployment);
   const iree_string_view_t names[] = {IREE_SV("gpu0"), IREE_SV("gpu1")};
   IREE_ASSERT_OK(loom_serve_model_configuration_resolve_device(
       &configuration_, {IREE_ARRAYSIZE(names), names},
       &configuration_.device_index));
+  const loom_serve_pool_binding_t pools[] = {{IREE_SV("shared"), 3},
+                                             {IREE_SV("gpu0-only"), 1}};
+  IREE_ASSERT_OK(loom_serve_model_configuration_resolve_pool(
+      &configuration_, IREE_ARRAYSIZE(pools), pools,
+      configuration_.device_index, &configuration_.pool_index));
   loom_serve_model_resolution_t* resolution = nullptr;
   IREE_ASSERT_OK(loom_serve_model_resolution_start(
       Sink(), &configuration_, Observer(), allocator_, &resolution));
@@ -123,6 +130,8 @@ TEST_F(ModelResolutionTest, ResolvesDefaultsOnWorkerAndOwnsResult) {
   loom_serve_model_configuration_deinitialize(&configuration_);
   EXPECT_EQ(resolved.device_index, 1u);
   EXPECT_EQ(std::string(resolved.device.data, resolved.device.size), "gpu1");
+  EXPECT_EQ(resolved.pool_index, 0u);
+  EXPECT_EQ(std::string(resolved.pool.data, resolved.pool.size), "shared");
   EXPECT_EQ(resolved.text.rows, 2u);
   EXPECT_EQ(resolved.text.context_capacity, 64u);
   EXPECT_EQ(resolved.text.prefill_capacity, 32u);
@@ -271,6 +280,8 @@ TEST_F(ModelResolutionTest, RemovalJoinsResolutionBeforeReleasingDeclaration) {
   const loom_serve_registration_factory_t factory = {
       .kinds = 1u << LOOM_SERVE_MODEL_KIND_TEXT,
       .device_names = {1, kDeviceNames},
+      .pool_count = 1,
+      .pools = kPools,
       .resolution_sink = Sink(),
       .create =
           +[](void*, const loom_serve_model_configuration_t*,

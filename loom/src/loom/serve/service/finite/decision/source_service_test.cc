@@ -44,8 +44,7 @@ class SourceDecisionServiceTest : public ::testing::Test {
         .options = IREE_SV("{\"batch_units\":64}"),
     };
     IREE_ASSERT_OK(loom_serve_finite_model_allocate(
-        device_, loom_serve_device_pool(device_), &options, host_allocator_,
-        output));
+        device_, storage_owner_, &options, host_allocator_, output));
   }
   void SetUp() override {
     const char* model_source = std::getenv("LOOM_SERVE_TEST_MODEL_SOURCE");
@@ -65,13 +64,15 @@ class SourceDecisionServiceTest : public ::testing::Test {
     resources_.device_group =
         loom_serve_test_application_device_group(application);
     device_ = loom_serve_test_application_device_at(application, 0);
+    storage_owner_ = loom_serve_device_group_pool_at(
+        loom_serve_test_application_device_group(application), 0);
     ASSERT_NO_FATAL_FAILURE(CreateModel(model_source_.c_str(), &models_[0]));
     IREE_ASSERT_OK(loom_serve_finite_service_allocate(
         host_, models_[0], loom_serve_decision_protocol(), IREE_SV("decisions"),
         16, 16, 0, nullptr, host_allocator_, &services_[0]));
     interfaces_[0] = loom_serve_finite_service_interface(services_[0]);
     EXPECT_EQ(interfaces_[0].capacity_domain,
-              loom_serve_device_residency_cache(device_));
+              loom_serve_pool_residency_cache(storage_owner_));
     const loom_serve_wake_callback_t observer = {
         [](void* self) {
           auto* test = static_cast<SourceDecisionServiceTest*>(self);
@@ -215,6 +216,8 @@ class SourceDecisionServiceTest : public ::testing::Test {
   loom_serve_resources_t resources_ = {};
   // Borrowed device record within the application group.
   loom_serve_device_t* device_ = nullptr;
+  // Explicit storage owner selected independently from execution placement.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Independently compiled source models, not mock callbacks.
   loom_serve_finite_model_t* models_[2] = {};
   // Bounded modality services borrowing the corresponding models.

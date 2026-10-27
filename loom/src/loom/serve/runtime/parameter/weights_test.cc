@@ -70,18 +70,24 @@ class WeightDeviceEnvironment : public ::testing::Environment {
           .uri = WeightDeviceUri()[0]
                      ? iree_make_cstring_view(WeightDeviceUri())
                      : loom_serve_test_device()->device_uri,
-          .backing = elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
-                             : LOOM_SERVE_DEVICE_BACKING_FIXED,
+      };
+      const loom_serve_pool_options_t pool_options = {
+          .elastic = elastic,
           .weight_slab_size = slab_size,
           .state_slab_size = slab_size,
           .memory_limit = memory_limit,
       };
       status = loom_serve_device_group_allocate(
           host_, 1, &options, entry->allocator.allocator(), &entry->group);
+      if (iree_status_is_ok(status)) {
+        loom_serve_pool_t* pool = nullptr;
+        status = loom_serve_device_group_create_pool(
+            entry->group, {IREE_SV("pool"), 1}, &pool_options, &pool);
+      }
     }
     if (iree_status_is_ok(status)) {
-      status =
-          entry->allocator.Observe(loom_serve_device_group_at(entry->group, 0));
+      status = entry->allocator.Observe(
+          loom_serve_device_group_pool_at(entry->group, 0));
     }
     if (iree_status_is_ok(status)) {
       *out_group = entry->group;
@@ -274,11 +280,10 @@ TEST_P(WeightsTest, PreparationPublishesOnlyRecordableRootAddresses) {
   const auto root = Root(0, 0);
   auto allocate = [&] {
     return loom_serve_weights_allocate(
-        device_, transfer_, dispatch_,
-        loom_serve_device_storage_pool(device_owner_), pool_,
-        loom_serve_device_weight_geometry(device_owner_), nullptr,
-        loom_serve_device_workspace(device_owner_), 0, 1, &root,
-        host_allocator_, &plans_[plan_count_++]);
+        device_, transfer_, dispatch_, loom_serve_pool_storage(storage_owner_),
+        pool_, loom_serve_pool_weight_geometry(storage_owner_), nullptr,
+        loom_serve_pool_workspace(storage_owner_), 0, 1, &root, host_allocator_,
+        &plans_[plan_count_++]);
   };
   if (!pool_) {
     // Allocation is accepted while its native dependency is held. Its later
@@ -321,8 +326,7 @@ TEST_P(WeightsTest, SharedActivationImportsReadinessWithoutReloading) {
   const auto root = Root(0, 0);
   IREE_ASSERT_OK(CreateRoots(0, 1, &root, {path_.path()}));
   IREE_ASSERT_OK(loom_serve_device_create_execution(
-      device_owner_, loom_serve_device_pool(device_owner_),
-      &shared_execution_));
+      device_owner_, storage_owner_, &shared_execution_));
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       device_, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
       IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &consumer_gate_));
@@ -490,11 +494,10 @@ TEST_P(WeightsTest, InitialBackingRetirementMatchesAcceptedWork) {
   const auto root = Root(0, 0);
   auto allocate_and_release_view = [&] {
     IREE_ASSERT_OK(loom_serve_weights_allocate(
-        device_, transfer_, dispatch_,
-        loom_serve_device_storage_pool(device_owner_), pool_,
-        loom_serve_device_weight_geometry(device_owner_), nullptr,
-        loom_serve_device_workspace(device_owner_), 0, 1, &root,
-        host_allocator_, &plans_[0]));
+        device_, transfer_, dispatch_, loom_serve_pool_storage(storage_owner_),
+        pool_, loom_serve_pool_weight_geometry(storage_owner_), nullptr,
+        loom_serve_pool_workspace(storage_owner_), 0, 1, &root, host_allocator_,
+        &plans_[0]));
     iree_hal_buffer_release(buffers_[0][0]);
     buffers_[0][0] = nullptr;
   };
@@ -567,7 +570,7 @@ TEST_P(WeightsTest,
 }
 
 TEST_P(WeightsTest, SharedWorkingSetsAdmitAtomicallyAndEvictOnlyIdleGroups) {
-  auto* cache = loom_serve_device_residency_cache(device_owner_);
+  auto* cache = loom_serve_pool_residency_cache(storage_owner_);
   WriteCheckpoint(adapter_path_.path(), 100);
   const char* stages[] = {"target", "raw", "raw"};
   for (iree_host_size_t i = 0; i < 3; ++i) {
@@ -581,8 +584,7 @@ TEST_P(WeightsTest, SharedWorkingSetsAdmitAtomicallyAndEvictOnlyIdleGroups) {
         cache, 1, &plans_[i], host_allocator_, &parameter_groups_[i]));
   }
   IREE_ASSERT_OK(loom_serve_device_create_execution(
-      device_owner_, loom_serve_device_pool(device_owner_),
-      &shared_execution_));
+      device_owner_, storage_owner_, &shared_execution_));
   loom_serve_residency_group_t* first[] = {parameter_groups_[0],
                                            parameter_groups_[1]};
   loom_serve_residency_group_t* second[] = {parameter_groups_[0],
@@ -715,7 +717,7 @@ TEST_P(WeightsTest, CachedConsumersSurviveBackingReuseAndPreparationReplay) {
   loom_serve_virtual_buffer_t* other = nullptr;
   loom_serve_memory_statistics_t other_statistics = {};
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool_, loom_serve_device_state_geometry(device_owner_), 2 * kSlabBytes,
+      pool_, loom_serve_pool_state_geometry(storage_owner_), 2 * kSlabBytes,
       256, &other_statistics, &other));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(other, 0, 2 * kSlabBytes));
   // Another allocation consumes every physical byte the model gave up.
@@ -1135,7 +1137,7 @@ TEST_P(WeightsTest, PressureTurnSurvivesMutableStateNativeReturn) {
   IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residencies_[0]));
   ASSERT_NO_FATAL_FAILURE(Run(0, 70));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool_, loom_serve_device_state_geometry(device_owner_), 2 * kSlabBytes,
+      pool_, loom_serve_pool_state_geometry(storage_owner_), 2 * kSlabBytes,
       256, &state_statistics_, &state_));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(state_, 0, kSlabBytes));
   loom_serve_residency_admission_t admission;
@@ -1237,7 +1239,7 @@ TEST_P(WeightsTest, WarmAdmissionCollectsCompletedPeerRelease) {
   }
   IREE_ASSERT_OK(loom_serve_residency_acquire(residencies_[0]));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool_, loom_serve_device_state_geometry(device_owner_), 2 * kSlabBytes,
+      pool_, loom_serve_pool_state_geometry(storage_owner_), 2 * kSlabBytes,
       256, &state_statistics_, &state_));
   auto* cache = ResidencyCache();
   bool admitted = false;
@@ -1360,7 +1362,7 @@ TEST_P(WeightsTest, PinnedWeightsDeferIdleCacheReclamationUntilItCanHelp) {
   IREE_ASSERT_OK(Register(0, 0, 2));
   IREE_ASSERT_OK(Register(1, 0, 0));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool_, loom_serve_device_state_geometry(device_owner_), kSlabBytes, 256,
+      pool_, loom_serve_pool_state_geometry(storage_owner_), kSlabBytes, 256,
       &state_statistics_, &state_));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(state_, 0, kSlabBytes));
   struct loom_serve_test_weight_cache_owner_t {
@@ -1449,7 +1451,7 @@ TEST_P(WeightsTest, MutableGrowthReclaimsIdleParametersWithoutDiscardingState) {
     return;
   }
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool_, loom_serve_device_state_geometry(device_owner_), 2 * kSlabBytes,
+      pool_, loom_serve_pool_state_geometry(storage_owner_), 2 * kSlabBytes,
       256, &state_statistics_, &state_));
   IREE_ASSERT_OK(loom_serve_residency_acquire(residencies_[0]));
   IREE_EXPECT_STATUS_IS(
@@ -1537,7 +1539,7 @@ TEST_P(WeightsTest,
   iree_hal_buffer_release(workspace_);
   workspace_ = nullptr;
   IREE_ASSERT_OK(loom_serve_execution_drain(execution_));
-  const auto before = loom_serve_device_memory_statistics(device_owner_);
+  const auto before = loom_serve_pool_statistics(storage_owner_);
   EXPECT_EQ(before.retained.committed_bytes, GetParam() ? 2 * kSlabBytes : 0);
   if (GetParam()) {
     // Under the two-slab cap, scratch and the pinned model share the domain;
@@ -1547,22 +1549,20 @@ TEST_P(WeightsTest,
   // The shared workspace keeps its registered slab geometry after a trim.
   // Earlier streaming cases may have registered a larger geometry.
   EXPECT_GE(before.workspace.bytes_committed, kSlabBytes);
-  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(device_owner_),
-                                      GetParam() ? kSlabBytes : 0));
+  IREE_ASSERT_OK(
+      loom_serve_pool_trim(storage_owner_, GetParam() ? kSlabBytes : 0));
   DrainNativeReturns();
-  EXPECT_EQ(loom_serve_device_memory_statistics(device_owner_)
-                .workspace.bytes_committed,
-            0u);
+  EXPECT_EQ(
+      loom_serve_pool_statistics(storage_owner_).workspace.bytes_committed, 0u);
   ASSERT_NO_FATAL_FAILURE(Run(0, 70));
 
   IREE_ASSERT_OK(
       loom_serve_execution_alloca(execution_, 1, &request, &workspace_));
   // The model's real command completion follows allocation on the work chain.
   ASSERT_NO_FATAL_FAILURE(Run(0, 70));
-  IREE_ASSERT_OK(loom_serve_pool_trim(loom_serve_device_pool(device_owner_),
-                                      kSlabBytes - 1));
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, kSlabBytes - 1));
   DrainNativeReturns();
-  const auto pinned = loom_serve_device_memory_statistics(device_owner_);
+  const auto pinned = loom_serve_pool_statistics(storage_owner_);
   EXPECT_EQ(pinned.workspace.bytes_committed, before.workspace.bytes_committed);
   EXPECT_EQ(pinned.workspace.reservation_count, 1u);
   EXPECT_EQ(pinned.retained.committed_bytes, GetParam() ? 2 * kSlabBytes : 0);
@@ -1576,15 +1576,13 @@ TEST_P(WeightsTest,
   iree_hal_buffer_release(workspace_);
   workspace_ = nullptr;
   IREE_ASSERT_OK(loom_serve_execution_drain(execution_));
-  IREE_ASSERT_OK(
-      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
   DrainNativeReturns();
-  const auto cold = loom_serve_device_memory_statistics(device_owner_);
+  const auto cold = loom_serve_pool_statistics(storage_owner_);
   EXPECT_EQ(cold.retained.committed_bytes, 0u);
   EXPECT_EQ(cold.workspace.bytes_committed, 0u);
   ASSERT_NO_FATAL_FAILURE(RunPinned(1, 70));
-  EXPECT_EQ(loom_serve_device_memory_statistics(device_owner_)
-                .retained.committed_bytes,
+  EXPECT_EQ(loom_serve_pool_statistics(storage_owner_).retained.committed_bytes,
             GetParam() ? kSlabBytes : 0);
 }
 
@@ -1600,7 +1598,7 @@ TEST_P(SmallRootWeightsTest, SmallRootCommitsOnlyItsNativeExtent) {
   IREE_ASSERT_OK(Register(0, 0, 1));
   ASSERT_NO_FATAL_FAILURE(RunPinned(0, 70));
   if (GetParam()) {
-    const auto geometry = loom_serve_device_weight_geometry(device_owner_);
+    const auto geometry = loom_serve_pool_weight_geometry(storage_owner_);
     const auto memory = loom_serve_weights_statistics(plans_[0]);
     EXPECT_EQ(memory.reserved_bytes, geometry.minimum_size);
     EXPECT_EQ(memory.committed_bytes, geometry.minimum_size);
@@ -1625,7 +1623,7 @@ class ArenaWeightsTest : public WeightsTest {
 
 TEST_P(ArenaWeightsTest, IndependentPreparedRangesReloadAndRecycleAbove4GiB) {
   WriteCheckpoint(adapter_path_.path(), 100);
-  const auto geometry = loom_serve_device_weight_geometry(device_owner_);
+  const auto geometry = loom_serve_pool_weight_geometry(storage_owner_);
   constexpr uint64_t kPrefixBytes = UINT64_C(1) << 32;
   const uint64_t arena_bytes = kPrefixBytes + 2 * geometry.minimum_size;
   const auto before = loom_serve_memory_pool_statistics(pool_);
@@ -1726,7 +1724,7 @@ TEST_P(ArenaWeightsTest, IndependentPreparedRangesReloadAndRecycleAbove4GiB) {
 
 TEST_P(ArenaWeightsTest, SelectedPreparedBanksShareOneParameterBinding) {
   WriteCheckpoint(adapter_path_.path(), 100);
-  const auto geometry = loom_serve_device_weight_geometry(device_owner_);
+  const auto geometry = loom_serve_pool_weight_geometry(storage_owner_);
   constexpr uint64_t kPrefixBytes = UINT64_C(1) << 32;
   IREE_ASSERT_OK(loom_serve_memory_arena_allocate(
       pool_, geometry, kPrefixBytes + 2 * geometry.minimum_size, &arena_));
@@ -1755,7 +1753,7 @@ TEST_P(ArenaWeightsTest, SelectedPreparedBanksShareOneParameterBinding) {
   EXPECT_EQ(bank_offsets[1], kPrefixBytes + geometry.minimum_size);
   std::array<uint64_t, 8> request_offsets;
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(request_offsets), 0),
       iree_infinite_timeout(), &workspace_));
 
@@ -1864,15 +1862,15 @@ class RejectedPreparationWeightsTest : public ArenaWeightsTest {
 
 TEST_P(RejectedPreparationWeightsTest,
        FailedActivationDeactivatesAcceptedArenaBacking) {
-  const auto geometry = loom_serve_device_weight_geometry(device_owner_);
+  const auto geometry = loom_serve_pool_weight_geometry(storage_owner_);
   IREE_ASSERT_OK(loom_serve_memory_arena_allocate(
       pool_, geometry, 2 * geometry.minimum_size, &arena_));
   IREE_ASSERT_OK(Compile(0, "target"));
   const auto root = Root(0, 0, 0);
   IREE_ASSERT_OK(loom_serve_weights_allocate(
       device_, transfer_, &rejected_dispatch_,
-      loom_serve_device_storage_pool(device_owner_), pool_, geometry, arena_,
-      loom_serve_device_workspace(device_owner_), 0, 1, &root, host_allocator_,
+      loom_serve_pool_storage(storage_owner_), pool_, geometry, arena_,
+      loom_serve_pool_workspace(storage_owner_), 0, 1, &root, host_allocator_,
       &plans_[0]));
   IREE_ASSERT_OK(Prepare(plans_[0], {path_.path()}));
   const auto original = iree_hal_buffer_virtual_view(buffers_[0][0]);
@@ -1926,7 +1924,7 @@ TEST_P(RejectedAdmissionWeightsTest,
   IREE_ASSERT_OK(CreateRoots(0, 1, &root, {path_.path()}));
   IREE_ASSERT_OK(Register(0, 0, 1));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      pool_, loom_serve_device_state_geometry(device_owner_), 2 * kSlabBytes,
+      pool_, loom_serve_pool_state_geometry(storage_owner_), 2 * kSlabBytes,
       256, &state_statistics_, &state_));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(state_, 0, 2 * kSlabBytes));
   loom_serve_memory_pool_set_reclaimer(

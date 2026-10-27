@@ -191,7 +191,8 @@ class SourceTextServiceTest : public ::testing::Test {
     for (const auto& path : additional_sources) {
       sources += ",\"" + path + "\"";
     }
-    return "{\"name\":\"" + name + "\",\"base_directory\":\"" +
+    return "{\"name\":\"" + name +
+           "\",\"pool\":\"pool0\",\"base_directory\":\"" +
            std::filesystem::absolute(source).string() + "\",\"admission\":\"" +
            admission +
            "\",\"definition\":{\"kind\":\"text\",\"prepare\":\"prepare.loom\","
@@ -691,6 +692,8 @@ class SourceTextServiceTest : public ::testing::Test {
   loom_serve_device_group_t* group_ = nullptr;
   // Borrowed device record within the process-wide application group.
   loom_serve_device_t* device_ = nullptr;
+  // Explicit storage owner selected independently from execution placement.
+  loom_serve_pool_t* storage_owner_ = nullptr;
   // Actual source-defined text model, with no native mock implementation.
   loom_serve_text_model_t* model_ = nullptr;
   // Real loopback HTTP carrier.

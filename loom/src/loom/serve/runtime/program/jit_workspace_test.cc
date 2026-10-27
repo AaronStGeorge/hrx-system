@@ -28,7 +28,7 @@ class JitWorkspaceTest : public loom_serve::testing::JitModuleTest {
     }
     if (held_.completion) {
       IREE_EXPECT_OK(
-          loom_serve_workspace_wait(loom_serve_device_workspace(device_owner_),
+          loom_serve_workspace_wait(loom_serve_pool_workspace(storage_owner_),
                                     held_.completion, held_.completion_value));
     }
     loom_serve_execution_release(held_.execution);
@@ -67,16 +67,15 @@ TEST_P(JitWorkspaceTest, UnequalPrivateWorkspacesPreservePoolPolicyAndOutput) {
   ASSERT_EQ(transients_[0].required_byte_length, 64u);
   ASSERT_EQ(transients_[1].required_byte_length, 4160u);
   IREE_ASSERT_OK(PrepareVm());
-  EXPECT_EQ(loom_serve_device_memory_statistics(device_owner_)
-                .workspace.bytes_committed,
-            0u);
+  EXPECT_EQ(
+      loom_serve_pool_statistics(storage_owner_).workspace.bytes_committed, 0u);
   loom_serve_jit_release(jit_);
   jit_ = nullptr;
   iree_vm_function_t selected_step;
   IREE_ASSERT_OK(iree_vm_process_lookup_function(
       process_, IREE_SV("model"), IREE_SV("selected_step"), &selected_step));
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(input_), 0),
       iree_infinite_timeout(), &buffer_));
   iree_hal_transfer_operation_t upload = {
@@ -108,8 +107,7 @@ TEST_P(JitWorkspaceTest, UnequalPrivateWorkspacesPreservePoolPolicyAndOutput) {
   IREE_ASSERT_OK(
       loom_serve_execution_feedback(execution_, 1, &download, &completion));
   IREE_ASSERT_OK(loom_serve_execution_drain(execution_));
-  const auto statistics =
-      loom_serve_device_memory_statistics(device_owner_).workspace;
+  const auto statistics = loom_serve_pool_statistics(storage_owner_).workspace;
   EXPECT_EQ(statistics.reservation_count, 0u);
   EXPECT_EQ(statistics.reserve_count, workspace_baseline_.reserve_count + 4);
   EXPECT_EQ(statistics.release_count, workspace_baseline_.release_count + 4);
@@ -131,7 +129,7 @@ TEST_P(JitWorkspaceTest, UnequalPrivateWorkspacesPreservePoolPolicyAndOutput) {
   // A different model has no dependency edge to the retired producer. HAL's
   // completed-frontier query must recover reuse without a device-wide chain.
   IREE_ASSERT_OK(loom_serve_device_create_execution(
-      device_owner_, loom_serve_device_pool(device_owner_), &held_.execution));
+      device_owner_, storage_owner_, &held_.execution));
   const iree_hal_pool_reservation_request_t request = {
       .allocation_size = 4160,
       .min_alignment = 16,
@@ -170,8 +168,7 @@ TEST_P(JitWorkspaceTest, UnequalPrivateWorkspacesPreservePoolPolicyAndOutput) {
   held_.buffer = nullptr;
   IREE_ASSERT_OK(loom_serve_execution_drain(held_.execution));
   EXPECT_EQ(held_.output, input_);
-  const auto shared =
-      loom_serve_device_memory_statistics(device_owner_).workspace;
+  const auto shared = loom_serve_pool_statistics(storage_owner_).workspace;
   if (quarantine_limit) {
     // Quarantined ranges cannot satisfy this independent model's request.
     EXPECT_GE(shared.bytes_committed, statistics.bytes_committed);
@@ -185,10 +182,8 @@ TEST_P(JitWorkspaceTest, UnequalPrivateWorkspacesPreservePoolPolicyAndOutput) {
   } else {
     EXPECT_GT(shared.reuse_count, statistics.reuse_count);
   }
-  IREE_ASSERT_OK(
-      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
-  const auto trimmed =
-      loom_serve_device_memory_statistics(device_owner_).workspace;
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
+  const auto trimmed = loom_serve_pool_statistics(storage_owner_).workspace;
   // Completed consumers do not imply retirement of every raw queue capture.
   // Nonwaiting trim may retain backing until those captures retire; final
   // group teardown joins them independently of model work.
@@ -209,7 +204,7 @@ TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
   IREE_ASSERT_OK(Compile("5", 0));
   IREE_ASSERT_OK(Compile("7", 1, IREE_SV("temporary_advance"), "4160"));
   IREE_ASSERT_OK(loom_serve_device_create_execution(
-      device_owner_, loom_serve_device_pool(device_owner_), &held_.execution));
+      device_owner_, storage_owner_, &held_.execution));
   IREE_ASSERT_OK(
       loom_serve_execution_reserve_workspace(held_.execution, 64, 16));
   const iree_hal_pool_reservation_request_t request = {
@@ -259,7 +254,7 @@ TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
   IREE_ASSERT_OK(iree_vm_process_lookup_function(
       process_, IREE_SV("model"), IREE_SV("selected_step"), &selected_step));
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(input_), 0),
       iree_infinite_timeout(), &buffer_));
   upload.upload.target_buffer = buffer_;
@@ -286,14 +281,11 @@ TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
   IREE_ASSERT_OK(
       iree_hal_semaphore_query(held_frontier.semaphores[1], &observed));
   EXPECT_LT(observed, held_frontier.values[1]);
-  const auto live =
-      loom_serve_device_memory_statistics(device_owner_).workspace;
+  const auto live = loom_serve_pool_statistics(storage_owner_).workspace;
   EXPECT_EQ(live.reservation_count, 1u);
-  IREE_ASSERT_OK(
-      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
-  EXPECT_GT(loom_serve_device_memory_statistics(device_owner_)
-                .workspace.bytes_committed,
-            0u);
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
+  EXPECT_GT(
+      loom_serve_pool_statistics(storage_owner_).workspace.bytes_committed, 0u);
   IREE_ASSERT_OK(iree_hal_semaphore_signal(held_.gate, 1, nullptr));
   iree_hal_semaphore_release(held_.gate);
   held_.gate = nullptr;
@@ -301,10 +293,8 @@ TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
   for (size_t i = 0; i < held_.output.size(); ++i) {
     EXPECT_EQ(held_.output[i], 105 + i);
   }
-  IREE_ASSERT_OK(
-      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
-  const auto trimmed =
-      loom_serve_device_memory_statistics(device_owner_).workspace;
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
+  const auto trimmed = loom_serve_pool_statistics(storage_owner_).workspace;
   // The model has retired, but a raw allocation capture can still preserve an
   // older pool generation. Trim must neither wait for it nor grow backing.
   EXPECT_LE(trimmed.bytes_committed, live.bytes_committed);
@@ -315,7 +305,7 @@ TEST_P(JitWorkspaceTest, IndependentModelCompletesWhileSharedWorkspaceGrows) {
 
 TEST_P(JitWorkspaceTest, RetiredModelDoesNotJoinRawQueueAllocationCaptures) {
   IREE_ASSERT_OK(loom_serve_device_create_execution(
-      device_owner_, loom_serve_device_pool(device_owner_), &held_.execution));
+      device_owner_, storage_owner_, &held_.execution));
   IREE_ASSERT_OK(
       loom_serve_execution_reserve_workspace(held_.execution, 64, 16));
   IREE_ASSERT_OK(
@@ -373,7 +363,7 @@ TEST_P(JitWorkspaceTest, RetiredModelDoesNotJoinRawQueueAllocationCaptures) {
   IREE_ASSERT_OK(Compile("5", 0));
   IREE_ASSERT_OK(PrepareVm());
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      loom_serve_device_storage_pool(device_owner_),
+      loom_serve_pool_storage(storage_owner_),
       iree_hal_make_pool_reservation_request(sizeof(input_), 0),
       iree_infinite_timeout(), &buffer_));
   const iree_hal_transfer_operation_t upload = {
@@ -407,8 +397,7 @@ TEST_P(JitWorkspaceTest, RetiredModelDoesNotJoinRawQueueAllocationCaptures) {
   uint64_t observed = 0;
   IREE_ASSERT_OK(iree_hal_semaphore_query(held_.gate, &observed));
   EXPECT_EQ(observed, 0u);
-  IREE_ASSERT_OK(
-      loom_serve_pool_trim(loom_serve_device_pool(device_owner_), 0));
+  IREE_ASSERT_OK(loom_serve_pool_trim(storage_owner_, 0));
   // Fixture teardown opens the predecessor and joins the retained completion
   // before checking the shared workspace for this test's remaining captures.
 }

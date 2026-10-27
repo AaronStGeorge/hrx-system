@@ -448,6 +448,15 @@ function updatePlacement(state) {
       : `device ${index}`;
   if (device) state.placement.setAttribute("href", `#device-${index}`);
   else state.placement.removeAttribute("href");
+  const poolIndex = state.model.pool;
+  const pool = pools.get(poolIndex);
+  state.poolPlacement.textContent = pool
+    ? poolLabel(pool.source)
+    : poolIndex === null || poolIndex === undefined
+      ? "unassigned pool"
+      : `pool ${poolIndex}`;
+  if (pool) state.poolPlacement.setAttribute("href", `#pool-${poolIndex}`);
+  else state.poolPlacement.removeAttribute("href");
 }
 
 function summarizeDevices() {
@@ -472,32 +481,52 @@ function summarizeDevices() {
   }
 }
 
-function createPool(device, role) {
+function poolLabel(pool) {
+  return pool.key + (pool.key_truncated ? "…" : "");
+}
+
+// Immutable inventory edges are rebuilt only when a new resource arrives.
+// This also handles a reader receiving the pool before a referenced device.
+function updateResourceLinks() {
+  for (const device of devices.values()) device.links.replaceChildren();
+  for (const pool of pools.values()) {
+    pool.links.replaceChildren();
+    for (const index of pool.source.devices) {
+      const device = devices.get(index);
+      const link = element(
+        "a", "device-link",
+        device ? deviceLabel(device.source) : `device ${index}`,
+      );
+      link.href = `#device-${index}`;
+      pool.links.append(link);
+      if (device) {
+        const owner = element("a", "device-link", poolLabel(pool.source));
+        owner.href = `#pool-${pool.source.index}`;
+        device.links.append(owner);
+      }
+    }
+  }
+}
+
+function createPool(source) {
   const card = element("article", "panel memory-pool");
-  card.id = `pool-${device.index}-${role}`;
+  card.id = `pool-${source.index}`;
   const heading = element("div", "resource-head");
-  const link = element("a", "device-link", deviceLabel(device));
-  link.href = `#device-${device.index}`;
+  const links = element("div", "device-pools");
   heading.append(
-    element(
-      "h3",
-      "",
-      role === "elastic" ? "Elastic backing" : "Native storage",
-    ),
-    link,
+    element("h3", "", poolLabel(source)),
+    element("span", "muted", source.backing),
+    links,
   );
   const total = element("div", "pool-total");
   const committed = element("strong", "pool-value", "—");
   const peak = element("span", "muted");
-  peak.title =
-    role === "elastic"
-      ? "Storage-owner lifetime peak."
-      : "Highest commitment observed in this page session.";
+  peak.title = "Highest commitment observed in this page session.";
   total.append(committed, peak);
   const canvas = element("canvas");
   canvas.setAttribute(
     "aria-label",
-    `${deviceLabel(device)} ${role} committed bytes`,
+    `${poolLabel(source)} committed bytes`,
   );
   const budget = element("div", "model-facts");
   const reservations = element("div", "model-facts");
@@ -510,6 +539,8 @@ function createPool(device, role) {
   card.append(heading, total, canvas, budget, reservations, workspace, details);
   $("pool-grid").append(card);
   return {
+    source,
+    links,
     card,
     committed,
     peak,
@@ -524,7 +555,7 @@ function createPool(device, role) {
   };
 }
 
-function updateDevice(device, time, recordHistory) {
+function updateDevice(device) {
   let state = devices.get(device.index);
   if (!state) {
     if (!devices.size) $("device-grid").replaceChildren();
@@ -539,7 +570,6 @@ function updateDevice(device, time, recordHistory) {
     heading.append(
       element("h3", "", deviceLabel(device)),
       identity,
-      element("span", "muted", device.backing),
     );
     const activity = element("div", "device-activity");
     const links = element("div", "device-pools");
@@ -547,50 +577,45 @@ function updateDevice(device, time, recordHistory) {
     $("device-grid").append(card);
     state = { source: device, card, activity, links };
     devices.set(device.index, state);
-  }
-  const workspace = device.topics.find((topic) => topic.topic === "workspace");
-  const parent = device.backing === "elastic" ? "elastic" : "storage";
-  for (const topic of device.topics) {
-    if (topic.topic !== "storage" && topic.topic !== "elastic") continue;
-    const role = topic.topic,
-      key = `${device.index}/${role}`;
-    let pool = pools.get(key);
-    if (!pool) {
-      pool = createPool(device, role);
-      pools.set(key, pool);
-      const link = element(
-        "a",
-        "device-link",
-        role === "elastic" ? "Elastic backing" : "Native storage",
-      );
-      link.href = `#${pool.card.id}`;
-      state.links.append(link);
-    }
-    const topics = role === parent && workspace ? [topic, workspace] : [topic];
-    const fields = updateTopicFields(topics, pool);
-    const value = (name, source = role) =>
-      fields.has(`${source}.${name}`)
-        ? Number(fields.get(`${source}.${name}`).value)
-        : NaN;
-    const committed = value("committed_bytes");
-    pool.committed.textContent = bytes(committed);
-    if (recordHistory) {
-      pool.ring.push(time, committed);
-      pendingPlots.add(pool);
-    }
-    pool.peak.textContent = `peak ${bytes(role === "elastic" ? value("peak_bytes") : pool.ring.peak)}`;
-    const limit = value("budget_limit");
-    pool.budget.textContent = `Committed · ${limit > 0 ? `${bytes(limit)} budget` : "no pool budget"}`;
-    pool.reservations.textContent =
-      role === "elastic"
-        ? `${bytes(value("reserved_bytes"))} virtual reserved · ${bytes(value("cached_bytes"))} reusable`
-        : `${bytes(value("reserved_bytes"))} charged · ${bytes(value("free_bytes"))} reusable`;
-    pool.workspace.textContent =
-      role === parent && workspace
-        ? `Workspace: ${bytes(value("reserved_bytes", "workspace"))} charged · ${bytes(value("committed_bytes", "workspace"))} retained (included)`
-        : "";
+    updateResourceLinks();
   }
   $("device-count").textContent = devices.size;
+  summarizeDevices();
+}
+
+function updatePool(source, time, recordHistory) {
+  let pool = pools.get(source.index);
+  if (!pool) {
+    if (!pools.size) $("pool-grid").replaceChildren();
+    pool = createPool(source);
+    pools.set(source.index, pool);
+    updateResourceLinks();
+  }
+  const fields = updateTopicFields(source.topics, pool);
+  const value = (topic, name) =>
+    fields.has(`${topic}.${name}`)
+      ? Number(fields.get(`${topic}.${name}`).value)
+      : NaN;
+  const elastic = source.backing === "elastic";
+  const nativeBytes = value("storage", "committed_bytes");
+  const elasticBytes = elastic ? value("elastic", "committed_bytes") : 0;
+  // Distinct backing owners add; workspace is a child, never added again.
+  const committed = nativeBytes + elasticBytes;
+  pool.committed.textContent = bytes(committed);
+  if (recordHistory) {
+    pool.ring.push(time, committed);
+    pendingPlots.add(pool);
+  }
+  pool.peak.textContent = `peak ${bytes(pool.ring.peak)}`;
+  const limit = elastic ? value("elastic", "budget_limit") : 0;
+  pool.budget.textContent = elastic
+    ? `${bytes(elasticBytes)} elastic · ${limit > 0 ? `${bytes(limit)} budget` : "unbounded"} · ${bytes(nativeBytes)} native outside budget`
+    : "Native storage · no pool budget";
+  pool.reservations.textContent = elastic
+    ? `${bytes(value("elastic", "reserved_bytes"))} virtual reserved · ${bytes(value("elastic", "cached_bytes"))} reusable`
+    : `${bytes(value("storage", "reserved_bytes"))} charged · ${bytes(value("storage", "free_bytes"))} reusable`;
+  pool.workspace.textContent =
+    `Workspace: ${bytes(value("workspace", "reserved_bytes"))} charged · ${bytes(value("workspace", "committed_bytes"))} retained (included)`;
   $("pool-count").textContent = pools.size;
   summarizeDevices();
 }
@@ -607,7 +632,8 @@ function createModel(model) {
   const identity = element("div");
   const kind = element("div", "kind", model.kind);
   const placement = element("a", "device-link");
-  kind.append(placement);
+  const poolPlacement = element("a", "device-link");
+  kind.append(placement, poolPlacement);
   identity.append(name, kind);
   const phase = element("span", "phase", model.phase);
   heading.append(identity, phase);
@@ -673,6 +699,7 @@ function createModel(model) {
     card,
     phase,
     placement,
+    poolPlacement,
     numbers,
     peaks,
     averages,
@@ -1008,8 +1035,12 @@ function apply(frame) {
     updateServer(page, time, timeNs, frame, recordHistory);
     if (!page.device_count)
       $("device-grid").textContent = "No application-owned devices.";
+    if (!page.pool_count)
+      $("pool-grid").textContent = "No application-owned pools.";
   } else if (page.type === "device") {
-    updateDevice(page, time, recordHistory);
+    updateDevice(page);
+  } else if (page.type === "pool") {
+    updatePool(page, time, recordHistory);
   } else if (page.type === "models") {
     // A live page establishes absence only for its explicitly scanned slots.
     for (let slot = page.first; slot < page.next; ++slot) {

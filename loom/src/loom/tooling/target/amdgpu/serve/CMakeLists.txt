@@ -42,6 +42,8 @@ loom_cc_test(
     "--stream_count=8"
     "--fixture_activity_device=cpu"
     "--fixture_transcription_device=gpu"
+    "--fixture_activity_pool=activity"
+    "--fixture_transcription_pool=transcription"
   LABELS
     "iree-run-requirement=runtime.resource.amd_gpu"
     "notsan"

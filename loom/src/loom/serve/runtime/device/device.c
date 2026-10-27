@@ -25,8 +25,6 @@ struct loom_serve_device_t {
   iree_hal_queue_t* transfer;
   // Fixed inventory shared by independently retained model executions.
   loom_serve_execution_queues_t* execution_queues;
-  // Borrowed default storage binding, owned by the group's pool inventory.
-  loom_serve_pool_t* pool;
   // Exact immutable source products shared by independent model instances.
   loom_serve_jit_cache_t* jit_cache;
 };
@@ -52,6 +50,8 @@ struct loom_serve_device_group_t {
   iree_host_size_t pool_count;
   // Owned pool inventory, independent of device membership and model bindings.
   loom_serve_pool_t** pools;
+  // Owned names and qualified consumer membership in pool inventory order.
+  loom_serve_pool_binding_t* pool_bindings;
   // Owned execution records, borrowed by model owners.
   loom_serve_device_t devices[];
 };
@@ -107,8 +107,7 @@ static iree_status_t loom_serve_device_group_initialize(
   return status;
 }
 
-static iree_status_t loom_serve_device_initialize(
-    loom_serve_device_t* device, const loom_serve_device_options_t* options) {
+static iree_status_t loom_serve_device_initialize(loom_serve_device_t* device) {
   loom_serve_device_group_t* group = device->owner;
   device->dispatch = loom_serve_device_select_queue(
       device->handle, IREE_HAL_QUEUE_FAMILY_ROLE_FLAG_DISPATCH);
@@ -118,14 +117,6 @@ static iree_status_t loom_serve_device_initialize(
     return iree_make_status(IREE_STATUS_UNAVAILABLE,
                             "device needs dispatch and transfer queues");
   }
-  const iree_hal_device_sanitizer_spec_t* sanitizer =
-      iree_hal_device_spec_sanitizer(iree_hal_device_spec(device->handle));
-  if (options->backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC &&
-      iree_any_bit_set(sanitizer->flags, IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "address-sanitized serving devices require fixed backing");
-  }
   const iree_hal_queue_family_t* dispatch_family =
       iree_hal_queue_family(device->dispatch);
   const iree_hal_queue_family_t* transfer_family =
@@ -133,29 +124,6 @@ static iree_status_t loom_serve_device_initialize(
   IREE_RETURN_IF_ERROR(loom_serve_execution_queues_create(
       dispatch_family, transfer_family, group->host_allocator,
       &device->execution_queues));
-  // Source programs may carry indirect launch counts in retained buffers or
-  // execution workspace, both allocated from this dispatch-visible domain.
-  const iree_hal_pool_family_access_t families[] = {
-      {.family = dispatch_family,
-       .usage = IREE_HAL_BUFFER_USAGE_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER |
-                IREE_HAL_BUFFER_USAGE_DISPATCH_INDIRECT_PARAMETERS},
-      {.family = transfer_family, .usage = IREE_HAL_BUFFER_USAGE_TRANSFER},
-  };
-  const iree_hal_pool_scope_t scope = {
-      .family_count = dispatch_family == transfer_family ? 1 : 2,
-      .families = families,
-  };
-  loom_serve_pool_options_t pool_options = {
-      .elastic = options->backing == LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-      .weight_slab_size = options->weight_slab_size,
-      .state_slab_size = options->state_slab_size,
-      .memory_limit = options->memory_limit,
-  };
-  if (iree_any_bit_set(sanitizer->flags, IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN)) {
-    pool_options.asan = sanitizer->asan.pool_options;
-  }
-  IREE_RETURN_IF_ERROR(loom_serve_device_group_create_pool(
-      group, scope, device->transfer, &pool_options, &device->pool));
   return loom_serve_jit_cache_allocate(device->handle, device->dispatch,
                                        group->host_allocator,
                                        &device->jit_cache);
@@ -199,16 +167,6 @@ iree_status_t loom_serve_device_group_allocate(
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "device names exceed addressable storage");
     }
-    if (options[i].backing != LOOM_SERVE_DEVICE_BACKING_FIXED &&
-        options[i].backing != LOOM_SERVE_DEVICE_BACKING_ELASTIC) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unsupported physical backing strategy");
-    }
-    if (options[i].backing == LOOM_SERVE_DEVICE_BACKING_FIXED &&
-        options[i].memory_limit) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "a physical budget requires elastic backing");
-    }
   }
   iree_host_size_t total_size = 0, names_offset = 0;
   IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
@@ -237,7 +195,7 @@ iree_status_t loom_serve_device_group_allocate(
   }
   for (iree_host_size_t i = 0; i < device_count && iree_status_is_ok(status);
        ++i) {
-    status = loom_serve_device_initialize(&group->devices[i], &options[i]);
+    status = loom_serve_device_initialize(&group->devices[i]);
     if (!iree_status_is_ok(status)) {
       status = iree_status_annotate_f(
           status, "initializing serving device %" PRIhsz " (%.*s)", i,
@@ -282,6 +240,11 @@ iree_status_t loom_serve_device_group_free(loom_serve_device_group_t* group) {
   if (!iree_status_is_ok(cleanup_status)) {
     return iree_status_join(status, cleanup_status);
   }
+  for (iree_host_size_t i = 0; i < group->pool_count; ++i) {
+    iree_allocator_free(group->host_allocator,
+                        (void*)group->pool_bindings[i].name.data);
+  }
+  iree_allocator_free(group->host_allocator, group->pool_bindings);
   iree_allocator_free(group->host_allocator, group->pools);
   for (iree_host_size_t i = 0; i < group->device_count; ++i) {
     loom_serve_device_t* device = &group->devices[i];
@@ -299,17 +262,97 @@ iree_status_t loom_serve_device_group_free(loom_serve_device_group_t* group) {
 }
 
 iree_status_t loom_serve_device_group_create_pool(
-    loom_serve_device_group_t* group, iree_hal_pool_scope_t scope,
-    iree_hal_queue_t* allocation_queue,
+    loom_serve_device_group_t* group, loom_serve_pool_binding_t binding,
     const loom_serve_pool_options_t* options, loom_serve_pool_t** out_pool) {
   *out_pool = NULL;
+  if (!binding.name.size || !binding.device_mask ||
+      binding.device_mask >> group->device_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pool needs a name and nonempty group membership");
+  }
+  for (iree_host_size_t i = 0; i < binding.name.size; ++i) {
+    if ((uint8_t)binding.name.data[i] < 0x21 ||
+        (uint8_t)binding.name.data[i] > 0x7e) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "pool names must be visible ASCII");
+    }
+  }
+  for (iree_host_size_t i = 0; i < group->pool_count; ++i) {
+    if (iree_string_view_equal(group->pool_bindings[i].name, binding.name)) {
+      return iree_make_status(IREE_STATUS_ALREADY_EXISTS,
+                              "duplicate pool name '%.*s'",
+                              (int)binding.name.size, binding.name.data);
+    }
+  }
+  iree_hal_pool_family_access_t
+      families[2 * IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
+  iree_hal_pool_scope_t scope = {.families = families};
+  iree_hal_queue_t* allocation_queue = NULL;
+  loom_serve_pool_options_t pool_options = *options;
+  for (iree_host_size_t i = 0; i < group->device_count; ++i) {
+    if (!(binding.device_mask & (UINT64_C(1) << i))) {
+      continue;
+    }
+    loom_serve_device_t* device = &group->devices[i];
+    if (!allocation_queue) {
+      allocation_queue = device->transfer;
+    }
+    const iree_hal_queue_family_t* dispatch =
+        iree_hal_queue_family(device->dispatch);
+    const iree_hal_queue_family_t* transfer =
+        iree_hal_queue_family(device->transfer);
+    // Indirect launch counts can live in retained buffers or workspace.
+    families[scope.family_count++] = (iree_hal_pool_family_access_t){
+        .family = dispatch,
+        .usage = IREE_HAL_BUFFER_USAGE_STORAGE |
+                 IREE_HAL_BUFFER_USAGE_TRANSFER |
+                 IREE_HAL_BUFFER_USAGE_DISPATCH_INDIRECT_PARAMETERS,
+    };
+    if (dispatch != transfer) {
+      families[scope.family_count++] = (iree_hal_pool_family_access_t){
+          .family = transfer, .usage = IREE_HAL_BUFFER_USAGE_TRANSFER};
+    }
+    const iree_hal_device_sanitizer_spec_t* sanitizer =
+        iree_hal_device_spec_sanitizer(iree_hal_device_spec(device->handle));
+    if (!iree_any_bit_set(sanitizer->flags,
+                          IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN)) {
+      continue;
+    }
+    const iree_hal_asan_pool_options_t asan = sanitizer->asan.pool_options;
+    if (pool_options.asan.mode &&
+        (pool_options.asan.mode != asan.mode ||
+         pool_options.asan.shadow_granule_size != asan.shadow_granule_size ||
+         pool_options.asan.redzone_size != asan.redzone_size ||
+         pool_options.asan.backing_alignment != asan.backing_alignment ||
+         pool_options.asan.quarantine_size != asan.quarantine_size)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "pool '%.*s' has incompatible sanitizer policies",
+                              (int)binding.name.size, binding.name.data);
+    }
+    pool_options.asan = asan;
+  }
   IREE_RETURN_IF_ERROR(iree_allocator_realloc_array(
       group->host_allocator, group->pool_count + 1, sizeof(*group->pools),
       (void**)&group->pools));
+  IREE_RETURN_IF_ERROR(iree_allocator_realloc_array(
+      group->host_allocator, group->pool_count + 1,
+      sizeof(*group->pool_bindings), (void**)&group->pool_bindings));
+  char* name = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_uninitialized(
+      group->host_allocator, binding.name.size, (void**)&name));
+  memcpy(name, binding.name.data, binding.name.size);
+  binding.name.data = name;
   loom_serve_pool_t* pool = NULL;
-  IREE_RETURN_IF_ERROR(loom_serve_pool_allocate(group->handle, scope,
-                                                allocation_queue, options,
-                                                group->host_allocator, &pool));
+  iree_status_t status =
+      loom_serve_pool_allocate(group->handle, scope, allocation_queue,
+                               &pool_options, group->host_allocator, &pool);
+  if (!iree_status_is_ok(status)) {
+    status = iree_status_annotate_f(status, "creating serving pool '%.*s'",
+                                    (int)binding.name.size, binding.name.data);
+    iree_allocator_free(group->host_allocator, name);
+    return status;
+  }
+  group->pool_bindings[group->pool_count] = binding;
   group->pools[group->pool_count++] = pool;
   *out_pool = pool;
   return iree_ok_status();
@@ -325,8 +368,9 @@ loom_serve_pool_t* loom_serve_device_group_pool_at(
   return group->pools[pool_index];
 }
 
-loom_serve_pool_t* loom_serve_device_pool(const loom_serve_device_t* device) {
-  return device->pool;
+const loom_serve_pool_binding_t* loom_serve_device_group_pool_bindings(
+    const loom_serve_device_group_t* group) {
+  return group->pool_bindings;
 }
 
 iree_host_size_t loom_serve_device_group_count(
@@ -348,11 +392,6 @@ loom_serve_device_t* loom_serve_device_group_at(
   return &group->devices[device_index];
 }
 
-loom_serve_pool_statistics_t loom_serve_device_memory_statistics(
-    const loom_serve_device_t* device) {
-  return loom_serve_pool_statistics(device->pool);
-}
-
 void loom_serve_device_trim_programs(loom_serve_device_t* device) {
   loom_serve_tokenizer_cache_trim(device->owner->tokenizer_cache);
   loom_serve_jit_cache_trim(device->jit_cache);
@@ -362,11 +401,6 @@ iree_hal_device_t* loom_serve_device_handle(const loom_serve_device_t* device) {
   return device->handle;
 }
 
-iree_hal_pool_t* loom_serve_device_storage_pool(
-    const loom_serve_device_t* device) {
-  return loom_serve_pool_storage(device->pool);
-}
-
 loom_serve_host_t* loom_serve_device_host(const loom_serve_device_t* device) {
   return device->owner->host;
 }
@@ -374,11 +408,6 @@ loom_serve_host_t* loom_serve_device_host(const loom_serve_device_t* device) {
 loom_serve_tokenizer_cache_t* loom_serve_device_tokenizer_cache(
     const loom_serve_device_t* device) {
   return device->owner->tokenizer_cache;
-}
-
-loom_serve_workspace_t* loom_serve_device_workspace(
-    const loom_serve_device_t* device) {
-  return loom_serve_pool_workspace(device->pool);
 }
 
 iree_hal_device_group_t* loom_serve_device_group(
@@ -402,26 +431,6 @@ iree_status_t loom_serve_device_create_execution(
   return loom_serve_execution_create(
       device->execution_queues, loom_serve_pool_workspace(pool),
       device->owner->host_allocator, out_execution);
-}
-
-loom_serve_memory_pool_t* loom_serve_device_memory_pool(
-    const loom_serve_device_t* device) {
-  return loom_serve_pool_memory(device->pool);
-}
-
-loom_serve_memory_geometry_t loom_serve_device_weight_geometry(
-    const loom_serve_device_t* device) {
-  return loom_serve_pool_weight_geometry(device->pool);
-}
-
-loom_serve_memory_geometry_t loom_serve_device_state_geometry(
-    const loom_serve_device_t* device) {
-  return loom_serve_pool_state_geometry(device->pool);
-}
-
-loom_serve_residency_cache_t* loom_serve_device_residency_cache(
-    const loom_serve_device_t* device) {
-  return loom_serve_pool_residency_cache(device->pool);
 }
 
 iree_status_t loom_serve_device_create_jit(
