@@ -93,12 +93,13 @@ iree_status_t loom_serve_test_text_policy_allocate(
         policy->environment, host_allocator, &libraries[2]);
   }
   const iree_string_view_t roots[] = {
-      IREE_SVL("model_name"),       IREE_SVL("chat_image_limits"),
-      IREE_SVL("chat_begin"),       IREE_SVL("chat_message"),
-      IREE_SVL("chat_end"),         IREE_SVL("render_tool"),
-      IREE_SVL("parse_tools"),      IREE_SVL("prepare_input"),
-      IREE_SVL("output_next"),      IREE_SVL("complete_text"),
-      IREE_SVL("request_defaults"), IREE_SVL("request_options")};
+      IREE_SVL("chat_reasoning"),    IREE_SVL("model_name"),
+      IREE_SVL("chat_image_limits"), IREE_SVL("chat_begin"),
+      IREE_SVL("chat_message"),      IREE_SVL("chat_end"),
+      IREE_SVL("render_tool"),       IREE_SVL("parse_tools"),
+      IREE_SVL("prepare_input"),     IREE_SVL("output_next"),
+      IREE_SVL("complete_text"),     IREE_SVL("request_defaults"),
+      IREE_SVL("request_options")};
   loomc_target_environment_t* target_environment = NULL;
   if (iree_status_is_ok(status)) {
     status = iree_status_from_loomc(loomc_target_environment_create_vm(

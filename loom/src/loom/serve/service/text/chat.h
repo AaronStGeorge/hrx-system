@@ -10,6 +10,7 @@
 #include "iree/base/api.h"
 #include "iree/vm/buffer.h"
 #include "loom/serve/runtime/program/program.h"
+#include "loom/serve/service/reasoning.h"
 #include "loom/serve/service/text/media.h"
 #include "loom/serve/service/text/tool_calls.h"
 
@@ -38,6 +39,8 @@ typedef struct loom_serve_text_chat_policy_t {
   iree_string_view_t name;
   // Owned source-validated deployment defaults, opaque to native code.
   iree_vm_buffer_t* defaults;
+  // Cold source declaration from chat_reasoning(), copied at publication.
+  loom_serve_reasoning_t reasoning;
   // Resolves request JSON and nonce against defaults into owned opaque bytes.
   iree_vm_function_t request_options;
   // chat_image_limits() returns five i64 bounds: occurrence count, compressed

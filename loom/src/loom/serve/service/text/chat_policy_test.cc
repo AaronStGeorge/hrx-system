@@ -94,6 +94,14 @@ class SourceChatPolicyTest : public ::testing::Test {
   iree_arena_block_pool_t pool_;
 };
 
+TEST_F(SourceChatPolicyTest,
+       ColdSourceDeclaresReasoningWithoutRetainedStorage) {
+  const auto* policy = loom_serve_test_text_policy_chat(policy_owner_);
+  EXPECT_EQ(policy->reasoning.support, LOOM_SERVE_REASONING_UNSUPPORTED);
+  EXPECT_EQ(policy->reasoning.efforts, 0);
+  EXPECT_EQ(policy->reasoning.default_effort, 0);
+}
+
 TEST_F(SourceChatPolicyTest, StreamingBatchesReuseScratchWithoutHeapChurn) {
   const auto* policy = loom_serve_test_text_policy_chat(policy_owner_);
   const std::string body = Request(Message("user", "a"), 32);

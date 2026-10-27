@@ -18,7 +18,7 @@ PACKAGE = Path(sys.argv.pop(1)).resolve().parent
 
 
 class RequestTest(unittest.TestCase):
-    def execute(self, request, response=None, capacity=96, card=None):
+    def execute(self, request, response=None, capacity=96, card=None, control=None):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             request_path = directory / "request.json"
@@ -32,7 +32,7 @@ class RequestTest(unittest.TestCase):
             if card is not None:
                 command.extend([f"--model={card}", "--preset=check"])
             else:
-                command.append(f"--control={PACKAGE / 'control.loom'}")
+                command.append(f"--control={control or PACKAGE / 'control.loom'}")
             if response is not None:
                 response_path = directory / "response.txt"
                 response_path.write_text(response)
@@ -96,6 +96,28 @@ class RequestTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stdout, "")
                 self.assertIn("require text service version 1", result.stderr)
+
+    def test_invalid_source_reasoning_declaration_rejects_before_rendering(self):
+        source = (PACKAGE / "control.loom").read_text()
+        declaration = """func.def public @chat_reasoning() -> (i32, i32, i32) {
+  %c0 = scalar.constant 0 : i32
+  func.return %c0, %c0, %c0 : i32, i32, i32
+}"""
+        self.assertIn(declaration, source)
+        with tempfile.TemporaryDirectory() as temporary:
+            control = Path(temporary) / "control.loom"
+            for enabled, efforts, default in ((2, 0, 0), (1, 4, 3), (0, 4, 2)):
+                replacement = f"""func.def public @chat_reasoning() -> (i32, i32, i32) {{
+  %enabled = scalar.constant {enabled} : i32
+  %efforts = scalar.constant {efforts} : i32
+  %default = scalar.constant {default} : i32
+  func.return %enabled, %efforts, %default : i32, i32, i32
+}}"""
+                control.write_text(source.replace(declaration, replacement))
+                result = self.execute(self.request(), control=control)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("source chat_reasoning", result.stderr)
 
     def test_large_tool_catalog_renders(self):
         def tool(index):
@@ -189,6 +211,24 @@ class RequestTest(unittest.TestCase):
     def test_policy_errors_publish_no_partial_success(self):
         requests = [
             self.request(enable_thinking=True),
+            self.request(reasoning_effort="none"),
+            self.request(reasoning_effort="high"),
+            self.request(reasoning_effort=None),
+            self.request(reasoning_effort=False),
+            self.request(reasoning_effort=1),
+            self.request(reasoning_effort={}),
+            self.request(reasoning_effort=[]),
+            self.request(preserve_thinking=True),
+            self.request(preserve_thinking=False),
+            self.request(chat_template_kwargs={"preserve_thinking": True}),
+            self.request(chat_template_kwargs={"enable_thinking": False}),
+            self.request(chat_template_kwargs={"reasoning_effort": "none"}),
+            self.request(chat_template_kwargs={}),
+            self.request(chat_template_kwargs={"unknown": True}),
+            self.request(chat_template_kwargs={"enable_thinking": "false"}),
+            self.request(chat_template_kwargs={"reasoning_effort": None}),
+            self.request(chat_template_kwargs={"preserve_thinking": 1}),
+            self.request(chat_template_kwargs=[]),
             self.request(model_options={"unknown": True}),
             self.request([{"role": "user", "content": "?"}]),
             self.request(

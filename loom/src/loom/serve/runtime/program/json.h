@@ -30,6 +30,13 @@ extern "C" {
 // are string=0, number=1, object=2, array=3, true=4, false=5, null=6. Input
 // order and duplicate keys are preserved for the source policy to interpret.
 //
+// json.members_range(buffer source, i64 offset, i64 length)
+//     -> (buffer, i32 type, i64 count)
+// has the same contract for one selected byte range. Returned offsets remain
+// relative to source, so nested objects and arrays can be traversed directly
+// from parent records without copying their JSON. Bytes outside the range are
+// not inspected. The result owns its records and retains no source reference.
+//
 // json.unescape(buffer source, i64 offset, i64 length, buffer target,
 //               i64 target_offset) -> i64 length
 // decodes a raw string range into the remaining target capacity. Source and

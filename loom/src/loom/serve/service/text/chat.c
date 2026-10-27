@@ -284,6 +284,7 @@ iree_status_t loom_serve_text_chat_policy_initialize(
   iree_vm_function_t name_function = {0};
   iree_vm_function_t defaults_function = {0};
   iree_vm_function_t image_limits_function = {0};
+  iree_vm_function_t reasoning_function = {0};
   const iree_vm_signature_type_t buffer = {
       .kind = IREE_VM_SIGNATURE_TYPE_KIND_REF,
       .value.ref = out_policy->types.buffer};
@@ -294,6 +295,7 @@ iree_status_t loom_serve_text_chat_policy_initialize(
       .kind = IREE_VM_SIGNATURE_TYPE_KIND_SCALAR,
       .value.scalar = IREE_VM_SCALAR_TYPE_I64};
   const iree_vm_signature_type_t buffers[] = {buffer, buffer};
+  const iree_vm_signature_type_t reasoning_results[] = {i32, i32, i32};
   const iree_vm_signature_type_t fragment_results[] = {buffer, i64};
   const iree_vm_signature_type_t media_results[] = {buffer, i64, buffer};
   const iree_vm_signature_type_t image_limit_results[] = {i64, i64, i64, i64,
@@ -310,6 +312,10 @@ iree_status_t loom_serve_text_chat_policy_initialize(
   const iree_vm_signature_type_t completion_results[] = {buffer, i32};
   const loom_serve_program_binding_t bindings[] = {
       {IREE_SVL("model_name"), {NULL, 0}, {&buffer, 1}, &name_function},
+      {IREE_SVL("chat_reasoning"),
+       {NULL, 0},
+       {reasoning_results, IREE_ARRAYSIZE(reasoning_results)},
+       &reasoning_function},
       {IREE_SVL("chat_image_limits"),
        {NULL, 0},
        {image_limit_results, IREE_ARRAYSIZE(image_limit_results)},
@@ -402,6 +408,22 @@ iree_status_t loom_serve_text_chat_policy_initialize(
     }
   }
   iree_vm_variant_reset(&result);
+  iree_vm_variant_t reasoning_values[3] = {0};
+  if (iree_status_is_ok(status)) {
+    status = iree_vm_invoke(out_policy->invocation, reasoning_function,
+                            iree_vm_variant_span_empty(),
+                            iree_vm_variant_span_from_array(reasoning_values));
+  }
+  int32_t reasoning[IREE_ARRAYSIZE(reasoning_values)] = {0};
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(reasoning_values) && iree_status_is_ok(status); ++i) {
+    status = iree_vm_i32_from_variant(reasoning_values[i], &reasoning[i]);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_reasoning_initialize(
+        reasoning[0], reasoning[1], reasoning[2], &out_policy->reasoning);
+  }
+  iree_vm_variant_span_reset(iree_vm_variant_span_from_array(reasoning_values));
   iree_vm_variant_t image_limits[5] = {0};
   if (iree_status_is_ok(status)) {
     status = iree_vm_invoke(out_policy->invocation, image_limits_function,
@@ -892,11 +914,22 @@ static iree_status_t loom_serve_text_chat_request_render(
       {"model_options", LOOM_SERVE_TEXT_CHAT_OBJECT},
       {"top_p", LOOM_SERVE_TEXT_CHAT_NUMBER},
       {"top_k", LOOM_SERVE_TEXT_CHAT_NUMBER},
-      {"seed", LOOM_SERVE_TEXT_CHAT_NUMBER}};
+      {"seed", LOOM_SERVE_TEXT_CHAT_NUMBER},
+      {"reasoning_effort", LOOM_SERVE_TEXT_CHAT_STRING},
+      {"preserve_thinking", LOOM_SERVE_TEXT_CHAT_BOOL},
+      {"chat_template_kwargs", LOOM_SERVE_TEXT_CHAT_OBJECT}};
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
       object, IREE_ARRAYSIZE(fields), fields, 0));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[1]));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[0]));
+  if (fields[17].value.data) {
+    loom_serve_text_chat_field_t options[] = {
+        {"enable_thinking", LOOM_SERVE_TEXT_CHAT_BOOL},
+        {"reasoning_effort", LOOM_SERVE_TEXT_CHAT_STRING},
+        {"preserve_thinking", LOOM_SERVE_TEXT_CHAT_BOOL}};
+    IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
+        fields[17].value, IREE_ARRAYSIZE(options), options, 0));
+  }
   iree_string_builder_reset(&history->scratch);
   IREE_RETURN_IF_ERROR(
       loom_serve_text_chat_append_decoded(&history->scratch, fields[0].value));

@@ -333,6 +333,23 @@ encoding uses each request's dimensions.
 The [image source contract](https://github.com/ROCm/hrx-system/blob/main/loom/src/loom/serve/service/image/model.h)
 defines entry signatures, alignment and cancellation.
 
+### Declare reasoning support
+
+The text control program exports `text_chat_reasoning_v1()`, returning three
+I32 values: whether reasoning is supported, a bitmap of selectable efforts, and
+the effort ordinal used when a request omits controls. Preparation calls this
+once and validates the declaration before publishing the model. The server
+copies the resulting facts into discovery; it does not use them to interpret
+requests or modify sampling.
+
+Effort bits and ordinals are `none=0`, `minimal=1`, `low=2`, `medium=3`,
+`high=4`, `xhigh=5`, and `max=6`. Source advertises the model's distinct policies,
+not every accepted alias. A selectable ladder contains at least one reasoning
+level, and its default must be in the bitmap. Non-reasoning models return
+`(0, 0, 0)`; reasoning models without an effort selector return `(1, 0, 0)`.
+For example, `(1, 45, 0)` advertises none/low/medium/xhigh with reasoning off by
+default. The [HTTP profile](http-profiles.md) describes the discovery fields.
+
 ### Tool-call translation
 
 Text policy owns the generated grammar and canonical history. Its `parse_tools`

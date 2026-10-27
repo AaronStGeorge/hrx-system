@@ -1,10 +1,10 @@
 # Connect model clients
 
-`loom-serve` can back Pi, Oh My Pi and Open WebUI through their existing
-OpenAI-compatible configuration. No client plugin or Loom-specific HTTP route
-is required. The server continues to publish one complete catalog containing
-text, image, embedding, decision, speech and recognition deployments; each
-client selects the operations it understands.
+`loom-serve` can back Pi, Oh My Pi, and Open WebUI through their existing
+OpenAI-compatible configuration. Pi and Oh My Pi need no compatibility flags,
+request-body overrides, or client plugin. The server publishes one complete
+catalog containing text, image, embedding, decision, speech, and recognition
+deployments; each client selects the operations it understands.
 
 This workflow assumes that the server and its model packages are already
 running. [Serve source-defined models](serve-models.md) establishes that
@@ -31,6 +31,9 @@ curl --fail --silent --show-error "$loom_base_url/models" |
     output_modalities,
     context_length,
     max_output_tokens: .limits.max_output_tokens,
+    reasoning,
+    supported_reasoning_levels,
+    default_reasoning_level,
     endpoint: .loom.endpoint
   }'
 ```
@@ -67,6 +70,12 @@ complete configuration for one catalog row:
 text_model=scout
 curl --fail --silent --show-error "$loom_base_url/models" |
   jq --arg base_url "$loom_base_url" --arg model "$text_model" '
+    def thinking_levels($supported):
+      ["off", "minimal", "low", "medium", "high", "xhigh", "max"] |
+      map(. as $level | (if . == "off" then "none" else . end) as $effort |
+        {key: $level, value:
+          (if $supported | index($effort) then $effort else null end)}) |
+      from_entries;
     (.data | map(select(.id == $model)) |
       if length == 1 then .[0]
       else error("expected exactly one catalog row for \($model)") end) as $row |
@@ -79,21 +88,17 @@ curl --fail --silent --show-error "$loom_base_url/models" |
           "baseUrl": $base_url,
           "api": "openai-completions",
           "apiKey": "loom",
-          "compat": {
-            "supportsDeveloperRole": false,
-            "supportsReasoningEffort": false,
-            "maxTokensField": "max_completion_tokens"
-          },
           "models": [{
             "id": $row.id,
             "name": $row.id,
-            "reasoning": false,
+            "reasoning": ($row.reasoning // false),
             "input": ($row.input_modalities |
               map(select(. == "text" or . == "image"))),
             "contextWindow": $row.context_length,
-            "maxTokens": $row.limits.max_output_tokens,
-            "samplingParams": {"temperature": 0}
-          }]
+            "maxTokens": $row.limits.max_output_tokens
+          } + (if $row.supported_reasoning_levels then {
+            "thinkingLevelMap": thinking_levels($row.supported_reasoning_levels)
+          } else {} end)]
         }
       }
     } end'
@@ -104,24 +109,18 @@ already contains providers, merge the `loom` member into its existing
 `providers` object. The dummy API key makes the provider available to Pi; Loom
 does not authenticate it. Opening Pi's `/model` picker reloads the file.
 
-The compatibility block describes the current Loom chat profile. It keeps Pi
-on the `system` instruction role because Loom's public profile does not promise
-OpenAI's `developer` role; it selects `max_completion_tokens` and suppresses
-OpenAI's `reasoning_effort`. Streaming usage, `store:false` and ordinary
-function tools already match Pi's OpenAI-completions transport.
+Select the deployment and use Pi's `/thinking` picker to change reasoning:
 
-For a Qwen package whose source chat policy actually supports thinking, extend
-the model entry with:
-
-```json
-{
-  "reasoning": true,
-  "compat": {"thinkingFormat": "qwen"}
-}
+```sh
+pi --model loom/scout
 ```
 
-Pi then sends the top-level `enable_thinking` boolean that Loom passes to source
-policy. A model name alone does not establish that capability.
+The generated `thinkingLevelMap` describes the model's supported choices;
+it does not change Pi's transport. For Qwen, the picker offers off, low,
+medium, and xhigh. Pi sends the selected `reasoning_effort`, and the model's
+source policy applies its corresponding prompt. Streaming usage, leading
+`developer` instructions, and ordinary function tools work with the same
+configuration. These examples use Pi 1.4 or newer.
 
 Pi's native llama.cpp integration is a different protocol. It owns router
 discovery, load, unload and download operations that Loom does not expose. Use
@@ -130,8 +129,9 @@ a llama.cpp router.
 
 ## Let Oh My Pi discover the mixed catalog
 
-Oh My Pi can discover a generic OpenAI model list. Add this provider to
-`~/.omp/agent/models.yml`:
+Oh My Pi discovers model modalities, limits, and reasoning choices from the
+catalog. Use version 18.13.2 or newer for discovered reasoning levels, and add
+this provider to `~/.omp/agent/models.yml`:
 
 ```yaml
 providers:
@@ -139,55 +139,30 @@ providers:
     baseUrl: http://127.0.0.1:8080/v1
     auth: none
     api: openai-completions
-    compat:
-      supportsDeveloperRole: false
-      supportsReasoningEffort: false
-      qwenPreserveThinking: false
-      qwenTemplateReasoningEffort: false
-      maxTokensField: max_completion_tokens
     discovery:
       type: openai-models-list
-    modelOverrides:
-      scout:
-        samplingParams:
-          temperature: 0
 ```
 
-Change the URL and `scout` to match the client-visible server and selected text
-deployment. `omp models refresh` refreshes discovery; `omp models --kind all`
-displays every discovered kind. Oh My Pi consumes Loom's modality and limit
+Change the URL to match the client-visible server. `omp models refresh`
+refreshes discovery; `omp models --kind all` displays every discovered kind.
+Oh My Pi consumes Loom's modality and limit
 fields: text-output rows become chat models, image-only rows become image runners,
 and embedding-only rows become embedding runners. The ordinary model picker
 remains a chat-model view rather than presenting every server deployment as chat.
 
-The Qwen compatibility flags suppress `preserve_thinking` and template
-`reasoning_effort`, which are not Loom chat fields. They do not disable thinking.
-OMP can otherwise emit these fields based on the model's name and local URL.
-In particular, `reasoning: false` does not suppress `preserve_thinking`. Its
-[compatibility reference](https://github.com/can1357/oh-my-pi/blob/main/docs/provider-compat-reference.md)
-describes those automatic policies.
+Select a text model and choose a reasoning level in the client:
 
-For a package supporting Loom's `enable_thinking`, add an entry under that
-provider's `modelOverrides`. The key is the exact deployment ID, including any
-slashes:
-
-```yaml
-modelOverrides:
-  "Qwen/Qwen3.8-27B":
-    reasoning: true
-    compat:
-      thinkingFormat: qwen
-      supportsReasoningParams: true
+```sh
+omp --model loom/scout
 ```
 
-OMP's thinking control then sends `enable_thinking` rather than an effort or
-template-options object. `supportsReasoningParams: false` would suppress that
-toggle too. A fixed `compat.extraBody.enable_thinking` overrides the toggle;
-leaving it unset keeps the client's thinking control effective. The model's
-source policy determines whether either value is supported.
+Qwen advertises off (`none`), low, medium, and xhigh. These select its trained
+prompt policies, not fixed thinking-token budgets. OMP also sends its ordinary
+reasoning-history controls; the source policy preserves thoughts through tool
+cycles. No Qwen-specific override is needed. The catalog's default describes
+requests that omit a choice; an explicit client preference takes precedence.
 
-`temperature: 0` in the initial example is an explicit smoke-test choice, not
-a server restriction. Omitted sampling fields use model defaults; supported
+Omitted sampling fields use model defaults; supported
 `temperature`, `top_p`, `top_k`, and `seed` values belong to the package's
 [chat policy](../http-profiles.md#chat-completions).
 

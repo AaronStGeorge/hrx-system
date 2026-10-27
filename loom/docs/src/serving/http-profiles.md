@@ -61,6 +61,24 @@ Text also reports configured `context_length` and
 `loom.input_tokens:true` advertises exact prepared-chat input counting.
 Capabilities do not establish learned quality or support for every optional field.
 
+Prepared text models declare `reasoning` explicitly. Models with an effort
+selector also publish `supported_reasoning_levels` and
+`default_reasoning_level`, the policy used when a request omits reasoning
+controls. For example, a Qwen policy can advertise:
+
+```json
+{
+  "reasoning": true,
+  "supported_reasoning_levels": ["none", "low", "medium", "xhigh"],
+  "default_reasoning_level": "none"
+}
+```
+
+These are fields of each `/v1/models` row, not server-wide settings. An absent
+declaration means unknown; `reasoning:false` means the model does not support
+reasoning. Accepted aliases need not appear as distinct levels. Discovery
+reflects source policy without inferring capabilities from the model name.
+
 Residency controls default to `component:"primary"`. A text deployment with an
 image-input component also accepts `component:"image"`; an image-generation
 deployment's normal computation is still `primary`. An undeclared component
@@ -229,10 +247,19 @@ unsupported values reject before admission. The server carries the validated
 policy to the model program without reading logits back to the host. Supported
 sampling algorithms and value ranges belong to the model package.
 
-Sampling is separate from thinking: `enable_thinking` and the `model_options`
-object are passed to source chat policy, which validates their meaning and
-renders the model's framing. Reasoning-aware models return `reasoning_content`
-separately from answer `content`, in both SSE deltas and complete messages.
+Sampling is separate from thinking: the boolean `enable_thinking`, string
+`reasoning_effort`, and `model_options` object are passed to source chat policy,
+which validates their meaning and renders the model's framing. Supported effort
+levels, aliases, and omitted-control defaults belong to the model package;
+unsupported or contradictory controls reject before admission. Reasoning-aware
+models return `reasoning_content` separately from answer `content`, in both SSE
+deltas and complete messages.
+
+`preserve_thinking` is a boolean source-policy control for reasoning in prior
+assistant messages. `chat_template_kwargs` accepts `enable_thinking`,
+`reasoning_effort`, and `preserve_thinking` with the same types. The source policy
+resolves top-level and nested spellings together; contradictory controls reject,
+and the nested object does not enable arbitrary template options or execution.
 
 `tools` accepts up to 4096 function declarations. Omitted `tool_choice` or
 `"auto"` allows tool calls. `"none"` disables tools for the current response,

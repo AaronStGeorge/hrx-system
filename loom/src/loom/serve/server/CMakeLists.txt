@@ -93,6 +93,7 @@ loom_cc_library(
     loom::serve::service
     loom::serve::service::inspection
     loom::serve::service::kind
+    loom::serve::service::reasoning
     loom::serve::telemetry::record
     loom::serve::telemetry::stream
     loom::serve::transport::http::multipart
@@ -268,6 +269,7 @@ loom_cc_test(
     loom::serve::dashboard::files
     loom::serve::runtime::host::wake
     loom::serve::runtime::program::variant_pool
+    loom::serve::service::reasoning
     loom::serve::telemetry::latency
     loom::serve::transport::http::listener
     loom::serve::transport::http::multipart

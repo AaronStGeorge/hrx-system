@@ -21,6 +21,7 @@
 #include "loom/serve/server/http/variants.h"
 #include "loom/serve/server/maintenance.h"
 #include "loom/serve/service/kind.h"
+#include "loom/serve/service/reasoning.h"
 #include "loom/serve/transport/http/multipart.h"
 #include "loom/util/json.h"
 
@@ -616,6 +617,36 @@ static iree_status_t loom_serve_router_describe_service(
       "input_modalities", service->capabilities.input_modalities, output));
   IREE_RETURN_IF_ERROR(loom_serve_router_describe_modalities(
       "output_modalities", service->capabilities.output_modalities, output));
+  const loom_serve_reasoning_t reasoning = service->capabilities.reasoning;
+  if (reasoning.support != LOOM_SERVE_REASONING_UNKNOWN) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        output, ",\"reasoning\":%s",
+        reasoning.support == LOOM_SERVE_REASONING_SUPPORTED ? "true"
+                                                            : "false"));
+  }
+  if (reasoning.efforts) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+        output, ",\"supported_reasoning_levels\":["));
+    bool comma = false;
+    iree_status_t status = iree_ok_status();
+    for (int32_t effort = 0; effort < LOOM_SERVE_REASONING_EFFORT_COUNT &&
+                             iree_status_is_ok(status);
+         ++effort) {
+      if (!(reasoning.efforts & (1u << effort))) {
+        continue;
+      }
+      status = iree_string_builder_append_format(
+          output, "%s\"%s\"", comma ? "," : "",
+          loom_serve_reasoning_effort_name(
+              (loom_serve_reasoning_effort_t)effort));
+      comma = true;
+    }
+    IREE_RETURN_IF_ERROR(status);
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        output, "],\"default_reasoning_level\":\"%s\"",
+        loom_serve_reasoning_effort_name(
+            (loom_serve_reasoning_effort_t)reasoning.default_effort)));
+  }
   if (service->capabilities.context_length) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         output, ",\"context_length\":%zu",

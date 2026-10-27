@@ -34,6 +34,11 @@ func.def public @model_name() -> (buffer) {
   func.return %name : buffer
 }
 
+func.def public @chat_reasoning() -> (i32, i32, i32) {
+  %c0 = scalar.constant 0 : i32
+  func.return %c0, %c0, %c0 : i32, i32, i32
+}
+
 func.def public @chat_image_limits() -> (i64, i64, i64, i64, i64) {
   %c0 = scalar.constant 0 : i64
   func.return %c0, %c0, %c0, %c0, %c0 : i64, i64, i64, i64, i64

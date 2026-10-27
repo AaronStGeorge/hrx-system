@@ -1459,7 +1459,11 @@ loom_serve_service_t loom_serve_text_service_interface(
                encodes ? 0
                        : iree_min(service->scheduling.context_capacity,
                                   LOOM_SERVE_TEXT_CHAT_MAX_OUTPUT_TOKENS),
-           .input_token_count = !encodes},
+           .input_token_count = !encodes,
+           .reasoning = encodes
+                            ? (loom_serve_reasoning_t){0}
+                            : loom_serve_text_model_chat_policy(service->model)
+                                  ->reasoning},
       .snapshot = loom_serve_text_snapshot,
       .inspection = {.request_at = loom_serve_text_request_at,
                      .session_at = loom_serve_text_session_at},

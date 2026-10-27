@@ -535,6 +535,7 @@ loom_cc_library(
     loom::serve::media::digest
     loom::serve::media::image
     loom::serve::runtime::program
+    loom::serve::service::reasoning
     loom::util::json
     loom::util::stream
   PUBLIC

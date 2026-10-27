@@ -72,6 +72,14 @@ class JsonTest : public ::testing::Test {
     arguments_[0] = Text(document);
     return Invoke(IREE_SV("members"), 1, 3);
   }
+  iree_status_t MembersRange(std::string_view document, int64_t offset,
+                             int64_t length) {
+    ResetCall();
+    arguments_[0] = Text(document);
+    arguments_[1] = iree_vm_variant_from_i64(offset);
+    arguments_[2] = iree_vm_variant_from_i64(length);
+    return Invoke(IREE_SV("members_range"), 3, 3);
+  }
   iree_status_t Compact(std::string_view document) {
     ResetCall();
     arguments_[0] = Text(document);
@@ -341,6 +349,63 @@ TEST_F(JsonTest, MalformedInputDoesNotPoisonTheSharedInvocation) {
   arguments_[0] = iree_vm_buffer_variant_from_ptr_borrowed(&types_, nullptr);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Invoke(IREE_SV("members"), 1, 3));
+}
+
+TEST_F(JsonTest, MemberRangesKeepAbsoluteOffsetsAcrossNestedContainers) {
+  const std::string document =
+      "\xff"
+      R"({"messages":[{"role":"user","content":"\u03bb"}]})"
+      "\xff";
+  arguments_[4] = Text(document);
+  arguments_[0] = iree_vm_variant_retain(arguments_[4]);
+  arguments_[1] = iree_vm_variant_from_i64(1);
+  arguments_[2] = iree_vm_variant_from_i64(document.size() - 2);
+  IREE_ASSERT_OK(Invoke(IREE_SV("members_range"), 3, 3));
+  auto records = Records(2, 1);
+  EXPECT_EQ(iree_unaligned_load_le_u64(records.data), 3u);
+  EXPECT_EQ(iree_unaligned_load_le_u64(records.data + 8), 8u);
+  for (int32_t type : {3, 2}) {
+    const uint64_t offset = iree_unaligned_load_le_u64(records.data + 16);
+    const uint64_t length = iree_unaligned_load_le_u64(records.data + 24);
+    // Reuse the original source reference. Only member records change as the
+    // production source caller follows offsets through nested containers.
+    iree_vm_variant_span_reset(iree_vm_variant_span_from_array(results_));
+    arguments_[0] = iree_vm_variant_retain(arguments_[4]);
+    arguments_[1] = iree_vm_variant_from_i64(offset);
+    arguments_[2] = iree_vm_variant_from_i64(length);
+    IREE_ASSERT_OK(Invoke(IREE_SV("members_range"), 3, 3));
+    records = Records(type, type == 3 ? 1 : 2);
+    if (type == 3) {
+      EXPECT_EQ(iree_unaligned_load_le_u64(records.data), 0u);
+      EXPECT_EQ(iree_unaligned_load_le_u64(records.data + 8), 0u);
+    }
+  }
+  const uint64_t content = iree_unaligned_load_le_u64(records.data + 56);
+  const uint64_t length = iree_unaligned_load_le_u64(records.data + 64);
+  EXPECT_EQ(document.substr(content, length), R"(\u03bb)");
+  iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments_));
+  EXPECT_EQ(Records(2, 2).data_length, 80u);
+}
+
+TEST_F(JsonTest, MemberRangesRejectInvalidExtentsAndRecover) {
+  for (const auto& [offset, length] : {std::pair<int64_t, int64_t>{-1, 1},
+                                       {0, -1},
+                                       {0, 3},
+                                       {3, 0},
+                                       {1, INT64_MAX},
+                                       {INT64_MAX, 1}}) {
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                          MembersRange("{}", offset, length));
+    IREE_ASSERT_OK(MembersRange("![]!", 1, 2));
+    Records(3, 0);
+  }
+  for (std::string_view selected : {"", "{}x", "[", "{\"x\":\xff}", "true"}) {
+    const std::string document = "!!" + std::string(selected) + "!!";
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          MembersRange(document, 2, selected.size()));
+    IREE_ASSERT_OK(MembersRange("!{}!", 1, 2));
+    Records(2, 0);
+  }
 }
 
 TEST_F(JsonTest, UnescapeUsesOnlyTheProvidedRanges) {

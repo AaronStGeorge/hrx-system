@@ -18,6 +18,7 @@ loom_cc_library(
   DEPS
     ::inspection
     ::kind
+    ::reasoning
     ::reconfiguration
     iree::base
     iree::tokenizer
@@ -27,6 +28,37 @@ loom_cc_library(
     loom::serve::telemetry::stream
     loom::serve::transport::http::server
   PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
+loom_cc_library(
+  NAME
+    reasoning
+  HDRS
+    "reasoning.h"
+  SRCS
+    "reasoning.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
+loom_cc_test(
+  NAME
+    reasoning_test
+  SRCS
+    "reasoning_test.cc"
+  DEPS
+    ::reasoning
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
