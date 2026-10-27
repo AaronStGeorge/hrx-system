@@ -9,8 +9,10 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
+#include "loom/ir/structural_hash.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/template/ops.h"
+#include "loom/transforms/kernel/kernel_shape_requirements.h"
 #include "loom/transforms/kernel/kernel_specialization.h"
 #include "loom/util/adaptive_sort.h"
 
@@ -280,6 +282,111 @@ static loom_kernel_class_contract_flags_t loom_kernel_class_contract_flags(
   return flags;
 }
 
+// During construction a shape slice names source SSA values. Once projection
+// discovery is complete it is translated in place to projection ordinals.
+static iree_status_t loom_kernel_class_shape_values(
+    const loom_kernel_shape_requirements_t* requirements,
+    loom_value_set_id_t values, iree_arena_allocator_t* arena,
+    loom_kernel_class_shape_t* out_shape) {
+  *out_shape = (loom_kernel_class_shape_t){0};
+  loom_value_set_cursor_t cursor;
+  loom_value_set_cursor_begin(requirements->sets, values, &cursor);
+  while (loom_value_set_cursor_next(&cursor) != LOOM_VALUE_ID_INVALID) {
+    ++out_shape->count;
+  }
+  uint32_t* storage = NULL;
+  IREE_RETURN_IF_ERROR(loom_kernel_class_allocate_array(
+      arena, out_shape->count, sizeof(*storage), (void**)&storage));
+  out_shape->projections = storage;
+  loom_value_set_cursor_begin(requirements->sets, values, &cursor);
+  for (uint32_t i = 0; i < out_shape->count; ++i) {
+    storage[i] = loom_value_set_cursor_next(&cursor);
+  }
+  return iree_ok_status();
+}
+
+// Keep an available boundary expression as one requirement. When a value is
+// supplied through a non-affine operation or exact helper result, preserve its
+// retained formal dependencies instead of silently merging its static shape.
+static iree_status_t loom_kernel_class_shape_resolve(
+    const loom_kernel_shape_requirements_t* requirements,
+    loom_symbolic_expr_context_t* expression_context,
+    const loom_kernel_class_argument_lookup_t* arguments,
+    iree_arena_allocator_t* arena, loom_kernel_class_shape_t* shape) {
+  loom_value_set_id_t values = 0;
+  for (uint32_t i = 0; i < shape->count; ++i) {
+    const loom_value_id_t value = shape->projections[i];
+    loom_symbolic_expr_t expression;
+    IREE_RETURN_IF_ERROR(
+        loom_symbolic_expr_from_value(expression_context, value, &expression));
+    bool projected = loom_symbolic_expr_is_linear(&expression);
+    for (iree_host_size_t j = 0; projected && j < expression.term_count; ++j) {
+      uint16_t ordinal;
+      projected = loom_kernel_class_lookup_argument(
+          arguments, expression.terms[j].value_id, &ordinal);
+    }
+    if (projected) {
+      if (expression.term_count) {
+        IREE_RETURN_IF_ERROR(loom_value_set_index_add(requirements->sets,
+                                                      values, value, &values));
+      }
+    } else {
+      IREE_RETURN_IF_ERROR(loom_value_set_index_union(
+          requirements->sets, values,
+          loom_kernel_shape_value_arguments(requirements, value), &values));
+    }
+  }
+  return loom_kernel_class_shape_values(requirements, values, arena, shape);
+}
+
+static iree_status_t loom_kernel_class_provider_shape(
+    const loom_module_t* module,
+    const loom_kernel_shape_requirements_t* requirements,
+    const loom_template_provider_summary_t* provider,
+    loom_value_slice_t actuals, iree_arena_allocator_t* arena,
+    loom_kernel_class_shape_t* out_shape) {
+  *out_shape = (loom_kernel_class_shape_t){0};
+  if (provider->module != module ||
+      !loom_symbol_ref_is_valid(provider->symbol) ||
+      provider->symbol.module_id != 0) {
+    return iree_ok_status();
+  }
+  const loom_func_like_t function = loom_func_like_cast(
+      module, module->symbols.entries[provider->symbol.symbol_id].defining_op);
+  uint16_t argument_count = 0;
+  const loom_value_id_t* arguments =
+      loom_func_like_arg_ids(function, &argument_count);
+  const loom_value_set_id_t required =
+      requirements->symbols[provider->symbol.symbol_id].arguments;
+  loom_value_set_id_t values = 0;
+  for (uint16_t i = 0; i < argument_count; ++i) {
+    if (loom_value_set_index_contains(requirements->sets, required,
+                                      arguments[i])) {
+      IREE_RETURN_IF_ERROR(loom_value_set_index_add(
+          requirements->sets, values, actuals.values[i], &values));
+    }
+  }
+  return loom_kernel_class_shape_values(requirements, values, arena, out_shape);
+}
+
+static void loom_kernel_class_shape_project(
+    loom_kernel_class_shape_t* shape,
+    const loom_kernel_class_projection_t* projections,
+    uint32_t projection_count) {
+  uint32_t* ordinals = (uint32_t*)shape->projections;
+  uint32_t count = 0;
+  for (uint32_t i = 0; i < shape->count; ++i) {
+    uint32_t ordinal = 0;
+    const loom_kernel_class_projection_t* projection =
+        loom_kernel_class_lookup_projection(projections, projection_count,
+                                            ordinals[i], &ordinal);
+    if (projection->kind == LOOM_KERNEL_CLASS_PROJECTION_AFFINE) {
+      ordinals[count++] = ordinal;
+    }
+  }
+  shape->count = count;
+}
+
 //===----------------------------------------------------------------------===//
 // Classifier construction
 //===----------------------------------------------------------------------===//
@@ -339,9 +446,6 @@ iree_status_t loom_kernel_class_classifier_build(
     demand_id = demand->next_source_demand_id;
   }
   out_classifier->decision_count = decision_count;
-  if (decision_count == 0) {
-    return iree_ok_status();
-  }
 
   loom_kernel_class_decision_t* decisions = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -349,8 +453,21 @@ iree_status_t loom_kernel_class_classifier_build(
   memset(decisions, 0, decision_count * sizeof(*decisions));
   out_classifier->decisions = decisions;
 
+  loom_kernel_class_argument_lookup_t argument_lookup;
+  IREE_RETURN_IF_ERROR(loom_kernel_class_prepare_argument_lookup(
+      kernel_argument_ids, kernel_argument_count, arena, &argument_lookup));
+  loom_kernel_shape_requirements_t requirements;
+  IREE_RETURN_IF_ERROR(loom_kernel_shape_requirements_build(
+      module, decision_models, arena, &requirements));
+  IREE_RETURN_IF_ERROR(loom_kernel_class_shape_values(
+      &requirements, requirements.symbols[kernel_symbol_id].values, arena,
+      &out_classifier->shape));
+  IREE_RETURN_IF_ERROR(loom_kernel_class_shape_resolve(
+      &requirements, expression_context, &argument_lookup, arena,
+      &out_classifier->shape));
+  out_classifier->has_shape_requirements = out_classifier->shape.count != 0;
   uint32_t decision_ordinal = decision_count;
-  iree_host_size_t value_reference_count = 0;
+  iree_host_size_t value_reference_count = out_classifier->shape.count;
   iree_host_size_t binding_value_count = 0;
   iree_host_size_t feature_count = 0;
   iree_host_size_t action_count = 0;
@@ -384,6 +501,21 @@ iree_status_t loom_kernel_class_classifier_build(
     decision->result_count = (uint16_t)results.count;
     value_reference_count +=
         loom_kernel_class_decision_value_reference_count(model);
+    loom_kernel_class_shape_t* shapes = NULL;
+    IREE_RETURN_IF_ERROR(loom_kernel_class_allocate_array(
+        arena, model->providers.count, sizeof(*shapes), (void**)&shapes));
+    decision->action_shapes = shapes;
+    for (uint32_t i = 0; i < model->providers.count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_kernel_class_provider_shape(
+          module, &requirements,
+          loom_template_decision_model_provider(model, i), arguments, arena,
+          &shapes[i]));
+      IREE_RETURN_IF_ERROR(
+          loom_kernel_class_shape_resolve(&requirements, expression_context,
+                                          &argument_lookup, arena, &shapes[i]));
+      value_reference_count += shapes[i].count;
+      out_classifier->has_shape_requirements |= shapes[i].count != 0;
+    }
     binding_value_count += arguments.count + results.count;
     feature_count += model->program.feature_count;
     if (!iree_host_size_checked_add(action_count, model->program.choice_count,
@@ -402,7 +534,17 @@ iree_status_t loom_kernel_class_classifier_build(
       arena, value_reference_count, sizeof(*referenced_value_ids),
       (void**)&referenced_value_ids));
   iree_host_size_t referenced_value_count = 0;
+  for (uint32_t i = 0; i < out_classifier->shape.count; ++i) {
+    referenced_value_ids[referenced_value_count++] =
+        out_classifier->shape.projections[i];
+  }
   for (uint32_t i = 0; i < decision_count; ++i) {
+    for (uint32_t j = 0; j < decisions[i].model->providers.count; ++j) {
+      const loom_kernel_class_shape_t* shape = &decisions[i].action_shapes[j];
+      for (uint32_t k = 0; k < shape->count; ++k) {
+        referenced_value_ids[referenced_value_count++] = shape->projections[k];
+      }
+    }
     const loom_kernel_class_decision_t* decision = &decisions[i];
     for (uint32_t j = 0; j < decision->model->program.predicate_count; ++j) {
       const loom_decision_program_predicate_t* predicate =
@@ -434,10 +576,6 @@ iree_status_t loom_kernel_class_classifier_build(
   IREE_RETURN_IF_ERROR(loom_kernel_class_allocate_array(
       arena, projection_count, sizeof(*projections), (void**)&projections));
   out_classifier->projections = projections;
-
-  loom_kernel_class_argument_lookup_t argument_lookup;
-  IREE_RETURN_IF_ERROR(loom_kernel_class_prepare_argument_lookup(
-      kernel_argument_ids, kernel_argument_count, arena, &argument_lookup));
 
   iree_host_size_t total_term_count = 0;
   for (uint32_t i = 0; i < projection_count; ++i) {
@@ -505,6 +643,19 @@ iree_status_t loom_kernel_class_classifier_build(
     projection->term_count = (uint16_t)expression->term_count;
     projection->static_facts = loom_value_facts_unknown();
     term_cursor += expression->term_count;
+  }
+
+  loom_kernel_class_shape_project(&out_classifier->shape, projections,
+                                  projection_count);
+  out_classifier->has_shape_requirements = out_classifier->shape.count != 0;
+  for (uint32_t i = 0; i < decision_count; ++i) {
+    for (uint32_t j = 0; j < decisions[i].model->providers.count; ++j) {
+      loom_kernel_class_shape_project(
+          (loom_kernel_class_shape_t*)&decisions[i].action_shapes[j],
+          projections, projection_count);
+      out_classifier->has_shape_requirements |=
+          decisions[i].action_shapes[j].count != 0;
+    }
   }
 
   loom_value_id_t* binding_values = NULL;
@@ -770,6 +921,157 @@ static bool loom_kernel_class_action_is_publishable(
                            LOOM_KERNEL_CLASS_CONTRACT_FLAG_RESULT_DEPENDENT);
 }
 
+static iree_status_t loom_kernel_class_union_shape(
+    loom_value_set_index_t* sets, const loom_kernel_class_shape_t* shape,
+    loom_value_set_id_t* inout_values) {
+  for (uint32_t i = 0; i < shape->count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_value_set_index_add(
+        sets, *inout_values, shape->projections[i], inout_values));
+  }
+  return iree_ok_status();
+}
+
+// Refine the already-selected classes by exact structural values. This uses
+// retained projections only: no source traversal, inlining, or native compile
+// occurs per launch. Unknown values remain unknown for later specialization.
+static iree_status_t loom_kernel_class_collect_shapes(
+    const loom_kernel_class_classifier_t* classifier,
+    const loom_kernel_class_site_t* sites,
+    const loom_kernel_class_collection_options_t* options,
+    const loom_kernel_class_decision_result_t* decisions,
+    const loom_kernel_class_trace_t* traces,
+    loom_kernel_class_trace_id_t* trace_ids,
+    loom_decision_class_partition_t* partition, iree_arena_allocator_t* arena,
+    loom_kernel_class_t** out_shapes) {
+  *out_shapes = NULL;
+  if (!classifier->has_shape_requirements) {
+    return iree_ok_status();
+  }
+  loom_value_set_index_t* sets = NULL;
+  IREE_RETURN_IF_ERROR(loom_value_set_index_allocate(arena, &sets));
+  loom_value_set_id_t common = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_kernel_class_union_shape(sets, &classifier->shape, &common));
+  for (uint32_t i = 0; i < classifier->decision_count; ++i) {
+    if (decisions[i].state != LOOM_KERNEL_CLASS_DECISION_ACCEPTED) {
+      const loom_kernel_class_decision_t* decision = &classifier->decisions[i];
+      IREE_RETURN_IF_ERROR(loom_kernel_class_union_shape(
+          sets,
+          &decision->action_shapes[decision->generic_result.action_ordinal],
+          &common));
+    }
+  }
+  loom_kernel_class_shape_t* shapes = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, partition->class_count, sizeof(*shapes), (void**)&shapes));
+  uint32_t maximum_values = 0;
+  const loom_kernel_shape_requirements_t membership = {.sets = sets};
+  for (uint16_t i = 0; i < partition->class_count; ++i) {
+    loom_value_set_id_t values = common;
+    for (uint32_t trace = trace_ids[i];
+         trace != LOOM_KERNEL_CLASS_TRACE_ID_INVALID;
+         trace = traces[trace].parent_trace_id) {
+      const loom_kernel_class_trace_t* step = &traces[trace];
+      IREE_RETURN_IF_ERROR(loom_kernel_class_union_shape(
+          sets,
+          &classifier->decisions[step->decision_ordinal]
+               .action_shapes[step->action_ordinal],
+          &values));
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_kernel_class_shape_values(&membership, values, arena, &shapes[i]));
+    maximum_values = iree_max(maximum_values, shapes[i].count);
+  }
+  loom_kernel_class_shape_value_t* candidate = NULL;
+  IREE_RETURN_IF_ERROR(loom_kernel_class_allocate_array(
+      arena, maximum_values, sizeof(*candidate), (void**)&candidate));
+  loom_kernel_class_t* classes = NULL;
+  const uint32_t capacity =
+      (uint32_t)iree_min(partition->site_count, partition->class_limit);
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, capacity, sizeof(*classes), (void**)&classes));
+  uint32_t bucket_count = 1;
+  while (bucket_count < 2 * capacity) {
+    bucket_count *= 2;
+  }
+  loom_decision_class_ordinal_t* buckets = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, bucket_count, sizeof(*buckets), (void**)&buckets));
+  memset(buckets, 0xFF, bucket_count * sizeof(*buckets));
+  uint16_t class_count = 0;
+  for (iree_host_size_t i = 0; i < partition->site_count; ++i) {
+    const uint16_t parent = partition->site_classes[i];
+    const loom_kernel_class_shape_t* shape = &shapes[parent];
+    uint32_t hash =
+        loom_structural_hash_mix_u32(loom_structural_hash_initialize(), parent);
+    for (uint32_t j = 0; j < shape->count; ++j) {
+      const uint32_t projection = shape->projections[j];
+      const loom_value_facts_t facts = loom_kernel_class_evaluate_projection(
+          &classifier->projections[projection], &sites[i],
+          options->ranged_transfer_term_limit);
+      const bool exact =
+          loom_value_facts_is_exact(facts) && !loom_value_facts_is_float(facts);
+      candidate[j] = (loom_kernel_class_shape_value_t){
+          .projection = projection,
+          .facts = exact ? loom_value_facts_exact_i64(facts.range_lo)
+                         : loom_value_facts_unknown(),
+      };
+      hash = loom_structural_hash_mix_u32(hash, exact);
+      if (exact) {
+        hash = loom_structural_hash_mix_u64(hash, facts.range_lo);
+      }
+    }
+    uint32_t bucket = loom_structural_hash_finalize(hash) & (bucket_count - 1);
+    for (; buckets[bucket] != LOOM_DECISION_CLASS_ORDINAL_INVALID;
+         bucket = (bucket + 1) & (bucket_count - 1)) {
+      const uint16_t ordinal = buckets[bucket];
+      if (partition->candidate_parent_classes[ordinal] != parent) {
+        continue;
+      }
+      bool equal = true;
+      for (uint32_t j = 0; j < shape->count; ++j) {
+        equal &= loom_value_facts_equal(candidate[j].facts,
+                                        classes[ordinal].shape_values[j].facts);
+      }
+      if (equal) {
+        break;
+      }
+    }
+    if (buckets[bucket] == LOOM_DECISION_CLASS_ORDINAL_INVALID) {
+      if (class_count == partition->class_limit) {
+        return iree_make_status(
+            IREE_STATUS_RESOURCE_EXHAUSTED,
+            "kernel structural specializations exceed the class limit %u",
+            partition->class_limit);
+      }
+      const uint16_t ordinal = class_count++;
+      buckets[bucket] = ordinal;
+      partition->candidate_parent_classes[ordinal] = parent;
+      loom_kernel_class_shape_value_t* retained = NULL;
+      IREE_RETURN_IF_ERROR(loom_kernel_class_allocate_array(
+          arena, shape->count, sizeof(*retained), (void**)&retained));
+      if (shape->count) {
+        memcpy(retained, candidate, shape->count * sizeof(*retained));
+      }
+      classes[ordinal] = (loom_kernel_class_t){
+          .trace_id = trace_ids[parent],
+          .shape_values = retained,
+          .shape_value_count = shape->count,
+      };
+    }
+    partition->candidate_site_classes[i] = buckets[bucket];
+  }
+  loom_decision_class_ordinal_t* previous = partition->site_classes;
+  partition->site_classes = partition->candidate_site_classes;
+  partition->candidate_site_classes = previous;
+  partition->class_count = class_count;
+  for (uint16_t i = 0; i < class_count; ++i) {
+    trace_ids[i] = classes[i].trace_id;
+  }
+  *out_shapes = classes;
+  return iree_ok_status();
+}
+
 iree_status_t loom_kernel_class_classifier_collect(
     const loom_kernel_class_classifier_t* classifier,
     const loom_module_t* site_module, const loom_kernel_class_site_t* sites,
@@ -954,6 +1256,10 @@ iree_status_t loom_kernel_class_classifier_collect(
     ++accepted_decision_count;
   }
 
+  loom_kernel_class_t* class_shapes = NULL;
+  IREE_RETURN_IF_ERROR(loom_kernel_class_collect_shapes(
+      classifier, sites, options, decision_results, traces, current_trace_ids,
+      &partition, arena, &class_shapes));
   loom_kernel_class_t* classes = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, partition.class_count, sizeof(*classes), (void**)&classes));
@@ -966,6 +1272,9 @@ iree_status_t loom_kernel_class_classifier_collect(
   for (loom_decision_class_ordinal_t i = 0; i < partition.class_count; ++i) {
     classes[i] = (loom_kernel_class_t){
         .trace_id = current_trace_ids[i],
+        .shape_values = class_shapes ? class_shapes[i].shape_values : NULL,
+        .shape_value_count =
+            class_shapes ? class_shapes[i].shape_value_count : 0,
         .argument_facts =
             argument_facts
                 ? argument_facts +

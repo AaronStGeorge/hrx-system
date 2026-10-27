@@ -36,12 +36,35 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    kernel_shape_requirements
+  HDRS
+    "kernel_shape_requirements.h"
+  SRCS
+    "kernel_shape_requirements.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::analysis::value_relation
+    loom::ir
+    loom::ops::index
+    loom::ops::op_defs
+    loom::ops::scalar
+    loom::ops::scf
+    loom::ops::template
+    loom::transforms::symbol::template_decision_model
+    loom::util::walk
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     kernel_class_classifier
   HDRS
     "kernel_class_classifier.h"
   SRCS
     "kernel_class_classifier.c"
   DEPS
+    ::kernel_shape_requirements
     ::kernel_specialization
     iree::base
     iree::base::internal
@@ -109,6 +132,7 @@ loom_cc_library(
     loom::ir
     loom::ops::index
     loom::ops::scalar
+    loom::ops::special_values
     loom::ops::template
     loom::rewrite::module_projection
     loom::rewrite::rewriter

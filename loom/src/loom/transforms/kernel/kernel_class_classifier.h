@@ -129,6 +129,14 @@ typedef struct loom_kernel_class_action_t {
 static_assert(sizeof(loom_kernel_class_action_t) == 8,
               "kernel class actions must remain compact");
 
+// Boundary projections supplying static structure in one selected body.
+typedef struct loom_kernel_class_shape_t {
+  // Distinct projection ordinals; facts are evaluated only for live classes.
+  const uint32_t* projections;
+  // Number of required projections.
+  uint32_t count;
+} loom_kernel_class_shape_t;
+
 // Immutable boundary form of one template application decision.
 typedef struct loom_kernel_class_decision_t {
   // Source application demand.
@@ -151,6 +159,10 @@ typedef struct loom_kernel_class_decision_t {
 
   // Publication metadata indexed by provider action ordinal.
   const loom_kernel_class_action_t* actions;
+
+  // Structural requirements indexed by provider action, independent of the
+  // header predicates used to select that provider.
+  const loom_kernel_class_shape_t* action_shapes;
 
   // Selection result from kernel-source facts before launch-site refinement.
   loom_decision_program_result_t generic_result;
@@ -190,6 +202,12 @@ typedef struct loom_kernel_class_classifier_t {
 
   // Argument facts already implied by the source kernel contract, in ABI order.
   const loom_value_facts_t* argument_facts;
+
+  // Structural values required directly by the kernel and exact helper calls.
+  loom_kernel_class_shape_t shape;
+
+  // True when any source or provider body has structural requirements.
+  bool has_shape_requirements;
 
   // Number of projected source values.
   uint32_t projection_count;
@@ -269,6 +287,14 @@ typedef struct loom_kernel_class_trace_t {
   uint32_t action_ordinal;
 } loom_kernel_class_trace_t;
 
+// One projected structural fact retained through class materialization.
+typedef struct loom_kernel_class_shape_value_t {
+  // Source-boundary projection whose exact value distinguishes this class.
+  uint32_t projection;
+  // Exact scalar or unknown facts when no caller proves the value.
+  loom_value_facts_t facts;
+} loom_kernel_class_shape_value_t;
+
 // One live kernel class.
 typedef struct loom_kernel_class_t {
   // Final trace node describing all accepted decisions for this class.
@@ -280,6 +306,12 @@ typedef struct loom_kernel_class_t {
   // Integer argument facts true at every site in this class, in ABI order.
   // Context-local extensions are not retained across publication.
   const loom_value_facts_t* argument_facts;
+
+  // Structural facts shared by every site, independently of argument joins.
+  const loom_kernel_class_shape_value_t* shape_values;
+
+  // Number of structural facts.
+  uint32_t shape_value_count;
 
   // Number of launch sites assigned to this class.
   iree_host_size_t member_count;
@@ -322,9 +354,11 @@ typedef struct loom_kernel_class_collection_t {
 // Builds an immutable boundary classifier for one kernel implementation body.
 //
 // Construction follows the kernel symbol's existing template-demand chain and
-// walks no IR. |kernel_facts| and |expression_context| must describe the same
-// kernel function and immutable module snapshot. The classifier borrows all
-// supplied analyses and owns only storage allocated from |arena|.
+// projects its header decisions without walking IR. The structural requirement
+// analysis owns one immutable body/call traversal. |kernel_facts| and
+// |expression_context| must describe the same kernel function and immutable
+// module snapshot. The classifier borrows all supplied analyses and owns only
+// storage allocated from |arena|.
 iree_status_t loom_kernel_class_classifier_build(
     const loom_module_t* module, loom_symbol_id_t kernel_symbol_id,
     const loom_symbol_reference_table_t* references,
