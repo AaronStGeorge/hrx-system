@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "scope": "assets",
+  "origins": {},
+  "files": [
+    {
+      "origin": "tokenizer.json",
+      "size": 281,
+      "sha256": "b5da12a5215c1bf232871b15ad84de3204b43cf847d46b7b3a13600c4d3e211d"
+    },
+    {
+      "origin": {
+        "kind": "inline",
+        "base64": "QAAAAAAAAAB7ImJpYXMiOnsiZHR5cGUiOiJJMzIiLCJzaGFwZSI6WzFdLCJkYXRhX29mZnNldHMiOlswLDRdfX0gICAgICAgAgAAAA=="
+      },
+      "size": 76,
+      "sha256": "ffad45c5dd6fd5aa71e98414507ee8cf854d2934e778ccdfebfd116e8f4961f6"
+    }
+  ]
+}

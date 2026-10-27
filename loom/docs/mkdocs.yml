@@ -108,6 +108,8 @@ nav:
       - Model documents: serving/model-documents.md
       - Author model programs: serving/model-programs.md
       - HTTP profiles: serving/http-profiles.md
+      - Sharing Models:
+          - Hugging Face: serving/sharing/hugging-face.md
       - Workflows:
           - Fetch and serve a model: serving/workflows/fetch-and-serve.md
           - Serve source-defined models: serving/workflows/serve-models.md

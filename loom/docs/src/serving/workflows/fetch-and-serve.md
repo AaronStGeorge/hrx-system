@@ -5,6 +5,10 @@
 parameters, tokenizer, and service contract; a separate server configuration is
 optional.
 
+To share your own programs and model cards, the
+[Hugging Face publishing guide](../sharing/hugging-face.md) provides a small
+copyable repository, explicit metadata refresh, and an end-to-end smoke test.
+
 This walkthrough transcribes a short English recording with
 [Moonshine Streaming Tiny](https://huggingface.co/moonshine-ai/moonshine-streaming-tiny).
 It uses the original checkpoint and the Loom library's AMD GPU implementation.

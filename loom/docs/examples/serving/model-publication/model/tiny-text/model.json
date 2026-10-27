@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "model": {
+    "id": "example/tiny-text",
+    "name": "Tiny arithmetic text model",
+    "description": "A deterministic, source-defined text model for checking publication and serving; not a trained language model."
+  },
+  "programs": {
+    "source": {
+      "directory": "program",
+      "inputs": [
+        {
+          "path": "program/prepare.loom",
+          "data": ["program/weights.loom"]
+        },
+        "program/control.loom",
+        "program/storage.loom"
+      ],
+      "libraries": ["program/advance.loom"]
+    }
+  },
+  "services": {"chat": {"kind": "text", "version": 1}},
+  "variants": {
+    "original": {
+      "services": {
+        "chat": {
+          "programs": ["source"],
+          "parameters": {
+            "model": {
+              "files": [{
+                "path": "parameter/weights.safetensors",
+                "origin": {
+                  "kind": "inline",
+                  "base64": "QAAAAAAAAAB7ImJpYXMiOnsiZHR5cGUiOiJJMzIiLCJzaGFwZSI6WzFdLCJkYXRhX29mZnNldHMiOlswLDRdfX0gICAgICAgAgAAAA=="
+                }
+              }]
+            }
+          },
+          "tokenizers": {"text": "tokenizer.json"}
+        }
+      }
+    }
+  },
+  "presets": {
+    "default": {
+      "service": "chat",
+      "variant": "original",
+      "programs": "source",
+      "execution": {
+        "rows": 4,
+        "context_capacity": 96,
+        "pool_capacity": 256,
+        "prefill_capacity": 32,
+        "max_tokens": 16
+      }
+    }
+  }
+}

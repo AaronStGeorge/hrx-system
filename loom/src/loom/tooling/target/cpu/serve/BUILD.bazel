@@ -405,6 +405,33 @@ loom_py_test(
 )
 
 loom_py_test(
+    name = "publisher_template_test",
+    size = "small",
+    srcs = ["publisher_template_test.py"],
+    args = [
+        "$(rootpath :loom-serve-test-tool)",
+        "$(rootpath //loom/docs/examples/serving:publication)",
+    ],
+    data = [
+        ":loom-serve-test-tool",
+        "//loom/docs/examples/serving:publication",
+    ],
+    main = "publisher_template_test.py",
+    tags = ["skip-bazel_to_cmake"],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:x86_task_hal",
+    ]) + ["@platforms//cpu:x86_64"] + select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//loom/py/loom/model:catalog",
+        "//loom/py/loom/model:fetch_cli",
+        "//loom/py/loom/model/hf_test:fixture",
+    ],
+)
+
+loom_py_test(
     name = "wheel_model_card_test",
     size = "small",
     srcs = [
