@@ -21,8 +21,8 @@ loom_cc_library(
     "xdna.c"
   DEPS
     loom::binding::c::loomc
-    loom::target::arch::amd::xdna::aie2p::artifact
     loom::target::arch::amd::xdna::aie2p::target_profile
+    loom::target::emit::native::aie2p::elf_compiler_provider
   ALWAYSLINK
   PUBLIC
 )

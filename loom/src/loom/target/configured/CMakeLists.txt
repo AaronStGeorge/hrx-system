@@ -156,7 +156,7 @@ if(LOOM_ARTIFACT_WASM_BINARY)
   list(APPEND _compiler_provider_set_platform_deps loom::target::emit::wasm::module_compiler)
 endif()
 if(LOOM_ARTIFACT_AIE2P_ELF)
-  list(APPEND _compiler_provider_set_platform_deps loom::target::arch::amd::xdna::aie2p::artifact)
+  list(APPEND _compiler_provider_set_platform_deps loom::target::emit::native::aie2p::elf_compiler_provider)
 endif()
 loom_cc_library(
   NAME

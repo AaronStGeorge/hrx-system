@@ -200,7 +200,7 @@ _CONFIGURED_COMPILER_DEPS = (
     }) +
     iree_select({
         "//loom/config/emit:aie2p_elf": [
-            "//loom/src/loom/target/arch/amd/xdna/aie2p:artifact",
+            "//loom/src/loom/target/emit/native/aie2p:elf_compiler_provider",
         ],
         "//conditions:default": [],
     })

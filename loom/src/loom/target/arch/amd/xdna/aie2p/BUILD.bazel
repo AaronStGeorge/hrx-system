@@ -1396,11 +1396,7 @@ loom_cc_library(
         "emit/artifact.h",
         "emit/configuration.h",
     ],
-    visibility = [
-        "//loom/binding/c/target/amd/xdna:__pkg__",
-        "//loom/src/loom/target/configured:__pkg__",
-        "//loom/src/loom/tooling/target/amd/xdna:__pkg__",
-    ],
+    visibility = ["//loom/src/loom/target/emit/native/aie2p:__pkg__"],
     deps = [
         ":array_abi_layout",
         ":array_plan",

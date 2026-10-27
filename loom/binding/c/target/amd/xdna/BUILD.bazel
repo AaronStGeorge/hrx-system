@@ -32,8 +32,8 @@ loom_cc_library(
     target_compatible_with = _XDNA_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
-        "//loom/src/loom/target/arch/amd/xdna/aie2p:artifact",
         "//loom/src/loom/target/arch/amd/xdna/aie2p:target_profile",
+        "//loom/src/loom/target/emit/native/aie2p:elf_compiler_provider",
     ],
     alwayslink = True,
 )

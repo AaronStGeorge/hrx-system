@@ -6,8 +6,8 @@
 
 #include "loomc/target/amd/xdna.h"
 
-#include "loom/target/arch/amd/xdna/aie2p/emit/artifact.h"
 #include "loom/target/arch/amd/xdna/aie2p/profile.h"
+#include "loom/target/emit/native/aie2p/elf_compiler_provider.h"
 #include "loomc/iree.h"
 #include "target.h"
 

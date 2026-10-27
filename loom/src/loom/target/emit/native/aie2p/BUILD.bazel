@@ -1,0 +1,32 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+)
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "elf_compiler_provider",
+    srcs = ["elf_compiler_provider.c"],
+    hdrs = ["elf_compiler_provider.h"],
+    visibility = [
+        "//loom/binding/c/target/amd/xdna:__pkg__",
+        "//loom/src/loom/target/configured:__pkg__",
+    ],
+    deps = [
+        "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:artifact",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:provider",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
+    ],
+)

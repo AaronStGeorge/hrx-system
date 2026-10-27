@@ -25,6 +25,7 @@ load(
     "ARCH_VM",
     "ARCH_WASM",
     "ARCH_X86",
+    "ARTIFACT_AIE2P_ELF",
     "ARTIFACT_AMDGPU_ELF",
     "ARTIFACT_SPIRV_BINARY",
     "ARTIFACT_VM_BINARY",
@@ -91,6 +92,10 @@ PACKAGE_POLICIES = [
         packages = ["loom/src/loom/target/emit/native/amdgpu/..."],
         build_requirements = [ARCH_AMDGPU, ARTIFACT_AMDGPU_ELF],
         forbidden_deps = ["//runtime/src/iree/hal/drivers/amdgpu/..."],
+    ),
+    package_policy(
+        packages = ["loom/src/loom/target/emit/native/aie2p/..."],
+        build_requirements = [ARCH_AIE2P, ARTIFACT_AIE2P_ELF],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/native/x86/..."],

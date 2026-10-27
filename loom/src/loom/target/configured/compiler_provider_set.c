@@ -48,7 +48,7 @@
 #include "loom/target/emit/wasm/module_compiler.h"
 #endif  // LOOM_CONFIG_COMPILER_HAVE_WASM
 #if LOOM_CONFIG_COMPILER_HAVE_XDNA
-#include "loom/target/arch/amd/xdna/aie2p/emit/artifact.h"
+#include "loom/target/emit/native/aie2p/elf_compiler_provider.h"
 #endif  // LOOM_CONFIG_COMPILER_HAVE_XDNA
 
 #if LOOM_CONFIG_COMPILER_HAVE_ANY_EMITTER
