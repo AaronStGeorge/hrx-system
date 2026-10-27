@@ -24,22 +24,18 @@ class ExecutablesTest : public WeightsTest {
  protected:
   virtual uint64_t SlabCount() const { return 2; }
 
-  void SetUpDevice() override {
-    // Native geometry is known after device construction. Select a backing
-    // configuration with the required number of physical slabs.
-    ASSERT_NO_FATAL_FAILURE(WeightsTest::SetUpDevice());
+  void SetUpPool() override {
+    ASSERT_NO_FATAL_FAILURE(WeightsTest::SetUpPool());
     if (GetParam()) {
+      // Resolve the native extent before fixing this case's physical budget.
       const uint64_t root_bytes =
-          loom_serve_pool_weight_geometry(
-              loom_serve_device_group_pool_at(group_, 0))
-              .minimum_size;
-      IREE_ASSERT_OK(AcquireWeightDeviceGroup(
-          true, kSlabBytes, SlabCount() * root_bytes, &group_));
+          loom_serve_pool_weight_geometry(storage_owner_).minimum_size;
+      ASSERT_NO_FATAL_FAILURE(AllocatePool(SlabCount() * root_bytes));
     }
   }
 
   void TearDown() override {
-    if (!device_owner_) {
+    if (!storage_owner_) {
       return;
     }
     if (execution_) {

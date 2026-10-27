@@ -17,7 +17,7 @@
 #include "iree/testing/temp_file.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/retirement.h"
-#include "loom/serve/testing/device.h"
+#include "loom/serve/runtime/parameter/parameter_test_base.h"
 
 namespace {
 
@@ -75,7 +75,7 @@ struct GatedProvider : iree_io_parameter_provider_t {
   }
 };
 
-class ParameterGatherTest : public ::testing::TestWithParam<uint32_t> {
+class ParameterGatherTest : public loom_serve::testing::ParameterTest {
  protected:
   static constexpr size_t kRows = 128;
   static constexpr size_t kRequests = 48;
@@ -86,32 +86,6 @@ class ParameterGatherTest : public ::testing::TestWithParam<uint32_t> {
     kInvalidSpan = 1u << 2,
     kCancelProducer = 1u << 3,
   };
-
-  void SetUp() override {
-    IREE_ASSERT_OK(
-        loom_serve_host_create(GetParam(), nullptr, allocator_, &host_));
-    iree_hal_driver_t* driver = nullptr;
-    IREE_ASSERT_OK(loom_serve_test_driver_acquire(host_, &driver));
-    const loom_serve_device_options_t options = {
-        .driver = driver,
-        .uri = loom_serve_test_device()->device_uri,
-    };
-    auto status = loom_serve_device_group_allocate(host_, 1, &options,
-                                                   allocator_, &group_);
-    iree_hal_driver_release(driver);
-    IREE_ASSERT_OK(status);
-    const loom_serve_pool_options_t pool_options = {};
-    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
-        group_, {IREE_SV("pool"), 1}, &pool_options, &storage_owner_));
-    owner_ = loom_serve_device_group_at(group_, 0);
-    device_ = loom_serve_device_handle(owner_);
-    queue_ = loom_serve_device_transfer_queue(owner_);
-  }
-
-  void TearDown() override {
-    IREE_EXPECT_OK(loom_serve_device_group_free(group_));
-    loom_serve_host_release(host_);
-  }
 
   iree_hal_buffer_t* Buffer(size_t length,
                             loom_serve_retirement_t* retirement) {
@@ -334,21 +308,6 @@ class ParameterGatherTest : public ::testing::TestWithParam<uint32_t> {
     iree_hal_semaphore_release(producer_gate);
     loom_serve_retirement_deinitialize(&descriptors_retirement);
   }
-
-  // Host allocator, valid until all queue and file owners have retired.
-  iree_allocator_t allocator_ = iree_allocator_system();
-  // Native worker and proactor owner.
-  loom_serve_host_t* host_ = nullptr;
-  // Shared device/storage lifetime enclosing all operations.
-  loom_serve_device_group_t* group_ = nullptr;
-  // Borrowed serving-device capabilities.
-  loom_serve_device_t* owner_ = nullptr;
-  // Explicit fixed backing for the gather buffers.
-  loom_serve_pool_t* storage_owner_ = nullptr;
-  // Borrowed physical device.
-  iree_hal_device_t* device_ = nullptr;
-  // Borrowed exact transfer queue.
-  iree_hal_queue_t* queue_ = nullptr;
 };
 
 TEST_P(ParameterGatherTest, IndependentFileDomains) { Run(0); }
