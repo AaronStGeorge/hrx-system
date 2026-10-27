@@ -41,13 +41,13 @@ typedef enum loom_low_schedule_candidate_compare_mode_e {
 // reach the physical completion policy first; issuing their ready peers can
 // fragment the bank those handoffs are closing.
 static inline bool loom_low_schedule_candidate_policy_uses_ready_progress_order(
-    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_options_t* options,
     loom_low_schedule_candidate_compare_mode_t compare_mode,
     const loom_low_schedule_candidate_score_t* lhs,
     const loom_low_schedule_candidate_score_t* rhs) {
-  if (state->options->strategy != LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL ||
+  if (options->strategy != LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL ||
       compare_mode == LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT ||
-      iree_any_bit_set(state->options->flags,
+      iree_any_bit_set(options->flags,
                        LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC) ||
       lhs->active_unspillable_completion_domain_id == UINT16_MAX ||
       rhs->active_unspillable_completion_domain_id == UINT16_MAX ||
@@ -70,6 +70,16 @@ static inline bool loom_low_schedule_candidate_policy_uses_ready_progress_order(
          !iree_any_bit_set(lhs->flags | rhs->flags,
                            LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_STORAGE);
 }
+
+// Returns true when |lhs| is preferred to |rhs| under the selected physical
+// pressure context. Both scores borrow |register_debt_word_count| debt words
+// from their owning policy. Comparison reads only retained score facts.
+bool loom_low_schedule_candidate_score_less(
+    const loom_low_schedule_options_t* options,
+    loom_low_schedule_candidate_compare_mode_t compare_mode,
+    const loom_low_schedule_candidate_score_t* lhs,
+    const loom_low_schedule_candidate_score_t* rhs,
+    iree_host_size_t register_debt_word_count);
 
 // Allocates bounded score storage when the strategy uses pressure scoring.
 iree_status_t loom_low_schedule_candidate_policy_initialize(
