@@ -2085,7 +2085,7 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_row_list_t target_insertion_rows;
   // Owned invocation config bindings materialized before compilation.
   loom_target_compile_report_row_list_t config_binding_rows;
-  // Owned source-to-low selection rows.
+  // Owned per-selection rows when SOURCE_LOW_ROWS is requested.
   loom_target_compile_report_row_list_t source_low_rows;
   // Owned source function target-selection rows.
   loom_target_compile_report_row_list_t source_low_target_rows;
@@ -2102,7 +2102,7 @@ typedef struct loom_target_compile_report_t {
   // Borrowed root of the selection index in |source_low_selection_summaries|.
   loom_target_compile_report_source_low_selection_summary_t*
       source_low_selection_root;
-  // Owned emitted source-memory packet rows.
+  // Owned per-packet rows when SOURCE_LOW_ROWS is requested.
   loom_target_compile_report_row_list_t source_low_memory_rows;
   // Owned source-memory summaries grouped by named source memory root.
   loom_target_compile_report_row_list_t source_low_memory_root_summaries;
@@ -2333,7 +2333,8 @@ iree_status_t loom_target_compile_report_record_target_capability_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_target_capability_row_t* row);
 
-// Records one source-low row.
+// Accumulates one selection into grouped summaries and retains the individual
+// row only when SOURCE_LOW_ROWS is requested.
 iree_status_t loom_target_compile_report_record_source_low_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_source_low_row_t* row);

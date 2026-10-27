@@ -1399,10 +1399,18 @@ iree_status_t loom_target_compile_report_merge_evidence(
   }
   if (iree_any_bit_set(entry_report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {
-    IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append_all(
-        &report->source_low_rows, &entry_report->source_low_rows,
-        sizeof(loom_target_compile_report_source_low_row_t),
-        report->allocator));
+    if (loom_target_compile_report_wants_details(
+            report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append_all(
+          &report->source_low_rows, &entry_report->source_low_rows,
+          sizeof(loom_target_compile_report_source_low_row_t),
+          report->allocator));
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append_all(
+          &report->loop_pipeline_stage_rows,
+          &entry_report->loop_pipeline_stage_rows,
+          sizeof(loom_target_compile_report_loop_pipeline_stage_row_t),
+          report->allocator));
+    }
     IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append_all(
         &report->source_low_target_rows, &entry_report->source_low_target_rows,
         sizeof(loom_target_compile_report_source_low_target_row_t),
@@ -1420,11 +1428,6 @@ iree_status_t loom_target_compile_report_merge_evidence(
     IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append_all(
         &report->loop_pipeline_rows, &entry_report->loop_pipeline_rows,
         sizeof(loom_target_compile_report_loop_pipeline_row_t),
-        report->allocator));
-    IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append_all(
-        &report->loop_pipeline_stage_rows,
-        &entry_report->loop_pipeline_stage_rows,
-        sizeof(loom_target_compile_report_loop_pipeline_stage_row_t),
         report->allocator));
     for (const loom_target_compile_report_vec_t* vec =
              entry_report->source_low_selection_summaries.head;
@@ -1594,8 +1597,11 @@ iree_status_t loom_target_compile_report_record_source_low_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_source_low_row_t* row) {
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append(
-      &report->source_low_rows, sizeof(*row), report->allocator, row));
+  if (loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append(
+        &report->source_low_rows, sizeof(*row), report->allocator, row));
+  }
   if (row->emitted_low_op_count == 0) {
     return iree_ok_status();
   }

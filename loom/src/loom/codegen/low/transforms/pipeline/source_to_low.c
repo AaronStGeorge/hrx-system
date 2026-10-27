@@ -365,13 +365,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   loom_kernel_launch_config_program_t* launch_config_program =
       loom_kernel_launch_config_program_from_pass(pass);
   const iree_allocator_t source_low_report_allocator =
-      loom_target_compile_report_wants_details(
-          compile_report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)
-          ? compile_report->allocator
-          : iree_allocator_null();
-  const bool record_source_low_targets =
-      loom_target_compile_report_wants_details(
-          compile_report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS);
+      compile_report ? compile_report->allocator : iree_allocator_null();
 
   iree_arena_allocator_t selection_arena;
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
@@ -385,7 +379,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       .diagnostic_emitter = pass->diagnostic_emitter,
       .function_versions =
           loom_target_pass_capability_function_versions(target_capability),
-      .collect_target_candidates = record_source_low_targets,
+      .collect_target_candidates = compile_report != NULL,
   };
   iree_status_t status = loom_low_select_lowering_symbols(
       module, &selection_options, &selection_arena, &selection_list);

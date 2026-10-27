@@ -36,7 +36,7 @@ typedef struct loom_target_compile_report_memory_batch_t {
   loom_target_compile_report_t* report;
   // Caller-owned scratch arena, valid through finish.
   iree_arena_allocator_t* arena;
-  // Stable scratch references to the rows and their owning summary groups.
+  // Scratch-owned interval evidence and borrowed summary group references.
   loom_target_compile_report_row_list_t entries;
   // Function-local lookup state; promoted nodes belong to the scratch arena.
   struct {
@@ -60,7 +60,7 @@ void loom_target_compile_report_memory_batch_initialize(
     loom_target_compile_report_t* report, iree_arena_allocator_t* arena,
     loom_target_compile_report_memory_batch_t* out_batch);
 
-// Retains one packet and accumulates its structural and dynamic counters. All
+// Accumulates one packet and retains its provenance only when requested. All
 // packets in the batch have the same function name. Each summary category uses
 // O(log g) key comparisons for g distinct groups, with a bounded scan for small
 // categories; comparison includes the bytes of string-valued key fields.
