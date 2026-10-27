@@ -312,7 +312,6 @@ loom_check_test_suite(
     "test/instruction_immediates.loom-test"
     "test/low_avx512_bf16.loom-test"
     "test/low_bmi2_variable_shift.loom-test"
-    "test/register_classes.loom-test"
     "test/source_low/allocation.loom-test"
     "test/source_low/buffer_bulk.loom-test"
     "test/source_low/buffer_raw.loom-test"
@@ -440,6 +439,15 @@ loom_check_test_suite(
     "test/target_features.loom-test"
   TEST_NAME_PREFIX_TO_STRIP
     "test/source_low/"
+)
+endif()
+
+if(LOOM_ARTIFACT_X86_ELF AND LOOM_ARCH_X86)
+loom_check_test_suite(
+  NAME
+    artifact_loom_check_file_test
+  SRCS
+    "test/register_classes.loom-test"
 )
 endif()
 

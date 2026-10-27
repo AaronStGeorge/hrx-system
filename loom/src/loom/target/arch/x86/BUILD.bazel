@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_config_compatible_with",
     "loom_generated_cc_library",
 )
 load(
@@ -22,6 +23,10 @@ package(
 )
 
 _X86_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/x86/lower:__pkg__"]
+
+_X86_ELF_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:x86_elf",
+])
 
 _X86_NATIVE_VISIBILITY = ["//loom/src/loom/target/emit/native/x86:__pkg__"]
 
@@ -280,7 +285,6 @@ loom_check_test_suite(
         "test/instruction_immediates.loom-test",
         "test/low_avx512_bf16.loom-test",
         "test/low_bmi2_variable_shift.loom-test",
-        "test/register_classes.loom-test",
         "test/source_low/allocation.loom-test",
         "test/source_low/buffer_bulk.loom-test",
         "test/source_low/buffer_raw.loom-test",
@@ -408,6 +412,12 @@ loom_check_test_suite(
         "test/target_features.loom-test",
     ],
     test_name_prefix_to_strip = "test/source_low/",
+)
+
+loom_check_test_suite(
+    name = "artifact_loom_check_file_test",
+    srcs = ["test/register_classes.loom-test"],
+    target_compatible_with = _X86_ELF_COMPATIBLE_WITH,
 )
 
 #===------------------------------------------------------------------------===#

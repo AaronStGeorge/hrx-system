@@ -226,18 +226,11 @@ loom_check_test_suite(
   SRCS
     "test/assembly.loom-test"
     "test/atomic_policy.loom-test"
-    "test/buffer_packets.loom-test"
-    "test/call_overflow.loom-test"
-    "test/calls.loom-test"
     "test/effects.loom-test"
-    "test/emission.loom-test"
-    "test/imports.loom-test"
     "test/inverse_hyperbolic.loom-test"
     "test/math_contraction.loom-test"
     "test/math_policy.loom-test"
-    "test/native_references.loom-test"
     "test/scalar.loom-test"
-    "test/source_low/callable_policy.loom-test"
     "test/source_low/callable_values.loom-test"
     "test/source_low/carried_counter_store.loom-test"
     "test/source_low/loop_counter_offset.loom-test"
@@ -265,60 +258,43 @@ loom_check_test_suite(
     "test/source_low/vector_selection.loom-test"
     "test/source_low/view_boundaries.loom-test"
     "test/source_low/view_root_selection.loom-test"
+  TEST_NAME_PREFIX_TO_STRIP
+    "test/"
+)
+endif()
+
+if(LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_VM)
+loom_check_test_suite(
+  NAME
+    artifact_loom_check_file_test
+  SRCS
+    "test/buffer_packets.loom-test"
+    "test/call_overflow.loom-test"
+    "test/calls.loom-test"
+    "test/emission.loom-test"
+    "test/imports.loom-test"
+    "test/native_references.loom-test"
+    "test/source_low/callable_policy.loom-test"
     "test/storage.loom-test"
   TEST_NAME_PREFIX_TO_STRIP
     "test/"
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARTIFACT_VM_BINARY AND LOOM_ARCH_VM)
 loom_check_compile_tests(
   NAME
     "emission"
   SRC
     "test/emission.loom-test"
   REGISTERED_SRCS
-    "test/assembly.loom-test"
-    "test/atomic_policy.loom-test"
     "test/buffer_packets.loom-test"
     "test/call_overflow.loom-test"
     "test/calls.loom-test"
-    "test/effects.loom-test"
     "test/emission.loom-test"
     "test/imports.loom-test"
-    "test/inverse_hyperbolic.loom-test"
-    "test/math_contraction.loom-test"
-    "test/math_policy.loom-test"
     "test/native_references.loom-test"
-    "test/scalar.loom-test"
     "test/source_low/callable_policy.loom-test"
-    "test/source_low/callable_values.loom-test"
-    "test/source_low/carried_counter_store.loom-test"
-    "test/source_low/loop_counter_offset.loom-test"
-    "test/source_low/memory_access_flags.loom-test"
-    "test/source_low/memory_byte_offset_reuse.loom-test"
-    "test/source_low/memory_generic_atomic.loom-test"
-    "test/source_low/memory_scalar_addressing.loom-test"
-    "test/source_low/memory_signed_terms.loom-test"
-    "test/source_low/memory_subview.loom-test"
-    "test/source_low/memory_vector_atomic.loom-test"
-    "test/source_low/memory_view_base.loom-test"
-    "test/source_low/memory_wide_carriers.loom-test"
-    "test/source_low/nested_view_selection.loom-test"
-    "test/source_low/numeric_narrow_float_selection.loom-test"
-    "test/source_low/numeric_unsigned_remainder.loom-test"
-    "test/source_low/packed_memory_alignment.loom-test"
-    "test/source_low/packed_payload_offsets.loom-test"
-    "test/source_low/scalar_selection.loom-test"
-    "test/source_low/selected_payload_transport.loom-test"
-    "test/source_low/semantic_assertions.loom-test"
-    "test/source_low/shared_conditional_values.loom-test"
-    "test/source_low/source_low_diagnostics.loom-test"
-    "test/source_low/split_barrier.loom-test"
-    "test/source_low/uniform_predicate_control.loom-test"
-    "test/source_low/vector_selection.loom-test"
-    "test/source_low/view_boundaries.loom-test"
-    "test/source_low/view_root_selection.loom-test"
     "test/storage.loom-test"
   TARGETS
     loom::target::vm::core
