@@ -6,6 +6,8 @@
 
 """Tests for Loom's dependency-free pytest-style runner."""
 
+import contextlib
+import io
 import unittest
 
 import pytest
@@ -43,3 +45,23 @@ def test_exhaustive_marker_skips_default_execution(
     pytest_style_runner._run_test_case(test_case, include_exhaustive=True)
     assert calls == ["ran"]
     assert capsys.readouterr().out.count("RUN ") == 2
+
+
+def test_unicode_parameters_run_with_legacy_output_encoding() -> None:
+    value = "café 世界 🧵"
+    parameters = [value, {"nested": value}, (value,)]
+    calls: list[object] = []
+
+    @pytest.mark.parametrize("text", parameters)
+    def sample(text: object) -> None:
+        calls.append(text)
+
+    output = io.BytesIO()
+    with io.TextIOWrapper(output, encoding="cp1252") as stream:
+        with contextlib.redirect_stdout(stream):
+            for test_case in pytest_style_runner._expand_test_callable(
+                __name__, "test_sample", sample
+            ):
+                pytest_style_runner._run_test_case(test_case, include_exhaustive=False)
+        assert output.getvalue().count(b"RUN ") == len(parameters)
+    assert calls == parameters

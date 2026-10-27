@@ -595,6 +595,22 @@ TEST_F(SymbolicExprTest, RetainedLiteralExclusionProvesRelations) {
       &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_EQ, assumed_value,
       literal, &proof));
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
+
+  for (bool lower : {false, true}) {
+    auto condition = LiteralRelation(lower ? LOOM_SYMBOLIC_INTEGER_RELATION_GE
+                                           : LOOM_SYMBOLIC_INTEGER_RELATION_LE,
+                                     assumed_value, 42);
+    auto conditions = SingleRelationFacts(&condition);
+    ScopedConditionFacts scope(&expression_context_, &conditions);
+    loom_symbolic_expr_t expression, limit;
+    IREE_ASSERT_OK(loom_symbolic_expr_from_value(&expression_context_,
+                                                 assumed_value, &expression));
+    loom_symbolic_expr_constant(lower ? 43 : 41, &limit);
+    IREE_ASSERT_OK(loom_symbolic_expr_prove_le(
+        &expression_context_, lower ? &limit : &expression,
+        lower ? &expression : &limit, &proof));
+    EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+  }
 }
 
 TEST_F(SymbolicExprTest, CheckedIdentityPredicateProvesDynamicExtent) {
@@ -1202,6 +1218,72 @@ TEST_F(SymbolicExprTest, ProvesLessEqualFromTermFacts) {
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
 }
 
+TEST_F(SymbolicExprTest, RetainedRelationsRefineScopedCounterpartFacts) {
+  const loom_predicate_kind_t kinds[] = {
+      LOOM_PREDICATE_LT, LOOM_PREDICATE_LE, LOOM_PREDICATE_GT,
+      LOOM_PREDICATE_GE, LOOM_PREDICATE_EQ, LOOM_PREDICATE_NE,
+  };
+  const int64_t lower_bounds[] = {-128, -128, 65, 64, 64, 65};
+  const int64_t upper_bounds[] = {63, 64, 4096, 4096, 64, 4096};
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kinds); ++i) {
+    for (bool reversed : {false, true}) {
+      SCOPED_TRACE(i);
+      SCOPED_TRACE(reversed);
+      const auto value = DefineIndexValue();
+      const auto counterpart = DefineIndexValue();
+      const auto original = loom_value_facts_make(
+          kinds[i] == LOOM_PREDICATE_NE ? 64 : -128, 4096, 1);
+      DefineFacts(value, original);
+      DefineFacts(counterpart, loom_value_facts_make(-128, 4096, 1));
+      loom_symbolic_integer_relation_t relation;
+      ASSERT_TRUE(loom_symbolic_integer_relation_from_predicate_kind(
+          kinds[i], &relation));
+      const auto predicate = ValuePredicate(
+          reversed ? loom_symbolic_integer_relation_to_predicate_kind(
+                         loom_symbolic_integer_relation_swap(relation))
+                   : kinds[i],
+          reversed ? counterpart : value, reversed ? value : counterpart);
+      const auto type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+      loom_op_t* assume = nullptr;
+      IREE_ASSERT_OK(loom_index_assume_build(&builder_, &value, 1, &predicate,
+                                             1, &type, 1, LOOM_LOCATION_UNKNOWN,
+                                             &assume));
+      ComputeFacts(assume);
+      const auto alias = loom_index_assume_results(assume).values[0];
+      const auto ambient = loom_value_fact_table_lookup(&fact_table_, alias);
+      auto condition =
+          LiteralRelation(LOOM_SYMBOLIC_INTEGER_RELATION_EQ, counterpart, 64);
+      auto conditions = SingleRelationFacts(&condition);
+      auto prove_bound = [&](loom_value_id_t subject, int64_t bound,
+                             bool is_lower) {
+        loom_symbolic_expr_t expression, limit;
+        IREE_CHECK_OK(loom_symbolic_expr_from_value(&expression_context_,
+                                                    subject, &expression));
+        loom_symbolic_expr_constant(bound, &limit);
+        loom_symbolic_proof_result_t proof;
+        IREE_CHECK_OK(loom_symbolic_expr_prove_le(
+            &expression_context_, is_lower ? &limit : &expression,
+            is_lower ? &expression : &limit, &proof));
+        return proof;
+      };
+      const bool narrows_lower = lower_bounds[i] > ambient.range_lo;
+      const int64_t scoped_bound =
+          narrows_lower ? lower_bounds[i] : upper_bounds[i];
+      {
+        ScopedConditionFacts scope(&expression_context_, &conditions);
+        EXPECT_EQ(prove_bound(alias, lower_bounds[i], true),
+                  LOOM_SYMBOLIC_PROOF_TRUE);
+        EXPECT_EQ(prove_bound(alias, upper_bounds[i], false),
+                  LOOM_SYMBOLIC_PROOF_TRUE);
+        EXPECT_EQ(prove_bound(value, scoped_bound, narrows_lower),
+                  LOOM_SYMBOLIC_PROOF_UNKNOWN);
+      }
+      EXPECT_EQ(prove_bound(alias, scoped_bound, narrows_lower),
+                LOOM_SYMBOLIC_PROOF_UNKNOWN);
+    }
+  }
+}
+
 TEST_F(SymbolicExprTest, ProvesBoundsFromIdentityRangeEndpointFacts) {
   const loom_value_id_t lower = DefineIndexValue();
   const loom_value_id_t value = DefineIndexValue();
@@ -1221,6 +1303,7 @@ TEST_F(SymbolicExprTest, ProvesBoundsFromIdentityRangeEndpointFacts) {
   IREE_ASSERT_OK(loom_index_assume_build(&builder_, &value, 1, &predicate, 1,
                                          &index_type, 1, LOOM_LOCATION_UNKNOWN,
                                          &assume_op));
+  ComputeFacts(assume_op);
   const loom_value_id_t assumed_value =
       loom_index_assume_results(assume_op).values[0];
 
@@ -1232,6 +1315,24 @@ TEST_F(SymbolicExprTest, ProvesBoundsFromIdentityRangeEndpointFacts) {
   loom_symbolic_expr_t upper_limit = {};
   loom_symbolic_expr_constant(4096, &upper_limit);
   loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_le(&expression_context_, &lower_limit,
+                                             &expression, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_le(&expression_context_, &expression,
+                                             &upper_limit, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+  loom_condition_integer_relation_t relations[] = {
+      LiteralRelation(LOOM_SYMBOLIC_INTEGER_RELATION_GE, lower, -64),
+      LiteralRelation(LOOM_SYMBOLIC_INTEGER_RELATION_LE, upper, 128),
+  };
+  loom_condition_fact_set_t conditions = {
+      .integer_relations = relations,
+      .integer_relation_count = 2,
+      .integer_relation_capacity = 2,
+  };
+  ScopedConditionFacts scope(&expression_context_, &conditions);
+  loom_symbolic_expr_constant(-64, &lower_limit);
+  loom_symbolic_expr_constant(128, &upper_limit);
   IREE_ASSERT_OK(loom_symbolic_expr_prove_le(&expression_context_, &lower_limit,
                                              &expression, &proof));
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);

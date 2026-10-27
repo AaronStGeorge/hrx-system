@@ -181,8 +181,7 @@ static iree_status_t loom_symbolic_expr_condition_fact_frame_begin(
   IREE_RETURN_IF_ERROR(
       loom_symbolic_expr_context_lookup_facts(context, value_id, &facts));
   IREE_RETURN_IF_ERROR(
-      loom_symbolic_value_apply_identity_chain_predicates_to_facts(
-          context, value_id, &facts));
+      loom_symbolic_value_refine_retained_relations(context, value_id, &facts));
   if (memo_entry->state == LOOM_SYMBOLIC_VALUE_CONDITION_FACT_MEMO_VISITING) {
     *out_facts = facts;
     return iree_ok_status();
@@ -299,7 +298,7 @@ static iree_status_t loom_symbolic_value_lookup_condition_refined_facts_bounded(
     loom_condition_fact_scope_apply_to_value_facts(
         context->condition_scope, context->fact_table, frame->value_id,
         &inferred_facts);
-    status = loom_symbolic_value_apply_identity_chain_predicates_to_facts(
+    status = loom_symbolic_value_refine_retained_relations(
         context, frame->value_id, &inferred_facts);
     if (!iree_status_is_ok(status)) {
       continue;
@@ -332,146 +331,6 @@ iree_status_t loom_symbolic_value_lookup_condition_refined_facts(
 //===----------------------------------------------------------------------===//
 // Identity chains and value equivalence
 //===----------------------------------------------------------------------===//
-
-static iree_status_t loom_symbolic_expr_predicate_arg_exact_integer(
-    loom_symbolic_expr_context_t* context, loom_predicate_arg_tag_t arg_tag,
-    int64_t arg, int64_t* out_value, bool* out_known) {
-  *out_value = 0;
-  *out_known = false;
-  switch (arg_tag) {
-    case LOOM_PRED_ARG_CONST:
-      *out_value = arg;
-      *out_known = true;
-      return iree_ok_status();
-    case LOOM_PRED_ARG_VALUE: {
-      if (arg < 0) {
-        return iree_ok_status();
-      }
-      loom_symbolic_expr_t expression = {0};
-      IREE_RETURN_IF_ERROR(loom_symbolic_expr_from_value(
-          context, (loom_value_id_t)arg, &expression));
-      *out_known =
-          loom_symbolic_value_constant_expression(&expression, out_value);
-      return iree_ok_status();
-    }
-    default:
-      return iree_ok_status();
-  }
-}
-
-static iree_status_t loom_symbolic_expr_predicate_apply_to_value_facts(
-    loom_symbolic_expr_context_t* context, const loom_predicate_t* predicate,
-    loom_value_id_t value_id, loom_value_facts_t* inout_facts) {
-  if (predicate->kind == LOOM_PREDICATE_RANGE) {
-    if (predicate->arg_count != 3 ||
-        predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE ||
-        predicate->args[0] < 0) {
-      return iree_ok_status();
-    }
-    const bool has_dynamic_lower =
-        predicate->arg_tags[1] == LOOM_PRED_ARG_VALUE &&
-        predicate->args[1] >= 0;
-    const bool has_dynamic_upper =
-        predicate->arg_tags[2] == LOOM_PRED_ARG_VALUE &&
-        predicate->args[2] >= 0;
-    if (!has_dynamic_lower && !has_dynamic_upper) {
-      // Literal-only ranges are already materialized in the fact table.
-      return iree_ok_status();
-    }
-    bool value_is_target = false;
-    IREE_RETURN_IF_ERROR(
-        loom_symbolic_values_match(context, (loom_value_id_t)predicate->args[0],
-                                   value_id, &value_is_target));
-    if (!value_is_target) {
-      return iree_ok_status();
-    }
-
-    // Retain literal endpoints directly, then consume interval facts for
-    // dynamic endpoints as lower <= value <= upper. Endpoint facts are
-    // borrowed evidence and remain read-only.
-    loom_value_facts_apply_predicate(inout_facts, predicate);
-    if (loom_value_facts_is_float(*inout_facts)) {
-      return iree_ok_status();
-    }
-    for (uint8_t endpoint_index = 1; endpoint_index < 3; ++endpoint_index) {
-      if (predicate->arg_tags[endpoint_index] != LOOM_PRED_ARG_VALUE ||
-          predicate->args[endpoint_index] < 0) {
-        continue;
-      }
-      loom_value_facts_t endpoint_facts = loom_value_facts_unknown();
-      IREE_RETURN_IF_ERROR(loom_symbolic_expr_context_lookup_facts(
-          context, (loom_value_id_t)predicate->args[endpoint_index],
-          &endpoint_facts));
-      if (loom_value_facts_is_float(endpoint_facts)) {
-        continue;
-      }
-      if (endpoint_index == 1) {
-        (void)loom_value_facts_refine_relation(
-            LOOM_PREDICATE_LE, endpoint_facts, *inout_facts,
-            /*lhs_result=*/NULL, inout_facts);
-      } else {
-        (void)loom_value_facts_refine_relation(LOOM_PREDICATE_LE, *inout_facts,
-                                               endpoint_facts, inout_facts,
-                                               /*rhs_result=*/NULL);
-      }
-    }
-    return iree_ok_status();
-  }
-
-  if (predicate->arg_count != 2) {
-    return iree_ok_status();
-  }
-
-  loom_symbolic_integer_relation_t relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
-  if (!loom_symbolic_integer_relation_from_predicate_kind(predicate->kind,
-                                                          &relation)) {
-    return iree_ok_status();
-  }
-
-  bool value_is_left = false;
-  if (predicate->arg_tags[0] == LOOM_PRED_ARG_VALUE &&
-      predicate->args[0] >= 0) {
-    IREE_RETURN_IF_ERROR(
-        loom_symbolic_values_match(context, (loom_value_id_t)predicate->args[0],
-                                   value_id, &value_is_left));
-  }
-  bool value_is_right = false;
-  if (predicate->arg_tags[1] == LOOM_PRED_ARG_VALUE &&
-      predicate->args[1] >= 0) {
-    IREE_RETURN_IF_ERROR(
-        loom_symbolic_values_match(context, (loom_value_id_t)predicate->args[1],
-                                   value_id, &value_is_right));
-  }
-  if (!value_is_left && !value_is_right) {
-    return iree_ok_status();
-  }
-
-  uint8_t other_arg_index = value_is_left ? 1 : 0;
-  int64_t other_value = 0;
-  bool other_known = false;
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_predicate_arg_exact_integer(
-      context, (loom_predicate_arg_tag_t)predicate->arg_tags[other_arg_index],
-      predicate->args[other_arg_index], &other_value, &other_known));
-  if (!other_known) {
-    return iree_ok_status();
-  }
-
-  if (value_is_right) {
-    relation = loom_symbolic_integer_relation_swap(relation);
-  }
-  const loom_predicate_kind_t predicate_kind =
-      loom_symbolic_integer_relation_to_predicate_kind(relation);
-
-  loom_predicate_t normalized = {
-      .kind = predicate_kind,
-      .arg_count = 2,
-      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
-                   LOOM_PRED_ARG_NONE},
-      .args = {value_id, other_value, 0},
-  };
-  loom_value_facts_apply_predicate(inout_facts, &normalized);
-  return iree_ok_status();
-}
 
 typedef enum loom_symbolic_expr_identity_chain_flag_bits_e {
   LOOM_SYMBOLIC_EXPR_IDENTITY_CHAIN_FOLLOW_INDEX_CASTS = 1u << 0,
@@ -570,27 +429,64 @@ iree_status_t loom_symbolic_value_for_each_identity_predicate(
   return iree_ok_status();
 }
 
-typedef struct loom_symbolic_value_apply_predicates_t {
+typedef struct loom_symbolic_value_refine_relations_t {
+  // Context retaining memoized expressions for relation counterparts.
+  loom_symbolic_expr_context_t* context;
+  // Scoped alias named by the refinement predicate.
+  loom_value_id_t value;
+  // Caller-owned facts for the scoped alias being refined.
   loom_value_facts_t* facts;
-} loom_symbolic_value_apply_predicates_t;
+  // Allocation failure from a counterpart expression query.
+  iree_status_t status;
+} loom_symbolic_value_refine_relations_t;
 
-static iree_status_t loom_symbolic_value_apply_identity_predicate(
-    loom_symbolic_expr_context_t* context, loom_value_id_t identity_value,
-    const loom_predicate_t* predicate, void* user_data, bool* out_continue) {
-  loom_symbolic_value_apply_predicates_t* apply =
-      (loom_symbolic_value_apply_predicates_t*)user_data;
-  *out_continue = true;
-  return loom_symbolic_expr_predicate_apply_to_value_facts(
-      context, predicate, identity_value, apply->facts);
+static bool loom_symbolic_value_refine_relation(
+    void* user_data, loom_value_id_t counterpart,
+    loom_integer_order_outcome_bits_t outcomes) {
+  loom_symbolic_value_refine_relations_t* refine =
+      (loom_symbolic_value_refine_relations_t*)user_data;
+  loom_symbolic_expr_t expression = {0};
+  refine->status =
+      loom_symbolic_expr_from_value(refine->context, counterpart, &expression);
+  if (!iree_status_is_ok(refine->status)) {
+    return false;
+  }
+  loom_symbolic_integer_relation_t relation;
+  (void)loom_symbolic_integer_relation_from_outcomes(outcomes, &relation);
+  const loom_predicate_kind_t kind =
+      loom_symbolic_integer_relation_to_predicate_kind(relation);
+  if (loom_value_facts_is_exact(expression.facts)) {
+    // Exact counterparts also retain disequality and divisibility facts that
+    // cannot be represented by intersecting intervals alone.
+    const loom_predicate_t predicate = {
+        .kind = kind,
+        .arg_count = 2,
+        .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+        .args = {refine->value, expression.facts.range_lo},
+    };
+    loom_value_facts_apply_predicate(refine->facts, &predicate);
+  } else {
+    (void)loom_value_facts_refine_relation(kind, *refine->facts,
+                                           expression.facts, refine->facts,
+                                           /*rhs_result=*/NULL);
+  }
+  return true;
 }
 
-iree_status_t loom_symbolic_value_apply_identity_chain_predicates_to_facts(
-    loom_symbolic_expr_context_t* context, loom_value_id_t start_value,
+iree_status_t loom_symbolic_value_refine_retained_relations(
+    loom_symbolic_expr_context_t* context, loom_value_id_t value,
     loom_value_facts_t* inout_facts) {
-  loom_symbolic_value_apply_predicates_t apply = {.facts = inout_facts};
-  return loom_symbolic_value_for_each_identity_predicate(
-      context, start_value, loom_symbolic_value_apply_identity_predicate,
-      &apply);
+  loom_symbolic_value_refine_relations_t refine = {
+      .context = context,
+      .value = value,
+      .facts = inout_facts,
+      .status = iree_ok_status(),
+  };
+  (void)loom_value_fact_table_for_each_signed_integer_relation_while(
+      context->fact_table, value, loom_symbolic_value_refine_relation, &refine);
+  loom_value_fact_table_refine_integer_exclusions(context->fact_table, value,
+                                                  inout_facts);
+  return refine.status;
 }
 
 static bool loom_symbolic_expr_value_is_integer_domain(

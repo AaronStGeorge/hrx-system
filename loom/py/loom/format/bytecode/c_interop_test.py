@@ -70,6 +70,7 @@ def _run_loom_format(arguments: list[object]) -> subprocess.CompletedProcess[str
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         raise AssertionError(
@@ -156,7 +157,7 @@ def _roundtrip_through_c(loom_format: Path, source: Module | str) -> Module:
         )
         c_bytecode_path = temp_path / "c.loombc"
         if isinstance(source, str):
-            source_path.write_text(source)
+            source_path.write_text(source, encoding="utf-8")
         else:
             source_path.write_bytes(write_module(source))
 
@@ -555,6 +556,7 @@ def _test_region_argument_interop(loom_format: Path) -> None:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         assert result.returncode != 0
         assert "error [TYPE/013]" in result.stderr
@@ -606,7 +608,7 @@ def _fixture_sources(fixture: Path) -> list[str]:
             for line in case.partition("// ----")[0].splitlines()
             if not line.startswith("// RUN:")
         ).lstrip()
-        for case in fixture.read_text().split("// ====")
+        for case in fixture.read_text(encoding="utf-8").split("// ====")
     ]
 
 
@@ -679,6 +681,7 @@ def _test_scoped_type_interop(
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
         assert result.returncode == 0, result.stderr
@@ -739,6 +742,7 @@ def _test_predicate_attribute_interop(
                 ],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=False,
             )
             assert result.returncode == 0, result.stderr
@@ -786,6 +790,7 @@ def _test_shared_projected_graph(loom_format: Path, loom_link: Path) -> None:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
         assert result.returncode == 0, result.stderr

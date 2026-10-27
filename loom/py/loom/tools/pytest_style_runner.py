@@ -378,7 +378,8 @@ def _parameter_suffix(parameters: dict[str, object], index: int) -> str:
 
 
 def _short_value(value: object) -> str:
-    text = repr(value)
+    # Case labels must remain printable through legacy console encodings.
+    text = ascii(value)
     if len(text) > 48:
         return text[:45] + "..."
     return text

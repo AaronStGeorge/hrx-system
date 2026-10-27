@@ -30,15 +30,15 @@ iree_status_t loom_symbolic_expr_context_lookup_facts(
     loom_value_facts_t* out_facts);
 
 // Returns value facts after applying the active condition facts, producer fact
-// inference, and predicates carried by identity operations.
+// inference, and retained alias-local relations.
 iree_status_t loom_symbolic_value_lookup_condition_refined_facts(
     loom_symbolic_expr_context_t* context, loom_value_id_t value_id,
     loom_value_facts_t* out_facts);
 
-// Applies predicates carried by the identity chain beginning at |start_value|
-// to |inout_facts|.
-iree_status_t loom_symbolic_value_apply_identity_chain_predicates_to_facts(
-    loom_symbolic_expr_context_t* context, loom_value_id_t start_value,
+// Refines |inout_facts| from the indexed relations retained for |value| and
+// memoized counterpart facts, then applies the retained literal exclusions.
+iree_status_t loom_symbolic_value_refine_retained_relations(
+    loom_symbolic_expr_context_t* context, loom_value_id_t value,
     loom_value_facts_t* inout_facts);
 
 // Visits predicates carried by the bounded identity chain beginning at

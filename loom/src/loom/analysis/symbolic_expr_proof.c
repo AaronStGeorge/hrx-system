@@ -143,9 +143,8 @@ static iree_status_t loom_symbolic_expr_term_facts(
   IREE_RETURN_IF_ERROR(loom_symbolic_value_lookup_condition_refined_facts(
       context, term.relation_value_id, &relation_facts));
   facts = loom_symbolic_expr_intersect_integer_facts(facts, relation_facts);
-  IREE_RETURN_IF_ERROR(
-      loom_symbolic_value_apply_identity_chain_predicates_to_facts(
-          context, term.relation_value_id, &facts));
+  IREE_RETURN_IF_ERROR(loom_symbolic_value_refine_retained_relations(
+      context, term.relation_value_id, &facts));
   *out_facts = facts;
   return iree_ok_status();
 }
@@ -321,31 +320,14 @@ static iree_status_t loom_symbolic_expr_normalize_difference_into_scratch(
 }
 
 static iree_status_t loom_symbolic_expr_prove_le_linear(
-    loom_symbolic_expr_context_t* context,
-    const loom_symbolic_expr_t* left_expression,
-    const loom_symbolic_expr_t* right_expression,
+    loom_symbolic_expr_context_t* context, int64_t constant,
+    const loom_symbolic_term_t* terms, iree_host_size_t term_count,
     loom_symbolic_proof_result_t* out_result) {
-  int64_t constant = 0;
-  iree_host_size_t term_count = 0;
-  bool linear = false;
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_normalize_difference_into_scratch(
-      context, left_expression, right_expression, &constant, &term_count,
-      &linear));
-  if (!linear) {
-    *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
-    return iree_ok_status();
-  }
-
   if (term_count == 0) {
     *out_result =
         constant <= 0 ? LOOM_SYMBOLIC_PROOF_TRUE : LOOM_SYMBOLIC_PROOF_FALSE;
     return iree_ok_status();
   }
-
-  loom_symbolic_term_t stack_terms[LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT];
-  const loom_symbolic_term_t* terms = NULL;
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_proof_stabilize_scratch_terms(
-      context, term_count, stack_terms, IREE_ARRAYSIZE(stack_terms), &terms));
 
   int64_t minimum = constant;
   int64_t maximum = constant;
@@ -966,7 +948,9 @@ static bool loom_symbolic_expr_visit_retained_relation(
 static iree_status_t loom_symbolic_expr_prove_le_by_condition_relations(
     loom_symbolic_expr_context_t* context,
     const loom_symbolic_expr_t* left_expression,
-    const loom_symbolic_expr_t* right_expression,
+    const loom_symbolic_expr_t* right_expression, int64_t expression_constant,
+    const loom_symbolic_term_t* expression_terms,
+    iree_host_size_t expression_term_count,
     loom_symbolic_proof_result_t* out_result) {
   *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
   const bool has_counted_domains =
@@ -979,19 +963,10 @@ static iree_status_t loom_symbolic_expr_prove_le_by_condition_relations(
     return iree_ok_status();
   }
 
-  int64_t expression_constant = 0;
-  iree_host_size_t expression_term_count = 0;
-  bool expression_linear = false;
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_normalize_difference_into_scratch(
-      context, left_expression, right_expression, &expression_constant,
-      &expression_term_count, &expression_linear));
-  if (!expression_linear || expression_term_count == 0 ||
+  if (expression_term_count == 0 ||
       expression_term_count > LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT) {
     return iree_ok_status();
   }
-  loom_symbolic_term_t expression_terms[LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT];
-  memcpy(expression_terms, context->scratch_terms,
-         expression_term_count * sizeof(*expression_terms));
 
   loom_condition_integer_operand_t
       anchors[LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT * 2 + 2];
@@ -1394,27 +1369,11 @@ loom_symbolic_expr_prove_le_by_scaled_relation_with_residual(
 }
 
 static iree_status_t loom_symbolic_expr_prove_le_by_scaled_relation(
-    loom_symbolic_expr_context_t* context,
-    const loom_symbolic_expr_t* left_expression,
-    const loom_symbolic_expr_t* right_expression,
+    loom_symbolic_expr_context_t* context, int64_t constant,
+    const loom_symbolic_term_t* terms, iree_host_size_t term_count,
     loom_symbolic_expr_proof_scope_t proof_scope,
     loom_symbolic_proof_result_t* out_result) {
   *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
-  int64_t constant = 0;
-  iree_host_size_t term_count = 0;
-  bool linear = false;
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_normalize_difference_into_scratch(
-      context, left_expression, right_expression, &constant, &term_count,
-      &linear));
-  if (!linear) {
-    return iree_ok_status();
-  }
-
-  loom_symbolic_term_t stable_terms[LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT];
-  const loom_symbolic_term_t* terms = NULL;
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_proof_stabilize_scratch_terms(
-      context, term_count, stable_terms, IREE_ARRAYSIZE(stable_terms), &terms));
-
   if (term_count == 1 && terms[0].coefficient > 0) {
     loom_value_id_t positive_relation_value = terms[0].relation_value_id;
     if (positive_relation_value == LOOM_VALUE_ID_INVALID) {
@@ -1510,6 +1469,7 @@ static iree_status_t loom_symbolic_expr_prove_le_by_select_cases(
     loom_symbolic_expr_context_t* context,
     const loom_symbolic_expr_t* left_expression,
     const loom_symbolic_expr_t* right_expression,
+    const loom_symbolic_term_t* terms, iree_host_size_t term_count,
     loom_symbolic_proof_result_t* out_result);
 
 static iree_status_t loom_symbolic_expr_prove_le_with_scope(
@@ -1519,26 +1479,40 @@ static iree_status_t loom_symbolic_expr_prove_le_with_scope(
     loom_symbolic_expr_proof_scope_t proof_scope,
     loom_symbolic_proof_result_t* out_result) {
   *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
-  if (loom_symbolic_expr_is_linear(left_expression) &&
-      loom_symbolic_expr_is_linear(right_expression)) {
+  int64_t constant = 0;
+  iree_host_size_t term_count = 0;
+  bool linear = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_normalize_difference_into_scratch(
+      context, left_expression, right_expression, &constant, &term_count,
+      &linear));
+  if (linear) {
+    // Nested fact and relation queries reuse context scratch. Keep this scope's
+    // exact difference stable across all attempts; each conditional scope
+    // enters here again with its own normalization and storage.
+    loom_symbolic_term_t stack_terms[LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT];
+    const loom_symbolic_term_t* terms = NULL;
+    IREE_RETURN_IF_ERROR(loom_symbolic_expr_proof_stabilize_scratch_terms(
+        context, term_count, stack_terms, IREE_ARRAYSIZE(stack_terms), &terms));
     IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le_linear(
-        context, left_expression, right_expression, out_result));
+        context, constant, terms, term_count, out_result));
     if (*out_result != LOOM_SYMBOLIC_PROOF_UNKNOWN) {
       return iree_ok_status();
     }
     IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le_by_condition_relations(
-        context, left_expression, right_expression, out_result));
+        context, left_expression, right_expression, constant, terms, term_count,
+        out_result));
     if (*out_result != LOOM_SYMBOLIC_PROOF_UNKNOWN) {
       return iree_ok_status();
     }
     IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le_by_scaled_relation(
-        context, left_expression, right_expression, proof_scope, out_result));
+        context, constant, terms, term_count, proof_scope, out_result));
     if (*out_result != LOOM_SYMBOLIC_PROOF_UNKNOWN) {
       return iree_ok_status();
     }
     if (proof_scope == LOOM_SYMBOLIC_EXPR_PROOF_SCOPE_SELECT_CASES) {
       IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le_by_select_cases(
-          context, left_expression, right_expression, out_result));
+          context, left_expression, right_expression, terms, term_count,
+          out_result));
       if (*out_result != LOOM_SYMBOLIC_PROOF_UNKNOWN) {
         return iree_ok_status();
       }
@@ -1681,26 +1655,14 @@ loom_symbolic_expr_select_iterator_next(
 }
 
 static iree_status_t loom_symbolic_expr_select_iterator_for_le(
-    loom_symbolic_expr_context_t* context,
-    const loom_symbolic_expr_t* left_expression,
-    const loom_symbolic_expr_t* right_expression, iree_arena_allocator_t* arena,
+    loom_symbolic_expr_context_t* context, const loom_symbolic_term_t* terms,
+    iree_host_size_t term_count, iree_arena_allocator_t* arena,
     loom_symbolic_expr_select_iterator_t* out_iterator) {
   loom_symbolic_expr_select_iterator_initialize(out_iterator);
 
-  int64_t constant = 0;
-  iree_host_size_t term_count = 0;
-  bool linear = false;
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_normalize_difference_into_scratch(
-      context, left_expression, right_expression, &constant, &term_count,
-      &linear));
-  (void)constant;
-  if (!linear) {
-    return iree_ok_status();
-  }
-
   const iree_host_size_t maximum_root_count = term_count * 2;
   for (iree_host_size_t i = 0; i < term_count; ++i) {
-    const loom_symbolic_term_t term = context->scratch_terms[i];
+    const loom_symbolic_term_t term = terms[i];
     IREE_RETURN_IF_ERROR(loom_symbolic_expr_select_iterator_add(
         context->fact_table, term.value_id, maximum_root_count, arena,
         out_iterator));
@@ -1885,14 +1847,14 @@ static iree_status_t loom_symbolic_expr_prove_le_by_select_cases(
     loom_symbolic_expr_context_t* context,
     const loom_symbolic_expr_t* left_expression,
     const loom_symbolic_expr_t* right_expression,
+    const loom_symbolic_term_t* terms, iree_host_size_t term_count,
     loom_symbolic_proof_result_t* out_result) {
   *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
   iree_arena_allocator_t condition_arena;
   iree_arena_initialize(context->arena->block_pool, &condition_arena);
   loom_symbolic_expr_select_iterator_t conditions;
   iree_status_t status = loom_symbolic_expr_select_iterator_for_le(
-      context, left_expression, right_expression, &condition_arena,
-      &conditions);
+      context, terms, term_count, &condition_arena, &conditions);
   loom_symbolic_expr_select_assumptions_t residual_assumptions;
   loom_symbolic_expr_select_assumptions_initialize(&residual_assumptions);
   // A one-sided proof covers that condition outcome. The only assignments not
