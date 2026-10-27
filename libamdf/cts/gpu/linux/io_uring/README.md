@@ -416,8 +416,9 @@ omitting it selects a requested 50 µs sleep between service calls. All transpor
 same selected policy; `host_wait` additionally sleeps for actual I/O completion.
 Scheduling and timer slack can exceed a requested polling interval. Wake calls
 are coalesced by published SQ tail, and SQPOLL samples begin with an observed
-sleeping poller. A separate ten-second progress deadline bounds each execution
-and its native waits; the service interval does not reset that deadline.
+sleeping poller. The host services accepted work until the GPU owner completes;
+the outer test harness provides the progress watchdog. A local service timeout
+cannot abandon requests that the GPU still needs in order to retire.
 `poller_idle_ms` identifies the shared comparison setting; `idle_ms` and
 `setup_flags` describe the actual ring, with zero idle time and no SQPOLL flag
 for `host_wait`.
@@ -536,7 +537,8 @@ fix SQPOLL idle at 1 ms and their own five-policy matrix; the causal cases'
 `AMDF_IO_SERVICE_US` and `AMDF_IO_IDLE_MS` overrides do not alter them.
 Ordinary correctness runs use at least a 50 µs sleep in every configuration;
 busy service is restricted to these explicitly requested, leased measurements.
-Both modes retain the ten-second execution deadline.
+Both modes service the live owner until completion under the outer harness
+watchdog.
 
 Each `AMDF_IO_DEMAND` line contains all requests, with column names and times
 relative to the same GPU reference-clock origin. Reported `burst` is offered

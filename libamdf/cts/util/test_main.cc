@@ -179,6 +179,9 @@ int main(int argument_count, char** argument_values) {
     return EXIT_FAILURE;
   }
   testing::InitGoogleTest(&argument_count, argument_values);
+  // Cases share native devices. A failed case may retain an unretired queue,
+  // so later cases must not add more work to the same native owner.
+  GTEST_FLAG_SET(fail_fast, true);
   const int result = ResolveRunnerGpuSelection() && ValidatePeerSelection()
                          ? RUN_ALL_TESTS()
                          : EXIT_FAILURE;

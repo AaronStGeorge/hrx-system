@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -67,18 +68,18 @@ void GpuFileIoFixture::Execute(const kernels::Kernel& kernel,
   uint64_t wake_count = 0;
   uint64_t enter_count = 0;
   uint64_t wait_count = 0;
-  const amdf::cts::WaitDeadline deadline;
   while (GpuLoadAcquire<uint32_t>(
              reinterpret_cast<uintptr_t>(completion->host.pointer)) != 1) {
-    ASSERT_TRUE(deadline.Pause())
-        << "timed out waiting for file workload completion";
+    // This host services the live GPU owner; returning before it completes
+    // would abandon the very I/O that permits it to retire.
+    std::this_thread::sleep_for(
+        std::chrono::nanoseconds(amdf::cts::kWaitPollIntervalNs));
     RelayFileIo();
     if (!(ring_->parameters.flags & IORING_SETUP_SQPOLL)) {
       if (ring_->path == FileIoPath::kDeviceWait) {
-        ASSERT_NO_FATAL_FAILURE(
-            ServiceDeviceIo(&enter_count, &wait_count, deadline));
+        ASSERT_NO_FATAL_FAILURE(ServiceDeviceIo(&enter_count, &wait_count));
       } else {
-        ASSERT_NO_FATAL_FAILURE(ServiceHostIo(&enter_count, deadline));
+        ASSERT_NO_FATAL_FAILURE(ServiceHostIo(&enter_count));
       }
       continue;
     }

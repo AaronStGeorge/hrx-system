@@ -12,9 +12,11 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "libamdf/cts/gpu/kernels/file_staged.h"
@@ -609,11 +611,10 @@ void GpuFileStagedTest::Run(const StagedCase& test_case) {
     }
     return description.str();
   };
-  const amdf::cts::WaitDeadline deadline;
   while (GpuLoadAcquire<int64_t>(reinterpret_cast<uintptr_t>(&joined.value)) !=
          0) {
-    ASSERT_TRUE(deadline.Pause())
-        << "timed out waiting for staged file completion" << progress();
+    std::this_thread::sleep_for(
+        std::chrono::nanoseconds(amdf::cts::kWaitPollIntervalNs));
     // Idle wake only: the GPU owns every SQE, CQE and dependent dispatch.
     if ((GpuLoadAcquire<uint32_t>(RingWord(ring_->parameters.sq_off.flags)) &
          IORING_SQ_NEED_WAKEUP) &&
@@ -624,7 +625,8 @@ void GpuFileStagedTest::Run(const StagedCase& test_case) {
       if (result < 0 && errno == EINTR) {
         continue;
       }
-      ASSERT_EQ(result, 0) << "wake SQPOLL: " << std::strerror(errno);
+      ASSERT_EQ(result, 0) << "wake SQPOLL: " << std::strerror(errno)
+                           << progress();
       ++wake_count;
     }
   }

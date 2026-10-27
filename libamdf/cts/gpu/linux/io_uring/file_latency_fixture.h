@@ -269,15 +269,12 @@ class GpuFileLatencyTest : public GpuFileIoFixture,
         queue->Publish(api_, gpu_api_, commands->word_count()));
     const uintptr_t completion_address =
         reinterpret_cast<uintptr_t>(completion->host.pointer);
-    const amdf::cts::WaitDeadline deadline;
     while (GpuLoadAcquire<uint32_t>(completion_address) != 1) {
-      ASSERT_NE(deadline.remaining_ns(), 0u)
-          << "timed out waiting for file workload completion";
       RelayFileIo();
       const uint32_t tail =
           GpuLoadAcquire<uint32_t>(RingWord(ring_->parameters.sq_off.tail));
       if (!(ring_->parameters.flags & IORING_SETUP_SQPOLL)) {
-        ASSERT_NO_FATAL_FAILURE(ServiceHostIo(&sample->enter_calls, deadline));
+        ASSERT_NO_FATAL_FAILURE(ServiceHostIo(&sample->enter_calls));
       } else if (tail != wake_tail && (GpuLoadAcquire<uint32_t>(RingWord(
                                            ring_->parameters.sq_off.flags)) &
                                        IORING_SQ_NEED_WAKEUP)) {
@@ -295,8 +292,8 @@ class GpuFileLatencyTest : public GpuFileIoFixture,
       if (service_microseconds_ == 0) {
         _mm_pause();
       } else {
-        // The measurement's service interval is separate from its overall
-        // progress deadline. Timer slack can exceed the requested interval.
+        // Timer slack can exceed the requested service interval. The outer
+        // harness owns the watchdog while this host services the live owner.
         std::this_thread::sleep_for(
             std::chrono::microseconds(service_microseconds_));
       }
@@ -1201,7 +1198,7 @@ class GpuFileDemandTest : public GpuFileLatencyTest {
             transports[(epoch + direction * order) % transports.size()];
         const FileIoPath path = transport.path;
         // Busy service is an explicit benchmark baseline, never the default
-        // correctness policy. Both policies retain the same progress deadline.
+        // correctness policy. Both policies service the owner until completion.
         service_microseconds_ =
             measurement ? transport.service_microseconds
                         : std::max(50u, transport.service_microseconds);
