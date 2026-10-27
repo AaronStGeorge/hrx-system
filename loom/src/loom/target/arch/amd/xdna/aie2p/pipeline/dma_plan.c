@@ -183,11 +183,11 @@ bool loom_aie2p_native_encode_descriptor(
   words[0] = layout.transfer_byte_length / dma->transfer_length_granularity -
              dma->transfer_length_offset;
   if (kind == LOOM_XDNA_TILE_KIND_SHIM_NOC) {
-    words[4] = loom_xdna_register_field_encode_admitted(
+    words[4] = loom_xdna_register_field_encode(
         LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD4_BURST_LENGTH, 3);
-    words[5] = loom_xdna_register_field_encode_admitted(
+    words[5] = loom_xdna_register_field_encode(
         LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD5_AXI_CACHE, 2);
-    words[7] = loom_xdna_register_field_encode_admitted(
+    words[7] = loom_xdna_register_field_encode(
         LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD7_VALID_BD, 1);
     const loom_xdna_register_field_id_t step[] = {
         LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD3_D0_STEP_SIZE,
@@ -197,15 +197,15 @@ bool loom_aie2p_native_encode_descriptor(
         LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD3_D0_WRAP,
         LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD4_D1_WRAP};
     for (uint8_t i = 0; i < layout.dma_dimension_count; ++i) {
-      words[3 + i] |= loom_xdna_register_field_encode_admitted(
+      words[3 + i] |= loom_xdna_register_field_encode(
           step[i], layout.dma_dimensions[i].step_size - 1);
       if (i + 1 < layout.dma_dimension_count) {
-        words[3 + i] |= loom_xdna_register_field_encode_admitted(
+        words[3 + i] |= loom_xdna_register_field_encode(
             wrap[i], layout.dma_dimensions[i].wrap);
       }
     }
   } else if (kind == LOOM_XDNA_TILE_KIND_MEMORY) {
-    words[7] = loom_xdna_register_field_encode_admitted(
+    words[7] = loom_xdna_register_field_encode(
         LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_DMA_BD_WORD7_VALID_BD, 1);
     const loom_xdna_register_field_id_t step[] = {
         LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_DMA_BD_WORD2_D0_STEP_SIZE,
@@ -217,15 +217,15 @@ bool loom_aie2p_native_encode_descriptor(
         LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_DMA_BD_WORD3_D1_WRAP,
         LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_DMA_BD_WORD4_D2_WRAP};
     for (uint8_t i = 0; i < layout.dma_dimension_count; ++i) {
-      words[2 + i] |= loom_xdna_register_field_encode_admitted(
+      words[2 + i] |= loom_xdna_register_field_encode(
           step[i], layout.dma_dimensions[i].step_size - 1);
       if (i + 1 < layout.dma_dimension_count) {
-        words[2 + i] |= loom_xdna_register_field_encode_admitted(
+        words[2 + i] |= loom_xdna_register_field_encode(
             wrap[i], layout.dma_dimensions[i].wrap);
       }
     }
   } else {
-    words[5] = loom_xdna_register_field_encode_admitted(
+    words[5] = loom_xdna_register_field_encode(
         LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_DMA_BD_WORD5_VALID_BD, 1);
     const loom_xdna_register_field_id_t step[] = {
         LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_DMA_BD_WORD2_D0_STEP_SIZE,
@@ -235,10 +235,10 @@ bool loom_aie2p_native_encode_descriptor(
         LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_DMA_BD_WORD3_D0_WRAP,
         LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_DMA_BD_WORD3_D1_WRAP};
     for (uint8_t i = 0; i < layout.dma_dimension_count; ++i) {
-      words[i < 2 ? 2 : 3] |= loom_xdna_register_field_encode_admitted(
+      words[i < 2 ? 2 : 3] |= loom_xdna_register_field_encode(
           step[i], layout.dma_dimensions[i].step_size - 1);
       if (i + 1 < layout.dma_dimension_count) {
-        words[3] |= loom_xdna_register_field_encode_admitted(
+        words[3] |= loom_xdna_register_field_encode(
             wrap[i], layout.dma_dimensions[i].wrap);
       }
     }
@@ -289,10 +289,10 @@ bool loom_aie2p_native_encode_ingress(const loom_xdna_array_family_t* family,
       return false;
     }
     words[6] =
-        loom_xdna_register_field_encode_admitted(
+        loom_xdna_register_field_encode(
             LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD6_ITERATION_WRAP,
             repetitions - 1) |
-        loom_xdna_register_field_encode_admitted(
+        loom_xdna_register_field_encode(
             LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD6_ITERATION_STEP_SIZE,
             step - 1);
   }
@@ -425,7 +425,7 @@ iree_status_t loom_aie2p_native_build_sequence(
     const uint32_t ordinal = i < chain_length ? i : i - chain_length;
     const uint32_t slot = chain_length == 1 ? 0 : ordinal % capacity;
     if (layout) {
-      words[layout->address_word] |= loom_xdna_register_field_encode_admitted(
+      words[layout->address_word] |= loom_xdna_register_field_encode(
           layout->address,
           (layout->local_address_base + byte_offset + slot * byte_stride) >>
               dma->address_encoding_shift);
@@ -433,19 +433,18 @@ iree_status_t loom_aie2p_native_build_sequence(
         const uint32_t step_units =
             byte_stride / dma->transfer_length_granularity;
         words[layout->iteration_word] =
-            loom_xdna_register_field_encode_admitted(layout->iteration.wrap,
-                                                     capacity - 1) |
-            loom_xdna_register_field_encode_admitted(
-                layout->iteration.step, step_units ? step_units - 1 : 0);
+            loom_xdna_register_field_encode(layout->iteration.wrap,
+                                            capacity - 1) |
+            loom_xdna_register_field_encode(layout->iteration.step,
+                                            step_units ? step_units - 1 : 0);
       }
     }
     const uint32_t chain_end =
         i < chain_length ? chain_length : required_descriptors;
     if (i + 1 < chain_end) {
-      words[chain_word] |=
-          loom_xdna_register_field_encode_admitted(
-              chain_next, out_sequence->descriptor + i + 1) |
-          loom_xdna_register_field_encode_admitted(chain_enable, 1);
+      words[chain_word] |= loom_xdna_register_field_encode(
+                               chain_next, out_sequence->descriptor + i + 1) |
+                           loom_xdna_register_field_encode(chain_enable, 1);
     }
   }
   const bool sender = direction == LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM;
@@ -465,19 +464,18 @@ iree_status_t loom_aie2p_native_build_sequence(
   while (cycles) {
     const uint32_t count = iree_min(cycles, repeat_limit);
     out_sequence->tasks[task++] =
-        loom_xdna_register_field_encode_admitted(start,
-                                                 out_sequence->descriptor) |
-        loom_xdna_register_field_encode_admitted(repeat, count - 1);
+        loom_xdna_register_field_encode(start, out_sequence->descriptor) |
+        loom_xdna_register_field_encode(repeat, count - 1);
     cycles -= count;
   }
   if (suffix_length) {
     out_sequence->tasks[task++] =
-        loom_xdna_register_field_encode_admitted(
+        loom_xdna_register_field_encode(
             start, out_sequence->descriptor + chain_length - suffix_length) |
-        loom_xdna_register_field_encode_admitted(repeat, suffix_cycles - 1);
+        loom_xdna_register_field_encode(repeat, suffix_cycles - 1);
   }
   if (tail_length) {
-    out_sequence->tasks[task] = loom_xdna_register_field_encode_admitted(
+    out_sequence->tasks[task] = loom_xdna_register_field_encode(
         start, out_sequence->descriptor + tail_descriptor);
   }
   *out_valid = true;

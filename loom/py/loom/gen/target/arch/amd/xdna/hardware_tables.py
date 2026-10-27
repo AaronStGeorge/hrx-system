@@ -344,8 +344,6 @@ def emit_register_facts() -> str:
         *field_lines,
         "};",
         "",
-        f"static const uint16_t kLoomXdnaRegisterFieldCount = {len(fields)};",
-        "",
     ]
     return "\n".join(lines)
 

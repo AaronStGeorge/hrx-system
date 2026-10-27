@@ -133,10 +133,10 @@ static void loom_aie2p_native_task_descriptor_words(
   const loom_xdna_register_field_id_t enable =
       layout ? layout->chain.enable
              : LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD7_USE_NEXT_BD;
-  out_words[word] |= loom_xdna_register_field_encode_admitted(
+  out_words[word] |= loom_xdna_register_field_encode(
                          next, descriptor->sequence.descriptor +
                                    transfer->descriptor_ordinal + 1) |
-                     loom_xdna_register_field_encode_admitted(enable, 1);
+                     loom_xdna_register_field_encode(enable, 1);
 }
 
 static bool loom_aie2p_native_task_descriptor_matches(
@@ -705,25 +705,22 @@ static iree_status_t loom_aie2p_native_select_worker_transfers(
             local_channel->byte_offset +
             (uint32_t)local_view->projection_byte_offset.constant;
         selected->local_words[layout->address_word] |=
-            loom_xdna_register_field_encode_admitted(
+            loom_xdna_register_field_encode(
                 layout->address,
                 (layout->local_address_base + address) >>
                     local_tile->facts->dma.address_encoding_shift);
       }
       if (autonomous) {
         selected->local_words[layout->lock_word] |=
-            loom_xdna_register_field_encode_admitted(
+            loom_xdna_register_field_encode(
                 layout->locks.acquire_id,
                 layout->local_lock_base + local_channel->free_lock) |
-            loom_xdna_register_field_encode_admitted(
-                layout->locks.acquire_value, -1) |
-            loom_xdna_register_field_encode_admitted(
-                layout->locks.acquire_enable, 1) |
-            loom_xdna_register_field_encode_admitted(
+            loom_xdna_register_field_encode(layout->locks.acquire_value, -1) |
+            loom_xdna_register_field_encode(layout->locks.acquire_enable, 1) |
+            loom_xdna_register_field_encode(
                 layout->locks.release_id,
                 layout->local_lock_base + local_channel->ready_lock) |
-            loom_xdna_register_field_encode_admitted(
-                layout->locks.release_value, 1);
+            loom_xdna_register_field_encode(layout->locks.release_value, 1);
       }
       if (configuration) {
         while (source->transport.steps[transport_step].op != request->op) {
@@ -739,13 +736,11 @@ static iree_status_t loom_aie2p_native_select_worker_transfers(
             loom_op_const_results(preceding)[0] == payload_record.value_id) {
           selected->admission = preceding;
           selected->local_words[layout->lock_word] |=
-              loom_xdna_register_field_encode_admitted(
+              loom_xdna_register_field_encode(
                   layout->locks.acquire_id,
                   layout->local_lock_base + local_channel->ready_lock) |
-              loom_xdna_register_field_encode_admitted(
-                  layout->locks.acquire_value, -1) |
-              loom_xdna_register_field_encode_admitted(
-                  layout->locks.acquire_enable, 1);
+              loom_xdna_register_field_encode(layout->locks.acquire_value, -1) |
+              loom_xdna_register_field_encode(layout->locks.acquire_enable, 1);
         }
       }
       loom_aie2p_native_binding_t* binding =
@@ -853,20 +848,18 @@ static iree_status_t loom_aie2p_native_select_distribution_endpoint(
   words[0] = length_units - dma->transfer_length_offset;
   const bool sender = direction == LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM;
   words[layout->lock_word] =
-      loom_xdna_register_field_encode_admitted(
+      loom_xdna_register_field_encode(
           layout->locks.acquire_id,
           layout->local_lock_base +
               (sender ? channel->ready_lock : channel->free_lock)) |
-      loom_xdna_register_field_encode_admitted(layout->locks.acquire_value,
-                                               -1) |
-      loom_xdna_register_field_encode_admitted(layout->locks.acquire_enable,
-                                               1) |
-      loom_xdna_register_field_encode_admitted(
+      loom_xdna_register_field_encode(layout->locks.acquire_value, -1) |
+      loom_xdna_register_field_encode(layout->locks.acquire_enable, 1) |
+      loom_xdna_register_field_encode(
           layout->locks.release_id,
           layout->local_lock_base +
               (sender ? channel->free_lock : channel->ready_lock)) |
-      loom_xdna_register_field_encode_admitted(layout->locks.release_value, 1) |
-      loom_xdna_register_field_encode_admitted(layout->locks.valid, 1);
+      loom_xdna_register_field_encode(layout->locks.release_value, 1) |
+      loom_xdna_register_field_encode(layout->locks.valid, 1);
   *out_endpoint = (loom_aie2p_native_distribution_endpoint_t){
       .channel = channel, .tile = tile, .engine = (*next_engine)++};
   return loom_aie2p_native_select_sequence(

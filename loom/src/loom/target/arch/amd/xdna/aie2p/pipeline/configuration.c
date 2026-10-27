@@ -124,15 +124,13 @@ static iree_status_t loom_aie2p_native_config_function(
 
 static iree_status_t loom_aie2p_native_config_register(
     loom_aie2p_native_configuration_t* config, loom_xdna_tile_coordinate_t tile,
-    loom_xdna_register_field_id_t field, const uint16_t* indices,
-    iree_host_size_t index_count, int64_t value, uint32_t instruction) {
-  uint64_t address;
-  uint32_t bits;
-  loom_xdna_register_field_info_t info;
-  IREE_RETURN_IF_ERROR(loom_xdna_register_field_info(field, &info));
-  IREE_RETURN_IF_ERROR(loom_xdna_register_field_address(
-      config->context->family, field, tile, index_count, indices, &address));
-  IREE_RETURN_IF_ERROR(loom_xdna_register_field_encode(field, value, &bits));
+    loom_xdna_register_field_id_t field, const uint16_t* indices, int64_t value,
+    uint32_t instruction) {
+  const loom_xdna_register_field_info_t info =
+      loom_xdna_register_field_info(field);
+  const uint64_t address = loom_xdna_register_field_address(
+      config->context->family, field, tile, indices);
+  const uint32_t bits = loom_xdna_register_field_encode(field, value);
   const uint64_t mask = ((UINT64_C(1) << info.bit_width) - 1)
                         << info.least_significant_bit;
   const uint64_t operands[] = {address, mask, bits};
@@ -154,11 +152,11 @@ static iree_status_t loom_aie2p_native_config_reset_core(
     loom_xdna_tile_coordinate_t tile) {
   // Disable and reset are bits in the same control register. Set the reset
   // state atomically while preserving the register's other fields.
-  const uint32_t enable = loom_xdna_register_field_encode_admitted(
+  const uint32_t enable = loom_xdna_register_field_encode(
       LOOM_XDNA_REGISTER_FIELD_CORE_CONTROL_ENABLE, 1);
-  const uint32_t reset = loom_xdna_register_field_encode_admitted(
+  const uint32_t reset = loom_xdna_register_field_encode(
       LOOM_XDNA_REGISTER_FIELD_CORE_CONTROL_RESET, 1);
-  const uint64_t address = loom_xdna_register_field_address_admitted(
+  const uint64_t address = loom_xdna_register_field_address(
       config->context->family, LOOM_XDNA_REGISTER_FIELD_CORE_CONTROL_RESET,
       tile, NULL);
   const uint64_t operands[] = {address, enable | reset, reset};
@@ -178,9 +176,9 @@ static iree_status_t loom_aie2p_native_config_set_lock(
           .memory_layout->lock_value;
   return loom_aie2p_native_config_write(
       config,
-      loom_xdna_register_field_address_admitted(config->context->family, field,
-                                                tile, &lock),
-      loom_xdna_register_field_encode_admitted(field, value));
+      loom_xdna_register_field_address(config->context->family, field, tile,
+                                       &lock),
+      loom_xdna_register_field_encode(field, value));
 }
 
 static iree_status_t loom_aie2p_native_config_bank(
@@ -249,7 +247,7 @@ static iree_status_t loom_aie2p_native_config_routes(
             ? mux_fields[edge->destination_channel]
             : demux_fields[edge->source_channel];
     IREE_RETURN_IF_ERROR(loom_aie2p_native_config_register(
-        config, edge->coordinate, field, NULL, 0, 1,
+        config, edge->coordinate, field, NULL, 1,
         AIE2P_CONFIGURATION_DESCRIPTOR_REF_CONFIGURATION_WRITE_MASK32));
   }
   return iree_ok_status();
@@ -262,10 +260,10 @@ static iree_status_t loom_aie2p_native_config_reset_distribution_endpoint(
   const loom_xdna_register_field_id_t control =
       endpoint->tile->memory_layout->directions[direction - 1].reset;
   const uint16_t engine = endpoint->engine;
-  const uint64_t address = loom_xdna_register_field_address_admitted(
+  const uint64_t address = loom_xdna_register_field_address(
       config->context->family, control, endpoint->tile->coordinate, &engine);
   IREE_RETURN_IF_ERROR(loom_aie2p_native_config_write(
-      config, address, loom_xdna_register_field_encode_admitted(control, 1)));
+      config, address, loom_xdna_register_field_encode(control, 1)));
   return loom_aie2p_native_config_write(config, address, 0);
 }
 
@@ -281,7 +279,7 @@ static iree_status_t loom_aie2p_native_config_descriptors(
   const uint8_t word_count = layout ? layout->descriptor_word_count : 8;
   for (uint16_t i = 0; i < sequence->descriptor_count; ++i) {
     const uint16_t descriptor = sequence->descriptor + i;
-    uint64_t values[9] = {loom_xdna_register_field_address_admitted(
+    uint64_t values[9] = {loom_xdna_register_field_address(
         config->context->family, base, tile->coordinate, &descriptor)};
     for (unsigned j = 0; j < word_count; ++j) {
       values[j + 1] = sequence->words[i][j];
@@ -307,12 +305,12 @@ static iree_status_t loom_aie2p_native_config_transfers(
       const loom_xdna_register_field_id_t local_control =
           path->local->memory_layout->directions[path->ingress ? 1 : 0].reset;
       const uint16_t local_engine = path->local_engine;
-      const uint64_t local_address = loom_xdna_register_field_address_admitted(
+      const uint64_t local_address = loom_xdna_register_field_address(
           context->family, local_control, path->local->coordinate,
           &local_engine);
       IREE_RETURN_IF_ERROR(loom_aie2p_native_config_write(
           config, local_address,
-          loom_xdna_register_field_encode_admitted(local_control, 1)));
+          loom_xdna_register_field_encode(local_control, 1)));
       IREE_RETURN_IF_ERROR(
           loom_aie2p_native_config_write(config, local_address, 0));
       const loom_xdna_register_field_id_t shim_control =
@@ -322,11 +320,11 @@ static iree_status_t loom_aie2p_native_config_transfers(
       const uint16_t shim_engine = path->shim_engine;
       IREE_RETURN_IF_ERROR(loom_aie2p_native_config_write(
           config,
-          loom_xdna_register_field_address_admitted(
-              context->family, shim_control, path->shim->coordinate,
-              &shim_engine),
-          loom_xdna_register_field_encode_admitted(shim_control,
-                                                   path->completion_packet)));
+          loom_xdna_register_field_address(context->family, shim_control,
+                                           path->shim->coordinate,
+                                           &shim_engine),
+          loom_xdna_register_field_encode(shim_control,
+                                          path->completion_packet)));
     }
     for (const loom_aie2p_native_dma_descriptor_t* descriptor =
              worker->descriptors;
@@ -337,11 +335,10 @@ static iree_status_t loom_aie2p_native_config_transfers(
       if (descriptor->completion) {
         const loom_aie2p_native_memory_layout_t* layout = tile->memory_layout;
         completion_release =
-            loom_xdna_register_field_encode_admitted(
+            loom_xdna_register_field_encode(
                 layout->locks.release_id,
                 layout->local_lock_base + descriptor->completion->lock) |
-            loom_xdna_register_field_encode_admitted(
-                layout->locks.release_value, 1);
+            loom_xdna_register_field_encode(layout->locks.release_value, 1);
       }
       IREE_RETURN_IF_ERROR(loom_aie2p_native_config_descriptors(
           config, tile, &descriptor->sequence, completion_release));
@@ -456,7 +453,7 @@ static iree_status_t loom_aie2p_native_config_bindings(
             external_dynamic
                 ? tile_address + worker->tile->facts->memory.local_base +
                       transfer->base_storage_offset
-                : loom_xdna_register_field_address_admitted(
+                : loom_xdna_register_field_address(
                       context->family,
                       LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD1_BASE_ADDRESS_LOW,
                       transfer->shim_descriptor->path->shim->coordinate,
@@ -477,7 +474,7 @@ static iree_status_t loom_aie2p_native_config_bindings(
         // does not wrap naturally; the consumer also starts at slot zero.
         IREE_RETURN_IF_ERROR(loom_aie2p_native_config_write(
             config,
-            loom_xdna_register_field_address_admitted(
+            loom_xdna_register_field_address(
                 context->family,
                 transfer->local_descriptor->path->local->memory_layout
                     ->iteration.current,
@@ -501,7 +498,7 @@ static iree_status_t loom_aie2p_native_config_bindings(
         }
         IREE_RETURN_IF_ERROR(loom_aie2p_native_config_write(
             config,
-            loom_xdna_register_field_address_admitted(
+            loom_xdna_register_field_address(
                 context->family,
                 endpoint->tile->memory_layout->iteration.current,
                 endpoint->tile->coordinate, &endpoint->sequence.descriptor),
@@ -523,23 +520,23 @@ static iree_status_t loom_aie2p_native_config_submit(
       path->ingress
           ? LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_CHANNEL_MM2S_TASK_QUEUE_START_BD_ID
           : LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_CHANNEL_S2MM_TASK_QUEUE_START_BD_ID;
-  uint32_t local_task = loom_xdna_register_field_encode_admitted(
+  uint32_t local_task = loom_xdna_register_field_encode(
       local_queue, task->local_descriptor->sequence.descriptor);
-  uint32_t shim_task = loom_xdna_register_field_encode_admitted(
+  uint32_t shim_task = loom_xdna_register_field_encode(
       shim_queue, task->shim_descriptor->sequence.descriptor);
   if (!path->ingress) {
-    shim_task |= loom_xdna_register_field_encode_admitted(
+    shim_task |= loom_xdna_register_field_encode(
         LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_CHANNEL_S2MM_TASK_QUEUE_ENABLE_TOKEN_ISSUE,
         1);
   }
   const uint16_t local_engine = path->local_engine;
   const uint16_t shim_engine = path->shim_engine;
-  const uint64_t local_address = loom_xdna_register_field_address_admitted(
-      config->context->family, local_queue, path->local->coordinate,
-      &local_engine);
-  const uint64_t shim_address = loom_xdna_register_field_address_admitted(
-      config->context->family, shim_queue, path->shim->coordinate,
-      &shim_engine);
+  const uint64_t local_address =
+      loom_xdna_register_field_address(config->context->family, local_queue,
+                                       path->local->coordinate, &local_engine);
+  const uint64_t shim_address =
+      loom_xdna_register_field_address(config->context->family, shim_queue,
+                                       path->shim->coordinate, &shim_engine);
   // Enqueue the receiver before the sender, as in core-issued movement.
   IREE_RETURN_IF_ERROR(loom_aie2p_native_config_write(
       config, path->ingress ? local_address : shim_address,
@@ -564,11 +561,11 @@ static iree_status_t loom_aie2p_native_config_submit_ingress(
     const loom_aie2p_native_transfer_task_t* task) {
   const loom_aie2p_native_dma_path_t* path = task->path;
   const uint16_t local_engine = path->local_engine;
-  const uint64_t local_address = loom_xdna_register_field_address_admitted(
+  const uint64_t local_address = loom_xdna_register_field_address(
       config->context->family, path->local->memory_layout->directions[1].start,
       path->local->coordinate, &local_engine);
   const uint16_t shim_engine = path->shim_engine;
-  const uint64_t shim_address = loom_xdna_register_field_address_admitted(
+  const uint64_t shim_address = loom_xdna_register_field_address(
       config->context->family,
       LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_CHANNEL_MM2S_TASK_QUEUE_START_BD_ID,
       path->shim->coordinate, &shim_engine);
@@ -585,7 +582,7 @@ static iree_status_t loom_aie2p_native_config_submit_distribution_endpoint(
   const loom_xdna_register_field_id_t queue =
       endpoint->tile->memory_layout->directions[direction - 1].start;
   const uint16_t engine = endpoint->engine;
-  const uint64_t address = loom_xdna_register_field_address_admitted(
+  const uint64_t address = loom_xdna_register_field_address(
       config->context->family, queue, endpoint->tile->coordinate, &engine);
   return loom_aie2p_native_config_queue_sequence(config, address,
                                                  &endpoint->sequence);
@@ -613,15 +610,15 @@ static iree_status_t loom_aie2p_native_config_wait_distribution_endpoint(
   }
   const loom_xdna_register_field_id_t* fields =
       endpoint->tile->memory_layout->directions[direction - 1].status;
-  uint32_t mask = loom_xdna_register_field_encode_admitted(fields[0], 7);
+  uint32_t mask = loom_xdna_register_field_encode(fields[0], 7);
   for (iree_host_size_t i = 1; i < 6; ++i) {
-    mask |= loom_xdna_register_field_encode_admitted(fields[i], 1);
+    mask |= loom_xdna_register_field_encode(fields[i], 1);
   }
   const uint16_t engine = endpoint->engine;
-  const uint64_t values[] = {loom_xdna_register_field_address_admitted(
-                                 config->context->family, fields[0],
-                                 endpoint->tile->coordinate, &engine),
-                             mask, 0};
+  const uint64_t values[] = {
+      loom_xdna_register_field_address(config->context->family, fields[0],
+                                       endpoint->tile->coordinate, &engine),
+      mask, 0};
   return loom_aie2p_native_config_op(
       config, AIE2P_CONFIGURATION_DESCRIPTOR_REF_CONFIGURATION_WAIT_MASK32,
       values, IREE_ARRAYSIZE(values), loom_named_attr_slice_empty());
@@ -654,7 +651,7 @@ static iree_status_t loom_aie2p_native_config_communicate(
             IREE_RETURN_IF_ERROR(loom_aie2p_native_config_register(
                 config, path->local->coordinate,
                 path->local->memory_layout->lock_value,
-                &complete->local_descriptor->completion->lock, 1, 1,
+                &complete->local_descriptor->completion->lock, 1,
                 AIE2P_CONFIGURATION_DESCRIPTOR_REF_CONFIGURATION_WAIT_MASK32));
           } else {
             const uint64_t values[] = {path->shim->coordinate.column,
@@ -694,7 +691,7 @@ static iree_status_t loom_aie2p_native_config_communicate(
         const bool acquire = loom_channel_acquire_isa(step->op);
         if (acquire) {
           IREE_RETURN_IF_ERROR(loom_aie2p_native_config_register(
-              config, tile, lock_value, &channel->ready_lock, 1, 1,
+              config, tile, lock_value, &channel->ready_lock, 1,
               AIE2P_CONFIGURATION_DESCRIPTOR_REF_CONFIGURATION_WAIT_MASK32));
         }
         // Each endpoint acts once and has one cursor owner. No second producer
@@ -881,10 +878,10 @@ iree_status_t loom_aie2p_native_emit_configuration(
     const loom_xdna_tile_coordinate_t tile =
         context->workers[i].tile->coordinate;
     IREE_RETURN_IF_ERROR(loom_aie2p_native_config_register(
-        &config, tile, LOOM_XDNA_REGISTER_FIELD_CORE_CONTROL_RESET, NULL, 0, 0,
+        &config, tile, LOOM_XDNA_REGISTER_FIELD_CORE_CONTROL_RESET, NULL, 0,
         AIE2P_CONFIGURATION_DESCRIPTOR_REF_CONFIGURATION_WRITE_MASK32));
     IREE_RETURN_IF_ERROR(loom_aie2p_native_config_register(
-        &config, tile, LOOM_XDNA_REGISTER_FIELD_CORE_CONTROL_ENABLE, NULL, 0, 1,
+        &config, tile, LOOM_XDNA_REGISTER_FIELD_CORE_CONTROL_ENABLE, NULL, 1,
         AIE2P_CONFIGURATION_DESCRIPTOR_REF_CONFIGURATION_WRITE_MASK32));
   }
   for (iree_host_size_t i = 0; i < realization->resources.strand_count; ++i) {
@@ -917,7 +914,7 @@ iree_status_t loom_aie2p_native_emit_configuration(
     IREE_RETURN_IF_ERROR(loom_aie2p_native_config_register(
         &config, worker->tile->coordinate,
         LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_LOCK_VALUE_VALUE,
-        &worker->completion_lock, 1, 1,
+        &worker->completion_lock, 1,
         AIE2P_CONFIGURATION_DESCRIPTOR_REF_CONFIGURATION_WAIT_MASK32));
   }
   for (iree_host_size_t i = 0; i < realization->resources.strand_count; ++i) {

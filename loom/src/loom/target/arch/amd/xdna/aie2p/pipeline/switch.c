@@ -67,7 +67,7 @@ static iree_status_t loom_aie2p_native_switch_initialize(
   const uint16_t first_indices[] = {0, 0};
   for (unsigned i = 0; i < LOOM_AIE2P_NATIVE_SWITCH_BANK_COUNT; ++i) {
     state->desired->banks[i] = (loom_aie2p_native_register_bank_t){
-        .address = (uint32_t)loom_xdna_register_field_address_admitted(
+        .address = (uint32_t)loom_xdna_register_field_address(
             context->family, selected[i], tile->coordinate, first_indices),
         .word_count = word_counts[i],
         .words = words};

@@ -296,18 +296,6 @@ typedef struct loom_xdna_array_family_t {
   const char* register_database_version;
 } loom_xdna_array_family_t;
 
-// Canonical physical storage selected by a local or load-aperture range.
-typedef struct loom_xdna_memory_placement_t {
-  // Physical tile owning the storage.
-  loom_xdna_tile_coordinate_t owner;
-  // Byte offset in the owner's local storage.
-  uint32_t owner_offset;
-  // Number of bytes in the resolved placement.
-  uint32_t byte_length;
-  // Bytes available from |owner_offset| through the resolved aperture.
-  uint32_t available_capacity;
-} loom_xdna_memory_placement_t;
-
 // Returns the complete immutable NPU2 physical-array family.
 const loom_xdna_array_family_t* loom_xdna_npu2_array_family(void);
 
@@ -334,29 +322,6 @@ uint32_t loom_xdna_array_stream_destination_channels(
     const loom_xdna_array_family_t* family,
     const loom_xdna_stream_port_range_t* source, uint8_t source_channel,
     const loom_xdna_stream_port_range_t* destination);
-
-// Forms one absolute tile register address after validating the module.
-iree_status_t loom_xdna_array_register_address(
-    const loom_xdna_array_family_t* family,
-    loom_xdna_tile_coordinate_t coordinate, loom_xdna_register_module_t module,
-    uint32_t register_offset, uint64_t* out_address);
-
-// Resolves one direct tile-local allocation range to canonical storage.
-iree_status_t loom_xdna_array_resolve_local_memory(
-    const loom_xdna_array_family_t* family,
-    loom_xdna_tile_coordinate_t coordinate, uint32_t address,
-    uint32_t byte_length, loom_xdna_memory_placement_t* out_placement);
-
-// Resolves one program or data load range to canonical physical storage.
-//
-// Data addresses are interpreted through the accessor tile's load apertures.
-// Neighbor windows resolve to the same owner and owner-relative offset as a
-// direct placement through the owner's self window.
-iree_status_t loom_xdna_array_resolve_load_memory(
-    const loom_xdna_array_family_t* family,
-    loom_xdna_tile_coordinate_t accessor, loom_xdna_memory_space_t memory_space,
-    uint32_t address, uint32_t byte_length,
-    loom_xdna_memory_placement_t* out_placement);
 
 // Returns the immutable data-memory aperture mapping |owner| into |accessor|,
 // or NULL when the owner is not directly visible. Coordinates are already

@@ -7,15 +7,14 @@
 #include "loom/target/arch/amd/xdna/array/registers.h"
 
 #include "iree/testing/gtest.h"
-#include "iree/testing/status_matchers.h"
 
 namespace {
 
 TEST(XdnaRegisterFactsTest, ExposesCrossVerifiedSemanticCorpus) {
   const loom_xdna_register_field_id_t field_id =
       LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_DMA_BD_WORD5_LOCK_ACQUIRE_VALUE;
-  loom_xdna_register_field_info_t info = {};
-  IREE_ASSERT_OK(loom_xdna_register_field_info(field_id, &info));
+  const loom_xdna_register_field_info_t info =
+      loom_xdna_register_field_info(field_id);
   EXPECT_TRUE(iree_string_view_equal(
       info.key, IREE_SV("compute_memory.dma.bd.word5.lock_acquire_value")));
   EXPECT_EQ(info.module, LOOM_XDNA_REGISTER_MODULE_COMPUTE_MEMORY);
@@ -118,19 +117,19 @@ TEST(XdnaRegisterFactsTest, ResolvesDmaIdleStatusAcrossMemoryModules) {
     uint32_t idle_mask = 0;
     for (size_t i = 0; i < IREE_ARRAYSIZE(test_case.fields); ++i) {
       const auto field = test_case.fields[i];
-      loom_xdna_register_field_info_t info = {};
-      IREE_ASSERT_OK(loom_xdna_register_field_info(field, &info));
+      const loom_xdna_register_field_info_t info =
+          loom_xdna_register_field_info(field);
       EXPECT_EQ(info.access, LOOM_XDNA_REGISTER_ACCESS_READ_ONLY);
       const auto dimension = loom_xdna_register_field_dimension(field, 0);
       EXPECT_EQ(dimension.count, test_case.channel_count);
       EXPECT_EQ(dimension.stride, 4u);
       for (uint16_t channel = 0; channel < test_case.channel_count; ++channel) {
-        EXPECT_EQ(loom_xdna_register_field_address_admitted(
+        EXPECT_EQ(loom_xdna_register_field_address(
                       loom_xdna_npu2_array_family(), field,
                       test_case.coordinate, &channel),
                   test_case.address + channel * 4);
       }
-      idle_mask |= loom_xdna_register_field_encode_admitted(field, i ? 1 : 7);
+      idle_mask |= loom_xdna_register_field_encode(field, i ? 1 : 7);
     }
     EXPECT_EQ(idle_mask, 0x0078003Cu);
   }
@@ -140,69 +139,30 @@ TEST(XdnaRegisterFactsTest, FormsIndexedAbsoluteAddresses) {
   const loom_xdna_register_field_id_t field_id =
       LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD7_VALID_BD;
   const uint16_t indices[] = {3};
-  uint64_t address = 0;
-  IREE_ASSERT_OK(loom_xdna_register_field_address(
-      loom_xdna_npu2_array_family(), field_id, {2, 0}, IREE_ARRAYSIZE(indices),
-      indices, &address));
+  const uint64_t address = loom_xdna_register_field_address(
+      loom_xdna_npu2_array_family(), field_id, {2, 0}, indices);
   EXPECT_EQ(address, (UINT64_C(2) << 25) | 0x1D07C);
-
-  const uint16_t invalid_indices[] = {16};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
-      loom_xdna_register_field_address(loom_xdna_npu2_array_family(), field_id,
-                                       {2, 0}, IREE_ARRAYSIZE(invalid_indices),
-                                       invalid_indices, &address));
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_xdna_register_field_address(
-                            loom_xdna_npu2_array_family(), field_id, {2, 2},
-                            IREE_ARRAYSIZE(indices), indices, &address));
 }
 
-TEST(XdnaRegisterFactsTest, EncodesExactSignedAndUnsignedDomains) {
+TEST(XdnaRegisterFactsTest, EncodesSignedAndUnsignedBits) {
   const loom_xdna_register_field_id_t signed_field =
       LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_DMA_BD_WORD5_LOCK_ACQUIRE_VALUE;
-  uint32_t bits = 0;
-  IREE_ASSERT_OK(loom_xdna_register_field_encode(signed_field, -1, &bits));
-  EXPECT_EQ(bits, UINT32_C(0x00000FE0));
-  IREE_ASSERT_OK(loom_xdna_register_field_encode(signed_field, -64, &bits));
-  EXPECT_EQ(bits, UINT32_C(0x00000800));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
-      loom_xdna_register_field_encode(signed_field, -65, &bits));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
-      loom_xdna_register_field_encode(signed_field, 64, &bits));
+  EXPECT_EQ(loom_xdna_register_field_encode(signed_field, -1),
+            UINT32_C(0x00000FE0));
+  EXPECT_EQ(loom_xdna_register_field_encode(signed_field, -64),
+            UINT32_C(0x00000800));
 
   const loom_xdna_register_field_id_t unsigned_field =
       LOOM_XDNA_REGISTER_FIELD_CORE_CONTROL_ENABLE;
-  IREE_ASSERT_OK(loom_xdna_register_field_encode(unsigned_field, 1, &bits));
-  EXPECT_EQ(bits, 1u);
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
-      loom_xdna_register_field_encode(unsigned_field, 2, &bits));
-
-  EXPECT_EQ(loom_xdna_register_field_encode_admitted(signed_field, -1),
-            UINT32_C(0x00000FE0));
-  EXPECT_EQ(loom_xdna_register_field_encode_admitted(unsigned_field, 1), 1u);
-}
-
-TEST(XdnaRegisterFactsTest, ProjectsAdmittedIndexedAddress) {
-  const uint16_t indices[] = {3};
-  EXPECT_EQ(loom_xdna_register_field_address_admitted(
-                loom_xdna_npu2_array_family(),
-                LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_BD_WORD7_VALID_BD, {2, 0},
-                indices),
-            (UINT64_C(2) << 25) | 0x1D07C);
+  EXPECT_EQ(loom_xdna_register_field_encode(unsigned_field, 1), 1u);
 }
 
 TEST(XdnaRegisterFactsTest, ResolvesTwoDimensionalStreamSlotPattern) {
   const loom_xdna_register_field_id_t field_id =
       LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_STREAM_SLAVE_SLOT_PACKET_ID;
   const uint16_t indices[] = {13, 2};
-  uint64_t address = 0;
-  IREE_ASSERT_OK(loom_xdna_register_field_address(
-      loom_xdna_npu2_array_family(), field_id, {0, 1}, IREE_ARRAYSIZE(indices),
-      indices, &address));
+  const uint64_t address = loom_xdna_register_field_address(
+      loom_xdna_npu2_array_family(), field_id, {0, 1}, indices);
   EXPECT_EQ(address, (UINT64_C(1) << 20) | 0xB02D8);
 }
 
@@ -249,9 +209,9 @@ TEST(XdnaRegisterFactsTest, DescribesCompleteStreamRegisterBanks) {
       EXPECT_EQ(ports.stride, bank == 2 ? 16u : 4u);
       const uint16_t indices[] = {static_cast<uint16_t>(ports.count - 1),
                                   static_cast<uint16_t>(slots.count - 1)};
-      EXPECT_EQ(loom_xdna_register_field_address_admitted(
-                    loom_xdna_npu2_array_family(), test_case.fields[bank],
-                    test_case.coordinate, indices),
+      EXPECT_EQ(loom_xdna_register_field_address(loom_xdna_npu2_array_family(),
+                                                 test_case.fields[bank],
+                                                 test_case.coordinate, indices),
                 test_case.last_addresses[bank]);
     }
   }
@@ -298,29 +258,19 @@ TEST(XdnaRegisterFactsTest, EncodesCoreTraceFieldsAtExactHardwareAddresses) {
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.field);
-    loom_xdna_register_field_info_t info = {};
-    IREE_ASSERT_OK(loom_xdna_register_field_info(test_case.field, &info));
+    const loom_xdna_register_field_info_t info =
+        loom_xdna_register_field_info(test_case.field);
     EXPECT_EQ(info.module, LOOM_XDNA_REGISTER_MODULE_CORE);
     EXPECT_EQ(info.access, LOOM_XDNA_REGISTER_ACCESS_READ_WRITE);
     EXPECT_FALSE(info.is_signed);
     EXPECT_EQ(info.dimension_count, 0u);
-    uint64_t address = 0;
-    IREE_ASSERT_OK(loom_xdna_register_field_address(
-        loom_xdna_npu2_array_family(), test_case.field, {7, 5}, 0, nullptr,
-        &address));
+    const uint64_t address = loom_xdna_register_field_address(
+        loom_xdna_npu2_array_family(), test_case.field, {7, 5}, nullptr);
     EXPECT_EQ(address, UINT64_C(0x0E500000) | test_case.offset);
-    uint32_t bits = 0;
-    IREE_ASSERT_OK(loom_xdna_register_field_encode(test_case.field, 0, &bits));
-    EXPECT_EQ(bits, 0u);
-    IREE_ASSERT_OK(loom_xdna_register_field_encode(test_case.field,
-                                                   test_case.maximum, &bits));
-    EXPECT_EQ(bits, test_case.mask);
-    IREE_EXPECT_STATUS_IS(
-        IREE_STATUS_OUT_OF_RANGE,
-        loom_xdna_register_field_encode(test_case.field, -1, &bits));
-    IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
-                          loom_xdna_register_field_encode(
-                              test_case.field, test_case.maximum + 1, &bits));
+    EXPECT_EQ(loom_xdna_register_field_encode(test_case.field, 0), 0u);
+    EXPECT_EQ(
+        loom_xdna_register_field_encode(test_case.field, test_case.maximum),
+        test_case.mask);
   }
 }
 
@@ -335,8 +285,8 @@ TEST(XdnaRegisterFactsTest, ResolvesBroadcastTimerSynchronizationSequence) {
     // Concrete source or destination tile.
     loom_xdna_tile_coordinate_t coordinate;
     // Whether the field selects an indexed broadcast channel.
-    iree_host_size_t index_count;
-    // Broadcast channel when index_count is one.
+    bool indexed;
+    // Broadcast channel when indexed.
     uint16_t index;
     // Raw event identifier in this module's event domain.
     int64_t value;
@@ -347,56 +297,56 @@ TEST(XdnaRegisterFactsTest, ResolvesBroadcastTimerSynchronizationSequence) {
   } cases[] = {
       {LOOM_XDNA_REGISTER_FIELD_CORE_TIMER_CONTROL_RESET_EVENT,
        {2, 2},
-       0,
+       false,
        0,
        122,
        0x04234000,
        0x7A00},
       {LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_TIMER_CONTROL_RESET_EVENT,
        {2, 2},
-       0,
+       false,
        0,
        122,
        0x04214000,
        0x7A00},
       {LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_TIMER_CONTROL_RESET_EVENT,
        {2, 1},
-       0,
+       false,
        0,
        157,
        0x04194000,
        0x9D00},
       {LOOM_XDNA_REGISTER_FIELD_SHIM_PL_TIMER_CONTROL_RESET_EVENT,
        {2, 0},
-       0,
+       false,
        0,
        127,
        0x04034000,
        0x7F00},
       {LOOM_XDNA_REGISTER_FIELD_SHIM_PL_EVENT_BROADCAST_EVENT,
        {2, 0},
-       1,
+       true,
        15,
        127,
        0x0403404C,
        0x7F},
       {LOOM_XDNA_REGISTER_FIELD_SHIM_PL_EVENT_GENERATE_EVENT,
        {2, 0},
-       0,
+       false,
        0,
        127,
        0x04034008,
        0x7F},
       {LOOM_XDNA_REGISTER_FIELD_SHIM_PL_EVENT_BROADCAST_EVENT,
        {2, 0},
-       1,
+       true,
        14,
        126,
        0x04034048,
        0x7E},
       {LOOM_XDNA_REGISTER_FIELD_SHIM_PL_EVENT_GENERATE_EVENT,
        {2, 0},
-       0,
+       false,
        0,
        126,
        0x04034008,
@@ -404,16 +354,12 @@ TEST(XdnaRegisterFactsTest, ResolvesBroadcastTimerSynchronizationSequence) {
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.field);
-    uint64_t address = 0;
-    IREE_ASSERT_OK(loom_xdna_register_field_address(
+    const uint64_t address = loom_xdna_register_field_address(
         loom_xdna_npu2_array_family(), test_case.field, test_case.coordinate,
-        test_case.index_count,
-        test_case.index_count ? &test_case.index : nullptr, &address));
+        test_case.indexed ? &test_case.index : nullptr);
     EXPECT_EQ(address, test_case.address);
-    uint32_t bits = 0;
-    IREE_ASSERT_OK(loom_xdna_register_field_encode(test_case.field,
-                                                   test_case.value, &bits));
-    EXPECT_EQ(bits, test_case.bits);
+    EXPECT_EQ(loom_xdna_register_field_encode(test_case.field, test_case.value),
+              test_case.bits);
   }
 }
 
@@ -451,106 +397,72 @@ TEST(XdnaRegisterFactsTest, PreservesMixedAccessAndStatusComparisonBits) {
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.field);
-    loom_xdna_register_field_info_t info = {};
-    IREE_ASSERT_OK(loom_xdna_register_field_info(test_case.field, &info));
+    const loom_xdna_register_field_info_t info =
+        loom_xdna_register_field_info(test_case.field);
     EXPECT_EQ(info.access, test_case.access);
     EXPECT_FALSE(info.is_signed);
-    uint32_t bits = 0;
-    IREE_ASSERT_OK(loom_xdna_register_field_encode(test_case.field,
-                                                   test_case.value, &bits));
-    EXPECT_EQ(bits, test_case.bits);
+    EXPECT_EQ(loom_xdna_register_field_encode(test_case.field, test_case.value),
+              test_case.bits);
   }
-  uint32_t bits = 0;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
-                        loom_xdna_register_field_encode(
-                            LOOM_XDNA_REGISTER_FIELD_CORE_TIMER_LOW_VALUE,
-                            INT64_C(0x100000000), &bits));
-  uint64_t address = 0;
-  IREE_ASSERT_OK(loom_xdna_register_field_address(
-      loom_xdna_npu2_array_family(),
-      LOOM_XDNA_REGISTER_FIELD_CORE_TRACE_STATUS_STATE, {2, 2}, 0, nullptr,
-      &address));
-  EXPECT_EQ(address, UINT64_C(0x042340D8));
-  IREE_ASSERT_OK(loom_xdna_register_field_address(
-      loom_xdna_npu2_array_family(),
-      LOOM_XDNA_REGISTER_FIELD_CORE_TIMER_HIGH_VALUE, {2, 2}, 0, nullptr,
-      &address));
-  EXPECT_EQ(address, UINT64_C(0x042340FC));
+  EXPECT_EQ(
+      loom_xdna_register_field_address(
+          loom_xdna_npu2_array_family(),
+          LOOM_XDNA_REGISTER_FIELD_CORE_TRACE_STATUS_STATE, {2, 2}, nullptr),
+      UINT64_C(0x042340D8));
+  EXPECT_EQ(
+      loom_xdna_register_field_address(
+          loom_xdna_npu2_array_family(),
+          LOOM_XDNA_REGISTER_FIELD_CORE_TIMER_HIGH_VALUE, {2, 2}, nullptr),
+      UINT64_C(0x042340FC));
 }
 
-TEST(XdnaRegisterFactsTest, ResolvesBroadcastSwitchesAndRejectsInvalidDomains) {
+TEST(XdnaRegisterFactsTest, ResolvesBroadcastSwitchAddress) {
   const uint16_t switch_b[] = {1};
-  uint64_t address = 0;
-  IREE_ASSERT_OK(loom_xdna_register_field_address(
+  const uint64_t address = loom_xdna_register_field_address(
       loom_xdna_npu2_array_family(),
       LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_EVENT_BROADCAST_EAST_VALUE_CHANNELS,
-      {2, 1}, 1, switch_b, &address));
+      {2, 1}, switch_b);
   EXPECT_EQ(address, UINT64_C(0x041940C8));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
-      loom_xdna_register_field_address(
-          loom_xdna_npu2_array_family(),
-          LOOM_XDNA_REGISTER_FIELD_CORE_EVENT_BROADCAST_EAST_VALUE_CHANNELS,
-          {2, 2}, 1, switch_b, &address));
-  const uint16_t invalid_channel[] = {16};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
-      loom_xdna_register_field_address(
-          loom_xdna_npu2_array_family(),
-          LOOM_XDNA_REGISTER_FIELD_SHIM_PL_EVENT_BROADCAST_EVENT, {2, 0}, 1,
-          invalid_channel, &address));
-  for (const auto coordinate :
-       {loom_xdna_tile_coordinate_t{2, 0}, loom_xdna_tile_coordinate_t{2, 1}}) {
-    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                          loom_xdna_register_field_address(
-                              loom_xdna_npu2_array_family(),
-                              LOOM_XDNA_REGISTER_FIELD_CORE_TRACE_STATUS_STATE,
-                              coordinate, 0, nullptr, &address));
-  }
 }
 
 TEST(XdnaRegisterFactsTest, EncodesMemoryTileEventsAndStreamObservation) {
-  uint32_t bits = 0;
-  IREE_ASSERT_OK(loom_xdna_register_field_encode(
-      LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_TRACE_EVENT1_EVENT7, 160, &bits));
-  EXPECT_EQ(bits, UINT32_C(0xA0000000));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
+  EXPECT_EQ(loom_xdna_register_field_encode(
+                LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_TRACE_EVENT1_EVENT7, 160),
+            UINT32_C(0xA0000000));
+  EXPECT_EQ(
       loom_xdna_register_field_encode(
-          LOOM_XDNA_REGISTER_FIELD_CORE_TRACE_EVENT1_EVENT7, 160, &bits));
-  IREE_ASSERT_OK(loom_xdna_register_field_encode(
-      LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_COMBO_EVENT_INPUTS_EVENT_D, 160,
-      &bits));
-  EXPECT_EQ(bits, UINT32_C(0xA0000000));
-  IREE_ASSERT_OK(loom_xdna_register_field_encode(
-      LOOM_XDNA_REGISTER_FIELD_CORE_COMBO_EVENT_CONTROL_COMBO2, 2, &bits));
-  EXPECT_EQ(bits, UINT32_C(0x00020000));
-  IREE_ASSERT_OK(loom_xdna_register_field_encode(
-      LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_EDGE_EVENT_CONTROL_EVENT1, 160,
-      &bits));
-  EXPECT_EQ(bits, UINT32_C(0x00A00000));
-  IREE_ASSERT_OK(loom_xdna_register_field_encode(
-      LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_EDGE_EVENT_CONTROL_RISING1, 1,
-      &bits));
-  EXPECT_EQ(bits, UINT32_C(0x02000000));
+          LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_COMBO_EVENT_INPUTS_EVENT_D, 160),
+      UINT32_C(0xA0000000));
+  EXPECT_EQ(loom_xdna_register_field_encode(
+                LOOM_XDNA_REGISTER_FIELD_CORE_COMBO_EVENT_CONTROL_COMBO2, 2),
+            UINT32_C(0x00020000));
+  EXPECT_EQ(
+      loom_xdna_register_field_encode(
+          LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_EDGE_EVENT_CONTROL_EVENT1, 160),
+      UINT32_C(0x00A00000));
+  EXPECT_EQ(
+      loom_xdna_register_field_encode(
+          LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_EDGE_EVENT_CONTROL_RISING1, 1),
+      UINT32_C(0x02000000));
 
   // Core trace is slave port 23, represented by port slot 7 in this example.
-  IREE_ASSERT_OK(loom_xdna_register_field_encode(
-      LOOM_XDNA_REGISTER_FIELD_CORE_STREAM_EVENT_PORT_SELECTION1_PORT7_ID, 23,
-      &bits));
-  EXPECT_EQ(bits, UINT32_C(0x17000000));
-  uint64_t address = 0;
-  IREE_ASSERT_OK(loom_xdna_register_field_address(
-      loom_xdna_npu2_array_family(),
-      LOOM_XDNA_REGISTER_FIELD_CORE_STREAM_EVENT_PORT_SELECTION1_PORT7_ID,
-      {2, 2}, 0, nullptr, &address));
-  EXPECT_EQ(address, UINT64_C(0x0423FF04));
+  EXPECT_EQ(
+      loom_xdna_register_field_encode(
+          LOOM_XDNA_REGISTER_FIELD_CORE_STREAM_EVENT_PORT_SELECTION1_PORT7_ID,
+          23),
+      UINT32_C(0x17000000));
+  EXPECT_EQ(
+      loom_xdna_register_field_address(
+          loom_xdna_npu2_array_family(),
+          LOOM_XDNA_REGISTER_FIELD_CORE_STREAM_EVENT_PORT_SELECTION1_PORT7_ID,
+          {2, 2}, nullptr),
+      UINT64_C(0x0423FF04));
   const uint16_t trace_slot[] = {23, 0};
-  IREE_ASSERT_OK(loom_xdna_register_field_address(
-      loom_xdna_npu2_array_family(),
-      LOOM_XDNA_REGISTER_FIELD_CORE_STREAM_SLAVE_SLOT_PACKET_ID, {2, 2},
-      IREE_ARRAYSIZE(trace_slot), trace_slot, &address));
-  EXPECT_EQ(address, UINT64_C(0x0423F370));
+  EXPECT_EQ(loom_xdna_register_field_address(
+                loom_xdna_npu2_array_family(),
+                LOOM_XDNA_REGISTER_FIELD_CORE_STREAM_SLAVE_SLOT_PACKET_ID,
+                {2, 2}, trace_slot),
+            UINT64_C(0x0423F370));
 }
 
 }  // namespace

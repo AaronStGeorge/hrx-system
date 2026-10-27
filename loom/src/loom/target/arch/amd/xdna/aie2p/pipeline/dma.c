@@ -14,7 +14,7 @@ static uint32_t loom_aie2p_native_register_offset(
     const loom_aie2p_native_context_t* context,
     const loom_aie2p_native_tile_t* tile, loom_xdna_register_field_id_t field,
     uint16_t index) {
-  const uint64_t address = loom_xdna_register_field_address_admitted(
+  const uint64_t address = loom_xdna_register_field_address(
       context->family, field, tile->coordinate, &index);
   const uint64_t origin =
       (uint64_t)tile->coordinate.column << context->family->column_shift |
@@ -50,9 +50,8 @@ static iree_status_t loom_aie2p_native_dma_local_word(
         builder, loom_index_add_result(address), transfer->local_record,
         offset_type, location, &address));
   }
-  loom_xdna_register_field_info_t address_field;
-  IREE_RETURN_IF_ERROR(
-      loom_xdna_register_field_info(layout->address, &address_field));
+  const loom_xdna_register_field_info_t address_field =
+      loom_xdna_register_field_info(layout->address);
   loom_op_t *integer, *shift, *address_bits, *length, *word;
   IREE_RETURN_IF_ERROR(
       loom_index_cast_build(builder, loom_index_add_result(address),
@@ -179,13 +178,13 @@ static iree_status_t loom_aie2p_native_dma_submit_helper(
   loom_value_id_t local_task, shim_task;
   IREE_RETURN_IF_ERROR(loom_aie2p_worker_constant(
       code, &builder,
-      loom_xdna_register_field_encode_admitted(
+      loom_xdna_register_field_encode(
           local_queue, task->local_descriptor->sequence.descriptor),
       &local_task));
-  uint32_t shim_bits = loom_xdna_register_field_encode_admitted(
+  uint32_t shim_bits = loom_xdna_register_field_encode(
       shim_queue, task->shim_descriptor->sequence.descriptor);
   if (!path->ingress) {
-    shim_bits |= loom_xdna_register_field_encode_admitted(
+    shim_bits |= loom_xdna_register_field_encode(
         LOOM_XDNA_REGISTER_FIELD_SHIM_NOC_DMA_CHANNEL_S2MM_TASK_QUEUE_ENABLE_TOKEN_ISSUE,
         1);
   }
