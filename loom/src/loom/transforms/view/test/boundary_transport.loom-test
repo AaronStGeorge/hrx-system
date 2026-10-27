@@ -237,14 +237,6 @@ func.def public target(@carrier_target) @call_tied(%storage: buffer, %offset: of
 
 // ====
 
-// RUN: pass target=spirv:vulkan1.3+bda specialize-target-callgraph,decompose-view-boundaries
-
-func.def public @spirv_direct(%input: view<1xi32>) -> (view<1xi32>) {
-  func.return %input : view<1xi32>
-}
-
-// ====
-
 // RUN: pass specialize-target-callgraph,decompose-view-boundaries,dce
 
 // Related crops share the selected coordinate; the projection comes from the

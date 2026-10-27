@@ -119,11 +119,19 @@ PACKAGE_POLICIES = [
         build_requirements = [ARCH_WASM, ARTIFACT_WASM_BINARY],
     ),
     package_policy(
+        packages = ["loom/src/loom/tooling/target/amd/xdna/..."],
+        build_requirements = [ARCH_AIE2P, ARTIFACT_AIE2P_ELF],
+    ),
+    package_policy(
         packages = ["loom/src/loom/tooling/target/amdgpu/..."],
         build_requirements = [
             ARCH_AMDGPU,
             ARTIFACT_AMDGPU_ELF,
         ],
+    ),
+    package_policy(
+        packages = ["loom/src/loom/tooling/target/cpu/..."],
+        build_requirements = [ARCH_X86, ARTIFACT_X86_ELF],
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/spirv/..."],
@@ -134,7 +142,7 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/vm/..."],
-        build_requirements = [ARCH_VM],
+        build_requirements = [ARCH_VM, ARTIFACT_VM_BINARY],
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/wasm/..."],

@@ -21,6 +21,10 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+_VM_EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:vm_iree_vm",
+])
+
 _AMDGPU_TARGET_COPTS = iree_select({
     "//loom/config/execute:amdgpu_hal": [
         "-DLOOM_TEST_HAVE_AMDGPU=1",
@@ -229,6 +233,7 @@ iree_execution_test_suite(
     ],
     manifests = ["loom-test.test.json"],
     tags = ["hostonly"],
+    target_compatible_with = _VM_EXECUTION_COMPATIBLE_WITH,
     tools = {
         "loom-link": "//loom/src/loom/tools/loom-link",
         "loom-test": ":loom-test",
@@ -240,9 +245,7 @@ iree_execution_test_suite(
     data = ["testdata/scenario_cases.loom"],
     manifests = ["scenario_execution.test.json"],
     tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/execute:vm_iree_vm",
-    ]),
+    target_compatible_with = _VM_EXECUTION_COMPATIBLE_WITH,
     tools = {
         "loom-test": ":loom-test",
     },

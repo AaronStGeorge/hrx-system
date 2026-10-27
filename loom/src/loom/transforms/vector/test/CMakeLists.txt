@@ -40,9 +40,7 @@ loom_check_test_suite(
     "packed_memory_consumers.loom-test"
     "reduce_axes_to_scalar.loom-test"
     "reshape_lanes.loom-test"
-    "shape_slices.loom-test"
     "sink_single_use_reads.loom-test"
-    "snapshot_rewrites.loom-test"
     "to_scalar.loom-test"
     "to_scalar_divrem.loom-test"
     "to_scalar_e8m0.loom-test"
@@ -50,6 +48,35 @@ loom_check_test_suite(
     "to_scalar_float_formats.loom-test"
 )
 
+if(LOOM_ARCH_AMDGPU)
+iree_native_test(
+  NAME
+    "shape_slices"
+  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
+  ARGS
+    "{{${CMAKE_CURRENT_SOURCE_DIR}/shape_slices.loom-test}}"
+  SRC
+    loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_ARCH_SPIRV)
+iree_native_test(
+  NAME
+    "snapshot_rewrites"
+  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
+  ARGS
+    "{{${CMAKE_CURRENT_SOURCE_DIR}/snapshot_rewrites.loom-test}}"
+  SRC
+    loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_ARCH_SPIRV)
 iree_py_test(
   NAME
     bitstream_packet_legalization_test
@@ -70,7 +97,9 @@ iree_py_test(
   TIMEOUT
     60
 )
+endif()
 
+if(LOOM_ARCH_SPIRV)
 iree_py_test(
   NAME
     bitstream_packet_legalization_exhaustive_test
@@ -95,5 +124,6 @@ iree_py_test(
   TIMEOUT
     60
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

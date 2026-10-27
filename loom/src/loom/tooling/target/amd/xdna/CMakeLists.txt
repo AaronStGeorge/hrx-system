@@ -80,13 +80,16 @@ iree_execution_test_suite(
 )
 endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     multicast_execution_test_module
   SRCS
     "test/channel_multicast.loom"
 )
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -114,14 +117,18 @@ loom_execution_test(
     "gpu-device"
 )
 endif()
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     dma_wrap_execution_test_module
   SRCS
     "test/dma_wrap.loom"
 )
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -148,14 +155,18 @@ loom_execution_test(
     "gpu-device"
 )
 endif()
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     grouped_dma_execution_test_module
   SRCS
     "test/grouped_dma.loom"
 )
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -182,14 +193,18 @@ loom_execution_test(
     "gpu-device"
 )
 endif()
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     hardware_loop_execution_test_module
   SRCS
     "test/hardware_loop.loom"
 )
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -216,14 +231,18 @@ loom_execution_test(
     "gpu-device"
 )
 endif()
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     source_owned_accumulation_execution_test_module
   SRCS
     "test/source_owned_accumulation.loom"
 )
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -250,14 +269,18 @@ loom_execution_test(
     "gpu-device"
 )
 endif()
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     radian_trigonometry_execution_test_module
   SRCS
     "test/radian_trigonometry.loom"
 )
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -284,14 +307,18 @@ loom_execution_test(
     "gpu-device"
 )
 endif()
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     staging_stress_module
   SRCS
     "test/staging_stress.loom"
 )
+endif()
 
+if(LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -320,8 +347,9 @@ loom_execution_test(
     "gpu-device"
 )
 endif()
+endif()
 
-if(LOOM_ARTIFACT_AIE2P_ELF)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_ARCH_AIE2P)
 loom_generated_file(
   NAME
     temporal_fold_image_npu4
@@ -340,7 +368,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ARTIFACT_AIE2P_ELF)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_ARCH_AIE2P)
 loom_generated_file(
   NAME
     temporal_fold_image_npu5
@@ -359,7 +387,7 @@ loom_generated_file(
 )
 endif()
 
-if(LOOM_ROUTE_AIE2P_XDNA_HAL)
+if(LOOM_ROUTE_AIE2P_XDNA_HAL AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_cc_binary(
   NAME
     temporal_fold_test_bin
@@ -398,7 +426,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_IMPORT_CXX)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P)
 iree_native_test(
   NAME
     "assembly_lowering"
@@ -412,7 +440,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_IMPORT_CXX)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P)
 iree_native_test(
   NAME
     "boolean_storage_lowering"
@@ -428,7 +456,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_IMPORT_CXX)
+if(LOOM_ARTIFACT_AIE2P_ELF AND LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P)
 iree_native_test(
   NAME
     "ordinary_function_lowering"
@@ -458,7 +486,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     assembly_pack_execution_test_module
@@ -468,7 +496,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -497,7 +525,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     bitcast_execution_test_module
@@ -508,7 +536,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -537,7 +565,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     buffer_selection_execution_test_module
@@ -548,7 +576,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -577,7 +605,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     vector_copy_execution_test_module
@@ -588,7 +616,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -617,7 +645,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 loom_test_module(
   NAME
     packed_memory_execution_test_module
@@ -627,7 +655,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME
@@ -656,7 +684,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_IMPORT_CXX)
+if(LOOM_IMPORT_CXX AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF)
 if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
 loom_execution_test(
   NAME

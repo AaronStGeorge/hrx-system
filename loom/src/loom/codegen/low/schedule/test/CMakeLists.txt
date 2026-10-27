@@ -27,9 +27,23 @@ loom_check_test_suite(
     "schedule_scopes.loom-test"
     "setup_order.loom-test"
     "setup_recovery.loom-test"
-    "spill_traffic.loom-test"
+    "spill_traffic_generic.loom-test"
     "state_updates.loom-test"
     "storage_lifetime.loom-test"
 )
+
+if(LOOM_ARCH_AMDGPU)
+iree_native_test(
+  NAME
+    "spill_traffic"
+  WORKING_DIRECTORY "${IREE_ROOT_DIR}"
+  ARGS
+    "{{${CMAKE_CURRENT_SOURCE_DIR}/spill_traffic.loom-test}}"
+  SRC
+    loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

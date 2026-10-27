@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_EXECUTE_IREE_VM AND LOOM_ARCH_VM)
+if(LOOM_EXECUTE_IREE_VM AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     buffer
@@ -25,7 +25,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EXECUTE_IREE_VM AND LOOM_ARCH_VM)
+if(LOOM_EXECUTE_IREE_VM AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     buffer_test
@@ -41,6 +41,7 @@ loom_cc_test(
     iree::vm
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
@@ -77,7 +78,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_VM)
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_library(
   NAME
     testbench
@@ -135,7 +136,7 @@ iree_c_embed_data(
 )
 endif()
 
-if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_VM)
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     imports_test
@@ -163,6 +164,7 @@ loom_cc_test(
     loom::tooling::input
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
@@ -236,10 +238,11 @@ loom_cc_test(
     loom::target::emit::vm::module_compiler
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 
-if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_VM)
+if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_cc_test(
   NAME
     native_references_test
@@ -257,6 +260,7 @@ loom_cc_test(
     loom::format::location
   LABELS
     "iree-build-requirement=loom.arch.vm"
+    "iree-build-requirement=loom.artifact.vm_binary"
 )
 endif()
 

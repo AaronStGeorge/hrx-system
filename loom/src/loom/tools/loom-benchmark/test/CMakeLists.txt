@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ROUTE_X86_TASK_HAL AND IREE_ARCH STREQUAL "x86_64")
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ROUTE_VM_IREE_VM AND IREE_ARCH STREQUAL "x86_64")
 iree_py_test(
   NAME
     benchmark_execution_test

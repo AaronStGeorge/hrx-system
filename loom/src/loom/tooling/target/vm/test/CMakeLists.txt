@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_test_module(
   NAME
     allocation_instances_test_module
@@ -18,7 +18,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
@@ -37,7 +37,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_test_module(
   NAME
     buffer_selection_test_module
@@ -46,7 +46,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
@@ -65,7 +65,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_test_module(
   NAME
     callable_returns_test_module
@@ -74,7 +74,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
@@ -93,7 +93,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_test_module(
   NAME
     callable_storage_test_module
@@ -102,7 +102,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
@@ -121,7 +121,7 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 loom_test_module(
   NAME
     view_bitcast_test_module
@@ -130,7 +130,7 @@ loom_test_module(
 )
 endif()
 
-if(LOOM_ARCH_VM)
+if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY)
 if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME

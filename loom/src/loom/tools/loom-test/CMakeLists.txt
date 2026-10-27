@@ -146,6 +146,7 @@ loom_cc_binary(
   TESTONLY
 )
 
+if(LOOM_ROUTE_VM_IREE_VM)
 iree_execution_test_suite(
   NAME
     execution_test
@@ -165,6 +166,7 @@ iree_execution_test_suite(
   LABELS
     "hostonly"
 )
+endif()
 
 if(LOOM_ROUTE_VM_IREE_VM)
 iree_execution_test_suite(
