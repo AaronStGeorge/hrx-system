@@ -37,18 +37,16 @@
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/low_emit.h"
 #include "loom/tools/loom-check/low_report.h"
-#include "loom/tools/loom-check/target_low_registry_manifest.h"
 #include "loom/util/stream.h"
 
 typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LIVENESS_JSON = 0,
-  LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON = 1,
-  LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST = 2,
-  LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON = 3,
-  LOOM_CHECK_EMIT_LOW_ALLOCATION_SUMMARY = 4,
-  LOOM_CHECK_EMIT_LOW_PACKET_JSON = 5,
-  LOOM_CHECK_EMIT_LOW_COMPILE_REPORT = 6,
-  LOOM_CHECK_EMIT_STORAGE_INTERFERENCE = 8,
+  LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON,
+  LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON,
+  LOOM_CHECK_EMIT_LOW_ALLOCATION_SUMMARY,
+  LOOM_CHECK_EMIT_LOW_PACKET_JSON,
+  LOOM_CHECK_EMIT_LOW_COMPILE_REPORT,
+  LOOM_CHECK_EMIT_STORAGE_INTERFERENCE,
 } loom_check_emit_format_t;
 
 enum {
@@ -98,12 +96,12 @@ typedef struct loom_check_emit_low_allocation_summary_row_t {
 } loom_check_emit_low_allocation_summary_row_t;
 
 static const iree_string_view_t kLoomCheckEmitCoreTargetNames[] = {
-    IREE_SVL("liveness-json"),       IREE_SVL("liveness"),
-    IREE_SVL("low-schedule-json"),   IREE_SVL("low-schedule"),
-    IREE_SVL("low-allocation-json"), IREE_SVL("low-allocation-summary"),
-    IREE_SVL("low-allocation"),      IREE_SVL("low-packet-json"),
-    IREE_SVL("low-packet"),          IREE_SVL("target-low-registry-manifest"),
-    IREE_SVL("low-compile-report"),  IREE_SVL("storage-interference"),
+    IREE_SVL("liveness-json"),        IREE_SVL("liveness"),
+    IREE_SVL("low-schedule-json"),    IREE_SVL("low-schedule"),
+    IREE_SVL("low-allocation-json"),  IREE_SVL("low-allocation-summary"),
+    IREE_SVL("low-allocation"),       IREE_SVL("low-packet-json"),
+    IREE_SVL("low-packet"),           IREE_SVL("low-compile-report"),
+    IREE_SVL("storage-interference"),
 };
 
 typedef struct loom_check_emit_request_t {
@@ -662,15 +660,6 @@ static iree_status_t loom_check_emit_parse_request(
     }
     out_request->analysis_symbol_name = symbol_name;
     out_request->format = LOOM_CHECK_EMIT_LOW_COMPILE_REPORT;
-    return iree_ok_status();
-  } else if (iree_string_view_equal(target_name,
-                                    IREE_SV("target-low-registry-manifest"))) {
-    if (!iree_string_view_is_empty(target_options)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "target-low registry manifest does not accept target options");
-    }
-    out_request->format = LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST;
     return iree_ok_status();
   } else {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1626,31 +1615,6 @@ iree_status_t loom_check_execute_emit(
         .emit_target_name = provider_target_name,
     };
   }
-  if (request.format == LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST) {
-    const loom_target_low_descriptor_registry_t registry =
-        loom_target_environment_low_descriptor_registry(
-            environment->target_environment);
-    status = loom_check_target_low_registry_format_manifest_json(
-        &registry, &result->actual_output);
-    if (!iree_status_is_ok(status)) {
-      status = loom_check_emit_finish_status_failure(
-          status, request.emit_target_name, result);
-      iree_arena_deinitialize(&diagnostic_arena);
-      return status;
-    }
-    result->has_actual_output = true;
-    if (test_case->annotation_count > 0) {
-      status = loom_check_emit_finish_diagnostics_and_compare_output(
-          &diagnostic_collector, test_case, case_index, report, allocator,
-          result);
-      iree_arena_deinitialize(&diagnostic_arena);
-      return status;
-    }
-    status = loom_check_compare_output(test_case, allocator, result);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-
   const loom_target_low_descriptor_registry_t low_registry =
       loom_target_environment_low_descriptor_registry(
           environment->target_environment);
