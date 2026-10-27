@@ -146,6 +146,42 @@ static bool loom_low_physical_events_require_separation(
   return separation != NULL && separation->minimum_issue_separation_cycles > 0;
 }
 
+static bool loom_low_physical_issue_events_fit(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
+    const loom_low_physical_instruction_t* instructions, uint16_t count) {
+  for (uint16_t i = 0; i < count; ++i) {
+    const loom_low_descriptor_t* consumer =
+        &descriptor_set->descriptors[instructions[i].descriptor_ordinal];
+    for (uint16_t j = 0; j < i; ++j) {
+      const loom_low_descriptor_t* producer =
+          &descriptor_set->descriptors[instructions[j].descriptor_ordinal];
+      for (uint16_t p = 0; p < producer->operand_count; ++p) {
+        const loom_low_operand_t* lhs =
+            loom_low_descriptor_operand(descriptor_set, producer, p);
+        for (uint16_t c = 0; c < consumer->operand_count; ++c) {
+          const loom_low_operand_t* rhs =
+              loom_low_descriptor_operand(descriptor_set, consumer, c);
+          if (!loom_low_physical_events_require_separation(
+                  schedule_model, lhs->read_event_id, rhs->write_event_id) &&
+              !loom_low_physical_events_require_separation(
+                  schedule_model, lhs->write_event_id, rhs->read_event_id) &&
+              !loom_low_physical_events_require_separation(
+                  schedule_model, lhs->write_event_id, rhs->write_event_id)) {
+            continue;
+          }
+          if (loom_low_physical_registers_overlap(
+                  descriptor_set, instructions[j].physical_registers[p],
+                  instructions[i].physical_registers[c])) {
+            return false;
+          }
+        }
+      }
+    }
+  }
+  return true;
+}
+
 bool loom_low_physical_issue_group_fits(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_schedule_model_t* schedule_model,
@@ -184,6 +220,19 @@ bool loom_low_physical_issue_group_fits(
     }
   }
   return loom_low_schedule_resource_group_fits(schedule_model, classes, count);
+}
+
+bool loom_low_physical_issue_group_fits_with_resource_classes(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
+    const loom_low_physical_instruction_t* instructions,
+    uint16_t instruction_count,
+    const loom_low_schedule_class_t* const* resource_classes,
+    uint16_t resource_class_count) {
+  return loom_low_physical_issue_events_fit(descriptor_set, schedule_model,
+                                            instructions, instruction_count) &&
+         loom_low_schedule_resource_group_fits(schedule_model, resource_classes,
+                                               resource_class_count);
 }
 
 uint32_t loom_low_physical_issue_register_ready_cycle(
@@ -228,6 +277,74 @@ uint32_t loom_low_physical_issue_find_earliest_issue_cycle(
   uint16_t bottleneck = LOOM_LOW_RESOURCE_NONE;
   return loom_low_schedule_resource_calendar_find_earliest_issue_cycle(
       &issue->resources, classes, count, cycle, &bottleneck);
+}
+
+uint32_t
+loom_low_physical_issue_find_earliest_issue_cycle_with_resource_classes(
+    const loom_low_physical_issue_t* issue,
+    const loom_low_physical_instruction_t* instructions,
+    uint16_t instruction_count,
+    const loom_low_schedule_class_t* const* resource_classes,
+    uint16_t resource_class_count, uint32_t proposed_cycle) {
+  const uint32_t cycle =
+      iree_max(proposed_cycle, loom_low_physical_issue_register_ready_cycle(
+                                   issue, instructions, instruction_count));
+  uint16_t bottleneck = LOOM_LOW_RESOURCE_NONE;
+  return loom_low_schedule_resource_calendar_find_earliest_issue_cycle(
+      &issue->resources, resource_classes, resource_class_count, cycle,
+      &bottleneck);
+}
+
+static iree_status_t loom_low_physical_issue_commit_events(
+    loom_low_physical_issue_t* issue,
+    const loom_low_physical_instruction_t* instructions, uint16_t count,
+    uint32_t issue_cycle) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      issue->events.descriptor_set;
+  const loom_low_schedule_model_t* schedule_model =
+      issue->events.schedule_model;
+  iree_status_t status = iree_ok_status();
+  for (uint16_t i = 0; i < count && iree_status_is_ok(status); ++i) {
+    const loom_low_descriptor_t* descriptor =
+        &descriptor_set->descriptors[instructions[i].descriptor_ordinal];
+    for (uint16_t j = 0;
+         j < descriptor->operand_count && iree_status_is_ok(status); ++j) {
+      const loom_low_operand_t* operand =
+          loom_low_descriptor_operand(descriptor_set, descriptor, j);
+      const uint16_t physical_register = instructions[i].physical_registers[j];
+      status = loom_low_schedule_event_frontier_commit(
+          &issue->events, physical_register, operand->read_event_id,
+          issue_cycle);
+      if (iree_status_is_ok(status)) {
+        status = loom_low_schedule_event_frontier_commit(
+            &issue->events, physical_register, operand->write_event_id,
+            issue_cycle);
+      }
+    }
+    const loom_low_descriptor_layout_t* descriptor_layout =
+        loom_low_descriptor_layout(descriptor_set, descriptor);
+    for (uint16_t j = 0;
+         j < descriptor_layout->effect_count && iree_status_is_ok(status);
+         ++j) {
+      const loom_low_effect_t* effect =
+          &descriptor_set->effects[descriptor_layout->effect_start + j];
+      if (effect->producer_event_id == LOOM_LOW_TIMING_EVENT_NONE) {
+        continue;
+      }
+      const uint32_t separation =
+          schedule_model->timing_events[effect->producer_event_id]
+              .maximum_issue_separation_cycles;
+      if (issue_cycle > UINT32_MAX - separation) {
+        status =
+            iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                             "physical effect exceeds the issue-cycle domain");
+      } else {
+        issue->effect_quiescent_cycle =
+            iree_max(issue->effect_quiescent_cycle, issue_cycle + separation);
+      }
+    }
+  }
+  return status;
 }
 
 iree_status_t loom_low_physical_issue_commit(
@@ -288,4 +405,16 @@ iree_status_t loom_low_physical_issue_commit(
     }
   }
   return status;
+}
+
+iree_status_t loom_low_physical_issue_commit_with_resource_classes(
+    loom_low_physical_issue_t* issue,
+    const loom_low_physical_instruction_t* instructions,
+    uint16_t instruction_count,
+    const loom_low_schedule_class_t* const* resource_classes,
+    uint16_t resource_class_count, uint32_t issue_cycle) {
+  IREE_RETURN_IF_ERROR(loom_low_schedule_resource_calendar_commit(
+      &issue->resources, resource_classes, resource_class_count, issue_cycle));
+  return loom_low_physical_issue_commit_events(issue, instructions,
+                                               instruction_count, issue_cycle);
 }

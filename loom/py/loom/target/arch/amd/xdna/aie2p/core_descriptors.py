@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 from itertools import combinations, product
 from math import gcd
@@ -39,6 +40,9 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptor_constraints import (
 )
 from loom.target.arch.amd.xdna.aie2p.core_encoding_data import CORE_ENCODING_TABLE
 from loom.target.arch.amd.xdna.aie2p.core_machine_data import CORE_MACHINE_TABLE
+from loom.target.arch.amd.xdna.aie2p.core_move_topology import (
+    SCALAR_MOVE_TOPOLOGY,
+)
 from loom.target.arch.amd.xdna.aie2p.core_schedule_data import CORE_SCHEDULE_TABLE
 from loom.target.arch.amd.xdna.aie2p.core_stream_descriptors import (
     _SCALAR_STREAM_ISSUE_EVENT,
@@ -2078,6 +2082,27 @@ def _schedule_class(spec: descriptor_specs._DescriptorSpec) -> ScheduleClass:
     )
 
 
+_NON_SCALAR_NATIVE_MOVE_SCHEDULE_SPECS = (
+    descriptor_specs._DescriptorSpec(
+        "VMOV_alu_mv_mv_cm",
+        f"{descriptor_specs._TARGET_KEY}.native-move.accumulator1024",
+        "register.move.native.accumulator1024",
+        "II_VMOV_alu_mv_mv_cm",
+        storage_overrides=(("dst", "eCML"), ("src", "eCML")),
+    ),
+    descriptor_specs._DescriptorSpec(
+        "VMOV_alu_mv_mv_x",
+        f"{descriptor_specs._TARGET_KEY}.native-move.fifo512",
+        "register.move.native.fifo512",
+        "II_VMOV_alu_mv_mv_x_eLdFifoLReg_eLdFifoLReg",
+        storage_overrides=(
+            ("dst", "eLdFifoLReg"),
+            ("src", "eLdFifoLReg"),
+        ),
+    ),
+)
+
+
 def _schedule_classes() -> tuple[
     dict[tuple[str, str], str],
     tuple[ScheduleClass, ...],
@@ -2094,7 +2119,170 @@ def _schedule_classes() -> tuple[
     return names, tuple(classes[name] for name in sorted(classes))
 
 
-_SCHEDULE_CLASS_NAMES, _SCHEDULE_CLASSES = _schedule_classes()
+def _scalar_move_schedule_class(itinerary_name: str) -> ScheduleClass:
+    return _schedule_class(
+        descriptor_specs._DescriptorSpec(
+            "MOV_alu_mv_mv_mv_scl",
+            f"{descriptor_specs._TARGET_KEY}.native-move.scalar",
+            "register.move.native.scalar",
+            itinerary_name,
+            storage_overrides=(("dst", "eR"), ("src", "eR")),
+        )
+    )
+
+
+def _intersect_issue_uses(
+    rows: tuple[Counter[IssueUse], ...],
+) -> Counter[IssueUse]:
+    result = rows[0].copy()
+    for row in rows[1:]:
+        result &= row
+    return result
+
+
+def _issue_use_sort_key(row: IssueUse) -> tuple[object, ...]:
+    return (row.resource, row.stage, row.cycles, row.units, row.kind.value)
+
+
+def _schedule_fragment(name: str, uses: Counter[IssueUse]) -> ScheduleClass | None:
+    if not uses:
+        return None
+    issue_uses = tuple(
+        use
+        for use, count in sorted(
+            uses.items(), key=lambda item: _issue_use_sort_key(item[0])
+        )
+        for _ in range(count)
+    )
+    return ScheduleClass(
+        name,
+        LatencyKind.EXACT,
+        ModelQuality.EXACT,
+        latency_cycles=max(1, *(use.stage + use.cycles for use in issue_uses)),
+        issue_uses=issue_uses,
+    )
+
+
+def _native_move_schedule_classes(
+    schedule_class_names: dict[tuple[str, str], str],
+) -> tuple[
+    tuple[tuple[tuple[str, ...], ...], ...],
+    str,
+    str,
+    tuple[ScheduleClass, ...],
+]:
+    """Factors exact move resources without retaining the full product matrix."""
+
+    specialized_rows = tuple(
+        tuple(
+            Counter(_scalar_move_schedule_class(itinerary).issue_uses)
+            for itinerary in row[:-1]
+        )
+        for row in SCALAR_MOVE_TOPOLOGY.itinerary_names
+    )
+    common_uses = _intersect_issue_uses(
+        tuple(uses for row in specialized_rows for uses in row)
+    )
+    destination_uses = tuple(
+        _intersect_issue_uses(row) - common_uses for row in specialized_rows
+    )
+    source_uses = tuple(
+        _intersect_issue_uses(tuple(row[source_index] for row in specialized_rows))
+        - common_uses
+        for source_index in range(len(specialized_rows[0]))
+    )
+    if any(
+        specialized_rows[destination_index][source_index]
+        != common_uses + destination_uses[destination_index] + source_uses[source_index]
+        for destination_index in range(len(specialized_rows))
+        for source_index in range(len(specialized_rows[0]))
+    ):
+        raise ValueError("AIE2P scalar move schedules are not exactly factorable")
+
+    common = _schedule_fragment(
+        f"{descriptor_specs._TARGET_KEY}.schedule.native-move.scalar.common",
+        common_uses,
+    )
+    if common is None:
+        raise ValueError("AIE2P scalar moves have no common issue resources")
+    destinations = tuple(
+        _schedule_fragment(
+            f"{descriptor_specs._TARGET_KEY}.schedule.native-move.scalar.destination.{index}",
+            uses,
+        )
+        for index, uses in enumerate(destination_uses)
+    )
+    sources = tuple(
+        _schedule_fragment(
+            f"{descriptor_specs._TARGET_KEY}.schedule.native-move.scalar.source.{index}",
+            uses,
+        )
+        for index, uses in enumerate(source_uses)
+    )
+    scalar_fragments = (
+        common,
+        *(row for row in destinations if row is not None),
+        *(row for row in sources if row is not None),
+    )
+    scalar_schedule_class_names = tuple(
+        (
+            *(
+                tuple(
+                    fragment.name
+                    for fragment in (common, destination, source)
+                    if fragment is not None
+                )
+                for source in sources
+            ),
+            (schedule_class_names[("MOV_alu_mv_mv_mv_scl", itineraries[-1])],),
+        )
+        for itineraries, destination in zip(
+            SCALAR_MOVE_TOPOLOGY.itinerary_names, destinations, strict=True
+        )
+    )
+
+    non_scalar_classes = tuple(
+        _schedule_class(spec) for spec in _NON_SCALAR_NATIVE_MOVE_SCHEDULE_SPECS
+    )
+    accumulator_name, fifo_name = (row.name for row in non_scalar_classes)
+    classes = (*scalar_fragments, *non_scalar_classes)
+    if len({row.name for row in classes}) != len(classes):
+        raise ValueError("AIE2P native move schedule-class name collision")
+    return (
+        scalar_schedule_class_names,
+        accumulator_name,
+        fifo_name,
+        tuple(classes),
+    )
+
+
+_SCHEDULE_CLASS_NAMES, _BASE_SCHEDULE_CLASSES = _schedule_classes()
+(
+    AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES,
+    AIE2P_ACCUMULATOR_1024_MOVE_SCHEDULE_CLASS_NAME,
+    AIE2P_FIFO_512_MOVE_SCHEDULE_CLASS_NAME,
+    _NATIVE_MOVE_SCHEDULE_CLASSES,
+) = _native_move_schedule_classes(_SCHEDULE_CLASS_NAMES)
+_SCHEDULE_CLASSES = tuple(
+    sorted(
+        (*_BASE_SCHEDULE_CLASSES, *_NATIVE_MOVE_SCHEDULE_CLASSES),
+        key=lambda row: row.name,
+    )
+)
+AIE2P_NATIVE_MOVE_SCHEDULE_CLASS_NAMES = tuple(
+    sorted(
+        {
+            name
+            for row in AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES
+            for cell in row
+            for name in cell
+        }
+        | {
+            AIE2P_ACCUMULATOR_1024_MOVE_SCHEDULE_CLASS_NAME,
+            AIE2P_FIFO_512_MOVE_SCHEDULE_CLASS_NAME,
+        }
+    )
+)
 
 
 AIE2P_CORE_DESCRIPTOR_SET = DescriptorSet(

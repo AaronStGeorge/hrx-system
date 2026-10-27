@@ -36,6 +36,7 @@ from loom.target.arch.amd.xdna.aie2p.configuration_descriptors import (
 )
 from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
     AIE2P_CORE_DESCRIPTOR_SET,
+    AIE2P_NATIVE_MOVE_SCHEDULE_CLASS_NAMES,
 )
 from loom.target.arch.amd.xdna.aie2p.core_encoding_data import (
     CORE_ENCODING_TABLE,
@@ -531,7 +532,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         CORE_MACHINE_TABLE,
         CORE_ENCODING_TABLE,
     )
-    generated_descriptors = generate_descriptor_set(AIE2P_CORE_DESCRIPTOR_SET)
+    generated_descriptors = generate_descriptor_set(
+        AIE2P_CORE_DESCRIPTOR_SET,
+        required_schedule_class_names=AIE2P_NATIVE_MOVE_SCHEDULE_CLASS_NAMES,
+    )
     generated_array_descriptors = generate_descriptor_set(AIE2P_ARRAY_DESCRIPTOR_SET)
     generated_configuration_descriptors = generate_descriptor_set(AIE2P_CONFIGURATION_DESCRIPTOR_SET)
     register_contents = _emit_register_tables()

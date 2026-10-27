@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 from itertools import combinations, product
 
@@ -35,16 +36,19 @@ from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
     _SLOT_RESOURCE_KINDS,
     _STICKY_UPDATE_ENDPOINTS,
     AIE2P_CORE_DESCRIPTOR_SET,
+    AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES,
     _bundle_exclusion_resource_name,
     _itinerary,
     _memory_event_name,
     _pipeline_resource_name,
     _register_event_name,
+    _scalar_move_schedule_class,
     _slot_resource_name,
     _validate_control_issue_timing,
 )
 from loom.target.arch.amd.xdna.aie2p.core_encoding_data import CORE_ENCODING_TABLE
 from loom.target.arch.amd.xdna.aie2p.core_machine_data import CORE_MACHINE_TABLE
+from loom.target.arch.amd.xdna.aie2p.core_move_topology import SCALAR_MOVE_TOPOLOGY
 from loom.target.arch.amd.xdna.aie2p.core_schedule_data import CORE_SCHEDULE_TABLE
 from loom.target.low_descriptors import (
     DescriptorFlag,
@@ -57,6 +61,30 @@ from loom.target.low_descriptors import (
     ResourceKind,
     ScheduleClassFlag,
 )
+
+
+def test_scalar_move_resource_fragments_exactly_cover_native_itineraries() -> None:
+    schedule_classes = {
+        row.name: row for row in AIE2P_CORE_DESCRIPTOR_SET.schedule_classes
+    }
+    assert len(AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES) == len(
+        SCALAR_MOVE_TOPOLOGY.itinerary_names
+    )
+    for itinerary_row, fragment_row in zip(
+        SCALAR_MOVE_TOPOLOGY.itinerary_names,
+        AIE2P_SCALAR_MOVE_SCHEDULE_CLASS_NAMES,
+        strict=True,
+    ):
+        assert len(fragment_row) == len(itinerary_row)
+        for itinerary, fragment_names in zip(itinerary_row, fragment_row, strict=True):
+            assert 1 <= len(fragment_names) <= 3
+            expected = Counter(_scalar_move_schedule_class(itinerary).issue_uses)
+            actual = Counter(
+                issue_use
+                for name in fragment_names
+                for issue_use in schedule_classes[name].issue_uses
+            )
+            assert actual == expected
 
 
 @pytest.mark.parametrize(

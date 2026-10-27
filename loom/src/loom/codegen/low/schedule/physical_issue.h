@@ -118,6 +118,18 @@ bool loom_low_physical_issue_group_fits(
     const loom_low_schedule_model_t* schedule_model,
     const loom_low_physical_instruction_t* instructions, uint16_t count);
 
+// Tests coissue with an explicit complete resource demand. Instruction rows
+// continue to own event and register-access semantics; |resource_classes|
+// replaces their resource rows when one native instruction is represented by
+// multiple independently generated resource fragments.
+bool loom_low_physical_issue_group_fits_with_resource_classes(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
+    const loom_low_physical_instruction_t* instructions,
+    uint16_t instruction_count,
+    const loom_low_schedule_class_t* const* resource_classes,
+    uint16_t resource_class_count);
+
 // Returns the register-event lower bound for a candidate group. Querying all
 // accesses before committing any preserves legal same-cycle forwarding.
 uint32_t loom_low_physical_issue_register_ready_cycle(
@@ -133,6 +145,16 @@ uint32_t loom_low_physical_issue_find_earliest_issue_cycle(
     const loom_low_physical_instruction_t* instructions, uint16_t count,
     uint32_t proposed_cycle);
 
+// Finds the earliest issue cycle using an explicit complete resource demand.
+// Register-event readiness is still derived from |instructions|.
+uint32_t
+loom_low_physical_issue_find_earliest_issue_cycle_with_resource_classes(
+    const loom_low_physical_issue_t* issue,
+    const loom_low_physical_instruction_t* instructions,
+    uint16_t instruction_count,
+    const loom_low_schedule_class_t* const* resource_classes,
+    uint16_t resource_class_count, uint32_t proposed_cycle);
+
 // Commits a group at its admitted cycle, with no intervening commit since the
 // query. Groups and their accesses are published in accepted semantic order,
 // not native issue order. Capacity and retained history are proved by
@@ -142,6 +164,15 @@ iree_status_t loom_low_physical_issue_commit(
     loom_low_physical_issue_t* issue,
     const loom_low_physical_instruction_t* instructions, uint16_t count,
     uint32_t issue_cycle);
+
+// Commits instruction events with the explicit complete resource demand used
+// by the preceding admission query.
+iree_status_t loom_low_physical_issue_commit_with_resource_classes(
+    loom_low_physical_issue_t* issue,
+    const loom_low_physical_instruction_t* instructions,
+    uint16_t instruction_count,
+    const loom_low_schedule_class_t* const* resource_classes,
+    uint16_t resource_class_count, uint32_t issue_cycle);
 
 // Earliest successor-entry cycle that is independent of predecessor history.
 // A control-flow owner accounts for branch-delay cycles before enforcing this
