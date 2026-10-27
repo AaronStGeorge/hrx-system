@@ -62,6 +62,7 @@ loom_cc_library(
   SRCS
     "iree_hal.c"
   DEPS
+    ::profile
     ::spirv
     iree::hal
     iree::hal::drivers::vulkan::device_spec
