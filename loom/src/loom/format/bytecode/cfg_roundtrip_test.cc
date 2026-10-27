@@ -146,5 +146,68 @@ TEST_F(CfgRoundtripTest, LoopDefinitionsPrecedeUsesWithoutReorderingSource) {
   EXPECT_EQ(loom_op_operands(decoded_exit->last_op)[0], decoded_next);
 }
 
+TEST_F(CfgRoundtripTest, PreservesBlockOperationCountsAbove16Bits) {
+  loom_builder_t builder;
+  loom_builder_initialize(module_, &module_->arena, loom_module_block(module_),
+                          &builder);
+  loom_string_id_t name;
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("chain"), &name));
+  loom_symbol_id_t symbol;
+  IREE_ASSERT_OK(loom_module_add_symbol(module_, name, &symbol));
+  const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* function = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(&builder, 0, 0, 0, {0, symbol}, &type, 1,
+                                      &type, 1, nullptr, 0, nullptr, 0,
+                                      LOOM_LOCATION_UNKNOWN, &function));
+  loom_region_t* body = loom_test_func_body(function);
+  loom_block_t* entry = loom_region_entry_block(body);
+  loom_builder_enter_region(&builder, function, body);
+  const loom_value_id_t argument = entry->arg_ids[0];
+  loom_value_id_t value = argument;
+  for (uint32_t i = 0; i < UINT16_MAX; ++i) {
+    loom_op_t* add = nullptr;
+    IREE_ASSERT_OK(loom_test_addi_build(&builder, value, argument, type,
+                                        LOOM_LOCATION_UNKNOWN, &add));
+    value = loom_test_addi_result(add);
+  }
+  loom_op_t* yield = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&builder, &value, 1,
+                                       LOOM_LOCATION_UNKNOWN, &yield));
+  ASSERT_EQ(entry->op_count, 65536u);
+
+  iree_io_stream_t* stream = nullptr;
+  IREE_ASSERT_OK(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_WRITABLE |
+          IREE_IO_STREAM_MODE_SEEKABLE,
+      4096, iree_allocator_system(), &stream));
+  IREE_ASSERT_OK(loom_bytecode_write_module(module_, stream, nullptr, &pool_));
+  std::vector<uint8_t> bytes(iree_io_stream_length(stream));
+  IREE_ASSERT_OK(iree_io_stream_seek(stream, IREE_IO_STREAM_SEEK_SET, 0));
+  IREE_ASSERT_OK(
+      iree_io_stream_read(stream, bytes.size(), bytes.data(), nullptr));
+  iree_io_stream_release(stream);
+  loom_bytecode_read_result_t result = {};
+  IREE_ASSERT_OK(loom_bytecode_read_module(
+      iree_make_const_byte_span(bytes.data(), bytes.size()),
+      IREE_SV("chain.loombc"), &context_, &pool_, nullptr, &result, &decoded_,
+      iree_allocator_system()));
+  ASSERT_EQ(result.error_count, 0u);
+  ASSERT_NE(decoded_, nullptr);
+  loom_op_t* decoded_function = loom_module_block(decoded_)->first_op;
+  loom_block_t* decoded_entry =
+      loom_region_entry_block(loom_test_func_body(decoded_function));
+  ASSERT_EQ(decoded_entry->op_count, entry->op_count);
+  value = decoded_entry->arg_ids[0];
+  for (loom_op_t* op = decoded_entry->first_op; op != decoded_entry->last_op;
+       op = op->next_op) {
+    ASSERT_TRUE(loom_test_addi_isa(op));
+    EXPECT_EQ(loom_test_addi_lhs(op), value);
+    EXPECT_EQ(loom_test_addi_rhs(op), decoded_entry->arg_ids[0]);
+    value = loom_test_addi_result(op);
+  }
+  ASSERT_TRUE(loom_test_yield_isa(decoded_entry->last_op));
+  EXPECT_EQ(loom_op_operands(decoded_entry->last_op)[0], value);
+}
+
 }  // namespace
 }  // namespace loom

@@ -8,6 +8,7 @@
 
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/pipeline/ops.h"
+#include "loom/target/arch/amd/xdna/aie2p/pipeline/configuration_entry.h"
 #include "loom/target/arch/amd/xdna/aie2p/pipeline/kernel_realization.h"
 #include "loom/target/arch/amd/xdna/aie2p/pipeline/native.h"
 
@@ -53,11 +54,34 @@ iree_status_t loom_aie2p_pipeline_lower_run(loom_pass_t* pass,
   return loom_aie2p_pipeline_realize(pass, module, function);
 }
 
+static const loom_pass_info_t kAie2pConfigurationEntryPassInfo = {
+    .name = IREE_SVL("aie2p-realize-configuration-kernel"),
+    .description = IREE_SVL("Realize typed resident configuration entries."),
+    .kind = LOOM_PASS_FUNCTION,
+};
+
+static const loom_pass_info_t* loom_aie2p_configuration_entry_pass_info(void) {
+  return &kAie2pConfigurationEntryPassInfo;
+}
+
+static iree_status_t loom_aie2p_configuration_entry_run(
+    loom_pass_t* pass, loom_module_t* module, loom_func_like_t function) {
+  if (!loom_kernel_def_isa(function.op)) {
+    return iree_ok_status();
+  }
+  return loom_aie2p_configuration_entry_realize(pass, module, function);
+}
+
 static const loom_pass_descriptor_t kAie2pPipelinePassDescriptors[] = {
     {
         .key = IREE_SVL("aie2p-lower-pipeline"),
         .info = loom_aie2p_pipeline_lower_pass_info,
         .function_run = loom_aie2p_pipeline_lower_run,
+    },
+    {
+        .key = IREE_SVL("aie2p-realize-configuration-kernel"),
+        .info = loom_aie2p_configuration_entry_pass_info,
+        .function_run = loom_aie2p_configuration_entry_run,
     },
     {
         .key = IREE_SVL("aie2p-realize-kernel"),

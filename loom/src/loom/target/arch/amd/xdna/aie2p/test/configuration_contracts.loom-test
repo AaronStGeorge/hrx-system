@@ -187,7 +187,7 @@ low.func.def target<amd.xdna.aie2p.configuration>(@configuration_target) abi(arr
 aie2p.target<configuration> @configuration_target
 
 // ERROR@+1: XDNA/050 {function_name="configure", argument_count="1", result_count="0"}
-low.func.def target<amd.xdna.aie2p.configuration>(@configuration_target) @configure(%runtime: reg<aie2p.config.scalar : i64>) asm {
+low.func.def target<amd.xdna.aie2p.configuration>(@configuration_target) abi(array_program) @configure(%runtime: reg<aie2p.config.scalar : i64>) asm {
   return
 }
 

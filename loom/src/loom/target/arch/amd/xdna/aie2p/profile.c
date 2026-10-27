@@ -19,6 +19,8 @@ static iree_status_t loom_aie2p_target_profile_project_facts(
   loom_aie2p_target_facts_t* facts = (loom_aie2p_target_facts_t*)base_facts;
   facts->base.selector = profile->kind;
   facts->device_profile = profile->device_profile;
+  facts->array_contract_unselected =
+      profile->kind == LOOM_AIE2P_TARGET_KIND_ARRAY;
   return iree_ok_status();
 }
 

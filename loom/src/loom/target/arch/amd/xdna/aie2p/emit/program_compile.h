@@ -34,16 +34,27 @@ typedef struct loom_aie2p_program_helper_list_t {
   iree_host_size_t count;
 } loom_aie2p_program_helper_list_t;
 
+// Module-scoped owner of compiled native helper objects and their ABI/clobber
+// contracts. Helper compilation may rewrite IR during allocation repair; every
+// tile calling that helper consumes the same retained result. Source symbols,
+// target versions, and descriptor registry remain fixed for this lifetime.
+typedef struct loom_aie2p_program_compiler_t loom_aie2p_program_compiler_t;
+
+// Allocates a compiler in |arena|, which also owns its retained helper objects
+// and complete program contributions. The module outlives this compiler.
+iree_status_t loom_aie2p_program_compiler_allocate(
+    loom_module_t* module, iree_arena_allocator_t* arena,
+    loom_aie2p_program_compiler_t** out_compiler);
+
 // Compiles |entry_function_op| and its producer-retained direct,
 // nonrecursive, module-internal helper callees into one tile contribution.
 // Helpers use scalar and pointer register ABI values, remain spill-free and
 // code-only, and cannot call other functions. Call-free entries retain the
 // exact ordinary leaf compilation path.
 iree_status_t loom_aie2p_program_compile(
-    loom_module_t* module, loom_op_t* entry_function_op,
+    loom_aie2p_program_compiler_t* compiler, loom_op_t* entry_function_op,
     loom_aie2p_program_helper_list_t direct_helpers,
-    const loom_aie2p_leaf_compile_options_t* entry_options,
-    iree_arena_allocator_t* arena, bool* out_compiled,
+    const loom_aie2p_leaf_compile_options_t* entry_options, bool* out_compiled,
     loom_aie2p_leaf_contribution_t* out_contribution);
 
 #ifdef __cplusplus

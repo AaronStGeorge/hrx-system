@@ -22,6 +22,10 @@ typedef struct loom_aie2p_target_facts_t {
 
   // Exact physical deployment profile, or NULL for a generic authored target.
   const loom_xdna_device_profile_t* device_profile;
+
+  // True for a device profile whose whole-array input contract is not selected.
+  // Authored targets and root-selected contexts have a fixed contract.
+  bool array_contract_unselected;
 } loom_aie2p_target_facts_t;
 
 // Static fact type shared by AIE2P target records and structured profiles.

@@ -317,7 +317,12 @@ class Aie2pProgramCompileTest : public ::testing::Test {
   iree_status_t CompileProgram(
       loom_module_t* module, loom_op_t* entry,
       const loom_aie2p_leaf_compile_options_t* options, bool* out_compiled,
-      loom_aie2p_leaf_contribution_t* out_contribution) {
+      loom_aie2p_leaf_contribution_t* out_contribution,
+      loom_aie2p_program_compiler_t* compiler = nullptr) {
+    if (compiler == nullptr) {
+      IREE_RETURN_IF_ERROR(loom_aie2p_program_compiler_allocate(
+          module, &program_arena_, &compiler));
+    }
     iree_arena_allocator_t requirements_arena;
     iree_arena_initialize(&program_block_pool_, &requirements_arena);
     loom_low_function_requirements_t requirements = {};
@@ -330,13 +335,13 @@ class Aie2pProgramCompileTest : public ::testing::Test {
       for (iree_host_size_t i = 0; i < direct_helpers.size(); ++i) {
         direct_helpers[i].function = requirements.direct_callees.values[i];
       }
-      status = loom_aie2p_program_compile(module, entry,
-                                          loom_aie2p_program_helper_list_t{
-                                              .values = direct_helpers.data(),
-                                              .count = direct_helpers.size(),
-                                          },
-                                          options, &program_arena_,
-                                          out_compiled, out_contribution);
+      status =
+          loom_aie2p_program_compile(compiler, entry,
+                                     loom_aie2p_program_helper_list_t{
+                                         .values = direct_helpers.data(),
+                                         .count = direct_helpers.size(),
+                                     },
+                                     options, out_compiled, out_contribution);
     }
     iree_arena_deinitialize(&requirements_arena);
     return status;
@@ -348,6 +353,61 @@ class Aie2pProgramCompileTest : public ::testing::Test {
   loom_context_t context_ = {};
   loom_target_low_descriptor_registry_t low_registry_ = {};
 };
+
+TEST_F(Aie2pProgramCompileTest, RetainsHelperObjectsAcrossProgramCompilations) {
+  const iree_string_view_t sources[] = {
+      IREE_SV(kDirectHelperSource),
+      IREE_SV(kArgumentTransportClobberSource),
+      IREE_SV(kPointerHelperSource),
+  };
+  const loom_aie2p_leaf_compile_options_t options = {
+      .descriptor_registry = &low_registry_.registry,
+  };
+  for (iree_string_view_t source : sources) {
+    ModulePtr module = ParseModule(source);
+    loom_op_t* entry = FindFunction(module.get(), IREE_SV("entry"));
+    ASSERT_NE(entry, nullptr);
+    loom_aie2p_program_compiler_t* compiler = nullptr;
+    IREE_ASSERT_OK(loom_aie2p_program_compiler_allocate(
+        module.get(), &program_arena_, &compiler));
+    const uint8_t* helper_contents = nullptr;
+    const uint8_t* entry_contents = nullptr;
+    for (int program_index = 0; program_index < 3; ++program_index) {
+      bool compiled = false;
+      loom_aie2p_leaf_contribution_t contribution = {};
+      IREE_ASSERT_OK(CompileProgram(module.get(), entry, &options, &compiled,
+                                    &contribution, compiler));
+      ASSERT_TRUE(compiled);
+      ASSERT_EQ(contribution.object.section_count, 2u);
+      // Each caller is allocated independently. Its native call still borrows
+      // the same helper code and ABI contract after earlier frame scratch has
+      // been released, including pointer carriers and transport-only clobbers.
+      EXPECT_NE(contribution.object.sections[0].contents.data, entry_contents);
+      entry_contents = contribution.object.sections[0].contents.data;
+      const uint8_t* current_helper =
+          contribution.object.sections[1].contents.data;
+      if (program_index == 0) {
+        helper_contents = current_helper;
+      } else {
+        EXPECT_EQ(current_helper, helper_contents);
+      }
+    }
+
+    // Equal symbol ordinals in a different module cannot reuse the first
+    // module's native object or register contract.
+    ModulePtr other_module = ParseModule(source);
+    loom_op_t* other_entry = FindFunction(other_module.get(), IREE_SV("entry"));
+    ASSERT_NE(other_entry, nullptr);
+    bool compiled = false;
+    loom_aie2p_leaf_contribution_t other_contribution = {};
+    IREE_ASSERT_OK(CompileProgram(other_module.get(), other_entry, &options,
+                                  &compiled, &other_contribution));
+    ASSERT_TRUE(compiled);
+    ASSERT_EQ(other_contribution.object.section_count, 2u);
+    EXPECT_NE(other_contribution.object.sections[1].contents.data,
+              helper_contents);
+  }
+}
 
 TEST_F(Aie2pProgramCompileTest, ReusesOnlyIdenticalAdjacentPhysicalConstants) {
   struct TestCase {

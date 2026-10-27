@@ -12,6 +12,7 @@
 #include "loom/pass/report.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/configuration.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/leaf_compile.h"
+#include "loom/target/arch/amd/xdna/aie2p/emit/program_compile.h"
 #include "loom/target/arch/amd/xdna/aie2p/facts.h"
 #include "loom/target/pass_environment.h"
 
@@ -99,7 +100,13 @@ static iree_status_t loom_aie2p_configuration_check_run(loom_pass_t* pass,
       &request, &versions, entry_op, entry_facts->device_profile, &plan, &entry,
       &accepted);
   if (iree_status_is_ok(status) && accepted) {
-    status = loom_aie2p_configuration_plan_materialize(plan, &accepted);
+    loom_aie2p_program_compiler_t* compiler = NULL;
+    status =
+        loom_aie2p_program_compiler_allocate(module, pass->arena, &compiler);
+    if (iree_status_is_ok(status)) {
+      status =
+          loom_aie2p_configuration_plan_materialize(plan, compiler, &accepted);
+    }
   }
 
   loom_target_compile_report_t worker_report;

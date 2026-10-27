@@ -7,9 +7,11 @@
 #include "loomc/target/amd/xdna.h"
 
 #include <string>
+#include <vector>
 
 #include "iree/testing/gtest.h"
 #include "loomc/loomc.h"
+#include "loomc/target/cmd/program.h"
 #include "test/util.h"
 
 namespace {
@@ -391,6 +393,189 @@ TEST_F(XdnaTest, CompileArtifactReturnsLaunchConfigsForEveryArrayProgram) {
       EXPECT_EQ(config.subgroup_size, 1u);
       EXPECT_EQ(config.workgroup_storage_bytes, 0u);
     }
+  }
+}
+
+TEST_F(XdnaTest, ConfigurationRequestOutlivesCommandAndPreservesUnitLaunch) {
+  constexpr char source_text[] = R"(
+aie2p.target<configuration> @device
+
+kernel.def target(@device) @configured() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch(%buffer: buffer) {
+  func.call @configure() : () -> ()
+  kernel.return
+}
+
+low.func.def target<amd.xdna.aie2p.configuration>(@device) abi(array_program) @configure() asm {
+  %columns = constant 1 : reg<aie2p.config.scalar : i64>
+  entry %columns, @initialize, @invoke
+  return
+}
+low.func.def target<amd.xdna.aie2p.configuration>(@device) @initialize() asm {
+  return
+}
+low.func.def target<amd.xdna.aie2p.configuration>(@device) @invoke() asm {
+  %c0 = constant 0 : reg<aie2p.config.scalar : i64>
+  binding.unused %c0
+  return
+}
+command.program.def public @dispatch() launch(%buffer: buffer) {
+  kernel.launch @configured(%buffer) : (buffer)
+  command.return
+}
+)";
+  const loomc_context_target_options_t target_options = {
+      .type = LOOMC_STRUCTURE_TYPE_CONTEXT_TARGET_OPTIONS,
+      .target_environment = environment_.get(),
+  };
+  const loomc_context_options_t context_options = {
+      .type = LOOMC_STRUCTURE_TYPE_CONTEXT_OPTIONS,
+      .next = &target_options,
+  };
+  loomc_context_t* raw_context = nullptr;
+  LOOMC_ASSERT_OK(loomc_context_create(&context_options,
+                                       loomc_allocator_system(), &raw_context));
+  HandlePtr<loomc_context_t, loomc_context_release> context(raw_context);
+  loomc_compiler_t* raw_compiler = nullptr;
+  LOOMC_ASSERT_OK(loomc_compiler_create(
+      context.get(), nullptr, loomc_allocator_system(), &raw_compiler));
+  HandlePtr<loomc_compiler_t, loomc_compiler_release> compiler(raw_compiler);
+  for (const char* device_key :
+       {"amd.xdna.strix.17f0_10", "amd.xdna.strix_halo.17f0_11",
+        "amd.xdna.krackan.17f0_20"}) {
+    SCOPED_TRACE(device_key);
+    loomc_workspace_t* raw_workspace = nullptr;
+    LOOMC_ASSERT_OK(loomc_workspace_create(nullptr, loomc_allocator_system(),
+                                           &raw_workspace));
+    HandlePtr<loomc_workspace_t, loomc_workspace_release> workspace(
+        raw_workspace);
+    const loomc_source_options_t source_options = {
+        .type = LOOMC_STRUCTURE_TYPE_SOURCE_OPTIONS,
+        .format = LOOMC_SOURCE_FORMAT_TEXT,
+        .contents = loomc_make_byte_span(source_text, sizeof(source_text) - 1),
+        .storage = LOOMC_SOURCE_STORAGE_COPY,
+    };
+    loomc_source_t* raw_source = nullptr;
+    LOOMC_ASSERT_OK(loomc_source_create(&source_options,
+                                        loomc_allocator_system(), &raw_source));
+    SourcePtr source(raw_source);
+    loomc_module_t* raw_module = nullptr;
+    loomc_result_t* raw_result = nullptr;
+    LOOMC_ASSERT_OK(loomc_module_deserialize_from_source(
+        context.get(), workspace.get(), source.get(), nullptr,
+        loomc_allocator_system(), &raw_module, &raw_result));
+    ModulePtr module(raw_module);
+    ResultPtr result(raw_result);
+    ASSERT_TRUE(Succeeded(result.get()));
+    loomc_target_profile_t* raw_profile = nullptr;
+    LOOMC_ASSERT_OK(loomc_target_profile_create_xdna(
+        environment_.get(), loomc_make_cstring_view(device_key),
+        loomc_allocator_system(), &raw_profile));
+    HandlePtr<loomc_target_profile_t, loomc_target_profile_release> profile(
+        raw_profile);
+    using RequestPtr = HandlePtr<loomc_request_t, loomc_request_release>;
+    std::vector<RequestPtr> requests;
+    const auto root = loomc_make_cstring_view("dispatch");
+    const loomc_cmd_program_module_options_t command_options = {
+        .type = LOOMC_STRUCTURE_TYPE_CMD_PROGRAM_MODULE_OPTIONS,
+        .structure_size = sizeof(command_options),
+        .provider_name = loomc_make_cstring_view("configuration"),
+        .root_symbols = &root,
+        .root_symbol_count = 1,
+        .target_profile = profile.get(),
+        .request_sink = {[](void* user_data, loomc_request_t* request) {
+                           static_cast<std::vector<RequestPtr>*>(user_data)
+                               ->emplace_back(request);
+                           return loomc_ok_status();
+                         },
+                         &requests},
+    };
+    loomc_product_t* raw_product = nullptr;
+    LOOMC_ASSERT_OK(loomc_cmd_program_product_build_module(
+        workspace.get(), module.get(), &command_options,
+        loomc_allocator_system(), &raw_product, &raw_result));
+    HandlePtr<loomc_product_t, loomc_product_release> product(raw_product);
+    result.reset(raw_result);
+    ASSERT_TRUE(Succeeded(result.get()));
+    EXPECT_EQ(loomc_cmd_program_product_program_count(product.get()), 1u);
+    ASSERT_EQ(requests.size(), 1u);
+    result.reset();
+    product.reset();
+    module.reset();
+    source.reset();
+    workspace.reset();
+    LOOMC_ASSERT_OK(loomc_workspace_create(nullptr, loomc_allocator_system(),
+                                           &raw_workspace));
+    workspace.reset(raw_workspace);
+    loomc_string_view_t kernel_root;
+    LOOMC_ASSERT_OK(loomc_module_deserialize_request(
+        context.get(), workspace.get(), requests[0].get(),
+        loomc_allocator_system(), &raw_module, &kernel_root, &raw_result));
+    module.reset(raw_module);
+    result.reset(raw_result);
+    ASSERT_TRUE(Succeeded(result.get()));
+    const std::string kernel_name(kernel_root.data, kernel_root.size);
+    kernel_root = loomc_make_cstring_view(kernel_name.c_str());
+    requests.clear();
+    EXPECT_EQ(kernel_name, "configured");
+    const loomc_emit_options_t emit_options = {
+        .type = LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
+        .structure_size = sizeof(emit_options),
+        .artifact_format = loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_XDNA),
+        .artifact_flags = LOOMC_EMIT_ARTIFACT_FLAG_PRIMARY,
+    };
+    const loomc_compile_artifact_options_t compile_options = {
+        .type = LOOMC_STRUCTURE_TYPE_COMPILE_ARTIFACT_OPTIONS,
+        .structure_size = sizeof(compile_options),
+        .roots = &kernel_root,
+        .root_count = 1,
+        .target_profile = profile.get(),
+        .emit_options = &emit_options,
+        .artifact_flags = LOOMC_COMPILE_ARTIFACT_FLAG_LAUNCH_CONFIG,
+    };
+    LOOMC_ASSERT_OK(loomc_compile_artifact(
+        compiler.get(), workspace.get(), nullptr, module.get(),
+        &compile_options, loomc_allocator_system(), &raw_result));
+    result.reset(raw_result);
+    ASSERT_TRUE(Succeeded(result.get()));
+    ASSERT_NE(FindArtifact(result.get(), LOOMC_ARTIFACT_KIND_EXECUTABLE,
+                           LOOMC_ARTIFACT_FORMAT_XDNA),
+              nullptr);
+    const auto* launch_artifact =
+        FindArtifact(result.get(), LOOMC_ARTIFACT_KIND_LAUNCH_CONFIG,
+                     LOOMC_ARTIFACT_FORMAT_LOOM_BYTECODE);
+    ASSERT_NE(launch_artifact, nullptr);
+    loomc_launch_config_program_t* raw_launch_program = nullptr;
+    LOOMC_ASSERT_OK(loomc_launch_config_program_load(
+        launch_artifact, loomc_allocator_system(), &raw_launch_program));
+    HandlePtr<loomc_launch_config_program_t,
+              loomc_launch_config_program_release>
+        launch_program(raw_launch_program);
+    result.reset();
+    module.reset();
+    loomc_launch_config_function_t function =
+        loomc_launch_config_function_invalid();
+    LOOMC_ASSERT_OK(loomc_launch_config_program_lookup_function(
+        launch_program.get(), kernel_root, &function));
+    loomc_launch_config_t config = {
+        .type = LOOMC_STRUCTURE_TYPE_LAUNCH_CONFIG,
+        .structure_size = sizeof(config),
+    };
+    LOOMC_ASSERT_OK(loomc_launch_config_program_invoke(
+        launch_program.get(), function, nullptr, 0, &config));
+    EXPECT_EQ(config.workgroup_count.x, 1u);
+    EXPECT_EQ(config.workgroup_count.y, 1u);
+    EXPECT_EQ(config.workgroup_count.z, 1u);
+    EXPECT_EQ(config.workgroup_size.x, 1u);
+    EXPECT_EQ(config.workgroup_size.y, 1u);
+    EXPECT_EQ(config.workgroup_size.z, 1u);
+    EXPECT_EQ(config.workgroup_cluster_size.x, 1u);
+    EXPECT_EQ(config.workgroup_cluster_size.y, 1u);
+    EXPECT_EQ(config.workgroup_cluster_size.z, 1u);
+    EXPECT_EQ(config.subgroup_size, 1u);
+    EXPECT_EQ(config.workgroup_storage_bytes, 0u);
   }
 }
 

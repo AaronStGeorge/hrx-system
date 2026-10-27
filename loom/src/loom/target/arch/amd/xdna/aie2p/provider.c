@@ -9,6 +9,7 @@
 #include "loom/ir/module.h"
 #include "loom/pass/builder.h"
 #include "loom/target/arch/amd/xdna/aie2p/call_abi.h"
+#include "loom/target/arch/amd/xdna/aie2p/descriptors/configuration_descriptors.h"
 #include "loom/target/arch/amd/xdna/aie2p/descriptors/low_registry.h"
 #include "loom/target/arch/amd/xdna/aie2p/facts.h"
 #include "loom/target/arch/amd/xdna/aie2p/legalization.h"
@@ -61,6 +62,15 @@ static iree_status_t loom_aie2p_provider_build_kernel_realization_run(
                                 loom_named_attr_slice_empty(), &run_op);
 }
 
+static iree_status_t loom_aie2p_provider_build_configuration_entry_run(
+    loom_builder_t* builder, void* user_data) {
+  (void)user_data;
+  loom_op_t* run_op = NULL;
+  return loom_pass_ir_build_run(builder, 0,
+                                IREE_SV("aie2p-realize-configuration-kernel"),
+                                loom_named_attr_slice_empty(), &run_op);
+}
+
 static iree_status_t loom_aie2p_provider_build_pipeline_lower_run(
     loom_builder_t* builder, void* user_data) {
   (void)user_data;
@@ -77,10 +87,17 @@ static iree_status_t loom_aie2p_provider_build_kernel_target_where(
       builder, IREE_SV("contract"), IREE_SV("amd.xdna.aie2p.array"),
       &contract_attr));
   loom_op_t* where_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_pass_ir_build_where(
+      builder, LOOM_PASS_WHERE_BUILD_FLAG_HAS_ATTRS, IREE_SV("target"),
+      loom_make_named_attr_slice(&contract_attr, 1),
+      loom_aie2p_provider_build_kernel_realization_run, NULL, &where_op));
+  IREE_RETURN_IF_ERROR(loom_aie2p_provider_build_string_attr(
+      builder, IREE_SV("contract"), IREE_SV("amd.xdna.aie2p.configuration"),
+      &contract_attr));
   return loom_pass_ir_build_where(
       builder, LOOM_PASS_WHERE_BUILD_FLAG_HAS_ATTRS, IREE_SV("target"),
       loom_make_named_attr_slice(&contract_attr, 1),
-      loom_aie2p_provider_build_kernel_realization_run, NULL, &where_op);
+      loom_aie2p_provider_build_configuration_entry_run, NULL, &where_op);
 }
 
 static iree_status_t loom_aie2p_provider_build_pipeline_target_where(
@@ -101,7 +118,6 @@ static loom_target_call_policy_t loom_aie2p_select_call_policy(
     const loom_resolved_target_t* resolved_target, const loom_module_t* module,
     loom_call_like_kind_t kind, loom_call_like_t call,
     loom_func_like_t callee) {
-  (void)resolved_target;
   (void)call;
   if ((kind != LOOM_CALL_LIKE_KIND_SEMANTIC &&
        kind != LOOM_CALL_LIKE_KIND_LOW_INTERNAL) ||
@@ -109,6 +125,13 @@ static loom_target_call_policy_t loom_aie2p_select_call_policy(
       loom_func_like_inline_policy(callee) != LOOM_INLINE_POLICY_NOINLINE ||
       !loom_func_like_is_module_internal(callee) ||
       !loom_func_like_body(callee)) {
+    return LOOM_TARGET_CALL_POLICY_REQUIRE_INLINE;
+  }
+  // Configuration calls must expand before physical materialization. Semantic
+  // array-strand helpers can retain calls until worker outlining selects the
+  // core contract and its native ABI.
+  if (resolved_target->facts->storage.config.contract_set.stable_id ==
+      AIE2P_CONFIGURATION_DESCRIPTOR_SET_ID) {
     return LOOM_TARGET_CALL_POLICY_REQUIRE_INLINE;
   }
 
