@@ -36,6 +36,10 @@ iree_executable_test(
 iree_execution_test_suite(
     name = "hosted_diagnostics_test",
     data = ["unresolved_function.loom"],
+    env_inherit = [
+        "IREE_WASM_NODE",
+        "PATH",
+    ],
     manifests = ["hosted_diagnostics.test.json"],
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/target/arch:vm",
