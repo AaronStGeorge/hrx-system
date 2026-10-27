@@ -98,6 +98,20 @@ loom_kernel_library(
     targets = ["//loom/target/amdgpu:gfx11-generic"],
 )
 
+loom_kernel_library(
+    name = "production_kernel_library",
+    srcs = ["link_kernels.loom"],
+    benchmark_smoke = False,
+    targets = ["//loom/target/amdgpu:gfx11-generic"],
+)
+
+loom_test(
+    name = "separated_kernel_test",
+    srcs = ["link_checks.loom"],
+    compile_targets = ["//loom/target/amdgpu:gfx11-generic"],
+    deps = [":production_kernel_library"],
+)
+
 loom_library(
     name = "library_dependency",
     srcs = [
@@ -215,6 +229,13 @@ loom_test(
         "all": {"case": ""},
         "selected": {},
     },
+)
+
+loom_test(
+    name = "custom_runner_test",
+    execution_profiles = [EXPLICIT_RUNNER_PROFILE],
+    module = ":profiled_module",
+    tags = ["manual"],
 )
 
 loom_test(
@@ -351,7 +372,7 @@ py_test(
         "--combined=$(rootpath :profiled_test_selected_execute_reference_test)",
         "--correctness=$(rootpath :correctness_only_test_execute_reference_test)",
         "--format=$(rootpath :public_kernel_library_format_0_test)",
-        "--plan=$(rootpath :public_kernel_library_plan_test)",
+        "--plan=$(rootpath :profiled_test_selected_plan_test)",
         "--artifacts=$(rootpath :public_kernel_library_kernel_binary_gfx11_generic_test)",
         "--library=$(rootpath :linked_module)",
     ],
@@ -359,9 +380,9 @@ py_test(
         ":correctness_only_test_execute_reference_test",
         ":linked_module",
         ":profiled_test_selected_execute_reference_test",
+        ":profiled_test_selected_plan_test",
         ":public_kernel_library_format_0_test",
         ":public_kernel_library_kernel_binary_gfx11_generic_test",
-        ":public_kernel_library_plan_test",
     ],
 )
 

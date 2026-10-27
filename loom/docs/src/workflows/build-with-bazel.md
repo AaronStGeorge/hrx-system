@@ -182,10 +182,17 @@ loom_test(
 )
 ```
 
+Kernels, cases, and benchmarks can share one `.loom` file for rapid iteration.
+For reusable libraries, adjacent `_test.loom` files are a useful alternative:
+`loom_test` depends on the production `loom_kernel_library`, whose
+`benchmark_smoke = False` leaves benchmark ownership with the separate test.
+This keeps test-only edits out of downstream production action inputs.
+
 The sources own `check.case` or `check.benchmark` roots; `deps` contribute only
 reachable definitions. Execution and compilation consume the same linked test
-module. The owning test target includes both phases, plus lint and format checks
-for its authored `.loom` files. Source checks run once regardless of workload
+module. The owning test target includes both phases, plus format checks for
+its authored `.loom` files. Repository-wide authoring lint belongs in presubmit.
+Source checks run once regardless of workload
 or profile count and do not inherit execution profiles' device requirements. Each
 `_execute_<profile>_test` child requires only its execution profile's device,
 while `_compile_gfx942` and `_compile_gfx1151` run the offline compiler on the
@@ -230,9 +237,10 @@ The shared module builds independently of device availability, and its runtime
 fixtures follow it into every consumer. `module` is exclusive with source and
 import arguments on `loom_test`.
 
-The corpus owns its lint and format checks in `//corpus:copy_cases_test`.
+The corpus owns its format checks in `//corpus:copy_cases_test`.
 Recursive test discovery includes that source suite; consumers such as
-`copy_test` contain only their selected compiler and execution checks. This keeps
+`copy_test` contain their selected compiler and execution checks, plus a
+host-only benchmark plan when benchmark smoke is enabled. This keeps
 source checks independent of how many target packages consume the module.
 The checks retain the source owner's tags and source-provider constraints.
 Modules with no authored `.loom` inputs do not declare a source-check suite.
@@ -255,6 +263,12 @@ Each row overrides keys in the common `configs` mapping and may override the
 common `case` selector. Configuration values are strings, as on binary rules.
 Omitting `variants` creates one default workload; supplying it names the
 complete set, with no extra default row. An empty mapping is an authoring error.
+
+With benchmark smoke enabled, each workload also has a host-only
+`<name>_<variant>_plan_test` that plans its selected benchmarks using the same
+configuration. Planning is independent of the number of execution profiles.
+Profiles that supply their own runner own benchmark policy too; a test using
+only custom runners has no implicit host benchmark plan.
 
 Each workload has independent compiler and execution children, named
 `<name>_<variant>_compile_<target>` and

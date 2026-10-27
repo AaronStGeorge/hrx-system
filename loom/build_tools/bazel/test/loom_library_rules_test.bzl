@@ -525,6 +525,8 @@ def _test_direct_sources_own_checks_once_impl(env, targets):
         for test in targets.suite[TestingAspectInfo].attrs.tests
     ]).contains_exactly([
         "direct_source_test_format_0_test",
+        "direct_source_test_all_plan_test",
+        "direct_source_test_selected_plan_test",
         "direct_source_test_all_execute_reference_test",
         "direct_source_test_all_execute_serialized_reference_test",
         "direct_source_test_selected_execute_reference_test",
@@ -581,11 +583,54 @@ def _test_nontext_module_has_no_source_suite_impl(env, target):
     action = _find_action(env, target[TestingAspectInfo].actions, "LoomLibrary")
     _expect_basename(env, action.inputs.to_list(), "profiled_module.loombc")
 
+def _test_custom_runner_owns_benchmark_policy(name, **kwargs):
+    if native.existing_rule("custom_runner_test_plan_test"):
+        fail("custom execution must not implicitly acquire a benchmark plan")
+    analysis_test(
+        name = name,
+        impl = _test_custom_runner_owns_benchmark_policy_impl,
+        target = ":custom_runner_test",
+        **kwargs
+    )
+
+def _test_custom_runner_owns_benchmark_policy_impl(env, target):
+    env.expect.that_collection([
+        test.label.name
+        for test in target[TestingAspectInfo].attrs.tests
+    ]).contains_exactly(["custom_runner_test_execute_explicit_runner_test"])
+
+def _test_kernel_production_and_check_inputs_are_separate(name, **kwargs):
+    if native.existing_rule("production_kernel_library_test_module"):
+        fail("a kernel with separate checks must not acquire an inline test module")
+    analysis_test(
+        name = name,
+        impl = _test_kernel_production_and_check_inputs_are_separate_impl,
+        targets = {
+            "checks": ":separated_kernel_test_module_library",
+            "module": ":separated_kernel_test_module",
+            "production": ":production_kernel_library",
+        },
+        **kwargs
+    )
+
+def _test_kernel_production_and_check_inputs_are_separate_impl(env, targets):
+    production_action = _find_action(env, targets.production[TestingAspectInfo].actions, "LoomLibrary")
+    _expect_basename(env, production_action.inputs.to_list(), "link_kernels.loom")
+    _expect_no_basename(env, production_action.inputs.to_list(), "link_checks.loom")
+    checks_action = _find_action(env, targets.checks[TestingAspectInfo].actions, "LoomLibrary")
+    _expect_basename(env, checks_action.inputs.to_list(), "link_checks.loom")
+    _expect_basename(env, checks_action.inputs.to_list(), "production_kernel_library.loombc")
+    _expect_no_basename(env, checks_action.inputs.to_list(), "link_kernels.loom")
+    module_action = _find_action(env, targets.module[TestingAspectInfo].actions, "LoomTestModule")
+    _expect_basename(env, module_action.inputs.to_list(), "separated_kernel_test_module_library.loombc")
+    _expect_basename(env, module_action.inputs.to_list(), "production_kernel_library.loombc")
+
 def loom_library_rules_test_suite(name):
     test_suite(
         name = name,
         tests = [
             _test_correctness_only_profile_omits_benchmark_runner,
+            _test_custom_runner_owns_benchmark_policy,
             _test_deps_only_library_propagates_dependencies,
             _test_direct_sources_own_checks_once,
             _test_execution_module_links_root_tests,
@@ -593,6 +638,7 @@ def loom_library_rules_test_suite(name):
             _test_explicit_runner_owns_profile_execution,
             _test_generated_kernel_binary_is_testonly,
             _test_grouped_execution_root_sources,
+            _test_kernel_production_and_check_inputs_are_separate,
             _test_library_keeps_dependency_module_separate,
             _test_nontext_module_has_no_source_suite,
             _test_redundant_direct_dependency_is_not_transitive,
