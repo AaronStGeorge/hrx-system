@@ -11,6 +11,7 @@
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/host/timer.h"
 #include "loom/serve/runtime/parameter/weights.h"
+#include "loom/serve/telemetry/sample.h"
 #include "loom/serve/telemetry/stream.h"
 
 #ifdef __cplusplus
@@ -131,6 +132,12 @@ void loom_serve_text_heartbeat_initialize(
 // Safe while a finite CPU task owns mutable rows or device work is pending.
 loom_serve_text_heartbeat_snapshot_t loom_serve_text_heartbeat_read(
     loom_serve_text_heartbeat_t* heartbeat);
+
+// Samples the published text ownership/work facts independently of heartbeat
+// interval and event retention. No model rows or device storage are accessed.
+iree_status_t loom_serve_text_heartbeat_sample(
+    loom_serve_text_heartbeat_t* heartbeat,
+    loom_serve_telemetry_sample_sink_t sink);
 
 // Configures borrowed I/O and observation storage before the first advance.
 // Zero interval disables reporting. The owner installs the timer observer

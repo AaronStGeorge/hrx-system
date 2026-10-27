@@ -256,6 +256,12 @@ iree_host_size_t loom_serve_registry_capacity(
     const loom_serve_registry_t* registry);
 iree_host_size_t loom_serve_registry_count(
     const loom_serve_registry_t* registry);
+// Monotonic epoch covering aggregate work, including retired registrations and
+// borrowed services' earlier history. Fixed at construction: the earliest of
+// registry creation and borrowed stream creation. Zero if any borrowed service
+// lacks a counter epoch. This is not the start of an individual model's work.
+iree_time_t loom_serve_registry_counters_since_ns(
+    const loom_serve_registry_t* registry);
 loom_serve_registered_model_t* loom_serve_registry_at(
     loom_serve_registry_t* registry, iree_host_size_t index);
 

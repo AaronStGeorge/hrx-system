@@ -4,6 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <tuple>
+
+#include "loom/serve/dashboard/files.h"
 #include "loom/serve/server/router_test_fixture.h"
 #include "loom/serve/transport/http/multipart.h"
 
@@ -253,6 +256,10 @@ loom_serve_server_latency_available 0
 # TYPE loom_serve_model_request_duration_seconds histogram
 # HELP loom_serve_model_first_output_seconds Model protocol receipt through first meaningful output accepted by the carrier, not peer receipt.
 # TYPE loom_serve_model_first_output_seconds histogram
+# HELP loom_serve_model_observation Source-defined current ownership; unit identifies the value scale.
+# TYPE loom_serve_model_observation gauge
+# HELP loom_serve_model_observation_total Source-defined cumulative work within this incarnation; unit identifies the value scale.
+# TYPE loom_serve_model_observation_total counter
 )");
   const auto log = Read(Send("GET", "/logz"));
   EXPECT_NE(log.find("\"counters_available\":false"), std::string::npos);
@@ -284,6 +291,246 @@ loom_serve_server_latency_available 0
                       "kind=\"embedding\"} 0\n"),
             std::string::npos);
 }
+
+TEST_P(HttpRouterTest, DashboardAssetsUseTheExistingCarrierAndRelativePaths) {
+  for (const auto* path : {"/", "/dashboard"}) {
+    const auto response = Read(Send("GET", path));
+    EXPECT_EQ(response.find("HTTP/1.1 302"), 0u);
+    EXPECT_NE(response.find("Location: ./dashboard/\r\n"), std::string::npos);
+  }
+  for (const auto& [path, type, name] :
+       {std::tuple{"/dashboard/", "text/html", "index.html"},
+        std::tuple{"/dashboard/index.html", "text/html", "index.html"},
+        std::tuple{"/dashboard/style.css", "text/css", "style.css"},
+        std::tuple{"/dashboard/app.js", "text/javascript", "app.js"}}) {
+    SCOPED_TRACE(path);
+    const auto response = Read(Send("GET", path));
+    EXPECT_EQ(response.find("HTTP/1.1 200"), 0u);
+    EXPECT_NE(response.find(std::string("Content-Type: ") + type),
+              std::string::npos);
+    EXPECT_NE(response.find("Content-Security-Policy: default-src 'none';"),
+              std::string::npos);
+    EXPECT_NE(response.find("Content-Encoding: gzip\r\n"), std::string::npos);
+    EXPECT_NE(response.find("Vary: Accept-Encoding\r\n"), std::string::npos);
+    const auto header = response.find("Content-Length: ");
+    ASSERT_NE(header, std::string::npos);
+    const auto separator = response.find("\r\n\r\n");
+    ASSERT_NE(separator, std::string::npos);
+    const auto body = separator + 4;
+    EXPECT_EQ(std::stoul(response.substr(header + 16)), response.size() - body);
+    const iree_file_toc_t* file = nullptr;
+    const auto* files = loom_serve_dashboard_files_create();
+    for (size_t i = 0; i < loom_serve_dashboard_files_size(); ++i) {
+      if (std::string(files[i].name) == name) {
+        file = &files[i];
+      }
+    }
+    ASSERT_NE(file, nullptr);
+    EXPECT_EQ(
+        response.substr(body),
+        std::string(reinterpret_cast<const char*>(file->data), file->size));
+    EXPECT_EQ(response.substr(body, 3), std::string("\x1f\x8b\x08", 3));
+  }
+  EXPECT_EQ(Read(Send("GET", "/dashboard/../app.js")).find("HTTP/1.1 404"), 0u);
+  EXPECT_EQ(Read(Send("GET", "/healthz")).find("HTTP/1.1 200"), 0u);
+}
+
+TEST_P(HttpRouterTest, DashboardNegotiatesItsCompressedRepresentation) {
+  for (const auto& [value, accepted] : {
+           std::pair{"gzip", true},
+           std::pair{"br, gzip, deflate", true},
+           std::pair{"GZip ; Q=0.001", true},
+           std::pair{"gzip;q=1.000", true},
+           std::pair{"gzip;q=1.", true},
+           std::pair{"x-gzip", true},
+           std::pair{"*", true},
+           std::pair{"*;q=0.5", true},
+           std::pair{"gzip;q=0.1, *;q=0", true},
+           std::pair{"*;q=0, gzip;q=0.1", true},
+           std::pair{"identity;q=1, gzip;q=0.1", true},
+           std::pair{", gzip, ,", true},
+           std::pair{"", false},
+           std::pair{"identity", false},
+           std::pair{"br, deflate", false},
+           std::pair{"not-gzip", false},
+           std::pair{"gzip;q=0", false},
+           std::pair{"gzip;q=0.", false},
+           std::pair{"gzip;q=0.000", false},
+           std::pair{"gzip;q=0, *;q=1", false},
+           std::pair{"*;q=1, gzip;q=0", false},
+           std::pair{"*;q=0", false},
+           std::pair{"gzip, gzip;q=0", false},
+           std::pair{"gzip;q=0, gzip", false},
+           std::pair{"gzip;q=", false},
+           std::pair{"gzip;q=1.001", false},
+           std::pair{"gzip;q=0.0001", false},
+           std::pair{"gzip;q=2", false},
+           std::pair{"gzip;q=-1", false},
+           std::pair{"gzip;q=nan", false},
+           std::pair{"gzip;q=0x1", false},
+           std::pair{"gzip;q=1;other=1", false},
+           std::pair{"gzip;other=1", false},
+       }) {
+    SCOPED_TRACE(value);
+    const auto response =
+        Read(Send("GET", "/dashboard/", "",
+                  std::string("aCcEpT-eNcOdInG: ") + value + "\r\n"));
+    EXPECT_EQ(response.find(accepted ? "HTTP/1.1 200" : "HTTP/1.1 406"), 0u);
+    EXPECT_NE(response.find("Vary: Accept-Encoding\r\n"), std::string::npos);
+    EXPECT_EQ(response.find("Content-Encoding: gzip\r\n") != std::string::npos,
+              accepted);
+  }
+}
+
+TEST_P(HttpRouterTest, InvalidLiveAcknowledgementOnlyClosesItsPeer) {
+  ObservationClient observer;
+  ASSERT_NO_FATAL_FAILURE(observer.OpenLive(server_));
+  ASSERT_NO_FATAL_FAILURE(observer.ReadUpgrade());
+  EXPECT_NE(observer.WebSocketFrame().find("\"sequence\":\"1\""),
+            std::string::npos);
+  observer.WriteFrame(1, "2");
+  observer.Join();
+  EXPECT_EQ(Read(Send("GET", "/healthz")).find("HTTP/1.1 200"), 0u);
+}
+
+class HttpRouterLiveChurnTest : public HttpRouterTest {
+ protected:
+  void SetUp() override {
+    request_quota_ = 1;
+    HttpRouterTest::SetUp();
+  }
+};
+
+TEST_P(HttpRouterLiveChurnTest, RetirementPreservesPeerCreditAndReadmission) {
+  for (int round = 0; round < 3; ++round) {
+    SCOPED_TRACE(round);
+    ObservationClient first, middle, last;
+    for (auto* observer : {&first, &middle, &last}) {
+      ASSERT_NO_FATAL_FAILURE(observer->OpenLive(server_));
+      ASSERT_NO_FATAL_FAILURE(observer->ReadUpgrade());
+      EXPECT_NE(observer->WebSocketFrame().find("\"sequence\":\"1\""),
+                std::string::npos);
+    }
+    // All readers hold application credit. Retiring a middle record must not
+    // change the last reader's sequence, ACK, or independently owned socket.
+    middle.WriteFrame(1, "2");
+    middle.Join();
+    first.WriteFrame(8, "");
+    EXPECT_EQ(first.WebSocketFrame(8), "");
+    first.Join();
+    last.WriteFrame(9, "still here");
+    EXPECT_EQ(last.WebSocketFrame(10), "still here");
+    last.WriteFrame(1, "1");
+    const auto second = last.WebSocketFrame();
+    EXPECT_NE(second.find("\"sequence\":\"2\""), std::string::npos);
+
+    ObservationClient replacement;
+    ASSERT_NO_FATAL_FAILURE(replacement.OpenLive(server_));
+    ASSERT_NO_FATAL_FAILURE(replacement.ReadUpgrade());
+    const auto initial = replacement.WebSocketFrame();
+    EXPECT_NE(initial.find("\"sequence\":\"1\""), std::string::npos);
+    last.Ack(second);
+    replacement.Ack(initial);
+    EXPECT_NE(last.WebSocketFrame().find("\"sequence\":\"3\""),
+              std::string::npos);
+    EXPECT_NE(replacement.WebSocketFrame().find("\"sequence\":\"2\""),
+              std::string::npos);
+    for (auto* observer : {&last, &replacement}) {
+      observer->WriteFrame(8, "");
+      EXPECT_EQ(observer->WebSocketFrame(8), "");
+      observer->Join();
+    }
+    EXPECT_NE(Read(Send("GET", "/v1/status")).find("\"observers\":0"),
+              std::string::npos);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(Workers, HttpRouterLiveChurnTest,
+                         ::testing::Values(1, 4));
+
+TEST_P(HttpRouterTest, LiveActivitySamplesOwnersWithoutAMetricsScrape) {
+  const int held = Send("POST", "/v1/test", R"({"model":"held"})");
+  held_.WaitSubmitted();
+  ObservationClient observer;
+  ASSERT_NO_FATAL_FAILURE(observer.OpenLive(server_));
+  ASSERT_NO_FATAL_FAILURE(observer.ReadUpgrade());
+  observer.Ack(observer.WebSocketFrame());
+  bool found_held = false;
+  for (size_t i = 0; i < 5; ++i) {
+    const auto page = observer.WebSocketFrame();
+    if (page.find("\"name\":\"held\"") != std::string::npos) {
+      EXPECT_NE(page.find("\"phase\":\"held\""), std::string::npos);
+      EXPECT_NE(page.find("\"device\":null"), std::string::npos);
+      EXPECT_NE(page.find("\"queued\":0,\"active\":1"), std::string::npos);
+      EXPECT_NE(
+          page.find("\"name\":\"oldest_active_age\",\"unit\":\"nanoseconds\","
+                    "\"kind\":\"gauge\",\"value\":\"2250000000\""),
+          std::string::npos);
+      found_held = true;
+    }
+    observer.Ack(page);
+  }
+  EXPECT_TRUE(found_held);
+  held_.Release();
+  EXPECT_EQ(Read(held).find("HTTP/1.1 200"), 0u);
+}
+
+TEST_P(HttpRouterTest, SameOriginBrowserLiveNeedsNoConfiguration) {
+  ObservationClient observer;
+  ASSERT_NO_FATAL_FAILURE(observer.OpenLive(
+      server_, "Origin: http://localhost\r\nSec-Fetch-Site: same-origin\r\n"));
+  ASSERT_NO_FATAL_FAILURE(observer.ReadUpgrade());
+  const auto first = observer.WebSocketFrame();
+  EXPECT_NE(first.find("\"type\":\"server\""), std::string::npos);
+  observer.Ack(first);
+  EXPECT_NE(observer.WebSocketFrame().find("\"type\":\"models\""),
+            std::string::npos);
+  observer.WriteFrame(8, "");
+  EXPECT_EQ(observer.WebSocketFrame(8), "");
+  observer.Join();
+}
+
+TEST_P(HttpRouterTest, CrossOriginBrowserLiveRequiresExplicitAdmission) {
+  EXPECT_EQ(Read(Send("GET", "/v1/observe", "",
+                      "Connection: Upgrade\r\nUpgrade: websocket\r\n"
+                      "Sec-WebSocket-Version: 13\r\n"
+                      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                      "Sec-WebSocket-Protocol: loom.observe.v1\r\n"
+                      "Origin: http://untrusted.example\r\n"))
+                .find("HTTP/1.1 403"),
+            0u);
+  EXPECT_EQ(Read(Send("GET", "/healthz")).find("HTTP/1.1 200"), 0u);
+}
+
+class HttpRouterLiveOriginTest : public HttpRouterTest {
+ protected:
+  void SetUp() override {
+    allowed_origins_ = {1, &origin_};
+    HttpRouterTest::SetUp();
+  }
+  // Deliberately authorized external UI, independent of the server's origin.
+  const iree_string_view_t origin_ = IREE_SV("https://serve.example");
+};
+
+TEST_P(HttpRouterLiveOriginTest, AdditionalBrowserOriginUsesHttpConfiguration) {
+  ObservationClient observer;
+  ASSERT_NO_FATAL_FAILURE(
+      observer.OpenLive(server_, "Origin: https://serve.example\r\n"));
+  ASSERT_NO_FATAL_FAILURE(observer.ReadUpgrade());
+  const auto first = observer.WebSocketFrame();
+  EXPECT_NE(first.find("\"type\":\"server\""), std::string::npos);
+  observer.Ack(first);
+  EXPECT_NE(observer.WebSocketFrame().find("\"type\":\"models\""),
+            std::string::npos);
+  // Closing does not need to acknowledge an application page.
+  observer.WriteFrame(8, "");
+  EXPECT_EQ(observer.WebSocketFrame(8), "");
+  observer.Join();
+  EXPECT_EQ(Read(Send("GET", "/healthz")).find("HTTP/1.1 200"), 0u);
+}
+
+INSTANTIATE_TEST_SUITE_P(Workers, HttpRouterLiveOriginTest,
+                         ::testing::Values(1, 4));
 
 TEST_P(HttpRouterTest, UnrelatedCapacityNeverWaitsForHeldCompletion) {
   const int held = Send("POST", "/v1/test", R"({"model":"other"})");
@@ -588,7 +835,7 @@ TEST_P(HttpRouterTest, ShutdownReleasesHeldClaimsWithoutAdmittingThem) {
 }
 
 TEST_P(HttpRouterTest, RejectsAQuotaThatCouldExcludeEveryControlConnection) {
-  for (const auto options : {
+  for (const auto& options : {
            loom_serve_router_options_t{
                .request_quota = 0,
                .holding_capacity = 0,
@@ -815,6 +1062,26 @@ TEST_P(HttpRouterTightCapacityTest, ObservationWaitsForTransportReclamation) {
   EXPECT_EQ(Read(Send("GET", "/healthz")).find("HTTP/1.1 200"), 0u);
 }
 
+TEST_P(HttpRouterTightCapacityTest, LiveReadersShareTheControlReserve) {
+  EXPECT_EQ(Control("drain", "a").find("HTTP/1.1 200"), 0u);
+  const int held = Send("POST", "/v1/test", R"({"model":"a"})");
+  WaitHeld("a", 1);
+  ObservationClient observer;
+  ASSERT_NO_FATAL_FAILURE(observer.OpenLive(server_));
+  observer.WaitCredit(false);
+  const auto status = Read(Send("GET", "/v1/status"));
+  EXPECT_NE(
+      status.find(R"("held_requests":1,"observer_capacity":2,"observers":1)"),
+      std::string::npos);
+  EXPECT_EQ(Read(Send("GET", "/v1/observe")).find("HTTP/1.1 429"), 0u);
+  EXPECT_EQ(Read(Send("GET", "/logz/stream")).find("HTTP/1.1 429"), 0u);
+  EXPECT_EQ(
+      Read(Send("POST", "/v1/test", R"({"model":"a"})")).find("HTTP/1.1 429"),
+      0u);
+  EXPECT_EQ(Control("undrain", "a").find("HTTP/1.1 200"), 0u);
+  EXPECT_NE(Read(held).find("a:/v1/test:"), std::string::npos);
+}
+
 class HttpRouterNoHoldingTest : public HttpRouterTest {
  protected:
   void SetUp() override {
@@ -845,6 +1112,11 @@ TEST_P(HttpRouterCountersTest, ServerTotalsPreserveIntegerPrecisionAndScope) {
                            "kind=\"embedding\"} 9007199254740993\n"),
               std::string::npos);
     EXPECT_NE(metrics.find("loom_serve_server_requests_total 15\n"),
+              std::string::npos);
+    EXPECT_NE(metrics.find("loom_serve_model_observation_total{model=\"a\","
+                           "kind=\"embedding\",topic=\"work\",schema=\"1\","
+                           "field=\"consumed\",unit=\"tokens\"} "
+                           "9007199254740993\n"),
               std::string::npos);
     EXPECT_NE(metrics.find(
                   "loom_serve_server_input_tokens_total 45035996273704975\n"),
@@ -891,6 +1163,22 @@ TEST_P(HttpRouterCountersTest, ServerTotalsPreserveIntegerPrecisionAndScope) {
                   .find("404 Not Found"),
               std::string::npos);
   }
+}
+
+TEST_P(HttpRouterCountersTest, LiveCountersPreservePrecisionOnTheWire) {
+  ObservationClient observer;
+  ASSERT_NO_FATAL_FAILURE(observer.OpenLive(server_));
+  ASSERT_NO_FATAL_FAILURE(observer.ReadUpgrade());
+  const auto server = observer.WebSocketFrame();
+  EXPECT_NE(server.find("\"input_tokens\":\"45035996273704975\""),
+            std::string::npos);
+  observer.Ack(server);
+  const auto model = observer.WebSocketFrame();
+  EXPECT_NE(model.find("\"name\":\"a\""), std::string::npos);
+  EXPECT_NE(model.find("\"input_tokens\":\"9007199254740993\""),
+            std::string::npos);
+  EXPECT_NE(model.find("\"topic\":\"work\",\"version\":1"), std::string::npos);
+  EXPECT_NE(model.find("\"value\":\"9007199254740993\""), std::string::npos);
 }
 
 INSTANTIATE_TEST_SUITE_P(Workers, HttpRouterTest, ::testing::Values(1, 4));

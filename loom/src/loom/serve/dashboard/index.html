@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Loom · Serve</title>
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a class="brand" href="./"
+          ><span class="brand-word">loom</span
+          ><span class="brand-section">/ serve</span></a
+        >
+        <span id="endpoint" class="endpoint">—</span>
+        <div class="controls">
+          <span id="connection-dot" class="dot"></span>
+          <span id="connection">Connecting</span>
+          <button id="pause" type="button">Pause</button>
+          <button
+            id="scroll"
+            type="button"
+            aria-pressed="true"
+            title="Advance charts with time. Turn off to retain the last activity window; counters stay live."
+          >
+            Scroll on
+          </button>
+          <button
+            id="window"
+            type="button"
+            aria-label="Change chart time range"
+          >
+            30 SEC
+          </button>
+          <time id="clock">—</time>
+        </div>
+      </header>
+      <div id="notice" role="status" hidden></div>
+      <section class="stats" aria-label="Server counters">
+        <article class="stat">
+          <div class="stat-label">Output throughput <span>5s avg</span></div>
+          <div class="stat-value cyan">
+            <strong id="output-rate">—</strong><span>tok/s</span>
+            <span
+              class="peak"
+              title="Highest full five-second average observed in this page session."
+              >peak <b id="output-peak">—</b><br /><span
+                class="average"
+                title="Lifetime average, including idle time; independent of this page session."
+                >avg <b id="output-average">—</b></span
+              ></span
+            >
+          </div>
+          <canvas
+            id="output-spark"
+            aria-label="Rolling output token rate"
+          ></canvas>
+          <small><span id="output-total">—</span> tokens total</small>
+        </article>
+        <article
+          class="stat"
+          title="Tokens consumed by completed model work, including decode input; not only prompt tokens."
+        >
+          <div class="stat-label">Input work <span>5s avg</span></div>
+          <div class="stat-value orange">
+            <strong id="input-rate">—</strong><span>tok/s</span>
+            <span
+              class="peak"
+              title="Highest full five-second average observed in this page session."
+              >peak <b id="input-peak">—</b><br /><span
+                class="average"
+                title="Lifetime average, including idle time; independent of this page session."
+                >avg <b id="input-average">—</b></span
+              ></span
+            >
+          </div>
+          <canvas
+            id="input-spark"
+            aria-label="Rolling input token work rate"
+          ></canvas>
+          <small><span id="input-total">—</span> tokens total</small>
+        </article>
+        <article class="stat">
+          <div class="stat-label">Completions <span>5s avg</span></div>
+          <div class="stat-value">
+            <strong id="request-rate">—</strong><span>req/s</span>
+            <span
+              class="peak"
+              title="Highest full five-second average observed in this page session."
+              >peak <b id="request-peak">—</b><br /><span
+                class="average"
+                title="Lifetime average, including idle time; independent of this page session."
+                >avg <b id="request-average">—</b></span
+              ></span
+            >
+          </div>
+          <canvas
+            id="request-spark"
+            aria-label="Rolling successful request rate"
+          ></canvas>
+          <small
+            ><span id="completed">—</span> completed ·
+            <span id="batches">—</span> batches</small
+          >
+        </article>
+        <article
+          class="stat"
+          title="Arrivals counted between observations, including requests that finish between samples. Buckets close after at least one second; this is work, not peak concurrency."
+        >
+          <div class="stat-label">
+            Requests received <span id="activity-span">~1s bucket</span>
+          </div>
+          <div class="stat-value violet">
+            <strong id="activity">—</strong><span>requests</span>
+            <span
+              class="peak"
+              title="Largest observed arrival bucket in this page session, not peak concurrency."
+              >peak <b id="activity-peak">—</b></span
+            >
+          </div>
+          <canvas
+            id="activity-spark"
+            aria-label="Received requests per observation bucket"
+          ></canvas>
+          <small
+            ><span id="active">—</span> active ·
+            <span
+              title="Highest sampled concurrent active count; short requests may finish between samples."
+              >peak <span id="active-peak">—</span></span
+            >
+            · <span id="queued">—</span> queued ·
+            <span id="held">—</span> held</small
+          >
+        </article>
+        <article
+          class="stat"
+          title="Resident logical token positions across observed text pools; not physical RAM usage."
+        >
+          <div class="stat-label">KV occupancy <span>now</span></div>
+          <div class="stat-value green">
+            <strong id="kv">—</strong><span>% resident</span>
+            <span
+              class="peak"
+              title="Highest sampled logical KV occupancy percentage in this page session."
+              >peak <b id="kv-peak">—</b></span
+            >
+          </div>
+          <canvas
+            id="kv-spark"
+            aria-label="Logical KV occupancy history"
+          ></canvas>
+          <small
+            ><span id="kv-resident">—</span> /
+            <span id="kv-capacity">—</span> positions ·
+            <span id="kv-reserved">—</span> reserved</small
+          >
+        </article>
+        <article class="stat">
+          <div class="stat-label">Failed requests <span>total</span></div>
+          <div class="stat-value red">
+            <strong id="errors">—</strong><span>failed</span>
+          </div>
+          <canvas
+            id="error-spark"
+            aria-label="Cumulative failed requests"
+          ></canvas>
+          <small
+            ><span id="rejected">—</span> rejected ·
+            <span id="cancelled">—</span> cancelled</small
+          >
+        </article>
+      </section>
+      <section class="charts" aria-label="Serving histories">
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>Token throughput</h2>
+            <span class="muted">tok/s · 5s avg</span>
+          </div>
+          <div class="legend">
+            <span class="cyan">● Output</span
+            ><span class="orange">● Input work</span>
+          </div>
+          <canvas
+            id="flow"
+            class="chart"
+            aria-label="Rolling input and output token throughput"
+          ></canvas>
+          <div class="chart-footer">
+            <span>−30s</span><span>−22.5s</span><span>−15s</span
+            ><span>−7.5s</span><span>NOW</span>
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>Request throughput</h2>
+            <span class="muted">req/s · 5s avg</span>
+          </div>
+          <div class="legend">
+            <span class="orange">● Successful completions</span>
+          </div>
+          <canvas
+            id="request-flow"
+            class="chart"
+            aria-label="Rolling successful request throughput"
+          ></canvas>
+          <div class="chart-footer">
+            <span>−30s</span><span>−22.5s</span><span>−15s</span
+            ><span>−7.5s</span><span>NOW</span>
+          </div>
+        </article>
+        <article
+          class="panel"
+          title="Exact differences of cumulative request counters over nonoverlapping, roughly one-second intervals. Finishes include success, rejection, cancellation, and failure. These are request counts, not concurrent activity."
+        >
+          <div class="panel-heading">
+            <h2>Request activity</h2>
+            <span class="muted">requests · ~1s buckets</span>
+          </div>
+          <div class="legend">
+            <span class="violet">● Received</span
+            ><span class="orange">● Finished</span>
+          </div>
+          <canvas
+            id="activity-flow"
+            class="chart"
+            aria-label="Received and finished requests per observation bucket"
+          ></canvas>
+          <div class="chart-footer">
+            <span>−30s</span><span>−22.5s</span><span>−15s</span
+            ><span>−7.5s</span><span>NOW</span>
+          </div>
+        </article>
+      </section>
+      <section class="sources">
+        <div id="models">
+          <div class="models-heading">
+            <h2>Models <span id="model-count">0</span></h2>
+            <span class="muted"
+              >Rates: 5s · avg: lifetime · peak: observed</span
+            >
+          </div>
+          <div id="model-grid" class="model-grid">
+            <div class="panel empty">Waiting for models.</div>
+          </div>
+        </div>
+        <div>
+          <div class="models-heading">
+            <h2>Serving mix</h2>
+            <span class="muted">req/s · 5s avg</span>
+          </div>
+          <article class="panel activity">
+            <div id="mix" class="mix">
+              <p class="empty">Waiting for models.</p>
+            </div>
+            <div class="cache-summary">
+              <h2>Text cache</h2>
+              <dl>
+                <dt>Cached sessions</dt>
+                <dd id="cached-sessions">—</dd>
+                <dt>Cached prefixes</dt>
+                <dd id="cached-prefixes">—</dd>
+              </dl>
+            </div>
+          </article>
+        </div>
+      </section>
+      <section class="resources" aria-label="Devices and serving memory">
+        <div class="models-heading">
+          <h2>Devices <span id="device-count">0</span></h2>
+          <span class="muted"
+            >Request activity · hardware counters unavailable</span
+          >
+        </div>
+        <div id="device-grid" class="device-grid">
+          <div class="panel empty">Waiting for devices.</div>
+        </div>
+        <div class="models-heading memory-heading">
+          <h2>Memory pools <span id="pool-count">0</span></h2>
+          <span class="muted"
+            >Serving allocations · workspace included in backing</span
+          >
+        </div>
+        <div id="pool-grid" class="pool-grid"></div>
+      </section>
+      <footer>
+        <span id="freshness">Awaiting first sample</span
+        ><span id="delivery">—</span>
+      </footer>
+    </main>
+  </body>
+</html>

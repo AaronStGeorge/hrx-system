@@ -90,8 +90,8 @@ static bool loom_serve_websocket_has_token(iree_string_view_t list,
 
 iree_status_t loom_serve_websocket_handshake(
     const loom_serve_http_request_t* request,
-    iree_string_view_list_t allowed_origins, iree_string_view_t subprotocol,
-    iree_string_builder_t* response) {
+    loom_serve_http_origin_policy_t origin_policy,
+    iree_string_view_t subprotocol, iree_string_builder_t* response) {
   iree_string_view_t value = iree_string_view_empty();
   if (!iree_string_view_equal(request->method, IREE_SV("GET")) ||
       !iree_string_view_is_empty(request->body) ||
@@ -116,17 +116,7 @@ iree_status_t loom_serve_websocket_handshake(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "WebSocket requires version 13");
   }
-  if (loom_serve_http_request_lookup_header(request, IREE_SV("Origin"),
-                                            &value)) {
-    bool allowed = false;
-    for (iree_host_size_t i = 0; i < allowed_origins.count; ++i) {
-      allowed |= iree_string_view_equal(value, allowed_origins.values[i]);
-    }
-    if (!allowed) {
-      return iree_make_status(IREE_STATUS_PERMISSION_DENIED,
-                              "WebSocket Origin is not allowed");
-    }
-  }
+  IREE_RETURN_IF_ERROR(loom_serve_http_origin_check(request, origin_policy));
   iree_string_view_t key;
   if (!loom_serve_http_request_lookup_header(
           request, IREE_SV("Sec-WebSocket-Key"), &key) ||

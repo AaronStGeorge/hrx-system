@@ -11,6 +11,60 @@
 
 #include "loom/serve/runtime/parameter/telemetry.h"
 
+iree_status_t loom_serve_text_heartbeat_sample(
+    loom_serve_text_heartbeat_t* heartbeat,
+    loom_serve_telemetry_sample_sink_t sink) {
+  const loom_serve_text_heartbeat_snapshot_t state =
+      loom_serve_text_heartbeat_read(heartbeat);
+  static const loom_serve_telemetry_metric_t fields[] = {
+      {"prefill_rows", "requests", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"decode_rows", "requests", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"backpressured_rows", "requests", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"session_capacity", "sessions", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"pool_capacity", "tokens", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"pool_resident", "tokens", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"pool_reserved", "tokens", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"session_cache_endpoints", "sessions", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"prefix_cache_endpoints", "prefixes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"checkpoint_host_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"elastic_state_committed_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"elastic_state_reserved_bytes", "bytes", LOOM_SERVE_TELEMETRY_GAUGE},
+      {"completed_epochs", "epochs", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"traversals", "traversals", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"prefill_tokens", "tokens", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"decode_tokens", "tokens", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"model_duration", "nanoseconds", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"draft_proposed_tokens", "tokens", LOOM_SERVE_TELEMETRY_COUNTER},
+      {"draft_accepted_inputs", "tokens", LOOM_SERVE_TELEMETRY_COUNTER},
+  };
+  const uint64_t values[] = {
+      state.prefill_rows,
+      state.decode_rows,
+      state.backpressured_rows,
+      state.session_capacity,
+      state.pool.capacity,
+      state.pool.resident,
+      state.pool.reserved,
+      state.session_cache.endpoints,
+      state.prefix_cache.endpoints,
+      state.checkpoint_host_bytes,
+      state.state_memory.committed_bytes,
+      state.state_memory.reserved_bytes,
+      state.completed_epochs,
+      state.traversals,
+      state.prefill_tokens,
+      state.decode_tokens,
+      (uint64_t)state.model_duration,
+      state.draft.proposed_tokens,
+      state.draft.accepted_inputs,
+  };
+  static_assert(IREE_ARRAYSIZE(fields) == IREE_ARRAYSIZE(values),
+                "one value per text field");
+  const loom_serve_telemetry_topic_t topic = {"text", 1, IREE_ARRAYSIZE(fields),
+                                              fields};
+  return sink.emit(sink.self, &topic, values);
+}
+
 // Related records share a timestamp but remain independently readable after
 // overwrite. Shared device memory is labeled separately from model ownership.
 typedef struct loom_serve_text_activity_record_t {

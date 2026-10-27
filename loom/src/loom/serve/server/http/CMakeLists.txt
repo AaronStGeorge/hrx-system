@@ -23,6 +23,34 @@ loom_cc_library(
     loom::serve::service::kind
     loom::serve::telemetry::latency
     loom::serve::telemetry::record
+    loom::serve::telemetry::sample
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    live
+  HDRS
+    "live.h"
+  SRCS
+    "live.c"
+  DEPS
+    ::response
+    iree::async
+    iree::async::util::proactor_pool
+    iree::base
+    loom::serve::runtime::host::timer
+    loom::serve::runtime::host::wake
+    loom::serve::server::observation
+    loom::serve::server::registry
+    loom::serve::server::resources
+    loom::serve::telemetry::stream
+    loom::serve::transport::http::request
+    loom::serve::transport::http::server
+    loom::serve::transport::websocket::connection
+    loom::serve::transport::websocket::handshake
   PUBLIC
 )
 endif()

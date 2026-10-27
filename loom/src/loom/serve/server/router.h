@@ -54,7 +54,11 @@ typedef struct loom_serve_router_options_t {
 // removal never waits for observers; stream_end reports that lifetime's end
 // once transport credit permits. Held requests plus observers remain below
 // transport capacity, preserving one credit for other arrivals. Excess long-
-// lived claims receive 429. Idle observers schedule no periodic work.
+// lived claims receive 429. Idle log observers schedule no periodic work.
+// GET /v1/observe upgrades to bounded current-state WebSocket pages. Numeric
+// topics come from service-owned providers; the collector retains no model
+// resources. Application acknowledgements bound slow browsers independently
+// of carrier credit. /dashboard/ serves the embedded same-origin viewer.
 // POST /v1/models/register takes one catalog model object with optional
 // admission="open" or "drained". A 202 acknowledges server-owned intent;
 // /v1/status reports preparation/failure and copied source diagnostics. Closing

@@ -9,6 +9,7 @@
 
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/host/wake.h"
+#include "loom/serve/telemetry/sample.h"
 #include "loom/serve/transport/http/listener.h"
 #include "loom/util/stream.h"
 
@@ -67,6 +68,30 @@ bool loom_serve_resources_is_pending(const loom_serve_resources_t* resources);
 // available allocation bytes.
 iree_status_t loom_serve_resources_write_json(
     const loom_serve_resources_t* resources, loom_output_stream_t* output);
+
+// Immutable device-source count, independent of model registration/residency.
+iree_host_size_t loom_serve_resources_observation_count(
+    const loom_serve_resources_t* resources);
+
+// Copies one device's pool facts to a transport-independent numeric sink.
+// Index comes from observation_count. Runs on the serialized serving owner
+// without hardware polling or waiting; only sink failure can propagate.
+// Descriptors and values are borrowed only through the synchronous emit call.
+iree_status_t loom_serve_resources_sample(
+    const loom_serve_resources_t* resources, iree_host_size_t device_index,
+    loom_serve_telemetry_sample_sink_t sink);
+
+// Copies one device's identity and source-owned numeric pool topics. Index is
+// from observation_count and identifies this source for the resources lifetime.
+// Deployment keys are bounded display labels; indices identify owners.
+// Native storage and elastic backing are distinct pools. Workspace borrows
+// storage with fixed backing or elastic backing otherwise; its bytes are not
+// additive to that parent. These are serving-pool facts, not device-wide usage.
+// Runs on the serialized serving owner without hardware polling or waiting.
+// Failure is only output/allocation failure; no resource borrow escapes.
+iree_status_t loom_serve_resources_write_observation(
+    const loom_serve_resources_t* resources, iree_host_size_t device_index,
+    iree_string_builder_t* output);
 
 // Parses exactly {"device": <key>, "target_bytes": <unsigned integer>} and
 // resolves the device key against immutable membership. Performs no mutation.

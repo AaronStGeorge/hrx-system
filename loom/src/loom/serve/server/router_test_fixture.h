@@ -54,7 +54,8 @@ class ObservationClient {
   }
 
   void Open(loom_serve_http_server_t* server, const std::string& headers = "",
-            const std::function<void()>& capacity_wait = {}) {
+            const std::function<void()>& capacity_wait = {},
+            const std::string& target = "/logz/stream") {
     auto options = iree_async_proactor_options_default();
     options.threading_mode = IREE_ASYNC_PROACTOR_THREADING_CROSS_THREAD;
     IREE_ASSERT_OK(iree_async_proactor_create_platform(
@@ -70,7 +71,8 @@ class ObservationClient {
     iree_net_carrier_retain(peer_);
     uint64_t wait_value = 0;
     auto* capacity = loom_serve_http_server_capacity_semaphore(server);
-    while (!loom_serve_http_server_try_accept(server, peer_, {}, &wait_value)) {
+    while (!loom_serve_http_server_try_accept(
+        server, peer_, LOOM_SERVE_HTTP_ORIGIN_DIRECT, {}, &wait_value)) {
       // Like the production listener, retain the unadmitted carrier until a
       // capacity generation advances. Client EOF does not join reclamation of
       // the previous HTTP connection's server-side slot.
@@ -102,7 +104,7 @@ class ObservationClient {
          this}));
     IREE_ASSERT_OK(iree_net_carrier_activate(carrier_));
     const std::string request =
-        "GET /logz/stream HTTP/1.1\r\nHost: local\r\n" + headers + "\r\n";
+        "GET " + target + " HTTP/1.1\r\nHost: localhost\r\n" + headers + "\r\n";
     const iree_net_send_params_t params = {
         .generated_prefix = iree_net_send_prefix_from_bytes(
             iree_make_const_byte_span(request.data(), request.size())),
@@ -119,6 +121,88 @@ class ObservationClient {
                available) {
       std::this_thread::yield();
     }
+  }
+  void OpenLive(loom_serve_http_server_t* server,
+                const std::string& headers = "") {
+    Open(server,
+         "Connection: Upgrade\r\nUpgrade: websocket\r\n"
+         "Sec-WebSocket-Version: 13\r\n"
+         "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+         "Sec-WebSocket-Protocol: loom.observe.v1\r\n" +
+             headers,
+         {}, "/v1/observe");
+  }
+  void ReadUpgrade() {
+    while (received_.find("\r\n\r\n") == std::string::npos && !departed_) {
+      Poll();
+    }
+    const auto end = received_.find("\r\n\r\n");
+    ASSERT_NE(end, std::string::npos);
+    EXPECT_EQ(received_.find("HTTP/1.1 101 "), 0u);
+    received_.erase(0, end + 4);
+  }
+  std::string ReadBytes(size_t count) {
+    while (received_.size() < count && !departed_) {
+      Poll();
+    }
+    EXPECT_GE(received_.size(), count);
+    std::string bytes = received_.substr(0, count);
+    received_.erase(0, bytes.size());
+    return bytes;
+  }
+  std::string WebSocketFrame(uint8_t expected_type = 1) {
+    const auto header = ReadBytes(2);
+    if (header.size() != 2) {
+      return {};
+    }
+    EXPECT_EQ(static_cast<uint8_t>(header[0]), 0x80 | expected_type);
+    EXPECT_EQ(header[1] & 0x80, 0);
+    size_t count = header[1] & 127;
+    if (count == 126) {
+      const auto length = ReadBytes(2);
+      if (length.size() != 2) {
+        return {};
+      }
+      count = (static_cast<uint8_t>(length[0]) << 8) |
+              static_cast<uint8_t>(length[1]);
+    }
+    EXPECT_LE(count, 16368u);
+    return ReadBytes(count);
+  }
+  void WriteFrame(uint8_t type, const std::string& payload) {
+    ASSERT_LT(payload.size(), 126u);
+    const uint8_t mask[] = {1, 2, 3, 4};
+    std::string bytes{static_cast<char>(0x80 | type),
+                      static_cast<char>(0x80 | payload.size())};
+    bytes.append(reinterpret_cast<const char*>(mask), sizeof(mask));
+    for (size_t i = 0; i < payload.size(); ++i) {
+      bytes.push_back(payload[i] ^ mask[i % 4]);
+    }
+    while (!iree_net_carrier_query_send_budget(carrier_).slots) {
+      Poll();
+    }
+    bool completed = false;
+    const iree_net_send_params_t params = {
+        .generated_prefix = iree_net_send_prefix_from_bytes(
+            iree_make_const_byte_span(bytes.data(), bytes.size())),
+        .completion_callback = {
+            [](void* self, iree_status_t status, iree_host_size_t) {
+              IREE_EXPECT_OK(status);
+              *static_cast<bool*>(self) = true;
+            },
+            &completed}};
+    IREE_ASSERT_OK(iree_net_carrier_send(carrier_, &params));
+    // Join accepted send ownership before a final ACK can be cancelled by
+    // this client's destructor. Receiving server pages remains independent.
+    while (!completed) {
+      Poll();
+    }
+  }
+  void Ack(const std::string& frame) {
+    const auto key = frame.find("\"sequence\":\"");
+    ASSERT_NE(key, std::string::npos);
+    const auto start = key + 12;
+    WriteFrame(1, frame.substr(start, frame.find('"', start) - start));
   }
   std::string Frame() {
     while (received_.find("\n\n") == std::string::npos && !departed_) {
@@ -158,7 +242,7 @@ class ObservationClient {
   iree_net_carrier_t* carrier_ = nullptr;
   // Retained endpoint for observing actual credit, not HTTP/model ownership.
   iree_net_carrier_t* peer_ = nullptr;
-  // Received bytes not yet consumed as complete SSE frames.
+  // Received bytes not yet consumed as complete SSE or WebSocket frames.
   std::string received_;
   // Peer retirement publication on the client poll owner.
   bool departed_ = false;
@@ -356,6 +440,15 @@ struct loom_serve_test_model_service_t {
     return status;
   }
 
+  static iree_status_t Sample(void* self,
+                              loom_serve_telemetry_sample_sink_t sink) {
+    const auto* service = static_cast<loom_serve_test_model_service_t*>(self);
+    const loom_serve_telemetry_metric_t field = {"consumed", "tokens",
+                                                 LOOM_SERVE_TELEMETRY_COUNTER};
+    const loom_serve_telemetry_topic_t topic = {"work", 1, 1, &field};
+    return sink.emit(sink.self, &topic, &service->counters->input_tokens);
+  }
+
   loom_serve_service_t Interface(const iree_tokenizer_t* tokenizer,
                                  const void* capacity_domain) {
     return {.name = iree_make_cstring_view(name),
@@ -370,7 +463,9 @@ struct loom_serve_test_model_service_t {
             .endpoint = "/v1/test",
             .snapshot = Snapshot,
             .capacity_domain = capacity_domain,
-            .telemetry = {.counters = counters, .latency = latency}};
+            .telemetry = {.counters = counters,
+                          .latency = latency,
+                          .sample = counters ? Sample : nullptr}};
   }
 };
 
@@ -393,6 +488,7 @@ class HttpRouterTest : public ::testing::TestWithParam<int> {
     IREE_ASSERT_OK(status);
     auto options = loom_serve_http_server_options_default();
     options.connection_capacity = connection_capacity_;
+    options.allowed_origins = allowed_origins_;
     IREE_ASSERT_OK(loom_serve_http_server_allocate(
         pool_, &options, iree_allocator_system(), &server_));
     auto listener_options = loom_serve_http_listener_options_default();
@@ -429,7 +525,7 @@ class HttpRouterTest : public ::testing::TestWithParam<int> {
           iree_allocator_system(), &registry));
       status_ = loom_serve_router_run(
           executor_, server_, registry,
-          {.request_quota = 4,
+          {.request_quota = request_quota_,
            .holding_capacity = holding_capacity_,
            .resources = {.listener_count = 1, .listeners = &listener_}},
           iree_allocator_system());
@@ -513,10 +609,14 @@ class HttpRouterTest : public ::testing::TestWithParam<int> {
   }
   // Tight-capacity cases change this before the production server starts.
   iree_host_size_t connection_capacity_ = 64;
+  // Maximum ordinary requests or observation steps in one owner turn.
+  iree_host_size_t request_quota_ = 4;
   // Zero-budget cases reject instead of retaining requests behind the gate.
   iree_host_size_t holding_capacity_ = 2;
   // Managed slots supplied only by registration-lifecycle cases.
   iree_host_size_t managed_capacity_ = 0;
+  // Additional browser origins, borrowed until the HTTP owner retires.
+  iree_string_view_list_t allowed_origins_ = {};
   // Model dependency construction, never a replacement for registry behavior.
   loom_serve_registration_factory_t factory_ = {};
   // HTTP connection owner with no private polling thread.

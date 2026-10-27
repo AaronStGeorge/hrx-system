@@ -8,9 +8,12 @@ HTTP reclamation releases the protocol only after the application and I/O have
 both retired, including when the peer disconnects during an accepted CPU job.
 
 `handshake.h` validates the RFC 6455 request and formats the challenge response.
-A browser Origin requires an explicit exact allowlist match; clients without an
-Origin use the same handshake without that browser policy. The caller supplies
-its optional subprotocol. Compression and other extensions are not negotiated.
+Browser admission comes from the HTTP owner's `origin.h` policy, including
+automatic same-origin access and deliberately authorized additional origins.
+The policy carries trusted transport provenance, not a guess based on forwarded
+headers. Clients without Origin use the same handshake without browser policy.
+The caller supplies its optional subprotocol. Compression and other extensions
+are not negotiated.
 The protocol's fixed SHA-1 challenge requires no cryptographic dependency and
 does not authenticate the peer.
 

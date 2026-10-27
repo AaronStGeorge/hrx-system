@@ -84,6 +84,7 @@ loom_cc_library(
     deps = [
         ":generator",
         "//loom/src/loom/serve/telemetry:record",
+        "//loom/src/loom/serve/telemetry:sample",
         "//loom/src/loom/serve/telemetry:stream",
         "//runtime/src/iree/base",
     ],
@@ -109,6 +110,7 @@ loom_cc_library(
         "//loom/src/loom/serve/service:kind",
         "//loom/src/loom/serve/telemetry:latency",
         "//loom/src/loom/serve/telemetry:record",
+        "//loom/src/loom/serve/telemetry:sample",
         "//loom/src/loom/serve/telemetry:stream",
         "//loom/src/loom/serve/telemetry:tracing",
         "//loom/src/loom/serve/transport/http:request",
@@ -122,6 +124,18 @@ loom_cc_library(
         "//runtime/src/iree/base/threading",
         "//runtime/src/iree/task",
         "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "telemetry_test",
+    srcs = ["telemetry_test.cc"],
+    deps = [
+        ":telemetry",
+        "//loom/src/loom/serve/telemetry:sample",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

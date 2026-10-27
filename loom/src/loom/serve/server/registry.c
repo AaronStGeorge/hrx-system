@@ -25,6 +25,8 @@ struct loom_serve_registry_t {
   iree_host_size_t count;
   // Next identity assigned to a managed registration, independent of its name.
   uint64_t next_incarnation;
+  // Aggregate counter epoch, including borrowed history; zero if unavailable.
+  iree_time_t counters_since_ns;
   // Final observations accumulated exactly once before registration slot reuse.
   struct {
     // Completed work from removed incarnations.
@@ -136,6 +138,7 @@ iree_status_t loom_serve_registry_allocate(
   registry->capacity = service_count + managed_capacity;
   registry->count = service_count;
   registry->next_incarnation = 1;
+  registry->counters_since_ns = iree_time_now();
   iree_status_t status = iree_ok_status();
   if (registry->capacity) {
     status = iree_allocator_malloc_array(host_allocator, registry->capacity,
@@ -149,6 +152,13 @@ iree_status_t loom_serve_registry_allocate(
       registry->models[i].service = services[i];
       registry->models[i].phase = LOOM_SERVE_REGISTRATION_READY;
       registry->models[i].registered_unix_seconds = registered_unix_seconds;
+      const iree_time_t since_ns = services[i].telemetry.stream
+                                       ? loom_serve_telemetry_stream_identity(
+                                             services[i].telemetry.stream)
+                                             .created_ns
+                                       : 0;
+      registry->counters_since_ns =
+          iree_min(registry->counters_since_ns, since_ns);
     }
     *out_registry = registry;
   } else {
@@ -192,6 +202,11 @@ iree_host_size_t loom_serve_registry_capacity(
 iree_host_size_t loom_serve_registry_count(
     const loom_serve_registry_t* registry) {
   return registry->count;
+}
+
+iree_time_t loom_serve_registry_counters_since_ns(
+    const loom_serve_registry_t* registry) {
+  return registry->counters_since_ns;
 }
 
 loom_serve_registered_model_t* loom_serve_registry_at(

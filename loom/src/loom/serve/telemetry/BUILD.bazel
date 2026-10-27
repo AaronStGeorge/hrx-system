@@ -19,6 +19,24 @@ loom_cc_library(
     deps = ["//runtime/src/iree/base"],
 )
 
+loom_cc_library(
+    name = "sample",
+    srcs = ["sample.c"],
+    hdrs = ["sample.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_test(
+    name = "sample_test",
+    srcs = ["sample_test.cc"],
+    deps = [
+        ":sample",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_test(
     name = "tracing_test",
     srcs = ["tracing_test.cc"],

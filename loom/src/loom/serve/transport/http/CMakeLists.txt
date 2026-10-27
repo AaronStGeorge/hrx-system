@@ -74,12 +74,46 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    origin
+  HDRS
+    "origin.h"
+  SRCS
+    "origin.c"
+  DEPS
+    ::request
+    iree::async
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    origin_test
+  SRCS
+    "origin_test.cc"
+  DEPS
+    ::origin
+    ::request
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     server
   HDRS
     "server.h"
   SRCS
     "server.c"
   DEPS
+    ::origin
     ::request
     iree::async
     iree::async::util::proactor_pool
@@ -156,6 +190,7 @@ loom_cc_test(
     "server_test.cc"
   DEPS
     ::listener
+    ::origin
     ::request
     ::server
     iree::async

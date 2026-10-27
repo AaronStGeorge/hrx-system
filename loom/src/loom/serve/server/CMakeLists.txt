@@ -76,11 +76,13 @@ loom_cc_library(
     iree::base::threading
     iree::task
     iree::tokenizer
+    loom::serve::dashboard::assets
     loom::serve::runtime::device
     loom::serve::runtime::host::wake
     loom::serve::runtime::parameter::residency
     loom::serve::runtime::program::compilation
     loom::serve::runtime::program::variant_pool
+    loom::serve::server::http::live
     loom::serve::server::http::logs
     loom::serve::server::http::metrics
     loom::serve::server::http::package
@@ -124,6 +126,29 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    observation
+  HDRS
+    "observation.h"
+  SRCS
+    "observation.c"
+  DEPS
+    ::registry
+    ::resources
+    iree::base
+    loom::serve::service
+    loom::serve::service::kind
+    loom::serve::telemetry::record
+    loom::serve::telemetry::sample
+    loom::serve::telemetry::stream
+    loom::util::json
+    loom::util::stream
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     resources
   HDRS
     "resources.h"
@@ -139,10 +164,33 @@ loom_cc_library(
     loom::serve::runtime::host::wake
     loom::serve::runtime::parameter::residency
     loom::serve::runtime::storage::memory
+    loom::serve::telemetry::sample
     loom::serve::transport::http::listener
     loom::util::json
     loom::util::stream
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    observation_test
+  SRCS
+    "observation_test.cc"
+  DEPS
+    ::observation
+    ::registry
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm::test_support
+    loom::serve::service
+    loom::serve::telemetry::record
+    loom::serve::telemetry::sample
+    loom::serve::telemetry::stream
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
 )
 endif()
 
@@ -171,12 +219,17 @@ loom_cc_test(
   SRCS
     "resources_test.cc"
   DEPS
+    ::observation
+    ::registry
     ::resources
     iree::base
+    iree::base::internal::json
     iree::hal
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::vm::test_support
     loom::serve::runtime::device
+    loom::serve::runtime::execution
     loom::serve::runtime::host
     loom::util::stream
   LABELS
@@ -207,6 +260,7 @@ loom_cc_test(
     iree::testing::gtest_main
     iree::tokenizer
     iree::tokenizer::format::huggingface::tokenizer_json
+    loom::serve::dashboard::files
     loom::serve::runtime::host::wake
     loom::serve::runtime::program::variant_pool
     loom::serve::telemetry::latency
@@ -367,6 +421,7 @@ loom_cc_test(
     loom::serve::service
     loom::serve::service::recognition::request
     loom::serve::service::speech::request
+    loom::serve::telemetry::stream
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )

@@ -9,6 +9,94 @@ The [serving walkthrough](serve-models.md) provides an arithmetic model for
 exercising these endpoints. [Operations](operate-model-server.md) explains the
 registration, admission and residency states they describe.
 
+## Watch the live dashboard
+
+Start the server, then visit
+`http://127.0.0.1:8080/dashboard/`:
+
+```sh
+loom-serve --device=task --pool_backing=fixed \
+  --listen=127.0.0.1:8080 \
+  --model=vectors/model.json
+```
+
+The dashboard is embedded in the executable: no frontend installation,
+external assets, database, or second listener. Models appear as they register.
+Token and completion rates use a five-second rolling window, with the available
+observed duration during warm-up. Lifetime averages divide cumulative work by
+elapsed source lifetime, including idle time and work before the page opened.
+They survive reloads and reconnects; a source without a known start time leaves
+its average unavailable. Serving mix shows recent completions by modality.
+
+Request activity counts arrivals and finishes in roughly one-second buckets, so
+short requests remain visible even when they finish between observations. Each
+bucket closes on a real sample after at least one second; the received-request
+card shows its actual duration. Finishes include all outcomes, while completion
+throughput counts only successes. These are counts of work, not concurrency.
+Active, queued, and held requests remain separate current samples. Per-model
+sparklines, logical KV occupancy, cache counts, and expandable source counters
+come from the running services. Logical KV positions are not physical RAM usage;
+elastic text-state bytes exclude fixed buffers, weights, and workspace. A modality
+without a particular observation leaves it unavailable rather than inventing a
+value.
+
+Model badges link to their configured device. The Devices section groups current
+request activity by that placement; these counts are not hardware utilization or
+native queue depth. Device and pool cards remain when models are unregistered.
+
+Memory pools show committed serving allocations, retained peaks, reusable backing,
+and commitment histories. Native storage and elastic backing are separate owners;
+workspace is shown inside its backing pool, not added to the total. Elastic
+virtual reservations are address space, not physical RAM. These views exclude
+driver allocations and other processes, and do not invent a shared RAM capacity
+or a weights/KV/workspace partition from overlapping observations. Expand a pool
+to inspect its source counters.
+
+Unchanged snapshots stay off the wire. A small heartbeat settles the rate window,
+then backs off to once per minute while idle. New activity still appears at the
+normal sampling cadence; it does not wait for the idle heartbeat.
+
+Observed peaks remain visible after work finishes: rate peaks use full
+five-second windows, activity peaks count observed buckets, and active/occupancy
+peaks use received gauges.
+Peaks belong to this browser page session, survive pause/reconnect, and reset
+when the server or corresponding model is replaced. They describe observed work,
+not a benchmark of the server's maximum capacity.
+
+The browser retains a fixed history. **Scroll on** moves the charts using the
+browser clock, even when the feed is quiet; a dotted tail marks the last received
+value, not new samples. **Scroll off** keeps the last activity window visible
+while counters and peaks continue updating. Neither mode adds network traffic.
+The time-range button switches between 30 seconds and two minutes.
+Pause or a hidden tab releases the live connection. Resuming reads current
+state; rolling rates and activity buckets do not replay work that happened while
+disconnected. Lifetime averages still include that work and elapsed time.
+
+No dashboard flag is needed for same-origin access through `localhost`, a
+numeric IP address, or an SSH tunnel. The browser-visible port may differ from
+the server's listening port. Relative URLs preserve a proxy mount prefix.
+
+A Unix-socket backend such as `unix:/run/loom/serve.sock` trusts its HTTP relay
+to validate public hostnames and control access to the socket. The relay
+preserves `Host` and `Origin`, forwards WebSocket upgrades, and replaces
+`X-Forwarded-Proto` with `https` when terminating TLS (`http` is the default).
+Use a protected socket directory or equivalent namespace isolation. TCP
+connections never gain relay trust from forwarded headers.
+
+For a direct DNS hostname or a deliberately separate browser UI, repeat
+`--http_allowed_origin=https://console.example` for each additional exact
+origin, including any nondefault port. Arbitrary DNS names are not inferred
+safe from matching request headers. This browser-origin check is neither
+authentication nor a CORS policy; native clients may omit `Origin`. Public
+access control belongs to the deployment.
+
+The `/v1/observe` WebSocket sends bounded current-state pages, with at most
+one application-unacknowledged page per viewer. Slow clients skip intermediate
+states without queuing a history or retaining model resources. Registration
+incarnations distinguish a removed model from a replacement with the same
+name. Observation pages are live, not an atomic whole-server snapshot.
+Persistent collectors use `/metrics`; event history remains in `/logz`.
+
 ## Start with status and counters
 
 ```sh
@@ -48,6 +136,13 @@ model-specific controls such as text checkpoints, but exclude router-owned raw
 tokenization, health/observation calls and unknown-route rejections. Unavailable
 counters are reported as unavailable, not zero. Disabling periodic heartbeats
 with `--heartbeat_ms=0` does not disable counting.
+
+Source-owned numeric extensions appear in `loom_serve_model_observation`
+(gauges) and `loom_serve_model_observation_total` (counters). Their `topic`,
+`schema`, `field`, and `unit` labels describe the source's integer values,
+without implicit unit conversion. Text and image services publish these same
+facts to the live dashboard. Extension counters belong to their model
+incarnation and are not automatically added to server-lifetime totals.
 
 ## Read preparation timing
 

@@ -20,6 +20,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::base64
+    loom::serve::transport::http::origin
     loom::serve::transport::http::request
   PUBLIC
 )

@@ -50,6 +50,11 @@ loom_serve_http_listener_options_t loom_serve_http_listener_options_default(
 // bind through destruction. Existing paths are never unlinked to make bind
 // succeed. Destruction removes only a path this listener successfully bound;
 // abstract Unix addresses have no filesystem ownership.
+//
+// Unix bindings are trusted HTTP relay boundaries. The deployment restricts
+// socket access and validates public Host names at its relay; the relay
+// preserves Host/Origin and replaces X-Forwarded-Proto with the public scheme
+// when terminating TLS. TCP bindings never trust these forwarded headers.
 iree_status_t loom_serve_http_listener_allocate(
     loom_serve_http_server_t* server,
     const loom_serve_http_listener_options_t* options,

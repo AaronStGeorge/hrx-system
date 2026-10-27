@@ -1310,6 +1310,12 @@ static iree_status_t loom_serve_text_open_checkpoint(
                                                      out_control);
 }
 
+static iree_status_t loom_serve_text_sample(
+    void* self, loom_serve_telemetry_sample_sink_t sink) {
+  loom_serve_text_service_t* service = self;
+  return loom_serve_text_heartbeat_sample(&service->heartbeat, sink);
+}
+
 static loom_serve_service_snapshot_t loom_serve_text_snapshot(void* self) {
   loom_serve_text_service_t* service = self;
   const loom_serve_text_heartbeat_snapshot_t state =
@@ -1461,7 +1467,8 @@ loom_serve_service_t loom_serve_text_service_interface(
           service->reconfiguration),
       .telemetry = {.stream = service->telemetry.stream,
                     .counters = &service->telemetry.counters,
-                    .latency = &service->telemetry.latency},
+                    .latency = &service->telemetry.latency,
+                    .sample = loom_serve_text_sample},
       .capacity_domain = loom_serve_residency_cache(
           loom_serve_text_model_residency(service->model))};
 }

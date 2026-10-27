@@ -17,6 +17,7 @@ loom_cc_library(
     srcs = ["handshake.c"],
     hdrs = ["handshake.h"],
     deps = [
+        "//loom/src/loom/serve/transport/http:origin",
         "//loom/src/loom/serve/transport/http:request",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:base64",

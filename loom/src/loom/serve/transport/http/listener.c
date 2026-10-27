@@ -39,6 +39,8 @@ struct loom_serve_http_listener_t {
   loom_serve_http_receive_cache_t* receive_cache;
   // Per-connection bounded send policy copied during construction.
   iree_net_stream_carrier_options_t send;
+  // Immutable browser-origin trust established by the listener binding.
+  loom_serve_http_origin_source_t origin_source;
   // Joins publication and final callback accesses with retirement queries.
   iree_slim_mutex_t mutex;
   // Advisory wake for listener pressure and retirement, not model readiness.
@@ -126,6 +128,7 @@ static void loom_serve_http_listener_completed(
   if (admit && listener->admission.carrier &&
       loom_serve_http_server_try_accept(
           listener->server, listener->admission.carrier,
+          listener->origin_source,
           (loom_serve_http_connection_release_callback_t){
               loom_serve_http_listener_recycle_receive_slot,
               listener->admission.receive_slot},
@@ -330,6 +333,8 @@ iree_status_t loom_serve_http_listener_allocate(
                                              (void**)&listener));
   listener->host_allocator = host_allocator;
   listener->server = server;
+  listener->origin_source =
+      is_unix ? LOOM_SERVE_HTTP_ORIGIN_RELAY : LOOM_SERVE_HTTP_ORIGIN_DIRECT;
   listener->admission.semaphores[0] =
       loom_serve_http_server_capacity_semaphore(server);
   listener->admission.values[1] = 1;

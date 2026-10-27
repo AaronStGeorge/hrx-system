@@ -118,9 +118,9 @@ class WebSocketConnectionTest : public ::testing::Test {
     iree_string_builder_t response;
     iree_string_builder_initialize_with_storage(buffer, sizeof(buffer),
                                                 &response);
-    IREE_ASSERT_OK(
-        loom_serve_websocket_handshake(request, iree_string_view_list_empty(),
-                                       iree_string_view_empty(), &response));
+    IREE_ASSERT_OK(loom_serve_websocket_handshake(
+        request, loom_serve_http_connection_origin_policy(connection_),
+        iree_string_view_empty(), &response));
     if (half_close) {
       ASSERT_EQ(shutdown(client_, SHUT_WR), 0);
     }

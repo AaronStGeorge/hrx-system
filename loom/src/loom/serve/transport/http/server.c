@@ -28,6 +28,8 @@ struct loom_serve_http_connection_t {
   loom_serve_http_server_t* server;
   // Ownership and completion facts protected by the server mutex.
   loom_serve_http_connection_flags_t flags;
+  // Immutable accepted-carrier provenance, live through the application claim.
+  loom_serve_http_origin_source_t origin_source;
   // Carrier owns its socket and dedicated registered receive pool.
   iree_net_carrier_t* carrier;
   // Returns exclusive transport resources after carrier retirement/release.
@@ -168,6 +170,7 @@ static void loom_serve_http_connection_send_completed(
 
 bool loom_serve_http_server_try_accept(
     loom_serve_http_server_t* server, iree_net_carrier_t* carrier,
+    loom_serve_http_origin_source_t origin_source,
     loom_serve_http_connection_release_callback_t release_callback,
     uint64_t* out_wait_value) {
   *out_wait_value = 0;
@@ -179,6 +182,7 @@ bool loom_serve_http_server_try_accept(
         connection = &server->connections[i];
         connection->flags =
             HTTP_CONNECTION_OCCUPIED | HTTP_CONNECTION_INITIALIZING;
+        connection->origin_source = origin_source;
         connection->carrier = carrier;
         connection->release_callback = release_callback;
         break;
@@ -325,6 +329,8 @@ iree_status_t loom_serve_http_server_allocate(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "connection_capacity must be in [1, INT_MAX]");
   }
+  IREE_RETURN_IF_ERROR(
+      loom_serve_http_origin_validate_allowed(options->allowed_origins));
   loom_serve_http_server_t* server = NULL;
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(host_allocator, sizeof(*server), (void**)&server));
@@ -477,6 +483,13 @@ bool loom_serve_http_connection_failed(
   const bool failed = !iree_status_is_ok(connection->failure);
   iree_slim_mutex_unlock(&connection->server->mutex);
   return failed;
+}
+
+loom_serve_http_origin_policy_t loom_serve_http_connection_origin_policy(
+    const loom_serve_http_connection_t* connection) {
+  return (loom_serve_http_origin_policy_t){
+      .source = connection->origin_source,
+      .allowed_origins = connection->server->options.allowed_origins};
 }
 
 bool loom_serve_http_connection_can_send(

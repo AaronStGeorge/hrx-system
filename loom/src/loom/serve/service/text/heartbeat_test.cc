@@ -182,4 +182,38 @@ TEST_F(TextHeartbeatTest, TimerReadinessPublishesCopiedCounters) {
   EXPECT_EQ(cursor, 14u);
 }
 
+TEST_F(TextHeartbeatTest, SamplingIsIndependentOfTimerAndRingRetention) {
+  Configure(0);
+  heartbeat_.snapshot.prefill_tokens = UINT64_MAX;
+  heartbeat_.snapshot.decode_rows = 3;
+  heartbeat_.snapshot.pool = {128, 16, 64};
+  heartbeat_.snapshot.completed_epochs = 7;
+  iree_string_builder_t output;
+  iree_string_builder_initialize(iree_allocator_system(), &output);
+  IREE_EXPECT_OK(loom_serve_text_heartbeat_sample(
+      &heartbeat_,
+      {&output, [](void* self, const loom_serve_telemetry_topic_t* topic,
+                   const uint64_t* values) {
+         EXPECT_STREQ(topic->name, "text");
+         EXPECT_EQ(topic->version, 1u);
+         return loom_serve_telemetry_sample_write_json(
+             topic, values, static_cast<iree_string_builder_t*>(self));
+       }}));
+  const auto view = iree_string_builder_view(&output);
+  const std::string json(view.data, view.size);
+  EXPECT_NE(
+      json.find("\"name\":\"prefill_tokens\",\"unit\":\"tokens\","
+                "\"kind\":\"counter\",\"value\":\"18446744073709551615\""),
+      std::string::npos);
+  EXPECT_NE(json.find("\"name\":\"decode_rows\",\"unit\":\"requests\","
+                      "\"kind\":\"gauge\",\"value\":\"3\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"name\":\"pool_reserved\",\"unit\":\"tokens\","
+                      "\"kind\":\"gauge\",\"value\":\"16\""),
+            std::string::npos);
+  EXPECT_EQ(loom_serve_telemetry_stream_head(stream_), 0u);
+  EXPECT_FALSE(loom_serve_text_heartbeat_is_pending(&heartbeat_));
+  iree_string_builder_deinitialize(&output);
+}
+
 }  // namespace

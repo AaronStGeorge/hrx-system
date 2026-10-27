@@ -11,6 +11,7 @@
 #include "loom/serve/service/kind.h"
 #include "loom/serve/telemetry/latency.h"
 #include "loom/serve/telemetry/record.h"
+#include "loom/serve/telemetry/sample.h"
 
 // Prometheus labels preserve UTF-8 and escape only backslash, quote and LF.
 // JSON escaping is different for control characters and Unicode separators.
@@ -102,6 +103,68 @@ static iree_status_t loom_serve_http_metrics_integer(
   IREE_RETURN_IF_ERROR(loom_serve_http_metrics_sample_begin(
       output, metric, model, "component", component));
   return iree_string_builder_append_format(output, "} %" PRIu64 "\n", value);
+}
+
+typedef struct loom_serve_http_metrics_extension_t {
+  // Borrowed output owned by this scrape.
+  iree_string_builder_t* output;
+  // Registration borrowed only through its synchronous sampling call.
+  const loom_serve_registered_model_t* model;
+} loom_serve_http_metrics_extension_t;
+
+static iree_status_t loom_serve_http_metrics_extension_emit(
+    void* self, const loom_serve_telemetry_topic_t* topic,
+    const uint64_t* values) {
+  const loom_serve_http_metrics_extension_t* extension = self;
+  iree_string_builder_t* output = extension->output;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < topic->count && iree_status_is_ok(status);
+       ++i) {
+    const loom_serve_telemetry_metric_t* field = &topic->fields[i];
+    status = loom_serve_http_metrics_sample_begin(
+        output,
+        field->kind == LOOM_SERVE_TELEMETRY_COUNTER ? "observation_total"
+                                                    : "observation",
+        extension->model, "topic", topic->name);
+    if (iree_status_is_ok(status)) {
+      status = iree_string_builder_append_format(
+          output, ",schema=\"%u\",field=\"%s\",unit=\"%s\"} %" PRIu64 "\n",
+          topic->version, field->name, field->unit, values[i]);
+    }
+  }
+  return status;
+}
+
+static iree_status_t loom_serve_http_metrics_extensions(
+    loom_serve_registry_t* registry, iree_string_builder_t* output) {
+  // Two typed families keep metadata unique without discovering field names
+  // through a preliminary sample or maintaining an exporter-side schema table.
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+      output,
+      "# HELP loom_serve_model_observation Source-defined current ownership; "
+      "unit identifies the value scale.\n"
+      "# TYPE loom_serve_model_observation gauge\n"
+      "# HELP loom_serve_model_observation_total Source-defined cumulative "
+      "work "
+      "within this incarnation; unit identifies the value scale.\n"
+      "# TYPE loom_serve_model_observation_total counter\n"));
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < loom_serve_registry_capacity(registry) && iree_status_is_ok(status);
+       ++i) {
+    const loom_serve_registered_model_t* model =
+        loom_serve_registry_at(registry, i);
+    if (model->phase != LOOM_SERVE_REGISTRATION_READY ||
+        !model->service.telemetry.sample) {
+      continue;
+    }
+    loom_serve_http_metrics_extension_t extension = {output, model};
+    status = model->service.telemetry.sample(
+        model->service.self,
+        (loom_serve_telemetry_sample_sink_t){
+            &extension, loom_serve_http_metrics_extension_emit});
+  }
+  return status;
 }
 
 static iree_status_t loom_serve_http_metrics_parameters(
@@ -481,6 +544,9 @@ iree_status_t loom_serve_http_metrics_format(loom_serve_registry_t* registry,
   }
   if (iree_status_is_ok(status)) {
     status = loom_serve_http_metrics_latency(registry, output);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_http_metrics_extensions(registry, output);
   }
   return status;
 }
