@@ -45,6 +45,8 @@ class Hub:
         self.repository = "fixture/model"
         # Immutable snapshot advertised by metadata and download responses.
         self.revision = "a" * 40
+        # Prior immutable snapshots retained when a test advances the branch.
+        self.snapshots = {}
         # Publisher approval is changed explicitly by each test's user action.
         self.approved = False
         # Denial response, retaining the provider's explicit gate error code.
@@ -141,6 +143,7 @@ def running_hub(root, files=None):
                 head=False,
                 hold=False,
                 interval=None,
+                revision=None,
             ):
                 digest = hashlib.sha256(content).hexdigest()
                 total = len(content)
@@ -157,7 +160,7 @@ def running_hub(root, files=None):
                 if status >= 400 and state.retry_after:
                     self.send_header("Retry-After", state.retry_after)
                 if metadata:
-                    self.send_header("X-Repo-Commit", state.revision)
+                    self.send_header("X-Repo-Commit", revision or state.revision)
                     self.send_header("ETag", '"' + digest + '"')
                 self.end_headers()
                 if not head:
@@ -206,9 +209,17 @@ def running_hub(root, files=None):
                     )
                 elif "/resolve/" in path:
                     revision, _, filename = path.split("/resolve/", 1)[1].partition("/")
-                    if unquote(revision) not in ("main", state.revision):
+                    revision = unquote(revision)
+                    if revision == "main":
+                        revision = state.revision
+                    files = (
+                        state.files
+                        if revision == state.revision
+                        else state.snapshots.get(revision)
+                    )
+                    if files is None:
                         self.response(404, error="RevisionNotFound", head=head)
-                    elif unquote(filename) not in state.files:
+                    elif unquote(filename) not in files:
                         self.response(404, error="EntryNotFound", head=head)
                     elif not head and unquote(filename) in state.redirects:
                         self.send_response(302)
@@ -228,11 +239,12 @@ def running_hub(root, files=None):
                             state.range_requests.append((unquote(filename), *interval))
                         self.response(
                             200,
-                            state.files[unquote(filename)],
+                            files[unquote(filename)],
                             metadata=True,
                             head=head,
                             hold=unquote(filename) == state.held_file,
                             interval=interval,
+                            revision=revision,
                         )
                 else:
                     self.response(404, head=head)

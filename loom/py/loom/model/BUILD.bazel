@@ -68,6 +68,7 @@ iree_py_library(
     srcs = ["fetch_catalog.py"],
     deps = [
         ":catalog",
+        ":fetch_hf",
         ":fetch_source",
         ":fetch_storage",
         ":manifest",

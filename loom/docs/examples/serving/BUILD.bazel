@@ -1,0 +1,40 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# bazel-to-cmake: skip
+
+load("//build_tools/bazel:python.bzl", "iree_py_binary")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_generated_file")
+
+package(default_visibility = ["//visibility:private"])
+
+iree_py_binary(
+    name = "package",
+    srcs = ["package.py"],
+    data = glob([
+        "model-publication/model/*/model.json",
+        "model-publication/model/*/model.json.lock",
+        "model-publication/model/*/tokenizer.json",
+        "model-publication/model/*/program/*.loom",
+    ]) + [
+        "model-publication/.gitignore",
+        "model-publication/AGENTS.md",
+        "model-publication/LICENSE",
+        "model-publication/README.md",
+        "model-publication/catalog.json",
+        "model-publication/refresh.py",
+        "model-publication/smoke.py",
+    ],
+    main = "package.py",
+)
+
+loom_generated_file(
+    name = "publication",
+    generator = ":package",
+    output = "model-publication.zip",
+    output_flag = "--output=",
+    visibility = ["//visibility:public"],
+)

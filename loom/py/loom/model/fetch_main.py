@@ -115,7 +115,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", help="model ID in the selected catalog")
     parser.add_argument(
         "--catalog",
-        help="local catalog JSON or github:OWNER/REPOSITORY@TAG_OR_COMMIT; "
+        help="local catalog JSON, Hugging Face catalog URL, "
+        "or github:OWNER/REPOSITORY@TAG_OR_COMMIT; "
         "defaults to this SDK's association",
     )
     parser.add_argument(

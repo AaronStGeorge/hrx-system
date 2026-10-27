@@ -79,6 +79,7 @@ iree_py_library(
     "fetch_catalog.py"
   DEPS
     loom::py::loom::model::catalog
+    loom::py::loom::model::fetch_hf
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_storage
     loom::py::loom::model::manifest

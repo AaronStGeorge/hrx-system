@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import quote, urljoin
 
 from .catalog import ModelCatalog
+from .fetch_hf import hf_url_source
 from .fetch_source import Document, FetchError, document_location
 from .fetch_storage import ContentCache, atomic_write
 from .manifest import ManifestError, ModelCard, parse_json
@@ -24,7 +25,7 @@ from .manifest import ManifestError, ModelCard, parse_json
 
 @dataclass(frozen=True)
 class CatalogSnapshot:
-    # Authored local catalog or GitHub repository/tag association.
+    # Authored local catalog, HF file URL, or GitHub repository/tag association.
     source: str
     # Catalog document at its immutable publication coordinate, when remote.
     document: Document
@@ -76,7 +77,7 @@ def installed_catalog() -> str:
                 return source
     raise FetchError(
         "this SDK has no associated model catalog; use --catalog=LOCAL_JSON "
-        "or --catalog=github:OWNER/REPOSITORY@TAG"
+        "or a Hugging Face catalog URL or --catalog=github:OWNER/REPOSITORY@TAG"
     )
 
 
@@ -113,10 +114,11 @@ def _commit(cache: ContentCache, repository: str, tag: str) -> str:
 
 
 def load_catalog(source: str, cache: ContentCache, *, offline: bool) -> CatalogSnapshot:
-    if not source.startswith("github:"):
+    huggingface = hf_url_source(source) if "://" in source else None
+    if not source.startswith("github:") and huggingface is None:
         if "://" in source:
             raise ManifestError(
-                "catalog discovery requires a local JSON or "
+                "catalog discovery requires a local JSON, a Hugging Face file URL, or "
                 "github:OWNER/REPOSITORY@TAG; direct model URLs do not "
                 "require a catalog"
             )
@@ -125,14 +127,18 @@ def load_catalog(source: str, cache: ContentCache, *, offline: bool) -> CatalogS
         return CatalogSnapshot(
             location, document, ModelCatalog.parse(document.text), None
         )
-    match = re.fullmatch(r"github:([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@(.+)", source)
-    if match is None or any(part in (".", "..") for part in match[1].split("/")):
-        raise ManifestError("expected github:OWNER/REPOSITORY@TAG_OR_COMMIT")
-    repository, tag = match.groups()
+    if huggingface is not None:
+        transport, endpoint = huggingface
+        reference = transport["revision"]
+    else:
+        match = re.fullmatch(r"github:([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@(.+)", source)
+        if match is None or any(part in (".", "..") for part in match[1].split("/")):
+            raise ManifestError("expected github:OWNER/REPOSITORY@TAG_OR_COMMIT")
+        repository, reference = match.groups()
     pointer = cache.root / "catalog" / hashlib.sha256(source.encode()).hexdigest()
     if offline:
-        if re.fullmatch(r"[0-9a-f]{40}", tag):
-            revision = tag
+        if re.fullmatch(r"[0-9a-f]{40}", reference):
+            revision = reference
         else:
             if not pointer.is_file():
                 raise FetchError("--offline has no cached snapshot for this catalog")
@@ -141,9 +147,18 @@ def load_catalog(source: str, cache: ContentCache, *, offline: bool) -> CatalogS
             if not re.fullmatch(rb"[0-9a-f]{40}", encoded):
                 raise FetchError("cached catalog snapshot is invalid")
             revision = encoded.decode("ascii")
+    elif huggingface is not None:
+        revision = cache.huggingface.resolve_revision(transport, offline=False)
     else:
-        revision = _commit(cache, repository, tag)
-    location = f"https://raw.githubusercontent.com/{repository}/{revision}/catalog.json"
+        revision = _commit(cache, repository, reference)
+    if huggingface is not None:
+        location = cache.huggingface.file_url(
+            {**transport, "revision": revision}, endpoint=endpoint
+        )
+    else:
+        location = (
+            f"https://raw.githubusercontent.com/{repository}/{revision}/catalog.json"
+        )
     document = cache.read_document(location, offline=offline)
     catalog = ModelCatalog.parse(document.text)
     if not offline:
