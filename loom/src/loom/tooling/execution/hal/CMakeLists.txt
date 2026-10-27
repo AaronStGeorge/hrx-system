@@ -39,6 +39,20 @@ endif()
 if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ROUTE_VM_IREE_VM AND IREE_ARCH STREQUAL "x86_64")
 iree_native_test(
   NAME
+    "command_structural_specializations_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_structural_specializations.loom}}"
+    "--device=task"
+  SRC
+    loom::tools::loom-test
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_structural_specializations.loom"
+)
+endif()
+
+if(LOOM_ROUTE_X86_TASK_HAL AND LOOM_ROUTE_VM_IREE_VM AND IREE_ARCH STREQUAL "x86_64")
+iree_native_test(
+  NAME
     "command_scenario_execution_test"
   ARGS
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom}}"
@@ -71,6 +85,7 @@ loom_test_module(
     "testdata/buffer_bulk_hal_actual.loom"
     "testdata/command_count_observations.loom"
     "testdata/command_scenario_dependent_stages.loom"
+    "testdata/command_structural_specializations.loom"
     "testdata/dynamic_workgroup_hal_actual.loom"
     "testdata/launch_schedule_hal_actual.loom"
     "testdata/scenario_batch_hal_actual.loom"

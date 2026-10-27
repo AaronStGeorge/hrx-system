@@ -12,10 +12,12 @@
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/special_values.h"
 #include "loom/ops/template/ops.h"
 #include "loom/rewrite/module_projection.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/transforms/symbol/template_rewrite.h"
+#include "loom/util/predicate_facts.h"
 
 void loom_kernel_class_product_deinitialize(
     loom_kernel_class_product_t* product) {
@@ -337,6 +339,92 @@ static iree_status_t loom_kernel_class_rewrite_application(
   return iree_ok_status();
 }
 
+// Caller facts are preconditions of the published artifact. Keeping them on
+// the signature preserves argument identity, dependent types, and lexical
+// scope; ordinary specialization subsequently materializes any constants.
+static iree_status_t loom_kernel_class_materialize_argument_facts(
+    loom_func_like_t kernel, const loom_value_facts_t* inferred_facts,
+    const loom_value_facts_t* argument_facts, uint16_t specialization_count,
+    loom_rewriter_t* rewriter) {
+  loom_block_t* block = loom_region_entry_block(loom_func_like_body(kernel));
+  uint16_t source_count = 0;
+  const loom_predicate_t* source =
+      loom_func_like_predicates(kernel, &source_count);
+  const uint32_t capacity =
+      source_count +
+      (uint32_t)block->arg_count * LOOM_VALUE_FACT_INTEGER_REFINEMENT_CAPACITY;
+  loom_predicate_t* predicates = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(&rewriter->module->arena,
+                                                 capacity, sizeof(*predicates),
+                                                 (void**)&predicates));
+  if (source_count) {
+    memcpy(predicates, source, source_count * sizeof(*source));
+  }
+  uint32_t count = source_count;
+  for (uint16_t i = specialization_count; i < block->arg_count; ++i) {
+    const loom_type_t type =
+        loom_module_value_type(rewriter->module, block->arg_ids[i]);
+    int64_t domain_lo = 0;
+    int64_t domain_hi = 0;
+    if (!loom_type_is_scalar(type) ||
+        !loom_value_facts_scalar_type_domain(loom_type_element_type(type),
+                                             &domain_lo, &domain_hi)) {
+      continue;
+    }
+    count += loom_value_facts_export_integer_refinements(
+        block->arg_ids[i], inferred_facts[i], argument_facts[i],
+        predicates + count, LOOM_VALUE_FACT_INTEGER_REFINEMENT_CAPACITY);
+  }
+  if (count == source_count) {
+    return iree_ok_status();
+  }
+  if (count > UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "kernel argument refinements exceed the predicate limit");
+  }
+  return loom_rewriter_set_attr(
+      rewriter, kernel.op, kernel.vtable->predicates_attr_index,
+      loom_attr_predicate_list(predicates, (uint16_t)count));
+}
+
+// A required extent can be an affine expression of several arguments whose
+// individual values vary within the class. Preserve that expression's proven
+// value without falsely specializing its inputs.
+static iree_status_t loom_kernel_class_materialize_shape_values(
+    const loom_kernel_class_classifier_t* classifier,
+    const loom_kernel_class_t* entry,
+    const loom_ir_module_projection_t* projection, loom_func_like_t kernel,
+    loom_rewriter_t* rewriter) {
+  loom_block_t* block = loom_region_entry_block(loom_func_like_body(kernel));
+  loom_builder_set_before(&rewriter->builder, block->first_op);
+  for (uint32_t i = 0; i < entry->shape_value_count; ++i) {
+    const loom_kernel_class_shape_value_t* value = &entry->shape_values[i];
+    if (!loom_value_facts_is_exact(value->facts)) {
+      continue;
+    }
+    const loom_value_id_t source =
+        classifier->projections[value->projection].source_value_id;
+    // Entry argument facts are already retained on the signature.
+    if (loom_value_is_block_arg(
+            loom_module_value(classifier->module, source))) {
+      continue;
+    }
+    loom_value_id_t target = LOOM_VALUE_ID_INVALID;
+    const bool projected =
+        loom_ir_module_projection_try_target_value(projection, source, &target);
+    IREE_ASSERT(projected);
+    loom_value_id_t constant = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_constant_build(&rewriter->builder, value->facts,
+                            loom_module_value_type(rewriter->module, target),
+                            kernel.op->location, &constant));
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_replace_all_uses_with(rewriter, target, constant));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_kernel_class_materialize(
     const loom_kernel_class_classifier_t* classifier,
     const loom_kernel_class_collection_t* collection,
@@ -422,6 +510,24 @@ iree_status_t loom_kernel_class_materialize(
           ? loom_ir_module_projection_target_symbol(
                 &module_projection, classifier->kernel_symbol_id)
           : loom_symbol_ref_null();
+  if (iree_status_is_ok(status) && classifier->kernel_argument_count != 0) {
+    status = loom_kernel_class_materialize_argument_facts(
+        loom_func_like_cast(target_module, target_module->symbols
+                                               .entries[target_kernel.symbol_id]
+                                               .defining_op),
+        classifier->argument_facts,
+        collection->classes[class_ordinal].argument_facts,
+        classifier->specialization_count, &rewriter);
+  }
+  if (iree_status_is_ok(status) &&
+      collection->classes[class_ordinal].shape_value_count != 0) {
+    status = loom_kernel_class_materialize_shape_values(
+        classifier, &collection->classes[class_ordinal], &module_projection,
+        loom_func_like_cast(target_module, target_module->symbols
+                                               .entries[target_kernel.symbol_id]
+                                               .defining_op),
+        &rewriter);
+  }
   if (iree_status_is_ok(status) && classifier->specialization_count != 0) {
     status = loom_kernel_specializations_apply(
         collection->specialization_module,

@@ -514,11 +514,25 @@ template.def<@schedule> priority(1) @small(%size: index) {
       uint16_t predicate_count = 0;
       const auto* predicates =
           loom_func_like_predicates(function, &predicate_count);
-      ASSERT_EQ(predicate_count, 2u);
+      ASSERT_GE(predicate_count, 2u);
       EXPECT_EQ(predicates[0].kind, LOOM_PREDICATE_GE);
       EXPECT_EQ(predicates[0].arg_tags[1], LOOM_PRED_ARG_CONST);
       EXPECT_EQ(predicates[0].args[1], request.class_ordinal == 0 ? 64 : 128);
       EXPECT_EQ(predicates[1].kind, LOOM_PREDICATE_FINITE);
+      iree_arena_allocator_t query_arena;
+      iree_arena_initialize(&block_pool_, &query_arena);
+      loom_value_fact_table_t retained = {};
+      IREE_ASSERT_OK(loom_value_fact_table_initialize(
+          &retained, &query_arena, request.product.module->values.count));
+      IREE_ASSERT_OK(loom_value_fact_table_compute(
+          &retained, request.product.module, function));
+      const auto* body = loom_region_entry_block(loom_func_like_body(function));
+      const auto size_facts =
+          loom_value_fact_table_lookup(&retained, body->arg_ids[0]);
+      EXPECT_EQ(size_facts.range_lo, 256);
+      EXPECT_EQ(size_facts.range_hi, 512);
+      EXPECT_EQ(size_facts.known_divisor, 256);
+      iree_arena_deinitialize(&query_arena);
       const auto* first =
           loom_region_entry_block(loom_func_like_body(function))->first_op;
       const auto* assume = first->next_op->next_op;
@@ -529,6 +543,167 @@ template.def<@schedule> priority(1) @small(%size: index) {
       EXPECT_EQ(assume->operand_count, 2u);
       loom_kernel_class_product_deinitialize(&request.product);
     }
+  }
+}
+
+TEST_P(KernelRequestProducerTest, SharesStructuralBodiesAcrossDistinctOffsets) {
+  for (bool use_bytecode : {false, true}) {
+    SCOPED_TRACE(use_bytecode);
+    const std::string source_text =
+        R"(
+func.def inline @extent(%rows: index, %unused: offset) -> (index) {
+  func.return %rows : index
+}
+template.decl @write(%rows: index, %offset: offset, %output: buffer)
+template.def<@write> @write_impl(%rows: index, %offset: offset, %output: buffer) {
+  func.call @compute(%rows, %offset, %output) : (index, offset, buffer)
+  template.return
+}
+func.def inline @compute(%rows: index, %offset: offset, %output: buffer) {
+  %extent = func.call @extent(%rows, %offset) : (index, offset) -> (index)
+  %values = vector.constant 1.0 : vector<[%extent]xf32>
+  %view = buffer.view %output[%offset] : buffer -> view<[%extent]xf32>
+  vector.store %values, %view[0] : vector<[%extent]xf32>, view<[%extent]xf32>
+  func.return
+}
+template.decl @schedule(%rows: index, %fixed: index, %offset: offset, %output: buffer)
+template.def<@schedule> priority(10) @fixed(%rows: index, %fixed: index, %offset: offset, %output: buffer) where [eq(%fixed, 1)] {
+  %width = index.constant 4 : index
+  func.call @compute(%width, %offset, %output) : (index, offset, buffer)
+  template.return
+}
+template.def<@schedule> priority(1) @variable(%rows: index, %fixed: index, %offset: offset, %output: buffer) {
+  template.apply<@write>(%rows, %offset, %output) : (index, offset, buffer)
+  template.return
+}
+)" +
+        std::string(GetParam()
+                        ? "target.decl @device\nkernel.def target(@device) "
+                        : "kernel.def ") +
+        R"(@classified() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%rows: index, %padding: index, %fixed: index, %offset: offset, %output: buffer) {
+  %width = index.add %rows, %padding : index
+  template.apply<@schedule>(%width, %fixed, %offset, %output) : (index, index, offset, buffer)
+  kernel.return
+}
+)";
+    ModulePtr source = ParseText(source_text);
+    ASSERT_NE(source, nullptr);
+    auto bytes = WriteModule(source.get());
+    auto index = CreateIndex();
+    const auto source_ordinal =
+        use_bytecode ? AddBytecodeSource(index.get(), bytes, source.get())
+                     : AddMaterializedSource(index.get(), source.get());
+    auto producer = CreateProducer(index.get());
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    constexpr size_t kSites = 999;
+    std::vector<loom_value_facts_t> facts(kSites * 5);
+    std::vector<loom_value_id_t> arguments(kSites * 5);
+    std::vector<loom_kernel_class_site_t> sites(kSites);
+    const loom_value_fact_table_t observations = {
+        .entries = facts.data(),
+        .count = facts.size(),
+        .capacity = facts.size(),
+    };
+    for (size_t i = 0; i < kSites; ++i) {
+      const int64_t width = i % 3 == 0 ? 8 : i % 3 == 1 ? 16 : 32 + i;
+      const int64_t padding = i % 4;
+      facts[i * 5] = loom_value_facts_exact_i64(width - padding);
+      facts[i * 5 + 1] = loom_value_facts_exact_i64(padding);
+      facts[i * 5 + 2] = loom_value_facts_exact_i64(i % 3 == 2);
+      facts[i * 5 + 3] = loom_value_facts_exact_i64(256 * i);
+      facts[i * 5 + 4] = loom_value_facts_unknown();
+      for (size_t j = 0; j < 5; ++j) {
+        arguments[i * 5 + j] = i * 5 + j;
+      }
+      sites[i] = {
+          .facts = &observations,
+          .argument_values = arguments.data() + i * 5,
+      };
+    }
+    RequestCapture capture = {.block_pool = &block_pool_};
+    const auto environment = MaterializationEnvironment();
+    auto options = loom_kernel_class_collection_options_default();
+    loom_kernel_class_collection_t collection = {};
+    options.class_limit = 2;
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        loom_kernel_request_producer_publish(
+            producer.get(), &environment, source_ordinal, source.get(),
+            sites.data(), sites.size(), &options,
+            {.publish = CaptureRequest, .user_data = &capture}, &arena,
+            &collection));
+    EXPECT_TRUE(capture.requests.empty());
+    options = loom_kernel_class_collection_options_default();
+    IREE_ASSERT_OK(loom_kernel_request_producer_publish(
+        producer.get(), &environment, source_ordinal, source.get(),
+        sites.data(), sites.size(), &options,
+        {.publish = CaptureRequest, .user_data = &capture}, &arena,
+        &collection));
+    ASSERT_EQ(capture.requests.size(), 3u);
+    for (size_t i = 3; i < kSites; ++i) {
+      EXPECT_EQ(collection.site_classes[i], collection.site_classes[i % 3]);
+    }
+    producer.reset();
+    index.reset();
+    source.reset();
+    bytes.clear();
+    iree_arena_deinitialize(&arena);
+    size_t fixed_count = 0;
+    size_t width8_count = 0;
+    size_t width16_count = 0;
+    for (auto& request : capture.requests) {
+      auto* module = request.product.module;
+      Verify(module);
+      EXPECT_EQ(request.member_count, kSites / 3);
+      const auto kernel = loom_func_like_cast(
+          module, module->symbols.entries[request.product.kernel.symbol_id]
+                      .defining_op);
+      iree_arena_initialize(&block_pool_, &arena);
+      loom_value_fact_table_t retained = {};
+      IREE_ASSERT_OK(loom_value_fact_table_initialize(&retained, &arena,
+                                                      module->values.count));
+      IREE_ASSERT_OK(loom_value_fact_table_compute(&retained, module, kernel));
+      auto* body = loom_region_entry_block(loom_func_like_body(kernel));
+      loom_op_t* operation = nullptr;
+      loom_block_for_each_op(body, operation) {
+        const auto call = loom_call_like_cast(module, operation);
+        if (!loom_call_like_isa(call)) {
+          continue;
+        }
+        const auto callee = loom_call_like_callee(call);
+        const auto name = loom_string_table_get(
+            &module->strings,
+            module->symbols.entries[callee.symbol_id].name_id);
+        if (iree_string_view_equal(name, IREE_SV("fixed"))) {
+          ++fixed_count;
+          continue;
+        }
+        EXPECT_TRUE(iree_string_view_equal(name, IREE_SV("variable")));
+        const auto values = loom_call_like_operands(call);
+        const auto width =
+            loom_value_fact_table_lookup(&retained, values.values[0]);
+        EXPECT_TRUE(loom_value_facts_is_exact(width));
+        if (width.range_lo == 8) {
+          ++width8_count;
+        }
+        if (width.range_lo == 16) {
+          ++width16_count;
+        }
+        const auto offset =
+            loom_value_fact_table_lookup(&retained, values.values[2]);
+        EXPECT_FALSE(loom_value_facts_is_exact(offset));
+        EXPECT_EQ(offset.known_divisor % 256, 0);
+      }
+      iree_arena_deinitialize(&arena);
+      loom_kernel_class_product_deinitialize(&request.product);
+    }
+    EXPECT_EQ(fixed_count, 1u);
+    EXPECT_EQ(width8_count, 1u);
+    EXPECT_EQ(width16_count, 1u);
   }
 }
 

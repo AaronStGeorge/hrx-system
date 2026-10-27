@@ -35,10 +35,30 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "kernel_shape_requirements",
+    srcs = ["kernel_shape_requirements.c"],
+    hdrs = ["kernel_shape_requirements.h"],
+    deps = [
+        "//loom/src/loom/analysis:value_relation",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/template",
+        "//loom/src/loom/transforms/symbol:template_decision_model",
+        "//loom/src/loom/util:walk",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "kernel_class_classifier",
     srcs = ["kernel_class_classifier.c"],
     hdrs = ["kernel_class_classifier.h"],
     deps = [
+        ":kernel_shape_requirements",
         ":kernel_specialization",
         "//loom/src/loom/analysis:symbol_references",
         "//loom/src/loom/analysis:symbolic_expr",
@@ -96,12 +116,14 @@ loom_cc_library(
         ":kernel_class_classifier",
         ":kernel_specialization",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops:special_values",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/template",
         "//loom/src/loom/rewrite:module_projection",
         "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/transforms/symbol:template_rewrite",
+        "//loom/src/loom/util:predicate_facts",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
