@@ -165,9 +165,9 @@ low.func.def retain target<amd.xdna.aie2p.core> @discard_then_increment$worker$1
   acq %acquire_delta, 48
   %input = copy %20 : reg<aie2p.ep> -> reg<aie2p.ep>
   %output = copy %22 : reg<aie2p.ep> -> reg<aie2p.ep>
+  %16 = mov.short 1
+  %increment = vbcst.32 %16
   %value = vlda.512.i32x16 %input, 0
-  %17 = mov.short 1
-  %increment = vbcst.32 %17
   %next = vadd.32 %value, %increment
   vst.512.i32x16 %next, %output, 0
   rel %release_delta, 49
