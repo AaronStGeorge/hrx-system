@@ -575,6 +575,14 @@ preset, provider-set, and output flags as a direct card. A direct card
 path or URL does not consult the catalog.
 
 `--catalog=./catalog.json` selects a local publication for authoring or CI.
+`--catalog=https://huggingface.co/OWNER/REPOSITORY/resolve/REVISION/catalog.json`
+selects a Hugging Face publication. Both `blob` and `resolve` file URLs work,
+including catalogs in subdirectories. The optional `hf` SDK extra provides
+authentication and acquisition. A branch, tag, or full commit is resolved once;
+the catalog's relative cards, sibling locks, and card-relative files stay on
+that immutable revision. Listing reads the catalog only, without downloading
+models or checking access to their external checkpoints.
+
 `--catalog=github:OWNER/REPOSITORY@TAG_OR_COMMIT` selects a GitHub publication.
 The client resolves a tag once, including annotated tags, then reads
 `catalog.json`, its relative cards, and their sibling locks at that commit.

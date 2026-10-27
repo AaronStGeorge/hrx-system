@@ -16,6 +16,29 @@ package(default_visibility = ["//visibility:private"])
 
 exports_files(["requirements.lock.txt"])
 
+iree_py_test(
+    name = "catalog_test",
+    srcs = [
+        "catalog_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.hf_test.catalog_test"],
+    main = "pytest_style_runner.py",
+    pyc_collection = "include_pyc",
+    deps = [
+        ":fixture",
+        "//loom/py/loom/model:catalog",
+        "//loom/py/loom/model:fetch",
+        "//loom/py/loom/model:fetch_catalog",
+        "//loom/py/loom/model:fetch_cli",
+        "//loom/py/loom/model:fetch_hf",
+        "//loom/py/loom/model:fetch_source",
+        "//loom/py/loom/model:fetch_storage",
+        "//loom/py/loom/model:lock",
+        "//loom/py/loom/model:manifest",
+    ],
+)
+
 iree_py_library(
     name = "fixture",
     testonly = True,
