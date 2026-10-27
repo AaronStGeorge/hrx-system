@@ -594,37 +594,36 @@ static void loom_x86_function_incoming(
   }
 }
 
-static void loom_x86_function_begin_vector_stack_inputs(
-    loom_x86_function_builder_t* builder) {
-  loom_x86_function_t* function = builder->function;
-  if (builder->incoming.vector_base_spill_offset != UINT64_MAX) {
+uint32_t loom_x86_function_begin_vector_stack_inputs(
+    loom_x86_function_t* function, uint64_t spill_offset) {
+  if (spill_offset != UINT64_MAX) {
     loom_x86_transport_instruction_t spill;
-    loom_x86_transport_select_storage(
-        LOOM_X86_STORAGE_TRANSFER_STORE, LOOM_X86_REGISTER_CLASS_GPR64,
-        LOOM_X86_GPR_TRANSPORT_SCRATCH_REGISTER, 4,
-        (int32_t)builder->incoming.vector_base_spill_offset, &spill);
+    loom_x86_transport_select_storage(LOOM_X86_STORAGE_TRANSFER_STORE,
+                                      LOOM_X86_REGISTER_CLASS_GPR64,
+                                      LOOM_X86_GPR_TRANSPORT_SCRATCH_REGISTER,
+                                      4, (int32_t)spill_offset, &spill);
     loom_x86_function_append_transport(function, &spill);
   }
-  builder->incoming.vector_base_reload_instruction =
-      (uint32_t)function->instruction_count;
+  const uint32_t reload_instruction = (uint32_t)function->instruction_count;
   loom_x86_function_append(
       function, LOOM_X86_ENCODING_FORM_LOAD, 0x8b | LOOM_X86_ENCODING_REX_W,
       (loom_x86_encoding_operands_t){
           .result = LOOM_X86_GPR_TRANSPORT_SCRATCH_REGISTER, .inputs = {4}},
       UINT32_MAX);
+  return reload_instruction;
 }
 
-static void loom_x86_function_end_vector_stack_inputs(
-    loom_x86_function_builder_t* builder) {
-  if (builder->incoming.vector_base_spill_offset == UINT64_MAX) {
+void loom_x86_function_end_vector_stack_inputs(loom_x86_function_t* function,
+                                               uint64_t spill_offset) {
+  if (spill_offset == UINT64_MAX) {
     return;
   }
   loom_x86_transport_instruction_t restore;
-  loom_x86_transport_select_storage(
-      LOOM_X86_STORAGE_TRANSFER_LOAD, LOOM_X86_REGISTER_CLASS_GPR64,
-      LOOM_X86_GPR_TRANSPORT_SCRATCH_REGISTER, 4,
-      (int32_t)builder->incoming.vector_base_spill_offset, &restore);
-  loom_x86_function_append_transport(builder->function, &restore);
+  loom_x86_transport_select_storage(LOOM_X86_STORAGE_TRANSFER_LOAD,
+                                    LOOM_X86_REGISTER_CLASS_GPR64,
+                                    LOOM_X86_GPR_TRANSPORT_SCRATCH_REGISTER, 4,
+                                    (int32_t)spill_offset, &restore);
+  loom_x86_function_append_transport(function, &restore);
 }
 
 static iree_status_t loom_x86_function_call(
@@ -1339,11 +1338,14 @@ iree_status_t loom_x86_function_prepare(
       &frame->allocation, frame->allocation.entry_moves.moves, &builder);
   if (!builder.rejected && iree_status_is_ok(status)) {
     if (has_realigned_vector_stack_input) {
-      loom_x86_function_begin_vector_stack_inputs(&builder);
+      builder.incoming.vector_base_reload_instruction =
+          loom_x86_function_begin_vector_stack_inputs(
+              &function, builder.incoming.vector_base_spill_offset);
       loom_x86_function_incoming(
           frame, LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
           LOOM_X86_INCOMING_REGISTER_GROUP_VECTOR, &builder);
-      loom_x86_function_end_vector_stack_inputs(&builder);
+      loom_x86_function_end_vector_stack_inputs(
+          &function, builder.incoming.vector_base_spill_offset);
       loom_x86_function_incoming(
           frame, LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
           LOOM_X86_INCOMING_REGISTER_GROUP_GPR, &builder);

@@ -27,8 +27,6 @@ typedef struct loom_x86_loom_check_emit_options_t {
       allocation_budgets[LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_BUDGETS];
   // Number of entries in |allocation_budgets|.
   iree_host_size_t allocation_budget_count;
-  // Fixed low allocation requests parsed from target options.
-  loom_check_low_emit_fixed_value_spec_list_t allocation_fixed_values;
 } loom_x86_loom_check_emit_options_t;
 
 static bool loom_x86_loom_check_emit_provider_matches(
@@ -69,10 +67,10 @@ static iree_status_t loom_x86_loom_check_parse_option(
   if (matched) {
     return iree_ok_status();
   }
-  return loom_check_low_emit_parse_allocation_option(
+  return loom_check_low_emit_parse_allocation_budget(
       token, IREE_SV("x86 native"), options->allocation_budgets,
       IREE_ARRAYSIZE(options->allocation_budgets),
-      &options->allocation_budget_count, &options->allocation_fixed_values);
+      &options->allocation_budget_count);
 }
 
 static iree_status_t loom_x86_loom_check_parse_emit_options(
@@ -99,8 +97,6 @@ static iree_status_t loom_x86_loom_check_parse_emit_options(
                             "x86 native emit function symbol is required");
   }
 
-  IREE_RETURN_IF_ERROR(loom_check_low_emit_fixed_value_spec_list_initialize(
-      option_text, request->case_arena, &out_options->allocation_fixed_values));
   while (!iree_string_view_is_empty(option_text)) {
     iree_string_view_t token = iree_string_view_empty();
     iree_string_view_t remaining = iree_string_view_empty();
@@ -284,8 +280,8 @@ static iree_status_t loom_x86_loom_check_emit_provider_execute(
   loom_low_emission_frame_t frame = {0};
   bool frame_accepted = false;
   const loom_low_emission_frame_spill_free_options_t spill_free_options = {0};
-  // The fixture supplies incoming value locations. Reserve RSP just as the
-  // object provider does before allocation; the native envelope uses it.
+  // Reserve RSP just as the object provider does before allocation; the native
+  // envelope uses it. Incoming and outgoing locations follow the normal ABI.
   loom_low_allocation_reserved_range_t reserved_ranges[2] = {
       {{0}},
   };
@@ -321,9 +317,7 @@ static iree_status_t loom_x86_loom_check_emit_provider_execute(
   };
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, native_module, options.function_symbol_name, &frame_options,
-      options.allocation_fixed_values.specs,
-      options.allocation_fixed_values.count, &spill_free_options, &frame,
-      &frame_accepted));
+      NULL, 0, &spill_free_options, &frame, &frame_accepted));
   if (request->diagnostic_collector != NULL &&
       loom_check_diagnostic_collector_has_error(
           request->diagnostic_collector)) {

@@ -369,6 +369,72 @@ TEST(FunctionStackLayoutTest, IncomingAddressesFollowFinalPreservation) {
   }
 }
 
+TEST(FunctionConstructionTest, PreservesBorrowedVectorStackBase) {
+  for (uint64_t spill_offset : {UINT64_MAX, uint64_t{0}, uint64_t{32}}) {
+    SCOPED_TRACE(::testing::Message() << "spill offset=" << spill_offset);
+    const bool preserve = spill_offset != UINT64_MAX;
+    loom_x86_instruction_t instructions[5] = {};
+    loom_x86_function_t function = {.instructions = instructions};
+    const loom_x86_instruction_t entry_move = Instruction(
+        LOOM_X86_ENCODING_FORM_UNARY_R_RM, 0x8b | LOOM_X86_ENCODING_REX_W,
+        {.result = 11, .inputs = {7}});
+    loom_x86_function_append(&function, entry_move.encoding_format_id,
+                             entry_move.encoding_id, entry_move.operands,
+                             entry_move.reference);
+    const uint32_t reload =
+        loom_x86_function_begin_vector_stack_inputs(&function, spill_offset);
+    EXPECT_EQ(reload, preserve ? 2u : 1u);
+    const loom_x86_incoming_fixup_t fixup = {
+        UINT32_MAX, static_cast<uint32_t>(function.instruction_count)};
+    loom_x86_transport_instruction_t vector_load;
+    ASSERT_TRUE(loom_x86_transport_select_abi_storage(
+        LOOM_X86_STORAGE_TRANSFER_LOAD, LOOM_X86_REGISTER_CLASS_YMM, 32, 0, 11,
+        0, &vector_load));
+    loom_x86_function_append_transport(&function, &vector_load);
+    loom_x86_function_end_vector_stack_inputs(&function, spill_offset);
+    const uint32_t storage_bytes =
+        preserve ? static_cast<uint32_t>(spill_offset + 8) : 32;
+    ASSERT_TRUE(
+        loom_x86_function_layout_stack(storage_bytes, 32, 0, &function.stack));
+    loom_x86_function_fixup_incoming(&function, &fixup, 1, reload);
+    EXPECT_EQ(function.instruction_count, preserve ? 5u : 3u);
+    EXPECT_EQ(function.saved_registers, 0u);
+
+    std::string expected = Encode(entry_move);
+    if (preserve) {
+      expected += Encode(Instruction(
+          LOOM_X86_ENCODING_FORM_STORE, 0x89 | LOOM_X86_ENCODING_REX_W,
+          {
+              .immediate = static_cast<int64_t>(spill_offset),
+              .inputs = {11, 4},
+          }));
+    }
+    // The borrowed pointer comes from the restoration slot, not the local
+    // slot used to preserve the allocated R11 value.
+    expected += Encode(
+        Instruction(LOOM_X86_ENCODING_FORM_LOAD, 0x8b | LOOM_X86_ENCODING_REX_W,
+                    {.immediate = storage_bytes, .result = 11, .inputs = {4}}));
+    vector_load.operands.immediate = 8;
+    expected +=
+        Encode({vector_load.operands, UINT32_MAX,
+                vector_load.encoding_format_id, vector_load.encoding_id});
+    if (preserve) {
+      expected += Encode(Instruction(
+          LOOM_X86_ENCODING_FORM_LOAD, 0x8b | LOOM_X86_ENCODING_REX_W,
+          {
+              .immediate = static_cast<int64_t>(spill_offset),
+              .result = 11,
+              .inputs = {4},
+          }));
+    }
+    std::string actual;
+    for (iree_host_size_t i = 0; i < function.instruction_count; ++i) {
+      actual += Encode(instructions[i]);
+    }
+    EXPECT_EQ(actual, expected);
+  }
+}
+
 TEST_F(FunctionTest, DirtyUpperVectorStateCleansBeforeReturn) {
   iree_host_size_t block_starts[] = {0, 0};
   loom_x86_function_t function = {

@@ -135,6 +135,18 @@ void loom_x86_function_fixup_incoming(loom_x86_function_t* function,
                                       iree_host_size_t fixup_count,
                                       uint32_t vector_base_reload_instruction);
 
+// Borrows R11 as the caller-stack base for vector argument loads after dynamic
+// realignment. Preserves its allocated value at |spill_offset|, or omits the
+// save when the offset is UINT64_MAX. The caller provides space for at most
+// two instructions. Returns the pointer-load index for final address fixup.
+uint32_t loom_x86_function_begin_vector_stack_inputs(
+    loom_x86_function_t* function, uint64_t spill_offset);
+
+// Restores R11 after the vector argument loads using the same |spill_offset|
+// passed to begin. The caller provides space for at most one instruction.
+void loom_x86_function_end_vector_stack_inputs(loom_x86_function_t* function,
+                                               uint64_t spill_offset);
+
 // Returns the allocator reservations needed by the native function envelope.
 // Descriptor fragments without GPR values need no reservation: the envelope
 // may still address RSP directly because it cannot be assigned from the
