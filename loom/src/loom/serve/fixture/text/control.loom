@@ -368,7 +368,7 @@ func.def public @render_tool(%name: buffer, %arguments: buffer, %ordinal: i64) -
   func.return %empty, %c0_i64 : buffer, i64
 }
 
-func.def public @parse_tools(%schemas: buffer, %response: buffer) -> (buffer) {
+func.def public @parse_tools(%schemas: buffer, %response: buffer, %truncated: i64) -> (buffer) {
   %empty = global.load @no_tools : buffer
   func.return %empty : buffer
 }

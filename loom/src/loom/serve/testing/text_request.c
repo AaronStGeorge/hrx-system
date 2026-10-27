@@ -24,6 +24,8 @@ IREE_FLAG(string, request, "", "Chat Completions request JSON file.");
 IREE_FLAG(string, options, "{}", "Deployment options JSON object.");
 IREE_FLAG(string, response, "",
           "Optional raw generated text file to complete.");
+IREE_FLAG(bool, response_truncated, false,
+          "The generated response stopped at its token limit instead of EOS.");
 IREE_FLAG(int32_t, capacity, 262144, "Maximum complete prompt token count.");
 IREE_FLAG(
     int32_t, response_chunk_size, 0,
@@ -240,8 +242,9 @@ static iree_status_t loom_serve_text_request_check_run(
   }
   if (iree_status_is_ok(status) && response) {
     status = loom_serve_text_chat_complete(
-        &chat, loom_serve_text_request_check_file_text(response), 1, &calls,
-        &scratch, iree_arena_allocator(&arena), &completion);
+        &chat, loom_serve_text_request_check_file_text(response),
+        FLAG_response_truncated, 1, &calls, &scratch,
+        iree_arena_allocator(&arena), &completion);
   }
   if (iree_status_is_ok(status) && response) {
     status = loom_serve_text_tool_calls_write_json(

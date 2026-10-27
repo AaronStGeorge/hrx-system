@@ -333,7 +333,7 @@ iree_status_t loom_serve_text_chat_policy_initialize(
        {fragment_results, IREE_ARRAYSIZE(fragment_results)},
        &out_policy->chat_end},
       {IREE_SVL("parse_tools"),
-       {buffers, IREE_ARRAYSIZE(buffers)},
+       {tool_arguments, IREE_ARRAYSIZE(tool_arguments)},
        {&buffer, 1},
        &out_policy->parse_tools},
       {IREE_SVL("render_tool"),
@@ -1312,7 +1312,7 @@ void loom_serve_text_chat_scratch_deinitialize(
 }
 
 iree_status_t loom_serve_text_chat_complete(
-    loom_serve_text_chat_t* chat, iree_string_view_t response,
+    loom_serve_text_chat_t* chat, iree_string_view_t response, bool truncated,
     uint64_t request_id, loom_serve_text_tool_calls_t* tool_calls,
     loom_serve_text_chat_scratch_t* scratch, iree_allocator_t scratch_allocator,
     loom_serve_text_chat_completion_t* completion) {
@@ -1338,9 +1338,10 @@ iree_status_t loom_serve_text_chat_complete(
           chat->flags, LOOM_SERVE_TEXT_CHAT_FLAG_TOOL_CALLS_DISABLED),
       .calls = tool_calls,
       .scratch = scratch};
+  const int64_t truncated_argument = truncated;
   iree_status_t status = loom_serve_text_chat_render(
       chat->policy, chat->policy->parse_tools, IREE_ARRAYSIZE(inputs), inputs,
-      0, NULL, &scratch->parsed, scratch_allocator, NULL);
+      1, &truncated_argument, &scratch->parsed, scratch_allocator, NULL);
   if (iree_status_is_ok(status)) {
     status = iree_json_enumerate_array_typed(
         iree_string_builder_view(&scratch->parsed),

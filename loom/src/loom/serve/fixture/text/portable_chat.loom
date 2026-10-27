@@ -125,7 +125,7 @@ func.def public @output_next(%response: buffer, %previous: i64, %state: i64, %ph
   func.return %content, %previous, %end, %state : i64, i64, i64, i64
 }
 
-func.def public @parse_tools(%schemas: buffer, %response: buffer) -> (buffer) {
+func.def public @parse_tools(%schemas: buffer, %response: buffer, %truncated: i64) -> (buffer) {
   %c0 = index.constant 0 : offset
   %length = buffer.length %response
   %nonempty = index.cmp ne, %length, %c0 : offset

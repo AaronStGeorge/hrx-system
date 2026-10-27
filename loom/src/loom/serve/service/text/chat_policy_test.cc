@@ -160,7 +160,7 @@ TEST_F(SourceChatPolicyTest, CompletionAliasSurvivesBatchAndRequestRetirement) {
   // The fixture returns the prompt itself for an empty response. That source
   // alias must keep owned storage, not retain a temporary argument wrapper.
   IREE_ASSERT_OK(loom_serve_text_chat_complete(
-      &chat, iree_string_view_empty(), 1, &tools, &scratch,
+      &chat, iree_string_view_empty(), false, 1, &tools, &scratch,
       iree_arena_allocator(&arena), &completion));
   loom_serve_text_chat_deinitialize(&chat);
   iree_arena_reset(&arena);
@@ -233,7 +233,7 @@ TEST_F(SourceChatPolicyTest, CompletionFormattingReusesCapacityAcrossRows) {
         &tools, row + 1, IREE_SV("prior"), IREE_SV("{}")));
     loom_serve_text_chat_completion_t completion = {};
     IREE_ASSERT_OK(loom_serve_text_chat_complete(
-        &chat, IREE_SV("b"), row + 1, &tools, &scratch,
+        &chat, IREE_SV("b"), false, row + 1, &tools, &scratch,
         iree_arena_allocator(&arena), &completion));
     if (row == 0) {
       warm_allocations = allocator.allocation_count();
@@ -275,8 +275,8 @@ TEST_F(SourceChatPolicyTest,
   loom_serve_text_chat_scratch_t completion_scratch;
   loom_serve_text_chat_scratch_initialize(host_allocator_, &completion_scratch);
   loom_serve_text_chat_completion_t completion = {};
-  IREE_ASSERT_OK(loom_serve_text_chat_complete(&first, IREE_SV("b"), 1, &tools,
-                                               &completion_scratch,
+  IREE_ASSERT_OK(loom_serve_text_chat_complete(&first, IREE_SV("b"), false, 1,
+                                               &tools, &completion_scratch,
                                                host_allocator_, &completion));
   const loom_serve_text_input_prefix_t prefix = {
       .completion = &completion,
@@ -428,8 +428,8 @@ TEST_F(SourceChatPolicyTest, RetainedHistoryRequiresExactOrderedMedia) {
   loom_serve_text_chat_scratch_t completion_scratch;
   loom_serve_text_chat_scratch_initialize(host_allocator_, &completion_scratch);
   loom_serve_text_chat_completion_t completion = {};
-  IREE_ASSERT_OK(loom_serve_text_chat_complete(&first, IREE_SV("b"), 10, &tools,
-                                               &completion_scratch,
+  IREE_ASSERT_OK(loom_serve_text_chat_complete(&first, IREE_SV("b"), false, 10,
+                                               &tools, &completion_scratch,
                                                host_allocator_, &completion));
   loom_serve_text_chat_completion_t retained = {};
   loom_serve_text_chat_completion_retain(&completion, &retained);

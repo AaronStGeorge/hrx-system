@@ -150,15 +150,15 @@ func.def public @text_render_tool_v1(%name: buffer, %arguments: buffer, %ordinal
   func.return %result_0, %result_1 : buffer, i64
 }
 
-func.decl @parse_tools(%schemas: buffer, %response: buffer) -> (buffer)
+func.decl @parse_tools(%schemas: buffer, %response: buffer, %truncated: i64) -> (buffer)
 
-func.def public @text_parse_tools(%schemas: buffer, %response: buffer) -> (buffer) {
-  %result_0 = func.call @parse_tools(%schemas, %response) : (buffer, buffer) -> (buffer)
+func.def public @text_parse_tools(%schemas: buffer, %response: buffer, %truncated: i64) -> (buffer) {
+  %result_0 = func.call @parse_tools(%schemas, %response, %truncated) : (buffer, buffer, i64) -> (buffer)
   func.return %result_0 : buffer
 }
 
-func.def public @text_parse_tools_v1(%schemas: buffer, %response: buffer) -> (buffer) {
-  %result_0 = func.call @parse_tools(%schemas, %response) : (buffer, buffer) -> (buffer)
+func.def public @text_parse_tools_v1(%schemas: buffer, %response: buffer, %truncated: i64) -> (buffer) {
+  %result_0 = func.call @parse_tools(%schemas, %response, %truncated) : (buffer, buffer, i64) -> (buffer)
   func.return %result_0 : buffer
 }
 

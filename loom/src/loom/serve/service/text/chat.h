@@ -62,7 +62,8 @@ typedef struct loom_serve_text_chat_policy_t {
   iree_vm_function_t chat_message;
   // Final prompt fragment, conversation validation and initial output state.
   iree_vm_function_t chat_end;
-  // Generated suffix to standard function-call records.
+  // parse_tools(schemas: buffer, response: buffer, truncated: i64) returns
+  // standard function-call records, omitting an unfinished call at the limit.
   iree_vm_function_t parse_tools;
   // Canonical tool formatter shared by input history and generated output.
   iree_vm_function_t render_tool;
@@ -291,15 +292,20 @@ void loom_serve_text_chat_scratch_deinitialize(
 // Finishes output parsing before translating the remaining structured suffix.
 // Plain text responses produce an empty table. Source parser failures never
 // submit a partial executable call to the agent.
+// truncated identifies a token-limit stop, allowing source to omit an
+// unfinished call. The original response still determines canonical history
+// reusability.
+//
 // Replaces completion only on success, releasing its prior storage. Failure
 // leaves completion unchanged and tool_calls empty. The checkpoint validates
 // subsequent client history; it does not replace original generated tokens in
 // device state.
+//
 // scratch_allocator owns call-local argument wrappers only. Retained history
 // uses the request's host allocator, independent of temporary formatting work.
 // scratch is reset on entry and may be reused immediately after return.
 iree_status_t loom_serve_text_chat_complete(
-    loom_serve_text_chat_t* chat, iree_string_view_t response,
+    loom_serve_text_chat_t* chat, iree_string_view_t response, bool truncated,
     uint64_t request_id, loom_serve_text_tool_calls_t* tool_calls,
     loom_serve_text_chat_scratch_t* scratch, iree_allocator_t scratch_allocator,
     loom_serve_text_chat_completion_t* completion);

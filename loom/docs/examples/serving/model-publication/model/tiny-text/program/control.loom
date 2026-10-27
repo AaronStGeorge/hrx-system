@@ -268,7 +268,7 @@ func.def public @text_render_tool_v1(%name: buffer, %arguments: buffer, %ordinal
   func.return %empty, %c0_i64 : buffer, i64
 }
 
-func.def public @text_parse_tools_v1(%schemas: buffer, %response: buffer) -> (buffer) {
+func.def public @text_parse_tools_v1(%schemas: buffer, %response: buffer, %truncated: i64) -> (buffer) {
   %empty = global.load @no_tools : buffer
   func.return %empty : buffer
 }

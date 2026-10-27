@@ -392,6 +392,92 @@ class ClientTest(unittest.TestCase):
                             )
                             self.assertIn("without enabled tools", error["message"])
                             self.assertNotIn("tool_calls", json.dumps(failed))
+
+                    # The source owns call translation, but the native session
+                    # owns why generation stopped. A complete call must not turn
+                    # an exhausted budget into a normal tool handoff.
+                    call_source = source.replace(
+                        marker, f'global.rodata.def @no_tools = bytes("{calls}")'
+                    )
+                    begin = call_source.index("func.def public @render_tool(")
+                    end = call_source.index("\n}", begin)
+                    renderer = call_source[begin:end]
+                    failure = "  func.call @require(%c0, %error) : (i32, buffer)\n"
+                    self.assertEqual(renderer.count(failure), 1)
+                    call_source = call_source.replace(
+                        renderer, renderer.replace(failure, "")
+                    )
+                    # This fixture has no canonical tool-history rendering.
+                    call_source = call_source.replace(
+                        "%reusable = scalar.constant 1 : i32",
+                        "%reusable = scalar.constant 0 : i32",
+                    )
+                    path.write_text(call_source)
+                    control(
+                        address,
+                        "POST",
+                        "/v1/models/register",
+                        202,
+                        body=json.dumps(
+                            {
+                                **declaration,
+                                "name": "tools",
+                                "base_directory": str(broken),
+                            }
+                        ),
+                    )
+                    for streaming in (False, True):
+                        for budget, finish, outputs in (
+                            (2, "length", 2),
+                            (6, "length", 6),
+                            (7, "tool_calls", 7),
+                            (16, "tool_calls", 7),
+                        ):
+                            with self.subTest(streaming=streaming, budget=budget):
+                                result = self.request(
+                                    address,
+                                    self.body(
+                                        model="tools",
+                                        tools=tools,
+                                        stream=streaming,
+                                        max_tokens=budget,
+                                        **(
+                                            {"stream_options": {"include_usage": True}}
+                                            if streaming
+                                            else {}
+                                        ),
+                                    ),
+                                )
+                                if streaming:
+                                    self.assertEqual(result[-1]["choices"], [])
+                                    usage = result[-1]["usage"]
+                                    chunks = [
+                                        event["choices"][0] for event in result[:-1]
+                                    ]
+                                    self.assertEqual(
+                                        chunks[-1]["finish_reason"], finish
+                                    )
+                                    returned = [
+                                        call
+                                        for chunk in chunks
+                                        for call in chunk["delta"].get("tool_calls", [])
+                                    ]
+                                else:
+                                    usage = result["usage"]
+                                    choice = result["choices"][0]
+                                    self.assertEqual(choice["finish_reason"], finish)
+                                    returned = choice["message"]["tool_calls"]
+                                self.assertEqual(len(returned), 1)
+                                self.assertEqual(
+                                    returned[0]["function"],
+                                    {
+                                        "name": "inspect",
+                                        "arguments": "{}",
+                                    },
+                                )
+                                self.assertEqual(usage["prompt_tokens"], 5)
+                                self.assertEqual(usage["completion_tokens"], outputs)
+                                self.assertEqual(usage["total_tokens"], 5 + outputs)
                     result = self.request(address, self.body())
                     self.check_completion(result, "bx", "length", 4, 2)
                 self.assertEqual(process.returncode, 0, log.read_text())
