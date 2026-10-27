@@ -278,13 +278,13 @@ low.kernel.def target<amdgpu.cdna4.core> abi_layout({constant_count = 0, direct_
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input = resource<hal_binding> {extent = 1024, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %results = resource<hal_binding> {extent = 64, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %27 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %29 = v_lshlrev_b32_src0_inline %lane, 4
-  %30 = s_mov_b32_m0_imm 0
-  global_load_lds_dwordx4_saddr %29, %input, %30
+  %25 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %27 = v_lshlrev_b32_src0_inline %lane, 4
+  %28 = s_mov_b32_m0_imm 0
+  global_load_lds_dwordx4_saddr %27, %input, %28
   s_waitcnt {vmcnt = 0}
-  %32 = ds_read_u8 %29
-  %first = v_bfe_i32_offset_width_inline %32 {offset = 0, width = 8}
+  %30 = ds_read_u8 %27
+  %first = v_bfe_i32_offset_width_inline %30 {offset = 0, width = 8}
   global_store_b8_saddr %lane, %first, %results
   return
 }

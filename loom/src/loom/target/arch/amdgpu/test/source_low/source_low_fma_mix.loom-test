@@ -66,20 +66,20 @@ low.kernel.def target<amdgpu.gfx11.generic.core>(@gfx11_target) abi_layout({cons
   %scale_view = resource<hal_binding> {extent = 512, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %bias_view = resource<hal_binding> {extent = 512, index = 2, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {extent = 512, index = 3, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %44 = v_lshlrev_b32_src0_inline %tid, 3
-  %x = global_load_b64_saddr %44, %input_view
-  %scale = global_load_b64_saddr %44, %scale_view
-  %bias = global_load_b64_saddr %44, %bias_view
-  %50 = slice %bias[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %51 = slice %x[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %52 = slice %scale[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %53 = v_pk_fmac_f16 %50, %51, %52
-  %54 = slice %bias[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %55 = slice %x[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %56 = slice %scale[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %57 = v_pk_fmac_f16 %54, %55, %56
-  %result = concat(%53, %57) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  global_store_b64_saddr %44, %result, %output_view
+  %30 = v_lshlrev_b32_src0_inline %tid, 3
+  %x = global_load_b64_saddr %30, %input_view
+  %scale = global_load_b64_saddr %30, %scale_view
+  %bias = global_load_b64_saddr %30, %bias_view
+  %36 = slice %bias[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %37 = slice %x[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %38 = slice %scale[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %39 = v_pk_fmac_f16 %36, %37, %38
+  %40 = slice %bias[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %41 = slice %x[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %42 = slice %scale[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %43 = v_pk_fmac_f16 %40, %41, %42
+  %result = concat(%39, %43) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  global_store_b64_saddr %30, %result, %output_view
   return
 }
 

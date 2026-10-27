@@ -9,13 +9,17 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "iree/base/internal/math.h"
+#include "loom/ir/intern_table.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
+#include "loom/ir/structural_hash.h"
 #include "loom/ir/types.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/cache.h"
 #include "loom/ops/encoding/roles.h"
 #include "loom/ops/encoding/storage.h"
+#include "loom/ops/index/carrier.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/vector/memory.h"
@@ -64,7 +68,7 @@ const loom_pass_info_t* loom_linearize_view_accesses_pass_info(void) {
 //===----------------------------------------------------------------------===//
 
 typedef struct loom_linearize_view_accesses_op_list_t {
-  // Collected memory operations in dominance order.
+  // Collected memory operations in structural order, ordered within each block.
   loom_op_t** ops;
   // Number of collected operations.
   iree_host_size_t count;
@@ -73,19 +77,17 @@ typedef struct loom_linearize_view_accesses_op_list_t {
 } loom_linearize_view_accesses_op_list_t;
 
 typedef struct loom_linearize_view_accesses_view_map_entry_t {
-  // Original multi-dimensional buffer.view operation.
-  loom_op_t* original_view_op;
+  // Original multi-dimensional buffer.view result.
+  loom_value_id_t original_view;
   // Rank-1 buffer.view result built for the same buffer and byte offset.
   loom_value_id_t linear_view;
 } loom_linearize_view_accesses_view_map_entry_t;
 
 typedef struct loom_linearize_view_accesses_view_map_t {
-  // Lazily materialized linear view entries.
-  loom_linearize_view_accesses_view_map_entry_t* entries;
-  // Number of entries in use.
-  iree_host_size_t count;
-  // Allocated entry capacity.
-  iree_host_size_t capacity;
+  // Original-view index into stable mapping rows, allocated lazily.
+  loom_intern_table_t index;
+  // Pass-owned mapping rows in fixed-size pooled chunks.
+  loom_segmented_storage_t rows;
 } loom_linearize_view_accesses_view_map_t;
 
 typedef struct loom_linearize_view_accesses_collect_context_t {
@@ -108,6 +110,8 @@ typedef struct loom_linearize_view_accesses_context_t {
   const loom_value_fact_table_t* fact_table;
   // Lazily materialized rank-1 views.
   loom_linearize_view_accesses_view_map_t* view_map;
+  // Block-local arithmetic emitted by this pass, indexed by result value ID.
+  loom_intern_table_t index_ops;
 } loom_linearize_view_accesses_context_t;
 
 typedef struct loom_linearize_view_accesses_vector_tile_t {
@@ -176,31 +180,29 @@ static iree_status_t loom_linearize_view_accesses_op_list_push(
   return iree_ok_status();
 }
 
-static iree_status_t loom_linearize_view_accesses_view_map_initialize(
-    iree_arena_allocator_t* arena,
-    loom_linearize_view_accesses_view_map_t* map) {
-  map->count = 0;
-  map->capacity = 16;
-  return iree_arena_allocate_array(
-      arena, map->capacity,
-      sizeof(loom_linearize_view_accesses_view_map_entry_t),
-      (void**)&map->entries);
+#define LOOM_LINEARIZE_VIEW_ROWS_PER_SEGMENT 128u
+
+static loom_linearize_view_accesses_view_map_entry_t*
+loom_linearize_view_accesses_view_map_entry(
+    loom_linearize_view_accesses_view_map_t* map, uint32_t index) {
+  loom_linearize_view_accesses_view_map_entry_t* rows =
+      loom_segmented_storage_segment(
+          &map->rows, index / LOOM_LINEARIZE_VIEW_ROWS_PER_SEGMENT);
+  return &rows[index % LOOM_LINEARIZE_VIEW_ROWS_PER_SEGMENT];
 }
 
-static iree_status_t loom_linearize_view_accesses_view_map_push(
-    iree_arena_allocator_t* arena, loom_linearize_view_accesses_view_map_t* map,
-    loom_op_t* original_view_op, loom_value_id_t linear_view) {
-  if (map->count >= map->capacity) {
-    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        arena, map->count, map->count + 1,
-        sizeof(loom_linearize_view_accesses_view_map_entry_t), &map->capacity,
-        (void**)&map->entries));
-  }
-  map->entries[map->count++] = (loom_linearize_view_accesses_view_map_entry_t){
-      .original_view_op = original_view_op,
-      .linear_view = linear_view,
-  };
-  return iree_ok_status();
+typedef struct loom_linearize_view_accesses_view_probe_t {
+  // Borrowed mapping whose rows are compared.
+  loom_linearize_view_accesses_view_map_t* map;
+  // Original view being flattened.
+  loom_value_id_t original_view;
+} loom_linearize_view_accesses_view_probe_t;
+
+static bool loom_linearize_view_accesses_view_equal(const void* user_data,
+                                                    uint32_t index) {
+  const loom_linearize_view_accesses_view_probe_t* probe = user_data;
+  return loom_linearize_view_accesses_view_map_entry(probe->map, index)
+             ->original_view == probe->original_view;
 }
 
 static iree_status_t loom_linearize_view_accesses_collect_access(
@@ -375,21 +377,129 @@ static bool loom_linearize_view_accesses_prepare_index(
   return true;
 }
 
-static iree_status_t loom_linearize_view_accesses_build_index_constant(
-    loom_builder_t* builder, int64_t value, loom_location_id_t location,
-    loom_value_id_t* out_index) {
-  loom_op_t* constant_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_index_constant_build(
-      builder, loom_attr_i64(value), loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
-      location, &constant_op));
-  *out_index = loom_index_constant_result(constant_op);
+// Probe recipes before allocating IR. Only operations emitted by this pass
+// enter the index, and all remain live. Structural access order gives
+// same-block dominance without a separate availability walk; cross-block
+// sharing remains the ordinary CSE pass's responsibility. Equality checks the
+// current operands: replacing a load result can change an indexed operation's
+// key, in which case the old hash can miss reuse but cannot return a different
+// expression.
+typedef struct loom_linearize_view_accesses_index_op_t {
+  // Index constant, add, multiply, multiply-add, or left shift.
+  loom_op_kind_t kind;
+  // Constant payload, meaningful only for index.constant.
+  int64_t constant;
+  // Two operands for binary arithmetic or three for multiply-add.
+  loom_value_id_t operands[3];
+} loom_linearize_view_accesses_index_op_t;
+
+typedef struct loom_linearize_view_accesses_index_probe_t {
+  // Builder supplying the module and current insertion block.
+  const loom_builder_t* builder;
+  // Recipe to compare with an already-emitted operation.
+  const loom_linearize_view_accesses_index_op_t* recipe;
+} loom_linearize_view_accesses_index_probe_t;
+
+static bool loom_linearize_view_accesses_index_equal(const void* user_data,
+                                                     uint32_t value_id) {
+  const loom_linearize_view_accesses_index_probe_t* probe = user_data;
+  const loom_op_t* op =
+      loom_value_def_op(loom_module_value(probe->builder->module, value_id));
+  const loom_linearize_view_accesses_index_op_t* recipe = probe->recipe;
+  if (op->parent_block != probe->builder->ip.block ||
+      op->kind != recipe->kind) {
+    return false;
+  }
+  if (recipe->kind == LOOM_OP_INDEX_CONSTANT) {
+    return loom_attr_as_i64(loom_index_constant_value(op)) == recipe->constant;
+  }
+  return memcmp(loom_op_const_operands(op), recipe->operands,
+                op->operand_count * sizeof(recipe->operands[0])) == 0;
+}
+
+static iree_status_t loom_linearize_view_accesses_build_index_op(
+    loom_linearize_view_accesses_context_t* context,
+    loom_linearize_view_accesses_index_op_t recipe, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  loom_builder_t* builder = &context->rewriter->builder;
+  uint32_t hash = loom_structural_hash_initialize();
+  hash = loom_structural_hash_mix_u64(hash, (uintptr_t)builder->ip.block);
+  hash = loom_structural_hash_mix_u16(hash, recipe.kind);
+  if (recipe.kind == LOOM_OP_INDEX_CONSTANT) {
+    hash = loom_structural_hash_mix_u64(hash, (uint64_t)recipe.constant);
+  } else {
+    hash = loom_structural_hash_mix_u32(hash, recipe.operands[0]);
+    hash = loom_structural_hash_mix_u32(hash, recipe.operands[1]);
+    if (recipe.kind == LOOM_OP_INDEX_MADD) {
+      hash = loom_structural_hash_mix_u32(hash, recipe.operands[2]);
+    }
+  }
+  hash = loom_structural_hash_finalize(hash);
+  const loom_linearize_view_accesses_index_probe_t key = {builder, &recipe};
+  loom_intern_probe_t probe =
+      loom_intern_table_probe(&context->index_ops, hash,
+                              loom_linearize_view_accesses_index_equal, &key);
+  if (probe.index != UINT32_MAX) {
+    *out_value = probe.index;
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_intern_table_reserve_insert(
+      context->pass->arena, &context->index_ops, hash, 1, &probe.slot));
+  loom_op_t* op = NULL;
+  const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  switch (recipe.kind) {
+    case LOOM_OP_INDEX_CONSTANT: {
+      IREE_RETURN_IF_ERROR(loom_index_constant_build(
+          builder, loom_attr_i64(recipe.constant), type, location, &op));
+      break;
+    }
+    case LOOM_OP_INDEX_ADD: {
+      IREE_RETURN_IF_ERROR(loom_index_add_build(builder, recipe.operands[0],
+                                                recipe.operands[1], type,
+                                                location, &op));
+      break;
+    }
+    case LOOM_OP_INDEX_MUL: {
+      IREE_RETURN_IF_ERROR(loom_index_mul_build(
+          builder, recipe.operands[0], recipe.operands[1], location, &op));
+      break;
+    }
+    case LOOM_OP_INDEX_MADD: {
+      IREE_RETURN_IF_ERROR(
+          loom_index_madd_build(builder, recipe.operands[0], recipe.operands[1],
+                                recipe.operands[2], location, &op));
+      break;
+    }
+    case LOOM_OP_INDEX_SHLI: {
+      IREE_RETURN_IF_ERROR(loom_index_shli_build(
+          builder, recipe.operands[0], recipe.operands[1], location, &op));
+      break;
+    }
+    default: {
+      IREE_ASSERT_UNREACHABLE("invalid linear index recipe");
+      IREE_BUILTIN_UNREACHABLE();
+    }
+  }
+  *out_value = loom_op_results(op)[0];
+  loom_intern_table_insert(&context->index_ops, probe.slot, hash, *out_value);
   return iree_ok_status();
 }
 
+static iree_status_t loom_linearize_view_accesses_build_index_constant(
+    loom_linearize_view_accesses_context_t* context, int64_t value,
+    loom_location_id_t location, loom_value_id_t* out_index) {
+  return loom_linearize_view_accesses_build_index_op(
+      context,
+      (loom_linearize_view_accesses_index_op_t){.kind = LOOM_OP_INDEX_CONSTANT,
+                                                .constant = value},
+      location, out_index);
+}
+
 static iree_status_t loom_linearize_view_accesses_build_linear_index(
-    loom_builder_t* builder, const loom_linearize_view_accesses_index_t* index,
-    int64_t row_offset, loom_location_id_t location,
-    loom_value_id_t* out_linear_index, int64_t* out_static_linear_index) {
+    loom_linearize_view_accesses_context_t* context,
+    const loom_linearize_view_accesses_index_t* index, int64_t row_offset,
+    loom_location_id_t location, loom_value_id_t* out_linear_index,
+    int64_t* out_static_linear_index) {
   *out_linear_index = LOOM_VALUE_ID_INVALID;
   const int64_t static_offset = index->static_offset + row_offset;
   *out_static_linear_index = static_offset;
@@ -397,44 +507,59 @@ static iree_status_t loom_linearize_view_accesses_build_linear_index(
   for (uint8_t i = 0; i < index->term_count; ++i) {
     const loom_value_id_t axis_index = index->terms[i].value;
     const int64_t stride = index->terms[i].stride;
-    loom_value_id_t stride_index = LOOM_VALUE_ID_INVALID;
-    if (stride != 1) {
-      IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_index_constant(
-          builder, stride, location, &stride_index));
+    // The coordinate footprint was proved even when its physical stride is
+    // zero. Its contribution can now be omitted without discarding that proof.
+    if (stride == 0) {
+      continue;
     }
-
     if (stride == 1) {
       if (accumulator == LOOM_VALUE_ID_INVALID) {
         accumulator = axis_index;
         continue;
       }
-      loom_op_t* add_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_add_build(
-          builder, accumulator, axis_index,
-          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), location, &add_op));
-      accumulator = loom_index_add_result(add_op);
-    } else if (accumulator == LOOM_VALUE_ID_INVALID) {
-      loom_op_t* mul_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_mul_build(
-          builder, axis_index, stride_index, location, &mul_op));
-      accumulator = loom_index_mul_result(mul_op);
+      IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_index_op(
+          context,
+          (loom_linearize_view_accesses_index_op_t){
+              .kind = LOOM_OP_INDEX_ADD, .operands = {accumulator, axis_index}},
+          location, &accumulator));
     } else {
-      loom_op_t* madd_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_madd_build(
-          builder, axis_index, stride_index, accumulator, location, &madd_op));
-      accumulator = loom_index_madd_result(madd_op);
+      const bool first_term = accumulator == LOOM_VALUE_ID_INVALID;
+      loom_op_kind_t kind = first_term ? LOOM_OP_INDEX_MUL : LOOM_OP_INDEX_MADD;
+      int64_t factor = stride;
+      if (first_term && iree_math_is_power_of_two_i64(stride)) {
+        const int64_t amount = iree_math_floor_log2_u64(stride);
+        const loom_fact_context_t fact_context = {
+            .target_facts = loom_value_fact_table_block_target_facts(
+                context->fact_table, context->rewriter->builder.ip.block),
+        };
+        const int32_t bitwidth = loom_index_target_carrier_bitwidth(
+            &fact_context, LOOM_SCALAR_TYPE_INDEX);
+        if (amount < bitwidth) {
+          kind = LOOM_OP_INDEX_SHLI;
+          factor = amount;
+        }
+      }
+      loom_value_id_t factor_index = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_index_constant(
+          context, factor, location, &factor_index));
+      IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_index_op(
+          context,
+          (loom_linearize_view_accesses_index_op_t){
+              .kind = kind,
+              .operands = {axis_index, factor_index, accumulator}},
+          location, &accumulator));
     }
   }
 
   if (static_offset != 0 && accumulator != LOOM_VALUE_ID_INVALID) {
     loom_value_id_t offset_value = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_index_constant(
-        builder, static_offset, location, &offset_value));
-    loom_op_t* add_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_index_add_build(
-        builder, accumulator, offset_value,
-        loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), location, &add_op));
-    accumulator = loom_index_add_result(add_op);
+        context, static_offset, location, &offset_value));
+    IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_index_op(
+        context,
+        (loom_linearize_view_accesses_index_op_t){
+            .kind = LOOM_OP_INDEX_ADD, .operands = {accumulator, offset_value}},
+        location, &accumulator));
   }
 
   *out_linear_index = accumulator;
@@ -445,13 +570,25 @@ static iree_status_t loom_linearize_view_accesses_get_linear_view(
     loom_linearize_view_accesses_context_t* context, loom_op_t* view_op,
     loom_type_t view_type, const loom_linearize_view_accesses_layout_t* layout,
     loom_value_id_t* out_linear_view) {
-  for (iree_host_size_t i = 0; i < context->view_map->count; ++i) {
-    loom_linearize_view_accesses_view_map_entry_t entry =
-        context->view_map->entries[i];
-    if (entry.original_view_op == view_op) {
-      *out_linear_view = entry.linear_view;
-      return iree_ok_status();
-    }
+  loom_linearize_view_accesses_view_map_t* map = context->view_map;
+  const loom_value_id_t original_view = loom_buffer_view_result(view_op);
+  const uint32_t hash = loom_structural_hash_finalize(original_view);
+  const loom_linearize_view_accesses_view_probe_t key = {map, original_view};
+  loom_intern_probe_t probe = loom_intern_table_probe(
+      &map->index, hash, loom_linearize_view_accesses_view_equal, &key);
+  if (probe.index != UINT32_MAX) {
+    *out_linear_view =
+        loom_linearize_view_accesses_view_map_entry(map, probe.index)
+            ->linear_view;
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_intern_table_reserve_insert(
+      context->pass->arena, &map->index, hash, 1, &probe.slot));
+  const uint32_t row = (uint32_t)map->index.count;
+  if (row / LOOM_LINEARIZE_VIEW_ROWS_PER_SEGMENT == map->rows.segment_count) {
+    void* segment = NULL;
+    IREE_RETURN_IF_ERROR(loom_segmented_storage_append(
+        &map->rows, context->pass->arena, &segment));
   }
 
   uint16_t linear_encoding_id = view_type.encoding_id;
@@ -498,8 +635,10 @@ static iree_status_t loom_linearize_view_accesses_get_linear_view(
   loom_value_id_t linear_view = loom_buffer_view_result(linear_view_op);
   IREE_RETURN_IF_ERROR(loom_rewriter_copy_value_name(
       context->rewriter, loom_buffer_view_result(view_op), linear_view));
-  IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_view_map_push(
-      context->pass->arena, context->view_map, view_op, linear_view));
+  *loom_linearize_view_accesses_view_map_entry(map, row) =
+      (loom_linearize_view_accesses_view_map_entry_t){original_view,
+                                                      linear_view};
+  loom_intern_table_insert(&map->index, probe.slot, hash, row);
   ++context->statistics->views_created;
   *out_linear_view = linear_view;
   return iree_ok_status();
@@ -642,7 +781,7 @@ static void loom_linearize_view_accesses_tile_row_offsets(
 }
 
 static iree_status_t loom_linearize_view_accesses_build_tile_row_index(
-    loom_builder_t* builder,
+    loom_linearize_view_accesses_context_t* context,
     const loom_linearize_view_accesses_layout_t* layout,
     const loom_linearize_view_accesses_index_t* index,
     const loom_linearize_view_accesses_vector_tile_t* tile, int64_t row_ordinal,
@@ -659,7 +798,7 @@ static iree_status_t loom_linearize_view_accesses_build_tile_row_index(
     row_offset += axis_static_offsets[axis] * layout->strides[axis];
   }
   return loom_linearize_view_accesses_build_linear_index(
-      builder, index, row_offset, location, out_linear_index,
+      context, index, row_offset, location, out_linear_index,
       out_static_linear_index);
 }
 
@@ -691,7 +830,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_load(
   loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
   int64_t static_linear_index = INT64_MIN;
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_linear_index(
-      builder, &index, /*row_offset=*/0, load_op->location, &linear_index,
+      context, &index, /*row_offset=*/0, load_op->location, &linear_index,
       &static_linear_index));
 
   loom_value_id_t linear_view = LOOM_VALUE_ID_INVALID;
@@ -764,7 +903,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_store(
   loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
   int64_t static_linear_index = INT64_MIN;
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_linear_index(
-      builder, &index, /*row_offset=*/0, store_op->location, &linear_index,
+      context, &index, /*row_offset=*/0, store_op->location, &linear_index,
       &static_linear_index));
 
   loom_value_id_t linear_view = LOOM_VALUE_ID_INVALID;
@@ -854,7 +993,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_load(
       loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
       int64_t static_linear_index = INT64_MIN;
       IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_tile_row_index(
-          builder, &layout, &index, &tile, row, load_op->location,
+          context, &layout, &index, &tile, row, load_op->location,
           &linear_index, &static_linear_index));
 
       int64_t static_indices[] = {linear_index == LOOM_VALUE_ID_INVALID
@@ -911,7 +1050,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_load(
   loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
   int64_t static_linear_index = INT64_MIN;
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_linear_index(
-      builder, &index, /*row_offset=*/0, load_op->location, &linear_index,
+      context, &index, /*row_offset=*/0, load_op->location, &linear_index,
       &static_linear_index));
 
   loom_value_id_t linear_view = LOOM_VALUE_ID_INVALID;
@@ -1007,7 +1146,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_store(
       loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
       int64_t static_linear_index = INT64_MIN;
       IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_tile_row_index(
-          builder, &layout, &index, &tile, row, store_op->location,
+          context, &layout, &index, &tile, row, store_op->location,
           &linear_index, &static_linear_index));
 
       int64_t static_indices[] = {linear_index == LOOM_VALUE_ID_INVALID
@@ -1044,7 +1183,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_store(
   loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
   int64_t static_linear_index = INT64_MIN;
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_linear_index(
-      builder, &index, /*row_offset=*/0, store_op->location, &linear_index,
+      context, &index, /*row_offset=*/0, store_op->location, &linear_index,
       &static_linear_index));
 
   loom_value_id_t linear_view = LOOM_VALUE_ID_INVALID;
@@ -1132,7 +1271,12 @@ iree_status_t loom_linearize_view_accesses_run(loom_pass_t* pass,
 
   loom_linearize_view_accesses_view_map_t view_map = {0};
   IREE_RETURN_IF_ERROR(
-      loom_linearize_view_accesses_view_map_initialize(pass->arena, &view_map));
+      loom_intern_table_initialize(pass->arena, 0, &view_map.index));
+  loom_segmented_storage_initialize(
+      LOOM_LINEARIZE_VIEW_ROWS_PER_SEGMENT *
+          sizeof(loom_linearize_view_accesses_view_map_entry_t),
+      iree_alignof(loom_linearize_view_accesses_view_map_entry_t),
+      &view_map.rows);
 
   loom_rewriter_t rewriter;
   loom_rewriter_initialize(&rewriter, module, pass->arena);
@@ -1146,6 +1290,8 @@ iree_status_t loom_linearize_view_accesses_run(loom_pass_t* pass,
       .fact_table = fact_table,
       .view_map = &view_map,
   };
+  IREE_RETURN_IF_ERROR(
+      loom_intern_table_initialize(pass->arena, 0, &context.index_ops));
   for (iree_host_size_t i = 0; i < accesses.count && iree_status_is_ok(status);
        ++i) {
     bool access_changed = false;

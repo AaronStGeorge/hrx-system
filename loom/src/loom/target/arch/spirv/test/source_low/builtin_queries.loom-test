@@ -51,35 +51,35 @@ low.kernel.def target<spirv.logical.core> abi_layout({signature = (buffer) -> ()
   %subgroup_count_word = OpCopyObject.i32 %subgroup_count
   %width_word = OpCopyObject.i32 %width
   %lane_word = OpCopyObject.i32 %lane
-  %73 = OpSConvert.i32.offset64 %thread
-  %74 = OpConstant.offset64 28
-  %75 = OpIMul.offset64 %73, %74
+  %55 = OpSConvert.i32.offset64 %thread
+  %56 = OpConstant.offset64 28
+  %57 = OpIMul.offset64 %55, %56
+  %58 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %57
+  OpStore.storage_buffer.i32 %58, %groups_x_word
+  %62 = OpConstant.offset64 4
+  %63 = OpIAdd.offset64 %57, %62
+  %64 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %63
+  OpStore.storage_buffer.i32 %64, %groups_y_word
+  %68 = OpConstant.offset64 8
+  %69 = OpIAdd.offset64 %57, %68
+  %70 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %69
+  OpStore.storage_buffer.i32 %70, %groups_z_word
+  %74 = OpConstant.offset64 12
+  %75 = OpIAdd.offset64 %57, %74
   %76 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %75
-  OpStore.storage_buffer.i32 %76, %groups_x_word
-  %80 = OpConstant.offset64 4
-  %81 = OpIAdd.offset64 %75, %80
+  OpStore.storage_buffer.i32 %76, %subgroup_word
+  %80 = OpConstant.offset64 16
+  %81 = OpIAdd.offset64 %57, %80
   %82 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %81
-  OpStore.storage_buffer.i32 %82, %groups_y_word
-  %86 = OpConstant.offset64 8
-  %87 = OpIAdd.offset64 %75, %86
+  OpStore.storage_buffer.i32 %82, %subgroup_count_word
+  %86 = OpConstant.offset64 20
+  %87 = OpIAdd.offset64 %57, %86
   %88 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %87
-  OpStore.storage_buffer.i32 %88, %groups_z_word
-  %92 = OpConstant.offset64 12
-  %93 = OpIAdd.offset64 %75, %92
+  OpStore.storage_buffer.i32 %88, %width_word
+  %92 = OpConstant.offset64 24
+  %93 = OpIAdd.offset64 %57, %92
   %94 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %93
-  OpStore.storage_buffer.i32 %94, %subgroup_word
-  %98 = OpConstant.offset64 16
-  %99 = OpIAdd.offset64 %75, %98
-  %100 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %99
-  OpStore.storage_buffer.i32 %100, %subgroup_count_word
-  %104 = OpConstant.offset64 20
-  %105 = OpIAdd.offset64 %75, %104
-  %106 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %105
-  OpStore.storage_buffer.i32 %106, %width_word
-  %110 = OpConstant.offset64 24
-  %111 = OpIAdd.offset64 %75, %110
-  %112 = OpPtrAccessChain.storage_buffer.i32.byte_offset %aligned, %111
-  OpStore.storage_buffer.i32 %112, %lane_word
+  OpStore.storage_buffer.i32 %94, %lane_word
   return
 }
 
@@ -118,18 +118,18 @@ low.kernel.def target<spirv.logical.core> abi_layout({signature = (buffer) -> ()
   %lane_word = OpCopyObject.i32 %lane
   %subgroup_word = OpCopyObject.i32 %subgroup
   %count_word = OpCopyObject.i32 %count
-  %33 = OpSConvert.i32.offset64 %thread
-  %34 = OpConstant.offset64 12
-  %35 = OpIMul.offset64 %33, %34
+  %27 = OpSConvert.i32.offset64 %thread
+  %28 = OpConstant.offset64 12
+  %29 = OpIMul.offset64 %27, %28
+  %30 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %29
+  OpStore.storage_buffer.i32 %30, %lane_word
+  %34 = OpConstant.offset64 4
+  %35 = OpIAdd.offset64 %29, %34
   %36 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %35
-  OpStore.storage_buffer.i32 %36, %lane_word
-  %40 = OpConstant.offset64 4
-  %41 = OpIAdd.offset64 %35, %40
+  OpStore.storage_buffer.i32 %36, %subgroup_word
+  %40 = OpConstant.offset64 8
+  %41 = OpIAdd.offset64 %29, %40
   %42 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %41
-  OpStore.storage_buffer.i32 %42, %subgroup_word
-  %46 = OpConstant.offset64 8
-  %47 = OpIAdd.offset64 %35, %46
-  %48 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %47
-  OpStore.storage_buffer.i32 %48, %count_word
+  OpStore.storage_buffer.i32 %42, %count_word
   return
 }

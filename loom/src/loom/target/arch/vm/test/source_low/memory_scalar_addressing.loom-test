@@ -111,14 +111,14 @@ func.def @scalar_mixed_rank2_i32(%input: buffer, %output: buffer, %base: offset,
 
 // ----
 low.func.def target<vm.core> abi(vm_function) @scalar_mixed_rank2_i32(%input_view: reg<vm.ref : buffer>, %output_view: reg<vm.ref : buffer>, %base_aligned: reg<vm.value : i64>, %row_bounded: reg<vm.value : i64>, %column_bounded: reg<vm.value : i64>) -> (reg<vm.value : i32>) asm {
-  %27 = constant.i64 8
-  %28 = integer.mul.i64 %row_bounded, %27
-  %29 = integer.add.i64 %28, %column_bounded
-  %30 = constant.i64 2 : reg<vm.value>
-  %31 = integer.shift.left.i64 %29, %30
-  %32 = integer.add.i64 %31, %base_aligned
-  %loaded = buffer.load %input_view, %32, %32, 0, "i32.x1" : reg<vm.value : i32>
-  buffer.store %output_view, %32, %32, %loaded, 0, "i32.x1"
+  %25 = constant.i64 8
+  %26 = integer.mul.i64 %row_bounded, %25
+  %27 = integer.add.i64 %26, %column_bounded
+  %28 = constant.i64 2 : reg<vm.value>
+  %29 = integer.shift.left.i64 %27, %28
+  %30 = integer.add.i64 %29, %base_aligned
+  %loaded = buffer.load %input_view, %30, %30, 0, "i32.x1" : reg<vm.value : i32>
+  buffer.store %output_view, %30, %30, %loaded, 0, "i32.x1"
   return %loaded
 }
 

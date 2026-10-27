@@ -96,35 +96,35 @@ low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @matrix_b
   %accumulator_fragment = acc.clear.f32x64
   low.br ^_bb1(%begin: reg<aie2p.er>, %accumulator_fragment: reg<aie2p.mbms x4>)
 ^_bb1(%record: reg<aie2p.er>, %accumulator: reg<aie2p.mbms x4>):
-  %56 = lt %record, %end
-  low.cond_br %56, ^_bb2, ^_bb3 : reg<aie2p.er>
+  %50 = lt %record, %end
+  low.cond_br %50, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
-  %57 = mov.i32 7
-  %58 = lshl %record, %57
-  %59 = mov.address-index %58
-  %60 = vlda.convert.bf16x32.to.f32x32.index %lhs_aligned, %59
-  %61 = add.address-index.immediate %58, 64
-  %62 = vlda.convert.bf16x32.to.f32x32.index %lhs_aligned, %61
-  %63 = concat(%60, %62) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
+  %51 = mov.i32 7
+  %52 = lshl %record, %51
+  %53 = mov.address-index %52
+  %54 = vlda.convert.bf16x32.to.f32x32.index %lhs_aligned, %53
+  %55 = add.address-index.immediate %52, 64
+  %56 = vlda.convert.bf16x32.to.f32x32.index %lhs_aligned, %55
+  %57 = concat(%54, %56) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
   set.rounding 12
-  %lhs_fragment = vconv.bfp16ebs8.fp32 %63
-  %66 = vlda.convert.bf16x32.to.f32x32.index %rhs_aligned, %59
-  %68 = vlda.convert.bf16x32.to.f32x32.index %rhs_aligned, %61
-  %69 = concat(%66, %68) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
-  %rhs_fragment = vconv.bfp16ebs8.fp32 %69
-  %71 = mova.i32 780
-  %next = mma.bfp16ebs8.m8n8k8 %accumulator, %lhs_fragment, %rhs_fragment, %71
-  %73 = add.nc %record, %step
-  low.br ^_bb1(%73: reg<aie2p.er>, %next: reg<aie2p.mbms x4>)
+  %lhs_fragment = vconv.bfp16ebs8.fp32 %57
+  %60 = vlda.convert.bf16x32.to.f32x32.index %rhs_aligned, %53
+  %62 = vlda.convert.bf16x32.to.f32x32.index %rhs_aligned, %55
+  %63 = concat(%60, %62) : (reg<aie2p.mbms x2>, reg<aie2p.mbms x2>) -> reg<aie2p.mbms x4>
+  %rhs_fragment = vconv.bfp16ebs8.fp32 %63
+  %65 = mova.i32 780
+  %next = mma.bfp16ebs8.m8n8k8 %accumulator, %lhs_fragment, %rhs_fragment, %65
+  %67 = add.nc %record, %step
+  low.br ^_bb1(%67: reg<aie2p.er>, %next: reg<aie2p.mbms x4>)
 ^_bb3:
-  %74 = slice %accumulator[0] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
-  vst.acc %74, %output_aligned, 0
-  %75 = slice %accumulator[1] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
-  vst.acc %75, %output_aligned, 64
-  %76 = slice %accumulator[2] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
-  vst.acc %76, %output_aligned, 128
-  %77 = slice %accumulator[3] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
-  vst.acc %77, %output_aligned, 192
+  %68 = slice %accumulator[0] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
+  vst.acc %68, %output_aligned, 0
+  %69 = slice %accumulator[1] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
+  vst.acc %69, %output_aligned, 64
+  %70 = slice %accumulator[2] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
+  vst.acc %70, %output_aligned, 128
+  %71 = slice %accumulator[3] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
+  vst.acc %71, %output_aligned, 192
   return
 }
 

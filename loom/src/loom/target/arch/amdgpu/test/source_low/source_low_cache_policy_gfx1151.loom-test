@@ -21,9 +21,9 @@ low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 0, direc
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {extent = 1024, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {extent = 1024, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %23 = v_lshlrev_b32_src0_inline %lane, 4
-  %loaded = global_load_b128_saddr %23, %input_view
-  global_store_b128_saddr %23, %loaded, %output_view
+  %17 = v_lshlrev_b32_src0_inline %lane, 4
+  %loaded = global_load_b128_saddr %17, %input_view
+  global_store_b128_saddr %17, %loaded, %output_view
   return
 }
 

@@ -16,10 +16,11 @@
 // prove exact physical strides and that the complete footprint fits every
 // original axis before flattening can discard those constraints. Unproved
 // accesses retain their ranked form for memory-footprint verification; the
-// pass does not infer bounds from a memory operation's use of an index. The
-// resulting index.madd expressions are ordinary source SSA, so canonicalize
-// and CSE can share address math before source-to-low without target-specific
-// emission knowledge.
+// pass does not infer bounds from a memory operation's use of an index. Address
+// expressions are reused within their defining block before allocating new IR,
+// including shared tile row bases. Power-of-two scales use shifts when the
+// target index width permits. The resulting ordinary source SSA remains
+// available to canonicalization and cross-block CSE before source-to-low.
 
 #ifndef LOOM_TRANSFORMS_LINEARIZE_VIEW_ACCESSES_H_
 #define LOOM_TRANSFORMS_LINEARIZE_VIEW_ACCESSES_H_

@@ -21,18 +21,18 @@ func.def @ranked_exchange(%input: buffer, %output: buffer, %row_input: index, %c
 
 // ----
 low.func.def target<wasm.core.simd128> abi(wasm_function) @ranked_exchange(%input: reg<wasm.i32>, %output: reg<wasm.i32>, %row: reg<wasm.i32>, %column: reg<wasm.i32>, %replacement: reg<wasm.i32>, %base: reg<wasm.i32>) -> (reg<wasm.i32>) asm {
-  %34 = i32.const 19
-  %35 = i32.mul %row, %34
-  %36 = i32.add %35, %column
-  %37 = i32.const 4
-  %38 = i32.mul %36, %37
-  %39 = i32.add %38, %base
-  %40 = i32.add %input, %39
-  %first = i32.load<volatile> %40
-  %packet = v128.load<volatile> %40
-  v128.store<volatile> %40, %packet
-  %45 = i32.add %output, %39
-  i32.store<volatile> %45, %replacement {offset = 16}
+  %30 = i32.const 19
+  %31 = i32.mul %row, %30
+  %32 = i32.add %31, %column
+  %33 = i32.const 4
+  %34 = i32.mul %32, %33
+  %35 = i32.add %34, %base
+  %36 = i32.add %input, %35
+  %first = i32.load<volatile> %36
+  %packet = v128.load<volatile> %36
+  v128.store<volatile> %36, %packet
+  %41 = i32.add %output, %35
+  i32.store<volatile> %41, %replacement {offset = 16}
   return %first
 }
 

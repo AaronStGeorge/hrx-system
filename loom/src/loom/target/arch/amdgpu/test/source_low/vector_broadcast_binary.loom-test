@@ -65,16 +65,16 @@ low.kernel.def target<amdgpu.cdna3.core> abi_layout({constant_count = 0, direct_
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = resource<hal_binding> {extent = 8, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {extent = 2048, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %24 = s_mov_b32 0
-  %left = s_load_dword %source, %24
-  %right = s_load_dword %source, %24 {offset = 4}
-  %28 = v_mov_b32_copy %right
-  %29 = v_pk_add_f32.broadcast_lhs_rhs %left, %28
-  %38 = concat(%29, %29) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
-  %35 = v_lshlrev_b32_src0_inline %lane, 5
-  global_store_dwordx4_saddr %35, %38, %output_view
-  %37 = concat(%29, %29) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
-  global_store_dwordx4_saddr %35, %37, %output_view {offset = 16}
+  %22 = s_mov_b32 0
+  %left = s_load_dword %source, %22
+  %right = s_load_dword %source, %22 {offset = 4}
+  %26 = v_mov_b32_copy %right
+  %27 = v_pk_add_f32.broadcast_lhs_rhs %left, %26
+  %36 = concat(%27, %27) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
+  %33 = v_lshlrev_b32_src0_inline %lane, 5
+  global_store_dwordx4_saddr %33, %36, %output_view
+  %35 = concat(%27, %27) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
+  global_store_dwordx4_saddr %33, %35, %output_view {offset = 16}
   return
 }
 

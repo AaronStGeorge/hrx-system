@@ -32,59 +32,59 @@ low.kernel.def target<spirv.logical.core> abi_layout({signature = (buffer, buffe
   %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %lane = OpLoadBuiltin.local_invocation_id.x
-  %65 = OpSConvert.i32.offset64 %lane
-  %66 = OpConstant.offset64 12
-  %67 = OpIMul.offset64 %65, %66
-  %68 = OpPtrAccessChain.storage_buffer.i32.byte_offset %input, %67
-  %69 = OpLoad.storage_buffer.i32 %68
-  %73 = OpConstant.offset64 4
-  %74 = OpIAdd.offset64 %67, %73
-  %75 = OpPtrAccessChain.storage_buffer.i32.byte_offset %input, %74
-  %76 = OpLoad.storage_buffer.i32 %75
-  %80 = OpConstant.offset64 8
-  %81 = OpIAdd.offset64 %67, %80
-  %82 = OpPtrAccessChain.storage_buffer.i32.byte_offset %input, %81
-  %83 = OpLoad.storage_buffer.i32 %82
-  %vector = OpCompositeConstruct.v3i32 %69, %76, %83
-  %85 = OpBitcast.v3i32.v3u32 %vector
-  %86 = OpGroupNonUniformUMin.clustered_reduce.v3u32 %85, 8
-  %minimum = OpBitcast.v3u32.v3i32 %86
-  %88 = OpCompositeExtract.v3i32.i32 %minimum, 0
-  %89 = OpCompositeExtract.v3i32.i32 %minimum, 1
-  %90 = OpCompositeExtract.v3i32.i32 %minimum, 2
-  %91 = OpSConvert.i32.offset64 %lane
-  %92 = OpConstant.offset64 16
-  %93 = OpIMul.offset64 %91, %92
-  %94 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %93
-  OpStore.storage_buffer.i32 %94, %88
-  %98 = OpConstant.offset64 4
-  %99 = OpIAdd.offset64 %93, %98
-  %100 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %99
-  OpStore.storage_buffer.i32 %100, %89
-  %104 = OpConstant.offset64 8
-  %105 = OpIAdd.offset64 %93, %104
-  %106 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %105
-  OpStore.storage_buffer.i32 %106, %90
+  %52 = OpSConvert.i32.offset64 %lane
+  %53 = OpConstant.offset64 12
+  %54 = OpIMul.offset64 %52, %53
+  %55 = OpPtrAccessChain.storage_buffer.i32.byte_offset %input, %54
+  %56 = OpLoad.storage_buffer.i32 %55
+  %60 = OpConstant.offset64 4
+  %61 = OpIAdd.offset64 %54, %60
+  %62 = OpPtrAccessChain.storage_buffer.i32.byte_offset %input, %61
+  %63 = OpLoad.storage_buffer.i32 %62
+  %67 = OpConstant.offset64 8
+  %68 = OpIAdd.offset64 %54, %67
+  %69 = OpPtrAccessChain.storage_buffer.i32.byte_offset %input, %68
+  %70 = OpLoad.storage_buffer.i32 %69
+  %vector = OpCompositeConstruct.v3i32 %56, %63, %70
+  %72 = OpBitcast.v3i32.v3u32 %vector
+  %73 = OpGroupNonUniformUMin.clustered_reduce.v3u32 %72, 8
+  %minimum = OpBitcast.v3u32.v3i32 %73
+  %75 = OpCompositeExtract.v3i32.i32 %minimum, 0
+  %76 = OpCompositeExtract.v3i32.i32 %minimum, 1
+  %77 = OpCompositeExtract.v3i32.i32 %minimum, 2
+  %78 = OpSConvert.i32.offset64 %lane
+  %79 = OpConstant.offset64 16
+  %80 = OpIMul.offset64 %78, %79
+  %81 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %80
+  OpStore.storage_buffer.i32 %81, %75
+  %85 = OpConstant.offset64 4
+  %86 = OpIAdd.offset64 %80, %85
+  %87 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %86
+  OpStore.storage_buffer.i32 %87, %76
+  %91 = OpConstant.offset64 8
+  %92 = OpIAdd.offset64 %80, %91
+  %93 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %92
+  OpStore.storage_buffer.i32 %93, %77
   %integer_lane = OpCopyObject.i32 %lane
   %scalar = OpConvertSToF.i32.f32 %integer_lane
   %sum = OpGroupNonUniformFAdd.reduce.f32 %scalar : reg<spirv.id>
   %integer_sum = OpConvertFToS.f32.i32 %sum
   %limit = OpConstant.i32 16 : reg<spirv.id : index>
-  %112 = OpBitcast.i32.u32 %lane
-  %113 = OpBitcast.i32.u32 %limit
-  %predicate = OpULessThan.u32 %112, %113
+  %99 = OpBitcast.i32.u32 %lane
+  %100 = OpBitcast.i32.u32 %limit
+  %predicate = OpULessThan.u32 %99, %100
   %parity = OpGroupNonUniformLogicalXor.reduce.bool %predicate : reg<spirv.id>
-  %116 = OpConstant.i32 1
-  %117 = OpConstant.i32 0
-  %flag = OpSelect %parity, %116, %117
+  %103 = OpConstant.i32 1
+  %104 = OpConstant.i32 0
+  %flag = OpSelect %parity, %103, %104
   %combined = OpBitwiseXor %integer_sum, %flag
-  %120 = OpSConvert.i32.offset64 %lane
-  %121 = OpConstant.offset64 16
-  %122 = OpIMul.offset64 %120, %121
-  %123 = OpConstant.offset64 12
-  %124 = OpIAdd.offset64 %122, %123
-  %125 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %124
-  OpStore.storage_buffer.i32 %125, %combined
+  %107 = OpSConvert.i32.offset64 %lane
+  %108 = OpConstant.offset64 16
+  %109 = OpIMul.offset64 %107, %108
+  %110 = OpConstant.offset64 12
+  %111 = OpIAdd.offset64 %109, %110
+  %112 = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %111
+  OpStore.storage_buffer.i32 %112, %combined
   return
 }
 
@@ -114,24 +114,24 @@ low.kernel.def target<spirv.logical.core> abi_layout({signature = (buffer, buffe
   %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %lane = OpLoadBuiltin.local_invocation_id.x
-  %24 = OpSConvert.i32.offset64 %lane
-  %25 = OpConstant.offset64 8
-  %26 = OpIMul.offset64 %24, %25
-  %27 = OpPtrAccessChain.storage_buffer.i64.byte_offset %input, %26
-  %value = OpLoad.storage_buffer.i64 %27
+  %18 = OpSConvert.i32.offset64 %lane
+  %19 = OpConstant.offset64 8
+  %20 = OpIMul.offset64 %18, %19
+  %21 = OpPtrAccessChain.storage_buffer.i64.byte_offset %input, %20
+  %value = OpLoad.storage_buffer.i64 %21
   %sum = OpGroupNonUniformIAdd.inclusive_scan.i64 %value : reg<spirv.id>
-  %30 = OpBitcast.i64.u64 %value
-  %31 = OpGroupNonUniformUMin.exclusive_scan.u64 %30
-  %minimum = OpBitcast.u64.i64 %31
-  %33 = OpSConvert.i32.offset64 %lane
-  %34 = OpConstant.offset64 16
-  %35 = OpIMul.offset64 %33, %34
+  %24 = OpBitcast.i64.u64 %value
+  %25 = OpGroupNonUniformUMin.exclusive_scan.u64 %24
+  %minimum = OpBitcast.u64.i64 %25
+  %27 = OpSConvert.i32.offset64 %lane
+  %28 = OpConstant.offset64 16
+  %29 = OpIMul.offset64 %27, %28
+  %30 = OpPtrAccessChain.storage_buffer.i64.byte_offset %output, %29
+  OpStore.storage_buffer.i64 %30, %sum
+  %34 = OpConstant.offset64 8
+  %35 = OpIAdd.offset64 %29, %34
   %36 = OpPtrAccessChain.storage_buffer.i64.byte_offset %output, %35
-  OpStore.storage_buffer.i64 %36, %sum
-  %40 = OpConstant.offset64 8
-  %41 = OpIAdd.offset64 %35, %40
-  %42 = OpPtrAccessChain.storage_buffer.i64.byte_offset %output, %41
-  OpStore.storage_buffer.i64 %42, %minimum
+  OpStore.storage_buffer.i64 %36, %minimum
   return
 }
 
