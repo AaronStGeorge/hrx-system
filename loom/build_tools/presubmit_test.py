@@ -44,9 +44,7 @@ class LoomPresubmitTest(unittest.TestCase):
         self.assertEqual(source_options[0], "--config=locked")
         self.assertEqual(test_options[0], "--config=presubmit")
         self.assertEqual(source_options[1:], test_options[1:])
-        self.assertTrue(any("/config/arch:enable=" in arg for arg in source_options))
-        self.assertTrue(any("/config/emit:enable=" in arg for arg in source_options))
-        self.assertTrue(any("/config/execute:enable=" in arg for arg in source_options))
+        self.assertIn("--config=loom-target-all", source_options)
         self.assertIn("--//loom/config/import:enable=cxx", source_options)
 
     def test_bazel_tests_preserve_manual_filter_without_hardware_blacklists(self):
@@ -54,10 +52,7 @@ class LoomPresubmitTest(unittest.TestCase):
 
         self.assertEqual(command[:3], ["bazel", "test", "--config=presubmit"])
         self.assertEqual(command[-1], "//loom/...")
-        self.assertFalse(any("/config/target:" in arg for arg in command))
-        self.assertTrue(any("/config/arch:enable=" in arg for arg in command))
-        self.assertTrue(any("/config/emit:enable=" in arg for arg in command))
-        self.assertTrue(any("/config/execute:enable=" in arg for arg in command))
+        self.assertIn("--config=loom-target-all", command)
         self.assertIn("--//loom/config/import:enable=cxx", command)
 
         tag_filter = next(
@@ -258,20 +253,16 @@ class LoomPresubmitTest(unittest.TestCase):
         dependency_command = run_command.call_args_list[1].args[0]
         self.assertEqual(dependency_command[:2], ["bazel", "cquery"])
         self.assertIn("--config=presubmit", dependency_command)
-        self.assertFalse(any("/config/target:" in arg for arg in dependency_command))
-        self.assertTrue(
-            any("/config/arch:enable=" in arg for arg in dependency_command)
-        )
-        self.assertTrue(
-            any("/config/emit:enable=" in arg for arg in dependency_command)
-        )
-        self.assertTrue(
-            any("/config/execute:enable=" in arg for arg in dependency_command)
-        )
+        self.assertIn("--config=loom-target-all", dependency_command)
         self.assertIn("--//loom/config/import:enable=cxx", dependency_command)
         self.assertEqual(
             [arg for arg in dependency_command if arg.startswith("--config=")],
-            ["--config=presubmit", "--config=asan", "--config=remote-execution"],
+            [
+                "--config=presubmit",
+                "--config=loom-target-all",
+                "--config=asan",
+                "--config=remote-execution",
+            ],
         )
         self.assertIn("--experimental_explicit_aspects", dependency_command)
         self.assertIn("--output=label", dependency_command)
@@ -731,13 +722,7 @@ class LoomPresubmitTest(unittest.TestCase):
             lane="cmake",
             bazel_target="//loom/src/loom/tools/loom-format:loom-format",
             cmake_target="loom::tools::loom-format",
-            bazel_args=(
-                "--config=locked",
-                "--//loom/config/arch:enable=aie2p,amdgpu,spirv,vm,wasm,x86",
-                "--//loom/config/emit:enable=elf,spirv,vm,wasm",
-                "--//loom/config/execute:enable=iree_hal,iree_vm,wasm_host",
-                "--//loom/config/import:enable=cxx",
-            ),
+            bazel_args=self.presubmit.BAZEL_SOURCE_TOOL_ARGS,
         )
         run_command.assert_called_once_with(
             [

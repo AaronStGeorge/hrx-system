@@ -41,11 +41,12 @@ This measures the common production linker and template selector. Source
 import, text parsing, bytecode serialization, index construction, and native
 compilation stay outside the timed region.
 
-Build and run the selection comparison without enabling native emission:
+Build and run the selection comparison with AMD GPU compiler support. The
+benchmark does not open a GPU or invoke native emission in its timed path:
 
 ```sh
 iree-bazel-build --config=opt --config=loom-importer-cxx \
-  --//loom/config/arch:enable=amdgpu \
+  --config=loom-target-amd-gpu \
   //loom/binding/c/benchmark/import/cxx:q8s32_selection_benchmark
 
 for name in SelectQ8S32CxxProviders SelectQ8S32AuthoredLoomProviders; do
@@ -132,7 +133,7 @@ Build an optimized executable before collecting numbers:
 
 ```sh
 iree-bazel-build --config=opt --config=loom-importer-cxx \
-  --//loom/config/arch:enable=amdgpu --//loom/config/emit:enable=elf \
+  --config=loom-target-amd-gpu \
   //loom/binding/c/benchmark/import/cxx:source_to_hsaco_benchmark
 
 bazel-bin/loom/binding/c/benchmark/import/cxx/source_to_hsaco_benchmark \

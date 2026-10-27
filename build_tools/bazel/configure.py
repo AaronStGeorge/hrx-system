@@ -482,10 +482,15 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
   python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_DEPENDENCY_MODE=pinned
   python build_tools/bazel/configure.py --//runtime/config/hal:drivers=amdgpu,task --repo_env=IREE_ROCM_PATH=/opt/rocm
   python build_tools/bazel/configure.py -DAMDF_BUILD=ON -DAMDF_FAMILY_CDNA=OFF
-  python build_tools/bazel/configure.py -DLOOM_ARCH_SPIRV=OFF
-  python build_tools/bazel/configure.py -DLOOM_ARCH_AMDGPU=ON -DLOOM_EMIT_ELF=ON -DLOOM_EXECUTE_IREE_HAL=ON -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
-  python build_tools/bazel/configure.py -DLOOM_ARCH_AIE2P=ON
+  python build_tools/bazel/configure.py --config=loom-target-cpu
+  python build_tools/bazel/configure.py --config=loom-target-amd-gpu -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
+  python build_tools/bazel/configure.py --config=loom-target-all
   python build_tools/bazel/configure.py -DLOOM_IMPORT_TILELANG=ON
+
+Loom target presets resolve to complete architecture, artifact, and execution
+sets. Exact native selection must provide all three --//loom/config/...:enable
+lists and cannot be mixed with a target preset. The configure summary prints
+the resolved selection.
 
 Portable -D project options are documented in BUILDING.md. Other Bazel-native
 overrides belong in .bazelrc.local.""",
@@ -805,8 +810,7 @@ def bazelrc_line(command: str, option: str) -> str:
     return f"{command} {shlex.quote(option)}"
 
 
-def generate_config(args: argparse.Namespace) -> str:
-    request = request_from_args(args)
+def render_config(request: ConfigRequest) -> str:
     if request.enabled_drivers.intersection(AMD_ENGINES):
         if request.amdf_build_source is not None and not request.amdf_build:
             raise SystemExit(
@@ -1005,14 +1009,21 @@ def generate_config(args: argparse.Namespace) -> str:
     return "\n".join(lines)
 
 
+def generate_config(args: argparse.Namespace) -> str:
+    return render_config(request_from_args(args))
+
+
 def main() -> int:
     args = parse_arguments()
     require_windows_bazel_host()
     if args.check_windows_host:
         return 0
-    config = generate_config(args)
+    request = request_from_args(args)
+    config = render_config(request)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(config, encoding="utf-8")
+    for line in configure_project.request_summary(request):
+        print(line)
     print(f"Wrote {args.output}")
     return 0
 

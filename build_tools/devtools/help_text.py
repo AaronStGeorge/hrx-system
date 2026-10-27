@@ -171,14 +171,17 @@ active.""",
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=pinned
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMD=OFF
-  python dev.py bazel configure -DLOOM_ARCH_AMDGPU=ON -DLOOM_EMIT_ELF=ON
+  python dev.py bazel configure --config=loom-target-amd-gpu
+  python dev.py bazel configure --config=loom-target-all
   python dev.py bazel configure --importer-env tilelang
   python dev.py bazel configure --importer-env mlir
   python dev.py bazel configure --//runtime/config/hal:drivers=amdgpu,task --repo_env=IREE_ROCM_PATH=/opt/rocm
 
 The default includes task and native AMD GPU/XDNA drivers. This writes
-.bazelrc.configured. Published portable build options live in
-BUILDING.md. Use .bazelrc.local for checkout-specific Bazel overrides.
+.bazelrc.configured. Loom target presets resolve to complete architecture,
+artifact, and execution sets, which are printed in the configure summary.
+Published portable build options and exact-selection rules live in BUILDING.md.
+Use .bazelrc.local for checkout-specific Bazel overrides.
 `--importer-env <name>` writes the matching Loom importer build setting
 without adding frontend packages to the base module lock.""",
             )
@@ -193,6 +196,8 @@ without adding frontend packages to the base module lock.""",
   python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=package
   python dev.py cmake configure -DAMDF_BUILD=ON -DIREE_HAL_DRIVER_AMD=OFF -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF -DLOOM_BUILD=OFF
   python dev.py cmake configure -DIREE_HAL_DRIVER_AMD_XDNA=OFF
+  python dev.py cmake configure -DLOOM_TARGET_ALL_CPU=ON
+  python dev.py cmake configure -DLOOM_TARGET_ALL=ON
   python dev.py cmake configure --importer-env tilelang
   python dev.py cmake configure --importer-env mlir
   python dev.py --cmake-build-dir build/cmake-asan cmake configure -DIREE_ENABLE_ASAN=ON

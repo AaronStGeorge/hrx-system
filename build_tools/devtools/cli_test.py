@@ -202,19 +202,19 @@ class CliTest(unittest.TestCase):
         self.assertIn("-DIREE_HAL_DRIVER_AMDGPU=ON", description)
         self.assertIn("-DIREE_ROCM_PATH=/opt/rocm", description)
 
-    def test_bazel_configure_accepts_portable_loom_target_options(self):
+    def test_bazel_configure_accepts_portable_loom_target_preset(self):
         args = cli.parse_arguments(
             [
                 "bazel",
                 "configure",
-                "-DLOOM_ARCH_AMDGPU=ON",
+                "-DLOOM_TARGET_ALL_AMD_GPU=ON",
             ]
         )
 
         plan = args.handler(args)
         description = plan.describe()
 
-        self.assertIn("-DLOOM_ARCH_AMDGPU=ON", description)
+        self.assertIn("-DLOOM_TARGET_ALL_AMD_GPU=ON", description)
 
     def test_bazel_configure_accepts_importer_environment(self):
         args = cli.parse_arguments(["bazel", "configure", "--importer-env", "tilelang"])

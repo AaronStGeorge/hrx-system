@@ -26,9 +26,7 @@ and a pointer with nonzero byte displacement. Each definition transforms its
 input so an identity-shaped ABI mistake cannot pass accidentally.
 
 ```sh
-iree-bazel-run --config=loom-importer-cxx \
-  --//loom/config/arch:enable=x86 \
-  --//loom/config/emit:enable=elf \
+iree-bazel-run --config=loom-importer-cxx --config=loom-target-cpu \
   //loom/binding/c/example/cxx:native_abi
 ```
 
@@ -42,8 +40,7 @@ iree-bazel-run --config=loom-importer-cxx \
   //loom/src/loom/tools/loom-import-cxx -- \
   loom/binding/c/example/cxx/native_abi_library.cxx \
   --to=bc --output=/tmp/native_abi.loombc
-iree-bazel-run --//loom/config/arch:enable=x86 \
-  --//loom/config/emit:enable=elf \
+iree-bazel-run --config=loom-target-cpu \
   //loom/src/loom/tools/loom-compile -- \
   /tmp/native_abi.loombc --target=x86:avx2 --output=/tmp/native_abi.o
 c++ -std=c++20 -mavx2 -I. \
@@ -67,11 +64,8 @@ guards. The shared template helper calls the generated scalar FMA binding
 through the ordinary HIP header facade.
 
 ```sh
-iree-bazel-run --config=loom-importer-cxx \
+iree-bazel-run --config=loom-importer-cxx --config=loom-target-amd-gpu \
   --//runtime/config/hal:drivers=amdgpu,task \
-  --//loom/config/arch:enable=amdgpu \
-  --//loom/config/emit:enable=elf \
-  --//loom/config/execute:enable=iree_hal \
   //loom/binding/c/example/cxx:jit_amdgpu
 ```
 
@@ -80,11 +74,8 @@ The second supplies an external facade include root, disabling embedded
 headers for the import:
 
 ```sh
-iree-bazel-run --config=loom-importer-cxx \
+iree-bazel-run --config=loom-importer-cxx --config=loom-target-amd-gpu \
   --//runtime/config/hal:drivers=amdgpu,task \
-  --//loom/config/arch:enable=amdgpu \
-  --//loom/config/emit:enable=elf \
-  --//loom/config/execute:enable=iree_hal \
   --//loom/config/import/cxx:embed_includes=false \
   //loom/binding/c/example/cxx:jit_amdgpu -- \
   legacy-amdgpu loom/src/loom/import/cxx/include

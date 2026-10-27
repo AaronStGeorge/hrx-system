@@ -59,9 +59,7 @@ CMAKE_SOURCE_FORMAT_CAPABILITY_SETS = (
 # Formatting, hygiene, dependency selection, and tests share one build
 # configuration so successive phases retain Bazel's configured analysis graph.
 BAZEL_CONFIGURATION_ARGS = (
-    "--//loom/config/arch:enable=aie2p,amdgpu,spirv,vm,wasm,x86",
-    "--//loom/config/emit:enable=elf,spirv,vm,wasm",
-    "--//loom/config/execute:enable=iree_hal,iree_vm,wasm_host",
+    "--config=loom-target-all",
     "--//loom/config/import:enable=cxx",
 )
 BAZEL_SOURCE_TOOL_ARGS = (

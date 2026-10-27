@@ -1741,12 +1741,10 @@ Save this as `checks.cxx`. The existing test and benchmark tools accept it
 directly when the C++ importer and VM target are enabled:
 
 ```sh
-iree-bazel-run --config=loom-importer-cxx --//loom/config/arch:enable=vm \
-  --//loom/config/emit:enable=vm --//loom/config/execute:enable=iree_vm \
+iree-bazel-run --config=loom-importer-cxx --config=loom-target-vm \
   //loom/src/loom/tools/loom-test -- checks.cxx
 
-iree-bazel-run --config=loom-importer-cxx --//loom/config/arch:enable=vm \
-  --//loom/config/emit:enable=vm --//loom/config/execute:enable=iree_vm \
+iree-bazel-run --config=loom-importer-cxx --config=loom-target-vm \
   //loom/src/loom/tools/loom-benchmark -- checks.cxx \
   --iterations=10 --warmup-iterations=1 --output-format=jsonl
 ```

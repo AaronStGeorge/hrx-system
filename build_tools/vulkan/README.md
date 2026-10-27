@@ -16,9 +16,8 @@ caller and does not link or load a Vulkan loader.
 For example, the raw profile test runs on the CPU with Vulkan HAL disabled:
 
 ```bash
-iree-bazel-test --config=asan \
+iree-bazel-test --config=asan --config=loom-target-spirv \
   --//runtime/config/hal:drivers=task \
-  --//loom/config/arch:enable=spirv \
   //loom/binding/c/test/target/spirv:vulkan_test
 ```
 

@@ -42,7 +42,7 @@ class ConfigureBazelTest(unittest.TestCase):
     def test_direct_script_entrypoint_loads_project_contributors(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = Path(temporary_directory) / "configured.bazelrc"
-            subprocess.run(
+            result = subprocess.run(
                 [
                     sys.executable,
                     str(CONFIGURE_BAZEL_PATH),
@@ -51,10 +51,13 @@ class ConfigureBazelTest(unittest.TestCase):
                     "-DLOOM_TARGET_ALL_CPU=ON",
                 ],
                 check=True,
+                capture_output=True,
+                text=True,
             )
 
             config = output.read_text(encoding="utf-8")
 
+        self.assertIn("Loom target selection: cpu", result.stdout)
         self.assertIn("# Loom target selection: cpu", config)
         self.assertIn("build --//loom/config/arch:enable=vm,x86", config)
 

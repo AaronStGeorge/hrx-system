@@ -435,10 +435,7 @@ $baseOptions = @(
   '-GNinja'
   '-DCMAKE_BUILD_TYPE=RelWithDebInfo'
   '-DLIBHRX_BUILD=OFF'
-  '-DLOOM_ARCH_AIE2P=OFF'
-  '-DLOOM_ARCH_AMDGPU=OFF'
-  '-DLOOM_ARCH_SPIRV=OFF'
-  '-DLOOM_EMIT_SPIRV=OFF'
+  '-DLOOM_TARGET_ALL_CPU=ON'
 )
 
 $llvmBin = 'C:\Program Files\LLVM\bin'
@@ -744,13 +741,18 @@ compiler selection and runtime target selectors.
 
 ### Loom compiler capabilities and execution
 
-Loom build selection has three independent axes. Architecture options select
-target records and lowering transforms. Emission options select serialized
-artifact formats. Execution options select the host substrate used to run an
-artifact. A compiler or execution provider enters the build only when all of
-its required leaves are present. For example, x86 native compilation requires
-the `x86` architecture and `elf` emission, while task execution additionally
-requires the IREE HAL substrate, task driver, and embedded ELF loader.
+Loom resolves friendly target presets into three independent capability axes at
+the configuration boundary. Architecture options select target records and
+lowering transforms. Emission options select serialized artifact formats.
+Execution options select the host substrate used to run an artifact. Build
+files and compiler code consume only those resolved capabilities. Package
+policy can therefore mark an entire architecture, emitter, or execution tree
+incompatible when its required capabilities are absent.
+
+A compiler or execution provider enters the build only when all of its required
+leaves are present. For example, x86 native compilation requires the `x86`
+architecture and `elf` emission, while task execution additionally requires the
+IREE HAL substrate, task driver, and embedded ELF loader.
 
 Ordinary builds enable every production architecture except WebAssembly:
 `aie2p,amdgpu,spirv,vm,x86`. Their artifact formats are `elf,spirv,vm`, and
@@ -763,41 +765,65 @@ Architecture and emission do not enable a matching runtime HAL driver. A build
 can compile AMDGPU or SPIR-V artifacts without a GPU. Execution routes require
 the corresponding `IREE_HAL_DRIVER_*` option or the non-HAL VM/Wasm host.
 
-| Capability | CMake option | Bazel native value |
+An ordinary configure needs no target arguments. The configure summary prints
+the selected preset and its resolved architecture, artifact, and execution
+lists. Direct Bazel commands can name the same default explicitly:
+
+```bash
+python dev.py bazel configure
+iree-bazel-build --config=loom-target-default \
+  //loom/src/loom/tools/loom-compile
+```
+
+Complete presets keep common builds concise:
+
+| Target set | CMake configure option | Bazel configuration |
 | --- | --- | --- |
-| AIE2P architecture | `LOOM_ARCH_AIE2P` | `--//loom/config/arch:enable=...aie2p...` |
-| AMDGPU architecture | `LOOM_ARCH_AMDGPU` | `--//loom/config/arch:enable=...amdgpu...` |
-| SPIR-V architecture | `LOOM_ARCH_SPIRV` | `--//loom/config/arch:enable=...spirv...` |
-| VM architecture | `LOOM_ARCH_VM` | `--//loom/config/arch:enable=...vm...` |
-| WebAssembly architecture | `LOOM_ARCH_WASM` | `--//loom/config/arch:enable=...wasm...` |
-| x86 architecture | `LOOM_ARCH_X86` | `--//loom/config/arch:enable=...x86...` |
-| ELF emission | `LOOM_EMIT_ELF` | `--//loom/config/emit:enable=...elf...` |
-| SPIR-V binary emission | `LOOM_EMIT_SPIRV` | `--//loom/config/emit:enable=...spirv...` |
-| VM binary emission | `LOOM_EMIT_VM` | `--//loom/config/emit:enable=...vm...` |
-| WebAssembly binary emission | `LOOM_EMIT_WASM` | `--//loom/config/emit:enable=...wasm...` |
-| IREE HAL execution | `LOOM_EXECUTE_IREE_HAL` | `--//loom/config/execute:enable=...iree_hal...` |
-| IREE VM execution | `LOOM_EXECUTE_IREE_VM` | `--//loom/config/execute:enable=...iree_vm...` |
-| WebAssembly host execution | `LOOM_EXECUTE_WASM_HOST` | `--//loom/config/execute:enable=...wasm_host...` |
+| Ordinary non-Wasm targets | `LOOM_TARGET_DEFAULT=ON` | `--config=loom-target-default` |
+| Every target | `LOOM_TARGET_ALL=ON` | `--config=loom-target-all` |
+| CPU | `LOOM_TARGET_ALL_CPU=ON` | `--config=loom-target-cpu` |
+| AMD GPU and NPU | `LOOM_TARGET_ALL_AMD=ON` | `--config=loom-target-amd` |
+| AMD GPU | `LOOM_TARGET_ALL_AMD_GPU=ON` | `--config=loom-target-amd-gpu` |
+| AMD NPU | `LOOM_TARGET_ALL_AMD_NPU=ON` | `--config=loom-target-amd-npu` |
+| SPIR-V | `LOOM_TARGET_ALL_SPIRV=ON` | `--config=loom-target-spirv` |
+| WebAssembly | `LOOM_TARGET_ALL_WASM=ON` | `--config=loom-target-wasm` |
+| VM | `LOOM_TARGET_ALL_VM=ON` | `--config=loom-target-vm` |
 
-Bazel's native flags are complete lists. This explicitly selects the ordinary
-all-but-Wasm configuration:
+Selecting any CMake family preset replaces the implicit default; selecting
+several family presets takes their deterministic union. The portable `-D`
+options accepted by `python dev.py bazel configure` have the same behavior.
+Bazel's named target configurations are complete selections, so use one target
+configuration per invocation instead of stacking them. Full development builds
+include WebAssembly explicitly:
+
+```bash
+python dev.py bazel configure --config=loom-target-all
+python dev.py cmake configure -DLOOM_TARGET_ALL=ON
+```
+
+Exact builds bypass presets and name complete architecture, artifact, and
+execution lists. All three native Bazel settings are required together. CMake
+exact selection disables the default preset and enables the desired additive
+leaves:
 
 ```bash
 python dev.py bazel configure \
-  --//loom/config/arch:enable=aie2p,amdgpu,spirv,vm,x86 \
-  --//loom/config/emit:enable=elf,spirv,vm \
-  --//loom/config/execute:enable=iree_hal,iree_vm
+  --//loom/config/arch:enable=x86 \
+  --//loom/config/emit:enable=elf \
+  --//loom/config/execute:enable=iree_hal
+
+python dev.py cmake configure \
+  -DLOOM_TARGET_DEFAULT=OFF \
+  -DLOOM_ARCH_X86=ON \
+  -DLOOM_EMIT_ELF=ON \
+  -DLOOM_EXECUTE_IREE_HAL=ON
 ```
 
-Portable `-D...=ON|OFF` options edit the same lists. Enabling hosted Wasm
-end-to-end requires all three leaves:
-
-```bash
-python dev.py bazel configure \
-  -DLOOM_ARCH_WASM=ON \
-  -DLOOM_EMIT_WASM=ON \
-  -DLOOM_EXECUTE_WASM_HOST=ON
-```
+Native Bazel lists cannot be mixed with a target preset, and an incomplete
+three-axis selection fails during configure. CMake leaf options add to selected
+presets; setting a leaf to `OFF` does not subtract it. A custom CMake matrix
+therefore starts with `LOOM_TARGET_DEFAULT=OFF` and leaves every family preset
+off.
 
 AMDGPU has an additional architecture selector list.
 `LOOM_ARCH_AMDGPU_TARGETS` selects which processors the compiler supports. The
@@ -844,13 +870,11 @@ comma-separated list values; CMake uses normal semicolon-separated CMake lists:
 
 ```bash
 python dev.py bazel configure \
-  -DLOOM_ARCH_AMDGPU=ON \
-  -DLOOM_EMIT_ELF=ON \
+  --config=loom-target-amd-gpu \
   --//loom/config/arch/amdgpu:targets=gfx942,gfx120X-all,gfx12-5-generic
 
 python dev.py cmake configure \
-  -DLOOM_ARCH_AMDGPU=ON \
-  -DLOOM_EMIT_ELF=ON \
+  -DLOOM_TARGET_ALL_AMD_GPU=ON \
   -DLOOM_ARCH_AMDGPU_TARGETS='gfx942;gfx120X-all;gfx12-5-generic'
 ```
 
@@ -858,17 +882,9 @@ To select Loom targets from the runtime's processor set:
 
 ```bash
 python dev.py cmake configure \
-  -DLOOM_ARCH_AMDGPU=ON \
-  -DLOOM_EMIT_ELF=ON \
+  -DLOOM_TARGET_ALL_AMD_GPU=ON \
   -DLOOM_ARCH_AMDGPU_TARGETS=iree_hal \
   -DIREE_HAL_AMDGPU_TARGETS='gfx942;gfx1201'
-```
-
-To remove SPIR-V compilation from the ordinary configuration, disable both its
-architecture and format leaves:
-
-```bash
-python dev.py bazel configure -DLOOM_ARCH_SPIRV=OFF -DLOOM_EMIT_SPIRV=OFF
 ```
 
 Execution options describe the runtime substrate available to Loom tools, not a
@@ -878,9 +894,7 @@ HAL driver:
 
 ```bash
 python dev.py bazel configure \
-  -DLOOM_ARCH_AMDGPU=ON \
-  -DLOOM_EMIT_ELF=ON \
-  -DLOOM_EXECUTE_IREE_HAL=ON \
+  --config=loom-target-amd-gpu \
   -DIREE_HAL_DRIVER_AMDGPU=ON \
   --//runtime/src/iree/hal/drivers/amdgpu:targets=gfx942 \
   --//loom/config/arch/amdgpu:targets=gfx942 \
