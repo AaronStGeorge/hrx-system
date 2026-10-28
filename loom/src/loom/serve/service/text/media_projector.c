@@ -316,8 +316,9 @@ bool loom_serve_text_media_projector_offer(
         &request->chat->projections.values[index];
     iree_host_size_t length = 0;
     iree_status_t status = loom_serve_media_image_request_size(
-        &request->chat->images.values[projection->image_index].info,
-        projection->metadata_length, &length);
+        1, &request->chat->images.values[projection->image_index].info,
+        sizeof(*request->chat->images.values), projection->metadata_length,
+        &length);
     if (!iree_status_is_ok(status)) {
       request->status = iree_status_join(request->status, status);
       return true;
@@ -364,7 +365,8 @@ static iree_status_t loom_serve_text_media_request_forecast(
     const loom_serve_text_media_projection_t* projection =
         &request->chat->projections.values[request->first_projection + i];
     status = loom_serve_media_image_request_describe(
-        &request->chat->images.values[projection->image_index].info,
+        1, &request->chat->images.values[projection->image_index].info,
+        sizeof(*request->chat->images.values),
         loom_serve_text_media_projection_metadata(request->chat, projection),
         projection->feature_count, request->host_allocator,
         &descriptions[i].bytes);
@@ -441,7 +443,8 @@ static iree_status_t loom_serve_text_media_projector_prepare(void* user_data) {
     }
     projector->cohort[valid_count] = job;
     projector->requests[valid_count++] = (loom_serve_media_image_request_t){
-        .image = &job->input,
+        .image_count = 1,
+        .images = &job->input,
         .metadata = loom_serve_text_media_projection_metadata(chat, projection),
         .output_rows = projection->feature_count,
     };

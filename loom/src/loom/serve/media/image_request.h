@@ -14,41 +14,54 @@
 extern "C" {
 #endif
 
-// Source-visible little-endian u32 fields in a finite image request. The
-// 64-byte header has zero reserved words. Source-private metadata follows it;
-// packed RGB8/RGBA8 pixels begin at a 16-byte-aligned offset in encoded
-// row-major orientation. Device preprocessing owns orientation, compositing,
-// resizing, and normalization. FORMAT identifies the codec, not the channels.
-// Complete packets include zero tail padding to 16 bytes so concatenation
-// preserves header and pixel alignment across differently shaped images.
+// Source-visible little-endian u32 fields in one finite projection request.
+// The header precedes a directory of distinct input planes, source-private
+// metadata, and aligned RGB8/RGBA8 planes in encoded row-major orientation.
+// Device preprocessing owns orientation, compositing, resizing, and temporal
+// grouping. Every plane and the complete packet are padded to 16 bytes.
 typedef enum loom_serve_media_image_request_field_e {
   LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_VERSION = 0,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_FORMAT = 1,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_WIDTH = 2,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_HEIGHT = 3,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_DISPLAY_WIDTH = 4,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_DISPLAY_HEIGHT = 5,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_ORIENTATION = 6,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_OUTPUT_ROWS = 7,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_METADATA_OFFSET = 8,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_METADATA_LENGTH = 9,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_PIXEL_OFFSET = 10,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_PIXEL_LENGTH = 11,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_PIXEL_FORMAT = 12,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_COUNT = 13,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_PLANE_COUNT = 1,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_OUTPUT_ROWS = 2,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_METADATA_OFFSET = 3,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_METADATA_LENGTH = 4,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_PLANES_OFFSET = 5,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_PIXEL_OFFSET = 6,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_PACKET_LENGTH = 7,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_FIELD_COUNT = 8,
 } loom_serve_media_image_request_field_t;
 
+// One plane directory record. FORMAT identifies the codec; PIXEL_FORMAT
+// identifies the channel layout. Offsets are relative to the complete packet.
+// The remaining words in each 48-byte record are zero.
+typedef enum loom_serve_media_image_plane_field_e {
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_FORMAT = 0,
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_WIDTH = 1,
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_HEIGHT = 2,
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_DISPLAY_WIDTH = 3,
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_DISPLAY_HEIGHT = 4,
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_ORIENTATION = 5,
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_PIXEL_OFFSET = 6,
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_PIXEL_LENGTH = 7,
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_PIXEL_FORMAT = 8,
+  LOOM_SERVE_MEDIA_IMAGE_PLANE_FIELD_COUNT = 9,
+} loom_serve_media_image_plane_field_t;
+
 enum {
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_VERSION = 1,
-  LOOM_SERVE_MEDIA_IMAGE_REQUEST_HEADER_BYTES = 64,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_VERSION = 2,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_HEADER_BYTES = 32,
+  LOOM_SERVE_MEDIA_IMAGE_REQUEST_PLANE_BYTES = 48,
   LOOM_SERVE_MEDIA_IMAGE_REQUEST_PIXEL_ALIGNMENT = 16,
 };
 
-// One inspected image and its source-owned projection policy. Instances from
-// several text requests can share a cohort without changing their ordinals.
+// One nonempty inspected image group and its source-owned projection policy.
+// Groups from several text requests can share a cohort without changing their
+// ordinals. Repeated temporal padding aliases a plane in source, not here.
 typedef struct loom_serve_media_image_request_t {
-  // Borrowed immutable input already inspected by the configured codec facade.
-  const loom_serve_media_image_input_t* image;
+  // Number of distinct inputs in this group.
+  iree_host_size_t image_count;
+  // Borrowed contiguous immutable inputs inspected by the codec facade.
+  const loom_serve_media_image_input_t* images;
   // Borrowed checked preprocessing metadata, copied into the source packet.
   iree_const_byte_span_t metadata;
   // Positive source-declared row count, checked at finite batch preparation.
@@ -57,32 +70,38 @@ typedef struct loom_serve_media_image_request_t {
 
 // Exact checked packet extent, available before transport or pixel allocation.
 // Admission uses the same layout calculation as packet realization.
+// infos names image_count inspected records separated by info_stride bytes;
+// this borrows facts embedded in either transport inputs or chat descriptors
+// without allocating a second array. Groups are nonempty.
 iree_status_t loom_serve_media_image_request_size(
-    const loom_serve_media_image_info_t* info, iree_host_size_t metadata_length,
+    iree_host_size_t image_count, const loom_serve_media_image_info_t* infos,
+    iree_host_size_t info_stride, iree_host_size_t metadata_length,
     iree_host_size_t* out_length);
 
 // Creates only the header and source metadata for memory forecasting, without
 // retaining the compressed image or decoding pixels. The descriptor is the
-// exact prefix of the eventual packet, ending at PIXEL_OFFSET. PIXEL_LENGTH
-// still describes the future plane; the descriptor does not contain it and is
+// exact prefix of the eventual packet, ending at PIXEL_OFFSET. The directory
+// still describes every future plane; the descriptor contains no pixels and is
 // not an execution input. The inspected info and metadata are borrowed only
 // through this call. Success transfers one VM buffer.
 iree_status_t loom_serve_media_image_request_describe(
-    const loom_serve_media_image_info_t* info, iree_const_byte_span_t metadata,
+    iree_host_size_t image_count, const loom_serve_media_image_info_t* infos,
+    iree_host_size_t info_stride, iree_const_byte_span_t metadata,
     uint32_t output_rows, iree_allocator_t host_allocator,
     iree_vm_buffer_t** out_descriptor);
 
 // Realizes a cohort directly into exact source packets, with no intermediate
 // pixel planes. Inputs/metadata remain borrowed through return. Each successful
-// output owns one VM buffer; a per-image error leaves that output null without
-// rejecting valid peers. All out_statuses must be consumed, including when the
-// returned shared allocation status fails. Shared failure releases every output
-// buffer while preserving any per-image errors already produced.
+// output owns one VM buffer; a per-plane error leaves its group's output null
+// without rejecting valid peer groups. All out_statuses must be consumed,
+// including when the returned shared allocation status fails. Shared failure
+// releases every output buffer while preserving any per-group errors already
+// produced.
 //
 // The owner selects the cohort within its byte budget before calling. Retained
-// packet bytes are align(align(64 + metadata_length, 16) + pixel_length, 16)
-// per image, plus VM ownership overhead. Temporary scratch is O(count), never
-// O(pixels). No persistent cache is created. Empty cohorts allocate nothing.
+// packet bytes are align(32 + 48*image_count + metadata_length, 16), plus the
+// sum of aligned plane lengths and VM ownership overhead. Temporary scratch
+// is proportional to input count, never pixels. Empty cohorts allocate nothing.
 iree_status_t loom_serve_media_image_request_create_batch(
     iree_host_size_t count, const loom_serve_media_image_request_t* requests,
     iree_allocator_t host_allocator, iree_vm_buffer_t** out_packets,

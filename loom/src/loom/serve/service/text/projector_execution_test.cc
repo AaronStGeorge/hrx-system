@@ -123,8 +123,9 @@ TEST_F(PixelProjectorExecutionTest, RgbAndRgbaCohortConditionsRetainedText) {
   }
   const uint8_t metadata[] = {9, 8, 7};
   const loom_serve_media_image_request_t requests[] = {
-      {&inputs_[0], {}, 3},
-      {&inputs_[1], iree_make_const_byte_span(metadata, sizeof(metadata)), 2},
+      {1, &inputs_[0], {}, 3},
+      {1, &inputs_[1], iree_make_const_byte_span(metadata, sizeof(metadata)),
+       2},
   };
   iree_status_t statuses[2];
   IREE_ASSERT_OK(loom_serve_media_image_request_create_batch(

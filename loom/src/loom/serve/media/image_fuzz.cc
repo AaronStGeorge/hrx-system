@@ -38,8 +38,8 @@ static void Exercise(iree_string_view_t input) {
       // distinct metadata alignment and projection extents in one cohort.
       const uint8_t metadata[] = {1, 2, 3};
       const loom_serve_media_image_request_t requests[] = {
-          {&image, {}, 1},
-          {&image, iree_make_const_byte_span(metadata, sizeof(metadata)), 3},
+          {1, &image, {}, 1},
+          {1, &image, iree_make_const_byte_span(metadata, sizeof(metadata)), 3},
       };
       iree_vm_buffer_t* packets[2];
       status = loom_serve_media_image_request_create_batch(
