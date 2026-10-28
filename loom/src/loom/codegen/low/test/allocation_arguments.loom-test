@@ -221,34 +221,6 @@ value %quad: test.pressure.alias32 -> physical_register[0:4]
 
 // ====
 
-// Both inputs intersect every four-unit span. The packing repair must move both.
-// RUN: emit low-allocation @entry_fragment_two_inputs test.i32=6 entry=0:test.i32:target_id:2 entry=1:test.i32:target_id:3
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @entry_fragment_two_inputs(%first: reg<test.i32>, %second: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
-  %wide = test.load.v4i32 %address
-  return %first, %second, %wide
-}
-
-// ----
-low-allocation @entry_fragment_two_inputs
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 4
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 2
-  test.i32:target_id:5 <- test.i32:target_id:2
-  test.i32:target_id:4 <- test.i32:target_id:3
-classes:
-  test.i32: assignments=3 units=6 target_ids=6 physical=0 spill_slots=0 unassigned=0
-  test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
-
-// ====
-
 // Five simultaneous scalars cannot fit in the four-register unspillable bank.
 // RUN: emit low-allocation @entry_physical_shortage
 

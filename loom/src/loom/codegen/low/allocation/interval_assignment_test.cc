@@ -1066,6 +1066,9 @@ struct EntryPlacementCase {
   uint32_t incoming_count;
   // Expected final location of each argument.
   uint32_t expected[3];
+  // Assignment policy whose incoming-location behavior is under test.
+  loom_low_allocation_search_strategy_t strategy =
+      LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FIRST_FIT;
 };
 
 class LowEntryPlacementTest : public LowAllocationIntervalAssignmentTest {
@@ -1088,6 +1091,8 @@ void LowEntryPlacementTest::CheckPlacement(
   uint32_t starts[8] = {};
   uint32_t ends[8] = {};
   uint32_t unit_count = 0;
+  loom_liveness_pressure_summary_t pressure_summaries[3] = {};
+  uint32_t pressure_summary_count = 0;
   for (uint32_t i = 0; i < test_case.value_count; ++i) {
     IREE_ASSERT_OK(loom_module_define_value(
         module_,
@@ -1100,10 +1105,26 @@ void LowEntryPlacementTest::CheckPlacement(
         .value_id = values[i],
         .start_point = 0,
         .end_point = 2,
+        .block_count = 1,
         .value_class = RegisterValueClass(descriptors->stable_id),
         .unit_count = test_case.widths[i],
+        .definition_point = UINT32_MAX,
     };
     intervals[i].value_class.register_class_id = class_ids[i];
+    uint32_t summary_index = 0;
+    while (summary_index < pressure_summary_count &&
+           pressure_summaries[summary_index].value_class.register_class_id !=
+               class_ids[i]) {
+      ++summary_index;
+    }
+    auto& summary = pressure_summaries[summary_index];
+    if (summary_index == pressure_summary_count) {
+      summary.value_class = intervals[i].value_class;
+      summary.peak_block = block;
+      ++pressure_summary_count;
+    }
+    summary.peak_live_units += test_case.widths[i];
+    ++summary.peak_live_values;
     unit_values[i] = {unit_count, 0};
     for (uint32_t j = 0; j < test_case.widths[i]; ++j) {
       ends[unit_count++] = 2;
@@ -1124,6 +1145,8 @@ void LowEntryPlacementTest::CheckPlacement(
       .value_ids = values,
       .value_count = test_case.value_count,
       .value_interval_indices = interval_indices,
+      .pressure_summaries = pressure_summaries,
+      .pressure_summary_count = pressure_summary_count,
   };
   uint64_t incomplete_storage = 0;
   const loom_low_allocation_unit_liveness_t unit_liveness = {
@@ -1185,6 +1208,7 @@ void LowEntryPlacementTest::CheckPlacement(
       .storage_leases = &leases,
       .arena = &arena_,
       .function_cfg_graph = &graph,
+      .search_strategy = test_case.strategy,
   };
   loom_low_allocation_interval_assignment_result_t result = {};
   iree_status_t status = loom_low_allocation_interval_assignment_build(
@@ -1249,7 +1273,16 @@ INSTANTIATE_TEST_SUITE_P(
                 "already_fits", 8, 3, {1, 1, 4}, {2, 0}, 2, {2, 0, 4}},
             EntryPlacementCase{
                 "second_input", 6, 3, {1, 1, 4}, {0, 2}, 2, {0, 5, 1}},
-            EntryPlacementCase{"pair", 6, 2, {2, 4}, {2}, 1, {4, 0}})));
+            EntryPlacementCase{"pair", 6, 2, {2, 4}, {2}, 1, {4, 0}},
+            EntryPlacementCase{
+                "two_input_repacking",
+                6,
+                3,
+                {1, 1, 4},
+                {2, 3},
+                2,
+                {5, 4, 0},
+                LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FRAGMENTATION_REPAIR})));
 
 class LowExplicitEntryPlacementTest
     : public LowEntryPlacementTest,
