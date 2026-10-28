@@ -804,7 +804,7 @@ TEST_F(GpuNativeTest, RecordedAtomicsFollowReplacementBacking) {
           {
               .queue =
                   {
-                      .device_scope_32 = IREE_HAL_ATOMIC_OPERATION_FLAG_RMW_ADD,
+                      .device_scope_32 = IREE_HAL_ATOMIC_OPERATION_FLAG_STORE,
                   },
           },
   };
@@ -827,21 +827,44 @@ TEST_F(GpuNativeTest, RecordedAtomicsFollowReplacementBacking) {
   IREE_ASSERT_OK(
       iree_hal_virtual_buffer_create(group_, scope, {1, &source_pool}, &options,
                                      iree_allocator_system(), target.out()));
+  iree_hal_memory_scope_t queue_scope;
+  IREE_ASSERT_OK(iree_hal_device_group_resolve_memory_scope(
+      group_, {IREE_HAL_MEMORY_SITE_QUEUE, access.family}, &queue_scope));
+  const auto atomic_operations =
+      iree_hal_buffer_query_atomic_operations(target, queue_scope);
+  ASSERT_TRUE(iree_all_bits_set(atomic_operations.device_scope_32,
+                                IREE_HAL_ATOMIC_OPERATION_FLAG_STORE));
+  const bool supports_add =
+      iree_all_bits_set(atomic_operations.device_scope_32,
+                        IREE_HAL_ATOMIC_OPERATION_FLAG_RMW_ADD);
+  RecordProperty("atomic_operations", supports_add ? "STORE+ADD" : "STORE");
   Ref<iree_hal_command_buffer_t> commands;
   IREE_ASSERT_OK(iree_hal_command_buffer_create(
       access.family, IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
       IREE_HAL_COMMAND_CATEGORY_ATOMIC, 0, commands.out()));
   IREE_ASSERT_OK(iree_hal_command_buffer_begin(commands));
-  IREE_ASSERT_OK(iree_hal_command_buffer_atomic_rmw(
+  IREE_ASSERT_OK(iree_hal_command_buffer_atomic_store(
       commands, IREE_HAL_EXECUTION_STAGE_COMMAND_ISSUE,
       IREE_HAL_EXECUTION_STAGE_COMMAND_RETIRE,
       iree_hal_make_buffer_ref(target, 0, sizeof(uint32_t)),
       {
-          .operand = 1,
-          .flags = IREE_HAL_ATOMIC_FLAG_ACQUIRE | IREE_HAL_ATOMIC_FLAG_RELEASE,
+          .value = 99,
+          .flags = IREE_HAL_ATOMIC_FLAG_RELEASE,
           .width = IREE_HAL_ATOMIC_WIDTH_32,
-          .operation = IREE_HAL_ATOMIC_RMW_OPERATION_ADD,
       }));
+  if (supports_add) {
+    IREE_ASSERT_OK(iree_hal_command_buffer_atomic_rmw(
+        commands, IREE_HAL_EXECUTION_STAGE_COMMAND_ISSUE,
+        IREE_HAL_EXECUTION_STAGE_COMMAND_RETIRE,
+        iree_hal_make_buffer_ref(target, 0, sizeof(uint32_t)),
+        {
+            .operand = 1,
+            .flags =
+                IREE_HAL_ATOMIC_FLAG_ACQUIRE | IREE_HAL_ATOMIC_FLAG_RELEASE,
+            .width = IREE_HAL_ATOMIC_WIDTH_32,
+            .operation = IREE_HAL_ATOMIC_RMW_OPERATION_ADD,
+        }));
+  }
   IREE_ASSERT_OK(iree_hal_command_buffer_end(commands));
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(source, &stats);
@@ -880,7 +903,7 @@ TEST_F(GpuNativeTest, RecordedAtomicsFollowReplacementBacking) {
         backings[i], 0, &result, sizeof(result), nullptr));
     IREE_ASSERT_OK(
         iree_hal_semaphore_wait(timeline, read, iree_infinite_timeout(), 0));
-    EXPECT_EQ(result, initial + 1);
+    EXPECT_EQ(result, supports_add ? 100u : 99u);
   }
   IREE_ASSERT_OK(iree_hal_virtual_buffer_detach(target, all));
 }
