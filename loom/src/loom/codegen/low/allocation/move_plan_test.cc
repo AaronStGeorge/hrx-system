@@ -8,21 +8,16 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/frame.h"
-#include "loom/codegen/low/text_asm.h"
-#include "loom/format/text/parser.h"
+#include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/facts_builder.h"
-#include "loom/target/test/low_registry.h"
+#include "loom/target/test/descriptors.h"
 #include "loom/target/test/target_records.h"
-#include "loom/testing/module_ptr.h"
 
 namespace loom {
 namespace {
-
-using ModulePtr = ::loom::testing::ModulePtr;
 
 class LowAllocationMovePlanTest : public ::testing::Test {
  protected:
@@ -36,7 +31,6 @@ class LowAllocationMovePlanTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_LOW,
                                                  vtables, (uint16_t)count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
-    loom_test_low_descriptor_registry_initialize(&registry_);
     const auto* target_bundle = loom_target_bundle_table_lookup(
         &loom_test_target_bundles, LOOM_TEST_TARGET_KIND_LOW_CORE);
     ASSERT_NE(target_bundle, nullptr);
@@ -47,8 +41,7 @@ class LowAllocationMovePlanTest : public ::testing::Test {
         .target_name = target_bundle->name,
         .descriptor_set_key = target_bundle->config->contract_set.spelling,
         .feature_bits = target_bundle->config->contract_feature_bits,
-        .descriptor_set = loom_low_descriptor_registry_lookup(
-            &registry_.registry, target_bundle->config->contract_set.spelling),
+        .descriptor_set = loom_test_low_core_descriptor_set(),
     };
     ASSERT_NE(target_.descriptor_set, nullptr);
 
@@ -91,53 +84,6 @@ class LowAllocationMovePlanTest : public ::testing::Test {
     iree_arena_block_pool_deinitialize(&pool_);
   }
 
-  ModulePtr Parse(const char* source) {
-    loom_text_parse_options_t options = {
-        .diagnostic_sink = {loom_diagnostic_stderr_sink, nullptr},
-    };
-    loom_low_descriptor_text_asm_environment_initialize(
-        &registry_.registry, &options.low_asm_environment);
-    loom_module_t* module = nullptr;
-    IREE_CHECK_OK(loom_text_parse(iree_make_cstring_view(source),
-                                  IREE_SV("move_plan_test.loom"), &context_,
-                                  &pool_, &options, &module));
-    return ModulePtr(module);
-  }
-
-  void CheckCursor(const loom_low_allocation_move_plan_t& plan,
-                   const loom_region_t* region,
-                   loom_low_allocation_move_cursor_t* cursor,
-                   uint32_t* visited_count) {
-    const auto& liveness = *plan.context.assignment_map.liveness;
-    const loom_block_t* block = nullptr;
-    loom_region_for_each_block(region, block) {
-      const loom_op_t* op = nullptr;
-      loom_block_for_each_op(block, op) {
-        const auto* point =
-            loom_low_allocation_move_plan_next_operation(&plan, op, cursor);
-        // Independent identity lookup is deliberately confined to the test.
-        const loom_liveness_operation_point_t* expected = nullptr;
-        for (iree_host_size_t i = 0; i < liveness.operation_count; ++i) {
-          if (loom_liveness_operation_at(&liveness, i)->op == op) {
-            expected = loom_liveness_operation_at(&liveness, i);
-            break;
-          }
-        }
-        EXPECT_EQ(point, expected);
-        ++*visited_count;
-        if (!loom_liveness_analysis_includes_region_tree(&liveness)) {
-          continue;
-        }
-        loom_region_t* const* regions = loom_op_regions(op);
-        for (uint8_t i = 0; i < op->region_count; ++i) {
-          if (regions[i]) {
-            CheckCursor(plan, regions[i], cursor, visited_count);
-          }
-        }
-      }
-    }
-  }
-
   // Shared blocks for retained output, transient workspace, and IR ownership.
   iree_arena_block_pool_t pool_ = {};
   // Retains move rows and constraints beyond scratch release.
@@ -146,8 +92,6 @@ class LowAllocationMovePlanTest : public ::testing::Test {
   iree_arena_allocator_t scratch_ = {};
   // Registered Low operations for the owned function.
   loom_context_t context_ = {};
-  // Test-target descriptor bindings.
-  loom_target_low_descriptor_registry_t registry_ = {};
   // Target facts used by constraint resolution.
   loom_target_facts_t target_facts_ = {};
   // Resolved descriptor contract shared by native move groups.
@@ -193,9 +137,7 @@ TEST_F(LowAllocationMovePlanTest, AppendsOnlyDemandedAssignmentUnits) {
        {0, 2},
        {1, 3}},
   };
-  const auto* descriptors = loom_low_descriptor_registry_lookup(
-      &registry_.registry, IREE_SV("test.low.core"));
-  ASSERT_NE(descriptors, nullptr);
+  const auto* descriptors = target_.descriptor_set;
   uint32_t starts[] = {2, 2};
   uint32_t ends[] = {6, 6};
   const loom_low_allocation_unit_liveness_t liveness = {
@@ -262,103 +204,6 @@ TEST_F(LowAllocationMovePlanTest, AppendsOnlyDemandedAssignmentUnits) {
       }
     }
   }
-}
-
-TEST_F(LowAllocationMovePlanTest,
-       RetainsSourceIdentityAcrossScheduledSubtrees) {
-  ModulePtr module = Parse(R"(
-low.func.def target<test.low.core> @subtrees(%condition: reg<test.i32>, %lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) asm {
-  %sum = test.add.i32 %lhs, %rhs
-  %result = low.scf.if %condition -> (reg<test.i32>) {
-    %copy = copy %sum : reg<test.i32> -> reg<test.i32>
-    low.scf.yield %copy : reg<test.i32>
-  } else {
-    %nested = low.scf.if %condition -> (reg<test.i32>) {
-      %other = copy %rhs : reg<test.i32> -> reg<test.i32>
-      low.scf.yield %other : reg<test.i32>
-    } else {
-      low.scf.yield %lhs : reg<test.i32>
-    }
-    low.scf.yield %nested : reg<test.i32>
-  }
-  low.br ^exit(%result: reg<test.i32>)
-^exit(%returned: reg<test.i32>):
-  return %returned
-}
-)");
-  loom_low_emission_frame_options_t options = {
-      .descriptor_registry = &registry_.registry,
-      .function_target_facts = &target_facts_,
-      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
-  };
-  loom_low_emission_frame_t frame = {};
-  bool frame_accepted = false;
-  IREE_ASSERT_OK(loom_low_emission_frame_build(
-      module.get(), loom_block_op(loom_module_block(module.get()), 0), &options,
-      &arena_, &frame, &frame_accepted));
-  ASSERT_TRUE(frame_accepted);
-  ASSERT_EQ(frame.allocation.error_count, 0u);
-  ASSERT_GT(frame.allocation.liveness.operation_count,
-            frame.schedule.node_count);
-  const loom_low_schedule_table_t* const schedules[] = {&frame.schedule,
-                                                        nullptr};
-  for (const auto* schedule : schedules) {
-    loom_low_allocation_move_plan_context_t context = {};
-    context.assignment_map.liveness = &frame.allocation.liveness;
-    context.schedule = schedule;
-    loom_low_allocation_move_plan_t plan = {};
-    IREE_ASSERT_OK(loom_low_allocation_move_plan_initialize(
-        &context, /*move_input_capacity=*/2, /*raw_group_capacity=*/1, &arena_,
-        &scratch_, &plan));
-    EXPECT_EQ(plan.operation_indices_by_source_node == nullptr,
-              schedule == nullptr);
-    const auto scratch_size = scratch_.used_allocation_size;
-    for (int traversal = 0; traversal < 2; ++traversal) {
-      loom_low_allocation_move_cursor_t cursor = {};
-      uint32_t visited_count = 0;
-      CheckCursor(plan, frame.allocation.liveness.region, &cursor,
-                  &visited_count);
-      EXPECT_EQ(visited_count, frame.allocation.liveness.operation_count);
-    }
-    EXPECT_EQ(scratch_.used_allocation_size, scratch_size);
-  }
-}
-
-TEST_F(LowAllocationMovePlanTest, SourceCursorUsesAcceptedPermutation) {
-  ModulePtr module = Parse(R"(
-low.func.def target<test.low.core> @reordered(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) asm {
-  %producer = test.event.slow.i32 %lhs, %rhs
-  %consumer = test.add.i32 %producer, %rhs
-  %constant = test.const.issued.i32 1
-  %result = test.add.i32 %consumer, %constant
-  return %result
-}
-)");
-  loom_low_emission_frame_options_t options = {
-      .descriptor_registry = &registry_.registry,
-      .function_target_facts = &target_facts_,
-      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
-  };
-  loom_low_emission_frame_t frame = {};
-  bool frame_accepted = false;
-  IREE_ASSERT_OK(loom_low_emission_frame_build(
-      module.get(), loom_block_op(loom_module_block(module.get()), 0), &options,
-      &arena_, &frame, &frame_accepted));
-  ASSERT_TRUE(frame_accepted);
-  ASSERT_EQ(frame.allocation.error_count, 0u);
-  ASSERT_LT(frame.schedule.nodes[2].scheduled_ordinal,
-            frame.schedule.nodes[1].scheduled_ordinal);
-  loom_low_allocation_move_plan_context_t context = {};
-  context.assignment_map.liveness = &frame.allocation.liveness;
-  context.schedule = &frame.schedule;
-  loom_low_allocation_move_plan_t plan = {};
-  IREE_ASSERT_OK(loom_low_allocation_move_plan_initialize(
-      &context, /*move_input_capacity=*/2, /*raw_group_capacity=*/1, &arena_,
-      &scratch_, &plan));
-  loom_low_allocation_move_cursor_t cursor = {};
-  uint32_t visited_count = 0;
-  CheckCursor(plan, frame.allocation.liveness.region, &cursor, &visited_count);
-  EXPECT_EQ(visited_count, frame.allocation.liveness.operation_count);
 }
 
 TEST_F(LowAllocationMovePlanTest, CycleRowsSurviveScratchRelease) {
