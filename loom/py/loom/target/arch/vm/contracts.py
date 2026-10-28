@@ -192,6 +192,7 @@ _MATH_SOURCE_OPS = {
     "rsqrt": math.scalar_rsqrtf,
     "exp": math.scalar_expf,
     "exp2": math.scalar_exp2f,
+    "cbrt": math.scalar_cbrtf,
     "ceil": math.scalar_ceilf,
     "floor": math.scalar_floorf,
     "round_even": math.scalar_roundevenf,

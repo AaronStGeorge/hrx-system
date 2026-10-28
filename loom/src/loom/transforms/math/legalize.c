@@ -178,46 +178,6 @@ iree_status_t loom_math_legalize_create(loom_pass_t* pass,
   return iree_ok_status();
 }
 
-static bool loom_math_legalize_scalar_result_query(
-    const loom_module_t* module, const loom_op_t* op,
-    const loom_target_bundle_t* target_bundle, loom_target_math_op_t math_op,
-    loom_target_math_fastmath_flags_t fastmath_flags,
-    loom_target_math_query_t* out_query) {
-  const loom_value_id_t result = loom_op_results(op)[0];
-  const loom_type_t result_type = loom_module_value_type(module, result);
-  *out_query = (loom_target_math_query_t){
-      .target_bundle = target_bundle,
-      .math_op = math_op,
-      .lane_domain = LOOM_TARGET_MATH_LANE_DOMAIN_SCALAR,
-      .value_type = result_type,
-      .element_type = loom_type_element_type(result_type),
-      .fastmath_flags = fastmath_flags,
-      .requirement_flags =
-          op->instance_flags & LOOM_TARGET_MATH_REQUIREMENT_FLAG_PRESERVE,
-  };
-  return true;
-}
-
-static bool loom_math_legalize_vector_result_query(
-    const loom_module_t* module, const loom_op_t* op,
-    const loom_target_bundle_t* target_bundle, loom_target_math_op_t math_op,
-    loom_target_math_fastmath_flags_t fastmath_flags,
-    loom_target_math_query_t* out_query) {
-  const loom_value_id_t result = loom_op_results(op)[0];
-  const loom_type_t result_type = loom_module_value_type(module, result);
-  *out_query = (loom_target_math_query_t){
-      .target_bundle = target_bundle,
-      .math_op = math_op,
-      .lane_domain = LOOM_TARGET_MATH_LANE_DOMAIN_VECTOR,
-      .value_type = result_type,
-      .element_type = loom_type_element_type(result_type),
-      .fastmath_flags = fastmath_flags,
-      .requirement_flags =
-          op->instance_flags & LOOM_TARGET_MATH_REQUIREMENT_FLAG_PRESERVE,
-  };
-  return true;
-}
-
 static loom_target_math_op_t loom_math_legalize_scalar_geluf_op(
     const loom_op_t* op) {
   switch (loom_scalar_geluf_variant(op)) {
@@ -248,133 +208,101 @@ static loom_target_math_op_t loom_math_legalize_vector_geluf_op(
   return LOOM_TARGET_MATH_OP_UNKNOWN;
 }
 
-static loom_target_math_op_t loom_math_legalize_scalar_op_kind(
-    const loom_op_t* op) {
+// Scalar and vector operations share one semantic policy key; lane shape is
+// carried independently by the result type in the policy query.
+static loom_target_math_op_t loom_math_legalize_op_kind(const loom_op_t* op) {
   switch (op->kind) {
     case LOOM_OP_SCALAR_EXP2F:
-      return LOOM_TARGET_MATH_OP_EXP2F;
-    case LOOM_OP_SCALAR_EXPF:
-      return LOOM_TARGET_MATH_OP_EXPF;
-    case LOOM_OP_SCALAR_LOGF:
-      return LOOM_TARGET_MATH_OP_LOGF;
-    case LOOM_OP_SCALAR_LOG2F:
-      return LOOM_TARGET_MATH_OP_LOG2F;
-    case LOOM_OP_SCALAR_TANHF:
-      return LOOM_TARGET_MATH_OP_TANHF;
-    case LOOM_OP_SCALAR_ASINHF:
-      return LOOM_TARGET_MATH_OP_ASINHF;
-    case LOOM_OP_SCALAR_ACOSHF:
-      return LOOM_TARGET_MATH_OP_ACOSHF;
-    case LOOM_OP_SCALAR_ATANHF:
-      return LOOM_TARGET_MATH_OP_ATANHF;
-    case LOOM_OP_SCALAR_POWF:
-      return LOOM_TARGET_MATH_OP_POWF;
-    case LOOM_OP_SCALAR_CEILF:
-      return LOOM_TARGET_MATH_OP_CEILF;
-    case LOOM_OP_SCALAR_FLOORF:
-      return LOOM_TARGET_MATH_OP_FLOORF;
-    case LOOM_OP_SCALAR_ROUNDF:
-      return LOOM_TARGET_MATH_OP_ROUNDF;
-    case LOOM_OP_SCALAR_ROUNDEVENF:
-      return LOOM_TARGET_MATH_OP_ROUNDEVENF;
-    case LOOM_OP_SCALAR_TRUNCF:
-      return LOOM_TARGET_MATH_OP_TRUNCF;
-    case LOOM_OP_SCALAR_SQRTF:
-      return LOOM_TARGET_MATH_OP_SQRTF;
-    case LOOM_OP_SCALAR_RSQRTF:
-      return LOOM_TARGET_MATH_OP_RSQRTF;
-    case LOOM_OP_SCALAR_SINF:
-      return LOOM_TARGET_MATH_OP_SINF;
-    case LOOM_OP_SCALAR_COSF:
-      return LOOM_TARGET_MATH_OP_COSF;
-    case LOOM_OP_SCALAR_SINTURNSF:
-      return LOOM_TARGET_MATH_OP_SINTURNSF;
-    case LOOM_OP_SCALAR_COSTURNSF:
-      return LOOM_TARGET_MATH_OP_COSTURNSF;
-    case LOOM_OP_SCALAR_ERFF:
-      return LOOM_TARGET_MATH_OP_ERFF;
-    case LOOM_OP_SCALAR_LOGISTICF:
-      return LOOM_TARGET_MATH_OP_LOGISTICF;
-    case LOOM_OP_SCALAR_SILUF:
-      return LOOM_TARGET_MATH_OP_SILUF;
-    case LOOM_OP_SCALAR_SOFTPLUSF:
-      return LOOM_TARGET_MATH_OP_SOFTPLUSF;
-    case LOOM_OP_SCALAR_GELUF:
-      return loom_math_legalize_scalar_geluf_op(op);
-    case LOOM_OP_SCALAR_ADDF:
-      return LOOM_TARGET_MATH_OP_ADDF;
-    case LOOM_OP_SCALAR_SUBF:
-      return LOOM_TARGET_MATH_OP_SUBF;
-    case LOOM_OP_SCALAR_MULF:
-      return LOOM_TARGET_MATH_OP_MULF;
-    case LOOM_OP_SCALAR_DIVF:
-      return LOOM_TARGET_MATH_OP_DIVF;
-    default:
-      return LOOM_TARGET_MATH_OP_UNKNOWN;
-  }
-}
-
-static loom_target_math_op_t loom_math_legalize_vector_op_kind(
-    const loom_op_t* op) {
-  switch (op->kind) {
     case LOOM_OP_VECTOR_EXP2F:
       return LOOM_TARGET_MATH_OP_EXP2F;
+    case LOOM_OP_SCALAR_EXPF:
     case LOOM_OP_VECTOR_EXPF:
       return LOOM_TARGET_MATH_OP_EXPF;
+    case LOOM_OP_SCALAR_LOGF:
     case LOOM_OP_VECTOR_LOGF:
       return LOOM_TARGET_MATH_OP_LOGF;
+    case LOOM_OP_SCALAR_LOG2F:
     case LOOM_OP_VECTOR_LOG2F:
       return LOOM_TARGET_MATH_OP_LOG2F;
+    case LOOM_OP_SCALAR_TANHF:
     case LOOM_OP_VECTOR_TANHF:
       return LOOM_TARGET_MATH_OP_TANHF;
+    case LOOM_OP_SCALAR_ASINHF:
     case LOOM_OP_VECTOR_ASINHF:
       return LOOM_TARGET_MATH_OP_ASINHF;
+    case LOOM_OP_SCALAR_ACOSHF:
     case LOOM_OP_VECTOR_ACOSHF:
       return LOOM_TARGET_MATH_OP_ACOSHF;
+    case LOOM_OP_SCALAR_ATANHF:
     case LOOM_OP_VECTOR_ATANHF:
       return LOOM_TARGET_MATH_OP_ATANHF;
+    case LOOM_OP_SCALAR_POWF:
     case LOOM_OP_VECTOR_POWF:
       return LOOM_TARGET_MATH_OP_POWF;
+    case LOOM_OP_SCALAR_CEILF:
     case LOOM_OP_VECTOR_CEILF:
       return LOOM_TARGET_MATH_OP_CEILF;
+    case LOOM_OP_SCALAR_FLOORF:
     case LOOM_OP_VECTOR_FLOORF:
       return LOOM_TARGET_MATH_OP_FLOORF;
+    case LOOM_OP_SCALAR_ROUNDF:
     case LOOM_OP_VECTOR_ROUNDF:
       return LOOM_TARGET_MATH_OP_ROUNDF;
+    case LOOM_OP_SCALAR_ROUNDEVENF:
     case LOOM_OP_VECTOR_ROUNDEVENF:
       return LOOM_TARGET_MATH_OP_ROUNDEVENF;
+    case LOOM_OP_SCALAR_TRUNCF:
     case LOOM_OP_VECTOR_TRUNCF:
       return LOOM_TARGET_MATH_OP_TRUNCF;
+    case LOOM_OP_SCALAR_SQRTF:
     case LOOM_OP_VECTOR_SQRTF:
       return LOOM_TARGET_MATH_OP_SQRTF;
+    case LOOM_OP_SCALAR_RSQRTF:
     case LOOM_OP_VECTOR_RSQRTF:
       return LOOM_TARGET_MATH_OP_RSQRTF;
+    case LOOM_OP_SCALAR_CBRTF:
+    case LOOM_OP_VECTOR_CBRTF:
+      return LOOM_TARGET_MATH_OP_CBRTF;
+    case LOOM_OP_SCALAR_SINF:
     case LOOM_OP_VECTOR_SINF:
       return LOOM_TARGET_MATH_OP_SINF;
+    case LOOM_OP_SCALAR_COSF:
     case LOOM_OP_VECTOR_COSF:
       return LOOM_TARGET_MATH_OP_COSF;
+    case LOOM_OP_SCALAR_SINTURNSF:
     case LOOM_OP_VECTOR_SINTURNSF:
       return LOOM_TARGET_MATH_OP_SINTURNSF;
+    case LOOM_OP_SCALAR_COSTURNSF:
     case LOOM_OP_VECTOR_COSTURNSF:
       return LOOM_TARGET_MATH_OP_COSTURNSF;
+    case LOOM_OP_SCALAR_ERFF:
     case LOOM_OP_VECTOR_ERFF:
       return LOOM_TARGET_MATH_OP_ERFF;
+    case LOOM_OP_SCALAR_LOGISTICF:
     case LOOM_OP_VECTOR_LOGISTICF:
       return LOOM_TARGET_MATH_OP_LOGISTICF;
+    case LOOM_OP_SCALAR_SILUF:
     case LOOM_OP_VECTOR_SILUF:
       return LOOM_TARGET_MATH_OP_SILUF;
+    case LOOM_OP_SCALAR_SOFTPLUSF:
     case LOOM_OP_VECTOR_SOFTPLUSF:
       return LOOM_TARGET_MATH_OP_SOFTPLUSF;
-    case LOOM_OP_VECTOR_GELUF:
-      return loom_math_legalize_vector_geluf_op(op);
+    case LOOM_OP_SCALAR_ADDF:
     case LOOM_OP_VECTOR_ADDF:
       return LOOM_TARGET_MATH_OP_ADDF;
+    case LOOM_OP_SCALAR_SUBF:
     case LOOM_OP_VECTOR_SUBF:
       return LOOM_TARGET_MATH_OP_SUBF;
+    case LOOM_OP_SCALAR_MULF:
     case LOOM_OP_VECTOR_MULF:
       return LOOM_TARGET_MATH_OP_MULF;
+    case LOOM_OP_SCALAR_DIVF:
     case LOOM_OP_VECTOR_DIVF:
       return LOOM_TARGET_MATH_OP_DIVF;
+    case LOOM_OP_SCALAR_GELUF:
+      return loom_math_legalize_scalar_geluf_op(op);
+    case LOOM_OP_VECTOR_GELUF:
+      return loom_math_legalize_vector_geluf_op(op);
     default:
       return LOOM_TARGET_MATH_OP_UNKNOWN;
   }
@@ -384,21 +312,25 @@ static bool loom_math_legalize_query_for_op(
     const loom_module_t* module, const loom_op_t* op,
     const loom_target_bundle_t* target_bundle,
     loom_target_math_query_t* out_query) {
-  loom_target_math_op_t math_op = loom_math_legalize_scalar_op_kind(op);
-  if (math_op != LOOM_TARGET_MATH_OP_UNKNOWN) {
-    return loom_math_legalize_scalar_result_query(
-        module, op, target_bundle, math_op,
-        loom_math_legalize_fastmath_flags(op->instance_flags), out_query);
+  const loom_target_math_op_t math_op = loom_math_legalize_op_kind(op);
+  if (math_op == LOOM_TARGET_MATH_OP_UNKNOWN) {
+    return false;
   }
-
-  math_op = loom_math_legalize_vector_op_kind(op);
-  if (math_op != LOOM_TARGET_MATH_OP_UNKNOWN) {
-    return loom_math_legalize_vector_result_query(
-        module, op, target_bundle, math_op,
-        loom_math_legalize_fastmath_flags(op->instance_flags), out_query);
-  }
-
-  return false;
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_op_results(op)[0]);
+  *out_query = (loom_target_math_query_t){
+      .target_bundle = target_bundle,
+      .math_op = math_op,
+      .lane_domain = loom_type_is_scalar(result_type)
+                         ? LOOM_TARGET_MATH_LANE_DOMAIN_SCALAR
+                         : LOOM_TARGET_MATH_LANE_DOMAIN_VECTOR,
+      .value_type = result_type,
+      .element_type = loom_type_element_type(result_type),
+      .fastmath_flags = loom_math_legalize_fastmath_flags(op->instance_flags),
+      .requirement_flags =
+          op->instance_flags & LOOM_TARGET_MATH_REQUIREMENT_FLAG_PRESERVE,
+  };
+  return true;
 }
 
 static iree_string_view_t loom_math_legalize_function_name(

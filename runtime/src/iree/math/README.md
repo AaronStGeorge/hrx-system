@@ -5,9 +5,9 @@ shared by the runtime and compiler. It is not a host `libm` wrapper: each
 public function names one stable operation, format, and numerical contract so
 constant evaluation and dynamic execution can agree across hosts.
 
-Ordinary F32/F64 square root, reciprocal square root, and natural/base-two
-exponentials preserve gradual underflow. Both scalar and vector constant
-folding and the Core VM call these same typed functions:
+Ordinary F32/F64 square root, reciprocal square root, cube root, and
+natural/base-two exponentials preserve gradual underflow. Both scalar and
+vector constant folding and the Core VM call these same typed functions:
 
 ```c
 float root = iree_math_sqrt_f32(x);
@@ -22,6 +22,11 @@ The exponentials use Arm's table-and-polynomial algorithms with fixed unfused
 rounding points and at most one adjacent value of error from correct rounding.
 Their exceptional-value behavior and arithmetic profile are part of their
 stable mapping, not host library policy.
+
+Cube root uses a bit estimate followed by fixed Newton refinement. F32 uses
+two F64 refinements; F64 uses a short reciprocal-cube-root polynomial and one
+final correction. Both preserve signed zero and infinity, accept negative
+inputs, and normalize subnormal inputs without flushing them.
 
 Fused multiply-add rounds the exact product and addend once. F32/F64 use a
 native instruction when enabled by the build ISA, with an owned software
@@ -63,8 +68,8 @@ fast-math flags from changing the frozen mappings. Implicit contraction is
 disabled; fused arithmetic, where required by an algorithm, must be explicit.
 Clang evaluates intermediates at their declared source width, including when
 an embedding application requests wider expression evaluation globally.
-The ordinary mappings require
-gradual underflow, while approximation leaves own their documented flush rules.
+The ordinary mappings require gradual underflow, while approximation leaves
+own their documented flush rules.
 
 ## Organization
 
@@ -72,7 +77,7 @@ Operations are grouped by algorithm family and provenance:
 
 - `exponential.h` owns natural/base-two exponential and base-two logarithm.
 - `fma.h` owns fused arithmetic and narrow-format intermediate evaluation.
-- `roots.h` owns reciprocal, reciprocal square root, and square root.
+- `roots.h` owns reciprocal, reciprocal square root, square root, and cube root.
 - `trigonometry.h` owns turns-based sine and cosine.
 
 All clusters form one `:math` build target. Keeping their implementations in

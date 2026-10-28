@@ -196,6 +196,11 @@ TEST_F(VMBytecodeInterpreterFloatMathTest,
   EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_EXP2,
                             UINT64_C(0xC090C80000000000)),
             1);
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_CBRT, 1),
+            UINT32_C(0x26A14518));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_CBRT,
+                            UINT64_C(0x8000000000000001)),
+            UINT64_C(0xA990000000000000));
 }
 
 TEST_F(VMBytecodeInterpreterFloatMathTest, FmaRoundsOnce) {

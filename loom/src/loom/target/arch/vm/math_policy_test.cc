@@ -25,10 +25,9 @@ TEST(MathPolicyTest, OrdinaryElementaryFamily) {
       LOOM_SCALAR_TYPE_BF16,   LOOM_SCALAR_TYPE_F32,    LOOM_SCALAR_TYPE_F64,
   };
   const loom_target_math_op_t operations[] = {
-      LOOM_TARGET_MATH_OP_EXPF,
-      LOOM_TARGET_MATH_OP_EXP2F,
-      LOOM_TARGET_MATH_OP_SQRTF,
-      LOOM_TARGET_MATH_OP_RSQRTF,
+      LOOM_TARGET_MATH_OP_EXPF,  LOOM_TARGET_MATH_OP_EXP2F,
+      LOOM_TARGET_MATH_OP_SQRTF, LOOM_TARGET_MATH_OP_RSQRTF,
+      LOOM_TARGET_MATH_OP_CBRTF,
   };
   for (auto operation : operations) {
     SCOPED_TRACE(operation);

@@ -3893,7 +3893,8 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sqrtf_facts, iree_math_sqrt_f32,
                               iree_math_sqrt_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_rsqrtf_facts, iree_math_rsqrt_f32,
                               iree_math_rsqrt_f64)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cbrtf_facts, cbrtf, cbrt)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cbrtf_facts, iree_math_cbrt_f32,
+                              iree_math_cbrt_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sinf_facts, sinf, sin)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cosf_facts, cosf, cos)
 

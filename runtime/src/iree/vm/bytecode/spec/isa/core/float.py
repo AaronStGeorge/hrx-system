@@ -196,6 +196,14 @@ _FLOAT_MATH_ORDINARY_UNARY_VALUES = (
         "value of correct rounding. Either zero becomes one; infinities map "
         "to their limits; every NaN becomes the canonical positive quiet NaN.",
     ),
+    (
+        "cbrt",
+        16,
+        "Returns the stable iree/math real cube-root mapping with fixed unfused "
+        "refinement and at most one adjacent value of error from correct "
+        "rounding. Signed zero and infinity are preserved, subnormal inputs "
+        "are not flushed, and every NaN becomes the canonical positive quiet NaN.",
+    ),
 )
 
 FLOAT_MATH_F32_SELECTOR = _selector(

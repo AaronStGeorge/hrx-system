@@ -387,7 +387,8 @@ bool loom_target_math_policy_prefers_fma(
   _(ASINHF, op_asinhf, "asinhf")                         \
   _(ACOSHF, op_acoshf, "acoshf")                         \
   _(ATANHF, op_atanhf, "atanhf")                         \
-  _(DIVF, op_divf, "divf")
+  _(DIVF, op_divf, "divf")                               \
+  _(CBRTF, op_cbrtf, "cbrtf")
 
 #define LOOM_TARGET_MATH_LANE_DOMAIN_NAMES(_) \
   _(UNKNOWN, lane_unknown, "unknown")         \

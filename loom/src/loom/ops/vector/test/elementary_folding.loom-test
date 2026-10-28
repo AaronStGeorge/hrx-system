@@ -17,3 +17,20 @@ func.def @ordinary_vector_math() -> (vector<2xf64>, vector<2xf32>, vector<2xbf16
   %natural = vector.constant 2.71875 : vector<2xbf16>
   func.return %roots, %powers, %natural : vector<2xf64>, vector<2xf32>, vector<2xbf16>
 }
+
+// ====
+
+func.def @vector_cube_roots() -> (vector<2xf16>, vector<2xf64>) {
+  %narrow = vector.constant -8.0 : vector<2xf16>
+  %wide = vector.constant 4.9406564584124654e-324 : vector<2xf64>
+  %narrow_roots = vector.cbrtf %narrow : vector<2xf16>
+  %wide_roots = vector.cbrtf %wide : vector<2xf64>
+  func.return %narrow_roots, %wide_roots : vector<2xf16>, vector<2xf64>
+}
+
+// ----
+func.def @vector_cube_roots() -> (vector<2xf16>, vector<2xf64>) {
+  %narrow_roots = vector.constant -2.0 : vector<2xf16>
+  %wide_roots = vector.constant 1.7031839360032603e-108 : vector<2xf64>
+  func.return %narrow_roots, %wide_roots : vector<2xf16>, vector<2xf64>
+}

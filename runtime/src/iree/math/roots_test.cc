@@ -240,5 +240,83 @@ TEST_F(ElementaryTest, RsqrtF64OrdinaryBoundaries) {
   }
 }
 
+// MPFR 4.2.2 directed 256-bit intervals agree on these payloads. Cases
+// straddle subnormal normalization and exact cubes; each also tests its
+// negative counterpart, including signed zero and infinity.
+TEST_F(ElementaryTest, CbrtF32Boundaries) {
+  const struct {
+    // Exact input payload.
+    uint32_t input;
+    // Independently correctly rounded output payload.
+    uint32_t expected;
+  } cases[] = {
+      {UINT32_C(0x00000000), UINT32_C(0x00000000)},
+      {UINT32_C(0x00000001), UINT32_C(0x26A14518)},
+      {UINT32_C(0x00000002), UINT32_C(0x26CB2FF5)},
+      {UINT32_C(0x007FFFFF), UINT32_C(0x2A7FFFFF)},
+      {UINT32_C(0x00800000), UINT32_C(0x2A800000)},
+      {UINT32_C(0x00800001), UINT32_C(0x2A800000)},
+      {UINT32_C(0x3F7FFFFF), UINT32_C(0x3F800000)},
+      {UINT32_C(0x3F800000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x3F800001), UINT32_C(0x3F800000)},
+      {UINT32_C(0x40000000), UINT32_C(0x3FA14518)},
+      {UINT32_C(0x40FFFFFF), UINT32_C(0x40000000)},
+      {UINT32_C(0x41000000), UINT32_C(0x40000000)},
+      {UINT32_C(0x41000001), UINT32_C(0x40000000)},
+      {UINT32_C(0x41D80000), UINT32_C(0x40400000)},
+      {UINT32_C(0x7F7FFFFF), UINT32_C(0x54CB2FF5)},
+      {UINT32_C(0x7F800000), UINT32_C(0x7F800000)},
+  };
+  for (const auto& item : cases) {
+    ExpectF32Mapping(iree_math_cbrt_f32, item.input, item.expected);
+    ExpectF32Mapping(iree_math_cbrt_f32, item.input | UINT32_C(0x80000000),
+                     item.expected | UINT32_C(0x80000000));
+  }
+  ExpectF32Mapping(iree_math_cbrt_f32, UINT32_C(0x7F800001),
+                   UINT32_C(0x7FC00000));
+  ExpectF32Mapping(iree_math_cbrt_f32, UINT32_C(0x7FC0007B),
+                   UINT32_C(0x7FC00000));
+  ExpectF32Mapping(iree_math_cbrt_f32, UINT32_C(0xFF800001),
+                   UINT32_C(0x7FC00000));
+}
+
+TEST_F(ElementaryTest, CbrtF64Boundaries) {
+  const struct {
+    // Exact input payload.
+    uint64_t input;
+    // Independently correctly rounded output payload.
+    uint64_t expected;
+  } cases[] = {
+      {UINT64_C(0x0000000000000000), UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x0000000000000001), UINT64_C(0x2990000000000000)},
+      {UINT64_C(0x0000000000000002), UINT64_C(0x299428A2F98D728B)},
+      {UINT64_C(0x000FFFFFFFFFFFFF), UINT64_C(0x2AA428A2F98D728A)},
+      {UINT64_C(0x0010000000000000), UINT64_C(0x2AA428A2F98D728B)},
+      {UINT64_C(0x0010000000000001), UINT64_C(0x2AA428A2F98D728B)},
+      {UINT64_C(0x3FEFFFFFFFFFFFFF), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FF0000000000000), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0x3FF428A2F98D728B)},
+      {UINT64_C(0x401FFFFFFFFFFFFF), UINT64_C(0x4000000000000000)},
+      {UINT64_C(0x4020000000000000), UINT64_C(0x4000000000000000)},
+      {UINT64_C(0x4020000000000001), UINT64_C(0x4000000000000000)},
+      {UINT64_C(0x403B000000000000), UINT64_C(0x4008000000000000)},
+      {UINT64_C(0x7FEFFFFFFFFFFFFF), UINT64_C(0x554428A2F98D728B)},
+      {UINT64_C(0x7FF0000000000000), UINT64_C(0x7FF0000000000000)},
+  };
+  for (const auto& item : cases) {
+    ExpectF64Mapping(iree_math_cbrt_f64, item.input, item.expected);
+    ExpectF64Mapping(iree_math_cbrt_f64,
+                     item.input | UINT64_C(0x8000000000000000),
+                     item.expected | UINT64_C(0x8000000000000000));
+  }
+  ExpectF64Mapping(iree_math_cbrt_f64, UINT64_C(0x7FF0000000000001),
+                   UINT64_C(0x7FF8000000000000));
+  ExpectF64Mapping(iree_math_cbrt_f64, UINT64_C(0x7FF800000000007B),
+                   UINT64_C(0x7FF8000000000000));
+  ExpectF64Mapping(iree_math_cbrt_f64, UINT64_C(0xFFF0000000000001),
+                   UINT64_C(0x7FF8000000000000));
+}
+
 }  // namespace
 }  // namespace iree::math::testing

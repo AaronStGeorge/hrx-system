@@ -168,3 +168,32 @@ func.def @ordinary_math_mapping() -> (i64, f32, f64, f32) {
   %inverse = scalar.constant 3.5527132552840273e-15 : f32
   func.return %bits, %root, %subnormal, %inverse : i64, f32, f64, f32
 }
+
+// ====
+
+func.def @cube_roots() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %input0 = scalar.constant 2.0 : f8E4M3
+  %root0 = scalar.cbrtf %input0 : f8E4M3
+  %input1 = scalar.constant 2.0 : f8E5M2
+  %root1 = scalar.cbrtf %input1 : f8E5M2
+  %input2 = scalar.constant 2.0 : f16
+  %root2 = scalar.cbrtf %input2 : f16
+  %input3 = scalar.constant 2.0 : bf16
+  %root3 = scalar.cbrtf %input3 : bf16
+  %input4 = scalar.constant 2.0 : f32
+  %root4 = scalar.cbrtf %input4 : f32
+  %input5 = scalar.constant 2.0 : f64
+  %root5 = scalar.cbrtf %input5 : f64
+  func.return %root0, %root1, %root2, %root3, %root4, %root5 : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}
+
+// ----
+func.def @cube_roots() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %root0 = scalar.constant 1.25 : f8E4M3
+  %root1 = scalar.constant 1.25 : f8E5M2
+  %root2 = scalar.constant 1.259765625 : f16
+  %root3 = scalar.constant 1.2578125 : bf16
+  %root4 = scalar.constant 1.2599210739135742 : f32
+  %root5 = scalar.constant 1.2599210498948732 : f64
+  func.return %root0, %root1, %root2, %root3, %root4, %root5 : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}

@@ -23,9 +23,9 @@ check.case public @ordinary_f32 {
   %sqrt_two = check.literal value(1.4142135381698608) : f32
   %exp_half = check.literal value(1.6487212181091309) : f32
   check.expect.equal actual(%root) expected(%sqrt_half) : f32
-  check.expect.close actual(%inverse) expected(%sqrt_two) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32
-  check.expect.close actual(%natural) expected(%exp_half) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32
-  check.expect.close actual(%base_two) expected(%sqrt_two) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32
+  check.expect.approximate actual(%inverse) expected(%sqrt_two) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32, f32
+  check.expect.approximate actual(%natural) expected(%exp_half) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32, f32
+  check.expect.approximate actual(%base_two) expected(%sqrt_two) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32, f32
   check.return
 }
 
@@ -36,8 +36,8 @@ check.case public @ordinary_f64 {
   %sqrt_two = check.literal value(1.4142135623730951) : f64
   %exp_half = check.literal value(1.6487212707001282) : f64
   check.expect.equal actual(%root) expected(%sqrt_half) : f64
-  check.expect.close actual(%inverse) expected(%sqrt_two) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64
-  check.expect.close actual(%natural) expected(%exp_half) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64
-  check.expect.close actual(%base_two) expected(%sqrt_two) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64
+  check.expect.approximate actual(%inverse) expected(%sqrt_two) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64, f64
+  check.expect.approximate actual(%natural) expected(%exp_half) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64, f64
+  check.expect.approximate actual(%base_two) expected(%sqrt_two) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64, f64
   check.return
 }

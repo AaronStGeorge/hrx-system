@@ -182,3 +182,38 @@ low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_elementary(%e4m3: reg
   %base_two = conversion.float.truncate %18, "f32.to.bf16" : reg<vm.value : bf16>
   return %root, %inverse, %natural, %base_two
 }
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @cube_roots(%input0: f8E4M3, %input1: f8E5M2, %input2: f16, %input3: bf16, %input4: f32, %input5: f64) -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %root0 = scalar.cbrtf %input0 : f8E4M3
+  %root1 = scalar.cbrtf %input1 : f8E5M2
+  %root2 = scalar.cbrtf %input2 : f16
+  %root3 = scalar.cbrtf %input3 : bf16
+  %root4 = scalar.cbrtf %input4 : f32
+  %root5 = scalar.cbrtf %input5 : f64
+  func.return %root0, %root1, %root2, %root3, %root4, %root5 : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @cube_roots(%input0: reg<vm.value : f8E4M3>, %input1: reg<vm.value : f8E5M2>, %input2: reg<vm.value : f16>, %input3: reg<vm.value : bf16>, %input4: reg<vm.value : f32>, %input5: reg<vm.value : f64>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f16>, reg<vm.value : bf16>, reg<vm.value : f32>, reg<vm.value : f64>) asm {
+  %12 = conversion.float.extend %input0, "f8e4m3.to.f32" : reg<vm.value : f32>
+  %13 = float.math.unary.f32 %12, "cbrt"
+  %root0 = conversion.float.truncate %13, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %15 = conversion.float.extend %input1, "f8e5m2.to.f32" : reg<vm.value : f32>
+  %16 = float.math.unary.f32 %15, "cbrt"
+  %root1 = conversion.float.truncate %16, "f32.to.f8e5m2" : reg<vm.value : f8E5M2>
+  %18 = conversion.float.extend %input2, "f16.to.f32" : reg<vm.value : f32>
+  %19 = float.math.unary.f32 %18, "cbrt"
+  %root2 = conversion.float.truncate %19, "f32.to.f16" : reg<vm.value : f16>
+  %21 = conversion.float.extend %input3, "bf16.to.f32" : reg<vm.value : f32>
+  %22 = float.math.unary.f32 %21, "cbrt"
+  %root3 = conversion.float.truncate %22, "f32.to.bf16" : reg<vm.value : bf16>
+  %root4 = float.math.unary.f32 %input4, "cbrt"
+  %root5 = float.math.unary.f64 %input5, "cbrt"
+  return %root0, %root1, %root2, %root3, %root4, %root5
+}

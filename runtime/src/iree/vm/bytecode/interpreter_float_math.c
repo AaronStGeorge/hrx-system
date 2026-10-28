@@ -77,6 +77,9 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits) {
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP2:
       result = iree_math_exp2_f32(source);
       break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_CBRT:
+      result = iree_math_cbrt_f32(source);
+      break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_CEIL:
       result = ceilf(source);
       break;
@@ -136,6 +139,9 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXP2:
       result = iree_math_exp2_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_CBRT:
+      result = iree_math_cbrt_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_CEIL:
       result = ceil(source);

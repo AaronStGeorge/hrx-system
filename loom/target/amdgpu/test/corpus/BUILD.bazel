@@ -197,6 +197,7 @@ loom_corpus_test(
             "memory/view/selected_crops.loom:@selected_crop_values": "LOWERING/044",
             "numeric/float/exponential.loom:@exponential_values": "EXPECT/002,EXPECT/006",
             "numeric/float/logarithm.loom:@logarithm_values": "EXPECT/006",
+            "numeric/float/roots.loom:@cube_root_values": "LOWERING/036",
             "numeric/float/roots.loom:@root_values": "EXPECT/006",
             "numeric/float/rounding.loom:@rounding_bf16_all_bits": "LOWERING/036",
             "numeric/float/rounding.loom:@rounding_f16_all_bits": "LOWERING/036",

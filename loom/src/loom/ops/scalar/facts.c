@@ -337,7 +337,8 @@ FLOAT_UNARY_FACTS(loom_scalar_sqrtf_facts, iree_math_sqrt_f32,
                   iree_math_sqrt_f64)
 FLOAT_UNARY_FACTS(loom_scalar_rsqrtf_facts, iree_math_rsqrt_f32,
                   iree_math_rsqrt_f64)
-FLOAT_UNARY_FACTS(loom_scalar_cbrtf_facts, cbrtf, cbrt)
+FLOAT_UNARY_FACTS(loom_scalar_cbrtf_facts, iree_math_cbrt_f32,
+                  iree_math_cbrt_f64)
 FLOAT_UNARY_FACTS(loom_scalar_sinf_facts, sinf, sin)
 FLOAT_UNARY_FACTS(loom_scalar_cosf_facts, cosf, cos)
 
