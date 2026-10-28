@@ -407,7 +407,8 @@ class CpuXdnaRecipeTest : public XdnaDeviceFixture {
         continue;
       }
       ASSERT_EQ(status, AMDF_STATUS_OK);
-      if ((profile->roles & roles) != roles ||
+      if (!amdf_status_is_ok(profile->availability) ||
+          (profile->roles & roles) != roles ||
           (profile->supported_flags & required_flags) != required_flags) {
         continue;
       }

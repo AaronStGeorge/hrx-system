@@ -181,7 +181,12 @@ class FabricVirtualBufferTest
 
     IREE_ASSERT_OK(context_.Initialize(allocator_));
     iree_task_topology_t topology;
-    iree_task_topology_initialize_from_group_count(1, &topology);
+    // A real worker affinity gives the sealed group a host memory node for
+    // explicit placement without inventing topology facts for the native GPU.
+    IREE_ASSERT_OK(iree_task_topology_initialize_from_physical_cores(
+        IREE_TASK_TOPOLOGY_NODE_ID_ANY,
+        IREE_TASK_TOPOLOGY_PERFORMANCE_LEVEL_ANY,
+        IREE_TASK_TOPOLOGY_DISTRIBUTION_COMPACT, 1, &topology));
     iree_task_executor_options_t executor_options;
     iree_task_executor_options_initialize(&executor_options);
     auto status = iree_task_executor_create(executor_options, &topology,

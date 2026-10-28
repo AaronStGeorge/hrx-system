@@ -12,7 +12,7 @@ amdf_status_t amdf_linux_xdna_query_memory_profile(
     const amdf_xdna_device_profile_t* target, size_t page_size,
     uint32_t memory_profile_ordinal,
     amdf_memory_native_profile_t* out_profile) {
-  if (memory_profile_ordinal > 2 || target->dma.address_bit_count == 0) {
+  if (memory_profile_ordinal > 3 || target->dma.address_bit_count == 0) {
     return amdf_make_api_status(AMDF_STATUS_CODE_OUT_OF_RANGE);
   }
   const uint64_t maximum_address =
@@ -86,11 +86,16 @@ amdf_status_t amdf_linux_xdna_query_memory_profile(
         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK;
     profile.external_memory_support[1].flags &=
         ~AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_FOREIGN_API;
-  } else if (memory_profile_ordinal == 1) {
+  } else if (memory_profile_ordinal == 1 || memory_profile_ordinal == 3) {
     profile.host_mapping.properties = AMDF_HOST_MEMORY_PROPERTY_NONE;
     profile.memory_class = AMDF_MEMORY_CLASS_SYSTEM;
-    profile.roles =
-        AMDF_MEMORY_PROFILE_ROLE_IMPORT | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
+    // Platform-owned pages use the same DMA-BUF attachment, but are selected
+    // through a construction-only role. Their backing owner supplies host
+    // placement and mapping guarantees independently of this consumer.
+    profile.roles = AMDF_MEMORY_PROFILE_ROLE_HOST_MAP |
+                    (memory_profile_ordinal == 3
+                         ? AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT
+                         : AMDF_MEMORY_PROFILE_ROLE_IMPORT);
     profile.import = (amdf_memory_construction_capabilities_t){
         .maximum_byte_length = maximum_byte_length,
         .byte_length_granularity = 1,

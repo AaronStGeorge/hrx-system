@@ -72,6 +72,7 @@ class XdnaReservationTest
       }
       ASSERT_EQ(query_status, AMDF_STATUS_OK);
       found =
+          amdf_status_is_ok(profile_.availability) &&
           (profile_.roles & role_) != 0 &&
           (profile_.supported_flags & capabilities_.required_source_flags) ==
               capabilities_.required_source_flags;
