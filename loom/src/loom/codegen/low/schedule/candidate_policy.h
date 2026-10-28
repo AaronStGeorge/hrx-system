@@ -91,6 +91,21 @@ loom_low_schedule_choose_candidate_compare_mode(
     const loom_low_schedule_candidate_score_t* scores,
     iree_host_size_t score_count, uint32_t current_persistent_pressure_penalty);
 
+// Tests a graph- or schedule-ranked nominee beyond the bounded source window.
+// A growing nominee must come from the schedule view, remain free of pressure
+// risk, and stay within the source nominees' critical-path band.
+bool loom_low_schedule_candidate_policy_admits_ranked_nominee(
+    const loom_low_schedule_candidate_score_t* score,
+    uint32_t maximum_source_critical_path_cycles, bool is_graph_nominee);
+
+// Tests the pressure eligibility of a recovery nominee after its latency-window
+// checks. Default recovery cannot introduce debt. Pressure recovery requires
+// progress unless it replaces deferred setup or escapes hard-capacity failure.
+bool loom_low_schedule_candidate_policy_admits_recovery_nominee(
+    loom_low_schedule_candidate_compare_mode_t compare_mode,
+    const loom_low_schedule_candidate_score_t* score,
+    const loom_low_schedule_candidate_score_t* chosen_score);
+
 // Returns true when |lhs| is preferred to |rhs| under the selected physical
 // pressure context. Both scores borrow |register_debt_word_count| debt words
 // from their owning policy. Comparison reads only retained score facts.

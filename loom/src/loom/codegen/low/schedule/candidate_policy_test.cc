@@ -182,6 +182,103 @@ TEST_F(CandidatePolicyTest, CompareModeAccountsForEveryNomineeAndCurrentDebt) {
             LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION);
 }
 
+TEST_F(CandidatePolicyTest, RankedNomineesRequireBoundedGrowth) {
+  auto score = MakeCandidate(0, 0);
+  score.killed_live_units = 1;
+  score.produced_live_units = 1;
+  score.killed_live_value_count = 1;
+  score.produced_live_value_count = 1;
+  score.critical_path_cycles = UINT32_MAX;
+  for (const auto risk : {LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE,
+                          LOOM_LOW_SCHEDULE_PRESSURE_RISK_NEAR_CLIFF,
+                          LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT}) {
+    SCOPED_TRACE(risk);
+    score.pressure_risk = risk;
+    // Neutral progress is allowed from either view regardless of path length.
+    for (bool is_graph_nominee : {false, true}) {
+      EXPECT_TRUE(loom_low_schedule_candidate_policy_admits_ranked_nominee(
+          &score, 8, is_graph_nominee));
+    }
+    auto growth = score;
+    growth.produced_live_units = 2;
+    growth.critical_path_cycles = 8;
+    EXPECT_EQ(loom_low_schedule_candidate_policy_admits_ranked_nominee(
+                  &growth, 8, /*is_graph_nominee=*/false),
+              risk == LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE);
+    EXPECT_FALSE(loom_low_schedule_candidate_policy_admits_ranked_nominee(
+        &growth, 8, /*is_graph_nominee=*/true));
+  }
+
+  score.pressure_risk = LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE;
+  score.produced_live_units = 2;
+  // A shorter path and the one-cycle band are safe even at saturated costs.
+  for (uint32_t maximum : {8u, UINT32_MAX - 1}) {
+    SCOPED_TRACE(maximum);
+    for (uint32_t path : {maximum - 1, maximum, maximum + 1}) {
+      score.critical_path_cycles = path;
+      EXPECT_TRUE(loom_low_schedule_candidate_policy_admits_ranked_nominee(
+          &score, maximum, /*is_graph_nominee=*/false));
+    }
+  }
+  score.critical_path_cycles = 10;
+  EXPECT_FALSE(loom_low_schedule_candidate_policy_admits_ranked_nominee(
+      &score, 8, /*is_graph_nominee=*/false));
+}
+
+TEST_F(CandidatePolicyTest, RecoveryAdmissionUsesTheSelectedPressureContext) {
+  auto chosen = MakeCandidate(0, 0);
+  auto nominee = MakeCandidate(0, 1);
+  for (const auto risk : {LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE,
+                          LOOM_LOW_SCHEDULE_PRESSURE_RISK_NEAR_CLIFF,
+                          LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT}) {
+    SCOPED_TRACE(risk);
+    nominee.pressure_risk = risk;
+    EXPECT_EQ(
+        loom_low_schedule_candidate_policy_admits_recovery_nominee(
+            LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT, &nominee, &chosen),
+        risk != LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT);
+  }
+
+  // Under pressure, progress can justify debt; readiness alone cannot.
+  for (const auto mode :
+       {LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
+        LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION}) {
+    SCOPED_TRACE(mode);
+    EXPECT_FALSE(loom_low_schedule_candidate_policy_admits_recovery_nominee(
+        mode, &nominee, &chosen));
+    auto progress = nominee;
+    progress.killed_live_units = 4;
+    progress.produced_live_units = 1;
+    progress.killed_live_value_count = 1;
+    progress.produced_live_value_count = 1;
+    progress.pressure_progress_kind =
+        LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_REDUCTION;
+    EXPECT_TRUE(loom_low_schedule_candidate_policy_admits_recovery_nominee(
+        mode, &progress, &chosen));
+
+    auto deferred = chosen;
+    deferred.produced_live_units = 1;
+    deferred.produced_live_value_count = 1;
+    deferred.flags = LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF;
+    EXPECT_TRUE(loom_low_schedule_candidate_policy_admits_recovery_nominee(
+        mode, &nominee, &deferred));
+    deferred.flags |= LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR;
+    EXPECT_FALSE(loom_low_schedule_candidate_policy_admits_recovery_nominee(
+        mode, &nominee, &deferred));
+
+    auto overflowing = chosen;
+    overflowing.flags =
+        LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY;
+    EXPECT_TRUE(loom_low_schedule_candidate_policy_admits_recovery_nominee(
+        mode, &nominee, &overflowing));
+    nominee.flags =
+        LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY;
+    EXPECT_FALSE(loom_low_schedule_candidate_policy_admits_recovery_nominee(
+        mode, &nominee, &overflowing));
+    nominee.flags = 0;
+  }
+}
+
 TEST_F(CandidatePolicyTest, PackingRecoveryPreservesStorageHandoff) {
   auto storage_handoff = MakeConstrainedCandidate(3, 0);
   storage_handoff.flags |= LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_STORAGE;

@@ -1015,50 +1015,6 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_advances_non_gr
 }
 
 // ====
-// RUN: emit low-schedule-json @resource_stall_rejects_pressure_debt_from_recovery_window strategy=resource-stall diagnostics=candidates test.i32=76 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_rejects_pressure_debt_from_recovery_window(%pad: reg<test.i32 x65>, %ptr0: reg<test.ptr>, %ptr1: reg<test.ptr>) -> (reg<test.i32 x65>, reg<test.i32>, reg<test.i32 x4>) asm {
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_packet="test.load.v4i32", rejected_packet="test.load.v4i32"}
-  %load0 = test.load.v4i32 %ptr0
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", scored_candidate_count="17", chosen_packet="test.extract_lane.i32", chosen_pressure_cliff_penalty="0"}
-  %lane0 = test.extract_lane.i32 %load0, 0
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="2", chosen_packet="test.extract_lane.i32"}
-  %lane1 = test.extract_lane.i32 %load0, 1
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="3", chosen_packet="test.extract_lane.i32"}
-  %lane2 = test.extract_lane.i32 %load0, 2
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="4", chosen_packet="test.extract_lane.i32"}
-  %lane3 = test.extract_lane.i32 %load0, 3
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="5", chosen_packet="test.extract_lane.i32"}
-  %lane4 = test.extract_lane.i32 %load0, 0
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="6", chosen_packet="test.extract_lane.i32"}
-  %lane5 = test.extract_lane.i32 %load0, 1
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="7", chosen_packet="test.extract_lane.i32"}
-  %lane6 = test.extract_lane.i32 %load0, 2
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="8", chosen_packet="test.extract_lane.i32"}
-  %lane7 = test.extract_lane.i32 %load0, 3
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="9", chosen_packet="test.extract_lane.i32"}
-  %lane8 = test.extract_lane.i32 %load0, 0
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="10", chosen_packet="test.extract_lane.i32"}
-  %lane9 = test.extract_lane.i32 %load0, 1
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="11", chosen_packet="test.extract_lane.i32"}
-  %lane10 = test.extract_lane.i32 %load0, 2
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="12", chosen_packet="test.extract_lane.i32"}
-  %lane11 = test.extract_lane.i32 %load0, 3
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="13", chosen_packet="test.extract_lane.i32"}
-  %lane12 = test.extract_lane.i32 %load0, 0
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="14", chosen_packet="test.extract_lane.i32"}
-  %lane13 = test.extract_lane.i32 %load0, 1
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="15", chosen_packet="test.extract_lane.i32"}
-  %lane14 = test.extract_lane.i32 %load0, 2
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="16", chosen_packet="test.extract_lane.i32", rejected_packet="test.load.v4i32", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="5"}
-  %lane15 = test.extract_lane.i32 %load0, 3
-  %load1 = test.load.v4i32 %ptr1
-  return %pad, %lane15, %load1
-}
-
-// ====
 // A dependent operation waiting for data and an independent chain root waiting
 // for the vector resource can reach the same issue cycle. Start the independent
 // chain with the longer remaining path instead of draining the first chain.
