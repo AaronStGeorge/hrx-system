@@ -222,18 +222,21 @@ TEST_F(CandidatePolicyTest, PressureReliefSchedulesReadyPeer) {
                   ready_peer, storage_handoff);
 }
 
-TEST_F(CandidatePolicyTest, PackingRecoverySchedulesReadyPeerWithoutHandoff) {
+TEST_F(CandidatePolicyTest, RecoverySchedulesReadyPeerBeforeSpillLowering) {
   const auto stalled_peer = MakeConstrainedCandidate(3, 0);
   const auto ready_peer = MakeConstrainedCandidate(1, 1);
+  for (const auto mode :
+       {LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
+        LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION}) {
+    SCOPED_TRACE(mode);
+    options_.flags = 0;
+    ExpectPreferred(mode, ready_peer, stalled_peer);
 
-  ExpectPreferred(LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION,
-                  ready_peer, stalled_peer);
-
-  // Materialized spill helpers must retain their demand order: their setup
-  // cannot run ahead of the transfer that closes the current lifetime.
-  options_.flags |= LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC;
-  ExpectPreferred(LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION,
-                  stalled_peer, ready_peer);
+    // Materialized spill helpers must retain their demand order: their setup
+    // cannot run ahead of the transfer that closes the current lifetime.
+    options_.flags = LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC;
+    ExpectPreferred(mode, stalled_peer, ready_peer);
+  }
 }
 
 TEST_F(CandidatePolicyTest, ReadyProgressRequiresTheSameCompletionDomain) {
