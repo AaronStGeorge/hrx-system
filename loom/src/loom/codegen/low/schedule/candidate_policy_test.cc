@@ -280,6 +280,59 @@ TEST_F(CandidatePolicyTest, PhysicalCliffPrecedesAggregateReliefAndReadiness) {
                   crossing);
 }
 
+TEST_F(CandidatePolicyTest, RetainedSetupNeedsSafeInputBearingProgress) {
+  auto setup = MakeCandidate(0, 0);
+  setup.projected_live_units = 4;
+  setup.killed_live_units = 1;
+  setup.produced_live_units = 1;
+  setup.killed_live_value_count = 1;
+  setup.produced_live_value_count = 1;
+  setup.pressure_progress_kind =
+      LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NON_GROWING;
+  setup.flags = LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_STORAGE_SETUP |
+                LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION |
+                LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_RETAINS_PRE_SPILL_PLACEMENT;
+  auto independent = MakeCandidate(0, 1);
+  independent.projected_live_units = 5;
+  independent.produced_live_units = 1;
+  independent.produced_live_value_count = 1;
+
+  for (const auto mode :
+       {LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT,
+        LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
+        LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION}) {
+    SCOPED_TRACE(mode);
+    ExpectPreferred(mode, setup, independent);
+    for (const uint16_t flag :
+         {LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION,
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_RETAINS_PRE_SPILL_PLACEMENT}) {
+      auto deferred = setup;
+      deferred.flags &= ~flag;
+      ExpectPreferred(mode, independent, deferred);
+    }
+
+    // Replayable leaves capture no input lifetime to advance. Retention alone
+    // does not justify opening them before independent work.
+    auto leaf = setup;
+    leaf.projected_live_units = 5;
+    leaf.killed_live_units = 0;
+    leaf.killed_live_value_count = 0;
+    leaf.pressure_progress_kind = LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE;
+    leaf.flags |= LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF;
+    ExpectPreferred(mode, independent, leaf);
+
+    auto constrained = setup;
+    constrained.pressure_risk = LOOM_LOW_SCHEDULE_PRESSURE_RISK_NEAR_CLIFF;
+    constrained.units_until_pressure_cliff = 1;
+    constrained.activation_reserve_units = 1;
+    ExpectPreferred(mode, independent, constrained);
+    constrained.pressure_cliff_penalty = 1;
+    constrained.pressure_cliff_units = 4;
+    constrained.pressure_risk = LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT;
+    ExpectPreferred(mode, independent, constrained);
+  }
+}
+
 TEST_F(CandidatePolicyTest, NearCliffRecoveryDefersReadyGrowth) {
   auto recovery = MakeCandidate(4, 1);
   recovery.projected_live_units = 12;

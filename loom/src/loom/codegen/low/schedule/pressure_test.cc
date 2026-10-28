@@ -41,7 +41,16 @@ TEST_F(CandidatePressureTest, RequiredOwnershipUsesRetainedInstructionPhases) {
       .alloc_unit_bits = 32,
       .allocatable_count = 4,
   };
+  const loom_low_operand_t operands[] = {
+      {.role = LOOM_LOW_OPERAND_ROLE_RESULT, .unit_count = 2},
+      {.role = LOOM_LOW_OPERAND_ROLE_OPERAND, .unit_count = 2},
+  };
+  const uint16_t operand_indices[] = {0, 1, 1};
   const loom_low_descriptor_set_t descriptors = {
+      .operands = operands,
+      .operand_count = IREE_ARRAYSIZE(operands),
+      .operand_indices = operand_indices,
+      .operand_index_count = IREE_ARRAYSIZE(operand_indices),
       .reg_classes = &reg_class,
       .reg_class_count = 1,
   };
@@ -105,37 +114,12 @@ TEST_F(CandidatePressureTest, RequiredOwnershipUsesRetainedInstructionPhases) {
               .unspillable_completion_domain_count = 1,
           },
   };
-  uint64_t live_units = 4;
-  loom_low_schedule_required_pressure_t required = {};
-  uint32_t reserve_units = 0;
-  uint16_t operand_use_counts[3] = {};
-  uint32_t scratch_counts[3] = {};
-  loom_value_ordinal_t operand_ordinals[3] = {};
-  int64_t delta_units = 0;
-  uint64_t early_units = 0;
-  uint64_t late_units = 0;
-  uint32_t candidate_activation_units = 0;
-  uint8_t touched = 0;
-  uint16_t touched_class = 0;
-  loom_low_schedule_pressure_state_t pressure = {
-      .current_live_units_by_reg_class = &live_units,
-      .required_pressure = &required,
-      .packing_reserve_units_by_reg_class = &reserve_units,
-      .candidate_operand_use_counts = operand_use_counts,
-      .candidate_scratch_counts = scratch_counts,
-      .candidate_operand_ordinals = operand_ordinals,
-      .candidate_delta_units_by_reg_class = &delta_units,
-      .candidate_lifetime =
-          {
-              .early_added_units = &early_units,
-              .late_released_units = &late_units,
-          },
-      .candidate_unspillable_activation_units = &candidate_activation_units,
-      .unspillable_completion_demand = completions,
-      .candidate_delta_touched_flags = &touched,
-      .candidate_delta_touched_reg_class_ids = &touched_class,
-      .current_live_units = 4,
-  };
+  loom_low_schedule_pressure_state_t pressure;
+  IREE_ASSERT_OK(loom_low_schedule_pressure_initialize(&state, 1, &pressure));
+  pressure.unspillable_completion_demand = completions;
+  pressure.current_live_units = 4;
+  pressure.current_live_units_by_reg_class[0] = 4;
+  auto& required = pressure.required_pressure[0];
   IREE_ASSERT_OK(loom_low_schedule_pressure_initialize_unlock_summaries(
       &state, 1, &pressure));
   const loom_low_schedule_ready_policy_t ready = {};
@@ -186,7 +170,119 @@ TEST_F(CandidatePressureTest, RequiredOwnershipUsesRetainedInstructionPhases) {
       EXPECT_EQ(pressure.candidate_operand_count, 0u);
       EXPECT_EQ(values[0].remaining_use_count, 2u);
       EXPECT_EQ(values[0].flags, ownership | LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE);
-      EXPECT_EQ(operand_use_counts[0], 0u);
+      EXPECT_EQ(pressure.candidate_operand_use_counts[0], 0u);
+    }
+  }
+}
+
+TEST_F(CandidatePressureTest, RetainedPlacementAndReplayHaveSeparateLifetimes) {
+  const loom_low_reg_class_t reg_class = {.alloc_unit_bits = 32};
+  loom_low_operand_t operands[] = {
+      {.role = LOOM_LOW_OPERAND_ROLE_RESULT, .unit_count = 1},
+      {.role = LOOM_LOW_OPERAND_ROLE_OPERAND, .unit_count = 1},
+  };
+  const uint16_t operand_indices[] = {0, 1};
+  const loom_low_descriptor_set_t descriptors = {
+      .operands = operands,
+      .operand_count = IREE_ARRAYSIZE(operands),
+      .operand_indices = operand_indices,
+      .operand_index_count = IREE_ARRAYSIZE(operand_indices),
+      .reg_classes = &reg_class,
+      .reg_class_count = 1,
+  };
+  loom_low_descriptor_t descriptor = {.result_count = 1};
+  loom_low_schedule_node_t node = {
+      .descriptor = &descriptor,
+      .scheduled_ordinal = LOOM_LOW_SCHEDULE_NODE_NONE,
+      .result_count = 1,
+  };
+  // Both values cross the block boundary. Module IDs deliberately differ from
+  // the local ordinals used by the candidate's operands and results.
+  loom_low_schedule_value_record_t values[] = {
+      {
+          .live_unit_count = 1,
+          .remaining_use_count = 1,
+          .unit_count = 1,
+          .flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE,
+      },
+      {.remaining_use_count = 1, .unit_count = 1},
+  };
+  loom_value_id_t value_ids[] = {7, 19};
+  const loom_local_value_domain_t value_domain = {
+      .value_ids = value_ids,
+      .value_count = IREE_ARRAYSIZE(values),
+  };
+  loom_low_schedule_options_t options = {
+      .strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
+  };
+  loom_low_schedule_build_state_t state = {
+      .options = &options,
+      .scratch_arena = &arena_,
+      .target = {.descriptor_set = &descriptors},
+      .value_domain = &value_domain,
+      .values = values,
+      .nodes = &node,
+  };
+  loom_low_schedule_dependency_graph_t graph;
+  loom_low_schedule_dependency_graph_initialize(&graph);
+  uint32_t indegree = 0;
+  loom_low_schedule_dependency_detail_index_t details;
+  IREE_ASSERT_OK(loom_low_schedule_dependency_index_initialize(
+      &graph, 1, &arena_, &arena_, &indegree, &state.dependency_index,
+      &details));
+  loom_low_schedule_pressure_state_t pressure;
+  IREE_ASSERT_OK(loom_low_schedule_pressure_initialize(&state, 1, &pressure));
+  IREE_ASSERT_OK(loom_low_schedule_pressure_initialize_unlock_summaries(
+      &state, 1, &pressure));
+  pressure.current_live_units = 1;
+  pressure.current_live_units_by_reg_class[0] = 1;
+  const loom_low_schedule_ready_policy_t ready = {};
+
+  for (bool captured : {false, true}) {
+    node.operand_count = captured ? 1 : 0;
+    descriptor.operand_count = node.operand_count + 1;
+    node.value_ordinals.inline_value_ordinals[0] = captured ? 0 : 1;
+    node.value_ordinals.inline_value_ordinals[1] = 1;
+    for (bool replayable : {false, true}) {
+      operands[0].flags =
+          replayable ? LOOM_LOW_OPERAND_FLAG_REMATERIALIZABLE : 0;
+      for (bool lowered_spills : {false, true}) {
+        options.flags = lowered_spills
+                            ? LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC
+                            : 0;
+        for (loom_value_id_t placement : {0u, 7u, 19u}) {
+          SCOPED_TRACE(::testing::Message() << "captured=" << captured
+                                            << " replayable=" << replayable
+                                            << " spills=" << lowered_spills
+                                            << " placement=" << placement);
+          uint64_t placement_word = 0;
+          options.per_user_placement_values =
+              placement == 0 ? iree_bitmap_t{}
+                             : iree_bitmap_t{64, &placement_word};
+          if (placement != 0) {
+            iree_bitmap_set(options.per_user_placement_values, placement);
+          }
+          loom_low_schedule_register_debt_word_t debt = {};
+          loom_low_schedule_candidate_score_t score = {};
+          loom_low_schedule_pressure_score_candidate(
+              &state, &pressure, &ready, &indegree, 0, &debt, &score);
+          EXPECT_EQ(
+              iree_any_bit_set(score.flags,
+                               LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_STORAGE_SETUP),
+              placement == value_ids[1]);
+          EXPECT_EQ(
+              iree_any_bit_set(
+                  score.flags,
+                  LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_RETAINS_PRE_SPILL_PLACEMENT),
+              placement == value_ids[1] && !lowered_spills);
+          EXPECT_EQ(iree_any_bit_set(
+                        score.flags,
+                        LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF),
+                    replayable && !captured);
+          EXPECT_EQ(score.killed_live_units, captured ? 1u : 0u);
+          EXPECT_EQ(score.produced_live_units, 1u);
+        }
+      }
     }
   }
 }
