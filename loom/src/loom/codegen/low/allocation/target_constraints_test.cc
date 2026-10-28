@@ -27,6 +27,8 @@ namespace {
 typedef struct DiagnosticCapture {
   // Most recently emitted error definition, borrowed from the catalog.
   const loom_error_def_t* error;
+  // Borrowed operation identifying the owner of the last diagnostic.
+  const loom_op_t* op;
   // Number of diagnostic emissions delivered to this capture.
   iree_host_size_t count;
 } DiagnosticCapture;
@@ -35,6 +37,7 @@ static iree_status_t CaptureDiagnostic(
     void* user_data, const loom_diagnostic_emission_t* emission) {
   DiagnosticCapture* capture = static_cast<DiagnosticCapture*>(user_data);
   capture->error = emission->error;
+  capture->op = emission->op;
   ++capture->count;
   return iree_ok_status();
 }
@@ -124,6 +127,70 @@ class LowAllocationTargetConstraintsTest : public ::testing::Test {
   // Resolved target whose register contract is under test.
   loom_low_resolved_target_t target_ = {};
 };
+
+TEST_F(LowAllocationTargetConstraintsTest, RejectsUnknownBudgetClass) {
+  const loom_low_allocation_budget_t budgets[] = {
+      {IREE_SV("test.i32"), 7},
+      {IREE_SV("test.missing"), 1},
+      {IREE_SV("test.phys"), 8},
+  };
+  DiagnosticCapture capture = {};
+  const iree_diagnostic_emitter_t emitter = {CaptureDiagnostic, &capture};
+  loom_low_allocation_target_constraints_t constraints = {};
+  IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
+      module_, function_op_, &target_, budgets, IREE_ARRAYSIZE(budgets),
+      /*reserved_ranges=*/nullptr, /*reserved_range_count=*/0, emitter, &arena_,
+      &constraints));
+
+  EXPECT_EQ(capture.error, LOOM_ERR_BACKEND_023);
+  EXPECT_EQ(capture.op, function_op_);
+  EXPECT_EQ(capture.count, 1u);
+  EXPECT_EQ(constraints.error_count, 1u);
+  ASSERT_EQ(constraints.budget_count, 2u);
+  EXPECT_EQ(constraints.budgets[0].descriptor_reg_class_id,
+            RegisterClassId(IREE_SV("test.i32")));
+  EXPECT_EQ(constraints.budgets[0].max_units, 7u);
+  EXPECT_EQ(constraints.budgets[1].descriptor_reg_class_id,
+            RegisterClassId(IREE_SV("test.phys")));
+  EXPECT_EQ(constraints.budgets[1].max_units, 8u);
+}
+
+TEST_F(LowAllocationTargetConstraintsTest, RejectsDuplicateBudgetBanks) {
+  const iree_string_view_t classes[][2] = {
+      {IREE_SV("test.i32"), IREE_SV("test.i32")},
+      {IREE_SV("test.alias32"), IREE_SV("test.alias64")},
+      {IREE_SV("test.alias64"), IREE_SV("test.alias32")},
+      {IREE_SV("test.explicit32"), IREE_SV("test.spillable.explicit32")},
+      {IREE_SV("test.spillable.explicit32"), IREE_SV("test.explicit32")},
+  };
+  for (const auto& pair : classes) {
+    SCOPED_TRACE(pair[0].data);
+    const loom_low_allocation_budget_t budgets[] = {{pair[0], 1}, {pair[1], 2}};
+    DiagnosticCapture capture = {};
+    const iree_diagnostic_emitter_t emitter = {CaptureDiagnostic, &capture};
+    loom_low_allocation_target_constraints_t constraints = {};
+    IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
+        module_, function_op_, &target_, budgets, IREE_ARRAYSIZE(budgets),
+        /*reserved_ranges=*/nullptr, /*reserved_range_count=*/0, emitter,
+        &arena_, &constraints));
+
+    EXPECT_EQ(capture.error, LOOM_ERR_BACKEND_024);
+    EXPECT_EQ(capture.op, function_op_);
+    EXPECT_EQ(capture.count, 1u);
+    EXPECT_EQ(constraints.error_count, 1u);
+    ASSERT_EQ(constraints.budget_count, 1u);
+    EXPECT_EQ(constraints.budgets[0].descriptor_reg_class_id,
+              RegisterClassId(pair[0]));
+    EXPECT_EQ(constraints.budgets[0].max_units, 1u);
+    for (const auto& name : pair) {
+      loom_low_allocation_class_capacity_t capacity = {};
+      IREE_ASSERT_OK(loom_low_allocation_target_constraints_reg_class_capacity(
+          &constraints, RegisterClassId(name), &capacity));
+      EXPECT_TRUE(capacity.is_bounded);
+      EXPECT_EQ(capacity.max_units, 1u);
+    }
+  }
+}
 
 TEST_F(LowAllocationTargetConstraintsTest, ClampsBudgetToDescriptorCapacity) {
   loom_low_allocation_budget_t budget = {
