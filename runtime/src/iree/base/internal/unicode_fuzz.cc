@@ -55,10 +55,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     (void)iree_unicode_is_katakana(codepoint);
     (void)iree_unicode_is_hangul(codepoint);
 
-    // Case folding.
+    // Case mapping.
     uint32_t lower_out[2];
+    uint32_t upper_out[3];
     (void)iree_unicode_to_lower(codepoint, lower_out);
-    (void)iree_unicode_to_upper(codepoint);
+    (void)iree_unicode_to_upper(codepoint, upper_out);
 
     // NFD decomposition.
     (void)iree_unicode_nfd_base(codepoint);
@@ -89,6 +90,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     bool is_letter = iree_unicode_is_letter(codepoint);
     bool is_mark = iree_unicode_is_mark(codepoint);
     bool is_number = iree_unicode_is_number(codepoint);
+    bool is_decimal = iree_unicode_is_decimal(codepoint);
+    bool is_digit = iree_unicode_is_digit(codepoint);
     bool is_punctuation = iree_unicode_is_punctuation(codepoint);
     bool is_symbol = iree_unicode_is_symbol(codepoint);
     bool is_separator = iree_unicode_is_separator(codepoint);
@@ -110,6 +113,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     if (is_number) {
       FUZZ_ASSERT((category & IREE_UNICODE_CATEGORY_NUMBER) != 0);
     }
+    FUZZ_ASSERT(!is_decimal || is_digit);
+    FUZZ_ASSERT(!is_digit || is_number);
     if (is_punctuation) {
       FUZZ_ASSERT((category & IREE_UNICODE_CATEGORY_PUNCTUATION) != 0);
     }
@@ -123,14 +128,15 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       FUZZ_ASSERT((category & IREE_UNICODE_CATEGORY_OTHER) != 0);
     }
 
-    // Test case folding and NFD.
+    // Test case mapping and NFD.
     uint32_t lower_out[2];
     iree_host_size_t lower_count = iree_unicode_to_lower(codepoint, lower_out);
-    uint32_t upper = iree_unicode_to_upper(codepoint);
+    uint32_t upper_out[3];
+    iree_host_size_t upper_count = iree_unicode_to_upper(codepoint, upper_out);
     uint32_t nfd = iree_unicode_nfd_base(codepoint);
     (void)iree_unicode_ccc(codepoint);
 
-    // Invariant: case folding idempotency.
+    // Invariant: case mapping idempotency.
     // Applying the same case operation twice should yield the same result.
     // For lowercase: each output codepoint should lowercase to itself.
     for (iree_host_size_t i = 0; i < lower_count; ++i) {
@@ -140,7 +146,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       FUZZ_ASSERT(lower2_count == 1);
       FUZZ_ASSERT(lower2_out[0] == lower_out[i]);
     }
-    FUZZ_ASSERT(iree_unicode_to_upper(upper) == upper);
+    for (iree_host_size_t i = 0; i < upper_count; ++i) {
+      uint32_t upper2_out[3];
+      iree_host_size_t upper2_count =
+          iree_unicode_to_upper(upper_out[i], upper2_out);
+      FUZZ_ASSERT(upper2_count == 1);
+      FUZZ_ASSERT(upper2_out[0] == upper_out[i]);
+    }
 
     // Note: NFD decomposition may be multi-level (e.g., ẳ → ạ → a), so
     // nfd_base is NOT necessarily idempotent. Instead, verify it converges

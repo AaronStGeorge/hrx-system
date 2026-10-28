@@ -65,7 +65,8 @@ class ProgramTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_serve_input_module_create(environment_, nullptr,
                                                   host_allocator_, &input_));
     const iree_string_view_t roots[] = {
-        IREE_SVL("scalars"), IREE_SVL("references"), IREE_SVL("empty")};
+        IREE_SVL("scalars"), IREE_SVL("references"), IREE_SVL("empty"),
+        IREE_SVL("uppercase")};
     const loom_serve_sources_t sources = {.base_directory = IREE_SV(".")};
     IREE_ASSERT_OK(loom_serve_program_allocate(
         target_environment_, environment_, &sources,
@@ -289,6 +290,23 @@ TEST_F(ProgramTest, BindingDoesNotInvokeSourceAndRemainsCallable) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
                         Bind(IREE_SV("missing"), {}, {}));
   EXPECT_EQ(std::memcmp(&saved, &function_, sizeof(saved)), 0);
+}
+
+TEST_F(ProgramTest, StringCodepointImportsUseSharedRuntimeCapability) {
+  const iree_vm_signature_type_t types[] = {
+      Scalar(IREE_VM_SCALAR_TYPE_I32), Scalar(IREE_VM_SCALAR_TYPE_I32),
+      Scalar(IREE_VM_SCALAR_TYPE_I32), Scalar(IREE_VM_SCALAR_TYPE_I32)};
+  IREE_ASSERT_OK(Bind(IREE_SV("uppercase"), {types, 1}, {types, 4}));
+  iree_vm_variant_t argument = iree_vm_variant_from_i32(0x0390);
+  iree_vm_variant_t results[4] = {};
+  IREE_ASSERT_OK(iree_vm_invoke(loom_serve_program_invocation(program_),
+                                function_, {&argument, 1}, {results, 4}));
+  const int32_t expected[] = {3, 0x0399, 0x0308, 0x0301};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(expected); ++i) {
+    int32_t actual = 0;
+    IREE_ASSERT_OK(iree_vm_i32_from_variant(results[i], &actual));
+    EXPECT_EQ(actual, expected[i]);
+  }
 }
 
 }  // namespace

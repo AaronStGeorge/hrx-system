@@ -59,6 +59,7 @@ iree_status_t loom_serve_program_compile(
 // Retains module and libraries on success; caller ownership never transfers.
 // Performs no compilation or source I/O. Native library creation and linking
 // run on the owner of the shared resources those capabilities expose.
+// The stateless "string" capability is supplied alongside caller libraries.
 iree_status_t loom_serve_program_link(iree_vm_module_t* module,
                                       iree_vm_module_span_t libraries,
                                       iree_allocator_t host_allocator,

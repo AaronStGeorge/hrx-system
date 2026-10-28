@@ -7,6 +7,7 @@
 #include "loom/tooling/target/vm/testbench.h"
 
 #include "iree/hal/buffer.h"
+#include "iree/module/string/module.h"
 #include "iree/vm/bytecode/module.h"
 #include "iree/vm/execution.h"
 #include "iree/vm/sync.h"
@@ -265,6 +266,7 @@ static iree_status_t loom_vm_testbench_prepare(
   }
   iree_vm_environment_t* environment = NULL;
   iree_vm_module_t* module = NULL;
+  iree_vm_module_t* string_module = NULL;
   iree_vm_program_t* program = NULL;
   iree_vm_invocation_t* invocation = NULL;
   iree_vm_process_t* process = NULL;
@@ -290,10 +292,16 @@ static iree_status_t loom_vm_testbench_prepare(
   iree_allocator_free(testbench->host_allocator, contents.data);
   iree_vm_environment_free(environment);
   if (iree_status_is_ok(status)) {
+    status =
+        iree_string_module_create(testbench->host_allocator, &string_module);
+  }
+  if (iree_status_is_ok(status)) {
     status = iree_vm_program_create(
-        (iree_vm_program_modules_t){.executable = module},
+        (iree_vm_program_modules_t){.executable = module,
+                                    .libraries = {&string_module, 1}},
         testbench->host_allocator, &program);
   }
+  iree_vm_module_release(string_module);
   iree_vm_module_release(module);
   if (iree_status_is_ok(status)) {
     status = iree_vm_invocation_allocate(16 * 1024, testbench->host_allocator,

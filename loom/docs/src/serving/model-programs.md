@@ -81,6 +81,32 @@ bound to native modules when the VM program loads. The cold program names
 numerical roots; the warm program invokes the resulting prepared stages.
 Shared source helpers do not turn device kernels into direct VM calls.
 
+### Reuse Unicode properties
+
+Host text programs can use the `string` module's `codepoint.*` operations
+instead of embedding Unicode tables in each model. They are available in
+`loom-serve`, `loom-test`, and `loom-benchmark` VM execution. Each operation
+accepts one Unicode codepoint; full case mapping handles expansions such as
+`ß` → `SS`:
+
+```mlir
+func.decl import("string", "codepoint.to_upper") @unicode.to_upper(%codepoint: i32) -> (i32, i32, i32, i32)
+
+func.def public @uppercase(%codepoint: i32) -> (i32, i32, i32, i32) {
+  %count, %first, %second, %third = func.call @unicode.to_upper(%codepoint) : (i32) -> (i32, i32, i32, i32)
+  func.return %count, %first, %second, %third : i32, i32, i32, i32
+}
+```
+
+`codepoint.to_upper` returns a count and three codepoint slots;
+`codepoint.to_lower` returns a count and two slots. Unused slots are zero.
+Both use locale-independent Unicode 15.1 mappings, preserve unmapped input,
+and allocate no buffers. `codepoint.is_decimal`, `codepoint.is_digit`, and
+`codepoint.is_whitespace` each take one `i32` codepoint and return `i32` zero or
+one. Digits include decimal digits and characters such as `²`; whitespace means
+Unicode `White_Space`. Model-specific spacing, punctuation, and capitalization
+policies remain in the authored program.
+
 ## Separate preparation from execution
 
 The cold `prepare` VM program receives modality inputs and the source-owned
