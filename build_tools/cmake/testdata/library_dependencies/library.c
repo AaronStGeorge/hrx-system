@@ -5,10 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <generated.h>
+#include <owned.h>
 
 int fixture_external_value(void);
 
 int fixture_library_value(void) {
-  return GENERATED_VALUE + TRANSITIVE_VALUE + PRIVATE_VALUE + LATE_VALUE +
-         fixture_external_value();
+  return GENERATED_VALUE + OWNED_VALUE + TRANSITIVE_VALUE + PRIVATE_VALUE +
+         LATE_VALUE + fixture_external_value();
 }
