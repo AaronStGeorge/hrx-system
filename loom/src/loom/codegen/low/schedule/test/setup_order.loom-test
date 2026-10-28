@@ -31,3 +31,22 @@ low.func.def target<test.low.core>(@target) @required_fixed_disjoint(%source: re
 
 // ----
 node 0 <- none
+
+// ====
+
+// Ordinary values remain freely scheduled around calls. Only repair-owned
+// private placement establishes the additional lifetime boundary.
+// RUN: emit low-schedule-query @ordinary_call_setup kind=order consumer=1
+
+test.target<low_core> @target
+
+low.func.decl target<test.low.core>(@target) @clobber()
+
+low.func.def target<test.low.core>(@target) @ordinary_call_setup() -> (reg<test.i32>) asm {
+  low.func.call @clobber() : ()
+  %ordinary = test.const.i32 7
+  return %ordinary
+}
+
+// ----
+node 1 <- none

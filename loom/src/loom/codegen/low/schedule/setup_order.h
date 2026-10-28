@@ -69,10 +69,12 @@ void loom_low_schedule_setup_order_classify_node(
     struct loom_low_schedule_build_state_t* state, uint32_t node_index,
     bool order_structural_setup);
 
-// Closes setup dependencies before adjacency construction. Every member has
-// one value consumer inside its source-order range, and any other successor
-// already depends on that consumer. External prerequisites can therefore
-// precede the entire setup chain without creating a cycle.
+// Retains private placement after indexed calls and closes setup dependencies
+// before adjacency construction. Every chain member has one value consumer
+// inside its source-order range, and any other successor already depends on
+// that consumer. External prerequisites can therefore precede the entire setup
+// chain without creating a cycle. Call boundaries also apply to private leaves
+// when there are no chain members or closure scratch arrays.
 iree_status_t loom_low_schedule_setup_order_finish(
     struct loom_low_schedule_build_state_t* state, uint32_t node_count,
     uint16_t block_count);

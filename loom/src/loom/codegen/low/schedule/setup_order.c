@@ -286,8 +286,9 @@ static iree_status_t loom_low_schedule_setup_order_append(
         IREE_STATUS_RESOURCE_EXHAUSTED,
         "low schedule dependency count exceeds uint32_t index capacity");
   }
-  // The semantic graph is complete: these edges only close its retained setup
-  // chains and do not contribute another successor observation.
+  // Ordering retains lifetime placement without imposing an issue delay. The
+  // caller records call-boundary successors before closure; chain-closing
+  // edges do not feed back into those original successor facts.
   return loom_low_schedule_dependency_graph_append(
       &state->dependencies,
       (loom_low_schedule_dependency_t){
@@ -301,6 +302,40 @@ static iree_status_t loom_low_schedule_setup_order_append(
           .kind = LOOM_LOW_SCHEDULE_DEPENDENCY_ORDER,
       },
       state->dependency_arena);
+}
+
+static iree_status_t loom_low_schedule_setup_order_retain_call_boundaries(
+    loom_low_schedule_build_state_t* state) {
+  if (state->options->per_user_placement_values.bit_count == 0) {
+    return iree_ok_status();
+  }
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < state->call_node_count && iree_status_is_ok(status); ++i) {
+    const uint32_t call = state->call_node_indices[i];
+    const loom_low_schedule_block_t* block =
+        &state->blocks[state->nodes[call].block_index];
+    uint32_t end = block->node_start + block->node_count;
+    if (i + 1 < state->call_node_count) {
+      end = iree_min(end, state->call_node_indices[i + 1]);
+    }
+    // The collected call index partitions disjoint ranges within each block.
+    // Repair-owned setup stays after its nearest call, even when an input-free
+    // producer does not belong to an ordered setup chain. Hoisting it again
+    // would recreate the preserved-register pressure that repair removed.
+    for (uint32_t node_index = call + 1;
+         node_index < end && iree_status_is_ok(status); ++node_index) {
+      bool requires_register = false;
+      if (!loom_low_schedule_setup_order_has_per_user_placement(
+              state, &state->nodes[node_index], &requires_register)) {
+        continue;
+      }
+      loom_low_schedule_setup_order_record_dependency(&state->setup_order, call,
+                                                      node_index, false);
+      status = loom_low_schedule_setup_order_append(state, call, node_index);
+    }
+  }
+  return status;
 }
 
 // A private producer P can retain its sole value consumer S even when it
@@ -371,6 +406,8 @@ static iree_status_t loom_low_schedule_setup_order_resolve_successors(
 iree_status_t loom_low_schedule_setup_order_finish(
     loom_low_schedule_build_state_t* state, uint32_t node_count,
     uint16_t block_count) {
+  IREE_RETURN_IF_ERROR(
+      loom_low_schedule_setup_order_retain_call_boundaries(state));
   loom_low_schedule_setup_order_t* order = &state->setup_order;
   if (order->completion_nodes == NULL) {
     return iree_ok_status();

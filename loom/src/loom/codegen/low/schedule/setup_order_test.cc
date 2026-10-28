@@ -420,6 +420,11 @@ class SetupOrderTest : public ::testing::Test {
       const auto* edge =
           loom_low_schedule_dependency_graph_at(&state_.dependencies, i);
       EXPECT_EQ(edge->kind, LOOM_LOW_SCHEDULE_DEPENDENCY_ORDER);
+      EXPECT_EQ(edge->minimum_issue_separation_cycles, 0);
+      EXPECT_EQ(edge->separation_source,
+                LOOM_LOW_SCHEDULE_SEPARATION_SOURCE_STRUCTURAL);
+      EXPECT_EQ(edge->producer_event_id, LOOM_LOW_TIMING_EVENT_NONE);
+      EXPECT_EQ(edge->consumer_event_id, LOOM_LOW_TIMING_EVENT_NONE);
       actual.emplace_back(edge->producer_node, edge->consumer_node);
     }
     std::sort(actual.begin(), actual.end());
@@ -439,6 +444,58 @@ class SetupOrderTest : public ::testing::Test {
   // Native closure inputs and outputs, borrowing the arrays above.
   loom_low_schedule_build_state_t state_ = {};
 };
+
+TEST_F(SetupOrderTest, PrivatePlacementRetainsOnlyItsNearestLocalCall) {
+  for (bool chain_scratch : {false, true}) {
+    for (bool private_placement : {false, true}) {
+      SCOPED_TRACE(::testing::Message() << "chain scratch=" << chain_scratch
+                                        << " private=" << private_placement);
+      Initialize({8, 3, 1});
+      if (!chain_scratch) {
+        state_.setup_order = {};
+      }
+      loom_value_id_t value_ids[14];
+      for (uint32_t i = 0; i < IREE_ARRAYSIZE(value_ids); ++i) {
+        value_ids[i] = i + 7;
+      }
+      const loom_local_value_domain_t domain = {
+          .value_ids = value_ids,
+          .value_count = IREE_ARRAYSIZE(value_ids),
+      };
+      state_.value_domain = &domain;
+      for (uint32_t i = 0; i < nodes_.size(); ++i) {
+        nodes_[i].result_count = 1;
+        nodes_[i].value_ordinals.inline_value_ordinals[0] = i;
+      }
+      uint32_t calls[] = {1, 4, 5, 9};
+      state_.call_node_indices = calls;
+      state_.call_node_count = IREE_ARRAYSIZE(calls);
+      nodes_[4].result_count = 0;
+      nodes_[9].result_count = 2;
+      nodes_[9].value_ordinals.inline_value_ordinals[1] = 12;
+      // Setup can capture inputs or be input-free. A private result from a
+      // multi-result producer does not establish this single-value boundary.
+      nodes_[6].operand_count = 2;
+      nodes_[6].value_ordinals = {.inline_value_ordinals = {0, 2, 6}};
+      nodes_[7].result_count = 2;
+      nodes_[7].value_ordinals.inline_value_ordinals[1] = 13;
+      uint64_t placements = 0;
+      if (private_placement) {
+        options_.per_user_placement_values = {64, &placements};
+        for (uint32_t ordinal : {0u, 2u, 6u, 7u, 8u, 10u, 11u}) {
+          iree_bitmap_set(options_.per_user_placement_values,
+                          value_ids[ordinal]);
+        }
+      }
+
+      if (private_placement) {
+        ExpectAddedOrder({{1, 2}, {5, 6}, {9, 10}});
+      } else {
+        ExpectAddedOrder({});
+      }
+    }
+  }
+}
 
 TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
   enum SourceKind {
