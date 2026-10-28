@@ -1,0 +1,76 @@
+// Native Unicode imports share the same runtime capability in the standalone
+// runner and serving hosts. Model text policies remain authored functions.
+func.decl import("unicode", "to_upper") @unicode.to_upper(%codepoint: i32) -> (i32, i32, i32, i32)
+
+func.decl import("unicode", "to_lower") @unicode.to_lower(%codepoint: i32) -> (i32, i32, i32)
+
+func.decl import("unicode", "is_digit") @unicode.is_digit(%codepoint: i32) -> (i32)
+
+func.decl import("unicode", "is_decimal") @unicode.is_decimal(%codepoint: i32) -> (i32)
+
+func.decl import("unicode", "is_whitespace") @unicode.is_whitespace(%codepoint: i32) -> (i32)
+
+func.def @uppercase(%codepoint: i32) -> (i32, i32, i32, i32) {
+  %count, %first, %second, %third = func.call @unicode.to_upper(%codepoint) : (i32) -> (i32, i32, i32, i32)
+  func.return %count, %first, %second, %third : i32, i32, i32, i32
+}
+
+func.def @lowercase(%codepoint: i32) -> (i32, i32, i32) {
+  %count, %first, %second = func.call @unicode.to_lower(%codepoint) : (i32) -> (i32, i32, i32)
+  func.return %count, %first, %second : i32, i32, i32
+}
+
+func.def @properties(%codepoint: i32) -> (i32, i32, i32) {
+  %digit = func.call @unicode.is_digit(%codepoint) : (i32) -> (i32)
+  %decimal = func.call @unicode.is_decimal(%codepoint) : (i32) -> (i32)
+  %space = func.call @unicode.is_whitespace(%codepoint) : (i32) -> (i32)
+  func.return %digit, %decimal, %space : i32, i32, i32
+}
+
+check.case @full_uppercase {
+  %codepoint = check.literal value(912) : i32
+  %count, %first, %second, %third = func.call @uppercase(%codepoint) : (i32) -> (i32, i32, i32, i32)
+  %expansion_count = check.literal value(3) : i32
+  %iota = check.literal value(921) : i32
+  %diaeresis = check.literal value(776) : i32
+  %acute = check.literal value(769) : i32
+  check.expect.equal actual(%count) expected(%expansion_count) : i32
+  check.expect.equal actual(%first) expected(%iota) : i32
+  check.expect.equal actual(%second) expected(%diaeresis) : i32
+  check.expect.equal actual(%third) expected(%acute) : i32
+  check.return
+}
+
+check.case @full_lowercase {
+  %codepoint = check.literal value(304) : i32
+  %count, %first, %second = func.call @lowercase(%codepoint) : (i32) -> (i32, i32, i32)
+  %expansion_count = check.literal value(2) : i32
+  %i = check.literal value(105) : i32
+  %dot = check.literal value(775) : i32
+  check.expect.equal actual(%count) expected(%expansion_count) : i32
+  check.expect.equal actual(%first) expected(%i) : i32
+  check.expect.equal actual(%second) expected(%dot) : i32
+  check.return
+}
+
+check.case @digits_beyond_decimal {
+  %codepoint = check.param.choice values([178, 9312]) : i32
+  %digit, %decimal, %space = func.call @properties(%codepoint) : (i32) -> (i32, i32, i32)
+  %true_value = check.literal value(1) : i32
+  %false_value = check.literal value(0) : i32
+  check.expect.equal actual(%digit) expected(%true_value) : i32
+  check.expect.equal actual(%decimal) expected(%false_value) : i32
+  check.expect.equal actual(%space) expected(%false_value) : i32
+  check.return
+}
+
+check.case @unicode_whitespace {
+  %codepoint = check.param.choice values([9, 32, 133, 160, 12288]) : i32
+  %digit, %decimal, %space = func.call @properties(%codepoint) : (i32) -> (i32, i32, i32)
+  %true_value = check.literal value(1) : i32
+  %false_value = check.literal value(0) : i32
+  check.expect.equal actual(%digit) expected(%false_value) : i32
+  check.expect.equal actual(%decimal) expected(%false_value) : i32
+  check.expect.equal actual(%space) expected(%true_value) : i32
+  check.return
+}

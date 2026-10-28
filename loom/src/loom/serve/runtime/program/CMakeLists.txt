@@ -339,6 +339,7 @@ loom_cc_library(
     ::jit
     ::sources
     iree::base
+    iree::module::unicode
     iree::vm
     iree::vm::bytecode::module
     loom::binding::c::loomc

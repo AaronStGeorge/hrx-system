@@ -44,6 +44,12 @@ loom_test(
 )
 
 loom_test(
+    name = "unicode_test",
+    srcs = ["unicode.loom"],
+    execution_profiles = [VM_REFERENCE_PROFILE],
+)
+
+loom_test(
     name = "view_bitcast_test",
     srcs = ["view_bitcast.loom"],
     execution_profiles = [VM_REFERENCE_PROFILE],
