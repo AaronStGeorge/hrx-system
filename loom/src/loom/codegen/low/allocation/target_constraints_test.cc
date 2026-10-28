@@ -13,6 +13,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/error/error_catalog.h"
+#include "loom/error/parameter.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -31,6 +32,8 @@ typedef struct DiagnosticCapture {
   const loom_op_t* op;
   // Number of diagnostic emissions delivered to this capture.
   iree_host_size_t count;
+  // Last parameter values; referenced strings retain their original ownership.
+  std::vector<loom_diagnostic_param_t> parameters;
 } DiagnosticCapture;
 
 static iree_status_t CaptureDiagnostic(
@@ -38,6 +41,8 @@ static iree_status_t CaptureDiagnostic(
   DiagnosticCapture* capture = static_cast<DiagnosticCapture*>(user_data);
   capture->error = emission->error;
   capture->op = emission->op;
+  capture->parameters.assign(emission->params,
+                             emission->params + emission->param_count);
   ++capture->count;
   return iree_ok_status();
 }
@@ -488,7 +493,18 @@ TEST_F(LowAllocationTargetConstraintsTest,
           function_op_, &valid));
   EXPECT_FALSE(valid);
   EXPECT_EQ(capture.count, 3u);
+  EXPECT_EQ(capture.error, LOOM_ERR_BACKEND_022);
+  EXPECT_EQ(capture.op, function_op_);
   EXPECT_EQ(constraints.error_count, 3u);
+  ASSERT_EQ(capture.parameters.size(), 10u);
+  EXPECT_TRUE(
+      iree_string_view_equal(capture.parameters[4].string, IREE_SV("test")));
+  EXPECT_TRUE(iree_string_view_equal(capture.parameters[5].string,
+                                     IREE_SV("test.phys")));
+  EXPECT_EQ(capture.parameters[6].u32, 40u);  // Location base.
+  EXPECT_EQ(capture.parameters[7].u32, 1u);   // Location count.
+  EXPECT_EQ(capture.parameters[8].u64, 41u);  // Exclusive end.
+  EXPECT_EQ(capture.parameters[9].u32, 16u);  // Allocatable budget.
 }
 
 TEST_F(LowAllocationTargetConstraintsTest,
@@ -792,6 +808,98 @@ TEST_F(LowAllocationTargetConstraintsTest,
             << "range [" << minimum << ", " << maximum << "]";
       }
     }
+  }
+}
+
+TEST_F(LowAllocationTargetConstraintsTest,
+       FixedBindingsRequireExactUnitCounts) {
+  struct BindingClass {
+    // Register class defining the requested two-unit value.
+    iree_string_view_t name;
+    // Target coordinate space of the binding.
+    loom_low_allocation_location_kind_t location_kind;
+    // First linear unit, explicit aggregate view, or candidate ordinal.
+    uint32_t location_base;
+  };
+  const BindingClass classes[] = {
+      {IREE_SV("test.i32"), LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID, 0},
+      {IREE_SV("test.phys"), LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, 0},
+      {IREE_SV("test.explicit32"),
+       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, 4},
+      {IREE_SV("test.explicit_range32"),
+       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, 0},
+  };
+  for (const auto& binding : classes) {
+    SCOPED_TRACE(binding.name.data);
+    const uint16_t class_id = RegisterClassId(binding.name);
+    loom_value_id_t value;
+    IREE_ASSERT_OK(loom_module_define_value(
+        module_,
+        loom_low_register_type(target_.descriptor_set->stable_id, class_id,
+                               /*unit_count=*/2),
+        &value));
+    loom_local_value_domain_t domain = {};
+    IREE_ASSERT_OK(loom_local_value_domain_acquire_for_region(
+        module_, loom_low_func_def_body(function_op_), &arena_, &domain));
+    loom_value_ordinal_t ordinal;
+    IREE_ASSERT_OK(
+        loom_local_value_domain_register_value(&domain, value, &ordinal));
+    ASSERT_EQ(ordinal, 0u);
+    const loom_liveness_interval_t interval = {
+        .value_id = value,
+        .start_point = 0,
+        .end_point = 1,
+        .block_count = 1,
+        .value_class =
+            {
+                .type_kind = LOOM_TYPE_REGISTER,
+                .register_class_id = class_id,
+                .register_descriptor_set_stable_id =
+                    target_.descriptor_set->stable_id,
+            },
+        .unit_count = 2,
+        .definition_point = UINT32_MAX,
+    };
+    uint32_t interval_index = 0;
+    const loom_liveness_analysis_t liveness = {
+        .intervals = &interval,
+        .interval_count = 1,
+        .value_ids = &value,
+        .value_count = 1,
+        .value_interval_indices = &interval_index,
+    };
+    for (uint32_t count : {0u, 1u, 2u, 3u}) {
+      SCOPED_TRACE(count);
+      DiagnosticCapture capture = {};
+      const iree_diagnostic_emitter_t emitter = {CaptureDiagnostic, &capture};
+      loom_low_allocation_target_constraints_t constraints = {};
+      IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
+          module_, function_op_, &target_, nullptr, 0, nullptr, 0, emitter,
+          &arena_, &constraints));
+      const loom_low_allocation_fixed_value_t fixed = {
+          value, binding.location_kind, binding.location_base, count};
+      IREE_ASSERT_OK(
+          loom_low_allocation_target_constraints_resolve_fixed_locations(
+              &constraints, &liveness, &domain, nullptr, nullptr, &fixed, 1,
+              &arena_));
+      if (count == interval.unit_count) {
+        EXPECT_EQ(capture.count, 0u);
+        EXPECT_EQ(constraints.error_count, 0u);
+        ASSERT_EQ(constraints.fixed_value_count, 1u);
+        EXPECT_EQ(constraints.fixed_values[0].assignment.location_count, count);
+      } else {
+        EXPECT_EQ(capture.count, 1u);
+        EXPECT_EQ(capture.error, LOOM_ERR_BACKEND_034);
+        EXPECT_EQ(capture.op, function_op_);
+        EXPECT_EQ(constraints.error_count, 1u);
+        EXPECT_EQ(constraints.fixed_value_count, 0u);
+        ASSERT_EQ(capture.parameters.size(), 8u);
+        EXPECT_EQ(capture.parameters[5].u32, value);
+        EXPECT_EQ(capture.parameters[6].u32, interval.unit_count);
+        EXPECT_EQ(capture.parameters[7].u32, count);
+      }
+    }
+    loom_local_value_domain_release(&domain);
   }
 }
 

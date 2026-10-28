@@ -1186,6 +1186,7 @@ loom_cc_test(
     deps = [
         ":target_constraints",
         "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:parameter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:facts_builder",

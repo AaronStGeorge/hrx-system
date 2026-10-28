@@ -611,16 +611,6 @@ value %middle: test.i32 -> target_id[6:1]
 
 // ====
 
-// RUN: emit low-allocation-query @fixed_physical_span_exceeds_capacity fixed=%value:physical_register:40:1
-
-test.target<low_core> @test_target
-
-// ERROR@+1: BACKEND/022 {function_name="fixed_physical_span_exceeds_capacity", request_kind="fixed_value", register_class="test.phys", location_base="40", location_count="1", location_end="41", allocation_capacity="32"}
-low.func.def target<test.low.core>(@test_target) @fixed_physical_span_exceeds_capacity(%value: reg<test.phys>) -> (reg<test.phys>) asm {
-  return %value
-}
-// ====
-
 // RUN: emit low-allocation-query @missing_low_allocation_symbol
 
 // ERROR@+1: SYMBOL/002 {symbol_name="missing_low_allocation_symbol"}
@@ -637,16 +627,6 @@ test.target<low_core> @test_target
 
 // ERROR@+1: BACKEND/037 {function_name="unknown_fixed_value_selector", value_name="missing"}
 low.func.def target<test.low.core>(@test_target) @unknown_fixed_value_selector(%value: reg<test.i32>) -> (reg<test.i32>) asm {
-  return %value
-}
-// ====
-
-// RUN: emit low-allocation-query @fixed_value_unit_count_mismatch fixed=%value:target_id:0:1
-
-test.target<low_core> @test_target
-
-// ERROR@+1: BACKEND/034 {function_name="fixed_value_unit_count_mismatch", value_name="value", value_id="0", required_unit_count="2", location_count="1"}
-low.func.def target<test.low.core>(@test_target) @fixed_value_unit_count_mismatch(%value: reg<test.i32 x2>) -> (reg<test.i32 x2>) asm {
   return %value
 }
 // ====
