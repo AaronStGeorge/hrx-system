@@ -1,21 +1,28 @@
-// RUN: emit low-allocation-query @copy_declared_pair values=%source,%result copies=%result fixed=%source:physical_register:5:2
+// RUN: emit low-allocation-query @copy_declared_pair values=%guard,%source,%result copies=%result
 
 test.target<low_core> @target
 
-// Physical ID 5 names l1 (r1,r3); it is not an unaligned linear pair.
-low.func.def target<test.low.core>(@target) @copy_declared_pair(%source: reg<test.explicit32 x2>) -> (reg<test.explicit32 x2>) asm {
+// A live scalar forces the source into l1 before releasing r0. The later copy
+// preserves l1 even though l0 is now free; its odd ID names a declared view,
+// not an unaligned linear range.
+low.func.def target<test.low.core>(@target) @copy_declared_pair(%guard: reg<test.explicit32>) -> (reg<test.i32>, reg<test.explicit32 x2>) asm {
+  %low = test.const.explicit32 11
+  %high = test.const.explicit32 23
+  %source = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
+  %released = copy %guard : reg<test.explicit32> -> reg<test.i32>
   %result = copy %source : reg<test.explicit32 x2> -> reg<test.explicit32 x2>
-  return %result
+  return %released, %result
 }
 
 // ----
+value %guard: test.explicit32 -> physical_register[0:1]
 value %source: test.explicit32 -> physical_register[5:2]
 value %result: test.explicit32 -> physical_register[5:2]
 copy %source -> %result: coalesced
 
 // ====
 
-// RUN: emit low-allocation-query @join_preserves_loop_storage values=%initial,%state,%fresh,%merged fixed=%initial:physical_register:4:2
+// RUN: emit low-allocation-query @join_preserves_loop_storage values=%initial,%state,%fresh,%merged
 
 test.target<low_core> @target
 
