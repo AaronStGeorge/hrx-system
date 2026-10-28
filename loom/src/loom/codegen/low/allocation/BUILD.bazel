@@ -905,6 +905,7 @@ loom_cc_test(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/test",
         "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/util:cfg_graph",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

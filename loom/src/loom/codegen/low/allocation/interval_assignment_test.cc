@@ -18,6 +18,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/target/registers.h"
+#include "loom/target/test/descriptors.h"
 #include "loom/util/cfg_graph.h"
 
 namespace loom {
@@ -1053,7 +1054,7 @@ TEST_F(LowRequiredRegisterRelocationTest, MovesAliasClassOwners) {
 struct EntryPlacementCase {
   // Placement property named in failure traces.
   const char* name;
-  // Allocatable units in the linear register bank.
+  // Allocatable units in the first argument's register bank.
   uint16_t capacity;
   // Number of live arguments in the fixture.
   uint32_t value_count;
@@ -1067,17 +1068,17 @@ struct EntryPlacementCase {
   uint32_t expected[3];
 };
 
-class LowEntryPlacementTest : public LowAllocationIntervalAssignmentTest,
-                              public ::testing::WithParamInterface<
-                                  std::tuple<bool, EntryPlacementCase>> {};
+class LowEntryPlacementTest : public LowAllocationIntervalAssignmentTest {
+ protected:
+  void CheckPlacement(const loom_low_descriptor_set_t* descriptors,
+                      const uint16_t* class_ids, uint16_t location_kind,
+                      const EntryPlacementCase& test_case);
+};
 
-TEST_P(LowEntryPlacementTest, PreservesOrRelocatesIncomingStorage) {
-  const auto [physical, test_case] = GetParam();
+void LowEntryPlacementTest::CheckPlacement(
+    const loom_low_descriptor_set_t* descriptors, const uint16_t* class_ids,
+    uint16_t location_kind, const EntryPlacementCase& test_case) {
   SCOPED_TRACE(test_case.name);
-  constexpr uint64_t kDescriptorSetId = 17;
-  const uint16_t location_kind =
-      physical ? LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER
-               : LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
   loom_region_t* body = loom_low_func_def_body(function_op_);
   loom_block_t* block = loom_region_entry_block(body);
   loom_value_id_t values[3];
@@ -1088,16 +1089,21 @@ TEST_P(LowEntryPlacementTest, PreservesOrRelocatesIncomingStorage) {
   uint32_t ends[8] = {};
   uint32_t unit_count = 0;
   for (uint32_t i = 0; i < test_case.value_count; ++i) {
-    values[i] = DefineValue(kDescriptorSetId, test_case.widths[i]);
+    IREE_ASSERT_OK(loom_module_define_value(
+        module_,
+        loom_low_register_type(descriptors->stable_id, class_ids[i],
+                               test_case.widths[i]),
+        &values[i]));
     IREE_ASSERT_OK(loom_block_add_arg(module_, block, values[i]));
     interval_indices[i] = i;
     intervals[i] = {
         .value_id = values[i],
         .start_point = 0,
         .end_point = 2,
-        .value_class = RegisterValueClass(kDescriptorSetId),
+        .value_class = RegisterValueClass(descriptors->stable_id),
         .unit_count = test_case.widths[i],
     };
+    intervals[i].value_class.register_class_id = class_ids[i];
     unit_values[i] = {unit_count, 0};
     for (uint32_t j = 0; j < test_case.widths[i]; ++j) {
       ends[unit_count++] = 2;
@@ -1136,42 +1142,25 @@ TEST_P(LowEntryPlacementTest, PreservesOrRelocatesIncomingStorage) {
       .ranges_by_result_ordinal = ranges,
       .ranges_by_source_ordinal = ranges,
   };
-  const loom_low_reg_class_t reg_class = {
-      .flags = static_cast<loom_low_reg_class_flags_t>(
-          LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE |
-          (physical ? LOOM_LOW_REG_CLASS_FLAG_PHYSICAL
-                    : LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY)),
-      .alloc_unit_bits = 32,
-      .allocatable_count = physical ? test_case.capacity : uint16_t{0},
-      .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
-  };
-  const loom_low_descriptor_set_t descriptors = {
-      .stable_id = kDescriptorSetId,
-      .reg_classes = &reg_class,
-      .reg_class_count = 1,
-  };
   const loom_low_resolved_target_t target = {
-      .descriptor_set = &descriptors,
+      .descriptor_set = descriptors,
   };
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
       module_, function_op_, &target, nullptr, 0, nullptr, 0, {}, &arena_,
       &constraints));
-  // A target-ID bank has no physical inventory; its bound belongs to the
-  // invocation's resolved budget instead of the register-class descriptor.
+  // The invocation can restrict its first bank independently of inventory.
   loom_low_allocation_resolved_budget_t budget = {
-      .descriptor_reg_class_id = 0,
+      .descriptor_reg_class_id = class_ids[0],
       .max_units = test_case.capacity,
   };
-  if (!physical) {
-    constraints.budgets = &budget;
-    constraints.budget_count = 1;
-  }
+  constraints.budgets = &budget;
+  constraints.budget_count = 1;
   loom_low_allocation_abi_location_t incoming[2] = {};
   for (uint32_t i = 0; i < test_case.incoming_count; ++i) {
     incoming[i] = {
         .location_kind = location_kind,
-        .descriptor_reg_class_id = 0,
+        .descriptor_reg_class_id = class_ids[i],
         .location_base = test_case.incoming[i],
     };
   }
@@ -1209,13 +1198,42 @@ TEST_P(LowEntryPlacementTest, PreservesOrRelocatesIncomingStorage) {
     const auto& assignment =
         result.assignments[result.assignment_indices_by_value_ordinal[i]];
     EXPECT_EQ(assignment.location_kind, location_kind);
+    EXPECT_EQ(assignment.descriptor_reg_class_id, class_ids[i]);
     EXPECT_EQ(assignment.location_base, test_case.expected[i]);
     EXPECT_EQ(assignment.location_count, test_case.widths[i]);
   }
 }
 
+class LowLinearEntryPlacementTest : public LowEntryPlacementTest,
+                                    public ::testing::WithParamInterface<
+                                        std::tuple<bool, EntryPlacementCase>> {
+};
+
+TEST_P(LowLinearEntryPlacementTest, PreservesOrRelocatesIncomingStorage) {
+  const auto [physical, test_case] = GetParam();
+  const loom_low_reg_class_t reg_class = {
+      .flags = static_cast<loom_low_reg_class_flags_t>(
+          LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE |
+          (physical ? LOOM_LOW_REG_CLASS_FLAG_PHYSICAL
+                    : LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY)),
+      .alloc_unit_bits = 32,
+      .allocatable_count = physical ? test_case.capacity : uint16_t{0},
+      .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+  };
+  const loom_low_descriptor_set_t descriptors = {
+      .stable_id = 17,
+      .reg_classes = &reg_class,
+      .reg_class_count = 1,
+  };
+  const uint16_t class_ids[] = {0, 0, 0};
+  CheckPlacement(&descriptors, class_ids,
+                 physical ? LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER
+                          : LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
+                 test_case);
+}
+
 INSTANTIATE_TEST_SUITE_P(
-    LinearBanks, LowEntryPlacementTest,
+    LinearBanks, LowLinearEntryPlacementTest,
     ::testing::Combine(
         ::testing::Bool(),
         ::testing::Values(
@@ -1232,6 +1250,46 @@ INSTANTIATE_TEST_SUITE_P(
             EntryPlacementCase{
                 "second_input", 6, 3, {1, 1, 4}, {0, 2}, 2, {0, 5, 1}},
             EntryPlacementCase{"pair", 6, 2, {2, 4}, {2}, 1, {4, 0}})));
+
+class LowExplicitEntryPlacementTest
+    : public LowEntryPlacementTest,
+      public ::testing::WithParamInterface<
+          std::tuple<const char*, const char*, EntryPlacementCase>> {};
+
+TEST_P(LowExplicitEntryPlacementTest, RelocatesOverlappingViews) {
+  const auto [first_class, last_class, test_case] = GetParam();
+  const auto* descriptors = loom_test_low_core_descriptor_set();
+  uint16_t class_ids[3];
+  for (uint32_t i = 0; i < test_case.value_count; ++i) {
+    ASSERT_TRUE(loom_low_descriptor_set_lookup_register_class(
+        descriptors,
+        iree_make_cstring_view(i + 1 == test_case.value_count ? last_class
+                                                              : first_class),
+        &class_ids[i], nullptr));
+  }
+  CheckPlacement(descriptors, class_ids,
+                 LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, test_case);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ExplicitBanks, LowExplicitEntryPlacementTest,
+    ::testing::Values(
+        std::make_tuple(
+            "test.explicit_range32", "test.explicit_range32",
+            EntryPlacementCase{
+                "candidate_ordinals", 4, 3, {1, 1, 2}, {0, 2}, 2, {3, 2, 0}}),
+        std::make_tuple(
+            "test.explicit32", "test.explicit32",
+            EntryPlacementCase{
+                "pair_view", 4, 3, {1, 1, 2}, {0, 1}, 2, {3, 1, 4}}),
+        std::make_tuple(
+            "test.explicit32", "test.fixed.r0",
+            EntryPlacementCase{
+                "pair_blocks_narrow", 4, 2, {2, 1}, {4}, 1, {5, 0}}),
+        std::make_tuple(
+            "test.explicit32", "test.fixed.r0",
+            EntryPlacementCase{
+                "scalar_blocks_narrow", 4, 2, {1, 1}, {0}, 1, {2, 0}})));
 
 }  // namespace
 }  // namespace loom
