@@ -77,11 +77,10 @@ bool loom_encoding_query_value_address_layout(
     const loom_fact_context_t* context, loom_value_id_t value_id,
     loom_value_fact_address_layout_t* out_layout);
 
-// Queries retained per-axis SSA stride bindings for an encoding value. Static
-// axes use INVALID; their values live in the numeric layout summary. An empty
-// slice means no scoped materialization is available. Storage is owned by
-// |context|'s fact table and survives until its scope is cleared.
-loom_value_fact_layout_strides_t loom_encoding_query_value_layout_strides(
+// Queries the retained exact materialization recipe for an encoding value.
+// Storage is owned by |context|'s fact table and survives until its scope is
+// cleared. An absent recipe does not trigger producer inspection.
+loom_value_fact_layout_origin_t loom_encoding_query_value_layout_origin(
     const loom_fact_context_t* context, loom_value_id_t value_id);
 
 // Decodes a static storage-schema encoding into a summary. Generic operand
@@ -127,12 +126,10 @@ bool loom_encoding_query_type_address_layout(
     iree_host_size_t stride_capacity,
     loom_value_fact_address_layout_t* out_layout);
 
-// Queries retained per-axis SSA stride bindings for a shaped type. Static axes
-// use INVALID; their values live in the numeric layout summary. An empty slice
-// means no scoped materialization is available. Storage is owned by |context|'s
-// fact table and survives until its scope is cleared. This does not inspect IR
-// producers or recover bindings from portable numeric facts.
-loom_value_fact_layout_strides_t loom_encoding_query_type_layout_strides(
+// Queries the retained exact materialization recipe for a shaped type's SSA
+// encoding. Storage is owned by |context|'s fact table and survives until its
+// scope is cleared. This does not inspect IR producers.
+loom_value_fact_layout_origin_t loom_encoding_query_type_layout_origin(
     const loom_fact_context_t* context, loom_type_t type);
 
 // Queries a shaped type's storage-schema summary from static encodings or

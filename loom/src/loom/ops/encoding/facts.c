@@ -249,11 +249,9 @@ iree_status_t loom_encoding_layout_strided_facts(
   }
 
   if (dynamic_ordinal || context->table->layout_origins) {
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_define_layout_strides(
-        context->table, loom_encoding_layout_strided_result(op),
-        (loom_value_fact_layout_strides_t){
-            .values = stride_values,
-            .count = dynamic_ordinal ? static_strides.count : 0}));
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_define_layout_explicit_strides(
+        context->table, loom_encoding_layout_strided_result(op), stride_values,
+        dynamic_ordinal ? static_strides.count : 0));
   }
 
   loom_value_fact_address_layout_t address_layout = {
@@ -288,7 +286,7 @@ iree_status_t loom_encoding_layout_assume_strided_facts(
           LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED &&
       source_summary.address_layout.rank == rank) {
     if (context->table->layout_origins) {
-      IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_layout_strides(
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_layout_origin(
           context->table, loom_encoding_layout_assume_strided_layout(op),
           loom_encoding_layout_assume_strided_result(op)));
     }
@@ -298,7 +296,7 @@ iree_status_t loom_encoding_layout_assume_strided_facts(
         (loom_value_fact_storage_schema_t){0}, &result_facts[0]);
   }
   if (context->table->layout_origins) {
-    loom_value_fact_table_clear_layout_strides(
+    loom_value_fact_table_clear_layout_origin(
         context->table, loom_encoding_layout_assume_strided_result(op));
   }
 
@@ -346,7 +344,7 @@ iree_status_t loom_encoding_define_facts(
       vtable, context, module, op, &params, operand_facts, stride_storage,
       IREE_ARRAYSIZE(stride_storage), &family_summary);
   if (context->table->layout_origins) {
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_layout_strides(
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_layout_origin(
         context->table, family_summary.address_layout_value_id,
         loom_encoding_define_result(op)));
   }

@@ -496,12 +496,12 @@ bool loom_encoding_query_value_address_layout(
       out_layout);
 }
 
-loom_value_fact_layout_strides_t loom_encoding_query_value_layout_strides(
+loom_value_fact_layout_origin_t loom_encoding_query_value_layout_origin(
     const loom_fact_context_t* context, loom_value_id_t value_id) {
   if (!context || !context->table || value_id == LOOM_VALUE_ID_INVALID) {
-    return (loom_value_fact_layout_strides_t){0};
+    return (loom_value_fact_layout_origin_t){0};
   }
-  return loom_value_fact_table_query_layout_strides(context->table, value_id);
+  return loom_value_fact_table_query_layout_origin(context->table, value_id);
 }
 
 static bool loom_encoding_value_storage_schema(
@@ -553,12 +553,12 @@ bool loom_encoding_query_type_address_layout(
       context, loom_type_encoding_value_id(type), out_layout);
 }
 
-loom_value_fact_layout_strides_t loom_encoding_query_type_layout_strides(
+loom_value_fact_layout_origin_t loom_encoding_query_type_layout_origin(
     const loom_fact_context_t* context, loom_type_t type) {
   if (!context || !loom_type_has_ssa_encoding(type)) {
-    return (loom_value_fact_layout_strides_t){0};
+    return (loom_value_fact_layout_origin_t){0};
   }
-  return loom_encoding_query_value_layout_strides(
+  return loom_encoding_query_value_layout_origin(
       context, loom_type_encoding_value_id(type));
 }
 

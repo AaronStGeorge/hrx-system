@@ -353,21 +353,30 @@ static iree_status_t loom_view_region_axis_stride_expr(
     loom_symbolic_expr_unknown(loom_value_facts_unknown(), out_expression);
     return iree_ok_status();
   }
-  loom_value_facts_t stride_facts = layout.summary.strides[axis];
-  if (loom_value_facts_is_exact(stride_facts) &&
-      !loom_value_facts_is_float(stride_facts)) {
-    loom_symbolic_expr_constant(stride_facts.range_lo, out_expression);
+  const loom_value_facts_t stride_facts = layout.summary.strides[axis];
+  const loom_value_fact_layout_origin_t origin =
+      loom_encoding_query_type_layout_origin(
+          &table->expression_context->fact_table->context, view_type);
+  loom_value_fact_layout_axis_t layout_axis;
+  loom_value_fact_layout_query_axis(table->expression_context->fact_table,
+                                    origin, axis, stride_facts, &layout_axis);
+  if (layout_axis.kind == LOOM_VALUE_FACT_LAYOUT_AXIS_STATIC) {
+    loom_symbolic_expr_constant(layout_axis.static_coefficient, out_expression);
     out_expression->facts = stride_facts;
     *out_known = true;
     return iree_ok_status();
   }
-  const loom_value_fact_layout_strides_t stride_values =
-      loom_encoding_query_type_layout_strides(
-          &table->expression_context->fact_table->context, view_type);
-  if (axis < stride_values.count &&
-      stride_values.values[axis] != LOOM_VALUE_ID_INVALID) {
-    IREE_RETURN_IF_ERROR(loom_symbolic_expr_from_value(
-        table->expression_context, stride_values.values[axis], out_expression));
+  if (layout_axis.kind == LOOM_VALUE_FACT_LAYOUT_AXIS_DYNAMIC) {
+    loom_symbolic_expr_constant(layout_axis.static_coefficient, out_expression);
+    for (uint8_t i = 0; i < layout_axis.dynamic_factor_count; ++i) {
+      loom_symbolic_expr_t factor = {0};
+      IREE_RETURN_IF_ERROR(loom_symbolic_expr_from_value(
+          table->expression_context, layout_axis.dynamic_factors[i], &factor));
+      loom_symbolic_expr_t product = {0};
+      IREE_RETURN_IF_ERROR(
+          loom_view_region_expr_mul(table, out_expression, &factor, &product));
+      *out_expression = product;
+    }
     loom_view_region_expression_refine_facts(out_expression, stride_facts);
     *out_known = true;
     return iree_ok_status();

@@ -82,26 +82,25 @@ void loom_low_source_memory_query_axis_byte_stride(
       return;
     }
     loom_value_facts_muli(&byte_facts, &element_stride_facts, &byte_facts);
-    int64_t exact_element_stride = 0;
-    if (loom_value_facts_as_exact_i64(element_stride_facts,
-                                      &exact_element_stride)) {
-      if (!iree_checked_mul_i64(static_byte_coefficient, exact_element_stride,
-                                &static_byte_coefficient)) {
-        out_stride->kind = LOOM_LOW_SOURCE_MEMORY_AXIS_BYTE_STRIDE_INVALID;
-        return;
-      }
-    } else {
-      const loom_value_fact_layout_strides_t stride_values =
-          vector_access->layout_stride_values;
-      if (view_axis >= stride_values.count ||
-          stride_values.values[view_axis] == LOOM_VALUE_ID_INVALID) {
-        out_stride->kind =
-            LOOM_LOW_SOURCE_MEMORY_AXIS_BYTE_STRIDE_UNMATERIALIZED;
-        out_stride->byte_facts = byte_facts;
-        return;
-      }
+    loom_value_fact_layout_axis_t layout_axis;
+    loom_value_fact_layout_query_axis(fact_table, vector_access->layout_origin,
+                                      view_axis, element_stride_facts,
+                                      &layout_axis);
+    if (layout_axis.kind == LOOM_VALUE_FACT_LAYOUT_AXIS_UNAVAILABLE) {
+      out_stride->kind = LOOM_LOW_SOURCE_MEMORY_AXIS_BYTE_STRIDE_UNMATERIALIZED;
+      out_stride->byte_facts = byte_facts;
+      return;
+    }
+    if (layout_axis.kind == LOOM_VALUE_FACT_LAYOUT_AXIS_INVALID ||
+        !iree_checked_mul_i64(static_byte_coefficient,
+                              layout_axis.static_coefficient,
+                              &static_byte_coefficient)) {
+      out_stride->kind = LOOM_LOW_SOURCE_MEMORY_AXIS_BYTE_STRIDE_INVALID;
+      return;
+    }
+    for (uint8_t i = 0; i < layout_axis.dynamic_factor_count; ++i) {
       out_stride->dynamic_factors[out_stride->dynamic_factor_count++] =
-          stride_values.values[view_axis];
+          layout_axis.dynamic_factors[i];
     }
   } else {
     return;
