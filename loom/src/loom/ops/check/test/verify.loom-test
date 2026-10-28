@@ -294,7 +294,7 @@ check.scenario @valid_scenario configure[2](%configuration: index, %configuratio
     %storage = check.generate.fill value(0) : tensor<4xi32>
     %input = check.generate<@scenario_generator>(%trial, %storage) : (index, tensor<4xi32>) -> (i32)
     check.compare<@scenario_subject>(%input) : (i32) -> [actual(%actual: f32), expected(%expected: f32)] {
-      check.expect.close actual(%actual) expected(%expected) atol(0.0) rtol(0.0) nan(same) : f32
+      check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(0.0) nan(same) : f32, f32
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {

@@ -298,7 +298,7 @@ check.scenario @routed_row_combine_structured {
     %expected = check.generate.iota offset(1270.0) step(1.25) : tensor<1x1024xf32>
     check.compare<@routed_row_combine_pipelined, @routed_row_combine_oracle>[%tokens](%count, %tokens, %ids, %weights, %rows, %output) : [index](index, index, tensor<1x32xi32>, tensor<1x32xf32>, tensor<4x1024xf32>, tensor<1x1024xf32>) -> () {
       check.expect.bitwise actual(%output) expected(%output) : tensor<1x1024xf32>
-      check.expect.close actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<1x1024xf32>
+      check.expect.approximate actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<1x1024xf32>, tensor<1x1024xf32>
     }
   }
 
@@ -314,7 +314,7 @@ check.scenario @routed_row_combine_structured {
     %expected = check.generate.fill value(0.0) : tensor<1x1024xf32>
     check.compare<@routed_row_combine_pipelined, @routed_row_combine_oracle>[%tokens](%count, %tokens, %ids, %weights, %rows, %output) : [index](index, index, tensor<1x32xi32>, tensor<1xf32>, tensor<1x1024xf32>, tensor<1x1024xf32>) -> () {
       check.expect.bitwise actual(%output) expected(%output) : tensor<1x1024xf32>
-      check.expect.close actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<1x1024xf32>
+      check.expect.approximate actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<1x1024xf32>, tensor<1x1024xf32>
     }
   }
 
@@ -329,7 +329,7 @@ check.scenario @routed_row_combine_structured {
     %expected = check.generate.fill value(2.0) : tensor<1x1024xf32>
     check.compare<@routed_row_combine_pipelined, @routed_row_combine_oracle>[%tokens](%count, %tokens, %ids, %weights, %rows, %output) : [index](index, index, tensor<1x32xi32>, tensor<1x32xf32>, tensor<1x1024xf32>, tensor<1x1024xf32>) -> () {
       check.expect.bitwise actual(%output) expected(%output) : tensor<1x1024xf32>
-      check.expect.close actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<1x1024xf32>
+      check.expect.approximate actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<1x1024xf32>, tensor<1x1024xf32>
     }
   }
   check.return

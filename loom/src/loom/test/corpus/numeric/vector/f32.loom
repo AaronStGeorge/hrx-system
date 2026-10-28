@@ -144,7 +144,7 @@ check.scenario @vector_f32_sign_values {
     %suffix = check.tensor.view %storage offset(48) : tensor<16xf32> -> tensor<4xf32>
     %guard = check.generate.fill value(-123.5) : tensor<4xf32>
     check.compare<@vector_f32_sign>(%input, %output) : (tensor<4xf32>, tensor<8xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<8xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<8xf32>, tensor<8xf32>
       check.expect.bitwise actual(%input) expected(%expected_input) : tensor<4xf32>
       check.expect.bitwise actual(%prefix) expected(%guard) : tensor<4xf32>
       check.expect.bitwise actual(%suffix) expected(%guard) : tensor<4xf32>
@@ -165,7 +165,7 @@ check.scenario @vector_f32_rounding_values {
     %suffix = check.tensor.view %storage offset(80) : tensor<24xf32> -> tensor<4xf32>
     %guard = check.generate.fill value(-123.5) : tensor<4xf32>
     check.compare<@vector_f32_rounding>(%input, %output) : (tensor<4xf32>, tensor<16xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<16xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<16xf32>, tensor<16xf32>
       check.expect.bitwise actual(%input) expected(%expected_input) : tensor<4xf32>
       check.expect.bitwise actual(%prefix) expected(%guard) : tensor<4xf32>
       check.expect.bitwise actual(%suffix) expected(%guard) : tensor<4xf32>
@@ -186,7 +186,7 @@ check.scenario @vector_f32_square_root_values {
     %suffix = check.tensor.view %storage offset(32) : tensor<12xf32> -> tensor<4xf32>
     %guard = check.generate.fill value(-123.5) : tensor<4xf32>
     check.compare<@vector_f32_square_root>(%input, %output) : (tensor<4xf32>, tensor<4xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<4xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<4xf32>, tensor<4xf32>
       check.expect.bitwise actual(%input) expected(%expected_input) : tensor<4xf32>
       check.expect.bitwise actual(%prefix) expected(%guard) : tensor<4xf32>
       check.expect.bitwise actual(%suffix) expected(%guard) : tensor<4xf32>
@@ -211,7 +211,7 @@ check.scenario @vector_f32_arithmetic_values {
     %suffix = check.tensor.view %storage offset(64) : tensor<20xf32> -> tensor<4xf32>
     %guard = check.generate.fill value(-123.5) : tensor<4xf32>
     check.compare<@vector_f32_arithmetic>(%lhs, %rhs, %output) : (tensor<4xf32>, tensor<4xf32>, tensor<12xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<12xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<12xf32>, tensor<12xf32>
       check.expect.bitwise actual(%lhs) expected(%expected_lhs) : tensor<4xf32>
       check.expect.bitwise actual(%rhs) expected(%expected_rhs) : tensor<4xf32>
       check.expect.bitwise actual(%prefix) expected(%guard) : tensor<4xf32>
@@ -251,7 +251,7 @@ check.scenario @vector_f32_division_values {
     %suffix = check.tensor.view %storage offset(32) : tensor<12xf32> -> tensor<4xf32>
     %guard = check.generate.fill value(-123.5) : tensor<4xf32>
     check.compare<@vector_f32_division>(%lhs, %rhs, %output) : (tensor<4xf32>, tensor<4xf32>, tensor<4xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<4xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<4xf32>, tensor<4xf32>
       check.expect.bitwise actual(%lhs) expected(%expected_lhs) : tensor<4xf32>
       check.expect.bitwise actual(%rhs) expected(%expected_rhs) : tensor<4xf32>
       check.expect.bitwise actual(%prefix) expected(%guard) : tensor<4xf32>

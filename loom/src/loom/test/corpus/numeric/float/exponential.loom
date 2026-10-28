@@ -128,14 +128,14 @@ check.scenario @exponential_values {
   check.trial[12](%trial: index, %entropy: check.entropy) {
     %output = check.generate.fill value(0.0) : tensor<2xf32>
     check.compare<@exponential_boundary_observations>(%trial, %output) : (index, tensor<2xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.4012984643248171e-45) rtol(1.0000000000000001e-05) nan(same) : tensor<2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.4012984643248171e-45) rtol(1.0000000000000001e-05) nan(same) : tensor<2xf32>, tensor<2xf32>
     }
   }
   check.trial[256](%trial: index, %entropy: check.entropy) {
     %bits = check.entropy.read %entropy[%trial] : check.entropy -> i64
     %output = check.generate.fill value(0.0) : tensor<2xf32>
     check.compare<@exponential_entropy_observations>(%bits, %output) : (i64, tensor<2xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.4012984643248171e-45) rtol(1.0000000000000001e-05) nan(same) : tensor<2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.4012984643248171e-45) rtol(1.0000000000000001e-05) nan(same) : tensor<2xf32>, tensor<2xf32>
     }
   }
   check.return

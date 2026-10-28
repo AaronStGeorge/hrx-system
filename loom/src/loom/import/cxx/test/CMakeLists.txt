@@ -58,8 +58,8 @@ loom_check_test_suite(
     "c_abi_invalid.cxx-test"
     "callable_effects.cxx-test"
     "check.cxx-test"
-    "check_close.cxx-test"
-    "check_close_invalid.cxx-test"
+    "check_approximate.cxx-test"
+    "check_approximate_invalid.cxx-test"
     "check_records.cxx-test"
     "check_resources.cxx-test"
     "check_scenarios.cxx-test"
@@ -240,7 +240,7 @@ loom_check_test_suite(
     "workload_config_invalid.cxx-test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/aligned_layout.h"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/check_close.cxx"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/check_approximate.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/check_records.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/enum_semantics.h"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/locations.h"
@@ -287,9 +287,9 @@ endif()
 if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
 loom_test_module(
   NAME
-    check_close_test_module
+    check_approximate_test_module
   SRCS
-    "check_close.cxx"
+    "check_approximate.cxx"
 )
 endif()
 
@@ -297,9 +297,9 @@ if(LOOM_IMPORT_CXX AND LOOM_ARCH_VM)
 if(LOOM_ARCH_VM AND LOOM_ARTIFACT_VM_BINARY AND LOOM_EXECUTE_IREE_VM)
 loom_execution_test(
   NAME
-    check_close_test_execute_vm_reference_test
+    check_approximate_test_execute_vm_reference_test
   MODULE
-    "::check_close_test_module"
+    "::check_approximate_test_module"
   LABELS
     "iree-build-requirement=loom.arch.vm"
     "iree-build-requirement=loom.artifact.vm_binary"

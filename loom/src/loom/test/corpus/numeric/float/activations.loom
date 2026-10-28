@@ -435,14 +435,14 @@ check.scenario @activation_portable_values {
     %input = check.generate.iota offset(-8.0) step(2.0) : tensor<8xf32>
     %output = check.generate.fill value(0.0) : tensor<54xf32>
     check.compare<@activation_portable_observations, @activation_portable_observations_oracle>(%input, %output) : (tensor<8xf32>, tensor<54xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<54xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<54xf32>, tensor<54xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
     %input = check.generate.iota offset(-1.75) step(0.5) : tensor<8xf32>
     %output = check.generate.fill value(0.0) : tensor<54xf32>
     check.compare<@activation_portable_observations, @activation_portable_observations_oracle>(%input, %output) : (tensor<8xf32>, tensor<54xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<54xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<54xf32>, tensor<54xf32>
     }
   }
   check.return
@@ -455,14 +455,14 @@ check.scenario @activation_core_values {
     %input = check.generate.iota offset(-8.0) step(2.0) : tensor<8xf32>
     %output = check.generate.fill value(0.0) : tensor<56xf32>
     check.compare<@activation_f32x8_observations, @activation_f32x8_observations_oracle>(%input, %output) : (tensor<8xf32>, tensor<56xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<56xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<56xf32>, tensor<56xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
     %input = check.generate.iota offset(-1.75) step(0.5) : tensor<8xf32>
     %output = check.generate.fill value(0.0) : tensor<56xf32>
     check.compare<@activation_f32x8_observations, @activation_f32x8_observations_oracle>(%input, %output) : (tensor<8xf32>, tensor<56xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<56xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<56xf32>, tensor<56xf32>
     }
   }
   check.return
@@ -474,7 +474,7 @@ check.scenario @activation_values {
     %input = check.generate.iota offset(-8.0) step(1.0) : tensor<16xf32>
     %output = check.generate.fill value(0.0) : tensor<85xf32>
     check.compare<@activation_observations, @activation_observations_oracle>(%scalar_input, %input, %output) : (f32, tensor<16xf32>, tensor<85xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<85xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<85xf32>, tensor<85xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -482,7 +482,7 @@ check.scenario @activation_values {
     %input = check.generate.iota offset(-3.75) step(0.5) : tensor<16xf32>
     %output = check.generate.fill value(0.0) : tensor<85xf32>
     check.compare<@activation_observations, @activation_observations_oracle>(%scalar_input, %input, %output) : (f32, tensor<16xf32>, tensor<85xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<85xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.02) rtol(0.01) nan(same) : tensor<85xf32>, tensor<85xf32>
     }
   }
   // Tiny positive tails must not disappear when 1 + exp(x) rounds to 1.
@@ -490,7 +490,7 @@ check.scenario @activation_values {
     %input = check.generate.iota offset(-90.0) step(5.0) : tensor<16xf32>
     %output = check.generate.fill value(-1.0) : tensor<62xf32>
     check.compare<@softplus_observations, @softplus_observations_oracle>(%input, %output) : (tensor<16xf32>, tensor<62xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>, tensor<62xf32>
     }
   }
   // Full-range finite values exercise both tails and the central transition.
@@ -499,7 +499,7 @@ check.scenario @activation_values {
     %input = check.generate.random.uniform seed(%seed) range(-120.0 to 120.0) : tensor<16xf32>
     %output = check.generate.fill value(-1.0) : tensor<62xf32>
     check.compare<@softplus_observations, @softplus_observations_oracle>(%input, %output) : (tensor<16xf32>, tensor<62xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>, tensor<62xf32>
     }
   }
   check.trial[64](%trial: index, %entropy: check.entropy) {
@@ -507,7 +507,7 @@ check.scenario @activation_values {
     %input = check.generate.random.uniform seed(%seed) range(-120.0 to 120.0) : tensor<16xf32>
     %fast_output = check.generate.fill value(-1.0) : tensor<17xf32>
     check.compare<@softplus_fast_observations, @softplus_fast_observations_oracle>(%input, %fast_output) : (tensor<16xf32>, tensor<17xf32>) -> () {
-      check.expect.close actual(%fast_output) expected(%fast_output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<17xf32>
+      check.expect.approximate actual(%fast_output) expected(%fast_output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<17xf32>, tensor<17xf32>
     }
   }
   // Alternating encodings of positive and negative FLT_MAX may overflow an
@@ -532,28 +532,28 @@ check.scenario @activation_values {
     %input = check.generate.iota offset(0) step(1) : tensor<16xi32>
     %output = check.generate.fill value(-1.0) : tensor<62xf32>
     check.compare<@softplus_observations, @softplus_observations_oracle>(%input, %output) : (tensor<16xi32>, tensor<62xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>, tensor<62xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
     %input = check.generate.iota offset(-2147483648) step(1) : tensor<16xi32>
     %output = check.generate.fill value(-1.0) : tensor<62xf32>
     check.compare<@softplus_observations, @softplus_observations_oracle>(%input, %output) : (tensor<16xi32>, tensor<62xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>, tensor<62xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
     %input = check.generate.iota offset(2139095040) step(1) : tensor<16xi32>
     %output = check.generate.fill value(-1.0) : tensor<62xf32>
     check.compare<@softplus_observations, @softplus_observations_oracle>(%input, %output) : (tensor<16xi32>, tensor<62xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>, tensor<62xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
     %input = check.generate.iota offset(-8388608) step(1) : tensor<16xi32>
     %output = check.generate.fill value(-1.0) : tensor<62xf32>
     check.compare<@softplus_observations, @softplus_observations_oracle>(%input, %output) : (tensor<16xi32>, tensor<62xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.1754943508222875e-38) rtol(3.814697265625e-06) nan(same) : tensor<62xf32>, tensor<62xf32>
     }
   }
   check.return

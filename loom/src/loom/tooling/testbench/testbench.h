@@ -147,8 +147,6 @@ typedef enum loom_testbench_expectation_kind_e {
   LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED = 6,
   // check.expect.close.unsigned exact integer-distance comparison.
   LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED = 7,
-  // Legacy check.expect.close approximate comparison.
-  LOOM_TESTBENCH_EXPECTATION_CLOSE = 8,
 } loom_testbench_expectation_kind_t;
 
 typedef struct loom_testbench_plan_options_t {
@@ -394,15 +392,6 @@ typedef struct loom_testbench_trial_recipe_step_t {
   };
 } loom_testbench_trial_recipe_step_t;
 
-typedef struct loom_testbench_close_expectation_plan_t {
-  // Absolute tolerance.
-  double absolute_tolerance;
-  // Relative tolerance.
-  double relative_tolerance;
-  // NaN comparison policy.
-  loom_check_expect_close_nan_t nan_policy;
-} loom_testbench_close_expectation_plan_t;
-
 typedef struct loom_testbench_approximate_expectation_plan_t {
   // Absolute tolerance.
   double absolute_tolerance;
@@ -464,8 +453,6 @@ typedef struct loom_testbench_expectation_plan_t {
     loom_testbench_approximate_expectation_plan_t approximate;
     // Payload for check.expect.close.signed and close.unsigned.
     loom_testbench_integer_close_expectation_plan_t integer_close;
-    // Payload for check.expect.close.
-    loom_testbench_close_expectation_plan_t close;
     // Payload for check.expect.shape.
     loom_testbench_shape_expectation_plan_t shape;
     // Payload for check.expect.event<provider>.

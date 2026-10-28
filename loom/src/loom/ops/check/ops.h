@@ -49,8 +49,7 @@ enum {
   LOOM_OP_CHECK_GENERATE = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 27),
   LOOM_OP_CHECK_EXPECT_CLOSE_SIGNED = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 28),
   LOOM_OP_CHECK_EXPECT_CLOSE_UNSIGNED = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 29),
-  LOOM_OP_CHECK_EXPECT_CLOSE = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 30),
-  LOOM_OP_CHECK_COUNT_ = 31,
+  LOOM_OP_CHECK_COUNT_ = 30,
 };
 
 // Check symbol visibility. Absent (0) means private.
@@ -79,13 +78,6 @@ typedef enum loom_check_expect_approximate_nan_e {
   LOOM_CHECK_EXPECT_APPROXIMATE_NAN_DIFFERENT = 2,
   LOOM_CHECK_EXPECT_APPROXIMATE_NAN_COUNT_ = 3,
 } loom_check_expect_approximate_nan_t;
-
-// NaN comparison policy for approximate expectations.
-typedef enum loom_check_expect_close_nan_e {
-  LOOM_CHECK_EXPECT_CLOSE_NAN_SAME = 1,
-  LOOM_CHECK_EXPECT_CLOSE_NAN_DIFFERENT = 2,
-  LOOM_CHECK_EXPECT_CLOSE_NAN_COUNT_ = 3,
-} loom_check_expect_close_nan_t;
 
 // LOOM_OP_CHECK_CASE: Named correctness harness.
 // check.case @empty {
@@ -651,27 +643,6 @@ iree_status_t loom_check_expect_close_unsigned_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_check_expect_close_unsigned_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
-
-// LOOM_OP_CHECK_EXPECT_CLOSE: Requires actual and expected floating-point values to be approximately equal.
-// check.expect.close actual(%actual) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<[%m]xf32>
-LOOM_DEFINE_ISA(loom_check_expect_close_isa, LOOM_OP_CHECK_EXPECT_CLOSE)
-LOOM_DEFINE_OPERAND(loom_check_expect_close_actual, 0)
-LOOM_DEFINE_OPERAND(loom_check_expect_close_expected, 1)
-LOOM_DEFINE_ATTR_F64(loom_check_expect_close_atol, 0)
-LOOM_DEFINE_ATTR_F64(loom_check_expect_close_rtol, 1)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_check_expect_close_nan, 2, loom_check_expect_close_nan_t)
-iree_status_t loom_check_expect_close_build(
-    loom_builder_t* builder,
-    loom_value_id_t actual,
-    loom_value_id_t expected,
-    double atol,
-    double rtol,
-    loom_check_expect_close_nan_t nan,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-iree_status_t loom_check_expect_pair_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

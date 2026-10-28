@@ -297,13 +297,3 @@ class CheckBuilder(DialectBuilder):
         max_distance: int,
         location_id: int | None = ...,
     ) -> None: ...
-    def close(
-        self,
-        *,
-        actual: ValueRef,
-        expected: ValueRef,
-        atol: float,
-        rtol: float,
-        nan: str,
-        location_id: int | None = ...,
-    ) -> None: ...

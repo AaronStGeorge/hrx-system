@@ -28,16 +28,6 @@ ERR_EXPECT_002 = ErrorDef(
     params=(),
 )
 
-# ERR_EXPECT_003: Legacy close expectation mismatch.
-ERR_EXPECT_003 = ErrorDef(
-    domain=ErrorDomain.EXPECT,
-    code=3,
-    severity=Severity.ERROR,
-    summary="Close expectation did not match.",
-    message="check.expect.close did not match",
-    params=(),
-)
-
 # ERR_EXPECT_004: Shape expectation mismatch.
 ERR_EXPECT_004 = ErrorDef(
     domain=ErrorDomain.EXPECT,
@@ -91,7 +81,6 @@ ERR_EXPECT_008 = ErrorDef(
 ALL_EXPECT_ERRORS: tuple[ErrorDef, ...] = (
     ERR_EXPECT_001,
     ERR_EXPECT_002,
-    ERR_EXPECT_003,
     ERR_EXPECT_004,
     ERR_EXPECT_005,
     ERR_EXPECT_006,

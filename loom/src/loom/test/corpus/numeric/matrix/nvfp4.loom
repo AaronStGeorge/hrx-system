@@ -172,7 +172,7 @@ check.scenario @nvfp4_matrix_values {
       check.expect.bitwise actual(%rhs_payload) expected(%rhs_payload) : tensor<32xi32>
       check.expect.bitwise actual(%rhs_scale) expected(%rhs_scale) : tensor<16xi8>
       check.expect.bitwise actual(%init) expected(%init) : tensor<256xf32>
-      check.expect.close actual(%output) expected(%output) atol(1.9999999999999999e-06) rtol(2.0000000000000002e-05) nan(same) : tensor<264xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.9999999999999999e-06) rtol(2.0000000000000002e-05) nan(same) : tensor<264xf32>, tensor<264xf32>
     }
   }
   check.trial[8](%trial: index, %entropy: check.entropy) {
@@ -198,7 +198,7 @@ check.scenario @nvfp4_matrix_values {
       check.expect.bitwise actual(%rhs_payload) expected(%rhs_payload) : tensor<32xi32>
       check.expect.bitwise actual(%rhs_scale) expected(%rhs_scale) : tensor<16xi8>
       check.expect.bitwise actual(%init) expected(%init) : tensor<256xf32>
-      check.expect.close actual(%output) expected(%output) atol(1.9999999999999999e-06) rtol(2.0000000000000002e-05) nan(same) : tensor<264xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.9999999999999999e-06) rtol(2.0000000000000002e-05) nan(same) : tensor<264xf32>, tensor<264xf32>
     }
   }
   check.return

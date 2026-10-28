@@ -1116,36 +1116,6 @@ class CheckBody {
       case Operation::Event:
         metadata(call, binding);
         break;
-      case Operation::Close: {
-        auto actual = expression(first->value);
-        auto expected = expression(first->next->value);
-        auto* absolute = first->next->next;
-        auto* relative = absolute->next;
-        auto absolute_tolerance = tolerance(absolute->value);
-        auto relative_tolerance = tolerance(relative->value);
-        auto nan = string_literal(relative->next->value);
-        if (nan != "same" && nan != "different") {
-          fail(relative->next->value,
-               "check NaN policy must be 'same' or 'different'");
-        }
-        auto actual_value =
-            actual.is_tensor()
-                ? static_cast<const TensorPartition&>(actual.partition())
-                      .tensor_value(actual.components())
-                : actual.ssa();
-        auto expected_value =
-            expected.is_tensor()
-                ? static_cast<const TensorPartition&>(expected.partition())
-                      .tensor_value(expected.components())
-                : expected.ssa();
-        check(loom_check_expect_close_build(
-            &builder_, actual_value, expected_value, absolute_tolerance,
-            relative_tolerance,
-            nan == "same" ? LOOM_CHECK_EXPECT_CLOSE_NAN_SAME
-                          : LOOM_CHECK_EXPECT_CLOSE_NAN_DIFFERENT,
-            location, &op));
-        break;
-      }
       case Operation::Approximate: {
         auto actual = expression(first->value);
         auto expected = expression(first->next->value);

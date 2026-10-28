@@ -255,17 +255,6 @@ template <class Shape, class T>
 [[loom::op("check.expect.bitwise")]] void expect_bitwise(
     loom::type::tensor<Shape, T> actual, loom::type::tensor<Shape, T> expected);
 
-// Compares equal-typed floating scalars or tensors using
-// abs(actual - expected) <= absolute_tolerance + relative_tolerance *
-// abs(expected). Tolerances are finite, non-negative compile-time constants.
-// The literal NaN policy is "same" to accept two NaNs, or "different" to reject
-// any NaN.
-template <class T>
-[[loom::op("check.expect.close")]] void expect_close(T actual, T expected,
-                                                     double absolute_tolerance,
-                                                     double relative_tolerance,
-                                                     const char* nan = "same");
-
 // Compares independently typed floating scalars or tensors using
 // abs(actual - expected) <= absolute_tolerance + relative_tolerance *
 // abs(expected). Tolerances are finite, non-negative compile-time constants.

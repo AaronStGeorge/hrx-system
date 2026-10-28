@@ -16,7 +16,7 @@ using loom::kernel::scan_mode;
 #define EXPECT_BITWISE_OUTPUT(Actual, Expected) \
   loom::check::expect_bitwise(Actual, Expected)
 #define EXPECT_NATIVE_FLOAT_OUTPUT(Actual, Expected) \
-  loom::check::expect_close(Actual, Expected, 0.0, 0.0)
+  loom::check::expect_approximate(Actual, Expected, 0.0, 0.0)
 
 #define DEFINE_SCAN_VALUES(Name, Type, Kind, Seed, Offset, Step, ExpectOutput) \
   [[loom::kernel, loom::workgroup_count(3, 1, 1),                              \

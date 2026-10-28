@@ -498,7 +498,7 @@ check.scenario @broadcast_arithmetic_f16_values {
     check.compare<@broadcast_arithmetic_f16, @broadcast_arithmetic_f16_oracle>(%input, %parameters, %output) : (tensor<64x27xi16>, tensor<3xi16>, tensor<64x896xf16>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<64x27xi16>
       check.expect.bitwise actual(%parameters) expected(%parameters) : tensor<3xi16>
-      check.expect.close actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<57348xf16>
+      check.expect.approximate actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<57348xf16>, tensor<57348xf16>
     }
   }
   check.return
@@ -710,7 +710,7 @@ check.scenario @broadcast_arithmetic_bf16_values {
     check.compare<@broadcast_arithmetic_bf16, @broadcast_arithmetic_bf16_oracle>(%input, %parameters, %output) : (tensor<64x27xi16>, tensor<3xi16>, tensor<64x512xbf16>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<64x27xi16>
       check.expect.bitwise actual(%parameters) expected(%parameters) : tensor<3xi16>
-      check.expect.close actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<32772xbf16>
+      check.expect.approximate actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<32772xbf16>, tensor<32772xbf16>
     }
   }
   check.return

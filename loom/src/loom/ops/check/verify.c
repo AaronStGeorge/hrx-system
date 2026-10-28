@@ -636,8 +636,7 @@ static bool loom_check_expectation_pair_values(const loom_op_t* op,
   if (loom_check_expect_equal_isa(op) || loom_check_expect_bitwise_isa(op) ||
       loom_check_expect_approximate_isa(op) ||
       loom_check_expect_close_signed_isa(op) ||
-      loom_check_expect_close_unsigned_isa(op) ||
-      loom_check_expect_close_isa(op)) {
+      loom_check_expect_close_unsigned_isa(op)) {
     *out_actual = loom_op_const_operands(op)[0];
     *out_expected = loom_op_const_operands(op)[1];
     return true;
@@ -791,7 +790,6 @@ static iree_status_t loom_check_verify_compare_body(
         loom_check_expect_approximate_isa(nested_op) ||
         loom_check_expect_close_signed_isa(nested_op) ||
         loom_check_expect_close_unsigned_isa(nested_op) ||
-        loom_check_expect_close_isa(nested_op) ||
         loom_check_expect_shape_isa(nested_op) ||
         loom_check_expect_event_isa(nested_op) ||
         loom_check_return_isa(nested_op)) {

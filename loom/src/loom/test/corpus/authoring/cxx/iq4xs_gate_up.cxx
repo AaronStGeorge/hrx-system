@@ -517,7 +517,7 @@ LOOM_CHECK_SCENARIO(iq4xs_gate_up_values) {
           loom::check::expect_bitwise(route_ids, route_ids);
           loom::check::expect_bitwise(gate_weight, gate_weight);
           loom::check::expect_bitwise(up_weight, up_weight);
-          loom::check::expect_close(output, output, 0.00001, 0.00001);
+          loom::check::expect_approximate(output, output, 0.00001, 0.00001);
           loom::check::expect_bitwise(output_prefix, output_prefix);
           loom::check::expect_bitwise(output_suffix, output_suffix);
         });

@@ -104,18 +104,18 @@ LOOM_CHECK_CASE(pair_formats_and_seeds) {
   // gamma_3 times the sum of absolute contributions, with unit roundoff 2^-24.
   // This is the case's accuracy requirement, independent of native result bits.
   constexpr double error_factor = 3.0 * 0x1p-24 / (1.0 - 3.0 * 0x1p-24);
-  loom::check::expect_close(loom::check::slice<1>(output, 0),
-                            loom::check::fill<1, float>(2.0f),
-                            26.0 * error_factor, 0.0, "different");
-  loom::check::expect_close(loom::check::slice<1>(output, 1),
-                            loom::check::fill<1, float>(1.0f),
-                            63.0 * error_factor, 0.0, "different");
-  loom::check::expect_close(loom::check::slice<1>(output, 2),
-                            loom::check::fill<1, float>(2.0f),
-                            26.0 * error_factor, 0.0, "different");
-  loom::check::expect_close(loom::check::slice<1>(output, 3),
-                            loom::check::fill<1, float>(1.0f),
-                            63.0 * error_factor, 0.0, "different");
+  loom::check::expect_approximate(
+      loom::check::slice<1>(output, 0), loom::check::fill<1, float>(2.0f),
+      26.0 * error_factor, 0.0, loom::check::nan_policy::different);
+  loom::check::expect_approximate(
+      loom::check::slice<1>(output, 1), loom::check::fill<1, float>(1.0f),
+      63.0 * error_factor, 0.0, loom::check::nan_policy::different);
+  loom::check::expect_approximate(
+      loom::check::slice<1>(output, 2), loom::check::fill<1, float>(2.0f),
+      26.0 * error_factor, 0.0, loom::check::nan_policy::different);
+  loom::check::expect_approximate(
+      loom::check::slice<1>(output, 3), loom::check::fill<1, float>(1.0f),
+      63.0 * error_factor, 0.0, loom::check::nan_policy::different);
   // Explicitly widened dotf uses ordered F32 FMAs, exact for these inputs.
   loom::check::expect_bitwise(loom::check::slice<1>(output, 4),
                               loom::check::fill<1, float>(2.0f));

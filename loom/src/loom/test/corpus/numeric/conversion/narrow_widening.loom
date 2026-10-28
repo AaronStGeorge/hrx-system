@@ -244,8 +244,8 @@ check.scenario @float8_to_f32_all_bits {
     %e5_suffix = check.tensor.view %e5_storage offset(1028) : tensor<258xf32> -> tensor<1xf32>
 
     check.compare<@widen_float8_to_f32, @widen_float8_to_f32_oracle>(%byte_bits, %e4_output, %e5_output) : (tensor<256xi8>, tensor<256xf32>, tensor<256xf32>) -> () {
-      check.expect.close actual(%e4_output) expected(%e4_output) atol(0.0) rtol(0.0) nan(same) : tensor<256xf32>
-      check.expect.close actual(%e5_output) expected(%e5_output) atol(0.0) rtol(0.0) nan(same) : tensor<256xf32>
+      check.expect.approximate actual(%e4_output) expected(%e4_output) atol(0.0) rtol(0.0) nan(same) : tensor<256xf32>, tensor<256xf32>
+      check.expect.approximate actual(%e5_output) expected(%e5_output) atol(0.0) rtol(0.0) nan(same) : tensor<256xf32>, tensor<256xf32>
       check.expect.bitwise actual(%e4_negative_zero) expected(%e4_negative_zero) : tensor<1xf32>
       check.expect.bitwise actual(%e4_positive_zero) expected(%e4_positive_zero) : tensor<1xf32>
       check.expect.bitwise actual(%e5_negative_zero) expected(%e5_negative_zero) : tensor<1xf32>
@@ -272,7 +272,7 @@ check.scenario @bfloat_to_f32_all_bits {
     %bf16_prefix = check.tensor.view %bf16_storage offset(0) : tensor<65538xf32> -> tensor<1xf32>
     %bf16_suffix = check.tensor.view %bf16_storage offset(262148) : tensor<65538xf32> -> tensor<1xf32>
     check.compare<@widen_bfloat_to_f32, @widen_bfloat_to_f32_oracle>(%word_bits, %bf16_output) : (tensor<65536xi16>, tensor<65536xf32>) -> () {
-      check.expect.close actual(%bf16_output) expected(%bf16_output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf32>
+      check.expect.approximate actual(%bf16_output) expected(%bf16_output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf32>, tensor<65536xf32>
       check.expect.bitwise actual(%bf16_negative_zero) expected(%bf16_negative_zero) : tensor<1xf32>
       check.expect.bitwise actual(%bf16_positive_zero) expected(%bf16_positive_zero) : tensor<1xf32>
       check.expect.bitwise actual(%word_bits) expected(%expected_word_bits) : tensor<65536xi16>
@@ -295,7 +295,7 @@ check.scenario @float16_to_f32_all_bits {
     %f16_prefix = check.tensor.view %f16_storage offset(0) : tensor<65538xf32> -> tensor<1xf32>
     %f16_suffix = check.tensor.view %f16_storage offset(262148) : tensor<65538xf32> -> tensor<1xf32>
     check.compare<@widen_float16_to_f32, @widen_float16_to_f32_oracle>(%word_bits, %f16_output) : (tensor<65536xi16>, tensor<65536xf32>) -> () {
-      check.expect.close actual(%f16_output) expected(%f16_output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf32>
+      check.expect.approximate actual(%f16_output) expected(%f16_output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf32>, tensor<65536xf32>
       check.expect.bitwise actual(%f16_negative_zero) expected(%f16_negative_zero) : tensor<1xf32>
       check.expect.bitwise actual(%f16_positive_zero) expected(%f16_positive_zero) : tensor<1xf32>
       check.expect.bitwise actual(%word_bits) expected(%expected_word_bits) : tensor<65536xi16>
@@ -318,7 +318,7 @@ check.scenario @bfloat_to_f64_all_bits {
     %prefix = check.tensor.view %storage offset(0) : tensor<65538xf64> -> tensor<1xf64>
     %suffix = check.tensor.view %storage offset(524296) : tensor<65538xf64> -> tensor<1xf64>
     check.compare<@widen_bfloat_to_f64>(%bits, %output) : (tensor<65536xi16>, tensor<65536xf64>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf64>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf64>, tensor<65536xf64>
       check.expect.bitwise actual(%negative_zero) expected(%negative_zero) : tensor<1xf64>
       check.expect.bitwise actual(%positive_zero) expected(%positive_zero) : tensor<1xf64>
       check.expect.bitwise actual(%bits) expected(%expected_bits) : tensor<65536xi16>
@@ -341,7 +341,7 @@ check.scenario @float16_to_f64_all_bits {
     %prefix = check.tensor.view %storage offset(0) : tensor<65538xf64> -> tensor<1xf64>
     %suffix = check.tensor.view %storage offset(524296) : tensor<65538xf64> -> tensor<1xf64>
     check.compare<@widen_float16_to_f64>(%bits, %output) : (tensor<65536xi16>, tensor<65536xf64>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf64>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf64>, tensor<65536xf64>
       check.expect.bitwise actual(%negative_zero) expected(%negative_zero) : tensor<1xf64>
       check.expect.bitwise actual(%positive_zero) expected(%positive_zero) : tensor<1xf64>
       check.expect.bitwise actual(%bits) expected(%expected_bits) : tensor<65536xi16>
@@ -362,7 +362,7 @@ check.scenario @packed_f32_to_f64_values {
     %prefix = check.tensor.view %storage offset(0) : tensor<258xf64> -> tensor<1xf64>
     %suffix = check.tensor.view %storage offset(2056) : tensor<258xf64> -> tensor<1xf64>
     check.compare<@widen_f32_packets>(%input, %output) : (tensor<64xi32>, tensor<256xf64>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<256xf64>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<256xf64>, tensor<256xf64>
       check.expect.bitwise actual(%prefix) expected(%guard) : tensor<1xf64>
       check.expect.bitwise actual(%suffix) expected(%guard) : tensor<1xf64>
     }
@@ -414,7 +414,7 @@ check.scenario @packed_f32_to_f64_values {
     %prefix = check.tensor.view %storage offset(0) : tensor<258xf64> -> tensor<1xf64>
     %suffix = check.tensor.view %storage offset(2056) : tensor<258xf64> -> tensor<1xf64>
     check.compare<@widen_f32_packets>(%input, %output) : (tensor<64xi32>, tensor<256xf64>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<256xf64>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<256xf64>, tensor<256xf64>
       check.expect.bitwise actual(%prefix) expected(%guard) : tensor<1xf64>
       check.expect.bitwise actual(%suffix) expected(%guard) : tensor<1xf64>
     }

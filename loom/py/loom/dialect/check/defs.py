@@ -114,15 +114,6 @@ NanPolicy = EnumDef(
     doc="NaN comparison policy for approximate expectations.",
 )
 
-ApproximateNanPolicy = EnumDef(
-    "ApproximateNanPolicy",
-    [
-        EnumCase("same", 1, doc="NaNs compare equal only when both sides are NaN."),
-        EnumCase("different", 2, doc="NaNs compare unequal."),
-    ],
-    doc="NaN comparison policy for approximate expectations.",
-)
-
 FileWriteMode = EnumDef(
     "FileWriteMode",
     [
@@ -916,7 +907,7 @@ check_expect_approximate = Op(
     attrs=[
         AttrDef("atol", "f64"),
         AttrDef("rtol", "f64"),
-        AttrDef("nan", "enum", enum_def=ApproximateNanPolicy),
+        AttrDef("nan", "enum", enum_def=NanPolicy),
     ],
     traits=_EXPECT_BODY_TRAITS,
     verify="loom_check_expect_approximate_verify",
@@ -989,31 +980,6 @@ check_expect_close_unsigned = Op(
     ],
     examples=[
         "check.expect.close.unsigned actual(%actual) expected(%expected) max_distance(2) : tensor<[%m]xi8>, tensor<[%m]xi16>",
-    ],
-)
-
-check_expect_close = Op(
-    "check.expect.close",
-    group=check_ops,
-    doc="Requires actual and expected floating-point values to be approximately equal.",
-    operands=_EXPECT_OPERANDS,
-    attrs=[
-        AttrDef("atol", "f64"),
-        AttrDef("rtol", "f64"),
-        AttrDef("nan", "enum", enum_def=NanPolicy),
-    ],
-    traits=_EXPECT_BODY_TRAITS,
-    verify="loom_check_expect_pair_verify",
-    format=[
-        *_EXPECT_VALUE_CLAUSES,
-        Clause("atol", Attr("atol")),
-        Clause("rtol", Attr("rtol")),
-        Clause("nan", Attr("nan")),
-        COLON,
-        TypeOf("actual"),
-    ],
-    examples=[
-        "check.expect.close actual(%actual) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<[%m]xf32>",
     ],
 )
 
@@ -1127,5 +1093,4 @@ ALL_CHECK_OPS = (
     check_generate,
     check_expect_close_signed,
     check_expect_close_unsigned,
-    check_expect_close,
 )

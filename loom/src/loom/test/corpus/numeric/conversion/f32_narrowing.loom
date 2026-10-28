@@ -365,7 +365,7 @@ check.scenario @f32_half_packet_values {
     %prefix = check.tensor.view %storage offset(0) : tensor<322xf16> -> tensor<1xf16>
     %suffix = check.tensor.view %storage offset(642) : tensor<322xf16> -> tensor<1xf16>
     check.compare<@narrow_f32_half_packets>(%input, %output) : (tensor<64xi32>, tensor<320xf16>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<320xf16>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<320xf16>, tensor<320xf16>
       check.expect.bitwise actual(%prefix) expected(%guard) : tensor<1xf16>
       check.expect.bitwise actual(%suffix) expected(%guard) : tensor<1xf16>
     }
@@ -391,7 +391,7 @@ check.scenario @f32_half_packet_values {
     %prefix = check.tensor.view %storage offset(0) : tensor<322xf16> -> tensor<1xf16>
     %suffix = check.tensor.view %storage offset(642) : tensor<322xf16> -> tensor<1xf16>
     check.compare<@narrow_f32_half_packets>(%input, %output) : (tensor<64xi32>, tensor<320xf16>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<320xf16>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<320xf16>, tensor<320xf16>
       check.expect.bitwise actual(%prefix) expected(%guard) : tensor<1xf16>
       check.expect.bitwise actual(%suffix) expected(%guard) : tensor<1xf16>
     }

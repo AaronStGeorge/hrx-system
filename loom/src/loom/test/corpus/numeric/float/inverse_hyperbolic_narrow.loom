@@ -153,7 +153,7 @@ check.scenario @inverse_f8e4m3_values {
     check.generate<@inverse_f8e4m3_inputs>(%input) : (tensor<16xi8>) -> ()
     %output = check.generate.fill value(0.0) : tensor<6x16xf32>
     check.compare<@inverse_f8e4m3_observations>(%packet_count, %input, %output) : (index, tensor<16xi8>, tensor<6x16xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.0) rtol(0.0) nan(same) : tensor<6x16xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.0) rtol(0.0) nan(same) : tensor<6x16xf32>, tensor<6x16xf32>
     }
   }
   check.return
@@ -224,7 +224,7 @@ check.scenario @inverse_f8e5m2_values {
     check.generate<@inverse_f8e5m2_inputs>(%input) : (tensor<16xi8>) -> ()
     %output = check.generate.fill value(0.0) : tensor<6x16xf32>
     check.compare<@inverse_f8e5m2_observations>(%packet_count, %input, %output) : (index, tensor<16xi8>, tensor<6x16xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.0) rtol(0.0) nan(same) : tensor<6x16xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.0) rtol(0.0) nan(same) : tensor<6x16xf32>, tensor<6x16xf32>
     }
   }
   check.return
@@ -295,7 +295,7 @@ check.scenario @inverse_f16_values {
     check.generate<@inverse_f16_inputs>(%input) : (tensor<16xi16>) -> ()
     %output = check.generate.fill value(0.0) : tensor<6x16xf32>
     check.compare<@inverse_f16_observations>(%packet_count, %input, %output) : (index, tensor<16xi16>, tensor<6x16xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.0) rtol(0.0) nan(same) : tensor<6x16xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.0) rtol(0.0) nan(same) : tensor<6x16xf32>, tensor<6x16xf32>
     }
   }
   check.return
@@ -366,7 +366,7 @@ check.scenario @inverse_bf16_values {
     check.generate<@inverse_bf16_inputs>(%input) : (tensor<16xi16>) -> ()
     %output = check.generate.fill value(0.0) : tensor<6x16xf32>
     check.compare<@inverse_bf16_observations>(%packet_count, %input, %output) : (index, tensor<16xi16>, tensor<6x16xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.0) rtol(0.0) nan(same) : tensor<6x16xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.0) rtol(0.0) nan(same) : tensor<6x16xf32>, tensor<6x16xf32>
     }
   }
   check.return

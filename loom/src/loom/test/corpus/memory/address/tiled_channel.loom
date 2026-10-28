@@ -74,7 +74,7 @@ check.scenario @tiled_channel_values {
       check.expect.bitwise actual(%integer_storage) expected(%integer_storage) : tensor<4112xi32>
       check.expect.bitwise actual(%float_storage) expected(%float_storage) : tensor<4112xf32>
       check.expect.bitwise actual(%integer_output) expected(%integer_output) : tensor<256xi32>
-      check.expect.close actual(%float_output) expected(%float_output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<256xf32>
+      check.expect.approximate actual(%float_output) expected(%float_output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<256xf32>, tensor<256xf32>
       check.expect.bitwise actual(%integer_prefix) expected(%expected_integer_prefix) : tensor<8xi32>
       check.expect.bitwise actual(%integer_suffix) expected(%expected_integer_suffix) : tensor<8xi32>
       check.expect.bitwise actual(%float_prefix) expected(%expected_float_prefix) : tensor<8xf32>

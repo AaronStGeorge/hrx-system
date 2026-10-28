@@ -176,8 +176,7 @@ bool loom_testbench_is_expectation_op(const loom_op_t* op) {
          loom_check_expect_approximate_isa(op) ||
          loom_check_expect_close_signed_isa(op) ||
          loom_check_expect_close_unsigned_isa(op) ||
-         loom_check_expect_close_isa(op) || loom_check_expect_shape_isa(op) ||
-         loom_check_expect_event_isa(op);
+         loom_check_expect_shape_isa(op) || loom_check_expect_event_isa(op);
 }
 
 bool loom_testbench_plan_expectation(
@@ -226,23 +225,6 @@ bool loom_testbench_plan_expectation(
     }
     out_expectation->integer_close.maximum_distance =
         (uint64_t)maximum_distance;
-  } else if (loom_check_expect_close_isa(op)) {
-    out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_CLOSE;
-    out_expectation->actual_value_id = loom_check_expect_close_actual(op);
-    out_expectation->expected_value_id = loom_check_expect_close_expected(op);
-    out_expectation->close.absolute_tolerance =
-        loom_check_expect_close_atol(op);
-    out_expectation->close.relative_tolerance =
-        loom_check_expect_close_rtol(op);
-    out_expectation->close.nan_policy =
-        (loom_check_expect_close_nan_t)loom_check_expect_close_nan(op);
-    if (out_expectation->close.absolute_tolerance < 0.0 ||
-        out_expectation->close.relative_tolerance < 0.0 ||
-        out_expectation->close.nan_policy <= 0 ||
-        out_expectation->close.nan_policy >=
-            LOOM_CHECK_EXPECT_CLOSE_NAN_COUNT_) {
-      return false;
-    }
   } else if (loom_check_expect_shape_isa(op)) {
     out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_SHAPE;
     out_expectation->actual_value_id = loom_check_expect_shape_value(op);
@@ -276,7 +258,6 @@ bool loom_testbench_plan_expectation(
   switch (out_expectation->kind) {
     case LOOM_TESTBENCH_EXPECTATION_EQUAL:
     case LOOM_TESTBENCH_EXPECTATION_BITWISE:
-    case LOOM_TESTBENCH_EXPECTATION_CLOSE:
       return out_expectation->expected_value_id < module->values.count;
     case LOOM_TESTBENCH_EXPECTATION_APPROXIMATE: {
       if (out_expectation->expected_value_id >= module->values.count) {

@@ -235,7 +235,7 @@ def _test_execution_partitions_profiles_and_xfails_impl(env, target):
     info = target[LoomExecutionTestInfo]
     if info.test_runner_args != [
         "--max-samples-per-case=1",
-        "--xfail=@fixture_scenario=TARGET/003,EXPECT/003",
+        "--xfail=@fixture_scenario=TARGET/003,EXPECT/006",
     ]:
         env.fail("unexpected corpus correctness arguments %r" % info.test_runner_args)
     if info.benchmark_runner != None or info.benchmark_runner_args:
@@ -255,7 +255,7 @@ def _test_execution_carries_allowed_failures_impl(env, target):
     info = target[LoomExecutionTestInfo]
     if info.test_runner_args != [
         "--max-samples-per-case=1",
-        "--allow-failure=@other_scenario=TARGET/003,EXPECT/003",
+        "--allow-failure=@other_scenario=TARGET/003,EXPECT/006",
     ]:
         env.fail("unexpected corpus correctness arguments %r" % info.test_runner_args)
 

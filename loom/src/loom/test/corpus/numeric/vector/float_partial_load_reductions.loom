@@ -38,9 +38,9 @@ check.scenario @partial_load_float_reduction_boundaries {
     %expected_prefix = check.generate.fill value(33.0) : tensor<1xf32>
     %expected_suffix = check.generate.iota offset(35.0) step(1.0) : tensor<2xf32>
     check.compare<@partial_load_float_sum>(%storage) : (tensor<36xf32>) -> () {
-      check.expect.close actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>
-      check.expect.close actual(%prefix) expected(%expected_prefix) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>
-      check.expect.close actual(%suffix) expected(%expected_suffix) atol(0.0) rtol(0.0) nan(same) : tensor<2xf32>
+      check.expect.approximate actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>, tensor<1xf32>
+      check.expect.approximate actual(%prefix) expected(%expected_prefix) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>, tensor<1xf32>
+      check.expect.approximate actual(%suffix) expected(%expected_suffix) atol(0.0) rtol(0.0) nan(same) : tensor<2xf32>, tensor<2xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -53,9 +53,9 @@ check.scenario @partial_load_float_reduction_boundaries {
     %expected_prefix = check.generate.fill value(9.0) : tensor<1xf32>
     %expected_suffix = check.generate.iota offset(11.0) step(1.0) : tensor<2xf32>
     check.compare<@partial_load_float_product>(%storage) : (tensor<12xf32>) -> () {
-      check.expect.close actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>
-      check.expect.close actual(%prefix) expected(%expected_prefix) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>
-      check.expect.close actual(%suffix) expected(%expected_suffix) atol(0.0) rtol(0.0) nan(same) : tensor<2xf32>
+      check.expect.approximate actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>, tensor<1xf32>
+      check.expect.approximate actual(%prefix) expected(%expected_prefix) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>, tensor<1xf32>
+      check.expect.approximate actual(%suffix) expected(%expected_suffix) atol(0.0) rtol(0.0) nan(same) : tensor<2xf32>, tensor<2xf32>
     }
   }
   check.return

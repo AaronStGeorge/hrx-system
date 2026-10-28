@@ -75,7 +75,7 @@ check.scenario public @radian_trigonometry_phase {
     %output = check.generate.fill value(-99.0) : tensor<32xf32>
     check.compare<@radian_trigonometry, @radian_trigonometry_reference>(%input, %output) : (tensor<16xf32>, tensor<32xf32>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<16xf32>
-      check.expect.close actual(%output) expected(%output) atol(0.025000000000000001) rtol(0.0) nan(same) : tensor<32xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.025000000000000001) rtol(0.0) nan(same) : tensor<32xf32>, tensor<32xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -83,7 +83,7 @@ check.scenario public @radian_trigonometry_phase {
     %output = check.generate.fill value(-99.0) : tensor<32xf32>
     check.compare<@radian_trigonometry, @radian_trigonometry_reference>(%input, %output) : (tensor<16xf32>, tensor<32xf32>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<16xf32>
-      check.expect.close actual(%output) expected(%output) atol(0.025000000000000001) rtol(0.0) nan(same) : tensor<32xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.025000000000000001) rtol(0.0) nan(same) : tensor<32xf32>, tensor<32xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -91,7 +91,7 @@ check.scenario public @radian_trigonometry_phase {
     %output = check.generate.fill value(-99.0) : tensor<32xf32>
     check.compare<@radian_trigonometry, @radian_trigonometry_reference>(%input, %output) : (tensor<16xf32>, tensor<32xf32>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<16xf32>
-      check.expect.close actual(%output) expected(%output) atol(0.025000000000000001) rtol(0.0) nan(same) : tensor<32xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.025000000000000001) rtol(0.0) nan(same) : tensor<32xf32>, tensor<32xf32>
     }
   }
   check.return

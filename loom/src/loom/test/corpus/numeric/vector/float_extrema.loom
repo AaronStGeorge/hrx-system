@@ -265,7 +265,7 @@ check.scenario @vector_float_extrema_finite_f16_values {
     %upper = check.generate.random.uniform seed(%upper_seed) range(-1024.0 to 1024.0) : tensor<4xf16>
     %output = check.generate.fill value(0.0) : tensor<28xf16>
     check.compare<@vector_float_extrema_finite_f16>(%value, %lower, %upper, %output) : (tensor<4xf16>, tensor<4xf16>, tensor<4xf16>, tensor<28xf16>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(different) : tensor<28xf16>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(different) : tensor<28xf16>, tensor<28xf16>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -290,7 +290,7 @@ check.scenario @vector_float_extrema_finite_f32_values {
     %upper = check.generate.random.uniform seed(%upper_seed) range(-1024.0 to 1024.0) : tensor<4xf32>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_finite_f32>(%value, %lower, %upper, %output) : (tensor<4xf32>, tensor<4xf32>, tensor<4xf32>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(different) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(different) : tensor<28xf32>, tensor<28xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -315,7 +315,7 @@ check.scenario @vector_float_extrema_finite_f64_values {
     %upper = check.generate.random.uniform seed(%upper_seed) range(-1024.0 to 1024.0) : tensor<4xf64>
     %output = check.generate.fill value(0.0) : tensor<28xf64>
     check.compare<@vector_float_extrema_finite_f64>(%value, %lower, %upper, %output) : (tensor<4xf64>, tensor<4xf64>, tensor<4xf64>, tensor<28xf64>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(different) : tensor<28xf64>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(different) : tensor<28xf64>, tensor<28xf64>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -368,7 +368,7 @@ check.scenario @vector_float_extrema_f8e4m3_values {
     %rhs = check.generate.iota offset(1) step(1) : tensor<4xi8>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_f8e4m3>(%value, %lhs, %rhs, %output) : (tensor<4xi8>, tensor<4xi8>, tensor<4xi8>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>, tensor<28xf32>
     }
   }
   // Every sign pairing, including reversed bounds, preserves subnormal bits.
@@ -399,7 +399,7 @@ check.scenario @vector_float_extrema_f8e4m3_values {
     %rhs = check.generate.random.uniform seed(%rhs_seed) range(-128 to 127) : tensor<4xi8>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_f8e4m3>(%value, %lhs, %rhs, %output) : (tensor<4xi8>, tensor<4xi8>, tensor<4xi8>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>, tensor<28xf32>
     }
   }
   // Opposing signed-zero operands exercise IEEE extrema ordering while the
@@ -421,7 +421,7 @@ check.scenario @vector_float_extrema_f8e4m3_values {
     %rhs = check.generate.iota offset(127) step(-1) : tensor<4xi8>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_f8e4m3>(%value, %lhs, %rhs, %output) : (tensor<4xi8>, tensor<4xi8>, tensor<4xi8>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>, tensor<28xf32>
     }
   }
   check.return
@@ -465,7 +465,7 @@ check.scenario @vector_float_extrema_f8e5m2_values {
     %rhs = check.generate.iota offset(1) step(1) : tensor<4xi8>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_f8e5m2>(%value, %lhs, %rhs, %output) : (tensor<4xi8>, tensor<4xi8>, tensor<4xi8>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>, tensor<28xf32>
     }
   }
   // Every sign pairing, including reversed bounds, preserves subnormal bits.
@@ -496,7 +496,7 @@ check.scenario @vector_float_extrema_f8e5m2_values {
     %rhs = check.generate.random.uniform seed(%rhs_seed) range(-128 to 127) : tensor<4xi8>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_f8e5m2>(%value, %lhs, %rhs, %output) : (tensor<4xi8>, tensor<4xi8>, tensor<4xi8>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>, tensor<28xf32>
     }
   }
   // Opposing signed-zero operands exercise IEEE extrema ordering while the
@@ -518,7 +518,7 @@ check.scenario @vector_float_extrema_f8e5m2_values {
     %rhs = check.generate.iota offset(126) step(-1) : tensor<4xi8>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_f8e5m2>(%value, %lhs, %rhs, %output) : (tensor<4xi8>, tensor<4xi8>, tensor<4xi8>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>, tensor<28xf32>
     }
   }
   check.return
@@ -562,7 +562,7 @@ check.scenario @vector_float_extrema_f16_values {
     %rhs = check.generate.iota offset(1) step(1) : tensor<4xi16>
     %output = check.generate.fill value(0.0) : tensor<28xf16>
     check.compare<@vector_float_extrema_f16>(%value, %lhs, %rhs, %output) : (tensor<4xi16>, tensor<4xi16>, tensor<4xi16>, tensor<28xf16>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf16>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf16>, tensor<28xf16>
     }
   }
   // Every sign pairing, including reversed bounds, preserves subnormal bits.
@@ -593,7 +593,7 @@ check.scenario @vector_float_extrema_f16_values {
     %rhs = check.generate.random.uniform seed(%rhs_seed) range(-32768 to 32767) : tensor<4xi16>
     %output = check.generate.fill value(0.0) : tensor<28xf16>
     check.compare<@vector_float_extrema_f16>(%value, %lhs, %rhs, %output) : (tensor<4xi16>, tensor<4xi16>, tensor<4xi16>, tensor<28xf16>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf16>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf16>, tensor<28xf16>
     }
   }
   // Opposing signed-zero operands exercise IEEE extrema ordering while the
@@ -615,7 +615,7 @@ check.scenario @vector_float_extrema_f16_values {
     %rhs = check.generate.iota offset(32256) step(1) : tensor<4xi16>
     %output = check.generate.fill value(0.0) : tensor<28xf16>
     check.compare<@vector_float_extrema_f16>(%value, %lhs, %rhs, %output) : (tensor<4xi16>, tensor<4xi16>, tensor<4xi16>, tensor<28xf16>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf16>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf16>, tensor<28xf16>
     }
   }
   check.return
@@ -659,7 +659,7 @@ check.scenario @vector_float_extrema_bf16_values {
     %rhs = check.generate.iota offset(1) step(1) : tensor<4xi16>
     %output = check.generate.fill value(0.0) : tensor<28xbf16>
     check.compare<@vector_float_extrema_bf16>(%value, %lhs, %rhs, %output) : (tensor<4xi16>, tensor<4xi16>, tensor<4xi16>, tensor<28xbf16>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xbf16>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xbf16>, tensor<28xbf16>
     }
   }
   // Every sign pairing, including reversed bounds, preserves subnormal bits.
@@ -690,7 +690,7 @@ check.scenario @vector_float_extrema_bf16_values {
     %rhs = check.generate.random.uniform seed(%rhs_seed) range(-32768 to 32767) : tensor<4xi16>
     %output = check.generate.fill value(0.0) : tensor<28xbf16>
     check.compare<@vector_float_extrema_bf16>(%value, %lhs, %rhs, %output) : (tensor<4xi16>, tensor<4xi16>, tensor<4xi16>, tensor<28xbf16>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xbf16>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xbf16>, tensor<28xbf16>
     }
   }
   // Opposing signed-zero operands exercise IEEE extrema ordering while the
@@ -712,7 +712,7 @@ check.scenario @vector_float_extrema_bf16_values {
     %rhs = check.generate.iota offset(32704) step(1) : tensor<4xi16>
     %output = check.generate.fill value(0.0) : tensor<28xbf16>
     check.compare<@vector_float_extrema_bf16>(%value, %lhs, %rhs, %output) : (tensor<4xi16>, tensor<4xi16>, tensor<4xi16>, tensor<28xbf16>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xbf16>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xbf16>, tensor<28xbf16>
     }
   }
   check.return
@@ -756,7 +756,7 @@ check.scenario @vector_float_extrema_f32_values {
     %rhs = check.generate.iota offset(1) step(1) : tensor<4xi32>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_f32>(%value, %lhs, %rhs, %output) : (tensor<4xi32>, tensor<4xi32>, tensor<4xi32>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>, tensor<28xf32>
     }
   }
   // Every sign pairing, including reversed bounds, preserves subnormal bits.
@@ -787,7 +787,7 @@ check.scenario @vector_float_extrema_f32_values {
     %rhs = check.generate.random.uniform seed(%rhs_seed) range(-2147483648 to 2147483647) : tensor<4xi32>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_f32>(%value, %lhs, %rhs, %output) : (tensor<4xi32>, tensor<4xi32>, tensor<4xi32>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>, tensor<28xf32>
     }
   }
   // Opposing signed-zero operands exercise IEEE extrema ordering while the
@@ -809,7 +809,7 @@ check.scenario @vector_float_extrema_f32_values {
     %rhs = check.generate.iota offset(2143289344) step(1) : tensor<4xi32>
     %output = check.generate.fill value(0.0) : tensor<28xf32>
     check.compare<@vector_float_extrema_f32>(%value, %lhs, %rhs, %output) : (tensor<4xi32>, tensor<4xi32>, tensor<4xi32>, tensor<28xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf32>, tensor<28xf32>
     }
   }
   check.return
@@ -853,7 +853,7 @@ check.scenario @vector_float_extrema_f64_values {
     %rhs = check.generate.iota offset(1) step(1) : tensor<4xi64>
     %output = check.generate.fill value(0.0) : tensor<28xf64>
     check.compare<@vector_float_extrema_f64>(%value, %lhs, %rhs, %output) : (tensor<4xi64>, tensor<4xi64>, tensor<4xi64>, tensor<28xf64>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf64>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf64>, tensor<28xf64>
     }
   }
   // Every sign pairing, including reversed bounds, preserves subnormal bits.
@@ -884,7 +884,7 @@ check.scenario @vector_float_extrema_f64_values {
     %rhs = check.generate.random.uniform seed(%rhs_seed) range(-9223372036854775808 to 9223372036854775807) : tensor<4xi64>
     %output = check.generate.fill value(0.0) : tensor<28xf64>
     check.compare<@vector_float_extrema_f64>(%value, %lhs, %rhs, %output) : (tensor<4xi64>, tensor<4xi64>, tensor<4xi64>, tensor<28xf64>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf64>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf64>, tensor<28xf64>
     }
   }
   // Opposing signed-zero operands exercise IEEE extrema ordering while the
@@ -906,7 +906,7 @@ check.scenario @vector_float_extrema_f64_values {
     %rhs = check.generate.iota offset(9221120237041090560) step(1) : tensor<4xi64>
     %output = check.generate.fill value(0.0) : tensor<28xf64>
     check.compare<@vector_float_extrema_f64>(%value, %lhs, %rhs, %output) : (tensor<4xi64>, tensor<4xi64>, tensor<4xi64>, tensor<28xf64>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf64>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<28xf64>, tensor<28xf64>
     }
   }
   check.return

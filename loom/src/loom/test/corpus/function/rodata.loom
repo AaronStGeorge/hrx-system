@@ -378,7 +378,7 @@ check.scenario @immutable_gather_values {
       // Native grouped dots need not match ordered f32 arithmetic. The bound
       // is four f32 ULPs at the maximum absolute intermediate sum (< 256);
       // every gathered bit is checked independently above.
-      check.expect.close actual(%dot) expected(%dot) atol(6.103515625e-05) rtol(0.0) nan(same) : tensor<16xf32>
+      check.expect.approximate actual(%dot) expected(%dot) atol(6.103515625e-05) rtol(0.0) nan(same) : tensor<16xf32>, tensor<16xf32>
     }
   }
   check.return

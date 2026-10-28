@@ -99,7 +99,7 @@ loom_scenario_test(
     name = "scenario_execution",
     allowed_failures = {
         "reference": {
-            "sample/other.loom:@other_scenario": "TARGET/003,EXPECT/003",
+            "sample/other.loom:@other_scenario": "TARGET/003,EXPECT/006",
         },
     },
     catalog = TEST_CORPUS,
@@ -110,7 +110,7 @@ loom_scenario_test(
     tags = ["manual"],
     xfails = {
         "reference": {
-            "sample/nested/fixture.loom:@fixture_scenario": "TARGET/003,EXPECT/003",
+            "sample/nested/fixture.loom:@fixture_scenario": "TARGET/003,EXPECT/006",
         },
     },
 )

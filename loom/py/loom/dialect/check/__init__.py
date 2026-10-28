@@ -9,7 +9,6 @@
 from loom.dialect.check.defs import (
     ALL_CHECK_OPS,
     ALL_CHECK_TYPES,
-    ApproximateNanPolicy,
     FileWriteMode,
     NanPolicy,
     RangePolicy,
@@ -22,7 +21,6 @@ from loom.dialect.check.defs import (
     check_entropy_type,
     check_expect_approximate,
     check_expect_bitwise,
-    check_expect_close,
     check_expect_close_signed,
     check_expect_close_unsigned,
     check_expect_equal,
@@ -51,7 +49,6 @@ from loom.dialect.check.defs import (
 __all__ = [
     "ALL_CHECK_OPS",
     "ALL_CHECK_TYPES",
-    "ApproximateNanPolicy",
     "FileWriteMode",
     "NanPolicy",
     "RangePolicy",
@@ -65,7 +62,6 @@ __all__ = [
     "check_entropy_type",
     "check_expect_approximate",
     "check_expect_bitwise",
-    "check_expect_close",
     "check_expect_close_signed",
     "check_expect_close_unsigned",
     "check_expect_equal",

@@ -25,7 +25,6 @@ class LaunchContracts;
 struct CheckIntrinsic {
   enum class Operation {
     Equal,
-    Close,
     Approximate,
     CloseSigned,
     CloseUnsigned,
@@ -52,7 +51,7 @@ struct CheckIntrinsic {
 
   bool equivalent(const CheckIntrinsic& other) const;
   bool is_observation() const {
-    return operation == Operation::Equal || operation == Operation::Close ||
+    return operation == Operation::Equal ||
            operation == Operation::Approximate ||
            operation == Operation::CloseSigned ||
            operation == Operation::CloseUnsigned ||

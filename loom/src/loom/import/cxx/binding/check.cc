@@ -112,9 +112,6 @@ std::optional<CheckIntrinsic::Operation> CheckIntrinsic::parse_operation(
   if (name == "check.expect.equal") {
     return Operation::Equal;
   }
-  if (name == "check.expect.close") {
-    return Operation::Close;
-  }
   if (name == "check.expect.approximate") {
     return Operation::Approximate;
   }
@@ -266,31 +263,6 @@ std::optional<CheckIntrinsic> CheckIntrinsic::resolve(
         fail(
             "check.generate.iota offset and step must match the tensor "
             "element type, with an integer period");
-      }
-      break;
-    }
-    case Operation::Close: {
-      if (!returns_void || parameters.size() != 5 ||
-          types.unqualified(parameters[0]) !=
-              types.unqualified(parameters[1]) ||
-          types.unqualified(parameters[2])->kind() != cxx::TypeKind::kDouble ||
-          types.unqualified(parameters[3])->kind() != cxx::TypeKind::kDouble ||
-          !is_string_type(types, parameters[4])) {
-        fail(
-            "check.expect.close requires void(T, T, double, double, const "
-            "char*)");
-      }
-      const auto& partition = types.partition(parameters[0], owner);
-      if (partition.kind == ValueKind::SSA && types.is_float(parameters[0])) {
-        result.scalar_type = types.get(parameters[0], owner);
-      } else if (partition.kind == ValueKind::Tensor &&
-                 types.is_float(static_cast<const TensorPartition&>(partition)
-                                    .lane_type)) {
-        result.source_tensor = static_cast<const TensorPartition*>(&partition);
-      } else {
-        fail(
-            "check.expect.close requires floating-point scalar or tensor "
-            "operands");
       }
       break;
     }

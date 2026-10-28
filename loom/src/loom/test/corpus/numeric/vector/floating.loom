@@ -564,8 +564,8 @@ check.scenario @bfloat_lookup_arithmetic_values {
       // have magnitude at most 256 and the initial value at most 16, so the
       // largest absolute intermediate sum is 528. Allow four f32 ULPs at that
       // magnitude, while checking all non-dot bytes exactly above.
-      check.expect.close actual(%dot_zero) expected(%dot_zero) atol(0.000244140625) rtol(0.0) nan(same) : tensor<4xf32>
-      check.expect.close actual(%dot_initial) expected(%dot_initial) atol(0.000244140625) rtol(0.0) nan(same) : tensor<4xf32>
+      check.expect.approximate actual(%dot_zero) expected(%dot_zero) atol(0.000244140625) rtol(0.0) nan(same) : tensor<4xf32>, tensor<4xf32>
+      check.expect.approximate actual(%dot_initial) expected(%dot_initial) atol(0.000244140625) rtol(0.0) nan(same) : tensor<4xf32>, tensor<4xf32>
     }
   }
   check.return

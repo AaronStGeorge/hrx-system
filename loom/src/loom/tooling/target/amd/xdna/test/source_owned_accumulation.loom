@@ -103,7 +103,7 @@ check.scenario public @source_owned_accumulation_replay {
     %output_suffix = check.tensor.view %output_storage offset(256) : tensor<80xf32> -> tensor<16xf32>
     check.compare<@source_owned_accumulation, @source_owned_accumulation_reference>(%input, %output) : (tensor<144xf32>, tensor<48xf32>) -> () {
       check.expect.bitwise actual(%input_storage) expected(%input_storage) : tensor<176xf32>
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<48xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(9.9999999999999995e-07) nan(same) : tensor<48xf32>, tensor<48xf32>
       check.expect.bitwise actual(%output_prefix) expected(%output_prefix) : tensor<16xf32>
       check.expect.bitwise actual(%output_suffix) expected(%output_suffix) : tensor<16xf32>
     }

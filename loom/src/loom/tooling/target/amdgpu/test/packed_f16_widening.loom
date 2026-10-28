@@ -45,7 +45,7 @@ check.scenario @packed_f16_widening_all_bits {
       check.expect.bitwise actual(%input) expected(%input) : tensor<65536xi16>
       // Widening is exact for every numeric value. NaN sign and payload
       // canonicalization are not part of the floating conversion contract.
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<65536xf32>, tensor<65536xf32>
     }
   }
   check.return

@@ -200,7 +200,7 @@ check.scenario @guarded_uniform_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<16x17xf32>
     %output = check.generate.fill value(-1.0) : tensor<6xf32>
     check.compare<@guarded_uniform_variants, @guarded_variants_oracle>(%row_count, %flags, %values, %output) : (index, tensor<16x17xi32>, tensor<16x17xf32>, tensor<6xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>, tensor<6xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -209,7 +209,7 @@ check.scenario @guarded_uniform_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<16x17xf32>
     %output = check.generate.fill value(-1.0) : tensor<6xf32>
     check.compare<@guarded_uniform_variants, @guarded_variants_oracle>(%row_count, %flags, %values, %output) : (index, tensor<16x17xi32>, tensor<16x17xf32>, tensor<6xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>, tensor<6xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -218,7 +218,7 @@ check.scenario @guarded_uniform_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<16x17xf32>
     %output = check.generate.fill value(-1.0) : tensor<6xf32>
     check.compare<@guarded_uniform_variants, @guarded_variants_oracle>(%row_count, %flags, %values, %output) : (index, tensor<16x17xi32>, tensor<16x17xf32>, tensor<6xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>, tensor<6xf32>
     }
   }
   check.return
@@ -231,7 +231,7 @@ check.scenario @guarded_varying_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<16x17xf32>
     %output = check.generate.fill value(-1.0) : tensor<6xf32>
     check.compare<@guarded_varying_variants, @guarded_variants_oracle>(%row_count, %flags, %values, %output) : (index, tensor<16x17xi32>, tensor<16x17xf32>, tensor<6xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>, tensor<6xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -240,7 +240,7 @@ check.scenario @guarded_varying_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<16x17xf32>
     %output = check.generate.fill value(-1.0) : tensor<6xf32>
     check.compare<@guarded_varying_variants, @guarded_variants_oracle>(%row_count, %flags, %values, %output) : (index, tensor<16x17xi32>, tensor<16x17xf32>, tensor<6xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>, tensor<6xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -249,7 +249,7 @@ check.scenario @guarded_varying_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<16x17xf32>
     %output = check.generate.fill value(-1.0) : tensor<6xf32>
     check.compare<@guarded_varying_variants, @guarded_variants_oracle>(%row_count, %flags, %values, %output) : (index, tensor<16x17xi32>, tensor<16x17xf32>, tensor<6xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<6xf32>, tensor<6xf32>
     }
   }
   check.return
@@ -379,7 +379,7 @@ check.scenario @guarded_state_values {
     %sum = check.generate.fill value(0.0) : tensor<3xf32>
     %last = check.generate.fill value(0.0) : tensor<3xf32>
     check.compare<@guarded_state_variants, @guarded_state_oracle>(%row_count, %initial, %flags, %values, %sum, %last) : (index, i32, tensor<16xi32>, tensor<16xf32>, tensor<3xf32>, tensor<3xf32>) -> () {
-      check.expect.close actual(%sum) expected(%sum) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>
+      check.expect.approximate actual(%sum) expected(%sum) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>, tensor<3xf32>
       check.expect.bitwise actual(%last) expected(%last) : tensor<3xf32>
     }
   }
@@ -454,7 +454,7 @@ check.scenario @segmented_guarded_read_ahead_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<32768xf32>
     %output = check.generate.fill value(-1.0) : tensor<3xf32>
     check.compare<@segmented_guarded_read_ahead_variants, @segmented_guarded_read_ahead_oracle>(%flags, %values, %output, %length) : (tensor<32768xi32>, tensor<32768xf32>, tensor<3xf32>, index) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>, tensor<3xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -463,7 +463,7 @@ check.scenario @segmented_guarded_read_ahead_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<32768xf32>
     %output = check.generate.fill value(-1.0) : tensor<3xf32>
     check.compare<@segmented_guarded_read_ahead_variants, @segmented_guarded_read_ahead_oracle>(%flags, %values, %output, %length) : (tensor<32768xi32>, tensor<32768xf32>, tensor<3xf32>, index) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>, tensor<3xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -472,7 +472,7 @@ check.scenario @segmented_guarded_read_ahead_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<32768xf32>
     %output = check.generate.fill value(-1.0) : tensor<3xf32>
     check.compare<@segmented_guarded_read_ahead_variants, @segmented_guarded_read_ahead_oracle>(%flags, %values, %output, %length) : (tensor<32768xi32>, tensor<32768xf32>, tensor<3xf32>, index) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>, tensor<3xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -481,7 +481,7 @@ check.scenario @segmented_guarded_read_ahead_values {
     %values = check.generate.iota offset(1.0) step(1.0) : tensor<32768xf32>
     %output = check.generate.fill value(-1.0) : tensor<3xf32>
     check.compare<@segmented_guarded_read_ahead_variants, @segmented_guarded_read_ahead_oracle>(%flags, %values, %output, %length) : (tensor<32768xi32>, tensor<32768xf32>, tensor<3xf32>, index) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>, tensor<3xf32>
     }
   }
   check.return

@@ -80,7 +80,7 @@ check.scenario @clamp_ordered_f32_values {
     %upper = check.generate.random.uniform seed(%upper_seed) range(1.0 to 1024.0) : tensor<4xf32>
     %output = check.generate.fill value(0.0) : tensor<5xf32>
     check.compare<@clamp_ordered_f32>(%input_bits, %lower, %upper, %output) : (tensor<4xi32>, tensor<4xf32>, tensor<4xf32>, tensor<5xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<5xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<5xf32>, tensor<5xf32>
     }
   }
   check.return
@@ -99,7 +99,7 @@ check.scenario @clamp_ieee_f32_values {
     %upper = check.generate.random.uniform seed(%upper_seed) range(1.0 to 1024.0) : tensor<4xf32>
     %output = check.generate.fill value(0.0) : tensor<5xf32>
     check.compare<@clamp_ieee_f32>(%input_bits, %lower, %upper, %output) : (tensor<4xi32>, tensor<4xf32>, tensor<4xf32>, tensor<5xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<5xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<5xf32>, tensor<5xf32>
     }
   }
   check.return
