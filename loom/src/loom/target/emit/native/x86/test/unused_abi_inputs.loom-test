@@ -1,14 +1,15 @@
 // Only the live i32 needs entry transport. The complete narrow action family
 // remains in the public signature without emitting normalization instructions.
+// Unused inputs on both sides preserve the live argument's ABI ordinal.
 // RUN: emit x86-native-bytes @unused_narrow_inputs
 x86.target<avx2> @target
 
-low.func.def public target<x86.avx2.core>(@target) abi(object_function) abi_layout({signature = (i32, i1, i8, f8E4M3, f8E5M2, i16) -> (i32)}) @unused_narrow_inputs(%value: reg<x86.gpr32>, %unused_i1: reg<x86.gpr32>, %unused_i8: reg<x86.gpr32>, %unused_f8e4m3: reg<x86.gpr32>, %unused_f8e5m2: reg<x86.gpr32>, %unused_i16: reg<x86.gpr32>) -> (reg<x86.gpr32>) asm {
+low.func.def public target<x86.avx2.core>(@target) abi(object_function) abi_layout({signature = (i1, i32, i8, f8E4M3, f8E5M2, i16) -> (i32)}) @unused_narrow_inputs(%unused_i1: reg<x86.gpr32>, %value: reg<x86.gpr32>, %unused_i8: reg<x86.gpr32>, %unused_f8e4m3: reg<x86.gpr32>, %unused_f8e5m2: reg<x86.gpr32>, %unused_i16: reg<x86.gpr32>) -> (reg<x86.gpr32>) asm {
   return %value
 }
 
 // ----
-code: 8b c7 c3
+code: 8b c6 c3
 
 // ====
 

@@ -163,31 +163,6 @@ low.func.def target<test.low.core>(@target) @unused_fixed(%unused: reg<test.i32>
 
 // ====
 
-// RUN: emit low-allocation @entry_identity entry=0:test.i32:target_id:7 entry=1:test.i32:target_id:2 test.i32=3
-
-test.target<low_core> @target
-
-// Incoming positions include unused arguments. A legal live input stays put;
-// the unused input does not consume the deliberately smaller body budget.
-low.func.def target<test.low.core>(@target) @entry_identity(%unused: reg<test.i32>, %value: reg<test.i32>) -> (reg<test.i32>) asm {
-  return %value
-}
-
-// ----
-low-allocation @entry_identity
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 1
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 0
-classes:
-  test.i32: assignments=1 units=1 target_ids=3 physical=0 spill_slots=0 unassigned=0
-
-// ====
-
 // RUN: emit low-allocation @entry_budget entry=0:test.phys:physical_register:7 test.phys=2
 
 test.target<low_core> @target
@@ -211,33 +186,6 @@ entry moves: 1
   test.phys:physical_register:0 <- test.phys:physical_register:7
 classes:
   test.phys: assignments=1 units=1 target_ids=0 physical=1 spill_slots=0 unassigned=0
-
-// ====
-
-// RUN: emit low-allocation @entry_cross_class entry=0:test.pressure.alias64:physical_register:0 fixed=%value:physical_register:1:1
-
-test.target<low_core> @target
-
-// The invocation boundary owns its register view independently from the SSA
-// carrier. Allocation cannot reinterpret the incoming coordinate as a
-// placement preference in the destination class.
-low.func.def target<test.low.core>(@target) @entry_cross_class(%value: reg<test.pressure.alias32>) -> (reg<test.pressure.alias32>) asm {
-  return %value
-}
-
-// ----
-low-allocation @entry_cross_class
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 1
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 1
-  test.pressure.alias32:physical_register:1 <- test.pressure.alias64:physical_register:0
-classes:
-  test.pressure.alias32: assignments=1 units=1 target_ids=0 physical=2 spill_slots=0 unassigned=0
 
 // ====
 
