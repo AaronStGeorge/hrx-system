@@ -1,0 +1,73 @@
+// RUN: pass target=x86:avx2 target-legalize{mode=final},canonicalize,dce
+
+// Partial packets cover the exact range, including an unaligned base.
+func.def @partial_packet(%source: buffer, %target: buffer) {
+  %source_offset = index.constant 1 : offset
+  %target_offset = index.constant 3 : offset
+  %length = index.constant 19 : offset
+  buffer.copy %source[%source_offset], %target[%target_offset], %length
+  func.return
+}
+
+// ----
+func.def @partial_packet(%source: buffer, %target: buffer) {
+  %27 = index.constant 1 : offset
+  %8 = buffer.view %source[%27] : buffer -> view<4xi32, align(1)>
+  %9 = vector.load %8[0] : view<4xi32, align(1)> -> vector<4xi32>
+  %26 = index.constant 3 : offset
+  %11 = buffer.view %target[%26] : buffer -> view<4xi32, align(1)>
+  vector.store %9, %11[0] : vector<4xi32>, view<4xi32, align(1)>
+  %25 = index.constant 17 : offset
+  %14 = buffer.view %source[%25] : buffer -> view<1xi16, align(1)>
+  %15 = view.load %14[0] : view<1xi16, align(1)> -> i16
+  %24 = index.constant 19 : offset
+  %17 = buffer.view %target[%24] : buffer -> view<1xi16, align(1)>
+  view.store %15, %17[0] : i16, view<1xi16, align(1)>
+  %23 = index.constant 19 : offset
+  %20 = buffer.load.i8.u %source[%23]
+  %22 = index.constant 21 : offset
+  buffer.store.i8 %20, %target[%22]
+  func.return
+}
+
+// ====
+
+// Long constants retain a bounded loop plus an exact suffix.
+func.def @loop_and_tail(%source: buffer, %target: buffer) {
+  %origin = index.constant 0 : offset
+  %length = index.constant 65 : offset
+  buffer.copy %source[%origin], %target[%origin], %length
+  func.return
+}
+
+// ----
+func.def @loop_and_tail(%source: buffer, %target: buffer) {
+  %4 = index.constant 0 : offset
+  %5 = index.constant 64 : offset
+  %6 = index.constant 32 : offset
+  scf.for %7 = [%4 to %5 step %6] {
+    %9 = buffer.view %source[%7] : buffer -> view<8xi32, align(1)>
+    %10 = vector.load %9[0] : view<8xi32, align(1)> -> vector<8xi32>
+    %12 = buffer.view %target[%7] : buffer -> view<8xi32, align(1)>
+    vector.store %10, %12[0] : vector<8xi32>, view<8xi32, align(1)>
+  }
+  %18 = index.constant 64 : offset
+  %15 = buffer.load.i8.u %source[%18]
+  %17 = index.constant 64 : offset
+  buffer.store.i8 %15, %target[%17]
+  func.return
+}
+
+// ====
+
+// Empty copies access neither buffer, even with arbitrary offsets.
+func.def @empty(%source: buffer, %target: buffer, %offset: offset) {
+  %length = index.constant 0 : offset
+  buffer.copy %source[%offset], %target[%offset], %length
+  func.return
+}
+
+// ----
+func.def @empty(%source: buffer, %target: buffer, %offset: offset) {
+  func.return
+}

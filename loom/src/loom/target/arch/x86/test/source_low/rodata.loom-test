@@ -72,16 +72,8 @@ low.func.def public target<x86.avx2.core>(@__loom_target_context_0_0) abi(object
   %3 = lea.symbol.gpr64 @__low_rodata_c251e68b
   %4 = storage {byte_alignment = 16, byte_length = 16} : low.storage<private>
   %scratch = storage_address %4 : low.storage<private> -> reg<x86.gpr64>
-  %6 = mov.imm64 0
-  low.br ^_bb1(%6: reg<x86.gpr64>)
-^_bb1(%7: reg<x86.gpr64>):
-  low.op.cond_br<x86.scalar.cmp.branch.imm.gpr64>(%7) {imm32 = 16, predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>)
-^_bb2:
-  %8 = movzx.load.indexed.u8.gpr32 %3, %7 {disp32 = 0, scale = 1}
-  mov.store.indexed.u8.gpr32 %8, %scratch, %7 {disp32 = 0, scale = 1}
-  %9 = lea.disp %7 {disp32 = 1}
-  low.br ^_bb1(%9: reg<x86.gpr64>)
-^_bb3:
+  %6 = vmovdqu32.load.xmm %3 {disp32 = 0}
+  vmovdqu32.store.xmm %6, %scratch {disp32 = 0}
   mov.store.indexed.gpr32 %replacement, %scratch, %position {disp32 = 0, scale = 4}
   %values = vmovdqu32.load.xmm %scratch {disp32 = 0}
   vmovdqu32.store.xmm %values, %output {disp32 = 0}

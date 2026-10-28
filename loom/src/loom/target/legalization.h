@@ -133,6 +133,8 @@ typedef struct loom_target_legalization_context_t {
   // Target packet and scalar-word representation contract for shared
   // packed-bitstream legalization, or NULL when disabled.
   const loom_target_bitstream_policy_t* bitstream_policy;
+  // Preferred exact memory transfers for shared bulk-buffer decomposition.
+  loom_target_bulk_memory_policy_t bulk_memory_policy;
   // Complete target admission query for authored source vector carriers.
   // Semantic rewrites that consume an aggregate may precede this admission;
   // scalar fallback must not.

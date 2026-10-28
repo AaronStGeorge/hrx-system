@@ -1,0 +1,4 @@
+func.def public @bulk_copy(%source: buffer, %source_offset: offset, %target: buffer, %target_offset: offset, %length: offset) {
+  buffer.copy %source[%source_offset], %target[%target_offset], %length
+  func.return
+}

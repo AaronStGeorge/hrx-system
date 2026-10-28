@@ -68,6 +68,22 @@ typedef struct loom_target_bitstream_policy_t {
   loom_target_vector_carrier_supported_callback_t packet_carrier_supported;
 } loom_target_bitstream_policy_t;
 
+// Preferred exact transfers for shared bulk-buffer decomposition. Each bit
+// names its power-of-two byte width (1 | 2 | 4 | 8, for example). Scalar
+// transfers use integers; vector transfers use contiguous i32 lanes. Targets
+// publish widths whose ordinary memory contracts support both load and store
+// in their bulk-buffer address spaces. Empty policies retain byte transfers.
+typedef struct loom_target_bulk_memory_policy_t {
+  // Preferred scalar byte widths, up to eight bytes. Byte access is implicit.
+  uint8_t scalar_byte_widths;
+  // Preferred vector byte widths, from eight through 64 bytes.
+  uint8_t vector_byte_widths;
+  // Required scalar alignment is min(transfer width, this byte alignment).
+  uint8_t scalar_alignment;
+  // Required vector alignment is min(transfer width, this byte alignment).
+  uint8_t vector_alignment;
+} loom_target_bulk_memory_policy_t;
+
 // Maximum number of logical lane candidates in a packet policy. Shared
 // component planning represents the candidate intersection as one bit per
 // policy entry.

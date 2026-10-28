@@ -40,13 +40,17 @@ loom_cc_library(
     "target_legalization.c"
   DEPS
     iree::base
+    iree::base::internal
     loom::ir
     loom::ops::buffer
     loom::ops::index
     loom::ops::scalar
     loom::ops::scf
+    loom::ops::vector
+    loom::ops::view
     loom::rewrite::rewriter
     loom::target::legalization
+    loom::util::fact_table
   PUBLIC
 )
 

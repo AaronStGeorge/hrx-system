@@ -977,6 +977,8 @@ typedef struct loom_low_lower_policy_t {
   // Optional packet and scalar-word representation contract for shared
   // packed-bitstream legalization.
   const loom_target_bitstream_policy_t* bitstream_policy;
+  // Preferred exact memory transfers for shared bulk-buffer decomposition.
+  loom_target_bulk_memory_policy_t bulk_memory_policy;
   // Source allocation spaces backed by bounded structural function storage.
   // Empty leaves allocation selection to ordinary rules or target callbacks.
   loom_low_lower_function_storage_config_t function_storage;

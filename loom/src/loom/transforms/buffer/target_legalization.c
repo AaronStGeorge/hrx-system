@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 
+#include "iree/base/internal/math.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ir/types.h"
@@ -15,7 +16,10 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/util/fact_table.h"
 
 static iree_status_t loom_buffer_legalize_build_offset_constant(
     loom_builder_t* builder, int64_t value, loom_location_id_t location,
@@ -78,20 +82,168 @@ static iree_status_t loom_buffer_legalize_build_byte_store(
                                     location, &op);
 }
 
-static iree_status_t loom_buffer_legalize_build_copy_loop_body(
-    loom_builder_t* builder, loom_op_t* loop, loom_value_id_t source,
+// Selects transfers from producer-retained root and offset alignment facts.
+// No stronger alignment requirement is introduced by the generated views.
+static uint8_t loom_buffer_legalize_transfer_widths(
+    const loom_target_legalization_context_t* context, loom_value_id_t buffer,
+    loom_value_id_t offset) {
+  const loom_target_bulk_memory_policy_t policy = context->bulk_memory_policy;
+  if ((policy.scalar_byte_widths | policy.vector_byte_widths) == 0) {
+    return 1;
+  }
+  uint64_t alignment = 1;
+  loom_value_fact_buffer_reference_t reference = {0};
+  if (context->fact_table != NULL &&
+      loom_value_facts_query_buffer_reference(
+          &context->fact_table->context,
+          loom_value_fact_table_lookup(context->fact_table, buffer),
+          &reference)) {
+    const loom_value_facts_t offset_facts =
+        loom_value_fact_table_lookup(context->fact_table, offset);
+    alignment = reference.minimum_alignment;
+    if (!loom_value_facts_is_zero(offset_facts)) {
+      alignment = iree_math_gcd_u64(alignment, offset_facts.known_divisor);
+    }
+  }
+  uint8_t widths = 1;
+  for (uint32_t width = 2; width <= 64; width *= 2) {
+    const uint32_t required_alignment = iree_min(
+        width, (policy.scalar_byte_widths & width) ? policy.scalar_alignment
+                                                   : policy.vector_alignment);
+    if (((policy.scalar_byte_widths | policy.vector_byte_widths) & width) &&
+        alignment >= required_alignment) {
+      widths |= width;
+    }
+  }
+  return widths;
+}
+
+static loom_type_t loom_buffer_legalize_transfer_type(
+    const loom_target_bulk_memory_policy_t* policy, uint32_t width) {
+  if (policy->vector_byte_widths & width) {
+    return loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
+                               width / 4, 0);
+  }
+  return loom_type_scalar(width == 8   ? LOOM_SCALAR_TYPE_I64
+                          : width == 4 ? LOOM_SCALAR_TYPE_I32
+                          : width == 2 ? LOOM_SCALAR_TYPE_I16
+                                       : LOOM_SCALAR_TYPE_I8);
+}
+
+static iree_status_t loom_buffer_legalize_build_transfer_view(
+    loom_builder_t* builder, loom_value_id_t buffer, loom_value_id_t offset,
+    loom_value_id_t relative_offset, loom_type_t transfer_type,
+    loom_location_id_t location, loom_value_id_t* out_view) {
+  loom_value_id_t byte_offset = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_byte_offset(
+      builder, offset, relative_offset, location, &byte_offset));
+  const uint32_t lane_count =
+      loom_type_is_vector(transfer_type)
+          ? loom_type_dim_static_size_at(transfer_type, 0)
+          : 1;
+  loom_type_t view_type = loom_type_view_with_alignment(
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, loom_type_element_type(transfer_type),
+                          lane_count, 0),
+      1);
+  loom_op_t* view_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_buffer_view_build(builder, buffer, byte_offset,
+                                              view_type, location, &view_op));
+  *out_view = loom_buffer_view_result(view_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_buffer_legalize_build_load(
+    loom_builder_t* builder, loom_value_id_t source,
+    loom_value_id_t source_offset, loom_value_id_t relative_offset,
+    loom_type_t transfer_type, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  if (loom_type_equal(transfer_type, loom_type_scalar(LOOM_SCALAR_TYPE_I8))) {
+    return loom_buffer_legalize_build_byte_load(
+        builder, source, source_offset, relative_offset, location, out_value);
+  }
+  loom_value_id_t view = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_transfer_view(
+      builder, source, source_offset, relative_offset, transfer_type, location,
+      &view));
+  const int64_t origin = 0;
+  loom_op_t* load = NULL;
+  if (loom_type_is_vector(transfer_type)) {
+    IREE_RETURN_IF_ERROR(loom_vector_load_build(builder, 0, 0, view, NULL, 0,
+                                                &origin, 1, 0, 0, transfer_type,
+                                                location, &load));
+    *out_value = loom_vector_load_result(load);
+  } else {
+    IREE_RETURN_IF_ERROR(loom_view_load_build(builder, 0, 0, view, NULL, 0,
+                                              &origin, 1, 0, 0, transfer_type,
+                                              location, &load));
+    *out_value = loom_view_load_result(load);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_buffer_legalize_build_store(
+    loom_builder_t* builder, loom_value_id_t value, loom_value_id_t target,
+    loom_value_id_t target_offset, loom_value_id_t relative_offset,
+    loom_type_t transfer_type, loom_location_id_t location) {
+  if (loom_type_equal(transfer_type, loom_type_scalar(LOOM_SCALAR_TYPE_I8))) {
+    return loom_buffer_legalize_build_byte_store(
+        builder, value, target, target_offset, relative_offset, location);
+  }
+  loom_value_id_t view = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_transfer_view(
+      builder, target, target_offset, relative_offset, transfer_type, location,
+      &view));
+  const int64_t origin = 0;
+  loom_op_t* store = NULL;
+  if (loom_type_is_vector(transfer_type)) {
+    return loom_vector_store_build(builder, 0, 0, value, view, NULL, 0, &origin,
+                                   1, 0, 0, location, &store);
+  }
+  return loom_view_store_build(builder, 0, 0, value, view, NULL, 0, &origin, 1,
+                               0, 0, location, &store);
+}
+
+static iree_status_t loom_buffer_legalize_build_copy_chunk(
+    loom_builder_t* builder, loom_value_id_t relative_offset,
+    loom_type_t transfer_type, loom_value_id_t source,
     loom_value_id_t source_offset, loom_value_id_t target,
     loom_value_id_t target_offset, loom_location_id_t location) {
-  const loom_value_id_t relative_offset =
-      loom_region_entry_arg_id(loom_scf_for_body(loop), 0);
   loom_value_id_t value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_byte_load(
-      builder, source, source_offset, relative_offset, location, &value));
-  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_byte_store(
-      builder, value, target, target_offset, relative_offset, location));
-  loom_op_t* yield_op = NULL;
-  return loom_scf_yield_build(builder, /*values=*/NULL, /*value_count=*/0,
-                              location, &yield_op);
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_load(
+      builder, source, source_offset, relative_offset, transfer_type, location,
+      &value));
+  return loom_buffer_legalize_build_store(builder, value, target, target_offset,
+                                          relative_offset, transfer_type,
+                                          location);
+}
+
+// Converts to an integer payload for bit arithmetic, keeping address-domain
+// operations restricted to their canonical coordinate/byte semantics.
+static iree_status_t loom_buffer_legalize_build_aligned_end(
+    loom_builder_t* builder, loom_value_id_t byte_length, uint32_t width,
+    loom_location_id_t location, loom_value_id_t* out_end) {
+  if (width == 1) {
+    *out_end = byte_length;
+    return iree_ok_status();
+  }
+  const loom_type_t offset_type = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  const loom_type_t bits_type = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
+  loom_op_t* bits_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_cast_build(builder, byte_length, offset_type,
+                                             bits_type, location, &bits_op));
+  loom_value_id_t mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
+      builder, LOOM_SCALAR_TYPE_I64, -(int64_t)width, location, &mask));
+  loom_op_t* end_bits_op = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_scalar_andi_build(builder, loom_index_cast_result(bits_op), mask,
+                             bits_type, location, &end_bits_op));
+  loom_op_t* end_op = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_index_cast_build(builder, loom_scalar_andi_result(end_bits_op),
+                            bits_type, offset_type, location, &end_op));
+  *out_end = loom_index_cast_result(end_op);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_buffer_legalize_copy(
@@ -103,26 +255,97 @@ static iree_status_t loom_buffer_legalize_copy(
   loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_offset_constant(
       &rewriter->builder, 0, op->location, &zero));
-  loom_value_id_t one = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_offset_constant(
-      &rewriter->builder, 1, op->location, &one));
-  loom_op_t* loop = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_for_build(
-      &rewriter->builder, /*build_flags=*/0, zero,
-      loom_buffer_copy_byte_length(op), one, /*iter_args=*/NULL,
-      /*iter_args_count=*/0, /*result_types=*/NULL, /*tied_results=*/NULL,
-      /*tied_result_count=*/0,
-      /*pipeline_depth=*/LOOM_VALUE_ID_INVALID,
-      /*unroll_factor=*/LOOM_VALUE_ID_INVALID, /*unroll_policy=*/0,
-      /*unroll_schedule=*/0, op->location, &loop));
-
-  loom_builder_ip_t saved_ip = loom_builder_enter_region(
-      &rewriter->builder, loop, loom_scf_for_body(loop));
-  iree_status_t status = loom_buffer_legalize_build_copy_loop_body(
-      &rewriter->builder, loop, loom_buffer_copy_source(op),
-      loom_buffer_copy_source_offset(op), loom_buffer_copy_target(op),
-      loom_buffer_copy_target_offset(op), op->location);
-  loom_builder_restore(&rewriter->builder, saved_ip);
+  const uint8_t widths =
+      loom_buffer_legalize_transfer_widths(context, loom_buffer_copy_source(op),
+                                           loom_buffer_copy_source_offset(op)) &
+      loom_buffer_legalize_transfer_widths(context, loom_buffer_copy_target(op),
+                                           loom_buffer_copy_target_offset(op));
+  const loom_value_id_t byte_length = loom_buffer_copy_byte_length(op);
+  int64_t static_length = 0;
+  const bool is_static = loom_value_facts_as_exact_i64(
+      loom_value_fact_table_lookup(context->fact_table, byte_length),
+      &static_length);
+  int64_t static_start = 0;
+  loom_value_id_t start = zero;
+  uint32_t previous_width = 0;
+  iree_status_t status = iree_ok_status();
+  for (uint32_t width = 64; width != 0 && iree_status_is_ok(status);
+       width /= 2) {
+    if (!(widths & width)) {
+      continue;
+    }
+    const int64_t static_end = static_length & -(int64_t)width;
+    if (is_static && static_end == static_start) {
+      continue;
+    }
+    loom_value_id_t end = LOOM_VALUE_ID_INVALID;
+    if (is_static) {
+      status = loom_buffer_legalize_build_offset_constant(
+          &rewriter->builder, static_end, op->location, &end);
+    } else {
+      status = loom_buffer_legalize_build_aligned_end(
+          &rewriter->builder, byte_length, width, op->location, &end);
+    }
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    const bool single = is_static && static_end - static_start == width;
+    loom_builder_ip_t saved_ip = loom_builder_save(&rewriter->builder);
+    loom_value_id_t position = start;
+    if (!single) {
+      loom_op_t* region_op = NULL;
+      if (!is_static && previous_width == 2 * width) {
+        loom_op_t* condition_op = NULL;
+        status = loom_index_cmp_build(&rewriter->builder,
+                                      LOOM_INDEX_CMP_PREDICATE_ULT, start, end,
+                                      op->location, &condition_op);
+        if (iree_status_is_ok(status)) {
+          status = loom_scf_if_build(&rewriter->builder, 0,
+                                     loom_index_cmp_result(condition_op), NULL,
+                                     0, NULL, 0, op->location, &region_op);
+        }
+        if (iree_status_is_ok(status)) {
+          loom_builder_enter_region(&rewriter->builder, region_op,
+                                    loom_scf_if_then_region(region_op));
+        }
+      } else {
+        loom_value_id_t step = LOOM_VALUE_ID_INVALID;
+        status = loom_buffer_legalize_build_offset_constant(
+            &rewriter->builder, width, op->location, &step);
+        if (iree_status_is_ok(status)) {
+          status = loom_scf_for_build(
+              &rewriter->builder, 0, start, end, step, NULL, 0, NULL, NULL, 0,
+              LOOM_VALUE_ID_INVALID, LOOM_VALUE_ID_INVALID, 0, 0, op->location,
+              &region_op);
+        }
+        if (iree_status_is_ok(status)) {
+          loom_builder_enter_region(&rewriter->builder, region_op,
+                                    loom_scf_for_body(region_op));
+          position = loom_region_entry_arg_id(loom_scf_for_body(region_op), 0);
+        }
+      }
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_buffer_legalize_build_copy_chunk(
+          &rewriter->builder, position,
+          loom_buffer_legalize_transfer_type(&context->bulk_memory_policy,
+                                             width),
+          loom_buffer_copy_source(op), loom_buffer_copy_source_offset(op),
+          loom_buffer_copy_target(op), loom_buffer_copy_target_offset(op),
+          op->location);
+    }
+    if (!single && iree_status_is_ok(status)) {
+      loom_op_t* yield_op = NULL;
+      status = loom_scf_yield_build(&rewriter->builder, NULL, 0, op->location,
+                                    &yield_op);
+    }
+    if (!single) {
+      loom_builder_restore(&rewriter->builder, saved_ip);
+    }
+    start = end;
+    static_start = static_end;
+    previous_width = width;
+  }
   IREE_RETURN_IF_ERROR(status);
 
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(rewriter, op));

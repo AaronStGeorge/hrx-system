@@ -312,6 +312,35 @@ func.def @vector_boundary_observations(%ordinal: index, %left_entropy: i64, %rig
   func.return
 }
 
+// Exercise every suffix length across the scalar and vector transfer widths.
+// The complete output includes untouched prefix/suffix canaries. Source and
+// destination offsets deliberately have different alignment residues.
+func.def @copy_exact_range(%input: buffer, %output: buffer, %length: index) {
+  %bounded = index.assume %length [range(%length, 0, 129)] : index
+  %mask = index.constant 31 : index
+  %source_position = index.andi %bounded, %mask : index
+  %factor = index.constant 3 : index
+  %shift = index.constant 7 : index
+  %product = index.madd %bounded, %factor, %shift : index
+  %target_position = index.andi %product, %mask : index
+  %source_offset = index.cast %source_position : index to offset
+  %target_offset = index.cast %target_position : index to offset
+  %byte_length = index.cast %bounded : index to offset
+  buffer.copy %input[%source_offset], %output[%target_offset], %byte_length
+  func.return
+}
+
+check.scenario @copy_exact_range_values {
+  check.trial[130](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-128) step(1) : tensor<192xi8>
+    %output = check.generate.fill value(85) : tensor<192xi8>
+    check.compare<@copy_exact_range>(%input, %output, %trial) : (tensor<192xi8>, tensor<192xi8>, index) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<192xi8>
+    }
+  }
+  check.return
+}
+
 check.scenario @byte_boundary_values {
   check.trial[16](%trial: index, %entropy: check.entropy) {
     %left_source = check.entropy.fork %entropy name("left") : check.entropy
