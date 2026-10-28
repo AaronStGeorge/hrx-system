@@ -18,6 +18,237 @@
 namespace loom {
 namespace {
 
+TEST(SetupMembershipTest, StructuralSetupRequiresPolicyOrRetainedRegister) {
+  const loom_low_reg_class_t reg_class = {
+      .alloc_unit_bits = 32,
+      .allocatable_count = 8,
+  };
+  const loom_low_descriptor_set_t descriptors = {
+      .reg_classes = &reg_class,
+      .reg_class_count = 1,
+  };
+  loom_value_id_t value_ids[] = {7, 19};
+  loom_local_value_domain_t domain = {
+      .value_ids = value_ids,
+      .value_count = IREE_ARRAYSIZE(value_ids),
+  };
+  const struct {
+    // Allocation retained private placement for the result.
+    bool retained;
+    // Allocation requires the result to remain in a register.
+    bool required;
+    // The caller requested ordering for all structural setup.
+    bool order_structural;
+    // Whether this node belongs to an ordered setup chain.
+    bool ordered;
+  } cases[] = {
+      {false, false, false, false}, {true, false, false, false},
+      {false, true, false, false},  {true, true, false, true},
+      {false, false, true, true},   {true, false, true, true},
+      {false, true, true, true},    {true, true, true, true},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "retained=" << test_case.retained
+                 << " required=" << test_case.required
+                 << " structural=" << test_case.order_structural);
+    uint64_t placement_word = 0;
+    uint64_t required_word = 0;
+    loom_low_schedule_options_t options = {
+        .required_register_values = {64, &required_word},
+        .per_user_placement_values = {64, &placement_word},
+    };
+    if (test_case.retained) {
+      iree_bitmap_set(options.per_user_placement_values, value_ids[1]);
+    }
+    if (test_case.required) {
+      iree_bitmap_set(options.required_register_values, value_ids[1]);
+    }
+    loom_low_schedule_value_record_t values[] = {
+        {.unit_count = 1, .register_class_id = 0},
+        {.unit_count = 1, .register_class_id = 0},
+    };
+    if (test_case.required) {
+      values[1].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+    }
+    loom_low_schedule_build_state_t state = {
+        .options = &options,
+        .target = {.descriptor_set = &descriptors},
+        .value_domain = &domain,
+        .values = values,
+    };
+    loom_low_schedule_node_t node = {
+        .kind = LOOM_LOW_SCHEDULE_NODE_STRUCTURAL,
+        .operand_count = 1,
+        .result_count = 1,
+        .flags = LOOM_LOW_SCHEDULE_NODE_FLAG_STORAGE_SETUP,
+        .value_ordinals = {.inline_value_ordinals = {0, 1}},
+    };
+    loom_low_schedule_setup_order_classify_node(&state, &node,
+                                                test_case.order_structural);
+    EXPECT_EQ(
+        iree_any_bit_set(node.flags, LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP),
+        test_case.ordered);
+    EXPECT_EQ(state.setup_order.has_members, test_case.ordered);
+  }
+}
+
+TEST(SetupMembershipTest, SingletonRequiredStorageNeedsExclusionOrdering) {
+  const loom_low_reg_class_t reg_class = {
+      .alloc_unit_bits = 32,
+      .allocatable_count = 8,
+  };
+  const loom_low_descriptor_set_t descriptors = {
+      .reg_classes = &reg_class,
+      .reg_class_count = 1,
+  };
+  const loom_low_schedule_options_t options = {};
+  const struct {
+    // Available physical units in the completion domain, or zero if unbounded.
+    uint32_t capacity;
+    // Physical units owned by the result.
+    uint32_t result_units;
+    // The result cannot spill or rematerialize.
+    bool required;
+    // The structural operation constructs storage for its result.
+    bool storage_setup;
+    // Whether the singleton storage requires exclusion ordering.
+    bool ordered;
+  } cases[] = {
+      {1, 1, true, true, true},   {1, 1, false, true, false},
+      {1, 1, true, false, false}, {2, 1, true, true, false},
+      {2, 2, true, true, false},  {0, 1, true, true, false},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "capacity=" << test_case.capacity << " units="
+                 << test_case.result_units << " required=" << test_case.required
+                 << " storage setup=" << test_case.storage_setup);
+    loom_low_schedule_completion_domain_t completion = {
+        .capacity = test_case.capacity,
+        .reg_class_id = 0,
+    };
+    uint16_t domain_id = test_case.capacity == 0 ? UINT16_MAX : 0;
+    loom_low_schedule_value_record_t values[] = {
+        {.unit_count = 1, .register_class_id = 0},
+        {.unit_count = test_case.result_units, .register_class_id = 0},
+    };
+    if (test_case.required) {
+      values[1].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+    }
+    loom_low_schedule_build_state_t state = {
+        .options = &options,
+        .target = {.descriptor_set = &descriptors},
+        .values = values,
+        .pressure_limits =
+            {
+                .unspillable_completion_domains = &completion,
+                .unspillable_completion_domain_ids_by_reg_class = &domain_id,
+                .unspillable_completion_domain_count =
+                    test_case.capacity == 0 ? uint16_t{0} : uint16_t{1},
+            },
+    };
+    loom_low_schedule_node_t node = {
+        .kind = LOOM_LOW_SCHEDULE_NODE_STRUCTURAL,
+        .operand_count = 1,
+        .result_count = 1,
+        .value_ordinals = {.inline_value_ordinals = {0, 1}},
+    };
+    if (test_case.storage_setup) {
+      node.flags = LOOM_LOW_SCHEDULE_NODE_FLAG_STORAGE_SETUP;
+    }
+    loom_low_schedule_setup_order_classify_node(
+        &state, &node, /*order_structural_setup=*/false);
+    EXPECT_EQ(
+        iree_any_bit_set(node.flags, LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP),
+        test_case.ordered);
+    EXPECT_EQ(state.setup_order.has_members, test_case.ordered);
+  }
+}
+
+TEST(SetupMembershipTest, CapturedRequiredStorageMustPreserveItsFootprint) {
+  const loom_low_reg_class_t classes[] = {
+      {.alloc_unit_bits = 32, .allocatable_count = 8, .alias_set_id = 1},
+      {.alloc_unit_bits = 32, .allocatable_count = 8, .alias_set_id = 1},
+      {.alloc_unit_bits = 32, .allocatable_count = 8},
+      {.alloc_unit_bits = 32, .allocatable_count = 8, .alias_set_id = 2},
+  };
+  const loom_low_descriptor_set_t descriptors = {
+      .reg_classes = classes,
+      .reg_class_count = IREE_ARRAYSIZE(classes),
+  };
+  const loom_low_schedule_options_t options = {};
+  const struct {
+    // Human-readable invariant represented by this row.
+    const char* name;
+    // Units captured from the first operand in class zero.
+    uint32_t first_units;
+    // Units captured from a second operand, or zero for a unary conversion.
+    uint32_t second_units;
+    // Units owned by the result.
+    uint32_t result_units;
+    // Result class in the same bank, a shared bank, or a disjoint bank.
+    uint16_t result_class;
+    // Whether the captured operands require physical registers.
+    bool inputs_required;
+    // Whether the result requires physical registers.
+    bool result_required;
+    // Whether retaining the inputs preserves required physical storage.
+    bool ordered;
+  } cases[] = {
+      {"same class", 4, 0, 4, 0, true, true, true},
+      {"shared bank", 1, 0, 1, 1, true, true, true},
+      {"different bank", 1, 0, 1, 2, true, true, false},
+      {"different shared bank", 1, 0, 1, 3, true, true, false},
+      {"unary contraction", 4, 0, 1, 0, true, true, false},
+      {"combined contraction", 4, 4, 4, 0, true, true, false},
+      {"expansion", 1, 0, 4, 0, true, true, true},
+      {"composition", 1, 1, 2, 0, true, true, true},
+      {"spillable result", 4, 0, 4, 0, true, false, false},
+      {"spillable inputs", 4, 0, 1, 2, false, true, true},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    loom_low_schedule_value_record_t values[] = {
+        {.unit_count = test_case.first_units, .register_class_id = 0},
+        {.unit_count = test_case.second_units, .register_class_id = 0},
+        {
+            .unit_count = test_case.result_units,
+            .register_class_id = test_case.result_class,
+        },
+    };
+    if (test_case.inputs_required) {
+      values[0].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+      if (test_case.second_units != 0) {
+        values[1].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+      }
+    }
+    if (test_case.result_required) {
+      values[2].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+    }
+    loom_low_schedule_build_state_t state = {
+        .options = &options,
+        .target = {.descriptor_set = &descriptors},
+        .values = values,
+    };
+    loom_low_schedule_node_t node = {
+        .kind = LOOM_LOW_SCHEDULE_NODE_STRUCTURAL,
+        .operand_count =
+            test_case.second_units == 0 ? uint16_t{1} : uint16_t{2},
+        .result_count = 1,
+        .flags = LOOM_LOW_SCHEDULE_NODE_FLAG_STORAGE_SETUP,
+        .value_ordinals = {.inline_value_ordinals = {0, 1}},
+    };
+    loom_low_schedule_node_result_ordinals(&node)[0] = 2;
+    loom_low_schedule_setup_order_classify_node(
+        &state, &node, /*order_structural_setup=*/true);
+    EXPECT_EQ(
+        iree_any_bit_set(node.flags, LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP),
+        test_case.ordered);
+    EXPECT_EQ(state.setup_order.has_members, test_case.ordered);
+  }
+}
+
 class SetupOrderTest : public ::testing::Test {
  protected:
   void SetUp() override {

@@ -20,24 +20,6 @@ node 3 <- none
 
 // ====
 
-// A retained structural producer follows the same private setup contract
-// without enabling the function-wide structural repair policy.
-// RUN: emit low-schedule-query @retained_structural_placement kind=order consumer=1 per-user-placement-values=%private required-register-values=%private
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @retained_structural_placement(%lhs: reg<test.i32>, %rhs: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
-  %dependency = test.add.i32 %lhs, %rhs
-  %private = copy %seed : reg<test.i32> -> reg<test.i32>
-  %result = test.add.i32 %private, %dependency
-  return %result
-}
-
-// ----
-node 1 <- 0
-
-// ====
-
 // Input-free target packets remain in one retained setup chain ending at an
 // unmarked structural result. That result may have several users, so the chain
 // carries no downstream consumer prerequisite.
@@ -110,75 +92,6 @@ node 3 <- 4
 
 // ====
 
-// Delaying a private destination can keep its captured input live in another
-// bank while that bank constructs an independent tuple.
-// RUN: emit low-schedule-query @captured_input strategy=resource-stall test.i64=2 required-register-values=%source,%private,%first,%second order=* scheduled-pressure=test.i64
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @captured_input(%source: reg<test.i64>) -> (reg<test.i32 x3>) asm {
-  %private = copy %source : reg<test.i64> -> reg<test.i32>
-  %first_source = test.const.i32 1
-  %second_source = test.const.i32 2
-  %first = copy %first_source : reg<test.i32> -> reg<test.i64>
-  %second = copy %second_source : reg<test.i32> -> reg<test.i64>
-  %wide = concat(%first, %second) : (reg<test.i64>, reg<test.i64>) -> reg<test.i64 x2>
-  %dependency = copy %wide : reg<test.i64 x2> -> reg<test.i32 x2>
-  %result = concat(%private, %dependency) : (reg<test.i32>, reg<test.i32 x2>) -> reg<test.i32 x3>
-  return %result
-}
-
-// ----
-block 0 order: 0, 1, 2, 3, 4, 5, 6, 7, 8
-scheduled pressure test.i64: peak-live-units=2 peak-live-values=2
-
-// ====
-
-// RUN: emit low-schedule-query @captured_input strategy=resource-stall test.i64=2 required-register-values=%source,%private,%first,%second per-user-placement-values=%private order=* scheduled-pressure=test.i64
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @captured_input(%source: reg<test.i64>) -> (reg<test.i32 x3>) asm {
-  %private = copy %source : reg<test.i64> -> reg<test.i32>
-  %first_source = test.const.i32 1
-  %second_source = test.const.i32 2
-  %first = copy %first_source : reg<test.i32> -> reg<test.i64>
-  %second = copy %second_source : reg<test.i32> -> reg<test.i64>
-  %wide = concat(%first, %second) : (reg<test.i64>, reg<test.i64>) -> reg<test.i64 x2>
-  %dependency = copy %wide : reg<test.i64 x2> -> reg<test.i32 x2>
-  %result = concat(%private, %dependency) : (reg<test.i32>, reg<test.i32 x2>) -> reg<test.i32 x3>
-  return %result
-}
-
-// ----
-block 0 order: 0, 1, 2, 3, 4, 5, 6, 7, 8
-scheduled pressure test.i64: peak-live-units=2 peak-live-values=2
-
-// ====
-
-// An input-free recipe can still require a temporary in the data bank.
-// RUN: emit low-schedule-query @input_free_transfer strategy=resource-stall test.i32=4 required-register-values=%source,%private,%first,%second,%third,%fourth per-user-placement-values=%source,%private order=* scheduled-pressure=test.i32
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @input_free_transfer() asm {
-  %source = test.const.i32 7
-  %private = copy %source : reg<test.i32> -> reg<test.ptr>
-  %first = test.const.i32 1
-  %second = test.const.i32 2
-  %third = test.const.i32 3
-  %fourth = test.const.i32 4
-  %wide = concat(%first, %second, %third, %fourth) : (reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>) -> reg<test.i32 x4>
-  test.store.v4i32 %private, %wide
-  return
-}
-
-// ----
-block 0 order: 0, 1, 2, 3, 4, 5, 6, 7, 8
-scheduled pressure test.i32: peak-live-units=4 peak-live-values=4
-
-// ====
-
 // Delaying this contraction would hold both required inputs while the
 // independent tuple grows in the same bank.
 // RUN: emit low-schedule-query @same_bank_contraction strategy=resource-stall test.i32=8 required-register-values=%left,%right,%private,%first,%second,%third,%fourth per-user-placement-values=%private order=* scheduled-pressure=test.i32
@@ -222,82 +135,6 @@ low.func.def target<test.low.core>(@target) @early_write_overlap(%source: reg<te
 // ----
 block 0 order: 0, 1, 2, 3, 4, 5, 6, 7
 scheduled pressure test.i32: peak-live-units=8 peak-live-values=5
-
-// ====
-
-// A same-bank copy preserves required storage and can still follow the
-// consumer's independent prerequisite.
-// RUN: emit low-schedule-query @required_copy kind=order consumer=* order=* per-user-placement-values=%private required-register-values=%source,%private
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_copy(%source: reg<test.i32>) -> (reg<test.i32>) asm {
-  %private = copy %source : reg<test.i32> -> reg<test.i32>
-  %dependency = test.const.i32 1
-  %result = test.add.i32 %private, %dependency
-  return %result
-}
-
-// ----
-block 0 order: 1, 0, 2, 3
-node 0 <- 1
-
-// ====
-
-// Distinct register classes can name the same pressure bank. Their required
-// ownership transfer retains the ordinary private ordering.
-// RUN: emit low-schedule-query @required_alias_copy kind=order consumer=* order=* per-user-placement-values=%private required-register-values=%source,%private
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_alias_copy(%source: reg<test.pressure.alias32>, %other: reg<test.i64>) -> (reg<test.pressure.alias64 x2>) asm {
-  %private = copy %source : reg<test.pressure.alias32> -> reg<test.pressure.alias64>
-  %dependency = copy %other : reg<test.i64> -> reg<test.pressure.alias64>
-  %result = concat(%private, %dependency) : (reg<test.pressure.alias64>, reg<test.pressure.alias64>) -> reg<test.pressure.alias64 x2>
-  return %result
-}
-
-// ----
-block 0 order: 1, 0, 2, 3
-node 0 <- 1
-
-// ====
-
-// An optional result cannot replace its required input in the hard-pressure
-// proof: allocation can spill the former but must retain the latter.
-// RUN: emit low-schedule-query @required_input_spillable_result kind=order consumer=* order-structural-setup required-register-values=%source
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_input_spillable_result(%source: reg<test.i32>) -> (reg<test.i32>) asm {
-  %private = copy %source : reg<test.i32> -> reg<test.i32>
-  %dependency = test.const.i32 1
-  %result = test.add.i32 %private, %dependency
-  return %result
-}
-
-// ----
-none
-
-// ====
-
-// Target-unspillable classes carry required ownership without an explicit
-// per-value requirement. Release the captured input before reopening its bank.
-// RUN: emit low-schedule-query @unspillable_capture strategy=resource-stall test.special=1 per-user-placement-values=%private required-register-values=%private order=* scheduled-pressure=test.special
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @unspillable_capture(%source: reg<test.special>, %other: reg<test.i32>) -> (reg<test.i32 x2>) asm {
-  %private = copy %source : reg<test.special> -> reg<test.i32>
-  %dependency = copy %other : reg<test.i32> -> reg<test.special>
-  %released = copy %dependency : reg<test.special> -> reg<test.i32>
-  %result = concat(%private, %released) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
-  return %result
-}
-
-// ----
-block 0 order: 0, 1, 2, 3, 4
-scheduled pressure test.special: peak-live-units=1 peak-live-values=1
 
 // ====
 
