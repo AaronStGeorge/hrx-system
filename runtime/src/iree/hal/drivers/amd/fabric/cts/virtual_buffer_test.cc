@@ -318,8 +318,8 @@ TEST_P(FabricVirtualBufferTest,
   const uint64_t unit = std::max(
       granularity_,
       iree_hal_pool_query_mapping_requirements(local_pool).minimum_granularity);
-  // Two device-local allocations followed by system backing prove that stable
-  // virtual addresses carry no physical-placement promise of their own.
+  // One reservation mixes device-local and system backing. Each interval can
+  // change its physical source while preserving the same virtual address.
   std::array<Ref<iree_hal_buffer_t>, 3> backings;
   const auto staging_address =
       iree_hal_buffer_native_binding(backing_, source_slot_).device_address;
@@ -329,7 +329,7 @@ TEST_P(FabricVirtualBufferTest,
   for (uint32_t i = 0; i < backings.size(); ++i) {
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
         i < 2 ? local_pool.get() : pool_,
-        iree_hal_make_pool_reservation_request(unit, 0),
+        iree_hal_make_pool_reservation_request(2 * unit, 0),
         iree_infinite_timeout(), backings[i].out()));
     for (uint32_t j = 0; j < 128; ++j) {
       staging[j] = 0x1000u + i * 0x1000u + j;
@@ -354,54 +354,65 @@ TEST_P(FabricVirtualBufferTest,
 
   family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
   const iree_hal_virtual_buffer_options_t options = {
-      .byte_length = unit,
+      .byte_length = 3 * unit,
       .mapping_granularity = 2 * unit,
   };
   Ref<iree_hal_buffer_t> root;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
       group_, {1, &family, {}}, &options, allocator_, root.out()));
-  Ref<iree_hal_buffer_t> view;
-  IREE_ASSERT_OK(
-      iree_hal_buffer_subspan(root, 256, 256, allocator_, view.out()));
+  std::array<Ref<iree_hal_buffer_t>, 2> views;
+  std::array<uint64_t, 2> addresses;
   const iree_hal_buffer_native_binding_slot_t virtual_slot = {
       .index = root.get()
                    ->memory.contract->scopes[scope_.id]
                    .bindings[IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS],
       .type = IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS,
   };
-  const uint64_t address =
-      iree_hal_buffer_native_binding(view, virtual_slot).device_address;
+  for (uint32_t i = 0; i < views.size(); ++i) {
+    IREE_ASSERT_OK(iree_hal_buffer_subspan(root, 2 * i * unit + 256, 256,
+                                           allocator_, views[i].out()));
+    addresses[i] =
+        iree_hal_buffer_native_binding(views[i], virtual_slot).device_address;
+  }
   for (uint32_t epoch = 0; epoch < backings.size(); ++epoch) {
-    const std::array<iree_hal_memory_mapping_t, 1> mappings = {{
-        {
-            .target = root,
-            .scope = scope_,
-            .target_range = {0, unit},
-            .source = backings[epoch],
-            .access = IREE_HAL_MEMORY_ACCESS_ALL,
-            .operation = epoch ? IREE_HAL_MEMORY_MAPPING_OPERATION_REPLACE
-                               : IREE_HAL_MEMORY_MAPPING_OPERATION_BIND,
-        },
-    }};
+    std::array<iree_hal_memory_mapping_t, 2> mappings;
+    for (uint32_t i = 0; i < mappings.size(); ++i) {
+      mappings[i] = {
+          .target = root,
+          .scope = scope_,
+          .target_range = {2 * i * unit, i ? unit : 2 * unit},
+          .source = backings[(epoch + 2 * i) % backings.size()],
+          .access = IREE_HAL_MEMORY_ACCESS_ALL,
+          .operation = epoch ? IREE_HAL_MEMORY_MAPPING_OPERATION_REPLACE
+                             : IREE_HAL_MEMORY_MAPPING_OPERATION_BIND,
+      };
+    }
     IREE_ASSERT_OK(Map(mappings));
-    EXPECT_EQ(iree_hal_buffer_native_binding(view, virtual_slot).device_address,
-              address);
     SdmaCommandWriter commands(
         reinterpret_cast<uint32_t*>(queue_host_.ring_address) + ring_words_,
         native_family_.format_features);
     if (cache_control) {
       commands.AcquireFromSystem();
     }
-    commands.CopyLinear(address, staging_address + 2 * granularity_, 256);
+    for (uint32_t i = 0; i < views.size(); ++i) {
+      EXPECT_EQ(
+          iree_hal_buffer_native_binding(views[i], virtual_slot).device_address,
+          addresses[i]);
+      commands.CopyLinear(addresses[i],
+                          staging_address + (2 + i) * granularity_, 256);
+    }
     if (cache_control) {
       commands.ReleaseToSystem();
     }
     ASSERT_NO_FATAL_FAILURE(SubmitAndWait(commands));
-    IREE_ASSERT_OK(
-        iree_hal_buffer_invalidate_host_range(backing_, 2 * granularity_, 256));
-    for (uint32_t j = 0; j < 64; ++j) {
-      EXPECT_EQ(staging[2 * granularity_ / sizeof(uint32_t) + j],
-                0x1000u + epoch * 0x1000u + 64 + j);
+    for (uint32_t i = 0; i < views.size(); ++i) {
+      IREE_ASSERT_OK(iree_hal_buffer_invalidate_host_range(
+          backing_, (2 + i) * granularity_, 256));
+      const uint32_t source_index = (epoch + 2 * i) % backings.size();
+      for (uint32_t j = 0; j < 64; ++j) {
+        EXPECT_EQ(staging[(2 + i) * granularity_ / sizeof(uint32_t) + j],
+                  0x1000u + source_index * 0x1000u + 64 + j);
+      }
     }
   }
   IREE_ASSERT_OK(iree_hal_virtual_buffer_detach(root, scope_));
