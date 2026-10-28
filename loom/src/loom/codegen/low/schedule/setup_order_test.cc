@@ -389,10 +389,12 @@ class SetupOrderTest : public ::testing::Test {
 
   void Append(uint32_t producer, uint32_t consumer,
               loom_low_schedule_dependency_kind_t kind =
-                  LOOM_LOW_SCHEDULE_DEPENDENCY_SSA) {
+                  LOOM_LOW_SCHEDULE_DEPENDENCY_SSA,
+              int32_t minimum_issue_separation_cycles = 0) {
     const loom_low_schedule_dependency_t edge = {
         .producer_node = producer,
         .consumer_node = consumer,
+        .minimum_issue_separation_cycles = minimum_issue_separation_cycles,
         .producer_attachment_index = LOOM_LOW_ID_NONE,
         .consumer_attachment_index = LOOM_LOW_ID_NONE,
         .producer_event_id = LOOM_LOW_TIMING_EVENT_NONE,
@@ -666,6 +668,23 @@ TEST_F(SetupOrderTest, OrdersSharedCompletionAfterItsPrerequisites) {
   EXPECT_EQ(state_.setup_order.entry_nodes[3], 1u);
 }
 
+TEST_F(SetupOrderTest, ComposedSetupSharesItsTerminalConsumer) {
+  Initialize({5});
+  for (uint32_t i = 0; i < 3; ++i) {
+    nodes_[i].flags = LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP;
+  }
+  Append(0, 2);
+  Append(1, 2);
+  Append(2, 4);
+  Append(3, 4);
+
+  ExpectAddedOrder({{0, 1}, {3, 0}});
+  for (uint32_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(state_.setup_order.completion_nodes[i], 4u);
+  }
+  EXPECT_EQ(state_.setup_order.entry_nodes[4], 0u);
+}
+
 TEST_F(SetupOrderTest, NonValueSuccessorsDoNotCompleteSetup) {
   for (auto kind :
        {LOOM_LOW_SCHEDULE_DEPENDENCY_EFFECT, LOOM_LOW_SCHEDULE_DEPENDENCY_STATE,
@@ -769,6 +788,33 @@ TEST_F(SetupOrderTest, SourceBoundaryDoesNotAcquireAnEarlierSetupChain) {
 
   ExpectAddedOrder({});
   EXPECT_EQ(state_.setup_order.completion_nodes[1], 1u);
+}
+
+TEST_F(SetupOrderTest, RepeatedValueEdgesRetainTimingThroughRepair) {
+  Initialize({4});
+  options_.flags = LOOM_LOW_SCHEDULE_FLAG_REPAIR_PRIVATE_SETUP;
+  nodes_[0].flags = LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP;
+  nodes_[3].flags = LOOM_LOW_SCHEDULE_NODE_FLAG_SOURCE_ORDER_BOUNDARY;
+  Append(0, 2, LOOM_LOW_SCHEDULE_DEPENDENCY_SSA, 3);
+  Append(0, 2, LOOM_LOW_SCHEDULE_DEPENDENCY_SSA, 5);
+  Append(1, 2, LOOM_LOW_SCHEDULE_DEPENDENCY_SSA, 7);
+  Append(0, 3, LOOM_LOW_SCHEDULE_DEPENDENCY_ORDER);
+  Append(1, 3, LOOM_LOW_SCHEDULE_DEPENDENCY_ORDER);
+  Append(2, 3, LOOM_LOW_SCHEDULE_DEPENDENCY_ORDER);
+
+  // Repeated operands still have one consumer. The shared boundary permits
+  // delaying setup until its peer, without changing either input's timing.
+  ExpectAddedOrder({{1, 0}});
+  EXPECT_EQ(state_.setup_order.completion_nodes[0], 2u);
+  const int32_t separations[] = {3, 5, 7};
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(separations); ++i) {
+    const auto* edge =
+        loom_low_schedule_dependency_graph_at(&state_.dependencies, i);
+    EXPECT_EQ(edge->producer_node, i < 2 ? 0u : 1u);
+    EXPECT_EQ(edge->consumer_node, 2u);
+    EXPECT_EQ(edge->kind, LOOM_LOW_SCHEDULE_DEPENDENCY_SSA);
+    EXPECT_EQ(edge->minimum_issue_separation_cycles, separations[i]);
+  }
 }
 
 TEST_F(SetupOrderTest, ClosesIndependentChainsInEveryBlock) {
