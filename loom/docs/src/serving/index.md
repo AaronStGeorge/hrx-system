@@ -129,6 +129,34 @@ fields, duplicate keys or pool members, unknown devices, empty keys, and malform
 Keys use nonempty visible ASCII; numeric device selectors are rejected.
 The file describes one group, not another set of servers or model lifecycles.
 
+An optional `placement` object selects the backing domain independently of the
+`devices` access list:
+
+```json
+"weights": {
+  "devices": ["gpu"],
+  "placement": {"device": "gpu"},
+  "pool_backing": "elastic"
+}
+```
+
+`{"device":"gpu"}` requires that named device's physical allocation domain.
+`{"host_numa":0}` requires initial allocation on OS NUMA node 0. The object
+contains exactly one selector. Omitting it retains automatic HAL placement.
+The same choice applies to fixed storage and elastic physical slabs, including
+slabs acquired after trimming or model reactivation. Unsupported placement or
+access fails pool creation; it never silently selects another domain. A device
+used only as a backing owner may be outside the pool's consumer list, but must
+be declared in the group. Device selectors require a single physical owner;
+host NUMA placement requires the backend to support the requested OS node.
+
+Placement selects the native allocation domain, not permanent physical
+residency against OS eviction. On Linux APUs, reserved GPU memory is available
+only when KFD admits that allocation route. CPU mapping, cache transitions,
+atomic access, and sharing remain separate contracts qualified for the complete
+consumer set. In particular, host-visible GPU memory does not imply CPU-cached
+memory or direct file-I/O support.
+
 One pool can list several devices, such as `"devices": ["gpu", "npu"]`. The HAL
 qualifies storage access for the complete consumer set during startup; an
 unsupported combination fails before loading model payloads. Models selecting

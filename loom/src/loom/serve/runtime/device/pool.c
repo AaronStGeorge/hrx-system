@@ -24,10 +24,61 @@ struct loom_serve_pool_t {
   loom_serve_residency_cache_t* residency_cache;
 };
 
+static iree_status_t loom_serve_pool_resolve_placement(
+    iree_hal_device_group_t* group, loom_serve_pool_placement_t requested,
+    iree_hal_pool_placement_t* out_placement) {
+  *out_placement = (iree_hal_pool_placement_t){0};
+  if (requested.kind == LOOM_SERVE_POOL_PLACEMENT_AUTOMATIC) {
+    return iree_ok_status();
+  }
+  if ((uint32_t)requested.kind > LOOM_SERVE_POOL_PLACEMENT_HOST_NUMA ||
+      (requested.kind == LOOM_SERVE_POOL_PLACEMENT_DEVICE &&
+       requested.ordinal >= iree_hal_device_group_device_count(group))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pool placement is outside the device group");
+  }
+  const iree_hal_topology_t* topology = iree_hal_device_group_topology(group);
+  uint32_t match_count = 0;
+  uint32_t selected_node = IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID;
+  for (uint32_t i = 0; i < iree_hal_topology_node_count(topology); ++i) {
+    const iree_hal_topology_node_t* node =
+        iree_hal_topology_node_at(topology, i);
+    const bool matches =
+        requested.kind == LOOM_SERVE_POOL_PLACEMENT_DEVICE
+            ? node->kind == IREE_HAL_TOPOLOGY_NODE_KIND_PHYSICAL_DEVICE &&
+                  node->device_ordinal == requested.ordinal
+            : node->kind == IREE_HAL_TOPOLOGY_NODE_KIND_HOST_NUMA &&
+                  node->local_ordinal == requested.ordinal;
+    if (matches) {
+      ++match_count;
+      selected_node = node->ordinal;
+    }
+  }
+  if (!match_count) {
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
+                            "pool placement %s %u is absent from the topology",
+                            requested.kind == LOOM_SERVE_POOL_PLACEMENT_DEVICE
+                                ? "device"
+                                : "host NUMA node",
+                            requested.ordinal);
+  }
+  if (match_count > 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pool placement names more than one physical "
+                            "domain; select a device with one physical owner");
+  }
+  *out_placement = (iree_hal_pool_placement_t){
+      .mode = IREE_HAL_POOL_PLACEMENT_REQUIRED,
+      .node = selected_node,
+  };
+  return iree_ok_status();
+}
+
 static iree_status_t loom_serve_pool_initialize_elastic(
     loom_serve_pool_t* pool, iree_hal_device_group_t* group,
     iree_hal_pool_scope_t scope, iree_hal_queue_t* allocation_queue,
-    const loom_serve_pool_options_t* options) {
+    const loom_serve_pool_options_t* options,
+    iree_hal_pool_placement_t placement) {
   iree_hal_pool_family_access_t* source_families = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_clone(
       pool->host_allocator,
@@ -41,6 +92,7 @@ static iree_status_t loom_serve_pool_initialize_elastic(
   iree_hal_pool_scope_t source_scope = scope;
   source_scope.families = source_families;
   const iree_hal_slab_pool_options_t source_options = {
+      .placement = placement,
       .trace_name = IREE_SVL("loom-serve-elastic-backing"),
   };
   iree_hal_pool_t* source_pool = NULL;
@@ -101,11 +153,15 @@ iree_status_t loom_serve_pool_allocate(iree_hal_device_group_t* group,
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "address-sanitized pools require fixed backing");
   }
+  iree_hal_pool_placement_t placement;
+  IREE_RETURN_IF_ERROR(
+      loom_serve_pool_resolve_placement(group, options->placement, &placement));
   loom_serve_pool_t* pool = NULL;
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(host_allocator, sizeof(*pool), (void**)&pool));
   pool->host_allocator = host_allocator;
   const iree_hal_slab_pool_options_t storage_options = {
+      .placement = placement,
       .trace_name = IREE_SVL("loom-serve-storage-backing"),
   };
   iree_status_t status = iree_hal_slab_pool_create(
@@ -113,8 +169,8 @@ iree_status_t loom_serve_pool_allocate(iree_hal_device_group_t* group,
   if (iree_status_is_ok(status)) {
     status =
         options->elastic
-            ? loom_serve_pool_initialize_elastic(pool, group, scope,
-                                                 allocation_queue, options)
+            ? loom_serve_pool_initialize_elastic(
+                  pool, group, scope, allocation_queue, options, placement)
             : loom_serve_workspace_create(group, pool->storage, &options->asan,
                                           host_allocator, &pool->workspace);
   }

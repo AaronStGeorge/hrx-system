@@ -138,6 +138,38 @@ TEST_P(CpuDeviceTest, PoolIdentityAndMembershipAreIndependentOfDevices) {
   EXPECT_NE(loom_serve_device_group_pool_at(group_, 0), pool);
 }
 
+TEST_P(CpuDeviceTest, RequiredPlacementCannotFallBackToUnplacedHostAllocation) {
+  const loom_serve_device_options_t options = {
+      .driver = loom_serve_host_task_driver(host_),
+      .uri = IREE_SV("task"),
+  };
+  IREE_ASSERT_OK(loom_serve_device_group_allocate(
+      host_, 1, &options, iree_allocator_system(), &group_));
+  loom_serve_pool_options_t pool_options = {};
+  loom_serve_pool_t* pool = nullptr;
+  pool_options.placement = {LOOM_SERVE_POOL_PLACEMENT_DEVICE, 1};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_serve_device_group_create_pool(group_, {IREE_SV("outside"), 1},
+                                          &pool_options, &pool));
+  pool_options.placement.ordinal = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      loom_serve_device_group_create_pool(group_, {IREE_SV("required"), 1},
+                                          &pool_options, &pool));
+  pool_options.placement = {LOOM_SERVE_POOL_PLACEMENT_HOST_NUMA, UINT32_MAX};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      loom_serve_device_group_create_pool(group_, {IREE_SV("missing-node"), 1},
+                                          &pool_options, &pool));
+  EXPECT_EQ(pool, nullptr);
+  EXPECT_EQ(loom_serve_device_group_pool_count(group_), 0u);
+  pool_options.placement = {};
+  IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+      group_, {IREE_SV("automatic"), 1}, &pool_options, &pool));
+  EXPECT_NE(pool, nullptr);
+}
+
 INSTANTIATE_TEST_SUITE_P(Workers, CpuDeviceTest, ::testing::Values(1, 4));
 
 }  // namespace
