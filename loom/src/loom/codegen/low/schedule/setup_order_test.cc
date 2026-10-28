@@ -500,6 +500,7 @@ TEST_F(SetupOrderTest, PrivatePlacementRetainsOnlyItsNearestLocalCall) {
 TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
   enum SourceKind {
     kComputed,
+    kCrossBank,
     kConstant,
     kObservable,
     kNotRematerializable,
@@ -524,17 +525,21 @@ TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
       {kComputed, false, false, kSource, kSource | kResult},
       {kComputed, true, false, kResult, kSource | kResult},
       {kComputed, false, false, kResult, kResult},
+      {kCrossBank, true, false, 0, 0},
+      {kCrossBank, true, false, kSource, kSource | kResult},
+      {kCrossBank, true, false, kResult, kResult},
       {kNotRematerializable, true, false, kResult, kResult},
       {kObservable, true, false, kResult, kResult},
       {kOtherBlock, true, false, kResult, kResult},
       {kConstant, false, true, kSource, 0},
       {kConstant, true, true, kSource, kSource},
       {kConstant, true, true, kResult, kResult},
+      {kConstant, true, true, kSource | kResult, kSource | kResult},
       {kConstant, true, false, kSource, kSource | kResult},
   };
-  const loom_low_reg_class_t reg_class = {
-      .alloc_unit_bits = 32,
-      .allocatable_count = 8,
+  const loom_low_reg_class_t reg_classes[] = {
+      {.alloc_unit_bits = 32, .allocatable_count = 8},
+      {.alloc_unit_bits = 256, .allocatable_count = 8},
   };
   loom_segmented_storage_t relations;
   loom_segmented_storage_initialize(
@@ -558,6 +563,7 @@ TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
                  << " rematerializable=" << test_case.result_rematerializable
                  << " retained=" << test_case.retained);
     const bool constant = test_case.source_kind == kConstant;
+    const bool cross_bank = test_case.source_kind == kCrossBank;
     const uint16_t source_operand_count = constant ? 0 : 1;
     const uint16_t result_operand_count = constant ? 1 : 2;
     const loom_low_descriptor_t descriptors[] = {
@@ -580,7 +586,10 @@ TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
                      LOOM_LOW_OPERAND_FLAG_STORAGE_CONTINUATION,
             .unit_count = 1,
         },
-        {.role = LOOM_LOW_OPERAND_ROLE_OPERAND, .unit_count = 1},
+        {
+            .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
+            .unit_count = uint16_t(cross_bank ? 4 : 1),
+        },
         {
             .source_value_index = uint16_t(result_operand_count - 1),
             .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
@@ -589,6 +598,7 @@ TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
                      LOOM_LOW_OPERAND_FLAG_STORAGE_CONTINUATION,
             .unit_count = 1,
         },
+        {.role = LOOM_LOW_OPERAND_ROLE_OPERAND, .unit_count = 1},
     };
     if (test_case.source_kind != kNotRematerializable) {
       operands[0].flags |= LOOM_LOW_OPERAND_FLAG_REMATERIALIZABLE;
@@ -596,7 +606,7 @@ TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
     if (test_case.result_rematerializable) {
       operands[1].flags |= LOOM_LOW_OPERAND_FLAG_REMATERIALIZABLE;
     }
-    uint16_t operand_indices[] = {0, 2, 1, uint16_t(constant ? 3 : 2), 3};
+    uint16_t operand_indices[] = {0, 2, 1, uint16_t(constant ? 3 : 4), 3};
     const loom_low_descriptor_layout_t layouts[] = {
         {
             .minimum_packet_operand_count = source_operand_count,
@@ -619,8 +629,8 @@ TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
         .operand_count = IREE_ARRAYSIZE(operands),
         .operand_indices = operand_indices,
         .operand_index_count = IREE_ARRAYSIZE(operand_indices),
-        .reg_classes = &reg_class,
-        .reg_class_count = 1,
+        .reg_classes = reg_classes,
+        .reg_class_count = IREE_ARRAYSIZE(reg_classes),
     };
     uint64_t placement_word = 0;
     uint64_t required_word = 0;
@@ -631,6 +641,12 @@ TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
     loom_low_schedule_value_record_t values[4] = {};
     for (auto& value : values) {
       value.unit_count = 1;
+    }
+    if (cross_bank) {
+      values[0].unit_count = 4;
+      values[0].register_class_id = 1;
+      values[0].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+      iree_bitmap_set(options.required_register_values, value_ids[0]);
     }
     for (uint32_t i = 0; i < 2; ++i) {
       if (test_case.retained & (1u << i)) {
