@@ -220,3 +220,61 @@ low.func.def target<test.low.core>(@target) @critical_alias_after_pending_produc
 block 0 order: 0, 1, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9, 21, 10, 11, 12, 13, 14, 15, 16, 17, 18, 22
 node 19 issue-cycle: 1
 node 20 issue-cycle: 2
+
+// ====
+
+// A copy with independent storage cannot expose a descriptor beyond a source
+// boundary. Finish unrelated ready work before preparing the copied operand.
+// RUN: emit low-schedule-query @setup_waits_for_consumer_range strategy=resource-stall order=*
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @setup_waits_for_consumer_range(%rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %copied = copy %rhs {detached = true} : reg<test.i32> -> reg<test.i32>
+  %ordinary = test.const.zero.i32
+  test.barrier
+  %result = test.add.i32 %copied, %rhs
+  return %ordinary, %result
+}
+
+// ----
+block 0 order: 1, 0, 2, 3, 4
+
+// ====
+
+// A later-range consumer stays blocked when an earlier producer leaves it
+// with one remaining dependency. Its copied operand still cannot unlock it.
+// RUN: emit low-schedule-query @incremental_unlock_waits_for_consumer_range strategy=resource-stall order=*
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @incremental_unlock_waits_for_consumer_range(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %copied = copy %lhs {detached = true} : reg<test.i32> -> reg<test.i32>
+  %prepared = test.add.i32 %lhs, %rhs
+  %ordinary = test.mul.i32 %prepared, %rhs
+  test.barrier
+  %result = test.add.i32 %copied, %prepared
+  return %ordinary, %result
+}
+
+// ----
+block 0 order: 1, 2, 0, 3, 4, 5
+
+// ====
+
+// Entering a later range publishes its remaining-producer relationships.
+// The copy can now expose its consumer before independent work.
+// RUN: emit low-schedule-query @setup_unlocks_admitted_consumer strategy=resource-stall order=*
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @setup_unlocks_admitted_consumer(%rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  test.barrier
+  %copied = copy %rhs {detached = true} : reg<test.i32> -> reg<test.i32>
+  %ordinary = test.const.zero.i32
+  %result = test.add.i32 %copied, %rhs
+  return %ordinary, %result
+}
+
+// ----
+block 0 order: 0, 1, 3, 2, 4

@@ -389,18 +389,6 @@ static iree_status_t loom_check_test_low_schedule_parse_option(
     options->flags |= LOOM_CHECK_TEST_SCHEDULE_OPTION_FLAG_HAS_PRESSURE_LIMIT;
     return iree_ok_status();
   }
-  if (iree_string_view_equal(name, IREE_SV("order-structural-setup"))) {
-    if (!iree_string_view_is_empty(value) ||
-        iree_any_bit_set(options->schedule_flags,
-                         LOOM_LOW_SCHEDULE_FLAG_ORDER_STRUCTURAL_SETUP)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low-schedule-query flag 'order-structural-setup' takes no value "
-          "and may appear only once");
-    }
-    options->schedule_flags |= LOOM_LOW_SCHEDULE_FLAG_ORDER_STRUCTURAL_SETUP;
-    return iree_ok_status();
-  }
   if (iree_string_view_equal(name, IREE_SV("repair-private-setup"))) {
     if (!iree_string_view_is_empty(value) ||
         iree_any_bit_set(options->schedule_flags,
