@@ -12,6 +12,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
+#include "loom/target/registers.h"
 
 namespace loom {
 namespace {
@@ -40,10 +41,13 @@ class LowAllocationCoalescingTest : public ::testing::Test {
     return module;
   }
 
-  loom_value_id_t DefineValue(loom_module_t* module) {
+  loom_value_id_t DefineValue(loom_module_t* module, uint32_t unit_count = 1) {
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
     IREE_CHECK_OK(loom_module_define_value(
-        module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &value_id));
+        module,
+        loom_low_register_type(/*descriptor_set_stable_id=*/17,
+                               /*register_class_id=*/0, unit_count),
+        &value_id));
     return value_id;
   }
 
@@ -98,7 +102,7 @@ loom_low_allocation_assignment_t Assignment(
 TEST_F(LowAllocationCoalescingTest, ConcatMayPrecedeItsSourceAssignments) {
   loom_module_t* module = AllocateModule();
   const loom_value_id_t value_ids[] = {DefineValue(module), DefineValue(module),
-                                       DefineValue(module)};
+                                       DefineValue(module, /*unit_count=*/2)};
   loom_module_value_ordinal_scratch_acquire(module);
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(value_ids); ++i) {
     loom_module_value_ordinal_scratch_set(module, value_ids[i], i);
@@ -276,6 +280,11 @@ TEST_F(LowAllocationCoalescingTest,
     SCOPED_TRACE(cause);
     const bool is_slice = cause == LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE;
     intervals[0].unit_count = is_slice ? 2 : 1;
+    IREE_EXPECT_OK(loom_module_set_value_type(
+        module, value_ids[0],
+        loom_low_register_type(/*descriptor_set_stable_id=*/17,
+                               /*register_class_id=*/0,
+                               intervals[0].unit_count)));
     relation.kind = is_slice ? LOOM_LOW_PLACEMENT_RELATION_SUBRANGE
                              : LOOM_LOW_PLACEMENT_RELATION_SAME_STORAGE;
     relation.cause = cause;
