@@ -1,39 +1,3 @@
-// An early result overlaps the old required input even when that input dies
-// at this instruction. Free the independent owner before creating the result.
-// RUN: emit low-schedule-query @required_early_write strategy=resource-stall test.i32=8 required-register-values=%held,%source,%result order=* scheduled-pressure=test.i32
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_early_write(%held: reg<test.i32 x4>, %source: reg<test.i32 x4>) -> (reg<test.i32 x4>, reg<test.i64 x4>) asm {
-  %result = test.early_clobber.v4i32 %source
-  %released = copy %held : reg<test.i32 x4> -> reg<test.i64 x4>
-  return %result, %released
-}
-
-// ----
-block 0 order: 1, 0, 2
-scheduled pressure test.i32: peak-live-units=8 peak-live-values=2
-
-// ====
-
-// The subtraction/cmov sequence still reads its original input after writing
-// the result. Release the independent GPR before starting that sequence.
-// RUN: emit low-schedule-query @required_late_read strategy=resource-stall x86.gpr32=2 required-register-values=%held,%source,%result order=* scheduled-pressure=x86.gpr32
-
-x86.target<avx2> @target
-
-low.func.def target<x86.avx2.core>(@target) @required_late_read(%held: reg<x86.gpr32>, %source: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.xmm>) asm {
-  %result = sub.if_uge.imm.gpr32 %source, 17
-  %released = copy %held : reg<x86.gpr32> -> reg<x86.xmm>
-  return %result, %released
-}
-
-// ----
-block 0 order: 1, 0, 2
-scheduled pressure x86.gpr32: peak-live-units=2 peak-live-values=2
-
-// ====
-
 // Required pressure is rebuilt at each block boundary. A value live through
 // both blocks occupies one unit throughout, leaving one temporary slot.
 // RUN: emit low-schedule-query @required_live_through strategy=resource-stall test.i32=2 required-register-values=%held,%first,%second,%third order=* scheduled-pressure=test.i32

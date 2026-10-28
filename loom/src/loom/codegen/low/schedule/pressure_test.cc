@@ -7,10 +7,189 @@
 #include "loom/codegen/low/schedule/pressure.h"
 
 #include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/schedule/completion_demand.h"
+#include "loom/codegen/low/schedule/dependencies.h"
+#include "loom/codegen/low/schedule/dependency_incoming.h"
+#include "loom/codegen/low/schedule/dependency_index.h"
+#include "loom/codegen/low/schedule/required_pressure.h"
 #include "loom/target/residency.h"
 
 namespace loom {
 namespace {
+
+class CandidatePressureTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(), &pool_);
+    iree_arena_initialize(&pool_, &arena_);
+  }
+
+  void TearDown() override {
+    iree_arena_deinitialize(&arena_);
+    iree_arena_block_pool_deinitialize(&pool_);
+  }
+
+  // Owns blocks backing the native dependency and completion indexes.
+  iree_arena_block_pool_t pool_;
+  // Scratch released after each candidate-scoring test.
+  iree_arena_allocator_t arena_;
+};
+
+TEST_F(CandidatePressureTest, RequiredOwnershipUsesRetainedInstructionPhases) {
+  const loom_low_reg_class_t reg_class = {
+      .alloc_unit_bits = 32,
+      .allocatable_count = 4,
+  };
+  const loom_low_descriptor_set_t descriptors = {
+      .reg_classes = &reg_class,
+      .reg_class_count = 1,
+  };
+  const loom_low_schedule_options_t options = {
+      .strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
+  };
+  const loom_low_descriptor_t descriptor = {
+      .operand_count = 3,
+      .result_count = 1,
+  };
+  loom_low_schedule_node_t node = {
+      .descriptor = &descriptor,
+      .scheduled_ordinal = LOOM_LOW_SCHEDULE_NODE_NONE,
+      .operand_count = 2,
+      .result_count = 1,
+      .value_ordinals = {.inline_value_ordinals = {0, 0, 1, 3}},
+  };
+  loom_low_schedule_dependency_graph_t graph;
+  loom_low_schedule_dependency_graph_initialize(&graph);
+  uint32_t indegree = 0;
+  loom_low_schedule_dependency_index_t dependencies;
+  loom_low_schedule_dependency_detail_index_t details;
+  IREE_ASSERT_OK(loom_low_schedule_dependency_index_initialize(
+      &graph, 1, &arena_, &arena_, &indegree, &dependencies, &details));
+  loom_low_schedule_dependency_incoming_index_t incoming;
+  IREE_ASSERT_OK(loom_low_schedule_dependency_incoming_index_initialize(
+      &dependencies, &node, &arena_, &incoming));
+  loom_low_schedule_completion_demand_t completions;
+  IREE_ASSERT_OK(loom_low_schedule_completion_demand_initialize(
+      &dependencies, &incoming, 1, &arena_, &completions));
+
+  // The candidate reads one two-unit owner twice and creates another. A
+  // separate two-unit owner stays live. Inputs and output cross the block
+  // boundary, so this one-node dependency index has no local edges.
+  loom_low_schedule_value_record_t values[] = {
+      {.live_unit_count = 2, .remaining_use_count = 2, .unit_count = 2},
+      {.remaining_use_count = 1, .unit_count = 2},
+      {.live_unit_count = 2, .remaining_use_count = 1, .unit_count = 2},
+  };
+  loom_value_id_t value_ids[] = {1, 2, 3};
+  const loom_local_value_domain_t value_domain = {
+      .value_ids = value_ids,
+      .value_count = IREE_ARRAYSIZE(values),
+  };
+  loom_low_schedule_completion_domain_t domain = {.capacity = 4};
+  uint16_t domain_id = 0;
+  uint32_t activation_units = 0;
+  loom_low_schedule_build_state_t state = {
+      .options = &options,
+      .scratch_arena = &arena_,
+      .target = {.descriptor_set = &descriptors},
+      .value_domain = &value_domain,
+      .values = values,
+      .nodes = &node,
+      .dependency_index = dependencies,
+      .node_unspillable_activation_units = &activation_units,
+      .pressure_limits =
+          {
+              .unspillable_completion_domains = &domain,
+              .unspillable_completion_domain_ids_by_reg_class = &domain_id,
+              .unspillable_completion_domain_count = 1,
+          },
+  };
+  uint64_t live_units = 4;
+  loom_low_schedule_required_pressure_t required = {};
+  uint32_t reserve_units = 0;
+  uint16_t operand_use_counts[3] = {};
+  uint32_t scratch_counts[3] = {};
+  loom_value_ordinal_t operand_ordinals[3] = {};
+  int64_t delta_units = 0;
+  uint64_t early_units = 0;
+  uint64_t late_units = 0;
+  uint32_t candidate_activation_units = 0;
+  uint8_t touched = 0;
+  uint16_t touched_class = 0;
+  loom_low_schedule_pressure_state_t pressure = {
+      .current_live_units_by_reg_class = &live_units,
+      .required_pressure = &required,
+      .packing_reserve_units_by_reg_class = &reserve_units,
+      .candidate_operand_use_counts = operand_use_counts,
+      .candidate_scratch_counts = scratch_counts,
+      .candidate_operand_ordinals = operand_ordinals,
+      .candidate_delta_units_by_reg_class = &delta_units,
+      .candidate_lifetime =
+          {
+              .early_added_units = &early_units,
+              .late_released_units = &late_units,
+          },
+      .candidate_unspillable_activation_units = &candidate_activation_units,
+      .unspillable_completion_demand = completions,
+      .candidate_delta_touched_flags = &touched,
+      .candidate_delta_touched_reg_class_ids = &touched_class,
+      .current_live_units = 4,
+  };
+  IREE_ASSERT_OK(loom_low_schedule_pressure_initialize_unlock_summaries(
+      &state, 1, &pressure));
+  const loom_low_schedule_ready_policy_t ready = {};
+  const struct {
+    // Result storage overlaps inputs before their reads.
+    bool early_write;
+    // Source storage remains live through result writes.
+    bool late_read;
+  } phases[] = {{false, false}, {true, false}, {false, false},
+                {false, true},  {true, true},  {false, false}};
+  for (bool requires_register : {false, true}) {
+    required.live_units = requires_register ? 4 : 0;
+    for (const auto& phase : phases) {
+      SCOPED_TRACE(::testing::Message() << "required=" << requires_register
+                                        << " early=" << phase.early_write
+                                        << " late=" << phase.late_read);
+      node.flags = phase.late_read ? LOOM_LOW_SCHEDULE_NODE_FLAG_LATE_READS : 0;
+      if (phase.early_write) {
+        node.flags |= LOOM_LOW_SCHEDULE_NODE_FLAG_EARLY_CLOBBER;
+      }
+      const loom_low_schedule_value_flags_t ownership =
+          requires_register ? LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER
+                            : 0;
+      values[0].flags = ownership | LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
+      values[1].flags =
+          ownership |
+          (phase.early_write ? LOOM_LOW_SCHEDULE_VALUE_FLAG_EARLY_WRITE : 0);
+      values[2].flags = ownership | LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
+      loom_low_schedule_register_debt_word_t debt = {};
+      loom_low_schedule_candidate_score_t score = {};
+      loom_low_schedule_pressure_score_candidate(&state, &pressure, &ready,
+                                                 &indegree, 0, &debt, &score);
+      EXPECT_EQ(score.projected_live_units, 4u);
+      EXPECT_EQ(score.killed_live_units, 2u);
+      EXPECT_EQ(score.produced_live_units, 2u);
+      EXPECT_EQ(required.candidate_delta_units, 0);
+      EXPECT_EQ(required.candidate_write_delta_units,
+                requires_register && phase.late_read ? 2 : 0);
+      EXPECT_EQ(required.candidate_early_added_units,
+                requires_register && phase.early_write ? 2u : 0u);
+      EXPECT_EQ(
+          iree_any_bit_set(
+              score.flags,
+              LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY),
+          requires_register && (phase.early_write || phase.late_read));
+      EXPECT_EQ(required.live_units, requires_register ? 4u : 0u);
+      EXPECT_EQ(pressure.current_live_units, 4u);
+      EXPECT_EQ(pressure.candidate_operand_count, 0u);
+      EXPECT_EQ(values[0].remaining_use_count, 2u);
+      EXPECT_EQ(values[0].flags, ownership | LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE);
+      EXPECT_EQ(operand_use_counts[0], 0u);
+    }
+  }
+}
 
 TEST(PressureTest, SourceCliffFloorRetainsReadWriteHighWater) {
   const loom_low_reg_class_t reg_class = {.alloc_unit_bits = 32};

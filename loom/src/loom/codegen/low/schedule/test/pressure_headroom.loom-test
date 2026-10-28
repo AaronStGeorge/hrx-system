@@ -106,3 +106,19 @@ low.func.def target<test.low.core>(@target) @unchanged_packing_headroom(%held: r
 node 1 issue-cycle: 0
 node 5 issue-cycle: 2
 node 2 issue-cycle: 4
+
+// ====
+
+// The subtraction/cmov sequence still reads its original input after writing
+// the result. With all sixteen GPRs live, that temporary overlap exceeds the
+// physical bank even though the final live demand remains sixteen units.
+// RUN: emit low-schedule-json @late_read_overlap strategy=resource-stall diagnostics=candidates output=none
+
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) @late_read_overlap(%held: reg<x86.gpr32 x15>, %source: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.xmm x15>) asm {
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_packet="x86.scalar.sub.if_uge.imm.gpr32", chosen_projected_live_units="16", chosen_pressure_cliff_source="x86.gpr32", chosen_pressure_cliff_units="16", chosen_pressure_cliff_penalty="2"}
+  %result = sub.if_uge.imm.gpr32 %source, 17
+  %released = copy %held : reg<x86.gpr32 x15> -> reg<x86.xmm x15>
+  return %result, %released
+}
