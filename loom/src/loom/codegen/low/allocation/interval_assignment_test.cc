@@ -766,25 +766,28 @@ TEST_F(LowAllocationIntervalAssignmentTest,
 }
 
 // Four required owners occupy the low window before a fifth required value
-// arrives. The earlier fixed interval distinguishes current availability from
-// availability over a moved owner's complete lifetime.
+// arrives. Earlier fixed and ordinary intervals distinguish current
+// availability from availability over a moved owner's complete lifetime.
 class LowRequiredRegisterRelocationTest
     : public LowAllocationIntervalAssignmentTest {
  protected:
   void Run() {
     loom_module_t* module = module_;
     constexpr uint64_t kDescriptorSetId = 29;
-    constexpr uint32_t kValueCount = 6;
-    loom_value_id_t values[kValueCount];
-    uint32_t interval_indices[kValueCount];
-    loom_liveness_interval_t intervals[kValueCount] = {};
-    loom_low_allocation_unit_liveness_value_t unit_values[kValueCount] = {};
-    uint32_t starts[kValueCount] = {0, 1, 2, 3, 4, 6};
-    uint32_t ends[kValueCount] = {prior_end_, 12, 12, 12, 12, 12};
+    const uint32_t value_count = include_expired_owner_ ? 7 : 6;
+    const uint32_t incoming_ordinal = value_count - 1;
+    loom_value_id_t values[7];
+    uint32_t interval_indices[7];
+    loom_liveness_interval_t intervals[7] = {};
+    loom_low_allocation_unit_liveness_value_t unit_values[7] = {};
+    uint32_t starts[7] = {0, 1, 2, 3, 4, 5, 6};
+    uint32_t ends[7] = {prior_end_, 12, 12, 12, 12, 6, 12};
+    starts[incoming_ordinal] = 6;
+    ends[incoming_ordinal] = 12;
     uint64_t required_bits = 0;
     loom_module_value_ordinal_scratch_acquire(module);
-    for (uint32_t i = 0; i < kValueCount; ++i) {
-      const uint16_t class_id = alias_class_ && i == 5 ? 1 : 0;
+    for (uint32_t i = 0; i < value_count; ++i) {
+      const uint16_t class_id = alias_class_ && i == incoming_ordinal ? 1 : 0;
       IREE_ASSERT_OK(loom_module_define_value(
           module, loom_low_register_type(kDescriptorSetId, class_id, 1),
           &values[i]));
@@ -808,14 +811,14 @@ class LowRequiredRegisterRelocationTest
     loom_local_value_domain_t value_domain = {
         .module = module,
         .value_ids = values,
-        .value_count = kValueCount,
+        .value_count = value_count,
         .flags = LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED,
     };
     loom_liveness_analysis_t liveness = {
         .intervals = intervals,
-        .interval_count = kValueCount,
+        .interval_count = value_count,
         .value_ids = values,
-        .value_count = kValueCount,
+        .value_count = value_count,
         .value_interval_indices = interval_indices,
     };
     uint64_t incomplete_storage = 0;
@@ -823,13 +826,13 @@ class LowRequiredRegisterRelocationTest
         .values = unit_values,
         .start_points = starts,
         .end_points = ends,
-        .point_count = kValueCount,
-        .values_with_incomplete_storage_segments = {kValueCount,
+        .point_count = value_count,
+        .values_with_incomplete_storage_segments = {value_count,
                                                     &incomplete_storage},
     };
-    loom_low_placement_relation_range_t ranges[kValueCount] = {};
-    loom_low_placement_operand_constraints_t operands[kValueCount] = {};
-    operands[5].addressable_unit_count = 4;
+    loom_low_placement_relation_range_t ranges[7] = {};
+    loom_low_placement_operand_constraints_t operands[7] = {};
+    operands[incoming_ordinal].addressable_unit_count = 4;
     if (constrain_blockers_) {
       for (uint32_t i = 1; i < 5; ++i) {
         operands[i].addressable_unit_count = 4;
@@ -838,7 +841,7 @@ class LowRequiredRegisterRelocationTest
     loom_low_placement_table_t placement = {
         .module = module,
         .value_ids = values,
-        .value_count = kValueCount,
+        .value_count = value_count,
         .ranges_by_result_ordinal = ranges,
         .ranges_by_source_ordinal = ranges,
         .operand_constraints_by_interval = operands,
@@ -921,9 +924,9 @@ class LowRequiredRegisterRelocationTest
         &context, &decision_arena_, &result));
     error_count_ = constraints.error_count;
     if (!error_count_) {
-      ASSERT_EQ(result.assignment_count, kValueCount);
+      ASSERT_EQ(result.assignment_count, value_count);
       EXPECT_EQ(result.spill_count, 0u);
-      for (uint32_t i = 0; i < kValueCount; ++i) {
+      for (uint32_t i = 0; i < value_count; ++i) {
         assignments_[i] =
             result.assignments[result.assignment_indices_by_value_ordinal[i]];
       }
@@ -933,8 +936,9 @@ class LowRequiredRegisterRelocationTest
 
   void CheckMoved(uint32_t destination) {
     ASSERT_EQ(error_count_, 0u);
-    ASSERT_LT(assignments_[5].location_base, 4u);
-    uint64_t occupied = UINT64_C(1) << assignments_[5].location_base;
+    const auto& incoming = assignments_[include_expired_owner_ ? 6 : 5];
+    ASSERT_LT(incoming.location_base, 4u);
+    uint64_t occupied = UINT64_C(1) << incoming.location_base;
     uint32_t moved = 0;
     for (uint32_t i = 1; i < 5; ++i) {
       const auto& assignment = assignments_[i];
@@ -957,6 +961,9 @@ class LowRequiredRegisterRelocationTest
   uint16_t capacity_ = 5;
   // End point of the earlier value fixed above the low window.
   uint32_t prior_end_ = 1;
+  // Adds an ordinary owner of register 4 that expires when the incoming value
+  // starts.
+  bool include_expired_owner_ = false;
   // Whether each blocking owner also has a low-window instruction constraint.
   bool constrain_blockers_ = false;
   // Whether immutable fixed-location claims protect all blocking owners.
@@ -966,7 +973,7 @@ class LowRequiredRegisterRelocationTest
   // Placement errors reported by the production assignment attempt.
   uint32_t error_count_ = 0;
   // Copies of completed assignments indexed by the fixture's value ordinal.
-  loom_low_allocation_assignment_t assignments_[6] = {};
+  loom_low_allocation_assignment_t assignments_[7] = {};
 };
 
 TEST_F(LowRequiredRegisterRelocationTest, MovesAboveInstructionWindow) {
@@ -974,11 +981,25 @@ TEST_F(LowRequiredRegisterRelocationTest, MovesAboveInstructionWindow) {
   CheckMoved(4);
 }
 
-TEST_F(LowRequiredRegisterRelocationTest, ChecksExpiredAssignments) {
+TEST_F(LowRequiredRegisterRelocationTest, ChecksExpiredFixedAssignments) {
   capacity_ = 6;
   prior_end_ = 5;
   Run();
   CheckMoved(5);
+}
+
+TEST_F(LowRequiredRegisterRelocationTest, ChecksExpiredOrdinaryAssignments) {
+  capacity_ = 6;
+  include_expired_owner_ = true;
+  Run();
+  CheckMoved(5);
+  EXPECT_EQ(assignments_[5].location_base, 4u);
+}
+
+TEST_F(LowRequiredRegisterRelocationTest, RejectsExpiredOrdinaryInterference) {
+  include_expired_owner_ = true;
+  Run();
+  EXPECT_NE(error_count_, 0u);
 }
 
 TEST_F(LowRequiredRegisterRelocationTest, RejectsEarlierInterference) {
