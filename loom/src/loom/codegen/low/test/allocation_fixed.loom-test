@@ -1,21 +1,3 @@
-// Fixing any member constrains the complete required storage chain.
-// RUN: emit low-allocation-query @fixed_tied_chain values=%seed,%first,%last fixed=%last:target_id:6:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @fixed_tied_chain(%seed: reg<test.i32>) -> (reg<test.i32>) asm {
-  %first = test.tied.any %seed
-  %last = test.tied.any %first
-  return %last
-}
-
-// ----
-value %seed: test.i32 -> target_id[6:1]
-value %first: test.i32 -> target_id[6:1]
-value %last: test.i32 -> target_id[6:1]
-
-// ====
-
 // An offset slice may share fixed storage with its wider source and a tie.
 // RUN: emit low-allocation-query @fixed_offset_slice values=%wide,%middle,%last fixed=%wide:target_id:4:4 fixed=%last:target_id:6:1
 
@@ -69,50 +51,6 @@ value %left: test.i32 -> target_id[4:2]
 value %right: test.i32 -> target_id[6:2]
 value %packed: test.i32 -> target_id[4:4]
 value %last: test.i32 -> target_id[4:4]
-
-// ====
-
-// Distinct fixed locations cannot split a required chain, even transitively.
-// RUN: emit low-allocation-query @conflicting_fixed_chain fixed=%seed:target_id:6:1 fixed=%last:target_id:7:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @conflicting_fixed_chain(%seed: reg<test.i32>) -> (reg<test.i32>) asm {
-  %first = test.tied.any %seed
-  // ERROR@+1: BACKEND/049 {first_value_name="seed", first_location_base="6", second_value_name="last", second_location_base="7"}
-  %last = test.tied.any %first
-  return %last
-}
-
-// ====
-
-// Binding diagnostics preserve request order even when the origin is last.
-// RUN: emit low-allocation-query @conflicting_origin_last fixed=%last:target_id:6:1 fixed=%first:target_id:6:1 fixed=%seed:target_id:7:1
-
-test.target<low_core> @target
-
-// ERROR@+1: BACKEND/049 {first_value_name="last", first_location_base="6", second_value_name="seed", second_location_base="7"}
-low.func.def target<test.low.core>(@target) @conflicting_origin_last(%seed: reg<test.i32>) -> (reg<test.i32>) asm {
-  %first = test.tied.any %seed
-  %last = test.tied.any %first
-  return %last
-}
-
-// ====
-
-// Each conflicting member is compared against the first request, not the
-// required storage origin's later request.
-// RUN: emit low-allocation-query @conflicting_members fixed=%last:target_id:6:1 fixed=%seed:target_id:7:1 fixed=%first:target_id:8:1
-
-test.target<low_core> @target
-
-// ERROR@+1: BACKEND/049 {first_value_name="last", first_location_base="6", second_value_name="seed", second_location_base="7"}
-low.func.def target<test.low.core>(@target) @conflicting_members(%seed: reg<test.i32>) -> (reg<test.i32>) asm {
-  // ERROR@+1: BACKEND/049 {first_value_name="last", first_location_base="6", second_value_name="first", second_location_base="8"}
-  %first = test.tied.any %seed
-  %last = test.tied.any %first
-  return %last
-}
 
 // ====
 

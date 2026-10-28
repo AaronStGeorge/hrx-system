@@ -908,8 +908,11 @@ TEST_F(LowAllocationTargetConstraintsTest,
   loom_module_t* module = module_;
   // Placement retains one origin for the required chain 1 -> 2 -> 0,
   // independently of local value registration order. Exercise every nonempty
-  // subset and ordering of explicit bindings, including an inferred origin.
+  // subset and ordering of explicit bindings, including an inferred origin and
+  // conflicting requests after each matching prefix.
   constexpr uint32_t kValueCount = 3;
+  const iree_string_view_t names[] = {IREE_SV("last"), IREE_SV("seed"),
+                                      IREE_SV("first")};
   loom_value_id_t values[kValueCount];
   loom_liveness_interval_t intervals[kValueCount] = {};
   uint32_t interval_indices[] = {0, 1, 2};
@@ -930,6 +933,9 @@ TEST_F(LowAllocationTargetConstraintsTest,
         loom_low_register_type(target_.descriptor_set->stable_id, reg_class_id,
                                1),
         &values[i]));
+    loom_string_id_t name;
+    IREE_ASSERT_OK(loom_module_intern_string(module, names[i], &name));
+    IREE_ASSERT_OK(loom_module_set_value_name(module, values[i], name));
     loom_module_value_ordinal_scratch_set(module, values[i], i);
     intervals[i].value_id = values[i];
     intervals[i].value_class = value_class;
@@ -990,54 +996,84 @@ TEST_F(LowAllocationTargetConstraintsTest,
                            1});
         }
       }
-      loom_low_allocation_target_constraints_t constraints = {};
-      IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-          module, function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
-          &constraints));
-      IREE_ASSERT_OK(
-          loom_low_allocation_target_constraints_resolve_fixed_locations(
-              &constraints, &liveness, &domain,
-              placement.operand_constraints_by_interval,
-              placement.tied_storage_origins_by_value_ordinal, fixed.data(),
-              fixed.size(), &arena_));
-      if (constraints.error_count == 0) {
+      for (size_t matching_count = fixed.size(); matching_count > 0;
+           --matching_count) {
+        SCOPED_TRACE(::testing::Message()
+                     << "matching_count=" << matching_count);
+        for (size_t i = matching_count; i < fixed.size(); ++i) {
+          fixed[i].location_base = 7 + (uint32_t)(i - matching_count);
+        }
+        DiagnosticCapture capture = {};
+        loom_low_allocation_target_constraints_t constraints = {};
+        IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
+            module, function_op_, &target_, nullptr, 0, nullptr, 0,
+            {CaptureDiagnostic, &capture}, &arena_, &constraints));
         IREE_ASSERT_OK(
-            loom_low_allocation_target_constraints_finalize_fixed_values(
-                &constraints, &liveness, &unit_liveness, &arena_));
-      }
-      ASSERT_EQ(constraints.error_count, 0u);
-      EXPECT_EQ(constraints.fixed_value_count, kValueCount);
-      EXPECT_EQ(constraints.preassigned_fixed_value_count, kValueCount);
-      EXPECT_NE(constraints.fixed_index.subtree_tied_roots, nullptr);
-      for (size_t i = 0; i < fixed.size(); ++i) {
-        EXPECT_EQ(constraints.fixed_values[i].assignment.value_id,
-                  fixed[i].value_id);
-      }
-      for (auto value : values) {
-        const auto* binding =
-            loom_low_allocation_target_constraints_preassigned_fixed_value_for_value(
-                &constraints, value);
-        ASSERT_NE(binding, nullptr);
-        EXPECT_EQ(binding->assignment.value_id, value);
-        EXPECT_EQ(binding->tied_root_ordinal, 1u);
-        EXPECT_EQ(binding->assignment.location_base, 6u);
-        EXPECT_FALSE(
-            loom_low_allocation_target_constraints_fixed_storage_conflicts(
-                &constraints, &unit_liveness, &binding->assignment,
-                /*ignored_value_ids=*/nullptr, /*ignored_value_count=*/0));
-        // A temporary may overlap the component only after its owner is
-        // excluded. Every required alias releases the same reservation.
-        loom_low_allocation_assignment_t temporary = binding->assignment;
-        temporary.value_id = LOOM_VALUE_ID_INVALID;
-        temporary.start_point = 0;
-        temporary.end_point = 3;
-        temporary.unit_point_start = 3;
-        EXPECT_TRUE(
-            loom_low_allocation_target_constraints_fixed_storage_conflicts(
-                &constraints, &unit_liveness, &temporary, nullptr, 0));
-        EXPECT_FALSE(
-            loom_low_allocation_target_constraints_fixed_storage_conflicts(
-                &constraints, &unit_liveness, &temporary, &value, 1));
+            loom_low_allocation_target_constraints_resolve_fixed_locations(
+                &constraints, &liveness, &domain,
+                placement.operand_constraints_by_interval,
+                placement.tied_storage_origins_by_value_ordinal, fixed.data(),
+                fixed.size(), &arena_));
+        const size_t conflict_count = fixed.size() - matching_count;
+        EXPECT_EQ(constraints.error_count, conflict_count);
+        EXPECT_EQ(capture.count, conflict_count);
+        if (conflict_count != 0) {
+          EXPECT_EQ(capture.error, LOOM_ERR_BACKEND_049);
+          EXPECT_EQ(capture.op, function_op_);
+          EXPECT_EQ(constraints.fixed_value_count, fixed.size());
+          EXPECT_EQ(constraints.preassigned_fixed_value_count, fixed.size());
+          ASSERT_EQ(capture.parameters.size(), 8u);
+          EXPECT_TRUE(
+              iree_string_view_equal(capture.parameters[4].string,
+                                     names[loom_local_value_domain_ordinal(
+                                         &domain, fixed.front().value_id)]));
+          EXPECT_EQ(capture.parameters[5].u32, fixed.front().location_base);
+          EXPECT_TRUE(
+              iree_string_view_equal(capture.parameters[6].string,
+                                     names[loom_local_value_domain_ordinal(
+                                         &domain, fixed.back().value_id)]));
+          EXPECT_EQ(capture.parameters[7].u32, fixed.back().location_base);
+          continue;
+        }
+        if (constraints.error_count == 0) {
+          IREE_ASSERT_OK(
+              loom_low_allocation_target_constraints_finalize_fixed_values(
+                  &constraints, &liveness, &unit_liveness, &arena_));
+        }
+        ASSERT_EQ(constraints.error_count, 0u);
+        EXPECT_EQ(constraints.fixed_value_count, kValueCount);
+        EXPECT_EQ(constraints.preassigned_fixed_value_count, kValueCount);
+        EXPECT_NE(constraints.fixed_index.subtree_tied_roots, nullptr);
+        for (size_t i = 0; i < fixed.size(); ++i) {
+          EXPECT_EQ(constraints.fixed_values[i].assignment.value_id,
+                    fixed[i].value_id);
+        }
+        for (auto value : values) {
+          const auto* binding =
+              loom_low_allocation_target_constraints_preassigned_fixed_value_for_value(
+                  &constraints, value);
+          ASSERT_NE(binding, nullptr);
+          EXPECT_EQ(binding->assignment.value_id, value);
+          EXPECT_EQ(binding->tied_root_ordinal, 1u);
+          EXPECT_EQ(binding->assignment.location_base, 6u);
+          EXPECT_FALSE(
+              loom_low_allocation_target_constraints_fixed_storage_conflicts(
+                  &constraints, &unit_liveness, &binding->assignment,
+                  /*ignored_value_ids=*/nullptr, /*ignored_value_count=*/0));
+          // A temporary may overlap the component only after its owner is
+          // excluded. Every required alias releases the same reservation.
+          loom_low_allocation_assignment_t temporary = binding->assignment;
+          temporary.value_id = LOOM_VALUE_ID_INVALID;
+          temporary.start_point = 0;
+          temporary.end_point = 3;
+          temporary.unit_point_start = 3;
+          EXPECT_TRUE(
+              loom_low_allocation_target_constraints_fixed_storage_conflicts(
+                  &constraints, &unit_liveness, &temporary, nullptr, 0));
+          EXPECT_FALSE(
+              loom_low_allocation_target_constraints_fixed_storage_conflicts(
+                  &constraints, &unit_liveness, &temporary, &value, 1));
+        }
       }
     } while (std::next_permutation(std::begin(order), std::end(order)));
   }
