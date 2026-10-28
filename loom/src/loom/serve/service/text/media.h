@@ -59,7 +59,7 @@ typedef enum loom_serve_text_media_marker_field_e {
 // Source prepare-input result fields. Records are ordered like the input marker
 // plan and map each image occurrence to its exact logical model-input rows.
 typedef enum loom_serve_text_media_span_field_e {
-  LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_IMAGE_INDEX = 0,
+  LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_PROJECTION_INDEX = 0,
   LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_OFFSET = 1,
   LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_COUNT = 2,
   LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_COUNT = 3,
@@ -79,27 +79,35 @@ typedef struct loom_serve_text_chat_image_t {
   uint32_t content_ordinal;
   // Decoded text bytes preceding this occurrence within the message.
   uint32_t text_offset;
+  // Exact compressed identity and codec/display geometry.
+  loom_serve_media_image_info_t info;
+} loom_serve_text_chat_image_t;
+
+// One checked source projection, independent of inspected input storage and
+// of the finite result that will eventually supply its device features.
+typedef struct loom_serve_text_media_projection_t {
+  // Inspected input in the owning request's images array.
+  uint32_t image_index;
   // Global byte offset of the source-rendered image marker in the prompt.
   uint32_t marker_offset;
   // Nonzero byte length of the source-rendered image marker.
   uint32_t marker_length;
   // Number of projected rows replacing this marker in model input.
   uint32_t feature_count;
-  // Byte offset of source-private preprocessing metadata in images.metadata.
+  // Byte offset of source-private preprocessing metadata in
+  // projections.metadata.
   uint32_t metadata_offset;
   // Byte length of source-private preprocessing metadata.
   uint32_t metadata_length;
   // Digest of the exact source-private preprocessing metadata.
   loom_serve_media_digest_t metadata_digest;
-  // Exact compressed identity and codec/display geometry.
-  loom_serve_media_image_info_t info;
-} loom_serve_text_chat_image_t;
+} loom_serve_text_media_projection_t;
 
-// One checked image range in source-tokenized model input. Ranges are sorted,
-// nonoverlapping and refer to image occurrences in the owning chat request.
+// One checked projection range in source-tokenized model input. Ranges are
+// sorted, nonoverlapping, and refer to the owning request's source projections.
 typedef struct loom_serve_text_media_span_t {
-  // Request image occurrence supplying projected features.
-  uint32_t image_index;
+  // Source projection supplying these features.
+  uint32_t projection_index;
   // First logical model-input row replaced by projected features.
   uint32_t input_offset;
   // Number of contiguous projected feature rows.
@@ -113,15 +121,16 @@ typedef struct loom_serve_text_media_span_t {
 typedef struct loom_serve_text_chat_media_identity_t {
   // Owned immutable packed identity storage.
   iree_vm_buffer_t* storage;
-  // Number of ordered image occurrences in storage.
+  // Number of ordered projections in storage.
   iree_host_size_t count;
 } loom_serve_text_chat_media_identity_t;
 
 typedef struct loom_serve_text_chat_t loom_serve_text_chat_t;
 
 // Validates one source-returned message plan and commits its exact marker and
-// metadata semantics to the already inspected image occurrences. No prompt
-// bytes are scanned. The caller appends the matching fragment only on success.
+// metadata semantics as projections of the inspected image occurrences. No
+// prompt bytes are scanned. The caller appends the matching fragment only on
+// success.
 iree_status_t loom_serve_text_media_apply_message_plan(
     loom_serve_text_chat_t* chat, iree_host_size_t first_image,
     iree_host_size_t prompt_offset, iree_host_size_t fragment_length,
@@ -137,12 +146,12 @@ iree_status_t loom_serve_text_media_build_input_plan(
     iree_allocator_t host_allocator, iree_vm_buffer_t** out_plan,
     iree_host_size_t* out_marker_count);
 
-// Checks the source prepare-input span result against the native image facts
-// for [first_image, images.count), not the scratch plan exposed to source.
+// Checks the source prepare-input span result against the checked projections
+// for [first_projection, projections.count), not the plan exposed to source.
 // input_shift accounts for a native retained prediction prepended to the
 // source token stream. Successful nonempty results own *out_spans.
 iree_status_t loom_serve_text_media_parse_spans(
-    const loom_serve_text_chat_t* chat, iree_host_size_t first_image,
+    const loom_serve_text_chat_t* chat, iree_host_size_t first_projection,
     iree_const_byte_span_t source_spans, iree_host_size_t token_count,
     iree_host_size_t input_shift, iree_allocator_t host_allocator,
     loom_serve_text_media_span_t** out_spans, iree_host_size_t* out_span_count);

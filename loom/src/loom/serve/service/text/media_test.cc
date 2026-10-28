@@ -42,11 +42,12 @@ class TextMediaTest : public ::testing::Test {
     chat_.images.values = images_.data();
     iree_string_builder_initialize(iree_allocator_system(), &chat_.prompt);
     iree_string_builder_initialize(iree_allocator_system(),
-                                   &chat_.images.metadata);
+                                   &chat_.projections.metadata);
   }
 
   void TearDown() override {
-    iree_string_builder_deinitialize(&chat_.images.metadata);
+    iree_allocator_free(chat_.host_allocator, chat_.projections.values);
+    iree_string_builder_deinitialize(&chat_.projections.metadata);
     iree_string_builder_deinitialize(&chat_.prompt);
   }
 
@@ -99,16 +100,16 @@ TEST_F(TextMediaTest, CommitsExactSourceSemanticsToMediaIdentity) {
   images_[0].info.digest.bytes[0] = 7;
   images_[1].info.digest.bytes[0] = 8;
 
-  EXPECT_EQ(images_[0].marker_offset, 11u);
-  EXPECT_EQ(images_[0].marker_length, 2u);
-  EXPECT_EQ(images_[0].feature_count, 3u);
-  EXPECT_EQ(images_[0].metadata_offset, 0u);
-  EXPECT_EQ(images_[0].metadata_length, 2u);
-  EXPECT_EQ(images_[1].marker_offset, 15u);
-  EXPECT_EQ(images_[1].feature_count, 4u);
-  EXPECT_EQ(images_[1].metadata_offset, 2u);
+  EXPECT_EQ(chat_.projections.values[0].marker_offset, 11u);
+  EXPECT_EQ(chat_.projections.values[0].marker_length, 2u);
+  EXPECT_EQ(chat_.projections.values[0].feature_count, 3u);
+  EXPECT_EQ(chat_.projections.values[0].metadata_offset, 0u);
+  EXPECT_EQ(chat_.projections.values[0].metadata_length, 2u);
+  EXPECT_EQ(chat_.projections.values[1].marker_offset, 15u);
+  EXPECT_EQ(chat_.projections.values[1].feature_count, 4u);
+  EXPECT_EQ(chat_.projections.values[1].metadata_offset, 2u);
   EXPECT_TRUE(iree_string_view_equal(
-      iree_string_builder_view(&chat_.images.metadata), IREE_SV("abc")));
+      iree_string_builder_view(&chat_.projections.metadata), IREE_SV("abc")));
 
   loom_serve_text_chat_media_identity_t identity = {};
   IREE_ASSERT_OK(loom_serve_text_chat_media_identity_initialize(
@@ -116,14 +117,14 @@ TEST_F(TextMediaTest, CommitsExactSourceSemanticsToMediaIdentity) {
   EXPECT_EQ(iree_vm_buffer_length(identity.storage), 2u * 89u);
   EXPECT_TRUE(
       loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
-  ++images_[0].feature_count;
+  ++chat_.projections.values[0].feature_count;
   EXPECT_FALSE(
       loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
-  --images_[0].feature_count;
-  images_[1].metadata_digest.bytes[0] ^= 1;
+  --chat_.projections.values[0].feature_count;
+  chat_.projections.values[1].metadata_digest.bytes[0] ^= 1;
   EXPECT_FALSE(
       loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
-  images_[1].metadata_digest.bytes[0] ^= 1;
+  chat_.projections.values[1].metadata_digest.bytes[0] ^= 1;
   std::swap(images_[0], images_[1]);
   EXPECT_FALSE(
       loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
@@ -140,7 +141,7 @@ TEST_F(TextMediaTest, TextOnlyMessagesRetainNoMediaAllocation) {
   chat_.images.count = 0;
   IREE_ASSERT_OK(loom_serve_text_media_apply_message_plan(
       &chat_, 0, 0, 16, iree_const_byte_span_empty()));
-  EXPECT_EQ(iree_string_builder_buffer(&chat_.images.metadata), nullptr);
+  EXPECT_EQ(iree_string_builder_buffer(&chat_.projections.metadata), nullptr);
   loom_serve_text_chat_media_identity_t identity = {};
   IREE_ASSERT_OK(loom_serve_text_chat_media_identity_initialize(
       &chat_, iree_allocator_null(), &identity));
@@ -176,9 +177,9 @@ TEST_F(TextMediaTest, RejectsMalformedMessagePlanBeforeMutation) {
           &chat_, 0, 10, 6,
           iree_make_const_byte_span(plan.data(), plan.size())));
 
-  EXPECT_EQ(iree_string_builder_size(&chat_.images.metadata), 0u);
-  EXPECT_EQ(images_[0].marker_length, 0u);
-  EXPECT_EQ(images_[1].feature_count, 0u);
+  EXPECT_EQ(iree_string_builder_size(&chat_.projections.metadata), 0u);
+  EXPECT_EQ(chat_.projections.count, 0u);
+  EXPECT_EQ(chat_.projections.values, nullptr);
 }
 
 TEST_F(TextMediaTest, BuildsSuffixPlanOnlyAtExactMarkerBoundaries) {
@@ -224,13 +225,13 @@ TEST_F(TextMediaTest, ValidatesAndCompactsSourceRanges) {
   ApplyMessagePlan();
   std::vector<uint8_t> source_spans(2 * kSpanRecordBytes);
   StoreField(source_spans, 0, kSpanRecordBytes,
-             LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_IMAGE_INDEX, 0);
+             LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_PROJECTION_INDEX, 0);
   StoreField(source_spans, 0, kSpanRecordBytes,
              LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_OFFSET, 1);
   StoreField(source_spans, 0, kSpanRecordBytes,
              LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_COUNT, 3);
   StoreField(source_spans, 1, kSpanRecordBytes,
-             LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_IMAGE_INDEX, 1);
+             LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_PROJECTION_INDEX, 1);
   StoreField(source_spans, 1, kSpanRecordBytes,
              LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_OFFSET, 4);
   StoreField(source_spans, 1, kSpanRecordBytes,
@@ -243,10 +244,10 @@ TEST_F(TextMediaTest, ValidatesAndCompactsSourceRanges) {
       iree_make_const_byte_span(source_spans.data(), source_spans.size()), 8, 1,
       iree_allocator_system(), &spans, &span_count));
   ASSERT_EQ(span_count, 2u);
-  EXPECT_EQ(spans[0].image_index, 0u);
+  EXPECT_EQ(spans[0].projection_index, 0u);
   EXPECT_EQ(spans[0].input_offset, 2u);
   EXPECT_EQ(spans[0].input_count, 3u);
-  EXPECT_EQ(spans[1].image_index, 1u);
+  EXPECT_EQ(spans[1].projection_index, 1u);
   EXPECT_EQ(spans[1].input_offset, 5u);
   EXPECT_EQ(spans[1].input_count, 4u);
   iree_allocator_free(iree_allocator_system(), spans);

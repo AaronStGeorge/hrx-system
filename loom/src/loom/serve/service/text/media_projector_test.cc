@@ -17,25 +17,26 @@
 
 namespace {
 
-TEST(MediaRequestTest, BindsOptionalMetadataAtItsImageOffset) {
+TEST(MediaRequestTest, BindsOptionalMetadataAtItsProjectionOffset) {
   const auto host_allocator = iree_allocator_system();
   for (const auto prefix : {IREE_SV(""), IREE_SV("earlier-image")}) {
     for (const auto metadata : {IREE_SV(""), IREE_SV("image-metadata")}) {
       loom_serve_text_chat_t chat = {};
-      loom_serve_text_chat_image_t image = {};
-      iree_string_builder_initialize(host_allocator, &chat.images.metadata);
+      loom_serve_text_media_projection_t projection = {};
+      iree_string_builder_initialize(host_allocator,
+                                     &chat.projections.metadata);
       if (prefix.size) {
-        IREE_ASSERT_OK(
-            iree_string_builder_append_string(&chat.images.metadata, prefix));
+        IREE_ASSERT_OK(iree_string_builder_append_string(
+            &chat.projections.metadata, prefix));
       }
       if (metadata.size) {
-        IREE_ASSERT_OK(
-            iree_string_builder_append_string(&chat.images.metadata, metadata));
+        IREE_ASSERT_OK(iree_string_builder_append_string(
+            &chat.projections.metadata, metadata));
       }
-      image.metadata_offset = prefix.size;
-      image.metadata_length = metadata.size;
-      chat.images.count = 1;
-      chat.images.values = &image;
+      projection.metadata_offset = prefix.size;
+      projection.metadata_length = metadata.size;
+      chat.projections.count = 1;
+      chat.projections.values = &projection;
       loom_serve_text_media_span_t span = {.input_count = 1};
       const loom_serve_text_input_t input = {
           .media_spans = &span,
@@ -55,7 +56,7 @@ TEST(MediaRequestTest, BindsOptionalMetadataAtItsImageOffset) {
         EXPECT_EQ(bytes.data, nullptr);
       }
       loom_serve_text_media_request_free(request);
-      iree_string_builder_deinitialize(&chat.images.metadata);
+      iree_string_builder_deinitialize(&chat.projections.metadata);
     }
   }
 }
@@ -64,7 +65,8 @@ class MediaProjectorTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_notification_initialize(&notification_);
-    iree_string_builder_initialize(host_allocator_, &chat_.images.metadata);
+    iree_string_builder_initialize(host_allocator_,
+                                   &chat_.projections.metadata);
     auto options = loom_serve_test_application_options_default();
     options.backing = LOOM_SERVE_POOL_BACKING_ELASTIC;
     options.slab_size = 4096;
@@ -105,7 +107,7 @@ class MediaProjectorTest : public ::testing::Test {
         "data:image/x-portable-arbitrarymap;base64,"
         "UDcKV0lEVEggMgpIRUlHSFQgMgpERVBUSCAzCk1BWFZBTCAyNTUKVFVQTFRZUEUg"
         "UkdCCkVOREhEUgr/AAAA/wAAAP////8=");
-    image_.feature_count = 1;
+    projection_.feature_count = 1;
     policy_.images.limits = {
         .compressed_bytes = 1024,
         .width = 2,
@@ -118,6 +120,8 @@ class MediaProjectorTest : public ::testing::Test {
     chat_.policy = &policy_;
     chat_.images.count = 1;
     chat_.images.values = &image_;
+    chat_.projections.count = 1;
+    chat_.projections.values = &projection_;
     input_.media_spans = &span_;
     input_.media_span_count = 1;
   }
@@ -139,7 +143,7 @@ class MediaProjectorTest : public ::testing::Test {
     loom_serve_workspace_set_observer(loom_serve_pool_workspace(storage_owner_),
                                       {});
     iree_notification_deinitialize(&notification_);
-    iree_string_builder_deinitialize(&chat_.images.metadata);
+    iree_string_builder_deinitialize(&chat_.projections.metadata);
   }
 
   template <typename Predicate>
@@ -189,6 +193,8 @@ class MediaProjectorTest : public ::testing::Test {
   loom_serve_text_chat_policy_t policy_ = {};
   // Immutable inspected input borrowed by each independent request.
   loom_serve_text_chat_image_t image_ = {};
+  // Checked source projection is separate from the immutable codec input.
+  loom_serve_text_media_projection_t projection_ = {};
   // Real compressed image descriptor and source metadata, with no pixel plane.
   loom_serve_text_chat_t chat_ = {};
   // Trusted logical feature span produced before projection admission.

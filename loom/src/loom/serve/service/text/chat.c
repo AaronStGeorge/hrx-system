@@ -685,7 +685,7 @@ iree_status_t loom_serve_text_chat_prepare_input(
   iree_host_size_t parsed_span_count = 0;
   if (iree_status_is_ok(status)) {
     status = loom_serve_text_media_parse_spans(
-        chat, chat->images.count - marker_count, span_bytes,
+        chat, chat->projections.count - marker_count, span_bytes,
         (iree_host_size_t)count, input_shift, host_allocator, &parsed_spans,
         &parsed_span_count);
   }
@@ -1058,7 +1058,8 @@ iree_status_t loom_serve_text_chat_initialize(
   out_chat->max_tokens = default_max_tokens;
   out_chat->host_allocator = host_allocator;
   iree_string_builder_initialize(host_allocator, &out_chat->prompt);
-  iree_string_builder_initialize(host_allocator, &out_chat->images.metadata);
+  iree_string_builder_initialize(host_allocator,
+                                 &out_chat->projections.metadata);
   iree_string_builder_initialize(host_allocator, &out_chat->output.content);
   iree_string_builder_initialize(host_allocator, &out_chat->output.reasoning);
   loom_serve_text_chat_history_t history = {.model_name = model_name,
@@ -1084,8 +1085,9 @@ iree_status_t loom_serve_text_chat_initialize(
 }
 
 void loom_serve_text_chat_deinitialize(loom_serve_text_chat_t* chat) {
-  iree_string_builder_deinitialize(&chat->images.metadata);
+  iree_string_builder_deinitialize(&chat->projections.metadata);
   iree_allocator_free(chat->host_allocator, chat->images.values);
+  iree_allocator_free(chat->host_allocator, chat->projections.values);
   iree_vm_buffer_release(chat->options);
   iree_string_builder_deinitialize(&chat->output.reasoning);
   iree_string_builder_deinitialize(&chat->output.content);

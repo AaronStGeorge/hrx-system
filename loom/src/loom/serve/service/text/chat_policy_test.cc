@@ -377,10 +377,10 @@ TEST_F(SourceChatPolicyTest, OrderedImagesReachSourceDefinedInputSpans) {
   EXPECT_EQ(std::vector<int32_t>(input.tokens, input.tokens + input.count),
             (std::vector<int32_t>{0, 2, 1, 2}));
   ASSERT_EQ(input.media_span_count, 2u);
-  EXPECT_EQ(input.media_spans[0].image_index, 0u);
+  EXPECT_EQ(input.media_spans[0].projection_index, 0u);
   EXPECT_EQ(input.media_spans[0].input_offset, 1u);
   EXPECT_EQ(input.media_spans[0].input_count, 1u);
-  EXPECT_EQ(input.media_spans[1].image_index, 1u);
+  EXPECT_EQ(input.media_spans[1].projection_index, 1u);
   EXPECT_EQ(input.media_spans[1].input_offset, 3u);
   EXPECT_EQ(input.media_spans[1].input_count, 1u);
   loom_serve_text_input_deinitialize(&input, host_allocator_);

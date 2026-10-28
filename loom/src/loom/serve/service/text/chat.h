@@ -176,9 +176,18 @@ typedef struct loom_serve_text_chat_t {
     iree_host_size_t capacity;
     // Dynamically sized descriptors in message/part order.
     loom_serve_text_chat_image_t* values;
+  } images;
+  // Checked source projections in prompt order, independent of input storage.
+  struct {
+    // Number of committed projections.
+    iree_host_size_t count;
+    // Allocated projection capacity.
+    iree_host_size_t capacity;
+    // Owned source plans; no decoded pixels or device results are stored here.
+    loom_serve_text_media_projection_t* values;
     // Owned concatenated source-private preprocessing metadata.
     iree_string_builder_t metadata;
-  } images;
+  } projections;
 } loom_serve_text_chat_t;
 
 // Validates and renders the supported chat request. Unknown execution options

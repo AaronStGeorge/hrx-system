@@ -23,7 +23,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   chat.images.capacity = images.size();
   chat.images.count = data[0] % (images.size() + 1);
   iree_string_builder_initialize(allocator, &chat.prompt);
-  iree_string_builder_initialize(allocator, &chat.images.metadata);
+  iree_string_builder_initialize(allocator, &chat.projections.metadata);
   std::array<char, 512> prompt;
   prompt.fill('x');
   iree_status_t status = iree_string_builder_append_string(
@@ -57,16 +57,17 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                               sizeof(uint32_t);
     const size_t available = size - 3 < span_bytes ? size - 3 : span_bytes;
     status = loom_serve_text_media_parse_spans(
-        &chat, chat.images.count - marker_count,
+        &chat, chat.projections.count - marker_count,
         iree_make_const_byte_span(data + size - available, available), 512,
         data[0] & 1, allocator, &spans, &span_count);
   }
   // Malformed source plans are expected outcomes at this validation boundary.
   iree_status_free(status);
   iree_allocator_free(allocator, spans);
+  iree_allocator_free(allocator, chat.projections.values);
   iree_vm_buffer_release(plan);
   loom_serve_text_chat_media_identity_deinitialize(&identity);
-  iree_string_builder_deinitialize(&chat.images.metadata);
+  iree_string_builder_deinitialize(&chat.projections.metadata);
   iree_string_builder_deinitialize(&chat.prompt);
   return 0;
 }
