@@ -238,8 +238,12 @@ TEST_F(DeviceGroupTest, ExplicitPlacementPreservesNativeDomainThroughReuse) {
           },
       };
       uint64_t value = 0;
-      IREE_ASSERT_OK(loom_serve_execution_transfer(
-          executions_[i], IREE_ARRAYSIZE(operations), operations, &value));
+      // Transfer siblings are unordered. Chain the readback after the fill
+      // through the execution timeline without an intermediate host wait.
+      for (const auto& operation : operations) {
+        IREE_ASSERT_OK(loom_serve_execution_transfer(executions_[i], 1,
+                                                     &operation, &value));
+      }
       IREE_ASSERT_OK(loom_serve_execution_drain(executions_[i]));
       EXPECT_EQ(output_[i], pattern);
       if (options.elastic) {
