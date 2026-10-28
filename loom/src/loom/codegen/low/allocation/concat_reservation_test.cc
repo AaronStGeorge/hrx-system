@@ -9,7 +9,9 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/ir/context.h"
+#include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/target/registers.h"
@@ -39,6 +41,12 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(value_ids); ++i) {
     loom_module_value_ordinal_scratch_set(module, value_ids[i], i);
   }
+  const loom_local_value_domain_t value_domain = {
+      .module = module,
+      .value_ids = value_ids,
+      .value_count = IREE_ARRAYSIZE(value_ids),
+      .flags = LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED,
+  };
 
   loom_liveness_value_class_t value_class = {
       .type_kind = LOOM_TYPE_REGISTER,
@@ -242,6 +250,50 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
           EXPECT_EQ(reservation.value_id, LOOM_VALUE_ID_INVALID);
         }
         EXPECT_EQ(assignments.assignment_count, 1u);
+
+        // A resolved aggregate binding also constrains early reservation.
+        // Neither a free source location nor a better preference may move it.
+        for (uint32_t fixed_base : {6u, 8u, 12u}) {
+          SCOPED_TRACE(::testing::Message() << "fixed base=" << fixed_base);
+          loom_low_allocation_resolved_fixed_value_t fixed = {
+              .assignment =
+                  {
+                      .value_id = value_ids[2],
+                      .descriptor_reg_class_id = value_class.register_class_id,
+                      .unit_count = 4,
+                      .location_kind =
+                          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+                      .location_base = fixed_base,
+                      .location_count = 4,
+                  },
+              .value_ordinal = 2,
+              .tied_root_ordinal = 2,
+              .semantic_end_point = intervals[2].end_point,
+          };
+          uint32_t fixed_indices[] = {0, 0, 1, 0};
+          uint32_t fixed_high_water[] = {fixed_base + 4};
+          auto fixed_constraints = constraints;
+          fixed_constraints.fixed_values = &fixed;
+          fixed_constraints.preassigned_fixed_value_count = 1;
+          fixed_constraints.fixed_value_count = 1;
+          fixed_constraints.fixed_value_domain = &value_domain;
+          fixed_constraints.fixed_value_indices_by_ordinal = fixed_indices;
+          fixed_constraints.max_constrained_location_end_by_reg_class =
+              fixed_high_water;
+          IREE_ASSERT_OK(
+              loom_low_allocation_target_constraints_finalize_fixed_values(
+                  &fixed_constraints, &liveness, &unit_liveness, &arena));
+          auto fixed_context = context;
+          fixed_context.target_constraints = &fixed_constraints;
+          IREE_ASSERT_OK(loom_low_allocation_concat_reservation_find(
+              &fixed_context, &intervals[0], &relations[0], &intervals[2],
+              &result_ranges[2], &reservation_sources,
+              /*source_has_unique_affinity_path=*/false, &reservation));
+          EXPECT_EQ(reservation.value_id, value_ids[2]);
+          EXPECT_EQ(reservation.location_base, fixed_base);
+          EXPECT_EQ(reservation.location_count, 4u);
+          EXPECT_EQ(assignments.assignment_count, 1u);
+        }
       }
     }
   }
