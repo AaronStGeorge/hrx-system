@@ -1,14 +1,14 @@
-// Native Unicode imports share the same runtime capability in the standalone
-// runner and serving hosts. Model text policies remain authored functions.
-func.decl import("unicode", "to_upper") @unicode.to_upper(%codepoint: i32) -> (i32, i32, i32, i32)
+// Native string codepoint imports share the same runtime capability in the
+// standalone runner and serving hosts. Model text policies remain authored.
+func.decl import("string", "codepoint.to_upper") @unicode.to_upper(%codepoint: i32) -> (i32, i32, i32, i32)
 
-func.decl import("unicode", "to_lower") @unicode.to_lower(%codepoint: i32) -> (i32, i32, i32)
+func.decl import("string", "codepoint.to_lower") @unicode.to_lower(%codepoint: i32) -> (i32, i32, i32)
 
-func.decl import("unicode", "is_digit") @unicode.is_digit(%codepoint: i32) -> (i32)
+func.decl import("string", "codepoint.is_digit") @unicode.is_digit(%codepoint: i32) -> (i32)
 
-func.decl import("unicode", "is_decimal") @unicode.is_decimal(%codepoint: i32) -> (i32)
+func.decl import("string", "codepoint.is_decimal") @unicode.is_decimal(%codepoint: i32) -> (i32)
 
-func.decl import("unicode", "is_whitespace") @unicode.is_whitespace(%codepoint: i32) -> (i32)
+func.decl import("string", "codepoint.is_whitespace") @unicode.is_whitespace(%codepoint: i32) -> (i32)
 
 func.def @uppercase(%codepoint: i32) -> (i32, i32, i32, i32) {
   %count, %first, %second, %third = func.call @unicode.to_upper(%codepoint) : (i32) -> (i32, i32, i32, i32)

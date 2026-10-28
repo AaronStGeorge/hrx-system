@@ -14,7 +14,7 @@ package(
 )
 
 iree_runtime_cc_library(
-    name = "unicode",
+    name = "string",
     srcs = ["module.c"],
     hdrs = ["module.h"],
     deps = [
@@ -28,7 +28,7 @@ iree_runtime_cc_test(
     name = "module_test",
     srcs = ["module_test.cc"],
     deps = [
-        ":unicode",
+        ":string",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

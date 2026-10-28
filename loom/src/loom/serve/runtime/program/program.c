@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "iree/module/unicode/module.h"
+#include "iree/module/string/module.h"
 #include "iree/vm/bytecode/module.h"
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/program/jit.h"
@@ -275,10 +275,10 @@ iree_status_t loom_serve_program_link(iree_vm_module_t* module,
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, sizeof(*program),
                                              (void**)&program));
   program->host_allocator = host_allocator;
-  iree_vm_module_t* unicode_module = NULL;
+  iree_vm_module_t* string_module = NULL;
   iree_vm_module_t** linked_libraries = NULL;
   iree_status_t status =
-      iree_unicode_module_create(host_allocator, &unicode_module);
+      iree_string_module_create(host_allocator, &string_module);
   if (iree_status_is_ok(status)) {
     status = iree_allocator_malloc_array(host_allocator, libraries.count + 1,
                                          sizeof(*linked_libraries),
@@ -288,14 +288,14 @@ iree_status_t loom_serve_program_link(iree_vm_module_t* module,
     for (iree_host_size_t i = 0; i < libraries.count; ++i) {
       linked_libraries[i] = libraries.data[i];
     }
-    linked_libraries[libraries.count] = unicode_module;
+    linked_libraries[libraries.count] = string_module;
     status = iree_vm_program_create(
         (iree_vm_program_modules_t){module,
                                     {linked_libraries, libraries.count + 1}},
         host_allocator, &program->program);
   }
   iree_allocator_free(host_allocator, linked_libraries);
-  iree_vm_module_release(unicode_module);
+  iree_vm_module_release(string_module);
   if (iree_status_is_ok(status)) {
     program->module = module;
     status = iree_vm_invocation_initialize(

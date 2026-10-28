@@ -292,7 +292,7 @@ TEST_F(ProgramTest, BindingDoesNotInvokeSourceAndRemainsCallable) {
   EXPECT_EQ(std::memcmp(&saved, &function_, sizeof(saved)), 0);
 }
 
-TEST_F(ProgramTest, UnicodeImportsUseSharedRuntimeCapability) {
+TEST_F(ProgramTest, StringCodepointImportsUseSharedRuntimeCapability) {
   const iree_vm_signature_type_t types[] = {
       Scalar(IREE_VM_SCALAR_TYPE_I32), Scalar(IREE_VM_SCALAR_TYPE_I32),
       Scalar(IREE_VM_SCALAR_TYPE_I32), Scalar(IREE_VM_SCALAR_TYPE_I32)};

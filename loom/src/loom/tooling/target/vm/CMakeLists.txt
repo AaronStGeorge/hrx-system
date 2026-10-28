@@ -90,7 +90,7 @@ loom_cc_library(
     ::buffer
     iree::base
     iree::hal
-    iree::module::unicode
+    iree::module::string
     iree::vm
     iree::vm::bytecode::module
     loom::binding::c::loomc
