@@ -8,11 +8,9 @@ func.def public @references(%host: buffer, %device: hal.buffer) -> (buffer, hal.
 
 func.decl import("input") @require(%condition: i32, %diagnostic: buffer)
 
-global.rodata.def @unexpected_call = bytes("62696e64696e67206d757374206e6f742065786563757465")
-
 func.def public @empty() {
   %c0 = scalar.constant 0 : i32
-  %diagnostic = global.load @unexpected_call : buffer
+  %diagnostic = buffer.constant utf8("binding must not execute") : buffer
   func.call @require(%c0, %diagnostic) : (i32, buffer)
   func.return
 }

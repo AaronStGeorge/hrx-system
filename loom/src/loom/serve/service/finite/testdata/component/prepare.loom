@@ -4,16 +4,6 @@ func.decl import("prepare") @source(%directory: buffer, %path: buffer) -> (i32)
 
 func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %input: i32, %source: i32, %policy: buffer)
 
-global.rodata.def @root = bytes("70726f6a656374")
-
-global.rodata.def @checkpoint = bytes("776569676874732e7361666574656e736f7273")
-
-global.rodata.def @policy = bytes("706f6c6963792e6c6f6f6d")
-
-global.rodata.def @empty = bytes("")
-
-global.rodata.def @name = bytes("666978747572652d636f6d706f6e656e74")
-
 func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64, i64, buffer, buffer, buffer) {
   %c0_source = scalar.constant 0 : i32
   %c0_i32 = scalar.constant 0 : i32
@@ -22,13 +12,13 @@ func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64
   %c16_i64 = scalar.constant 16 : i64
   %c32_i64 = scalar.constant 32 : i64
   %output_capacity = scalar.constant 131072 : i64
-  %root = global.load @root : buffer
+  %root = buffer.constant utf8("project") : buffer
   %stage = func.call @stage(%root, %c0_i64) : (buffer, i64) -> (i32)
-  %checkpoint = global.load @checkpoint : buffer
-  %policy = global.load @policy : buffer
+  %checkpoint = buffer.constant utf8("weights.safetensors") : buffer
+  %policy = buffer.constant utf8("policy.loom") : buffer
   %source = func.call @source(%directory, %checkpoint) : (buffer, buffer) -> (i32)
   func.call @parameter(%stage, %c0_i32, %c0_source, %source, %policy) : (i32, i32, i32, i32, buffer)
-  %empty = global.load @empty : buffer
-  %name = global.load @name : buffer
+  %empty = buffer.constant utf8("") : buffer
+  %name = buffer.constant utf8("fixture-component") : buffer
   func.return %c1_i64, %c32_i64, %output_capacity, %c16_i64, %empty, %name, %empty : i64, i64, i64, i64, buffer, buffer, buffer
 }

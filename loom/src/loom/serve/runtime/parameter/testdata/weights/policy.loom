@@ -2,18 +2,6 @@ func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
 
 func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
 
-// add_configured, delta
-global.rodata.def @add = bytes("6164645f636f6e66696775726564")
-
-global.rodata.def @delta = bytes("64656c7461")
-
-global.rodata.def @absent = bytes("616273656e745f636f6d6d616e64")
-
-// add_wide
-global.rodata.def @wide = bytes("6164645f77696465")
-
-global.rodata.def @unchanged = bytes("")
-
 func.def public @prepare_weight(%key: buffer) -> (i64) {
   %c0 = index.constant 0 : offset
   %letter = buffer.load.i8.u %key[%c0]
@@ -26,33 +14,33 @@ func.def public @prepare_weight(%key: buffer) -> (i64) {
   %is_size = scalar.cmpi eq, %letter, %s : i32
   %is_missing = scalar.cmpi eq, %letter, %m : i32
   %root, %bytes = scf.if %is_a -> (buffer, i64) {
-    %root = global.load @add : buffer
+    %root = buffer.constant utf8("add_configured") : buffer
     %bytes = scalar.constant 32 : i64
     scf.yield %root, %bytes : buffer, i64
   } else {
     %root, %bytes = scf.if %is_b -> (buffer, i64) {
-      %root = global.load @add : buffer
+      %root = buffer.constant utf8("add_configured") : buffer
       %bytes = scalar.constant 32 : i64
       scf.yield %root, %bytes : buffer, i64
     } else {
       %root, %bytes = scf.if %is_size -> (buffer, i64) {
-        %root = global.load @add : buffer
+        %root = buffer.constant utf8("add_configured") : buffer
         %bytes = scalar.constant 64 : i64
         scf.yield %root, %bytes : buffer, i64
       } else {
         %root, %bytes = scf.if %is_missing -> (buffer, i64) {
-          %root = global.load @absent : buffer
+          %root = buffer.constant utf8("absent_command") : buffer
           %bytes = scalar.constant 32 : i64
           scf.yield %root, %bytes : buffer, i64
         } else {
           %w = scalar.constant 119 : i32
           %is_wide = scalar.cmpi eq, %letter, %w : i32
           %root, %bytes = scf.if %is_wide -> (buffer, i64) {
-            %root = global.load @wide : buffer
+            %root = buffer.constant utf8("add_wide") : buffer
             %bytes = scalar.constant 2097184 : i64
             scf.yield %root, %bytes : buffer, i64
           } else {
-            %root = global.load @unchanged : buffer
+            %root = buffer.constant utf8("") : buffer
             %bytes = scalar.constant 0 : i64
             scf.yield %root, %bytes : buffer, i64
           }
@@ -75,7 +63,7 @@ func.def public @prepare_weight(%key: buffer) -> (i64) {
     } else {
       scf.yield %c3 : i64
     }
-    %delta = global.load @delta : buffer
+    %delta = buffer.constant utf8("delta") : buffer
     func.call @config_i64(%command, %delta, %value) : (i32, buffer, i64)
   }
   func.return %bytes : i64

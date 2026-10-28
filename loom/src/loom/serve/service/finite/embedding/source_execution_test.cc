@@ -671,11 +671,10 @@ class RequestChoiceTest : public GenerationSelectionTest {
           contents[i].replace(offset, 7, "@dispatch(");
           offset += 10;
         }
-        const std::string root = "bytes(\"656d626564\")";
+        const std::string root = "utf8(\"embed\")";
         offset = contents[i].find(root);
         ASSERT_NE(offset, std::string::npos);
-        contents[i].replace(offset, root.size(),
-                            "bytes(\"7265736964656e745f656d626564\")");
+        contents[i].replace(offset, root.size(), "utf8(\"resident_embed\")");
       }
     }
     for (size_t i = 0; i < IREE_ARRAYSIZE(paths); ++i) {

@@ -1,9 +1,5 @@
 func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
 
-global.rodata.def @factor = bytes("666163746f72")
-
-global.rodata.def @prepare_factor = bytes("707265706172655f666163746f72")
-
 func.def public @prepare_weight(%key: buffer) -> (i64) {
   %length = buffer.length %key
   %key_length = index.constant 6 : offset
@@ -11,7 +7,7 @@ func.def public @prepare_weight(%key: buffer) -> (i64) {
   %matches = scf.if %same_length -> (i1) {
     %origin = index.constant 0 : offset
     %actual = buffer.view %key[%origin] : buffer -> view<6xi8>
-    %expected = global.load @factor : buffer
+    %expected = buffer.constant utf8("factor") : buffer
     %expected_view = buffer.view %expected[%origin] : buffer -> view<6xi8>
     %start = index.constant 0 : index
     %end = index.constant 6 : index
@@ -30,7 +26,7 @@ func.def public @prepare_weight(%key: buffer) -> (i64) {
     scf.yield %false : i1
   }
   %bytes = scf.if %matches -> (i64) {
-    %root = global.load @prepare_factor : buffer
+    %root = buffer.constant utf8("prepare_factor") : buffer
     %tag = scalar.constant 0 : i64
     %command = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
     %bytes = scalar.constant 4 : i64

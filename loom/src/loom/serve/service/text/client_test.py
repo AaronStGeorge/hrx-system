@@ -340,10 +340,10 @@ class ClientTest(unittest.TestCase):
                         shutil.copyfile(PACKAGE / name, broken / name)
                     path = broken / "control.loom"
                     source = path.read_text()
-                    marker = "%empty = global.load @no_tools : buffer\n  func.return %empty : buffer"
+                    marker = '%empty = buffer.constant utf8("[]") : buffer\n  func.return %empty : buffer'
                     self.assertEqual(source.count(marker), 1)
                     path.write_text(
-                        source.replace(marker, marker.replace("@no_tools", "@empty"))
+                        source.replace(marker, marker.replace('utf8("[]")', 'utf8("")'))
                     )
                     control(
                         address,
@@ -369,23 +369,20 @@ class ClientTest(unittest.TestCase):
 
                     # A source parser cannot publish structured calls when the
                     # request disables calls, even with a declared catalog.
-                    calls = (
-                        json.dumps(
-                            [
-                                {
-                                    "type": "function",
-                                    "function": {"name": "inspect", "arguments": "{}"},
-                                }
-                            ]
-                        )
-                        .encode()
-                        .hex()
+                    calls = json.dumps(
+                        [
+                            {
+                                "type": "function",
+                                "function": {"name": "inspect", "arguments": "{}"},
+                            }
+                        ]
                     )
-                    marker = 'global.rodata.def @no_tools = bytes("5b5d")'
+                    marker = 'buffer.constant utf8("[]") : buffer'
                     self.assertEqual(source.count(marker), 1)
                     path.write_text(
                         source.replace(
-                            marker, f'global.rodata.def @no_tools = bytes("{calls}")'
+                            marker,
+                            f"buffer.constant utf8({json.dumps(calls)}) : buffer",
                         )
                     )
                     control(
@@ -426,7 +423,7 @@ class ClientTest(unittest.TestCase):
                     # owns why generation stopped. A complete call must not turn
                     # an exhausted budget into a normal tool handoff.
                     call_source = source.replace(
-                        marker, f'global.rodata.def @no_tools = bytes("{calls}")'
+                        marker, f"buffer.constant utf8({json.dumps(calls)}) : buffer"
                     )
                     begin = call_source.index("func.def public @render_tool(")
                     end = call_source.index("\n}", begin)

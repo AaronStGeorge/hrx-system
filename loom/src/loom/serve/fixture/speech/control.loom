@@ -4,15 +4,9 @@ func.decl import("runner") @execute_5(%stage: i32, %work: hal.buffer, %request: 
 
 func.decl import("runner") @feedback(%slot: i32, %source: hal.buffer, %offset: i64, %length: i64) -> (i64)
 
-global.rodata.def @positive = bytes("706f736974697665")
-
-global.rodata.def @negative = bytes("6e65676174697665")
-
-global.rodata.def @invalid = bytes("737065656368206669787475726520726571756972657320312d3130323420696e7075742062797465732c20706f736974697665206f72206e6567617469766520766f6963652c207370656564203120616e64206e6f20696e737472756374696f6e73")
-
 func.def @check(%condition: i1) {
   %valid = scalar.extui %condition : i1 to i32
-  %diagnostic = global.load @invalid : buffer
+  %diagnostic = buffer.constant utf8("speech fixture requires 1-1024 input bytes, positive or negative voice, speed 1 and no instructions") : buffer
   func.call @require(%valid, %diagnostic) : (i32, buffer)
   func.return
 }
@@ -36,8 +30,8 @@ func.def public @prepare_request(%model: buffer, %text: buffer, %voice: buffer, 
   %valid_voice_length = index.cmp eq, %voice_length, %voice_bytes : offset
   func.call @check(%valid_voice_length) : (i1)
   %actual = buffer.view %voice[%origin] : buffer -> view<8xi8>
-  %positive_buffer = global.load @positive : buffer
-  %negative_buffer = global.load @negative : buffer
+  %positive_buffer = buffer.constant utf8("positive") : buffer
+  %negative_buffer = buffer.constant utf8("negative") : buffer
   %positive = buffer.view %positive_buffer[%origin] : buffer -> view<8xi8>
   %negative = buffer.view %negative_buffer[%origin] : buffer -> view<8xi8>
   %begin = index.constant 0 : index
