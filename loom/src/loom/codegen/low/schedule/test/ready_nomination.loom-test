@@ -92,34 +92,35 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_recovers_descri
 }
 
 // ====
-// RUN: emit low-schedule-query @resource_stall_refreshes_ready_sole_consumer strategy=resource-stall test.i32=16 order=*
+// RUN: emit low-schedule-query @resource_stall_refreshes_ready_sole_consumer strategy=resource-stall order=*
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @resource_stall_refreshes_ready_sole_consumer(%shared: reg<test.i32 x4>, %anchor: reg<test.i32 x4>, %lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>) -> (reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>) asm {
-  // Scheduling the dead bridge leaves the final add as the sole consumer of
-  // both inputs. The final add begins outside the bounded source window; its
-  // refreshed pressure key must nominate it before unrelated ready work.
-  %bridge = test.add.v4i32 %shared, %anchor
-  %independent0 = test.add.v4i32 %lhs, %rhs
-  %independent1 = test.add.v4i32 %lhs, %rhs
-  %independent2 = test.add.v4i32 %lhs, %rhs
-  %independent3 = test.add.v4i32 %lhs, %rhs
-  %independent4 = test.add.v4i32 %lhs, %rhs
-  %independent5 = test.add.v4i32 %lhs, %rhs
-  %independent6 = test.add.v4i32 %lhs, %rhs
-  %independent7 = test.add.v4i32 %lhs, %rhs
-  %independent8 = test.add.v4i32 %lhs, %rhs
-  %independent9 = test.add.v4i32 %lhs, %rhs
-  %independent10 = test.add.v4i32 %lhs, %rhs
-  %independent11 = test.add.v4i32 %lhs, %rhs
-  %independent12 = test.add.v4i32 %lhs, %rhs
-  %independent13 = test.add.v4i32 %lhs, %rhs
-  %independent14 = test.add.v4i32 %lhs, %rhs
-  %independent15 = test.add.v4i32 %lhs, %rhs
-  %independent16 = test.add.v4i32 %lhs, %rhs
-  %independent17 = test.add.v4i32 %lhs, %rhs
-  %final = test.add.v4i32 %shared, %anchor
+low.func.def target<test.low.core>(@test_target) @resource_stall_refreshes_ready_sole_consumer(%shared: reg<test.pressure.alias32 x5>, %source: reg<test.i32>) -> (reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.i32 x5>) asm {
+  // The shared input occupies five of the bank's eight physical units. After
+  // the dead bridge, only the final read can retire it. That read starts beyond
+  // the bounded source window; its refreshed pressure key must nominate it
+  // before unrelated ready work grows the bank's live footprint.
+  %bridge = test.move.from.pressure.alias32.x5 %shared
+  %independent0 = test.move.to.pressure.alias32 %source
+  %independent1 = test.move.to.pressure.alias32 %source
+  %independent2 = test.move.to.pressure.alias32 %source
+  %independent3 = test.move.to.pressure.alias32 %source
+  %independent4 = test.move.to.pressure.alias32 %source
+  %independent5 = test.move.to.pressure.alias32 %source
+  %independent6 = test.move.to.pressure.alias32 %source
+  %independent7 = test.move.to.pressure.alias32 %source
+  %independent8 = test.move.to.pressure.alias32 %source
+  %independent9 = test.move.to.pressure.alias32 %source
+  %independent10 = test.move.to.pressure.alias32 %source
+  %independent11 = test.move.to.pressure.alias32 %source
+  %independent12 = test.move.to.pressure.alias32 %source
+  %independent13 = test.move.to.pressure.alias32 %source
+  %independent14 = test.move.to.pressure.alias32 %source
+  %independent15 = test.move.to.pressure.alias32 %source
+  %independent16 = test.move.to.pressure.alias32 %source
+  %independent17 = test.move.to.pressure.alias32 %source
+  %final = test.move.from.pressure.alias32.x5 %shared
   return %independent0, %independent1, %independent2, %independent3, %independent4, %independent5, %independent6, %independent7, %independent8, %independent9, %independent10, %independent11, %independent12, %independent13, %independent14, %independent15, %independent16, %independent17, %final
 }
 
