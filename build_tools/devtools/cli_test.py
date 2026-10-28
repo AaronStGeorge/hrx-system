@@ -1404,7 +1404,7 @@ class CliTest(unittest.TestCase):
         description = plan.describe()
 
         self.assertIn("# cmake run iree-dump-cpuinfo", description)
-        self.assertIn("CMake File API", description)
+        self.assertIn("CMake target map", description)
         self.assertIn("<built executable>", description)
         self.assertIn("--help", description)
 

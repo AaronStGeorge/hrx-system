@@ -19,6 +19,7 @@ import bazel_to_cmake_targets
 
 from build_tools.cmake.test_environment import (
     REPO_ROOT,
+    build_project,
     configure_project,
     test_project,
 )
@@ -35,6 +36,10 @@ class CMakeLoomCorpusTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="cmake loom corpus ") as temporary:
             source, build = Path(temporary) / "source", Path(temporary) / "build"
             shutil.copytree(FIXTURE, source)
+            shutil.copy2(
+                REPO_ROOT / "build_tools/cmake/testdata/loom_binary/tool.c",
+                source / "tool.c",
+            )
             source_converter = SimpleNamespace(body="")
             source_functions = project.build_file_functions(
                 converter=source_converter,
@@ -139,6 +144,7 @@ class CMakeLoomCorpusTest(unittest.TestCase):
                         [
                             "fixture_source_examples_identity",
                             "fixture_source_examples_identity_library",
+                            "fixture_target_examples_identity_subjects",
                         ],
                     )
                     for test in tests:
@@ -148,6 +154,33 @@ class CMakeLoomCorpusTest(unittest.TestCase):
                             if property["name"] == "LABELS"
                         )
                         self.assertIn("loom-corpus", labels)
+
+            artifact, report = [
+                Path(path)
+                for path in (build / "artifacts.txt").read_text().splitlines()
+            ]
+            build_project(build, "fixture_target_compile")
+            self.assertIn("func.def @identity", artifact.read_text())
+            timestamp = artifact.stat().st_mtime_ns
+            build_project(build, "fixture_target_compile")
+            self.assertEqual(artifact.stat().st_mtime_ns, timestamp)
+
+            subject = source / "identity.loom"
+            subject.write_text(subject.read_text() + "// changed subject\n")
+            build_project(build, "fixture_target_compile")
+            self.assertIn("changed subject", artifact.read_text())
+            tool_source = source / "tool.c"
+            tool_source.write_text(
+                tool_source.read_text().replace(
+                    "int failed = 0;",
+                    'int failed = fputs("changed tool\\n", output) < 0;',
+                )
+            )
+            build_project(build, "fixture_target_compile")
+            self.assertIn("changed tool\n", artifact.read_text())
+            report.unlink()
+            build_project(build, "fixture_target_compile")
+            self.assertTrue(report.is_file())
 
 
 if __name__ == "__main__":

@@ -56,6 +56,21 @@ class CMakeLoomBinaryTest(unittest.TestCase):
             self.assertIn("leaf changed", output.read_text())
             self.assertNotIn("leaf original", output.read_text())
 
+            tool_source = source / "tool.c"
+            tool_source.write_text(
+                tool_source.read_text().replace(
+                    "int failed = 0;",
+                    'int failed = fputs("changed tool\\n", output) < 0;',
+                )
+            )
+            build_project(build, "kernel_consumer")
+            self.assertIn("changed tool\n", output.read_text())
+            (build / "leaf.loombc").unlink()
+            (build / "explicit.compile.json").unlink()
+            build_project(build, "kernel_consumer")
+            self.assertIn("leaf changed", output.read_text())
+            self.assertTrue((build / "explicit.compile.json").is_file())
+
             host_tools = root / "host tools"
             host_tools.mkdir()
             suffix = ".exe" if os.name == "nt" else ""

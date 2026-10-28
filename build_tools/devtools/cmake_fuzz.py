@@ -13,7 +13,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from build_tools.devtools import cmake_file_api, fuzz
+from build_tools.devtools import cmake_targets, fuzz
 from build_tools.devtools.command_plan import CommandPlan, CommandStep, quote_command
 from build_tools.devtools.environment import REPO_ROOT, ToolEnvironment
 
@@ -58,7 +58,7 @@ class CMakeFuzzStep:
     env: dict[str, str] | None = None
 
     def describe(self) -> str:
-        resolved_target = cmake_file_api.resolve_target_name(
+        resolved_target = cmake_targets.resolve_target_name(
             self.build_dir,
             self.command.target,
         )
@@ -87,7 +87,7 @@ class CMakeFuzzStep:
                 file=sys.stderr,
             )
             return 1
-        resolved_target = cmake_file_api.resolve_target_name(
+        resolved_target = cmake_targets.resolve_target_name(
             self.build_dir,
             self.command.target,
         )
@@ -108,11 +108,11 @@ class CMakeFuzzStep:
             return build_result
 
         try:
-            target = cmake_file_api.resolve_executable(
+            target = cmake_targets.resolve_executable(
                 self.build_dir,
                 self.command.target,
             )
-        except cmake_file_api.FileApiError as exc:
+        except cmake_targets.CMakeMetadataError as exc:
             print(f"dev.py: {exc}", file=sys.stderr)
             return 1
         if not target.path.is_file():
@@ -165,7 +165,7 @@ def cache_bool_enabled(build_dir: Path, name: str) -> bool:
                 if key == name:
                     return value.upper() in ("1", "ON", "TRUE", "YES", "Y")
     except FileNotFoundError:
-        raise cmake_file_api.FileApiError(
+        raise cmake_targets.CMakeMetadataError(
             f"CMake cache is missing in {build_dir}; run iree-cmake-configure first"
         )
     return False

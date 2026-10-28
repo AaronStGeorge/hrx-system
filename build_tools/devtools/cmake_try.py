@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 
-from build_tools.devtools import cmake_cache, cmake_file_api
+from build_tools.devtools import cmake_cache, cmake_targets
 from build_tools.devtools.command_plan import CommandPlan, quote_command
 from build_tools.devtools.environment import LOCAL_TMP_ROOT, REPO_ROOT, ToolEnvironment
 
@@ -204,7 +204,7 @@ class CMakeTryStep:
         scratch = CMAKE_TRY_ROOT / "run-<pid>"
         try:
             generator_args = cmake_generator_args(self.configured_build_dir)
-        except cmake_file_api.FileApiError:
+        except cmake_targets.CMakeMetadataError:
             generator_args = []
         lines = [
             f"# write {scratch}/try.cmake",
@@ -259,15 +259,11 @@ class CMakeTryStep:
                     scratch_dir / "cache.cmake",
                     cmake_cache.load_cmake_cache(self.configured_build_dir),
                 )
-                cmake_file_api.codemodel_query_path(scratch_build_dir).parent.mkdir(
-                    parents=True,
-                    exist_ok=True,
-                )
-                cmake_file_api.codemodel_query_path(scratch_build_dir).write_text(
-                    "",
-                    encoding="utf-8",
-                )
-            except (FileNotFoundError, ValueError, cmake_file_api.FileApiError) as exc:
+            except (
+                FileNotFoundError,
+                ValueError,
+                cmake_targets.CMakeMetadataError,
+            ) as exc:
                 print(f"dev.py: {exc}", file=sys.stderr)
                 return 2
 
@@ -304,11 +300,11 @@ class CMakeTryStep:
             if build_result != 0:
                 return build_result
             try:
-                target = cmake_file_api.resolve_executable(
+                target = cmake_targets.resolve_executable(
                     scratch_build_dir,
                     TRY_TARGET_NAME,
                 )
-            except cmake_file_api.FileApiError as exc:
+            except cmake_targets.CMakeMetadataError as exc:
                 print(f"dev.py: {exc}", file=sys.stderr)
                 return 1
             if self.command.output is not None:
@@ -390,7 +386,7 @@ class CMakeTryStep:
         deps = list(dict.fromkeys(self.command.explicit_deps))
         if not self.command.infer_deps:
             return deps
-        aliases = cmake_file_api.load_target_aliases(self.configured_build_dir)
+        aliases = cmake_targets.load_target_aliases(self.configured_build_dir)
         inferred_deps = [
             dep
             for header in sorted(extract_quoted_includes(source_texts))

@@ -17,8 +17,8 @@ from unittest import mock
 from build_tools.devtools import cmake as cmake_dev
 from build_tools.devtools import (
     cmake_cache,
-    cmake_file_api,
     cmake_fuzz,
+    cmake_targets,
     cmake_try,
     ctest,
     environment,
@@ -187,7 +187,6 @@ class CMakeTest(unittest.TestCase):
         )
         configure_description = normalized_plan_description(configure_plan)
         self.assertIn("build/cmake-debug", configure_description)
-        self.assertIn("codemodel-v2", configure_description)
         self.assertIn("record CMake build directory", configure_description)
         self.assertIn("-DIREE_HAL_DRIVER_AMDGPU=OFF", configure_description)
 
@@ -386,7 +385,32 @@ class CMakeTest(unittest.TestCase):
                 user_file.read_text(encoding="utf-8"), "not a build tree\n"
             )
 
-    def test_run_plan_resolves_target_with_cmake_file_api(self):
+    def test_configure_retires_only_owned_codemodel_query(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            build_dir = Path(temporary_dir)
+            query = build_dir / ".cmake/api/v1/query/codemodel-v2"
+            query.parent.mkdir(parents=True)
+            query.write_text("", encoding="utf-8")
+            client_query = query.parent / "client-ide/codemodel-v2"
+            client_query.parent.mkdir()
+            client_query.write_text("", encoding="utf-8")
+            step = cmake_dev._RetireCMakeCodemodelQueryStep(build_dir)
+            self.assertEqual(step.run(), 0)
+            self.assertTrue(query.exists())
+
+            marker = build_dir / cmake_dev.CMAKE_BUILD_TREE_MARKER
+            marker.parent.mkdir()
+            marker.write_text(
+                cmake_dev.CMAKE_BUILD_TREE_MARKER_CONTENT, encoding="utf-8"
+            )
+            self.assertEqual(step.run(), 0)
+            self.assertFalse(query.exists())
+            self.assertTrue(client_query.exists())
+            query.write_text("{}", encoding="utf-8")
+            self.assertEqual(step.run(), 0)
+            self.assertTrue(query.exists())
+
+    def test_run_plan_resolves_target_with_cmake_targets(self):
         tool_env = ToolEnvironment(ToolMode.SYSTEM, None)
 
         plan = cmake_dev.run_plan(
@@ -397,7 +421,7 @@ class CMakeTest(unittest.TestCase):
         description = normalized_plan_description(plan)
 
         self.assertIn("# cmake run iree-dump-cpuinfo", description)
-        self.assertIn("CMake File API", description)
+        self.assertIn("CMake target map", description)
         self.assertIn("<built executable>", description)
         self.assertIn("--help", description)
 
@@ -594,7 +618,7 @@ class CMakeTest(unittest.TestCase):
     def test_try_infers_deps_from_configured_aliases(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             build_dir = Path(temporary_dir)
-            alias_path = cmake_file_api.target_aliases_path(build_dir)
+            alias_path = cmake_targets.target_aliases_path(build_dir)
             alias_path.parent.mkdir(parents=True)
             alias_path.write_text(
                 json.dumps(

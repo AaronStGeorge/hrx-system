@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from build_tools.devtools import cmake_cache, cmake_file_api, cmake_make, cmake_ninja
+from build_tools.devtools import cmake_cache, cmake_make, cmake_ninja, cmake_targets
 from build_tools.devtools.command_plan import CommandStep, quote_command
 
 BUILD_TARGETS_CATALOG_FILENAME = "iree_ctest_build_targets.json"
@@ -536,7 +536,7 @@ class CTestBuildAndRunStep:
             CTestMetadataError,
             cmake_make.MakeBuildError,
             cmake_ninja.NinjaBuildError,
-            cmake_file_api.FileApiError,
+            cmake_targets.CMakeMetadataError,
             OSError,
         ) as exc:
             print(

@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from build_tools.devtools import cmake_file_api
+from build_tools.devtools import cmake_targets
 
 CACHE_ENTRY_PATTERN = re.compile(r"^([^:#=]+):([^=]+)=(.*)$")
 
@@ -32,7 +32,7 @@ def load_cmake_cache(build_dir: Path) -> list[CMakeCacheEntry]:
     try:
         lines = cache_path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError as exc:
-        raise cmake_file_api.FileApiError(
+        raise cmake_targets.CMakeMetadataError(
             f"CMake cache is missing; run iree-cmake-configure first: {cache_path}"
         ) from exc
     entries = []

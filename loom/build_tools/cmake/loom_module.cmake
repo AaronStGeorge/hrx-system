@@ -90,6 +90,9 @@ function(_loom_link_input_paths OUTPUT_PATHS OUTPUT_TARGETS)
 endfunction()
 
 function(loom_module)
+  # Tools, sources, and direct/transitive libraries are explicit inputs. Avoid
+  # importing every consuming target's dependency closure into these actions.
+  set(CMAKE_ADD_CUSTOM_COMMAND_DEPENDS_EXPLICIT_ONLY ON)
   cmake_parse_arguments(
     _RULE
     "INCLUDE_INPUT_EXPORTS;INCLUDE_INPUT_TESTS;STRIP_CHECK;REQUIRE_RESOLVED_CONFIG;STRICT_DEPS"

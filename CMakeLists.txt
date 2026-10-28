@@ -305,4 +305,5 @@ if(IREE_BUILD_TESTS)
   hrx_create_installed_tests()
 endif()
 
-iree_write_target_alias_map()
+# Register after callbacks that create targets, including Windows Python sources.
+cmake_language(DEFER CALL iree_write_target_map)

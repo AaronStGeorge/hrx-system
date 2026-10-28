@@ -14,10 +14,11 @@ function(iree_record_target_alias to_target from_target)
   set_property(GLOBAL APPEND PROPERTY IREE_TARGET_ALIAS_MAP "${to_target}=${from_target}")
 endfunction()
 
-# Writes command-line tool metadata for CMake aliases. Generators and the CMake
-# File API expose the concrete target names that build systems understand, while
-# users naturally reach for project aliases such as iree::base and hrx::hrx.
-function(iree_write_target_alias_map)
+# Writes the names, aliases, and executable paths used by the developer tools.
+# Defer this until after target-producing callbacks have run. TARGET_FILE is
+# evaluated by CMake for each configuration, including custom output names and
+# directories; consumers never reconstruct a platform's executable path.
+function(iree_write_target_map)
   get_property(_ALIAS_MAP GLOBAL PROPERTY IREE_TARGET_ALIAS_MAP)
   set(_ALIAS_MAP_PATH "${CMAKE_BINARY_DIR}/.iree/target_aliases.json")
   file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/.iree")
@@ -44,6 +45,50 @@ function(iree_write_target_alias_map)
   endif()
   string(APPEND _ALIAS_MAP_JSON "}\n")
   file(WRITE "${_ALIAS_MAP_PATH}" "${_ALIAS_MAP_JSON}")
+
+  set(_DIRECTORIES "${CMAKE_SOURCE_DIR}")
+  set(_TARGET_MAP "")
+  while(_DIRECTORIES)
+    list(POP_FRONT _DIRECTORIES _DIRECTORY)
+    get_property(_CHILDREN DIRECTORY "${_DIRECTORY}" PROPERTY SUBDIRECTORIES)
+    list(APPEND _DIRECTORIES ${_CHILDREN})
+    get_property(_TARGETS DIRECTORY "${_DIRECTORY}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_TARGET IN LISTS _TARGETS)
+      get_target_property(_TYPE "${_TARGET}" TYPE)
+      if(_TYPE STREQUAL "EXECUTABLE")
+        string(APPEND _TARGET_MAP "${_TARGET}\t$<TARGET_FILE:${_TARGET}>\n")
+      elseif(_TYPE STREQUAL "INTERFACE_LIBRARY")
+        # Interfaces with sources/header sets own native generation rules;
+        # usage-only interfaces have no target in the generated build system.
+        get_target_property(_SOURCES "${_TARGET}" SOURCES)
+        get_target_property(_HEADER_SETS "${_TARGET}" HEADER_SETS)
+        if(_SOURCES OR _HEADER_SETS)
+          string(APPEND _TARGET_MAP "${_TARGET}\n")
+        endif()
+      else()
+        string(APPEND _TARGET_MAP "${_TARGET}\n")
+      endif()
+    endforeach()
+  endwhile()
+  # One line per native target; executable paths follow a tab. Unlike JSON,
+  # this preserves generator-resolved paths without another escaping pass.
+  file(GENERATE
+    OUTPUT "${CMAKE_BINARY_DIR}/.iree/targets-$<CONFIG>.txt"
+    CONTENT "${_TARGET_MAP}")
+
+  # Name only the current configurations so stale files from a previous
+  # configure cannot contribute targets or executable paths.
+  get_property(_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+  if(_MULTI_CONFIG)
+    set(_TARGET_MAP_FILES ${CMAKE_CONFIGURATION_TYPES})
+    list(TRANSFORM _TARGET_MAP_FILES PREPEND "targets-")
+    list(TRANSFORM _TARGET_MAP_FILES APPEND ".txt")
+  else()
+    set(_TARGET_MAP_FILES "targets-${CMAKE_BUILD_TYPE}.txt")
+  endif()
+  list(JOIN _TARGET_MAP_FILES "\n" _TARGET_MAP_FILES_CONTENT)
+  file(WRITE "${CMAKE_BINARY_DIR}/.iree/target_configurations.txt"
+    "${_TARGET_MAP_FILES_CONTENT}\n")
 endfunction()
 
 function(iree_add_alias_library to_target from_target)
