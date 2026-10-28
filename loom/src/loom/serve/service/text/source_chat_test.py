@@ -258,7 +258,7 @@ class RequestTest(unittest.TestCase):
                 self.assertEqual(result.stdout, "")
         result = self.execute(self.request(), capacity=3)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("input exceeds capacity", result.stderr)
+        self.assertIn("input exceeds the available context size", result.stderr)
         self.assertEqual(result.stdout, "")
 
     def test_deterministic_sampling_options(self):

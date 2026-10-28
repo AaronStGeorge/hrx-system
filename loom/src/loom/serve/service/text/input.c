@@ -66,9 +66,11 @@ iree_status_t loom_serve_text_input_prepare(
     iree_allocator_free(host_allocator, media_spans);
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
-        "request input and output exceed remaining %zu-token context; compact "
-        "history or lower max_tokens",
-        context_capacity);
+        "request exceeds the available context size of %zu tokens: %zu input "
+        "tokens and max_tokens=%zu require %zu stored tokens; compact history "
+        "or lower max_tokens",
+        context_capacity, retained_count + count, chat->max_tokens,
+        retained_count + count + chat->max_tokens - 1);
   }
   int32_t* tokens = NULL;
   iree_status_t status = iree_allocator_malloc_array(

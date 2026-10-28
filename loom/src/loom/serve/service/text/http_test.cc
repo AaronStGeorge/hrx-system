@@ -11,11 +11,12 @@
 #include "iree/async/util/proactor_pool.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/serve/service/text/checkpoint_http.h"
 #include "loom/serve/testing/http_harness.h"
 
 namespace {
 
-class TextHttpTest : public ::testing::TestWithParam<bool> {
+class TextHttpFixture : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_string_builder_initialize(iree_allocator_system(), &content_);
@@ -39,25 +40,25 @@ class TextHttpTest : public ::testing::TestWithParam<bool> {
         http_.Send("POST /v1/chat/completions HTTP/1.1\r\nHost: local\r\n"
                    "Content-Length: 2\r\n\r\n{}",
                    client_.put()));
-    loom_serve_http_connection_t* connection = nullptr;
     const loom_serve_http_request_t* request = nullptr;
-    IREE_ASSERT_OK(http_.TakeRequest(client_.get(), &connection, &request));
-    const auto receipt = loom_serve_text_telemetry_begin(&telemetry_);
+    IREE_ASSERT_OK(http_.TakeRequest(client_.get(), &connection_, &request));
+    receipt_ = loom_serve_text_telemetry_begin(&telemetry_);
+  }
+
+  void AllocateConsumer() {
     auto status = loom_serve_text_http_consumer_allocate(
-        connection, &telemetry_, receipt, false, iree_allocator_system(),
+        connection_, &telemetry_, receipt_, false, iree_allocator_system(),
         &consumer_);
-    if (!iree_status_is_ok(status)) {
-      loom_serve_http_connection_abort(connection);
-    }
     IREE_ASSERT_OK(status);
-    response_.flags = GetParam() ? LOOM_SERVE_TEXT_CHAT_FLAG_STREAM : 0;
-    IREE_ASSERT_OK(consumer_.vtable->begin(consumer_.self, &response_));
-    ASSERT_NO_FATAL_FAILURE(Publish());
+    connection_ = nullptr;
   }
 
   void TearDown() override {
     if (consumer_.self) {
       consumer_.vtable->end(consumer_.self, false, IREE_STATUS_CANCELLED);
+    }
+    if (connection_) {
+      loom_serve_http_connection_abort(connection_);
     }
     IREE_EXPECT_OK(loom_serve_http_listener_free(listener_));
     loom_serve_http_server_free(server_);
@@ -89,7 +90,7 @@ class TextHttpTest : public ::testing::TestWithParam<bool> {
 
   void Append(loom_serve_text_chat_output_kind_t kind,
               iree_string_view_t text) {
-    if (GetParam()) {
+    if (iree_any_bit_set(response_.flags, LOOM_SERVE_TEXT_CHAT_FLAG_STREAM)) {
       const loom_serve_text_chat_output_t output = {
           .advanced = true,
           .kind = kind,
@@ -120,6 +121,10 @@ class TextHttpTest : public ::testing::TestWithParam<bool> {
   loom_serve::testing::HttpClient client_;
   // Owner accounting borrowed by the production adapter.
   loom_serve_text_telemetry_t telemetry_ = {};
+  // Undelivered claim, transferred to the selected consumer on allocation.
+  loom_serve_http_connection_t* connection_ = nullptr;
+  // Admission identity shared by the transport and telemetry.
+  loom_serve_text_receipt_t receipt_ = {};
   // Owned production receipt; teardown cancels an unfinished transaction.
   loom_serve_text_consumer_t consumer_ = {};
   // Deterministic wire metadata independent of wall time.
@@ -137,6 +142,18 @@ class TextHttpTest : public ::testing::TestWithParam<bool> {
   iree_string_builder_t scratch_ = {};
   // Validated complete call table borrowed through final encoding.
   loom_serve_text_tool_calls_t calls_ = {};
+};
+
+class TextHttpTest : public TextHttpFixture,
+                     public ::testing::WithParamInterface<bool> {
+ protected:
+  void SetUp() override {
+    ASSERT_NO_FATAL_FAILURE(TextHttpFixture::SetUp());
+    ASSERT_NO_FATAL_FAILURE(AllocateConsumer());
+    response_.flags = GetParam() ? LOOM_SERVE_TEXT_CHAT_FLAG_STREAM : 0;
+    IREE_ASSERT_OK(consumer_.vtable->begin(consumer_.self, &response_));
+    ASSERT_NO_FATAL_FAILURE(Publish());
+  }
 };
 
 TEST_P(TextHttpTest, SemanticChannelsAndCallsReachTheSameClaim) {
@@ -192,7 +209,7 @@ TEST_P(TextHttpTest, TranslationFailureDiscardsUnpublishedOutput) {
   ASSERT_NO_FATAL_FAILURE(Publish());
   const auto response = Finish(IREE_STATUS_INVALID_ARGUMENT);
   const std::string error =
-      R"({"error":{"message":"invalid \"tool\"","type":"loom_output_error"}})";
+      R"({"error":{"message":"invalid \"tool\"","type":"loom_output_error","code":"INVALID_ARGUMENT"}})";
   const auto headers_end = response.find("\r\n\r\n");
   ASSERT_NE(headers_end, std::string::npos) << response;
   if (GetParam()) {
@@ -209,5 +226,81 @@ TEST_P(TextHttpTest, TranslationFailureDiscardsUnpublishedOutput) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Delivery, TextHttpTest, ::testing::Bool());
+
+struct RejectionCase {
+  // Owned failure received from admission or retired checkpoint work.
+  iree_status_code_t status;
+  // Public status line prefix, independent of the status diagnostic string.
+  const char* http;
+};
+
+class TextHttpRejectionTest
+    : public TextHttpFixture,
+      public ::testing::WithParamInterface<RejectionCase> {};
+
+TEST_P(TextHttpRejectionTest, PreservesFailureCodeAndAvailability) {
+  ASSERT_NO_FATAL_FAILURE(AllocateConsumer());
+  const auto test = GetParam();
+  auto consumer = consumer_;
+  consumer_ = {};
+  IREE_ASSERT_OK(consumer.vtable->reject(consumer.self,
+                                         iree_status_from_code(test.status)));
+  std::string response;
+  IREE_ASSERT_OK(http_.Read(client_.release(), false, &response));
+  EXPECT_EQ(response.find(test.http), 0u) << response;
+  const std::string code = iree_status_code_string(test.status);
+  EXPECT_NE(response.find("\"code\":\"" + code + "\""), std::string::npos);
+  EXPECT_NE(response.find("\"message\":\"" + code + "\""), std::string::npos);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Admission, TextHttpRejectionTest,
+    ::testing::Values(
+        RejectionCase{IREE_STATUS_INVALID_ARGUMENT, "HTTP/1.1 400 "},
+        RejectionCase{IREE_STATUS_OUT_OF_RANGE, "HTTP/1.1 400 "},
+        RejectionCase{IREE_STATUS_NOT_FOUND, "HTTP/1.1 404 "},
+        RejectionCase{IREE_STATUS_FAILED_PRECONDITION, "HTTP/1.1 409 "},
+        RejectionCase{IREE_STATUS_UNIMPLEMENTED, "HTTP/1.1 501 "},
+        RejectionCase{IREE_STATUS_RESOURCE_EXHAUSTED, "HTTP/1.1 503 "},
+        RejectionCase{IREE_STATUS_UNAVAILABLE, "HTTP/1.1 503 "},
+        RejectionCase{IREE_STATUS_CANCELLED, "HTTP/1.1 503 "},
+        RejectionCase{IREE_STATUS_UNKNOWN, "HTTP/1.1 500 "},
+        RejectionCase{IREE_STATUS_INTERNAL, "HTTP/1.1 500 "},
+        RejectionCase{IREE_STATUS_DATA_LOSS, "HTTP/1.1 500 "}));
+
+class TextCheckpointHttpRejectionTest
+    : public TextHttpFixture,
+      public ::testing::WithParamInterface<RejectionCase> {};
+
+TEST_P(TextCheckpointHttpRejectionTest, PreservesFailureCodeAndAvailability) {
+  auto consumer = loom_serve_text_checkpoint_http_consumer(connection_);
+  connection_ = nullptr;
+  const loom_serve_text_checkpoint_request_t request = {
+      .action = LOOM_SERVE_TEXT_CHECKPOINT_ACTION_PIN,
+      .name = IREE_SV("checkpoint"),
+      .session = IREE_SV("session"),
+  };
+  const auto test = GetParam();
+  IREE_ASSERT_OK(consumer.end(consumer.self, &request, nullptr,
+                              iree_status_from_code(test.status), &telemetry_,
+                              &receipt_, &scratch_));
+  std::string response;
+  IREE_ASSERT_OK(http_.Read(client_.release(), false, &response));
+  EXPECT_EQ(response.find(test.http), 0u) << response;
+  const std::string code = iree_status_code_string(test.status);
+  EXPECT_NE(response.find("\"code\":\"" + code + "\""), std::string::npos);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Checkpoint, TextCheckpointHttpRejectionTest,
+    ::testing::Values(
+        RejectionCase{IREE_STATUS_NOT_FOUND, "HTTP/1.1 404 "},
+        RejectionCase{IREE_STATUS_ALREADY_EXISTS, "HTTP/1.1 409 "},
+        RejectionCase{IREE_STATUS_FAILED_PRECONDITION, "HTTP/1.1 409 "},
+        RejectionCase{IREE_STATUS_RESOURCE_EXHAUSTED, "HTTP/1.1 503 "},
+        RejectionCase{IREE_STATUS_UNAVAILABLE, "HTTP/1.1 503 "},
+        RejectionCase{IREE_STATUS_CANCELLED, "HTTP/1.1 503 "},
+        RejectionCase{IREE_STATUS_INTERNAL, "HTTP/1.1 500 "},
+        RejectionCase{IREE_STATUS_DATA_LOSS, "HTTP/1.1 500 "}));
 
 }  // namespace

@@ -201,15 +201,15 @@ static iree_status_t loom_serve_text_complete(
         session, response, LOOM_SERVE_TEXT_CHAT_OUTPUT_COMPLETE, scratch,
         scratch_allocator));
   }
+  const bool truncated = !loom_serve_text_row_is_eos(session->row);
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_complete(
       &session->request.chat, iree_string_builder_view(&session->response),
-      session->lifetime.serial, tool_calls, completion_scratch,
+      truncated, session->lifetime.serial, tool_calls, completion_scratch,
       scratch_allocator, &session->completion));
   const iree_host_size_t tool_count = tool_calls->count;
-  session->request.finish_reason = tool_count ? "tool_calls"
-                                   : loom_serve_text_row_is_eos(session->row)
-                                       ? "stop"
-                                       : "length";
+  session->request.finish_reason = truncated    ? "length"
+                                   : tool_count ? "tool_calls"
+                                                : "stop";
   const iree_string_view_t finish_reason =
       iree_make_cstring_view(session->request.finish_reason);
   if (iree_any_bit_set(response->flags, LOOM_SERVE_TEXT_CHAT_FLAG_STREAM)) {

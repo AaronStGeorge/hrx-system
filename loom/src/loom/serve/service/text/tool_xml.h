@@ -15,13 +15,16 @@
 extern "C" {
 #endif
 
-// Creates the optional tools.parse_xml(schemas, text) -> buffer capability.
-// Both inputs are UTF-8 buffers. The result is a JSON array of standard
+// Creates tools.parse_xml(schemas: buffer, text: buffer, truncated: i64).
+// Both buffers contain UTF-8. The result is a JSON array of standard
 // function tool calls, with JSON-encoded argument strings and no assigned IDs.
 // Parameter type hints distinguish literal strings from JSON values; they do
 // not constrain generated names or arguments. Unknown arguments remain literal
 // strings, and duplicate members retain their original order. The harness owns
 // required-field, schema, permission, and execution validation.
+// With truncated != 0, a valid but incomplete final call is omitted. Malformed
+// framing still fails the entire call list. With truncated == 0, incomplete
+// framing also fails. No missing delimiters, names, or values are invented.
 // Source explicitly selects this grammar by importing it; native chat handling
 // consumes only the returned function records. The environment outlives the
 // module and every returned buffer.

@@ -20,38 +20,67 @@ static iree_status_t loom_serve_text_tool_xml_quote(
   return loom_json_write_escaped_string(&stream, value);
 }
 
+typedef struct loom_serve_text_tool_xml_cursor_t {
+  // Unconsumed model output, borrowed for this completion only.
+  iree_string_view_t remaining;
+  // Generation stopped at its token limit instead of producing EOS.
+  bool truncated;
+  // A valid grammar prefix ended before the current call was complete.
+  bool incomplete;
+} loom_serve_text_tool_xml_cursor_t;
+
 static iree_status_t loom_serve_text_tool_xml_consume(
-    iree_string_view_t* cursor, iree_string_view_t literal) {
-  *cursor = iree_string_view_trim(*cursor);
-  if (!iree_string_view_consume_prefix(cursor, literal)) {
+    loom_serve_text_tool_xml_cursor_t* cursor, iree_string_view_t literal) {
+  if (cursor->incomplete) {
+    return iree_ok_status();
+  }
+  cursor->remaining = iree_string_view_trim(cursor->remaining);
+  if (!iree_string_view_consume_prefix(&cursor->remaining, literal)) {
+    if (cursor->truncated &&
+        (!cursor->remaining.size ||
+         iree_string_view_starts_with(literal, cursor->remaining))) {
+      cursor->incomplete = true;
+      return iree_ok_status();
+    }
     // Bound model-generated diagnostics and keep terminal control bytes out of
     // server logs. The request still fails without publishing a partial call.
     char preview[33];
-    const iree_host_size_t length = iree_min(cursor->size, sizeof(preview) - 1);
+    const iree_host_size_t length =
+        iree_min(cursor->remaining.size, sizeof(preview) - 1);
     for (iree_host_size_t i = 0; i < length; ++i) {
-      const unsigned char c = (unsigned char)cursor->data[i];
+      const unsigned char c = (unsigned char)cursor->remaining.data[i];
       preview[i] = c >= 0x20 && c <= 0x7E ? (char)c : '.';
     }
     preview[length] = 0;
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "generated tool call expected '%.*s'; got '%s%s'",
                             (int)literal.size, literal.data, preview,
-                            cursor->size > length ? "..." : "");
+                            cursor->remaining.size > length ? "..." : "");
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_serve_text_tool_xml_name(
-    iree_string_view_t* cursor, iree_string_view_t prefix,
+    loom_serve_text_tool_xml_cursor_t* cursor, iree_string_view_t prefix,
     iree_string_view_t* out_name) {
+  *out_name = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_serve_text_tool_xml_consume(cursor, prefix));
-  const iree_host_size_t end = iree_string_view_find_char(*cursor, '>', 0);
+  if (cursor->incomplete) {
+    return iree_ok_status();
+  }
+  const iree_host_size_t end =
+      iree_string_view_find_char(cursor->remaining, '>', 0);
   if (end == IREE_STRING_VIEW_NPOS) {
+    if (cursor->truncated) {
+      cursor->incomplete = true;
+      return iree_ok_status();
+    }
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unterminated generated tool name");
   }
-  *out_name = iree_string_view_substr(*cursor, 0, end);
-  *cursor = iree_string_view_substr(*cursor, end + 1, IREE_HOST_SIZE_MAX);
+  *out_name = iree_string_view_substr(cursor->remaining, 0, end);
+  cursor->remaining =
+      iree_string_view_substr(cursor->remaining, end + 1, IREE_HOST_SIZE_MAX);
   return iree_ok_status();
 }
 
@@ -205,8 +234,11 @@ static iree_status_t loom_serve_text_tool_xml_parameter_value(
 }
 
 static iree_status_t loom_serve_text_tool_xml_parameters_parse(
-    iree_string_view_t* cursor, const loom_serve_text_chat_tool_t* tool,
-    iree_string_builder_t* arguments) {
+    loom_serve_text_tool_xml_cursor_t* cursor,
+    const loom_serve_text_chat_tool_t* tool, iree_string_builder_t* arguments) {
+  if (cursor->incomplete) {
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(arguments, "{"));
   iree_string_builder_t key_scratch;
   iree_string_builder_initialize(arguments->allocator, &key_scratch);
@@ -221,20 +253,30 @@ static iree_status_t loom_serve_text_tool_xml_parameters_parse(
     }
   }
   iree_host_size_t count = 0;
-  *cursor = iree_string_view_trim(*cursor);
-  while (iree_string_view_starts_with(*cursor, IREE_SV("<parameter=")) &&
-         iree_status_is_ok(status)) {
+  cursor->remaining = iree_string_view_trim(cursor->remaining);
+  const iree_string_view_t prefix = IREE_SV("<parameter=");
+  while (iree_status_is_ok(status) && !cursor->incomplete &&
+         cursor->remaining.size &&
+         (iree_string_view_starts_with(cursor->remaining, prefix) ||
+          (cursor->truncated &&
+           iree_string_view_starts_with(prefix, cursor->remaining)))) {
     iree_string_view_t name;
-    status =
-        loom_serve_text_tool_xml_name(cursor, IREE_SV("<parameter="), &name);
+    status = loom_serve_text_tool_xml_name(cursor, prefix, &name);
     const iree_string_view_t end_tag = IREE_SV("</parameter>");
-    const iree_host_size_t end = iree_string_view_find(*cursor, end_tag, 0);
-    if (iree_status_is_ok(status) && end == IREE_STRING_VIEW_NPOS) {
-      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "unterminated generated parameter");
+    const iree_host_size_t end =
+        iree_string_view_find(cursor->remaining, end_tag, 0);
+    if (iree_status_is_ok(status) && !cursor->incomplete &&
+        end == IREE_STRING_VIEW_NPOS) {
+      if (cursor->truncated) {
+        cursor->incomplete = true;
+      } else {
+        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "unterminated generated parameter");
+      }
     }
-    if (iree_status_is_ok(status)) {
-      iree_string_view_t value = iree_string_view_substr(*cursor, 0, end);
+    if (iree_status_is_ok(status) && !cursor->incomplete) {
+      iree_string_view_t value =
+          iree_string_view_substr(cursor->remaining, 0, end);
       // Remove the template's one framing newline, preserving string content.
       if (!iree_string_view_consume_prefix(&value, IREE_SV("\r\n"))) {
         iree_string_view_consume_prefix(&value, IREE_SV("\n"));
@@ -257,8 +299,8 @@ static iree_status_t loom_serve_text_tool_xml_parameters_parse(
       }
       if (iree_status_is_ok(status)) {
         ++count;
-        *cursor = iree_string_view_trim(iree_string_view_substr(
-            *cursor, end + end_tag.size, IREE_HOST_SIZE_MAX));
+        cursor->remaining = iree_string_view_trim(iree_string_view_substr(
+            cursor->remaining, end + end_tag.size, IREE_HOST_SIZE_MAX));
       }
     }
   }
@@ -271,14 +313,16 @@ static iree_status_t loom_serve_text_tool_xml_parameters_parse(
 
 static iree_status_t loom_serve_text_tool_xml_parse(
     const loom_serve_text_tool_schemas_t* schemas, iree_string_view_t text,
-    iree_string_builder_t* tool_calls) {
+    bool truncated, iree_string_builder_t* tool_calls) {
   iree_host_size_t tool_count = 0;
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(tool_calls, "["));
-  iree_string_view_t cursor = iree_string_view_trim(text);
+  loom_serve_text_tool_xml_cursor_t cursor = {
+      .remaining = iree_string_view_trim(text), .truncated = truncated};
   iree_string_builder_t arguments;
   iree_string_builder_initialize(tool_calls->allocator, &arguments);
   iree_status_t status = iree_ok_status();
-  while (cursor.size && iree_status_is_ok(status)) {
+  while (cursor.remaining.size && !cursor.incomplete &&
+         iree_status_is_ok(status)) {
     status = loom_serve_text_tool_xml_consume(&cursor, IREE_SV("<tool_call>"));
     iree_string_view_t name = iree_string_view_empty();
     if (iree_status_is_ok(status)) {
@@ -287,11 +331,6 @@ static iree_status_t loom_serve_text_tool_xml_parse(
     }
     const loom_serve_text_chat_tool_t* tool =
         loom_serve_text_tool_schemas_find(schemas, name);
-    if (iree_status_is_ok(status) &&
-        tool_count >= LOOM_SERVE_TEXT_CHAT_MAX_TOOL_COUNT) {
-      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "too many generated tool calls");
-    }
     iree_string_builder_reset(&arguments);
     if (iree_status_is_ok(status)) {
       status =
@@ -305,7 +344,12 @@ static iree_status_t loom_serve_text_tool_xml_parse(
       status =
           loom_serve_text_tool_xml_consume(&cursor, IREE_SV("</tool_call>"));
     }
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) && !cursor.incomplete &&
+        tool_count >= LOOM_SERVE_TEXT_CHAT_MAX_TOOL_COUNT) {
+      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "too many generated tool calls");
+    }
+    if (iree_status_is_ok(status) && !cursor.incomplete) {
       const iree_host_size_t index = tool_count;
       status = iree_string_builder_append_format(
           tool_calls,
@@ -325,7 +369,7 @@ static iree_status_t loom_serve_text_tool_xml_parse(
         status = iree_string_builder_append_cstring(tool_calls, "}}");
       }
       ++tool_count;
-      cursor = iree_string_view_trim(cursor);
+      cursor.remaining = iree_string_view_trim(cursor.remaining);
     }
   }
   if (iree_status_is_ok(status)) {
@@ -336,8 +380,8 @@ static iree_status_t loom_serve_text_tool_xml_parse(
     iree_status_t contextual =
         iree_make_status(iree_status_code(status),
                          "tool call %" PRIhsz " at byte %" PRIhsz ": %.*s",
-                         tool_count, text.size - cursor.size, (int)message.size,
-                         message.data ? message.data : "");
+                         tool_count, text.size - cursor.remaining.size,
+                         (int)message.size, message.data ? message.data : "");
     status = iree_status_join(contextual, status);
   }
   iree_string_builder_deinitialize(&arguments);
@@ -389,7 +433,9 @@ static iree_status_t loom_serve_text_tool_xml_start(
         inputs[0], module->host_allocator, &schemas);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_serve_text_tool_xml_parse(&schemas, inputs[1], &output);
+    status = loom_serve_text_tool_xml_parse(
+        &schemas, inputs[1],
+        iree_vm_call_value_argument_load(&params->call, 0) != 0, &output);
   }
   iree_vm_buffer_t* buffer = NULL;
   if (iree_status_is_ok(status)) {
@@ -414,7 +460,8 @@ static iree_status_t loom_serve_text_tool_xml_start(
 static const iree_vm_module_signature_type_t
     loom_serve_text_tool_xml_arguments[] = {
         {IREE_VM_MODULE_SIGNATURE_TYPE_KIND_REF, 0},
-        {IREE_VM_MODULE_SIGNATURE_TYPE_KIND_REF, 0}};
+        {IREE_VM_MODULE_SIGNATURE_TYPE_KIND_REF, 0},
+        {IREE_VM_SCALAR_TYPE_I64, 0}};
 static const iree_vm_module_signature_type_t
     loom_serve_text_tool_xml_results[] = {
         {IREE_VM_MODULE_SIGNATURE_TYPE_KIND_REF, 0}};
@@ -436,7 +483,7 @@ static void loom_serve_text_tool_xml_query_callable(
     iree_vm_module_callable_type_declaration_t* out_value) {
   *out_value = (iree_vm_module_callable_type_declaration_t){
       .signature = {
-          .arguments = {loom_serve_text_tool_xml_arguments, 2, 0, 2, 0},
+          .arguments = {loom_serve_text_tool_xml_arguments, 3, 1, 2, 0},
           .results = {loom_serve_text_tool_xml_results, 1, 0, 1, 0}}};
 }
 static void loom_serve_text_tool_xml_query_import_group(
@@ -483,7 +530,7 @@ iree_status_t loom_serve_text_tool_xml_module_create(
       .counts = {.function_count = 1,
                  .callable_type_count = 1,
                  .export_count = 1,
-                 .callable_fields = {.value_count = 0, .ref_count = 3}}};
+                 .callable_fields = {.value_count = 1, .ref_count = 3}}};
   iree_status_t status = iree_vm_module_initialize(
       &loom_serve_text_tool_xml_vtable, &module->descriptor, &module->base);
   if (iree_status_is_ok(status)) {

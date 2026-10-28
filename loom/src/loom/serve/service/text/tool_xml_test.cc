@@ -48,22 +48,24 @@ class ToolXmlTest : public ::testing::Test {
     return iree_vm_buffer_variant_from_ptr_move(&types_, &buffer);
   }
 
-  iree_status_t Parse(iree_string_view_t text, std::string* out_calls) {
+  iree_status_t Parse(iree_string_view_t text, std::string* out_calls,
+                      bool truncated = false) {
     return Parse(text,
                  IREE_SV(
                      R"([{"type":"function","function":{"name":"search",
           "parameters":{"type":"object","properties":{
             "query":{"type":"string"},"limit":{"type":"integer"}},
             "required":["query"]}}}])"),
-                 out_calls);
+                 out_calls, truncated);
   }
 
   iree_status_t Parse(iree_string_view_t text, iree_string_view_t schemas,
-                      std::string* out_calls) {
+                      std::string* out_calls, bool truncated = false) {
     out_calls->clear();
     iree_vm_variant_t arguments[] = {
         Text(schemas),
         Text(text),
+        iree_vm_variant_from_i64(truncated),
     };
     iree_vm_variant_t result = iree_vm_variant_empty();
     auto status =
@@ -159,6 +161,56 @@ TEST_F(ToolXmlTest, EmptyOutputDoesNotInspectUnusedSchemas) {
   std::string calls;
   IREE_ASSERT_OK(Parse(IREE_SV("\r\n\t"), IREE_SV("unused"), &calls));
   EXPECT_EQ(calls, "[]");
+}
+
+TEST_F(ToolXmlTest, TokenLimitAtEveryBytePublishesOnlyCompleteCalls) {
+  const std::string call =
+      "<tool_call>\n<function=search>\n"
+      "<parameter=query>\nhello\n</parameter>\n"
+      "<parameter=limit>3</parameter>\n</function>\n</tool_call>";
+  const std::string expected =
+      R"({"type":"function","function":{"name":"search","arguments":"{\"query\":\"hello\",\"limit\":3}"}})";
+  for (size_t length = 0; length <= call.size(); ++length) {
+    SCOPED_TRACE(length);
+    std::string calls;
+    IREE_ASSERT_OK(
+        Parse(iree_make_string_view(call.data(), length), &calls, true));
+    EXPECT_EQ(calls, length == call.size() ? "[" + expected + "]" : "[]");
+    // A complete prefix survives a later truncated call, without repairing or
+    // publishing any of that last call's name or arguments.
+    const std::string text = call + "\n" + call.substr(0, length);
+    IREE_ASSERT_OK(
+        Parse(iree_make_string_view(text.data(), text.size()), &calls, true));
+    EXPECT_EQ(calls, "[" + expected +
+                         (length == call.size() ? "," + expected : "") + "]");
+  }
+}
+
+TEST_F(ToolXmlTest, TokenLimitDoesNotHideMalformedFraming) {
+  const std::string valid =
+      "<tool_call><function=search></function></tool_call>";
+  for (const char* invalid :
+       {"not a call", "<tool_cX", "<tool_call><funX",
+        "<tool_call><function=search><paramX",
+        "<tool_call><function=search></funcX",
+        "<tool_call><function=search></function></tool_cX"}) {
+    SCOPED_TRACE(invalid);
+    for (const bool truncated : {false, true}) {
+      SCOPED_TRACE(truncated);
+      const std::string text = valid + invalid;
+      std::string calls;
+      IREE_EXPECT_STATUS_IS(
+          IREE_STATUS_INVALID_ARGUMENT,
+          Parse(iree_make_string_view(text.data(), text.size()), &calls,
+                truncated));
+      EXPECT_TRUE(calls.empty());
+      IREE_ASSERT_OK(
+          Parse(iree_make_cstring_view(valid.c_str()), &calls, truncated));
+      EXPECT_EQ(
+          calls,
+          R"([{"type":"function","function":{"name":"search","arguments":"{}"}}])");
+    }
+  }
 }
 
 TEST_F(ToolXmlTest, NamesAreDataAndEscapesOnlyBelongToJson) {

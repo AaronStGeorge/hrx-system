@@ -4,7 +4,7 @@ func.decl import("input") @encode(%text: buffer, %flags: i32, %capacity: i64) ->
 
 func.decl import("input") @require(%condition: i32, %diagnostic: buffer)
 
-global.rodata.def @overflow = bytes("696e7075742065786365656473206361706163697479")
+global.rodata.def @overflow = bytes("696e70757420657863656564732074686520617661696c61626c6520636f6e746578742073697a65")
 
 global.rodata.def @name = bytes("706f727461626c652d63686174")
 
@@ -125,7 +125,7 @@ func.def public @output_next(%response: buffer, %previous: i64, %state: i64, %ph
   func.return %content, %previous, %end, %state : i64, i64, i64, i64
 }
 
-func.def public @parse_tools(%schemas: buffer, %response: buffer) -> (buffer) {
+func.def public @parse_tools(%schemas: buffer, %response: buffer, %truncated: i64) -> (buffer) {
   %c0 = index.constant 0 : offset
   %length = buffer.length %response
   %nonempty = index.cmp ne, %length, %c0 : offset

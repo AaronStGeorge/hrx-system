@@ -38,7 +38,7 @@ global.rodata.def @invalid = bytes("74657874206669787475726520616363657074732061
 
 global.rodata.def @unsupported = bytes("74657874206669787475726520726571756972657320706f6f6c65642065706f63687320776974686f7574204d5450")
 
-global.rodata.def @overflow = bytes("696e7075742065786365656473206361706163697479")
+global.rodata.def @overflow = bytes("696e70757420657863656564732074686520617661696c61626c6520636f6e746578742073697a65")
 
 func.def @check(%condition: i1) {
   %value = scalar.extui %condition : i1 to i32
@@ -368,7 +368,7 @@ func.def public @render_tool(%name: buffer, %arguments: buffer, %ordinal: i64) -
   func.return %empty, %c0_i64 : buffer, i64
 }
 
-func.def public @parse_tools(%schemas: buffer, %response: buffer) -> (buffer) {
+func.def public @parse_tools(%schemas: buffer, %response: buffer, %truncated: i64) -> (buffer) {
   %empty = global.load @no_tools : buffer
   func.return %empty : buffer
 }
