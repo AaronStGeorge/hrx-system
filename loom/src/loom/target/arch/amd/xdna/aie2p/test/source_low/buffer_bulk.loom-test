@@ -92,61 +92,54 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @aligned_compare()
   %85 = mov.short 128
   %86 = mov.short 4
   low.br ^_bb1(%81: reg<aie2p.er>, %81: reg<aie2p.er>, %81: reg<aie2p.er>)
-^_bb1(%74: reg<aie2p.er>, %75: reg<aie2p.er>, %76: reg<aie2p.er>):
-  %87 = ltu %74, %85
-  %88 = eq %75, %76
+^_bb1(%73: reg<aie2p.er>, %74: reg<aie2p.er>, %75: reg<aie2p.er>):
+  %87 = ltu %73, %85
+  %88 = eq %74, %75
   %89 = and %87, %88
   low.cond_br %89, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
-  %90 = mov.address-index %74
+  %90 = mov.address-index %73
   %91 = lda.i32.index %source, %90
   %93 = lda.i32.index %destination, %90
-  %94 = add.nc %74, %86
+  %94 = add.nc %73, %86
   low.br ^_bb1(%94: reg<aie2p.er>, %91: reg<aie2p.er>, %93: reg<aie2p.er>)
 ^_bb3:
-  %95 = ne %75, %76
-  low.cond_br %95, ^_bb4, ^_bb5 : reg<aie2p.er>
+  low.cond_br %88, ^_bb4, ^_bb5 : reg<aie2p.er>
 ^_bb4:
-  %96 = xor %75, %76
-  %98 = xor %96, %83
-  %99 = add.nc.immediate %96, -1
-  %100 = and %98, %99
-  %101 = popcount %100
-  %102 = mov.short 32
-  %103 = copy %96 : reg<aie2p.er> -> reg<aie2p.mr27_select>
-  %104 = sel.eqz %102, %101, %103
-  %105 = mov.short -8
-  %106 = and %104, %105
-  %107 = mov.short 255
-  %109 = sub %81, %106
-  %110 = lshl %75, %109
-  %111 = and %110, %107
-  %113 = sub %81, %106
-  %114 = lshl %76, %113
-  %115 = and %114, %107
-  %116 = ltu %111, %115
-  %117 = copy %116 : reg<aie2p.er> -> reg<aie2p.mr27_select>
-  %118 = sel.nez %83, %84, %117
-  low.br ^_bb6(%118: reg<aie2p.er>)
+  %95 = mov.static-byte-offset 128
+  %96 = mov.address-index %95
+  %97 = lda.i8.index %source, %96
+  %100 = lda.i8.index %destination, %96
+  low.br ^_bb6(%97: reg<aie2p.er>, %100: reg<aie2p.er>)
 ^_bb5:
-  low.br ^_bb6(%81: reg<aie2p.er>)
-^_bb6(%77: reg<aie2p.er>):
-  %119 = eqz %77
-  low.cond_br %119, ^_bb7, ^_bb8 : reg<aie2p.er>
+  low.br ^_bb6(%74: reg<aie2p.er>, %75: reg<aie2p.er>)
+^_bb6(%76: reg<aie2p.er>, %77: reg<aie2p.er>):
+  %101 = ne %76, %77
+  low.cond_br %101, ^_bb7, ^_bb8 : reg<aie2p.er>
 ^_bb7:
-  %120 = mov.static-byte-offset 128
-  %121 = mov.address-index %120
-  %122 = lda.i8.index %source, %121
-  %125 = lda.i8.index %destination, %121
-  %126 = eq %122, %125
-  %127 = ltu %122, %125
-  %128 = copy %127 : reg<aie2p.er> -> reg<aie2p.mr27_select>
-  %129 = sel.nez %83, %84, %128
-  %130 = copy %126 : reg<aie2p.er> -> reg<aie2p.mr27_select>
-  %131 = sel.nez %81, %129, %130
-  low.br ^_bb9(%131: reg<aie2p.er>)
+  %102 = xor %76, %77
+  %104 = xor %102, %83
+  %105 = add.nc.immediate %102, -1
+  %106 = and %104, %105
+  %107 = popcount %106
+  %108 = mov.short 32
+  %109 = copy %102 : reg<aie2p.er> -> reg<aie2p.mr27_select>
+  %110 = sel.eqz %108, %107, %109
+  %111 = mov.short -8
+  %112 = and %110, %111
+  %113 = mov.short 255
+  %115 = sub %81, %112
+  %116 = lshl %76, %115
+  %117 = and %116, %113
+  %119 = sub %81, %112
+  %120 = lshl %77, %119
+  %121 = and %120, %113
+  %122 = ltu %117, %121
+  %123 = copy %122 : reg<aie2p.er> -> reg<aie2p.mr27_select>
+  %124 = sel.nez %83, %84, %123
+  low.br ^_bb9(%124: reg<aie2p.er>)
 ^_bb8:
-  low.br ^_bb9(%77: reg<aie2p.er>)
+  low.br ^_bb9(%81: reg<aie2p.er>)
 ^_bb9(%order: reg<aie2p.er>):
   return %order
 }

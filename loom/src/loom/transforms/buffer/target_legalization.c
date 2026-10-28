@@ -790,13 +790,12 @@ static iree_status_t loom_buffer_legalize_build_compare_order(
   return status;
 }
 
-// Carry the last loaded pair, comparing only equality inside the loop. Compute
-// lexicographic order once after the scan instead of on every equal pair.
+// Returns the last loaded pair, comparing only equality inside the loop.
+// Empty scans return two zero words.
 static iree_status_t loom_buffer_legalize_build_compare_range(
     loom_builder_t* builder, const loom_op_t* op, uint32_t width, bool single,
-    loom_value_id_t start, loom_value_id_t end,
-    const loom_buffer_compare_constants_t* constants,
-    loom_value_id_t* out_order) {
+    loom_value_id_t start, loom_value_id_t end, loom_value_id_t* out_lhs,
+    loom_value_id_t* out_rhs) {
   const loom_scalar_type_t element = width == 8   ? LOOM_SCALAR_TYPE_I64
                                      : width == 4 ? LOOM_SCALAR_TYPE_I32
                                      : width == 2 ? LOOM_SCALAR_TYPE_I16
@@ -879,10 +878,9 @@ static iree_status_t loom_buffer_legalize_build_compare_range(
     }
   }
   loom_builder_restore(builder, saved_ip);
-  IREE_RETURN_IF_ERROR(status);
-  return loom_buffer_legalize_build_compare_order(builder, lhs, rhs, width,
-                                                  loaded_type, constants,
-                                                  op->location, out_order);
+  *out_lhs = lhs;
+  *out_rhs = rhs;
+  return status;
 }
 
 static iree_status_t loom_buffer_legalize_compare(
@@ -921,7 +919,7 @@ static iree_status_t loom_buffer_legalize_compare(
       loom_value_fact_table_lookup(context->fact_table, byte_length),
       &static_length);
   loom_value_id_t start = zero_offset;
-  loom_value_id_t order = constants.equal;
+  loom_value_id_t pair[] = {constants.equal, constants.equal};
   // A single word loop plus a bounded byte tail avoids duplicating mismatch
   // resolution for every smaller width. Static short ranges still select the
   // widest word that fits their complete extent.
@@ -930,6 +928,10 @@ static iree_status_t loom_buffer_legalize_compare(
                        (is_static && (uint64_t)static_length < width))) {
     width /= 2;
   }
+  const loom_type_t pair_type =
+      loom_type_scalar(width == 8   ? LOOM_SCALAR_TYPE_I64
+                       : width == 2 ? LOOM_SCALAR_TYPE_I16
+                                    : LOOM_SCALAR_TYPE_I32);
   const int64_t static_end = static_length & -(int64_t)width;
   if (width > 1) {
     if (is_static) {
@@ -941,7 +943,7 @@ static iree_status_t loom_buffer_legalize_compare(
     }
     IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_compare_range(
         &rewriter->builder, op, width, is_static && static_end == width,
-        zero_offset, start, &constants, &order));
+        zero_offset, start, &pair[0], &pair[1]));
   }
   if (!is_static ||
       (width == 1 ? static_length != 0 : static_length != static_end)) {
@@ -950,18 +952,18 @@ static iree_status_t loom_buffer_legalize_compare(
     if (width > 1) {
       loom_op_t* equal = NULL;
       IREE_RETURN_IF_ERROR(loom_scalar_cmpi_build(
-          &rewriter->builder, LOOM_SCALAR_CMPI_PREDICATE_EQ, order,
-          constants.equal, op->location, &equal));
-      const loom_type_t result_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+          &rewriter->builder, LOOM_SCALAR_CMPI_PREDICATE_EQ, pair[0], pair[1],
+          op->location, &equal));
+      const loom_type_t result_types[] = {pair_type, pair_type};
       IREE_RETURN_IF_ERROR(loom_scf_if_build(
           &rewriter->builder, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
-          loom_scalar_cmpi_result(equal), &result_type, 1, NULL, 0,
-          op->location, &branch));
+          loom_scalar_cmpi_result(equal), result_types,
+          IREE_ARRAYSIZE(result_types), NULL, 0, op->location, &branch));
       loom_builder_enter_region(&rewriter->builder, branch,
                                 loom_scf_if_else_region(branch));
       loom_op_t* yield = NULL;
-      iree_status_t status = loom_scf_yield_build(&rewriter->builder, &order, 1,
-                                                  op->location, &yield);
+      iree_status_t status = loom_scf_yield_build(
+          &rewriter->builder, pair, IREE_ARRAYSIZE(pair), op->location, &yield);
       loom_builder_restore(&rewriter->builder, saved_ip);
       IREE_RETURN_IF_ERROR(status);
       loom_builder_enter_region(&rewriter->builder, branch,
@@ -971,18 +973,31 @@ static iree_status_t loom_buffer_legalize_compare(
         width == 1 ? static_length : static_length - static_end;
     iree_status_t status = loom_buffer_legalize_build_compare_range(
         &rewriter->builder, op, 1, is_static && tail_length == 1, start,
-        byte_length, &constants, &order);
+        byte_length, &pair[0], &pair[1]);
     if (width > 1) {
+      for (uint32_t i = 0;
+           i < IREE_ARRAYSIZE(pair) && iree_status_is_ok(status); ++i) {
+        status = loom_buffer_legalize_build_integer_cast(
+            &rewriter->builder, pair[i], LOOM_SCALAR_TYPE_I32,
+            loom_type_element_type(pair_type), op->location, &pair[i]);
+      }
       if (iree_status_is_ok(status)) {
         loom_op_t* yield = NULL;
-        status = loom_scf_yield_build(&rewriter->builder, &order, 1,
-                                      op->location, &yield);
+        status =
+            loom_scf_yield_build(&rewriter->builder, pair, IREE_ARRAYSIZE(pair),
+                                 op->location, &yield);
       }
       loom_builder_restore(&rewriter->builder, saved_ip);
-      order = loom_scf_if_results(branch).values[0];
+      pair[0] = loom_scf_if_results(branch).values[0];
+      pair[1] = loom_scf_if_results(branch).values[1];
     }
     IREE_RETURN_IF_ERROR(status);
   }
+  // Resolve order after both scans have finished using address state.
+  loom_value_id_t order = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_compare_order(
+      &rewriter->builder, pair[0], pair[1], width, pair_type, &constants,
+      op->location, &order));
   IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
       rewriter, op, &order, 1, value_checkpoint));
   IREE_RETURN_IF_ERROR(

@@ -369,47 +369,45 @@ low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @compare(%lhs
     %109 = i32.add %97, %90
     low.scf.yield %109, %105, %108 : reg<wasm.i32>, reg<wasm.i64>, reg<wasm.i64>
   }
-  %110 = i64.ne %95, %96
-  %111 = low.scf.if %110 -> (reg<wasm.i32>) {
-    %112 = i64.xor %95, %96
-    %113 = i64.ctz %112
-    %114 = i64.const -8
-    %115 = i64.and %113, %114
-    %116 = i64.const 255
-    %117 = i64.shr_u %95, %115
-    %118 = i64.and %117, %116
-    %119 = i64.shr_u %96, %115
-    %120 = i64.and %119, %116
-    %121 = i64.lt_u %118, %120
-    %122 = i32.select %85, %86, %121
-    low.scf.yield %122 : reg<wasm.i32>
+  %110 = i64.eq %95, %96
+  %111, %112 = low.scf.if %110 -> (reg<wasm.i64>, reg<wasm.i64>) {
+    %117, %118, %119 = low.scf.while(%114 = %88 : reg<wasm.i32>, %115 = %83 : reg<wasm.i32>, %116 = %83 : reg<wasm.i32>) -> (reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>) {
+      %123 = i32.lt_u %114, %byte_length
+      %124 = i32.eq %115, %116
+      %125 = i32.and %123, %124
+      low.scf.condition %125, %114, %115, %116 : reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>
+    } do(%120: reg<wasm.i32>, %121: reg<wasm.i32>, %122: reg<wasm.i32>) {
+      %126 = i32.add %lhs_offset, %120
+      %127 = i32.add %lhs, %126
+      %128 = i32.load8_u %127
+      %129 = i32.add %rhs_offset, %120
+      %130 = i32.add %rhs, %129
+      %131 = i32.load8_u %130
+      %132 = i32.add %120, %86
+      low.scf.yield %132, %128, %131 : reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>
+    }
+    %133 = i64.extend_i32_u %118
+    %134 = i64.extend_i32_u %119
+    low.scf.yield %133, %134 : reg<wasm.i64>, reg<wasm.i64>
+  } else {
+    low.scf.yield %95, %96 : reg<wasm.i64>, reg<wasm.i64>
+  }
+  %135 = i64.ne %111, %112
+  %order = low.scf.if %135 -> (reg<wasm.i32>) {
+    %137 = i64.xor %111, %112
+    %138 = i64.ctz %137
+    %139 = i64.const -8
+    %140 = i64.and %138, %139
+    %141 = i64.const 255
+    %142 = i64.shr_u %111, %140
+    %143 = i64.and %142, %141
+    %144 = i64.shr_u %112, %140
+    %145 = i64.and %144, %141
+    %146 = i64.lt_u %143, %145
+    %147 = i32.select %85, %86, %146
+    low.scf.yield %147 : reg<wasm.i32>
   } else {
     low.scf.yield %83 : reg<wasm.i32>
-  }
-  %123 = i32.eq %111, %83
-  %order = low.scf.if %123 -> (reg<wasm.i32>) {
-    %129, %130, %131 = low.scf.while(%126 = %88 : reg<wasm.i32>, %127 = %83 : reg<wasm.i32>, %128 = %83 : reg<wasm.i32>) -> (reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>) {
-      %135 = i32.lt_u %126, %byte_length
-      %136 = i32.eq %127, %128
-      %137 = i32.and %135, %136
-      low.scf.condition %137, %126, %127, %128 : reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>
-    } do(%132: reg<wasm.i32>, %133: reg<wasm.i32>, %134: reg<wasm.i32>) {
-      %138 = i32.add %lhs_offset, %132
-      %139 = i32.add %lhs, %138
-      %140 = i32.load8_u %139
-      %141 = i32.add %rhs_offset, %132
-      %142 = i32.add %rhs, %141
-      %143 = i32.load8_u %142
-      %144 = i32.add %132, %86
-      low.scf.yield %144, %140, %143 : reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>
-    }
-    %145 = i32.eq %130, %131
-    %146 = i32.lt_u %130, %131
-    %147 = i32.select %85, %86, %146
-    %148 = i32.select %83, %147, %145
-    low.scf.yield %148 : reg<wasm.i32>
-  } else {
-    low.scf.yield %111 : reg<wasm.i32>
   }
   return %order
 }
