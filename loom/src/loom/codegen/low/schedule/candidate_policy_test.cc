@@ -357,6 +357,35 @@ TEST_F(CandidatePolicyTest, RetainedSetupRequiresBoundedProgress) {
   }
 }
 
+TEST_F(CandidatePolicyTest, ReadyDescriptorOperandIsNotDeferredUnderPressure) {
+  auto operand = MakeCandidate(0, 1);
+  operand.projected_live_units = 8;
+  operand.produced_live_units = 1;
+  operand.produced_live_value_count = 1;
+  operand.pressure_cliff_penalty = 1;
+  operand.pressure_cliff_units = 8;
+  operand.pressure_risk = LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT;
+  operand.flags = LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF;
+
+  auto unrelated = operand;
+  unrelated.source_ordinal = 0;
+  unrelated.projected_live_units = 11;
+  unrelated.produced_live_units = 4;
+  unrelated.pressure_cliff_penalty = 4;
+  unrelated.flags = 0;
+  for (const auto mode :
+       {LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
+        LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION}) {
+    SCOPED_TRACE(mode);
+    // An input-free operand holds storage without progress while its consumer
+    // is blocked. Making that descriptor ready lets physical cost decide.
+    ExpectPreferred(mode, unrelated, operand);
+    auto actionable = operand;
+    actionable.flags |= LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR;
+    ExpectPreferred(mode, actionable, unrelated);
+  }
+}
+
 TEST_F(CandidatePolicyTest, NearCliffRecoveryDefersReadyGrowth) {
   auto recovery = MakeCandidate(4, 1);
   recovery.projected_live_units = 12;
