@@ -1,0 +1,238 @@
+// RUN: emit source-low target=amd.xdna.aie2p:core output=low
+
+func.def @aligned_copy(%input: buffer, %output: buffer) {
+  %source = buffer.assume.alignment %input {minimum_alignment = 64} : buffer
+  %destination = buffer.assume.alignment %output {minimum_alignment = 64} : buffer
+  %origin = index.constant 0 : offset
+  %length = index.constant 129 : offset
+  buffer.copy %source[%origin], %destination[%origin], %length
+  func.return
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @aligned_copy() asm {
+  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %28 = mov.short 0
+  %29 = mov.short 128
+  %30 = mov.short 64
+  low.br ^_bb1(%28: reg<aie2p.er>)
+^_bb1(%25: reg<aie2p.er>):
+  %31 = ltu %25, %29
+  low.cond_br %31, ^_bb2, ^_bb3 : reg<aie2p.er>
+^_bb2:
+  %32 = mov.address-index %25
+  %33 = vlda.512.i32x16.index %source, %32
+  vst.512.i32x16.index %33, %destination, %32
+  %35 = add.nc %25, %30
+  low.br ^_bb1(%35: reg<aie2p.er>)
+^_bb3:
+  %36 = mov.static-byte-offset 128
+  %37 = mov.address-index %36
+  %38 = lda.i8.index %source, %37
+  st.i8.index %38, %destination, %37
+  return
+}
+
+// ====
+
+func.def @aligned_fill(%pattern: i16, %output: buffer) {
+  %destination = buffer.assume.alignment %output {minimum_alignment = 64} : buffer
+  %origin = index.constant 0 : offset
+  %length = index.constant 129 : offset
+  buffer.fill %pattern, %destination[%origin], %length : i16
+  func.return
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @aligned_fill(%pattern: reg<aie2p.er>) asm {
+  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %27 = mov.short 0
+  %28 = extend.u16 %pattern
+  %29 = mov.short 16
+  %30 = lshl %28, %29
+  %31 = or %28, %30
+  %32 = mov.short 128
+  %33 = vbcst.32 %31
+  %34 = mov.short 64
+  low.br ^_bb1(%27: reg<aie2p.er>)
+^_bb1(%25: reg<aie2p.er>):
+  %35 = ltu %25, %32
+  low.cond_br %35, ^_bb2, ^_bb3 : reg<aie2p.er>
+^_bb2:
+  %36 = mov.address-index %25
+  vst.512.i32x16.index %33, %destination, %36
+  %37 = add.nc %25, %34
+  low.br ^_bb1(%37: reg<aie2p.er>)
+^_bb3:
+  %38 = mov.static-byte-offset 128
+  %39 = mov.address-index %38
+  st.i8.index %31, %destination, %39
+  return
+}
+
+// ====
+
+func.def @aligned_compare(%input: buffer, %output: buffer) -> (i32) {
+  %source = buffer.assume.alignment %input {minimum_alignment = 64} : buffer
+  %destination = buffer.assume.alignment %output {minimum_alignment = 64} : buffer
+  %origin = index.constant 0 : offset
+  %length = index.constant 129 : offset
+  %order = buffer.compare %source[%origin], %destination[%origin], %length
+  func.return %order : i32
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @aligned_compare() -> (reg<aie2p.er>) asm {
+  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %81 = mov.short 0
+  %83 = mov.short -1
+  %84 = mov.short 1
+  %85 = mov.short 128
+  %86 = mov.short 4
+  low.br ^_bb1(%81: reg<aie2p.er>, %81: reg<aie2p.er>, %81: reg<aie2p.er>)
+^_bb1(%74: reg<aie2p.er>, %75: reg<aie2p.er>, %76: reg<aie2p.er>):
+  %87 = ltu %74, %85
+  %88 = eq %75, %76
+  %89 = and %87, %88
+  low.cond_br %89, ^_bb2, ^_bb3 : reg<aie2p.er>
+^_bb2:
+  %90 = mov.address-index %74
+  %91 = lda.i32.index %source, %90
+  %93 = lda.i32.index %destination, %90
+  %94 = add.nc %74, %86
+  low.br ^_bb1(%94: reg<aie2p.er>, %91: reg<aie2p.er>, %93: reg<aie2p.er>)
+^_bb3:
+  %95 = ne %75, %76
+  low.cond_br %95, ^_bb4, ^_bb5 : reg<aie2p.er>
+^_bb4:
+  %96 = xor %75, %76
+  %98 = xor %96, %83
+  %99 = add.nc.immediate %96, -1
+  %100 = and %98, %99
+  %101 = popcount %100
+  %102 = mov.short 32
+  %103 = copy %96 : reg<aie2p.er> -> reg<aie2p.mr27_select>
+  %104 = sel.eqz %102, %101, %103
+  %105 = mov.short -8
+  %106 = and %104, %105
+  %107 = mov.short 255
+  %109 = sub %81, %106
+  %110 = lshl %75, %109
+  %111 = and %110, %107
+  %113 = sub %81, %106
+  %114 = lshl %76, %113
+  %115 = and %114, %107
+  %116 = ltu %111, %115
+  %117 = copy %116 : reg<aie2p.er> -> reg<aie2p.mr27_select>
+  %118 = sel.nez %83, %84, %117
+  low.br ^_bb6(%118: reg<aie2p.er>)
+^_bb5:
+  low.br ^_bb6(%81: reg<aie2p.er>)
+^_bb6(%77: reg<aie2p.er>):
+  %119 = eqz %77
+  low.cond_br %119, ^_bb7, ^_bb8 : reg<aie2p.er>
+^_bb7:
+  %120 = mov.static-byte-offset 128
+  %121 = mov.address-index %120
+  %122 = lda.i8.index %source, %121
+  %125 = lda.i8.index %destination, %121
+  %126 = eq %122, %125
+  %127 = ltu %122, %125
+  %128 = copy %127 : reg<aie2p.er> -> reg<aie2p.mr27_select>
+  %129 = sel.nez %83, %84, %128
+  %130 = copy %126 : reg<aie2p.er> -> reg<aie2p.mr27_select>
+  %131 = sel.nez %81, %129, %130
+  low.br ^_bb9(%131: reg<aie2p.er>)
+^_bb8:
+  low.br ^_bb9(%77: reg<aie2p.er>)
+^_bb9(%order: reg<aie2p.er>):
+  return %order
+}
+
+// ====
+
+func.def @dynamic_aligned_copy(%input: buffer, %output: buffer, %input_length: i32) {
+  %source = buffer.assume.alignment %input {minimum_alignment = 64} : buffer
+  %destination = buffer.assume.alignment %output {minimum_alignment = 64} : buffer
+  %bounded = scalar.assume %input_length [range(%input_length, 0, 1024)] : i32
+  %length = index.cast %bounded : i32 to offset
+  %origin = index.constant 0 : offset
+  buffer.copy %source[%origin], %destination[%origin], %length
+  func.return
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @dynamic_aligned_copy(%length: reg<aie2p.er>) asm {
+  %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
+  %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
+  %82 = mov.short 0
+  %83 = mov.short -64
+  %84 = and %length, %83
+  %85 = mov.short 64
+  low.br ^_bb1(%82: reg<aie2p.er>)
+^_bb1(%78: reg<aie2p.er>):
+  %86 = ltu %78, %84
+  low.cond_br %86, ^_bb2, ^_bb3 : reg<aie2p.er>
+^_bb2:
+  %87 = mov.address-index %78
+  %88 = vlda.512.i32x16.index %source, %87
+  vst.512.i32x16.index %88, %destination, %87
+  %90 = add.nc %78, %85
+  low.br ^_bb1(%90: reg<aie2p.er>)
+^_bb3:
+  %91 = mov.short -32
+  %92 = and %length, %91
+  %93 = ltu %84, %92
+  low.cond_br %93, ^_bb4, ^_bb5 : reg<aie2p.er>
+^_bb4:
+  %97 = mov.address-index %84
+  %98 = vlda.256.i32x8.index %source, %97
+  vst.256.i32x8.index %98, %destination, %97
+  low.br ^_bb5
+^_bb5:
+  %102 = mov.short -16
+  %103 = and %length, %102
+  %104 = ltu %92, %103
+  low.cond_br %104, ^_bb6, ^_bb7 : reg<aie2p.er>
+^_bb6:
+  %108 = mov.address-index %92
+  %109 = vlda.128.i32x4.index %source, %108
+  vst.128.i32x4.index %109, %destination, %108
+  low.br ^_bb7
+^_bb7:
+  %113 = mov.short -4
+  %114 = and %length, %113
+  %115 = mov.short 4
+  low.br ^_bb8(%103: reg<aie2p.er>)
+^_bb8(%79: reg<aie2p.er>):
+  %116 = ltu %79, %114
+  low.cond_br %116, ^_bb9, ^_bb10 : reg<aie2p.er>
+^_bb9:
+  %117 = mov.address-index %79
+  %118 = lda.i32.index %source, %117
+  st.i32.index %118, %destination, %117
+  %120 = add.nc %79, %115
+  low.br ^_bb8(%120: reg<aie2p.er>)
+^_bb10:
+  %121 = mov.short -2
+  %122 = and %length, %121
+  %123 = ltu %114, %122
+  low.cond_br %123, ^_bb11, ^_bb12 : reg<aie2p.er>
+^_bb11:
+  %124 = mov.address-index %114
+  %125 = lda.i16.index %source, %124
+  st.i16.index %125, %destination, %124
+  low.br ^_bb12
+^_bb12:
+  %127 = ltu %122, %length
+  low.cond_br %127, ^_bb13, ^_bb14 : reg<aie2p.er>
+^_bb13:
+  %128 = mov.address-index %122
+  %129 = lda.i8.index %source, %128
+  st.i8.index %129, %destination, %128
+  low.br ^_bb14
+^_bb14:
+  return
+}

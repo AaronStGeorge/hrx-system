@@ -487,6 +487,16 @@ static const loom_low_lower_function_storage_mapping_t kAie2pFunctionStorage[] =
 };
 
 static const loom_low_lower_policy_t kAie2pCoreLowLowerPolicy = {
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 2 | 4,
+                           .vector_byte_widths = 16 | 32 | 64,
+                           .scalar_alignment = 4,
+                           .vector_alignment = 64},
     .name = IREE_SVL("amd-xdna-aie2p-core-low-lower"),
     .error_catalog = &loom_xdna_error_catalog,
     .vector_packet_policy = &kAie2pVectorPacketPolicy,

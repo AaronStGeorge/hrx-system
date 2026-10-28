@@ -13,45 +13,45 @@ func.def @word_and_tail(%left: buffer, %right: buffer) -> (i32) {
   %7 = scalar.constant 0 : i32
   %8 = scalar.constant -1 : i32
   %9 = scalar.constant 1 : i32
-  %49 = index.constant 0 : offset
-  %15 = buffer.view %left[%49] : buffer -> view<1xi64, align(1)>
+  %46 = index.constant 0 : offset
+  %12 = buffer.view %left[%46] : buffer -> view<1xi64, align(1)>
+  %13 = view.load %12[0] : view<1xi64, align(1)> -> i64
+  %45 = index.constant 0 : offset
+  %15 = buffer.view %right[%45] : buffer -> view<1xi64, align(1)>
   %16 = view.load %15[0] : view<1xi64, align(1)> -> i64
-  %48 = index.constant 0 : offset
-  %18 = buffer.view %right[%48] : buffer -> view<1xi64, align(1)>
-  %19 = view.load %18[0] : view<1xi64, align(1)> -> i64
-  %20 = scalar.cmpi ne, %16, %19 : i64
-  %21 = scf.if %20 -> (i32) {
-    %44 = scalar.assume %19 [ne(%19, %16)] : i64
-    %43 = scalar.assume %16 [ne(%16, %19)] : i64
-    %22 = scalar.xori %43, %44 : i64
-    %23 = scalar.cttzi %22 : i64
-    %24 = scalar.constant -8 : i64
-    %25 = scalar.andi %23, %24 : i64
-    %26 = scalar.constant 255 : i64
-    %27 = scalar.shrui %43, %25 : i64
-    %28 = scalar.andi %27, %26 : i64
-    %29 = scalar.shrui %44, %25 : i64
-    %30 = scalar.andi %29, %26 : i64
-    %31 = scalar.cmpi ult, %28, %30 : i64
-    %32 = scf.select %31, %8, %9 : i32
-    scf.yield %32 : i32
+  %17 = scalar.cmpi ne, %13, %16 : i64
+  %18 = scf.if %17 -> (i32) {
+    %41 = scalar.assume %16 [ne(%16, %13)] : i64
+    %40 = scalar.assume %13 [ne(%13, %16)] : i64
+    %19 = scalar.xori %40, %41 : i64
+    %20 = scalar.cttzi %19 : i64
+    %21 = scalar.constant -8 : i64
+    %22 = scalar.andi %20, %21 : i64
+    %23 = scalar.constant 255 : i64
+    %24 = scalar.shrui %40, %22 : i64
+    %25 = scalar.andi %24, %23 : i64
+    %26 = scalar.shrui %41, %22 : i64
+    %27 = scalar.andi %26, %23 : i64
+    %28 = scalar.cmpi ult, %25, %27 : i64
+    %29 = scf.select %28, %8, %9 : i32
+    scf.yield %29 : i32
   } else {
     scf.yield %7 : i32
   }
-  %33 = scalar.cmpi eq, %21, %7 : i32
-  %order = scf.if %33 -> (i32) {
-    %47 = index.constant 8 : offset
-    %36 = buffer.load.i8.u %left[%47]
-    %46 = index.constant 8 : offset
-    %38 = buffer.load.i8.u %right[%46]
-    %39 = scalar.cmpi eq, %36, %38 : i32
-    %40 = scalar.cmpi ult, %36, %38 : i32
-    %41 = scf.select %40, %8, %9 : i32
-    %42 = scf.select %39, %7, %41 : i32
-    scf.yield %42 : i32
+  %30 = scalar.cmpi eq, %18, %7 : i32
+  %order = scf.if %30 -> (i32) {
+    %44 = index.constant 8 : offset
+    %33 = buffer.load.i8.u %left[%44]
+    %43 = index.constant 8 : offset
+    %35 = buffer.load.i8.u %right[%43]
+    %36 = scalar.cmpi eq, %33, %35 : i32
+    %37 = scalar.cmpi ult, %33, %35 : i32
+    %38 = scf.select %37, %8, %9 : i32
+    %39 = scf.select %36, %7, %38 : i32
+    scf.yield %39 : i32
   } else {
-    %45 = scalar.assume %21 [ne(%21, 0)] : i32
-    scf.yield %45 : i32
+    %42 = scalar.assume %18 [ne(%18, 0)] : i32
+    scf.yield %42 : i32
   }
   func.return %order : i32
 }

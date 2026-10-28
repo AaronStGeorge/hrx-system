@@ -599,6 +599,17 @@ static void loom_spirv_mark_plan_storage_demands(
 }
 
 static const loom_low_lower_policy_t kSpirvLowLowerPolicy = {
+    // i32 is common to every profile; narrower/wider integer arithmetic has
+    // independent optional feature requirements.
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 4,
+                           .scalar_alignment = 4},
     .name = IREE_SVL("spirv-logical-lower"),
     .error_catalog = &loom_spirv_error_catalog,
     .vector_packet_policy = &kSpirvVectorPacketPolicy,

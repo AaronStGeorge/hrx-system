@@ -1998,6 +1998,18 @@ static const loom_target_bitstream_policy_t kAmdgpuBitstreamPolicy = {
 };
 
 static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
+    // One physical payload register per transfer keeps implicit bulk lowering
+    // from expanding the register footprint of each memory operation.
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 2 | 4,
+                           .scalar_alignment = 4},
     .name = IREE_SVL("amdgpu-register-lower"),
     .error_catalog = &loom_amdgpu_error_catalog,
     .vector_packet_policy = &kAmdgpuVectorPacketPolicy,

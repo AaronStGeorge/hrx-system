@@ -26,6 +26,7 @@
 #include "loom/codegen/low/descriptors.h"
 #include "loom/error/parameter.h"
 #include "loom/ir/ir.h"
+#include "loom/ir/memory_space.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/func/ops.h"
 #include "loom/target/facts.h"
@@ -71,9 +72,14 @@ typedef struct loom_target_bitstream_policy_t {
 // Preferred exact transfers for shared bulk-buffer decomposition. Each bit
 // names its power-of-two byte width (1 | 2 | 4 | 8, for example). Scalar
 // transfers use integers; vector transfers use contiguous i32 lanes. Targets
-// publish widths whose ordinary memory contracts support both load and store
-// in their bulk-buffer address spaces. Empty policies retain byte transfers.
+// publish widths whose ordinary memory contracts support load and, for mutable
+// spaces, store. Scalar types also support the ordinary integer bit operations
+// used to assemble patterns and compare loaded words.
+// Empty policies retain byte transfers.
 typedef struct loom_target_bulk_memory_policy_t {
+  // Bit N admits memory space N, including UNKNOWN for unqualified buffers.
+  // Other spaces retain byte transfers and their ordinary legality checks.
+  loom_memory_space_mask_t memory_spaces;
   // Preferred scalar byte widths, up to eight bytes. Byte access is implicit.
   uint8_t scalar_byte_widths;
   // Preferred vector byte widths, from eight through 64 bytes.

@@ -82,7 +82,7 @@ static iree_status_t loom_buffer_legalize_build_byte_store(
                                     location, &op);
 }
 
-// Selects transfers from producer-retained root and offset alignment facts.
+// Selects transfers from producer-retained memory-space and alignment facts.
 // No stronger alignment requirement is introduced by the generated views.
 static uint8_t loom_buffer_legalize_transfer_widths(
     const loom_target_legalization_context_t* context, loom_value_id_t buffer,
@@ -104,6 +104,9 @@ static uint8_t loom_buffer_legalize_transfer_widths(
     if (!loom_value_facts_is_zero(offset_facts)) {
       alignment = iree_math_gcd_u64(alignment, offset_facts.known_divisor);
     }
+  }
+  if (!(policy.memory_spaces & (1u << reference.memory_space))) {
+    return 1;
   }
   uint8_t widths = 1;
   for (uint32_t width = 2; width <= 64; width *= 2) {
@@ -217,32 +220,74 @@ static iree_status_t loom_buffer_legalize_build_copy_chunk(
                                           location);
 }
 
-// Converts to an integer payload for bit arithmetic, keeping address-domain
-// operations restricted to their canonical coordinate/byte semantics.
+// Mask the target's offset carrier directly when it fits a preferred scalar
+// transfer word. Otherwise only the low remainder bits need integer arithmetic;
+// subtracting that i32 remainder preserves the full offset without optional
+// i64.
 static iree_status_t loom_buffer_legalize_build_aligned_end(
-    loom_builder_t* builder, loom_value_id_t byte_length, uint32_t width,
-    loom_location_id_t location, loom_value_id_t* out_end) {
+    loom_target_legalization_context_t* context, loom_value_id_t byte_length,
+    uint32_t width, loom_location_id_t location, loom_value_id_t* out_end) {
   if (width == 1) {
     *out_end = byte_length;
     return iree_ok_status();
   }
+  loom_builder_t* builder = &context->rewriter->builder;
   const loom_type_t offset_type = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
-  const loom_type_t bits_type = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
-  loom_op_t* bits_op = NULL;
+  const bool wide_length =
+      loom_target_legalization_context_bundle(context)
+              ->snapshot->offset_bitwidth > 32 &&
+      !loom_value_facts_fit_signed_bit_count(
+          loom_value_fact_table_lookup(context->fact_table, byte_length), 32);
+  const bool full_mask =
+      !wide_length || (context->bulk_memory_policy.scalar_byte_widths & 8) != 0;
+  const loom_scalar_type_t scalar_type =
+      full_mask && wide_length ? LOOM_SCALAR_TYPE_I64 : LOOM_SCALAR_TYPE_I32;
+  const loom_type_t bits_type = loom_type_scalar(scalar_type);
+  loom_op_t* bits = NULL;
   IREE_RETURN_IF_ERROR(loom_index_cast_build(builder, byte_length, offset_type,
-                                             bits_type, location, &bits_op));
+                                             bits_type, location, &bits));
   loom_value_id_t mask = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
-      builder, LOOM_SCALAR_TYPE_I64, -(int64_t)width, location, &mask));
-  loom_op_t* end_bits_op = NULL;
+      builder, scalar_type, full_mask ? -(int64_t)width : width - 1, location,
+      &mask));
+  loom_op_t* masked_bits = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scalar_andi_build(builder, loom_index_cast_result(bits_op), mask,
-                             bits_type, location, &end_bits_op));
-  loom_op_t* end_op = NULL;
+      loom_scalar_andi_build(builder, loom_index_cast_result(bits), mask,
+                             bits_type, location, &masked_bits));
+  loom_op_t* masked_offset = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_index_cast_build(builder, loom_scalar_andi_result(end_bits_op),
-                            bits_type, offset_type, location, &end_op));
-  *out_end = loom_index_cast_result(end_op);
+      loom_index_cast_build(builder, loom_scalar_andi_result(masked_bits),
+                            bits_type, offset_type, location, &masked_offset));
+  if (full_mask) {
+    *out_end = loom_index_cast_result(masked_offset);
+    return iree_ok_status();
+  }
+  loom_op_t* end = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_sub_build(
+      builder, byte_length, loom_index_cast_result(masked_offset), offset_type,
+      location, &end));
+  const loom_value_id_t end_value = loom_index_sub_result(end);
+  // The split owns the correlation between the length and its remainder.
+  // Preserve the resulting bounds and divisibility across that decomposition.
+  const loom_predicate_t predicates[] = {
+      {.kind = LOOM_PREDICATE_GE,
+       .arg_count = 2,
+       .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+       .args = {end_value, 0}},
+      {.kind = LOOM_PREDICATE_LE,
+       .arg_count = 2,
+       .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE},
+       .args = {end_value, byte_length}},
+      {.kind = LOOM_PREDICATE_MULTIPLE_OF,
+       .arg_count = 2,
+       .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+       .args = {end_value, width}},
+  };
+  loom_op_t* aligned_end = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_assume_build(
+      builder, &end_value, 1, predicates, IREE_ARRAYSIZE(predicates),
+      &offset_type, 1, location, &aligned_end));
+  *out_end = loom_index_assume_results(aligned_end).values[0];
   return iree_ok_status();
 }
 
@@ -511,7 +556,7 @@ static iree_status_t loom_buffer_legalize_transfer(
           &rewriter->builder, static_end, op->location, &end);
     } else {
       status = loom_buffer_legalize_build_aligned_end(
-          &rewriter->builder, byte_length, width, op->location, &end);
+          context, byte_length, width, op->location, &end);
     }
     if (!iree_status_is_ok(status)) {
       break;
@@ -881,14 +926,19 @@ static iree_status_t loom_buffer_legalize_compare(
   // resolution for every smaller width. Static short ranges still select the
   // widest word that fits their complete extent.
   uint32_t width = 8;
-  while (width > 1 &&
-         (!(widths & width) || (is_static && static_length < width))) {
+  while (width > 1 && (!(widths & width) ||
+                       (is_static && (uint64_t)static_length < width))) {
     width /= 2;
   }
   const int64_t static_end = static_length & -(int64_t)width;
   if (width > 1) {
-    IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_aligned_end(
-        &rewriter->builder, byte_length, width, op->location, &start));
+    if (is_static) {
+      IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_offset_constant(
+          &rewriter->builder, static_end, op->location, &start));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_aligned_end(
+          context, byte_length, width, op->location, &start));
+    }
     IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_compare_range(
         &rewriter->builder, op, width, is_static && static_end == width,
         zero_offset, start, &constants, &order));

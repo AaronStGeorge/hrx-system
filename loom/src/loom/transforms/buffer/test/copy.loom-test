@@ -71,3 +71,86 @@ func.def @empty(%source: buffer, %target: buffer, %offset: offset) {
 func.def @empty(%source: buffer, %target: buffer, %offset: offset) {
   func.return
 }
+
+
+// ====
+
+// A dynamic split retains its bounded, aligned origin for each narrower tail.
+func.def @bounded_dynamic(%source: buffer, %target: buffer, %length: offset) {
+  %bounded = index.assume %length [range(%length, 0, 129)] : offset
+  %origin = index.constant 0 : offset
+  buffer.copy %source[%origin], %target[%origin], %bounded
+  func.return
+}
+
+// ----
+func.def @bounded_dynamic(%source: buffer, %target: buffer, %length: offset) {
+  %bounded = index.assume %length [range(%length, 0, 129)] : offset
+  %5 = index.constant 0 : offset
+  %6 = index.cast %bounded : offset to i32
+  %7 = scalar.constant -32 : i32
+  %8 = scalar.andi %6, %7 : i32
+  %9 = index.cast %8 : i32 to offset
+  %10 = index.constant 32 : offset
+  scf.for %11 = [%5 to %9 step %10] {
+    %13 = buffer.view %source[%11] : buffer -> view<8xi32, align(1)>
+    %14 = vector.load %13[0] : view<8xi32, align(1)> -> vector<8xi32>
+    %16 = buffer.view %target[%11] : buffer -> view<8xi32, align(1)>
+    vector.store %14, %16[0] : vector<8xi32>, view<8xi32, align(1)>
+  }
+  %17 = index.cast %bounded : offset to i32
+  %18 = scalar.constant -16 : i32
+  %19 = scalar.andi %17, %18 : i32
+  %20 = index.cast %19 : i32 to offset
+  %21 = index.cmp ult, %9, %20 : offset
+  scf.if %21 {
+    %61 = index.assume %9 [lt(%9, %20)] : offset
+    %23 = buffer.view %source[%61] : buffer -> view<4xi32, align(1)>
+    %24 = vector.load %23[0] : view<4xi32, align(1)> -> vector<4xi32>
+    %26 = buffer.view %target[%61] : buffer -> view<4xi32, align(1)>
+    vector.store %24, %26[0] : vector<4xi32>, view<4xi32, align(1)>
+  }
+  %27 = index.cast %bounded : offset to i32
+  %28 = scalar.constant -8 : i32
+  %29 = scalar.andi %27, %28 : i32
+  %30 = index.cast %29 : i32 to offset
+  %31 = index.cmp ult, %20, %30 : offset
+  scf.if %31 {
+    %62 = index.assume %20 [lt(%20, %30)] : offset
+    %33 = buffer.view %source[%62] : buffer -> view<1xi64, align(1)>
+    %34 = view.load %33[0] : view<1xi64, align(1)> -> i64
+    %36 = buffer.view %target[%62] : buffer -> view<1xi64, align(1)>
+    view.store %34, %36[0] : i64, view<1xi64, align(1)>
+  }
+  %37 = index.cast %bounded : offset to i32
+  %38 = scalar.constant -4 : i32
+  %39 = scalar.andi %37, %38 : i32
+  %40 = index.cast %39 : i32 to offset
+  %41 = index.cmp ult, %30, %40 : offset
+  scf.if %41 {
+    %63 = index.assume %30 [lt(%30, %40)] : offset
+    %43 = buffer.view %source[%63] : buffer -> view<1xi32, align(1)>
+    %44 = view.load %43[0] : view<1xi32, align(1)> -> i32
+    %46 = buffer.view %target[%63] : buffer -> view<1xi32, align(1)>
+    view.store %44, %46[0] : i32, view<1xi32, align(1)>
+  }
+  %47 = index.cast %bounded : offset to i32
+  %48 = scalar.constant -2 : i32
+  %49 = scalar.andi %47, %48 : i32
+  %50 = index.cast %49 : i32 to offset
+  %51 = index.cmp ult, %40, %50 : offset
+  scf.if %51 {
+    %64 = index.assume %40 [lt(%40, %50)] : offset
+    %53 = buffer.view %source[%64] : buffer -> view<1xi16, align(1)>
+    %54 = view.load %53[0] : view<1xi16, align(1)> -> i16
+    %56 = buffer.view %target[%64] : buffer -> view<1xi16, align(1)>
+    view.store %54, %56[0] : i16, view<1xi16, align(1)>
+  }
+  %57 = index.cmp ult, %50, %bounded : offset
+  scf.if %57 {
+    %65 = index.assume %50 [lt(%50, %bounded)] : offset
+    %59 = buffer.load.i8.u %source[%65]
+    buffer.store.i8 %59, %target[%65]
+  }
+  func.return
+}

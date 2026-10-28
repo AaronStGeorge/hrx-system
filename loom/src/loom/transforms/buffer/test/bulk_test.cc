@@ -45,6 +45,11 @@ extern "C" int32_t bulk_compare(const void* left, uint64_t left_offset,
                                 const void* right, uint64_t right_offset,
                                 uint64_t length);
 
+extern "C" int32_t bulk_compare3(const void* left, uint64_t left_offset,
+                                 const void* right, uint64_t right_offset);
+extern "C" int32_t bulk_compare5(const void* left, uint64_t left_offset,
+                                 const void* right, uint64_t right_offset);
+
 namespace {
 
 class GuardedPage {
@@ -231,6 +236,34 @@ TEST_F(BulkMemoryTest, CompareFirstDifferentUnsignedByte) {
               0xA5;
         }
       }
+    }
+  }
+}
+
+TEST_F(BulkMemoryTest, CompareFixedShortWords) {
+  GuardedPage left;
+  GuardedPage right;
+  ASSERT_TRUE(left.ready());
+  ASSERT_TRUE(right.ready());
+  for (size_t length : {3u, 5u}) {
+    auto compare = length == 3 ? bulk_compare3 : bulk_compare5;
+    const size_t left_offset = left.size() - length;
+    const size_t right_offset = right.size() - length;
+    for (size_t first = 0; first <= length; ++first) {
+      std::memset(left.data(), 0xA5, left.size());
+      std::memset(right.data(), 0xA5, right.size());
+      if (first < length) {
+        left.data()[left_offset + first] = 0x80;
+        right.data()[right_offset + first] = 0x7F;
+      }
+      if (first + 1 < length) {
+        left.data()[left_offset + first + 1] = 0;
+        right.data()[right_offset + first + 1] = 255;
+      }
+      EXPECT_EQ(compare(left.data(), left_offset, right.data(), right_offset),
+                first == length ? 0 : 1);
+      EXPECT_EQ(compare(right.data(), right_offset, left.data(), left_offset),
+                first == length ? 0 : -1);
     }
   }
 }

@@ -1142,6 +1142,7 @@ loom_check_test_suite(
     "test/native_stream_routes.loom-test"
     "test/operand_ties.loom-test"
     "test/source_low/bf16_vectors.loom-test"
+    "test/source_low/buffer_bulk.loom-test"
     "test/source_low/buffer_selection.loom-test"
     "test/source_low/callable_memory.loom-test"
     "test/source_low/callable_result_diagnostics.loom-test"

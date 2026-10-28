@@ -71,3 +71,15 @@ func.def public @bulk_compare(%left: buffer, %left_offset: offset, %right: buffe
   %order = buffer.compare %left[%left_offset], %right[%right_offset], %length
   func.return %order : i32
 }
+
+func.def public @bulk_compare3(%left: buffer, %left_offset: offset, %right: buffer, %right_offset: offset) -> (i32) {
+  %length = index.constant 3 : offset
+  %order = buffer.compare %left[%left_offset], %right[%right_offset], %length
+  func.return %order : i32
+}
+
+func.def public @bulk_compare5(%left: buffer, %left_offset: offset, %right: buffer, %right_offset: offset) -> (i32) {
+  %length = index.constant 5 : offset
+  %order = buffer.compare %left[%left_offset], %right[%right_offset], %length
+  func.return %order : i32
+}
