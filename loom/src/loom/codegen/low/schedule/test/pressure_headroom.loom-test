@@ -1,3 +1,38 @@
+// A four-unit copy opens another four units in the 32-location physical bank.
+// The consumer demand reserves four units and alignment reserves three more,
+// leaving 17 units of headroom.
+// RUN: emit low-schedule-json @aligned_copy_headroom strategy=resource-stall diagnostics=candidates output=none
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @aligned_copy_headroom(%source: reg<test.phys x4>) -> (reg<test.phys x4>, reg<test.phys x4>) asm {
+  %duplicate = copy %source {detached = true} : reg<test.phys x4> -> reg<test.phys x4>
+  // REMARK@+1: BACKEND/015 {chosen_packet="low.storage.reserve", rejected_packet="low.copy", rejected_projected_live_units="8", rejected_units_until_pressure_cliff="17"}
+  %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  return %source, %duplicate
+}
+
+// ====
+
+// The predecessor's eight-unit span needs seven units of packing reserve.
+// Only the four-unit prefix reaches the body, whose copy retains 17 units of
+// headroom just as it does without a predecessor.
+// RUN: emit low-schedule-json @block_local_alignment_headroom strategy=resource-stall diagnostics=candidates output=none
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @block_local_alignment_headroom(%source: reg<test.phys x8>) -> (reg<test.phys x4>, reg<test.phys x4>) asm {
+  %prefix = slice %source[0] : reg<test.phys x8> -> reg<test.phys x4>
+  low.br ^body(%prefix: reg<test.phys x4>)
+^body(%value: reg<test.phys x4>):
+  %duplicate = copy %value {detached = true} : reg<test.phys x4> -> reg<test.phys x4>
+  // REMARK@+1: BACKEND/015 {chosen_packet="low.storage.reserve", rejected_packet="low.copy", rejected_projected_live_units="8", rejected_units_until_pressure_cliff="17"}
+  %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  return %value, %duplicate
+}
+
+// ====
+
 // Five pointer units remain live throughout the scalar work.
 // The scalar constant has five users but activates only one scalar at a time.
 // Neither scalar load changes pointer occupancy. The second independent load

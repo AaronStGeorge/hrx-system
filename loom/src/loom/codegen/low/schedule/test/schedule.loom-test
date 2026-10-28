@@ -1219,39 +1219,6 @@ node 1 issue-cycle: 4
 node 2 issue-cycle: 4
 
 // ====
-// RUN: emit low-schedule-json @resource_stall_reserves_aligned_value_packing strategy=resource-stall diagnostics=candidates test.i32=72 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_reserves_aligned_value_packing(%pad: reg<test.i32 x57>, %ptr0: reg<test.ptr>, %ptr1: reg<test.ptr>, %lhs: reg<test.i32 x4>) -> (reg<test.i32 x57>, reg<test.i32 x4>) asm {
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_packet="test.load.v4i32", rejected_packet="test.load.v4i32", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="1"}
-  %load0 = test.load.v4i32 %ptr0
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_packet="test.add.v4i32", rejected_packet="test.load.v4i32", rejected_projected_live_units="69", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="5", rejected_pressure_cliff_units="72"}
-  %use0 = test.add.v4i32 %load0, %lhs
-  %load1 = test.load.v4i32 %ptr1
-  %use1 = test.add.v4i32 %load1, %use0
-  return %pad, %use1
-}
-
-// ====
-// RUN: emit low-schedule-json @resource_stall_scopes_packing_reserve_to_block strategy=resource-stall diagnostics=candidates test.i32=72 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_scopes_packing_reserve_to_block(%wide: reg<test.i32 x8>, %pad: reg<test.i32 x57>, %ptr0: reg<test.ptr>, %ptr1: reg<test.ptr>, %lhs: reg<test.i32 x4>) -> (reg<test.i32>, reg<test.i32 x57>, reg<test.i32 x4>) asm {
-  %lane = slice %wide[0] : reg<test.i32 x8> -> reg<test.i32>
-  low.br ^body(%lane: reg<test.i32>)
-^body(%block_lane: reg<test.i32>):
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_packet="test.load.v4i32", rejected_packet="test.load.v4i32", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="2"}
-  %load0 = test.load.v4i32 %ptr0
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_packet="test.add.v4i32", rejected_packet="test.load.v4i32"}
-  %use0 = test.add.v4i32 %load0, %lhs
-  %load1 = test.load.v4i32 %ptr1
-  %use1 = test.add.v4i32 %load1, %use0
-  return %block_lane, %pad, %use1
-}
-
-// ====
 // RUN: emit low-schedule-json @resource_stall_accounts_for_early_clobber_pressure strategy=resource-stall diagnostics=candidates test.i32=74 output=none
 
 test.target<low_core> @test_target
