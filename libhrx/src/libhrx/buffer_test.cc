@@ -279,8 +279,8 @@ TEST_F(CpuBufferTest, PreparedBackingAliasesRemainOrdinaryStreamBuffers) {
       };
       iree_hal_buffer_t* reservation = nullptr;
       IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-          device_->hal_device_group, scope, &options, iree_allocator_system(),
-          &reservation));
+          device_->hal_device_group, scope, {1, &pool}, &options,
+          iree_allocator_system(), &reservation));
       iree_hal_memory_mapping_t mapping = {
           .target = reservation,
           .scope = {iree_hal_device_group_memory_domain(

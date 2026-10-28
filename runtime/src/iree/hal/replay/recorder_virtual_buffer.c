@@ -16,20 +16,48 @@ iree_status_t iree_hal_replay_recorder_create_virtual_buffer(
     iree_hal_replay_recorder_t* recorder,
     iree_hal_virtual_buffer_create_callback_t next,
     iree_hal_device_group_t* request_group, const iree_hal_pool_scope_t* scope,
+    const iree_hal_virtual_buffer_sources_t* sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
   *out_buffer = NULL;
   iree_hal_replay_recorder_buffer_t* buffer_proxy = NULL;
   iree_status_t status = iree_hal_replay_recorder_buffer_allocate_proxy(
       host_allocator, &buffer_proxy);
-  iree_hal_replay_pool_family_access_payload_t* family_payloads = NULL;
-  if (iree_status_is_ok(status) && scope->family_count) {
-    status = iree_allocator_malloc_array(host_allocator, scope->family_count,
-                                         sizeof(*family_payloads),
-                                         (void**)&family_payloads);
+  iree_host_size_t scratch_size = 0;
+  iree_host_size_t families_offset = 0, ids_offset = 0, pools_offset = 0;
+  uint8_t* scratch = NULL;
+  if (iree_status_is_ok(status)) {
+    status = IREE_STRUCT_LAYOUT(
+        0, &scratch_size,
+        IREE_STRUCT_FIELD(scope->family_count,
+                          iree_hal_replay_pool_family_access_payload_t,
+                          &families_offset),
+        IREE_STRUCT_FIELD(sources->pool_count, iree_hal_replay_object_id_t,
+                          &ids_offset),
+        IREE_STRUCT_FIELD(sources->pool_count, iree_hal_pool_t*,
+                          &pools_offset));
   }
   if (iree_status_is_ok(status)) {
+    status =
+        iree_allocator_malloc(host_allocator, scratch_size, (void**)&scratch);
+  }
+  iree_hal_replay_pool_family_access_payload_t* family_payloads =
+      scratch ? (void*)(scratch + families_offset) : NULL;
+  iree_hal_replay_object_id_t* source_ids =
+      scratch ? (void*)(scratch + ids_offset) : NULL;
+  iree_hal_pool_t** native_pools =
+      scratch ? (void*)(scratch + pools_offset) : NULL;
+  if (iree_status_is_ok(status)) {
     iree_hal_replay_recorder_pool_capture_families(scope, family_payloads);
+  }
+  bool can_record = true;
+  for (iree_host_size_t i = 0;
+       i < sources->pool_count && iree_status_is_ok(status); ++i) {
+    source_ids[i] =
+        iree_hal_replay_recorder_find_pool_id(recorder, sources->pools[i]);
+    native_pools[i] =
+        iree_hal_replay_recorder_pool_base_or_self(sources->pools[i]);
+    can_record &= source_ids[i] != IREE_HAL_REPLAY_OBJECT_ID_NONE;
   }
   iree_hal_replay_object_id_t buffer_id = IREE_HAL_REPLAY_OBJECT_ID_NONE;
   if (iree_status_is_ok(status)) {
@@ -42,12 +70,19 @@ iree_status_t iree_hal_replay_recorder_create_virtual_buffer(
         IREE_HAL_REPLAY_OBJECT_ID_NONE, buffer_id,
         IREE_HAL_REPLAY_OBJECT_TYPE_NONE,
         IREE_HAL_REPLAY_OPERATION_CODE_VIRTUAL_BUFFER_CREATE,
-        IREE_HAL_REPLAY_PAYLOAD_TYPE_VIRTUAL_BUFFER_CREATE, &pending_record);
+        can_record ? IREE_HAL_REPLAY_PAYLOAD_TYPE_VIRTUAL_BUFFER_CREATE
+                   : IREE_HAL_REPLAY_PAYLOAD_TYPE_NONE,
+        &pending_record);
+  }
+  if (pending_record.recorder && !can_record) {
+    iree_hal_replay_recorder_mark_unsupported(&pending_record);
   }
   iree_hal_buffer_t* native_buffer = NULL;
   if (iree_status_is_ok(status)) {
-    status = next.fn(next.user_data, request_group, scope, options,
-                     host_allocator, &native_buffer);
+    const iree_hal_virtual_buffer_sources_t native_sources = {
+        sources->pool_count, native_pools};
+    status = next.fn(next.user_data, request_group, scope, &native_sources,
+                     options, host_allocator, &native_buffer);
   }
   iree_hal_replay_buffer_object_payload_t buffer_payload = {0};
   if (iree_status_is_ok(status)) {
@@ -60,6 +95,7 @@ iree_status_t iree_hal_replay_recorder_create_virtual_buffer(
         .min_alignment = options->min_alignment,
         .mapping_granularity = options->mapping_granularity,
         .family_count = scope->family_count,
+        .source_pool_count = sources->pool_count,
         .host_access = scope->host.access,
         .host_mapping_modes = scope->host.modes,
         .host_properties = scope->host.properties,
@@ -72,6 +108,8 @@ iree_status_t iree_hal_replay_recorder_create_virtual_buffer(
         iree_make_const_byte_span(&payload, sizeof(payload)),
         iree_make_const_byte_span(
             family_payloads, scope->family_count * sizeof(*family_payloads)),
+        iree_make_const_byte_span(source_ids,
+                                  sources->pool_count * sizeof(*source_ids)),
     };
     const iree_const_byte_span_t buffer_iovec =
         iree_make_const_byte_span(&buffer_payload, sizeof(buffer_payload));
@@ -85,10 +123,12 @@ iree_status_t iree_hal_replay_recorder_create_virtual_buffer(
         },
     };
     status = iree_hal_replay_recorder_end_creation_operation_list(
-        &pending_record, status, IREE_ARRAYSIZE(operation_iovecs),
-        operation_iovecs, IREE_ARRAYSIZE(created_objects), created_objects);
+        &pending_record, status,
+        can_record ? IREE_ARRAYSIZE(operation_iovecs) : 0,
+        can_record ? operation_iovecs : NULL, IREE_ARRAYSIZE(created_objects),
+        created_objects);
   }
-  iree_allocator_free(host_allocator, family_payloads);
+  iree_allocator_free(host_allocator, scratch);
   if (iree_status_is_ok(status)) {
     *out_buffer = iree_hal_replay_recorder_buffer_initialize_proxy(
         recorder, IREE_HAL_REPLAY_OBJECT_ID_NONE, buffer_id,

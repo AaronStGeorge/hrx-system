@@ -59,7 +59,8 @@ typedef uint64_t iree_hal_buffer_interfaces_t;
 
 typedef uint32_t iree_hal_pool_access_requirements_t;
 enum iree_hal_pool_access_requirement_bits_e {
-  // This family's access is coherent with the requested public host mapping.
+  // This family's access requires no cache maintenance on the public host
+  // mapping. Device-side transitions may still be required.
   IREE_HAL_POOL_ACCESS_REQUIRE_COHERENT_WITH_HOST = 1u << 0,
   // This family uses an uncached native device access path.
   IREE_HAL_POOL_ACCESS_REQUIRE_UNCACHED = 1u << 1,
@@ -507,6 +508,14 @@ typedef struct iree_hal_memory_transition_recipe_info_t {
     iree_hal_host_cache_fence_t fence_after;
   } host;
 } iree_hal_memory_transition_recipe_info_t;
+
+// Joins qualified actions across possible backing routes. Host mappings may
+// dispatch their own protocol through HOST_API; device operations must agree
+// on executor and granularity kind. Returns false when no common qualified
+// recipe exists. Only used while constructing an unpublished contract.
+IREE_API_EXPORT bool iree_hal_memory_transition_recipe_join(
+    iree_hal_memory_transition_recipe_info_t* result,
+    const iree_hal_memory_transition_recipe_info_t* value);
 
 typedef uint32_t iree_hal_memory_pair_flags_t;
 enum iree_hal_memory_pair_flag_bits_e {

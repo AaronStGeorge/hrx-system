@@ -338,7 +338,18 @@ static iree_status_t iree_hal_replay_dump_append_json_payload(
                                                 families_size);
       IREE_RETURN_IF_ERROR(iree_hal_replay_dump_append_json_file_range(
           builder, "family_range", &range));
-      return iree_string_builder_append_cstring(builder, "}");
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+          builder, ",\"source_pool_ids\":["));
+      for (iree_host_size_t i = 0; i < payload.source_pool_count; ++i) {
+        iree_hal_replay_object_id_t id;
+        memcpy(&id,
+               record->payload.data + sizeof(payload) + families_size +
+                   i * sizeof(id),
+               sizeof(id));
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+            builder, "%s%" PRIu64, i ? "," : "", id));
+      }
+      return iree_string_builder_append_cstring(builder, "]}");
     }
     case IREE_HAL_REPLAY_PAYLOAD_TYPE_QUEUE_MAP: {
       if (record->payload.data_length <

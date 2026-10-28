@@ -247,7 +247,13 @@ static iree_status_t iree_hal_replay_executor_virtual_buffer_create(
   memcpy(&payload, record->payload.data, sizeof(payload));
   iree_host_size_t family_payload_length = 0;
   iree_host_size_t payload_length = 0;
+  iree_host_size_t sources_length = 0;
   if (IREE_UNLIKELY(payload.reserved0 || payload.host_access > UINT16_MAX ||
+                    !payload.source_pool_count ||
+                    payload.source_pool_count > IREE_HOST_SIZE_MAX ||
+                    !iree_host_size_checked_mul(
+                        (iree_host_size_t)payload.source_pool_count,
+                        sizeof(iree_hal_replay_object_id_t), &sources_length) ||
                     payload.family_count > IREE_HOST_SIZE_MAX ||
                     !iree_host_size_checked_mul(
                         (iree_host_size_t)payload.family_count,
@@ -255,6 +261,8 @@ static iree_status_t iree_hal_replay_executor_virtual_buffer_create(
                         &family_payload_length) ||
                     !iree_host_size_checked_add(sizeof(payload),
                                                 family_payload_length,
+                                                &payload_length) ||
+                    !iree_host_size_checked_add(payload_length, sources_length,
                                                 &payload_length) ||
                     payload_length != record->payload.data_length)) {
     return iree_make_status(IREE_STATUS_DATA_LOSS,
@@ -269,6 +277,26 @@ static iree_status_t iree_hal_replay_executor_virtual_buffer_create(
   iree_status_t status = iree_hal_replay_executor_pool_decode_families(
       executor, (iree_host_size_t)payload.family_count,
       record->payload.data + sizeof(payload), families);
+  iree_hal_pool_t** pools = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(
+        executor->host_allocator, (iree_host_size_t)payload.source_pool_count,
+        sizeof(*pools), (void**)&pools);
+  }
+  for (iree_host_size_t i = 0;
+       i < payload.source_pool_count && iree_status_is_ok(status); ++i) {
+    iree_hal_replay_object_id_t id;
+    memcpy(&id,
+           record->payload.data + sizeof(payload) + family_payload_length +
+               i * sizeof(id),
+           sizeof(id));
+    iree_hal_replay_object_entry_t* entry = NULL;
+    status = iree_hal_replay_executor_lookup(
+        executor, id, IREE_HAL_REPLAY_OBJECT_TYPE_POOL, &entry);
+    if (iree_status_is_ok(status)) {
+      pools[i] = entry->value.pool;
+    }
+  }
   const iree_hal_pool_scope_t scope = {
       .family_count = (iree_host_size_t)payload.family_count,
       .families = families,
@@ -294,9 +322,11 @@ static iree_status_t iree_hal_replay_executor_virtual_buffer_create(
   };
   iree_hal_buffer_t* buffer = NULL;
   if (iree_status_is_ok(status)) {
-    status =
-        iree_hal_virtual_buffer_create(executor->device_group, scope, &options,
-                                       executor->host_allocator, &buffer);
+    status = iree_hal_virtual_buffer_create(
+        executor->device_group, scope,
+        (iree_hal_virtual_buffer_sources_t){
+            (iree_host_size_t)payload.source_pool_count, pools},
+        &options, executor->host_allocator, &buffer);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_replay_executor_store(
@@ -304,6 +334,7 @@ static iree_status_t iree_hal_replay_executor_virtual_buffer_create(
         IREE_HAL_REPLAY_OBJECT_TYPE_BUFFER,
         (iree_hal_replay_object_entry_t){.value.buffer = buffer});
   }
+  iree_allocator_free(executor->host_allocator, pools);
   iree_allocator_free(executor->host_allocator, families);
   return status;
 }

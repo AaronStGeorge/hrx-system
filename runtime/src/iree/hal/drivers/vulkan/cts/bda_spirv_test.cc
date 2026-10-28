@@ -1380,6 +1380,10 @@ TEST_P(BdaSpirvTest, NativeBindingsExecuteFromInteriorPoolRanges) {
 }
 
 TEST_P(BdaSpirvTest, CommandBufferExecutesBdaShaderWithSparseBindings) {
+  iree_hal_queue_t* mapping_queue = FindVulkanSparseBindingQueue(device_);
+  if (!mapping_queue) {
+    GTEST_SKIP() << "Vulkan sparse binding is unavailable";
+  }
   std::array<iree_hal_pool_family_access_t, 2> families = {{
       {
           .family = iree_hal_queue_family(transfer_queue_),
@@ -1396,23 +1400,31 @@ TEST_P(BdaSpirvTest, CommandBufferExecutesBdaShaderWithSparseBindings) {
       .family_count = families[0].family == families[1].family ? 1u : 2u,
       .families = families.data(),
   };
-  iree_hal_virtual_buffer_capabilities_t capabilities;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      device_group_, scope, iree_allocator_system(), &capabilities));
-  if (!capabilities.max_byte_length) {
-    GTEST_SKIP() << "Vulkan sparse virtual memory is not available";
-  }
-  iree_hal_queue_t* mapping_queue = FindVulkanSparseBindingQueue(device_);
-  ASSERT_NE(nullptr, mapping_queue);
   for (auto& family : families) {
     family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
   }
   iree_hal_slab_pool_options_t source_options;
   iree_hal_slab_pool_options_initialize(&source_options);
   Ref<iree_hal_pool_t> source_pool;
-  IREE_ASSERT_OK(
+  iree_status_t source_status =
       iree_hal_slab_pool_create(device_group_, scope, &source_options,
-                                iree_allocator_system(), source_pool.out()));
+                                iree_allocator_system(), source_pool.out());
+  if (iree_status_is_unavailable(source_status)) {
+    iree_status_ignore(source_status);
+    GTEST_SKIP() << "Vulkan sparse mapping sources are unavailable";
+  }
+  IREE_ASSERT_OK(source_status);
+  for (auto& family : families) {
+    family.interfaces = 0;
+  }
+  iree_hal_pool_t* declared_source = source_pool.get();
+  iree_hal_virtual_buffer_capabilities_t capabilities;
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
+      device_group_, scope, {1, &declared_source}, iree_allocator_system(),
+      &capabilities));
+  if (!capabilities.max_byte_length) {
+    GTEST_SKIP() << "Vulkan sparse virtual memory is not available";
+  }
   const auto requirements =
       iree_hal_pool_query_mapping_requirements(source_pool);
   const iree_device_size_t page_size = std::max(
@@ -1437,11 +1449,11 @@ TEST_P(BdaSpirvTest, CommandBufferExecutesBdaShaderWithSparseBindings) {
   BdaMemoryReservation input_buffer;
   BdaMemoryReservation output_buffer;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      device_group_, scope, &reservation_options, iree_allocator_system(),
-      input_buffer.out()));
+      device_group_, scope, {1, &declared_source}, &reservation_options,
+      iree_allocator_system(), input_buffer.out()));
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      device_group_, scope, &reservation_options, iree_allocator_system(),
-      output_buffer.out()));
+      device_group_, scope, {1, &declared_source}, &reservation_options,
+      iree_allocator_system(), output_buffer.out()));
   iree_hal_memory_mapping_t mappings[2] = {
       {
           .target = input_buffer.owner(),

@@ -790,6 +790,101 @@ TEST_F(GpuNativeTest, NonfinalReleaseFromFailedDependencyCallback) {
   EXPECT_EQ(allocator_.live_count.load(), 0u);
 }
 
+TEST_F(GpuNativeTest, RecordedAtomicsFollowReplacementBacking) {
+  using iree::hal::cts::Ref;
+  Create();
+  if (HasFatalFailure()) {
+    return;
+  }
+  iree_hal_pool_family_access_t access = {
+      .family = iree_hal_queue_family(queues_[0]),
+      .usage = IREE_HAL_BUFFER_USAGE_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER,
+      .interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE,
+      .atomics =
+          {
+              .queue =
+                  {
+                      .device_scope_32 = IREE_HAL_ATOMIC_OPERATION_FLAG_RMW_ADD,
+                  },
+          },
+  };
+  const iree_hal_slab_pool_options_t pool_options = {};
+  Ref<iree_hal_pool_t> source;
+  IREE_ASSERT_OK(
+      iree_hal_slab_pool_create(group_, {1, &access, {}}, &pool_options,
+                                iree_allocator_system(), source.out()));
+  iree_hal_pool_t* source_pool = source.get();
+  access.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
+  const iree_hal_pool_scope_t scope = {1, &access, {}};
+  iree_hal_virtual_buffer_capabilities_t capabilities;
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
+      group_, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
+  ASSERT_NE(capabilities.max_byte_length, 0u);
+  const auto unit = capabilities.reservation_granularity;
+  const iree_hal_virtual_buffer_options_t options = {.byte_length = unit};
+  Ref<iree_hal_buffer_t> target;
+  IREE_ASSERT_OK(
+      iree_hal_virtual_buffer_create(group_, scope, {1, &source_pool}, &options,
+                                     iree_allocator_system(), target.out()));
+  Ref<iree_hal_command_buffer_t> commands;
+  IREE_ASSERT_OK(iree_hal_command_buffer_create(
+      access.family, IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
+      IREE_HAL_COMMAND_CATEGORY_ATOMIC, 0, commands.out()));
+  IREE_ASSERT_OK(iree_hal_command_buffer_begin(commands));
+  IREE_ASSERT_OK(iree_hal_command_buffer_atomic_rmw(
+      commands, IREE_HAL_EXECUTION_STAGE_COMMAND_ISSUE,
+      IREE_HAL_EXECUTION_STAGE_COMMAND_RETIRE,
+      iree_hal_make_buffer_ref(target, 0, sizeof(uint32_t)),
+      {
+          .operand = 1,
+          .flags = IREE_HAL_ATOMIC_FLAG_ACQUIRE | IREE_HAL_ATOMIC_FLAG_RELEASE,
+          .width = IREE_HAL_ATOMIC_WIDTH_32,
+          .operation = IREE_HAL_ATOMIC_RMW_OPERATION_ADD,
+      }));
+  IREE_ASSERT_OK(iree_hal_command_buffer_end(commands));
+  iree_hal_pool_stats_t stats;
+  iree_hal_pool_query_stats(source, &stats);
+  EXPECT_EQ(stats.bytes_committed, 0u);
+  std::array<Ref<iree_hal_buffer_t>, 2> backings;
+  Ref<iree_hal_semaphore_t> completion;
+  CreateSemaphore(completion.out());
+  auto* timeline = completion.get();
+  const iree_hal_memory_scope_t all = {
+      iree_hal_device_group_memory_domain(group_), IREE_HAL_MEMORY_SCOPE_ANY};
+  for (size_t i = 0; i < backings.size(); ++i) {
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        source, iree_hal_make_pool_reservation_request(unit, 0),
+        iree_infinite_timeout(), backings[i].out()));
+    uint64_t initialized = i * 4 + 1, mapped = initialized + 1,
+             executed = initialized + 2, read = initialized + 3;
+    const uint32_t initial = 40 + i;
+    IREE_ASSERT_OK(iree_hal_queue_fill(
+        queues_[0], {}, {1, &timeline, &initialized}, backings[i], 0,
+        sizeof(initial), &initial, sizeof(initial), nullptr, 0));
+    const iree_hal_memory_mapping_t mapping = {
+        .target = target,
+        .scope = all,
+        .target_range = {0, unit},
+        .source = backings[i],
+        .access = IREE_HAL_MEMORY_ACCESS_ALL,
+    };
+    IREE_ASSERT_OK(iree_hal_queue_map(queues_[0], {1, &timeline, &initialized},
+                                      {1, &timeline, &mapped}, 1, &mapping, 0));
+    IREE_ASSERT_OK(iree_hal_queue_execute(queues_[0], {1, &timeline, &mapped},
+                                          {1, &timeline, &executed}, commands,
+                                          {}, 0));
+    uint32_t result = 0;
+    IREE_ASSERT_OK(iree_hal_queue_download(
+        queues_[0], {1, &timeline, &executed}, {1, &timeline, &read},
+        backings[i], 0, &result, sizeof(result), nullptr));
+    IREE_ASSERT_OK(
+        iree_hal_semaphore_wait(timeline, read, iree_infinite_timeout(), 0));
+    EXPECT_EQ(result, initial + 1);
+  }
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_detach(target, all));
+}
+
 TEST_F(GpuNativeTest, BatchedMappingsReplaceProtectAndReleaseNativeBacking) {
   using iree::hal::cts::Ref;
   Create();
@@ -812,9 +907,11 @@ TEST_F(GpuNativeTest, BatchedMappingsReplaceProtectAndReleaseNativeBacking) {
   target_access.interfaces = UINT64_C(1)
                              << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
   const iree_hal_pool_scope_t scope = {1, &target_access, {}};
+  iree_hal_pool_t* source_pool = pool.get();
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, iree_allocator_system(), &capabilities));
+      group_, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
   ASSERT_NE(capabilities.max_byte_length, 0u);
   EXPECT_EQ(capabilities.operations, IREE_HAL_MEMORY_MAPPING_OPERATIONS_ALL);
   const uint64_t unit =
@@ -827,8 +924,8 @@ TEST_F(GpuNativeTest, BatchedMappingsReplaceProtectAndReleaseNativeBacking) {
   };
   Ref<iree_hal_buffer_t> reservation;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      group_, scope, &reservation_options, iree_allocator_system(),
-      reservation.out()));
+      group_, scope, {1, &source_pool}, &reservation_options,
+      iree_allocator_system(), reservation.out()));
   iree_hal_memory_scope_t program_scope;
   IREE_ASSERT_OK(iree_hal_device_group_resolve_memory_scope(
       group_, {IREE_HAL_MEMORY_SITE_PROGRAM, access.family}, &program_scope));

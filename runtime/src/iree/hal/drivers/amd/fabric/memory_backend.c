@@ -414,60 +414,6 @@ static void iree_hal_amd_fabric_memory_accumulate_pair(
   }
 }
 
-// Joins guarantees across construction routes, not across execution sites.
-// A prepared host mapping executes its own cache recipe when routes differ.
-// Device recipes must agree on an executor and operation; a range recipe does
-// not establish that the same engine supports a global operation.
-static bool iree_hal_amd_fabric_memory_join_transition(
-    iree_hal_memory_transition_recipe_info_t* result,
-    const iree_hal_memory_transition_recipe_info_t* value) {
-  if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_UNKNOWN ||
-      value->kind == IREE_HAL_MEMORY_TRANSITION_KIND_UNKNOWN) {
-    return false;
-  }
-  if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE ||
-      value->kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE) {
-    if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE) {
-      *result = *value;
-    }
-    // A no-op route may have a different host cache class. Execute through
-    // each mapping instead of applying another route's direct instructions.
-    if (result->operation == IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH ||
-        result->operation ==
-            IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_INVALIDATE) {
-      result->executor = IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API;
-      memset(&result->host, 0, sizeof(result->host));
-    }
-    return true;
-  }
-  if (result->operation != value->operation) {
-    return false;
-  }
-  const bool host =
-      result->operation == IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH ||
-      result->operation == IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_INVALIDATE;
-  if (host) {
-    // A contract with both ranged and global native routes promises the
-    // requested range. The selected mapping may perform broader maintenance.
-    if (result->kind != value->kind) {
-      result->kind = IREE_HAL_MEMORY_TRANSITION_KIND_RANGE;
-    }
-    if (result->executor != value->executor ||
-        result->host.instruction != value->host.instruction ||
-        result->host.fence_before != value->host.fence_before ||
-        result->host.fence_after != value->host.fence_after) {
-      result->executor = IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API;
-      memset(&result->host, 0, sizeof(result->host));
-    }
-  } else if (result->kind != value->kind ||
-             result->executor != value->executor) {
-    return false;
-  }
-  result->range_granularity =
-      iree_max(result->range_granularity, value->range_granularity);
-  return true;
-}
-
 static iree_status_t iree_hal_amd_fabric_memory_query_transition(
     void* user_data, iree_hal_memory_scope_id_t producer_id,
     iree_hal_memory_scope_id_t consumer_id,
@@ -576,9 +522,9 @@ static iree_status_t iree_hal_amd_fabric_memory_query_transition(
         out_info->estimated_fixed_cost_nanoseconds =
             iree_max(out_info->estimated_fixed_cost_nanoseconds,
                      info.estimated_fixed_cost_nanoseconds);
-        query->complete &= iree_hal_amd_fabric_memory_join_transition(
+        query->complete &= iree_hal_memory_transition_recipe_join(
             &out_info->release, &info.release);
-        query->complete &= iree_hal_amd_fabric_memory_join_transition(
+        query->complete &= iree_hal_memory_transition_recipe_join(
             &out_info->acquire, &info.acquire);
       }
     }

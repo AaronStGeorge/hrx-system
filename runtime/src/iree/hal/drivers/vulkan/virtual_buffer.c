@@ -87,6 +87,8 @@ bool iree_hal_vulkan_virtual_buffer_isa(iree_hal_buffer_t* buffer) {
 }
 
 typedef struct iree_hal_vulkan_reservation_plan_t {
+  // Owned immutable alias contract prepared before acquiring native addresses.
+  iree_hal_memory_contract_t* contract;
   // Zero geometry denotes an unsupported complete scope.
   iree_hal_virtual_buffer_capabilities_t capabilities;
   // Native creation usage, including the driver's binding requirements.
@@ -104,16 +106,18 @@ typedef struct iree_hal_vulkan_reservation_plan_t {
 // Cold scope qualification uses only the sealed group's native owners. The
 // query and constructor consume the same plan without acquiring scratch
 // buffers.
-static void iree_hal_vulkan_virtual_buffer_prepare(
+static iree_status_t iree_hal_vulkan_virtual_buffer_prepare(
     const iree_hal_vulkan_memory_backend_t* backend,
-    iree_hal_pool_scope_t scope, iree_hal_vulkan_reservation_plan_t* plan) {
+    iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
+    iree_hal_virtual_buffer_sources_t sources, iree_allocator_t host_allocator,
+    iree_hal_vulkan_reservation_plan_t* plan) {
   *plan = (iree_hal_vulkan_reservation_plan_t){0};
   if (!scope.family_count || scope.host.access ||
       !backend->sparse_binding_queue ||
       !iree_all_bits_set(
           backend->enabled_features.general,
           IREE_HAL_VULKAN_FEATURE_ENABLE_SPARSE_RESIDENCY_ALIASED)) {
-    return;
+    return iree_ok_status();
   }
   plan->interfaces = 1u << IREE_HAL_BUFFER_INTERFACE_VULKAN_BUFFER;
   const bool has_device_address =
@@ -144,13 +148,13 @@ static void iree_hal_vulkan_virtual_buffer_prepare(
                                          access->family},
                 atomic_operations),
             access->atomics.program)) {
-      return;
+      return iree_ok_status();
     }
     const iree_hal_vulkan_queue_t* queue =
         (const iree_hal_vulkan_queue_t*)iree_hal_device_queue(
             backend->device, access->family->ordinal, 0);
     if (!queue) {
-      return;
+      return iree_ok_status();
     }
     uint32_t j = 0;
     for (; j < plan->family_count; ++j) {
@@ -173,7 +177,7 @@ static void iree_hal_vulkan_virtual_buffer_prepare(
                backend->physical_device->maintenance4_properties.maxBufferSize);
   if (!granularity || granularity > max_length ||
       !plan->requirements.memoryTypeBits) {
-    return;
+    return iree_ok_status();
   }
   plan->capabilities = (iree_hal_virtual_buffer_capabilities_t){
       .max_byte_length = max_length - max_length % granularity,
@@ -186,28 +190,74 @@ static void iree_hal_vulkan_virtual_buffer_prepare(
               : granularity,
       .operations = IREE_HAL_MEMORY_MAPPING_OPERATIONS_ALL,
   };
+  iree_hal_memory_contract_t* contract = NULL;
+  IREE_RETURN_IF_ERROR(iree_hal_memory_contract_create(
+      iree_hal_device_group_memory_domain(group),
+      iree_hal_device_group_memory_scope_count(group),
+      iree_hal_vulkan_buffer_binding_layout(), host_allocator, &contract));
+  for (iree_host_size_t i = 0; i < scope.family_count; ++i) {
+    const iree_hal_pool_family_access_t* family = &scope.families[i];
+    contract->allowed_usage |= family->usage;
+    const uint32_t id = family->family->memory.queue_scope_id;
+    iree_hal_memory_scope_access_t* site = &contract->scopes[id];
+    site->usage = family->usage;
+    site->interfaces = plan->interfaces;
+    site->bindings[IREE_HAL_BUFFER_INTERFACE_VULKAN_BUFFER] =
+        IREE_HAL_VULKAN_BUFFER_BINDING_RESOURCE;
+    if (plan->interfaces & (1u << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS)) {
+      site->bindings[IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS] =
+          IREE_HAL_VULKAN_BUFFER_BINDING_DEVICE_ADDRESS;
+    }
+    contract->scopes[id + 1] = *site;
+    iree_hal_memory_scope_access_set_atomic_operations(
+        site, iree_hal_memory_site_filter_atomic_operations(
+                  (iree_hal_memory_site_t){IREE_HAL_MEMORY_SITE_QUEUE,
+                                           family->family},
+                  atomic_operations));
+    iree_hal_memory_scope_access_set_atomic_operations(
+        &contract->scopes[id + 1],
+        iree_hal_memory_site_filter_atomic_operations(
+            (iree_hal_memory_site_t){IREE_HAL_MEMORY_SITE_PROGRAM,
+                                     family->family},
+            atomic_operations));
+  }
+  contract->allowed_access =
+      iree_hal_buffer_usage_access(contract->allowed_usage);
+  iree_status_t status = iree_hal_virtual_buffer_initialize_contract(
+      scope, sources, IREE_HAL_MEMORY_BACKEND_VULKAN,
+      plan->requirements.memoryTypeBits, contract, &plan->capabilities);
+  if (iree_status_is_ok(status) && plan->capabilities.max_byte_length) {
+    plan->contract = contract;
+  } else {
+    iree_hal_memory_contract_release(contract);
+  }
+  return status;
 }
 
 iree_status_t iree_hal_vulkan_virtual_buffer_query_capabilities(
     const iree_hal_memory_backend_t* base, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope, iree_allocator_t host_allocator,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
+    iree_allocator_t host_allocator,
     iree_hal_virtual_buffer_capabilities_t* out_capabilities) {
   iree_hal_vulkan_reservation_plan_t plan;
-  iree_hal_vulkan_virtual_buffer_prepare(
-      (const iree_hal_vulkan_memory_backend_t*)base, scope, &plan);
+  IREE_RETURN_IF_ERROR(iree_hal_vulkan_virtual_buffer_prepare(
+      (const iree_hal_vulkan_memory_backend_t*)base, group, scope, sources,
+      host_allocator, &plan));
   *out_capabilities = plan.capabilities;
+  iree_hal_memory_contract_release(plan.contract);
   return iree_ok_status();
 }
 
 iree_status_t iree_hal_vulkan_virtual_buffer_create(
     const iree_hal_memory_backend_t* base, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
   const iree_hal_vulkan_memory_backend_t* backend =
       (const iree_hal_vulkan_memory_backend_t*)base;
   iree_hal_vulkan_reservation_plan_t plan;
-  iree_hal_vulkan_virtual_buffer_prepare(backend, scope, &plan);
+  IREE_RETURN_IF_ERROR(iree_hal_vulkan_virtual_buffer_prepare(
+      backend, group, scope, sources, host_allocator, &plan));
   if (!plan.capabilities.max_byte_length) {
     return iree_ok_status();
   }
@@ -225,29 +275,32 @@ iree_status_t iree_hal_vulkan_virtual_buffer_create(
           alignment - plan.capabilities.reservation_granularity,
           &native_length) ||
       native_length > plan.capabilities.max_byte_length) {
+    iree_hal_memory_contract_release(plan.contract);
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "reservation exceeds Vulkan address geometry");
   }
 
   const uint32_t scope_count = iree_hal_device_group_memory_scope_count(group);
   iree_host_size_t total_size = 0;
-  IREE_RETURN_IF_ERROR(
+  iree_hal_memory_contract_t* contract = plan.contract;
+  iree_status_t status =
       IREE_STRUCT_LAYOUT(sizeof(iree_hal_vulkan_virtual_buffer_t), &total_size,
-                         IREE_STRUCT_FIELD(scope_count, uint32_t, NULL)));
+                         IREE_STRUCT_FIELD(scope_count, uint32_t, NULL));
   iree_hal_vulkan_virtual_buffer_t* reservation = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_allocator_malloc(host_allocator, total_size, (void**)&reservation));
-  reservation->backend = backend;
-  reservation->memory_type_bits = plan.requirements.memoryTypeBits;
-  reservation->failure_code = IREE_ATOMIC_VAR_INIT(IREE_STATUS_OK);
-  reservation->mapping_alignment = plan.requirements.alignment;
-  for (uint32_t i = 0; i < scope_count; ++i) {
-    reservation->projections[i] = IREE_HAL_MEMORY_SCOPE_INVALID;
+  if (iree_status_is_ok(status)) {
+    status =
+        iree_allocator_malloc(host_allocator, total_size, (void**)&reservation);
   }
-  iree_hal_memory_contract_t* contract = NULL;
-  iree_status_t status = iree_hal_memory_contract_create(
-      iree_hal_device_group_memory_domain(group), scope_count,
-      iree_hal_vulkan_buffer_binding_layout(), host_allocator, &contract);
+  if (iree_status_is_ok(status)) {
+    reservation->backend = backend;
+    reservation->memory_type_bits = plan.requirements.memoryTypeBits;
+    reservation->failure_code = IREE_ATOMIC_VAR_INIT(IREE_STATUS_OK);
+    reservation->mapping_alignment = plan.requirements.alignment;
+    for (uint32_t id = 0; id < scope_count; ++id) {
+      reservation->projections[id] =
+          contract->scopes[id].interfaces ? 0 : IREE_HAL_MEMORY_SCOPE_INVALID;
+    }
+  }
   VkBuffer handle = VK_NULL_HANDLE;
   if (iree_status_is_ok(status)) {
     const VkBufferCreateInfo create_info = {
@@ -279,30 +332,6 @@ iree_status_t iree_hal_vulkan_virtual_buffer_create(
                                         backend->logical_device, &address_info);
     }
     const VkDeviceSize offset = (0 - address) & (alignment - 1);
-    for (iree_host_size_t i = 0; i < scope.family_count; ++i) {
-      const iree_hal_pool_family_access_t* family = &scope.families[i];
-      contract->allowed_usage |= family->usage;
-      const uint32_t id = family->family->memory.queue_scope_id;
-      iree_hal_memory_scope_access_t* site = &contract->scopes[id];
-      site->usage = family->usage;
-      site->interfaces = plan.interfaces;
-      site->bindings[IREE_HAL_BUFFER_INTERFACE_VULKAN_BUFFER] =
-          IREE_HAL_VULKAN_BUFFER_BINDING_RESOURCE;
-      if (plan.interfaces & (1u << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS)) {
-        site->bindings[IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS] =
-            IREE_HAL_VULKAN_BUFFER_BINDING_DEVICE_ADDRESS;
-      }
-      contract->scopes[id + 1] = *site;
-      iree_hal_memory_scope_access_set_atomic_operations(site,
-                                                         family->atomics.queue);
-      iree_hal_memory_scope_access_set_atomic_operations(
-          &contract->scopes[id + 1], family->atomics.program);
-      reservation->projections[id] = 0;
-      reservation->projections[id + 1] = 0;
-    }
-    iree_hal_memory_contract_finalize_atomic_operations(contract);
-    contract->allowed_access =
-        iree_hal_buffer_usage_access(contract->allowed_usage);
     reservation->backing = (iree_hal_buffer_backing_facts_t){
         .notification = backend->notification,
         .tracker =
@@ -320,6 +349,8 @@ iree_status_t iree_hal_vulkan_virtual_buffer_create(
     iree_hal_vulkan_buffer_initialize_bindings(
         &reservation->base.buffer, VK_NULL_HANDLE, handle, native_length,
         address, offset, &reservation->native);
+    reservation->base.source_native_type_mask =
+        plan.requirements.memoryTypeBits;
     reservation->base.projection_count = 1;
     reservation->base.projections = reservation->projections;
     *out_buffer = &reservation->base.buffer;

@@ -32,8 +32,8 @@ TEST_F(MemoryTest, GeometryRespectsFiniteBackingCapacity) {
   family.interfaces = 0;
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      loom_serve_device_group(device), scope, iree_allocator_system(),
-      &capabilities));
+      loom_serve_device_group(device), scope, {1, &source},
+      iree_allocator_system(), &capabilities));
   loom_serve_memory_geometry_t geometry;
   IREE_ASSERT_OK(loom_serve_memory_pool_query_geometry(&capabilities, source,
                                                        kSlabSize, &geometry));
@@ -724,10 +724,11 @@ TEST_F(DeviceMemoryTest, SparseGrowthTrimRegrowthAndSharedAdmission) {
       .family_count = dispatch == transfer ? 1u : 2u,
       .families = families,
   };
+  iree_hal_pool_t* source = loom_serve_pool_storage(storage_owner);
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      loom_serve_device_group(device), scope, iree_allocator_system(),
-      &capabilities));
+      loom_serve_device_group(device), scope, {1, &source},
+      iree_allocator_system(), &capabilities));
   if (capabilities.max_byte_length < kHighOffset + kSlabSize) {
     GTEST_SKIP() << "Native address interval limit is "
                  << capabilities.max_byte_length

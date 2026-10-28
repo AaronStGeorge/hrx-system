@@ -1082,9 +1082,11 @@ TEST_F(GpuNativeMemoryProgressTest,
   target_access.interfaces = UINT64_C(1)
                              << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
   const iree_hal_pool_scope_t scope = {1, &target_access, {}};
+  iree_hal_pool_t* source_pool = mapping_pool.get();
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, iree_allocator_system(), &capabilities));
+      group_, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
   ASSERT_NE(capabilities.max_byte_length, 0u);
   const auto source = iree_hal_pool_query_mapping_requirements(mapping_pool);
   const uint64_t unit =
@@ -1097,8 +1099,8 @@ TEST_F(GpuNativeMemoryProgressTest,
   };
   Ref<iree_hal_buffer_t> reservation, backing;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      group_, scope, &reservation_options, iree_allocator_system(),
-      reservation.out()));
+      group_, scope, {1, &source_pool}, &reservation_options,
+      iree_allocator_system(), reservation.out()));
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       mapping_pool, iree_hal_make_pool_reservation_request(unit, 0),
       iree_infinite_timeout(), backing.out()));

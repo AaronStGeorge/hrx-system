@@ -275,7 +275,8 @@ class SparseTestBuffer {
         .mapping_granularity = page_size,
     };
     IREE_RETURN_IF_ERROR(iree_hal_virtual_buffer_create(
-        group, scope, &options, iree_allocator_system(), &reservation_));
+        group, scope, {1, &source_pool}, &options, iree_allocator_system(),
+        &reservation_));
     iree_status_t status = iree_ok_status();
     for (size_t i = 0; i < backing_.size() && iree_status_is_ok(status); ++i) {
       status = iree_hal_pool_allocate_buffer(
@@ -346,12 +347,6 @@ void RunSparseByteOffsetExecution(
       .family_count = families[0].family == families[1].family ? 1u : 2u,
       .families = families.data(),
   };
-  iree_hal_virtual_buffer_capabilities_t capabilities;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      execution.device_group, scope, iree_allocator_system(), &capabilities));
-  if (!capabilities.max_byte_length) {
-    GTEST_SKIP() << "live device group does not support sparse virtual memory";
-  }
   for (auto& family : families) {
     family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
   }
@@ -363,6 +358,16 @@ void RunSparseByteOffsetExecution(
                                 iree_allocator_system(), &source_pool));
   loomc::testing::HandlePtr<iree_hal_pool_t, iree_hal_pool_release>
       source_pool_ptr(source_pool);
+  for (auto& family : families) {
+    family.interfaces = 0;
+  }
+  iree_hal_virtual_buffer_capabilities_t capabilities;
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
+      execution.device_group, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
+  if (!capabilities.max_byte_length) {
+    GTEST_SKIP() << "live device group does not support sparse virtual memory";
+  }
   const auto requirements =
       iree_hal_pool_query_mapping_requirements(source_pool);
   const iree_device_size_t page_size =

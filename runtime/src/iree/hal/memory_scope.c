@@ -564,6 +564,57 @@ iree_hal_memory_transition_recipe(iree_hal_memory_transition_table_t table,
   return recipe->operation_count ? recipe : NULL;
 }
 
+IREE_API_EXPORT bool iree_hal_memory_transition_recipe_join(
+    iree_hal_memory_transition_recipe_info_t* result,
+    const iree_hal_memory_transition_recipe_info_t* value) {
+  if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_UNKNOWN ||
+      value->kind == IREE_HAL_MEMORY_TRANSITION_KIND_UNKNOWN) {
+    return false;
+  }
+  if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE ||
+      value->kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE) {
+    if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE) {
+      *result = *value;
+    }
+    // A no-op route may have a different host cache class. Execute through
+    // each mapping instead of applying another route's direct instructions.
+    if (result->operation == IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH ||
+        result->operation ==
+            IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_INVALIDATE) {
+      result->executor = IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API;
+      memset(&result->host, 0, sizeof(result->host));
+    }
+    return true;
+  }
+  if (result->operation != value->operation) {
+    return false;
+  }
+  const bool host =
+      result->operation == IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH ||
+      result->operation == IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_INVALIDATE;
+  if (host) {
+    // A contract with both ranged and global native routes promises the
+    // requested range. The selected mapping may perform broader maintenance.
+    if (result->kind != value->kind) {
+      result->kind = IREE_HAL_MEMORY_TRANSITION_KIND_RANGE;
+    }
+    if (result->executor != value->executor ||
+        result->range_granularity != value->range_granularity ||
+        result->host.instruction != value->host.instruction ||
+        result->host.fence_before != value->host.fence_before ||
+        result->host.fence_after != value->host.fence_after) {
+      result->executor = IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API;
+      memset(&result->host, 0, sizeof(result->host));
+    }
+  } else if (result->kind != value->kind ||
+             result->executor != value->executor) {
+    return false;
+  }
+  result->range_granularity =
+      iree_max(result->range_granularity, value->range_granularity);
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // Cold qualification capture
 //===----------------------------------------------------------------------===//
@@ -996,6 +1047,7 @@ IREE_API_EXPORT iree_status_t iree_hal_memory_contract_initialize_transitions(
               captured_operations + (wildcards[i].operations - operations),
       };
     }
+    iree_allocator_free(contract->host_allocator, contract->transition_details);
     contract->transition_details = details;
     memcpy(contract->transitions, cells, cell_count * sizeof(*cells));
   }

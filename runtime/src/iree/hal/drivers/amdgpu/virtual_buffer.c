@@ -228,8 +228,12 @@ static const iree_hal_buffer_vtable_t iree_hal_amdgpu_virtual_buffer_vtable = {
 
 static iree_status_t iree_hal_amdgpu_virtual_buffer_prepare(
     const iree_hal_amdgpu_memory_backend_t* backend,
-    iree_hal_pool_scope_t scope, iree_hal_queue_family_affinity_t* out_affinity,
-    iree_hal_virtual_buffer_capabilities_t* out_capabilities) {
+    iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
+    iree_hal_virtual_buffer_sources_t sources, iree_allocator_t host_allocator,
+    iree_hal_queue_family_affinity_t* out_affinity,
+    iree_hal_virtual_buffer_capabilities_t* out_capabilities,
+    iree_hal_memory_contract_t** out_contract) {
+  *out_contract = NULL;
   *out_affinity = 0;
   *out_capabilities = (iree_hal_virtual_buffer_capabilities_t){0};
   if (!scope.family_count || scope.host.access ||
@@ -269,36 +273,67 @@ static iree_status_t iree_hal_amdgpu_virtual_buffer_prepare(
                     (1u << IREE_HAL_MEMORY_MAPPING_OPERATION_UNBIND) |
                     (1u << IREE_HAL_MEMORY_MAPPING_OPERATION_PROTECT),
   };
-  return iree_ok_status();
+  iree_hal_memory_contract_t* contract = NULL;
+  IREE_RETURN_IF_ERROR(iree_hal_memory_contract_create(
+      iree_hal_device_group_memory_domain(group),
+      iree_hal_device_group_memory_scope_count(group),
+      iree_hal_amdgpu_buffer_binding_layout(), host_allocator, &contract));
+  for (iree_host_size_t i = 0; i < scope.family_count; ++i) {
+    const iree_hal_pool_family_access_t* access = &scope.families[i];
+    contract->allowed_usage |= access->usage;
+    const uint32_t id = access->family->memory.queue_scope_id;
+    contract->scopes[id].usage = access->usage;
+    contract->scopes[id].interfaces =
+        1u << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
+    contract->scopes[id].bindings[IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS] =
+        IREE_HAL_AMDGPU_BUFFER_BINDING_DEVICE_ADDRESS;
+    contract->scopes[id + 1] = contract->scopes[id];
+  }
+  contract->allowed_access =
+      iree_hal_buffer_usage_access(contract->allowed_usage);
+  iree_status_t status = iree_hal_virtual_buffer_initialize_contract(
+      scope, sources, IREE_HAL_MEMORY_BACKEND_ROCR, 0, contract,
+      out_capabilities);
+  if (iree_status_is_ok(status) && out_capabilities->max_byte_length) {
+    *out_contract = contract;
+  } else {
+    iree_hal_memory_contract_release(contract);
+  }
+  return status;
 }
 
 iree_status_t iree_hal_amdgpu_virtual_buffer_query_capabilities(
     const iree_hal_memory_backend_t* base, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope, iree_allocator_t host_allocator,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
+    iree_allocator_t host_allocator,
     iree_hal_virtual_buffer_capabilities_t* out_capabilities) {
-  (void)group;
-  (void)host_allocator;
   iree_hal_queue_family_affinity_t affinity;
-  return iree_hal_amdgpu_virtual_buffer_prepare(
-      (const iree_hal_amdgpu_memory_backend_t*)base, scope, &affinity,
-      out_capabilities);
+  iree_hal_memory_contract_t* contract = NULL;
+  iree_status_t status = iree_hal_amdgpu_virtual_buffer_prepare(
+      (const iree_hal_amdgpu_memory_backend_t*)base, group, scope, sources,
+      host_allocator, &affinity, out_capabilities, &contract);
+  iree_hal_memory_contract_release(contract);
+  return status;
 }
 
 iree_status_t iree_hal_amdgpu_virtual_buffer_create(
     const iree_hal_memory_backend_t* base, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
   const iree_hal_amdgpu_memory_backend_t* backend =
       (const iree_hal_amdgpu_memory_backend_t*)base;
   iree_hal_queue_family_affinity_t affinity;
   iree_hal_virtual_buffer_capabilities_t capabilities;
+  iree_hal_memory_contract_t* contract = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_virtual_buffer_prepare(
-      backend, scope, &affinity, &capabilities));
+      backend, group, scope, sources, host_allocator, &affinity, &capabilities,
+      &contract));
   if (!capabilities.max_byte_length) {
     return iree_ok_status();
   }
   if (options->min_alignment > capabilities.max_alignment) {
+    iree_hal_memory_contract_release(contract);
     return iree_make_status(
         IREE_STATUS_UNAVAILABLE,
         "ROCr reservation alignment exceeds native guarantee");
@@ -306,14 +341,11 @@ iree_status_t iree_hal_amdgpu_virtual_buffer_create(
   const iree_device_size_t granularity =
       iree_max(options->mapping_granularity, capabilities.mapping_granularity);
   if (options->byte_length % capabilities.reservation_granularity) {
+    iree_hal_memory_contract_release(contract);
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "ROCr reservation length is not granule aligned");
   }
   const uint32_t scope_count = iree_hal_device_group_memory_scope_count(group);
-  iree_hal_memory_contract_t* contract = NULL;
-  IREE_RETURN_IF_ERROR(iree_hal_memory_contract_create(
-      iree_hal_device_group_memory_domain(group), scope_count,
-      iree_hal_amdgpu_buffer_binding_layout(), host_allocator, &contract));
   iree_hal_amdgpu_virtual_buffer_t* buffer = NULL;
   iree_status_t status = iree_allocator_malloc(
       host_allocator, sizeof(*buffer) + scope_count * sizeof(uint32_t),
@@ -331,20 +363,11 @@ iree_status_t iree_hal_amdgpu_virtual_buffer_create(
     // Virtual reservations promise only the atomic capabilities explicitly
     // qualified for arbitrary mapped sources; this adapter admits none.
     buffer->native.atomic_memory_cells = 0;
-    for (iree_host_size_t i = 0; i < scope.family_count; ++i) {
-      const iree_hal_pool_family_access_t* access = &scope.families[i];
-      contract->allowed_usage |= access->usage;
-      const uint32_t id = access->family->memory.queue_scope_id;
-      contract->scopes[id].usage = access->usage;
-      contract->scopes[id].interfaces =
-          1u << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
-      contract->scopes[id].bindings[IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS] =
-          IREE_HAL_AMDGPU_BUFFER_BINDING_DEVICE_ADDRESS;
-      contract->scopes[id + 1] = contract->scopes[id];
-      buffer->projections[id] = buffer->projections[id + 1] = 0;
+    for (uint32_t id = 1; id < scope_count; ++id) {
+      if (contract->scopes[id].interfaces) {
+        buffer->projections[id] = 0;
+      }
     }
-    contract->allowed_access =
-        iree_hal_buffer_usage_access(contract->allowed_usage);
     buffer->backing = (iree_hal_buffer_backing_facts_t){
         .notification = backend->physical_devices[0]->memory_notification,
         .tracker =

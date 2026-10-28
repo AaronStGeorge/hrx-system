@@ -155,6 +155,51 @@ class ReplayRecorderVirtualBufferTest : public ::testing::Test {
   iree_hal_semaphore_t* completion_ = nullptr;
 };
 
+TEST_F(ReplayRecorderVirtualBufferTest, UncapturedSourcePreservesLiveCreation) {
+  iree_hal_pool_family_access_t family;
+  auto scope = Scope(&family);
+  auto source_family = family;
+  source_family.family = iree_hal_device_queue_family(
+      iree_hal_device_group_device_at(source_group_, 0), 0);
+  source_family.interfaces = UINT64_C(1)
+                             << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  auto source_scope = scope;
+  source_scope.families = &source_family;
+  const iree_hal_slab_pool_options_t pool_options = {};
+  iree_hal_pool_t* source = nullptr;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(source_group_, source_scope,
+                                           &pool_options,
+                                           iree_allocator_system(), &source));
+  const iree_hal_virtual_buffer_options_t options = {.byte_length = 65536};
+  iree_hal_buffer_t* target = nullptr;
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+      group_, scope, {1, &source}, &options, iree_allocator_system(), &target));
+  EXPECT_TRUE(iree_hal_virtual_buffer_query_pool_compatibility(target, source));
+  iree_hal_buffer_release(target);
+  iree_hal_pool_release(source);
+  IREE_ASSERT_OK(iree_hal_replay_recorder_close(recorder_));
+
+  const auto recording = Recording();
+  iree_hal_replay_file_header_t header;
+  iree_host_size_t offset = 0;
+  IREE_ASSERT_OK(
+      iree_hal_replay_file_parse_header(recording, &header, &offset));
+  unsigned unsupported_count = 0;
+  while (offset < header.file_length) {
+    iree_hal_replay_file_record_t record;
+    IREE_ASSERT_OK(
+        iree_hal_replay_file_parse_record(recording, offset, &record, &offset));
+    if (record.header.operation_code ==
+        IREE_HAL_REPLAY_OPERATION_CODE_VIRTUAL_BUFFER_CREATE) {
+      EXPECT_EQ(record.header.record_type,
+                IREE_HAL_REPLAY_FILE_RECORD_TYPE_UNSUPPORTED);
+      EXPECT_EQ(record.header.status_code, IREE_STATUS_OK);
+      ++unsupported_count;
+    }
+  }
+  EXPECT_EQ(unsupported_count, 1u);
+}
+
 TEST_F(ReplayRecorderVirtualBufferTest,
        ReplaysBatchedAliasesAndReplacementToFile) {
 #if IREE_FILE_IO_ENABLE && \
@@ -183,9 +228,16 @@ TEST_F(ReplayRecorderVirtualBufferTest,
   family.atomics.program.device_scope_32 =
       IREE_HAL_ATOMIC_OPERATION_FLAG_RMW_ADD;
   scope.host.atomics.system_scope_32 = IREE_HAL_ATOMIC_OPERATION_FLAG_WAIT;
+  family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  iree_hal_slab_pool_options_t pool_options;
+  iree_hal_slab_pool_options_initialize(&pool_options);
+  iree_hal_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(group_, scope, &pool_options,
+                                           iree_allocator_system(), &pool));
+  family.interfaces = 0;
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, iree_allocator_system(), &capabilities));
+      group_, scope, {1, &pool}, iree_allocator_system(), &capabilities));
   ASSERT_GT(capabilities.mapping_granularity, 0u);
   const iree_device_size_t unit =
       iree_max(64 * 1024, capabilities.reservation_granularity);
@@ -196,16 +248,10 @@ TEST_F(ReplayRecorderVirtualBufferTest,
   };
   std::array<iree_hal_buffer_t*, 2> reservations = {};
   for (auto& reservation : reservations) {
-    IREE_ASSERT_OK(
-        iree_hal_virtual_buffer_create(group_, scope, &reservation_options,
-                                       iree_allocator_system(), &reservation));
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+        group_, scope, {1, &pool}, &reservation_options,
+        iree_allocator_system(), &reservation));
   }
-  family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
-  iree_hal_slab_pool_options_t pool_options;
-  iree_hal_slab_pool_options_initialize(&pool_options);
-  iree_hal_pool_t* pool = nullptr;
-  IREE_ASSERT_OK(iree_hal_slab_pool_create(group_, scope, &pool_options,
-                                           iree_allocator_system(), &pool));
 
   iree_hal_semaphore_t* gate = nullptr;
   IREE_ASSERT_OK(
@@ -425,14 +471,22 @@ TEST_F(ReplayRecorderVirtualBufferTest,
   constexpr iree_device_size_t kUnit = 64 * 1024;
   iree_hal_pool_family_access_t family;
   auto scope = Scope(&family);
+  family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  iree_hal_slab_pool_options_t pool_options;
+  iree_hal_slab_pool_options_initialize(&pool_options);
+  iree_hal_pool_t* source_pool = nullptr;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(
+      group_, scope, &pool_options, iree_allocator_system(), &source_pool));
+  family.interfaces = 0;
   const iree_hal_virtual_buffer_options_t options = {
       .byte_length = 2 * kUnit,
       .min_alignment = kUnit,
       .mapping_granularity = kUnit,
   };
   iree_hal_buffer_t* arena = nullptr;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      group_, scope, &options, iree_allocator_system(), &arena));
+  IREE_ASSERT_OK(
+      iree_hal_virtual_buffer_create(group_, scope, {1, &source_pool}, &options,
+                                     iree_allocator_system(), &arena));
   iree_hal_fixed_block_pool_options_t block_options;
   iree_hal_fixed_block_pool_options_initialize(&block_options);
   block_options.block_size = kUnit;
@@ -446,12 +500,6 @@ TEST_F(ReplayRecorderVirtualBufferTest,
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       child_pool, request, iree_infinite_timeout(), &child));
 
-  family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
-  iree_hal_slab_pool_options_t pool_options;
-  iree_hal_slab_pool_options_initialize(&pool_options);
-  iree_hal_pool_t* source_pool = nullptr;
-  IREE_ASSERT_OK(iree_hal_slab_pool_create(
-      group_, scope, &pool_options, iree_allocator_system(), &source_pool));
   iree_hal_buffer_t* backing = nullptr;
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       source_pool, request, iree_infinite_timeout(), &backing));
@@ -525,9 +573,16 @@ TEST_F(ReplayRecorderVirtualBufferTest,
 
   iree_hal_pool_family_access_t family;
   auto scope = Scope(&family);
+  family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  iree_hal_slab_pool_options_t pool_options;
+  iree_hal_slab_pool_options_initialize(&pool_options);
+  iree_hal_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(group_, scope, &pool_options,
+                                           iree_allocator_system(), &pool));
+  family.interfaces = 0;
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, iree_allocator_system(), &capabilities));
+      group_, scope, {1, &pool}, iree_allocator_system(), &capabilities));
   const auto unit = capabilities.reservation_granularity;
   const iree_hal_virtual_buffer_options_t options = {
       .byte_length = unit,
@@ -535,14 +590,10 @@ TEST_F(ReplayRecorderVirtualBufferTest,
       .mapping_granularity = unit,
   };
   iree_hal_buffer_t* reservation = nullptr;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      group_, scope, &options, iree_allocator_system(), &reservation));
-  family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
-  iree_hal_slab_pool_options_t pool_options;
-  iree_hal_slab_pool_options_initialize(&pool_options);
-  iree_hal_pool_t* pool = nullptr;
-  IREE_ASSERT_OK(iree_hal_slab_pool_create(group_, scope, &pool_options,
-                                           iree_allocator_system(), &pool));
+  IREE_ASSERT_OK(
+      iree_hal_virtual_buffer_create(group_, scope, {1, &pool}, &options,
+                                     iree_allocator_system(), &reservation));
+
   uint64_t allocated = 1;
   auto request = iree_hal_make_pool_reservation_request(2 * unit, unit);
   iree_hal_buffer_t* source = nullptr;
@@ -711,15 +762,26 @@ TEST_F(ReplayRecorderVirtualBufferTest, FailedRecordedDetachPreservesBuffer) {
   auto scope = Scope(&family);
   family.family = iree_hal_device_queue_family(
       iree_hal_device_group_device_at(source_group_, 0), 0);
+  family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  iree_hal_slab_pool_options_t pool_options;
+  iree_hal_slab_pool_options_initialize(&pool_options);
+  iree_hal_pool_t* source_pool = nullptr;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(source_group_, scope, &pool_options,
+                                           iree_allocator_system(),
+                                           &source_pool));
+  family.interfaces = 0;
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      source_group_, scope, iree_allocator_system(), &capabilities));
+      source_group_, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
   const iree_hal_virtual_buffer_options_t options = {
       .byte_length = capabilities.reservation_granularity,
   };
   iree_hal_buffer_t* buffer = nullptr;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      source_group_, scope, &options, iree_allocator_system(), &buffer));
+      source_group_, scope, {1, &source_pool}, &options,
+      iree_allocator_system(), &buffer));
+  iree_hal_pool_release(source_pool);
 
   std::array<iree_hal_replay_object_entry_t, 2> objects = {};
   objects[1].type = IREE_HAL_REPLAY_OBJECT_TYPE_BUFFER;
@@ -752,16 +814,26 @@ TEST_F(ReplayRecorderVirtualBufferTest, FailedRecordedDetachPreservesBuffer) {
 TEST_F(ReplayRecorderVirtualBufferTest, BufferReleasesAfterRecorderCloses) {
   iree_hal_pool_family_access_t family;
   auto scope = Scope(&family);
+  family.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  iree_hal_slab_pool_options_t pool_options;
+  iree_hal_slab_pool_options_initialize(&pool_options);
+  iree_hal_pool_t* source_pool = nullptr;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(
+      group_, scope, &pool_options, iree_allocator_system(), &source_pool));
+  family.interfaces = 0;
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, iree_allocator_system(), &capabilities));
+      group_, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
   ASSERT_GT(capabilities.reservation_granularity, 0u);
   const iree_hal_virtual_buffer_options_t options = {
       .byte_length = capabilities.reservation_granularity,
   };
   iree_hal_buffer_t* reservation = nullptr;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      group_, scope, &options, iree_allocator_system(), &reservation));
+  IREE_ASSERT_OK(
+      iree_hal_virtual_buffer_create(group_, scope, {1, &source_pool}, &options,
+                                     iree_allocator_system(), &reservation));
+  iree_hal_pool_release(source_pool);
   auto* buffer = (reservation);
   iree_hal_buffer_retain(buffer);
   IREE_ASSERT_OK(iree_hal_replay_recorder_close(recorder_));

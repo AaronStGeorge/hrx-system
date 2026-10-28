@@ -144,9 +144,10 @@ void FabricXdnaVirtualBufferTest::RunReplacement(
                                         IREE_HAL_MAPPING_MODE_PERSISTENT,
                                         IREE_HAL_HOST_MEMORY_PROPERTY_NONE}
           : iree_hal_pool_host_access_t{};
+  iree_hal_pool_t* source_pool = pool.get();
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, allocator_, &capabilities));
+      group_, scope, {1, &source_pool}, allocator_, &capabilities));
   ASSERT_NE(capabilities.max_byte_length, 0u);
   const auto unit = std::max(capabilities.reservation_granularity,
                              capabilities.mapping_granularity);
@@ -171,8 +172,8 @@ void FabricXdnaVirtualBufferTest::RunReplacement(
       .mapping_granularity = unit,
   };
   Ref<iree_hal_buffer_t> root;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, scope, &options,
-                                                allocator_, root.out()));
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+      group_, scope, {1, &source_pool}, &options, allocator_, root.out()));
   EXPECT_EQ(root.get()->memory.contract->host.access,
             host_alias ? IREE_HAL_MEMORY_ACCESS_READ : 0u);
   iree_hal_memory_scope_t cpu_scope, npu_scope, host_scope;

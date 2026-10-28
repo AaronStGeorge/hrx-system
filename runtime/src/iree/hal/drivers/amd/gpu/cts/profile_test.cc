@@ -1210,9 +1210,11 @@ TEST_P(GpuNativeProfileTest, MappingBatchIsOnePublicEvent) {
       .interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS,
   };
   const iree_hal_pool_scope_t scope = {1, &access, {}};
+  iree_hal_pool_t* source_pool = pool_.get();
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, iree_allocator_system(), &capabilities));
+      group_, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
   const auto source = iree_hal_pool_query_mapping_requirements(pool_);
   const uint64_t unit =
       iree_max(source.minimum_granularity,
@@ -1224,7 +1226,8 @@ TEST_P(GpuNativeProfileTest, MappingBatchIsOnePublicEvent) {
   };
   Ref<iree_hal_buffer_t> reservation, backing;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      group_, scope, &options, iree_allocator_system(), reservation.out()));
+      group_, scope, {1, &source_pool}, &options, iree_allocator_system(),
+      reservation.out()));
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       pool_, iree_hal_make_pool_reservation_request(2 * unit, 0),
       iree_infinite_timeout(), backing.out()));

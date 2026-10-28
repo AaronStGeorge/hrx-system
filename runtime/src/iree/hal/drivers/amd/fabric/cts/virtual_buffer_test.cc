@@ -20,9 +20,18 @@ TEST_P(FabricVirtualBufferTest, BatchedReplacementChangesRealGpuAddresses) {
         .byte_length = granularity_,
         .mapping_granularity = granularity_,
     };
+    auto source_family = family;
+    source_family.interfaces = UINT64_C(1)
+                               << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+    const iree_hal_slab_pool_options_t pool_options = {};
+    iree_hal_pool_t* source_pool = nullptr;
+    IREE_ASSERT_OK(iree_hal_slab_pool_create(group_, {1, &source_family, {}},
+                                             &pool_options, allocator_,
+                                             &source_pool));
     iree_hal_buffer_t* target = nullptr;
-    IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-        group_, {1, &family, {}}, &options, allocator_, &target));
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, {1, &family, {}},
+                                                  {1, &source_pool}, &options,
+                                                  allocator_, &target));
     const iree_hal_memory_mapping_t mapping = {
         .target = target,
         .scope = {iree_hal_device_group_memory_domain(group_),
@@ -38,6 +47,7 @@ TEST_P(FabricVirtualBufferTest, BatchedReplacementChangesRealGpuAddresses) {
                            iree_hal_semaphore_list_empty(), 1, &mapping,
                            IREE_HAL_QUEUE_MAP_FLAG_NONE));
     iree_hal_buffer_release(target);
+    iree_hal_pool_release(source_pool);
   }
   auto* words = reinterpret_cast<uint32_t*>(host_mapping_.contents.data);
   const size_t stride = granularity_ / sizeof(uint32_t);
@@ -123,9 +133,10 @@ TEST_P(FabricVirtualBufferTest, CpuAndGpuShareStableViewsAcrossReplacement) {
   families[0].interfaces = UINT64_C(1)
                            << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
   families[1].interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_HOST;
+  iree_hal_pool_t* source_pool = pool.get();
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, allocator_, &capabilities));
+      group_, scope, {1, &source_pool}, allocator_, &capabilities));
   ASSERT_NE(capabilities.max_byte_length, 0u);
   const auto unit = std::max(capabilities.reservation_granularity,
                              capabilities.mapping_granularity);
@@ -148,8 +159,8 @@ TEST_P(FabricVirtualBufferTest, CpuAndGpuShareStableViewsAcrossReplacement) {
       .mapping_granularity = unit,
   };
   Ref<iree_hal_buffer_t> root;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, scope, &options,
-                                                allocator_, root.out()));
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+      group_, scope, {1, &source_pool}, &options, allocator_, root.out()));
   std::array<Ref<iree_hal_buffer_t>, 2> views;
   std::array<iree_byte_span_t, 2> host_views;
   std::array<uint64_t, 2> addresses;
@@ -357,9 +368,11 @@ TEST_P(FabricVirtualBufferTest,
       .byte_length = 3 * unit,
       .mapping_granularity = 2 * unit,
   };
+  iree_hal_pool_t* source_pools[] = {local_pool.get(), pool_};
   Ref<iree_hal_buffer_t> root;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      group_, {1, &family, {}}, &options, allocator_, root.out()));
+      group_, {1, &family, {}}, {IREE_ARRAYSIZE(source_pools), source_pools},
+      &options, allocator_, root.out()));
   std::array<Ref<iree_hal_buffer_t>, 2> views;
   std::array<uint64_t, 2> addresses;
   const iree_hal_buffer_native_binding_slot_t virtual_slot = {

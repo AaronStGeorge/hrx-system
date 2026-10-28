@@ -12,9 +12,27 @@
 #include "iree/hal/memory_backend.h"
 #include "iree/hal/queue.h"
 
+static iree_status_t iree_hal_virtual_buffer_validate_sources(
+    iree_hal_device_group_t* group, iree_hal_virtual_buffer_sources_t sources) {
+  if (!sources.pool_count || !sources.pools) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "reservation requires mapping-source pools");
+  }
+  const void* domain = iree_hal_device_group_memory_domain(group);
+  for (iree_host_size_t i = 0; i < sources.pool_count; ++i) {
+    const iree_hal_memory_contract_t* contract =
+        sources.pools[i] ? sources.pools[i]->memory_contract : NULL;
+    if (!contract || contract->domain != domain) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "source pool must belong to reservation group");
+    }
+  }
+  return iree_ok_status();
+}
+
 IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_query_capabilities(
     iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
-    iree_allocator_t host_allocator,
+    iree_hal_virtual_buffer_sources_t sources, iree_allocator_t host_allocator,
     iree_hal_virtual_buffer_capabilities_t* out_capabilities) {
   memset(out_capabilities, 0, sizeof(*out_capabilities));
   if (!group) {
@@ -22,6 +40,8 @@ IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_query_capabilities(
                             "reservation group is null");
   }
   IREE_RETURN_IF_ERROR(iree_hal_pool_scope_validate(group, scope));
+  IREE_RETURN_IF_ERROR(
+      iree_hal_virtual_buffer_validate_sources(group, sources));
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0;
        i < iree_hal_device_group_device_count(group) &&
@@ -30,7 +50,7 @@ IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_query_capabilities(
     const iree_hal_memory_backend_t* backend = iree_hal_device_memory_backend(
         iree_hal_device_group_device_at(group, i));
     if (backend && backend->query_virtual_buffer) {
-      status = backend->query_virtual_buffer(backend, group, scope,
+      status = backend->query_virtual_buffer(backend, group, scope, sources,
                                              host_allocator, out_capabilities);
     }
   }
@@ -43,6 +63,7 @@ IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_query_capabilities(
 static iree_status_t iree_hal_virtual_buffer_create_native(
     void* user_data, iree_hal_device_group_t* group,
     const iree_hal_pool_scope_t* scope,
+    const iree_hal_virtual_buffer_sources_t* sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
   iree_status_t status = iree_ok_status();
@@ -52,8 +73,9 @@ static iree_status_t iree_hal_virtual_buffer_create_native(
     const iree_hal_memory_backend_t* backend = iree_hal_device_memory_backend(
         iree_hal_device_group_device_at(group, i));
     if (backend && backend->create_virtual_buffer) {
-      status = backend->create_virtual_buffer(backend, group, *scope, options,
-                                              host_allocator, out_buffer);
+      status =
+          backend->create_virtual_buffer(backend, group, *scope, *sources,
+                                         options, host_allocator, out_buffer);
     }
   }
   if (iree_status_is_ok(status) && !*out_buffer) {
@@ -66,6 +88,7 @@ static iree_status_t iree_hal_virtual_buffer_create_native(
 
 IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_create(
     iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
+    iree_hal_virtual_buffer_sources_t sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
   *out_buffer = NULL;
@@ -76,11 +99,283 @@ IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_create(
                             "invalid reservation group or geometry");
   }
   IREE_RETURN_IF_ERROR(iree_hal_pool_scope_validate(group, scope));
+  IREE_RETURN_IF_ERROR(
+      iree_hal_virtual_buffer_validate_sources(group, sources));
   const iree_hal_virtual_buffer_create_callback_t leaf = {
       .fn = iree_hal_virtual_buffer_create_native,
   };
   return iree_hal_device_group_create_virtual_buffer(
-      group, &scope, options, leaf, host_allocator, out_buffer);
+      group, &scope, &sources, options, leaf, host_allocator, out_buffer);
+}
+
+//===----------------------------------------------------------------------===//
+// Immutable accepted-mapping contracts
+//===----------------------------------------------------------------------===//
+
+static iree_hal_memory_access_t iree_hal_virtual_buffer_site_access(
+    const iree_hal_memory_contract_t* contract, uint32_t id) {
+  return id == 1 ? contract->host.access
+                 : iree_hal_buffer_usage_access(contract->scopes[id].usage);
+}
+
+static iree_hal_memory_pair_info_t iree_hal_virtual_buffer_pair_info(
+    const iree_hal_memory_contract_t* contract, uint32_t producer,
+    uint32_t consumer) {
+  return iree_hal_memory_transition_query_info(
+      (iree_hal_memory_transition_table_t){contract},
+      (iree_hal_memory_transition_pair_t){
+          (producer << contract->transition_row_shift) | consumer});
+}
+
+// Checks facts needed even before the target has captured its final guarantees.
+// Native schema and class eligibility are independent of physical allocation.
+static bool iree_hal_virtual_buffer_source_covers_scope(
+    const iree_hal_memory_contract_t* target,
+    iree_hal_memory_backend_type_t source_type, uint64_t native_type_mask,
+    const iree_hal_memory_contract_t* source) {
+  if (!source || source->domain != target->domain ||
+      !source->mapping_source.requirements.minimum_granularity ||
+      source->mapping_source.type != source_type ||
+      (source->mapping_source.native_type_mask & ~native_type_mask)) {
+    return false;
+  }
+  const iree_hal_memory_contract_t* alias =
+      iree_hal_memory_contract_mapping_alias(source);
+  if (!iree_all_bits_set(alias->host.access, target->host.access)) {
+    return false;
+  }
+  for (uint32_t id = 1; id < target->scope_count; ++id) {
+    if (target->scopes[id].interfaces &&
+        (!iree_any_bit_set(source->scopes[id].interfaces,
+                           1u << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE) ||
+         !iree_all_bits_set(alias->scopes[id].usage,
+                            target->scopes[id].usage))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+typedef struct iree_hal_virtual_buffer_transition_query_t {
+  // Borrowed for synchronous construction; never retained by the result.
+  iree_hal_virtual_buffer_sources_t sources;
+  // False if source recipes cannot be executed by one common alias protocol.
+  bool supported;
+} iree_hal_virtual_buffer_transition_query_t;
+
+static bool iree_hal_virtual_buffer_join_recipe(
+    iree_hal_memory_transition_recipe_info_t* result,
+    const iree_hal_memory_transition_recipe_info_t* value) {
+  if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_UNKNOWN ||
+      value->kind == IREE_HAL_MEMORY_TRANSITION_KIND_UNKNOWN) {
+    // A source without a qualified transition cannot contribute a promise.
+    *result = (iree_hal_memory_transition_recipe_info_t){0};
+    return true;
+  }
+  return iree_hal_memory_transition_recipe_join(result, value);
+}
+
+static iree_status_t iree_hal_virtual_buffer_query_transition(
+    void* user_data, uint32_t producer, uint32_t consumer,
+    iree_hal_memory_pair_info_t* out_info) {
+  iree_hal_virtual_buffer_transition_query_t* query = user_data;
+  for (iree_host_size_t i = 0; i < query->sources.pool_count; ++i) {
+    const iree_hal_memory_pair_info_t value = iree_hal_virtual_buffer_pair_info(
+        iree_hal_memory_contract_mapping_alias(
+            query->sources.pools[i]->memory_contract),
+        producer, consumer);
+    if (!i) {
+      *out_info = value;
+      continue;
+    }
+    out_info->flags &= value.flags;
+    out_info->atomic_reach.scope_32 =
+        iree_min(out_info->atomic_reach.scope_32, value.atomic_reach.scope_32);
+    out_info->atomic_reach.scope_64 =
+        iree_min(out_info->atomic_reach.scope_64, value.atomic_reach.scope_64);
+    out_info->estimated_fixed_cost_nanoseconds =
+        iree_max(out_info->estimated_fixed_cost_nanoseconds,
+                 value.estimated_fixed_cost_nanoseconds);
+    query->supported &=
+        iree_hal_virtual_buffer_join_recipe(&out_info->release, &value.release);
+    query->supported &=
+        iree_hal_virtual_buffer_join_recipe(&out_info->acquire, &value.acquire);
+  }
+  return iree_ok_status();
+}
+
+static bool iree_hal_virtual_buffer_supports_atomics(
+    const iree_hal_memory_scope_access_t* site,
+    iree_hal_atomic_operation_capabilities_t required) {
+  iree_hal_memory_scope_access_t requested = {0};
+  iree_hal_memory_scope_access_set_atomic_operations(&requested, required);
+  return iree_all_bits_set(site->atomic_operations,
+                           requested.atomic_operations);
+}
+
+IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_initialize_contract(
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
+    iree_hal_memory_backend_type_t source_type,
+    uint64_t source_native_type_mask, iree_hal_memory_contract_t* contract,
+    iree_hal_virtual_buffer_capabilities_t* capabilities) {
+  bool supported = true;
+  for (iree_host_size_t i = 0; i < sources.pool_count && supported; ++i) {
+    const iree_hal_memory_contract_t* source =
+        sources.pools[i]->memory_contract;
+    supported = iree_hal_virtual_buffer_source_covers_scope(
+        contract, source_type, source_native_type_mask, source);
+    if (!supported) {
+      continue;
+    }
+    const iree_hal_memory_contract_t* alias =
+        iree_hal_memory_contract_mapping_alias(source);
+    if (contract->host.access) {
+      contract->host.properties &= alias->host.properties;
+    }
+    for (uint32_t id = 1; id < contract->scope_count; ++id) {
+      contract->scopes[id].atomic_operations &=
+          alias->scopes[id].atomic_operations;
+    }
+    const iree_device_size_t granularity =
+        source->mapping_source.requirements.minimum_granularity;
+    capabilities->mapping_granularity =
+        iree_max(capabilities->mapping_granularity, granularity);
+    capabilities->reservation_granularity =
+        iree_max(capabilities->reservation_granularity, granularity);
+  }
+  supported &=
+      capabilities->reservation_granularity <= capabilities->max_byte_length &&
+      capabilities->mapping_granularity <= capabilities->max_alignment;
+  iree_hal_memory_contract_finalize_atomic_operations(contract);
+  supported &= iree_hal_virtual_buffer_supports_atomics(&contract->scopes[1],
+                                                        scope.host.atomics);
+  supported &=
+      iree_all_bits_set(contract->host.properties, scope.host.properties);
+  for (iree_host_size_t i = 0; i < scope.family_count && supported; ++i) {
+    const iree_hal_pool_family_access_t* access = &scope.families[i];
+    const uint32_t id = access->family->memory.queue_scope_id;
+    supported &= iree_hal_virtual_buffer_supports_atomics(
+                     &contract->scopes[id], access->atomics.queue) &&
+                 iree_hal_virtual_buffer_supports_atomics(
+                     &contract->scopes[id + 1], access->atomics.program);
+  }
+  iree_hal_virtual_buffer_transition_query_t query = {sources, supported};
+  iree_status_t status = iree_ok_status();
+  if (supported) {
+    status = iree_hal_memory_contract_initialize_transitions(
+        contract, iree_hal_virtual_buffer_query_transition, &query);
+  }
+  for (iree_host_size_t i = 0;
+       i < scope.family_count && query.supported && iree_status_is_ok(status);
+       ++i) {
+    const iree_hal_pool_family_access_t* access = &scope.families[i];
+    if (!(access->requirements &
+          IREE_HAL_POOL_ACCESS_REQUIRE_COHERENT_WITH_HOST)) {
+      continue;
+    }
+    const uint32_t id = access->family->memory.queue_scope_id;
+    const iree_hal_memory_access_t device_access =
+        iree_hal_buffer_usage_access(access->usage);
+    if ((scope.host.access & IREE_HAL_MEMORY_ACCESS_WRITE) &&
+        (device_access & IREE_HAL_MEMORY_ACCESS_READ)) {
+      const iree_hal_memory_pair_info_t pair =
+          iree_hal_virtual_buffer_pair_info(contract, 1, id);
+      query.supported &=
+          pair.release.kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE;
+    }
+    if ((scope.host.access & IREE_HAL_MEMORY_ACCESS_READ) &&
+        (device_access & IREE_HAL_MEMORY_ACCESS_WRITE)) {
+      const iree_hal_memory_pair_info_t pair =
+          iree_hal_virtual_buffer_pair_info(contract, id, 1);
+      query.supported &=
+          pair.acquire.kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE;
+    }
+  }
+  if (!query.supported || !iree_status_is_ok(status)) {
+    *capabilities = (iree_hal_virtual_buffer_capabilities_t){0};
+  }
+  return status;
+}
+
+static bool iree_hal_virtual_buffer_recipe_covers(
+    const iree_hal_memory_transition_recipe_info_t* target,
+    const iree_hal_memory_transition_recipe_info_t* source) {
+  if (target->kind == IREE_HAL_MEMORY_TRANSITION_KIND_UNKNOWN) {
+    return true;
+  }
+  iree_hal_memory_transition_recipe_info_t combined = *target;
+  return iree_hal_memory_transition_recipe_join(&combined, source) &&
+         combined.kind == target->kind &&
+         combined.executor == target->executor &&
+         combined.operation == target->operation &&
+         combined.range_granularity == target->range_granularity &&
+         combined.host.instruction == target->host.instruction &&
+         combined.host.fence_before == target->host.fence_before &&
+         combined.host.fence_after == target->host.fence_after;
+}
+
+static bool iree_hal_virtual_buffer_source_is_compatible(
+    const iree_hal_virtual_buffer_t* target,
+    const iree_hal_memory_contract_t* source) {
+  const iree_hal_memory_contract_t* contract = target->buffer.memory.contract;
+  if (!iree_hal_virtual_buffer_source_covers_scope(
+          contract, target->source_type, target->source_native_type_mask,
+          source)) {
+    return false;
+  }
+  const iree_hal_memory_contract_t* alias =
+      iree_hal_memory_contract_mapping_alias(source);
+  if (contract->host.access &&
+      !iree_all_bits_set(alias->host.properties, contract->host.properties)) {
+    return false;
+  }
+  for (uint32_t id = 1; id < contract->scope_count; ++id) {
+    if (contract->scopes[id].interfaces &&
+        !iree_all_bits_set(alias->scopes[id].atomic_operations,
+                           contract->scopes[id].atomic_operations)) {
+      return false;
+    }
+  }
+  for (uint32_t p = 1; p < contract->scope_count; ++p) {
+    if (!(iree_hal_virtual_buffer_site_access(contract, p) &
+          IREE_HAL_MEMORY_ACCESS_WRITE)) {
+      continue;
+    }
+    for (uint32_t c = 1; c < contract->scope_count; ++c) {
+      if (!(iree_hal_virtual_buffer_site_access(contract, c) &
+            IREE_HAL_MEMORY_ACCESS_READ)) {
+        continue;
+      }
+      const iree_hal_memory_pair_info_t required =
+          iree_hal_virtual_buffer_pair_info(contract, p, c);
+      const iree_hal_memory_pair_info_t candidate =
+          iree_hal_virtual_buffer_pair_info(alias, p, c);
+      const uint32_t guarantees =
+          IREE_HAL_MEMORY_PAIR_SHARED_BACKING_REACHABLE |
+          IREE_HAL_MEMORY_PAIR_MAPPING_SOURCE;
+      if (!iree_all_bits_set(candidate.flags, required.flags & guarantees) ||
+          candidate.atomic_reach.scope_32 < required.atomic_reach.scope_32 ||
+          candidate.atomic_reach.scope_64 < required.atomic_reach.scope_64 ||
+          !iree_hal_virtual_buffer_recipe_covers(&required.release,
+                                                 &candidate.release) ||
+          !iree_hal_virtual_buffer_recipe_covers(&required.acquire,
+                                                 &candidate.acquire)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+IREE_API_EXPORT bool iree_hal_virtual_buffer_query_pool_compatibility(
+    const iree_hal_buffer_t* buffer, const iree_hal_pool_t* pool) {
+  if (!buffer || !pool) {
+    return false;
+  }
+  const iree_hal_virtual_buffer_view_t view =
+      iree_hal_buffer_virtual_view(buffer);
+  return view.root && iree_hal_virtual_buffer_source_is_compatible(
+                          view.root, pool->memory_contract);
 }
 
 IREE_API_EXPORT iree_hal_virtual_buffer_view_t
@@ -268,6 +563,7 @@ IREE_API_EXPORT void iree_hal_virtual_buffer_initialize(
   reservation->mapping_granularity = mapping_granularity;
   reservation->operations = operations;
   reservation->source_type = source_type;
+  reservation->source_native_type_mask = 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -445,10 +741,10 @@ static iree_status_t iree_hal_memory_mapping_resolve(
   const iree_hal_memory_contract_t* source_contract =
       mapping->source ? mapping->source->memory.contract : NULL;
   if (source_contract &&
-      source_contract->mapping_source.type != target->source_type) {
+      !iree_hal_virtual_buffer_source_is_compatible(target, source_contract)) {
     return iree_make_status(
         IREE_STATUS_UNAVAILABLE,
-        "source and target use different native mapping formats");
+        "source does not preserve the virtual buffer mapping contract");
   }
   const uint32_t begin = mapping->scope.id ? mapping->scope.id : 1;
   const uint32_t end = mapping->scope.id ? begin + 1 : contract->scope_count;

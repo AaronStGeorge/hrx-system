@@ -266,13 +266,6 @@ class ExecutionTest
         .host = {IREE_HAL_MEMORY_ACCESS_READ, IREE_HAL_MAPPING_MODE_PERSISTENT,
                  IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED},
     };
-    iree_hal_virtual_buffer_capabilities_t capabilities;
-    IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-        group_, scope, iree_allocator_system(), &capabilities));
-    if (!capabilities.max_byte_length) {
-      GTEST_SKIP() << "Native topology does not support joint CPU/NPU/GPU "
-                      "address reservations";
-    }
     auto source_families = families_;
     for (auto& family : source_families) {
       family.interfaces = UINT64_C(1)
@@ -286,6 +279,15 @@ class ExecutionTest
     IREE_ASSERT_OK(iree_hal_slab_pool_create(
         group_, source_scope, &pool_options, iree_allocator_system(),
         mapping_pool_.out()));
+    iree_hal_pool_t* source_pool = mapping_pool_.get();
+    iree_hal_virtual_buffer_capabilities_t capabilities;
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
+        group_, scope, {1, &source_pool}, iree_allocator_system(),
+        &capabilities));
+    if (!capabilities.max_byte_length) {
+      GTEST_SKIP() << "Native topology does not support joint CPU/NPU/GPU "
+                      "address reservations";
+    }
     const auto source = iree_hal_pool_query_mapping_requirements(mapping_pool_);
     const auto unit = iree_max(source.minimum_granularity,
                                iree_max(capabilities.mapping_granularity,
@@ -303,7 +305,8 @@ class ExecutionTest
         .mapping_granularity = unit,
     };
     IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-        group_, scope, &options, iree_allocator_system(), out_root));
+        group_, scope, {1, &source_pool}, &options, iree_allocator_system(),
+        out_root));
     *out_unit = unit;
   }
 

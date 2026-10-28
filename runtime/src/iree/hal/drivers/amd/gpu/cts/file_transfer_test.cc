@@ -404,9 +404,12 @@ class GpuNativeFileTest : public GpuNativeTest,
         .usage = IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_STORAGE,
     };
     const iree_hal_pool_scope_t scope = {1, &family, {}};
+    iree_hal_pool_t* source_pools[] = {pool_.get(), device_pool_.get()};
+    const iree_hal_virtual_buffer_sources_t sources = {is_mixed() ? 2u : 1u,
+                                                       source_pools};
     iree_hal_virtual_buffer_capabilities_t capabilities;
     IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-        group_, scope, iree_allocator_system(), &capabilities));
+        group_, scope, sources, iree_allocator_system(), &capabilities));
     ASSERT_NE(capabilities.max_byte_length, 0u);
     const auto source = iree_hal_pool_query_mapping_requirements(pool_);
     uint64_t unit = iree_max(source.minimum_granularity,
@@ -424,7 +427,7 @@ class GpuNativeFileTest : public GpuNativeTest,
     };
     Ref<iree_hal_buffer_t> root;
     IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-        group_, scope, &options, iree_allocator_system(), root.out()));
+        group_, scope, sources, &options, iree_allocator_system(), root.out()));
     IREE_ASSERT_OK(iree_hal_buffer_subspan(
         root, unit, mapped_length, iree_allocator_system(), out_buffer));
     EXPECT_EQ((*out_buffer)->host_binding_index,

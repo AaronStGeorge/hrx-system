@@ -89,6 +89,7 @@ struct FakeNative {
         HostReservationCapabilities;
     api.memory_reservation_create = ReservationCreate;
     api.memory_reservation_query_access_info = ReservationInfo;
+    api.memory_reservation_map = ReservationMap;
     api.memory_reservation_update = ReservationUpdate;
     api.memory_reservation_detach = ReservationDetach;
     api.memory_reservation_destroy = ReservationDestroy;
@@ -593,6 +594,8 @@ struct FakeNative {
     std::vector<amdf_memory_reservation_access_t> accesses;
     // Complete reserved extent.
     uint64_t byte_length;
+    // Descriptor for the reserved host alias; owns no physical bytes.
+    Memory host_view = {};
   };
 
   static amdf_status_t AMDF_CALL
@@ -648,6 +651,9 @@ struct FakeNative {
                         {info->accesses, info->accesses + info->access_count},
                         info->byte_length};
     ++self->reservation_count;
+    reservation->host_view.owner = self;
+    reservation->host_view.data = reinterpret_cast<void*>(UINT64_C(0x40000000));
+    reservation->host_view.byte_length = info->byte_length;
     *output = reinterpret_cast<amdf_memory_reservation_t*>(reservation);
     return AMDF_STATUS_OK;
   }
@@ -663,6 +669,17 @@ struct FakeNative {
     output->address = UINT64_C(0x40000000);
     output->byte_length = reservation->byte_length;
     output->mapping_granularity = 4096;
+    return AMDF_STATUS_OK;
+  }
+
+  static amdf_status_t AMDF_CALL ReservationMap(
+      amdf_memory_reservation_t* handle, uint32_t ordinal,
+      const amdf_memory_map_info_t* info, amdf_host_mapping_t** output) {
+    auto* reservation = reinterpret_cast<Reservation*>(handle);
+    EXPECT_EQ(reservation->accesses[ordinal].device, nullptr);
+    EXPECT_EQ(info->byte_length, reservation->byte_length);
+    ++reservation->owner->map_count;
+    *output = reinterpret_cast<amdf_host_mapping_t*>(&reservation->host_view);
     return AMDF_STATUS_OK;
   }
 
@@ -1105,21 +1122,46 @@ class MemoryBackendTest : public ::testing::Test {
     return scope;
   }
 
-  iree_status_t CreateReservation(iree_hal_buffer_t** out_reservation) {
+  iree_status_t CreateReservation(
+      iree_hal_buffer_t** out_reservation,
+      iree_hal_pool_t* source_pool = nullptr,
+      iree_hal_buffer_usage_t usage = IREE_HAL_BUFFER_USAGE_STORAGE) {
     native_.mapping_enabled = true;
     binding_descriptions_[0] = {IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS,
                                 AMDF_MEMORY_ADDRESS_GPU};
     native_families_[0].host_usage = 0;
+    native_.address_kinds[0] = UINT64_C(1) << AMDF_MEMORY_ADDRESS_GPU;
     const iree_hal_pool_family_access_t family = {
         .family = families_[0],
-        .usage = IREE_HAL_BUFFER_USAGE_STORAGE,
+        .usage = usage,
     };
     const iree_hal_pool_scope_t scope = {1, &family, {}};
     const iree_hal_virtual_buffer_options_t options = {
         .byte_length = 16384,
     };
-    return iree_hal_virtual_buffer_create(group_, scope, &options, allocator_,
-                                          out_reservation);
+    iree_hal_pool_t* owned_source = nullptr;
+    iree_status_t status = iree_ok_status();
+    if (!source_pool) {
+      auto source_family = family;
+      source_family.interfaces = UINT64_C(1)
+                                 << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+      auto source_scope = scope;
+      source_scope.families = &source_family;
+      if (native_.required_flags & AMDF_MEMORY_FLAG_HOST_VISIBLE) {
+        source_scope.host.access = IREE_HAL_MEMORY_ACCESS_ALL;
+        source_scope.host.modes = IREE_HAL_MAPPING_MODE_SCOPED;
+      }
+      status = iree_hal_slab_pool_create(group_, source_scope, &pool_options_,
+                                         allocator_, &owned_source);
+      source_pool = owned_source;
+    }
+    if (iree_status_is_ok(status)) {
+      status =
+          iree_hal_virtual_buffer_create(group_, scope, {1, &source_pool},
+                                         &options, allocator_, out_reservation);
+    }
+    iree_hal_pool_release(owned_source);
+    return status;
   }
 
   // Native failures delivered through the production diagnostic sink.

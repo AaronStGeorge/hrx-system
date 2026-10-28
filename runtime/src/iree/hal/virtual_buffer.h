@@ -35,11 +35,22 @@ typedef enum iree_hal_memory_mapping_operation_e {
 typedef uint32_t iree_hal_memory_mapping_operations_t;
 #define IREE_HAL_MEMORY_MAPPING_OPERATIONS_ALL UINT32_C(0xF)
 
-// Native address geometry for a complete simultaneous scope. A zero
-// max_byte_length means no backend supports that scope. These limits describe
-// addresses only; backing pools and their prepared mapping sources may impose
-// additional alignment and size requirements. Address availability is checked
-// at creation and is not guaranteed by a successful capability query.
+// Source pools describing backing admitted for the reservation's entire life.
+// Construction borrows this array and its pools; it retains neither. Each
+// source covers the complete consumer scope. Order conveys no preference.
+typedef struct iree_hal_virtual_buffer_sources_t {
+  // Nonzero number of prepared mapping-source pools in the same sealed group.
+  iree_host_size_t pool_count;
+  // Borrowed pool contracts; no physical allocation is needed.
+  iree_hal_pool_t* const* pools;
+} iree_hal_virtual_buffer_sources_t;
+
+// Native address geometry for the complete scope and declared source classes.
+// A zero max_byte_length means no backend supports that combination. Mapping
+// geometry includes every declared source's minimum granularity; actual source
+// ranges must also satisfy their pool's mapping requirements. Address
+// availability is checked at creation and is not guaranteed by a successful
+// capability query.
 typedef struct iree_hal_virtual_buffer_capabilities_t {
   // Largest supported address interval, in bytes; zero when unsupported.
   iree_device_size_t max_byte_length;
@@ -60,7 +71,7 @@ typedef struct iree_hal_virtual_buffer_capabilities_t {
 // construction metadata. This is a cold planning operation.
 IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_query_capabilities(
     iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
-    iree_allocator_t host_allocator,
+    iree_hal_virtual_buffer_sources_t sources, iree_allocator_t host_allocator,
     iree_hal_virtual_buffer_capabilities_t* out_capabilities);
 
 // Geometry of an address reservation, independent of physical storage pools.
@@ -85,10 +96,23 @@ typedef struct iree_hal_virtual_buffer_options_t {
 // caller-owned and must stay live until checked removal completes after its
 // last users. Accessing an unbound range is invalid. The sealed group outlives
 // its buffers. Failure returns NULL and transfers no cleanup obligation.
+// The immutable contract combines source alias cache obligations and intersects
+// atomic guarantees independently at each site. Later backing must preserve
+// that contract, regardless of whether it comes from an originally named pool.
 IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_create(
     iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
+    iree_hal_virtual_buffer_sources_t sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer);
+
+// Tests a pool's immutable mapping contract against the virtual buffer's fixed
+// guarantees. No allocation, native call, or installed-mapping lookup occurs.
+// Ordinary views use the native root's complete contract. False means ordinary
+// incompatibility or no committed virtual target. Exact ranges must separately
+// satisfy source and target geometry when mapped. Allocation prerequisites must
+// have completed before querying a transient view.
+IREE_API_EXPORT bool iree_hal_virtual_buffer_query_pool_compatibility(
+    const iree_hal_buffer_t* buffer, const iree_hal_pool_t* pool);
 
 // Achieved mapping geometry of a virtual buffer or an ordinary view of one.
 typedef struct iree_hal_virtual_buffer_info_t {
@@ -195,6 +219,9 @@ typedef struct iree_hal_virtual_buffer_t {
   iree_hal_memory_mapping_operations_t operations;
   // Native descriptor schema accepted for mapping sources.
   iree_hal_memory_backend_type_t source_type;
+  // Backend allocation classes admitted by this native target. Zero means
+  // the backend has no additional allocation-class distinctions.
+  uint64_t source_native_type_mask;
   // Scope-indexed native projections; INVALID for excluded sites and ANY.
   const uint32_t* projections;
 } iree_hal_virtual_buffer_t;
@@ -210,6 +237,18 @@ typedef struct iree_hal_virtual_buffer_view_t {
   // Visible byte zero in the native root, in bytes.
   iree_device_size_t byte_offset;
 } iree_hal_virtual_buffer_view_t;
+
+// Completes a native constructor's unpublished contract using qualified source
+// aliases. The backend supplies site bindings/usages and native atomic limits;
+// sources restrict these guarantees and provide the cache protocol. Unsupported
+// combinations zero capabilities. Only metadata allocation failures return an
+// error. No source owner or backing is retained. Query and create use this same
+// cold qualification before acquiring native addresses.
+IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_initialize_contract(
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
+    iree_hal_memory_backend_type_t source_type,
+    uint64_t source_native_type_mask, iree_hal_memory_contract_t* contract,
+    iree_hal_virtual_buffer_capabilities_t* capabilities);
 
 // Resolves a trusted buffer's currently committed virtual mapping view.
 // Subspans apply their flat offsets; transient and instrumented roots forward

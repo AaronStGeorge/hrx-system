@@ -30,8 +30,24 @@ class VulkanSparseBindingTest : public CtsTestBase<> {
         .usage = IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_STORAGE,
         .interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_VULKAN_BUFFER,
     };
+    if (!sparse_queue_) {
+      GTEST_SKIP() << "Vulkan sparse binding is unavailable";
+    }
+    auto source_family = family_;
+    source_family.interfaces = UINT64_C(1)
+                               << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+    const iree_hal_slab_pool_options_t pool_options = {};
+    iree_status_t source_status = iree_hal_slab_pool_create(
+        device_group_, {1, &source_family, {}}, &pool_options,
+        iree_allocator_system(), &source_pool_);
+    if (iree_status_is_unavailable(source_status)) {
+      iree_status_ignore(source_status);
+      GTEST_SKIP() << "Vulkan sparse mapping sources are unavailable";
+    }
+    IREE_ASSERT_OK(source_status);
     IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-        device_group_, Scope(), iree_allocator_system(), &capabilities_));
+        device_group_, Scope(), {1, &source_pool_}, iree_allocator_system(),
+        &capabilities_));
     if (!capabilities_.max_byte_length) {
       GTEST_SKIP() << "Vulkan sparse residency and aliasing are unavailable";
     }
@@ -42,6 +58,7 @@ class VulkanSparseBindingTest : public CtsTestBase<> {
     for (auto* reservation : reservations_) {
       iree_hal_buffer_release(reservation);
     }
+    iree_hal_pool_release(source_pool_);
     CtsTestBase::TearDown();
   }
 
@@ -57,9 +74,9 @@ class VulkanSparseBindingTest : public CtsTestBase<> {
         .min_alignment = alignment,
     };
     iree_hal_buffer_t* reservation = nullptr;
-    IREE_RETURN_IF_ERROR(
-        iree_hal_virtual_buffer_create(device_group_, Scope(), &options,
-                                       iree_allocator_system(), &reservation));
+    IREE_RETURN_IF_ERROR(iree_hal_virtual_buffer_create(
+        device_group_, Scope(), {1, &source_pool_}, &options,
+        iree_allocator_system(), &reservation));
     reservations_.push_back(reservation);
     *out_buffer = reservation;
     return iree_ok_status();
@@ -76,6 +93,8 @@ class VulkanSparseBindingTest : public CtsTestBase<> {
     }
   }
 
+  // Owned metadata for the declared mapping-source class.
+  iree_hal_pool_t* source_pool_ = nullptr;
   // Borrowed queue owned by the shared CTS device.
   iree_hal_vulkan_queue_t* sparse_queue_ = nullptr;
   // Owned virtual buffers released after completed native operations.
@@ -280,22 +299,23 @@ TEST_P(VulkanSparseBindingTest, ReservationScopeAndGeometryQualification) {
   scope.host.modes = IREE_HAL_MAPPING_MODE_PERSISTENT;
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      device_group_, scope, iree_allocator_system(), &capabilities));
+      device_group_, scope, {1, &source_pool_}, iree_allocator_system(),
+      &capabilities));
   EXPECT_EQ(0u, capabilities.max_byte_length);
   iree_hal_virtual_buffer_options_t options = {
       .byte_length = capabilities_.reservation_granularity,
   };
   iree_hal_buffer_t* reservation = nullptr;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_UNAVAILABLE,
-      iree_hal_virtual_buffer_create(device_group_, scope, &options,
-                                     iree_allocator_system(), &reservation));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
+                        iree_hal_virtual_buffer_create(
+                            device_group_, scope, {1, &source_pool_}, &options,
+                            iree_allocator_system(), &reservation));
   EXPECT_EQ(nullptr, reservation);
   options.byte_length += 1;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
-      iree_hal_virtual_buffer_create(device_group_, Scope(), &options,
-                                     iree_allocator_system(), &reservation));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        iree_hal_virtual_buffer_create(
+                            device_group_, Scope(), {1, &source_pool_},
+                            &options, iree_allocator_system(), &reservation));
   EXPECT_EQ(nullptr, reservation);
 }
 
@@ -324,7 +344,8 @@ TEST_P(VulkanSparseBindingTest, CoarseMappingUnitsPreserveExactTail) {
   };
   Ref<iree_hal_buffer_t> target;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      device_group_, Scope(), &options, iree_allocator_system(), target.out()));
+      device_group_, Scope(), {1, &source_pool_}, &options,
+      iree_allocator_system(), target.out()));
   const iree_hal_memory_scope_t all = {
       iree_hal_device_group_memory_domain(device_group_),
       IREE_HAL_MEMORY_SCOPE_ANY};

@@ -102,7 +102,8 @@ static iree_status_t loom_serve_pool_initialize_elastic(
   iree_hal_virtual_buffer_capabilities_t capabilities;
   if (iree_status_is_ok(status)) {
     status = iree_hal_virtual_buffer_query_capabilities(
-        group, scope, pool->host_allocator, &capabilities);
+        group, scope, (iree_hal_virtual_buffer_sources_t){1, &source_pool},
+        pool->host_allocator, &capabilities);
   }
   if (iree_status_is_ok(status)) {
     status = loom_serve_memory_pool_query_geometry(&capabilities, source_pool,

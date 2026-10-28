@@ -214,6 +214,42 @@ TEST(MemoryScopeAtomicTest, FiltersExecutionSitesIndependently) {
           {IREE_HAL_MEMORY_SITE_PROGRAM, &family}, backing)));
 }
 
+TEST(MemoryTransitionRecipeTest, JoinsDistinctHostProtocolsThroughMappingApi) {
+  const iree_hal_memory_transition_recipe_info_t first = {
+      .kind = IREE_HAL_MEMORY_TRANSITION_KIND_RANGE,
+      .executor = IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_DIRECT,
+      .operation = IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH,
+      .range_granularity = 64,
+      .host = {.instruction = IREE_HAL_HOST_CACHE_INSTRUCTION_X86_CLFLUSH},
+  };
+  auto combined = first;
+  ASSERT_TRUE(iree_hal_memory_transition_recipe_join(&combined, &first));
+  EXPECT_EQ(combined.executor, IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_DIRECT);
+  EXPECT_EQ(combined.range_granularity, 64u);
+
+  // Direct execution strides by the recipe's cache-line size. A different
+  // size must use the mapping's own protocol instead of skipping cache lines.
+  auto second = first;
+  second.range_granularity = 128;
+  ASSERT_TRUE(iree_hal_memory_transition_recipe_join(&combined, &second));
+  EXPECT_EQ(combined.executor, IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API);
+  EXPECT_EQ(combined.host.instruction, IREE_HAL_HOST_CACHE_INSTRUCTION_NONE);
+  EXPECT_EQ(combined.range_granularity, 128u);
+
+  const iree_hal_memory_transition_recipe_info_t coherent = {
+      .kind = IREE_HAL_MEMORY_TRANSITION_KIND_NONE,
+  };
+  for (bool coherent_first : {false, true}) {
+    combined = coherent_first ? coherent : first;
+    const auto value = coherent_first ? first : coherent;
+    ASSERT_TRUE(iree_hal_memory_transition_recipe_join(&combined, &value));
+    EXPECT_EQ(combined.kind, IREE_HAL_MEMORY_TRANSITION_KIND_RANGE);
+    EXPECT_EQ(combined.executor, IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API);
+    EXPECT_EQ(combined.operation,
+              IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH);
+  }
+}
+
 TEST(MemoryTransitionRecipeTest, ValidatesEffectsAndQueueOperationShape) {
   iree_hal_memory_transition_recipe_info_t operation = {
       .kind = IREE_HAL_MEMORY_TRANSITION_KIND_RANGE,

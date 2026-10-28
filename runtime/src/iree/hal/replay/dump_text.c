@@ -240,7 +240,7 @@ static iree_status_t iree_hal_replay_dump_append_text_payload(
       iree_host_size_t families_size = 0;
       IREE_RETURN_IF_ERROR(iree_hal_replay_dump_virtual_buffer_layout(
           record, &payload, &families_size));
-      return iree_string_builder_append_format(
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           builder,
           " buffer_id=%" PRIu64 " byte_length=%" PRIu64
           " min_alignment=%" PRIu64 " mapping_granularity=%" PRIu64
@@ -252,7 +252,19 @@ static iree_status_t iree_hal_replay_dump_append_text_payload(
           payload.min_alignment, payload.mapping_granularity,
           payload.family_count, payload.host_access, payload.host_mapping_modes,
           payload.host_properties, payload_range->offset + sizeof(payload),
-          families_size);
+          families_size));
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(builder, " source_pool_ids=["));
+      for (iree_host_size_t i = 0; i < payload.source_pool_count; ++i) {
+        iree_hal_replay_object_id_t id;
+        memcpy(&id,
+               record->payload.data + sizeof(payload) + families_size +
+                   i * sizeof(id),
+               sizeof(id));
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+            builder, "%s%" PRIu64, i ? "," : "", id));
+      }
+      return iree_string_builder_append_cstring(builder, "]");
     }
     case IREE_HAL_REPLAY_PAYLOAD_TYPE_QUEUE_MAP: {
       if (record->payload.data_length <

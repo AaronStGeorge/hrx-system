@@ -857,9 +857,10 @@ iree_status_t loom_serve_virtual_buffer_allocate(
       .min_alignment = alignment,
       .mapping_granularity = geometry.slab_size,
   };
-  iree_status_t status =
-      iree_hal_virtual_buffer_create(pool->group, pool->scope, &options,
-                                     pool->host_allocator, &buffer->handle);
+  iree_status_t status = iree_hal_virtual_buffer_create(
+      pool->group, pool->scope,
+      (iree_hal_virtual_buffer_sources_t){1, &pool->storage_pool}, &options,
+      pool->host_allocator, &buffer->handle);
   if (iree_status_is_ok(status)) {
     pool->statistics.reserved_bytes += buffer->byte_length;
     statistics->reserved_bytes += buffer->byte_length;
@@ -901,9 +902,10 @@ iree_status_t loom_serve_memory_arena_allocate(
         .min_alignment = geometry.granularity,
         .mapping_granularity = geometry.granularity,
     };
-    status =
-        iree_hal_virtual_buffer_create(pool->group, pool->scope, &options,
-                                       pool->host_allocator, &arena->handle);
+    status = iree_hal_virtual_buffer_create(
+        pool->group, pool->scope,
+        (iree_hal_virtual_buffer_sources_t){1, &pool->storage_pool}, &options,
+        pool->host_allocator, &arena->handle);
     if (!iree_status_is_ok(status)) {
       iree_hal_memory_tlsf_deinitialize(&arena->ranges);
     }
@@ -1397,7 +1399,9 @@ iree_status_t loom_serve_virtual_buffer_grow_async(
   };
   iree_hal_buffer_t* handle = NULL;
   iree_status_t status = iree_hal_virtual_buffer_create(
-      pool->group, pool->scope, &options, pool->host_allocator, &handle);
+      pool->group, pool->scope,
+      (iree_hal_virtual_buffer_sources_t){1, &pool->storage_pool}, &options,
+      pool->host_allocator, &handle);
   loom_serve_memory_operation_t* operation = NULL;
   if (iree_status_is_ok(status)) {
     status = loom_serve_memory_operation_allocate(
