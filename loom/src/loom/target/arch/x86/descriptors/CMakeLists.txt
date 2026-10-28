@@ -250,6 +250,25 @@ loom_cc_library(
 endif()
 
 if(LOOM_ARCH_X86)
+loom_cc_library(
+  NAME
+    vector_slice
+  HDRS
+    "vector_slice.h"
+  SRCS
+    "vector_slice.c"
+  DEPS
+    ::avx2_descriptors_ids
+    ::avx2_features_descriptors_ids
+    ::avx512_descriptors_ids
+    ::avx512_features_descriptors_ids
+    iree::base
+    loom::codegen::low::descriptors
+  PUBLIC
+)
+endif()
+
+if(LOOM_ARCH_X86)
 loom_cc_test(
   NAME
     entry_test

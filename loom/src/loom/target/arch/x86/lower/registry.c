@@ -36,23 +36,8 @@
 #include "loom/target/arch/x86/lower/predicate_representation.h"
 #include "loom/target/arch/x86/lower/source_signature.h"
 #include "loom/target/arch/x86/lower/vector_construct.h"
+#include "loom/target/arch/x86/lower/vector_slice.h"
 #include "loom/target/arch/x86/register_classes.h"
-
-static bool loom_x86_vector_element_bit_width(loom_scalar_type_t scalar_type,
-                                              uint32_t* out_bit_width) {
-  static const loom_scalar_type_set_t kRegisterElementTypes =
-      LOOM_SCALAR_TYPE_SET_I8 | LOOM_SCALAR_TYPE_SET_I16 |
-      LOOM_SCALAR_TYPE_SET_I32 | LOOM_SCALAR_TYPE_SET_I64 |
-      LOOM_SCALAR_TYPE_SET_F8E4M3 | LOOM_SCALAR_TYPE_SET_F8E5M2 |
-      LOOM_SCALAR_TYPE_SET_16BIT_FLOAT | LOOM_SCALAR_TYPE_SET_F32 |
-      LOOM_SCALAR_TYPE_SET_F64;
-  if (!loom_scalar_type_set_contains(kRegisterElementTypes, scalar_type)) {
-    *out_bit_width = 0;
-    return false;
-  }
-  *out_bit_width = (uint32_t)loom_scalar_type_bitwidth(scalar_type);
-  return true;
-}
 
 static bool loom_x86_static_vector_register_class_for_source_type(
     loom_type_t source_type, uint32_t minimum_vector_bit_width,
@@ -63,8 +48,8 @@ static bool loom_x86_static_vector_register_class_for_source_type(
     return false;
   }
   uint32_t element_bit_width = 0;
-  if (!loom_x86_vector_element_bit_width(loom_type_element_type(source_type),
-                                         &element_bit_width)) {
+  if (!loom_x86_register_vector_element_bit_width(
+          loom_type_element_type(source_type), &element_bit_width)) {
     return false;
   }
   const int64_t lane_count = loom_type_dim_static_size_at(source_type, 0);
@@ -829,8 +814,13 @@ static iree_status_t loom_x86_query_op_contract(
   if (out_result->outcome != LOOM_TARGET_CONTRACT_QUERY_UNHANDLED) {
     return iree_ok_status();
   }
-  return loom_x86_query_vector_construct_contract(environment, source_op,
-                                                  out_result);
+  IREE_RETURN_IF_ERROR(loom_x86_query_vector_construct_contract(
+      environment, source_op, out_result));
+  if (out_result->outcome != LOOM_TARGET_CONTRACT_QUERY_UNHANDLED) {
+    return iree_ok_status();
+  }
+  return loom_x86_query_vector_slice_contract(environment, source_op,
+                                              out_result);
 }
 
 static iree_status_t loom_x86_preselect_op(void* user_data,
@@ -842,7 +832,12 @@ static iree_status_t loom_x86_preselect_op(void* user_data,
   if (!loom_low_lower_plan_is_empty(*out_plan)) {
     return iree_ok_status();
   }
-  return loom_x86_select_vector_construct_plan(context, source_op, out_plan);
+  IREE_RETURN_IF_ERROR(
+      loom_x86_select_vector_construct_plan(context, source_op, out_plan));
+  if (!loom_low_lower_plan_is_empty(*out_plan)) {
+    return iree_ok_status();
+  }
+  return loom_x86_select_vector_slice_plan(context, source_op, out_plan);
 }
 
 static void loom_x86_mark_plan_storage_demands(
@@ -852,6 +847,8 @@ static void loom_x86_mark_plan_storage_demands(
   if (loom_x86_vector_construct_plan_isa(plan)) {
     loom_x86_mark_vector_construct_plan_storage_demands(context, source_op,
                                                         plan);
+  } else if (loom_x86_vector_slice_plan_isa(plan)) {
+    loom_x86_mark_vector_slice_plan_storage_demands(context, source_op, plan);
   }
 }
 
@@ -868,6 +865,8 @@ static iree_status_t loom_x86_describe_plan(
   *out_report = (loom_low_lower_plan_report_t){0};
   if (loom_x86_vector_construct_plan_isa(plan)) {
     loom_x86_describe_vector_construct_plan(plan, out_report);
+  } else if (loom_x86_vector_slice_plan_isa(plan)) {
+    loom_x86_describe_vector_slice_plan(plan, out_report);
   }
   return iree_ok_status();
 }
@@ -878,6 +877,9 @@ static iree_status_t loom_x86_emit_op(void* user_data,
                                       loom_low_lower_plan_t plan) {
   if (loom_x86_vector_construct_plan_isa(plan)) {
     return loom_x86_emit_vector_construct_plan(context, source_op, plan);
+  }
+  if (loom_x86_vector_slice_plan_isa(plan)) {
+    return loom_x86_emit_vector_slice_plan(context, source_op, plan);
   }
   return loom_low_task_emit_kernel_builtin(user_data, context, source_op, plan);
 }

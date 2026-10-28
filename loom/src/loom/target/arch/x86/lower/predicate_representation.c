@@ -17,6 +17,7 @@ typedef enum loom_x86_predicate_representation_action_e {
   LOOM_X86_PREDICATE_REPRESENTATION_ACTION_COMPARE = 4,
   LOOM_X86_PREDICATE_REPRESENTATION_ACTION_EXTEND_INPUT = 5,
   LOOM_X86_PREDICATE_REPRESENTATION_ACTION_TRUNCATE_RESULT = 6,
+  LOOM_X86_PREDICATE_REPRESENTATION_ACTION_SLICE = 7,
 } loom_x86_predicate_representation_action_t;
 
 typedef enum loom_x86_predicate_profile_e {
@@ -554,8 +555,10 @@ static void loom_x86_predicate_observe_select(
       candidates[LOOM_X86_PREDICATE_MAX_CANDIDATE_COUNT];
   const iree_host_size_t candidate_count = loom_x86_predicate_candidates(
       policy, lane_count, native_representation, candidates);
-  loom_low_lower_representation_record_costs(recorder, condition, candidates,
-                                             candidate_count);
+  // These rows are the select's accepted representations as well as their
+  // conversion costs. An omitted representation cannot consume this payload.
+  loom_low_lower_representation_record_candidates(recorder, condition,
+                                                  candidates, candidate_count);
 }
 
 static void loom_x86_predicate_observe_lane_access(
@@ -609,6 +612,17 @@ static void loom_x86_predicate_observe_insert(
                                          recorder);
 }
 
+static void loom_x86_predicate_observe_slice(
+    const loom_x86_predicate_representation_policy_t* policy,
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_low_lower_representation_recorder_t* recorder) {
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t source = loom_vector_slice_source(source_op);
+  const loom_value_id_t result = loom_vector_slice_result(source_op);
+  loom_x86_predicate_constrain_flexible(policy, module, source, recorder);
+  loom_x86_predicate_constrain_flexible(policy, module, result, recorder);
+}
+
 static void loom_x86_predicate_observe_boundary(
     void* user_data, uint8_t action,
     loom_low_lower_representation_boundary_flags_t flags,
@@ -629,6 +643,10 @@ static void loom_x86_predicate_observe_boundary(
       return;
     case LOOM_X86_PREDICATE_REPRESENTATION_ACTION_INSERT:
       loom_x86_predicate_observe_insert(policy, context, source_op, recorder);
+      loom_low_lower_representation_claim_operand(recorder, 0);
+      return;
+    case LOOM_X86_PREDICATE_REPRESENTATION_ACTION_SLICE:
+      loom_x86_predicate_observe_slice(policy, context, source_op, recorder);
       loom_low_lower_representation_claim_operand(recorder, 0);
       return;
     case LOOM_X86_PREDICATE_REPRESENTATION_ACTION_SELECT:
@@ -714,6 +732,9 @@ static const loom_low_lower_representation_boundary_t
         {LOOM_OP_VECTOR_INSERT, LOOM_X86_PREDICATE_REPRESENTATION_ACTION_INSERT,
          LOOM_LOW_LOWER_REPRESENTATION_BOUNDARY_FLAG_OPERANDS |
              LOOM_LOW_LOWER_REPRESENTATION_BOUNDARY_FLAG_RESULTS},
+        {LOOM_OP_VECTOR_SLICE, LOOM_X86_PREDICATE_REPRESENTATION_ACTION_SLICE,
+         LOOM_LOW_LOWER_REPRESENTATION_BOUNDARY_FLAG_OPERANDS |
+             LOOM_LOW_LOWER_REPRESENTATION_BOUNDARY_FLAG_RESULTS},
         {LOOM_OP_VECTOR_SELECT, LOOM_X86_PREDICATE_REPRESENTATION_ACTION_SELECT,
          LOOM_LOW_LOWER_REPRESENTATION_BOUNDARY_FLAG_OPERANDS},
         {LOOM_OP_VECTOR_CMPI, LOOM_X86_PREDICATE_REPRESENTATION_ACTION_COMPARE,
@@ -743,6 +764,8 @@ static_assert((loom_op_kind_t)LOOM_OP_VECTOR_CONSTANT <
                   (loom_op_kind_t)LOOM_OP_VECTOR_EXTRACT <
                       (loom_op_kind_t)LOOM_OP_VECTOR_INSERT &&
                   (loom_op_kind_t)LOOM_OP_VECTOR_INSERT <
+                      (loom_op_kind_t)LOOM_OP_VECTOR_SLICE &&
+                  (loom_op_kind_t)LOOM_OP_VECTOR_SLICE <
                       (loom_op_kind_t)LOOM_OP_VECTOR_SELECT &&
                   (loom_op_kind_t)LOOM_OP_VECTOR_SELECT <
                       (loom_op_kind_t)LOOM_OP_VECTOR_CMPI &&

@@ -13,6 +13,7 @@
 #ifndef LOOM_TARGET_ARCH_X86_REGISTER_CLASSES_H_
 #define LOOM_TARGET_ARCH_X86_REGISTER_CLASSES_H_
 
+#include "loom/ir/scalar_type.h"
 #include "loom/target/arch/x86/descriptors/avx512_features_descriptors.h"
 
 #ifdef __cplusplus
@@ -27,6 +28,12 @@ typedef enum loom_x86_register_class_e {
   LOOM_X86_REGISTER_CLASS_ZMM = X86_AVX512_FEATURES_CORE_REG_CLASS_ID_ZMM,
   LOOM_X86_REGISTER_CLASS_K = X86_AVX512_FEATURES_CORE_REG_CLASS_ID_K,
 } loom_x86_register_class_t;
+
+// Returns the declared width of a scalar element carried in an x86 vector
+// register. Predicate lanes have representation-specific widths and return
+// false here.
+bool loom_x86_register_vector_element_bit_width(loom_scalar_type_t scalar_type,
+                                                uint32_t* out_bit_width);
 
 // Maps a logical vector payload width to its physical x86 register class.
 // Payloads narrower than 128 bits occupy the corresponding low XMM bits.

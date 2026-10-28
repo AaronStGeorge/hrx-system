@@ -6,6 +6,22 @@
 
 #include "loom/target/arch/x86/register_classes.h"
 
+bool loom_x86_register_vector_element_bit_width(loom_scalar_type_t scalar_type,
+                                                uint32_t* out_bit_width) {
+  static const loom_scalar_type_set_t kRegisterElementTypes =
+      LOOM_SCALAR_TYPE_SET_I8 | LOOM_SCALAR_TYPE_SET_I16 |
+      LOOM_SCALAR_TYPE_SET_I32 | LOOM_SCALAR_TYPE_SET_I64 |
+      LOOM_SCALAR_TYPE_SET_F8E4M3 | LOOM_SCALAR_TYPE_SET_F8E5M2 |
+      LOOM_SCALAR_TYPE_SET_16BIT_FLOAT | LOOM_SCALAR_TYPE_SET_F32 |
+      LOOM_SCALAR_TYPE_SET_F64;
+  if (!loom_scalar_type_set_contains(kRegisterElementTypes, scalar_type)) {
+    *out_bit_width = 0;
+    return false;
+  }
+  *out_bit_width = (uint32_t)loom_scalar_type_bitwidth(scalar_type);
+  return true;
+}
+
 bool loom_x86_register_class_for_vector_bit_width(
     uint32_t vector_bit_width, loom_x86_register_class_t* out_register_class) {
   switch (vector_bit_width) {

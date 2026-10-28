@@ -1096,6 +1096,35 @@ _X86_AVX2_VECTOR_DESCRIPTORS = (
     ),
     _vex_descriptor(
         Descriptor(
+            key="x86.avx2.vpalignr.xmm",
+            mnemonic="vpalignr",
+            semantic_tag="bits.align_right.bytes.v128",
+            operands=(
+                _vector_result(128),
+                _xmm_operand("upper"),
+                _xmm_operand("lower"),
+            ),
+            immediates=(
+                Immediate(
+                    "bytes",
+                    ImmediateKind.UNSIGNED,
+                    bit_width=8,
+                    unsigned_max=255,
+                ),
+            ),
+            asm_forms=_asm(
+                mnemonic="vpalignr.xmm",
+                results=("dst",),
+                operands=("upper", "lower"),
+                immediates=("bytes",),
+            ),
+            schedule_class=_SCHEDULE_VECTOR_I32_XMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        native.VPALIGNR,
+    ),
+    _vex_descriptor(
+        Descriptor(
             key="x86.avx2.vpsrldq.xmm",
             mnemonic="vpsrldq",
             semantic_tag="bits.shift_right_bytes.v128",

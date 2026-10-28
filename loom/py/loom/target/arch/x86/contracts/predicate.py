@@ -718,7 +718,7 @@ def avx2_predicate_representation_bit_widths(lane_count: int) -> tuple[int, ...]
     )
 
 
-def _signed_predicate_mask_conversion_emits(
+def avx2_predicate_simd_conversion_emits(
     descriptor_lookup: _DescriptorLookup,
     *,
     source_element_bit_width: int,
@@ -729,6 +729,7 @@ def _signed_predicate_mask_conversion_emits(
     result_type: TypePattern | None,
     temporary_prefix: str,
 ) -> tuple[tuple[ContractEmit, ...], tuple[Descriptor, ...]]:
+    """Converts signed all-zero/all-one predicate lanes between SIMD forms."""
     source_vector_bit_width = lane_count * source_element_bit_width
     result_vector_bit_width = lane_count * result_element_bit_width
     if (
@@ -790,7 +791,7 @@ def _predicate_extension_rules(
                         conversion_result = ValueRef.temporary("signed_mask")
                         conversion_result_type = result_type
                     conversion_emits, conversion_descriptors = (
-                        _signed_predicate_mask_conversion_emits(
+                        avx2_predicate_simd_conversion_emits(
                             descriptor_lookup,
                             source_element_bit_width=source_element_bit_width,
                             result_element_bit_width=result_element.bit_width,
@@ -924,7 +925,7 @@ def _predicate_truncation_rules(
                 conversion_descriptors: tuple[Descriptor, ...] = ()
                 if requires_conversion:
                     conversion_emits, conversion_descriptors = (
-                        _signed_predicate_mask_conversion_emits(
+                        avx2_predicate_simd_conversion_emits(
                             descriptor_lookup,
                             source_element_bit_width=source_element.bit_width,
                             result_element_bit_width=result_element_bit_width,
@@ -1255,7 +1256,7 @@ def _integer_compare_rules(
                     conversion_descriptors: tuple[Descriptor, ...] = ()
                     if requires_conversion:
                         conversion_emits, conversion_descriptors = (
-                            _signed_predicate_mask_conversion_emits(
+                            avx2_predicate_simd_conversion_emits(
                                 descriptor_lookup,
                                 source_element_bit_width=element.bit_width,
                                 result_element_bit_width=(
@@ -1339,7 +1340,7 @@ def _floating_compare_rules(
                 conversion_descriptors: tuple[Descriptor, ...] = ()
                 if requires_conversion:
                     conversion_emits, conversion_descriptors = (
-                        _signed_predicate_mask_conversion_emits(
+                        avx2_predicate_simd_conversion_emits(
                             descriptor_lookup,
                             source_element_bit_width=element.bit_width,
                             result_element_bit_width=result_bit_width // lane_count,
@@ -1394,7 +1395,7 @@ def _vector_select_rules(
                 if requires_conversion:
                     mask = ValueRef.temporary("native_mask")
                     conversion_emits, conversion_descriptors = (
-                        _signed_predicate_mask_conversion_emits(
+                        avx2_predicate_simd_conversion_emits(
                             descriptor_lookup,
                             source_element_bit_width=(
                                 condition_bit_width // lane_count

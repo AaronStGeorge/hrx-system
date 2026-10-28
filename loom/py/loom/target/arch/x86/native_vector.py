@@ -159,6 +159,10 @@ _OPERANDS_18 = (
 )
 _OPERANDS_19 = (*_OPERANDS_18, _operand(OperandRole.RESOURCE, _GPR64))
 _OPERANDS_20 = (_operand(OperandRole.RESULT, _SIMD),)
+_OPERANDS_21 = (
+    _operand(OperandRole.RESULT, _K),
+    _operand(OperandRole.OPERAND, _K),
+)
 
 _IMMEDIATES_0: tuple[VectorImmediateShape, ...] = ()
 _IMMEDIATES_1 = (VectorImmediateShape(ImmediateKind.ORDINAL, 32),)
@@ -351,6 +355,13 @@ KORQ = _instruction(
     _IMMEDIATES_0,
     _encoding(_VEX, _MAP_1, 0, 1, 0x45, fixed=1),
 )
+KSHIFTRQ = _instruction(
+    "kshiftrq",
+    _UNARY_IMMEDIATE,
+    _OPERANDS_21,
+    _IMMEDIATES_5,
+    _encoding(_VEX, _MAP_3, 1, 1, 0x31, fixed=0),
+)
 KXORQ = _instruction(
     "kxorq",
     _NDS,
@@ -401,6 +412,20 @@ VADDSS = _instruction(
     _OPERANDS_16,
     _IMMEDIATES_0,
     _encoding(_VEX, _MAP_1, 2, 0, 0x58, (128,)),
+)
+VALIGND = _instruction(
+    "valignd",
+    _NDS_IMMEDIATE,
+    _OPERANDS_16,
+    _IMMEDIATES_5,
+    _encoding(_EVEX, _MAP_3, 1, 0, 0x03, (128, 256, 512)),
+)
+VALIGNQ = _instruction(
+    "valignq",
+    _NDS_IMMEDIATE,
+    _OPERANDS_16,
+    _IMMEDIATES_5,
+    _encoding(_EVEX, _MAP_3, 1, 1, 0x03, (128, 256, 512)),
 )
 VBCSTNEBF162PS_MEMORY = _vex_memory_load_instructions("vbcstnebf162ps", 2, 0xB1)
 VBCSTNESH2PS_MEMORY = _vex_memory_load_instructions("vbcstnesh2ps", 1, 0xB1)
@@ -987,6 +1012,13 @@ VPADDW = _instruction(
     _IMMEDIATES_0,
     _encoding(_EVEX, _MAP_1, 1, 0, 0xFD, (512,)),
     _encoding(_VEX, _MAP_1, 1, 0, 0xFD, (128, 256)),
+)
+VPALIGNR = _instruction(
+    "vpalignr",
+    _NDS_IMMEDIATE,
+    _OPERANDS_16,
+    _IMMEDIATES_5,
+    _encoding(_VEX, _MAP_3, 1, 0, 0x0F, (128, 256)),
 )
 VPAND = _instruction(
     "vpand",
