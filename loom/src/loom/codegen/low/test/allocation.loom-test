@@ -64,7 +64,7 @@ value %sum: test.i32 -> target_id[0:1]
 
 // ====
 
-// RUN: emit low-allocation-query @ordinary_packet_reuses_dead_input values=%lhs,%rhs,%sum test.i32=8
+// RUN: emit low-allocation-query @ordinary_packet_reuses_dead_input values=%lhs,%rhs,%sum
 
 test.target<low_core> @test_target
 
@@ -80,7 +80,7 @@ value %sum: test.i32 -> target_id[0:4]
 
 // ====
 
-// RUN: emit low-allocation-query @early_clobber_preserves_input values=%source,%result test.i32=8
+// RUN: emit low-allocation-query @early_clobber_preserves_input values=%source,%result
 
 test.target<low_core> @test_target
 
@@ -95,7 +95,7 @@ value %result: test.i32 -> target_id[4:4]
 
 // ====
 
-// RUN: emit low-allocation-query @contiguous_early_clobber_read values=%source,%result spill-count test.i32=8
+// RUN: emit low-allocation-query @contiguous_early_clobber_read values=%source,%result spill-count
 
 test.target<low_core> @test_target
 
@@ -141,7 +141,7 @@ value %result: test.i32 -> target_id[0:4]
 
 // ====
 
-// RUN: emit low-allocation-query @sparse_late_read values=%source,%other copies=%other test.phys=1
+// RUN: emit low-allocation-query @sparse_late_read values=%source,%other copies=%other
 
 test.target<low_core> @test_target
 
@@ -163,7 +163,7 @@ copy %seed -> %other: materialized
 
 // ====
 
-// RUN: emit low-allocation-query @early_tied_reuses_input values=%source,%result test.i32=4
+// RUN: emit low-allocation-query @early_tied_reuses_input values=%source,%result
 
 test.target<low_core> @test_target
 
@@ -178,7 +178,7 @@ value %result: test.i32 -> target_id[0:4]
 
 // ====
 
-// RUN: emit low-allocation-query @fact_identity_reuses_input values=%source,%assumed test.i32=4
+// RUN: emit low-allocation-query @fact_identity_reuses_input values=%source,%assumed
 
 test.target<low_core> @test_target
 
@@ -339,7 +339,7 @@ value %late_read: test.i32 -> target_id[0:1]
 
 // ====
 
-// RUN: emit low-allocation-query @loop_body_chain_reuses_exit_live_state values=%state,%scaled,%next test.i32=4
+// RUN: emit low-allocation-query @loop_body_chain_reuses_exit_live_state values=%state,%scaled,%next
 
 test.target<low_core> @test_target
 
@@ -651,7 +651,7 @@ low.func.def target<test.low.core>(@test_target) @fixed_value_unit_count_mismatc
 }
 // ====
 
-// RUN: emit low-allocation-query @unspillable_interval_exceeds_budget_reports_failure failure test.special=1
+// RUN: emit low-allocation-query @unspillable_interval_exceeds_budget_reports_failure failure
 
 test.target<low_core> @test_target
 
@@ -679,7 +679,7 @@ failure: unspillable-register-exhausted kind=no-assignable-location value=%wide 
 
 // ====
 
-// RUN: emit low-allocation-query @unspillable_active_conflict_reports_failure failure test.special=1
+// RUN: emit low-allocation-query @unspillable_active_conflict_reports_failure failure
 
 test.target<low_core> @test_target
 
@@ -1381,7 +1381,7 @@ value %suffix_result: test.i32 -> target_id[4:1]
 // A carrier remains live along the loop continuation after one dynamic path
 // captures it. The explicit branch identity still requires the resume argument
 // to inherit its storage when optional edge coalescing rejects the overlap.
-// RUN: emit low-allocation-query @loop_branch_identity values=%source,%result test.i32=8
+// RUN: emit low-allocation-query @loop_branch_identity values=%source,%result
 
 test.target<low_core> @test_target
 
