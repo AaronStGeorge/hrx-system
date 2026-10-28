@@ -841,6 +841,50 @@ TEST_F(ModuleTypesTest, ValueRemapPreservesViewAccessAlignment) {
       module_, source_signature.get(), natural_signature.get(), &remap));
 }
 
+TEST_F(ModuleTypesTest, ValueRemapComparesNumericalContainerShapes) {
+  const auto scalar_f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  const auto scalar_f64 = loom_type_scalar(LOOM_SCALAR_TYPE_F64);
+  EXPECT_TRUE(loom_type_shape_equal_after_value_remap(
+      module_, scalar_f32, scalar_f64, /*remap=*/nullptr));
+
+  const loom_value_id_t source_value = 7;
+  const loom_value_id_t target_value = 9;
+  const loom_type_value_remap_t remap = {
+      .source_values = &source_value,
+      .target_values = &target_value,
+      .count = 1,
+  };
+  const auto source = loom_type_shaped_2d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_BF16,
+      loom_dim_pack_dynamic(source_value), loom_dim_pack_static(32),
+      /*encoding_id=*/0);
+  const auto target = loom_type_shaped_2d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F64,
+      loom_dim_pack_dynamic(target_value), loom_dim_pack_static(32),
+      /*encoding_id=*/0);
+  EXPECT_TRUE(
+      loom_type_shape_equal_after_value_remap(module_, source, target, &remap));
+  EXPECT_FALSE(
+      loom_type_equal_after_value_remap(module_, source, target, &remap));
+
+  const auto different_extent = loom_type_shaped_2d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F64,
+      loom_dim_pack_dynamic(target_value), loom_dim_pack_static(31),
+      /*encoding_id=*/0);
+  EXPECT_FALSE(loom_type_shape_equal_after_value_remap(
+      module_, source, different_extent, &remap));
+
+  const auto different_container = loom_type_shaped_2d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F64,
+      loom_dim_pack_dynamic(target_value), loom_dim_pack_static(32),
+      /*encoding_id=*/0);
+  EXPECT_FALSE(loom_type_shape_equal_after_value_remap(
+      module_, source, different_container, &remap));
+
+  EXPECT_FALSE(loom_type_shape_equal_after_value_remap(
+      module_, loom_type_buffer(), loom_type_buffer(), /*remap=*/nullptr));
+}
+
 TEST_F(ModuleTypesTest, ValueRemapComposesDiscontiguousSpans) {
   loom_type_t source = loom_type_shaped_2d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(7),

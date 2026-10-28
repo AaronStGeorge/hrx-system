@@ -51,6 +51,19 @@ loom_value_id_t loom_type_remap_value(const loom_module_t* module,
                                       const loom_type_value_remap_t* remap,
                                       loom_value_id_t value_id);
 
+// Returns true if |source_type| and |target_type| have compatible numerical
+// value shapes after applying |remap| to SSA value references embedded in the
+// source dimensions. Scalars are compatible with other scalars. Shaped values
+// must have the same container kind, rank, and remapped dimensions. Element
+// types, encodings, and view alignment are intentionally ignored.
+//
+// Non-scalar, non-shaped types are not numerical value containers and compare
+// incompatible. The module and remap spans are trusted compiler-owned state
+// and must be valid for the duration of the query.
+bool loom_type_shape_equal_after_value_remap(
+    const loom_module_t* module, loom_type_t source_type,
+    loom_type_t target_type, const loom_type_value_remap_t* remap);
+
 // Returns true if |source_type| equals |target_type| after applying |remap| to
 // SSA value references embedded in |source_type|.
 //

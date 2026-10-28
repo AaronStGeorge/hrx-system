@@ -162,6 +162,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    numeric_value
+  HDRS
+    "numeric_value.h"
+  SRCS
+    "numeric_value.c"
+  DEPS
+    iree::base
+    iree::base::internal
+    iree::hal
+    loom::ir::type_headers
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     compiled_provider
   HDRS
     "compiled_provider.h"
@@ -181,6 +196,7 @@ loom_cc_library(
     "expectation.c"
   DEPS
     ::device_event
+    ::numeric_value
     ::source_report
     ::testbench
     ::value_materializer
@@ -243,10 +259,22 @@ loom_cc_library(
     "reference.c"
   DEPS
     ::invocation
+    ::numeric_value
     iree::base
     iree::base::internal
     iree::hal
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    numeric_value_test
+  SRCS
+    "numeric_value_test.cc"
+  DEPS
+    ::numeric_value
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

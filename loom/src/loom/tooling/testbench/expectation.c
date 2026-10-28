@@ -9,8 +9,8 @@
 #include <math.h>
 #include <string.h>
 
-#include "iree/base/internal/math.h"
 #include "iree/tooling/buffer_view_matchers.h"
+#include "loom/tooling/testbench/numeric_value.h"
 #include "loom/tooling/testbench/source_report.h"
 #include "loom/util/json.h"
 
@@ -345,43 +345,19 @@ static iree_status_t loom_testbench_compare_scalar_close(
   // to the source type retained by expectation planning.
   const loom_scalar_type_t scalar_type =
       loom_type_element_type(expectation->type);
-  switch (scalar_type) {
-    case LOOM_SCALAR_TYPE_F8E4M3:
-      actual_f64 =
-          iree_math_f8e4m3fn_to_f32((uint8_t)actual_value->storage.u32);
-      expected_f64 =
-          iree_math_f8e4m3fn_to_f32((uint8_t)expected_value->storage.u32);
-      break;
-    case LOOM_SCALAR_TYPE_F8E5M2:
-      actual_f64 = iree_math_f8e5m2_to_f32((uint8_t)actual_value->storage.u32);
-      expected_f64 =
-          iree_math_f8e5m2_to_f32((uint8_t)expected_value->storage.u32);
-      break;
-    case LOOM_SCALAR_TYPE_F16:
-      actual_f64 = iree_math_f16_to_f32((uint16_t)actual_value->storage.u32);
-      expected_f64 =
-          iree_math_f16_to_f32((uint16_t)expected_value->storage.u32);
-      break;
-    case LOOM_SCALAR_TYPE_BF16:
-      actual_f64 = iree_math_bf16_to_f32((uint16_t)actual_value->storage.u32);
-      expected_f64 =
-          iree_math_bf16_to_f32((uint16_t)expected_value->storage.u32);
-      break;
-    case LOOM_SCALAR_TYPE_F32:
-      actual_f64 = (double)actual_value->storage.f32;
-      expected_f64 = (double)expected_value->storage.f32;
-      break;
-    case LOOM_SCALAR_TYPE_F64:
-      actual_f64 = actual_value->storage.f64;
-      expected_f64 = expected_value->storage.f64;
-      break;
-    default:
-      return iree_string_builder_append_format(
-          detail_builder,
-          "close expectation requires floating-point scalar values, "
-          "but source type is %s",
-          loom_scalar_type_name(scalar_type));
+  const loom_testbench_numeric_type_t* numeric_type =
+      loom_testbench_numeric_type_from_scalar_type(scalar_type);
+  if (!numeric_type || !loom_testbench_numeric_type_is_float(numeric_type)) {
+    return iree_string_builder_append_format(
+        detail_builder,
+        "close expectation requires floating-point scalar values, "
+        "but source type is %s",
+        loom_scalar_type_name(scalar_type));
   }
+  actual_f64 = numeric_type->load_f64(
+      (const uint8_t*)(const void*)&actual_value->storage);
+  expected_f64 = numeric_type->load_f64(
+      (const uint8_t*)(const void*)&expected_value->storage);
 
   const loom_testbench_close_expectation_plan_t* close_plan =
       &expectation->close;
@@ -427,48 +403,6 @@ static iree_status_t loom_testbench_compare_buffer_exact(
                                           out_matched);
 }
 
-static double loom_testbench_dense_floating_element_as_f64(
-    iree_hal_element_type_t element_type, const uint8_t* element_data) {
-  switch (element_type) {
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_8_E4M3_FN:
-      return (double)iree_math_f8e4m3fn_to_f32(*element_data);
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_8_E5M2:
-      return (double)iree_math_f8e5m2_to_f32(*element_data);
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_16: {
-      uint16_t bits = 0;
-      memcpy(&bits, element_data, sizeof(bits));
-      return (double)iree_math_f16_to_f32(bits);
-    }
-    case IREE_HAL_ELEMENT_TYPE_BFLOAT_16: {
-      uint16_t bits = 0;
-      memcpy(&bits, element_data, sizeof(bits));
-      return (double)iree_math_bf16_to_f32(bits);
-    }
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_32: {
-      float value = 0.0f;
-      memcpy(&value, element_data, sizeof(value));
-      return (double)value;
-    }
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_64: {
-      double value = 0.0;
-      memcpy(&value, element_data, sizeof(value));
-      return value;
-    }
-    default:
-      return NAN;
-  }
-}
-
-static bool loom_testbench_hal_element_type_is_close_supported(
-    iree_hal_element_type_t element_type) {
-  return element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_8_E4M3_FN ||
-         element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_8_E5M2 ||
-         element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_16 ||
-         element_type == IREE_HAL_ELEMENT_TYPE_BFLOAT_16 ||
-         element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_32 ||
-         element_type == IREE_HAL_ELEMENT_TYPE_FLOAT_64;
-}
-
 static iree_status_t loom_testbench_compare_buffer_close(
     const loom_testbench_close_expectation_plan_t* close_plan,
     const loom_testbench_value_t* actual,
@@ -500,7 +434,9 @@ static iree_status_t loom_testbench_compare_buffer_close(
 
   iree_hal_element_type_t element_type =
       iree_hal_buffer_view_element_type(actual_buffer_view);
-  if (!loom_testbench_hal_element_type_is_close_supported(element_type)) {
+  const loom_testbench_numeric_type_t* numeric_type =
+      loom_testbench_numeric_type_from_hal_element_type(element_type);
+  if (!numeric_type || !loom_testbench_numeric_type_is_float(numeric_type)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
         detail_builder, IREE_SV("close expectation requires floating-point "
                                 "buffer elements, but actual has ")));
@@ -543,16 +479,14 @@ static iree_status_t loom_testbench_compare_buffer_close(
   if (iree_status_is_ok(status)) {
     iree_host_size_t element_count =
         iree_hal_buffer_view_element_count(actual_buffer_view);
-    iree_host_size_t element_size =
-        iree_hal_element_dense_byte_count(element_type);
     const uint8_t* actual_data = actual_mapping.contents.data;
     const uint8_t* expected_data = expected_mapping.contents.data;
     *out_matched = true;
     for (iree_host_size_t i = 0; i < element_count; ++i) {
-      double actual_value = loom_testbench_dense_floating_element_as_f64(
-          element_type, actual_data + i * element_size);
-      double expected_value = loom_testbench_dense_floating_element_as_f64(
-          element_type, expected_data + i * element_size);
+      double actual_value =
+          loom_testbench_numeric_load_f64_at(numeric_type, actual_data, i);
+      double expected_value =
+          loom_testbench_numeric_load_f64_at(numeric_type, expected_data, i);
       if (!loom_testbench_f64_close(
               actual_value, expected_value, close_plan->absolute_tolerance,
               close_plan->relative_tolerance, close_plan->nan_policy)) {
@@ -639,9 +573,12 @@ static iree_status_t loom_testbench_compare_equal(
 
   iree_hal_buffer_view_t* actual_buffer_view = NULL;
   loom_testbench_expectation_buffer_view(actual, &actual_buffer_view);
-  if (actual_buffer_view &&
-      loom_testbench_hal_element_type_is_close_supported(
-          iree_hal_buffer_view_element_type(actual_buffer_view))) {
+  const loom_testbench_numeric_type_t* numeric_type =
+      actual_buffer_view
+          ? loom_testbench_numeric_type_from_hal_element_type(
+                iree_hal_buffer_view_element_type(actual_buffer_view))
+          : NULL;
+  if (numeric_type && loom_testbench_numeric_type_is_float(numeric_type)) {
     loom_testbench_close_expectation_plan_t exact_float = {
         .absolute_tolerance = 0.0,
         .relative_tolerance = 0.0,
