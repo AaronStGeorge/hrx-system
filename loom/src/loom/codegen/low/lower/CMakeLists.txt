@@ -134,7 +134,6 @@ loom_cc_library(
     loom::ops::func
     loom::ops::func_symbol_facts
     loom::ops::global
-    loom::ops::global::rodata_pool
     loom::ops::index
     loom::ops::kernel
     loom::ops::low
@@ -145,6 +144,7 @@ loom_cc_library(
     loom::ops::view
     loom::rewrite::materialize
     loom::rewrite::remap
+    loom::rewrite::rodata_pool
     loom::sanitizer::options
     loom::target::abi::c::signature_layout
     loom::target::contract

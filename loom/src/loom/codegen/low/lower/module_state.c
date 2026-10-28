@@ -10,7 +10,7 @@
 
 #include "loom/codegen/low/lower/rule_descriptor.h"
 #include "loom/ir/module.h"
-#include "loom/ops/global/rodata_pool.h"
+#include "loom/rewrite/rodata_pool.h"
 
 typedef struct loom_low_lower_module_target_state_record_t {
   // Target-owned static key identifying this module-scope state object.

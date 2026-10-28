@@ -6,8 +6,8 @@
 
 // Pass-local interning and publication of anonymous immutable storage.
 
-#ifndef LOOM_OPS_GLOBAL_RODATA_POOL_H_
-#define LOOM_OPS_GLOBAL_RODATA_POOL_H_
+#ifndef LOOM_REWRITE_RODATA_POOL_H_
+#define LOOM_REWRITE_RODATA_POOL_H_
 
 #include "iree/base/internal/arena.h"
 #include "loom/ir/attribute.h"
@@ -54,4 +54,4 @@ iree_status_t loom_rodata_pool_finalize(loom_rodata_pool_t* pool,
 }  // extern "C"
 #endif
 
-#endif  // LOOM_OPS_GLOBAL_RODATA_POOL_H_
+#endif  // LOOM_REWRITE_RODATA_POOL_H_

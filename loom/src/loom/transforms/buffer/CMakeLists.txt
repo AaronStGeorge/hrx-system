@@ -22,11 +22,11 @@ loom_cc_library(
     loom::ir
     loom::ops::buffer
     loom::ops::global
-    loom::ops::global::rodata_pool
     loom::ops::index
     loom::ops::kernel
     loom::pass::types
     loom::rewrite::rewriter
+    loom::rewrite::rodata_pool
     loom::util::walk
   PUBLIC
 )

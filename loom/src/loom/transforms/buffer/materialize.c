@@ -9,10 +9,10 @@
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/global/ops.h"
-#include "loom/ops/global/rodata_pool.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/rewrite/rodata_pool.h"
 #include "loom/util/walk.h"
 
 static const loom_pass_info_t loom_materialize_buffer_constants_info = {

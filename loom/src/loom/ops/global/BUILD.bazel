@@ -85,28 +85,3 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest_main",
     ],
 )
-
-loom_cc_library(
-    name = "rodata_pool",
-    srcs = ["rodata_pool.c"],
-    hdrs = ["rodata_pool.h"],
-    deps = [
-        ":global",
-        "//loom/src/loom/ir",
-        "//runtime/src/iree/base/internal",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_test(
-    name = "rodata_pool_test",
-    srcs = ["rodata_pool_test.cc"],
-    deps = [
-        ":global",
-        ":rodata_pool",
-        "//loom/src/loom/ir",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
