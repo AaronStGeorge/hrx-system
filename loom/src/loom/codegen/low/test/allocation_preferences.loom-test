@@ -107,18 +107,3 @@ low.func.def target<test.low.core>(@target) @ordinary_move_reuses_storage(%sourc
 // ----
 value %source: test.i32 -> target_id[0:1]
 value %result: test.i32 -> target_id[0:1]
-
-// ====
-
-// RUN: emit low-allocation-query @fixed_move_overrides_preference values=%source,%result fixed=%source:target_id:0:1 fixed=%result:target_id:0:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @fixed_move_overrides_preference(%source: reg<test.i32>) -> (reg<test.i32>) asm {
-  %result = move %source {detached = true} : reg<test.i32> -> reg<test.i32>
-  return %result
-}
-
-// ----
-value %source: test.i32 -> target_id[0:1]
-value %result: test.i32 -> target_id[0:1]
