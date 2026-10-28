@@ -9,10 +9,11 @@
 #include "loom/ir/module.h"
 #include "loom/ir/type_refs.h"
 
-bool loom_cfg_block_arguments_can_replace(
-    const loom_module_t* module, const loom_dominance_info_t* dominance,
-    const loom_block_t* block, loom_value_slice_t replacements,
-    const loom_op_t* before_op) {
+bool loom_cfg_block_arguments_can_bind(const loom_module_t* module,
+                                       const loom_dominance_info_t* dominance,
+                                       const loom_block_t* block,
+                                       loom_value_slice_t replacements,
+                                       const loom_op_t* before_op) {
   if (replacements.count != block->arg_count) {
     return false;
   }
@@ -28,6 +29,28 @@ bool loom_cfg_block_arguments_can_replace(
         !loom_type_equal_after_value_remap(
             module, loom_module_value_type(module, loom_block_arg_id(block, i)),
             loom_module_value_type(module, replacement), &remap)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool loom_cfg_block_argument_can_forward(const loom_module_t* module,
+                                         loom_value_id_t argument,
+                                         loom_value_id_t source) {
+  const loom_value_t* source_value = loom_module_value(module, source);
+  if (loom_value_ownership_use_count(source_value) != 0 ||
+      loom_value_ownership_use_count(loom_module_value(module, argument)) !=
+          0) {
+    return false;
+  }
+  if (!loom_value_is_block_arg(source_value)) {
+    const loom_op_t* definition = loom_value_def_op(source_value);
+    if (definition && loom_traits_have_storage_relation(definition->traits) &&
+        (loom_traits_are_fact_identity(definition->traits) ||
+         loom_traits_are_value_alias(definition->traits))) {
+      // Nonwriting aliases share an owner's observations that are not present
+      // in this value's use list. Tied results instead start new ownership.
       return false;
     }
   }

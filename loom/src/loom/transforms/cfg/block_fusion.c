@@ -77,8 +77,18 @@ iree_status_t loom_cfg_fuse_single_predecessor_blocks(
                                            &replacements)) {
       continue;
     }
-    if (!loom_cfg_block_arguments_can_replace(
-            rewriter->module, dominance, block, replacements, predecessor_br)) {
+    if (!loom_cfg_block_arguments_can_bind(rewriter->module, dominance, block,
+                                           replacements, predecessor_br)) {
+      continue;
+    }
+    bool can_forward = true;
+    for (uint16_t argument_index = 0;
+         argument_index < block->arg_count && can_forward; ++argument_index) {
+      can_forward = loom_cfg_block_argument_can_forward(
+          rewriter->module, loom_block_arg_id(block, argument_index),
+          replacements.values[argument_index]);
+    }
+    if (!can_forward) {
       continue;
     }
     if (!predecessor_branches) {

@@ -117,8 +117,9 @@ low.func.def target<test.low.core>(@target) @independent_slice_spill_costs(%left
 
 // Inlining appends the producer continuation after the existing loop. Two
 // helper returns and two loop predecessors keep both blocks through CFG
-// simplification, which forwards the loop argument to the later identity.
-// Allocation must reserve the identity's source first despite that layout.
+// simplification, which forwards the loop argument to a read-only concat.
+// Decomposing that concat reads the later identity before its definition in
+// storage order. Allocation must reserve the identity's source first.
 // RUN: pass inline-callables,cfg-simplify,low-materialize-allocation{budgets=test.i32=5}
 
 test.target<low_core> @target
@@ -136,7 +137,8 @@ low.func.def public target<test.low.core>(@target) @identity_after_inlined_conti
   %selected = low.func.call @select_seed(%choose, %seed) : (reg<test.i32>, reg<test.i32>) -> (reg<test.i32>)
   %source = test.add.i32 %selected, %seed
   %identity = low.assume %source [] : reg<test.i32>
-  low.br ^loop(%identity: reg<test.i32>)
+  %tuple = concat(%identity) : (reg<test.i32>) -> reg<test.i32>
+  low.br ^loop(%tuple: reg<test.i32>)
 ^loop(%forwarded: reg<test.i32>):
   %sum = test.add.i32 %forwarded, %seed
   low.cond_br %again, ^backedge, ^returned : reg<test.i32>
@@ -154,9 +156,10 @@ low.func.def public target<test.low.core>(@target) @identity_after_inlined_conti
 ^_bb5(%selected: reg<test.i32>):
   %source = test.add.i32 %selected, %seed
   %identity = low.assume %source [] : reg<test.i32>
+  %tuple = concat(%identity) : (reg<test.i32>) -> reg<test.i32>
   low.br ^loop
 ^loop:
-  %sum = test.add.i32 %identity, %seed
+  %sum = test.add.i32 %tuple, %seed
   low.cond_br %again, ^loop, ^returned : reg<test.i32>
 ^returned:
   return %sum

@@ -1,5 +1,97 @@
 // RUN: with-low-asm pass cfg-simplify
 
+// Each iteration consumes its own block argument, not the invariant source.
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_consumed_loop_argument(%repeat: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.br ^loop(%seed: reg<test.i32>)
+^loop(%state: reg<test.i32>):
+  %result = test.tied.any %state
+  low.cond_br %repeat, ^latch, ^exit : reg<test.i32>
+^latch:
+  low.br ^loop(%seed: reg<test.i32>)
+^exit:
+  return %result
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_consumed_loop_argument(%repeat: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.br ^loop(%seed: reg<test.i32>)
+^loop(%state: reg<test.i32>):
+  %result = test.tied.any %state
+  low.cond_br %repeat, ^latch, ^exit : reg<test.i32>
+^latch:
+  low.br ^loop(%seed: reg<test.i32>)
+^exit:
+  return %result
+}
+
+// ====
+
+// Equal incoming values still give the two arguments independent ownership.
+// A read-only argument must not be folded into its consumed sibling.
+// RUN: with-low-asm pass cfg-simplify
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_independent_equal_arguments(%choose: reg<test.i32>, %left: reg<test.i32>, %right: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.cond_br %choose, ^left_path, ^right_path : reg<test.i32>
+^left_path:
+  low.br ^join(%left: reg<test.i32>, %left: reg<test.i32>)
+^right_path:
+  low.br ^join(%right: reg<test.i32>, %right: reg<test.i32>)
+^join(%owner: reg<test.i32>, %snapshot: reg<test.i32>):
+  %changed = test.tied.any %owner
+  %sum = test.add.i32 %snapshot, %changed
+  return %sum
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_independent_equal_arguments(%choose: reg<test.i32>, %left: reg<test.i32>, %right: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.cond_br %choose, ^left_path, ^right_path : reg<test.i32>
+^left_path:
+  low.br ^join(%left: reg<test.i32>, %left: reg<test.i32>)
+^right_path:
+  low.br ^join(%right: reg<test.i32>, %right: reg<test.i32>)
+^join(%owner: reg<test.i32>, %snapshot: reg<test.i32>):
+  %changed = test.tied.any %owner
+  %sum = test.add.i32 %snapshot, %changed
+  return %sum
+}
+
+// ====
+
+// The required alias has no direct consuming uses, but its source does.
+// Capturing it through a block argument keeps that observation independent.
+// RUN: with-low-asm pass cfg-simplify
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_alias_capture(%seed: reg<test.i32>) -> (reg<test.i32>) asm {
+  %identity = low.assume %seed [] : reg<test.i32>
+  low.br ^body(%identity: reg<test.i32>)
+^body(%snapshot: reg<test.i32>):
+  %changed = test.tied.any %seed
+  %sum = test.add.i32 %snapshot, %changed
+  return %sum
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_alias_capture(%seed: reg<test.i32>) -> (reg<test.i32>) asm {
+  %identity = low.assume %seed [] : reg<test.i32>
+  low.br ^body(%identity: reg<test.i32>)
+^body(%snapshot: reg<test.i32>):
+  %changed = test.tied.any %seed
+  %sum = test.add.i32 %snapshot, %changed
+  return %sum
+}
+
+// ====
+
 // A rotated cycle whose columns share one initial value has no carried state.
 test.target<low_core> @test_target
 

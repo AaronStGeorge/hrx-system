@@ -61,31 +61,9 @@ low.func.def target<test.low.core>(@target) @loop_mask(%condition: reg<test.i32>
 
 // ====
 
-// Removing a redundant join argument exposes a dominating tied source.
-// Distinct loads keep both incoming paths and the definition's block intact.
-// RUN: pass cfg-simplify
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @dominating_tied_mask(%choose: reg<test.i32>, %route: reg<test.i32>, %row: reg<test.i32>, %address: reg<test.ptr>, %other_address: reg<test.ptr>) -> (reg<test.i32>) asm {
-  low.cond_br %choose, ^define, ^warmup : reg<test.i32>
-^define:
-  %row_bytes = test.add.i32 %row, %row
-  low.cond_br %route, ^left, ^right : reg<test.i32>
-^use(%incoming: reg<test.i32>):
-  %updated = test.write.high16.i32 %incoming, %address
-  return %updated
-^warmup:
-  %prefetched = test.write.low16.i32 %address
-  low.br ^define
-^left:
-  %left_half = test.write.low16.i32 %address
-  low.br ^use(%row_bytes: reg<test.i32>)
-^right:
-  %right_half = test.write.low16.i32 %other_address
-  low.br ^use(%row_bytes: reg<test.i32>)
-}
-
-// ----
+// A partial write preserves the unwritten half of a dominating full source,
+// even when neither incoming block defines that source.
+// RUN: verify
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @dominating_tied_mask(%choose: reg<test.i32>, %route: reg<test.i32>, %row: reg<test.i32>, %address: reg<test.ptr>, %other_address: reg<test.ptr>) -> (reg<test.i32>) asm {
