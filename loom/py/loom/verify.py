@@ -23,7 +23,13 @@ from loom.dsl import (
     type_constraint_name,
 )
 from loom.error.structure import ERR_STRUCTURE_007, ERR_STRUCTURE_008
-from loom.error.type import ERR_TYPE_001, ERR_TYPE_009, ERR_TYPE_013
+from loom.error.type import (
+    ERR_TYPE_001,
+    ERR_TYPE_009,
+    ERR_TYPE_013,
+    ERR_TYPE_019,
+    ERR_TYPE_020,
+)
 from loom.fields import FieldKind, FieldLayout, compute_layout, resolve_fields
 from loom.ir import (
     Block,
@@ -1307,8 +1313,27 @@ class ModuleVerifier:
                     f"dynamic {kind} references missing value",
                     source=source,
                     details=(f"binding references value id {binding_id}",),
+                    error_def=(ERR_TYPE_019 if isinstance(value, DynamicDim) else None),
                 )
                 valid = False
+            elif isinstance(value, DynamicDim):
+                carrier_type = self.module.values[binding_id].type
+                semantic_type = (
+                    carrier_type.value_type
+                    if isinstance(carrier_type, RegisterType)
+                    else carrier_type
+                )
+                if not (
+                    isinstance(semantic_type, ScalarType)
+                    and semantic_type.kind == ScalarTypeKind.INDEX
+                ):
+                    self.diagnostics.error(
+                        "dynamic dimension provider must have index semantic type",
+                        source=source,
+                        details=(f"value {binding_id} has type {carrier_type!r}",),
+                        error_def=ERR_TYPE_020,
+                    )
+                    valid = False
             validity[identity] = valid
         return validity[id(root)]
 

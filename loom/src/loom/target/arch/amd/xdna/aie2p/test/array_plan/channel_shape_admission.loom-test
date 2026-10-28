@@ -1,29 +1,3 @@
-// RUN: emit aie2p-array-plan @unresolved_record_shape
-
-aie2p.target<array> @array_target
-
-aie2p.target<core> @core_target
-
-low.func.def public retain target<amd.xdna.aie2p.array>(@array_target) abi(array_program) @unresolved_record_shape() asm {
-  %zero = constant.u32 0 : reg<aie2p.array.scalar : index>
-  %one = constant.u32 1 : reg<aie2p.array.scalar : index>
-  %two = constant.u32 2 : reg<aie2p.array.scalar : index>
-  %group = group %one
-  %worker = worker %group, %zero, @consume
-  %input = binding 0, "read"
-  %sender = sender %input, 0 : reg<aie2p.array.sender : tile<[%group]xi32>>
-  %receiver = receiver %worker, 0 : reg<aie2p.array.receiver : tile<[%group]xi32>>
-  // ERROR@+1: XDNA/024
-  %channel = channel %sender, %receiver, %one, %one : reg<aie2p.array.channel : tile<[%group]xi32>>
-  constrain.location %worker, %zero, %two
-  return
-}
-
-low.func.def target<amd.xdna.aie2p.core>(@core_target) abi(object_function) @consume() asm {
-  return
-}
-
-// ====
 // RUN: emit aie2p-array-plan @empty_ring
 
 aie2p.target<array> @array_target

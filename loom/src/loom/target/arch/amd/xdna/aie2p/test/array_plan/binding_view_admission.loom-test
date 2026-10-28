@@ -111,34 +111,6 @@ low.func.def target<amd.xdna.aie2p.core>(@core_target) abi(object_function) @con
 }
 
 // ====
-// RUN: emit aie2p-array-plan @unresolved_sequence_dimension
-
-aie2p.target<array> @array_target
-
-aie2p.target<core> @core_target
-
-low.func.def public retain target<amd.xdna.aie2p.array>(@array_target) abi(array_program) @unresolved_sequence_dimension() asm {
-  %zero = constant.u32 0 : reg<aie2p.array.scalar : index>
-  %one = constant.u32 1 : reg<aie2p.array.scalar : index>
-  %two = constant.u32 2 : reg<aie2p.array.scalar : index>
-  %offset = constant.u64 0 : reg<aie2p.array.offset : offset>
-  %group = group %one
-  %worker = worker %group, %zero, @consume
-  %input = binding 0, "read"
-  %source = sender %input, 0 : reg<aie2p.array.sender : tile<[%group]x1xi32>>
-  // ERROR@+1: XDNA/023
-  %view = view.sender %source, %offset : reg<aie2p.array.sender : tile<1xi32>>
-  %receiver = receiver %worker, 0 : reg<aie2p.array.receiver : tile<1xi32>>
-  %channel = channel %view, %receiver, %one, %one : reg<aie2p.array.channel : tile<1xi32>>
-  constrain.location %worker, %zero, %two
-  return
-}
-
-low.func.def target<amd.xdna.aie2p.core>(@core_target) abi(object_function) @consume() asm {
-  return
-}
-
-// ====
 // RUN: with-checks emit aie2p-array-plan @exact_dynamic_sequence
 
 aie2p.target<array> @array_target

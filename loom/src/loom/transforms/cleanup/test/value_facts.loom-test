@@ -174,10 +174,10 @@ func.def @negative_mask_alignment(%input: index) -> (index) {
 
 // A branch-local view and its forwarded type cannot constrain the size
 // argument on the path that bypasses both definitions.
-func.def @cfg_extent_capture(%input: buffer, %extent: i32, %condition: i1) -> (i1) {
+func.def @cfg_extent_capture(%input: buffer, %extent: index, %condition: i1) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %less = scalar.cmpi slt, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %less = index.cmp slt, %extent, %c0 : index
   cfg.cond_br %condition, ^shaped, ^plain
 ^shaped:
   %view = buffer.view %input[%base] : buffer -> view<[%extent]xi32>
@@ -190,10 +190,10 @@ func.def @cfg_extent_capture(%input: buffer, %extent: i32, %condition: i1) -> (i
 }
 
 // ----
-func.def @cfg_extent_capture(%input: buffer, %extent: i32, %condition: i1) -> (i1) {
+func.def @cfg_extent_capture(%input: buffer, %extent: index, %condition: i1) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %less = scalar.cmpi slt, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %less = index.cmp slt, %extent, %c0 : index
   cfg.cond_br %condition, ^shaped, ^plain
 ^shaped:
   %view = buffer.view %input[%base] : buffer -> view<[%extent]xi32>
@@ -210,10 +210,10 @@ func.def @cfg_extent_capture(%input: buffer, %extent: i32, %condition: i1) -> (i
 // RUN: pass canonicalize
 
 // A structured branch has the same execution boundary as a CFG branch.
-func.def @scf_extent_capture(%input: buffer, %extent: i32, %condition: i1) -> (i1) {
+func.def @scf_extent_capture(%input: buffer, %extent: index, %condition: i1) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %less = scalar.cmpi slt, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %less = index.cmp slt, %extent, %c0 : index
   scf.if %condition {
     %view = buffer.view %input[%base] : buffer -> view<[%extent]xi32>
     test.use %view : view<[%extent]xi32>
@@ -222,10 +222,10 @@ func.def @scf_extent_capture(%input: buffer, %extent: i32, %condition: i1) -> (i
 }
 
 // ----
-func.def @scf_extent_capture(%input: buffer, %extent: i32, %condition: i1) -> (i1) {
+func.def @scf_extent_capture(%input: buffer, %extent: index, %condition: i1) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %less = scalar.cmpi slt, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %less = index.cmp slt, %extent, %c0 : index
   scf.if %condition {
     %view = buffer.view %input[%base] : buffer -> view<[%extent]xi32>
     test.use %view : view<[%extent]xi32>
@@ -238,10 +238,10 @@ func.def @scf_extent_capture(%input: buffer, %extent: i32, %condition: i1) -> (i
 // RUN: pass canonicalize
 
 // The loop may execute zero times, leaving its captured size unconstrained.
-func.def @loop_extent_capture(%input: buffer, %extent: i32, %count: index) -> (i1) {
+func.def @loop_extent_capture(%input: buffer, %extent: index, %count: index) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %less = scalar.cmpi slt, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %less = index.cmp slt, %extent, %c0 : index
   %start = index.constant 0 : index
   %step = index.constant 1 : index
   scf.for %iteration = [%start to %count step %step] {
@@ -252,10 +252,10 @@ func.def @loop_extent_capture(%input: buffer, %extent: i32, %count: index) -> (i
 }
 
 // ----
-func.def @loop_extent_capture(%input: buffer, %extent: i32, %count: index) -> (i1) {
+func.def @loop_extent_capture(%input: buffer, %extent: index, %count: index) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %less = scalar.cmpi slt, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %less = index.cmp slt, %extent, %c0 : index
   %start = index.constant 0 : index
   %step = index.constant 1 : index
   scf.for %iteration = [%start to %count step %step] {
@@ -269,23 +269,23 @@ func.def @loop_extent_capture(%input: buffer, %extent: i32, %count: index) -> (i
 
 // A dependent call signature constrains its extent regardless of result order.
 // A separate scalar result without a shape dependency stays unconstrained.
-func.decl @shape_first() -> (view<[%extent]xf32>, %extent: i32)
+func.decl @shape_first() -> (view<[%extent]xf32>, %extent: index)
 
-func.decl @extent_first() -> (%extent: i32, view<[%extent]xf32>)
+func.decl @extent_first() -> (%extent: index, view<[%extent]xf32>)
 
 func.decl @scalar_only() -> (i32)
 
 func.def @shape_first_nonnegative() -> (i1) {
-  %view, %extent = func.call @shape_first() : () -> (view<[%extent]xf32>, i32)
-  %c0 = scalar.constant 0 : i32
-  %nonnegative = scalar.cmpi sge, %extent, %c0 : i32
+  %view, %extent = func.call @shape_first() : () -> (view<[%extent]xf32>, index)
+  %c0 = index.constant 0 : index
+  %nonnegative = index.cmp sge, %extent, %c0 : index
   func.return %nonnegative : i1
 }
 
 func.def @extent_first_nonnegative() -> (i1) {
-  %extent, %view = func.call @extent_first() : () -> (i32, view<[%extent]xf32>)
-  %c0 = scalar.constant 0 : i32
-  %nonnegative = scalar.cmpi sge, %extent, %c0 : i32
+  %extent, %view = func.call @extent_first() : () -> (index, view<[%extent]xf32>)
+  %c0 = index.constant 0 : index
+  %nonnegative = index.cmp sge, %extent, %c0 : index
   func.return %nonnegative : i1
 }
 
@@ -297,20 +297,20 @@ func.def @scalar_only_unconstrained() -> (i1) {
 }
 
 // ----
-func.decl @shape_first() -> (view<[%extent]xf32>, %extent: i32)
+func.decl @shape_first() -> (view<[%extent]xf32>, %extent: index)
 
-func.decl @extent_first() -> (%extent: i32, view<[%extent]xf32>)
+func.decl @extent_first() -> (%extent: index, view<[%extent]xf32>)
 
 func.decl @scalar_only() -> (i32)
 
 func.def @shape_first_nonnegative() -> (i1) {
-  %view, %extent = func.call @shape_first() : () -> (view<[%extent]xf32>, i32)
+  %view, %extent = func.call @shape_first() : () -> (view<[%extent]xf32>, index)
   %nonnegative = scalar.constant true : i1
   func.return %nonnegative : i1
 }
 
 func.def @extent_first_nonnegative() -> (i1) {
-  %extent, %view = func.call @extent_first() : () -> (i32, view<[%extent]xf32>)
+  %extent, %view = func.call @extent_first() : () -> (index, view<[%extent]xf32>)
   %nonnegative = scalar.constant true : i1
   func.return %nonnegative : i1
 }
@@ -325,31 +325,31 @@ func.def @scalar_only_unconstrained() -> (i1) {
 // ====
 
 // RUN: pass canonicalize
-func.def @shape_first(%input: buffer, %extent: i32) -> (i1) {
+func.def @shape_first(%input: buffer, %extent: index) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %in_domain = scalar.cmpi sge, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %in_domain = index.cmp sge, %extent, %c0 : index
   cfg.cond_br %in_domain, ^shaped, ^other
 ^shaped:
   %source = buffer.view %input[%base] : buffer -> view<[%extent]xi32>
-  cfg.br ^typed(%source: view<[%extent]xi32>, %extent: i32)
-^typed(%view: view<[%size]xi32>, %size: i32):
+  cfg.br ^typed(%source: view<[%extent]xi32>, %extent: index)
+^typed(%view: view<[%size]xi32>, %size: index):
   test.use %view : view<[%size]xi32>
-  %nonnegative = scalar.cmpi sge, %size, %c0 : i32
+  %nonnegative = index.cmp sge, %size, %c0 : index
   func.return %nonnegative : i1
 ^other:
   func.return %in_domain : i1
 }
 // ----
-func.def @shape_first(%input: buffer, %extent: i32) -> (i1) {
+func.def @shape_first(%input: buffer, %extent: index) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %in_domain = scalar.cmpi sge, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %in_domain = index.cmp sge, %extent, %c0 : index
   cfg.cond_br %in_domain, ^shaped, ^other
 ^shaped:
   %source = buffer.view %input[%base] : buffer -> view<[%extent]xi32>
-  cfg.br ^typed(%source: view<[%extent]xi32>, %extent: i32)
-^typed(%view: view<[%size]xi32>, %size: i32):
+  cfg.br ^typed(%source: view<[%extent]xi32>, %extent: index)
+^typed(%view: view<[%size]xi32>, %size: index):
   test.use %view : view<[%size]xi32>
   %nonnegative = scalar.constant true : i1
   func.return %nonnegative : i1
@@ -360,31 +360,31 @@ func.def @shape_first(%input: buffer, %extent: i32) -> (i1) {
 // ====
 
 // RUN: pass canonicalize
-func.def @extent_first(%input: buffer, %extent: i32) -> (i1) {
+func.def @extent_first(%input: buffer, %extent: index) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %in_domain = scalar.cmpi sge, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %in_domain = index.cmp sge, %extent, %c0 : index
   cfg.cond_br %in_domain, ^shaped, ^other
 ^shaped:
   %source = buffer.view %input[%base] : buffer -> view<[%extent]xi32>
-  cfg.br ^typed(%extent: i32, %source: view<[%extent]xi32>)
-^typed(%size: i32, %view: view<[%size]xi32>):
+  cfg.br ^typed(%extent: index, %source: view<[%extent]xi32>)
+^typed(%size: index, %view: view<[%size]xi32>):
   test.use %view : view<[%size]xi32>
-  %nonnegative = scalar.cmpi sge, %size, %c0 : i32
+  %nonnegative = index.cmp sge, %size, %c0 : index
   func.return %nonnegative : i1
 ^other:
   func.return %in_domain : i1
 }
 // ----
-func.def @extent_first(%input: buffer, %extent: i32) -> (i1) {
+func.def @extent_first(%input: buffer, %extent: index) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %in_domain = scalar.cmpi sge, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %in_domain = index.cmp sge, %extent, %c0 : index
   cfg.cond_br %in_domain, ^shaped, ^other
 ^shaped:
   %source = buffer.view %input[%base] : buffer -> view<[%extent]xi32>
-  cfg.br ^typed(%extent: i32, %source: view<[%extent]xi32>)
-^typed(%size: i32, %view: view<[%size]xi32>):
+  cfg.br ^typed(%extent: index, %source: view<[%extent]xi32>)
+^typed(%size: index, %view: view<[%size]xi32>):
   test.use %view : view<[%size]xi32>
   %nonnegative = scalar.constant true : i1
   func.return %nonnegative : i1
@@ -398,64 +398,66 @@ func.def @extent_first(%input: buffer, %extent: i32) -> (i1) {
 
 // Forwarding through a typed loop body must not constrain the header on the
 // zero-trip path. The body retains both its type bound and incoming upper bound.
-func.def @forwarding_extent_scope(%extent: i32, %count: i32, %input: buffer) -> (i32) {
+func.def @forwarding_extent_scope(%extent: index, %count: i32, %input: buffer) -> (i32) {
   %base = index.constant 0 : offset
+  %shape_floor = index.constant 0 : index
   %c0 = scalar.constant 0 : i32
   %c1 = scalar.constant 1 : i32
-  %bounded = scalar.assume %extent [range(%extent, -8, 16)] : i32
-  cfg.br ^header(%bounded: i32, %count: i32, %c0: i32)
-^header(%current: i32, %remaining: i32, %sum: i32):
-  %positive = scalar.cmpi sgt, %current, %c0 : i32
+  %bounded = index.assume %extent [range(%extent, -8, 16)] : index
+  cfg.br ^header(%bounded: index, %count: i32, %c0: i32)
+^header(%current: index, %remaining: i32, %sum: i32):
+  %positive = index.cmp sgt, %current, %shape_floor : index
   %repeat = scalar.cmpi sgt, %remaining, %c0 : i32
   %enter = scalar.andi %positive, %repeat : i1
   cfg.cond_br %enter, ^create, ^exit
 ^create:
   %source = buffer.view %input[%base] : buffer -> view<[%current]xi32>
-  cfg.br ^typed(%current: i32, %source: view<[%current]xi32>)
-^typed(%size: i32, %view: view<[%size]xi32>):
-  %limit = scalar.constant 16 : i32
-  %bounded_above = scalar.cmpi sle, %size, %limit : i32
+  cfg.br ^typed(%current: index, %source: view<[%current]xi32>)
+^typed(%size: index, %view: view<[%size]xi32>):
+  %limit = index.constant 16 : index
+  %bounded_above = index.cmp sle, %size, %limit : index
   test.use %bounded_above : i1
-  %nonnegative = scalar.cmpi sge, %size, %c0 : i32
+  %nonnegative = index.cmp sge, %size, %shape_floor : index
   %comparison = scf.select %nonnegative, %c1, %c0 : i32
   %observed = view.load %view[0] : view<[%size]xi32> -> i32
   %value = scalar.addi %observed, %comparison : i32
   %next_sum = scalar.addi %sum, %value : i32
   %next = scalar.subi %remaining, %c1 : i32
-  cfg.br ^header(%size: i32, %next: i32, %next_sum: i32)
+  cfg.br ^header(%size: index, %next: i32, %next_sum: i32)
 ^exit:
-  %less = scalar.cmpi slt, %current, %c0 : i32
+  %less = index.cmp slt, %current, %shape_floor : index
   %comparison_exit = scf.select %less, %c1, %c0 : i32
   %result = scalar.addi %sum, %comparison_exit : i32
   func.return %result : i32
 }
 // ----
-func.def @forwarding_extent_scope(%extent: i32, %count: i32, %input: buffer) -> (i32) {
+func.def @forwarding_extent_scope(%extent: index, %count: i32, %input: buffer) -> (i32) {
   %base = index.constant 0 : offset
+  %shape_floor = index.constant 0 : index
   %c0 = scalar.constant 0 : i32
   %c1 = scalar.constant 1 : i32
-  %bounded = scalar.assume %extent [range(%extent, -8, 16)] : i32
-  cfg.br ^header(%bounded: i32, %count: i32, %c0: i32)
-^header(%current: i32, %remaining: i32, %sum: i32):
-  %positive = scalar.cmpi sgt, %current, %c0 : i32
+  %bounded = index.assume %extent [range(%extent, -8, 16)] : index
+  cfg.br ^header(%bounded: index, %count: i32, %c0: i32)
+^header(%current: index, %remaining: i32, %sum: i32):
+  %positive = index.cmp sgt, %current, %shape_floor : index
   %repeat = scalar.cmpi sgt, %remaining, %c0 : i32
   %enter = scalar.andi %positive, %repeat : i1
   cfg.cond_br %enter, ^create, ^exit
 ^create:
   %source = buffer.view %input[%base] : buffer -> view<[%current]xi32>
-  cfg.br ^typed(%current: i32, %source: view<[%current]xi32>)
-^typed(%size: i32, %view: view<[%size]xi32>):
+  cfg.br ^typed(%current: index, %source: view<[%current]xi32>)
+^typed(%size: index, %view: view<[%size]xi32>):
   %bounded_above = scalar.constant true : i1
   test.use %bounded_above : i1
   %comparison = scalar.constant 1 : i32
   %observed = view.load %view[0] : view<[%size]xi32> -> i32
-  %32 = scalar.addi %observed, %sum : i32
-  %next_sum = scalar.addi %32, %comparison : i32
-  %30 = scalar.constant -1 : i32
-  %next = scalar.addi %remaining, %30 : i32
-  cfg.br ^header(%size: i32, %next: i32, %next_sum: i32)
+  %33 = scalar.addi %observed, %sum : i32
+  %next_sum = scalar.addi %33, %comparison : i32
+  %31 = scalar.constant -1 : i32
+  %next = scalar.addi %remaining, %31 : i32
+  cfg.br ^header(%size: index, %next: i32, %next_sum: i32)
 ^exit:
-  %less = scalar.cmpi slt, %current, %c0 : i32
+  %less = index.cmp slt, %current, %shape_floor : index
   %comparison_exit = scf.select %less, %c1, %c0 : i32
   %result = scalar.addi %sum, %comparison_exit : i32
   func.return %result : i32
@@ -465,32 +467,32 @@ func.def @forwarding_extent_scope(%extent: i32, %count: i32, %input: buffer) -> 
 
 // RUN: pass canonicalize
 
-// Reconstructing a transported view leaves its extent as a scalar argument.
+// Reconstructing a transported view leaves its extent as an index argument.
 // The later view type still constrains that argument before its facts publish.
-func.def @reconstructed_extent(%input: buffer, %extent: i32) -> (i1) {
+func.def @reconstructed_extent(%input: buffer, %extent: index) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %in_domain = scalar.cmpi sge, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %in_domain = index.cmp sge, %extent, %c0 : index
   cfg.cond_br %in_domain, ^forward, ^other
 ^forward:
-  cfg.br ^typed(%extent: i32)
-^typed(%size: i32):
+  cfg.br ^typed(%extent: index)
+^typed(%size: index):
   %view = buffer.view %input[%base] : buffer -> view<[%size]xi32>
   test.use %view : view<[%size]xi32>
-  %nonnegative = scalar.cmpi sge, %size, %c0 : i32
+  %nonnegative = index.cmp sge, %size, %c0 : index
   func.return %nonnegative : i1
 ^other:
   func.return %in_domain : i1
 }
 // ----
-func.def @reconstructed_extent(%input: buffer, %extent: i32) -> (i1) {
+func.def @reconstructed_extent(%input: buffer, %extent: index) -> (i1) {
   %base = index.constant 0 : offset
-  %c0 = scalar.constant 0 : i32
-  %in_domain = scalar.cmpi sge, %extent, %c0 : i32
+  %c0 = index.constant 0 : index
+  %in_domain = index.cmp sge, %extent, %c0 : index
   cfg.cond_br %in_domain, ^forward, ^other
 ^forward:
-  cfg.br ^typed(%extent: i32)
-^typed(%size: i32):
+  cfg.br ^typed(%extent: index)
+^typed(%size: index):
   %view = buffer.view %input[%base] : buffer -> view<[%size]xi32>
   test.use %view : view<[%size]xi32>
   %nonnegative = scalar.constant true : i1
@@ -504,19 +506,19 @@ func.def @reconstructed_extent(%input: buffer, %extent: i32) -> (i1) {
 // A declaration describes a possible call, not an executing view definition.
 // Its signature-local parameterized types likewise do not impose a domain on
 // values in another symbol.
-func.decl @declared_shape(%view: view<[%declared_size]xi32>, %declared_size: i32)
+func.decl @declared_shape(%view: view<[%declared_size]xi32>, %declared_size: index)
 
-func.def @nonexecuting_type_uses(%size: i32, %reference: test.ref<view<[%size]xi32>>) -> (i1) {
-  %c0 = scalar.constant 0 : i32
-  %nonnegative = scalar.cmpi sge, %size, %c0 : i32
+func.def @nonexecuting_type_uses(%size: index, %reference: test.ref<view<[%size]xi32>>) -> (i1) {
+  %c0 = index.constant 0 : index
+  %nonnegative = index.cmp sge, %size, %c0 : index
   func.return %nonnegative : i1
 }
 // ----
-func.decl @declared_shape(%view: view<[%declared_size]xi32>, %declared_size: i32)
+func.decl @declared_shape(%view: view<[%declared_size]xi32>, %declared_size: index)
 
-func.def @nonexecuting_type_uses(%size: i32, %reference: test.ref<view<[%size]xi32>>) -> (i1) {
-  %c0 = scalar.constant 0 : i32
-  %nonnegative = scalar.cmpi sge, %size, %c0 : i32
+func.def @nonexecuting_type_uses(%size: index, %reference: test.ref<view<[%size]xi32>>) -> (i1) {
+  %c0 = index.constant 0 : index
+  %nonnegative = index.cmp sge, %size, %c0 : index
   func.return %nonnegative : i1
 }
 
@@ -757,30 +759,30 @@ func.def @nested_region_continuations(%outer: i1, %inner: i1, %repeat: i1, %sele
 
 // A joined view constrains its sibling extent even when the view precedes the
 // extent in the result tuple. Publish the complete joined tuple together.
-func.def @branch_result_tuple(%condition: i1, %input: buffer, %left_size: i32, %right_size: i32) -> (i1) {
+func.def @branch_result_tuple(%condition: i1, %input: buffer, %left_size: index, %right_size: index) -> (i1) {
   %base = index.constant 0 : offset
-  %view, %size = scf.if %condition -> (view<[%size]xi32>, i32) {
+  %view, %size = scf.if %condition -> (view<[%size]xi32>, index) {
     %left = buffer.view %input[%base] : buffer -> view<[%left_size]xi32>
-    scf.yield %left, %left_size : view<[%left_size]xi32>, i32
+    scf.yield %left, %left_size : view<[%left_size]xi32>, index
   } else {
     %right = buffer.view %input[%base] : buffer -> view<[%right_size]xi32>
-    scf.yield %right, %right_size : view<[%right_size]xi32>, i32
+    scf.yield %right, %right_size : view<[%right_size]xi32>, index
   }
   test.use %view : view<[%size]xi32>
-  %c0 = scalar.constant 0 : i32
-  %nonnegative = scalar.cmpi sge, %size, %c0 : i32
+  %c0 = index.constant 0 : index
+  %nonnegative = index.cmp sge, %size, %c0 : index
   func.return %nonnegative : i1
 }
 
 // ----
-func.def @branch_result_tuple(%condition: i1, %input: buffer, %left_size: i32, %right_size: i32) -> (i1) {
+func.def @branch_result_tuple(%condition: i1, %input: buffer, %left_size: index, %right_size: index) -> (i1) {
   %base = index.constant 0 : offset
-  %view, %size = scf.if %condition -> (view<[%size]xi32>, i32) {
+  %view, %size = scf.if %condition -> (view<[%size]xi32>, index) {
     %left = buffer.view %input[%base] : buffer -> view<[%left_size]xi32>
-    scf.yield %left, %left_size : view<[%left_size]xi32>, i32
+    scf.yield %left, %left_size : view<[%left_size]xi32>, index
   } else {
     %right = buffer.view %input[%base] : buffer -> view<[%right_size]xi32>
-    scf.yield %right, %right_size : view<[%right_size]xi32>, i32
+    scf.yield %right, %right_size : view<[%right_size]xi32>, index
   }
   test.use %view : view<[%size]xi32>
   %nonnegative = scalar.constant true : i1

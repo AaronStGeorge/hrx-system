@@ -285,6 +285,123 @@ static loom_diagnostic_param_t loom_verify_type_ref_field_param(
       loom_diagnostic_field_ref(kind, field_index));
 }
 
+static loom_diagnostic_param_t loom_verify_attribute_ref_field_param(
+    const loom_op_vtable_t* vtable, uint8_t attribute_index, char* name_buffer,
+    iree_host_size_t name_buffer_size) {
+  iree_string_view_t field_name;
+  if (vtable->attr_descriptors && attribute_index < vtable->attribute_count) {
+    field_name =
+        loom_bstring_view(vtable->attr_descriptors[attribute_index].name);
+  } else {
+    // Structural verification diagnoses undescribed slots separately.
+    iree_snprintf(name_buffer, name_buffer_size, "attribute %u",
+                  attribute_index);
+    field_name = iree_make_cstring_view(name_buffer);
+  }
+  return loom_verify_param_string_for_diagnostic_field(
+      field_name, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, attribute_index);
+}
+
+typedef struct loom_verify_dimension_field_t {
+  // Operation schema naming the field; NULL only for block arguments.
+  const loom_op_vtable_t* vtable;
+  // Value or attribute field ordinal.
+  uint16_t index;
+  // Whether a value field is a result instead of an operand.
+  bool is_result;
+  // Whether the field is an operation attribute instead of a value type.
+  bool is_attribute;
+} loom_verify_dimension_field_t;
+
+static loom_diagnostic_param_t loom_verify_dimension_field_param(
+    const loom_op_t* op, loom_verify_dimension_field_t field, char* buffer,
+    iree_host_size_t buffer_size) {
+  return field.is_attribute
+             ? loom_verify_attribute_ref_field_param(
+                   field.vtable, (uint8_t)field.index, buffer, buffer_size)
+             : loom_verify_type_ref_field_param(op, field.vtable, field.index,
+                                                field.is_result, buffer,
+                                                buffer_size);
+}
+
+// Target-low registers may retain the exact source value type they carry.
+// Untyped registers expose only their physical carrier and have no semantic
+// type suitable for source-level constraints.
+static bool loom_verify_semantic_value_type(loom_type_t carrier_type,
+                                            loom_type_t* out_type) {
+  if (!loom_type_is_register(carrier_type)) {
+    *out_type = carrier_type;
+    return true;
+  }
+  const loom_type_t* value_type = loom_type_register_value_type(carrier_type);
+  if (value_type == NULL) {
+    return false;
+  }
+  *out_type = *value_type;
+  return true;
+}
+
+IREE_ATTRIBUTE_NOINLINE IREE_ATTRIBUTE_COLD static void
+loom_verify_emit_dimension_ref_out_of_range(loom_verify_state_t* state,
+                                            const loom_op_t* op,
+                                            loom_verify_dimension_field_t field,
+                                            loom_value_id_t value_id) {
+  char name_buffer[64];
+  const loom_diagnostic_param_t params[] = {
+      loom_verify_dimension_field_param(op, field, name_buffer,
+                                        sizeof(name_buffer)),
+      loom_param_u32(value_id),
+      loom_param_u32((uint32_t)state->module->values.count),
+  };
+  loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_019, params,
+                              IREE_ARRAYSIZE(params));
+}
+
+IREE_ATTRIBUTE_NOINLINE IREE_ATTRIBUTE_COLD static void
+loom_verify_emit_dimension_ref_wrong_type(loom_verify_state_t* state,
+                                          const loom_op_t* op,
+                                          loom_verify_dimension_field_t field,
+                                          loom_value_id_t value_id,
+                                          loom_type_t actual_type) {
+  char name_buffer[64];
+  const loom_diagnostic_param_t params[] = {
+      loom_verify_dimension_field_param(op, field, name_buffer,
+                                        sizeof(name_buffer)),
+      loom_param_string(loom_verify_value_name(state, value_id)),
+      loom_param_type(actual_type),
+  };
+  loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_020, params,
+                              IREE_ARRAYSIZE(params));
+}
+
+// Verifies a producer-retained dynamic-dimension subset. The set may contain
+// forward IDs that are absent from the module; no active-edge prefix is used.
+static void loom_verify_dimension_dependencies(
+    loom_verify_state_t* state, const loom_op_t* op,
+    loom_verify_dimension_field_t field,
+    loom_type_use_iterator_t* dependencies) {
+  for (loom_value_id_t provider = loom_type_dependencies_next(dependencies);
+       provider != LOOM_VALUE_ID_INVALID;
+       provider = loom_type_dependencies_next(dependencies)) {
+    if (provider >= state->module->values.count) {
+      loom_verify_emit_dimension_ref_out_of_range(state, op, field, provider);
+    } else {
+      const loom_type_t carrier_type =
+          loom_module_value_type(state->module, provider);
+      loom_type_t semantic_type = {0};
+      if (!loom_verify_semantic_value_type(carrier_type, &semantic_type) ||
+          !loom_type_is_scalar(semantic_type) ||
+          loom_type_element_type(semantic_type) != LOOM_SCALAR_TYPE_INDEX) {
+        loom_verify_emit_dimension_ref_wrong_type(state, op, field, provider,
+                                                  carrier_type);
+      }
+    }
+    if (loom_verify_at_error_limit(state)) {
+      return;
+    }
+  }
+}
+
 static bool loom_verify_op_allows_declaration_local_refs(
     const loom_op_vtable_t* vtable) {
   return vtable->symbol_def &&
@@ -379,6 +496,25 @@ static void loom_verify_defined_type_refs(
     loom_verify_state_t* state, const loom_op_t* op,
     const loom_op_vtable_t* vtable, loom_value_id_t value_id, loom_type_t type,
     uint16_t field_index, bool is_result) {
+  const loom_type_id_t type_id =
+      loom_module_lookup_type_id(state->module, type);
+  IREE_ASSERT(type_id != LOOM_TYPE_ID_INVALID,
+              "defined value types must be canonical");
+  loom_type_use_iterator_t dimension_dependencies;
+  loom_type_dependency_set_begin(
+      &state->module->type_uses,
+      loom_type_table_dimension_dependencies(&state->module->types, type_id),
+      &dimension_dependencies);
+  loom_verify_dimension_dependencies(state, op,
+                                     (loom_verify_dimension_field_t){
+                                         .vtable = vtable,
+                                         .index = field_index,
+                                         .is_result = is_result,
+                                     },
+                                     &dimension_dependencies);
+  if (loom_verify_at_error_limit(state)) {
+    return;
+  }
   loom_verify_encoding_ref(state, op, vtable, type, field_index, is_result);
   const loom_value_id_t direct_encoding =
       loom_type_has_ssa_encoding(type) ? loom_type_encoding_value_id(type)
@@ -476,19 +612,9 @@ loom_verify_emit_attribute_ref_not_visible(loom_verify_state_t* state,
                                            uint8_t attribute_index,
                                            loom_value_id_t value_id) {
   char name_buffer[32];
-  iree_string_view_t field_name;
-  if (vtable->attr_descriptors && attribute_index < vtable->attribute_count) {
-    field_name =
-        loom_bstring_view(vtable->attr_descriptors[attribute_index].name);
-  } else {
-    // Structural verification diagnoses undescribed slots separately.
-    iree_snprintf(name_buffer, sizeof(name_buffer), "attribute %u",
-                  attribute_index);
-    field_name = iree_make_cstring_view(name_buffer);
-  }
   loom_diagnostic_param_t params[] = {
-      loom_verify_param_string_for_diagnostic_field(
-          field_name, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, attribute_index),
+      loom_verify_attribute_ref_field_param(vtable, attribute_index,
+                                            name_buffer, sizeof(name_buffer)),
       loom_param_string(loom_verify_value_name(state, value_id)),
   };
   loom_verify_emit_structured(state, op, LOOM_ERR_DOMINANCE_017, params,
@@ -507,6 +633,19 @@ void loom_verify_attribute_value_refs(loom_verify_state_t* state,
   for (uint8_t i = 0; i < op->attribute_count; ++i) {
     if (!attribute_owners[i]) {
       continue;
+    }
+    loom_type_use_iterator_t dimension_dependencies;
+    loom_attribute_dimension_dependencies_begin(&state->module->type_uses, op,
+                                                i, &dimension_dependencies);
+    loom_verify_dimension_dependencies(state, op,
+                                       (loom_verify_dimension_field_t){
+                                           .vtable = vtable,
+                                           .index = i,
+                                           .is_attribute = true,
+                                       },
+                                       &dimension_dependencies);
+    if (loom_verify_at_error_limit(state)) {
+      return;
     }
     loom_type_use_iterator_t dependencies;
     loom_attribute_dependencies_begin(&state->module->type_uses, op, i,
@@ -642,20 +781,6 @@ typedef enum loom_verify_predicate_value_policy_e {
   LOOM_VERIFY_PREDICATE_VALUES_FUNCTION_SIGNATURE,
 } loom_verify_predicate_value_policy_t;
 
-static bool loom_verify_predicate_semantic_type(loom_type_t carrier_type,
-                                                loom_type_t* out_type) {
-  if (!loom_type_is_register(carrier_type)) {
-    *out_type = carrier_type;
-    return true;
-  }
-  const loom_type_t* value_type = loom_type_register_value_type(carrier_type);
-  if (value_type == NULL) {
-    return false;
-  }
-  *out_type = *value_type;
-  return true;
-}
-
 static bool loom_verify_predicate_requires_matching_types(
     uint8_t predicate_kind, loom_type_t first_type, loom_type_t next_type) {
   switch ((loom_predicate_kind_t)predicate_kind) {
@@ -731,7 +856,7 @@ static void loom_verify_predicate(
     const loom_type_t carrier_type =
         loom_module_value_type(state->module, value_id);
     loom_type_t semantic_type = {0};
-    if (!loom_verify_predicate_semantic_type(carrier_type, &semantic_type)) {
+    if (!loom_verify_semantic_value_type(carrier_type, &semantic_type)) {
       continue;
     }
     if (!loom_predicate_kind_accepts_value_type(predicate->kind,

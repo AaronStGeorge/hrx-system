@@ -114,6 +114,21 @@ class ValueRefsTest : public ::testing::Test {
     return result;
   }
 
+  std::vector<loom_value_id_t> DimensionOutgoing(loom_op_t* op) {
+    std::vector<loom_value_id_t> result;
+    for (uint8_t index = 0; index < op->attribute_count; ++index) {
+      loom_type_use_iterator_t dependencies;
+      loom_attribute_dimension_dependencies_begin(&module_->type_uses, op,
+                                                  index, &dependencies);
+      for (auto provider = loom_type_dependencies_next(&dependencies);
+           provider != LOOM_VALUE_ID_INVALID;
+           provider = loom_type_dependencies_next(&dependencies)) {
+        result.push_back(provider);
+      }
+    }
+    return result;
+  }
+
   bool HasUses(loom_value_id_t value) {
     return loom_value_has_attribute_uses(loom_module_value(module_, value));
   }
@@ -220,6 +235,7 @@ TEST_F(ValueRefsTest, SubtreeWalkIncludesOperandTypeAndPredicateAttributes) {
   EXPECT_EQ(visits[width], 1u);
   EXPECT_EQ(visits[bound], 1u);
   EXPECT_EQ(visits[loom_test_attrs_result(owner)], 0u);
+  EXPECT_EQ(DimensionOutgoing(owner), std::vector<loom_value_id_t>{width});
   EXPECT_EQ(module_->arena.used_allocation_size, allocation_size);
   EXPECT_EQ(failed_allocations_, 0u);
 }
@@ -764,6 +780,8 @@ TEST_F(ValueRefsTest, ForwardProvidersBecomeActiveAtRefreshAndRebuild) {
                                         loom_dim_pack_dynamic(8), 0);
   auto* owner = TypeOwner(available, type);
   EXPECT_EQ(Outgoing(owner), (std::vector<loom_value_id_t>{available}));
+  EXPECT_EQ(DimensionOutgoing(owner),
+            (std::vector<loom_value_id_t>{available, 8}));
   while (module_->values.count <= 8) {
     Constant(module_->values.count);
   }
@@ -774,6 +792,8 @@ TEST_F(ValueRefsTest, ForwardProvidersBecomeActiveAtRefreshAndRebuild) {
   EXPECT_FALSE(HasUses(available));
   EXPECT_FALSE(HasUses(8));
   IREE_ASSERT_OK(loom_module_compute_uses(module_));
+  EXPECT_EQ(DimensionOutgoing(owner),
+            (std::vector<loom_value_id_t>{available, 8}));
   EXPECT_EQ(IncomingCount(available), 1u);
   EXPECT_EQ(IncomingCount(8), 1u);
   IREE_ASSERT_OK(loom_op_erase(module_, owner));

@@ -195,6 +195,8 @@ static inline iree_status_t loom_type_dependencies_collect(
 typedef struct loom_type_dependency_assignment_t {
   // Full declared set, retained even while some providers are unavailable.
   loom_type_dependency_id_t declared;
+  // Dynamic-dimension subset for attribute owners; zero for value owners.
+  loom_type_dependency_id_t dimensions;
   // Prefix containing only providers below the supplied availability limit.
   loom_type_dependency_id_t active;
   // Prepared carrier slot, or zero when the declaration is dependency-free.
@@ -218,7 +220,7 @@ void loom_type_dependencies_commit(
 // unchanged on failure. No mutation may intervene before commit.
 iree_status_t loom_attribute_dependencies_prepare(
     loom_type_use_table_t* table, loom_op_t* op, uint8_t attribute_index,
-    loom_type_dependency_id_t root,
+    loom_type_dependency_sets_t dependencies,
     loom_type_dependency_assignment_t* out_assignment);
 
 // Publishes prepared attribute ownership. The caller publishes its payload in
@@ -325,6 +327,13 @@ void loom_attribute_dependencies_begin(const loom_type_use_table_t* table,
                                        const loom_op_t* op,
                                        uint8_t attribute_index,
                                        loom_type_use_iterator_t* out_iterator);
+
+// Begins the complete dynamic-dimension provider set of an attribute. Unlike
+// active dependencies, this includes forward and out-of-range provider IDs so
+// verification can diagnose malformed bindings.
+void loom_attribute_dimension_dependencies_begin(
+    const loom_type_use_table_t* table, const loom_op_t* op,
+    uint8_t attribute_index, loom_type_use_iterator_t* out_iterator);
 
 // Begins incoming attribute owners without visiting value-type owners.
 void loom_attribute_users_begin(const loom_type_use_table_t* table,

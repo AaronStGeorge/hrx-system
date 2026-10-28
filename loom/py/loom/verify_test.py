@@ -907,6 +907,78 @@ def test_verifier_reports_missing_dimension_value() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "provider_type",
+    [
+        I32,
+        ir.OFFSET,
+        ir.BUFFER_TYPE,
+        ir.RegisterType(1, 0, name="test.register"),
+        ir.RegisterType(1, 0, name="test.register", value_type=I32),
+    ],
+)
+def test_verifier_rejects_non_index_dimension_provider(provider_type: ir.Type) -> None:
+    module = Module()
+    extent = module.add_value(Value("extent", provider_type))
+    value_type = ShapedType(TypeKind.VIEW, F32, (DynamicDim(extent),))
+    value = module.add_value(Value("view", value_type))
+    module = _module_with_body_ops(
+        Operation(name="test.use", operands=[value]),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(
+        diagnostics, "dynamic dimension provider must have index semantic type"
+    )
+
+
+@pytest.mark.parametrize(
+    "provider_type",
+    [
+        INDEX,
+        ir.RegisterType(1, 0, name="test.register", value_type=INDEX),
+    ],
+)
+def test_verifier_accepts_index_dimension_provider(provider_type: ir.Type) -> None:
+    module = Module()
+    extent = module.add_value(Value("extent", provider_type))
+    value_type = ShapedType(TypeKind.VIEW, F32, (DynamicDim(extent),))
+    value = module.add_value(Value("view", value_type))
+    module = _module_with_body_ops(
+        Operation(name="test.use", operands=[value]),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert not diagnostics.has_errors
+
+
+def test_verifier_checks_dimension_provider_in_nested_type_attribute() -> None:
+    module = Module()
+    extent = module.add_value(Value("extent", I32))
+    input_value = module.add_value(Value("input", F32))
+    result_value = module.add_value(Value("result", F32))
+    shape = ShapedType(TypeKind.VECTOR, F32, (DynamicDim(extent),))
+    module = _module_with_body_ops(
+        Operation(
+            name="test.attrs",
+            operands=[input_value],
+            results=[result_value],
+            attributes={"dict": {"metadata": {"shape": shape}}},
+        ),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(
+        diagnostics, "dynamic dimension provider must have index semantic type"
+    )
+
+
 def test_verifier_reports_missing_encoding_value() -> None:
     module = Module()
     value_type = ShapedType(

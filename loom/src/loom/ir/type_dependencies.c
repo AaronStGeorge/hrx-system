@@ -525,8 +525,12 @@ typedef struct loom_dependency_carrier_t {
   uint32_t declared;
   // Currently active membership, or zero while dropped.
   uint32_t active;
-  // Prepared membership used by failure-atomic bulk refresh.
-  uint32_t prepared;
+  union {
+    // Prepared membership used by failure-atomic value-owner bulk refresh.
+    uint32_t prepared;
+    // Retained dimension subset for attribute owners.
+    uint32_t dimension_dependencies;
+  };
   // Previous carrier on the active root, or zero at the list head.
   uint32_t previous;
   // Next carrier on the active root, or next recycled carrier while unused.
@@ -953,11 +957,12 @@ void loom_type_dependencies_commit(
 
 iree_status_t loom_attribute_dependencies_prepare(
     loom_type_use_table_t* table, loom_op_t* op, uint8_t attribute_index,
-    loom_type_dependency_id_t root,
+    loom_type_dependency_sets_t dependencies,
     loom_type_dependency_assignment_t* out_assignment) {
   IREE_RETURN_IF_ERROR(loom_dependency_prepare_carrier(
-      table, loom_op_attribute_owners(op)[attribute_index], root,
+      table, loom_op_attribute_owners(op)[attribute_index], dependencies.all,
       table->value_table->count, out_assignment));
+  out_assignment->dimensions = dependencies.dimensions;
   if (out_assignment->carrier) {
     loom_dependency_carrier_t* carrier =
         loom_dependency_carrier(table->index, out_assignment->carrier);
@@ -973,6 +978,11 @@ void loom_attribute_dependencies_commit(
     const loom_type_dependency_assignment_t* assignment) {
   loom_dependency_commit_carrier(
       table, &loom_op_attribute_owners(op)[attribute_index], assignment);
+  const uint32_t carrier = loom_op_attribute_owners(op)[attribute_index];
+  if (carrier) {
+    loom_dependency_carrier(table->index, carrier)->dimension_dependencies =
+        assignment->dimensions;
+  }
 }
 
 void loom_attribute_dependencies_drop(loom_type_use_table_t* table,
@@ -1029,8 +1039,11 @@ iree_status_t loom_type_dependencies_recompute(loom_type_use_table_t* table) {
   for (uint32_t id = 1; id <= table->index->carriers.count; ++id) {
     loom_dependency_carrier_t* carrier =
         loom_dependency_carrier(table->index, id);
+    if (carrier->kind != LOOM_DEPENDENCY_OWNER_VALUE) {
+      continue;
+    }
     carrier->prepared = 0;
-    if (carrier->declared && carrier->kind == LOOM_DEPENDENCY_OWNER_VALUE &&
+    if (carrier->declared &&
         loom_dependency_carrier_is_live(loom_value_table_const_value(
             table->value_table, carrier->owner.value))) {
       IREE_RETURN_IF_ERROR(loom_dependency_prefix(table, carrier->declared,
@@ -1093,10 +1106,7 @@ void loom_type_dependencies_begin(const loom_type_use_table_t* table,
 void loom_type_dependency_set_begin(const loom_type_use_table_t* table,
                                     loom_type_dependency_id_t root,
                                     loom_type_use_iterator_t* out_iterator) {
-  out_iterator->index = table->index;
-  out_iterator->pending_count = 0;
-  out_iterator->carrier = 0;
-  out_iterator->members = 0;
+  *out_iterator = (loom_type_use_iterator_t){.index = table->index};
   if (root) {
     out_iterator->pending[out_iterator->pending_count++] = root;
   }
@@ -1186,16 +1196,20 @@ void loom_attribute_dependencies_begin(const loom_type_use_table_t* table,
                                        const loom_op_t* op,
                                        uint8_t attribute_index,
                                        loom_type_use_iterator_t* out_iterator) {
-  out_iterator->index = table->index;
-  out_iterator->pending_count = 0;
-  out_iterator->carrier = 0;
-  out_iterator->members = 0;
   const uint32_t carrier = loom_op_attribute_owners(op)[attribute_index];
   const uint32_t root =
       carrier ? loom_dependency_carrier(table->index, carrier)->active : 0;
-  if (root) {
-    out_iterator->pending[out_iterator->pending_count++] = root;
-  }
+  loom_type_dependency_set_begin(table, root, out_iterator);
+}
+
+void loom_attribute_dimension_dependencies_begin(
+    const loom_type_use_table_t* table, const loom_op_t* op,
+    uint8_t attribute_index, loom_type_use_iterator_t* out_iterator) {
+  const uint32_t carrier = loom_op_attribute_owners(op)[attribute_index];
+  const uint32_t root = carrier ? loom_dependency_carrier(table->index, carrier)
+                                      ->dimension_dependencies
+                                : 0;
+  loom_type_dependency_set_begin(table, root, out_iterator);
 }
 
 void loom_attribute_users_begin(const loom_type_use_table_t* table,

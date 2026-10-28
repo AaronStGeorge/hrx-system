@@ -73,6 +73,49 @@ func.def @local_shape(%tile: tile<[%count]xf32>, %count: index) -> (tile<[%count
 
 // ====
 
+// Dynamic dimensions require exact index semantics, not merely integer-like
+// or scalar providers.
+func.def @non_index_dimensions(%integer: i32, %offset: offset, %storage: buffer) {
+  %seed = test.constant 7 : i32
+  // ERROR@+1: TYPE/020 "result type uses '%integer' with type i32 as a dynamic dimension; expected 'index'"
+  %integer_tile = test.convert %seed : i32 -> tile<[%integer]xf32>
+  // ERROR@+1: TYPE/020 "result type uses '%offset' with type offset as a dynamic dimension; expected 'index'"
+  %offset_tile = test.convert %seed : i32 -> tile<[%offset]xf32>
+  // ERROR@+1: TYPE/020 "result type uses '%storage' with type buffer as a dynamic dimension; expected 'index'"
+  %storage_tile = test.convert %seed : i32 -> tile<[%storage]xf32>
+  func.return
+}
+
+// ====
+
+// Target-low registers can supply dimensions only when they preserve index as
+// their semantic value type. Physical carrier identity alone is insufficient.
+// ERROR@+1: TYPE/020 "args[1] type uses '%width' with type reg<test.i32> as a dynamic dimension; expected 'index'"
+low.func.decl target<test.low.core> @opaque_register_dimension(
+    %width: reg<test.i32>,
+    %value: reg<test.ptr : vector<[%width]xf32>>)
+
+// ERROR@+1: TYPE/020 "args[1] type uses '%width' with type reg<test.i32 : i32> as a dynamic dimension; expected 'index'"
+low.func.decl target<test.low.core> @integer_register_dimension(
+    %width: reg<test.i32 : i32>,
+    %value: reg<test.ptr : vector<[%width]xf32>>)
+
+low.func.decl target<test.low.core> @index_register_dimension(
+    %width: reg<test.ptr : index>,
+    %value: reg<test.ptr : vector<[%width]xf32>>)
+
+// ====
+
+// Retained dimension membership includes nested structural types.
+func.def @nested_non_index_dimension(%count: i32) {
+  %seed = test.constant 7 : i32
+  // ERROR@+1: TYPE/020 "result type uses '%count' with type i32 as a dynamic dimension; expected 'index'"
+  %callback = test.convert %seed : i32 -> (tile<[%count]xf32>) -> ()
+  func.return
+}
+
+// ====
+
 // Bodyless declarations define their own argument scope.
 func.decl @declared_shape(%tile: tile<[%count]xf32>, %count: index) -> (tile<[%count]xf32>)
 
