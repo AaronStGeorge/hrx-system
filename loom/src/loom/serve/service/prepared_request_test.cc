@@ -44,9 +44,10 @@ TEST(PreparedRequestsTest, PacksStableRangesAndOwnsBytes) {
   IREE_ASSERT_OK(iree_vm_buffer_map_read(
       packed, 0, iree_vm_buffer_length(packed), &bytes));
   EXPECT_EQ(records.data_length, 3 * 16u);
-  EXPECT_EQ(bytes.data_length, 9u);
-  EXPECT_EQ(memcmp(bytes.data, "firstlast", 9), 0);
-  const uint64_t expected[] = {0, 5, 5, 0, 5, 4};
+  EXPECT_EQ(bytes.data_length, 3 * 16u + 9u);
+  EXPECT_EQ(memcmp(bytes.data, records.data, records.data_length), 0);
+  EXPECT_EQ(memcmp(bytes.data + records.data_length, "firstlast", 9), 0);
+  const uint64_t expected[] = {48, 5, 53, 0, 53, 4};
   for (size_t i = 0; i < IREE_ARRAYSIZE(expected); ++i) {
     EXPECT_EQ(iree_unaligned_load_le_u64(records.data + i * 8), expected[i]);
   }

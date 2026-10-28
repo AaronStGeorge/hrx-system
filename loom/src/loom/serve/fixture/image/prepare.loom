@@ -56,7 +56,7 @@ func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buff
   view.store %text, %view[0] : i64, view<2xi64>
   view.store %pixels, %view[1] : i64, view<2xi64>
   %batch_units = scalar.constant 4 : i64
-  %capacity = scalar.constant 128 : i64
+  %capacity = scalar.constant 192 : i64
   %tokenizer = buffer.constant utf8("tokenizer.json") : buffer
   %name = buffer.constant utf8("fixture-image") : buffer
   func.return %batch_units, %capacity, %tokenizer, %name, %state : i64, i64, buffer, buffer, buffer

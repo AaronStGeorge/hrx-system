@@ -953,7 +953,7 @@ TEST_P(SourceImageServiceTest, SourcePixelsAndHttpPngPreserveRequestIdentity) {
       PrepareSingle(IREE_SV(R"({"prompt":"x"})"), kWidth, kHeight, &prepared));
   EXPECT_EQ(prepared.stage, 0u);
   EXPECT_EQ(prepared.tag, 32);
-  EXPECT_EQ(prepared.input_bytes, 32u);
+  EXPECT_EQ(prepared.input_bytes, 16u + 32u);
   loom_serve_image_model_discard_batch(model_);
   // Verify source arithmetic independently of the image encoder.
   for (uint64_t seed : {0u, 1u}) {
@@ -967,7 +967,7 @@ TEST_P(SourceImageServiceTest, SourcePixelsAndHttpPngPreserveRequestIdentity) {
         loom_serve_image_model_generate(model_, &input.value, &prepared, &rgb));
     EXPECT_EQ(prepared.stage, 0u);
     EXPECT_EQ(prepared.tag, 32);
-    EXPECT_EQ(prepared.input_bytes, 32u);
+    EXPECT_EQ(prepared.input_bytes, 16u + 32u);
     const auto expected = Pixels(3, seed);
     ASSERT_EQ(rgb.data_length, expected.size() * sizeof(float));
     for (size_t i = 0; i < expected.size(); ++i) {
@@ -1701,7 +1701,7 @@ class ImageSpecializationTest : public SourceImageServiceTest {
         model_, prepared.requests.size(), prepared.requests.data(), lengths,
         &batch));
     prepared_ = true;
-    EXPECT_EQ(batch.input_bytes, 64u);
+    EXPECT_EQ(batch.input_bytes, 2u * (16u + 32u));
     loom_serve_image_model_set_observer(model_, {Wake, this});
     IREE_ASSERT_OK(Resolve(false));
     EXPECT_EQ(compiler_allocations_.load() == before, reuse);

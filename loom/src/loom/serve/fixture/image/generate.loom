@@ -12,8 +12,10 @@ kernel.def target(@fixture_target) @colors() {
   %batch = config.get @fixture.batch : index
   %item = kernel.workgroup.id<x> : index
   %origin = index.constant 0 : offset
-  %header = buffer.view %request[%origin] : buffer -> view<[%batch]x8xi32>
-  %values = buffer.view %request[%origin] : buffer -> view<[%batch]x8xf32>
+  %range_stride = index.constant 16 : offset
+  %records_offset = index.scale %batch, %range_stride : index, offset -> offset
+  %header = buffer.view %request[%records_offset] : buffer -> view<[%batch]x8xi32>
+  %values = buffer.view %request[%records_offset] : buffer -> view<[%batch]x8xf32>
   %output = buffer.view %colors[%origin] : buffer -> view<[%batch]x2xf32>
   %seed = view.load %header[%item, 0] : view<[%batch]x8xi32> -> i32
   %count = view.load %header[%item, 2] : view<[%batch]x8xi32> -> i32

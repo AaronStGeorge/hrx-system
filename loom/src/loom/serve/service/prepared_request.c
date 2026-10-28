@@ -18,7 +18,8 @@ iree_status_t loom_serve_prepared_requests_pack(
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "prepared request ranges exceed host storage");
   }
-  iree_host_size_t length = 0;
+  const iree_host_size_t directory_length = count * 16;
+  iree_host_size_t length = directory_length;
   for (iree_host_size_t i = 0; i < count; ++i) {
     const iree_host_size_t size = iree_vm_buffer_length(requests[i].bytes);
     if (size > IREE_HOST_SIZE_MAX - length) {
@@ -30,18 +31,18 @@ iree_status_t loom_serve_prepared_requests_pack(
   iree_vm_buffer_t* ranges = NULL;
   iree_vm_buffer_t* packed = NULL;
   IREE_RETURN_IF_ERROR(
-      iree_vm_buffer_create(count * 16, 8, host_allocator, &ranges));
+      iree_vm_buffer_create(directory_length, 8, host_allocator, &ranges));
   iree_status_t status =
       iree_vm_buffer_create(length, 8, host_allocator, &packed);
   iree_byte_span_t records = iree_byte_span_empty();
   iree_byte_span_t target = iree_byte_span_empty();
   if (iree_status_is_ok(status)) {
-    status = iree_vm_buffer_map_write(ranges, 0, count * 16, &records);
+    status = iree_vm_buffer_map_write(ranges, 0, directory_length, &records);
   }
   if (iree_status_is_ok(status)) {
     status = iree_vm_buffer_map_write(packed, 0, length, &target);
   }
-  iree_host_size_t offset = 0;
+  iree_host_size_t offset = directory_length;
   for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status); ++i) {
     iree_const_byte_span_t input;
     status = iree_vm_buffer_map_read(
@@ -56,6 +57,9 @@ iree_status_t loom_serve_prepared_requests_pack(
     }
   }
   if (iree_status_is_ok(status)) {
+    if (directory_length) {
+      memcpy(target.data, records.data, directory_length);
+    }
     *out_ranges = ranges;
     *out_packed = packed;
   } else {

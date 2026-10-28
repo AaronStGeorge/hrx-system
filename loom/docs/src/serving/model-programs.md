@@ -270,8 +270,12 @@ across request preparation, and returned buffers retain any aliased input.
 
 The native scheduler starts with the oldest prepared request and fills the
 cohort from compatible waiting requests. It does not wait for hypothetical
-arrivals. Batch preparation receives stable request-order ranges over concatenated
-prepared bytes, selects a declared stage and maps physical output back to requests.
+arrivals. Batch preparation receives stable request-order `[offset, length]` I64
+ranges into the packed buffer. The buffer starts with a copy of that directory,
+followed by the prepared request bytes. A program can upload this allocation
+directly and let device workers index requests through the directory, without
+copying the request data again. Batch preparation selects a declared stage and
+maps physical output back to requests.
 
 Finite `prepare_batch` can also declare stages with the `prepare` capability.
 It uses the same `stage`, `dispatch`, `config`, `config_i64`, and

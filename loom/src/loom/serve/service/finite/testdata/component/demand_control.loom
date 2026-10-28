@@ -18,7 +18,11 @@ func.def public @prepare_request(%state: buffer, %input: buffer) -> (buffer, i64
 
 func.def public @prepare_batch(%directory: buffer, %tags: buffer, %ranges: buffer, %input: buffer) -> (i32, buffer, buffer) {
   %origin = index.constant 0 : offset
-  %request = buffer.view %input[%origin] : buffer -> view<4xf32>
+  %range = buffer.view %ranges[%origin] : buffer -> view<1x2xi64>
+  %first = view.load %range[0, 0] : view<1x2xi64> -> i64
+  %first_bounded = scalar.assume %first [range(%first, 0, 9223372036854775807)] : i64
+  %request_offset = index.cast %first_bounded : i64 to offset
+  %request = buffer.view %input[%request_offset] : buffer -> view<4xf32>
   %value = view.load %request[0] : view<4xf32> -> f32
   %threshold = scalar.constant 4.0 : f32
   %alternate = scalar.cmpf ogt, %value, %threshold : f32

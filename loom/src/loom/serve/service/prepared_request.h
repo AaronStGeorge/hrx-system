@@ -25,11 +25,12 @@ typedef struct loom_serve_prepared_request_t {
   uint64_t tag;
 } loom_serve_prepared_request_t;
 
-// Copies prepared bytes in stable request order for source batch preparation.
-// Ranges contain little-endian [byte_offset, byte_length] i64 pairs into
-// packed. Success transfers both buffers; failure leaves both NULL. This is
-// CPU-only request packing, independent of the source's final device upload
-// layout.
+// Packs a little-endian [byte_offset, byte_length] i64 directory followed by
+// prepared bytes in stable request order. Offsets are relative to packed;
+// its first count * 16 bytes equal ranges. Source may forward packed directly
+// as a device upload, including the directory, or produce another layout.
+// Each request's bytes are copied once. Success transfers both buffers;
+// failure leaves both NULL.
 iree_status_t loom_serve_prepared_requests_pack(
     iree_host_size_t count, const loom_serve_prepared_request_t* requests,
     iree_allocator_t host_allocator, iree_vm_buffer_t** out_ranges,
