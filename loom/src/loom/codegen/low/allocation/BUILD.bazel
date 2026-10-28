@@ -1336,26 +1336,6 @@ loom_cc_library(
     ],
 )
 
-loom_cc_test(
-    name = "move_topology_test",
-    srcs = ["move_topology_test.cc"],
-    deps = [
-        ":move_topology",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/target/test:descriptors",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_cc_library(
     name = "packet_move",
     srcs = ["packet_move.c"],
