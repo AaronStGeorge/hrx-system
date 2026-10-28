@@ -77,7 +77,7 @@ copy %alias -> %copy: materialized
 
 // A slice establishes an alias without reading the producer. Retain the
 // producer's storage and defer the loop-state handoff to the backedge.
-// RUN: emit low-allocation-query @slice_keeps_source_before_backedge values=%state,%fresh,%part fixed=%state:target_id:0:1 fixed=%fresh:target_id:8:4
+// RUN: emit low-allocation-query @slice_keeps_source_before_backedge values=%state,%fresh,%part
 
 test.target<low_core> @target
 
@@ -95,45 +95,53 @@ low.func.def target<test.low.core>(@target) @slice_keeps_source_before_backedge(
 }
 
 // ----
-value %state: test.i32 -> target_id[0:1]
-value %fresh: test.i32 -> target_id[8:4]
-value %part: test.i32 -> target_id[9:1]
+value %state: test.i32 -> target_id[7:1]
+value %fresh: test.i32 -> target_id[6:4]
+value %part: test.i32 -> target_id[7:1]
 
 // ====
 
-// RUN: emit low-allocation-query @copy_keeps_source_before_backedge values=%state,%fresh,%next copies=%next fixed=%state:target_id:0:1 fixed=%fresh:target_id:8:1
+// A temporary lives across fresh's definition but dies before the transfer.
+// Retain fresh's storage; the loop header can move to meet it.
+// RUN: emit low-allocation-query @copy_keeps_source_before_backedge values=%state,%previous,%fresh,%next copies=%next
 
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @copy_keeps_source_before_backedge(%condition: reg<test.i32>, %initial: reg<test.i32>) asm {
   low.br ^loop(%initial: reg<test.i32>)
 ^loop(%state: reg<test.i32>):
-  %fresh = test.add.i32 %state, %condition
+  %previous = test.add.i32 %state, %condition
+  %fresh = test.add.i32 %condition, %condition
+  test.event.memory.write.i32 %previous
   %next = copy %fresh : reg<test.i32> -> reg<test.i32>
   low.br ^loop(%next: reg<test.i32>)
 }
 
 // ----
-value %state: test.i32 -> target_id[0:1]
-value %fresh: test.i32 -> target_id[8:1]
-value %next: test.i32 -> target_id[8:1]
+value %state: test.i32 -> target_id[2:1]
+value %previous: test.i32 -> target_id[0:1]
+value %fresh: test.i32 -> target_id[2:1]
+value %next: test.i32 -> target_id[2:1]
 copy %fresh -> %next: coalesced
 
 // ====
 
-// RUN: emit low-allocation-query @move_keeps_source_before_backedge values=%state,%fresh,%next fixed=%state:target_id:0:1 fixed=%fresh:target_id:8:1
+// RUN: emit low-allocation-query @move_keeps_source_before_backedge values=%state,%previous,%fresh,%next
 
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @move_keeps_source_before_backedge(%condition: reg<test.i32>, %initial: reg<test.i32>) asm {
   low.br ^loop(%initial: reg<test.i32>)
 ^loop(%state: reg<test.i32>):
-  %fresh = test.add.i32 %state, %condition
+  %previous = test.add.i32 %state, %condition
+  %fresh = test.add.i32 %condition, %condition
+  test.event.memory.write.i32 %previous
   %next = move %fresh : reg<test.i32> -> reg<test.i32>
   low.br ^loop(%next: reg<test.i32>)
 }
 
 // ----
-value %state: test.i32 -> target_id[0:1]
-value %fresh: test.i32 -> target_id[8:1]
-value %next: test.i32 -> target_id[8:1]
+value %state: test.i32 -> target_id[2:1]
+value %previous: test.i32 -> target_id[0:1]
+value %fresh: test.i32 -> target_id[2:1]
+value %next: test.i32 -> target_id[2:1]
