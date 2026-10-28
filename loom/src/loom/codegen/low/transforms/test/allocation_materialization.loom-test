@@ -1,3 +1,39 @@
+// Competing slice-used inputs share the estimator workspace. Each candidate's
+// cost must remain independent of the values considered before it. The right
+// vector also feeds a whole-vector store, so spilling the left is cheaper.
+// RUN: pass low-materialize-allocation{budgets=test.i32=9}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @independent_slice_spill_costs(%left: reg<test.i32 x4>, %right: reg<test.i32 x4>, %blocker: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32 x3>, reg<test.i32>, reg<test.i32 x3>, reg<test.i32>) asm {
+  %temporary = test.add.i32 %blocker, %blocker
+  %pressure = test.add.i32 %blocker, %temporary
+  %left_head = slice %left[0] : reg<test.i32 x4> -> reg<test.i32 x3>
+  %left_tail = slice %left[3] : reg<test.i32 x4> -> reg<test.i32>
+  %right_head = slice %right[0] : reg<test.i32 x4> -> reg<test.i32 x3>
+  %right_tail = slice %right[3] : reg<test.i32 x4> -> reg<test.i32>
+  test.store.v4i32 %address, %right
+  return %pressure, %left_head, %left_tail, %right_head, %right_tail
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @independent_slice_spill_costs(%left: reg<test.i32 x4>, %right: reg<test.i32 x4>, %blocker: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32 x3>, reg<test.i32>, reg<test.i32 x3>, reg<test.i32>) asm {
+  %independent_slice_spill_costs_spill_storage_0 = storage {byte_alignment = 16, byte_length = 16} : low.storage<private>
+  low.spill %left, %independent_slice_spill_costs_spill_storage_0 : reg<test.i32 x4>, low.storage<private>
+  %temporary = test.add.i32 %blocker, %blocker
+  %pressure = test.add.i32 %blocker, %temporary
+  %16 = low.reload %independent_slice_spill_costs_spill_storage_0 : low.storage<private> -> reg<test.i32 x3>
+  %17 = low.reload %independent_slice_spill_costs_spill_storage_0 {offset = 12} : low.storage<private> -> reg<test.i32>
+  %right_head = slice %right[0] : reg<test.i32 x4> -> reg<test.i32 x3>
+  %right_tail = slice %right[3] : reg<test.i32 x4> -> reg<test.i32>
+  test.store.v4i32 %address, %right
+  return %pressure, %16, %17, %right_head, %right_tail
+}
+
+// ====
+
 // Inlining appends the producer continuation after the existing loop. Two
 // helper returns and two loop predecessors keep both blocks through CFG
 // simplification, which forwards the loop argument to the later identity.
