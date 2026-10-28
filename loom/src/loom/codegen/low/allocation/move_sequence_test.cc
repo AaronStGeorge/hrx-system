@@ -340,6 +340,14 @@ TEST(LowMoveSequenceTest, UsesTemporaryForCycle) {
               ::testing::ElementsAre("0:9<-1", "0:1<-0", "0:0<-9"));
 }
 
+TEST(LowMoveSequenceTest, EmitsTailBeforeCycle) {
+  const loom_low_move_t moves[] = {Move(0, 1), Move(1, 2), Move(2, 1)};
+  const loom_low_move_location_t temporary = Location(3);
+
+  EXPECT_THAT(ResolveMoves(moves, IREE_ARRAYSIZE(moves), &temporary, 1),
+              ::testing::ElementsAre("0:0<-1", "0:3<-2", "0:2<-1", "0:1<-3"));
+}
+
 TEST(LowMoveSequenceTest, ExchangesHomogeneousCycleWithoutTemporary) {
   const loom_low_move_t moves[] = {Move(0, 1), Move(1, 2), Move(2, 0)};
   EXPECT_THAT(ResolveMoves(moves, IREE_ARRAYSIZE(moves), nullptr, 0,

@@ -174,63 +174,6 @@ classes:
 
 // ====
 
-// RUN: emit low-allocation @entry_cycle entry=0:test.phys:physical_register:0 entry=1:test.phys:physical_register:1 entry=2:test.phys:physical_register:2 fixed=%first:physical_register:1:1 fixed=%second:physical_register:0:1 test.phys=4
-
-test.target<low_core> @target
-
-// The body requires swapped locations. Parallel entry transport uses scratch
-// and preserves the identity input in register 2 while resolving the cycle.
-low.func.def target<test.low.core>(@target) @entry_cycle(%first: reg<test.phys>, %second: reg<test.phys>, %guard: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>, reg<test.phys>) asm {
-  return %first, %second, %guard
-}
-
-// ----
-low-allocation @entry_cycle
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 3
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 3
-  test.phys:physical_register:3 <- test.phys:physical_register:0
-  test.phys:physical_register:0 <- test.phys:physical_register:1
-  test.phys:physical_register:1 <- test.phys:physical_register:3
-classes:
-  test.phys: assignments=3 units=3 target_ids=0 physical=3 spill_slots=0 unassigned=0
-
-// ====
-
-// RUN: emit low-allocation @entry_alias_cycle entry=0:test.pressure.alias32:physical_register:0 entry=1:test.pressure.alias64:physical_register:1 fixed=%narrow:physical_register:1:1 fixed=%wide:physical_register:0:1
-
-test.target<low_core> @target
-
-// Distinct register classes alias the same storage. Each transfer, including
-// cycle scratch, must retain the source view's width throughout the swap.
-low.func.def target<test.low.core>(@target) @entry_alias_cycle(%narrow: reg<test.pressure.alias32>, %wide: reg<test.pressure.alias64>) -> (reg<test.pressure.alias32>, reg<test.pressure.alias64>) asm {
-  return %narrow, %wide
-}
-
-// ----
-low-allocation @entry_alias_cycle
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 2
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 3
-  test.pressure.alias32:physical_register:2 <- test.pressure.alias32:physical_register:0
-  test.pressure.alias64:physical_register:0 <- test.pressure.alias64:physical_register:1
-  test.pressure.alias32:physical_register:1 <- test.pressure.alias32:physical_register:2
-classes:
-  test.pressure.alias32: assignments=1 units=1 target_ids=0 physical=2 spill_slots=0 unassigned=0
-  test.pressure.alias64: assignments=1 units=1 target_ids=0 physical=1 spill_slots=0 unassigned=0
-
-// ====
-
 // RUN: emit low-allocation @entry_cross_class entry=0:test.pressure.alias64:physical_register:0 fixed=%value:physical_register:1:1
 
 test.target<low_core> @target

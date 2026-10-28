@@ -389,30 +389,6 @@ value %next1: test.i32 -> target_id[6:1]
 
 // ====
 
-// RUN: emit low-allocation-query @edge_copy_tail_enters_cycle edge-moves values=%source_b,%source_c,%dst_a,%dst_b,%dst_c fixed=%source_b:physical_register:1:1 fixed=%source_c:physical_register:2:1 fixed=%dst_a:physical_register:0:1 fixed=%dst_b:physical_register:1:1 fixed=%dst_c:physical_register:2:1
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @edge_copy_tail_enters_cycle(%source_b: reg<test.phys>, %source_c: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>, reg<test.phys>) asm {
-  low.br ^join(%source_b: reg<test.phys>, %source_c: reg<test.phys>, %source_b: reg<test.phys>)
-^join(%dst_a: reg<test.phys>, %dst_b: reg<test.phys>, %dst_c: reg<test.phys>):
-  return %dst_a, %dst_b, %dst_c
-}
-
-// ----
-edge moves: 4
-move test.phys:physical_register[0] <- test.phys:physical_register[1]
-move test.phys:physical_register[3] <- test.phys:physical_register[2]
-move test.phys:physical_register[2] <- test.phys:physical_register[1]
-move test.phys:physical_register[1] <- test.phys:physical_register[3]
-value %source_b: test.phys -> physical_register[1:1]
-value %source_c: test.phys -> physical_register[2:1]
-value %dst_a: test.phys -> physical_register[0:1]
-value %dst_b: test.phys -> physical_register[1:1]
-value %dst_c: test.phys -> physical_register[2:1]
-
-// ====
-
 // RUN: emit low-allocation-query @edge_cycle_without_scratch failure test.phys=2 fixed=%lhs:physical_register:0:1 fixed=%rhs:physical_register:1:1 fixed=%dst_lhs:physical_register:1:1 fixed=%dst_rhs:physical_register:0:1
 
 test.target<low_core> @test_target
