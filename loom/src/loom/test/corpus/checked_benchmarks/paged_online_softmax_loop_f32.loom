@@ -327,8 +327,8 @@ check.scenario @paged_online_softmax_loop_values {
     %state = check.generate.fill value(-1000.0) : tensor<2xf32>
     %output = check.generate.fill value(-1000.0) : tensor<4xf32>
     check.compare<@paged_online_softmax_loop_f32, @paged_online_softmax_loop_f32_oracle>(%count, %query, %pages, %keys, %values, %state, %output) : (index, tensor<4xf32>, tensor<8xi32>, tensor<12x4xf32>, tensor<12x4xf32>, tensor<2xf32>, tensor<4xf32>) -> () {
-      check.expect.close actual(%state) expected(%state) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<2xf32>
-      check.expect.close actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<4xf32>
+      check.expect.approximate actual(%state) expected(%state) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<2xf32>, tensor<2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<4xf32>, tensor<4xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -340,8 +340,8 @@ check.scenario @paged_online_softmax_loop_values {
     %state = check.generate.fill value(-1000.0) : tensor<2xf32>
     %output = check.generate.fill value(-1000.0) : tensor<4xf32>
     check.compare<@paged_online_softmax_loop_f32, @paged_online_softmax_loop_f32_oracle>(%count, %query, %pages, %keys, %values, %state, %output) : (index, tensor<4xf32>, tensor<8xi32>, tensor<10x4xf32>, tensor<10x4xf32>, tensor<2xf32>, tensor<4xf32>) -> () {
-      check.expect.close actual(%state) expected(%state) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<2xf32>
-      check.expect.close actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<4xf32>
+      check.expect.approximate actual(%state) expected(%state) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<2xf32>, tensor<2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<4xf32>, tensor<4xf32>
     }
   }
   check.return

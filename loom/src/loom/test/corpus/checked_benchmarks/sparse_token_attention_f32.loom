@@ -155,8 +155,8 @@ check.case public @sparse_token_attention_varied {
   %pipeline_output = check.generate.fill value(-40000.0) : tensor<[%instances]x128xf32>
   kernel.launch @sparse_token_attention_serial[%instances](%instances, %cache_rows, %lengths, %query, %indices, %keys, %values, %serial_state, %serial_output) : [index](index, index, tensor<[%instances]xi32>, tensor<[%instances]x128xf32>, tensor<[%instances]x1024xi32>, tensor<5x128xf32>, tensor<5x128xf32>, tensor<[%instances]x2xf32>, tensor<[%instances]x128xf32>)
   kernel.launch @sparse_token_attention_pipelined[%instances](%instances, %cache_rows, %lengths, %query, %indices, %keys, %values, %pipeline_state, %pipeline_output) : [index](index, index, tensor<[%instances]xi32>, tensor<[%instances]x128xf32>, tensor<[%instances]x1024xi32>, tensor<5x128xf32>, tensor<5x128xf32>, tensor<[%instances]x2xf32>, tensor<[%instances]x128xf32>)
-  check.expect.close actual(%pipeline_state) expected(%serial_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%instances]x2xf32>
-  check.expect.close actual(%pipeline_output) expected(%serial_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%instances]x128xf32>
+  check.expect.approximate actual(%pipeline_state) expected(%serial_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%instances]x2xf32>, tensor<[%instances]x2xf32>
+  check.expect.approximate actual(%pipeline_output) expected(%serial_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%instances]x128xf32>, tensor<[%instances]x128xf32>
   check.return
 }
 
@@ -467,8 +467,8 @@ check.scenario @sparse_token_attention_analytic {
     %state = check.generate.fill value(-10000.0) : tensor<1x2xf32>
     %output = check.generate.fill value(-20000.0) : tensor<1x128xf32>
     check.compare<@sparse_token_attention_serial, @sparse_token_attention_analytic_oracle>[%instances](%instances, %cache_rows, %lengths, %query, %indices, %keys, %values, %state, %output) : [index](index, index, tensor<1xi32>, tensor<1x128xf32>, tensor<[%index_count]xi32>, tensor<[%backing_rows]x128xf32>, tensor<[%backing_rows]x128xf32>, tensor<1x2xf32>, tensor<1x128xf32>) -> () {
-      check.expect.close actual(%state) expected(%state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<1x2xf32>
-      check.expect.close actual(%output) expected(%output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<1x128xf32>
+      check.expect.approximate actual(%state) expected(%state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<1x2xf32>, tensor<1x2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<1x128xf32>, tensor<1x128xf32>
     }
   }
   check.trial[8](%trial: index, %entropy: check.entropy) {
@@ -483,8 +483,8 @@ check.scenario @sparse_token_attention_analytic {
     %state = check.generate.fill value(-30000.0) : tensor<1x2xf32>
     %output = check.generate.fill value(-40000.0) : tensor<1x128xf32>
     check.compare<@sparse_token_attention_pipelined, @sparse_token_attention_analytic_oracle>[%instances](%instances, %cache_rows, %lengths, %query, %indices, %keys, %values, %state, %output) : [index](index, index, tensor<1xi32>, tensor<1x128xf32>, tensor<[%index_count]xi32>, tensor<[%backing_rows]x128xf32>, tensor<[%backing_rows]x128xf32>, tensor<1x2xf32>, tensor<1x128xf32>) -> () {
-      check.expect.close actual(%state) expected(%state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<1x2xf32>
-      check.expect.close actual(%output) expected(%output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<1x128xf32>
+      check.expect.approximate actual(%state) expected(%state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<1x2xf32>, tensor<1x2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<1x128xf32>, tensor<1x128xf32>
     }
   }
   check.return

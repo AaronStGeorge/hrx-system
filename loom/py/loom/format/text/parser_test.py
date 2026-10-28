@@ -16,6 +16,7 @@ from loom.assembly import (
     LPAREN,
     RPAREN,
     Attr,
+    AttrDict,
     OptionalGroup,
     Param,
     Ref,
@@ -41,7 +42,7 @@ from loom.dialect.test import (
     test_tile_attr,
     test_variant_set_type,
 )
-from loom.dsl import ANY, AttrDef, Op, Operand, TypeDef, TypeParam
+from loom.dsl import ANY, ATTR_TYPE_DICT, AttrDef, Op, Operand, TypeDef, TypeParam
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import write_module
 from loom.format.text.parser import (
@@ -1101,6 +1102,31 @@ class TestParseSegmentedOp:
 
 
 class TestParseOptionalGroup:
+    def test_attribute_dictionary_anchor(self) -> None:
+        optional_attributes_op = Op(
+            "test.optional_attributes",
+            group=test_ops,
+            attrs=[AttrDef("attributes", ATTR_TYPE_DICT, optional=True)],
+            format=[
+                OptionalGroup(
+                    [AttrDict("attributes")],
+                    anchor="attributes",
+                ),
+            ],
+        )
+        parser = Parser()
+        parser.register_ops([optional_attributes_op])
+
+        populated_op = parser.parse_operation_from_text(
+            'test.optional_attributes {kind = "example"}'
+        )
+        empty_op = parser.parse_operation_from_text("test.optional_attributes")
+
+        assert populated_op.attributes == {
+            "attributes": CanonicalAttrDict((("kind", "example"),))
+        }
+        assert empty_op.attributes == {}
+
     def test_parenthesized_operand_after_glue(self) -> None:
         optional_operand_op = Op(
             "test.optional_parenthesized_operand",

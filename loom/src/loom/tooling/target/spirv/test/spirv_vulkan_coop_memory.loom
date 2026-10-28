@@ -128,7 +128,7 @@ check.case @staged_matrix32_case {
   %stride = check.literal value(40) : index
   kernel.launch @staged_matrix32(%lhs, %rhs, %init, %output, %stride) : (tensor<64x16xf16>, tensor<16x16xf16>, tensor<64x16xf32>, tensor<64x16xf32>, index)
   %expected = check.oracle.call<reference.matmul> callee(@staged_matrix32) inputs(%lhs, %rhs, %init) : (tensor<64x16xf16>, tensor<16x16xf16>, tensor<64x16xf32>) -> (tensor<64x16xf32>)
-  check.expect.close actual(%output) expected(%expected) atol(0.5) rtol(0.001) nan(different) : tensor<64x16xf32>
+  check.expect.approximate actual(%output) expected(%expected) atol(0.5) rtol(0.001) nan(different) : tensor<64x16xf32>, tensor<64x16xf32>
   check.return
 }
 
@@ -145,7 +145,7 @@ check.case @staged_matrix64_case {
   %stride = check.literal value(48) : index
   kernel.launch @staged_matrix64(%lhs, %rhs, %init, %output, %stride) : (tensor<64x16xf16>, tensor<16x16xf16>, tensor<64x16xf32>, tensor<64x16xf32>, index)
   %expected = check.oracle.call<reference.matmul> callee(@staged_matrix64) inputs(%lhs, %rhs, %init) : (tensor<64x16xf16>, tensor<16x16xf16>, tensor<64x16xf32>) -> (tensor<64x16xf32>)
-  check.expect.close actual(%output) expected(%expected) atol(0.5) rtol(0.001) nan(different) : tensor<64x16xf32>
+  check.expect.approximate actual(%output) expected(%expected) atol(0.5) rtol(0.001) nan(different) : tensor<64x16xf32>, tensor<64x16xf32>
   check.return
 }
 
@@ -219,7 +219,7 @@ check.case @half_accumulator32_case {
   %audit = check.generate.fill value(0.0) : tensor<16x16xf16>
   kernel.launch @half_accumulator32(%lhs, %rhs, %init, %output, %audit) : (tensor<16x16xf16>, tensor<16x16xf16>, tensor<16x16xf16>, tensor<16x16xf16>, tensor<16x16xf16>)
   %expected = check.oracle.call<reference.matmul> {accumulator = "f64", lhs = "f16", result = "f16", rhs = "f16"} callee(@half_accumulator32) inputs(%lhs, %rhs, %init) : (tensor<16x16xf16>, tensor<16x16xf16>, tensor<16x16xf16>) -> (tensor<16x16xf16>)
-  check.expect.close actual(%output) expected(%expected) atol(0.0) rtol(0.001) nan(different) : tensor<16x16xf16>
+  check.expect.approximate actual(%output) expected(%expected) atol(0.0) rtol(0.001) nan(different) : tensor<16x16xf16>, tensor<16x16xf16>
   check.expect.bitwise actual(%audit) expected(%output) : tensor<16x16xf16>
   check.return
 }
@@ -237,7 +237,7 @@ check.case @half_accumulator64_case {
   %audit = check.generate.fill value(0.0) : tensor<16x16xf16>
   kernel.launch @half_accumulator64(%lhs, %rhs, %init, %output, %audit) : (tensor<16x16xf16>, tensor<16x16xf16>, tensor<16x16xf16>, tensor<16x16xf16>, tensor<16x16xf16>)
   %expected = check.oracle.call<reference.matmul> {accumulator = "f64", lhs = "f16", result = "f16", rhs = "f16"} callee(@half_accumulator64) inputs(%lhs, %rhs, %init) : (tensor<16x16xf16>, tensor<16x16xf16>, tensor<16x16xf16>) -> (tensor<16x16xf16>)
-  check.expect.close actual(%output) expected(%expected) atol(0.0) rtol(0.001) nan(different) : tensor<16x16xf16>
+  check.expect.approximate actual(%output) expected(%expected) atol(0.0) rtol(0.001) nan(different) : tensor<16x16xf16>, tensor<16x16xf16>
   check.expect.bitwise actual(%audit) expected(%output) : tensor<16x16xf16>
   check.return
 }

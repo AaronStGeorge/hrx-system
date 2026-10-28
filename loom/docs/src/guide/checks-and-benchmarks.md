@@ -182,7 +182,9 @@ The expectation operation records what equality means:
 | --- | --- |
 | [`check.expect.equal`](../reference/dialects/check/ops/expect-equal.md) | Typed value equality. |
 | [`check.expect.bitwise`](../reference/dialects/check/ops/expect-bitwise.md) | Exact payload-bit identity. |
-| [`check.expect.close`](../reference/dialects/check/ops/expect-close.md) | Floating-point comparison with explicit absolute tolerance, relative tolerance, and NaN policy. |
+| [`check.expect.approximate`](../reference/dialects/check/ops/expect-approximate.md) | Independently typed floating-point comparison with explicit absolute tolerance, relative tolerance, and NaN policy. |
+| [`check.expect.close.signed`](../reference/dialects/check/ops/expect-close-signed.md) | Independently typed signed integer comparison with an exact maximum distance. |
+| [`check.expect.close.unsigned`](../reference/dialects/check/ops/expect-close-unsigned.md) | Independently typed unsigned integer comparison with an exact maximum distance. |
 | [`check.expect.shape`](../reference/dialects/check/ops/expect-shape.md) | Exact static and dynamic dimensions. |
 | [`check.expect.event`](../reference/dialects/check/ops/expect-event.md) | A provider-specific structured runtime event such as a sanitizer report. |
 
@@ -254,7 +256,7 @@ check.scenario public @advance_sweep {
     %word = check.entropy.read %input_entropy[%trial] : check.entropy -> i64
     %state = check.generate.iota offset(0.0) step(0.25) : tensor<64xf32>
     check.compare<@advance>(%state, %word) : (tensor<64xf32>, i64) -> () {
-      check.expect.close actual(%state) expected(%state) atol(1.0e-6) rtol(1.0e-5) nan(same) : tensor<64xf32>
+      check.expect.approximate actual(%state) expected(%state) atol(1.0e-6) rtol(1.0e-5) nan(same) : tensor<64xf32>, tensor<64xf32>
     }
   }
   check.return
@@ -277,7 +279,7 @@ check.scenario public @authored_advance_sweep {
     %state = check.generate.fill value(0.0) : tensor<64xf32>
     %word = check.generate<@make_advance_trial>(%trial, %entropy_word, %state) : (index, i64, tensor<64xf32>) -> (i64)
     check.compare<@advance>(%state, %word) : (tensor<64xf32>, i64) -> () {
-      check.expect.close actual(%state) expected(%state) atol(1.0e-6) rtol(1.0e-5) nan(same) : tensor<64xf32>
+      check.expect.approximate actual(%state) expected(%state) atol(1.0e-6) rtol(1.0e-5) nan(same) : tensor<64xf32>, tensor<64xf32>
     }
   }
   check.return

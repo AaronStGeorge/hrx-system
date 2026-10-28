@@ -90,7 +90,7 @@ check.case public @fragment_result_dynamic_strided_f16acc_f32_store_case {
   %expected = check.generate.fill value(0.0) : tensor<8192xf32>
   kernel.launch @fragment_result_dynamic_strided_f16acc_f32_store(%column_stride, %actual) : (index, tensor<8192xf32>)
   kernel.launch @fill_fragment_result_dynamic_strided_f16acc_f32_store_expected(%expected) : (tensor<8192xf32>)
-  check.expect.close actual(%actual) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<8192xf32>
+  check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<8192xf32>, tensor<8192xf32>
   check.return
 }
 

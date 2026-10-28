@@ -28,16 +28,6 @@ ERR_EXPECT_002 = ErrorDef(
     params=(),
 )
 
-# ERR_EXPECT_003: Approximate comparison expectation mismatch.
-ERR_EXPECT_003 = ErrorDef(
-    domain=ErrorDomain.EXPECT,
-    code=3,
-    severity=Severity.ERROR,
-    summary="Close expectation did not match.",
-    message="check.expect.close did not match",
-    params=(),
-)
-
 # ERR_EXPECT_004: Shape expectation mismatch.
 ERR_EXPECT_004 = ErrorDef(
     domain=ErrorDomain.EXPECT,
@@ -58,10 +48,42 @@ ERR_EXPECT_005 = ErrorDef(
     params=(),
 )
 
+# ERR_EXPECT_006: Approximate comparison expectation mismatch.
+ERR_EXPECT_006 = ErrorDef(
+    domain=ErrorDomain.EXPECT,
+    code=6,
+    severity=Severity.ERROR,
+    summary="Approximate expectation did not match.",
+    message="check.expect.approximate did not match",
+    params=(),
+)
+
+# ERR_EXPECT_007: Signed integer distance expectation mismatch.
+ERR_EXPECT_007 = ErrorDef(
+    domain=ErrorDomain.EXPECT,
+    code=7,
+    severity=Severity.ERROR,
+    summary="Signed integer distance expectation did not match.",
+    message="check.expect.close.signed did not match",
+    params=(),
+)
+
+# ERR_EXPECT_008: Unsigned integer distance expectation mismatch.
+ERR_EXPECT_008 = ErrorDef(
+    domain=ErrorDomain.EXPECT,
+    code=8,
+    severity=Severity.ERROR,
+    summary="Unsigned integer distance expectation did not match.",
+    message="check.expect.close.unsigned did not match",
+    params=(),
+)
+
 ALL_EXPECT_ERRORS: tuple[ErrorDef, ...] = (
     ERR_EXPECT_001,
     ERR_EXPECT_002,
-    ERR_EXPECT_003,
     ERR_EXPECT_004,
     ERR_EXPECT_005,
+    ERR_EXPECT_006,
+    ERR_EXPECT_007,
+    ERR_EXPECT_008,
 )

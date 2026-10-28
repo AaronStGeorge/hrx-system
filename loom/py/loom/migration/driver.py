@@ -22,6 +22,7 @@ from loom.format.text.parser import Parser
 from loom.format.text.tokenizer import ParseError
 from loom.importers.check.cases import CheckCase, rewrite_inline_case_inputs
 from loom.migration.rules import (
+    DEFAULT_MIGRATION_REWRITE_HOOKS,
     MigrationRule,
     migration_rules_from_ops,
 )
@@ -415,70 +416,36 @@ def check_bytecode_version(
 
 def default_migration_ops() -> tuple[Any, ...]:
     """Returns the broad current op registry used by migration validation."""
-    from loom.dialect.buffer import ALL_BUFFER_OPS
-    from loom.dialect.cfg import ALL_CFG_OPS
-    from loom.dialect.check import ALL_CHECK_OPS
-    from loom.dialect.command import ALL_COMMAND_OPS
+    import loom
     from loom.dialect.config import ALL_CONFIG_OPS
-    from loom.dialect.encoding import ALL_ENCODING_OPS
-    from loom.dialect.func import ALL_FUNC_OPS
-    from loom.dialect.globals import ALL_GLOBAL_OPS
-    from loom.dialect.index import ALL_INDEX_OPS
-    from loom.dialect.kernel import ALL_KERNEL_OPS
-    from loom.dialect.low import ALL_LOW_OPS
-    from loom.dialect.pass_ import ALL_PASS_OPS
-    from loom.dialect.pool import ALL_POOL_OPS
-    from loom.dialect.scalar import ALL_SCALAR_OPS
-    from loom.dialect.scf import ALL_SCF_OPS
-    from loom.dialect.target import ALL_TARGET_OPS
-    from loom.dialect.test import ALL_TEST_OPS
-    from loom.dialect.vector import ALL_VECTOR_OPS
-    from loom.dialect.view import ALL_VIEW_OPS
+    from loom.dialect.template import ALL_TEMPLATE_OPS
+    from loom.target.arch.amd.xdna.aie2p.dialect import ALL_AIE2P_OPS
     from loom.target.arch.amdgpu.dialect import ALL_AMDGPU_OPS
     from loom.target.arch.spirv.dialect import ALL_SPIRV_OPS
+    from loom.target.arch.vm.dialect import ALL_VM_OPS
     from loom.target.arch.wasm.dialect import ALL_WASM_OPS
     from loom.target.arch.x86.dialect import ALL_X86_OPS
 
     return (
-        *ALL_TEST_OPS,
-        *ALL_SCALAR_OPS,
-        *ALL_FUNC_OPS,
-        *ALL_ENCODING_OPS,
-        *ALL_POOL_OPS,
-        *ALL_GLOBAL_OPS,
-        *ALL_SCF_OPS,
-        *ALL_CFG_OPS,
-        *ALL_CHECK_OPS,
-        *ALL_COMMAND_OPS,
-        *ALL_BUFFER_OPS,
-        *ALL_VIEW_OPS,
-        *ALL_VECTOR_OPS,
-        *ALL_INDEX_OPS,
-        *ALL_KERNEL_OPS,
-        *ALL_TARGET_OPS,
-        *ALL_LOW_OPS,
-        *ALL_PASS_OPS,
+        *loom.default_ops(),
         *ALL_CONFIG_OPS,
+        *ALL_TEMPLATE_OPS,
+        *ALL_AIE2P_OPS,
         *ALL_AMDGPU_OPS,
-        *ALL_X86_OPS,
         *ALL_SPIRV_OPS,
+        *ALL_VM_OPS,
         *ALL_WASM_OPS,
+        *ALL_X86_OPS,
     )
 
 
 def default_migration_types() -> tuple[Any, ...]:
     """Returns the broad current type registry used by migration validation."""
-    from loom.builtin_types import ALL_BUILTIN_TYPES
-    from loom.dialect.check import ALL_CHECK_TYPES
-    from loom.dialect.hal import ALL_HAL_TYPES
-    from loom.dialect.kernel import ALL_KERNEL_TYPES
+    import loom
     from loom.target.arch.spirv.dialect import ALL_SPIRV_TYPES
 
     return (
-        *ALL_BUILTIN_TYPES,
-        *ALL_CHECK_TYPES,
-        *ALL_HAL_TYPES,
-        *ALL_KERNEL_TYPES,
+        *loom.default_types(),
         *ALL_SPIRV_TYPES,
     )
 
@@ -486,7 +453,10 @@ def default_migration_types() -> tuple[Any, ...]:
 @cache
 def default_migration_rules() -> tuple[MigrationRule, ...]:
     """Returns migration rules generated from current op legacy formats."""
-    return migration_rules_from_ops(default_migration_ops())
+    return migration_rules_from_ops(
+        default_migration_ops(),
+        rewrite_hooks=DEFAULT_MIGRATION_REWRITE_HOOKS,
+    )
 
 
 def _resolve_rules(

@@ -156,7 +156,7 @@ check.scenario @packed_halfword_add_values {
     check.compare<@packed_halfword_add, @packed_halfword_add_oracle>(%input, %integer_output, %half_output) : (tensor<65536xi16>, tensor<65536xi16>, tensor<65536xf16>) -> () {
       check.expect.bitwise actual(%input) expected(%expected_input) : tensor<65536xi16>
       check.expect.bitwise actual(%integer_storage) expected(%integer_storage) : tensor<65538xi16>
-      check.expect.close actual(%half_storage) expected(%half_storage) atol(0.0) rtol(0.0) nan(same) : tensor<65538xf16>
+      check.expect.approximate actual(%half_storage) expected(%half_storage) atol(0.0) rtol(0.0) nan(same) : tensor<65538xf16>, tensor<65538xf16>
       check.expect.bitwise actual(%half_negative_zero) expected(%half_negative_zero) : tensor<1xf16>
       check.expect.bitwise actual(%half_positive_zero) expected(%half_positive_zero) : tensor<1xf16>
     }

@@ -50,6 +50,7 @@ iree_py_test(
 iree_py_library(
     name = "all_targets",
     deps = [
+        "//loom/py/loom/target/arch/amd/xdna/aie2p:dialect",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:dialect",
         "//loom/py/loom/target/arch/cmd:descriptors",

@@ -60,6 +60,7 @@ iree_py_library(
   NAME
     all_targets
   DEPS
+    loom::py::loom::target::arch::amd::xdna::aie2p::dialect
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::arch::amdgpu::dialect
     loom::py::loom::target::arch::cmd::descriptors

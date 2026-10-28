@@ -106,10 +106,12 @@ LOOM_CHECK_CASE(mxfp4_dynamic_scale) {
   loom::check::launch<mxfp4_decode_dot>(payload, identity, activations, first);
   loom::check::launch<mxfp4_decode_dot>(payload, half, activations, second);
   // Products sum to -32.75 per eight lanes, with absolute sum 45.25.
-  loom::check::expect_close(first, loom::check::fill<1, float>(-131.0f),
-                            181.0 * kGroupErrorFactor, 0.0, "different");
-  loom::check::expect_close(second, loom::check::fill<1, float>(-65.5f),
-                            90.5 * kGroupErrorFactor, 0.0, "different");
+  loom::check::expect_approximate(first, loom::check::fill<1, float>(-131.0f),
+                                  181.0 * kGroupErrorFactor, 0.0,
+                                  loom::check::nan_policy::different);
+  loom::check::expect_approximate(second, loom::check::fill<1, float>(-65.5f),
+                                  90.5 * kGroupErrorFactor, 0.0,
+                                  loom::check::nan_policy::different);
   loom::check::expect_bitwise(loom::check::slice<1>(storage, 0),
                               loom::check::fill<1, float>(999.0f));
   loom::check::expect_bitwise(loom::check::slice<1>(storage, 3),
@@ -137,10 +139,12 @@ LOOM_CHECK_CASE(mxfp8_dynamic_scale) {
   loom::check::launch<mxfp8_decode_dot>(payload, identity, activations, first);
   loom::check::launch<mxfp8_decode_dot>(payload, half, activations, second);
   // Products sum to -72.5 per eight lanes, with absolute sum 91.5.
-  loom::check::expect_close(first, loom::check::fill<1, float>(-290.0f),
-                            366.0 * kGroupErrorFactor, 0.0, "different");
-  loom::check::expect_close(second, loom::check::fill<1, float>(-145.0f),
-                            183.0 * kGroupErrorFactor, 0.0, "different");
+  loom::check::expect_approximate(first, loom::check::fill<1, float>(-290.0f),
+                                  366.0 * kGroupErrorFactor, 0.0,
+                                  loom::check::nan_policy::different);
+  loom::check::expect_approximate(second, loom::check::fill<1, float>(-145.0f),
+                                  183.0 * kGroupErrorFactor, 0.0,
+                                  loom::check::nan_policy::different);
   loom::check::expect_bitwise(loom::check::slice<1>(storage, 0),
                               loom::check::fill<1, float>(999.0f));
   loom::check::expect_bitwise(loom::check::slice<1>(storage, 3),

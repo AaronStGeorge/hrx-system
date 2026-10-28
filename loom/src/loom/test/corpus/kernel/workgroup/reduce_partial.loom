@@ -357,14 +357,14 @@ check.scenario @workgroup_reduce_partial_float_values {
     %scalar_input = check.generate.fill value(nan) : tensor<67xf32>
     %scalar_output = check.generate.fill value(0.0) : tensor<67x4xf32>
     check.compare<@workgroup_reduce_partial_float, @workgroup_reduce_partial_float_oracle>(%scalar_input, %scalar_output) : (tensor<67xf32>, tensor<67x4xf32>) -> () {
-      check.expect.close actual(%scalar_output) expected(%scalar_output) atol(0.0) rtol(0.0) nan(same) : tensor<67x4xf32>
+      check.expect.approximate actual(%scalar_output) expected(%scalar_output) atol(0.0) rtol(0.0) nan(same) : tensor<67x4xf32>, tensor<67x4xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
     %vector_input = check.generate.fill value(nan) : tensor<67x2xf32>
     %vector_output = check.generate.fill value(0.0) : tensor<67x4x2xf32>
     check.compare<@workgroup_reduce_partial_vector, @workgroup_reduce_partial_float_oracle>(%vector_input, %vector_output) : (tensor<67x2xf32>, tensor<67x4x2xf32>) -> () {
-      check.expect.close actual(%vector_output) expected(%vector_output) atol(0.0) rtol(0.0) nan(same) : tensor<67x4x2xf32>
+      check.expect.approximate actual(%vector_output) expected(%vector_output) atol(0.0) rtol(0.0) nan(same) : tensor<67x4x2xf32>, tensor<67x4x2xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -388,7 +388,7 @@ check.scenario @workgroup_reduce_partial_float_values {
     %scalar_input = check.generate.random.uniform seed(%seed) range(0.98999999999999999 to 1.01) : tensor<67xf32>
     %scalar_output = check.generate.fill value(0.0) : tensor<67x4xf32>
     check.compare<@workgroup_reduce_partial_float, @workgroup_reduce_partial_float_oracle>(%scalar_input, %scalar_output) : (tensor<67xf32>, tensor<67x4xf32>) -> () {
-      check.expect.close actual(%scalar_output) expected(%scalar_output) atol(0.0) rtol(1.0000000000000001e-05) nan(same) : tensor<67x4xf32>
+      check.expect.approximate actual(%scalar_output) expected(%scalar_output) atol(0.0) rtol(1.0000000000000001e-05) nan(same) : tensor<67x4xf32>, tensor<67x4xf32>
     }
   }
   check.trial[4](%trial: index, %entropy: check.entropy) {
@@ -396,7 +396,7 @@ check.scenario @workgroup_reduce_partial_float_values {
     %vector_input = check.generate.random.uniform seed(%seed) range(0.98999999999999999 to 1.01) : tensor<67x2xf32>
     %vector_output = check.generate.fill value(0.0) : tensor<67x4x2xf32>
     check.compare<@workgroup_reduce_partial_vector, @workgroup_reduce_partial_float_oracle>(%vector_input, %vector_output) : (tensor<67x2xf32>, tensor<67x4x2xf32>) -> () {
-      check.expect.close actual(%vector_output) expected(%vector_output) atol(0.0) rtol(1.0000000000000001e-05) nan(same) : tensor<67x4x2xf32>
+      check.expect.approximate actual(%vector_output) expected(%vector_output) atol(0.0) rtol(1.0000000000000001e-05) nan(same) : tensor<67x4x2xf32>, tensor<67x4x2xf32>
     }
   }
   check.return

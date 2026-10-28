@@ -133,14 +133,14 @@ check.scenario @turn_approximate_values {
   check.trial[11](%trial: index, %entropy: check.entropy) {
     %output = check.generate.fill value(-1.0) : tensor<2xf32>
     check.compare<@turn_approximate_boundary_observations>(%trial, %output) : (index, tensor<2xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.9999999999999999e-07) rtol(3.9999999999999998e-07) nan(same) : tensor<2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.9999999999999999e-07) rtol(3.9999999999999998e-07) nan(same) : tensor<2xf32>, tensor<2xf32>
     }
   }
   check.trial[256](%trial: index, %entropy: check.entropy) {
     %bits = check.entropy.read %entropy[%trial] : check.entropy -> i64
     %output = check.generate.fill value(-1.0) : tensor<2xf32>
     check.compare<@turn_approximate_entropy_observations>(%bits, %output) : (i64, tensor<2xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.9999999999999999e-07) rtol(3.9999999999999998e-07) nan(same) : tensor<2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.9999999999999999e-07) rtol(3.9999999999999998e-07) nan(same) : tensor<2xf32>, tensor<2xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -163,7 +163,7 @@ check.scenario @turn_approximate_values {
     %angle = check.literal value(1065353216) : i64
     %output = check.generate.fill value(0.0) : tensor<4xf32>
     check.compare<@radian_observations>(%even, %odd, %angle, %output) : (i64, i64, i64, tensor<4xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(1.0000000000000001e-05) nan(same) : tensor<4xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(1.0000000000000001e-05) nan(same) : tensor<4xf32>, tensor<4xf32>
     }
   }
   check.return
@@ -203,7 +203,7 @@ check.scenario @turn_values {
     %angle = check.literal value(1065353216) : i64
     %output = check.generate.fill value(0.0) : tensor<4xf32>
     check.compare<@radian_observations>(%even, %odd, %angle, %output) : (i64, i64, i64, tensor<4xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(1.0000000000000001e-05) nan(same) : tensor<4xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(1.0000000000000001e-05) nan(same) : tensor<4xf32>, tensor<4xf32>
     }
   }
   check.trial[256](%trial: index, %entropy: check.entropy) {
@@ -215,7 +215,7 @@ check.scenario @turn_values {
     %angle = check.entropy.read %angle_source[%trial] : check.entropy -> i64
     %output = check.generate.fill value(0.0) : tensor<4xf32>
     check.compare<@radian_observations>(%even, %odd, %angle, %output) : (i64, i64, i64, tensor<4xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(1.0000000000000001e-05) nan(same) : tensor<4xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(9.9999999999999995e-07) rtol(1.0000000000000001e-05) nan(same) : tensor<4xf32>, tensor<4xf32>
     }
   }
   check.return

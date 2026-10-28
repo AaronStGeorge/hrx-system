@@ -21,6 +21,7 @@ from loom.assembly import (
     TemplateParam,
     TypeOf,
 )
+from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.diagnostics import DiagnosticSeverity
 from loom.format.text.tokenizer import ParseError, Token, Tokenizer, TokenKind
 from loom.migration.source import (
@@ -30,8 +31,16 @@ from loom.migration.source import (
 )
 
 BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID = "buffer.assume.memory_space.attr_dict"
+CHECK_EXPECT_CLOSE_APPROXIMATE_RULE_ID = "check.expect.close.approximate"
+CHECK_EXPECT_CLOSE_APPROXIMATE_REWRITE_HOOK = "check_expect_close_approximate"
 
 MigrationRewrite = Callable[[SourceDocument], "MigrationRuleApplication"]
+
+_COMPACT_SHAPE_TYPE_NAMES = frozenset(
+    type_def.name
+    for type_def in ALL_BUILTIN_TYPES
+    if type_def.uses_compact_shape_format
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +70,136 @@ class _FormatMatch:
     next_index: int
     end_token: Token
     captured_fields: dict[str, str]
+
+
+_CHECK_EXPECT_CLOSE_FORMAT: tuple[FormatElement, ...] = (
+    Keyword("actual"),
+    Keyword("("),
+    Ref("actual"),
+    Keyword(")"),
+    Keyword("expected"),
+    Keyword("("),
+    Ref("expected"),
+    Keyword(")"),
+    Keyword("atol"),
+    Keyword("("),
+    Attr("atol"),
+    Keyword(")"),
+    Keyword("rtol"),
+    Keyword("("),
+    Attr("rtol"),
+    Keyword(")"),
+    Keyword("nan"),
+    Keyword("("),
+    Attr("nan"),
+    Keyword(")"),
+    Keyword(":"),
+    TypeOf("shared_type"),
+)
+
+
+def rewrite_check_expect_close_approximate(
+    document: SourceDocument,
+) -> MigrationRuleApplication:
+    """Rewrites single-type floating close expectations to the typed form."""
+    if "check.expect.close" not in document.text:
+        return MigrationRuleApplication()
+
+    try:
+        tokens = _tokenize_source(document)
+    except ParseError as exc:
+        return MigrationRuleApplication(
+            diagnostics=(
+                MigrationSourceDiagnostic(
+                    severity=DiagnosticSeverity.ERROR,
+                    message=str(exc),
+                    source_range=document.source_range(exc.location, exc.location),
+                    rule_id=CHECK_EXPECT_CLOSE_APPROXIMATE_RULE_ID,
+                    fixup_hint="Fix source tokenization before running migration.",
+                ),
+            )
+        )
+
+    edits: list[SourceEdit] = []
+    diagnostics: list[MigrationSourceDiagnostic] = []
+    for index, token in enumerate(tokens):
+        if token.kind != TokenKind.OP_NAME or token.text != "check.expect.close":
+            continue
+        legacy_match = _match_format(
+            document,
+            tokens,
+            index + 1,
+            _CHECK_EXPECT_CLOSE_FORMAT,
+        )
+        if legacy_match is None:
+            diagnostics.append(
+                MigrationSourceDiagnostic(
+                    severity=DiagnosticSeverity.ERROR,
+                    message="expected the legacy check.expect.close source format",
+                    source_range=document.token_source_range(token),
+                    rule_id=CHECK_EXPECT_CLOSE_APPROXIMATE_RULE_ID,
+                    fixup_hint=(
+                        "Rewrite the expectation as check.expect.approximate "
+                        "with explicit actual and expected types."
+                    ),
+                )
+            )
+            continue
+
+        start_byte = document.byte_offset_at(token.location)
+        end_byte = document.byte_offset_at(legacy_match.end_token.end_location)
+        legacy_source = document.text[
+            token.location.offset : legacy_match.end_token.end_location.offset
+        ]
+        if "//" in legacy_source:
+            diagnostics.append(
+                MigrationSourceDiagnostic(
+                    severity=DiagnosticSeverity.ERROR,
+                    message=(
+                        "legacy format rewrite would remove an inline comment "
+                        "inside the operation"
+                    ),
+                    source_range=document.source_range(
+                        token.location,
+                        legacy_match.end_token.end_location,
+                    ),
+                    rule_id=CHECK_EXPECT_CLOSE_APPROXIMATE_RULE_ID,
+                    fixup_hint=(
+                        "Move comments outside the legacy op spelling before "
+                        "running migration."
+                    ),
+                )
+            )
+            continue
+
+        fields = legacy_match.captured_fields
+        shared_type = fields["shared_type"]
+        replacement = (
+            "check.expect.approximate "
+            f"actual({fields['actual']}) expected({fields['expected']}) "
+            f"atol({fields['atol']}) rtol({fields['rtol']}) "
+            f"nan({fields['nan']}) : {shared_type}, {shared_type}"
+        )
+        edits.append(
+            SourceEdit(
+                byte_start=start_byte,
+                byte_end=end_byte,
+                replacement_text=replacement,
+                rule_id=CHECK_EXPECT_CLOSE_APPROXIMATE_RULE_ID,
+            )
+        )
+
+    return MigrationRuleApplication(
+        edits=tuple(sorted(edits, key=lambda edit: (edit.byte_start, edit.byte_end))),
+        diagnostics=tuple(diagnostics),
+    )
+
+
+DEFAULT_MIGRATION_REWRITE_HOOKS: Mapping[str, MigrationRewrite] = {
+    CHECK_EXPECT_CLOSE_APPROXIMATE_REWRITE_HOOK: (
+        rewrite_check_expect_close_approximate
+    ),
+}
 
 
 def migration_rules_from_ops(
@@ -200,8 +339,28 @@ def _rewrite_structural_legacy_format(
 def _tokenize_source(document: SourceDocument) -> tuple[Token, ...]:
     tokenizer = Tokenizer(document.text, str(document.filename or "<input>"))
     tokens: list[Token] = []
+    pending_compact_shape = False
+    angle_depth = 0
+    compact_shape_depths: list[int] = []
     while not tokenizer.at(TokenKind.EOF):
-        tokens.append(tokenizer.next())
+        token = tokenizer.next()
+        tokens.append(token)
+        if token.kind == TokenKind.BARE_IDENT:
+            pending_compact_shape = token.text in _COMPACT_SHAPE_TYPE_NAMES
+            continue
+        if token.kind == TokenKind.LANGLE:
+            angle_depth += 1
+            if pending_compact_shape:
+                compact_shape_depths.append(angle_depth)
+                tokenizer.in_dim_list = True
+            pending_compact_shape = False
+            continue
+        if token.kind == TokenKind.RANGLE:
+            if compact_shape_depths and compact_shape_depths[-1] == angle_depth:
+                compact_shape_depths.pop()
+                tokenizer.in_dim_list = bool(compact_shape_depths)
+            angle_depth -= 1
+        pending_compact_shape = False
     return tuple(tokens)
 
 
@@ -514,8 +673,12 @@ _STRUCTURAL_ELEMENTS = (
 
 __all__ = [
     "BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID",
+    "CHECK_EXPECT_CLOSE_APPROXIMATE_REWRITE_HOOK",
+    "CHECK_EXPECT_CLOSE_APPROXIMATE_RULE_ID",
+    "DEFAULT_MIGRATION_REWRITE_HOOKS",
     "MigrationRule",
     "MigrationRuleApplication",
     "MigrationRewrite",
     "migration_rules_from_ops",
+    "rewrite_check_expect_close_approximate",
 ]

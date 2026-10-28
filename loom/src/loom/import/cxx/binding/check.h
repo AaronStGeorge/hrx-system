@@ -25,7 +25,9 @@ class LaunchContracts;
 struct CheckIntrinsic {
   enum class Operation {
     Equal,
-    Close,
+    Approximate,
+    CloseSigned,
+    CloseUnsigned,
     Fill,
     Iota,
     Slice,
@@ -49,7 +51,10 @@ struct CheckIntrinsic {
 
   bool equivalent(const CheckIntrinsic& other) const;
   bool is_observation() const {
-    return operation == Operation::Equal || operation == Operation::Close ||
+    return operation == Operation::Equal ||
+           operation == Operation::Approximate ||
+           operation == Operation::CloseSigned ||
+           operation == Operation::CloseUnsigned ||
            operation == Operation::Bitwise || operation == Operation::Event;
   }
 
@@ -57,8 +62,12 @@ struct CheckIntrinsic {
   Operation operation;
   // Admitted operand type for scalar observations.
   loom_type_t scalar_type = {};
+  // Admitted expected operand type for independently typed observations.
+  loom_type_t expected_scalar_type = {};
   // Tensor source for slicing or observation, owned by Types.
   const TensorPartition* source_tensor = nullptr;
+  // Expected tensor for independently typed observations, owned by Types.
+  const TensorPartition* expected_tensor = nullptr;
   // Tensor result for generation or slicing, owned by Types.
   const TensorPartition* result_tensor = nullptr;
   // Statically selected kernel declaration, borrowed from the source unit.

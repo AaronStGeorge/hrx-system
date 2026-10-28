@@ -131,7 +131,7 @@ check.scenario @bfloat_extrema_reduction_boundaries {
     %output = check.tensor.view %storage offset(8) : tensor<6xbf16> -> tensor<2xbf16>
     %expected_minimum = check.generate.fill value(-2.0) : tensor<2xbf16>
     check.compare<@bfloat_minimum_reductions_3>(%storage) : (tensor<6xbf16>) -> () {
-      check.expect.close actual(%output) expected(%expected_minimum) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>
+      check.expect.approximate actual(%output) expected(%expected_minimum) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>, tensor<2xbf16>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -139,7 +139,7 @@ check.scenario @bfloat_extrema_reduction_boundaries {
     %output = check.tensor.view %storage offset(8) : tensor<6xbf16> -> tensor<2xbf16>
     %expected_maximum = check.generate.fill value(7.0) : tensor<2xbf16>
     check.compare<@bfloat_maximum_reductions_3>(%storage) : (tensor<6xbf16>) -> () {
-      check.expect.close actual(%output) expected(%expected_maximum) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>
+      check.expect.approximate actual(%output) expected(%expected_maximum) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>, tensor<2xbf16>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -147,7 +147,7 @@ check.scenario @bfloat_extrema_reduction_boundaries {
     %output = check.tensor.view %storage offset(68) : tensor<36xbf16> -> tensor<2xbf16>
     %expected_minimum = check.generate.fill value(-17.0) : tensor<2xbf16>
     check.compare<@bfloat_minimum_reductions_33>(%storage) : (tensor<36xbf16>) -> () {
-      check.expect.close actual(%output) expected(%expected_minimum) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>
+      check.expect.approximate actual(%output) expected(%expected_minimum) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>, tensor<2xbf16>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -155,7 +155,7 @@ check.scenario @bfloat_extrema_reduction_boundaries {
     %output = check.tensor.view %storage offset(68) : tensor<36xbf16> -> tensor<2xbf16>
     %expected_maximum = check.generate.fill value(16.0) : tensor<2xbf16>
     check.compare<@bfloat_maximum_reductions_33>(%storage) : (tensor<36xbf16>) -> () {
-      check.expect.close actual(%output) expected(%expected_maximum) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>
+      check.expect.approximate actual(%output) expected(%expected_maximum) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>, tensor<2xbf16>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -168,9 +168,9 @@ check.scenario @bfloat_extrema_reduction_boundaries {
     %expected_prefix = check.generate.fill value(-17.0) : tensor<1xbf16>
     %expected_suffix = check.generate.iota offset(-19.0) step(-1.0) : tensor<2xbf16>
     check.compare<@bfloat_partial_load_minnum>(%storage) : (tensor<36xbf16>) -> () {
-      check.expect.close actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>
-      check.expect.close actual(%prefix) expected(%expected_prefix) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>
-      check.expect.close actual(%suffix) expected(%expected_suffix) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>
+      check.expect.approximate actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>, tensor<1xbf16>
+      check.expect.approximate actual(%prefix) expected(%expected_prefix) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>, tensor<1xbf16>
+      check.expect.approximate actual(%suffix) expected(%expected_suffix) atol(0.0) rtol(0.0) nan(same) : tensor<2xbf16>, tensor<2xbf16>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -179,7 +179,7 @@ check.scenario @bfloat_extrema_reduction_boundaries {
     %result = check.tensor.view %output offset(2) : tensor<4xbf16> -> tensor<1xbf16>
     %expected_result = check.generate.fill value(-15.0) : tensor<1xbf16>
     check.compare<@bfloat_partial_load_minimum>(%storage) : (tensor<36xbf16>) -> () {
-      check.expect.close actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>
+      check.expect.approximate actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>, tensor<1xbf16>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -188,7 +188,7 @@ check.scenario @bfloat_extrema_reduction_boundaries {
     %result = check.tensor.view %output offset(2) : tensor<4xbf16> -> tensor<1xbf16>
     %expected_result = check.generate.fill value(15.0) : tensor<1xbf16>
     check.compare<@bfloat_partial_load_maxnum>(%storage) : (tensor<36xbf16>) -> () {
-      check.expect.close actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>
+      check.expect.approximate actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>, tensor<1xbf16>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -197,7 +197,7 @@ check.scenario @bfloat_extrema_reduction_boundaries {
     %result = check.tensor.view %output offset(2) : tensor<4xbf16> -> tensor<1xbf16>
     %expected_result = check.generate.fill value(15.0) : tensor<1xbf16>
     check.compare<@bfloat_partial_load_maximum>(%storage) : (tensor<36xbf16>) -> () {
-      check.expect.close actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>
+      check.expect.approximate actual(%result) expected(%expected_result) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>, tensor<1xbf16>
     }
   }
   check.return

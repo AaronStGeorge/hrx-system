@@ -98,3 +98,4 @@
   LOOM_KW_RUN = 89,  // "run"
   LOOM_KW_POOL = 90,  // "pool"
   LOOM_KW_SOURCE_SIGNATURE = 91,  // "source_signature"
+  LOOM_KW_MAX_DISTANCE = 92,  // "max_distance"

@@ -67,7 +67,7 @@ class LibraryLauncherTest(unittest.TestCase):
         completed = self.run_launcher(
             "combined",
             "--case=@scalar_case",
-            "--allow-failure=@scalar_case=EXPECT/003",
+            "--allow-failure=@scalar_case=EXPECT/006",
             f"--library={self.paths['library']}",
         )
         reports = self.read_reports(completed)
@@ -76,7 +76,7 @@ class LibraryLauncherTest(unittest.TestCase):
     def test_correctness_failure_prevents_benchmark(self):
         for argument in (
             "--case=@missing_case",
-            "--xfail=@benchmark_case=EXPECT/003",
+            "--xfail=@benchmark_case=EXPECT/006",
             "",
         ):
             with self.subTest(argument=argument):

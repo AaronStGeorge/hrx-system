@@ -104,6 +104,31 @@ static bool loom_type_dim_equal_after_value_remap(
   return loom_dim_pack_dynamic(remapped_value) == target_dim;
 }
 
+bool loom_type_shape_equal_after_value_remap(
+    const loom_module_t* module, loom_type_t source_type,
+    loom_type_t target_type, const loom_type_value_remap_t* remap) {
+  const loom_type_kind_t source_kind = loom_type_kind(source_type);
+  if (source_kind != loom_type_kind(target_type)) {
+    return false;
+  }
+  if (source_kind == LOOM_TYPE_SCALAR) {
+    return true;
+  }
+  if (!loom_type_is_shaped(source_type) || !loom_type_is_shaped(target_type) ||
+      loom_type_rank(source_type) != loom_type_rank(target_type)) {
+    return false;
+  }
+  const uint8_t rank = loom_type_rank(source_type);
+  for (uint8_t i = 0; i < rank; ++i) {
+    if (!loom_type_dim_equal_after_value_remap(
+            module, loom_type_dim(source_type, i),
+            loom_type_dim(target_type, i), remap)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static bool loom_type_encoding_equal_after_value_remap(
     const loom_module_t* module, loom_type_t source_type,
     loom_type_t target_type, const loom_type_value_remap_t* remap) {
@@ -387,11 +412,21 @@ bool loom_type_equal_after_value_remap(const loom_module_t* module,
       break;
   }
 
+  if (loom_type_is_shaped(source_type)) {
+    if (source_type.header != target_type.header ||
+        !loom_type_shape_equal_after_value_remap(module, source_type,
+                                                 target_type, remap)) {
+      return false;
+    }
+    return loom_type_encoding_equal_after_value_remap(module, source_type,
+                                                      target_type, remap);
+  }
+
   if (loom_type_has_dimensions(source_type)) {
     if (source_type.header != target_type.header) {
       return false;
     }
-    uint8_t rank = loom_type_rank(source_type);
+    const uint8_t rank = loom_type_rank(source_type);
     for (uint8_t i = 0; i < rank; ++i) {
       if (!loom_type_dim_equal_after_value_remap(
               module, loom_type_dim(source_type, i),

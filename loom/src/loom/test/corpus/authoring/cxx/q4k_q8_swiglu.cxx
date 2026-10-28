@@ -570,7 +570,7 @@ LOOM_CHECK_SCENARIO(q4k_q8_swiglu_values) {
           loom::check::expect_bitwise(route_ids, route_ids);
           loom::check::expect_bitwise(gate_weight, gate_weight);
           loom::check::expect_bitwise(up_weight, up_weight);
-          loom::check::expect_close(output, output, 0.002, 0.002);
+          loom::check::expect_approximate(output, output, 0.002, 0.002);
           loom::check::expect_bitwise(output_prefix, output_prefix);
           loom::check::expect_bitwise(output_suffix, output_suffix);
         });

@@ -166,7 +166,7 @@ class CheckBuilder(DialectBuilder):
         expected: ValueRef,
         location_id: int | None = ...,
     ) -> None: ...
-    def close(
+    def approximate(
         self,
         *,
         actual: ValueRef,
@@ -281,3 +281,19 @@ class CheckBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> list[ValueRef]: ...
+    def signed(
+        self,
+        *,
+        actual: ValueRef,
+        expected: ValueRef,
+        max_distance: int,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def unsigned(
+        self,
+        *,
+        actual: ValueRef,
+        expected: ValueRef,
+        max_distance: int,
+        location_id: int | None = ...,
+    ) -> None: ...

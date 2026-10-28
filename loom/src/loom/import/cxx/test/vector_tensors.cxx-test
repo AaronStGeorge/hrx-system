@@ -40,7 +40,7 @@ LOOM_CHECK_SCENARIO(vector_tensor_objects) {
             input, output, [&] {
               loom::check::expect_bitwise(input, input);
               loom::check::expect_bitwise(dynamic, dynamic);
-              loom::check::expect_close(floating, floating, 0.0, 0.0);
+              loom::check::expect_approximate(floating, floating, 0.0, 0.0);
               loom::check::expect_bitwise(storage, storage);
             });
       });
@@ -146,7 +146,7 @@ check.scenario public @vector_tensor_objects {
     check.compare<@copy_vectors, @copy_vectors_oracle>(%input, %output) : (tensor<2x4xi32>, tensor<2x4xi32>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<2x4xi32>
       check.expect.bitwise actual(%dynamic) expected(%dynamic) : tensor<[%count]x4xi32>
-      check.expect.close actual(%floating) expected(%floating) atol(0.0) rtol(0.0) nan(same) : tensor<2x4xf32>
+      check.expect.approximate actual(%floating) expected(%floating) atol(0.0) rtol(0.0) nan(same) : tensor<2x4xf32>, tensor<2x4xf32>
       check.expect.bitwise actual(%storage) expected(%storage) : tensor<4x4xi32>
     }
   }

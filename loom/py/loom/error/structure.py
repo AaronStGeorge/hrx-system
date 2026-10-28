@@ -1041,6 +1041,22 @@ ERR_STRUCTURE_063 = ErrorDef(
     ),
 )
 
+# ERR_STRUCTURE_064: Numeric attribute violates a structural constraint.
+ERR_STRUCTURE_064 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=64,
+    severity=Severity.ERROR,
+    summary="Numeric attribute value violates a structural constraint.",
+    message="attribute '{attr_name}' value {actual_value} must satisfy "
+    "{expected_constraint}",
+    params=(
+        ErrorParam("attr_name", ParamKind.STRING),
+        ErrorParam("actual_value", ParamKind.STRING),
+        ErrorParam("expected_constraint", ParamKind.STRING),
+    ),
+    fix_hint="Choose an attribute value satisfying '{expected_constraint}'",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -1103,4 +1119,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_061,
     ERR_STRUCTURE_062,
     ERR_STRUCTURE_063,
+    ERR_STRUCTURE_064,
 )

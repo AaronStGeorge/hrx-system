@@ -102,7 +102,7 @@ check.scenario @float8_fact_values {
     %output = check.tensor.view %storage offset(16) : tensor<2064xbf16> -> tensor<2048xbf16>
     %finite_results = check.tensor.view %output offset(0) : tensor<2048xbf16> -> tensor<1536xbf16>
     check.compare<@float8_facts, @float8_facts_oracle>(%input, %output) : (tensor<256xi8>, tensor<2048xbf16>) -> () {
-      check.expect.close actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<2064xbf16>
+      check.expect.approximate actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<2064xbf16>, tensor<2064xbf16>
       check.expect.bitwise actual(%finite_results) expected(%finite_results) : tensor<1536xbf16>
     }
   }

@@ -21,6 +21,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/check/ops.h"
+#include "loom/tooling/testbench/numeric_value.h"
 #include "loom/util/stream.h"
 
 namespace loom {
@@ -95,24 +96,21 @@ class ExpectationTest : public ::testing::Test {
     return std::string(detail.data, detail.size);
   }
 
-  void ExpectScalarClose(loom_scalar_type_t scalar_type,
-                         iree_tooling_value_t actual,
-                         iree_tooling_value_t expected,
-                         loom_testbench_close_expectation_plan_t close,
-                         bool matched) {
+  void ExpectScalarComparison(loom_scalar_type_t actual_type,
+                              loom_scalar_type_t expected_type,
+                              loom_testbench_expectation_plan_t expectation,
+                              iree_tooling_value_t actual,
+                              iree_tooling_value_t expected, bool matched) {
     // Construct the typed slots consumed by expectation evaluation.
     loom_module_t* module = nullptr;
-    IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("scalar_close"),
+    IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("scalar_comparison"),
                                         &block_pool_, nullptr, host_allocator_,
                                         &module));
-    loom_testbench_expectation_plan_t expectation = {
-        .kind = LOOM_TESTBENCH_EXPECTATION_CLOSE,
-        .type = loom_type_scalar(scalar_type),
-        .close = close,
-    };
-    IREE_ASSERT_OK(loom_module_define_value(module, expectation.type,
-                                            &expectation.actual_value_id));
-    IREE_ASSERT_OK(loom_module_define_value(module, expectation.type,
+    expectation.type = loom_type_scalar(actual_type);
+    IREE_ASSERT_OK(loom_module_define_value(
+        module, loom_type_scalar(actual_type), &expectation.actual_value_id));
+    IREE_ASSERT_OK(loom_module_define_value(module,
+                                            loom_type_scalar(expected_type),
                                             &expectation.expected_value_id));
     loom_testbench_case_plan_t case_plan = {
         .expectations = &expectation,
@@ -146,6 +144,24 @@ class ExpectationTest : public ::testing::Test {
     loom_module_free(module);
   }
 
+  void ExpectScalarApproximate(
+      loom_scalar_type_t scalar_type, iree_tooling_value_t actual,
+      iree_tooling_value_t expected,
+      loom_testbench_approximate_expectation_plan_t approximate, bool matched) {
+    const loom_testbench_numeric_type_t* numeric_type =
+        loom_testbench_numeric_type_from_scalar_type(scalar_type);
+    ASSERT_NE(numeric_type, nullptr);
+    approximate.actual_numeric_kind = static_cast<uint8_t>(numeric_type->kind);
+    approximate.expected_numeric_kind =
+        static_cast<uint8_t>(numeric_type->kind);
+    loom_testbench_expectation_plan_t expectation = {
+        .kind = LOOM_TESTBENCH_EXPECTATION_APPROXIMATE,
+        .approximate = approximate,
+    };
+    ExpectScalarComparison(scalar_type, scalar_type, expectation, actual,
+                           expected, matched);
+  }
+
   iree_allocator_t host_allocator_ = iree_allocator_system();
   iree_arena_block_pool_t block_pool_;
   iree_arena_allocator_t plan_arena_;
@@ -175,25 +191,267 @@ TEST_F(ExpectationTest, ComparesNarrowScalarsUsingSourceTypes) {
     iree_tooling_value_t actual = {.kind = IREE_TOOLING_VALUE_KIND_RAW_U32};
     actual.storage.u32 = format.one;
     iree_tooling_value_t expected = actual;
-    loom_testbench_close_expectation_plan_t close = {
-        .nan_policy = LOOM_CHECK_EXPECT_CLOSE_NAN_DIFFERENT,
+    loom_testbench_approximate_expectation_plan_t approximate = {
+        .nan_policy = LOOM_CHECK_EXPECT_APPROXIMATE_NAN_DIFFERENT,
     };
-    ExpectScalarClose(format.type, actual, expected, close, true);
+    ExpectScalarApproximate(format.type, actual, expected, approximate, true);
     actual.storage.u32 = format.next;
-    ExpectScalarClose(format.type, actual, expected, close, false);
-    close.absolute_tolerance = 0.25;
-    ExpectScalarClose(format.type, actual, expected, close, true);
-    close.absolute_tolerance = 0.0;
-    close.relative_tolerance = 0.25;
-    ExpectScalarClose(format.type, actual, expected, close, true);
+    ExpectScalarApproximate(format.type, actual, expected, approximate, false);
+    approximate.absolute_tolerance = 0.25;
+    ExpectScalarApproximate(format.type, actual, expected, approximate, true);
+    approximate.absolute_tolerance = 0.0;
+    approximate.relative_tolerance = 0.25;
+    ExpectScalarApproximate(format.type, actual, expected, approximate, true);
     actual.storage.u32 = format.nan;
     expected.storage.u32 = format.nan;
-    ExpectScalarClose(format.type, actual, expected, close, false);
-    close.nan_policy = LOOM_CHECK_EXPECT_CLOSE_NAN_SAME;
-    ExpectScalarClose(format.type, actual, expected, close, true);
+    ExpectScalarApproximate(format.type, actual, expected, approximate, false);
+    approximate.nan_policy = LOOM_CHECK_EXPECT_APPROXIMATE_NAN_SAME;
+    ExpectScalarApproximate(format.type, actual, expected, approximate, true);
     expected.storage.u32 = format.one;
-    ExpectScalarClose(format.type, actual, expected, close, false);
+    ExpectScalarApproximate(format.type, actual, expected, approximate, false);
   }
+}
+
+TEST_F(ExpectationTest, ComparesEveryOrderedFloatingPointTypePair) {
+  struct FloatFormat {
+    // Loom scalar type carried by the authored operand.
+    loom_scalar_type_t scalar_type;
+    // Runtime decoder selected by planning.
+    loom_testbench_numeric_kind_t numeric_kind;
+    // Scalar carrier produced by the value materializer.
+    iree_tooling_value_kind_t tooling_kind;
+    // Raw representation of positive one.
+    uint64_t one_bits;
+  };
+  const FloatFormat formats[] = {
+      {LOOM_SCALAR_TYPE_F8E4M3, LOOM_TESTBENCH_NUMERIC_F8E4M3,
+       IREE_TOOLING_VALUE_KIND_RAW_U32, 0x38},
+      {LOOM_SCALAR_TYPE_F8E5M2, LOOM_TESTBENCH_NUMERIC_F8E5M2,
+       IREE_TOOLING_VALUE_KIND_RAW_U32, 0x3C},
+      {LOOM_SCALAR_TYPE_F16, LOOM_TESTBENCH_NUMERIC_F16,
+       IREE_TOOLING_VALUE_KIND_RAW_U32, 0x3C00},
+      {LOOM_SCALAR_TYPE_BF16, LOOM_TESTBENCH_NUMERIC_BF16,
+       IREE_TOOLING_VALUE_KIND_RAW_U32, 0x3F80},
+      {LOOM_SCALAR_TYPE_F32, LOOM_TESTBENCH_NUMERIC_F32,
+       IREE_TOOLING_VALUE_KIND_F32, 0x3F800000},
+      {LOOM_SCALAR_TYPE_F64, LOOM_TESTBENCH_NUMERIC_F64,
+       IREE_TOOLING_VALUE_KIND_F64, UINT64_C(0x3FF0000000000000)},
+  };
+  auto materialized_one = [](const FloatFormat& format) {
+    iree_tooling_value_t value = {.kind = format.tooling_kind};
+    if (format.tooling_kind == IREE_TOOLING_VALUE_KIND_F32) {
+      value.storage.f32 = 1.0f;
+    } else if (format.tooling_kind == IREE_TOOLING_VALUE_KIND_F64) {
+      value.storage.f64 = 1.0;
+    } else {
+      value.storage.u32 = static_cast<uint32_t>(format.one_bits);
+    }
+    return value;
+  };
+  for (const auto& actual_format : formats) {
+    for (const auto& expected_format : formats) {
+      SCOPED_TRACE(::testing::Message()
+                   << loom_scalar_type_name(actual_format.scalar_type)
+                   << " versus "
+                   << loom_scalar_type_name(expected_format.scalar_type));
+      const iree_tooling_value_t actual = materialized_one(actual_format);
+      const iree_tooling_value_t expected = materialized_one(expected_format);
+      loom_testbench_expectation_plan_t expectation = {
+          .kind = LOOM_TESTBENCH_EXPECTATION_APPROXIMATE,
+          .approximate =
+              {
+                  .nan_policy = LOOM_CHECK_EXPECT_APPROXIMATE_NAN_DIFFERENT,
+                  .actual_numeric_kind =
+                      static_cast<uint8_t>(actual_format.numeric_kind),
+                  .expected_numeric_kind =
+                      static_cast<uint8_t>(expected_format.numeric_kind),
+              },
+      };
+      ExpectScalarComparison(actual_format.scalar_type,
+                             expected_format.scalar_type, expectation, actual,
+                             expected, true);
+    }
+  }
+}
+
+TEST_F(ExpectationTest, DoesNotNarrowFloatingPointReferenceValues) {
+  iree_tooling_value_t actual = {.kind = IREE_TOOLING_VALUE_KIND_RAW_U32};
+  actual.storage.u32 = 0x3F80;  // bf16 1.0
+  iree_tooling_value_t expected = {.kind = IREE_TOOLING_VALUE_KIND_F64};
+  // Exactly halfway from bf16 1.0 to its next representable value. Narrowing
+  // this reference to bf16 would incorrectly turn the mismatch into a match.
+  expected.storage.f64 = 1.00390625;
+  loom_testbench_expectation_plan_t expectation = {
+      .kind = LOOM_TESTBENCH_EXPECTATION_APPROXIMATE,
+      .approximate =
+          {
+              .nan_policy = LOOM_CHECK_EXPECT_APPROXIMATE_NAN_DIFFERENT,
+              .actual_numeric_kind = LOOM_TESTBENCH_NUMERIC_BF16,
+              .expected_numeric_kind = LOOM_TESTBENCH_NUMERIC_F64,
+          },
+  };
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_BF16, LOOM_SCALAR_TYPE_F64,
+                         expectation, actual, expected, false);
+}
+
+TEST_F(ExpectationTest, ComparesMixedFloatingPointExceptionalValues) {
+  loom_testbench_expectation_plan_t expectation = {
+      .kind = LOOM_TESTBENCH_EXPECTATION_APPROXIMATE,
+      .approximate =
+          {
+              .nan_policy = LOOM_CHECK_EXPECT_APPROXIMATE_NAN_DIFFERENT,
+              .actual_numeric_kind = LOOM_TESTBENCH_NUMERIC_F32,
+              .expected_numeric_kind = LOOM_TESTBENCH_NUMERIC_F64,
+          },
+  };
+  iree_tooling_value_t actual = {.kind = IREE_TOOLING_VALUE_KIND_F32};
+  iree_tooling_value_t expected = {.kind = IREE_TOOLING_VALUE_KIND_F64};
+
+  actual.storage.f32 = std::numeric_limits<float>::infinity();
+  expected.storage.f64 = std::numeric_limits<double>::infinity();
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_F64,
+                         expectation, actual, expected, true);
+  actual.storage.f32 = 0.0f;
+  expected.storage.f64 = -0.0;
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_F64,
+                         expectation, actual, expected, true);
+  actual.storage.f32 = std::numeric_limits<float>::quiet_NaN();
+  expected.storage.f64 = std::numeric_limits<double>::quiet_NaN();
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_F64,
+                         expectation, actual, expected, false);
+  expectation.approximate.nan_policy = LOOM_CHECK_EXPECT_APPROXIMATE_NAN_SAME;
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_F64,
+                         expectation, actual, expected, true);
+}
+
+TEST_F(ExpectationTest, ComparesEveryOrderedIntegerTypePairExactly) {
+  struct IntegerFormat {
+    // Loom scalar type carried by both signed and unsigned interpretations.
+    loom_scalar_type_t scalar_type;
+    // Signed decoder selected by check.expect.close.signed.
+    loom_testbench_numeric_kind_t signed_kind;
+    // Unsigned decoder selected by check.expect.close.unsigned.
+    loom_testbench_numeric_kind_t unsigned_kind;
+    // Scalar carrier produced by the value materializer.
+    iree_tooling_value_kind_t tooling_kind;
+  };
+  const IntegerFormat formats[] = {
+      {LOOM_SCALAR_TYPE_I8, LOOM_TESTBENCH_NUMERIC_I8,
+       LOOM_TESTBENCH_NUMERIC_U8, IREE_TOOLING_VALUE_KIND_I32},
+      {LOOM_SCALAR_TYPE_I16, LOOM_TESTBENCH_NUMERIC_I16,
+       LOOM_TESTBENCH_NUMERIC_U16, IREE_TOOLING_VALUE_KIND_I32},
+      {LOOM_SCALAR_TYPE_I32, LOOM_TESTBENCH_NUMERIC_I32,
+       LOOM_TESTBENCH_NUMERIC_U32, IREE_TOOLING_VALUE_KIND_I32},
+      {LOOM_SCALAR_TYPE_I64, LOOM_TESTBENCH_NUMERIC_I64,
+       LOOM_TESTBENCH_NUMERIC_U64, IREE_TOOLING_VALUE_KIND_I64},
+  };
+  for (const auto& actual_format : formats) {
+    for (const auto& expected_format : formats) {
+      SCOPED_TRACE(::testing::Message()
+                   << loom_scalar_type_name(actual_format.scalar_type)
+                   << " versus "
+                   << loom_scalar_type_name(expected_format.scalar_type));
+      iree_tooling_value_t actual = {.kind = actual_format.tooling_kind};
+      if (actual_format.tooling_kind == IREE_TOOLING_VALUE_KIND_I32) {
+        actual.storage.i32 = 42;
+      } else {
+        actual.storage.i64 = 42;
+      }
+      iree_tooling_value_t expected = {.kind = expected_format.tooling_kind};
+      if (expected_format.tooling_kind == IREE_TOOLING_VALUE_KIND_I32) {
+        expected.storage.i32 = 42;
+      } else {
+        expected.storage.i64 = 42;
+      }
+      loom_testbench_expectation_plan_t signed_expectation = {
+          .kind = LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED,
+          .integer_close =
+              {
+                  .actual_numeric_kind =
+                      static_cast<uint8_t>(actual_format.signed_kind),
+                  .expected_numeric_kind =
+                      static_cast<uint8_t>(expected_format.signed_kind),
+              },
+      };
+      ExpectScalarComparison(actual_format.scalar_type,
+                             expected_format.scalar_type, signed_expectation,
+                             actual, expected, true);
+      loom_testbench_expectation_plan_t unsigned_expectation = {
+          .kind = LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED,
+          .integer_close =
+              {
+                  .actual_numeric_kind =
+                      static_cast<uint8_t>(actual_format.unsigned_kind),
+                  .expected_numeric_kind =
+                      static_cast<uint8_t>(expected_format.unsigned_kind),
+              },
+      };
+      ExpectScalarComparison(actual_format.scalar_type,
+                             expected_format.scalar_type, unsigned_expectation,
+                             actual, expected, true);
+    }
+  }
+}
+
+TEST_F(ExpectationTest, PreservesExactIntegerDistanceAtExtrema) {
+  loom_testbench_expectation_plan_t signed_expectation = {
+      .kind = LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED,
+      .integer_close =
+          {
+              .maximum_distance = 1,
+              .actual_numeric_kind = LOOM_TESTBENCH_NUMERIC_I64,
+              .expected_numeric_kind = LOOM_TESTBENCH_NUMERIC_I64,
+          },
+  };
+  iree_tooling_value_t actual = {.kind = IREE_TOOLING_VALUE_KIND_I64};
+  iree_tooling_value_t expected = {.kind = IREE_TOOLING_VALUE_KIND_I64};
+  actual.storage.i64 = INT64_C(9007199254740993);
+  expected.storage.i64 = INT64_C(9007199254740994);
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_I64, LOOM_SCALAR_TYPE_I64,
+                         signed_expectation, actual, expected, true);
+
+  signed_expectation.integer_close.maximum_distance = INT64_MAX;
+  actual.storage.i64 = INT64_MIN;
+  expected.storage.i64 = INT64_MAX;
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_I64, LOOM_SCALAR_TYPE_I64,
+                         signed_expectation, actual, expected, false);
+
+  signed_expectation.integer_close.maximum_distance = 0;
+  signed_expectation.integer_close.actual_numeric_kind =
+      LOOM_TESTBENCH_NUMERIC_I8;
+  actual.kind = IREE_TOOLING_VALUE_KIND_I32;
+  actual.storage.i32 = -1;
+  expected.kind = IREE_TOOLING_VALUE_KIND_I64;
+  expected.storage.i64 = -1;
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_I64,
+                         signed_expectation, actual, expected, true);
+
+  loom_testbench_expectation_plan_t unsigned_expectation = {
+      .kind = LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED,
+      .integer_close =
+          {
+              .maximum_distance = 1,
+              .actual_numeric_kind = LOOM_TESTBENCH_NUMERIC_U64,
+              .expected_numeric_kind = LOOM_TESTBENCH_NUMERIC_U64,
+          },
+  };
+  actual.kind = IREE_TOOLING_VALUE_KIND_I64;
+  expected.kind = IREE_TOOLING_VALUE_KIND_I64;
+  actual.storage.u64 = UINT64_MAX;
+  expected.storage.u64 = UINT64_MAX - 1;
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_I64, LOOM_SCALAR_TYPE_I64,
+                         unsigned_expectation, actual, expected, true);
+  unsigned_expectation.integer_close.maximum_distance = 0;
+  unsigned_expectation.integer_close.actual_numeric_kind =
+      LOOM_TESTBENCH_NUMERIC_U8;
+  unsigned_expectation.integer_close.expected_numeric_kind =
+      LOOM_TESTBENCH_NUMERIC_U16;
+  actual.kind = IREE_TOOLING_VALUE_KIND_I32;
+  actual.storage.i32 = UINT8_MAX;
+  expected.kind = IREE_TOOLING_VALUE_KIND_I32;
+  expected.storage.i32 = UINT8_MAX;
+  ExpectScalarComparison(LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_I16,
+                         unsigned_expectation, actual, expected, true);
 }
 
 TEST_F(ExpectationTest, ComparesInfinitiesIndependentlyOfTolerance) {
@@ -226,13 +484,13 @@ TEST_F(ExpectationTest, ComparesInfinitiesIndependentlyOfTolerance) {
       actual.storage.f64 = comparison.actual;
       iree_tooling_value_t expected = {.kind = IREE_TOOLING_VALUE_KIND_F64};
       expected.storage.f64 = comparison.expected;
-      loom_testbench_close_expectation_plan_t close = {
+      loom_testbench_approximate_expectation_plan_t approximate = {
           .absolute_tolerance = tolerance,
           .relative_tolerance = tolerance,
-          .nan_policy = LOOM_CHECK_EXPECT_CLOSE_NAN_DIFFERENT,
+          .nan_policy = LOOM_CHECK_EXPECT_APPROXIMATE_NAN_DIFFERENT,
       };
-      ExpectScalarClose(LOOM_SCALAR_TYPE_F64, actual, expected, close,
-                        comparison.matched);
+      ExpectScalarApproximate(LOOM_SCALAR_TYPE_F64, actual, expected,
+                              approximate, comparison.matched);
     }
   }
 }
@@ -385,7 +643,7 @@ TEST_F(ExpectationTest, ObservesCompletedDeviceWritesAndCacheFailures) {
        {0u, static_cast<uint32_t>(IREE_HAL_MEMORY_TYPE_HOST_COHERENT)}) {
     for (auto kind :
          {LOOM_TESTBENCH_EXPECTATION_EQUAL, LOOM_TESTBENCH_EXPECTATION_BITWISE,
-          LOOM_TESTBENCH_EXPECTATION_CLOSE}) {
+          LOOM_TESTBENCH_EXPECTATION_APPROXIMATE}) {
       SCOPED_TRACE(loom_testbench_expectation_kind_name(kind));
       auto actual = iree::hal::testing::MakeMappedTransferBuffer(coherence);
       auto expected = iree::hal::testing::MakeMappedTransferBuffer(coherence);
@@ -397,7 +655,12 @@ TEST_F(ExpectationTest, ObservesCompletedDeviceWritesAndCacheFailures) {
           .kind = kind,
           .type = loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
                                       loom_dim_pack_static(1), 0),
-          .close = {.nan_policy = LOOM_CHECK_EXPECT_CLOSE_NAN_DIFFERENT},
+          .approximate =
+              {
+                  .nan_policy = LOOM_CHECK_EXPECT_APPROXIMATE_NAN_DIFFERENT,
+                  .actual_numeric_kind = LOOM_TESTBENCH_NUMERIC_F32,
+                  .expected_numeric_kind = LOOM_TESTBENCH_NUMERIC_F32,
+              },
       };
       IREE_ASSERT_OK(loom_module_define_value(module, expectation.type,
                                               &expectation.actual_value_id));
@@ -483,10 +746,18 @@ check.case @buffer_expectations {
   %expected_f16 = check.generate.fill value(0.5005) : tensor<2xf16>
   %actual_bf16 = check.generate.fill value(0.25) : tensor<2xbf16>
   %expected_bf16 = check.generate.fill value(0.2505) : tensor<2xbf16>
+  %expected_f64 = check.generate.fill value(0.5005) : tensor<2xf64>
+  %actual_i8 = check.generate.fill value(41) : tensor<3xi8>
+  %expected_i64 = check.generate.fill value(42) : tensor<3xi64>
+  %actual_u8 = check.generate.fill value(-2) : tensor<3xi8>
+  %expected_u16 = check.generate.fill value(255) : tensor<3xi16>
   check.expect.shape value(%actual_iota) shape([%m]) : tensor<[%m]xi32>
-  check.expect.close actual(%actual) expected(%expected) atol(0.01) rtol(0.0) nan(different) : tensor<4xf32>
-  check.expect.close actual(%actual_f16) expected(%expected_f16) atol(0.01) rtol(0.0) nan(different) : tensor<2xf16>
-  check.expect.close actual(%actual_bf16) expected(%expected_bf16) atol(0.01) rtol(0.0) nan(different) : tensor<2xbf16>
+  check.expect.approximate actual(%actual) expected(%expected) atol(0.01) rtol(0.0) nan(different) : tensor<4xf32>, tensor<4xf32>
+  check.expect.approximate actual(%actual_f16) expected(%expected_f16) atol(0.01) rtol(0.0) nan(different) : tensor<2xf16>, tensor<2xf16>
+  check.expect.approximate actual(%actual_bf16) expected(%expected_bf16) atol(0.01) rtol(0.0) nan(different) : tensor<2xbf16>, tensor<2xbf16>
+  check.expect.approximate actual(%actual_f16) expected(%expected_f64) atol(0.01) rtol(0.0) nan(different) : tensor<2xf16>, tensor<2xf64>
+  check.expect.close.signed actual(%actual_i8) expected(%expected_i64) max_distance(1) : tensor<3xi8>, tensor<3xi64>
+  check.expect.close.unsigned actual(%actual_u8) expected(%expected_u16) max_distance(1) : tensor<3xi8>, tensor<3xi16>
   check.return
 }
 )");
@@ -496,11 +767,20 @@ check.case @buffer_expectations {
   ASSERT_EQ(plan.issue_count, 0u);
   ASSERT_EQ(plan.case_count, 1u);
   const loom_testbench_case_plan_t& case_plan = plan.cases[0];
-  ASSERT_EQ(case_plan.expectation_count, 4u);
+  ASSERT_EQ(case_plan.expectation_count, 7u);
   EXPECT_EQ(case_plan.expectations[0].kind, LOOM_TESTBENCH_EXPECTATION_SHAPE);
-  EXPECT_EQ(case_plan.expectations[1].kind, LOOM_TESTBENCH_EXPECTATION_CLOSE);
-  EXPECT_EQ(case_plan.expectations[2].kind, LOOM_TESTBENCH_EXPECTATION_CLOSE);
-  EXPECT_EQ(case_plan.expectations[3].kind, LOOM_TESTBENCH_EXPECTATION_CLOSE);
+  EXPECT_EQ(case_plan.expectations[1].kind,
+            LOOM_TESTBENCH_EXPECTATION_APPROXIMATE);
+  EXPECT_EQ(case_plan.expectations[2].kind,
+            LOOM_TESTBENCH_EXPECTATION_APPROXIMATE);
+  EXPECT_EQ(case_plan.expectations[3].kind,
+            LOOM_TESTBENCH_EXPECTATION_APPROXIMATE);
+  EXPECT_EQ(case_plan.expectations[4].kind,
+            LOOM_TESTBENCH_EXPECTATION_APPROXIMATE);
+  EXPECT_EQ(case_plan.expectations[5].kind,
+            LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED);
+  EXPECT_EQ(case_plan.expectations[6].kind,
+            LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED);
 
   loom_testbench_value_table_t table = {};
   IREE_ASSERT_OK(loom_testbench_value_table_initialize_case(
@@ -516,8 +796,8 @@ check.case @buffer_expectations {
   IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(&case_plan, &table,
                                                            nullptr, &report));
 
-  EXPECT_EQ(report.expectation_count, 4u);
-  EXPECT_EQ(report.passed_count, 4u);
+  EXPECT_EQ(report.expectation_count, 7u);
+  EXPECT_EQ(report.passed_count, 7u);
   EXPECT_EQ(report.failure_count, 0u);
 
   loom_testbench_expectation_report_deinitialize(&report);
@@ -525,12 +805,16 @@ check.case @buffer_expectations {
   loom_module_free(module);
 }
 
-TEST_F(ExpectationTest, ReportsBufferCloseMismatchDetails) {
+TEST_F(ExpectationTest, ReportsTypedBufferMismatchDetails) {
   loom_module_t* module = ParseModule(R"(
 check.case @buffer_mismatch {
-  %actual = check.generate.fill value(1.0) : tensor<4xf32>
-  %expected = check.generate.fill value(1.2) : tensor<4xf32>
-  check.expect.close actual(%actual) expected(%expected) atol(0.01) rtol(0.0) nan(different) : tensor<4xf32>
+  %actual_float = check.generate.fill value(1.0) : tensor<4xf16>
+  %expected_float = check.generate.fill value(1.2) : tensor<4xf64>
+  %actual_integer = check.generate.fill value(-1) : tensor<4xi8>
+  %expected_integer = check.generate.fill value(1) : tensor<4xi16>
+  check.expect.approximate actual(%actual_float) expected(%expected_float) atol(0.01) rtol(0.0) nan(different) : tensor<4xf16>, tensor<4xf64>
+  check.expect.close.signed actual(%actual_integer) expected(%expected_integer) max_distance(1) : tensor<4xi8>, tensor<4xi16>
+  check.expect.close.unsigned actual(%actual_integer) expected(%expected_integer) max_distance(1) : tensor<4xi8>, tensor<4xi16>
   check.return
 }
 )");
@@ -554,11 +838,23 @@ check.case @buffer_mismatch {
   IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(&case_plan, &table,
                                                            nullptr, &report));
 
-  ASSERT_EQ(report.failure_count, 1u);
+  ASSERT_EQ(report.failure_count, 3u);
+  EXPECT_EQ(report.failures[0].diagnostic_ref,
+            LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 6));
+  EXPECT_EQ(report.failures[1].diagnostic_ref,
+            LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 7));
+  EXPECT_EQ(report.failures[2].diagnostic_ref,
+            LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 8));
   EXPECT_THAT(FailureDetail(report, report.failures[0]),
               ::testing::HasSubstr("element at index 0"));
   EXPECT_THAT(FailureDetail(report, report.failures[0]),
-              ::testing::HasSubstr("not close"));
+              ::testing::HasSubstr("actual f16"));
+  EXPECT_THAT(FailureDetail(report, report.failures[0]),
+              ::testing::HasSubstr("expected f64"));
+  EXPECT_THAT(FailureDetail(report, report.failures[1]),
+              ::testing::HasSubstr("actual i8 -1"));
+  EXPECT_THAT(FailureDetail(report, report.failures[2]),
+              ::testing::HasSubstr("actual u8 255"));
 
   loom_testbench_expectation_report_deinitialize(&report);
   loom_testbench_value_table_deinitialize(&table);

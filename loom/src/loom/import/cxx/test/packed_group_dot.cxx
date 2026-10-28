@@ -77,9 +77,9 @@ LOOM_CHECK_CASE(parallel_codes) {
   // Independent integer products per eight lanes sum to 96. Two groups,
   // scaled by one half and biased by 3.25, give exactly 99.25. Their absolute
   // products sum to 320, giving a scaled magnitude of 160 + 3.25 = 653/4.
-  loom::check::expect_close(output, loom::check::fill<1, float>(99.25f),
-                            (653.0 / 4.0) * kGroupErrorFactor, 0.0,
-                            "different");
+  loom::check::expect_approximate(output, loom::check::fill<1, float>(99.25f),
+                                  (653.0 / 4.0) * kGroupErrorFactor, 0.0,
+                                  loom::check::nan_policy::different);
   loom::check::expect_bitwise(loom::check::slice<1>(storage, 0),
                               loom::check::fill<1, float>(999.0f));
   loom::check::expect_bitwise(loom::check::slice<1>(storage, 2),
@@ -111,9 +111,9 @@ LOOM_CHECK_CASE(crossed_codes) {
   // Independent integer products per eight lanes sum to -34. The full group's
   // absolute products sum to 276, giving a scaled magnitude of 138 + 3.25 =
   // 565/4.
-  loom::check::expect_close(output, loom::check::fill<1, float>(-30.75f),
-                            (565.0 / 4.0) * kGroupErrorFactor, 0.0,
-                            "different");
+  loom::check::expect_approximate(output, loom::check::fill<1, float>(-30.75f),
+                                  (565.0 / 4.0) * kGroupErrorFactor, 0.0,
+                                  loom::check::nan_policy::different);
   loom::check::expect_bitwise(loom::check::slice<1>(storage, 0),
                               loom::check::fill<1, float>(999.0f));
   loom::check::expect_bitwise(loom::check::slice<1>(storage, 2),

@@ -316,10 +316,10 @@ check.case public @grouped_paged_attention_varied {
   %shared_state = check.generate.fill value(-30000.0) : tensor<[%pairs]x2x2xf32>
   %shared_output = check.generate.fill value(-120000.0) : tensor<[%pairs]x2x128xf32>
   kernel.launch @grouped_paged_attention_shared[%pairs](%pairs, %lengths, %query, %pages, %keys, %values, %shared_state, %shared_output) : [index](index, tensor<[%pairs]x2xi32>, tensor<[%pairs]x2x128xf32>, tensor<[%pairs]x64xi32>, tensor<64x128xf32>, tensor<64x128xf32>, tensor<[%pairs]x2x2xf32>, tensor<[%pairs]x2x128xf32>)
-  check.expect.close actual(%shared_serial_state) expected(%independent_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%pairs]x2x2xf32>
-  check.expect.close actual(%shared_serial_output) expected(%independent_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%pairs]x2x128xf32>
-  check.expect.close actual(%shared_state) expected(%independent_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%pairs]x2x2xf32>
-  check.expect.close actual(%shared_output) expected(%independent_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%pairs]x2x128xf32>
+  check.expect.approximate actual(%shared_serial_state) expected(%independent_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%pairs]x2x2xf32>, tensor<[%pairs]x2x2xf32>
+  check.expect.approximate actual(%shared_serial_output) expected(%independent_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%pairs]x2x128xf32>, tensor<[%pairs]x2x128xf32>
+  check.expect.approximate actual(%shared_state) expected(%independent_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%pairs]x2x2xf32>, tensor<[%pairs]x2x2xf32>
+  check.expect.approximate actual(%shared_output) expected(%independent_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<[%pairs]x2x128xf32>, tensor<[%pairs]x2x128xf32>
   check.return
 }
 
@@ -550,10 +550,10 @@ check.scenario @grouped_paged_attention_analytic {
     %second_state = check.tensor.view %state offset(8) : tensor<2x2xf32> -> tensor<2xf32>
     %second_output = check.tensor.view %output offset(512) : tensor<2x128xf32> -> tensor<128xf32>
     check.compare<@grouped_paged_attention_shared, @grouped_paged_attention_analytic_oracle>[%pairs](%pairs, %lengths, %query, %pages, %keys, %values, %state, %output) : [index](index, tensor<2xi32>, tensor<2x128xf32>, tensor<[%page_count]xi32>, tensor<[%backing_rows]x128xf32>, tensor<[%backing_rows]x128xf32>, tensor<2x2xf32>, tensor<2x128xf32>) -> () {
-      check.expect.close actual(%first_state) expected(%first_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<2xf32>
-      check.expect.close actual(%first_output) expected(%first_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<128xf32>
-      check.expect.close actual(%second_state) expected(%second_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<2xf32>
-      check.expect.close actual(%second_output) expected(%second_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<128xf32>
+      check.expect.approximate actual(%first_state) expected(%first_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<2xf32>, tensor<2xf32>
+      check.expect.approximate actual(%first_output) expected(%first_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<128xf32>, tensor<128xf32>
+      check.expect.approximate actual(%second_state) expected(%second_state) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<2xf32>, tensor<2xf32>
+      check.expect.approximate actual(%second_output) expected(%second_output) atol(2.0000000000000002e-05) rtol(2.0000000000000002e-05) nan(same) : tensor<128xf32>, tensor<128xf32>
     }
   }
   check.return

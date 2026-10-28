@@ -262,7 +262,7 @@ check.scenario @workgroup_scan_float_values {
     %input = check.generate.fill value(nan) : tensor<33xf32>
     %output = check.generate.fill value(2.0) : tensor<33x16xf32>
     check.compare<@workgroup_scan_float, @workgroup_scan_float_oracle>(%input, %output) : (tensor<33xf32>, tensor<33x16xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<33x16xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<33x16xf32>, tensor<33x16xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -279,7 +279,7 @@ check.scenario @workgroup_scan_float_values {
     %input = check.generate.random.uniform seed(%seed) range(0.98999999999999999 to 1.01) : tensor<33xf32>
     %output = check.generate.fill value(2.0) : tensor<33x16xf32>
     check.compare<@workgroup_scan_float, @workgroup_scan_float_oracle>(%input, %output) : (tensor<33xf32>, tensor<33x16xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(1.0000000000000001e-05) nan(same) : tensor<33x16xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(1.0000000000000001e-05) nan(same) : tensor<33x16xf32>, tensor<33x16xf32>
     }
   }
   check.return
@@ -340,7 +340,7 @@ check.scenario @workgroup_scan_vector_values {
     %input = check.generate.fill value(nan) : tensor<83x2xf32>
     %output = check.generate.fill value(2.0) : tensor<83x16x2xf32>
     check.compare<@workgroup_scan_vector, @workgroup_scan_vector_oracle>(%input, %output) : (tensor<83x2xf32>, tensor<83x16x2xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<83x16x2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<83x16x2xf32>, tensor<83x16x2xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -355,7 +355,7 @@ check.scenario @workgroup_scan_vector_values {
     %input = check.generate.random.uniform seed(%seed) range(0.98999999999999999 to 1.01) : tensor<83x2xf32>
     %output = check.generate.fill value(2.0) : tensor<83x16x2xf32>
     check.compare<@workgroup_scan_vector, @workgroup_scan_vector_oracle>(%input, %output) : (tensor<83x2xf32>, tensor<83x16x2xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(1.0000000000000001e-05) nan(same) : tensor<83x16x2xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(1.0000000000000001e-05) nan(same) : tensor<83x16x2xf32>, tensor<83x16x2xf32>
     }
   }
   check.return

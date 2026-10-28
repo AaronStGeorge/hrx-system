@@ -176,7 +176,7 @@ check.scenario @approximate_quantization_values {
     %amax = check.literal value(127.0) : f32
     %floating = check.generate.fill value(-123.0) : tensor<8xf32>
     check.compare<@approximate_quantization_shapes, @approximate_quantization_shapes_oracle>(%values, %scale, %amax, %floating) : (tensor<4xf32>, f32, f32, tensor<8xf32>) -> () {
-      check.expect.close actual(%floating) expected(%floating) atol(1.0) rtol(0.0) nan(different) : tensor<8xf32>
+      check.expect.approximate actual(%floating) expected(%floating) atol(1.0) rtol(0.0) nan(different) : tensor<8xf32>, tensor<8xf32>
     }
   }
   check.trial[64](%trial: index, %entropy: check.entropy) {
@@ -186,7 +186,7 @@ check.scenario @approximate_quantization_values {
     %amax = check.literal value(127.5) : f32
     %floating = check.generate.fill value(-123.0) : tensor<8xf32>
     check.compare<@approximate_quantization_shapes, @approximate_quantization_shapes_oracle>(%values, %scale, %amax, %floating) : (tensor<4xf32>, f32, f32, tensor<8xf32>) -> () {
-      check.expect.close actual(%floating) expected(%floating) atol(1.0) rtol(0.0) nan(different) : tensor<8xf32>
+      check.expect.approximate actual(%floating) expected(%floating) atol(1.0) rtol(0.0) nan(different) : tensor<8xf32>, tensor<8xf32>
     }
   }
   check.return

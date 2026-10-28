@@ -69,7 +69,7 @@ check.scenario @approximate_extended_math_f32_values {
     %approximate = check.tensor.view %output offset(0) : tensor<18xf32> -> tensor<12xf32>
     %extrema = check.tensor.view %output offset(48) : tensor<18xf32> -> tensor<6xf32>
     check.compare<@approximate_extended_math_f32, @approximate_extended_math_f32_oracle>(%output) : (tensor<18xf32>) -> () {
-      check.expect.close actual(%approximate) expected(%approximate) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<12xf32>
+      check.expect.approximate actual(%approximate) expected(%approximate) atol(9.9999999999999995e-07) rtol(9.9999999999999995e-07) nan(same) : tensor<12xf32>, tensor<12xf32>
       check.expect.bitwise actual(%extrema) expected(%extrema) : tensor<6xf32>
     }
   }

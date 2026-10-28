@@ -189,7 +189,7 @@ LOOM_CHECK_SCENARIO(flash_attention_values) {
           loom::check::expect_bitwise(query, query);
           loom::check::expect_bitwise(key, key);
           loom::check::expect_bitwise(value, value);
-          loom::check::expect_close(output, output, 0.0003, 0.0003);
+          loom::check::expect_approximate(output, output, 0.0003, 0.0003);
           loom::check::expect_bitwise(prefix, prefix);
           loom::check::expect_bitwise(suffix, suffix);
         });
@@ -209,7 +209,7 @@ LOOM_CHECK_SCENARIO(flash_attention_values) {
           loom::check::expect_bitwise(query, query);
           loom::check::expect_bitwise(key, key);
           loom::check::expect_bitwise(value, value);
-          loom::check::expect_close(output, output, 0.0003, 0.0003);
+          loom::check::expect_approximate(output, output, 0.0003, 0.0003);
           loom::check::expect_bitwise(prefix, prefix);
           loom::check::expect_bitwise(suffix, suffix);
         });
@@ -229,7 +229,7 @@ LOOM_CHECK_SCENARIO(flash_attention_values) {
           loom::check::expect_bitwise(query, query);
           loom::check::expect_bitwise(key, key);
           loom::check::expect_bitwise(value, value);
-          loom::check::expect_close(output, output, 0.0003, 0.0003);
+          loom::check::expect_approximate(output, output, 0.0003, 0.0003);
           loom::check::expect_bitwise(prefix, prefix);
           loom::check::expect_bitwise(suffix, suffix);
         });

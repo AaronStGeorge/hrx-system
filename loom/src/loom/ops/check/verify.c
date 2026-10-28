@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <math.h>
+
 #include "loom/error/error_catalog.h"
 #include "loom/error/parameter.h"
 #include "loom/ir/ancestry.h"
@@ -50,6 +52,22 @@ static iree_status_t loom_check_emit_positive_count(
       loom_param_string(IREE_SV("a positive finite domain size")),
   };
   return loom_check_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                         IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_check_emit_numeric_attr_value_error(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t attribute_name, double actual_value,
+    iree_string_view_t expected_constraint) {
+  char actual_value_buffer[32];
+  iree_snprintf(actual_value_buffer, sizeof(actual_value_buffer), "%.17g",
+                actual_value);
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(attribute_name),
+      loom_param_string(iree_make_cstring_view(actual_value_buffer)),
+      loom_param_string(expected_constraint),
+  };
+  return loom_check_emit(emitter, op, LOOM_ERR_STRUCTURE_064, params,
                          IREE_ARRAYSIZE(params));
 }
 
@@ -520,11 +538,105 @@ iree_status_t loom_check_expect_pair_verify(const loom_module_t* module,
                                        expected_type);
 }
 
+static bool loom_check_expect_numeric_type_isa(loom_type_t type,
+                                               bool require_float) {
+  if ((!loom_type_is_scalar(type) && !loom_type_is_shaped(type)) ||
+      loom_type_has_encoding(type)) {
+    return false;
+  }
+  const loom_scalar_type_t element_type = loom_type_element_type(type);
+  return require_float ? loom_scalar_type_is_float(element_type)
+                       : element_type >= LOOM_SCALAR_TYPE_I8 &&
+                             element_type <= LOOM_SCALAR_TYPE_I64;
+}
+
+static iree_status_t loom_check_expect_numeric_pair_verify(
+    const loom_module_t* module, const loom_op_t* op, bool require_float,
+    iree_diagnostic_emitter_t emitter) {
+  const loom_value_id_t actual_id = loom_op_const_operands(op)[0];
+  const loom_value_id_t expected_id = loom_op_const_operands(op)[1];
+  const loom_type_t actual_type = loom_module_value_type(module, actual_id);
+  const loom_type_t expected_type = loom_module_value_type(module, expected_id);
+  const iree_string_view_t expected_constraint =
+      require_float
+          ? IREE_SV("an unencoded scalar or shaped floating-point value")
+          : IREE_SV("an unencoded scalar or shaped i8, i16, i32, or i64 value");
+  if (!loom_check_expect_numeric_type_isa(actual_type, require_float)) {
+    return loom_check_emit_operand_type(emitter, op, IREE_SV("actual"),
+                                        actual_type, expected_constraint);
+  }
+  if (!loom_check_expect_numeric_type_isa(expected_type, require_float)) {
+    return loom_check_emit_operand_type(emitter, op, IREE_SV("expected"),
+                                        expected_type, expected_constraint);
+  }
+  if ((!op->parent_op || !loom_check_compare_isa(op->parent_op)) &&
+      !loom_type_shape_equal_after_value_remap(module, actual_type,
+                                               expected_type, /*remap=*/NULL)) {
+    return loom_check_emit_type_mismatch(emitter, op, IREE_SV("actual"),
+                                         actual_type, IREE_SV("expected"),
+                                         expected_type);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_check_expect_approximate_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_check_expect_numeric_pair_verify(
+      module, op, /*require_float=*/true, emitter));
+  const double absolute_tolerance = loom_check_expect_approximate_atol(op);
+  if (!isfinite(absolute_tolerance) || absolute_tolerance < 0.0) {
+    return loom_check_emit_numeric_attr_value_error(
+        emitter, op, IREE_SV("atol"), absolute_tolerance,
+        IREE_SV("a finite non-negative tolerance"));
+  }
+  const double relative_tolerance = loom_check_expect_approximate_rtol(op);
+  if (!isfinite(relative_tolerance) || relative_tolerance < 0.0) {
+    return loom_check_emit_numeric_attr_value_error(
+        emitter, op, IREE_SV("rtol"), relative_tolerance,
+        IREE_SV("a finite non-negative tolerance"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_expect_close_integer_verify(
+    const loom_module_t* module, const loom_op_t* op, int64_t max_distance,
+    iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_check_expect_numeric_pair_verify(
+      module, op, /*require_float=*/false, emitter));
+  if (max_distance >= 0) {
+    return iree_ok_status();
+  }
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("max_distance")),
+      loom_param_i64(max_distance),
+      loom_param_string(IREE_SV("a non-negative integer distance")),
+  };
+  return loom_check_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                         IREE_ARRAYSIZE(params));
+}
+
+iree_status_t loom_check_expect_close_signed_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_check_expect_close_integer_verify(
+      module, op, loom_check_expect_close_signed_max_distance(op), emitter);
+}
+
+iree_status_t loom_check_expect_close_unsigned_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_check_expect_close_integer_verify(
+      module, op, loom_check_expect_close_unsigned_max_distance(op), emitter);
+}
+
 static bool loom_check_expectation_pair_values(const loom_op_t* op,
                                                loom_value_id_t* out_actual,
                                                loom_value_id_t* out_expected) {
   if (loom_check_expect_equal_isa(op) || loom_check_expect_bitwise_isa(op) ||
-      loom_check_expect_close_isa(op)) {
+      loom_check_expect_approximate_isa(op) ||
+      loom_check_expect_close_signed_isa(op) ||
+      loom_check_expect_close_unsigned_isa(op)) {
     *out_actual = loom_op_const_operands(op)[0];
     *out_expected = loom_op_const_operands(op)[1];
     return true;
@@ -660,11 +772,10 @@ static iree_status_t loom_check_verify_compare_body(
     const loom_type_t actual_type = loom_block_arg_type(module, block, i);
     const loom_type_t expected_type =
         loom_block_arg_type(module, block, actual_count + i);
-    bool matches = false;
-    IREE_RETURN_IF_ERROR(loom_function_call_argument_type_matches(
-        module, actual_type, expected_type, &pair_remap, /*flags=*/0,
-        &matches));
-    if (matches) {
+    if (loom_type_equal_after_value_remap(module, expected_type, actual_type,
+                                          &pair_remap) ||
+        loom_type_shape_equal_after_value_remap(module, expected_type,
+                                                actual_type, &pair_remap)) {
       continue;
     }
     return loom_check_emit_type_mismatch(
@@ -676,7 +787,9 @@ static iree_status_t loom_check_verify_compare_body(
   loom_block_for_each_op(block, nested_op) {
     if (loom_check_expect_equal_isa(nested_op) ||
         loom_check_expect_bitwise_isa(nested_op) ||
-        loom_check_expect_close_isa(nested_op) ||
+        loom_check_expect_approximate_isa(nested_op) ||
+        loom_check_expect_close_signed_isa(nested_op) ||
+        loom_check_expect_close_unsigned_isa(nested_op) ||
         loom_check_expect_shape_isa(nested_op) ||
         loom_check_expect_event_isa(nested_op) ||
         loom_check_return_isa(nested_op)) {

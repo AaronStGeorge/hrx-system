@@ -35,7 +35,7 @@ enum {
   LOOM_OP_CHECK_ORACLE_CALL = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 13),
   LOOM_OP_CHECK_EXPECT_EQUAL = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 14),
   LOOM_OP_CHECK_EXPECT_BITWISE = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 15),
-  LOOM_OP_CHECK_EXPECT_CLOSE = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 16),
+  LOOM_OP_CHECK_EXPECT_APPROXIMATE = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 16),
   LOOM_OP_CHECK_EXPECT_SHAPE = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 17),
   LOOM_OP_CHECK_EXPECT_EVENT = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 18),
   LOOM_OP_CHECK_BENCHMARK = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 19),
@@ -47,7 +47,9 @@ enum {
   LOOM_OP_CHECK_ENTROPY_FORK = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 25),
   LOOM_OP_CHECK_ENTROPY_READ = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 26),
   LOOM_OP_CHECK_GENERATE = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 27),
-  LOOM_OP_CHECK_COUNT_ = 28,
+  LOOM_OP_CHECK_EXPECT_CLOSE_SIGNED = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 28),
+  LOOM_OP_CHECK_EXPECT_CLOSE_UNSIGNED = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 29),
+  LOOM_OP_CHECK_COUNT_ = 30,
 };
 
 // Check symbol visibility. Absent (0) means private.
@@ -71,11 +73,11 @@ typedef enum loom_check_file_write_npy_mode_e {
 } loom_check_file_write_npy_mode_t;
 
 // NaN comparison policy for approximate expectations.
-typedef enum loom_check_expect_close_nan_e {
-  LOOM_CHECK_EXPECT_CLOSE_NAN_SAME = 1,
-  LOOM_CHECK_EXPECT_CLOSE_NAN_DIFFERENT = 2,
-  LOOM_CHECK_EXPECT_CLOSE_NAN_COUNT_ = 3,
-} loom_check_expect_close_nan_t;
+typedef enum loom_check_expect_approximate_nan_e {
+  LOOM_CHECK_EXPECT_APPROXIMATE_NAN_SAME = 1,
+  LOOM_CHECK_EXPECT_APPROXIMATE_NAN_DIFFERENT = 2,
+  LOOM_CHECK_EXPECT_APPROXIMATE_NAN_COUNT_ = 3,
+} loom_check_expect_approximate_nan_t;
 
 // LOOM_OP_CHECK_CASE: Named correctness harness.
 // check.case @empty {
@@ -357,24 +359,24 @@ iree_status_t loom_check_expect_pair_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_CHECK_EXPECT_CLOSE: Requires actual and expected floating-point values to be approximately equal.
-// check.expect.close actual(%actual) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<[%m]xf32>
-LOOM_DEFINE_ISA(loom_check_expect_close_isa, LOOM_OP_CHECK_EXPECT_CLOSE)
-LOOM_DEFINE_OPERAND(loom_check_expect_close_actual, 0)
-LOOM_DEFINE_OPERAND(loom_check_expect_close_expected, 1)
-LOOM_DEFINE_ATTR_F64(loom_check_expect_close_atol, 0)
-LOOM_DEFINE_ATTR_F64(loom_check_expect_close_rtol, 1)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_check_expect_close_nan, 2, loom_check_expect_close_nan_t)
-iree_status_t loom_check_expect_close_build(
+// LOOM_OP_CHECK_EXPECT_APPROXIMATE: Requires independently typed floating-point values to be approximately equal.
+// check.expect.approximate actual(%actual) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<[%m]xbf16>, tensor<[%m]xf64>
+LOOM_DEFINE_ISA(loom_check_expect_approximate_isa, LOOM_OP_CHECK_EXPECT_APPROXIMATE)
+LOOM_DEFINE_OPERAND(loom_check_expect_approximate_actual, 0)
+LOOM_DEFINE_OPERAND(loom_check_expect_approximate_expected, 1)
+LOOM_DEFINE_ATTR_F64(loom_check_expect_approximate_atol, 0)
+LOOM_DEFINE_ATTR_F64(loom_check_expect_approximate_rtol, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_check_expect_approximate_nan, 2, loom_check_expect_approximate_nan_t)
+iree_status_t loom_check_expect_approximate_build(
     loom_builder_t* builder,
     loom_value_id_t actual,
     loom_value_id_t expected,
     double atol,
     double rtol,
-    loom_check_expect_close_nan_t nan,
+    loom_check_expect_approximate_nan_t nan,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_check_expect_pair_verify(
+iree_status_t loom_check_expect_approximate_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
@@ -495,7 +497,7 @@ iree_status_t loom_check_trial_verify(
 
 // LOOM_OP_CHECK_COMPARE: Ends a trial by independently invoking target and oracle subjects and checking their explicit typed observations. A single subject is used for both profiles; an optional second subject supplies the oracle implementation. Call parameters configure the target. A distinct ordinary function oracle receives only the shared arguments; another product-shaped oracle receives the same call parameters as the target.
 // check.compare<@logarithm>(%bits) : (i32) -> [actual(%actual: f32), expected(%expected: f32)] {
-//   check.expect.close actual(%actual) expected(%expected) atol(0.0) rtol(1.0e-6) nan(same) : f32
+//   check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(1.0e-6) nan(same) : f32, f32
 // }
 LOOM_DEFINE_ISA(loom_check_compare_isa, LOOM_OP_CHECK_COMPARE)
 LOOM_DEFINE_SEGMENTED_OPERANDS(loom_check_compare_call_parameters, 0)
@@ -607,6 +609,40 @@ iree_status_t loom_check_generate_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_check_generate_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_CHECK_EXPECT_CLOSE_SIGNED: Requires independently typed signed integer values to be within an exact distance.
+// check.expect.close.signed actual(%actual) expected(%expected) max_distance(2) : tensor<[%m]xi16>, tensor<[%m]xi32>
+LOOM_DEFINE_ISA(loom_check_expect_close_signed_isa, LOOM_OP_CHECK_EXPECT_CLOSE_SIGNED)
+LOOM_DEFINE_OPERAND(loom_check_expect_close_signed_actual, 0)
+LOOM_DEFINE_OPERAND(loom_check_expect_close_signed_expected, 1)
+LOOM_DEFINE_ATTR_I64(loom_check_expect_close_signed_max_distance, 0)
+iree_status_t loom_check_expect_close_signed_build(
+    loom_builder_t* builder,
+    loom_value_id_t actual,
+    loom_value_id_t expected,
+    int64_t max_distance,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_check_expect_close_signed_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_CHECK_EXPECT_CLOSE_UNSIGNED: Requires independently typed unsigned integer bit patterns to be within an exact distance.
+// check.expect.close.unsigned actual(%actual) expected(%expected) max_distance(2) : tensor<[%m]xi8>, tensor<[%m]xi16>
+LOOM_DEFINE_ISA(loom_check_expect_close_unsigned_isa, LOOM_OP_CHECK_EXPECT_CLOSE_UNSIGNED)
+LOOM_DEFINE_OPERAND(loom_check_expect_close_unsigned_actual, 0)
+LOOM_DEFINE_OPERAND(loom_check_expect_close_unsigned_expected, 1)
+LOOM_DEFINE_ATTR_I64(loom_check_expect_close_unsigned_max_distance, 0)
+iree_status_t loom_check_expect_close_unsigned_build(
+    loom_builder_t* builder,
+    loom_value_id_t actual,
+    loom_value_id_t expected,
+    int64_t max_distance,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_check_expect_close_unsigned_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

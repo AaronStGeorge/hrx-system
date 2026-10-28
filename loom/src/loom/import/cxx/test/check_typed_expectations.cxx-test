@@ -1,0 +1,45 @@
+// RUN: roundtrip
+#include <stdfloat>
+#include <loomcxx/check.h>
+
+using std::bfloat16_t;
+
+LOOM_CHECK_CASE(typed_scalars) {
+  loom::check::expect_approximate(1.0bf16, 1.0001, 0.001, 0.0,
+                                  loom::check::nan_policy::different);
+  loom::check::expect_close_signed((signed char)-7, (long long)-6, 1);
+  loom::check::expect_close_unsigned((unsigned char)41, (unsigned short)42, 1);
+}
+
+LOOM_CHECK_CASE(typed_tensors) {
+  const auto actual_float = loom::check::fill<4, bfloat16_t>(1.0bf16);
+  const auto expected_float = loom::check::fill<4, double>(1.0001);
+  const auto actual_integer = loom::check::fill<4, signed char>(41);
+  const auto expected_integer = loom::check::fill<4, long long>(42);
+  loom::check::expect_approximate(actual_float, expected_float, 0.001, 0.0);
+  loom::check::expect_close_signed(actual_integer, expected_integer, 1);
+}
+
+// ----
+check.case public @typed_scalars {
+  %0 = check.literal value(1.0) : bf16
+  %1 = check.literal value(1.0001) : f64
+  check.expect.approximate actual(%0) expected(%1) atol(0.001) rtol(0.0) nan(different) : bf16, f64
+  %2 = check.literal value(-7) : i8
+  %3 = check.literal value(-6) : i64
+  check.expect.close.signed actual(%2) expected(%3) max_distance(1) : i8, i64
+  %4 = check.literal value(41) : i8
+  %5 = check.literal value(42) : i16
+  check.expect.close.unsigned actual(%4) expected(%5) max_distance(1) : i8, i16
+  check.return
+}
+
+check.case public @typed_tensors {
+  %actual_float = check.generate.fill value(1.0) : tensor<4xbf16>
+  %expected_float = check.generate.fill value(1.0001) : tensor<4xf64>
+  %actual_integer = check.generate.fill value(41) : tensor<4xi8>
+  %expected_integer = check.generate.fill value(42) : tensor<4xi64>
+  check.expect.approximate actual(%actual_float) expected(%expected_float) atol(0.001) rtol(0.0) nan(same) : tensor<4xbf16>, tensor<4xf64>
+  check.expect.close.signed actual(%actual_integer) expected(%expected_integer) max_distance(1) : tensor<4xi8>, tensor<4xi64>
+  check.return
+}

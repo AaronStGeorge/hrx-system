@@ -320,9 +320,9 @@ check.scenario @arithmetic_f16_values {
     %product = check.generate.fill value(-123.0) : tensor<1xf16>
     %difference = check.tensor.view %difference_storage offset(8) : tensor<22xf16> -> tensor<14xf16>
     check.compare<@arithmetic_f16, @arithmetic_f16_oracle>(%lhs, %rhs, %sum, %difference, %product) : (tensor<14xi16>, tensor<14xi16>, tensor<1xf16>, tensor<14xf16>, tensor<1xf16>) -> () {
-      check.expect.close actual(%sum) expected(%sum) atol(0.0) rtol(0.0) nan(same) : tensor<1xf16>
-      check.expect.close actual(%difference_storage) expected(%difference_storage) atol(0.0) rtol(0.0) nan(same) : tensor<22xf16>
-      check.expect.close actual(%product) expected(%product) atol(0.0) rtol(0.0) nan(same) : tensor<1xf16>
+      check.expect.approximate actual(%sum) expected(%sum) atol(0.0) rtol(0.0) nan(same) : tensor<1xf16>, tensor<1xf16>
+      check.expect.approximate actual(%difference_storage) expected(%difference_storage) atol(0.0) rtol(0.0) nan(same) : tensor<22xf16>, tensor<22xf16>
+      check.expect.approximate actual(%product) expected(%product) atol(0.0) rtol(0.0) nan(same) : tensor<1xf16>, tensor<1xf16>
     }
   }
   check.return
@@ -366,9 +366,9 @@ check.scenario @arithmetic_bf16_values {
     %product = check.generate.fill value(-123.0) : tensor<1xbf16>
     %difference = check.tensor.view %difference_storage offset(8) : tensor<22xbf16> -> tensor<14xbf16>
     check.compare<@arithmetic_bf16, @arithmetic_bf16_oracle>(%lhs, %rhs, %sum, %difference, %product) : (tensor<14xi16>, tensor<14xi16>, tensor<1xbf16>, tensor<14xbf16>, tensor<1xbf16>) -> () {
-      check.expect.close actual(%sum) expected(%sum) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>
-      check.expect.close actual(%difference_storage) expected(%difference_storage) atol(0.0) rtol(0.0) nan(same) : tensor<22xbf16>
-      check.expect.close actual(%product) expected(%product) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>
+      check.expect.approximate actual(%sum) expected(%sum) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>, tensor<1xbf16>
+      check.expect.approximate actual(%difference_storage) expected(%difference_storage) atol(0.0) rtol(0.0) nan(same) : tensor<22xbf16>, tensor<22xbf16>
+      check.expect.approximate actual(%product) expected(%product) atol(0.0) rtol(0.0) nan(same) : tensor<1xbf16>, tensor<1xbf16>
     }
   }
   check.return

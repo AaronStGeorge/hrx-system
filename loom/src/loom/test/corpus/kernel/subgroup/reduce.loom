@@ -169,7 +169,7 @@ check.scenario @subgroup_float_reduction_values {
     %output = check.generate.fill value(123.0) : tensor<4x64x4xf32>
     check.compare<@subgroup_float_reductions, @subgroup_float_reductions_oracle>(%input, %output) : (tensor<64x4xf32>, tensor<4x64x4xf32>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<64x4xf32>
-      check.expect.close actual(%output) expected(%output) atol(1.9999999999999999e-06) rtol(2.0000000000000002e-05) nan(same) : tensor<4x64x4xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.9999999999999999e-06) rtol(2.0000000000000002e-05) nan(same) : tensor<4x64x4xf32>, tensor<4x64x4xf32>
     }
   }
   check.trial[8](%trial: index, %entropy: check.entropy) {
@@ -178,7 +178,7 @@ check.scenario @subgroup_float_reduction_values {
     %output = check.generate.fill value(123.0) : tensor<4x64x4xf32>
     check.compare<@subgroup_float_reductions, @subgroup_float_reductions_oracle>(%input, %output) : (tensor<64x4xf32>, tensor<4x64x4xf32>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<64x4xf32>
-      check.expect.close actual(%output) expected(%output) atol(1.9999999999999999e-06) rtol(2.0000000000000002e-05) nan(same) : tensor<4x64x4xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.9999999999999999e-06) rtol(2.0000000000000002e-05) nan(same) : tensor<4x64x4xf32>, tensor<4x64x4xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -189,7 +189,7 @@ check.scenario @subgroup_float_reduction_values {
     %extrema = check.tensor.view %output offset(2048) : tensor<4x64x4xf32> -> tensor<2x64x4xf32>
     check.compare<@subgroup_float_reductions, @subgroup_float_reductions_oracle>(%input, %output) : (tensor<64x4xf32>, tensor<4x64x4xf32>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<64x4xf32>
-      check.expect.close actual(%extrema) expected(%extrema) atol(0.0) rtol(0.0) nan(same) : tensor<2x64x4xf32>
+      check.expect.approximate actual(%extrema) expected(%extrema) atol(0.0) rtol(0.0) nan(same) : tensor<2x64x4xf32>, tensor<2x64x4xf32>
     }
   }
   check.trial[1](%trial: index, %entropy: check.entropy) {
@@ -200,7 +200,7 @@ check.scenario @subgroup_float_reduction_values {
     %extrema = check.tensor.view %output offset(2048) : tensor<4x64x4xf32> -> tensor<2x64x4xf32>
     check.compare<@subgroup_float_reductions, @subgroup_float_reductions_oracle>(%input, %output) : (tensor<64x4xi32>, tensor<4x64x4xf32>) -> () {
       check.expect.bitwise actual(%input) expected(%input) : tensor<64x4xi32>
-      check.expect.close actual(%extrema) expected(%extrema) atol(0.0) rtol(0.0) nan(same) : tensor<2x64x4xf32>
+      check.expect.approximate actual(%extrema) expected(%extrema) atol(0.0) rtol(0.0) nan(same) : tensor<2x64x4xf32>, tensor<2x64x4xf32>
     }
   }
   check.return
@@ -402,7 +402,7 @@ check.scenario @subgroup_ieee_extrema_values {
     %input = check.generate.iota offset(-8388608) step(4194304) period(3) : tensor<64x4xi32>
     %output = check.generate.fill value(123.0) : tensor<64x2x4xf32>
     check.compare<@subgroup_ieee_extrema, @subgroup_ieee_extrema_oracle>(%input, %output) : (tensor<64x4xi32>, tensor<64x2x4xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<64x2x4xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<64x2x4xf32>, tensor<64x2x4xf32>
     }
   }
   check.return

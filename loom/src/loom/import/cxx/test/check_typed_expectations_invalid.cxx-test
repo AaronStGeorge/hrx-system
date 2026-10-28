@@ -1,0 +1,46 @@
+// RUN: verify
+// ERROR@+1: LOWERING/059 "check.expect.approximate requires" "scoped enum"
+[[loom::op("check.expect.approximate")]] void wrong_nan_parameter(float, double, double, double, int);
+
+// ====
+#include <loomcxx/check.h>
+
+LOOM_CHECK_CASE(approximate_integer_operand) {
+  // ERROR@+1: LOWERING/059 "typed expectation requires two floating-point scalars or tensors"
+  loom::check::expect_approximate(1, 1.0, 0.0, 0.0);
+}
+
+// ====
+#include <loomcxx/check.h>
+
+LOOM_CHECK_CASE(integer_close_float_operand) {
+  // ERROR@+1: LOWERING/059 "typed expectation requires two fixed-width integer scalars or tensors"
+  loom::check::expect_close_signed(1.0f, 1, 0);
+}
+
+// ====
+#include <loomcxx/check.h>
+
+LOOM_CHECK_CASE(mixed_scalar_and_tensor) {
+  const auto expected = loom::check::fill<2, float>(1.0f);
+  // ERROR@+1: LOWERING/059 "typed expectation operands must both be scalars or both be tensors"
+  loom::check::expect_approximate(1.0f, expected, 0.0, 0.0);
+}
+
+// ====
+#include <loomcxx/check.h>
+
+LOOM_CHECK_CASE(mismatched_tensor_shapes) {
+  const auto actual = loom::check::fill<2, int>(1);
+  const auto expected = loom::check::fill<3, long long>(1);
+  // ERROR@+1: LOWERING/059 "typed expectation tensor shapes must match"
+  loom::check::expect_close_signed(actual, expected, 0);
+}
+
+// ====
+#include <loomcxx/check.h>
+
+LOOM_CHECK_CASE(maximum_distance_out_of_range) {
+  // ERROR@+1: LOWERING/059 "check maximum distance must be a non-negative integer constant no greater than INT64_MAX"
+  loom::check::expect_close_unsigned(1, 1, 0xffffffffffffffffULL);
+}

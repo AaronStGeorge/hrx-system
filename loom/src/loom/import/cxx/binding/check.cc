@@ -14,6 +14,7 @@
 #include <cxx/types.h>
 
 #include <limits>
+#include <string>
 
 #include "loom/import/cxx/binding/launch.h"
 #include "loom/import/cxx/source/attributes.h"
@@ -52,6 +53,58 @@ void require_tensor_extent(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
   }
 }
 
+bool is_expectation_element(loom_scalar_type_t element, bool require_float) {
+  return require_float ? loom_scalar_type_is_float(element)
+                       : element >= LOOM_SCALAR_TYPE_I8 &&
+                             element <= LOOM_SCALAR_TYPE_I64;
+}
+
+void resolve_typed_expectation(cxx::TranslationUnit& unit,
+                               Diagnostics& diagnostics, Types& types,
+                               const cxx::Type* actual_type,
+                               const cxx::Type* expected_type,
+                               bool require_float, cxx::AST* owner,
+                               CheckIntrinsic& result) {
+  const auto& actual = types.partition(actual_type, owner);
+  const auto& expected = types.partition(expected_type, owner);
+  const char* family = require_float ? "floating-point" : "fixed-width integer";
+  if (actual.kind == ValueKind::SSA && expected.kind == ValueKind::SSA) {
+    result.scalar_type = types.get(actual_type, owner);
+    result.expected_scalar_type = types.get(expected_type, owner);
+    if (loom_type_kind(result.scalar_type) != LOOM_TYPE_SCALAR ||
+        loom_type_kind(result.expected_scalar_type) != LOOM_TYPE_SCALAR ||
+        !is_expectation_element(loom_type_element_type(result.scalar_type),
+                                require_float) ||
+        !is_expectation_element(
+            loom_type_element_type(result.expected_scalar_type),
+            require_float)) {
+      diagnostics.reject(unit, owner,
+                         std::string("typed expectation requires two ") +
+                             family + " scalars or tensors");
+    }
+    return;
+  }
+  if (actual.kind != ValueKind::Tensor || expected.kind != ValueKind::Tensor) {
+    diagnostics.reject(unit, owner,
+                       "typed expectation operands must both be scalars or "
+                       "both be tensors");
+  }
+  result.source_tensor = static_cast<const TensorPartition*>(&actual);
+  result.expected_tensor = static_cast<const TensorPartition*>(&expected);
+  if (result.source_tensor->extent != result.expected_tensor->extent ||
+      result.source_tensor->vector_lane_count !=
+          result.expected_tensor->vector_lane_count) {
+    diagnostics.reject(unit, owner,
+                       "typed expectation tensor shapes must match");
+  }
+  if (!is_expectation_element(result.source_tensor->element, require_float) ||
+      !is_expectation_element(result.expected_tensor->element, require_float)) {
+    diagnostics.reject(unit, owner,
+                       std::string("typed expectation requires two ") + family +
+                           " scalars or tensors");
+  }
+}
+
 }  // namespace
 
 std::optional<CheckIntrinsic::Operation> CheckIntrinsic::parse_operation(
@@ -59,8 +112,14 @@ std::optional<CheckIntrinsic::Operation> CheckIntrinsic::parse_operation(
   if (name == "check.expect.equal") {
     return Operation::Equal;
   }
-  if (name == "check.expect.close") {
-    return Operation::Close;
+  if (name == "check.expect.approximate") {
+    return Operation::Approximate;
+  }
+  if (name == "check.expect.close.signed") {
+    return Operation::CloseSigned;
+  }
+  if (name == "check.expect.close.unsigned") {
+    return Operation::CloseUnsigned;
   }
   if (name == "check.generate.fill") {
     return Operation::Fill;
@@ -207,29 +266,33 @@ std::optional<CheckIntrinsic> CheckIntrinsic::resolve(
       }
       break;
     }
-    case Operation::Close: {
+    case Operation::Approximate: {
       if (!returns_void || parameters.size() != 5 ||
-          types.unqualified(parameters[0]) !=
-              types.unqualified(parameters[1]) ||
           types.unqualified(parameters[2])->kind() != cxx::TypeKind::kDouble ||
           types.unqualified(parameters[3])->kind() != cxx::TypeKind::kDouble ||
-          !is_string_type(types, parameters[4])) {
+          !cxx::type_cast<cxx::ScopedEnumType>(
+              types.unqualified(parameters[4]))) {
         fail(
-            "check.expect.close requires void(T, T, double, double, const "
-            "char*)");
+            "check.expect.approximate requires void(Actual, Expected, double, "
+            "double, scoped enum)");
       }
-      const auto& partition = types.partition(parameters[0], owner);
-      if (partition.kind == ValueKind::SSA && types.is_float(parameters[0])) {
-        result.scalar_type = types.get(parameters[0], owner);
-      } else if (partition.kind == ValueKind::Tensor &&
-                 types.is_float(static_cast<const TensorPartition&>(partition)
-                                    .lane_type)) {
-        result.source_tensor = static_cast<const TensorPartition*>(&partition);
-      } else {
+      resolve_typed_expectation(unit, diagnostics, types, parameters[0],
+                                parameters[1], /*require_float=*/true, owner,
+                                result);
+      break;
+    }
+    case Operation::CloseSigned:
+    case Operation::CloseUnsigned: {
+      if (!returns_void || parameters.size() != 3 ||
+          types.unqualified(parameters[2]) !=
+              unit.control()->getUnsignedLongLongIntType()) {
         fail(
-            "check.expect.close requires floating-point scalar or tensor "
-            "operands");
+            "integer close expectations require void(Actual, Expected, "
+            "unsigned long long)");
       }
+      resolve_typed_expectation(unit, diagnostics, types, parameters[0],
+                                parameters[1], /*require_float=*/false, owner,
+                                result);
       break;
     }
     case Operation::Slice: {
@@ -425,7 +488,9 @@ std::optional<CheckIntrinsic> CheckIntrinsic::resolve(
 bool CheckIntrinsic::equivalent(const CheckIntrinsic& other) const {
   return operation == other.operation &&
          loom_type_equal(scalar_type, other.scalar_type) &&
+         loom_type_equal(expected_scalar_type, other.expected_scalar_type) &&
          source_tensor == other.source_tensor &&
+         expected_tensor == other.expected_tensor &&
          result_tensor == other.result_tensor && kernel == other.kernel &&
          subject == other.subject && oracle == other.oracle &&
          trial_count == other.trial_count &&

@@ -51,7 +51,7 @@ check.scenario @semantic_behavior_class_values {
   check.trial[...](%trial: index, %entropy: check.entropy) {
     // Runtime inputs that distinguish the represented behavior.
     check.compare<@semantic_behavior_class, @semantic_behavior_class_oracle>(%input, %output) : (tensor<...>, tensor<...>) -> () {
-      check.expect.close actual(...) expected(...) atol(...) rtol(...) nan(...) : ...
+      check.expect.approximate actual(...) expected(...) atol(...) rtol(...) nan(...) : ..., ...
     }
   }
   check.return

@@ -120,7 +120,7 @@ check.scenario @root_values {
   check.trial[14](%trial: index, %entropy: check.entropy) {
     %output = check.generate.fill value(0.0) : tensor<6xf32>
     check.compare<@root_boundary_observations>(%trial, %output) : (index, tensor<6xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.4012984643248171e-45) rtol(1.0000000000000001e-05) nan(same) : tensor<6xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.4012984643248171e-45) rtol(1.0000000000000001e-05) nan(same) : tensor<6xf32>, tensor<6xf32>
     }
   }
   check.trial[256](%trial: index, %entropy: check.entropy) {
@@ -130,7 +130,7 @@ check.scenario @root_values {
     %second_bits = check.entropy.read %second_source[%trial] : check.entropy -> i64
     %output = check.generate.fill value(0.0) : tensor<6xf32>
     check.compare<@root_entropy_observations>(%first_bits, %second_bits, %output) : (i64, i64, tensor<6xf32>) -> () {
-      check.expect.close actual(%output) expected(%output) atol(1.4012984643248171e-45) rtol(1.0000000000000001e-05) nan(same) : tensor<6xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(1.4012984643248171e-45) rtol(1.0000000000000001e-05) nan(same) : tensor<6xf32>, tensor<6xf32>
     }
   }
   check.return

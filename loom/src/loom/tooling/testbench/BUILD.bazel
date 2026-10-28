@@ -38,6 +38,7 @@ loom_cc_library(
     srcs = ["operation_plan.c"],
     deps = [
         ":api",
+        ":numeric_value",
         "//loom/src/loom/ir:builders",
     ],
 )
@@ -150,6 +151,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "numeric_value",
+    srcs = ["numeric_value.c"],
+    hdrs = ["numeric_value.h"],
+    deps = [
+        "//loom/src/loom/ir:type_headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+loom_cc_library(
     name = "compiled_provider",
     hdrs = ["compiled_provider.h"],
     deps = [
@@ -165,6 +178,7 @@ loom_cc_library(
     hdrs = ["expectation.h"],
     deps = [
         ":device_event",
+        ":numeric_value",
         ":source_report",
         ":testbench",
         ":value_materializer",
@@ -218,9 +232,20 @@ loom_cc_library(
     hdrs = ["reference.h"],
     deps = [
         ":invocation",
+        ":numeric_value",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/hal",
+    ],
+)
+
+loom_cc_test(
+    name = "numeric_value_test",
+    srcs = ["numeric_value_test.cc"],
+    deps = [
+        ":numeric_value",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -321,6 +346,7 @@ loom_cc_test(
     deps = [
         ":device_event",
         ":expectation",
+        ":numeric_value",
         ":testbench",
         ":value_materializer",
         "//loom/src/loom/format/text:parser",

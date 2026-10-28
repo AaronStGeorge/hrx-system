@@ -191,8 +191,8 @@ check.scenario @vector_float_reduction_values {
     %direct = check.tensor.view %output offset(0) : tensor<3xf32> -> tensor<1xf32>
     %expected_direct = check.generate.fill value(28.0) : tensor<1xf32>
     check.compare<@vector_float_reductions>(%storage) : (tensor<19xf32>) -> () {
-      check.expect.close actual(%direct) expected(%expected_direct) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>
+      check.expect.approximate actual(%direct) expected(%expected_direct) atol(0.0) rtol(0.0) nan(same) : tensor<1xf32>, tensor<1xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<3xf32>, tensor<3xf32>
     }
   }
   check.return
@@ -206,7 +206,7 @@ check.scenario @vector_bfloat_dot_reduction_values {
     %output = check.tensor.view %storage offset(64) : tensor<18xf32> -> tensor<2xf32>
     %expected = check.generate.fill value(107.0) : tensor<2xf32>
     check.compare<@vector_bfloat_dot_reductions>(%lhs, %rhs, %storage) : (tensor<16xbf16>, tensor<16xbf16>, tensor<18xf32>) -> () {
-      check.expect.close actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<2xf32>
+      check.expect.approximate actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<2xf32>, tensor<2xf32>
     }
   }
   check.return
@@ -234,8 +234,8 @@ check.scenario @vector_float_extrema_reduction_values {
     %expected_input = check.generate.random.uniform seed(%input_seed) range(-999.0 to 999.0) : tensor<4xf32>
     %output = check.generate.fill value(0.0) : tensor<2xf32>
     check.compare<@vector_float_extrema_reductions>(%input, %output) : (tensor<4xf32>, tensor<2xf32>) -> () {
-      check.expect.close actual(%input) expected(%expected_input) atol(0.0) rtol(0.0) nan(same) : tensor<4xf32>
-      check.expect.close actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<2xf32>
+      check.expect.approximate actual(%input) expected(%expected_input) atol(0.0) rtol(0.0) nan(same) : tensor<4xf32>, tensor<4xf32>
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(0.0) nan(same) : tensor<2xf32>, tensor<2xf32>
     }
   }
   check.return

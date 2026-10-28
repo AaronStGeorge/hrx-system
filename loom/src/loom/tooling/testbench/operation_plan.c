@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "loom/ir/module.h"
+#include "loom/tooling/testbench/numeric_value.h"
 #include "loom/tooling/testbench/testbench.h"
 
 enum {
@@ -172,8 +173,10 @@ bool loom_testbench_plan_value_source(
 
 bool loom_testbench_is_expectation_op(const loom_op_t* op) {
   return loom_check_expect_equal_isa(op) || loom_check_expect_bitwise_isa(op) ||
-         loom_check_expect_close_isa(op) || loom_check_expect_shape_isa(op) ||
-         loom_check_expect_event_isa(op);
+         loom_check_expect_approximate_isa(op) ||
+         loom_check_expect_close_signed_isa(op) ||
+         loom_check_expect_close_unsigned_isa(op) ||
+         loom_check_expect_shape_isa(op) || loom_check_expect_event_isa(op);
 }
 
 bool loom_testbench_plan_expectation(
@@ -191,23 +194,37 @@ bool loom_testbench_plan_expectation(
     out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_BITWISE;
     out_expectation->actual_value_id = loom_check_expect_bitwise_actual(op);
     out_expectation->expected_value_id = loom_check_expect_bitwise_expected(op);
-  } else if (loom_check_expect_close_isa(op)) {
-    out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_CLOSE;
-    out_expectation->actual_value_id = loom_check_expect_close_actual(op);
-    out_expectation->expected_value_id = loom_check_expect_close_expected(op);
-    out_expectation->close.absolute_tolerance =
-        loom_check_expect_close_atol(op);
-    out_expectation->close.relative_tolerance =
-        loom_check_expect_close_rtol(op);
-    out_expectation->close.nan_policy =
-        (loom_check_expect_close_nan_t)loom_check_expect_close_nan(op);
-    if (out_expectation->close.absolute_tolerance < 0.0 ||
-        out_expectation->close.relative_tolerance < 0.0 ||
-        out_expectation->close.nan_policy <= 0 ||
-        out_expectation->close.nan_policy >=
-            LOOM_CHECK_EXPECT_CLOSE_NAN_COUNT_) {
+  } else if (loom_check_expect_approximate_isa(op)) {
+    out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_APPROXIMATE;
+    out_expectation->actual_value_id = loom_check_expect_approximate_actual(op);
+    out_expectation->expected_value_id =
+        loom_check_expect_approximate_expected(op);
+    out_expectation->approximate.absolute_tolerance =
+        loom_check_expect_approximate_atol(op);
+    out_expectation->approximate.relative_tolerance =
+        loom_check_expect_approximate_rtol(op);
+    out_expectation->approximate.nan_policy =
+        loom_check_expect_approximate_nan(op);
+  } else if (loom_check_expect_close_signed_isa(op) ||
+             loom_check_expect_close_unsigned_isa(op)) {
+    const bool is_signed = loom_check_expect_close_signed_isa(op);
+    out_expectation->kind = is_signed
+                                ? LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED
+                                : LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED;
+    out_expectation->actual_value_id =
+        is_signed ? loom_check_expect_close_signed_actual(op)
+                  : loom_check_expect_close_unsigned_actual(op);
+    out_expectation->expected_value_id =
+        is_signed ? loom_check_expect_close_signed_expected(op)
+                  : loom_check_expect_close_unsigned_expected(op);
+    const int64_t maximum_distance =
+        is_signed ? loom_check_expect_close_signed_max_distance(op)
+                  : loom_check_expect_close_unsigned_max_distance(op);
+    if (maximum_distance < 0) {
       return false;
     }
+    out_expectation->integer_close.maximum_distance =
+        (uint64_t)maximum_distance;
   } else if (loom_check_expect_shape_isa(op)) {
     out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_SHAPE;
     out_expectation->actual_value_id = loom_check_expect_shape_value(op);
@@ -241,8 +258,62 @@ bool loom_testbench_plan_expectation(
   switch (out_expectation->kind) {
     case LOOM_TESTBENCH_EXPECTATION_EQUAL:
     case LOOM_TESTBENCH_EXPECTATION_BITWISE:
-    case LOOM_TESTBENCH_EXPECTATION_CLOSE:
       return out_expectation->expected_value_id < module->values.count;
+    case LOOM_TESTBENCH_EXPECTATION_APPROXIMATE: {
+      if (out_expectation->expected_value_id >= module->values.count) {
+        return false;
+      }
+      const loom_type_t expected_type =
+          loom_testbench_value_type(module, out_expectation->expected_value_id);
+      const loom_testbench_numeric_type_t* actual_numeric_type =
+          loom_testbench_numeric_type_from_scalar_type(
+              loom_type_element_type(out_expectation->type));
+      const loom_testbench_numeric_type_t* expected_numeric_type =
+          loom_testbench_numeric_type_from_scalar_type(
+              loom_type_element_type(expected_type));
+      if (!actual_numeric_type || !expected_numeric_type ||
+          !loom_testbench_numeric_type_is_float(actual_numeric_type) ||
+          !loom_testbench_numeric_type_is_float(expected_numeric_type)) {
+        return false;
+      }
+      out_expectation->approximate.actual_numeric_kind =
+          (uint8_t)actual_numeric_type->kind;
+      out_expectation->approximate.expected_numeric_kind =
+          (uint8_t)expected_numeric_type->kind;
+      return true;
+    }
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED:
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED: {
+      if (out_expectation->expected_value_id >= module->values.count) {
+        return false;
+      }
+      const bool is_signed =
+          out_expectation->kind == LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED;
+      const loom_type_t expected_type =
+          loom_testbench_value_type(module, out_expectation->expected_value_id);
+      const loom_scalar_type_t actual_element_type =
+          loom_type_element_type(out_expectation->type);
+      const loom_scalar_type_t expected_element_type =
+          loom_type_element_type(expected_type);
+      const loom_testbench_numeric_type_t* actual_numeric_type =
+          is_signed ? loom_testbench_numeric_type_from_signed_scalar_type(
+                          actual_element_type)
+                    : loom_testbench_numeric_type_from_unsigned_scalar_type(
+                          actual_element_type);
+      const loom_testbench_numeric_type_t* expected_numeric_type =
+          is_signed ? loom_testbench_numeric_type_from_signed_scalar_type(
+                          expected_element_type)
+                    : loom_testbench_numeric_type_from_unsigned_scalar_type(
+                          expected_element_type);
+      if (!actual_numeric_type || !expected_numeric_type) {
+        return false;
+      }
+      out_expectation->integer_close.actual_numeric_kind =
+          (uint8_t)actual_numeric_type->kind;
+      out_expectation->integer_close.expected_numeric_kind =
+          (uint8_t)expected_numeric_type->kind;
+      return true;
+    }
     case LOOM_TESTBENCH_EXPECTATION_SHAPE: {
       if (out_expectation->shape.static_dimension_count >
           LOOM_TESTBENCH_MAX_SHAPE_RANK) {

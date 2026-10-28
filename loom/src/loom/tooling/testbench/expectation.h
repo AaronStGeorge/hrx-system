@@ -104,9 +104,10 @@ iree_string_view_t loom_testbench_expectation_failure_detail(
 // expectations and may be NULL when the case has none. A non-OK status means
 // the evaluator could not run; ordinary expectation mismatches are recorded in
 // |report|.
-// Scalar close comparisons use the planned source type, including narrow float
-// carriers. Equal infinities match; other infinite pairs fail independently of
-// tolerance. NaNs follow the expectation's explicit NaN policy.
+// Numerical comparisons decode each operand from its independently planned
+// source type. Equal infinities match; other infinite pairs fail independently
+// of tolerance. NaNs follow the expectation's explicit NaN policy, and integer
+// distances remain exact across widths.
 iree_status_t loom_testbench_evaluate_case_expectations(
     const loom_testbench_case_plan_t* case_plan,
     const loom_testbench_value_table_t* table,

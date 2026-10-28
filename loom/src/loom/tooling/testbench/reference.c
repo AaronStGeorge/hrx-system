@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
+#include "loom/tooling/testbench/numeric_value.h"
 
 typedef struct loom_testbench_reference_rank2_view_t {
   // Borrowed HAL buffer view.
@@ -44,48 +45,17 @@ typedef struct loom_testbench_reference_matmul_result_t {
   iree_host_size_t data_length;
 } loom_testbench_reference_matmul_result_t;
 
-typedef enum loom_testbench_reference_numeric_kind_e {
-  // Invalid or unset numeric kind.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_NONE = 0,
-  // 8-bit E4M3 finite-only float.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E4M3 = 1,
-  // 8-bit E5M2 float.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E5M2 = 2,
-  // IEEE f16.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_F16 = 3,
-  // bfloat16.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_BF16 = 4,
-  // IEEE f32.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_F32 = 5,
-  // IEEE f64.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_F64 = 6,
-  // Signed 8-bit integer.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_I8 = 7,
-  // Unsigned 8-bit integer.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_U8 = 8,
-  // Signed 16-bit integer.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_I16 = 9,
-  // Unsigned 16-bit integer.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_U16 = 10,
-  // Signed 32-bit integer.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_I32 = 11,
-  // Unsigned 32-bit integer.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_U32 = 12,
-  // Signed 64-bit integer.
-  LOOM_TESTBENCH_REFERENCE_NUMERIC_I64 = 13,
-} loom_testbench_reference_numeric_kind_t;
-
 typedef struct loom_testbench_reference_matmul_contract_t {
   // Numeric interpretation of lhs storage elements.
-  loom_testbench_reference_numeric_kind_t lhs;
+  const loom_testbench_numeric_type_t* lhs;
   // Numeric interpretation of rhs storage elements.
-  loom_testbench_reference_numeric_kind_t rhs;
+  const loom_testbench_numeric_type_t* rhs;
   // Numeric interpretation of init storage elements.
-  loom_testbench_reference_numeric_kind_t init;
+  const loom_testbench_numeric_type_t* init;
   // Numeric domain used for reference accumulation.
-  loom_testbench_reference_numeric_kind_t accumulator;
+  const loom_testbench_numeric_type_t* accumulator;
   // Numeric element kind written into the result buffer view.
-  loom_testbench_reference_numeric_kind_t result;
+  const loom_testbench_numeric_type_t* result;
 } loom_testbench_reference_matmul_contract_t;
 
 static iree_status_t loom_testbench_reference_value_buffer_view(
@@ -157,340 +127,27 @@ static iree_string_view_t loom_testbench_reference_module_string(
   return loom_string_table_get(&module->strings, string_id);
 }
 
-static const char* loom_testbench_reference_numeric_kind_name(
-    loom_testbench_reference_numeric_kind_t kind) {
-  switch (kind) {
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E4M3:
-      return "f8e4m3";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E5M2:
-      return "f8e5m2";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F16:
-      return "f16";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_BF16:
-      return "bf16";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F32:
-      return "f32";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F64:
-      return "f64";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I8:
-      return "i8";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U8:
-      return "u8";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I16:
-      return "i16";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U16:
-      return "u16";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I32:
-      return "i32";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U32:
-      return "u32";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I64:
-      return "i64";
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_NONE:
-      return "none";
-  }
-  return "unknown";
-}
-
-static bool loom_testbench_reference_numeric_kind_is_float(
-    loom_testbench_reference_numeric_kind_t kind) {
-  return kind >= LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E4M3 &&
-         kind <= LOOM_TESTBENCH_REFERENCE_NUMERIC_F64;
-}
-
-static bool loom_testbench_reference_numeric_kind_is_integer(
-    loom_testbench_reference_numeric_kind_t kind) {
-  return kind >= LOOM_TESTBENCH_REFERENCE_NUMERIC_I8 &&
-         kind <= LOOM_TESTBENCH_REFERENCE_NUMERIC_I64;
-}
-
-static bool loom_testbench_reference_numeric_kind_parse(
-    iree_string_view_t value,
-    loom_testbench_reference_numeric_kind_t* out_kind) {
-  static const struct {
-    iree_string_view_t name;
-    loom_testbench_reference_numeric_kind_t kind;
-  } kKinds[] = {
-      {IREE_SVL("f8e4m3"), LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E4M3},
-      {IREE_SVL("f8e5m2"), LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E5M2},
-      {IREE_SVL("f16"), LOOM_TESTBENCH_REFERENCE_NUMERIC_F16},
-      {IREE_SVL("bf16"), LOOM_TESTBENCH_REFERENCE_NUMERIC_BF16},
-      {IREE_SVL("f32"), LOOM_TESTBENCH_REFERENCE_NUMERIC_F32},
-      {IREE_SVL("f64"), LOOM_TESTBENCH_REFERENCE_NUMERIC_F64},
-      {IREE_SVL("i8"), LOOM_TESTBENCH_REFERENCE_NUMERIC_I8},
-      {IREE_SVL("u8"), LOOM_TESTBENCH_REFERENCE_NUMERIC_U8},
-      {IREE_SVL("i16"), LOOM_TESTBENCH_REFERENCE_NUMERIC_I16},
-      {IREE_SVL("u16"), LOOM_TESTBENCH_REFERENCE_NUMERIC_U16},
-      {IREE_SVL("i32"), LOOM_TESTBENCH_REFERENCE_NUMERIC_I32},
-      {IREE_SVL("u32"), LOOM_TESTBENCH_REFERENCE_NUMERIC_U32},
-      {IREE_SVL("i64"), LOOM_TESTBENCH_REFERENCE_NUMERIC_I64},
-  };
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kKinds); ++i) {
-    if (iree_string_view_equal(value, kKinds[i].name)) {
-      *out_kind = kKinds[i].kind;
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool loom_testbench_reference_numeric_kind_from_element_type(
-    iree_hal_element_type_t element_type,
-    loom_testbench_reference_numeric_kind_t* out_kind) {
-  switch (element_type) {
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_8_E4M3_FN:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E4M3;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_8_E5M2:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E5M2;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_16:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_F16;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_BFLOAT_16:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_BF16;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_32:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_F32;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_FLOAT_64:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_F64;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_SINT_8:
-    case IREE_HAL_ELEMENT_TYPE_INT_8:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_I8;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_UINT_8:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_U8;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_SINT_16:
-    case IREE_HAL_ELEMENT_TYPE_INT_16:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_I16;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_UINT_16:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_U16;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_SINT_32:
-    case IREE_HAL_ELEMENT_TYPE_INT_32:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_I32;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_UINT_32:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_U32;
-      return true;
-    case IREE_HAL_ELEMENT_TYPE_SINT_64:
-    case IREE_HAL_ELEMENT_TYPE_INT_64:
-      *out_kind = LOOM_TESTBENCH_REFERENCE_NUMERIC_I64;
-      return true;
-    default:
-      return false;
-  }
-}
-
-static iree_hal_element_type_t
-loom_testbench_reference_numeric_kind_hal_element_type(
-    loom_testbench_reference_numeric_kind_t kind) {
-  switch (kind) {
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E4M3:
-      return IREE_HAL_ELEMENT_TYPE_FLOAT_8_E4M3_FN;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E5M2:
-      return IREE_HAL_ELEMENT_TYPE_FLOAT_8_E5M2;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F16:
-      return IREE_HAL_ELEMENT_TYPE_FLOAT_16;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_BF16:
-      return IREE_HAL_ELEMENT_TYPE_BFLOAT_16;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F32:
-      return IREE_HAL_ELEMENT_TYPE_FLOAT_32;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F64:
-      return IREE_HAL_ELEMENT_TYPE_FLOAT_64;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I8:
-      return IREE_HAL_ELEMENT_TYPE_SINT_8;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U8:
-      return IREE_HAL_ELEMENT_TYPE_UINT_8;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I16:
-      return IREE_HAL_ELEMENT_TYPE_SINT_16;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U16:
-      return IREE_HAL_ELEMENT_TYPE_UINT_16;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I32:
-      return IREE_HAL_ELEMENT_TYPE_SINT_32;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U32:
-      return IREE_HAL_ELEMENT_TYPE_UINT_32;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I64:
-      return IREE_HAL_ELEMENT_TYPE_SINT_64;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_NONE:
-      return IREE_HAL_ELEMENT_TYPE_NONE;
-  }
-  return IREE_HAL_ELEMENT_TYPE_NONE;
-}
-
-static iree_host_size_t loom_testbench_reference_numeric_kind_byte_count(
-    loom_testbench_reference_numeric_kind_t kind) {
-  return iree_hal_element_dense_byte_count(
-      loom_testbench_reference_numeric_kind_hal_element_type(kind));
-}
-
-static bool loom_testbench_reference_numeric_kind_matches_storage(
-    loom_testbench_reference_numeric_kind_t kind,
-    iree_hal_element_type_t element_type) {
-  if (loom_testbench_reference_numeric_kind_hal_element_type(kind) ==
-      element_type) {
-    return true;
-  }
-  if ((kind == LOOM_TESTBENCH_REFERENCE_NUMERIC_U8 ||
-       kind == LOOM_TESTBENCH_REFERENCE_NUMERIC_I8) &&
-      (element_type == IREE_HAL_ELEMENT_TYPE_SINT_8 ||
-       element_type == IREE_HAL_ELEMENT_TYPE_UINT_8 ||
-       element_type == IREE_HAL_ELEMENT_TYPE_INT_8)) {
-    return true;
-  }
-  if ((kind == LOOM_TESTBENCH_REFERENCE_NUMERIC_U32 ||
-       kind == LOOM_TESTBENCH_REFERENCE_NUMERIC_I32) &&
-      (element_type == IREE_HAL_ELEMENT_TYPE_SINT_32 ||
-       element_type == IREE_HAL_ELEMENT_TYPE_UINT_32 ||
-       element_type == IREE_HAL_ELEMENT_TYPE_INT_32)) {
-    return true;
-  }
-  return false;
-}
-
-static double loom_testbench_reference_load_float_element_at(
-    loom_testbench_reference_numeric_kind_t kind, const uint8_t* data,
-    iree_host_size_t element_offset) {
-  const uint8_t* element_data =
-      data +
-      element_offset * loom_testbench_reference_numeric_kind_byte_count(kind);
-  switch (kind) {
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E4M3: {
-      return (double)iree_math_f8e4m3fn_to_f32(element_data[0]);
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F8E5M2: {
-      return (double)iree_math_f8e5m2_to_f32(element_data[0]);
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F16: {
-      uint16_t bits = 0;
-      memcpy(&bits, element_data, sizeof(bits));
-      return (double)iree_math_f16_to_f32(bits);
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_BF16: {
-      uint16_t bits = 0;
-      memcpy(&bits, element_data, sizeof(bits));
-      return (double)iree_math_bf16_to_f32(bits);
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F32: {
-      float value = 0.0f;
-      memcpy(&value, element_data, sizeof(value));
-      return (double)value;
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F64: {
-      double value = 0.0;
-      memcpy(&value, element_data, sizeof(value));
-      return value;
-    }
-    default:
-      return 0.0;
-  }
-}
-
-static int64_t loom_testbench_reference_load_integer_element_at(
-    loom_testbench_reference_numeric_kind_t kind, const uint8_t* data,
-    iree_host_size_t element_offset) {
-  const uint8_t* element_data =
-      data +
-      element_offset * loom_testbench_reference_numeric_kind_byte_count(kind);
-  switch (kind) {
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I8: {
-      int8_t value = 0;
-      memcpy(&value, element_data, sizeof(value));
-      return value;
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U8: {
-      return element_data[0];
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I16: {
-      int16_t value = 0;
-      memcpy(&value, element_data, sizeof(value));
-      return value;
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U16: {
-      uint16_t value = 0;
-      memcpy(&value, element_data, sizeof(value));
-      return value;
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I32: {
-      int32_t value = 0;
-      memcpy(&value, element_data, sizeof(value));
-      return value;
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U32: {
-      uint32_t value = 0;
-      memcpy(&value, element_data, sizeof(value));
-      return value;
-    }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I64: {
-      int64_t value = 0;
-      memcpy(&value, element_data, sizeof(value));
-      return value;
-    }
-    default:
-      return 0;
-  }
-}
-
-static double loom_testbench_reference_load_numeric_element_as_float_at(
-    loom_testbench_reference_numeric_kind_t kind, const uint8_t* data,
-    iree_host_size_t element_offset) {
-  if (loom_testbench_reference_numeric_kind_is_float(kind)) {
-    return loom_testbench_reference_load_float_element_at(kind, data,
-                                                          element_offset);
-  }
-  return (double)loom_testbench_reference_load_integer_element_at(
-      kind, data, element_offset);
-}
-
-static bool loom_testbench_reference_integer_kind_contains(
-    loom_testbench_reference_numeric_kind_t kind, int64_t value) {
-  switch (kind) {
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I8:
-      return value >= INT8_MIN && value <= INT8_MAX;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U8:
-      return value >= 0 && value <= UINT8_MAX;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I16:
-      return value >= INT16_MIN && value <= INT16_MAX;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U16:
-      return value >= 0 && value <= UINT16_MAX;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I32:
-      return value >= INT32_MIN && value <= INT32_MAX;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U32:
-      return value >= 0 && value <= UINT32_MAX;
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I64:
-      return true;
-    default:
-      return false;
-  }
-}
-
 static iree_status_t loom_testbench_reference_store_float_element_at(
-    loom_testbench_reference_numeric_kind_t kind, double value, uint8_t* data,
-    iree_host_size_t element_offset) {
-  uint8_t* element_data =
-      data +
-      element_offset * loom_testbench_reference_numeric_kind_byte_count(kind);
-  switch (kind) {
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F16: {
+    const loom_testbench_numeric_type_t* numeric_type, double value,
+    uint8_t* data, iree_host_size_t element_offset) {
+  uint8_t* element_data = data + element_offset * numeric_type->byte_count;
+  switch (numeric_type->kind) {
+    case LOOM_TESTBENCH_NUMERIC_F16: {
       uint16_t bits = iree_math_f32_to_f16((float)value);
       memcpy(element_data, &bits, sizeof(bits));
       return iree_ok_status();
     }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_BF16: {
+    case LOOM_TESTBENCH_NUMERIC_BF16: {
       uint16_t bits = iree_math_f32_to_bf16((float)value);
       memcpy(element_data, &bits, sizeof(bits));
       return iree_ok_status();
     }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F32: {
+    case LOOM_TESTBENCH_NUMERIC_F32: {
       float stored_value = (float)value;
       memcpy(element_data, &stored_value, sizeof(stored_value));
       return iree_ok_status();
     }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_F64: {
+    case LOOM_TESTBENCH_NUMERIC_F64: {
       memcpy(element_data, &value, sizeof(value));
       return iree_ok_status();
     }
@@ -498,18 +155,16 @@ static iree_status_t loom_testbench_reference_store_float_element_at(
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "reference matmul cannot store floating result as %s",
-          loom_testbench_reference_numeric_kind_name(kind));
+          numeric_type->name);
   }
 }
 
 static iree_status_t loom_testbench_reference_store_integer_element_at(
-    loom_testbench_reference_numeric_kind_t kind, int64_t value, uint8_t* data,
-    iree_host_size_t element_offset) {
-  uint8_t* element_data =
-      data +
-      element_offset * loom_testbench_reference_numeric_kind_byte_count(kind);
-  switch (kind) {
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I8: {
+    const loom_testbench_numeric_type_t* numeric_type, int64_t value,
+    uint8_t* data, iree_host_size_t element_offset) {
+  uint8_t* element_data = data + element_offset * numeric_type->byte_count;
+  switch (numeric_type->kind) {
+    case LOOM_TESTBENCH_NUMERIC_I8: {
       if (value < INT8_MIN || value > INT8_MAX) {
         break;
       }
@@ -517,7 +172,7 @@ static iree_status_t loom_testbench_reference_store_integer_element_at(
       memcpy(element_data, &i8_value, sizeof(i8_value));
       return iree_ok_status();
     }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U8: {
+    case LOOM_TESTBENCH_NUMERIC_U8: {
       if (value < 0 || value > UINT8_MAX) {
         break;
       }
@@ -525,7 +180,7 @@ static iree_status_t loom_testbench_reference_store_integer_element_at(
       memcpy(element_data, &u8_value, sizeof(u8_value));
       return iree_ok_status();
     }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I16: {
+    case LOOM_TESTBENCH_NUMERIC_I16: {
       if (value < INT16_MIN || value > INT16_MAX) {
         break;
       }
@@ -533,7 +188,7 @@ static iree_status_t loom_testbench_reference_store_integer_element_at(
       memcpy(element_data, &i16_value, sizeof(i16_value));
       return iree_ok_status();
     }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U16: {
+    case LOOM_TESTBENCH_NUMERIC_U16: {
       if (value < 0 || value > UINT16_MAX) {
         break;
       }
@@ -541,7 +196,7 @@ static iree_status_t loom_testbench_reference_store_integer_element_at(
       memcpy(element_data, &u16_value, sizeof(u16_value));
       return iree_ok_status();
     }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I32: {
+    case LOOM_TESTBENCH_NUMERIC_I32: {
       if (value < INT32_MIN || value > INT32_MAX) {
         break;
       }
@@ -549,7 +204,7 @@ static iree_status_t loom_testbench_reference_store_integer_element_at(
       memcpy(element_data, &i32_value, sizeof(i32_value));
       return iree_ok_status();
     }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_U32: {
+    case LOOM_TESTBENCH_NUMERIC_U32: {
       if (value < 0 || value > UINT32_MAX) {
         break;
       }
@@ -557,7 +212,7 @@ static iree_status_t loom_testbench_reference_store_integer_element_at(
       memcpy(element_data, &u32_value, sizeof(u32_value));
       return iree_ok_status();
     }
-    case LOOM_TESTBENCH_REFERENCE_NUMERIC_I64: {
+    case LOOM_TESTBENCH_NUMERIC_I64: {
       memcpy(element_data, &value, sizeof(value));
       return iree_ok_status();
     }
@@ -565,11 +220,11 @@ static iree_status_t loom_testbench_reference_store_integer_element_at(
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "reference matmul cannot store integer result as %s",
-          loom_testbench_reference_numeric_kind_name(kind));
+          numeric_type->name);
   }
   return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                           "reference matmul result does not fit in %s",
-                          loom_testbench_reference_numeric_kind_name(kind));
+                          numeric_type->name);
 }
 
 static iree_status_t loom_testbench_reference_validate_tiled_matmul_shape(
@@ -636,7 +291,7 @@ static const loom_named_attr_t* loom_testbench_reference_find_attr(
 static iree_status_t loom_testbench_reference_read_numeric_contract_attr(
     const loom_module_t* module, loom_named_attr_slice_t attrs,
     iree_string_view_t name,
-    loom_testbench_reference_numeric_kind_t* out_kind) {
+    const loom_testbench_numeric_type_t** out_numeric_type) {
   const loom_named_attr_t* attr =
       loom_testbench_reference_find_attr(module, attrs, name);
   if (!attr) {
@@ -652,7 +307,8 @@ static iree_status_t loom_testbench_reference_read_numeric_contract_attr(
   }
   iree_string_view_t value = loom_testbench_reference_module_string(
       module, loom_attr_as_string_id(attr->value));
-  if (!loom_testbench_reference_numeric_kind_parse(value, out_kind)) {
+  *out_numeric_type = loom_testbench_numeric_type_parse(value);
+  if (!*out_numeric_type) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unsupported reference matmul numeric kind '%.*s'",
                             (int)value.size, value.data);
@@ -661,13 +317,13 @@ static iree_status_t loom_testbench_reference_read_numeric_contract_attr(
 }
 
 static iree_status_t loom_testbench_reference_default_matmul_contract(
-    iree_string_view_t oracle_name, loom_testbench_reference_numeric_kind_t lhs,
-    loom_testbench_reference_numeric_kind_t rhs,
-    loom_testbench_reference_numeric_kind_t init,
+    iree_string_view_t oracle_name, const loom_testbench_numeric_type_t* lhs,
+    const loom_testbench_numeric_type_t* rhs,
+    const loom_testbench_numeric_type_t* init,
     loom_testbench_reference_matmul_contract_t* out_contract) {
-  if (!loom_testbench_reference_numeric_kind_is_float(lhs) ||
-      !loom_testbench_reference_numeric_kind_is_float(rhs) ||
-      !loom_testbench_reference_numeric_kind_is_float(init)) {
+  if (!loom_testbench_numeric_type_is_float(lhs) ||
+      !loom_testbench_numeric_type_is_float(rhs) ||
+      !loom_testbench_numeric_type_is_float(init)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "%.*s requires explicit {lhs, rhs, accumulator, result} contract attrs "
@@ -678,8 +334,8 @@ static iree_status_t loom_testbench_reference_default_matmul_contract(
       .lhs = lhs,
       .rhs = rhs,
       .init = init,
-      .accumulator = LOOM_TESTBENCH_REFERENCE_NUMERIC_F64,
-      .result = LOOM_TESTBENCH_REFERENCE_NUMERIC_F32,
+      .accumulator = loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_F64),
+      .result = loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_F32),
   };
   return iree_ok_status();
 }
@@ -713,23 +369,23 @@ static iree_status_t loom_testbench_reference_validate_matmul_contract_domains(
     iree_string_view_t oracle_name,
     const loom_testbench_reference_matmul_contract_t* contract) {
   const bool floating_contract =
-      loom_testbench_reference_numeric_kind_is_float(contract->lhs) &&
-      loom_testbench_reference_numeric_kind_is_float(contract->rhs) &&
-      loom_testbench_reference_numeric_kind_is_float(contract->init) &&
-      loom_testbench_reference_numeric_kind_is_float(contract->accumulator) &&
-      loom_testbench_reference_numeric_kind_is_float(contract->result);
+      loom_testbench_numeric_type_is_float(contract->lhs) &&
+      loom_testbench_numeric_type_is_float(contract->rhs) &&
+      loom_testbench_numeric_type_is_float(contract->init) &&
+      loom_testbench_numeric_type_is_float(contract->accumulator) &&
+      loom_testbench_numeric_type_is_float(contract->result);
   const bool integer_contract =
-      loom_testbench_reference_numeric_kind_is_integer(contract->lhs) &&
-      loom_testbench_reference_numeric_kind_is_integer(contract->rhs) &&
-      loom_testbench_reference_numeric_kind_is_integer(contract->init) &&
-      loom_testbench_reference_numeric_kind_is_integer(contract->accumulator) &&
-      loom_testbench_reference_numeric_kind_is_integer(contract->result);
+      loom_testbench_numeric_type_is_integer(contract->lhs) &&
+      loom_testbench_numeric_type_is_integer(contract->rhs) &&
+      loom_testbench_numeric_type_is_integer(contract->init) &&
+      loom_testbench_numeric_type_is_integer(contract->accumulator) &&
+      loom_testbench_numeric_type_is_integer(contract->result);
   const bool quantized_float_contract =
-      loom_testbench_reference_numeric_kind_is_integer(contract->lhs) &&
-      loom_testbench_reference_numeric_kind_is_integer(contract->rhs) &&
-      loom_testbench_reference_numeric_kind_is_float(contract->init) &&
-      loom_testbench_reference_numeric_kind_is_float(contract->accumulator) &&
-      loom_testbench_reference_numeric_kind_is_float(contract->result);
+      loom_testbench_numeric_type_is_integer(contract->lhs) &&
+      loom_testbench_numeric_type_is_integer(contract->rhs) &&
+      loom_testbench_numeric_type_is_float(contract->init) &&
+      loom_testbench_numeric_type_is_float(contract->accumulator) &&
+      loom_testbench_numeric_type_is_float(contract->result);
   if (!floating_contract && !integer_contract && !quantized_float_contract) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -742,15 +398,15 @@ static iree_status_t loom_testbench_reference_validate_matmul_contract_domains(
 
 static iree_status_t loom_testbench_reference_validate_contract_storage(
     iree_string_view_t oracle_name, iree_string_view_t operand_name,
-    loom_testbench_reference_numeric_kind_t kind,
+    const loom_testbench_numeric_type_t* numeric_type,
     iree_hal_element_type_t element_type) {
-  if (!loom_testbench_reference_numeric_kind_matches_storage(kind,
-                                                             element_type)) {
+  if (!loom_testbench_numeric_type_matches_storage(numeric_type,
+                                                   element_type)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "%.*s %.*s storage does not match contract kind %s",
                             (int)oracle_name.size, oracle_name.data,
                             (int)operand_name.size, operand_name.data,
-                            loom_testbench_reference_numeric_kind_name(kind));
+                            numeric_type->name);
   }
   return iree_ok_status();
 }
@@ -763,18 +419,13 @@ static iree_status_t loom_testbench_reference_derive_matmul_contract(
     iree_hal_element_type_t init_element_type,
     iree_host_size_t non_numeric_attr_count,
     loom_testbench_reference_matmul_contract_t* out_contract) {
-  loom_testbench_reference_numeric_kind_t lhs =
-      LOOM_TESTBENCH_REFERENCE_NUMERIC_NONE;
-  loom_testbench_reference_numeric_kind_t rhs =
-      LOOM_TESTBENCH_REFERENCE_NUMERIC_NONE;
-  loom_testbench_reference_numeric_kind_t init =
-      LOOM_TESTBENCH_REFERENCE_NUMERIC_NONE;
-  if (!loom_testbench_reference_numeric_kind_from_element_type(lhs_element_type,
-                                                               &lhs) ||
-      !loom_testbench_reference_numeric_kind_from_element_type(rhs_element_type,
-                                                               &rhs) ||
-      !loom_testbench_reference_numeric_kind_from_element_type(
-          init_element_type, &init)) {
+  const loom_testbench_numeric_type_t* lhs =
+      loom_testbench_numeric_type_from_hal_element_type(lhs_element_type);
+  const loom_testbench_numeric_type_t* rhs =
+      loom_testbench_numeric_type_from_hal_element_type(rhs_element_type);
+  const loom_testbench_numeric_type_t* init =
+      loom_testbench_numeric_type_from_hal_element_type(init_element_type);
+  if (!lhs || !rhs || !init) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "%.*s has unsupported buffer element type",
                             (int)oracle_name.size, oracle_name.data);
@@ -842,7 +493,7 @@ static iree_status_t loom_testbench_reference_store_accumulator(
     const loom_testbench_reference_matmul_contract_t* contract,
     double floating_accumulator, int64_t integer_accumulator, uint8_t* result,
     iree_host_size_t result_offset) {
-  if (loom_testbench_reference_numeric_kind_is_float(contract->result)) {
+  if (loom_testbench_numeric_type_is_float(contract->result)) {
     return loom_testbench_reference_store_float_element_at(
         contract->result, floating_accumulator, result, result_offset);
   }
@@ -851,7 +502,7 @@ static iree_status_t loom_testbench_reference_store_accumulator(
 }
 
 static iree_status_t loom_testbench_reference_add_integer_product(
-    loom_testbench_reference_numeric_kind_t accumulator_kind, int64_t lhs,
+    const loom_testbench_numeric_type_t* accumulator_type, int64_t lhs,
     int64_t rhs, int64_t* inout_accumulator) {
   int64_t product = 0;
   int64_t next = 0;
@@ -861,11 +512,11 @@ static iree_status_t loom_testbench_reference_add_integer_product(
         IREE_STATUS_OUT_OF_RANGE,
         "reference matmul integer accumulator is out of i64 range");
   }
-  if (!loom_testbench_reference_integer_kind_contains(accumulator_kind, next)) {
+  if (!loom_testbench_numeric_type_contains_i64(accumulator_type, next)) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
         "reference matmul integer accumulator does not fit in %s",
-        loom_testbench_reference_numeric_kind_name(accumulator_kind));
+        accumulator_type->name);
   }
   *inout_accumulator = next;
   return iree_ok_status();
@@ -906,7 +557,7 @@ static iree_status_t loom_testbench_reference_compute_matmul(
   if (iree_status_is_ok(status)) {
     init_mapped = true;
     const bool floating_domain =
-        loom_testbench_reference_numeric_kind_is_float(contract->accumulator);
+        loom_testbench_numeric_type_is_float(contract->accumulator);
     const iree_host_size_t result_column_count =
         rhs_transposed ? rhs->rows : rhs->columns;
     for (iree_host_size_t row = 0; row < lhs->rows; ++row) {
@@ -916,20 +567,17 @@ static iree_status_t loom_testbench_reference_compute_matmul(
         double floating_accumulator = 0.0;
         int64_t integer_accumulator = 0;
         if (floating_domain) {
-          floating_accumulator =
-              loom_testbench_reference_load_numeric_element_as_float_at(
-                  contract->init, init_mapping.contents.data, init_offset);
+          floating_accumulator = loom_testbench_numeric_load_f64_at(
+              contract->init, init_mapping.contents.data, init_offset);
         } else {
-          integer_accumulator =
-              loom_testbench_reference_load_integer_element_at(
-                  contract->init, init_mapping.contents.data, init_offset);
-          if (!loom_testbench_reference_integer_kind_contains(
-                  contract->accumulator, integer_accumulator)) {
+          integer_accumulator = loom_testbench_numeric_load_i64_at(
+              contract->init, init_mapping.contents.data, init_offset);
+          if (!loom_testbench_numeric_type_contains_i64(contract->accumulator,
+                                                        integer_accumulator)) {
             status = iree_make_status(
                 IREE_STATUS_OUT_OF_RANGE,
                 "reference matmul init does not fit in accumulator %s",
-                loom_testbench_reference_numeric_kind_name(
-                    contract->accumulator));
+                contract->accumulator->name);
             break;
           }
         }
@@ -939,20 +587,16 @@ static iree_status_t loom_testbench_reference_compute_matmul(
                                                   ? column * rhs->columns + k
                                                   : k * rhs->columns + column;
           if (floating_domain) {
-            const double lhs_value =
-                loom_testbench_reference_load_numeric_element_as_float_at(
-                    contract->lhs, lhs_mapping.contents.data, lhs_offset);
-            const double rhs_value =
-                loom_testbench_reference_load_numeric_element_as_float_at(
-                    contract->rhs, rhs_mapping.contents.data, rhs_offset);
+            const double lhs_value = loom_testbench_numeric_load_f64_at(
+                contract->lhs, lhs_mapping.contents.data, lhs_offset);
+            const double rhs_value = loom_testbench_numeric_load_f64_at(
+                contract->rhs, rhs_mapping.contents.data, rhs_offset);
             floating_accumulator += lhs_value * rhs_value;
           } else {
-            const int64_t lhs_value =
-                loom_testbench_reference_load_integer_element_at(
-                    contract->lhs, lhs_mapping.contents.data, lhs_offset);
-            const int64_t rhs_value =
-                loom_testbench_reference_load_integer_element_at(
-                    contract->rhs, rhs_mapping.contents.data, rhs_offset);
+            const int64_t lhs_value = loom_testbench_numeric_load_i64_at(
+                contract->lhs, lhs_mapping.contents.data, lhs_offset);
+            const int64_t rhs_value = loom_testbench_numeric_load_i64_at(
+                contract->rhs, rhs_mapping.contents.data, rhs_offset);
             status = loom_testbench_reference_add_integer_product(
                 contract->accumulator, lhs_value, rhs_value,
                 &integer_accumulator);
@@ -1016,7 +660,7 @@ static iree_status_t loom_testbench_reference_compute_tiled_matmul(
   if (iree_status_is_ok(status)) {
     init_mapped = true;
     const bool floating_domain =
-        loom_testbench_reference_numeric_kind_is_float(contract->accumulator);
+        loom_testbench_numeric_type_is_float(contract->accumulator);
     for (iree_host_size_t outer_row = 0; outer_row < lhs->outer_rows;
          ++outer_row) {
       for (iree_host_size_t outer_column = 0; outer_column < rhs->outer_columns;
@@ -1031,20 +675,17 @@ static iree_status_t loom_testbench_reference_compute_tiled_matmul(
             double floating_accumulator = 0.0;
             int64_t integer_accumulator = 0;
             if (floating_domain) {
-              floating_accumulator =
-                  loom_testbench_reference_load_numeric_element_as_float_at(
-                      contract->init, init_mapping.contents.data, init_offset);
+              floating_accumulator = loom_testbench_numeric_load_f64_at(
+                  contract->init, init_mapping.contents.data, init_offset);
             } else {
-              integer_accumulator =
-                  loom_testbench_reference_load_integer_element_at(
-                      contract->init, init_mapping.contents.data, init_offset);
-              if (!loom_testbench_reference_integer_kind_contains(
+              integer_accumulator = loom_testbench_numeric_load_i64_at(
+                  contract->init, init_mapping.contents.data, init_offset);
+              if (!loom_testbench_numeric_type_contains_i64(
                       contract->accumulator, integer_accumulator)) {
                 status = iree_make_status(
                     IREE_STATUS_OUT_OF_RANGE,
                     "reference matmul init does not fit in accumulator %s",
-                    loom_testbench_reference_numeric_kind_name(
-                        contract->accumulator));
+                    contract->accumulator->name);
                 break;
               }
             }
@@ -1059,20 +700,16 @@ static iree_status_t loom_testbench_reference_compute_tiled_matmul(
                     loom_testbench_reference_rank4_element_offset(
                         rhs, outer_k, outer_column, inner_k, inner_column);
                 if (floating_domain) {
-                  const double lhs_value =
-                      loom_testbench_reference_load_numeric_element_as_float_at(
-                          contract->lhs, lhs_mapping.contents.data, lhs_offset);
-                  const double rhs_value =
-                      loom_testbench_reference_load_numeric_element_as_float_at(
-                          contract->rhs, rhs_mapping.contents.data, rhs_offset);
+                  const double lhs_value = loom_testbench_numeric_load_f64_at(
+                      contract->lhs, lhs_mapping.contents.data, lhs_offset);
+                  const double rhs_value = loom_testbench_numeric_load_f64_at(
+                      contract->rhs, rhs_mapping.contents.data, rhs_offset);
                   floating_accumulator += lhs_value * rhs_value;
                 } else {
-                  const int64_t lhs_value =
-                      loom_testbench_reference_load_integer_element_at(
-                          contract->lhs, lhs_mapping.contents.data, lhs_offset);
-                  const int64_t rhs_value =
-                      loom_testbench_reference_load_integer_element_at(
-                          contract->rhs, rhs_mapping.contents.data, rhs_offset);
+                  const int64_t lhs_value = loom_testbench_numeric_load_i64_at(
+                      contract->lhs, lhs_mapping.contents.data, lhs_offset);
+                  const int64_t rhs_value = loom_testbench_numeric_load_i64_at(
+                      contract->rhs, rhs_mapping.contents.data, rhs_offset);
                   status = loom_testbench_reference_add_integer_product(
                       contract->accumulator, lhs_value, rhs_value,
                       &integer_accumulator);
@@ -1272,8 +909,7 @@ static iree_status_t loom_testbench_reference_matmul_invoke(
   if (iree_allocator_is_null(host_allocator)) {
     host_allocator = iree_allocator_system();
   }
-  const iree_host_size_t result_element_size =
-      loom_testbench_reference_numeric_kind_byte_count(contract.result);
+  const iree_host_size_t result_element_size = contract.result->byte_count;
   iree_host_size_t result_byte_count = 0;
   if (!iree_host_size_checked_mul(result_count_checked, result_element_size,
                                   &result_byte_count)) {
@@ -1290,8 +926,8 @@ static iree_status_t loom_testbench_reference_matmul_invoke(
   if (iree_status_is_ok(status)) {
     status = loom_testbench_reference_allocate_matmul_result(
         options, lhs.rows, result_column_count,
-        loom_testbench_reference_numeric_kind_hal_element_type(contract.result),
-        result_values, result_byte_count, &result_view);
+        contract.result->hal_element_type, result_values, result_byte_count,
+        &result_view);
   }
   iree_allocator_free(host_allocator, result_values);
   if (!iree_status_is_ok(status)) {
@@ -1359,8 +995,7 @@ static iree_status_t loom_testbench_reference_tiled_matmul_invoke(
   if (iree_allocator_is_null(host_allocator)) {
     host_allocator = iree_allocator_system();
   }
-  const iree_host_size_t result_element_size =
-      loom_testbench_reference_numeric_kind_byte_count(contract.result);
+  const iree_host_size_t result_element_size = contract.result->byte_count;
   iree_host_size_t result_byte_count = 0;
   if (!iree_host_size_checked_mul(result_count_checked, result_element_size,
                                   &result_byte_count)) {
@@ -1378,9 +1013,8 @@ static iree_status_t loom_testbench_reference_tiled_matmul_invoke(
   if (iree_status_is_ok(status)) {
     status = loom_testbench_reference_allocate_tiled_matmul_result(
         options, lhs.outer_rows, rhs.outer_columns, lhs.inner_rows,
-        rhs.inner_columns,
-        loom_testbench_reference_numeric_kind_hal_element_type(contract.result),
-        result_values, result_byte_count, &result_view);
+        rhs.inner_columns, contract.result->hal_element_type, result_values,
+        result_byte_count, &result_view);
   }
   iree_allocator_free(host_allocator, result_values);
   if (!iree_status_is_ok(status)) {

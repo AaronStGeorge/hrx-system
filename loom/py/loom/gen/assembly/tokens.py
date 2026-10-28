@@ -105,6 +105,7 @@ KEYWORD_MAP: dict[str, str] = {
     "run": "LOOM_KW_RUN",
     "pool": "LOOM_KW_POOL",
     "source_signature": "LOOM_KW_SOURCE_SIGNATURE",
+    "max_distance": "LOOM_KW_MAX_DISTANCE",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The

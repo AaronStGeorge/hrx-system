@@ -125,7 +125,7 @@ check.scenario @subtract_f16_8_values {
     check.compare<@subtract_f16_8, @subtract_f16_oracle>(%lhs, %rhs, %output, %count) : (tensor<66320xi16>, tensor<66320xi16>, tensor<66320xf32>, i32) -> () {
       check.expect.bitwise actual(%lhs) expected(%lhs) : tensor<66320xi16>
       check.expect.bitwise actual(%rhs) expected(%rhs) : tensor<66320xi16>
-      check.expect.close actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<66352xf32>
+      check.expect.approximate actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<66352xf32>, tensor<66352xf32>
       check.expect.bitwise actual(%positive_zero) expected(%positive_zero) : tensor<1xf32>
       check.expect.bitwise actual(%negative_zero) expected(%negative_zero) : tensor<1xf32>
     }
@@ -146,7 +146,7 @@ check.scenario @subtract_bf16_8_values {
     check.compare<@subtract_bf16_8, @subtract_bf16_oracle>(%lhs, %rhs, %output, %count) : (tensor<66320xi16>, tensor<66320xi16>, tensor<66320xf32>, i32) -> () {
       check.expect.bitwise actual(%lhs) expected(%lhs) : tensor<66320xi16>
       check.expect.bitwise actual(%rhs) expected(%rhs) : tensor<66320xi16>
-      check.expect.close actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<66352xf32>
+      check.expect.approximate actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<66352xf32>, tensor<66352xf32>
       check.expect.bitwise actual(%positive_zero) expected(%positive_zero) : tensor<1xf32>
       check.expect.bitwise actual(%negative_zero) expected(%negative_zero) : tensor<1xf32>
     }
@@ -167,7 +167,7 @@ check.scenario @subtract_f16_1_values {
     check.compare<@subtract_f16_1, @subtract_f16_oracle>(%lhs, %rhs, %output, %count) : (tensor<66320xi16>, tensor<66320xi16>, tensor<66320xf32>, i32) -> () {
       check.expect.bitwise actual(%lhs) expected(%lhs) : tensor<66320xi16>
       check.expect.bitwise actual(%rhs) expected(%rhs) : tensor<66320xi16>
-      check.expect.close actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<66352xf32>
+      check.expect.approximate actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<66352xf32>, tensor<66352xf32>
       check.expect.bitwise actual(%positive_zero) expected(%positive_zero) : tensor<1xf32>
       check.expect.bitwise actual(%negative_zero) expected(%negative_zero) : tensor<1xf32>
     }
@@ -188,7 +188,7 @@ check.scenario @subtract_bf16_1_values {
     check.compare<@subtract_bf16_1, @subtract_bf16_oracle>(%lhs, %rhs, %output, %count) : (tensor<66320xi16>, tensor<66320xi16>, tensor<66320xf32>, i32) -> () {
       check.expect.bitwise actual(%lhs) expected(%lhs) : tensor<66320xi16>
       check.expect.bitwise actual(%rhs) expected(%rhs) : tensor<66320xi16>
-      check.expect.close actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<66352xf32>
+      check.expect.approximate actual(%storage) expected(%storage) atol(0.0) rtol(0.0) nan(same) : tensor<66352xf32>, tensor<66352xf32>
       check.expect.bitwise actual(%positive_zero) expected(%positive_zero) : tensor<1xf32>
       check.expect.bitwise actual(%negative_zero) expected(%negative_zero) : tensor<1xf32>
     }
