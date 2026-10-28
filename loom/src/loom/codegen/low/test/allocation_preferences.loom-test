@@ -1,96 +1,70 @@
-// RUN: emit low-allocation @detached_copy_reuses_only_register test.i32=1
+// Detached transfers prefer distinct storage, but the target's one-register
+// class leaves only a reusable source location.
+// RUN: emit low-allocation-query @detached_copy_reuses_only_register values=%source,%result copies=%result
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @detached_copy_reuses_only_register(%source: reg<test.i32>) -> (reg<test.i32>) asm {
-  %result = copy %source {detached = true} : reg<test.i32> -> reg<test.i32>
+low.func.def target<test.low.core>(@target) @detached_copy_reuses_only_register(%source: reg<test.fixed.r0>) -> (reg<test.fixed.r0>) asm {
+  %result = copy %source {detached = true} : reg<test.fixed.r0> -> reg<test.fixed.r0>
   return %result
 }
 
 // ----
-low-allocation @detached_copy_reuses_only_register
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 2
-remarks: 0
-spills: 0
-copies: coalesced=1 materialized=0
-classes:
-  test.i32: assignments=2 units=2 target_ids=1 physical=0 spill_slots=0 unassigned=0
+value %source: test.fixed.r0 -> physical_register[0:1]
+value %result: test.fixed.r0 -> physical_register[0:1]
+copy %source -> %result: coalesced
 
 // ====
 
-// RUN: emit low-allocation @detached_move_reuses_only_register test.i32=1
+// RUN: emit low-allocation-query @detached_move_reuses_only_register values=%source,%result
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @detached_move_reuses_only_register(%source: reg<test.i32>) -> (reg<test.i32>) asm {
-  %result = move %source {detached = true} : reg<test.i32> -> reg<test.i32>
+low.func.def target<test.low.core>(@target) @detached_move_reuses_only_register(%source: reg<test.fixed.r0>) -> (reg<test.fixed.r0>) asm {
+  %result = move %source {detached = true} : reg<test.fixed.r0> -> reg<test.fixed.r0>
   return %result
 }
 
 // ----
-low-allocation @detached_move_reuses_only_register
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 2
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-classes:
-  test.i32: assignments=2 units=2 target_ids=1 physical=0 spill_slots=0 unassigned=0
+value %source: test.fixed.r0 -> physical_register[0:1]
+value %result: test.fixed.r0 -> physical_register[0:1]
 
 // ====
 
-// RUN: emit low-allocation @detached_copy_uses_spare_register test.i32=2
+// The two-register class can satisfy the preference without spilling.
+// RUN: emit low-allocation-query @detached_copy_uses_spare_register values=%source,%result copies=%result
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @detached_copy_uses_spare_register(%source: reg<test.i32>) -> (reg<test.i32>) asm {
-  %result = copy %source {detached = true} : reg<test.i32> -> reg<test.i32>
+low.func.def target<test.low.core>(@target) @detached_copy_uses_spare_register(%source: reg<test.packed.narrow>) -> (reg<test.packed.narrow>) asm {
+  %result = copy %source {detached = true} : reg<test.packed.narrow> -> reg<test.packed.narrow>
   return %result
 }
 
 // ----
-low-allocation @detached_copy_uses_spare_register
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 2
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=1
-classes:
-  test.i32: assignments=2 units=2 target_ids=2 physical=0 spill_slots=0 unassigned=0
+value %source: test.packed.narrow -> physical_register[0:1]
+value %result: test.packed.narrow -> physical_register[1:1]
+copy %source -> %result: materialized
 
 // ====
 
-// RUN: emit low-allocation @detached_move_uses_spare_register test.i32=2
+// RUN: emit low-allocation-query @detached_move_uses_spare_register values=%source,%result
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @detached_move_uses_spare_register(%source: reg<test.i32>) -> (reg<test.i32>) asm {
-  %result = move %source {detached = true} : reg<test.i32> -> reg<test.i32>
+low.func.def target<test.low.core>(@target) @detached_move_uses_spare_register(%source: reg<test.packed.narrow>) -> (reg<test.packed.narrow>) asm {
+  %result = move %source {detached = true} : reg<test.packed.narrow> -> reg<test.packed.narrow>
   return %result
 }
 
 // ----
-low-allocation @detached_move_uses_spare_register
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 2
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-classes:
-  test.i32: assignments=2 units=2 target_ids=2 physical=0 spill_slots=0 unassigned=0
+value %source: test.packed.narrow -> physical_register[0:1]
+value %result: test.packed.narrow -> physical_register[1:1]
 
 // ====
 
-// RUN: emit low-allocation @detached_copy_without_budget
+// Unbounded virtual IDs retain the same preference without a physical bank.
+// RUN: emit low-allocation-query @detached_copy_without_budget values=%source,%result copies=%result
 
 test.target<low_core> @target
 
@@ -100,20 +74,13 @@ low.func.def target<test.low.core>(@target) @detached_copy_without_budget(%sourc
 }
 
 // ----
-low-allocation @detached_copy_without_budget
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 2
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=1
-classes:
-  test.i32: assignments=2 units=2 target_ids=2 physical=0 spill_slots=0 unassigned=0
+value %source: test.i32 -> target_id[0:1]
+value %result: test.i32 -> target_id[1:1]
+copy %source -> %result: materialized
 
 // ====
 
-// RUN: emit low-allocation @detached_move_without_budget
+// RUN: emit low-allocation-query @detached_move_without_budget values=%source,%result
 
 test.target<low_core> @target
 
@@ -123,20 +90,12 @@ low.func.def target<test.low.core>(@target) @detached_move_without_budget(%sourc
 }
 
 // ----
-low-allocation @detached_move_without_budget
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 2
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-classes:
-  test.i32: assignments=2 units=2 target_ids=2 physical=0 spill_slots=0 unassigned=0
+value %source: test.i32 -> target_id[0:1]
+value %result: test.i32 -> target_id[1:1]
 
 // ====
 
-// RUN: emit low-allocation @ordinary_move_reuses_storage
+// RUN: emit low-allocation-query @ordinary_move_reuses_storage values=%source,%result
 
 test.target<low_core> @target
 
@@ -146,20 +105,12 @@ low.func.def target<test.low.core>(@target) @ordinary_move_reuses_storage(%sourc
 }
 
 // ----
-low-allocation @ordinary_move_reuses_storage
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 2
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-classes:
-  test.i32: assignments=2 units=2 target_ids=1 physical=0 spill_slots=0 unassigned=0
+value %source: test.i32 -> target_id[0:1]
+value %result: test.i32 -> target_id[0:1]
 
 // ====
 
-// RUN: emit low-allocation @fixed_move_overrides_preference fixed=%source:target_id:0:1 fixed=%result:target_id:0:1
+// RUN: emit low-allocation-query @fixed_move_overrides_preference values=%source,%result fixed=%source:target_id:0:1 fixed=%result:target_id:0:1
 
 test.target<low_core> @target
 
@@ -169,13 +120,5 @@ low.func.def target<test.low.core>(@target) @fixed_move_overrides_preference(%so
 }
 
 // ----
-low-allocation @fixed_move_overrides_preference
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 2
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-classes:
-  test.i32: assignments=2 units=2 target_ids=1 physical=0 spill_slots=0 unassigned=0
+value %source: test.i32 -> target_id[0:1]
+value %result: test.i32 -> target_id[0:1]
