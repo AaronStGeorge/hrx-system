@@ -370,5 +370,90 @@ TEST_F(LowAllocationMovePlanTest, CycleTemporariesRespectStorageSupport) {
   }
 }
 
+TEST_F(LowAllocationMovePlanTest, CycleScratchHonorsSparseAndReservedStorage) {
+  for (const char* class_name : {"test.f32", "test.phys", "test.explicit32"}) {
+    SCOPED_TRACE(class_name);
+    const auto name = iree_make_cstring_view(class_name);
+    uint16_t register_class = LOOM_LOW_REG_CLASS_NONE;
+    ASSERT_TRUE(loom_low_descriptor_set_lookup_register_class(
+        target_.descriptor_set, name, &register_class, nullptr));
+    const auto location_kind =
+        iree_string_view_equal(name, IREE_SV("test.f32"))
+            ? LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID
+            : LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+    const loom_low_allocation_budget_t budget = {name, 3};
+    const loom_liveness_segment_t segments[] = {{0, 2}, {4, 6}};
+    uint32_t start = 0;
+    uint32_t end = 6;
+    loom_low_allocation_unit_liveness_t unit_liveness = {
+        .start_points = &start,
+        .end_points = &end,
+        .point_count = 1,
+    };
+    unit_liveness.storage_segments.entries = segments;
+    const loom_low_allocation_assignment_t assignment = {
+        .descriptor_reg_class_id = register_class,
+        .start_point = 0,
+        .end_point = 6,
+        .unit_count = 1,
+        .location_kind = location_kind,
+        .location_base = 2,
+        .location_count = 1,
+        .unit_point_start = 0,
+        .liveness_segments = {0, IREE_ARRAYSIZE(segments)},
+    };
+    const loom_low_allocation_reserved_range_t reserved = {name, location_kind,
+                                                           2, 1};
+    for (uint32_t point : {1u, 2u, 4u, 6u}) {
+      SCOPED_TRACE(point);
+      for (bool reserve : {false, true}) {
+        SCOPED_TRACE(reserve);
+        loom_low_allocation_target_constraints_t constraints = {};
+        IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
+            diagnostic_module_, diagnostic_function_, &target_, &budget, 1,
+            reserve ? &reserved : nullptr, reserve ? 1 : 0, {}, &arena_,
+            &constraints));
+        const loom_low_allocation_move_plan_context_t context = {
+            .descriptor_set = target_.descriptor_set,
+            .target_constraints = &constraints,
+            .unit_liveness = &unit_liveness,
+            .assignment_map =
+                {
+                    // A reserved register cannot also hold an allocated value.
+                    .assignments = reserve ? nullptr : &assignment,
+                    .assignment_count = reserve ? 0u : 1u,
+                },
+        };
+        loom_low_allocation_move_plan_t plan = {};
+        IREE_ASSERT_OK(loom_low_allocation_move_plan_initialize(
+            &context, /*move_input_capacity=*/2, /*raw_group_capacity=*/2,
+            &arena_, &scratch_, &plan));
+        const loom_low_move_location_t lhs = {
+            static_cast<uint16_t>(location_kind), register_class, 0};
+        const loom_low_move_location_t rhs = {
+            static_cast<uint16_t>(location_kind), register_class, 1};
+        plan.sequence_scratch.moves[0] = {.destination = lhs, .source = rhs};
+        plan.sequence_scratch.moves[1] = {.destination = rhs, .source = lhs};
+        loom_low_move_group_t group = {};
+        IREE_ASSERT_OK(loom_low_allocation_move_plan_append_group(
+            &plan, diagnostic_function_, point, point, /*raw_move_count=*/2,
+            &group, nullptr));
+        if (reserve || point == 1 || point == 4) {
+          EXPECT_EQ(constraints.error_count, 1u);
+          EXPECT_TRUE(
+              iree_string_view_equal(constraints.failure.failure_code,
+                                     IREE_SV("parallel-move-no-scratch-unit")));
+          EXPECT_EQ(group.moves.count, 0u);
+        } else {
+          EXPECT_EQ(constraints.error_count, 0u);
+          ASSERT_EQ(group.moves.count, 3u);
+          EXPECT_EQ(plan.moves[group.moves.start].destination.location, 2u);
+        }
+        EXPECT_EQ(plan.storage_count, 0u);
+      }
+    }
+  }
+}
+
 }  // namespace
 }  // namespace loom
