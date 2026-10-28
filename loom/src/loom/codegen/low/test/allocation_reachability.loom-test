@@ -99,15 +99,16 @@ CHECK: *"name":"candidate","type":"reg<test.i32 x2>"*,"location":{"kind":"target
 
 // ====
 
-// RUN: with-checks emit low-allocation-json @tied_concat_in_sparse_branch fixed=%condition:target_id:8:1
+// RUN: emit low-allocation-query @tied_concat_in_sparse_branch values=%condition,%seed,%initial,%partial,%complete,%tuple,%result,%final
 
 // The wide input occupies the entry and exit, leaving a storage gap in the
 // other branch. Its sparse reservation must also admit the final tied scalar,
 // whose concat edge payload requires a continuous storage reservation.
+// The byte-sized condition uses an independent register class.
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @tied_concat_in_sparse_branch(%condition: reg<test.i32>, %seed: reg<test.i32 x4>) -> (reg<test.i32 x4>) asm {
-  low.cond_br %condition, ^body, ^exit : reg<test.i32>
+low.func.def target<test.low.core>(@test_target) @tied_concat_in_sparse_branch(%condition: reg<test.i8>, %seed: reg<test.i32 x4>) -> (reg<test.i32 x4>) asm {
+  low.cond_br %condition, ^body, ^exit : reg<test.i8>
 ^body:
   %initial = test.const.i32 7
   %partial = test.tied.any %initial
@@ -125,4 +126,11 @@ low.func.def target<test.low.core>(@test_target) @tied_concat_in_sparse_branch(%
 }
 
 // ----
-CHECK: *"name":"complete","type":"reg<test.i32>"*,"location":{"kind":"target_id","base":0,"count":1}*
+value %condition: test.i8 -> target_id[0:1]
+value %seed: test.i32 -> target_id[0:4]
+value %initial: test.i32 -> target_id[0:1]
+value %partial: test.i32 -> target_id[0:1]
+value %complete: test.i32 -> target_id[0:1]
+value %tuple: test.i32 -> target_id[0:4]
+value %result: test.i32 -> target_id[0:4]
+value %final: test.i32 -> target_id[0:4]
