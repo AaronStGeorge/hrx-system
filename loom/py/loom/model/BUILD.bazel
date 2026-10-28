@@ -203,9 +203,27 @@ iree_py_library(
 )
 
 iree_py_library(
+    name = "fetch_filesystem",
+    srcs = ["fetch_filesystem.py"],
+    deps = [":fetch_source"],
+)
+
+iree_py_test(
+    name = "fetch_filesystem_test",
+    srcs = [
+        "fetch_filesystem_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.fetch_filesystem_test"],
+    main = "pytest_style_runner.py",
+    deps = [":fetch_filesystem"],
+)
+
+iree_py_library(
     name = "fetch_storage",
     srcs = ["fetch_storage.py"],
     deps = [
+        ":fetch_filesystem",
         ":fetch_hf",
         ":fetch_progress",
         ":fetch_safetensors",
@@ -220,6 +238,7 @@ iree_py_library(
     name = "fetch",
     srcs = ["fetch.py"],
     deps = [
+        ":fetch_filesystem",
         ":fetch_hf",
         ":fetch_progress",
         ":fetch_source",
@@ -315,6 +334,7 @@ iree_py_test(
     deps = [
         ":fetch",
         ":fetch_cli",
+        ":fetch_filesystem",
         ":fetch_source",
         ":fetch_storage",
         ":http_test_server",
@@ -350,6 +370,7 @@ iree_py_test(
     args = ["loom.model.fetch_storage_test"],
     main = "pytest_style_runner.py",
     deps = [
+        ":fetch_filesystem",
         ":fetch_source",
         ":fetch_storage",
         ":http_test_server",

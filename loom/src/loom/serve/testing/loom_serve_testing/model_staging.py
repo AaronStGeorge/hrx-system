@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from loom.model import ModelCard
-from loom.model.fetch_storage import share_file
+from loom.model.fetch_filesystem import share_file
 
 
 def stage_model(card: Path, assets: Path, output: Path) -> Path:
@@ -20,8 +20,8 @@ def stage_model(card: Path, assets: Path, output: Path) -> Path:
     Parameters and tokenizers come from the supplied installation using their
     card-relative destination names. The caller declares the card, acquisition
     lock, and built programs as test inputs; the lock is a trusted identity for
-    the externally provisioned assets. This function neither reads asset bytes
-    nor acquires content. The caller owns cleanup, including partial failure.
+    the externally provisioned assets. This function does not verify or acquire
+    content. The caller owns cleanup, including partial failure.
     """
     selection = ModelCard.parse(card.read_text(encoding="utf-8")).select()
     output.mkdir(parents=True, exist_ok=False)

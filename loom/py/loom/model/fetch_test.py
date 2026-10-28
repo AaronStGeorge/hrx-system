@@ -17,6 +17,7 @@ import pytest
 
 from loom.model import ManifestError, ModelCard
 from loom.model.fetch import check_output, install, plan_fetch, plan_lock, update_lock
+from loom.model.fetch_filesystem import publish_file
 from loom.model.fetch_main import _cache_directory, main
 from loom.model.fetch_source import Document, FetchError
 from loom.model.fetch_storage import ContentCache
@@ -105,16 +106,15 @@ def test_card_publication_failure_rolls_back_the_catalog_receipt(tmp_path):
         catalog={"source": "local catalog"},
     )
     output = tmp_path / "output"
-    link = os.link
 
-    def fail_card_publication(source, destination, **options):
+    def fail_card_publication(source, destination):
         if destination == output / "model.json":
             assert (output / ".loom-fetch.json").is_file()
             raise OSError("publication failed")
-        return link(source, destination, **options)
+        return publish_file(source, destination)
 
     with (
-        patch("loom.model.fetch.os.link", side_effect=fail_card_publication),
+        patch("loom.model.fetch.publish_file", side_effect=fail_card_publication),
         pytest.raises(OSError, match="publication failed"),
     ):
         install(plan, cache, output)

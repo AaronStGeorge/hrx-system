@@ -21,6 +21,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from urllib.parse import urljoin
 
+from .fetch_filesystem import publish_file, share_file
 from .fetch_hf import AccessRequired
 from .fetch_progress import ByteProgress
 from .fetch_source import (
@@ -36,7 +37,6 @@ from .fetch_storage import (
     ContentCache,
     atomic_write,
     installation_lock,
-    share_file,
 )
 from .lock import FileIdentity, ModelLock, file_digest, file_key, lock_files
 from .manifest import ManifestError, ModelCard, Selection, parse_json
@@ -825,8 +825,8 @@ def install(
                     if name not in shared:
                         copied = staging / "payload"
                         shutil.copyfile(path, copied)
-                        os.link(copied, destination)
-                        copied.unlink()
+                        publish_file(copied, destination)
+                        copied.unlink(missing_ok=True)
                     else:
                         share_file(path, destination)
                     published.append(destination)
@@ -852,7 +852,7 @@ def install(
                     atomic_write(
                         staged, (json.dumps(document, indent=2) + "\n").encode("utf-8")
                     )
-                    os.link(staged, destination)
+                    publish_file(staged, destination)
                     published.append(destination)
             if plan.update_path is not None:
                 document = ModelLock.snapshot(
