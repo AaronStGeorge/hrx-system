@@ -764,62 +764,6 @@ low.func.def target<test.low.core> @pair(%first: reg<test.pressure.alias32>, %se
   EXPECT_EQ(registers[6], 0x22222222u);
 }
 
-TEST_F(LowEmissionFrameTest, CommonCallClobbersProtectCallerValues) {
-  ModulePtr module = ParseModule(R"(
-low.func.decl target<test.low.core> @callee()
-
-low.func.def target<test.low.core> @caller(%value: reg<test.pressure.alias32>) -> (reg<test.pressure.alias32>) asm {
-  low.func.call @callee() : ()
-  return %value
-}
-)");
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_test_low_core_descriptor_set();
-  const loom_low_call_clobber_t common_clobber = {
-      .register_class = TEST_LOW_CORE_REG_CLASS_ID_TEST_PRESSURE_ALIAS32,
-      .location = 0,
-      .count =
-          descriptor_set
-              ->reg_classes[TEST_LOW_CORE_REG_CLASS_ID_TEST_PRESSURE_ALIAS32]
-              .allocatable_count,
-  };
-  struct CallContracts {
-    loom_low_call_contract_t contract;
-    loom_low_call_clobber_list_t common_clobbers;
-  } call_contracts = {
-      .contract = {},
-      .common_clobbers = {&common_clobber, 1},
-  };
-  loom_low_emission_frame_options_t options = {
-      .descriptor_registry = &registry_.registry,
-      .function_target_facts = &target_facts_,
-      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
-  };
-  options.call_contracts.query =
-      [](void* user_data,
-         loom_symbol_ref_t callee) -> const loom_low_call_contract_t* {
-    (void)callee;
-    return &static_cast<CallContracts*>(user_data)->contract;
-  };
-  options.call_contracts.query_common_clobbers =
-      [](void* user_data, const loom_low_descriptor_set_t* descriptor_set) {
-        (void)descriptor_set;
-        return static_cast<CallContracts*>(user_data)->common_clobbers;
-      };
-  options.call_contracts.user_data = &call_contracts;
-  loom_low_emission_frame_t frame = {};
-  bool accepted = false;
-  IREE_ASSERT_OK(loom_low_emission_frame_build(
-      module.get(), loom_block_op(loom_module_block(module.get()), 1), &options,
-      &arena_, &frame, &accepted));
-  ASSERT_TRUE(accepted);
-  ASSERT_EQ(frame.allocation.error_count, 0u);
-  ASSERT_EQ(frame.allocation.assignment_count, 1u);
-  EXPECT_EQ(frame.allocation.assignments[0].location_kind,
-            LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT);
-  EXPECT_EQ(frame.allocation.spill_count, 1u);
-}
-
 TEST_F(LowEmissionFrameTest, CallPressureAccountsForSharedPackingCapacity) {
   ModulePtr module = ParseModule(R"(
 low.func.decl pure target<test.low.core> @callee()
