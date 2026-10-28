@@ -163,32 +163,6 @@ low.func.def target<test.low.core>(@target) @unused_fixed(%unused: reg<test.i32>
 
 // ====
 
-// RUN: emit low-allocation @entry_budget entry=0:test.phys:physical_register:7 test.phys=2
-
-test.target<low_core> @target
-
-// The ABI can deliver an input outside the body allocation budget. Transport
-// brings it into an allocatable register instead of treating it as precolored.
-low.func.def target<test.low.core>(@target) @entry_budget(%value: reg<test.phys>) -> (reg<test.phys>) asm {
-  return %value
-}
-
-// ----
-low-allocation @entry_budget
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 1
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 1
-  test.phys:physical_register:0 <- test.phys:physical_register:7
-classes:
-  test.phys: assignments=1 units=1 target_ids=0 physical=1 spill_slots=0 unassigned=0
-
-// ====
-
 // The four-register bank fits three scalars and the demanded half of the pair.
 // The unread half must not reserve a fifth register.
 // RUN: emit low-allocation-query @demanded_entry_units spill-count values=%guard0,%guard1,%guard2,%pair,%high
@@ -207,142 +181,6 @@ value %guard1: test.explicit32 -> physical_register[1:1]
 value %guard2: test.explicit32 -> physical_register[3:1]
 value %pair: test.explicit32 -> physical_register[4:2]
 value %high: test.explicit32 -> physical_register[2:1]
-
-// ====
-
-// Two incoming scalars fragment the six-unit bank. Moving only the first
-// one frees the four-unit load; another move would add an unnecessary copy.
-// RUN: emit low-allocation @entry_fragment_frees_wide_slot test.i32=6 entry=0:test.i32:target_id:2 entry=1:test.i32:target_id:0
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @entry_fragment_frees_wide_slot(%first: reg<test.i32>, %second: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
-  %wide = test.load.v4i32 %address
-  return %first, %second, %wide
-}
-
-// ----
-low-allocation @entry_fragment_frees_wide_slot
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 4
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 1
-  test.i32:target_id:5 <- test.i32:target_id:2
-classes:
-  test.i32: assignments=3 units=6 target_ids=6 physical=0 spill_slots=0 unassigned=0
-  test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
-
-// ====
-
-// The same repair is required when the first incoming scalar occupies the
-// upper wide slot instead of the lower one.
-// RUN: emit low-allocation @entry_fragment_at_upper_slot test.i32=6 entry=0:test.i32:target_id:4 entry=1:test.i32:target_id:0
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @entry_fragment_at_upper_slot(%first: reg<test.i32>, %second: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
-  %wide = test.load.v4i32 %address
-  return %first, %second, %wide
-}
-
-// ----
-low-allocation @entry_fragment_at_upper_slot
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 4
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 1
-  test.i32:target_id:5 <- test.i32:target_id:4
-classes:
-  test.i32: assignments=3 units=6 target_ids=6 physical=0 spill_slots=0 unassigned=0
-  test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
-
-// ====
-
-// Free units alone do not remove fragmentation. Reallocation after one
-// move discovers that the other incoming scalar can stay in place.
-// RUN: emit low-allocation @entry_fragment_with_spare_capacity test.i32=8 entry=0:test.i32:target_id:4 entry=1:test.i32:target_id:0
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @entry_fragment_with_spare_capacity(%first: reg<test.i32>, %second: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
-  %wide = test.load.v4i32 %address
-  return %first, %second, %wide
-}
-
-// ----
-low-allocation @entry_fragment_with_spare_capacity
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 4
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 1
-  test.i32:target_id:5 <- test.i32:target_id:4
-classes:
-  test.i32: assignments=3 units=6 target_ids=6 physical=0 spill_slots=0 unassigned=0
-  test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
-
-// ====
-
-// A four-unit slot is already free: the complete repair path emits no
-// transfers when both incoming scalars can remain in their incoming locations.
-// RUN: emit low-allocation @entry_values_already_fit test.i32=8 entry=0:test.i32:target_id:2 entry=1:test.i32:target_id:0
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @entry_values_already_fit(%first: reg<test.i32>, %second: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
-  %wide = test.load.v4i32 %address
-  return %first, %second, %wide
-}
-
-// ----
-low-allocation @entry_values_already_fit
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 4
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 0
-classes:
-  test.i32: assignments=3 units=6 target_ids=8 physical=0 spill_slots=0 unassigned=0
-  test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
-
-// ====
-
-// Linear physical register storage uses the same one-input repair.
-// RUN: emit low-allocation @entry_physical_fragment test.phys=6 entry=0:test.phys:physical_register:2 entry=1:test.phys:physical_register:0
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @entry_physical_fragment(%first: reg<test.phys>, %second: reg<test.phys>, %wide: reg<test.phys x4>) -> (reg<test.phys>, reg<test.phys>, reg<test.phys x4>) asm {
-  return %first, %second, %wide
-}
-
-// ----
-low-allocation @entry_physical_fragment
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 3
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 1
-  test.phys:physical_register:5 <- test.phys:physical_register:2
-classes:
-  test.phys: assignments=3 units=6 target_ids=0 physical=6 spill_slots=0 unassigned=0
 
 // ====
 
@@ -393,34 +231,6 @@ entry moves: 1
   test.explicit32:physical_register:3 <- test.explicit32:physical_register:0
 classes:
   test.explicit32: assignments=3 units=4 target_ids=0 physical=6 spill_slots=0 unassigned=0
-
-// ====
-
-// A moved aggregate needs one transport per live unit, not a scalar-only repair.
-// RUN: emit low-allocation @entry_pair_fragment test.i32=6 entry=0:test.i32:target_id:2
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @entry_pair_fragment(%pair: reg<test.i32 x2>, %address: reg<test.ptr>) -> (reg<test.i32 x2>, reg<test.i32 x4>) asm {
-  %wide = test.load.v4i32 %address
-  return %pair, %wide
-}
-
-// ----
-low-allocation @entry_pair_fragment
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 3
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 2
-  test.i32:target_id:4 <- test.i32:target_id:2
-  test.i32:target_id:5 <- test.i32:target_id:3
-classes:
-  test.i32: assignments=2 units=6 target_ids=6 physical=0 spill_slots=0 unassigned=0
-  test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
 
 // ====
 
@@ -560,33 +370,6 @@ entry moves: 2
   test.i32:target_id:0 <- test.i32:target_id:2
 classes:
   test.i32: assignments=4 units=7 target_ids=6 physical=0 spill_slots=0 unassigned=0
-  test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
-
-// ====
-
-// The obstructing input can follow the input that stays in place.
-// RUN: emit low-allocation @entry_fragment_second_input test.i32=6 entry=0:test.i32:target_id:0 entry=1:test.i32:target_id:2
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @entry_fragment_second_input(%first: reg<test.i32>, %second: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
-  %wide = test.load.v4i32 %address
-  return %first, %second, %wide
-}
-
-// ----
-low-allocation @entry_fragment_second_input
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 4
-remarks: 0
-spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 1
-  test.i32:target_id:5 <- test.i32:target_id:2
-classes:
-  test.i32: assignments=3 units=6 target_ids=6 physical=0 spill_slots=0 unassigned=0
   test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
 
 // ====

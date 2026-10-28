@@ -1050,5 +1050,188 @@ TEST_F(LowRequiredRegisterRelocationTest, MovesAliasClassOwners) {
   CheckMoved(4);
 }
 
+struct EntryPlacementCase {
+  // Placement property named in failure traces.
+  const char* name;
+  // Allocatable units in the linear register bank.
+  uint16_t capacity;
+  // Number of live arguments in the fixture.
+  uint32_t value_count;
+  // Register widths of the live arguments.
+  uint32_t widths[3];
+  // Incoming locations for the leading arguments.
+  uint32_t incoming[2];
+  // Number of arguments with an incoming register preference.
+  uint32_t incoming_count;
+  // Expected final location of each argument.
+  uint32_t expected[3];
+};
+
+class LowEntryPlacementTest : public LowAllocationIntervalAssignmentTest,
+                              public ::testing::WithParamInterface<
+                                  std::tuple<bool, EntryPlacementCase>> {};
+
+TEST_P(LowEntryPlacementTest, PreservesOrRelocatesIncomingStorage) {
+  const auto [physical, test_case] = GetParam();
+  SCOPED_TRACE(test_case.name);
+  constexpr uint64_t kDescriptorSetId = 17;
+  const uint16_t location_kind =
+      physical ? LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER
+               : LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
+  loom_region_t* body = loom_low_func_def_body(function_op_);
+  loom_block_t* block = loom_region_entry_block(body);
+  loom_value_id_t values[3];
+  uint32_t interval_indices[3];
+  loom_liveness_interval_t intervals[3] = {};
+  loom_low_allocation_unit_liveness_value_t unit_values[3] = {};
+  uint32_t starts[8] = {};
+  uint32_t ends[8] = {};
+  uint32_t unit_count = 0;
+  for (uint32_t i = 0; i < test_case.value_count; ++i) {
+    values[i] = DefineValue(kDescriptorSetId, test_case.widths[i]);
+    IREE_ASSERT_OK(loom_block_add_arg(module_, block, values[i]));
+    interval_indices[i] = i;
+    intervals[i] = {
+        .value_id = values[i],
+        .start_point = 0,
+        .end_point = 2,
+        .value_class = RegisterValueClass(kDescriptorSetId),
+        .unit_count = test_case.widths[i],
+    };
+    unit_values[i] = {unit_count, 0};
+    for (uint32_t j = 0; j < test_case.widths[i]; ++j) {
+      ends[unit_count++] = 2;
+    }
+  }
+  // All formals share one use, keeping only entry placement variable.
+  loom_builder_t builder;
+  loom_builder_initialize(module_, &module_->arena, block, &builder);
+  loom_builder_set_before(&builder, return_op_);
+  loom_op_t* use = nullptr;
+  IREE_ASSERT_OK(loom_test_use_build(&builder, values, test_case.value_count,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+
+  const loom_liveness_analysis_t liveness = {
+      .region = body,
+      .intervals = intervals,
+      .interval_count = test_case.value_count,
+      .value_ids = values,
+      .value_count = test_case.value_count,
+      .value_interval_indices = interval_indices,
+  };
+  uint64_t incomplete_storage = 0;
+  const loom_low_allocation_unit_liveness_t unit_liveness = {
+      .values = unit_values,
+      .start_points = starts,
+      .end_points = ends,
+      .point_count = unit_count,
+      .values_with_incomplete_storage_segments = {test_case.value_count,
+                                                  &incomplete_storage},
+  };
+  loom_low_placement_relation_range_t ranges[3] = {};
+  const loom_low_placement_table_t placement = {
+      .module = module_,
+      .value_ids = values,
+      .value_count = test_case.value_count,
+      .ranges_by_result_ordinal = ranges,
+      .ranges_by_source_ordinal = ranges,
+  };
+  const loom_low_reg_class_t reg_class = {
+      .flags = static_cast<loom_low_reg_class_flags_t>(
+          LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE |
+          (physical ? LOOM_LOW_REG_CLASS_FLAG_PHYSICAL
+                    : LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY)),
+      .alloc_unit_bits = 32,
+      .allocatable_count = physical ? test_case.capacity : uint16_t{0},
+      .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+  };
+  const loom_low_descriptor_set_t descriptors = {
+      .stable_id = kDescriptorSetId,
+      .reg_classes = &reg_class,
+      .reg_class_count = 1,
+  };
+  const loom_low_resolved_target_t target = {
+      .descriptor_set = &descriptors,
+  };
+  loom_low_allocation_target_constraints_t constraints = {};
+  IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
+      module_, function_op_, &target, nullptr, 0, nullptr, 0, {}, &arena_,
+      &constraints));
+  // A target-ID bank has no physical inventory; its bound belongs to the
+  // invocation's resolved budget instead of the register-class descriptor.
+  loom_low_allocation_resolved_budget_t budget = {
+      .descriptor_reg_class_id = 0,
+      .max_units = test_case.capacity,
+  };
+  if (!physical) {
+    constraints.budgets = &budget;
+    constraints.budget_count = 1;
+  }
+  loom_low_allocation_abi_location_t incoming[2] = {};
+  for (uint32_t i = 0; i < test_case.incoming_count; ++i) {
+    incoming[i] = {
+        .location_kind = location_kind,
+        .descriptor_reg_class_id = 0,
+        .location_base = test_case.incoming[i],
+    };
+  }
+  loom_cfg_graph_t graph = {};
+  IREE_ASSERT_OK(loom_cfg_graph_build(module_, body, &arena_, &graph));
+  loom_local_value_domain_t domain = {};
+  IREE_ASSERT_OK(loom_local_value_domain_acquire_for_region(module_, body,
+                                                            &arena_, &domain));
+  loom_low_allocation_storage_lease_state_t leases = {};
+  const loom_low_allocation_interval_assignment_context_t context = {
+      .module = module_,
+      .body = body,
+      .function_op = function_op_,
+      .target = &target,
+      .liveness = &liveness,
+      .value_domain = &domain,
+      .placement = &placement,
+      .target_constraints = &constraints,
+      .entry_locations = incoming,
+      .entry_location_count = test_case.incoming_count,
+      .unit_liveness = &unit_liveness,
+      .storage_leases = &leases,
+      .arena = &arena_,
+      .function_cfg_graph = &graph,
+  };
+  loom_low_allocation_interval_assignment_result_t result = {};
+  iree_status_t status = loom_low_allocation_interval_assignment_build(
+      &context, &decision_arena_, &result);
+  loom_local_value_domain_release(&domain);
+  IREE_ASSERT_OK(status);
+  ASSERT_EQ(constraints.error_count, 0u);
+  ASSERT_EQ(result.assignment_count, test_case.value_count);
+  EXPECT_EQ(result.spill_count, 0u);
+  for (uint32_t i = 0; i < test_case.value_count; ++i) {
+    const auto& assignment =
+        result.assignments[result.assignment_indices_by_value_ordinal[i]];
+    EXPECT_EQ(assignment.location_kind, location_kind);
+    EXPECT_EQ(assignment.location_base, test_case.expected[i]);
+    EXPECT_EQ(assignment.location_count, test_case.widths[i]);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LinearBanks, LowEntryPlacementTest,
+    ::testing::Combine(
+        ::testing::Bool(),
+        ::testing::Values(
+            EntryPlacementCase{"outside_budget", 2, 1, {1}, {7}, 1, {0}},
+            EntryPlacementCase{"preserve_input", 8, 1, {1}, {7}, 1, {7}},
+            EntryPlacementCase{
+                "lower_slot", 6, 3, {1, 1, 4}, {2, 0}, 2, {5, 0, 1}},
+            EntryPlacementCase{
+                "upper_slot", 6, 3, {1, 1, 4}, {4, 0}, 2, {5, 0, 1}},
+            EntryPlacementCase{
+                "spare_capacity", 8, 3, {1, 1, 4}, {4, 0}, 2, {5, 0, 1}},
+            EntryPlacementCase{
+                "already_fits", 8, 3, {1, 1, 4}, {2, 0}, 2, {2, 0, 4}},
+            EntryPlacementCase{
+                "second_input", 6, 3, {1, 1, 4}, {0, 2}, 2, {0, 5, 1}},
+            EntryPlacementCase{"pair", 6, 2, {2, 4}, {2}, 1, {4, 0}})));
+
 }  // namespace
 }  // namespace loom
