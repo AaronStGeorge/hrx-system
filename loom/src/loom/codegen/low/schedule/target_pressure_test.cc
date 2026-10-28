@@ -148,6 +148,7 @@ TEST_F(TargetPressureScoringTest, GrowthUsesCanonicalBankAndOwnership) {
   IREE_ASSERT_OK(loom_low_schedule_completion_demand_initialize(
       &dependencies, &incoming, 2, &arena_, &completions));
 
+  const uint32_t no_cliff = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE;
   const struct {
     // Live units in the candidate's bank before scheduling it.
     uint64_t current_units;
@@ -159,9 +160,15 @@ TEST_F(TargetPressureScoringTest, GrowthUsesCanonicalBankAndOwnership) {
     uint64_t late_units;
     // Whether the candidate increases demand beyond the bank's capacity.
     bool opens_debt;
+    // Remaining capacity in a growing bank, or no cliff for other banks.
+    uint32_t units_until_limit;
   } cases[] = {
-      {3, 1, 0, 0, false},  {4, 1, 0, 0, true}, {5, 0, 0, 0, false},
-      {5, -1, 0, 0, false}, {4, 0, 1, 0, true}, {4, 0, 0, 1, true},
+      {3, 1, 0, 0, false, no_cliff}, {4, 1, 0, 0, true, no_cliff},
+      {5, 0, 0, 0, false, no_cliff}, {5, -1, 0, 0, false, no_cliff},
+      {4, 0, 1, 0, true, no_cliff},  {4, 0, 0, 1, true, no_cliff},
+      {2, 0, 0, 0, false, no_cliff}, {2, -1, 0, 0, false, no_cliff},
+      {2, 1, 0, 0, false, 1},        {2, 0, 1, 0, false, 1},
+      {2, 0, 0, 1, false, 1},
   };
   for (uint16_t reg_class_id = 0; reg_class_id < 3; ++reg_class_id) {
     for (bool required : {false, true}) {
@@ -305,6 +312,8 @@ TEST_F(TargetPressureScoringTest, GrowthUsesCanonicalBankAndOwnership) {
                   : 0;
           EXPECT_EQ(debt.banks, expected_bank);
           EXPECT_EQ(debt.required_banks, required ? expected_bank : 0);
+          EXPECT_EQ(score.units_until_pressure_cliff,
+                    test_case.units_until_limit);
           EXPECT_EQ(iree_any_bit_set(
                         score.flags,
                         LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REGISTER_DEBT),

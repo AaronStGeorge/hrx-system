@@ -1,8 +1,8 @@
-// Five held pointer units leave three units below the allocation budget.
+// Five pointer units remain live throughout the scalar work.
 // The scalar constant has five users but activates only one scalar at a time.
 // Neither scalar load changes pointer occupancy. The second independent load
 // can issue before the first load's four-cycle consumer becomes available.
-// RUN: emit low-schedule-query @unchanged_class_headroom strategy=resource-stall test.ptr=8 issue=1,8,2
+// RUN: emit low-schedule-query @unchanged_class_headroom strategy=resource-stall issue=1,8,2
 
 test.target<low_core> @target
 
@@ -29,7 +29,7 @@ node 2 issue-cycle: 4
 
 // The descriptor's default ownership reuses the source storage even though the
 // result writes before other input reads complete.
-// RUN: emit low-schedule-json @preferred_ownership_reuses_storage strategy=resource-stall diagnostics=candidates test.i32=74 output=none
+// RUN: emit low-schedule-json @preferred_ownership_reuses_storage strategy=resource-stall diagnostics=candidates output=none
 
 test.target<low_core> @target
 

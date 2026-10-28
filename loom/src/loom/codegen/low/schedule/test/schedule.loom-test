@@ -128,7 +128,7 @@ low.func.def target<test.low.core>(@test_target) @move_source_order_boundary(%lh
 block 0 order: 0, 1, 2
 
 // ====
-// RUN: emit low-schedule-json @mixed_early_clobber_pressure strategy=resource-stall diagnostics=candidates test.i32=24 output=none
+// RUN: emit low-schedule-json @mixed_early_clobber_pressure strategy=resource-stall diagnostics=candidates output=none
 
 test.target<low_core> @test_target
 
@@ -140,7 +140,7 @@ low.func.def target<test.low.core>(@test_target) @mixed_early_clobber_pressure(%
 }
 
 // ====
-// RUN: emit low-schedule-json @early_tied_pressure_reuses_storage strategy=resource-stall diagnostics=candidates test.i32=16 output=none
+// RUN: emit low-schedule-json @early_tied_pressure_reuses_storage strategy=resource-stall diagnostics=candidates output=none
 
 test.target<low_core> @test_target
 
@@ -558,7 +558,7 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_advances_exact_
 block 0 order: 0, 1, 3, 4, 2
 
 // ====
-// RUN: emit low-schedule-query @resource_stall_finishes_nested_unspillable_release strategy=resource-stall test.i32=12 order=3,4,5
+// RUN: emit low-schedule-query @resource_stall_finishes_nested_unspillable_release strategy=resource-stall order=3,4,5
 
 test.target<low_core> @test_target
 
@@ -1387,7 +1387,7 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_caps_repeated_s
 }
 
 // ====
-// RUN: emit low-schedule-json @resource_stall_reuses_released_alias_capacity strategy=resource-stall diagnostics=candidates test.i32=72 output=none
+// RUN: emit low-schedule-json @resource_stall_reuses_released_alias_capacity strategy=resource-stall diagnostics=candidates output=none
 
 test.target<low_core> @test_target
 
