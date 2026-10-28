@@ -13,12 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "iree/base/api.h"
-
-// Haswell or later, gcc compile time option: -mlzcnt
-#if defined(__LZCNT__)
-#include <x86intrin.h>
-#endif
+#include "iree/base/alignment.h"
+#include "iree/base/checked_math.h"
 
 // Clang on Windows has __builtin_clzll; otherwise we need to use the Windows
 // intrinsic functions. Include <intrin.h> for all MSVC-compatible frontends so
@@ -181,15 +177,6 @@ static inline int iree_math_count_leading_zeros_u32(const uint32_t n) {
   }
   return 32;
 #elif defined(IREE_COMPILER_GCC_COMPAT)
-#if defined(__LCZNT__)
-  // NOTE: LZCNT is a risky instruction; it is not supported on architectures
-  // before Haswell, yet it is encoded as 'rep bsr', which typically ignores
-  // invalid rep prefixes, and interprets it as the 'bsr' instruction, which
-  // returns the index of the value rather than the count, resulting in
-  // incorrect code.
-  return (int)__lzcnt32(n);
-#endif  // defined(__LCZNT__)
-
   // Handle 0 as a special case because __builtin_clz(0) is undefined.
   if (n == 0) {
     return 32;
@@ -224,17 +211,6 @@ static inline int iree_math_count_leading_zeros_u64(uint64_t n) {
   }
   return 64;
 #elif defined(IREE_COMPILER_GCC_COMPAT)
-#if defined(__LCZNT__)
-  // NOTE: LZCNT is a risky instruction; it is not supported on architectures
-  // before Haswell, yet it is encoded as 'rep bsr', which typically ignores
-  // invalid rep prefixes, and interprets it as the 'bsr' instruction, which
-  // returns the index of the value rather than the count, resulting in
-  // incorrect code.
-  return __lzcnt64(n);
-#elif defined(__aarch64__) || defined(__powerpc64__)
-  // Empirically verified that __builtin_clzll(0) works as expected.
-  return (int)__builtin_clzll(n);
-#endif
   // Handle 0 as a special case because __builtin_clzll(0) is undefined.
   if (!n) {
     return 64;
