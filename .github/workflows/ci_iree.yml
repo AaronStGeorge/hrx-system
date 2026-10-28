@@ -85,6 +85,12 @@ jobs:
             platform_coverage: true
             runner: azure-linux-scale-rocm
             host_toolchain: rocm
+          - name: Clang / ASAN / Shared Tools
+            kind: cpu
+            command: iree-bazel-cpu-shared-tools-asan
+            platform_coverage: true
+            runner: azure-linux-scale-rocm
+            host_toolchain: rocm
           - name: Clang / TSAN
             kind: cpu
             command: iree-bazel-cpu-tsan
@@ -343,8 +349,11 @@ jobs:
         shell: bash
         run: |
           scope_args=()
-          if [[ "${{ steps.scope.outputs.loom_only }}" == true && "${{ matrix.command }}" != iree-bazel-repository-build ]]; then
-            scope_args=(--target //loom/...)
+          if [[ "${{ steps.scope.outputs.loom_only }}" == true ]]; then
+            case "${{ matrix.command }}" in
+              iree-bazel-repository-build|iree-bazel-cpu-shared-tools-asan) ;;
+              *) scope_args=(--target //loom/...) ;;
+            esac
           fi
           target_args=()
           if [[ -n "${{ matrix.target_selector }}" ]]; then
@@ -436,11 +445,31 @@ jobs:
         include:
           - name: Clang CL / Fastbuild
             kind: repository
+            command: iree-bazel-repository-integration
             host_toolchain: clang-cl
             platform_coverage: true
             runner: azure-windows-scale-rocm
           - name: MSVC / Fastbuild
             kind: repository
+            command: iree-bazel-repository-integration
+            host_toolchain: msvc
+            runner: azure-windows-scale-rocm
+          - name: Clang CL / Fastbuild / Repository Build
+            kind: repository
+            command: iree-bazel-repository-build
+            host_toolchain: clang-cl
+            platform_coverage: true
+            runner: azure-windows-scale-rocm
+            target_selector: gfx11-generic
+          - name: Clang CL / Fastbuild / Shared Tools
+            kind: repository
+            command: iree-bazel-repository-shared-tools
+            host_toolchain: clang-cl
+            platform_coverage: true
+            runner: azure-windows-scale-rocm
+          - name: MSVC / Fastbuild / Shared Tools
+            kind: repository
+            command: iree-bazel-repository-shared-tools
             host_toolchain: msvc
             runner: azure-windows-scale-rocm
           - name: Clang CL / Fastbuild / AMD gfx1151 NPU5
@@ -456,7 +485,7 @@ jobs:
             runner: windows-gfx1201-gpu-rocm
             target_selector: gfx1201
     concurrency:
-      group: iree-bazel-windows-${{ matrix.kind }}-${{ matrix.host_toolchain }}-${{ matrix.target_selector }}-${{ (github.event_name == 'push' && github.ref) || github.run_id }}
+      group: iree-bazel-windows-${{ matrix.command }}-${{ matrix.host_toolchain }}-${{ matrix.target_selector }}-${{ (github.event_name == 'push' && github.ref) || github.run_id }}
       cancel-in-progress: true
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.kind == 'amd_client' && 45 || 60 }}
@@ -541,7 +570,7 @@ jobs:
           Write-Output "Using stable toolchain root $rocmRoot and Bazel output base $($environment.IREE_CI_BAZEL_OUTPUT_BASE)."
 
       - name: Set up Node.js
-        if: matrix.kind == 'repository'
+        if: matrix.kind == 'repository' && matrix.command != 'iree-bazel-repository-build'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
@@ -686,8 +715,11 @@ jobs:
             $env:AR = Join-Path $env:BAZEL_LLVM 'bin\llvm-lib.exe'
           }
           $repositoryResultsDir = Join-Path $env:RUNNER_TEMP "repository-test-results-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          python build_tools/devtools/ci.py iree-bazel-repository-integration `
-            --amdgpu-target gfx11-generic `
+          $targetArgs = @()
+          if ("${{ matrix.target_selector }}") {
+            $targetArgs += @('--amdgpu-target', '${{ matrix.target_selector }}')
+          }
+          python build_tools/devtools/ci.py '${{ matrix.command }}' @targetArgs `
             --bazel-test-results-dir $repositoryResultsDir `
             --bazel-profile-dir "$env:RUNNER_TEMP\bazel-profiles" --keep-going
           exit $LASTEXITCODE
@@ -751,7 +783,7 @@ jobs:
         if: ${{ always() && (steps.iree_bazel_ci.outcome == 'failure' || steps.client_ci.outcome == 'failure') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: windows-build-failures-bazel-${{ matrix.kind }}-${{ matrix.host_toolchain }}-attempt-${{ github.run_attempt }}
+          name: windows-build-failures-${{ matrix.command }}-${{ matrix.host_toolchain }}-attempt-${{ github.run_attempt }}
           path: ${{ env.IREE_CI_FAILURE_ARTIFACT_DIR }}
           if-no-files-found: warn
           retention-days: 7
@@ -761,7 +793,7 @@ jobs:
         if: ${{ always() && (steps.iree_bazel_ci.outcome != 'skipped' || steps.client_ci.outcome != 'skipped') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: bazel-profiles-${{ matrix.kind }}-${{ matrix.host_toolchain }}-attempt-${{ github.run_attempt }}
+          name: bazel-profiles-windows-${{ matrix.command }}-${{ matrix.host_toolchain }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}\bazel-profiles\
           if-no-files-found: warn
           compression-level: 0
@@ -771,7 +803,7 @@ jobs:
         if: ${{ always() && steps.iree_bazel_ci.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: test-results-iree-bazel-repository-integration-${{ matrix.host_toolchain }}-attempt-${{ github.run_attempt }}
+          name: test-results-${{ matrix.command }}-${{ matrix.host_toolchain }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/repository-test-results-${{ github.run_id }}-${{ github.run_attempt }}/**/bazel-testlogs/**
           if-no-files-found: warn
           retention-days: 7
@@ -802,6 +834,12 @@ jobs:
           - name: Clang / RelWithDebInfo
             kind: cpu
             command: iree-cmake-cpu
+            platform_coverage: true
+            runner: azure-linux-scale-rocm
+            host_toolchain: rocm
+          - name: Clang / RelWithDebInfo / Shared Tools
+            kind: cpu
+            command: iree-cmake-shared-tools
             platform_coverage: true
             runner: azure-linux-scale-rocm
             host_toolchain: rocm
@@ -966,7 +1004,7 @@ jobs:
         if: ${{ always() && (steps.iree_cmake_ci.outcome == 'failure' || (matrix.kind != 'cpu' && steps.iree_cmake_ci.outcome == 'success')) }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ctest-results-${{ matrix.command }}-attempt-${{ github.run_attempt }}
+          name: ctest-results-linux-${{ matrix.command }}-attempt-${{ github.run_attempt }}
           path: |
             build/ci/**/Testing/Temporary/
             build/ci/**/test_tmpdir/**/test.xml
@@ -994,6 +1032,10 @@ jobs:
             host_toolchain: msvc
           - name: Clang CL / RelWithDebInfo
             command: iree-cmake-cpu
+            fetch_rocm: true
+            host_toolchain: clang-cl
+          - name: Clang CL / RelWithDebInfo / Shared Tools
+            command: iree-cmake-shared-tools
             fetch_rocm: true
             host_toolchain: clang-cl
     concurrency:
@@ -1077,7 +1119,7 @@ jobs:
         if: ${{ always() && steps.iree_cmake_ci.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ctest-results-${{ matrix.command }}-attempt-${{ github.run_attempt }}
+          name: ctest-results-windows-${{ matrix.command }}-attempt-${{ github.run_attempt }}
           path: |
             build/ci/**/Testing/Temporary/
             build/ci/**/test_tmpdir/**/test.xml

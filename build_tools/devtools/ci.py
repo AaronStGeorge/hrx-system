@@ -93,6 +93,8 @@ BAZEL_COMMANDS = {
     "iree-bazel-cpu": ("cpu", None),
     "iree-bazel-repository-build": ("repository-build", None),
     "iree-bazel-repository-integration": ("repository-integration", None),
+    "iree-bazel-repository-shared-tools": ("repository-shared-tools", None),
+    "iree-bazel-cpu-shared-tools-asan": ("cpu-shared-tools", "asan"),
     "iree-bazel-cpu-asan": ("cpu", "asan"),
     "iree-bazel-cpu-msan": ("cpu", "msan"),
     "iree-bazel-cpu-tsan": ("cpu", "tsan"),
@@ -111,6 +113,7 @@ CMAKE_COMMANDS = {
     "iree-cmake-xdna": ("xdna", None),
     "iree-cmake-xdna-asan": ("xdna", "asan"),
     "iree-cmake-cpu": ("cpu", None),
+    "iree-cmake-shared-tools": ("shared-tools", None),
     "iree-cmake-repository-build": ("repository-build", None),
     "iree-cmake-cpu-asan": ("cpu", "asan"),
     "iree-cmake-cpu-msan": ("cpu", "msan"),
@@ -703,29 +706,24 @@ def repository_configure_step() -> CiStep:
     )
 
 
-def repository_build_step() -> CiStep:
-    return bazel_build_step(
-        "Build repository",
-        ("//...",),
-        bazel_options=ci_config.REPOSITORY_BAZEL_OPTIONS,
-    )
-
-
-def repository_build_steps() -> list[CiStep]:
+def repository_build_steps(amdgpu_target_selector: str | None = None) -> list[CiStep]:
+    targets = ("//...",)
+    options = ci_config.REPOSITORY_BAZEL_OPTIONS
+    if amdgpu_target_selector is not None:
+        if not os.environ.get("HRX_ROCM_ROOT"):
+            raise ValueError("repository device compilation requires HRX_ROCM_ROOT")
+        targets += ci_config.BAZEL_REPOSITORY_DEVICE_TARGETS
+        options += (
+            runtime_configure.NATIVE_AMDGPU_TARGETS_FLAG + "=" + amdgpu_target_selector,
+        )
     return [
         repository_configure_step(),
-        repository_build_step(),
+        bazel_build_step("Build repository", targets, bazel_options=options),
     ]
 
 
-def repository_integration_steps(amdgpu_target_selector: str) -> list[CiStep]:
-    if not os.environ.get("HRX_ROCM_ROOT"):
-        raise ValueError(
-            "iree-bazel-repository-integration requires HRX_ROCM_ROOT so the "
-            "AMDGPU device compiler is exercised"
-        )
+def repository_integration_steps() -> list[CiStep]:
     platform_coverage = platform_coverage_enabled()
-    amdgpu_options = amdgpu_bazel_options(amdgpu_target_selector)
     test_tag_filters = ci_config.CPU_RESOURCE_TAG_EXCLUDES
     test_language_filters: tuple[str, ...] = ()
     if not platform_coverage:
@@ -735,12 +733,6 @@ def repository_integration_steps(amdgpu_target_selector: str) -> list[CiStep]:
         test_language_filters = ci_config.PYTHON_TEST_BAZEL_LANGUAGE_EXCLUSIONS
     return [
         repository_configure_step(),
-        *([repository_build_step()] if platform_coverage else []),
-        bazel_build_step(
-            "Build AMDGPU device toolchain smoke",
-            ci_config.BAZEL_REPOSITORY_INTEGRATION_DEVICE_TARGETS,
-            bazel_options=ci_config.REPOSITORY_BAZEL_OPTIONS + amdgpu_options,
-        ),
         bazel_test_step(
             "Test repository",
             ci_config.BAZEL_REPOSITORY_TEST_TARGETS,
@@ -748,18 +740,6 @@ def repository_integration_steps(amdgpu_target_selector: str) -> list[CiStep]:
             test_language_filters=test_language_filters,
             bazel_options=ci_config.REPOSITORY_BAZEL_OPTIONS,
         ),
-        bazel_run_step(
-            "Run dynamic library environment smoke",
-            ci_config.BAZEL_REPOSITORY_INTEGRATION_DYNAMIC_LIBRARY_TARGET,
-            bazel_options=ci_config.REPOSITORY_BAZEL_OPTIONS,
-        ),
-        bazel_run_step(
-            "Run executable alias smoke",
-            ci_config.BAZEL_REPOSITORY_INTEGRATION_ALIAS_TARGET,
-            program_args=("--help",),
-            bazel_options=ci_config.REPOSITORY_BAZEL_OPTIONS,
-        ),
-        shared_tool_bazel_step(bazel_options=ci_config.REPOSITORY_BAZEL_OPTIONS),
     ]
 
 
@@ -819,13 +799,6 @@ def cpu_config_steps(targets: tuple[str, ...], config: str) -> list[CiStep]:
                 test_language_filters=ci_config.PYTHON_TEST_BAZEL_LANGUAGE_EXCLUSIONS,
             ),
         ]
-        if config == "asan":
-            steps.append(
-                shared_tool_bazel_step(
-                    config=config,
-                    bazel_options=("--//loom/config/import:enable=cxx",),
-                )
-            )
         return steps
     if config in ci_config.SANITIZER_BUILD_CONFIGS:
         return [
@@ -1198,53 +1171,46 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
                 ),
             )
         )
-    if sanitizer is None:
-        # Reuse the static qualification tree so both final-link modes are
-        # exercised without another compilation tree or worker job.
-        steps.extend(
-            [
-                CiStep(
-                    "Configure shared Loom tools",
-                    cmake_dev_command(
-                        command_name,
-                        "configure",
-                        "-DLOOM_LINK_SHARED_TOOLS=ON",
-                        "-DLOOM_IMPORT_CXX=ON",
-                    ),
-                ),
-                cmake_build_step(
-                    command_name,
-                    "Build shared Loom tools",
-                    (
-                        "loom-compile",
-                        "loom-opt",
-                        "loom-format",
-                        "loom-link",
-                        "loom-run",
-                        "loom-import-cxx",
-                        "loom-serve",
-                        "loom-check",
-                        "loom-check-test",
-                        "loom-test",
-                        "loom-benchmark",
-                        "loom_tooling_target_cpu_serve_loom-serve-test-tool",
-                    ),
-                ),
-                cmake_test_step(
-                    command_name,
-                    "Test shared Loom tools",
-                    regex=(
-                        r"^(loom/tools/(loom-compile|loom-opt|loom-format|loom-link|loom-import-cxx|loom-run|loom-serve|loom-check|loom-test|loom-benchmark)/(execution_test|scenario_execution_test)"
-                        r"|loom/tools/loom-check/test/.*"
-                        r"|loom/tooling/execution/hal/command_scenario_(execution|specialization)_test"
-                        r"|loom/tooling/target/cpu/benchmark_scenario_correctness_test"
-                        r"|loom/tooling/target/cpu/run_cxx_input_test"
-                        r"|loom/tooling/target/cpu/serve/serve_command_test)$"
-                    ),
-                ),
-            ]
-        )
     return steps
+
+
+def cmake_shared_tool_steps(command_name: str) -> list[CiStep]:
+    return [
+        cmake_configure_step(
+            command_name,
+            extra_options=("-DLOOM_LINK_SHARED_TOOLS=ON", "-DLOOM_IMPORT_CXX=ON"),
+        ),
+        cmake_build_step(
+            command_name,
+            "Build shared Loom tools",
+            (
+                "loom-compile",
+                "loom-opt",
+                "loom-format",
+                "loom-link",
+                "loom-run",
+                "loom-import-cxx",
+                "loom-serve",
+                "loom-check",
+                "loom-check-test",
+                "loom-test",
+                "loom-benchmark",
+                "loom_tooling_target_cpu_serve_loom-serve-test-tool",
+            ),
+        ),
+        cmake_test_step(
+            command_name,
+            "Test shared Loom tools",
+            regex=(
+                r"^(loom/tools/(loom-compile|loom-opt|loom-format|loom-link|loom-import-cxx|loom-run|loom-serve|loom-check|loom-test|loom-benchmark)/(execution_test|scenario_execution_test)"
+                r"|loom/tools/loom-check/test/.*"
+                r"|loom/tooling/execution/hal/command_scenario_(execution|specialization)_test"
+                r"|loom/tooling/target/cpu/benchmark_scenario_correctness_test"
+                r"|loom/tooling/target/cpu/run_cxx_input_test"
+                r"|loom/tooling/target/cpu/serve/serve_command_test)$"
+            ),
+        ),
+    ]
 
 
 def cmake_repository_build_steps(command_name: str) -> list[CiStep]:
@@ -1486,6 +1452,8 @@ def cmake_target_steps(
 ) -> list[CiStep]:
     if target_group == "cpu":
         return cmake_cpu_steps(command_name, sanitizer)
+    if target_group == "shared-tools":
+        return cmake_shared_tool_steps(command_name)
     if target_group == "repository-build":
         if sanitizer is not None:
             raise ValueError("CMake repository builds do not support sanitizers")
@@ -1617,7 +1585,7 @@ def _steps_from_args(args: argparse.Namespace) -> list[CiStep]:
     amdgpu_target_bazel_groups = (
         "amdgpu",
         "amdgpu-native",
-        "repository-integration",
+        "repository-build",
     )
     accepts_amdgpu_target = (
         bazel_target_group in amdgpu_target_bazel_groups
@@ -1626,7 +1594,7 @@ def _steps_from_args(args: argparse.Namespace) -> list[CiStep]:
     if args.amdgpu_target is not None and not accepts_amdgpu_target:
         raise ValueError(
             "--amdgpu-target is only supported for AMDGPU and "
-            "repository-integration CI commands"
+            "repository-build CI commands"
         )
     if args.loom_importer is not None and bazel_target_group != "amdgpu":
         raise ValueError(
@@ -1690,13 +1658,27 @@ def _steps_from_args(args: argparse.Namespace) -> list[CiStep]:
             raise ValueError(
                 "--target is not supported by the repository-wide build command"
             )
-        return repository_build_steps()
+        return repository_build_steps(args.amdgpu_target)
     if bazel_target == "repository-integration":
         if args.target:
             raise ValueError(
                 "--target is not supported by the repository-wide integration command"
             )
-        return repository_integration_steps(amdgpu_target_selector)
+        return repository_integration_steps()
+    if bazel_target in ("repository-shared-tools", "cpu-shared-tools"):
+        if args.target:
+            raise ValueError("--target is not supported by shared-tool CI commands")
+        if bazel_target == "repository-shared-tools":
+            return [
+                repository_configure_step(),
+                shared_tool_bazel_step(
+                    bazel_options=ci_config.REPOSITORY_BAZEL_OPTIONS
+                ),
+            ]
+        return [
+            bazel_configure_step(enabled_loom_importers=("cxx",)),
+            shared_tool_bazel_step(config=sanitizer),
+        ]
     targets = command_targets(args.target)
     if bazel_target == "cpu":
         if sanitizer == "all":

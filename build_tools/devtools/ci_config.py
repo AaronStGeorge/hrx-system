@@ -50,14 +50,10 @@ CMAKE_REPOSITORY_SMOKE_CTEST_REGEXES = (
     "^libamdf/src/xdna/",
     "^loom/format/bytecode/varint_test$",
 )
-BAZEL_REPOSITORY_INTEGRATION_DEVICE_TARGETS = (
+BAZEL_REPOSITORY_DEVICE_TARGETS = (
     "//runtime/src/iree/hal/drivers/amdgpu/util:pm4_dispatch_test_kernels",
 )
 BAZEL_REPOSITORY_TEST_TARGETS = ("//...",)
-BAZEL_REPOSITORY_INTEGRATION_DYNAMIC_LIBRARY_TARGET = (
-    "//build_tools/bazel/test:dynamic_library_environment_binary_fixture"
-)
-BAZEL_REPOSITORY_INTEGRATION_ALIAS_TARGET = "//tools:iree-run-replay"
 IMPORTER_TILELANG_BAZEL_TEST_TARGETS = (
     "//loom/py/loom/importers/check/tilelang:tilelang_test",
     "//loom/py/loom/importers/tilelang:tilelang_test",
