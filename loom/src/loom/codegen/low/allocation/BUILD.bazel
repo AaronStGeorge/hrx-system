@@ -896,6 +896,7 @@ loom_cc_test(
     deps = [
         ":interval_assignment",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/test",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/util:cfg_graph",

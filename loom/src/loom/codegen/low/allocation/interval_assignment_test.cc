@@ -13,6 +13,7 @@
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/target/registers.h"
 #include "loom/util/cfg_graph.h"
@@ -33,28 +34,54 @@ class LowAllocationIntervalAssignmentTest : public ::testing::Test {
         loom_test_dialect_vtables(&vtable_count);
     IREE_ASSERT_OK(loom_context_register_dialect(
         &context_, LOOM_DIALECT_TEST, vtables, (uint16_t)vtable_count));
+    vtables = loom_low_dialect_vtables(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_LOW, vtables, (uint16_t)vtable_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
+
+    IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("assignment"),
+                                        &block_pool_, nullptr,
+                                        iree_allocator_system(), &module_));
+    loom_builder_t builder;
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_module_block(module_), &builder);
+    loom_string_id_t name;
+    IREE_ASSERT_OK(
+        loom_builder_intern_string(&builder, IREE_SV("owner"), &name));
+    loom_symbol_id_t symbol;
+    IREE_ASSERT_OK(loom_module_add_symbol(module_, name, &symbol));
+    loom_string_id_t descriptor_set;
+    IREE_ASSERT_OK(loom_builder_intern_string(
+        &builder, IREE_SV("test.low.core"), &descriptor_set));
+    IREE_ASSERT_OK(loom_low_func_def_build(
+        &builder, 0, /*visibility=*/0, /*retain=*/0, /*cc=*/0,
+        /*effect_contract=*/0, /*inline_policy=*/0, /*allocation=*/0,
+        /*schedule=*/0, descriptor_set, /*target=*/{}, /*abi=*/0, {}, {},
+        LOOM_STRING_ID_INVALID, {}, loom_symbol_ref_t{0, symbol},
+        /*arg_types=*/nullptr, /*arg_types_count=*/0,
+        /*result_types=*/nullptr, /*result_count=*/0,
+        /*tied_results=*/nullptr, /*tied_result_count=*/0,
+        /*predicates=*/nullptr, /*predicates_count=*/0, LOOM_LOCATION_UNKNOWN,
+        &function_op_));
+    loom_builder_enter_region(&builder, function_op_,
+                              loom_low_func_def_body(function_op_));
+    IREE_ASSERT_OK(loom_low_return_build(&builder, nullptr, 0,
+                                         LOOM_LOCATION_UNKNOWN, &return_op_));
   }
 
   void TearDown() override {
     iree_arena_deinitialize(&decision_arena_);
     iree_arena_deinitialize(&arena_);
+    loom_module_free(module_);
     loom_context_deinitialize(&context_);
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
-  loom_module_t* AllocateModule() {
-    loom_module_t* module = nullptr;
-    IREE_CHECK_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
-                                       nullptr, iree_allocator_system(),
-                                       &module));
-    return module;
-  }
-
-  loom_value_id_t DefineValue(loom_module_t* module) {
+  loom_value_id_t DefineValue(uint64_t descriptor_set_id, uint32_t unit_count) {
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
     IREE_CHECK_OK(loom_module_define_value(
-        module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &value_id));
+        module_, loom_low_register_type(descriptor_set_id, 0, unit_count),
+        &value_id));
     return value_id;
   }
 
@@ -66,6 +93,12 @@ class LowAllocationIntervalAssignmentTest : public ::testing::Test {
   iree_arena_allocator_t decision_arena_;
   // Context for the module-local value domain.
   loom_context_t context_;
+  // Owns value identities and the function used for diagnostics.
+  loom_module_t* module_ = nullptr;
+  // Real function owner; interval and placement facts remain native inputs.
+  loom_op_t* function_op_ = nullptr;
+  // Empty return used as the insertion point for the spill-traffic API fixture.
+  loom_op_t* return_op_ = nullptr;
 };
 
 loom_liveness_value_class_t RegisterValueClass(uint64_t descriptor_set_id) {
@@ -79,11 +112,12 @@ loom_liveness_value_class_t RegisterValueClass(uint64_t descriptor_set_id) {
 
 TEST_F(LowAllocationIntervalAssignmentTest,
        AssignsOrTrafficBoundsSingleRegisterInterval) {
-  loom_module_t* module = AllocateModule();
+  loom_module_t* module = module_;
   const uint64_t descriptor_set_id = 17;
   loom_builder_t builder = {};
-  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+  loom_builder_initialize(module, &module->arena, return_op_->parent_block,
                           &builder);
+  loom_builder_set_before(&builder, return_op_);
   loom_op_t* producer_op = nullptr;
   IREE_ASSERT_OK(loom_test_constant_build(
       &builder, loom_attr_i64(0),
@@ -115,7 +149,7 @@ TEST_F(LowAllocationIntervalAssignmentTest,
   };
   const uint32_t interval_indices[] = {0};
   loom_liveness_analysis_t liveness = {
-      .region = module->body,
+      .region = loom_low_func_def_body(function_op_),
       .intervals = &interval,
       .interval_count = 1,
       .value_ids = value_ids,
@@ -165,22 +199,22 @@ TEST_F(LowAllocationIntervalAssignmentTest,
       .descriptor_set = &descriptor_set,
   };
   target.descriptor_set_key = IREE_SV("test");
-  loom_op_t function_op = {};
   loom_low_allocation_target_constraints_t target_constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      module, &function_op, &target, /*budgets=*/nullptr,
+      module, function_op_, &target, /*budgets=*/nullptr,
       /*budget_count=*/0, /*reserved_ranges=*/nullptr,
       /*reserved_range_count=*/0, /*emitter=*/iree_diagnostic_emitter_t{},
       &arena_, &target_constraints));
   loom_cfg_graph_t function_cfg_graph = {};
-  IREE_ASSERT_OK(
-      loom_cfg_graph_build(module, module->body, &arena_, &function_cfg_graph));
+  IREE_ASSERT_OK(loom_cfg_graph_build(module,
+                                      loom_low_func_def_body(function_op_),
+                                      &arena_, &function_cfg_graph));
 
   loom_low_allocation_storage_lease_state_t storage_leases = {};
   const loom_low_allocation_interval_assignment_context_t context = {
       .module = module,
-      .body = module->body,
-      .function_op = &function_op,
+      .body = loom_low_func_def_body(function_op_),
+      .function_op = function_op_,
       .target = &target,
       .liveness = &liveness,
       .value_domain = &value_domain,
@@ -288,22 +322,21 @@ TEST_F(LowAllocationIntervalAssignmentTest,
   EXPECT_EQ(result.remark_count, 1u);
 
   loom_local_value_domain_release(&value_domain);
-  loom_module_free(module);
 }
 
 TEST_F(LowAllocationIntervalAssignmentTest,
        AssignsExplicitRegistersAndOddOrdinalAggregateView) {
-  loom_module_t* module = AllocateModule();
-  const loom_value_id_t first_value = DefineValue(module);
-  const loom_value_id_t second_value = DefineValue(module);
-  const loom_value_id_t aggregate_value = DefineValue(module);
+  loom_module_t* module = module_;
+  const uint64_t descriptor_set_id = 23;
+  const loom_value_id_t first_value = DefineValue(descriptor_set_id, 1);
+  const loom_value_id_t second_value = DefineValue(descriptor_set_id, 1);
+  const loom_value_id_t aggregate_value = DefineValue(descriptor_set_id, 2);
   loom_module_value_ordinal_scratch_acquire(module);
   loom_module_value_ordinal_scratch_set(module, first_value, /*ordinal=*/0);
   loom_module_value_ordinal_scratch_set(module, second_value, /*ordinal=*/1);
   loom_module_value_ordinal_scratch_set(module, aggregate_value,
                                         /*ordinal=*/2);
 
-  const uint64_t descriptor_set_id = 23;
   const loom_liveness_value_class_t value_class =
       RegisterValueClass(descriptor_set_id);
   const loom_liveness_interval_t intervals[] = {
@@ -468,10 +501,9 @@ TEST_F(LowAllocationIntervalAssignmentTest,
       .descriptor_set = &descriptor_set,
   };
   target.descriptor_set_key = IREE_SV("test");
-  loom_op_t function_op = {};
   loom_low_allocation_target_constraints_t target_constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      module, &function_op, &target, /*budgets=*/nullptr,
+      module, function_op_, &target, /*budgets=*/nullptr,
       /*budget_count=*/0, /*reserved_ranges=*/nullptr,
       /*reserved_range_count=*/0, /*emitter=*/iree_diagnostic_emitter_t{},
       &arena_, &target_constraints));
@@ -479,8 +511,8 @@ TEST_F(LowAllocationIntervalAssignmentTest,
   loom_low_allocation_storage_lease_state_t storage_leases = {};
   const loom_low_allocation_interval_assignment_context_t context = {
       .module = module,
-      .body = nullptr,
-      .function_op = &function_op,
+      .body = loom_low_func_def_body(function_op_),
+      .function_op = function_op_,
       .target = &target,
       .liveness = &liveness,
       .value_domain = &value_domain,
@@ -548,21 +580,20 @@ TEST_F(LowAllocationIntervalAssignmentTest,
   EXPECT_EQ(target_constraints.error_count, 0u);
 
   loom_local_value_domain_release(&value_domain);
-  loom_module_free(module);
 }
 
 TEST_F(LowAllocationIntervalAssignmentTest,
        AssignsTiedFixedValuesToSharedLocation) {
-  loom_module_t* module = AllocateModule();
-  const loom_value_id_t source_value = DefineValue(module);
-  const loom_value_id_t result_value = DefineValue(module);
+  loom_module_t* module = module_;
+  const uint64_t descriptor_set_id = 17;
+  const loom_value_id_t source_value = DefineValue(descriptor_set_id, 1);
+  const loom_value_id_t result_value = DefineValue(descriptor_set_id, 1);
   loom_module_value_ordinal_scratch_acquire(module);
   loom_module_value_ordinal_scratch_set(module, source_value,
                                         /*ordinal=*/0);
   loom_module_value_ordinal_scratch_set(module, result_value,
                                         /*ordinal=*/1);
 
-  const uint64_t descriptor_set_id = 17;
   const loom_liveness_value_class_t value_class =
       RegisterValueClass(descriptor_set_id);
   const loom_liveness_interval_t intervals[] = {
@@ -665,10 +696,9 @@ TEST_F(LowAllocationIntervalAssignmentTest,
       .descriptor_set = &descriptor_set,
   };
   target.descriptor_set_key = IREE_SV("test");
-  loom_op_t function_op = {};
   loom_low_allocation_target_constraints_t target_constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      module, &function_op, &target, /*budgets=*/nullptr,
+      module, function_op_, &target, /*budgets=*/nullptr,
       /*budget_count=*/0, /*reserved_ranges=*/nullptr,
       /*reserved_range_count=*/0, /*emitter=*/iree_diagnostic_emitter_t{},
       &arena_, &target_constraints));
@@ -703,8 +733,8 @@ TEST_F(LowAllocationIntervalAssignmentTest,
   loom_low_allocation_storage_lease_state_t storage_leases = {};
   const loom_low_allocation_interval_assignment_context_t context = {
       .module = module,
-      .body = nullptr,
-      .function_op = &function_op,
+      .body = loom_low_func_def_body(function_op_),
+      .function_op = function_op_,
       .target = &target,
       .liveness = &liveness,
       .value_domain = &value_domain,
@@ -733,7 +763,6 @@ TEST_F(LowAllocationIntervalAssignmentTest,
   EXPECT_FALSE(result.has_packable_aggregates);
 
   loom_local_value_domain_release(&value_domain);
-  loom_module_free(module);
 }
 
 // Four required owners occupy the low window before a fifth required value
@@ -743,7 +772,7 @@ class LowRequiredRegisterRelocationTest
     : public LowAllocationIntervalAssignmentTest {
  protected:
   void Run() {
-    loom_module_t* module = AllocateModule();
+    loom_module_t* module = module_;
     constexpr uint64_t kDescriptorSetId = 29;
     constexpr uint32_t kValueCount = 6;
     loom_value_id_t values[kValueCount];
@@ -838,10 +867,9 @@ class LowRequiredRegisterRelocationTest
     const loom_low_resolved_target_t target = {
         .descriptor_set = &descriptors,
     };
-    loom_op_t function = {};
     loom_low_allocation_target_constraints_t constraints = {};
     IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-        module, &function, &target, nullptr, 0, nullptr, 0, {}, &arena_,
+        module, function_op_, &target, nullptr, 0, nullptr, 0, {}, &arena_,
         &constraints));
     loom_low_allocation_fixed_value_t fixed[5] = {
         {
@@ -869,13 +897,14 @@ class LowRequiredRegisterRelocationTest
     IREE_ASSERT_OK(loom_low_allocation_target_constraints_finalize_fixed_values(
         &constraints, &liveness, &unit_liveness, &arena_));
     loom_cfg_graph_t function_cfg_graph = {};
-    IREE_ASSERT_OK(loom_cfg_graph_build(module, module->body, &arena_,
-                                        &function_cfg_graph));
+    IREE_ASSERT_OK(loom_cfg_graph_build(module,
+                                        loom_low_func_def_body(function_op_),
+                                        &arena_, &function_cfg_graph));
     loom_low_allocation_storage_lease_state_t leases = {};
     const loom_low_allocation_interval_assignment_context_t context = {
         .module = module,
-        .body = module->body,
-        .function_op = &function,
+        .body = loom_low_func_def_body(function_op_),
+        .function_op = function_op_,
         .target = &target,
         .liveness = &liveness,
         .value_domain = &value_domain,
@@ -900,7 +929,6 @@ class LowRequiredRegisterRelocationTest
       }
     }
     loom_local_value_domain_release(&value_domain);
-    loom_module_free(module);
   }
 
   void CheckMoved(uint32_t destination) {
