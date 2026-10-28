@@ -16,6 +16,7 @@ package(
 loom_check_test_suite(
     name = "test",
     srcs = [
+        "compare.loom-test",
         "copy.loom-test",
         "fill.loom-test",
         "materialize.loom-test",

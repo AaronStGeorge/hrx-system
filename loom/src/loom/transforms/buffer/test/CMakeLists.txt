@@ -13,6 +13,7 @@ loom_check_test_suite(
   NAME
     test
   SRCS
+    "compare.loom-test"
     "copy.loom-test"
     "fill.loom-test"
     "materialize.loom-test"

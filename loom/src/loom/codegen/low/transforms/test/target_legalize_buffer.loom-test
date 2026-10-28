@@ -139,26 +139,27 @@ func.def target(@test_target) @fill_bf16(%pattern: bf16, %target: buffer, %targe
 
 func.def target(@test_target) @compare(%lhs: buffer, %lhs_offset: offset, %rhs: buffer, %rhs_offset: offset, %byte_length: offset) -> (i32) {
   %97 = index.constant 0 : offset
-  %98 = index.constant 1 : offset
-  %99 = scalar.constant 0 : i32
-  %100 = scalar.constant -1 : i32
-  %101 = scalar.constant 1 : i32
-  %106, %order = scf.while(%102 = %97 : offset, %103 = %99 : i32) -> (offset, i32) {
-    %108 = index.cmp ult, %102, %byte_length : offset
-    %109 = scalar.cmpi eq, %103, %99 : i32
-    %110 = scalar.andi %108, %109 : i1
-    scf.condition %110, %102, %103 : i1, offset, i32
-  } do(%104: offset, %105: i32) {
-    %111 = index.add %lhs_offset, %104 : offset
-    %112 = buffer.load.i8.u %lhs[%111]
-    %113 = index.add %rhs_offset, %104 : offset
-    %114 = buffer.load.i8.u %rhs[%113]
-    %115 = scalar.cmpi eq, %112, %114 : i32
-    %116 = scalar.cmpi ult, %112, %114 : i32
-    %117 = scf.select %116, %100, %101 : i32
-    %118 = scf.select %115, %99, %117 : i32
-    %119 = index.add %104, %98 : offset
-    scf.yield %119, %118 : offset, i32
+  %98 = scalar.constant 0 : i32
+  %99 = scalar.constant -1 : i32
+  %100 = scalar.constant 1 : i32
+  %101 = scalar.constant 0 : i32
+  %108, %109, %110 = scf.while(%102 = %97 : offset, %103 = %101 : i32, %104 = %101 : i32) -> (offset, i32, i32) {
+    %111 = index.cmp ult, %102, %byte_length : offset
+    %112 = scalar.cmpi eq, %103, %104 : i32
+    %113 = scalar.andi %111, %112 : i1
+    scf.condition %113, %102, %103, %104 : i1, offset, i32, i32
+  } do(%105: offset, %106: i32, %107: i32) {
+    %114 = index.add %lhs_offset, %105 : offset
+    %115 = buffer.load.i8.u %lhs[%114]
+    %116 = index.add %rhs_offset, %105 : offset
+    %117 = buffer.load.i8.u %rhs[%116]
+    %118 = index.constant 1 : offset
+    %119 = index.add %105, %118 : offset
+    scf.yield %119, %115, %117 : offset, i32, i32
   }
+  %120 = scalar.cmpi eq, %109, %110 : i32
+  %121 = scalar.cmpi ult, %109, %110 : i32
+  %122 = scf.select %121, %99, %100 : i32
+  %order = scf.select %120, %98, %122 : i32
   func.return %order : i32
 }

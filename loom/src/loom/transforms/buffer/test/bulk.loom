@@ -66,3 +66,8 @@ func.def public @bulk_fill_f64(%target: buffer, %target_offset: offset, %length:
   buffer.fill %pattern, %target[%target_offset], %length : f64
   func.return
 }
+
+func.def public @bulk_compare(%left: buffer, %left_offset: offset, %right: buffer, %right_offset: offset, %length: offset) -> (i32) {
+  %order = buffer.compare %left[%left_offset], %right[%right_offset], %length
+  func.return %order : i32
+}

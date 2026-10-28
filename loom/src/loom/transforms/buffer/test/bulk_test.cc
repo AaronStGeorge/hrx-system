@@ -41,6 +41,10 @@ extern "C" void bulk_fill_f32(void* target, uint64_t target_offset,
 extern "C" void bulk_fill_f64(void* target, uint64_t target_offset,
                               uint64_t length, uint64_t pattern);
 
+extern "C" int32_t bulk_compare(const void* left, uint64_t left_offset,
+                                const void* right, uint64_t right_offset,
+                                uint64_t length);
+
 namespace {
 
 class GuardedPage {
@@ -190,6 +194,67 @@ TEST_F(BulkMemoryTest, FillDoesNotAccessOutsideRange) {
                   static_cast<uint8_t>(pattern >> (8 * (i % test.byte_count))));
       }
       EXPECT_EQ(target.data()[offset - 1], 0xA5);
+    }
+  }
+}
+
+TEST_F(BulkMemoryTest, CompareFirstDifferentUnsignedByte) {
+  alignas(64) std::array<uint8_t, 256> left;
+  alignas(64) std::array<uint8_t, 256> right;
+  for (size_t length = 0; length <= 129; ++length) {
+    for (size_t left_offset = 0; left_offset < 16; ++left_offset) {
+      const size_t right_offset = (3 * left_offset + length + 7) % 64;
+      left.fill(0xA5);
+      right.fill(0xA5);
+      ASSERT_EQ(bulk_compare(left.data(), left_offset, right.data(),
+                             right_offset, length),
+                0);
+      for (size_t first = 0; first < length; ++first) {
+        left[left_offset + first] = 0x80;
+        right[right_offset + first] = 0x7F;
+        // A later byte orders the entire little-endian word in the opposite
+        // direction. The first byte still determines lexicographic order.
+        if (first + 1 < length) {
+          left[left_offset + first + 1] = 0;
+          right[right_offset + first + 1] = 255;
+        }
+        ASSERT_EQ(bulk_compare(left.data(), left_offset, right.data(),
+                               right_offset, length),
+                  1)
+            << "length=" << length << " first=" << first;
+        ASSERT_EQ(bulk_compare(right.data(), right_offset, left.data(),
+                               left_offset, length),
+                  -1);
+        left[left_offset + first] = right[right_offset + first] = 0xA5;
+        if (first + 1 < length) {
+          left[left_offset + first + 1] = right[right_offset + first + 1] =
+              0xA5;
+        }
+      }
+    }
+  }
+}
+
+TEST_F(BulkMemoryTest, CompareDoesNotAccessOutsideRange) {
+  GuardedPage left;
+  GuardedPage right;
+  ASSERT_TRUE(left.ready());
+  ASSERT_TRUE(right.ready());
+  EXPECT_EQ(bulk_compare(nullptr, 0, nullptr, 0, 0), 0);
+  for (size_t length = 0; length <= 129; ++length) {
+    const size_t left_offset = left.size() - length;
+    const size_t right_offset = right.size() - length;
+    std::memset(left.data(), 0xA5, left.size());
+    std::memset(right.data(), 0xA5, right.size());
+    EXPECT_EQ(bulk_compare(left.data(), left_offset, right.data(), right_offset,
+                           length),
+              0);
+    if (length) {
+      left.data()[left.size() - 1] = 0x80;
+      right.data()[right.size() - 1] = 0x7F;
+      EXPECT_EQ(bulk_compare(left.data(), left_offset, right.data(),
+                             right_offset, length),
+                1);
     }
   }
 }

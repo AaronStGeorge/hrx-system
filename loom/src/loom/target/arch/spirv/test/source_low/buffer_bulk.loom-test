@@ -69,35 +69,35 @@ func.def target(@target) @compare(%lhs: buffer, %lhs_offset: offset, %rhs: buffe
 
 // ----
 low.func.def target<spirv.logical.core>(@target) abi(shader_entry_point) @compare(%lhs: reg<spirv.ptr.storage_buffer>, %lhs_offset: reg<spirv.offset64>, %rhs: reg<spirv.ptr.storage_buffer>, %rhs_offset: reg<spirv.offset64>, %byte_length: reg<spirv.offset64>) -> (reg<spirv.id : i32>) asm {
-  %36 = OpConstant.offset64 0
-  %37 = OpConstant.offset64 1
-  %38 = OpConstant.i32 0
-  %39 = OpConstant.i32 -1
-  %40 = OpConstant.i32 1
-  %43, %order = low.scf.while(%41 = %36 : reg<spirv.offset64>, %42 = %38 : reg<spirv.id : i32>) -> (reg<spirv.offset64>, reg<spirv.id : i32>) {
-    %47 = OpULessThan.offset64 %41, %byte_length
-    %48 = OpIEqual %42, %38
-    %49 = OpLogicalAnd.bool %47, %48
-    low.scf.condition %49, %41, %42 : reg<spirv.id : i1>, reg<spirv.offset64>, reg<spirv.id : i32>
-  } do(%45: reg<spirv.offset64>, %46: reg<spirv.id : i32>) {
-    %50 = OpIAdd.offset64 %lhs_offset, %45
-    %51 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %lhs, %50
-    %52 = OpLoad.storage_buffer.raw_u8 %51
-    %53 = OpUConvert.raw_u8.u32 %52
-    %54 = OpBitcast.u32.i32 %53
-    %55 = OpIAdd.offset64 %rhs_offset, %45
-    %56 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %rhs, %55
-    %57 = OpLoad.storage_buffer.raw_u8 %56
-    %58 = OpUConvert.raw_u8.u32 %57
-    %59 = OpBitcast.u32.i32 %58
-    %60 = OpIEqual %54, %59
-    %61 = OpBitcast.i32.u32 %54
-    %62 = OpBitcast.i32.u32 %59
-    %63 = OpULessThan.u32 %61, %62
-    %64 = OpSelect %63, %39, %40
-    %65 = OpSelect %60, %38, %64
-    %66 = OpIAdd.offset64 %45, %37
-    low.scf.yield %66, %65 : reg<spirv.offset64>, reg<spirv.id : i32>
+  %40 = OpConstant.offset64 0
+  %41 = OpConstant.i32 0
+  %42 = OpConstant.i32 -1
+  %43 = OpConstant.i32 1
+  %44 = OpConstant.offset64 1
+  %48, %49, %50 = low.scf.while(%45 = %40 : reg<spirv.offset64>, %46 = %41 : reg<spirv.id : i32>, %47 = %41 : reg<spirv.id : i32>) -> (reg<spirv.offset64>, reg<spirv.id : i32>, reg<spirv.id : i32>) {
+    %54 = OpULessThan.offset64 %45, %byte_length
+    %55 = OpIEqual %46, %47
+    %56 = OpLogicalAnd.bool %54, %55
+    low.scf.condition %56, %45, %46, %47 : reg<spirv.id : i1>, reg<spirv.offset64>, reg<spirv.id : i32>, reg<spirv.id : i32>
+  } do(%51: reg<spirv.offset64>, %52: reg<spirv.id : i32>, %53: reg<spirv.id : i32>) {
+    %57 = OpIAdd.offset64 %lhs_offset, %51
+    %58 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %lhs, %57
+    %59 = OpLoad.storage_buffer.raw_u8 %58
+    %60 = OpUConvert.raw_u8.u32 %59
+    %61 = OpBitcast.u32.i32 %60
+    %62 = OpIAdd.offset64 %rhs_offset, %51
+    %63 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %rhs, %62
+    %64 = OpLoad.storage_buffer.raw_u8 %63
+    %65 = OpUConvert.raw_u8.u32 %64
+    %66 = OpBitcast.u32.i32 %65
+    %67 = OpIAdd.offset64 %51, %44
+    low.scf.yield %67, %61, %66 : reg<spirv.offset64>, reg<spirv.id : i32>, reg<spirv.id : i32>
   }
+  %68 = OpIEqual %49, %50
+  %69 = OpBitcast.i32.u32 %49
+  %70 = OpBitcast.i32.u32 %50
+  %71 = OpULessThan.u32 %69, %70
+  %72 = OpSelect %71, %42, %43
+  %order = OpSelect %68, %41, %72
   return %order
 }
