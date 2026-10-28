@@ -39,13 +39,20 @@ bool loom_low_capture_can_forward(const loom_module_t* module,
   if (loom_low_capture_source_has_required_identity(source_value)) {
     return false;
   }
+  const loom_value_t* result_value = loom_module_value(module, result);
   if (loom_value_ownership_use_count(source_value) == 0 &&
-      loom_value_ownership_use_count(loom_module_value(module, result)) == 0) {
+      loom_value_ownership_use_count(result_value) == 0) {
     return true;
   }
-  // A sole observation can transfer the independent source's ownership to all
-  // result uses without merging two separately observed owners.
+  // A sole observation can transfer ownership only when block entry recreates
+  // both owners. A capture in a descendant loop may execute repeatedly while
+  // its source is created once, even though that source has one textual use.
+  const loom_block_t* source_block =
+      loom_value_is_block_arg(source_value)
+          ? loom_value_def_block(source_value)
+          : loom_value_def_op(source_value)->parent_block;
   return source_value->use_count == source_occurrences &&
+         source_block == loom_value_def_op(result_value)->parent_block &&
          !loom_value_has_attribute_uses(source_value) &&
          !loom_module_value_has_type_uses(module, source);
 }

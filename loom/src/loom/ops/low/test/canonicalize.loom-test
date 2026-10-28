@@ -1,5 +1,97 @@
 // RUN: pass canonicalize
 
+// One textual observation still captures a fresh owner on each loop iteration.
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_repeated_capture(%again: reg<test.i32>, %source: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.br ^loop
+^loop:
+  %saved = slice %source[0] : reg<test.i32> -> reg<test.i32>
+  %changed = test.tied.any %saved
+  low.cond_br %again, ^loop, ^exit : reg<test.i32>
+^exit:
+  return %changed
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_repeated_capture(%again: reg<test.i32>, %source: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.br ^loop
+^loop:
+  %saved = slice %source[0] : reg<test.i32> -> reg<test.i32>
+  %changed = test.tied.any %saved
+  low.cond_br %again, ^loop, ^exit : reg<test.i32>
+^exit:
+  return %changed
+}
+
+// ====
+
+// Both argument and operation owners are recreated with their captures.
+// Their sole observations can transfer ownership within the same block.
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @forwards_recreated_owners(%again: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  low.br ^loop(%seed: reg<test.i32>)
+^loop(%state: reg<test.i32>):
+  %fresh = test.add.i32 %seed, %seed
+  %saved_state = slice %state[0] : reg<test.i32> -> reg<test.i32>
+  %saved_fresh = slice %fresh[0] : reg<test.i32> -> reg<test.i32>
+  %changed_state = test.tied.any %saved_state
+  %changed_fresh = test.tied.any %saved_fresh
+  low.cond_br %again, ^backedge, ^exit : reg<test.i32>
+^backedge:
+  low.br ^loop(%seed: reg<test.i32>)
+^exit:
+  return %changed_state, %changed_fresh
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @forwards_recreated_owners(%again: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  low.br ^loop(%seed: reg<test.i32>)
+^loop(%state: reg<test.i32>):
+  %fresh = test.add.i32 %seed, %seed
+  %changed_state = test.tied.any %state
+  %changed_fresh = test.tied.any %fresh
+  low.cond_br %again, ^backedge, ^exit : reg<test.i32>
+^backedge:
+  low.br ^loop(%seed: reg<test.i32>)
+^exit:
+  return %changed_state, %changed_fresh
+}
+
+// ====
+
+// Repeated read-only observations need no independent destructive ownership.
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @forwards_repeated_readonly_capture(%again: reg<test.i32>, %source: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.br ^loop
+^loop:
+  %saved = slice %source[0] : reg<test.i32> -> reg<test.i32>
+  %sum = test.add.i32 %saved, %saved
+  low.cond_br %again, ^loop, ^exit : reg<test.i32>
+^exit:
+  return %sum
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @forwards_repeated_readonly_capture(%again: reg<test.i32>, %source: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.br ^loop
+^loop:
+  %sum = test.add.i32 %source, %source
+  low.cond_br %again, ^loop, ^exit : reg<test.i32>
+^exit:
+  return %sum
+}
+
+// ====
+
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @tied_result_capture_before_write(%source: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {

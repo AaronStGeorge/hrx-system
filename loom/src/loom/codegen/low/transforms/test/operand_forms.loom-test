@@ -1,5 +1,33 @@
 // RUN: pass low-select-operand-forms,low-cse,low-dce
 
+// Equal arms still create a fresh owner each time the select executes.
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_repeated_selected_owner(%again: reg<test.i32>, %condition: reg<test.i32>, %value: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.br ^loop
+^loop:
+  %selected = test.select.i32 %condition, %value, %value
+  %changed = test.tied.any %selected
+  low.cond_br %again, ^loop, ^exit : reg<test.i32>
+^exit:
+  return %changed
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @retains_repeated_selected_owner(%again: reg<test.i32>, %condition: reg<test.i32>, %value: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.br ^loop
+^loop:
+  %selected = slice %value[0] : reg<test.i32> -> reg<test.i32>
+  %changed = test.tied.any %selected
+  low.cond_br %again, ^loop, ^exit : reg<test.i32>
+^exit:
+  return %changed
+}
+
+// ====
+
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @equal_readonly_payloads(%condition: reg<test.i32>, %value: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
