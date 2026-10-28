@@ -146,6 +146,37 @@ code: 48 83 ec 68 c5 fe 6f 47 60 c5 fc 11 04 24 c5 fe 6f 07 c5 fc 11 44 24 20 c5
 
 // ====
 
+// Entry arguments and call results keep exclusive spill cells so their stores
+// can join ABI transport. Neither cell can be reused by the later loaded value,
+// even though all three register lifetimes end in separate blocks.
+// RUN: emit x86-native-bytes @callable_spill_cells
+x86.target<avx512> @target
+
+low.func.decl target<x86.avx512.core>(@target) @advance(%address: reg<x86.gpr64>) -> (reg<x86.gpr64>)
+
+low.func.decl target<x86.avx512.core>(@target) @produce() -> (reg<x86.ymm>)
+
+low.func.def target<x86.avx512.core>(@target) @callable_spill_cells(%input: reg<x86.gpr64>, %incoming: reg<x86.ymm>) asm {
+  %first_address = low.func.call @advance(%input) : (reg<x86.gpr64>) -> (reg<x86.gpr64>)
+  vmovdqu32.store.ymm %incoming, %first_address {disp32 = 0}
+  low.br ^returned
+^returned:
+  %returned = low.func.call @produce() : () -> (reg<x86.ymm>)
+  %second_address = low.func.call @advance(%first_address) : (reg<x86.gpr64>) -> (reg<x86.gpr64>)
+  vmovdqu32.store.ymm %returned, %second_address {disp32 = 32}
+  low.br ^loaded
+^loaded:
+  %loaded = vmovdqu32.load.ymm %second_address {disp32 = 64}
+  %last_address = low.func.call @advance(%second_address) : (reg<x86.gpr64>) -> (reg<x86.gpr64>)
+  vmovdqu32.store.ymm %loaded, %last_address {disp32 = 64}
+  return
+}
+
+// ----
+code: 53 48 83 ec 60 c5 fc 11 04 24 c5 f8 77 e8 00 00 00 00 48 8b d8 c5 fc 10 04 24 c5 fe 7f 03 c5 f8 77 e8 00 00 00 00 c5 fc 11 44 24 20 48 8b fb c5 f8 77 e8 00 00 00 00 c5 fc 10 44 24 20 c5 fe 7f 40 20 c5 fe 6f 40 40 c5 fc 11 44 24 40 48 8b f8 c5 f8 77 e8 00 00 00 00 c5 fc 10 44 24 40 c5 fe 7f 40 40 48 83 c4 60 5b c5 f8 77 c3
+
+// ====
+
 // A half-precision value crosses the platform boundary in XMM while its Low
 // carrier occupies four-byte GPR storage. The explicit spill and reload fold
 // into entry and return transport without an intermediate GPR.
