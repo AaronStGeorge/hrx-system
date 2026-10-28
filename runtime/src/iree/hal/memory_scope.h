@@ -73,7 +73,9 @@ typedef enum iree_hal_pool_placement_mode_e {
 
 typedef struct iree_hal_pool_placement_t {
   // Requested placement policy. In an achieved result, REQUIRED means the
-  // native allocator enforces the node; AUTOMATIC makes no node guarantee.
+  // native allocator selects the node's allocation domain; AUTOMATIC makes no
+  // node guarantee. Native eviction can change physical residency without
+  // changing the pool's access or host-mapping contract.
   iree_hal_pool_placement_mode_t mode;
   // Group topology node; ignored for AUTOMATIC.
   uint32_t node;

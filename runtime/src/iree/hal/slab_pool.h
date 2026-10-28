@@ -41,7 +41,7 @@ typedef enum iree_hal_slab_pool_owned_mode_e {
 } iree_hal_slab_pool_owned_mode_t;
 
 typedef struct iree_hal_slab_pool_options_t {
-  // Physical backing placement, independent of the participating-family order.
+  // Backing allocation domain, independent of the participating-family order.
   iree_hal_pool_placement_t placement;
   // Policy for storage allocated by the selected native route.
   struct {

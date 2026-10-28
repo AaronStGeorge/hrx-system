@@ -179,6 +179,10 @@ struct FakeNative {
       out_capabilities[i].supported_flags =
           AMDF_MEMORY_FLAG_DEVICE_ADDRESS |
           self->access_flags[device->ordinal] |
+          (storage->memory_class == AMDF_MEMORY_CLASS_SYSTEM &&
+                   (self->system_local_devices & (1u << device->ordinal))
+               ? AMDF_MEMORY_FLAG_DEVICE_LOCAL
+               : 0) |
           (self->mapping_enabled ? AMDF_MEMORY_FLAG_MAPPING_SOURCE : 0);
       out_capabilities[i].address_kinds = self->address_kinds[device->ordinal];
       const auto& atomics = profile_ordinal == 1 && self->registration_enabled
@@ -738,6 +742,8 @@ struct FakeNative {
 
   // Shared system scope offered by both engine descriptors.
   Scope system_scope = {this, AMDF_MEMORY_CLASS_SYSTEM, UINT32_MAX};
+  // Consumers for which the owned SYSTEM profile offers device-local backing.
+  uint32_t system_local_devices = 0;
   // Distinct physical storage scopes for the two participating devices.
   std::array<Scope, 2> local_scopes = {};
   // Scope actually used to acquire the last backing allocation.

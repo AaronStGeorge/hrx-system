@@ -1021,6 +1021,50 @@ TEST_F(MemoryBackendTest, PrivateTransferViewsFollowEachStorageRoute) {
   }
 }
 
+TEST_F(MemoryBackendTest, UnifiedSystemDefaultSurvivesLocalAdmission) {
+  for (uint32_t i = 0; i < backends_.size(); ++i) {
+    backends_[i].native.storage_count = 2;
+    storage_[i][0].memory_type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL;
+  }
+  // A mixed integrated/discrete consumer set cannot inherit the integrated
+  // device's SYSTEM locality. Explicit LOCAL remains independent of this rank.
+  for (uint32_t local_devices : {0u, 1u, 3u}) {
+    SCOPED_TRACE(local_devices);
+    native_.system_local_devices = local_devices;
+    for (bool required_local : {false, true}) {
+      SCOPED_TRACE(required_local);
+      pool_options_.placement =
+          required_local
+              ? iree_hal_pool_placement_t{IREE_HAL_POOL_PLACEMENT_REQUIRED,
+                                          PhysicalNode(1)}
+              : iree_hal_pool_placement_t{};
+      iree_hal_pool_t* pool = nullptr;
+      IREE_ASSERT_OK(CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, &pool));
+      const bool system = !required_local && local_devices == 3;
+      iree_hal_pool_capabilities_t capabilities;
+      iree_hal_pool_query_capabilities(pool, &capabilities);
+      EXPECT_EQ(capabilities.placement.mode,
+                system ? IREE_HAL_POOL_PLACEMENT_AUTOMATIC
+                       : IREE_HAL_POOL_PLACEMENT_REQUIRED);
+      if (!system) {
+        EXPECT_EQ(capabilities.placement.node,
+                  PhysicalNode(required_local ? 1 : 0));
+      }
+      EXPECT_EQ(native_.create_count, native_.destroy_count);
+      iree_hal_buffer_t* buffer = nullptr;
+      IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+          pool, iree_hal_make_pool_reservation_request(64, 64),
+          iree_infinite_timeout(), &buffer));
+      EXPECT_EQ(
+          native_.created_scope,
+          system ? native_.scope() : storage_[required_local ? 1 : 0][1].scope);
+      iree_hal_buffer_release(buffer);
+      iree_hal_pool_release(pool);
+      native_.AwaitEmpty();
+    }
+  }
+}
+
 TEST_F(MemoryBackendTest, RequiredPlacementSelectsBackingOwner) {
   for (auto& backend : backends_) {
     backend.native.storage_count = 2;

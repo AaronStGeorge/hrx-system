@@ -762,10 +762,26 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
       iree_allocator_malloc(query->host_allocator, plan_size, (void**)&plan));
   memset(plan, 0, plan_size);
   plan->base.vtable = &iree_hal_amd_fabric_slab_pool_plan_vtable;
+  // An allocating SYSTEM profile can be local to every native consumer even
+  // when other profiles in that scope (registration/import) are not. Preserve
+  // its rank alongside LOCAL without granting locality to those other routes.
+  bool unified_system =
+      profile && profile->memory_class == AMDF_MEMORY_CLASS_SYSTEM &&
+      native_placement.kind == AMDF_MEMORY_PLACEMENT_KIND_NONE &&
+      query->access_count != 0;
+  for (uint32_t i = 0; unified_system && i < query->access_count; ++i) {
+    unified_system = iree_all_bits_set(
+        profile_capabilities[(iree_host_size_t)profile->ordinal *
+                                 query->access_count +
+                             i]
+            .supported_flags,
+        AMDF_MEMORY_FLAG_DEVICE_LOCAL);
+  }
   plan->base.info = (iree_hal_slab_pool_plan_info_t){
       .preference =
           (preferred_host_added ? 1024 : 0) +
-          (iree_all_bits_set(memory_type, IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL)
+          (unified_system || iree_all_bits_set(
+                                 memory_type, IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL)
                ? 512
                : 0),
       .placement = placement,
