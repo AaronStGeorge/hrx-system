@@ -602,6 +602,8 @@ iree_cc_test(
   NAME
     unicode_test
   SRCS
+    "unicode_case_test.cc"
+    "unicode_number_test.cc"
     "unicode_test.cc"
   DEPS
     ::unicode

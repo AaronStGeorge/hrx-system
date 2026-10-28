@@ -7,8 +7,8 @@
 // Unicode utilities for text processing.
 //
 // Provides UTF-8 encoding/decoding, Unicode category classification, case
-// folding, and simple NFD decomposition. Designed for tokenizer preprocessing
-// (BERT BasicTokenizer, etc.) with minimal footprint (~50KB tables).
+// mapping, and normalization. Designed for tokenizer preprocessing with sparse
+// tables and arithmetic handling of regular Unicode ranges.
 
 #ifndef IREE_BASE_INTERNAL_UNICODE_H_
 #define IREE_BASE_INTERNAL_UNICODE_H_
@@ -251,14 +251,6 @@ typedef struct iree_unicode_category_range_t {
   uint8_t category;
 } iree_unicode_category_range_t;
 
-// Case mapping entry (codepoint -> lowercase/uppercase).
-// DEPRECATED: Legacy unified table, kept for the 4 entries with both mappings.
-typedef struct iree_unicode_case_mapping_t {
-  uint32_t codepoint;
-  uint32_t lowercase;
-  uint32_t uppercase;
-} iree_unicode_case_mapping_t;
-
 // Direction-specific case mapping entry (codepoint -> target).
 // Used by the split uppercase_mappings and lowercase_mappings tables.
 // Smaller struct (8 bytes vs 12 bytes) improves cache efficiency.
@@ -407,6 +399,15 @@ static inline bool iree_unicode_is_number(uint32_t codepoint) {
   return (iree_unicode_category(codepoint) & IREE_UNICODE_CATEGORY_NUMBER) != 0;
 }
 
+// Returns true for Unicode Numeric_Type=Decimal (General_Category=Nd).
+// This includes decimal digits in all scripts, not just ASCII 0-9.
+bool iree_unicode_is_decimal(uint32_t codepoint);
+
+// Returns true for Unicode Numeric_Type=Decimal or Digit. This includes
+// superscripts and circled digits, but excludes fractions and Roman numerals.
+// Equivalent to Python's str.isdigit() for a single codepoint.
+bool iree_unicode_is_digit(uint32_t codepoint);
+
 // Returns true if |codepoint| is punctuation (P category).
 static inline bool iree_unicode_is_punctuation(uint32_t codepoint) {
   return (iree_unicode_category(codepoint) &
@@ -492,7 +493,7 @@ bool iree_unicode_is_katakana(uint32_t codepoint);
 bool iree_unicode_is_hangul(uint32_t codepoint);
 
 //===----------------------------------------------------------------------===//
-// Case Folding
+// Case Mapping
 //===----------------------------------------------------------------------===//
 
 // Returns the number of lowercase codepoints written to |out| (1 or 2).
@@ -506,9 +507,12 @@ bool iree_unicode_is_hangul(uint32_t codepoint);
 // or the input unchanged if it has no lowercase mapping).
 iree_host_size_t iree_unicode_to_lower(uint32_t codepoint, uint32_t out[2]);
 
-// Returns the uppercase equivalent of |codepoint|, or |codepoint| unchanged
-// if it has no uppercase mapping.
-uint32_t iree_unicode_to_upper(uint32_t codepoint);
+// Returns the number of uppercase codepoints written to |out| (1, 2, or 3).
+// |out| must have space for at least 3 codepoints. Implements the unconditional
+// full uppercase mappings from UnicodeData.txt and SpecialCasing.txt, including
+// expansions such as U+00DF (ß) to "SS". Locale-specific rules are not applied.
+// Codepoints with no uppercase mapping are returned unchanged.
+iree_host_size_t iree_unicode_to_upper(uint32_t codepoint, uint32_t out[3]);
 
 //===----------------------------------------------------------------------===//
 // Simple NFD Decomposition

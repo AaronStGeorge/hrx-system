@@ -385,7 +385,88 @@ bool iree_unicode_is_hangul(uint32_t codepoint) {
 }
 
 //===----------------------------------------------------------------------===//
-// Case Folding
+// Numeric Properties
+//===----------------------------------------------------------------------===//
+
+// Unicode 15.1 Decimal ranges each contain ten consecutive codepoints, except
+// the adjacent five mathematical digit sets handled arithmetically below.
+// ASCII is handled without referencing this table. These private tables are
+// reachable only through their property functions so unused properties can be
+// removed along with their data by the linker.
+static const uint32_t iree_unicode_decimal_starts[] = {
+    0x00660, 0x006F0, 0x007C0, 0x00966, 0x009E6, 0x00A66, 0x00AE6, 0x00B66,
+    0x00BE6, 0x00C66, 0x00CE6, 0x00D66, 0x00DE6, 0x00E50, 0x00ED0, 0x00F20,
+    0x01040, 0x01090, 0x017E0, 0x01810, 0x01946, 0x019D0, 0x01A80, 0x01A90,
+    0x01B50, 0x01BB0, 0x01C40, 0x01C50, 0x0A620, 0x0A8D0, 0x0A900, 0x0A9D0,
+    0x0A9F0, 0x0AA50, 0x0ABF0, 0x0FF10, 0x104A0, 0x10D30, 0x11066, 0x110F0,
+    0x11136, 0x111D0, 0x112F0, 0x11450, 0x114D0, 0x11650, 0x116C0, 0x11730,
+    0x118E0, 0x11950, 0x11C50, 0x11D50, 0x11DA0, 0x11F50, 0x16A60, 0x16AC0,
+    0x16B50, 0x1E140, 0x1E2F0, 0x1E4F0, 0x1E950, 0x1FBF0,
+};
+
+bool iree_unicode_is_decimal(uint32_t codepoint) {
+  if (codepoint < 0x80) {
+    return codepoint >= '0' && codepoint <= '9';
+  }
+  if (codepoint >= 0x1D7CE && codepoint <= 0x1D7FF) {
+    return true;
+  }
+  iree_host_size_t low = 0;
+  iree_host_size_t high = IREE_ARRAYSIZE(iree_unicode_decimal_starts);
+  while (low < high) {
+    iree_host_size_t mid = low + (high - low) / 2;
+    uint32_t start = iree_unicode_decimal_starts[mid];
+    if (codepoint < start) {
+      high = mid;
+    } else if (codepoint - start < 10) {
+      return true;
+    } else {
+      low = mid + 1;
+    }
+  }
+  return false;
+}
+
+typedef struct iree_unicode_digit_range_t {
+  // First codepoint with Numeric_Type=Digit in the inclusive range.
+  uint32_t start;
+  // Last codepoint in the inclusive range.
+  uint32_t end;
+} iree_unicode_digit_range_t;
+
+// Unicode 15.1 Numeric_Type=Digit, excluding the Decimal ranges shared above.
+static const iree_unicode_digit_range_t iree_unicode_digit_ranges[] = {
+    {0x000B2, 0x000B3}, {0x000B9, 0x000B9}, {0x01369, 0x01371},
+    {0x019DA, 0x019DA}, {0x02070, 0x02070}, {0x02074, 0x02079},
+    {0x02080, 0x02089}, {0x02460, 0x02468}, {0x02474, 0x0247C},
+    {0x02488, 0x02490}, {0x024EA, 0x024EA}, {0x024F5, 0x024FD},
+    {0x024FF, 0x024FF}, {0x02776, 0x0277E}, {0x02780, 0x02788},
+    {0x0278A, 0x02792}, {0x10A40, 0x10A43}, {0x10E60, 0x10E68},
+    {0x11052, 0x1105A}, {0x1F100, 0x1F10A},
+};
+
+bool iree_unicode_is_digit(uint32_t codepoint) {
+  if (iree_unicode_is_decimal(codepoint)) {
+    return true;
+  }
+  iree_host_size_t low = 0;
+  iree_host_size_t high = IREE_ARRAYSIZE(iree_unicode_digit_ranges);
+  while (low < high) {
+    iree_host_size_t mid = low + (high - low) / 2;
+    const iree_unicode_digit_range_t* range = &iree_unicode_digit_ranges[mid];
+    if (codepoint < range->start) {
+      high = mid;
+    } else if (codepoint > range->end) {
+      low = mid + 1;
+    } else {
+      return true;
+    }
+  }
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
+// Case Mapping
 //===----------------------------------------------------------------------===//
 
 iree_host_size_t iree_unicode_to_lower(uint32_t codepoint, uint32_t out[2]) {
@@ -419,20 +500,94 @@ iree_host_size_t iree_unicode_to_lower(uint32_t codepoint, uint32_t out[2]) {
   return 1;
 }
 
-uint32_t iree_unicode_to_upper(uint32_t codepoint) {
+typedef struct iree_unicode_uppercase_expansion_t {
+  // Codepoint with an unconditional expanding uppercase mapping.
+  uint16_t codepoint;
+  // Two or three uppercase codepoints; the unused third element is zero.
+  uint16_t values[3];
+} iree_unicode_uppercase_expansion_t;
+
+// Unicode 15.1 SpecialCasing.txt unconditional expansions outside the regular
+// Greek iota-subscript blocks handled below. All source/output codepoints fit
+// in the BMP, so storing u16 values halves the sparse exception payload.
+static const iree_unicode_uppercase_expansion_t
+    iree_unicode_uppercase_expansions[] = {
+        {0x00DF, {0x0053, 0x0053, 0x0000}}, {0x0149, {0x02BC, 0x004E, 0x0000}},
+        {0x01F0, {0x004A, 0x030C, 0x0000}}, {0x0390, {0x0399, 0x0308, 0x0301}},
+        {0x03B0, {0x03A5, 0x0308, 0x0301}}, {0x0587, {0x0535, 0x0552, 0x0000}},
+        {0x1E96, {0x0048, 0x0331, 0x0000}}, {0x1E97, {0x0054, 0x0308, 0x0000}},
+        {0x1E98, {0x0057, 0x030A, 0x0000}}, {0x1E99, {0x0059, 0x030A, 0x0000}},
+        {0x1E9A, {0x0041, 0x02BE, 0x0000}}, {0x1F50, {0x03A5, 0x0313, 0x0000}},
+        {0x1F52, {0x03A5, 0x0313, 0x0300}}, {0x1F54, {0x03A5, 0x0313, 0x0301}},
+        {0x1F56, {0x03A5, 0x0313, 0x0342}}, {0x1FB2, {0x1FBA, 0x0399, 0x0000}},
+        {0x1FB3, {0x0391, 0x0399, 0x0000}}, {0x1FB4, {0x0386, 0x0399, 0x0000}},
+        {0x1FB6, {0x0391, 0x0342, 0x0000}}, {0x1FB7, {0x0391, 0x0342, 0x0399}},
+        {0x1FBC, {0x0391, 0x0399, 0x0000}}, {0x1FC2, {0x1FCA, 0x0399, 0x0000}},
+        {0x1FC3, {0x0397, 0x0399, 0x0000}}, {0x1FC4, {0x0389, 0x0399, 0x0000}},
+        {0x1FC6, {0x0397, 0x0342, 0x0000}}, {0x1FC7, {0x0397, 0x0342, 0x0399}},
+        {0x1FCC, {0x0397, 0x0399, 0x0000}}, {0x1FD2, {0x0399, 0x0308, 0x0300}},
+        {0x1FD3, {0x0399, 0x0308, 0x0301}}, {0x1FD6, {0x0399, 0x0342, 0x0000}},
+        {0x1FD7, {0x0399, 0x0308, 0x0342}}, {0x1FE2, {0x03A5, 0x0308, 0x0300}},
+        {0x1FE3, {0x03A5, 0x0308, 0x0301}}, {0x1FE4, {0x03A1, 0x0313, 0x0000}},
+        {0x1FE6, {0x03A5, 0x0342, 0x0000}}, {0x1FE7, {0x03A5, 0x0308, 0x0342}},
+        {0x1FF2, {0x1FFA, 0x0399, 0x0000}}, {0x1FF3, {0x03A9, 0x0399, 0x0000}},
+        {0x1FF4, {0x038F, 0x0399, 0x0000}}, {0x1FF6, {0x03A9, 0x0342, 0x0000}},
+        {0x1FF7, {0x03A9, 0x0342, 0x0399}}, {0x1FFC, {0x03A9, 0x0399, 0x0000}},
+        {0xFB00, {0x0046, 0x0046, 0x0000}}, {0xFB01, {0x0046, 0x0049, 0x0000}},
+        {0xFB02, {0x0046, 0x004C, 0x0000}}, {0xFB03, {0x0046, 0x0046, 0x0049}},
+        {0xFB04, {0x0046, 0x0046, 0x004C}}, {0xFB05, {0x0053, 0x0054, 0x0000}},
+        {0xFB06, {0x0053, 0x0054, 0x0000}}, {0xFB13, {0x0544, 0x0546, 0x0000}},
+        {0xFB14, {0x0544, 0x0535, 0x0000}}, {0xFB15, {0x0544, 0x053B, 0x0000}},
+        {0xFB16, {0x054E, 0x0546, 0x0000}}, {0xFB17, {0x0544, 0x053D, 0x0000}},
+};
+
+iree_host_size_t iree_unicode_to_upper(uint32_t codepoint, uint32_t out[3]) {
   // Fast path for ASCII.
   if (codepoint >= 'a' && codepoint <= 'z') {
-    return codepoint - ('a' - 'A');
+    out[0] = codepoint - ('a' - 'A');
+    return 1;
   }
   if (codepoint < 0x80) {
-    return codepoint;
+    out[0] = codepoint;
+    return 1;
+  }
+
+  // Each sixteen-codepoint block has matching lower/titlecase halves. The
+  // low three bits select the breathing/accent combination; all append iota.
+  // This covers 48 mappings without storing either mirrored half in a table.
+  if (codepoint >= 0x1F80 && codepoint <= 0x1FAF) {
+    uint32_t base = codepoint < 0x1F90   ? 0x1F08
+                    : codepoint < 0x1FA0 ? 0x1F28
+                                         : 0x1F68;
+    out[0] = base + (codepoint & 7);
+    out[1] = 0x0399;
+    return 2;
+  }
+
+  iree_host_size_t low = 0;
+  iree_host_size_t high = IREE_ARRAYSIZE(iree_unicode_uppercase_expansions);
+  while (low < high) {
+    iree_host_size_t mid = low + (high - low) / 2;
+    const iree_unicode_uppercase_expansion_t* expansion =
+        &iree_unicode_uppercase_expansions[mid];
+    if (codepoint < expansion->codepoint) {
+      high = mid;
+    } else if (codepoint > expansion->codepoint) {
+      low = mid + 1;
+    } else {
+      out[0] = expansion->values[0];
+      out[1] = expansion->values[1];
+      if (expansion->values[2] == 0) {
+        return 2;
+      }
+      out[2] = expansion->values[2];
+      return 3;
+    }
   }
   const iree_unicode_case_mapping_simple_t* mapping =
       iree_unicode_uppercase_lookup(codepoint);
-  if (mapping) {
-    return mapping->target;
-  }
-  return codepoint;
+  out[0] = mapping ? mapping->target : codepoint;
+  return 1;
 }
 
 //===----------------------------------------------------------------------===//

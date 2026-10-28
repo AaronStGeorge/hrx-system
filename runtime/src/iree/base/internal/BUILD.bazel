@@ -535,7 +535,11 @@ iree_runtime_cc_fuzz(
 
 iree_runtime_cc_test(
     name = "unicode_test",
-    srcs = ["unicode_test.cc"],
+    srcs = [
+        "unicode_case_test.cc",
+        "unicode_number_test.cc",
+        "unicode_test.cc",
+    ],
     deps = [
         ":unicode",
         "//runtime/src/iree/testing:gtest",
