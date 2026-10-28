@@ -330,6 +330,42 @@ func.def @copy_exact_range(%input: buffer, %output: buffer, %length: index) {
   func.return
 }
 
+// Each region exercises one pattern period with every partial repetition and
+// destination alignment. Floating-point patterns are compared as raw bytes.
+func.def @fill_exact_range(%output: buffer, %length: index, %bits: i64) {
+  %bounded = index.assume %length [range(%length, 0, 129)] : index
+  %mask = index.constant 31 : index
+  %position = index.andi %bounded, %mask : index
+  %origin = index.cast %position : index to offset
+  %byte_length = index.cast %bounded : index to offset
+  %region1 = index.constant 192 : offset
+  %region2 = index.constant 384 : offset
+  %region3 = index.constant 576 : offset
+  %offset1 = index.add %origin, %region1 : offset
+  %offset2 = index.add %origin, %region2 : offset
+  %offset3 = index.add %origin, %region3 : offset
+  %byte = scalar.trunci %bits : i64 to i8
+  %half = scalar.trunci %bits : i64 to i16
+  %word = scalar.trunci %bits : i64 to i32
+  %double = scalar.bitcast %bits : i64 to f64
+  buffer.fill %byte, %output[%origin], %byte_length : i8
+  buffer.fill %half, %output[%offset1], %byte_length : i16
+  buffer.fill %word, %output[%offset2], %byte_length : i32
+  buffer.fill %double, %output[%offset3], %byte_length : f64
+  func.return
+}
+
+check.scenario @fill_exact_range_values {
+  check.trial[130](%trial: index, %entropy: check.entropy) {
+    %bits = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %output = check.generate.fill value(85) : tensor<768xi8>
+    check.compare<@fill_exact_range>(%output, %trial, %bits) : (tensor<768xi8>, index, i64) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<768xi8>
+    }
+  }
+  check.return
+}
+
 check.scenario @copy_exact_range_values {
   check.trial[130](%trial: index, %entropy: check.entropy) {
     %input = check.generate.iota offset(-128) step(1) : tensor<192xi8>

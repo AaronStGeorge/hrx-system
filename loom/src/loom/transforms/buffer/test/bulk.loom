@@ -2,3 +2,67 @@ func.def public @bulk_copy(%source: buffer, %source_offset: offset, %target: buf
   buffer.copy %source[%source_offset], %target[%target_offset], %length
   func.return
 }
+
+func.def public @bulk_fill_i8(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  %raw = scalar.trunci %bits : i64 to i8
+  buffer.fill %raw, %target[%target_offset], %length : i8
+  func.return
+}
+
+func.def public @bulk_fill_i16(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  %raw = scalar.trunci %bits : i64 to i16
+  buffer.fill %raw, %target[%target_offset], %length : i16
+  func.return
+}
+
+func.def public @bulk_fill_i32(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  %raw = scalar.trunci %bits : i64 to i32
+  buffer.fill %raw, %target[%target_offset], %length : i32
+  func.return
+}
+
+func.def public @bulk_fill_i64(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  buffer.fill %bits, %target[%target_offset], %length : i64
+  func.return
+}
+
+func.def public @bulk_fill_f8E4M3(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  %raw = scalar.trunci %bits : i64 to i8
+  %pattern = scalar.bitcast %raw : i8 to f8E4M3
+  buffer.fill %pattern, %target[%target_offset], %length : f8E4M3
+  func.return
+}
+
+func.def public @bulk_fill_f8E5M2(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  %raw = scalar.trunci %bits : i64 to i8
+  %pattern = scalar.bitcast %raw : i8 to f8E5M2
+  buffer.fill %pattern, %target[%target_offset], %length : f8E5M2
+  func.return
+}
+
+func.def public @bulk_fill_f16(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  %raw = scalar.trunci %bits : i64 to i16
+  %pattern = scalar.bitcast %raw : i16 to f16
+  buffer.fill %pattern, %target[%target_offset], %length : f16
+  func.return
+}
+
+func.def public @bulk_fill_bf16(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  %raw = scalar.trunci %bits : i64 to i16
+  %pattern = scalar.bitcast %raw : i16 to bf16
+  buffer.fill %pattern, %target[%target_offset], %length : bf16
+  func.return
+}
+
+func.def public @bulk_fill_f32(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  %raw = scalar.trunci %bits : i64 to i32
+  %pattern = scalar.bitcast %raw : i32 to f32
+  buffer.fill %pattern, %target[%target_offset], %length : f32
+  func.return
+}
+
+func.def public @bulk_fill_f64(%target: buffer, %target_offset: offset, %length: offset, %bits: i64) {
+  %pattern = scalar.bitcast %bits : i64 to f64
+  buffer.fill %pattern, %target[%target_offset], %length : f64
+  func.return
+}

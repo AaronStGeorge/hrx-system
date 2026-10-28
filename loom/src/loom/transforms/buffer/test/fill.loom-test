@@ -1,0 +1,71 @@
+// RUN: pass target=x86:avx2 target-legalize{mode=final},canonicalize,dce
+
+// The last three bytes continue the eight-byte pattern after a vector store.
+func.def @partial_pattern(%target: buffer, %pattern: f64) {
+  %offset = index.constant 3 : offset
+  %length = index.constant 19 : offset
+  buffer.fill %pattern, %target[%offset], %length : f64
+  func.return
+}
+
+// ----
+func.def @partial_pattern(%target: buffer, %pattern: f64) {
+  %5 = scalar.bitcast %pattern : f64 to i64
+  %7 = vector.splat %5 : vector<2xi64>
+  %8 = vector.bitcast %7 : vector<2xi64> to vector<4xi32>
+  %27 = index.constant 3 : offset
+  %10 = buffer.view %target[%27] : buffer -> view<4xi32, align(1)>
+  vector.store %8, %10[0] : vector<4xi32>, view<4xi32, align(1)>
+  %12 = scalar.trunci %5 : i64 to i16
+  %26 = index.constant 19 : offset
+  %14 = buffer.view %target[%26] : buffer -> view<1xi16, align(1)>
+  view.store %12, %14[0] : i16, view<1xi16, align(1)>
+  %25 = scalar.constant 16 : i64
+  %21 = scalar.shrui %5, %25 : i64
+  %22 = scalar.trunci %21 : i64 to i32
+  %24 = index.constant 21 : offset
+  buffer.store.i8 %22, %target[%24]
+  func.return
+}
+
+// ====
+
+// Prepare the repeated pattern once, before the wide transfer loop.
+func.def @loop_and_tail(%target: buffer, %pattern: i16) {
+  %origin = index.constant 0 : offset
+  %length = index.constant 65 : offset
+  buffer.fill %pattern, %target[%origin], %length : i16
+  func.return
+}
+
+// ----
+func.def @loop_and_tail(%target: buffer, %pattern: i16) {
+  %4 = index.constant 0 : offset
+  %5 = scalar.extui %pattern : i16 to i32
+  %6 = scalar.constant 16 : i32
+  %7 = scalar.shli %5, %6 : i32
+  %8 = scalar.ori %5, %7 : i32
+  %9 = index.constant 64 : offset
+  %20 = vector.splat %8 : vector<8xi32>
+  %12 = index.constant 32 : offset
+  scf.for %13 = [%4 to %9 step %12] {
+    %15 = buffer.view %target[%13] : buffer -> view<8xi32, align(1)>
+    vector.store %20, %15[0] : vector<8xi32>, view<8xi32, align(1)>
+  }
+  %19 = index.constant 64 : offset
+  buffer.store.i8 %8, %target[%19]
+  func.return
+}
+
+// ====
+
+func.def @empty(%target: buffer, %offset: offset, %pattern: i64) {
+  %length = index.constant 0 : offset
+  buffer.fill %pattern, %target[%offset], %length : i64
+  func.return
+}
+
+// ----
+func.def @empty(%target: buffer, %offset: offset, %pattern: i64) {
+  func.return
+}

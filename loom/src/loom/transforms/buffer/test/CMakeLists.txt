@@ -14,6 +14,7 @@ loom_check_test_suite(
     test
   SRCS
     "copy.loom-test"
+    "fill.loom-test"
     "materialize.loom-test"
     "vm_literals.loom-test"
 )

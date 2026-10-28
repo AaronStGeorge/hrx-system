@@ -20,6 +20,27 @@ extern "C" void bulk_copy(const void* source, uint64_t source_offset,
                           void* target, uint64_t target_offset,
                           uint64_t length);
 
+extern "C" void bulk_fill_i8(void* target, uint64_t target_offset,
+                             uint64_t length, uint64_t pattern);
+extern "C" void bulk_fill_i16(void* target, uint64_t target_offset,
+                              uint64_t length, uint64_t pattern);
+extern "C" void bulk_fill_i32(void* target, uint64_t target_offset,
+                              uint64_t length, uint64_t pattern);
+extern "C" void bulk_fill_i64(void* target, uint64_t target_offset,
+                              uint64_t length, uint64_t pattern);
+extern "C" void bulk_fill_f8E4M3(void* target, uint64_t target_offset,
+                                 uint64_t length, uint64_t pattern);
+extern "C" void bulk_fill_f8E5M2(void* target, uint64_t target_offset,
+                                 uint64_t length, uint64_t pattern);
+extern "C" void bulk_fill_f16(void* target, uint64_t target_offset,
+                              uint64_t length, uint64_t pattern);
+extern "C" void bulk_fill_bf16(void* target, uint64_t target_offset,
+                               uint64_t length, uint64_t pattern);
+extern "C" void bulk_fill_f32(void* target, uint64_t target_offset,
+                              uint64_t length, uint64_t pattern);
+extern "C" void bulk_fill_f64(void* target, uint64_t target_offset,
+                              uint64_t length, uint64_t pattern);
+
 namespace {
 
 class GuardedPage {
@@ -109,6 +130,67 @@ TEST_F(BulkMemoryTest, CopyDoesNotAccessOutsideRange) {
                           target.data() + target_offset, length),
               0);
     EXPECT_EQ(target.data()[target_offset - 1], 0xA5);
+  }
+}
+
+struct FillCase {
+  // Authored pattern type, included in failing expectations.
+  const char* name;
+  // Period of the pattern's raw little-endian bytes.
+  size_t byte_count;
+  // Native function compiled from the corresponding authored fill operation.
+  void (*fill)(void*, uint64_t, uint64_t, uint64_t);
+};
+
+const FillCase kFillCases[] = {
+    {"i8", 1, bulk_fill_i8},         {"i16", 2, bulk_fill_i16},
+    {"i32", 4, bulk_fill_i32},       {"i64", 8, bulk_fill_i64},
+    {"f8E4M3", 1, bulk_fill_f8E4M3}, {"f8E5M2", 1, bulk_fill_f8E5M2},
+    {"f16", 2, bulk_fill_f16},       {"bf16", 2, bulk_fill_bf16},
+    {"f32", 4, bulk_fill_f32},       {"f64", 8, bulk_fill_f64},
+};
+
+TEST_F(BulkMemoryTest, FillExactPatternAndRange) {
+  const uint64_t patterns[] = {0, UINT64_MAX, 0xFEDCBA9876543210ull,
+                               0x7FF000007FC0FF80ull};
+  alignas(64) std::array<uint8_t, 256> target;
+  std::array<uint8_t, 256> expected;
+  for (const FillCase& test : kFillCases) {
+    SCOPED_TRACE(test.name);
+    for (uint64_t pattern : patterns) {
+      for (size_t length = 0; length <= 129; ++length) {
+        for (size_t offset = 0; offset < 16; ++offset) {
+          target.fill(0xA5);
+          expected.fill(0xA5);
+          for (size_t i = 0; i < length; ++i) {
+            expected[offset + i] = pattern >> (8 * (i % test.byte_count));
+          }
+          test.fill(target.data(), offset, length, pattern);
+          ASSERT_EQ(target, expected)
+              << "length=" << length << " offset=" << offset;
+        }
+      }
+    }
+  }
+}
+
+TEST_F(BulkMemoryTest, FillDoesNotAccessOutsideRange) {
+  GuardedPage target;
+  ASSERT_TRUE(target.ready());
+  constexpr uint64_t pattern = 0xFEDCBA9876543210ull;
+  for (const FillCase& test : kFillCases) {
+    SCOPED_TRACE(test.name);
+    test.fill(nullptr, 0, 0, pattern);
+    for (size_t length = 0; length <= 129; ++length) {
+      const size_t offset = target.size() - length;
+      std::memset(target.data(), 0xA5, target.size());
+      test.fill(target.data(), offset, length, pattern);
+      for (size_t i = 0; i < length; ++i) {
+        EXPECT_EQ(target.data()[offset + i],
+                  static_cast<uint8_t>(pattern >> (8 * (i % test.byte_count))));
+      }
+      EXPECT_EQ(target.data()[offset - 1], 0xA5);
+    }
   }
 }
 

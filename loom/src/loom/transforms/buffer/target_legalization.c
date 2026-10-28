@@ -246,7 +246,217 @@ static iree_status_t loom_buffer_legalize_build_aligned_end(
   return iree_ok_status();
 }
 
-static iree_status_t loom_buffer_legalize_copy(
+static loom_scalar_type_t loom_buffer_legalize_pattern_integer_type(
+    loom_scalar_type_t pattern_type) {
+  switch (loom_scalar_type_bitwidth(pattern_type)) {
+    case 8:
+      return LOOM_SCALAR_TYPE_I8;
+    case 16:
+      return LOOM_SCALAR_TYPE_I16;
+    case 32:
+      return LOOM_SCALAR_TYPE_I32;
+    case 64:
+      return LOOM_SCALAR_TYPE_I64;
+    default:
+      IREE_ASSERT_UNREACHABLE(
+          "verified buffer.fill pattern must have a supported byte width");
+      IREE_BUILTIN_UNREACHABLE();
+  }
+}
+
+// Fill patterns are loop invariants. Small patterns repeat through an i32
+// carrier; i64 patterns retain their full raw payload.
+typedef struct loom_buffer_fill_pattern_t {
+  // Repeated raw bits, with no floating-point arithmetic or conversion.
+  loom_value_id_t bits;
+  // Integer carrier containing at least one complete pattern period.
+  loom_scalar_type_t type;
+  // Authored repetition period in bytes.
+  uint32_t byte_count;
+} loom_buffer_fill_pattern_t;
+
+static iree_status_t loom_buffer_legalize_build_integer_cast(
+    loom_builder_t* builder, loom_value_id_t value, loom_scalar_type_t source,
+    loom_scalar_type_t target, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  if (source == target) {
+    *out_value = value;
+    return iree_ok_status();
+  }
+  loom_op_t* cast = NULL;
+  if (loom_scalar_type_bitwidth(source) < loom_scalar_type_bitwidth(target)) {
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_extui_build(builder, value, loom_type_scalar(source),
+                                loom_type_scalar(target), location, &cast));
+    *out_value = loom_scalar_extui_result(cast);
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_trunci_build(builder, value, loom_type_scalar(source),
+                                 loom_type_scalar(target), location, &cast));
+    *out_value = loom_scalar_trunci_result(cast);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_buffer_legalize_build_repeated_bits(
+    loom_builder_t* builder, loom_value_id_t value, loom_scalar_type_t type,
+    uint32_t period_bits, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  iree_status_t status = iree_ok_status();
+  for (uint32_t shift = period_bits;
+       shift < loom_scalar_type_bitwidth(type) && iree_status_is_ok(status);
+       shift *= 2) {
+    loom_value_id_t amount = LOOM_VALUE_ID_INVALID;
+    status = loom_buffer_legalize_build_scalar_constant(builder, type, shift,
+                                                        location, &amount);
+    loom_op_t* high = NULL;
+    if (iree_status_is_ok(status)) {
+      status = loom_scalar_shli_build(builder, 0, value, amount,
+                                      loom_type_scalar(type), location, &high);
+    }
+    loom_op_t* repeated = NULL;
+    if (iree_status_is_ok(status)) {
+      status =
+          loom_scalar_ori_build(builder, value, loom_scalar_shli_result(high),
+                                loom_type_scalar(type), location, &repeated);
+    }
+    if (iree_status_is_ok(status)) {
+      value = loom_scalar_ori_result(repeated);
+    }
+  }
+  *out_value = value;
+  return status;
+}
+
+static iree_status_t loom_buffer_legalize_prepare_fill(
+    loom_builder_t* builder, loom_value_id_t pattern,
+    loom_scalar_type_t pattern_type, loom_location_id_t location,
+    loom_buffer_fill_pattern_t* out_pattern) {
+  const loom_scalar_type_t integer_type =
+      loom_buffer_legalize_pattern_integer_type(pattern_type);
+  if (loom_scalar_type_is_float(pattern_type)) {
+    loom_op_t* bitcast = NULL;
+    IREE_RETURN_IF_ERROR(loom_scalar_bitcast_build(
+        builder, pattern, loom_type_scalar(pattern_type),
+        loom_type_scalar(integer_type), location, &bitcast));
+    pattern = loom_scalar_bitcast_result(bitcast);
+  }
+  out_pattern->byte_count = loom_scalar_type_bitwidth(integer_type) / 8;
+  out_pattern->type = out_pattern->byte_count == 8 ? LOOM_SCALAR_TYPE_I64
+                                                   : LOOM_SCALAR_TYPE_I32;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_integer_cast(
+      builder, pattern, integer_type, out_pattern->type, location, &pattern));
+  return loom_buffer_legalize_build_repeated_bits(
+      builder, pattern, out_pattern->type,
+      out_pattern->byte_count == 1 ? 32 : out_pattern->byte_count * 8, location,
+      &out_pattern->bits);
+}
+
+// Selects the initial pattern at a range's byte phase. Suffix ranges may
+// start partway through a repetition; narrow loops carry subsequent rotations.
+static iree_status_t loom_buffer_legalize_build_fill_bits(
+    loom_builder_t* builder, const loom_buffer_fill_pattern_t* pattern,
+    uint32_t start_alignment, loom_value_id_t range_start,
+    loom_location_id_t location, loom_value_id_t* out_value) {
+  loom_value_id_t bits = pattern->bits;
+  const loom_type_t working_type = loom_type_scalar(pattern->type);
+  if (start_alignment != 0 && start_alignment < pattern->byte_count) {
+    loom_op_t* position = NULL;
+    IREE_RETURN_IF_ERROR(loom_index_cast_build(
+        builder, range_start, loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET),
+        working_type, location, &position));
+    loom_value_id_t mask = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
+        builder, pattern->type, pattern->byte_count - 1, location, &mask));
+    loom_op_t* phase = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_andi_build(builder, loom_index_cast_result(position), mask,
+                               working_type, location, &phase));
+    loom_value_id_t three = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
+        builder, pattern->type, 3, location, &three));
+    loom_op_t* shift = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_shli_build(builder, 0, loom_scalar_andi_result(phase),
+                               three, working_type, location, &shift));
+    loom_op_t* shifted = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_shrui_build(builder, bits, loom_scalar_shli_result(shift),
+                                working_type, location, &shifted));
+    bits = loom_scalar_shrui_result(shifted);
+  }
+  *out_value = bits;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_buffer_legalize_build_fill_value(
+    loom_builder_t* builder, const loom_buffer_fill_pattern_t* pattern,
+    loom_value_id_t bits, loom_type_t transfer_type,
+    loom_location_id_t location, loom_value_id_t* out_value) {
+  const uint32_t repeated_bits =
+      pattern->byte_count == 1 ? 8 : loom_scalar_type_bitwidth(pattern->type);
+  if (loom_type_is_vector(transfer_type)) {
+    IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_repeated_bits(
+        builder, bits, pattern->type, repeated_bits, location, &bits));
+    const loom_type_t splat_type =
+        loom_type_shaped_1d(LOOM_TYPE_VECTOR, pattern->type,
+                            loom_type_dim_static_size_at(transfer_type, 0) *
+                                32 / loom_scalar_type_bitwidth(pattern->type),
+                            0);
+    loom_op_t* splat = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_vector_splat_build(builder, bits, splat_type, location, &splat));
+    loom_op_t* bitcast = NULL;
+    IREE_RETURN_IF_ERROR(loom_vector_bitcast_build(
+        builder, loom_vector_splat_result(splat), splat_type, transfer_type,
+        location, &bitcast));
+    *out_value = loom_vector_bitcast_result(bitcast);
+    return iree_ok_status();
+  }
+  // Raw byte stores take the low eight bits of an i32 carrier.
+  loom_scalar_type_t scalar_type = loom_type_element_type(transfer_type);
+  if (scalar_type == LOOM_SCALAR_TYPE_I8) {
+    scalar_type = LOOM_SCALAR_TYPE_I32;
+  }
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_integer_cast(
+      builder, bits, pattern->type, scalar_type, location, &bits));
+  return loom_buffer_legalize_build_repeated_bits(
+      builder, bits, scalar_type,
+      loom_type_element_type(transfer_type) == LOOM_SCALAR_TYPE_I8
+          ? 32
+          : repeated_bits,
+      location, out_value);
+}
+
+// Narrow memory may require several transfers per pattern. Carry one rotated
+// pattern through that loop instead of unrolling every byte into live values.
+static iree_status_t loom_buffer_legalize_rotate_pattern(
+    loom_builder_t* builder, loom_value_id_t bits, loom_scalar_type_t type,
+    uint32_t byte_count, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  loom_value_id_t right_shift = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t left_shift = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
+      builder, type, byte_count * 8, location, &right_shift));
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
+      builder, type, loom_scalar_type_bitwidth(type) - byte_count * 8, location,
+      &left_shift));
+  const loom_type_t working_type = loom_type_scalar(type);
+  loom_op_t* low = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_shrui_build(builder, bits, right_shift,
+                                               working_type, location, &low));
+  loom_op_t* high = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_shli_build(builder, 0, bits, left_shift,
+                                              working_type, location, &high));
+  loom_op_t* combined = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_ori_build(
+      builder, loom_scalar_shrui_result(low), loom_scalar_shli_result(high),
+      working_type, location, &combined));
+  *out_value = loom_scalar_ori_result(combined);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_buffer_legalize_transfer(
     loom_target_legalization_context_t* context, loom_op_t* op,
     loom_target_legalizer_result_t* out_result) {
   loom_rewriter_t* rewriter = context->rewriter;
@@ -255,12 +465,29 @@ static iree_status_t loom_buffer_legalize_copy(
   loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_offset_constant(
       &rewriter->builder, 0, op->location, &zero));
-  const uint8_t widths =
-      loom_buffer_legalize_transfer_widths(context, loom_buffer_copy_source(op),
-                                           loom_buffer_copy_source_offset(op)) &
-      loom_buffer_legalize_transfer_widths(context, loom_buffer_copy_target(op),
-                                           loom_buffer_copy_target_offset(op));
-  const loom_value_id_t byte_length = loom_buffer_copy_byte_length(op);
+  const bool is_fill = loom_buffer_fill_isa(op);
+  const loom_value_id_t target =
+      is_fill ? loom_buffer_fill_target(op) : loom_buffer_copy_target(op);
+  const loom_value_id_t target_offset =
+      is_fill ? loom_buffer_fill_target_offset(op)
+              : loom_buffer_copy_target_offset(op);
+  const loom_value_id_t byte_length = is_fill
+                                          ? loom_buffer_fill_byte_length(op)
+                                          : loom_buffer_copy_byte_length(op);
+  uint8_t widths =
+      loom_buffer_legalize_transfer_widths(context, target, target_offset);
+  loom_buffer_fill_pattern_t pattern = {0};
+  if (is_fill) {
+    const loom_value_id_t value = loom_buffer_fill_pattern(op);
+    IREE_RETURN_IF_ERROR(loom_buffer_legalize_prepare_fill(
+        &rewriter->builder, value,
+        loom_type_element_type(loom_module_value_type(context->module, value)),
+        op->location, &pattern));
+  } else {
+    widths &= loom_buffer_legalize_transfer_widths(
+        context, loom_buffer_copy_source(op),
+        loom_buffer_copy_source_offset(op));
+  }
   int64_t static_length = 0;
   const bool is_static = loom_value_facts_as_exact_i64(
       loom_value_fact_table_lookup(context->fact_table, byte_length),
@@ -289,12 +516,32 @@ static iree_status_t loom_buffer_legalize_copy(
     if (!iree_status_is_ok(status)) {
       break;
     }
+    const loom_type_t transfer_type =
+        loom_buffer_legalize_transfer_type(&context->bulk_memory_policy, width);
     const bool single = is_static && static_end - static_start == width;
+    const bool conditional = !is_static && previous_width == 2 * width;
+    const bool rotates =
+        is_fill && width < pattern.byte_count && !single && !conditional;
+    loom_value_id_t pattern_bits = LOOM_VALUE_ID_INVALID;
+    loom_value_id_t fill_value = LOOM_VALUE_ID_INVALID;
+    if (is_fill) {
+      status = loom_buffer_legalize_build_fill_bits(
+          &rewriter->builder, &pattern, previous_width, start, op->location,
+          &pattern_bits);
+      if (iree_status_is_ok(status) && !rotates) {
+        status = loom_buffer_legalize_build_fill_value(
+            &rewriter->builder, &pattern, pattern_bits, transfer_type,
+            op->location, &fill_value);
+      }
+    }
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
     loom_builder_ip_t saved_ip = loom_builder_save(&rewriter->builder);
     loom_value_id_t position = start;
     if (!single) {
       loom_op_t* region_op = NULL;
-      if (!is_static && previous_width == 2 * width) {
+      if (conditional) {
         loom_op_t* condition_op = NULL;
         status = loom_index_cmp_build(&rewriter->builder,
                                       LOOM_INDEX_CMP_PREDICATE_ULT, start, end,
@@ -314,7 +561,8 @@ static iree_status_t loom_buffer_legalize_copy(
             &rewriter->builder, width, op->location, &step);
         if (iree_status_is_ok(status)) {
           status = loom_scf_for_build(
-              &rewriter->builder, 0, start, end, step, NULL, 0, NULL, NULL, 0,
+              &rewriter->builder, 0, start, end, step,
+              rotates ? &pattern_bits : NULL, rotates ? 1 : 0, NULL, NULL, 0,
               LOOM_VALUE_ID_INVALID, LOOM_VALUE_ID_INVALID, 0, 0, op->location,
               &region_op);
         }
@@ -322,22 +570,38 @@ static iree_status_t loom_buffer_legalize_copy(
           loom_builder_enter_region(&rewriter->builder, region_op,
                                     loom_scf_for_body(region_op));
           position = loom_region_entry_arg_id(loom_scf_for_body(region_op), 0);
+          if (rotates) {
+            pattern_bits =
+                loom_region_entry_arg_id(loom_scf_for_body(region_op), 1);
+            status = loom_buffer_legalize_build_fill_value(
+                &rewriter->builder, &pattern, pattern_bits, transfer_type,
+                op->location, &fill_value);
+          }
         }
       }
     }
     if (iree_status_is_ok(status)) {
-      status = loom_buffer_legalize_build_copy_chunk(
-          &rewriter->builder, position,
-          loom_buffer_legalize_transfer_type(&context->bulk_memory_policy,
-                                             width),
-          loom_buffer_copy_source(op), loom_buffer_copy_source_offset(op),
-          loom_buffer_copy_target(op), loom_buffer_copy_target_offset(op),
-          op->location);
+      if (is_fill) {
+        status = loom_buffer_legalize_build_store(
+            &rewriter->builder, fill_value, target, target_offset, position,
+            transfer_type, op->location);
+      } else {
+        status = loom_buffer_legalize_build_copy_chunk(
+            &rewriter->builder, position, transfer_type,
+            loom_buffer_copy_source(op), loom_buffer_copy_source_offset(op),
+            target, target_offset, op->location);
+      }
+    }
+    if (rotates && iree_status_is_ok(status)) {
+      status = loom_buffer_legalize_rotate_pattern(
+          &rewriter->builder, pattern_bits, pattern.type, width, op->location,
+          &pattern_bits);
     }
     if (!single && iree_status_is_ok(status)) {
       loom_op_t* yield_op = NULL;
-      status = loom_scf_yield_build(&rewriter->builder, NULL, 0, op->location,
-                                    &yield_op);
+      status = loom_scf_yield_build(&rewriter->builder,
+                                    rotates ? &pattern_bits : NULL,
+                                    rotates ? 1 : 0, op->location, &yield_op);
     }
     if (!single) {
       loom_builder_restore(&rewriter->builder, saved_ip);
@@ -346,213 +610,6 @@ static iree_status_t loom_buffer_legalize_copy(
     static_start = static_end;
     previous_width = width;
   }
-  IREE_RETURN_IF_ERROR(status);
-
-  IREE_RETURN_IF_ERROR(loom_rewriter_erase(rewriter, op));
-  *out_result = (loom_target_legalizer_result_t){
-      .action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN,
-  };
-  return iree_ok_status();
-}
-
-static loom_scalar_type_t loom_buffer_legalize_pattern_integer_type(
-    loom_scalar_type_t pattern_type) {
-  switch (loom_scalar_type_bitwidth(pattern_type)) {
-    case 8:
-      return LOOM_SCALAR_TYPE_I8;
-    case 16:
-      return LOOM_SCALAR_TYPE_I16;
-    case 32:
-      return LOOM_SCALAR_TYPE_I32;
-    case 64:
-      return LOOM_SCALAR_TYPE_I64;
-    default:
-      IREE_ASSERT_UNREACHABLE(
-          "verified buffer.fill pattern must have a supported byte width");
-      IREE_BUILTIN_UNREACHABLE();
-  }
-}
-
-static iree_status_t loom_buffer_legalize_build_pattern_bits(
-    loom_builder_t* builder, loom_value_id_t pattern,
-    loom_scalar_type_t pattern_type, loom_location_id_t location,
-    loom_scalar_type_t* out_working_type, loom_value_id_t* out_pattern_bits) {
-  const loom_scalar_type_t integer_type =
-      loom_buffer_legalize_pattern_integer_type(pattern_type);
-  loom_value_id_t pattern_bits = pattern;
-  if (loom_scalar_type_is_float(pattern_type)) {
-    loom_op_t* bitcast_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_scalar_bitcast_build(
-        builder, pattern, loom_type_scalar(pattern_type),
-        loom_type_scalar(integer_type), location, &bitcast_op));
-    pattern_bits = loom_scalar_bitcast_result(bitcast_op);
-  }
-
-  const uint32_t pattern_bitwidth = loom_scalar_type_bitwidth(integer_type);
-  if (pattern_bitwidth < 32) {
-    loom_op_t* extend_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_scalar_extui_build(
-        builder, pattern_bits, loom_type_scalar(integer_type),
-        loom_type_scalar(LOOM_SCALAR_TYPE_I32), location, &extend_op));
-    pattern_bits = loom_scalar_extui_result(extend_op);
-
-    // Repeat a two-byte pattern across the i32 working value so rotating the
-    // working value by one byte preserves the authored pattern period.
-    if (pattern_bitwidth == 16) {
-      loom_value_id_t halfword_shift = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
-          builder, LOOM_SCALAR_TYPE_I32, 16, location, &halfword_shift));
-      loom_op_t* high_half_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_scalar_shli_build(
-          builder, /*instance_flags=*/0, pattern_bits, halfword_shift,
-          loom_type_scalar(LOOM_SCALAR_TYPE_I32), location, &high_half_op));
-      loom_op_t* repeated_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_scalar_ori_build(
-          builder, pattern_bits, loom_scalar_shli_result(high_half_op),
-          loom_type_scalar(LOOM_SCALAR_TYPE_I32), location, &repeated_op));
-      pattern_bits = loom_scalar_ori_result(repeated_op);
-    }
-
-    *out_working_type = LOOM_SCALAR_TYPE_I32;
-    *out_pattern_bits = pattern_bits;
-    return iree_ok_status();
-  }
-
-  *out_working_type = integer_type;
-  *out_pattern_bits = pattern_bits;
-  return iree_ok_status();
-}
-
-// Projects the low byte of the rotating pattern into the canonical i32 byte
-// carrier used by buffer.store.i8. The store consumes only the low eight bits,
-// so an i32 working value needs no separate mask or truncate operation.
-static iree_status_t loom_buffer_legalize_build_pattern_byte(
-    loom_builder_t* builder, loom_value_id_t pattern_bits,
-    loom_scalar_type_t working_type, loom_location_id_t location,
-    loom_value_id_t* out_byte) {
-  if (working_type == LOOM_SCALAR_TYPE_I32) {
-    *out_byte = pattern_bits;
-    return iree_ok_status();
-  }
-
-  loom_op_t* carrier_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scalar_trunci_build(
-      builder, pattern_bits, loom_type_scalar(working_type),
-      loom_type_scalar(LOOM_SCALAR_TYPE_I32), location, &carrier_op));
-  *out_byte = loom_scalar_trunci_result(carrier_op);
-  return iree_ok_status();
-}
-
-// Rotates a multi-byte working pattern right by one byte. Both shifts have
-// compile-time-constant amounts, which keeps the reference legalization in the
-// scalar baseline shared by targets without a general variable-shift form.
-static iree_status_t loom_buffer_legalize_build_rotated_pattern(
-    loom_builder_t* builder, loom_value_id_t pattern_bits,
-    loom_scalar_type_t working_type, loom_value_id_t byte_shift,
-    loom_value_id_t wrap_shift, loom_location_id_t location,
-    loom_value_id_t* out_rotated_pattern) {
-  const loom_type_t working_loom_type = loom_type_scalar(working_type);
-  loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scalar_shrui_build(
-      builder, pattern_bits, byte_shift, working_loom_type, location, &low_op));
-  loom_op_t* high_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scalar_shli_build(
-      builder, /*instance_flags=*/0, pattern_bits, wrap_shift,
-      working_loom_type, location, &high_op));
-  loom_op_t* rotated_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_scalar_ori_build(builder, loom_scalar_shrui_result(low_op),
-                            loom_scalar_shli_result(high_op), working_loom_type,
-                            location, &rotated_op));
-  *out_rotated_pattern = loom_scalar_ori_result(rotated_op);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_buffer_legalize_build_fill_loop_body(
-    loom_builder_t* builder, loom_op_t* loop, loom_value_id_t target,
-    loom_value_id_t target_offset, loom_value_id_t pattern_bits,
-    loom_scalar_type_t working_type, loom_value_id_t byte_shift,
-    loom_value_id_t wrap_shift, loom_location_id_t location) {
-  const loom_region_t* body = loom_scf_for_body(loop);
-  const loom_value_id_t relative_offset = loom_region_entry_arg_id(body, 0);
-  const bool rotates_pattern = byte_shift != LOOM_VALUE_ID_INVALID;
-  const loom_value_id_t current_pattern =
-      rotates_pattern ? loom_region_entry_arg_id(body, 1) : pattern_bits;
-  loom_value_id_t byte = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_pattern_byte(
-      builder, current_pattern, working_type, location, &byte));
-  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_byte_store(
-      builder, byte, target, target_offset, relative_offset, location));
-
-  if (!rotates_pattern) {
-    loom_op_t* yield_op = NULL;
-    return loom_scf_yield_build(builder, /*values=*/NULL, /*value_count=*/0,
-                                location, &yield_op);
-  }
-
-  loom_value_id_t next_pattern = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_rotated_pattern(
-      builder, current_pattern, working_type, byte_shift, wrap_shift, location,
-      &next_pattern));
-  loom_op_t* yield_op = NULL;
-  return loom_scf_yield_build(builder, &next_pattern, 1, location, &yield_op);
-}
-
-static iree_status_t loom_buffer_legalize_fill(
-    loom_target_legalization_context_t* context, loom_op_t* op,
-    loom_target_legalizer_result_t* out_result) {
-  loom_rewriter_t* rewriter = context->rewriter;
-  loom_builder_set_before(&rewriter->builder, op);
-
-  const loom_scalar_type_t pattern_type = loom_type_element_type(
-      loom_module_value_type(context->module, loom_buffer_fill_pattern(op)));
-  loom_scalar_type_t working_type = LOOM_SCALAR_TYPE_NONE;
-  loom_value_id_t pattern_bits = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_pattern_bits(
-      &rewriter->builder, loom_buffer_fill_pattern(op), pattern_type,
-      op->location, &working_type, &pattern_bits));
-
-  loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_offset_constant(
-      &rewriter->builder, 0, op->location, &zero));
-  loom_value_id_t one = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_offset_constant(
-      &rewriter->builder, 1, op->location, &one));
-  loom_value_id_t byte_shift = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t wrap_shift = LOOM_VALUE_ID_INVALID;
-  const int64_t pattern_byte_count =
-      loom_scalar_type_bitwidth(pattern_type) / 8;
-  if (pattern_byte_count > 1) {
-    IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
-        &rewriter->builder, working_type, 8, op->location, &byte_shift));
-    IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
-        &rewriter->builder, working_type,
-        loom_scalar_type_bitwidth(working_type) - 8, op->location,
-        &wrap_shift));
-  }
-
-  const loom_value_id_t initial_pattern =
-      pattern_byte_count > 1 ? pattern_bits : LOOM_VALUE_ID_INVALID;
-  const loom_value_id_t* iter_args =
-      initial_pattern == LOOM_VALUE_ID_INVALID ? NULL : &initial_pattern;
-  const iree_host_size_t iter_arg_count = iter_args == NULL ? 0 : 1;
-  loom_op_t* loop = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_for_build(
-      &rewriter->builder, /*build_flags=*/0, zero,
-      loom_buffer_fill_byte_length(op), one, iter_args, iter_arg_count,
-      /*result_types=*/NULL,
-      /*tied_results=*/NULL, /*tied_result_count=*/0,
-      /*pipeline_depth=*/LOOM_VALUE_ID_INVALID,
-      /*unroll_factor=*/LOOM_VALUE_ID_INVALID, /*unroll_policy=*/0,
-      /*unroll_schedule=*/0, op->location, &loop));
-
-  loom_builder_ip_t saved_ip = loom_builder_enter_region(
-      &rewriter->builder, loop, loom_scf_for_body(loop));
-  iree_status_t status = loom_buffer_legalize_build_fill_loop_body(
-      &rewriter->builder, loop, loom_buffer_fill_target(op),
-      loom_buffer_fill_target_offset(op), pattern_bits, working_type,
-      byte_shift, wrap_shift, op->location);
-  loom_builder_restore(&rewriter->builder, saved_ip);
   IREE_RETURN_IF_ERROR(status);
 
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(rewriter, op));
@@ -724,9 +781,8 @@ static iree_status_t loom_buffer_legalize(
   };
   switch (op->kind) {
     case LOOM_OP_BUFFER_COPY:
-      return loom_buffer_legalize_copy(context, op, out_result);
     case LOOM_OP_BUFFER_FILL:
-      return loom_buffer_legalize_fill(context, op, out_result);
+      return loom_buffer_legalize_transfer(context, op, out_result);
     case LOOM_OP_BUFFER_COMPARE:
       return loom_buffer_legalize_compare(context, op, out_result);
     default:
