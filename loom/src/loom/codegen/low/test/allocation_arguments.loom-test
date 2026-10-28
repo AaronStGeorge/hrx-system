@@ -196,33 +196,28 @@ classes:
 
 // ====
 
-// A coalesced storage identity cannot be recolored one assignment at a time.
-// The complete packing attempt moves the input and its required alias together.
-// RUN: emit low-allocation @entry_shared_identity test.i32=6 entry=0:test.i32:target_id:2 entry=1:test.i32:target_id:0
+// Short-lived aggregates separate two surviving scalars in the eight-register
+// bank. Repacking must preserve the alias and leave room for the later quad.
+// RUN: emit low-allocation-query @entry_shared_identity spill-count values=%left,%alias,%right,%quad
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @entry_shared_identity(%first: reg<test.i32>, %second: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
-  %alias = low.assume %first [range(%first, 0, 1024)] : reg<test.i32>
-  %wide = test.load.v4i32 %address
-  return %alias, %second, %wide
+low.func.def target<test.low.core>(@target) @entry_shared_identity(%pair: reg<test.pressure.alias32 x2>, %left: reg<test.pressure.alias32>, %triple_input: reg<test.i32 x3>, %scalar_input: reg<test.i32>, %quad_input: reg<test.i32 x4>) -> (reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32 x4>, reg<test.i32 x2>, reg<test.i32 x3>) asm {
+  %triple = copy %triple_input : reg<test.i32 x3> -> reg<test.pressure.alias32 x3>
+  %right = copy %scalar_input : reg<test.i32> -> reg<test.pressure.alias32>
+  %pair_result = copy %pair : reg<test.pressure.alias32 x2> -> reg<test.i32 x2>
+  %triple_result = copy %triple : reg<test.pressure.alias32 x3> -> reg<test.i32 x3>
+  %quad = copy %quad_input : reg<test.i32 x4> -> reg<test.pressure.alias32 x4>
+  %alias = low.assume %left [range(%left, 0, 1024)] : reg<test.pressure.alias32>
+  return %alias, %right, %quad, %pair_result, %triple_result
 }
 
 // ----
-low-allocation @entry_shared_identity
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 5
-remarks: 0
 spills: 0
-copies: coalesced=0 materialized=0
-entry moves: 2
-  test.i32:target_id:5 <- test.i32:target_id:0
-  test.i32:target_id:0 <- test.i32:target_id:2
-classes:
-  test.i32: assignments=4 units=7 target_ids=6 physical=0 spill_slots=0 unassigned=0
-  test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
+value %left: test.pressure.alias32 -> physical_register[6:1]
+value %alias: test.pressure.alias32 -> physical_register[6:1]
+value %right: test.pressure.alias32 -> physical_register[5:1]
+value %quad: test.pressure.alias32 -> physical_register[0:4]
 
 // ====
 
