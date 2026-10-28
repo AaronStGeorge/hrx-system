@@ -180,3 +180,38 @@ scheduled pressure test.i32: peak-live-units=2 peak-live-values=2
 node 3 <- 2
 node 4 <- 3
 node 5 <- 4
+
+// ====
+
+// Three physical registers remain live across both blocks, leaving one
+// temporary slot. Each transfer must free that slot before the next producer.
+// Candidate totals also include the independent scalar seed.
+// RUN: emit low-schedule-query @physical_live_through strategy=resource-stall diagnostics=candidates order=* scheduled-pressure=test.explicit32
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @physical_live_through(%held: reg<test.explicit32 x3>, %seed: reg<test.i32>) -> (reg<test.explicit32 x3>) asm {
+  low.br ^work
+^work:
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_projected_live_units="5", chosen_pressure_cliff_source="test.explicit32", chosen_pressure_cliff_units="4", chosen_pressure_cliff_penalty="2"}
+  %first = test.rematerialize.explicit32 %seed
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_packet="low.copy", chosen_projected_live_units="5", rejected_projected_live_units="6", rejected_pressure_cliff_penalty="3"}
+  %first_value = copy %first : reg<test.explicit32> -> reg<test.i32>
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="2", chosen_projected_live_units="4", rejected_projected_live_units="6"}
+  test.event.memory.write.i32 %first_value
+  %second = test.rematerialize.explicit32 %seed
+  %second_value = copy %second : reg<test.explicit32> -> reg<test.i32>
+  test.event.memory.write.i32 %second_value
+  low.br ^exit
+^exit:
+  %third = test.rematerialize.explicit32 %seed
+  %third_value = copy %third : reg<test.explicit32> -> reg<test.i32>
+  test.event.memory.write.i32 %third_value
+  return %held
+}
+
+// ----
+block 0 order: 0
+block 1 order: 1, 2, 3, 4, 5, 6, 7
+block 2 order: 8, 9, 10, 11
+scheduled pressure test.explicit32: peak-live-units=4 peak-live-values=2

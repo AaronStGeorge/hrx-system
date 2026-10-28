@@ -1,31 +1,3 @@
-// Required pressure is rebuilt at each block boundary. A value live through
-// both blocks occupies one unit throughout, leaving one temporary slot.
-// RUN: emit low-schedule-query @required_live_through strategy=resource-stall test.i32=2 required-register-values=%held,%first,%second,%third order=* scheduled-pressure=test.i32
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_live_through(%held: reg<test.i32>) -> (reg<test.i32>) asm {
-  low.br ^work
-^work:
-  %first = test.const.i32 1
-  test.event.memory.write.i32 %first
-  %second = test.const.i32 2
-  test.event.memory.write.i32 %second
-  low.br ^exit
-^exit:
-  %third = test.const.i32 3
-  test.event.memory.write.i32 %third
-  return %held
-}
-
-// ----
-block 0 order: 0
-block 1 order: 1, 2, 3, 4, 5
-block 2 order: 6, 7, 8
-scheduled pressure test.i32: peak-live-units=2 peak-live-values=2
-
-// ====
-
 // Two of the four physical registers are held across a source-order fence.
 // Their outer completion must not pin the new inner register chains.
 // RUN: emit low-schedule-query @required_completion_after_fence strategy=resource-stall order=* scheduled-pressure=test.explicit32
