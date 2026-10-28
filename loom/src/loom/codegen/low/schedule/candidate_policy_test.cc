@@ -236,6 +236,24 @@ TEST_F(CandidatePolicyTest, PackingRecoverySchedulesReadyPeerWithoutHandoff) {
                   stalled_peer, ready_peer);
 }
 
+TEST_F(CandidatePolicyTest, ReadyProgressRequiresTheSameCompletionDomain) {
+  const auto stalled_peer = MakeConstrainedCandidate(3, 0);
+  auto ready_peer = MakeConstrainedCandidate(0, 1);
+  for (const auto mode :
+       {LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
+        LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION}) {
+    SCOPED_TRACE(mode);
+    ready_peer.active_unspillable_completion_domain_id =
+        stalled_peer.active_unspillable_completion_domain_id;
+    ExpectPreferred(mode, ready_peer, stalled_peer);
+
+    // Equal capacity does not make independent banks interchangeable. The
+    // ready completion cannot displace an older transaction in another bank.
+    ready_peer.active_unspillable_completion_domain_id = 2;
+    ExpectPreferred(mode, stalled_peer, ready_peer);
+  }
+}
+
 TEST_F(CandidatePolicyTest, PhysicalCliffPrecedesAggregateReliefAndReadiness) {
   auto safe = MakeCandidate(4, 1);
   safe.projected_live_units = 25;

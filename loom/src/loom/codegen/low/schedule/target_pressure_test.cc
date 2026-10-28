@@ -112,7 +112,7 @@ TEST(TargetPressureTest, ResidencyHeadroomBelongsToGrowingResources) {
   }
 }
 
-class RegisterDebtPressureTest : public ::testing::Test {
+class TargetPressureScoringTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(), &pool_);
@@ -124,13 +124,13 @@ class RegisterDebtPressureTest : public ::testing::Test {
     iree_arena_block_pool_deinitialize(&pool_);
   }
 
-  // Owns the empty completion index used by native candidate scoring.
+  // Owns completion indexes used by native candidate scoring.
   iree_arena_block_pool_t pool_;
   // Scratch for dependency and completion initialization.
   iree_arena_allocator_t arena_;
 };
 
-TEST_F(RegisterDebtPressureTest, GrowthUsesCanonicalBankAndOwnership) {
+TEST_F(TargetPressureScoringTest, GrowthUsesCanonicalBankAndOwnership) {
   loom_low_schedule_dependency_graph_t graph;
   loom_low_schedule_dependency_graph_initialize(&graph);
   loom_low_schedule_node_t node = {
@@ -320,6 +320,103 @@ TEST_F(RegisterDebtPressureTest, GrowthUsesCanonicalBankAndOwnership) {
                   LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY),
               unspillable && test_case.opens_debt);
         }
+      }
+    }
+  }
+}
+
+TEST_F(TargetPressureScoringTest, ActiveCompletionsRetainDomainIdentity) {
+  const loom_low_reg_class_t classes[] = {
+      {
+          .flags = LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE,
+          .alloc_unit_bits = 32,
+          .allocatable_count = 4,
+      },
+      {
+          .flags = LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE,
+          .alloc_unit_bits = 32,
+          .allocatable_count = 4,
+      },
+  };
+  const loom_low_descriptor_set_t descriptors = {
+      .reg_classes = classes,
+      .reg_class_count = IREE_ARRAYSIZE(classes),
+  };
+  loom_low_schedule_completion_domain_t domains[] = {
+      {.capacity = 4, .reg_class_id = 0},
+      {.capacity = 4, .reg_class_id = 1},
+  };
+  loom_low_schedule_node_t nodes[3] = {};
+  for (auto& node : nodes) {
+    node.scheduled_ordinal = LOOM_LOW_SCHEDULE_NODE_NONE;
+  }
+  loom_low_schedule_dependency_graph_t graph;
+  loom_low_schedule_dependency_graph_initialize(&graph);
+  uint32_t indegrees[3] = {};
+  loom_low_schedule_dependency_index_t dependencies;
+  loom_low_schedule_dependency_detail_index_t details;
+  IREE_ASSERT_OK(loom_low_schedule_dependency_index_initialize(
+      &graph, IREE_ARRAYSIZE(nodes), &arena_, &arena_, indegrees, &dependencies,
+      &details));
+  loom_low_schedule_dependency_incoming_index_t incoming;
+  IREE_ASSERT_OK(loom_low_schedule_dependency_incoming_index_initialize(
+      &dependencies, nodes, &arena_, &incoming));
+  loom_low_schedule_build_state_t state = {
+      .target = {.descriptor_set = &descriptors},
+      .nodes = nodes,
+      .pressure_limits =
+          {
+              .unspillable_completion_domains = domains,
+              .unspillable_completion_domain_count = IREE_ARRAYSIZE(domains),
+          },
+  };
+  uint64_t live[2] = {};
+  uint32_t reserves[2] = {};
+  uint32_t activation[2] = {};
+  uint8_t touched[2] = {};
+  loom_low_schedule_required_pressure_t required[2] = {};
+  loom_low_schedule_pressure_state_t pressure = {
+      .current_live_units_by_reg_class = live,
+      .required_pressure = required,
+      .packing_reserve_units_by_reg_class = reserves,
+      .candidate_unspillable_activation_units = activation,
+      .candidate_delta_touched_flags = touched,
+  };
+  for (const auto kind :
+       {LOOM_LOW_SCHEDULE_COMPLETION_NOMINATION_FINAL,
+        LOOM_LOW_SCHEDULE_COMPLETION_NOMINATION_TRANSACTION}) {
+    SCOPED_TRACE(kind);
+    IREE_ASSERT_OK(loom_low_schedule_completion_demand_initialize(
+        &dependencies, &incoming, IREE_ARRAYSIZE(domains), &arena_,
+        &pressure.unspillable_completion_demand));
+    // Each bank nominates its own consumer; the third node advances neither.
+    for (uint16_t domain = 0; domain < IREE_ARRAYSIZE(domains); ++domain) {
+      loom_low_schedule_completion_demand_nominate(
+          &pressure.unspillable_completion_demand, kind, domain, domain);
+    }
+    for (uint64_t live_units : {3u, 4u}) {
+      SCOPED_TRACE(live_units);
+      for (uint16_t domain = 0; domain < IREE_ARRAYSIZE(domains); ++domain) {
+        live[domain] = live_units;
+        required[domain].live_units = live_units;
+      }
+      for (uint32_t candidate = 0; candidate < IREE_ARRAYSIZE(nodes);
+           ++candidate) {
+        SCOPED_TRACE(candidate);
+        loom_low_schedule_candidate_score_t score = {
+            .pressure_cliff_units = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE,
+            .units_until_pressure_cliff = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE,
+            .active_unspillable_completion_capacity = UINT32_MAX,
+            .active_unspillable_transaction_final_capacity = UINT32_MAX,
+            .active_unspillable_completion_domain_id = UINT16_MAX,
+        };
+        loom_low_schedule_target_pressure_score_candidate(&state, &pressure,
+                                                          candidate, &score);
+        const bool advances_full_bank = live_units == 4 && candidate < 2;
+        EXPECT_EQ(score.active_unspillable_completion_capacity,
+                  advances_full_bank ? 4u : UINT32_MAX);
+        EXPECT_EQ(score.active_unspillable_completion_domain_id,
+                  advances_full_bank ? candidate : UINT16_MAX);
       }
     }
   }
