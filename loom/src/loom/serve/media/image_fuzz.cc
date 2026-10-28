@@ -19,7 +19,8 @@ static void Exercise(iree_string_view_t input) {
       .compressed_bytes = 65536, .width = 128, .height = 128, .pixels = 16384};
   loom_serve_media_image_input_t image;
   iree_status_t status = loom_serve_media_image_input_initialize(
-      input, &limits, iree_allocator_system(), &image);
+      loom_serve_media_image_source_from_data_url(input), &limits,
+      iree_allocator_system(), &image);
   if (iree_status_is_ok(status)) {
     const loom_serve_media_image_input_t* images[] = {&image, &image};
     const size_t size = image.info.pixel_length;
@@ -38,8 +39,8 @@ static void Exercise(iree_string_view_t input) {
       // distinct metadata alignment and projection extents in one cohort.
       const uint8_t metadata[] = {1, 2, 3};
       const loom_serve_media_image_request_t requests[] = {
-          {&image, {}, 1},
-          {&image, iree_make_const_byte_span(metadata, sizeof(metadata)), 3},
+          {1, &image, {}, 1},
+          {1, &image, iree_make_const_byte_span(metadata, sizeof(metadata)), 3},
       };
       iree_vm_buffer_t* packets[2];
       status = loom_serve_media_image_request_create_batch(

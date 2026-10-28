@@ -54,11 +54,11 @@ typedef struct loom_serve_text_chat_policy_t {
   } images;
   // Initial prompt fragment and opaque rendering state.
   iree_vm_function_t chat_begin;
-  // chat_message(raw, role, text, parts, reasoning, calls, state, ordinal,
-  // fields, part_count) returns (fragment, next_state, marker_plan). The first
-  // six arguments and fragment/plan are buffers; the others are i64. fields
-  // reports the presence of reasoning, calls, and tool ID in bits 0, 1, and 2.
-  // parts and marker_plan use the ordered records defined in media.h.
+  // chat_message(raw, role, text, parts, frames, reasoning, calls, state,
+  // ordinal, fields, part_count) returns (fragment, next_state, plan, count).
+  // The first seven arguments and fragment/plan are buffers; the others are
+  // i64. fields reports reasoning, calls, and tool ID in bits 0, 1, and 2.
+  // parts, frames, and plan use the ordered records defined in media.h.
   iree_vm_function_t chat_message;
   // Final prompt fragment, conversation validation and initial output state.
   iree_vm_function_t chat_end;
@@ -176,9 +176,18 @@ typedef struct loom_serve_text_chat_t {
     iree_host_size_t capacity;
     // Dynamically sized descriptors in message/part order.
     loom_serve_text_chat_image_t* values;
+  } images;
+  // Checked source projections in prompt order, independent of input storage.
+  struct {
+    // Number of committed projections.
+    iree_host_size_t count;
+    // Allocated projection capacity.
+    iree_host_size_t capacity;
+    // Owned source plans; no decoded pixels or device results are stored here.
+    loom_serve_text_media_projection_t* values;
     // Owned concatenated source-private preprocessing metadata.
     iree_string_builder_t metadata;
-  } images;
+  } projections;
 } loom_serve_text_chat_t;
 
 // Validates and renders the supported chat request. Unknown execution options

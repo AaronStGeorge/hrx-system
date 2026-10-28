@@ -38,8 +38,9 @@ class PamTest : public ::testing::Test {
         .pixels = 4096,
     };
     return loom_serve_media_image_input_initialize(
-        iree_make_string_view(url.data(), url.size()), &limits,
-        iree_allocator_system(), &input_);
+        loom_serve_media_image_source_from_data_url(
+            iree_make_string_view(url.data(), url.size())),
+        &limits, iree_allocator_system(), &input_);
   }
 
   iree_status_t Decode(std::vector<uint8_t>& pixels) {

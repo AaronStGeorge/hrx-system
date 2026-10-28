@@ -31,44 +31,47 @@ static void loom_serve_media_compressed_image_deinitialize(
   memset(image, 0, sizeof(*image));
 }
 
-static iree_status_t loom_serve_media_image_data_url_decode(
-    iree_string_view_t escaped_data_url, iree_host_size_t maximum_length,
+static iree_status_t loom_serve_media_image_source_decode(
+    loom_serve_media_image_source_t source, iree_host_size_t maximum_length,
     iree_allocator_t host_allocator,
     loom_serve_media_compressed_image_t* out_image) {
   memset(out_image, 0, sizeof(*out_image));
   out_image->host_allocator = host_allocator;
+  out_image->format = source.format;
 
-  iree_host_size_t data_url_length = 0;
+  iree_host_size_t transport_length = 0;
   IREE_RETURN_IF_ERROR(
-      iree_json_unescape_string(escaped_data_url, 0, NULL, &data_url_length));
+      iree_json_unescape_string(source.value, 0, NULL, &transport_length));
   const iree_host_size_t maximum_encoded_length =
       iree_base64_encoded_size(maximum_length);
-  iree_host_size_t maximum_data_url_length = 0;
+  iree_host_size_t maximum_transport_length = 0;
   if (maximum_encoded_length == IREE_HOST_SIZE_MAX ||
       !iree_host_size_checked_add(
           maximum_encoded_length,
-          sizeof("data:image/x-portable-arbitrarymap;base64,") - 1,
-          &maximum_data_url_length) ||
-      data_url_length > maximum_data_url_length) {
+          source.format
+              ? 0
+              : sizeof("data:image/x-portable-arbitrarymap;base64,") - 1,
+          &maximum_transport_length) ||
+      transport_length > maximum_transport_length) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "image data URL exceeds the compressed byte bound");
+                            "encoded image exceeds the compressed byte bound");
   }
-  if (!data_url_length) {
+  if (!transport_length) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "image data URL is empty");
+                            "encoded image is empty");
   }
 
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, data_url_length,
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, transport_length,
                                              (void**)&out_image->allocation));
-  out_image->allocation_size = data_url_length;
+  out_image->allocation_size = transport_length;
   iree_status_t status = iree_ok_status();
   iree_host_size_t unescaped_length = 0;
-  status = iree_json_unescape_string(escaped_data_url, data_url_length,
+  status = iree_json_unescape_string(source.value, transport_length,
                                      (char*)out_image->allocation,
                                      &unescaped_length);
   iree_string_view_t encoded = iree_make_string_view(
       (const char*)out_image->allocation, unescaped_length);
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && !source.format) {
     if (iree_string_view_consume_prefix(&encoded,
                                         IREE_SV("data:image/png;base64,"))) {
       out_image->format = LOOM_SERVE_MEDIA_IMAGE_FORMAT_PNG;
@@ -106,8 +109,8 @@ static iree_status_t loom_serve_media_image_data_url_decode(
   }
   if (iree_status_is_ok(status)) {
     // Decoding toward the beginning is safe: each complete input quartet is
-    // read before its three output bytes are written, and the data-URL prefix
-    // leaves the write cursor strictly behind unread input.
+    // read before its three output bytes are written, including when the input
+    // has no data-URL prefix.
     status = iree_base64_decode(
         encoded, iree_make_byte_span(out_image->allocation, decoded_length),
         &decoded_length);
@@ -171,13 +174,13 @@ static iree_status_t loom_serve_media_image_inspect_compressed(
 }
 
 iree_status_t loom_serve_media_image_inspect(
-    iree_string_view_t escaped_data_url,
+    loom_serve_media_image_source_t source,
     const loom_serve_media_image_limits_t* limits,
     iree_allocator_t host_allocator, loom_serve_media_image_info_t* out_info) {
   memset(out_info, 0, sizeof(*out_info));
   loom_serve_media_compressed_image_t compressed;
-  IREE_RETURN_IF_ERROR(loom_serve_media_image_data_url_decode(
-      escaped_data_url, limits->compressed_bytes, host_allocator, &compressed));
+  IREE_RETURN_IF_ERROR(loom_serve_media_image_source_decode(
+      source, limits->compressed_bytes, host_allocator, &compressed));
   iree_status_t status =
       loom_serve_media_image_inspect_compressed(&compressed, limits, out_info);
   loom_serve_media_compressed_image_deinitialize(&compressed);
@@ -185,14 +188,14 @@ iree_status_t loom_serve_media_image_inspect(
 }
 
 iree_status_t loom_serve_media_image_input_initialize(
-    iree_string_view_t escaped_data_url,
+    loom_serve_media_image_source_t source,
     const loom_serve_media_image_limits_t* limits,
     iree_allocator_t host_allocator,
     loom_serve_media_image_input_t* out_input) {
   memset(out_input, 0, sizeof(*out_input));
   loom_serve_media_compressed_image_t compressed;
-  IREE_RETURN_IF_ERROR(loom_serve_media_image_data_url_decode(
-      escaped_data_url, limits->compressed_bytes, host_allocator, &compressed));
+  IREE_RETURN_IF_ERROR(loom_serve_media_image_source_decode(
+      source, limits->compressed_bytes, host_allocator, &compressed));
   iree_status_t status = loom_serve_media_image_inspect_compressed(
       &compressed, limits, &out_input->info);
   if (iree_status_is_ok(status)) {

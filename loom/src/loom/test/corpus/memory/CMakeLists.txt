@@ -57,6 +57,7 @@ loom_corpus_sources(
     "buffer/buffer_access.loom"
     "buffer/buffers.loom"
     "buffer/masked_memory.loom"
+    "buffer/packing.loom"
     "buffer/selection.loom"
     "packed/alignment.loom"
     "packed/consumers.loom"

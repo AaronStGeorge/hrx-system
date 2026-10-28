@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -92,6 +93,12 @@ class JsonTest : public ::testing::Test {
     arguments_[1] = iree_vm_variant_from_i64(offset);
     arguments_[2] = iree_vm_variant_from_i64(length);
     return Invoke(export_name, 3, 1);
+  }
+  iree_status_t FormatNumber(double value, int32_t precision) {
+    ResetCall();
+    arguments_[0] = iree_vm_variant_from_f64(value);
+    arguments_[1] = iree_vm_variant_from_i32(precision);
+    return Invoke(IREE_SV("format_f64"), 2, 1);
   }
   std::string CompactResult() {
     // Results own their backing after the call's input is released.
@@ -209,6 +216,48 @@ TEST_F(JsonTest, FloatingRangesPreserveDecimalMagnitudeAndSignedZero) {
     IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
                           Number(IREE_SV("parse_f64"), text, 0, text.size()));
     IREE_ASSERT_OK(Number(IREE_SV("parse_f64"), "0.7", 0, 3));
+  }
+}
+
+TEST_F(JsonTest, FixedNumbersPreservePrecisionAndOwnedBytes) {
+  for (const auto& [value, expected] :
+       std::array<std::pair<double, const char*>, 5>{
+           {{0.05, "0.1"},
+            {0.15, "0.1"},
+            {0.25, "0.2"},
+            {-0.0, "-0.0"},
+            {1e23, "99999999999999991611392.0"}}}) {
+    SCOPED_TRACE(value);
+    IREE_ASSERT_OK(FormatNumber(value, 1));
+    EXPECT_EQ(CompactResult(), expected);
+  }
+  IREE_ASSERT_OK(FormatNumber(1.5, 0));
+  EXPECT_EQ(CompactResult(), "2");
+  IREE_ASSERT_OK(FormatNumber(0.5, 17));
+  EXPECT_EQ(CompactResult(), "0.50000000000000000");
+  IREE_ASSERT_OK(FormatNumber(std::numeric_limits<double>::max(), 17));
+  const std::string maximum = CompactResult();
+  EXPECT_EQ(maximum.size(), 309 + 1 + 17);
+  char expected[328];
+  ASSERT_EQ(std::snprintf(expected, sizeof(expected), "%.17f",
+                          std::numeric_limits<double>::max()),
+            maximum.size());
+  EXPECT_EQ(maximum, expected);
+}
+
+TEST_F(JsonTest, FixedNumbersRejectInvalidValuesAndRecover) {
+  for (double value : {std::numeric_limits<double>::infinity(),
+                       -std::numeric_limits<double>::infinity(),
+                       std::numeric_limits<double>::quiet_NaN()}) {
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, FormatNumber(value, 1));
+    IREE_ASSERT_OK(FormatNumber(0.375, 1));
+    EXPECT_EQ(CompactResult(), "0.4");
+  }
+  for (int32_t precision : {-1, 18, std::numeric_limits<int32_t>::max()}) {
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                          FormatNumber(0.375, precision));
+    IREE_ASSERT_OK(FormatNumber(6.25, 1));
+    EXPECT_EQ(CompactResult(), "6.2");
   }
 }
 

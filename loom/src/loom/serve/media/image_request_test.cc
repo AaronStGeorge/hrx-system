@@ -54,8 +54,9 @@ class ImageRequestTest : public ::testing::Test {
 
   bool Open(size_t index, const char* url) {
     auto status = loom_serve_media_image_input_initialize(
-        iree_make_cstring_view(url), &kLimits, iree_allocator_system(),
-        &inputs_[index]);
+        loom_serve_media_image_source_from_data_url(
+            iree_make_cstring_view(url)),
+        &kLimits, iree_allocator_system(), &inputs_[index]);
     if (iree_status_is_unimplemented(status)) {
       IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
       return false;
@@ -81,7 +82,8 @@ TEST_F(ImageRequestTest, MixedCodecsAndChannelsPreserveExactSourcePackets) {
     }
     metadata[index].assign(i * 17, uint8_t(i + 1));
     requests.push_back({
-        .image = &inputs_[index],
+        .image_count = 1,
+        .images = &inputs_[index],
         .metadata = iree_make_const_byte_span(metadata[index].data(),
                                               metadata[index].size()),
         .output_rows = uint32_t(i + 1),
@@ -101,23 +103,27 @@ TEST_F(ImageRequestTest, MixedCodecsAndChannelsPreserveExactSourcePackets) {
     const auto info = inputs_[i].info;
     loom_serve_media_image_input_deinitialize(&inputs_[i]);
     const uint32_t metadata_length = uint32_t(metadata[i].size());
-    const uint32_t pixel_offset = (64 + metadata_length + 15) & ~15u;
+    const uint32_t pixel_offset = (80 + metadata_length + 15) & ~15u;
     iree_const_byte_span_t bytes;
     IREE_ASSERT_OK(iree_vm_buffer_map_read(
         packets_[i], 0, iree_vm_buffer_length(packets_[i]), &bytes));
     const size_t pixel_end = pixel_offset + info.pixel_length;
     EXPECT_EQ(bytes.data_length, (pixel_end + 15) & ~size_t{15});
     const uint32_t fields[] = {
+        2,
         1,
+        requests[i].output_rows,
+        80,
+        metadata_length,
+        32,
+        pixel_offset,
+        uint32_t(bytes.data_length),
         uint32_t(info.format),
         info.width,
         info.height,
         info.display_width,
         info.display_height,
         info.orientation,
-        requests[i].output_rows,
-        64,
-        metadata_length,
         pixel_offset,
         uint32_t(info.pixel_length),
         uint32_t(info.pixel_format),
@@ -131,9 +137,9 @@ TEST_F(ImageRequestTest, MixedCodecsAndChannelsPreserveExactSourcePackets) {
                 fields[field]);
     }
     for (size_t j = 0; j < metadata_length; ++j) {
-      EXPECT_EQ(bytes.data[64 + j], metadata[i][j]);
+      EXPECT_EQ(bytes.data[80 + j], metadata[i][j]);
     }
-    for (size_t j = 64 + metadata_length; j < pixel_offset; ++j) {
+    for (size_t j = 80 + metadata_length; j < pixel_offset; ++j) {
       EXPECT_EQ(bytes.data[j], 0u);
     }
     EXPECT_EQ(
@@ -147,7 +153,7 @@ TEST_F(ImageRequestTest, MixedCodecsAndChannelsPreserveExactSourcePackets) {
     // the execution packet's prefix, including empty and unaligned metadata.
     iree_vm_buffer_t* descriptor = nullptr;
     IREE_ASSERT_OK(loom_serve_media_image_request_describe(
-        &info, requests[i].metadata, requests[i].output_rows,
+        1, &info, sizeof(info), requests[i].metadata, requests[i].output_rows,
         iree_allocator_system(), &descriptor));
     iree_const_byte_span_t described;
     IREE_EXPECT_OK(iree_vm_buffer_map_read(
@@ -160,7 +166,49 @@ TEST_F(ImageRequestTest, MixedCodecsAndChannelsPreserveExactSourcePackets) {
   }
 }
 
-TEST_F(ImageRequestTest, LateCodecFailureReleasesOnlyItsPacket) {
+TEST_F(ImageRequestTest, FrameGroupOwnsDistinctPlanesAndExactForecast) {
+  if (!Open(0, kRgbPam) || !Open(1, kRgbaPam)) {
+    return;
+  }
+  const uint8_t metadata[] = {9, 8, 7};
+  const loom_serve_media_image_request_t request = {
+      .image_count = 2,
+      .images = inputs_.data(),
+      .metadata = iree_make_const_byte_span(metadata, sizeof(metadata)),
+      .output_rows = 3,
+  };
+  iree_status_t status;
+  IREE_ASSERT_OK(loom_serve_media_image_request_create_batch(
+      1, &request, iree_allocator_system(), packets_.data(), &status));
+  IREE_ASSERT_OK(status);
+  const auto* bytes =
+      static_cast<const uint8_t*>(iree_vm_buffer_const_data(packets_[0]));
+  EXPECT_EQ(iree_vm_buffer_length(packets_[0]), 176u);
+  EXPECT_EQ(iree_unaligned_load_le_u32(bytes + 4), 2u);
+  EXPECT_EQ(iree_unaligned_load_le_u32(bytes + 28), 176u);
+  EXPECT_EQ(iree_unaligned_load_le_u32(bytes + 32 + 24), 144u);
+  EXPECT_EQ(iree_unaligned_load_le_u32(bytes + 80 + 24), 160u);
+  EXPECT_EQ(std::vector<uint8_t>(bytes + 128, bytes + 131),
+            (std::vector<uint8_t>{9, 8, 7}));
+  EXPECT_EQ(
+      std::vector<uint8_t>(bytes + 144, bytes + 156),
+      (std::vector<uint8_t>{255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255}));
+  EXPECT_EQ(std::vector<uint8_t>(bytes + 160, bytes + 176),
+            (std::vector<uint8_t>{10, 20, 30, 0, 40, 50, 60, 128, 70, 80, 90,
+                                  255, 100, 110, 120, 200}));
+  iree_vm_buffer_t* descriptor = nullptr;
+  IREE_ASSERT_OK(loom_serve_media_image_request_describe(
+      2, &inputs_[0].info, sizeof(inputs_[0]), request.metadata, 3,
+      iree_allocator_system(), &descriptor));
+  EXPECT_EQ(iree_vm_buffer_length(descriptor), 144u);
+  const auto* prefix =
+      static_cast<const uint8_t*>(iree_vm_buffer_const_data(descriptor));
+  EXPECT_EQ(std::vector<uint8_t>(prefix, prefix + 144),
+            std::vector<uint8_t>(bytes, bytes + 144));
+  iree_vm_buffer_release(descriptor);
+}
+
+TEST_F(ImageRequestTest, LateCodecFailureReleasesOnlyItsGroup) {
   if (!Open(0, kRgbPam)) {
     return;
   }
@@ -171,9 +219,9 @@ TEST_F(ImageRequestTest, LateCodecFailureReleasesOnlyItsPacket) {
       "CkVOREhEUgr/AAAA/wAAAP///w==";
   ASSERT_TRUE(Open(1, damaged));
   const loom_serve_media_image_request_t requests[] = {
-      {&inputs_[0], {}, 1},
-      {&inputs_[1], {}, 2},
-      {&inputs_[0], {}, 3},
+      {1, &inputs_[0], {}, 1},
+      {2, &inputs_[0], {}, 2},
+      {1, &inputs_[0], {}, 3},
   };
   iree_status_t statuses[3];
   IREE_ASSERT_OK(loom_serve_media_image_request_create_batch(
@@ -191,9 +239,9 @@ TEST_F(ImageRequestTest, AllocationFailuresPreserveOrdinalsAndReleaseStorage) {
     return;
   }
   const loom_serve_media_image_request_t requests[] = {
-      {&inputs_[0], {}, 1},
-      {&inputs_[0], {}, 2},
-      {&inputs_[0], {}, 3},
+      {1, &inputs_[0], {}, 1},
+      {1, &inputs_[0], {}, 2},
+      {1, &inputs_[0], {}, 3},
   };
   // Scratch, three exact packets, and shared codec scratch are the five
   // caller-allocator operations. Every site is exercised independently.
@@ -226,6 +274,30 @@ TEST_F(ImageRequestTest, AllocationFailuresPreserveOrdinalsAndReleaseStorage) {
 TEST(ImageRequestEmptyTest, EmptyCohortDoesNotAllocate) {
   IREE_EXPECT_OK(loom_serve_media_image_request_create_batch(
       0, nullptr, iree_allocator_null(), nullptr, nullptr));
+}
+
+TEST(ImageRequestExtentTest, GroupMustFitItsCompletePacket) {
+  loom_serve_media_image_info_t infos[2] = {};
+  for (auto& info : infos) {
+    info.format = LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM;
+    info.pixel_format = LOOM_SERVE_MEDIA_IMAGE_PIXEL_FORMAT_RGB8;
+    info.width = info.display_width = 32768;
+    info.height = info.display_height = 32768;
+    info.orientation = 1;
+    info.pixel_length = UINT32_C(0xC0000000);
+  }
+  iree_host_size_t length = 0;
+  IREE_ASSERT_OK(loom_serve_media_image_request_size(1, infos, sizeof(infos[0]),
+                                                     0, &length));
+  EXPECT_EQ(length, UINT32_C(0xC0000050));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_serve_media_image_request_size(
+                            2, infos, sizeof(infos[0]), 0, &length));
+  EXPECT_EQ(length, 0u);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_serve_media_image_request_size(
+                            1, infos, sizeof(infos[0]), UINT32_MAX, &length));
+  EXPECT_EQ(length, 0u);
 }
 
 }  // namespace

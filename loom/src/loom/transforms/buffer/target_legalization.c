@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 
+#include "iree/base/internal/arena.h"
 #include "iree/base/internal/math.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
@@ -40,6 +41,99 @@ static iree_status_t loom_buffer_legalize_build_scalar_constant(
                                                   loom_type_scalar(scalar_type),
                                                   location, &op));
   *out_value = loom_scalar_constant_result(op);
+  return iree_ok_status();
+}
+
+// Keep the bias in the physical offset domain so the mask conversion preserves
+// its unsigned range independently of the target's logical index width.
+static iree_status_t loom_buffer_legalize_align_offset(
+    loom_builder_t* builder, loom_scalar_type_t carrier_type,
+    loom_value_id_t value, int64_t alignment, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  if (alignment == 1) {
+    *out_value = value;
+    return iree_ok_status();
+  }
+  loom_value_id_t bias = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_offset_constant(
+      builder, alignment - 1, location, &bias));
+  loom_op_t* op = NULL;
+  const loom_type_t offset_type = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  const loom_type_t integer_type = loom_type_scalar(carrier_type);
+  IREE_RETURN_IF_ERROR(
+      loom_index_add_build(builder, value, bias, offset_type, location, &op));
+  IREE_RETURN_IF_ERROR(loom_index_cast_build(builder, loom_index_add_result(op),
+                                             offset_type, integer_type,
+                                             location, &op));
+  const loom_value_id_t biased_value = loom_index_cast_result(op);
+  loom_value_id_t mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_scalar_constant(
+      builder, carrier_type, -alignment, location, &mask));
+  IREE_RETURN_IF_ERROR(loom_scalar_andi_build(builder, biased_value, mask,
+                                              integer_type, location, &op));
+  IREE_RETURN_IF_ERROR(
+      loom_index_cast_build(builder, loom_scalar_andi_result(op), integer_type,
+                            offset_type, location, &op));
+  *out_value = loom_index_cast_result(op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_buffer_legalize_pack(
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  loom_rewriter_t* rewriter = context->rewriter;
+  loom_builder_t* builder = &rewriter->builder;
+  loom_builder_set_before(builder, op);
+  const loom_value_id_t value_checkpoint =
+      loom_rewriter_value_checkpoint(rewriter);
+  const loom_value_slice_t lengths = loom_buffer_pack_byte_lengths(op);
+  const loom_attribute_t alignments = loom_buffer_pack_minimum_alignments(op);
+  const uint32_t offset_bitwidth =
+      loom_target_legalization_context_bundle(context)
+          ->snapshot->offset_bitwidth;
+  const loom_scalar_type_t carrier_type =
+      offset_bitwidth <= 32 ? LOOM_SCALAR_TYPE_I32 : LOOM_SCALAR_TYPE_I64;
+  loom_value_id_t* replacements = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(context->arena, op->result_count,
+                                sizeof(*replacements), (void**)&replacements));
+  loom_value_id_t end = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_build_offset_constant(
+      builder, 0, op->location, &end));
+  int64_t slab_alignment = 1;
+  iree_status_t status = iree_ok_status();
+  for (uint16_t i = 0; i < lengths.count && iree_status_is_ok(status); ++i) {
+    const int64_t alignment = alignments.i64_array[i];
+    if (alignment > slab_alignment) {
+      slab_alignment = alignment;
+    }
+    // Zero already satisfies every alignment for the first range.
+    if (i != 0) {
+      status = loom_buffer_legalize_align_offset(builder, carrier_type, end,
+                                                 alignment, op->location, &end);
+    }
+    if (iree_status_is_ok(status)) {
+      replacements[i + 1] = end;
+      loom_op_t* addition = NULL;
+      status = loom_index_add_build(builder, end, lengths.values[i],
+                                    loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET),
+                                    op->location, &addition);
+      if (iree_status_is_ok(status)) {
+        end = loom_index_add_result(addition);
+      }
+    }
+  }
+  IREE_RETURN_IF_ERROR(status);
+  IREE_RETURN_IF_ERROR(loom_buffer_legalize_align_offset(
+      builder, carrier_type, end, slab_alignment, op->location,
+      &replacements[0]));
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, replacements, op->result_count, value_checkpoint));
+  IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+      rewriter, op, replacements, op->result_count));
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN,
+  };
   return iree_ok_status();
 }
 
@@ -1017,6 +1111,8 @@ static iree_status_t loom_buffer_legalize(
       .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
   };
   switch (op->kind) {
+    case LOOM_OP_BUFFER_PACK:
+      return loom_buffer_legalize_pack(context, op, out_result);
     case LOOM_OP_BUFFER_COPY:
     case LOOM_OP_BUFFER_FILL:
       return loom_buffer_legalize_transfer(context, op, out_result);
@@ -1028,6 +1124,10 @@ static iree_status_t loom_buffer_legalize(
 }
 
 static const loom_target_legalizer_rule_t kBufferLegalizerRules[] = {
+    {
+        .root_kind = LOOM_OP_BUFFER_PACK,
+        .legalize = loom_buffer_legalize,
+    },
     {
         .root_kind = LOOM_OP_BUFFER_COPY,
         .legalize = loom_buffer_legalize,

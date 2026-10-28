@@ -110,8 +110,10 @@ iree_status_t loom_serve_finite_load_free(loom_serve_finite_load_t* load);
 // Tokenizer asset is relative to asset_root; empty omits tokenization support.
 // State is immutable across requests. Positive units bound cohort work/storage;
 // equal tags permit batching. Ranges contain [offset, length] i64 pairs into
-// concatenated prepared bytes, in request order. Both stage kinds have two
-// dynamic roots (input/output) aligned to LOOM_SERVE_FINITE_BUFFER_ALIGNMENT.
+// bytes, in request order. The bytes buffer begins with a copy of ranges
+// followed by the concatenated prepared inputs; payload may forward this
+// allocation directly. Both stage kinds have two dynamic roots (input/output)
+// aligned to LOOM_SERVE_FINITE_BUFFER_ALIGNMENT.
 // Commands may additionally have compiler-reflected private workspace; direct
 // stages use their compiled launch configuration without a command buffer or
 // runner workspace.

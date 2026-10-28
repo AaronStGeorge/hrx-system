@@ -111,23 +111,25 @@ iree_status_t loom_serve_image_load_free(loom_serve_image_load_t* load);
 // by loom_serve_image_request_t; source policy resolves registered identities
 // and rejects unsupported selections before publishing prepared bytes.
 // Positive units bound cohort work/storage; equal tags permit batching.
-// Ranges are little-endian [offset, length] i64 pairs
-// into concatenated prepared bytes. Output is concatenated F32 CHW RGB in that
-// same stable request order. A cancelled peer never changes this layout. The
-// warm program imports input/JSON capabilities, invocation-only prepare
-// declarations, and runner.execute_N/feedback. Request stage ordinals follow
-// the immutable cold table. Explicit checkpoint declarations select retained
-// domains or prepare independent banks on demand; omitted declarations preserve
-// the cold layout. Stages declared by one cohort share a parameter binding
-// map, while retained cohort choices can bind different checkpoint banks. Each
-// cold-declared parameter arena can supply independently selected banks through
-// one fixed binding. Such a model declares a bind_parameters control entry at
-// registration. The owner invokes it once after successful bank resolution and
-// before the existing payload upload; bank_offsets is an owned read-only buffer
-// of little-endian u64 arena offsets in parameter_bank declaration order. The
-// source patches its opaque payload, retaining item order and strengths. The
-// invocation retains selected banks through actual execution retirement. Each
-// command has three dynamic bindings: opaque request bytes, output F32 CHW RGB
+// Ranges are little-endian [offset, length] i64 pairs into bytes. The bytes
+// buffer begins with a copy of ranges followed by the concatenated prepared
+// inputs; payload may forward this allocation directly. Output is concatenated
+// F32 CHW RGB in the same stable request order. A cancelled peer never changes
+// this layout. The warm program imports input/JSON capabilities,
+// invocation-only prepare declarations, and runner.execute_N/feedback. Request
+// stage ordinals follow the immutable cold table. Explicit checkpoint
+// declarations select retained domains or prepare independent banks on demand;
+// omitted declarations preserve the cold layout. Stages declared by one cohort
+// share a parameter binding map, while retained cohort choices can bind
+// different checkpoint banks. Each cold-declared parameter arena can supply
+// independently selected banks through one fixed binding. Such a model declares
+// a bind_parameters control entry at registration. The owner invokes it once
+// after successful bank resolution and before the existing payload upload;
+// bank_offsets is an owned read-only buffer of little-endian u64 arena offsets
+// in parameter_bank declaration order. The source patches its opaque payload,
+// retaining item order and strengths. The invocation retains selected banks
+// through actual execution retirement. Each command has three dynamic bindings:
+// opaque request bytes, output F32 CHW RGB
 // [-1,1], and workspace. External input/output roots promise only byte
 // alignment; stronger private storage and parameter alignments come from their
 // compiler-reflected contracts. Input capacity comes from source; compiler

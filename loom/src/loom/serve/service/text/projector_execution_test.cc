@@ -17,7 +17,8 @@ namespace {
 using loom_serve::testing::text::Oracle;
 using loom_serve::testing::text::SourceTextServiceTest;
 
-class PixelProjectorExecutionTest : public SourceTextServiceTest {
+class PixelProjectorExecutionTest : public SourceTextServiceTest,
+                                    public ::testing::WithParamInterface<bool> {
  protected:
   void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(SourceTextServiceTest::SetUp());
@@ -100,7 +101,7 @@ class PixelProjectorExecutionTest : public SourceTextServiceTest {
   loom_serve_finite_snapshot_t* snapshot_ = nullptr;
 };
 
-TEST_F(PixelProjectorExecutionTest, RgbAndRgbaCohortConditionsRetainedText) {
+TEST_P(PixelProjectorExecutionTest, RgbAndRgbaCohortConditionsRetainedText) {
   const std::string urls[] = {
       std::string("data:image/x-portable-arbitrarymap;base64,") + kPam,
       std::string("data:image/x-portable-arbitrarymap;base64,") + kAlphaPam,
@@ -113,8 +114,9 @@ TEST_F(PixelProjectorExecutionTest, RgbAndRgbaCohortConditionsRetainedText) {
   };
   for (size_t i = 0; i < inputs_.size(); ++i) {
     auto status = loom_serve_media_image_input_initialize(
-        iree_make_string_view(urls[i].data(), urls[i].size()), &limits,
-        host_allocator_, &inputs_[i]);
+        loom_serve_media_image_source_from_data_url(
+            iree_make_string_view(urls[i].data(), urls[i].size())),
+        &limits, host_allocator_, &inputs_[i]);
     if (iree_status_is_unimplemented(status)) {
       IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
       return;
@@ -123,8 +125,9 @@ TEST_F(PixelProjectorExecutionTest, RgbAndRgbaCohortConditionsRetainedText) {
   }
   const uint8_t metadata[] = {9, 8, 7};
   const loom_serve_media_image_request_t requests[] = {
-      {&inputs_[0], {}, 3},
-      {&inputs_[1], iree_make_const_byte_span(metadata, sizeof(metadata)), 2},
+      {GetParam() ? 2u : 1u, &inputs_[0], {}, 3},
+      {1, &inputs_[1], iree_make_const_byte_span(metadata, sizeof(metadata)),
+       2},
   };
   iree_status_t statuses[2];
   IREE_ASSERT_OK(loom_serve_media_image_request_create_batch(
@@ -186,7 +189,8 @@ TEST_F(PixelProjectorExecutionTest, RgbAndRgbaCohortConditionsRetainedText) {
   loom_serve_text_result_t results[2];
   IREE_ASSERT_OK(loom_serve_text_model_complete_epoch(model_, results));
   const int32_t expected[][4] = {
-      {Fingerprint(512, 0), Fingerprint(513, 1), Fingerprint(514, 2), 1},
+      {Fingerprint(512, 0), Fingerprint(GetParam() ? 12 : 513, 1),
+       Fingerprint(GetParam() ? 513 : 514, 2), 1},
       {2, Fingerprint(12, 0), Fingerprint(13, 1), 1},
   };
   for (size_t i = 0; i < 2; ++i) {
@@ -212,12 +216,17 @@ TEST_F(PixelProjectorExecutionTest, RgbAndRgbaCohortConditionsRetainedText) {
       ASSERT_EQ(bytes.data_length, 4 * sizeof(float));
       float values[4];
       std::memcpy(values, bytes.data, sizeof(values));
-      EXPECT_EQ(values[0], (i ? 12.f : 512.f) + row);
-      EXPECT_EQ(values[1], i ? 20.f : 0.f);
-      EXPECT_EQ(values[2], i ? 30.f : 0.f);
+      const bool grouped = GetParam() && i == 0;
+      const bool rgba = i != 0 || (grouped && row % 2 != 0);
+      EXPECT_EQ(values[0], (rgba ? 12.f : 512.f) + (grouped ? row / 2 : row));
+      EXPECT_EQ(values[1], rgba ? 20.f : 0.f);
+      EXPECT_EQ(values[2], rgba ? 30.f : 0.f);
       EXPECT_EQ(values[3], 2.f);
     }
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(SingleAndGroupedPlanes, PixelProjectorExecutionTest,
+                         ::testing::Bool());
 
 }  // namespace

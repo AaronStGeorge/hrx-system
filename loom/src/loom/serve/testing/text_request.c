@@ -78,7 +78,7 @@ static iree_status_t loom_serve_text_request_check_report(
     }
     if (iree_status_is_ok(status)) {
       status = loom_json_array_write_host_size_element(
-          &span, media_spans[i].image_index);
+          &span, media_spans[i].projection_index);
     }
     if (iree_status_is_ok(status)) {
       status = loom_json_array_write_host_size_element(

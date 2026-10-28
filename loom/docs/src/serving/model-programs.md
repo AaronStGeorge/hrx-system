@@ -270,8 +270,12 @@ across request preparation, and returned buffers retain any aliased input.
 
 The native scheduler starts with the oldest prepared request and fills the
 cohort from compatible waiting requests. It does not wait for hypothetical
-arrivals. Batch preparation receives stable request-order ranges over concatenated
-prepared bytes, selects a declared stage and maps physical output back to requests.
+arrivals. Batch preparation receives stable request-order `[offset, length]` I64
+ranges into the packed buffer. The buffer starts with a copy of that directory,
+followed by the prepared request bytes. A program can upload this allocation
+directly and let device workers index requests through the directory, without
+copying the request data again. Batch preparation selects a declared stage and
+maps physical output back to requests.
 
 Finite `prepare_batch` can also declare stages with the `prepare` capability.
 It uses the same `stage`, `dispatch`, `config`, `config_i64`, and
@@ -585,22 +589,35 @@ Explicit component warmup follows the same preparation boundary. Its parameter
 pin policy is independent of the primary language model's policy; deactivation
 does not discard retained text state.
 
-The text control program declares image limits and receives ordered text/image
-content records. It renders model framing and returns each image's projected
-row count and opaque preprocessing metadata. Its input preparation maps those
-occurrences into logical input spans; native code checks the returned ranges
-against the inspected images. The
+The text control program declares image limits and receives ordered content
+records plus a message-local frame table. Each media part names a contiguous
+frame range; each frame supplies display geometry and a presentation timestamp.
+An ordinary image has one frame with timestamp zero. The source chooses
+projection groups within each part, renders their model framing, and returns an
+explicit group count, marker ranges, projected row counts, and opaque
+preprocessing metadata. Native code validates complete, ordered coverage of the
+inspected frames before committing the plan. Input preparation then maps those
+projections into logical input spans. The
 [ordered-media contract](https://github.com/ROCm/hrx-system/blob/main/loom/src/loom/serve/service/text/media.h)
 defines these records and retained identity.
 
 On a media-prefix miss, codecs realize packed RGB8/RGBA8 pixels without
 resizing or normalizing them. The projector receives an
 [image request packet](https://github.com/ROCm/hrx-system/blob/main/loom/src/loom/serve/media/image_request.h)
-containing encoded/display geometry, orientation, source metadata and pixels.
+containing a plane directory, encoded/display geometry, orientation, source
+metadata, and pixels for every frame in the group.
 Its device program owns preprocessing and projection. Compatible images from
 the same request or different requests share finite cohorts; source work units
 and compatibility tags govern packing, not a native assumption of one image
 per invocation.
+
+Projection identity includes every frame's compressed content and timestamp,
+its part placement and detail, the selected grouping, and source preprocessing
+metadata. Retained reuse compares the identity established when the plan was
+accepted. For example, a model that pads an odd final frame by using it twice
+must recompute that last projection when a second frame is appended. Earlier
+complete pairs remain eligible for prefix reuse when their preprocessing and
+prompt placement are unchanged.
 
 Projected rows remain on the device. The language epoch imports producer
 readiness and gathers only the rows its current spans need. Source
@@ -628,6 +645,13 @@ estimates for the complete logical request: the producer's private peak
 output roots, and gathered output rows with 16-byte row alignment. Retained
 output is excluded from the private peak and includes padded/shared roots;
 gather storage includes separate copies of aliased rows.
+
+A logical text request can join one projector cohort shared with peers. Its
+other cohorts contain only its own projections. The retained-output estimate
+can therefore include private projection output plus one maximum cohort root,
+instead of multiplying every projection by the maximum peer count. Compatible
+frame pairs within a video continue to batch across the request's private
+cohorts.
 
 These trusted source estimates let the server reject a request that cannot fit
 alone before pixel decoding or weight activation. It checks producer and

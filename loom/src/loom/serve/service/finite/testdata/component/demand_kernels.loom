@@ -25,7 +25,9 @@ kernel.def target(@device) @scale() {
 } launch(%input: buffer, %output: buffer) {
   %origin = index.constant 0 : offset
   %table_offset = index.constant 16 : offset
-  %input_view = buffer.view %input[%origin] : buffer -> view<4xf32>
+  // The single-request cohort has one 16-byte directory record.
+  %request_offset = index.constant 16 : offset
+  %input_view = buffer.view %input[%request_offset] : buffer -> view<4xf32>
   %output_view = buffer.view %output[%origin] : buffer -> view<4xf32>
   %tables = buffer.view %output[%table_offset] : buffer -> view<2xf32>
   %first = view.load %tables[0] : view<2xf32> -> f32

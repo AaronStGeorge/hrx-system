@@ -15,6 +15,8 @@
 
 namespace {
 
+constexpr iree_host_size_t kProjectionRecordBytes =
+    LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_COUNT * sizeof(uint32_t);
 constexpr iree_host_size_t kMarkerRecordBytes =
     LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_COUNT * sizeof(uint32_t);
 constexpr iree_host_size_t kSpanRecordBytes =
@@ -36,58 +38,69 @@ uint32_t LoadField(iree_const_byte_span_t bytes, iree_host_size_t record,
 class TextMediaTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    for (size_t i = 0; i < images_.size(); ++i) {
+      images_[i].kind = LOOM_SERVE_TEXT_CHAT_CONTENT_IMAGE;
+      images_[i].content_ordinal = uint32_t(i);
+      images_[i].info.digest.bytes[0] = uint8_t(i + 7);
+    }
     chat_.host_allocator = iree_allocator_system();
     chat_.images.count = images_.size();
     chat_.images.capacity = images_.size();
     chat_.images.values = images_.data();
     iree_string_builder_initialize(iree_allocator_system(), &chat_.prompt);
     iree_string_builder_initialize(iree_allocator_system(),
-                                   &chat_.images.metadata);
+                                   &chat_.projections.metadata);
   }
 
   void TearDown() override {
-    iree_string_builder_deinitialize(&chat_.images.metadata);
+    iree_allocator_free(chat_.host_allocator, chat_.projections.values);
+    iree_string_builder_deinitialize(&chat_.projections.metadata);
     iree_string_builder_deinitialize(&chat_.prompt);
   }
 
   std::vector<uint8_t> MessagePlan() {
-    std::vector<uint8_t> plan(2 * kMarkerRecordBytes + 3);
-    StoreField(plan, 0, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_IMAGE_INDEX, 0);
-    StoreField(plan, 0, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_BYTE_OFFSET, 1);
-    StoreField(plan, 0, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_BYTE_LENGTH, 2);
-    StoreField(plan, 0, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_FEATURE_COUNT, 3);
-    StoreField(plan, 0, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_METADATA_OFFSET,
-               2 * kMarkerRecordBytes);
-    StoreField(plan, 0, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_METADATA_LENGTH, 2);
-    StoreField(plan, 1, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_IMAGE_INDEX, 1);
-    StoreField(plan, 1, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_BYTE_OFFSET, 5);
-    StoreField(plan, 1, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_BYTE_LENGTH, 1);
-    StoreField(plan, 1, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_FEATURE_COUNT, 4);
-    StoreField(plan, 1, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_METADATA_OFFSET,
-               2 * kMarkerRecordBytes + 2);
-    StoreField(plan, 1, kMarkerRecordBytes,
-               LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_METADATA_LENGTH, 1);
-    plan[2 * kMarkerRecordBytes] = 'a';
-    plan[2 * kMarkerRecordBytes + 1] = 'b';
-    plan[2 * kMarkerRecordBytes + 2] = 'c';
+    std::vector<uint8_t> plan(2 * kProjectionRecordBytes + 3);
+    StoreField(plan, 0, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_IMAGE_BEGIN, 0);
+    StoreField(plan, 0, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_IMAGE_COUNT, 1);
+    StoreField(plan, 0, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_BYTE_OFFSET, 1);
+    StoreField(plan, 0, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_BYTE_LENGTH, 2);
+    StoreField(plan, 0, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_FEATURE_COUNT, 3);
+    StoreField(plan, 0, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_METADATA_OFFSET,
+               2 * kProjectionRecordBytes);
+    StoreField(plan, 0, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_METADATA_LENGTH, 2);
+    StoreField(plan, 1, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_IMAGE_BEGIN, 1);
+    StoreField(plan, 1, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_IMAGE_COUNT, 1);
+    StoreField(plan, 1, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_BYTE_OFFSET, 5);
+    StoreField(plan, 1, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_BYTE_LENGTH, 1);
+    StoreField(plan, 1, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_FEATURE_COUNT, 4);
+    StoreField(plan, 1, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_METADATA_OFFSET,
+               2 * kProjectionRecordBytes + 2);
+    StoreField(plan, 1, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_METADATA_LENGTH, 1);
+    plan[2 * kProjectionRecordBytes] = 'a';
+    plan[2 * kProjectionRecordBytes + 1] = 'b';
+    plan[2 * kProjectionRecordBytes + 2] = 'c';
     return plan;
   }
 
   void ApplyMessagePlan() {
     const std::vector<uint8_t> plan = MessagePlan();
     IREE_ASSERT_OK(loom_serve_text_media_apply_message_plan(
-        &chat_, 0, 10, 6, iree_make_const_byte_span(plan.data(), plan.size())));
+        &chat_, 0, 10, 6, 2,
+        iree_make_const_byte_span(plan.data(), plan.size())));
   }
 
   std::array<loom_serve_text_chat_image_t, 2> images_ = {};
@@ -96,38 +109,50 @@ class TextMediaTest : public ::testing::Test {
 
 TEST_F(TextMediaTest, CommitsExactSourceSemanticsToMediaIdentity) {
   ApplyMessagePlan();
-  images_[0].info.digest.bytes[0] = 7;
-  images_[1].info.digest.bytes[0] = 8;
 
-  EXPECT_EQ(images_[0].marker_offset, 11u);
-  EXPECT_EQ(images_[0].marker_length, 2u);
-  EXPECT_EQ(images_[0].feature_count, 3u);
-  EXPECT_EQ(images_[0].metadata_offset, 0u);
-  EXPECT_EQ(images_[0].metadata_length, 2u);
-  EXPECT_EQ(images_[1].marker_offset, 15u);
-  EXPECT_EQ(images_[1].feature_count, 4u);
-  EXPECT_EQ(images_[1].metadata_offset, 2u);
+  EXPECT_EQ(chat_.projections.values[0].marker_offset, 11u);
+  EXPECT_EQ(chat_.projections.values[0].marker_length, 2u);
+  EXPECT_EQ(chat_.projections.values[0].feature_count, 3u);
+  EXPECT_EQ(chat_.projections.values[0].metadata_offset, 0u);
+  EXPECT_EQ(chat_.projections.values[0].metadata_length, 2u);
+  EXPECT_EQ(chat_.projections.values[1].marker_offset, 15u);
+  EXPECT_EQ(chat_.projections.values[1].feature_count, 4u);
+  EXPECT_EQ(chat_.projections.values[1].metadata_offset, 2u);
   EXPECT_TRUE(iree_string_view_equal(
-      iree_string_builder_view(&chat_.images.metadata), IREE_SV("abc")));
+      iree_string_builder_view(&chat_.projections.metadata), IREE_SV("abc")));
 
   loom_serve_text_chat_media_identity_t identity = {};
   IREE_ASSERT_OK(loom_serve_text_chat_media_identity_initialize(
       &chat_, iree_allocator_system(), &identity));
-  EXPECT_EQ(iree_vm_buffer_length(identity.storage), 2u * 89u);
+  EXPECT_EQ(iree_vm_buffer_length(identity.storage), 2u * 32u);
   EXPECT_TRUE(
       loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
-  ++images_[0].feature_count;
+  // Re-render new request facts through the plan boundary. Checked projections
+  // are immutable; retention never reconstructs identity from mutated inputs.
+  const auto apply = [&](const std::vector<uint8_t>& plan) {
+    chat_.projections.count = 0;
+    iree_string_builder_reset(&chat_.projections.metadata);
+    IREE_ASSERT_OK(loom_serve_text_media_apply_message_plan(
+        &chat_, 0, 10, 6, 2,
+        iree_make_const_byte_span(plan.data(), plan.size())));
+  };
+  auto plan = MessagePlan();
+  StoreField(plan, 0, kProjectionRecordBytes,
+             LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_FEATURE_COUNT, 5);
+  apply(plan);
   EXPECT_FALSE(
       loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
-  --images_[0].feature_count;
-  images_[1].metadata_digest.bytes[0] ^= 1;
+  plan = MessagePlan();
+  plan.back() ^= 1;
+  apply(plan);
   EXPECT_FALSE(
       loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
-  images_[1].metadata_digest.bytes[0] ^= 1;
-  std::swap(images_[0], images_[1]);
+  std::swap(images_[0].info.digest, images_[1].info.digest);
+  apply(MessagePlan());
   EXPECT_FALSE(
       loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
-  std::swap(images_[0], images_[1]);
+  std::swap(images_[0].info.digest, images_[1].info.digest);
+  apply(MessagePlan());
   loom_serve_text_chat_media_identity_t retained = {};
   loom_serve_text_chat_media_identity_retain(&identity, &retained);
   loom_serve_text_chat_media_identity_deinitialize(&identity);
@@ -139,8 +164,8 @@ TEST_F(TextMediaTest, CommitsExactSourceSemanticsToMediaIdentity) {
 TEST_F(TextMediaTest, TextOnlyMessagesRetainNoMediaAllocation) {
   chat_.images.count = 0;
   IREE_ASSERT_OK(loom_serve_text_media_apply_message_plan(
-      &chat_, 0, 0, 16, iree_const_byte_span_empty()));
-  EXPECT_EQ(iree_string_builder_buffer(&chat_.images.metadata), nullptr);
+      &chat_, 0, 0, 16, 0, iree_const_byte_span_empty()));
+  EXPECT_EQ(iree_string_builder_buffer(&chat_.projections.metadata), nullptr);
   loom_serve_text_chat_media_identity_t identity = {};
   IREE_ASSERT_OK(loom_serve_text_chat_media_identity_initialize(
       &chat_, iree_allocator_null(), &identity));
@@ -150,35 +175,108 @@ TEST_F(TextMediaTest, TextOnlyMessagesRetainNoMediaAllocation) {
 
 TEST_F(TextMediaTest, RejectsMalformedMessagePlanBeforeMutation) {
   std::vector<uint8_t> plan = MessagePlan();
-  StoreField(plan, 0, kMarkerRecordBytes,
-             LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_BYTE_LENGTH, 0);
+  StoreField(plan, 0, kProjectionRecordBytes,
+             LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_BYTE_LENGTH, 0);
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_serve_text_media_apply_message_plan(
-          &chat_, 0, 10, 6,
+          &chat_, 0, 10, 6, 2,
           iree_make_const_byte_span(plan.data(), plan.size())));
 
   plan = MessagePlan();
-  StoreField(plan, 1, kMarkerRecordBytes,
-             LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_BYTE_OFFSET, 2);
+  StoreField(plan, 1, kProjectionRecordBytes,
+             LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_BYTE_OFFSET, 2);
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_serve_text_media_apply_message_plan(
-          &chat_, 0, 10, 6,
+          &chat_, 0, 10, 6, 2,
           iree_make_const_byte_span(plan.data(), plan.size())));
 
   plan = MessagePlan();
-  StoreField(plan, 1, kMarkerRecordBytes,
-             LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_METADATA_OFFSET, 0);
+  StoreField(plan, 1, kProjectionRecordBytes,
+             LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_METADATA_OFFSET, 0);
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_serve_text_media_apply_message_plan(
-          &chat_, 0, 10, 6,
+          &chat_, 0, 10, 6, 2,
           iree_make_const_byte_span(plan.data(), plan.size())));
 
-  EXPECT_EQ(iree_string_builder_size(&chat_.images.metadata), 0u);
-  EXPECT_EQ(images_[0].marker_length, 0u);
-  EXPECT_EQ(images_[1].feature_count, 0u);
+  EXPECT_EQ(iree_string_builder_size(&chat_.projections.metadata), 0u);
+  EXPECT_EQ(chat_.projections.count, 0u);
+  EXPECT_EQ(chat_.projections.values, nullptr);
+}
+
+// A source can project several frames into a different number of feature rows.
+// Input coverage, rather than a native temporal-group size, defines validity.
+TEST_F(TextMediaTest, GroupsCoverInputsWithoutCrossingContentParts) {
+  for (auto& image : images_) {
+    image.kind = LOOM_SERVE_TEXT_CHAT_CONTENT_VIDEO;
+    image.content_ordinal = 0;
+  }
+  const uint32_t fields[] = {0, 2, 1, 2, 3, kProjectionRecordBytes, 0};
+  std::vector<uint8_t> plan(kProjectionRecordBytes);
+  for (size_t i = 0; i < IREE_ARRAYSIZE(fields); ++i) {
+    StoreField(plan, 0, kProjectionRecordBytes, i, fields[i]);
+  }
+  const auto apply = [&](size_t count) {
+    return loom_serve_text_media_apply_message_plan(
+        &chat_, 0, 10, 6, count,
+        iree_make_const_byte_span(plan.data(), plan.size()));
+  };
+  for (const auto& range :
+       {std::array<uint32_t, 2>{1, 1}, {0, 0}, {0, 1}, {0, 3}}) {
+    StoreField(plan, 0, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_IMAGE_BEGIN, range[0]);
+    StoreField(plan, 0, kProjectionRecordBytes,
+               LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_IMAGE_COUNT, range[1]);
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, apply(1));
+  }
+  StoreField(plan, 0, kProjectionRecordBytes,
+             LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_IMAGE_COUNT, 2);
+  images_[1].content_ordinal = 1;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, apply(1));
+  images_[1].content_ordinal = 0;
+  images_[0].kind = LOOM_SERVE_TEXT_CHAT_CONTENT_IMAGE;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, apply(1));
+  images_[0].kind = LOOM_SERVE_TEXT_CHAT_CONTENT_VIDEO;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, apply(0));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, apply(3));
+  EXPECT_EQ(chat_.projections.count, 0u);
+  EXPECT_EQ(chat_.projections.values, nullptr);
+  IREE_ASSERT_OK(apply(1));
+  ASSERT_EQ(chat_.projections.count, 1u);
+  EXPECT_EQ(chat_.projections.values[0].image_begin, 0u);
+  EXPECT_EQ(chat_.projections.values[0].image_count, 2u);
+  EXPECT_EQ(chat_.projections.values[0].feature_count, 3u);
+
+  loom_serve_text_chat_media_identity_t identity = {};
+  IREE_ASSERT_OK(loom_serve_text_chat_media_identity_initialize(
+      &chat_, iree_allocator_system(), &identity));
+  const auto reapply = [&]() {
+    chat_.projections.count = 0;
+    iree_string_builder_reset(&chat_.projections.metadata);
+    IREE_ASSERT_OK(apply(1));
+  };
+  images_[1].timestamp = 0.75;
+  reapply();
+  EXPECT_FALSE(
+      loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
+  images_[1].timestamp = 0.0;
+  images_[1].info.digest.bytes[0] ^= 1;
+  reapply();
+  EXPECT_FALSE(
+      loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
+  images_[1].info.digest.bytes[0] ^= 1;
+  reapply();
+  EXPECT_TRUE(
+      loom_serve_text_chat_media_identity_equal_chat(&identity, &chat_));
+  // Same frames and prompt placement, but a different source grouping.
+  chat_.projections.count = 0;
+  iree_string_builder_reset(&chat_.projections.metadata);
+  ApplyMessagePlan();
+  EXPECT_FALSE(
+      loom_serve_text_chat_media_identity_is_prefix(&identity, &chat_));
+  loom_serve_text_chat_media_identity_deinitialize(&identity);
 }
 
 TEST_F(TextMediaTest, BuildsSuffixPlanOnlyAtExactMarkerBoundaries) {
@@ -196,7 +294,7 @@ TEST_F(TextMediaTest, BuildsSuffixPlanOnlyAtExactMarkerBoundaries) {
       iree_vm_buffer_map_read(plan, 0, iree_vm_buffer_length(plan), &bytes));
   EXPECT_EQ(bytes.data_length, kMarkerRecordBytes + 1);
   EXPECT_EQ(LoadField(bytes, 0, kMarkerRecordBytes,
-                      LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_IMAGE_INDEX),
+                      LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_PROJECTION_INDEX),
             1u);
   EXPECT_EQ(LoadField(bytes, 0, kMarkerRecordBytes,
                       LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_BYTE_OFFSET),
@@ -224,13 +322,13 @@ TEST_F(TextMediaTest, ValidatesAndCompactsSourceRanges) {
   ApplyMessagePlan();
   std::vector<uint8_t> source_spans(2 * kSpanRecordBytes);
   StoreField(source_spans, 0, kSpanRecordBytes,
-             LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_IMAGE_INDEX, 0);
+             LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_PROJECTION_INDEX, 0);
   StoreField(source_spans, 0, kSpanRecordBytes,
              LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_OFFSET, 1);
   StoreField(source_spans, 0, kSpanRecordBytes,
              LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_COUNT, 3);
   StoreField(source_spans, 1, kSpanRecordBytes,
-             LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_IMAGE_INDEX, 1);
+             LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_PROJECTION_INDEX, 1);
   StoreField(source_spans, 1, kSpanRecordBytes,
              LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_OFFSET, 4);
   StoreField(source_spans, 1, kSpanRecordBytes,
@@ -243,10 +341,10 @@ TEST_F(TextMediaTest, ValidatesAndCompactsSourceRanges) {
       iree_make_const_byte_span(source_spans.data(), source_spans.size()), 8, 1,
       iree_allocator_system(), &spans, &span_count));
   ASSERT_EQ(span_count, 2u);
-  EXPECT_EQ(spans[0].image_index, 0u);
+  EXPECT_EQ(spans[0].projection_index, 0u);
   EXPECT_EQ(spans[0].input_offset, 2u);
   EXPECT_EQ(spans[0].input_count, 3u);
-  EXPECT_EQ(spans[1].image_index, 1u);
+  EXPECT_EQ(spans[1].projection_index, 1u);
   EXPECT_EQ(spans[1].input_offset, 5u);
   EXPECT_EQ(spans[1].input_count, 4u);
   iree_allocator_free(iree_allocator_system(), spans);

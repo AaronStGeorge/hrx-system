@@ -14,6 +14,23 @@
 extern "C" {
 #endif
 
+// Borrowed transport input. A video sequence supplies individual base64 slices
+// with a known format; ordinary image inputs supply complete data URLs. Neither
+// form requires copying or synthesizing a URL before bounded inspection.
+typedef struct loom_serve_media_image_source_t {
+  // Raw JSON string contents, excluding quotes and retaining JSON escapes.
+  iree_string_view_t value;
+  // Declared format for bare base64, or zero to read it from a data URL.
+  loom_serve_media_image_format_t format;
+} loom_serve_media_image_source_t;
+
+static inline loom_serve_media_image_source_t
+loom_serve_media_image_source_from_data_url(iree_string_view_t value) {
+  loom_serve_media_image_source_t source = {value,
+                                            (loom_serve_media_image_format_t)0};
+  return source;
+}
+
 // Immutable inspected compressed input. The owner can collect a cohort before
 // decoding and release each compressed payload immediately after realization.
 // No cache is created here; callers account these bytes in their request
@@ -33,7 +50,7 @@ typedef struct loom_serve_media_image_input_t {
 
 // Opens one transport input without realizing pixels. Failure zeros out_input.
 iree_status_t loom_serve_media_image_input_initialize(
-    iree_string_view_t escaped_data_url,
+    loom_serve_media_image_source_t source,
     const loom_serve_media_image_limits_t* limits,
     iree_allocator_t host_allocator, loom_serve_media_image_input_t* out_input);
 
@@ -53,13 +70,12 @@ iree_status_t loom_serve_media_image_decode_batch(
     const iree_byte_span_t* pixels, iree_status_t* out_statuses,
     iree_allocator_t host_allocator);
 
-// Inspects one raw JSON string value containing a base64 image data URL.
-// |escaped_data_url| excludes its surrounding quotes and may contain JSON
-// escapes. The temporary compressed representation is released before return.
+// Inspects one borrowed transport input. The temporary compressed
+// representation is released before return.
 // Animated inputs and MIME/signature mismatches are rejected. No pixel plane is
 // allocated. Failure zeros |out_info|.
 iree_status_t loom_serve_media_image_inspect(
-    iree_string_view_t escaped_data_url,
+    loom_serve_media_image_source_t source,
     const loom_serve_media_image_limits_t* limits,
     iree_allocator_t host_allocator, loom_serve_media_image_info_t* out_info);
 

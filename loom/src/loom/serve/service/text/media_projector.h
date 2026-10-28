@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-// Request-owned device features, indexed by immutable chat image occurrence.
+// Request-owned device features, indexed by checked source projection.
 // Moves from the pending request to its admitted session without moving
 // storage. This is not a persistent cache: only live requests retain projected
 // roots.
@@ -26,22 +26,23 @@ typedef struct loom_serve_text_media_projector_t
     loom_serve_text_media_projector_t;
 
 // Borrows chat through projection, not through later text execution. Allocation
-// is proportional to the checked image count; no pixels or device work occur.
+// is proportional to the checked projection count; no pixels or device work
+// occur.
 iree_status_t loom_serve_text_media_request_allocate(
     const loom_serve_text_chat_t* chat, iree_allocator_t host_allocator,
     loom_serve_text_media_request_t** out_request);
 
 // Rebinds checked input coordinates after history eviction/prefix lookup.
-// Existing features remain reusable by image occurrence. Returns whether all
-// remaining images have published results. Requests whose declared phases fit
-// only sequentially publish after producer completion; others can compose
+// Existing features remain reusable by projection. Returns whether all
+// remaining projections have published results. Requests whose declared phases
+// fit only sequentially publish after producer completion; others can compose
 // directly with future-ready results. Does not start or wait for work.
 bool loom_serve_text_media_request_bind(
     loom_serve_text_media_request_t* request,
     const loom_serve_text_input_t* input, iree_host_size_t consumed);
 
 // Commits the bound input after admission and projector detachment. Drops
-// projected images superseded by a retained prefix and ends the chat borrow.
+// projections superseded by a retained prefix and ends the chat borrow.
 void loom_serve_text_media_request_begin(
     loom_serve_text_media_request_t* request);
 
@@ -62,21 +63,24 @@ void loom_serve_text_media_request_free(
     loom_serve_text_media_request_t* request);
 
 // One bounded host preparation window over an independently prepared component.
-// capacity bounds queued image occurrences; the source batch limit further
+// capacity bounds queued projections; the source batch limit further
 // bounds the window. Decoded packet bytes target the source upload capacity;
-// one larger checked image is allowed alone. Prepared windows drain before new
-// decoding. CPU and producer readiness are independent of text's channels.
+// one larger checked projection is allowed alone. Prepared windows drain before
+// new decoding. CPU and producer readiness are independent of text's channels.
 iree_status_t loom_serve_text_media_projector_allocate(
     loom_serve_finite_model_t* model, iree_host_size_t capacity,
     iree_task_executor_t* executor, iree_async_proactor_t* proactor,
     loom_serve_wake_callback_t observer, iree_allocator_t host_allocator,
     loom_serve_text_media_projector_t** out_projector);
 
-// Offers missing images in request order. False means the current window is
-// sealed/full, not request failure. Each occurrence is selected at most once.
-// consumer_bytes is the prepared language continuation's footprint, excluding
-// features. It is captured before the CPU forecast loan; no consumer state or
-// residency is accessed from that loan.
+// Offers missing projections in request order. False means the current window
+// is sealed/full, not request failure. Each projection is selected at most
+// once. consumer_bytes is the prepared language continuation's footprint,
+// excluding features. It is captured before the CPU forecast loan; no consumer
+// state or residency is accessed from that loan. Each logical request may join
+// one output cohort shared with peers; its other cohorts contain only its own
+// projections. Source forecasts can therefore bound retained peer backing by
+// one maximum cohort output, independent of the projection count.
 bool loom_serve_text_media_projector_offer(
     loom_serve_text_media_projector_t* projector,
     loom_serve_text_media_request_t* request, uint64_t consumer_bytes);

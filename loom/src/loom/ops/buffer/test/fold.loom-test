@@ -1,5 +1,20 @@
 // RUN: pass canonicalize
 
+// A range's offset depends on preceding lengths, not on its own length.
+func.def @pack_dynamic_tail(%tail: offset) -> (i64) {
+  %header = index.constant 13 : offset
+  %total, %header_offset, %tail_offset = buffer.pack [align(4) %header, align(16) %tail] : offset
+  %position = index.cast %tail_offset : offset to i64
+  func.return %position : i64
+}
+// ----
+func.def @pack_dynamic_tail(%tail: offset) -> (i64) {
+  %position = scalar.constant 16 : i64
+  func.return %position : i64
+}
+
+// ====
+
 // Static range sizes fold to an aligned dense layout. The final extent is
 // rounded to the greatest range alignment so it is a valid repeated stride.
 func.def @pack_static_ranges() -> (offset, offset, offset, offset) {

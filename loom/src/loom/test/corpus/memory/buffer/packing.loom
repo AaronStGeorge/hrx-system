@@ -1,0 +1,71 @@
+// Layout values cross the call boundary at runtime. Large extents exercise the
+// unsigned 32-bit offset carrier without allocating storage for those extents.
+func.def @pack_ranges(%first: i32, %second: i32, %third: i32, %output: buffer) {
+  %a = index.cast %first : i32 to offset
+  %b = index.cast %second : i32 to offset
+  %c = index.cast %third : i32 to offset
+  %total, %first_offset, %second_offset, %third_offset = buffer.pack [align(4) %a, align(64) %b, align(1) %c] : offset
+  %size = index.cast %total : offset to i64
+  %x = index.cast %first_offset : offset to i64
+  %y = index.cast %second_offset : offset to i64
+  %z = index.cast %third_offset : offset to i64
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<4xi64>
+  view.store %size, %results[0] : i64, view<4xi64>
+  view.store %x, %results[1] : i64, view<4xi64>
+  view.store %y, %results[2] : i64, view<4xi64>
+  view.store %z, %results[3] : i64, view<4xi64>
+  func.return
+}
+
+// Independent arithmetic rounds using division, with no offset packing or
+// bit-mask alignment. The small cases include empty and already aligned ranges.
+func.def @pack_ranges_oracle(%first: i32, %second: i32, %third: i32, %output: buffer) {
+  %a = scalar.extui %first : i32 to i64
+  %b = scalar.extui %second : i32 to i64
+  %c = scalar.extui %third : i32 to i64
+  %c0 = scalar.constant 0 : i64
+  %bias = scalar.constant 63 : i64
+  %alignment = scalar.constant 64 : i64
+  %a_rounded = scalar.addi %a, %bias : i64
+  %a_units = scalar.divui %a_rounded, %alignment : i64
+  %y = scalar.muli %a_units, %alignment : i64
+  %z = scalar.addi %y, %b : i64
+  %end = scalar.addi %z, %c : i64
+  %end_rounded = scalar.addi %end, %bias : i64
+  %end_units = scalar.divui %end_rounded, %alignment : i64
+  %size = scalar.muli %end_units, %alignment : i64
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<4xi64>
+  view.store %size, %results[0] : i64, view<4xi64>
+  view.store %c0, %results[1] : i64, view<4xi64>
+  view.store %y, %results[2] : i64, view<4xi64>
+  view.store %z, %results[3] : i64, view<4xi64>
+  func.return
+}
+
+func.def @pack_lengths(%trial: index) -> (i32, i32, i32) {
+  %ordinal = index.cast %trial : index to i32
+  %c7 = scalar.constant 7 : i32
+  %c16 = scalar.constant 16 : i32
+  %c3 = scalar.constant 3 : i32
+  %c1 = scalar.constant 1 : i32
+  %large = scalar.constant 2147483601 : i32
+  %small = scalar.muli %ordinal, %c16 : i32
+  %last = scalar.cmpi eq, %ordinal, %c7 : i32
+  %first = scf.select %last, %large, %small : i32
+  %second = scalar.muli %ordinal, %c3 : i32
+  %third = scalar.andi %ordinal, %c1 : i32
+  func.return %first, %second, %third : i32, i32, i32
+}
+
+check.scenario @dynamic_slab_layout {
+  check.trial[8](%trial: index, %entropy: check.entropy) {
+    %first, %second, %third = check.generate<@pack_lengths>(%trial) : (index) -> (i32, i32, i32)
+    %output = check.generate.fill value(-1) : tensor<4xi64>
+    check.compare<@pack_ranges, @pack_ranges_oracle>(%first, %second, %third, %output) : (i32, i32, i32, tensor<4xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<4xi64>
+    }
+  }
+  check.return
+}

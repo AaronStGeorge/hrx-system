@@ -352,6 +352,33 @@ TEST(Printf, FloatFixedRounding) {
   EXPECT_EQ(Format("%.0f", 1.5), "2");     // Banker's rounding: 1.5 → 2.
   EXPECT_EQ(Format("%.0f", 2.5), "2");     // Banker's rounding: 2.5 → 2.
   EXPECT_EQ(Format("%.1f", 1.25), "1.2");  // 1.25 → 1.2 (round to even).
+
+  // Scaling to decimal places can round a value just above or below the
+  // midpoint to an exact binary half. Preserve that multiplication residual.
+  EXPECT_EQ(Format("%.1f", 0.05), "0.1");
+  EXPECT_EQ(Format("%.1f", 0.15), "0.1");
+  for (double value : {0.05, 0.15, 0.25, 0.35, 0.45, 0.55}) {
+    for (double neighbor :
+         {std::nextafter(value, 0.0), value, std::nextafter(value, INFINITY)}) {
+      ExpectMatchesLibc("%.1f", neighbor);
+      ExpectMatchesLibc("%.1f", -neighbor);
+    }
+  }
+}
+
+TEST(Printf, FloatFixedPreservesLargeIntegralDigits) {
+  // Fixed notation includes every integral digit of the represented binary
+  // value, even when its decimal integer needs more than 17 digits.
+  EXPECT_EQ(Format("%.1f", 1e23), "99999999999999991611392.0");
+  EXPECT_EQ(Format("%.0f", std::nextafter(0x1p64, INFINITY)),
+            "18446744073709555712");
+  for (double value : {0x1p64, std::nextafter(0x1p64, INFINITY), 1e23, 1e200,
+                       std::numeric_limits<double>::max()}) {
+    for (const char* format : {"%.0f", "%#.0f", "%+032.2f"}) {
+      ExpectMatchesLibc(format, value);
+      ExpectMatchesLibc(format, -value);
+    }
+  }
 }
 
 TEST(Printf, FloatFixedWidth) {

@@ -123,10 +123,14 @@ func.def public @prepare_request(%state: buffer, %height: i64, %width: i64, %pro
 // but keeps independent request values and private palette slots.
 func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %payload: buffer) -> (i32, buffer) {
   %origin = index.constant 0 : offset
+  %range = buffer.view %ranges[%origin] : buffer -> view<1x2xi64>
+  %first = view.load %range[0, 0] : view<1x2xi64> -> i64
+  %first_bounded = scalar.assume %first [range(%first, 0, 9223372036854775807)] : i64
+  %request_offset = index.cast %first_bounded : i64 to offset
   %state_view = buffer.view %state[%origin] : buffer -> view<2xi64>
   %capacity = view.load %state_view[0] : view<2xi64> -> i64
   %cold_pixels = view.load %state_view[1] : view<2xi64> -> i64
-  %header = buffer.view %payload[%origin] : buffer -> view<3xi64>
+  %header = buffer.view %payload[%request_offset] : buffer -> view<3xi64>
   %pixels = view.load %header[2] : view<3xi64> -> i64
   %range_bytes = buffer.length %ranges
   %range_length = index.cast %range_bytes : offset to i64

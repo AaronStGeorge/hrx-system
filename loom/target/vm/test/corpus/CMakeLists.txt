@@ -444,6 +444,7 @@ loom_corpus_test(
     "kernel"
     "function"
   SOURCES
+    "memory/buffer/packing.loom"
     "numeric/float/exponent.loom"
     "numeric/float/reciprocal.loom"
     "numeric/float/inverse_hyperbolic.loom"

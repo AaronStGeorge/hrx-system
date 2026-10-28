@@ -21,6 +21,10 @@ func.def public @prepare_request(%state: buffer, %input: buffer) -> (buffer, i64
 
 func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %input: buffer) -> (i32, buffer, buffer) {
   %origin = index.constant 0 : offset
+  %range = buffer.view %ranges[%origin] : buffer -> view<1x2xi64>
+  %first = view.load %range[0, 0] : view<1x2xi64> -> i64
+  %first_bounded = scalar.assume %first [range(%first, 0, 9223372036854775807)] : i64
+  %request_offset = index.cast %first_bounded : i64 to offset
   %c72 = index.constant 72 : offset
   %plan = buffer.alloca<private> align(8) %c72 : buffer
   %values = buffer.view %plan[%origin] : buffer -> view<9xi64>
@@ -28,7 +32,7 @@ func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %
   %c1 = scalar.constant 1 : i64
   %c4 = scalar.constant 4 : i64
   %c16 = scalar.constant 16 : i64
-  %packet = buffer.view %input[%origin] : buffer -> view<8xi32>
+  %packet = buffer.view %input[%request_offset] : buffer -> view<8xi32>
   %output_length32 = view.load %packet[7] : view<8xi32> -> i32
   %output_length = scalar.extui %output_length32 : i32 to i64
   view.store %output_length, %values[0] : i64, view<9xi64>

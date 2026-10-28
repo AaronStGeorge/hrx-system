@@ -17,25 +17,27 @@
 
 namespace {
 
-TEST(MediaRequestTest, BindsOptionalMetadataAtItsImageOffset) {
+TEST(MediaRequestTest, BindsOptionalMetadataAtItsProjectionOffset) {
   const auto host_allocator = iree_allocator_system();
   for (const auto prefix : {IREE_SV(""), IREE_SV("earlier-image")}) {
     for (const auto metadata : {IREE_SV(""), IREE_SV("image-metadata")}) {
       loom_serve_text_chat_t chat = {};
-      loom_serve_text_chat_image_t image = {};
-      iree_string_builder_initialize(host_allocator, &chat.images.metadata);
+      loom_serve_text_media_projection_t projection = {};
+      iree_string_builder_initialize(host_allocator,
+                                     &chat.projections.metadata);
       if (prefix.size) {
-        IREE_ASSERT_OK(
-            iree_string_builder_append_string(&chat.images.metadata, prefix));
+        IREE_ASSERT_OK(iree_string_builder_append_string(
+            &chat.projections.metadata, prefix));
       }
       if (metadata.size) {
-        IREE_ASSERT_OK(
-            iree_string_builder_append_string(&chat.images.metadata, metadata));
+        IREE_ASSERT_OK(iree_string_builder_append_string(
+            &chat.projections.metadata, metadata));
       }
-      image.metadata_offset = prefix.size;
-      image.metadata_length = metadata.size;
-      chat.images.count = 1;
-      chat.images.values = &image;
+      projection.metadata_offset = prefix.size;
+      projection.metadata_length = metadata.size;
+      chat.projections.count = 1;
+      projection.image_count = 1;
+      chat.projections.values = &projection;
       loom_serve_text_media_span_t span = {.input_count = 1};
       const loom_serve_text_input_t input = {
           .media_spans = &span,
@@ -55,7 +57,7 @@ TEST(MediaRequestTest, BindsOptionalMetadataAtItsImageOffset) {
         EXPECT_EQ(bytes.data, nullptr);
       }
       loom_serve_text_media_request_free(request);
-      iree_string_builder_deinitialize(&chat.images.metadata);
+      iree_string_builder_deinitialize(&chat.projections.metadata);
     }
   }
 }
@@ -64,7 +66,8 @@ class MediaProjectorTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_notification_initialize(&notification_);
-    iree_string_builder_initialize(host_allocator_, &chat_.images.metadata);
+    iree_string_builder_initialize(host_allocator_,
+                                   &chat_.projections.metadata);
     auto options = loom_serve_test_application_options_default();
     options.backing = LOOM_SERVE_POOL_BACKING_ELASTIC;
     options.slab_size = 4096;
@@ -99,25 +102,27 @@ class MediaProjectorTest : public ::testing::Test {
     loom_serve_workspace_set_observer(loom_serve_pool_workspace(storage_owner_),
                                       observer);
     IREE_ASSERT_OK(loom_serve_text_media_projector_allocate(
-        model_, requests_.size(), loom_serve_host_executor(host), proactor,
+        model_, requests_.size() * 3, loom_serve_host_executor(host), proactor,
         observer, host_allocator_, &projector_));
-    image_.data_url = IREE_SV(
+    image_.source = loom_serve_media_image_source_from_data_url(IREE_SV(
         "data:image/x-portable-arbitrarymap;base64,"
         "UDcKV0lEVEggMgpIRUlHSFQgMgpERVBUSCAzCk1BWFZBTCAyNTUKVFVQTFRZUEUg"
-        "UkdCCkVOREhEUgr/AAAA/wAAAP////8=");
-    image_.feature_count = 1;
+        "UkdCCkVOREhEUgr/AAAA/wAAAP////8="));
+    projection_.image_count = 1;
+    projection_.feature_count = 1;
     policy_.images.limits = {
         .compressed_bytes = 1024,
         .width = 2,
         .height = 2,
         .pixels = 4,
     };
-    IREE_ASSERT_OK(
-        loom_serve_media_image_inspect(image_.data_url, &policy_.images.limits,
-                                       host_allocator_, &image_.info));
+    IREE_ASSERT_OK(loom_serve_media_image_inspect(
+        image_.source, &policy_.images.limits, host_allocator_, &image_.info));
     chat_.policy = &policy_;
     chat_.images.count = 1;
     chat_.images.values = &image_;
+    chat_.projections.count = 1;
+    chat_.projections.values = &projection_;
     input_.media_spans = &span_;
     input_.media_span_count = 1;
   }
@@ -139,7 +144,7 @@ class MediaProjectorTest : public ::testing::Test {
     loom_serve_workspace_set_observer(loom_serve_pool_workspace(storage_owner_),
                                       {});
     iree_notification_deinitialize(&notification_);
-    iree_string_builder_deinitialize(&chat_.images.metadata);
+    iree_string_builder_deinitialize(&chat_.projections.metadata);
   }
 
   template <typename Predicate>
@@ -189,6 +194,8 @@ class MediaProjectorTest : public ::testing::Test {
   loom_serve_text_chat_policy_t policy_ = {};
   // Immutable inspected input borrowed by each independent request.
   loom_serve_text_chat_image_t image_ = {};
+  // Checked source projection is separate from the immutable codec input.
+  loom_serve_text_media_projection_t projection_ = {};
   // Real compressed image descriptor and source metadata, with no pixel plane.
   loom_serve_text_chat_t chat_ = {};
   // Trusted logical feature span produced before projection admission.
@@ -261,6 +268,68 @@ TEST_F(MediaProjectorTest, RejectsImpossibleContinuationBeforeSubmission) {
       loom_serve_text_media_request_take_status(requests_[0]));
   EXPECT_FALSE(loom_serve_text_media_request_bind(requests_[0], &input_, 0));
   EXPECT_EQ(loom_serve_finite_model_parameters(model_).pin_count, 0u);
+}
+
+TEST_F(MediaProjectorTest, SharesOneCohortAndBatchesRemainingOwnerProjections) {
+  // The first owner's 1+32 rows leave room for each peer's first row. The
+  // remaining 32-row projections still fit together, but must not make another
+  // owner's entire result live for this request a second time.
+  std::array<loom_serve_text_chat_image_t, 3> images = {image_, image_, image_};
+  std::array<loom_serve_text_media_projection_t, 3> projections = {};
+  std::array<loom_serve_text_media_span_t, 3> spans = {};
+  uint32_t input_offset = 0;
+  for (size_t i = 0; i < projections.size(); ++i) {
+    const uint32_t rows = i ? 32 : 1;
+    projections[i] = {
+        .image_begin = static_cast<uint32_t>(i),
+        .image_count = 1,
+        .feature_count = rows,
+    };
+    spans[i] = {
+        .projection_index = static_cast<uint32_t>(i),
+        .input_offset = input_offset,
+        .input_count = rows,
+    };
+    input_offset += rows;
+  }
+  chat_.images.count = images.size();
+  chat_.images.values = images.data();
+  chat_.projections.count = projections.size();
+  chat_.projections.values = projections.data();
+  input_.media_spans = spans.data();
+  input_.media_span_count = spans.size();
+  for (size_t i = 0; i < requests_.size(); ++i) {
+    ASSERT_NO_FATAL_FAILURE(Offer(i, 0));
+  }
+  ASSERT_TRUE(loom_serve_text_media_projector_start(projector_));
+  ASSERT_NO_FATAL_FAILURE(AdvanceUntil([&] {
+    return loom_serve_text_media_projector_is_collecting(projector_);
+  }));
+  std::array<const loom_serve_text_media_input_t*, 3> inputs = {};
+  for (size_t i = 0; i < requests_.size(); ++i) {
+    IREE_ASSERT_OK(loom_serve_text_media_request_take_status(requests_[i]));
+    ASSERT_TRUE(loom_serve_text_media_request_bind(requests_[i], &input_, 0));
+    inputs[i] = loom_serve_text_media_request_input(requests_[i]);
+  }
+  const auto* shared = inputs[0]->spans[0].result;
+  EXPECT_EQ(inputs[0]->spans[1].result, shared);
+  EXPECT_EQ(inputs[1]->spans[0].result, shared);
+  EXPECT_EQ(inputs[2]->spans[0].result, shared);
+  EXPECT_EQ(loom_serve_finite_result_output_length(shared), 35 * 16u);
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    const auto* private_result = inputs[i]->spans[2].result;
+    EXPECT_NE(private_result, shared);
+    EXPECT_EQ(loom_serve_finite_result_output_length(private_result),
+              (i ? 64 : 32) * 16u);
+    if (i) {
+      EXPECT_EQ(inputs[i]->spans[1].result, private_result);
+      EXPECT_NE(private_result, inputs[i - 1]->spans[2].result);
+    }
+  }
+  for (auto* request : requests_) {
+    loom_serve_text_media_request_begin(request);
+    loom_serve_text_media_request_consume(request, input_offset);
+  }
 }
 
 }  // namespace

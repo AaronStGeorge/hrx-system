@@ -249,7 +249,8 @@ buffer_pack = Op(
         "minimum alignments, and never alias. The total byte length is rounded "
         "up to the greatest range alignment so the result can be used as a "
         "repeatable record stride. Byte lengths may remain dynamic through "
-        "specialization. Allocation lifetime packing is a separate compiler "
+        "specialization. The complete aligned extent must be representable "
+        "in the selected target's offset domain. Allocation lifetime packing is a separate compiler "
         "responsibility and must not be encoded with this operation."
     ),
     operands=[

@@ -177,7 +177,7 @@ iree_status_t loom_buffer_view_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_BUFFER_PACK: Lay out simultaneously live physical byte ranges in one dense slab. Ranges retain operand order, begin at offsets satisfying their minimum alignments, and never alias. The total byte length is rounded up to the greatest range alignment so the result can be used as a repeatable record stride. Byte lengths may remain dynamic through specialization. Allocation lifetime packing is a separate compiler responsibility and must not be encoded with this operation.
+// LOOM_OP_BUFFER_PACK: Lay out simultaneously live physical byte ranges in one dense slab. Ranges retain operand order, begin at offsets satisfying their minimum alignments, and never alias. The total byte length is rounded up to the greatest range alignment so the result can be used as a repeatable record stride. Byte lengths may remain dynamic through specialization. The complete aligned extent must be representable in the selected target's offset domain. Allocation lifetime packing is a separate compiler responsibility and must not be encoded with this operation.
 // %total, %header_offset, %payload_offset = buffer.pack [align(16) %header_bytes, align(256) %payload_bytes] : offset
 LOOM_DEFINE_ISA(loom_buffer_pack_isa, LOOM_OP_BUFFER_PACK)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_buffer_pack_byte_lengths, 0)

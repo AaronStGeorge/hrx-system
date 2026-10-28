@@ -24,30 +24,54 @@ typedef enum loom_serve_text_chat_image_detail_e {
 
 // Source-visible ordered content record fields. Each record is serialized as
 // this many little-endian u32 words. Text records name a span in the decoded
-// message content. Image records name a request image and its display geometry;
-// codec and encoded-orientation facts remain native preprocessing concerns.
+// message content. Media records name a nonempty range in the message-local
+// frame table. Codec and encoded-orientation facts remain native concerns.
 typedef enum loom_serve_text_chat_content_field_e {
   LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_KIND = 0,
   LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_TEXT_OFFSET = 1,
   LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_TEXT_LENGTH = 2,
-  LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_IMAGE_INDEX = 3,
-  LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_DISPLAY_WIDTH = 4,
-  LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_DISPLAY_HEIGHT = 5,
-  LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_IMAGE_DETAIL = 6,
-  LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_COUNT = 7,
+  LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_IMAGE_BEGIN = 3,
+  LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_IMAGE_COUNT = 4,
+  LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_IMAGE_DETAIL = 5,
+  LOOM_SERVE_TEXT_CHAT_CONTENT_FIELD_COUNT = 6,
 } loom_serve_text_chat_content_field_t;
 
 typedef enum loom_serve_text_chat_content_kind_e {
   LOOM_SERVE_TEXT_CHAT_CONTENT_TEXT = 0,
   LOOM_SERVE_TEXT_CHAT_CONTENT_IMAGE = 1,
+  LOOM_SERVE_TEXT_CHAT_CONTENT_VIDEO = 2,
 } loom_serve_text_chat_content_kind_t;
 
-// Source chat-message image plan fields. One record for each image occurrence
-// precedes source-private metadata in the returned buffer. Marker byte ranges
-// are relative to the returned message fragment. Metadata offsets are relative
-// to the plan buffer and must follow the complete record array.
+// Source-visible message-local frame facts. Width and height are little-endian
+// u32 display dimensions. Timestamp is little-endian f64 seconds, finite and
+// nonnegative for video frames and zero for ordinary images.
+enum {
+  LOOM_SERVE_TEXT_CHAT_FRAME_WIDTH_OFFSET = 0,
+  LOOM_SERVE_TEXT_CHAT_FRAME_HEIGHT_OFFSET = 4,
+  LOOM_SERVE_TEXT_CHAT_FRAME_TIMESTAMP_OFFSET = 8,
+  LOOM_SERVE_TEXT_CHAT_FRAME_BYTES = 16,
+};
+
+// Source chat-message plan. The explicit returned count names records before
+// source-private metadata. Input ranges are message-local, ordered, nonempty,
+// and cover all inspected frames without crossing content parts. Marker bytes
+// are relative to the returned fragment; metadata offsets are plan-relative.
+typedef enum loom_serve_text_media_projection_field_e {
+  LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_IMAGE_BEGIN = 0,
+  LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_IMAGE_COUNT = 1,
+  LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_BYTE_OFFSET = 2,
+  LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_BYTE_LENGTH = 3,
+  LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_FEATURE_COUNT = 4,
+  LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_METADATA_OFFSET = 5,
+  LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_METADATA_LENGTH = 6,
+  LOOM_SERVE_TEXT_MEDIA_PROJECTION_FIELD_COUNT = 7,
+} loom_serve_text_media_projection_field_t;
+
+// Native-normalized prepare-input marker plan. These records name checked
+// request projection ordinals, not input frames. Metadata follows the records;
+// marker offsets are relative to the input text suffix.
 typedef enum loom_serve_text_media_marker_field_e {
-  LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_IMAGE_INDEX = 0,
+  LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_PROJECTION_INDEX = 0,
   LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_BYTE_OFFSET = 1,
   LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_BYTE_LENGTH = 2,
   LOOM_SERVE_TEXT_MEDIA_MARKER_FIELD_FEATURE_COUNT = 3,
@@ -57,49 +81,63 @@ typedef enum loom_serve_text_media_marker_field_e {
 } loom_serve_text_media_marker_field_t;
 
 // Source prepare-input result fields. Records are ordered like the input marker
-// plan and map each image occurrence to its exact logical model-input rows.
+// plan and map each projection to its exact logical model-input rows.
 typedef enum loom_serve_text_media_span_field_e {
-  LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_IMAGE_INDEX = 0,
+  LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_PROJECTION_INDEX = 0,
   LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_OFFSET = 1,
   LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_INPUT_COUNT = 2,
   LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_COUNT = 3,
 } loom_serve_text_media_span_field_t;
 
-// One inspected image occurrence borrowing its escaped data URL from the HTTP
+// One inspected image occurrence borrowing its encoded source from the HTTP
 // body. Pixel storage is deliberately absent until admission establishes that
 // the image-conditioned prefix is not already resident.
 typedef struct loom_serve_text_chat_image_t {
-  // Raw escaped JSON string contents, excluding surrounding quotes.
-  iree_string_view_t data_url;
+  // Encoded image bytes borrowed from the request until bounded realization.
+  loom_serve_media_image_source_t source;
   // Source-visible processing hint participating in semantic identity.
   loom_serve_text_chat_image_detail_t detail;
+  // Image or video content kind; all frames in one part have the same kind.
+  loom_serve_text_chat_content_kind_t kind;
+  // Supplied presentation time in seconds, or zero for an ordinary image.
+  double timestamp;
   // Message ordinal containing this occurrence.
   uint32_t message_ordinal;
   // Ordered content-part ordinal within the message.
   uint32_t content_ordinal;
   // Decoded text bytes preceding this occurrence within the message.
   uint32_t text_offset;
+  // Exact compressed identity and codec/display geometry.
+  loom_serve_media_image_info_t info;
+} loom_serve_text_chat_image_t;
+
+// One checked source projection, independent of inspected input storage and
+// of the finite result that will eventually supply its device features.
+typedef struct loom_serve_text_media_projection_t {
+  // First inspected input in the owning request's images array.
+  uint32_t image_begin;
+  // Nonempty contiguous input range, wholly within one content part.
+  uint32_t image_count;
   // Global byte offset of the source-rendered image marker in the prompt.
   uint32_t marker_offset;
   // Nonzero byte length of the source-rendered image marker.
   uint32_t marker_length;
   // Number of projected rows replacing this marker in model input.
   uint32_t feature_count;
-  // Byte offset of source-private preprocessing metadata in images.metadata.
+  // Byte offset of source-private preprocessing metadata in
+  // projections.metadata.
   uint32_t metadata_offset;
   // Byte length of source-private preprocessing metadata.
   uint32_t metadata_length;
-  // Digest of the exact source-private preprocessing metadata.
-  loom_serve_media_digest_t metadata_digest;
-  // Exact compressed identity and codec/display geometry.
-  loom_serve_media_image_info_t info;
-} loom_serve_text_chat_image_t;
+  // Immutable identity of every input, timestamp, placement, and source fact.
+  loom_serve_media_digest_t identity_digest;
+} loom_serve_text_media_projection_t;
 
-// One checked image range in source-tokenized model input. Ranges are sorted,
-// nonoverlapping and refer to image occurrences in the owning chat request.
+// One checked projection range in source-tokenized model input. Ranges are
+// sorted, nonoverlapping, and refer to the owning request's source projections.
 typedef struct loom_serve_text_media_span_t {
-  // Request image occurrence supplying projected features.
-  uint32_t image_index;
+  // Source projection supplying these features.
+  uint32_t projection_index;
   // First logical model-input row replaced by projected features.
   uint32_t input_offset;
   // Number of contiguous projected feature rows.
@@ -107,25 +145,25 @@ typedef struct loom_serve_text_media_span_t {
 } loom_serve_text_media_span_t;
 
 // Immutable ordered image identity independent of request/body storage. The
-// compact reference-counted storage contains content and source-plan digests,
-// exact placement, detail, marker and feature-count semantics. An empty
-// identity owns no storage.
+// compact reference-counted storage contains the checked projection digests.
+// An empty identity owns no storage.
 typedef struct loom_serve_text_chat_media_identity_t {
   // Owned immutable packed identity storage.
   iree_vm_buffer_t* storage;
-  // Number of ordered image occurrences in storage.
+  // Number of ordered projections in storage.
   iree_host_size_t count;
 } loom_serve_text_chat_media_identity_t;
 
 typedef struct loom_serve_text_chat_t loom_serve_text_chat_t;
 
 // Validates one source-returned message plan and commits its exact marker and
-// metadata semantics to the already inspected image occurrences. No prompt
-// bytes are scanned. The caller appends the matching fragment only on success.
+// metadata semantics as projections of the inspected image occurrences. No
+// prompt bytes are scanned. The caller appends the matching fragment only on
+// success.
 iree_status_t loom_serve_text_media_apply_message_plan(
     loom_serve_text_chat_t* chat, iree_host_size_t first_image,
     iree_host_size_t prompt_offset, iree_host_size_t fragment_length,
-    iree_const_byte_span_t plan);
+    iree_host_size_t projection_count, iree_const_byte_span_t plan);
 
 // Builds the source prepare-input marker plan for [prompt_offset, prompt_end).
 // prompt_offset is within the rendered prompt. Prior image occurrences are
@@ -137,12 +175,12 @@ iree_status_t loom_serve_text_media_build_input_plan(
     iree_allocator_t host_allocator, iree_vm_buffer_t** out_plan,
     iree_host_size_t* out_marker_count);
 
-// Checks the source prepare-input span result against the native image facts
-// for [first_image, images.count), not the scratch plan exposed to source.
+// Checks the source prepare-input span result against the checked projections
+// for [first_projection, projections.count), not the plan exposed to source.
 // input_shift accounts for a native retained prediction prepended to the
 // source token stream. Successful nonempty results own *out_spans.
 iree_status_t loom_serve_text_media_parse_spans(
-    const loom_serve_text_chat_t* chat, iree_host_size_t first_image,
+    const loom_serve_text_chat_t* chat, iree_host_size_t first_projection,
     iree_const_byte_span_t source_spans, iree_host_size_t token_count,
     iree_host_size_t input_shift, iree_allocator_t host_allocator,
     loom_serve_text_media_span_t** out_spans, iree_host_size_t* out_span_count);

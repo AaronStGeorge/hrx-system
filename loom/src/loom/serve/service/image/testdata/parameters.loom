@@ -77,7 +77,7 @@ func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buff
   view.store %first, %values[1] : i32, view<3xi32>
   view.store %second, %values[2] : i32, view<3xi32>
   %c1 = scalar.constant 1 : i64
-  %input_capacity = scalar.constant 24 : i64
+  %input_capacity = scalar.constant 40 : i64
   %tokenizer = buffer.constant utf8("tokenizer.json") : buffer
   %name = buffer.constant utf8("parameter-image") : buffer
   func.return %c1, %input_capacity, %tokenizer, %name, %state : i64, i64, buffer, buffer, buffer
@@ -128,8 +128,10 @@ func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %
 func.def public @bind_banks(%state: buffer, %payload: buffer, %offsets: buffer) {
   %origin = index.constant 0 : offset
   %bytes = index.constant 16 : offset
-  buffer.copy %offsets[%origin], %payload[%origin], %bytes
-  %counter = buffer.view %payload[%bytes] : buffer -> view<1xi32>
+  %request_offset = index.constant 16 : offset
+  %values_offset = index.constant 32 : offset
+  buffer.copy %offsets[%origin], %payload[%request_offset], %bytes
+  %counter = buffer.view %payload[%values_offset] : buffer -> view<1xi32>
   %previous = view.load %counter[0] : view<1xi32> -> i32
   %c1 = scalar.constant 1 : i32
   %next = scalar.addi %previous, %c1 : i32
@@ -151,7 +153,8 @@ kernel.def @bank_pixels() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch(%weights: buffer, %request: buffer, %output: buffer) {
   %origin = index.constant 0 : offset
-  %offsets = buffer.view %request[%origin] : buffer -> view<2xi64>
+  %request_offset = index.constant 16 : offset
+  %offsets = buffer.view %request[%request_offset] : buffer -> view<2xi64>
   %first_loaded = view.load %offsets[0] : view<2xi64> -> i64
   %second_loaded = view.load %offsets[1] : view<2xi64> -> i64
   %first64 = scalar.assume %first_loaded [range(%first_loaded, 0, 9223372036854775807)] : i64
@@ -162,7 +165,7 @@ kernel.def @bank_pixels() {
   %right = buffer.view %weights[%second] : buffer -> view<8xi32>
   %a = view.load %left[0] : view<8xi32> -> i32
   %b = view.load %right[0] : view<8xi32> -> i32
-  %values_offset = index.constant 16 : offset
+  %values_offset = index.constant 32 : offset
   %values = buffer.view %request[%values_offset] : buffer -> view<2xi32>
   %counter = view.load %values[0] : view<2xi32> -> i32
   %seed = view.load %values[1] : view<2xi32> -> i32

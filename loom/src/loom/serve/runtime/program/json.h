@@ -54,6 +54,13 @@ extern "C" {
 // application-specific ranges.
 // These operations allocate nothing and retain no caller storage.
 //
+// json.format_f64(f64 value, i32 fractional_digits) -> buffer
+// returns an owned JSON number in fixed decimal notation, using a period and
+// exactly fractional_digits digits after it (0..17). Rounding is nearest-even
+// from the represented binary value; integral digits and signed zero are
+// preserved. Nonfinite values and unsupported precisions fail. The result has
+// no quotes, whitespace, or trailing NUL and owns no caller storage.
+//
 // Request inputs and returned records are ordinary VM buffers. The environment
 // outlives the module and every returned reference; the module owns no model,
 // session, tokenizer, or asynchronous resource.
