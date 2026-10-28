@@ -135,34 +135,38 @@ spills: 2
 
 // ====
 
-// Both store operands must stay in registers. Fragmentation can fail first-fit
-// before it produces any spill plan, but five registers still suffice.
-// RUN: emit low-allocation-query @required_tuple assignment-count spill-count test.i32=5
+// Both spill operands require registers. The scalar and seven-unit tuple fill
+// the physical class's eight registers without recursively spilling either.
+// RUN: emit low-allocation-query @required_tuple assignment-count spill-count values=%scalar,%wide
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @required_tuple(%scalar: reg<test.i32>, %wide: reg<test.i32 x4>) asm {
+low.func.def target<test.low.core>(@target) @required_tuple(%scalar: reg<test.pressure.alias32>, %wide: reg<test.pressure.alias32 x7>) asm {
   %storage = storage {byte_alignment = 16, byte_length = 32} : low.storage<private>
-  low.spill %scalar, %storage {offset = 16} : reg<test.i32>, low.storage<private>
-  low.spill %wide, %storage : reg<test.i32 x4>, low.storage<private>
+  low.spill %scalar, %storage {offset = 28} : reg<test.pressure.alias32>, low.storage<private>
+  low.spill %wide, %storage : reg<test.pressure.alias32 x7>, low.storage<private>
   return
 }
 
 // ----
 assignments: 2
 spills: 0
+value %scalar: test.pressure.alias32 -> physical_register[0:1]
+value %wide: test.pressure.alias32 -> physical_register[1:7]
 
 // ====
 
-// RUN: emit low-allocation-query @required_tuple_shortage test.i32=4
+// A scalar and eight-unit tuple exceed the same class's capacity. A spill
+// operand cannot be assigned another spill slot to resolve the shortage.
+// RUN: emit low-allocation-query @required_tuple_shortage
 
 test.target<low_core> @target
 
 // ERROR@+1: BACKEND/005 "spill-traffic-register-exhausted"
-low.func.def target<test.low.core>(@target) @required_tuple_shortage(%scalar: reg<test.i32>, %wide: reg<test.i32 x4>) asm {
-  %storage = storage {byte_alignment = 16, byte_length = 32} : low.storage<private>
-  low.spill %scalar, %storage {offset = 16} : reg<test.i32>, low.storage<private>
-  low.spill %wide, %storage : reg<test.i32 x4>, low.storage<private>
+low.func.def target<test.low.core>(@target) @required_tuple_shortage(%scalar: reg<test.pressure.alias32>, %wide: reg<test.pressure.alias32 x8>) asm {
+  %storage = storage {byte_alignment = 16, byte_length = 48} : low.storage<private>
+  low.spill %scalar, %storage {offset = 32} : reg<test.pressure.alias32>, low.storage<private>
+  low.spill %wide, %storage : reg<test.pressure.alias32 x8>, low.storage<private>
   return
 }
 
