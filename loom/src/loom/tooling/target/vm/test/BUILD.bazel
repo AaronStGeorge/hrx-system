@@ -66,6 +66,7 @@ iree_execution_test_suite(
         "source_call_context.loom",
         "source_cases.loom",
         "source_config.loom",
+        "source_elementary.loom",
         "source_library_cases.loom",
         "source_math.loom",
         "source_math_case.loom",
@@ -79,6 +80,7 @@ iree_execution_test_suite(
     tools = {
         "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
         "loom-compile": "//loom/src/loom/tools/loom-compile",
+        "loom-link": "//loom/src/loom/tools/loom-link",
         "loom-test": "//loom/src/loom/tools/loom-test",
         "vm-dis": "//tools:vm-dis",
     },

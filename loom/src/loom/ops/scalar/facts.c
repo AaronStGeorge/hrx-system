@@ -15,6 +15,8 @@
 #include <math.h>
 
 #include "iree/base/internal/math.h"
+#include "iree/math/exponential.h"
+#include "iree/math/roots.h"
 #include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
@@ -120,8 +122,6 @@ static float mul_f32(float a, float b) { return a * b; }
 static double mul_f64(double a, double b) { return a * b; }
 static float div_f32(float a, float b) { return a / b; }
 static double div_f64(double a, double b) { return a / b; }
-static float rsqrt_f32(float x) { return 1.0f / sqrtf(x); }
-static double rsqrt_f64(double x) { return 1.0 / sqrt(x); }
 static float roundeven_f32(float x) { return nearbyintf(x); }
 static double roundeven_f64(double x) { return nearbyint(x); }
 static float silu_f32(float x) { return x * loom_float_logistic_f32(x); }
@@ -324,16 +324,19 @@ iree_status_t loom_scalar_clampf_facts(loom_fact_context_t* context,
 // Math functions
 //===----------------------------------------------------------------------===//
 
-FLOAT_UNARY_FACTS(loom_scalar_expf_facts, expf, exp)
-FLOAT_UNARY_FACTS(loom_scalar_exp2f_facts, exp2f, exp2)
+FLOAT_UNARY_FACTS(loom_scalar_expf_facts, iree_math_exp_f32, iree_math_exp_f64)
+FLOAT_UNARY_FACTS(loom_scalar_exp2f_facts, iree_math_exp2_f32,
+                  iree_math_exp2_f64)
 FLOAT_UNARY_FACTS(loom_scalar_expm1f_facts, expm1f, expm1)
 FLOAT_UNARY_FACTS(loom_scalar_logf_facts, logf, log)
 FLOAT_UNARY_FACTS(loom_scalar_log2f_facts, log2f, log2)
 FLOAT_UNARY_FACTS(loom_scalar_log10f_facts, log10f, log10)
 FLOAT_UNARY_FACTS(loom_scalar_log1pf_facts, log1pf, log1p)
 FLOAT_BINARY_FACTS(loom_scalar_powf_facts, powf, pow)
-FLOAT_UNARY_FACTS(loom_scalar_sqrtf_facts, sqrtf, sqrt)
-FLOAT_UNARY_FACTS(loom_scalar_rsqrtf_facts, rsqrt_f32, rsqrt_f64)
+FLOAT_UNARY_FACTS(loom_scalar_sqrtf_facts, iree_math_sqrt_f32,
+                  iree_math_sqrt_f64)
+FLOAT_UNARY_FACTS(loom_scalar_rsqrtf_facts, iree_math_rsqrt_f32,
+                  iree_math_rsqrt_f64)
 FLOAT_UNARY_FACTS(loom_scalar_cbrtf_facts, cbrtf, cbrt)
 FLOAT_UNARY_FACTS(loom_scalar_sinf_facts, sinf, sin)
 FLOAT_UNARY_FACTS(loom_scalar_cosf_facts, cosf, cos)

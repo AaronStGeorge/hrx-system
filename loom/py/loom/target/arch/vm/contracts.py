@@ -188,6 +188,10 @@ _SELECTED_SOURCE_OPS = {
     },
 }
 _MATH_SOURCE_OPS = {
+    "sqrt": math.scalar_sqrtf,
+    "rsqrt": math.scalar_rsqrtf,
+    "exp": math.scalar_expf,
+    "exp2": math.scalar_exp2f,
     "ceil": math.scalar_ceilf,
     "floor": math.scalar_floorf,
     "round_even": math.scalar_roundevenf,
@@ -645,60 +649,6 @@ def _f32_math_sequence(source_op, constants, steps, *, guards=()):
         ),
         emit=tuple(emits),
     )
-
-
-def _exp2_case():
-    # The machine leaf flushes subnormal outputs. Shift those inputs into its
-    # normal interval, then restore the exponent with preserving multiplication.
-    # Adding 64 is exact throughout the f32 interval with a subnormal result.
-    constants = (
-        ("normal_limit", -126.0),
-        ("shift", 64.0),
-        ("zero", 0.0),
-        ("scale", 2.0**-64),
-        ("one", 1.0),
-    )
-    steps = (
-        ("underflow", "float.compare.f32", "input", "normal_limit", "olt"),
-        ("input_shift", "value.select", "underflow", "shift", "zero"),
-        ("output_scale", "value.select", "underflow", "scale", "one"),
-        ("shifted", "float.add.f32", "input", "input_shift"),
-        ("normal", "float.math.unary.f32", "shifted", "exp2.approx"),
-        ("result", "float.mul.f32", "normal", "output_scale"),
-    )
-    return _f32_math_sequence(
-        math.scalar_exp2f,
-        constants,
-        steps,
-        guards=(Guard.instance_flags_has_all("fastmath", "afn"),),
-    )
-
-
-def _root_cases():
-    # Scaling subnormal inputs by an even power of two preserves the root's
-    # significand. Both results are normal for every positive finite f32 input,
-    # so restoring the exponent is exact, including each rsqrt rounding point.
-    # Negative subnormals must normalize too, to reach the leaf's NaN case.
-    for source_op, leaf, output_scale in (
-        (math.scalar_sqrtf, "sqrt.approx", 2.0**-12),
-        (math.scalar_rsqrtf, "rsqrt.approx", 2.0**12),
-    ):
-        constants = (
-            ("normal_limit", 2.0**-126),
-            ("input_scale", 2.0**24),
-            ("output_scale", output_scale),
-            ("one", 1.0),
-        )
-        steps = (
-            ("magnitude", "float.abs.f32", "input"),
-            ("subnormal", "float.compare.f32", "magnitude", "normal_limit", "olt"),
-            ("scale_in", "value.select", "subnormal", "input_scale", "one"),
-            ("scale_out", "value.select", "subnormal", "output_scale", "one"),
-            ("scaled", "float.mul.f32", "input", "scale_in"),
-            ("normal", "float.math.unary.f32", "scaled", leaf),
-            ("result", "float.mul.f32", "normal", "scale_out"),
-        )
-        yield _f32_math_sequence(source_op, constants, steps)
 
 
 def _log2_case():
@@ -1206,8 +1156,6 @@ VM_CORE_CONTRACT_FRAGMENT = ContractFragment(
     + tuple(_selected_cases())
     + tuple(_conversion_cases())
     + tuple(_math_cases())
-    + (_exp2_case(),)
-    + tuple(_root_cases())
     + (_log2_case(),)
     + tuple(_address_cases())
     + tuple(_buffer_cases())

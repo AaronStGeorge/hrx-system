@@ -735,7 +735,7 @@ typedef struct loom_math_legalize_unary_source_t {
   loom_value_id_t input;
   // Source fast-math flags forwarded to replacement rounding.
   uint8_t fastmath_flags;
-  // Builds the widened rounding op.
+  // Builds the widened unary op.
   loom_math_legalize_unary_build_fn_t unary_build;
 } loom_math_legalize_unary_source_t;
 
@@ -869,6 +869,22 @@ static void loom_math_legalize_unary_source_initialize(
   out_source->fastmath_flags = op->instance_flags;
   const bool is_scalar = loom_type_is_scalar(out_source->widen.result_type);
   switch (context->query.math_op) {
+    case LOOM_TARGET_MATH_OP_EXPF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_expf_build : loom_vector_expf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_EXP2F:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_exp2f_build : loom_vector_exp2f_build;
+      return;
+    case LOOM_TARGET_MATH_OP_SQRTF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_sqrtf_build : loom_vector_sqrtf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_RSQRTF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_rsqrtf_build : loom_vector_rsqrtf_build;
+      return;
     case LOOM_TARGET_MATH_OP_CEILF:
       out_source->unary_build =
           is_scalar ? loom_scalar_ceilf_build : loom_vector_ceilf_build;
@@ -1010,8 +1026,9 @@ static iree_status_t loom_math_legalize_build_widen_f32_round_unary(
 // The target policy selects binary operations whose round-through-F32 semantics
 // have been proved for FP8, f16, and bf16. Integral rounding also commutes with
 // exact widening because every rounded result remains exactly representable in
-// the source format. Other arithmetic requires its own proof against
-// intermediate rounding.
+// the source format. Elementary functions use the same F32 evaluation followed
+// by format rounding as source constant evaluation. This does not grant
+// arbitrary arithmetic permission to introduce an intermediate rounding point.
 static iree_status_t loom_math_legalize_build_widen_f32_round(
     loom_builder_t* builder, const loom_math_legalize_recipe_context_t* context,
     const loom_op_t* op, loom_value_id_t* out_value) {
@@ -1022,6 +1039,10 @@ static iree_status_t loom_math_legalize_build_widen_f32_round(
     case LOOM_TARGET_MATH_OP_DIVF:
       return loom_math_legalize_build_widen_f32_round_binary(builder, context,
                                                              op, out_value);
+    case LOOM_TARGET_MATH_OP_EXPF:
+    case LOOM_TARGET_MATH_OP_EXP2F:
+    case LOOM_TARGET_MATH_OP_SQRTF:
+    case LOOM_TARGET_MATH_OP_RSQRTF:
     case LOOM_TARGET_MATH_OP_CEILF:
     case LOOM_TARGET_MATH_OP_FLOORF:
     case LOOM_TARGET_MATH_OP_ROUNDEVENF:

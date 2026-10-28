@@ -119,7 +119,7 @@ class SpecificationTest(unittest.TestCase):
                 len(NUMERIC_TABLES),
                 sum(len(table.values) for table in NUMERIC_TABLES),
             ),
-            (12, 182, 20, 191, tuple(range(1, 14)), 59, 9, 30),
+            (12, 182, 20, 199, tuple(range(1, 14)), 59, 9, 30),
         )
 
     def test_layout_rejects_implicit_alignment_padding(self) -> None:
@@ -164,11 +164,12 @@ class SpecificationTest(unittest.TestCase):
             ("trunc", 3),
             ("sign", 4),
         )
+        ordinary_values = (("sqrt", 12), ("rsqrt", 13), ("exp", 14), ("exp2", 15))
         self.assertEqual(
             tuple(
                 (value.name, value.value) for value in FLOAT_MATH_F64_SELECTOR.values
             ),
-            common_values,
+            common_values + ordinary_values,
         )
         self.assertEqual(
             tuple(
@@ -183,7 +184,8 @@ class SpecificationTest(unittest.TestCase):
                 ("sqrt.approx", 9),
                 ("sin_turns.approx", 10),
                 ("cos_turns.approx", 11),
-            ),
+            )
+            + ordinary_values,
         )
 
     def test_control_contracts_reject_inconsistent_declarations(self) -> None:

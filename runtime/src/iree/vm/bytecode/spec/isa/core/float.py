@@ -164,6 +164,40 @@ _FLOAT_MATH_EXACT_UNARY_VALUES = (
     ),
 )
 
+_FLOAT_MATH_ORDINARY_UNARY_VALUES = (
+    (
+        "sqrt",
+        12,
+        "Returns the correctly rounded square root with gradual underflow. "
+        "Signed zero and positive infinity are preserved; negative nonzero "
+        "values and every NaN become the canonical positive quiet NaN.",
+    ),
+    (
+        "rsqrt",
+        13,
+        "Returns 1/sqrt(x) with separate same-width rounding after square root "
+        "and division, preserving gradual underflow. Signed zero becomes signed "
+        "infinity; positive infinity becomes +0; negative nonzero values and "
+        "every NaN become the canonical positive quiet NaN.",
+    ),
+    (
+        "exp",
+        14,
+        "Returns the stable iree/math e^x mapping with gradual underflow and "
+        "fixed unfused rounding points. Finite results are within one adjacent "
+        "value of correct rounding. Either zero becomes one; infinities map "
+        "to their limits; every NaN becomes the canonical positive quiet NaN.",
+    ),
+    (
+        "exp2",
+        15,
+        "Returns the stable iree/math 2^x mapping with gradual underflow and "
+        "fixed unfused rounding points. Finite results are within one adjacent "
+        "value of correct rounding. Either zero becomes one; infinities map "
+        "to their limits; every NaN becomes the canonical positive quiet NaN.",
+    ),
+)
+
 FLOAT_MATH_F32_SELECTOR = _selector(
     "float.math.f32",
     (
@@ -230,16 +264,17 @@ FLOAT_MATH_F32_SELECTOR = _selector(
             "payload. Cardinal results are structural and every nonfinite input "
             "becomes the canonical positive quiet NaN.",
         ),
-    ),
+    )
+    + _FLOAT_MATH_ORDINARY_UNARY_VALUES,
 )
 
 FLOAT_MATH_F64_SELECTOR = _selector(
     "float.math.f64",
     (
-        "Selects one exact unary f64 mapping. Version zero has no f64 approximate "
-        "machine leaves."
+        "Selects one frozen unary f64 mapping. Ordinary elementary functions "
+        "use the shared iree/math implementation and preserve gradual underflow."
     ),
-    _FLOAT_MATH_EXACT_UNARY_VALUES,
+    _FLOAT_MATH_EXACT_UNARY_VALUES + _FLOAT_MATH_ORDINARY_UNARY_VALUES,
 )
 
 FLOAT_COMPARE_SELECTOR = _selector(
@@ -393,8 +428,10 @@ FLOAT_FAMILY = InstructionFamily(
         "host libm. The selector suffix is part of the operation identity; it does not "
         "permit any result inside an error interval. Exact integral rounding and fma "
         "have one selected-width mapping. No instruction carries an ambient fast-math "
-        "or approximation mode. Compound functions and strict library roots are "
-        "ordinary compiler recipes or callable libraries, not Core selectors.\n\n"
+        "or approximation mode. Ordinary elementary selectors use the same owned "
+        "iree/math implementations as compiler constant evaluation. Their "
+        "specified arithmetic profile and rounding points freeze the result "
+        "mapping independently of host libm or optional FMA contraction.\n\n"
         "All operations read inputs before destination publication, are infallible "
         "after verification, access no refs, and never suspend."
     ),

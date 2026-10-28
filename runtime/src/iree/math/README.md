@@ -5,7 +5,25 @@ shared by the runtime and compiler. It is not a host `libm` wrapper: each
 public function names one stable operation, format, and numerical contract so
 constant evaluation and dynamic execution can agree across hosts.
 
-The initial f32 operations model machine-shaped leaves used by ML target
+Ordinary F32/F64 square root, reciprocal square root, and natural/base-two
+exponentials preserve gradual underflow. Both scalar and vector constant
+folding and the Core VM call these same typed functions:
+
+```c
+float root = iree_math_sqrt_f32(x);
+double weight = iree_math_exp_f64(score);
+double power = iree_math_exp2_f64(exponent);
+```
+
+Square root is correctly rounded and uses hardware instructions when available.
+An integer restoring algorithm supplies the same payloads on hardware without
+square root. Reciprocal square root rounds after both square root and division.
+The exponentials use Arm's table-and-polynomial algorithms with fixed unfused
+rounding points and at most one adjacent value of error from correct rounding.
+Their exceptional-value behavior and arithmetic profile are part of their
+stable mapping, not host library policy.
+
+The f32 approximation operations model machine-shaped leaves used by ML target
 recipes:
 
 ```c
@@ -33,14 +51,16 @@ scope. This lets a VM invocation or compiler evaluation segment pay for at most
 one host FPU transition instead of one transition per scalar operation.
 
 Package-owned compile options prevent an embedding application's unrestricted
-fast-math flags from changing the frozen mappings. Contraction remains enabled
-where exhaustive testing proves it bit-invariant.
+fast-math flags from changing the frozen mappings. Implicit contraction is
+disabled; fused arithmetic, where required by an algorithm, must be explicit.
+The ordinary mappings require
+gradual underflow, while approximation leaves own their documented flush rules.
 
 ## Organization
 
 Operations are grouped by algorithm family and provenance:
 
-- `exponential.h` owns base-two exponential and logarithm.
+- `exponential.h` owns natural/base-two exponential and base-two logarithm.
 - `roots.h` owns reciprocal, reciprocal square root, and square root.
 - `trigonometry.h` owns turns-based sine and cosine.
 

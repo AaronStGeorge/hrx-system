@@ -2,6 +2,55 @@
   "version": 1,
   "cases": [
     {
+      "name": "ordinary math executes from source and linked bytecode without imports",
+      "steps": [
+        {
+          "name": "execute source",
+          "run": {
+            "tool": "loom-test",
+            "args": [
+              "{srcdir}/source_elementary.loom"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "\"case_count\":2",
+              "\"failed_sample_count\":0"
+            ]
+          }
+        },
+        {
+          "name": "link selected cases",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{srcdir}/source_elementary.loom",
+              "--mode=link",
+              "--root=@ordinary_f32",
+              "--root=@ordinary_f64",
+              "--to=bc",
+              "--output={tmp}/elementary.loombc"
+            ]
+          }
+        },
+        {
+          "name": "execute linked bytecode",
+          "run": {
+            "tool": "loom-test",
+            "args": [
+              "{tmp}/elementary.loombc"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "\"case_count\":2",
+              "\"failed_sample_count\":0"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "compiles an explicitly specialized root calling an authored VM helper",
       "steps": [
         {

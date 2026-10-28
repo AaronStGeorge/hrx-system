@@ -17,6 +17,7 @@
 namespace iree::math::testing {
 
 using F32Function = float (*)(float);
+using F64Function = double (*)(double);
 
 inline float F32FromBits(uint32_t bits) {
   float value = 0.0f;
@@ -30,10 +31,28 @@ inline uint32_t F32ToBits(float value) {
   return bits;
 }
 
+inline double F64FromBits(uint64_t bits) {
+  double value = 0.0;
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
+}
+
+inline uint64_t F64ToBits(double value) {
+  uint64_t bits = 0;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
 inline void ExpectF32Mapping(F32Function function, uint32_t input_bits,
                              uint32_t expected_bits) {
   SCOPED_TRACE(::testing::Message() << "input_bits=" << std::hex << input_bits);
   EXPECT_EQ(expected_bits, F32ToBits(function(F32FromBits(input_bits))));
+}
+
+inline void ExpectF64Mapping(F64Function function, uint64_t input_bits,
+                             uint64_t expected_bits) {
+  SCOPED_TRACE(::testing::Message() << "input_bits=" << std::hex << input_bits);
+  EXPECT_EQ(expected_bits, F64ToBits(function(F64FromBits(input_bits))));
 }
 
 class ElementaryTest : public ::testing::Test {

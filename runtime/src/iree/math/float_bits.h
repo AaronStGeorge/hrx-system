@@ -29,6 +29,19 @@ static_assert(FLT_RADIX == 2 && sizeof(double) == sizeof(uint64_t) &&
 #define IREE_MATH_F32_INFINITY UINT32_C(0x7F800000)
 #define IREE_MATH_F32_CANONICAL_NAN UINT32_C(0x7FC00000)
 
+#define IREE_MATH_F64_SIGN_BIT UINT64_C(0x8000000000000000)
+#define IREE_MATH_F64_MAGNITUDE_MASK UINT64_C(0x7FFFFFFFFFFFFFFF)
+#define IREE_MATH_F64_MIN_NORMAL UINT64_C(0x0010000000000000)
+#define IREE_MATH_F64_INFINITY UINT64_C(0x7FF0000000000000)
+#define IREE_MATH_F64_CANONICAL_NAN UINT64_C(0x7FF8000000000000)
+
+// MSVC's precise profile permits explicit contraction pragmas. The numerical
+// kernels specify their rounding points; a multiply and add must stay separate
+// unless the source explicitly requests a fused operation.
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma fp_contract(off)
+#endif
+
 static inline uint32_t iree_math_f32_to_bits(float value) {
   uint32_t bits = 0;
   memcpy(&bits, &value, sizeof(bits));
@@ -55,6 +68,10 @@ static inline double iree_math_f64_from_bits(uint64_t bits) {
 
 static inline float iree_math_f32_canonical_nan(void) {
   return iree_math_f32_from_bits(IREE_MATH_F32_CANONICAL_NAN);
+}
+
+static inline double iree_math_f64_canonical_nan(void) {
+  return iree_math_f64_from_bits(IREE_MATH_F64_CANONICAL_NAN);
 }
 
 #endif  // IREE_MATH_FLOAT_BITS_H_

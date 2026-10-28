@@ -151,7 +151,6 @@ loom_corpus_build(
             "numeric/float/activations.loom:@activation_portable_observations": "LOWERING/036",
             "numeric/float/activations.loom:@softplus_fast_observations": "LOWERING/036",
             "numeric/float/activations.loom:@softplus_observations": "LOWERING/036",
-            "numeric/float/roots.loom:@root_f64_boundary_observations": "LOWERING/036",
             "numeric/float/rounding.loom:@rounding_bf16_observations": "LOWERING/036",
             "numeric/float/rounding.loom:@rounding_f16_observations": "LOWERING/036",
             "numeric/float/rounding.loom:@rounding_f8e4m3_observations": "LOWERING/036",
@@ -173,6 +172,8 @@ loom_corpus_test(
         VM_REFERENCE_PROFILE.name: [
             "memory/buffer/packing.loom",
             "numeric/float/exponent.loom",
+            "numeric/float/exponential.loom",
+            "numeric/float/roots.loom",
             "numeric/float/reciprocal.loom",
             "numeric/float/inverse_hyperbolic.loom",
             "numeric/float/inverse_hyperbolic_narrow.loom",

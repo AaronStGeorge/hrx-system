@@ -19,6 +19,8 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
+#include "iree/math/exponential.h"
+#include "iree/math/roots.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
@@ -1522,7 +1524,7 @@ static iree_status_t loom_vector_transform_hadamard_facts(
   if (descriptor->normalization ==
       LOOM_ENCODING_TRANSFORM_NORMALIZATION_ORTHONORMAL) {
     const loom_value_facts_t scale = loom_value_facts_exact_float(
-        scalar_type, 1.0 / sqrt((double)slice_extent));
+        scalar_type, iree_math_rsqrt_f64((double)slice_extent));
     for (iree_host_size_t lane = 0; lane < lane_count; ++lane) {
       loom_value_facts_t scaled = loom_value_facts_unknown();
       if (!loom_vector_transform_eval_float_binary(
@@ -1666,9 +1668,6 @@ static bool loom_vector_dot4f8_apply(uint8_t kind, uint32_t lhs_raw,
   }
   return true;
 }
-
-static float loom_vector_rsqrt_f32(float input) { return 1.0f / sqrtf(input); }
-static double loom_vector_rsqrt_f64(double input) { return 1.0 / sqrt(input); }
 
 static float loom_vector_roundeven_f32(float input) {
   return nearbyintf(input);
@@ -3879,17 +3878,20 @@ LOOM_VECTOR_BIT_COUNT_FACTS(loom_vector_cttzi_facts, loom_vector_cttzi_result,
                             iree_math_count_trailing_zeros_u64_width)
 LOOM_VECTOR_BIT_COUNT_FACTS(loom_vector_ctpopi_facts, loom_vector_ctpopi_result,
                             iree_math_count_ones_u64_width)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_expf_facts, expf, exp)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_exp2f_facts, exp2f, exp2)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_expf_facts, iree_math_exp_f32,
+                              iree_math_exp_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_exp2f_facts, iree_math_exp2_f32,
+                              iree_math_exp2_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_expm1f_facts, expm1f, expm1)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_logf_facts, logf, log)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_log2f_facts, log2f, log2)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_log10f_facts, log10f, log10)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_log1pf_facts, log1pf, log1p)
 LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_powf_facts, powf, pow)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sqrtf_facts, sqrtf, sqrt)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_rsqrtf_facts, loom_vector_rsqrt_f32,
-                              loom_vector_rsqrt_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sqrtf_facts, iree_math_sqrt_f32,
+                              iree_math_sqrt_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_rsqrtf_facts, iree_math_rsqrt_f32,
+                              iree_math_rsqrt_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cbrtf_facts, cbrtf, cbrt)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sinf_facts, sinf, sin)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cosf_facts, cosf, cos)

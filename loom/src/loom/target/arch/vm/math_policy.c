@@ -10,7 +10,6 @@
 
 #define LOOM_VM_MATH_CONSTRAINTS(_)                                       \
   _(ELEMENT_F32_F64, element_f32_f64, "math.element.f32_f64")             \
-  _(EXP2_AFN_F32, exp2_afn_f32, "math.exp2.afn_f32")                      \
   _(INVERSE_HYPERBOLIC_AFN, inverse_hyperbolic_afn,                       \
     "math.inverse_hyperbolic.afn")                                        \
   _(INVERSE_HYPERBOLIC_F32_EVALUATION, inverse_hyperbolic_f32_evaluation, \
@@ -23,7 +22,6 @@
   _(RECIPE_ROUND_AWAY, recipe_round_away, "math.recipe.round_away")       \
   _(RECIPE_WIDEN_F32_ROUND, recipe_widen_f32_round,                       \
     "math.recipe.widen_f32_round")                                        \
-  _(ROOT_F32, root_f32, "math.root.f32")                                  \
   _(TURNS_TRIG_F32, turns_trig_f32, "math.turns_trig.f32")
 
 enum loom_vm_math_constraint_e {
@@ -105,6 +103,10 @@ static const loom_target_math_policy_direct_rule_t
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(ROUNDEVENF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(TRUNCF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(LOG2F),
+        LOOM_VM_MATH_SELECTED_WIDTH_RULE(EXPF),
+        LOOM_VM_MATH_SELECTED_WIDTH_RULE(EXP2F),
+        LOOM_VM_MATH_SELECTED_WIDTH_RULE(SQRTF),
+        LOOM_VM_MATH_SELECTED_WIDTH_RULE(RSQRTF),
 #undef LOOM_VM_MATH_SELECTED_WIDTH_RULE
         [LOOM_TARGET_MATH_OP_ROUNDF] = LOOM_VM_MATH_DIRECT_RULE(
             LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64,
@@ -112,28 +114,12 @@ static const loom_target_math_policy_direct_rule_t
             LOOM_TARGET_MATH_RECIPE_ROUND_AWAY, LOOM_VM_MATH_EVALUATION_NONE,
             LOOM_VM_MATH_CONSTRAINT_RECIPE_ROUND_AWAY,
             LOOM_VM_MATH_CONSTRAINT_NONE),
-        [LOOM_TARGET_MATH_OP_EXP2F] = LOOM_VM_MATH_DIRECT_RULE(
-            LOOM_SCALAR_TYPE_SET_F32, LOOM_TARGET_MATH_FASTMATH_FLAG_AFN,
-            LOOM_TARGET_MATH_RECIPE_UNKNOWN, LOOM_VM_MATH_EVALUATION_NONE,
-            LOOM_VM_MATH_CONSTRAINT_OP_SELECTED_WIDTH,
-            LOOM_VM_MATH_CONSTRAINT_EXP2_AFN_F32),
-        [LOOM_TARGET_MATH_OP_SQRTF] = LOOM_VM_MATH_DIRECT_RULE(
-            LOOM_SCALAR_TYPE_SET_F32, LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
-            LOOM_TARGET_MATH_RECIPE_UNKNOWN, LOOM_VM_MATH_EVALUATION_NONE,
-            LOOM_VM_MATH_CONSTRAINT_OP_SELECTED_WIDTH,
-            LOOM_VM_MATH_CONSTRAINT_NONE),
-        [LOOM_TARGET_MATH_OP_RSQRTF] = LOOM_VM_MATH_DIRECT_RULE(
-            LOOM_SCALAR_TYPE_SET_F32, LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
-            LOOM_TARGET_MATH_RECIPE_UNKNOWN, LOOM_VM_MATH_EVALUATION_NONE,
-            LOOM_VM_MATH_CONSTRAINT_OP_SELECTED_WIDTH,
-            LOOM_VM_MATH_CONSTRAINT_NONE),
 #define LOOM_VM_MATH_AFN_RECIPE_RULE(op_, recipe_)                     \
   [LOOM_TARGET_MATH_OP_##op_] = LOOM_VM_MATH_DIRECT_RULE(              \
       LOOM_SCALAR_TYPE_SET_F32, LOOM_TARGET_MATH_FASTMATH_FLAG_AFN,    \
       LOOM_TARGET_MATH_RECIPE_##recipe_, LOOM_VM_MATH_EVALUATION_NONE, \
       LOOM_VM_MATH_CONSTRAINT_RECIPE_AFN_F32,                          \
       LOOM_VM_MATH_CONSTRAINT_RECIPE_AFN_F32)
-        LOOM_VM_MATH_AFN_RECIPE_RULE(EXPF, EXP_EXP2_F32),
         LOOM_VM_MATH_AFN_RECIPE_RULE(LOGF, LOG_LOG2_F32),
         LOOM_VM_MATH_AFN_RECIPE_RULE(SINF, SIN_TURNS_F32),
         LOOM_VM_MATH_AFN_RECIPE_RULE(COSF, COS_TURNS_F32),
@@ -218,6 +204,10 @@ static const loom_target_math_policy_rule_span_t
         LOOM_VM_MATH_ARITHMETIC_SPAN(SUBF),
         LOOM_VM_MATH_ARITHMETIC_SPAN(MULF),
         LOOM_VM_MATH_ARITHMETIC_SPAN(DIVF),
+        LOOM_VM_MATH_ARITHMETIC_SPAN(EXPF),
+        LOOM_VM_MATH_ARITHMETIC_SPAN(EXP2F),
+        LOOM_VM_MATH_ARITHMETIC_SPAN(SQRTF),
+        LOOM_VM_MATH_ARITHMETIC_SPAN(RSQRTF),
 #undef LOOM_VM_MATH_ARITHMETIC_SPAN
 #define LOOM_VM_MATH_FALLBACK(op_, constraint_) \
   [LOOM_TARGET_MATH_OP_##op_] =                 \
@@ -228,10 +218,6 @@ static const loom_target_math_policy_rule_span_t
         LOOM_VM_MATH_FALLBACK(ROUNDEVENF, ELEMENT_F32_F64),
         LOOM_VM_MATH_FALLBACK(TRUNCF, ELEMENT_F32_F64),
         LOOM_VM_MATH_FALLBACK(LOG2F, ELEMENT_F32_F64),
-        LOOM_VM_MATH_FALLBACK(EXP2F, EXP2_AFN_F32),
-        LOOM_VM_MATH_FALLBACK(SQRTF, ROOT_F32),
-        LOOM_VM_MATH_FALLBACK(RSQRTF, ROOT_F32),
-        LOOM_VM_MATH_FALLBACK(EXPF, RECIPE_AFN_F32),
         LOOM_VM_MATH_FALLBACK(LOGF, RECIPE_AFN_F32),
         LOOM_VM_MATH_FALLBACK(SINF, RECIPE_AFN_F32),
         LOOM_VM_MATH_FALLBACK(COSF, RECIPE_AFN_F32),

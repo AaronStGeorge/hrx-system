@@ -20,6 +20,7 @@ iree_runtime_cc_library(
         "exponential.c",
         "float_bits.h",
         "roots.c",
+        "roots_integer.h",
         "trigonometry.c",
     ],
     hdrs = [
@@ -28,26 +29,25 @@ iree_runtime_cc_library(
         "trigonometry.h",
     ],
     # Each exported operation freezes one exact result mapping. Prevent an
-    # embedding application's fast-math flags from changing that mapping while
-    # still permitting contraction proven bit-invariant by exhaustive tests.
+    # embedding application's fast-math flags from changing that mapping and
+    # preserve explicitly separate rounding points in the ordinary mappings.
     copts = select({
         "//build_tools/bazel:cc_compiler_clang": [
             "-fno-fast-math",
             "-fno-math-errno",
-            "-ffp-contract=fast",
+            "-ffp-contract=off",
         ],
         "//build_tools/bazel:cc_compiler_clang_cl": [
             "/fp:precise",
-            "/fp:contract",
+            "/clang:-ffp-contract=off",
         ],
         "//build_tools/bazel:cc_compiler_gcc": [
             "-fno-fast-math",
             "-fno-math-errno",
-            "-ffp-contract=fast",
+            "-ffp-contract=off",
         ],
         "//build_tools/bazel:cc_compiler_msvc": [
             "/fp:precise",
-            "/fp:contract",
         ],
         "//conditions:default": [],
     }),
@@ -61,6 +61,7 @@ iree_runtime_cc_test(
     srcs = [
         "elementary_test_util.h",
         "exponential_test.cc",
+        "roots_integer.h",
         "roots_test.cc",
         "trigonometry_test.cc",
     ],

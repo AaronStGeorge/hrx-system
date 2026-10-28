@@ -141,3 +141,30 @@ func.def @turn_trig_frozen_f32_mapping() -> (i32) {
   %result_bits = scalar.constant 1031482228 : i32
   func.return %result_bits : i32
 }
+
+// ====
+
+// The F64 input distinguishes the fixed unfused exponential from contraction.
+// Ordinary roots and exp2 preserve subnormals instead of using the approximate
+// leaf's flush-to-zero profile.
+func.def @ordinary_math_mapping() -> (i64, f32, f64, f32) {
+  %input = scalar.constant -2.7638700436113073 : f64
+  %result = scalar.expf %input : f64
+  %bits = scalar.bitcast %result : f64 to i64
+  %minimum = scalar.constant 1.4012984643248171e-45 : f32
+  %root = scalar.sqrtf %minimum : f32
+  %exponent = scalar.constant -1074.0 : f64
+  %subnormal = scalar.exp2f %exponent : f64
+  %value = scalar.constant 7.9228181403112027e+28 : f32
+  %inverse = scalar.rsqrtf %value : f32
+  func.return %bits, %root, %subnormal, %inverse : i64, f32, f64, f32
+}
+
+// ----
+func.def @ordinary_math_mapping() -> (i64, f32, f64, f32) {
+  %bits = scalar.constant 4589207457398273482 : i64
+  %root = scalar.constant 3.7433920665092162e-23 : f32
+  %subnormal = scalar.constant 4.9406564584124654e-324 : f64
+  %inverse = scalar.constant 3.5527132552840273e-15 : f32
+  func.return %bits, %root, %subnormal, %inverse : i64, f32, f64, f32
+}

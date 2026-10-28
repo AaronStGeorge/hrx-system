@@ -170,6 +170,34 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, SelectsFrozenF32Approximations) {
             UINT32_C(0x00000000));
 }
 
+TEST_F(VMBytecodeInterpreterFloatMathTest,
+       OrdinarySelectorsPreserveWidthAndProfile) {
+  // In-place source/destination aliasing and dirty upper F32 cell bits are
+  // exercised by ExecuteUnary. These results distinguish ordinary gradual
+  // underflow from the machine leaves, and unfused exp from contraction.
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_SQRT, 1),
+            UINT32_C(0x1A3504F3));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_RSQRT,
+                            UINT32_C(0x70000002)),
+            UINT32_C(0x273504F1));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP, 0),
+            UINT32_C(0x3F800000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP2,
+                            UINT32_C(0xC3150000)),
+            1);
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_SQRT, 1),
+            UINT64_C(0x1E60000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_RSQRT,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0xFFF0000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_EXP,
+                            UINT64_C(0xC0061C67E5BDA324)),
+            UINT64_C(0x3FB023DE2ACC35CA));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_EXP2,
+                            UINT64_C(0xC090C80000000000)),
+            1);
+}
+
 TEST_F(VMBytecodeInterpreterFloatMathTest, FmaRoundsOnce) {
   EXPECT_EQ(ExecuteFma<iree_vm_bytecode_float_fma_f32_t>(
                 iree_vm_bytecode_execute_float_fma_f32, UINT32_C(0x3F800001),

@@ -1,0 +1,43 @@
+// Ordinary source operations compile into direct VM math selectors. The same
+// cases run before and after linking to Loom bytecode, without native imports.
+func.def @elementary_f32(%value: f32) -> (f32, f32, f32, f32) {
+  %root = scalar.sqrtf %value : f32
+  %inverse = scalar.rsqrtf %value : f32
+  %natural = scalar.expf %value : f32
+  %base_two = scalar.exp2f %value : f32
+  func.return %root, %inverse, %natural, %base_two : f32, f32, f32, f32
+}
+
+func.def @elementary_f64(%value: f64) -> (f64, f64, f64, f64) {
+  %root = scalar.sqrtf %value : f64
+  %inverse = scalar.rsqrtf %value : f64
+  %natural = scalar.expf %value : f64
+  %base_two = scalar.exp2f %value : f64
+  func.return %root, %inverse, %natural, %base_two : f64, f64, f64, f64
+}
+
+check.case public @ordinary_f32 {
+  %input = check.literal value(0.5) : f32
+  %root, %inverse, %natural, %base_two = func.call @elementary_f32(%input) : (f32) -> (f32, f32, f32, f32)
+  %sqrt_half = check.literal value(0.70710676908493042) : f32
+  %sqrt_two = check.literal value(1.4142135381698608) : f32
+  %exp_half = check.literal value(1.6487212181091309) : f32
+  check.expect.equal actual(%root) expected(%sqrt_half) : f32
+  check.expect.close actual(%inverse) expected(%sqrt_two) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32
+  check.expect.close actual(%natural) expected(%exp_half) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32
+  check.expect.close actual(%base_two) expected(%sqrt_two) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32
+  check.return
+}
+
+check.case public @ordinary_f64 {
+  %input = check.literal value(0.5) : f64
+  %root, %inverse, %natural, %base_two = func.call @elementary_f64(%input) : (f64) -> (f64, f64, f64, f64)
+  %sqrt_half = check.literal value(0.70710678118654757) : f64
+  %sqrt_two = check.literal value(1.4142135623730951) : f64
+  %exp_half = check.literal value(1.6487212707001282) : f64
+  check.expect.equal actual(%root) expected(%sqrt_half) : f64
+  check.expect.close actual(%inverse) expected(%sqrt_two) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64
+  check.expect.close actual(%natural) expected(%exp_half) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64
+  check.expect.close actual(%base_two) expected(%sqrt_two) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64
+  check.return
+}

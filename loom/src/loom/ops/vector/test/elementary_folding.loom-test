@@ -1,0 +1,19 @@
+// RUN: pass canonicalize
+
+func.def @ordinary_vector_math() -> (vector<2xf64>, vector<2xf32>, vector<2xbf16>) {
+  %inputs = vector.constant 4.9406564584124654e-324 : vector<2xf64>
+  %roots = vector.sqrtf %inputs : vector<2xf64>
+  %exponents = vector.constant -149.0 : vector<2xf32>
+  %powers = vector.exp2f %exponents : vector<2xf32>
+  %narrow = vector.constant 1.0 : vector<2xbf16>
+  %natural = vector.expf %narrow : vector<2xbf16>
+  func.return %roots, %powers, %natural : vector<2xf64>, vector<2xf32>, vector<2xbf16>
+}
+
+// ----
+func.def @ordinary_vector_math() -> (vector<2xf64>, vector<2xf32>, vector<2xbf16>) {
+  %roots = vector.constant 2.2227587494850775e-162 : vector<2xf64>
+  %powers = vector.constant 1.4012984643248171e-45 : vector<2xf32>
+  %natural = vector.constant 2.71875 : vector<2xbf16>
+  func.return %roots, %powers, %natural : vector<2xf64>, vector<2xf32>, vector<2xbf16>
+}

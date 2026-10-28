@@ -65,6 +65,18 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits) {
   const float source = iree_vm_bytecode_float_math_f32_from_bits(source_bits);
   float result = 0.0f;
   switch (selector) {
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SQRT:
+      result = iree_math_sqrt_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_RSQRT:
+      result = iree_math_rsqrt_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP:
+      result = iree_math_exp_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP2:
+      result = iree_math_exp2_f32(source);
+      break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_CEIL:
       result = ceilf(source);
       break;
@@ -113,6 +125,18 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
   const double source = iree_vm_bytecode_float_math_f64_from_bits(source_bits);
   double result = 0.0;
   switch (selector) {
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SQRT:
+      result = iree_math_sqrt_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_RSQRT:
+      result = iree_math_rsqrt_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXP:
+      result = iree_math_exp_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXP2:
+      result = iree_math_exp2_f64(source);
+      break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_CEIL:
       result = ceil(source);
       break;

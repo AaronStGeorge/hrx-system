@@ -136,9 +136,8 @@ check.scenario @root_values {
   check.return
 }
 
-// VM core does not implement f64 square root, so the oracle selects
-// independently specified IEEE-754 result encodings instead of re-executing the
-// operation.
+// The independent oracle selects specified IEEE-754 result encodings, so this
+// scenario also qualifies execution on the reference VM itself.
 func.def inline @root_f64_result_bits(%value: f64) -> (i64) {
   %bits = scalar.bitcast %value : f64 to i64
   %is_nan = scalar.isnanf %value : f64

@@ -10,16 +10,76 @@
 
 #if defined(IREE_COMPILER_MSVC)
 #include <math.h>
+#if defined(_M_X64) || defined(_M_ARM64)
+#pragma intrinsic(sqrt, sqrtf)
+#endif
 #endif  // IREE_COMPILER_MSVC
 
 #include "iree/math/float_bits.h"
+#include "iree/math/roots_integer.h"
 
 static float iree_math_sqrt_f32_native(float value) {
-#if defined(IREE_COMPILER_MSVC)
+#if defined(IREE_COMPILER_MSVC) && (defined(_M_X64) || defined(_M_ARM64))
   return sqrtf(value);
-#else
+#elif defined(__SSE__) || defined(__aarch64__) || defined(__wasm__) || \
+    (defined(__ARM_FP) && (__ARM_FP & 4)) ||                           \
+    (defined(__riscv_flen) && __riscv_flen >= 32)
   return __builtin_sqrtf(value);
-#endif  // IREE_COMPILER_MSVC
+#else
+  return iree_math_f32_from_bits(
+      (uint32_t)iree_math_sqrt_integer(iree_math_f32_to_bits(value), 23, 127));
+#endif
+}
+
+static double iree_math_sqrt_f64_native(double value) {
+#if defined(IREE_COMPILER_MSVC) && (defined(_M_X64) || defined(_M_ARM64))
+  return sqrt(value);
+#elif defined(__SSE2__) || defined(__aarch64__) || defined(__wasm__) || \
+    (defined(__ARM_FP) && (__ARM_FP & 8)) ||                            \
+    (defined(__riscv_flen) && __riscv_flen >= 64)
+  return __builtin_sqrt(value);
+#else
+  return iree_math_f64_from_bits(
+      iree_math_sqrt_integer(iree_math_f64_to_bits(value), 52, 1023));
+#endif
+}
+
+IREE_API_EXPORT float iree_math_sqrt_f32(float value) {
+  const uint32_t bits = iree_math_f32_to_bits(value);
+  const uint32_t magnitude = bits & IREE_MATH_F32_MAGNITUDE_MASK;
+  if (IREE_UNLIKELY(magnitude == 0)) {
+    return value;
+  }
+  if (IREE_UNLIKELY(bits > IREE_MATH_F32_INFINITY)) {
+    return iree_math_f32_canonical_nan();
+  }
+  if (IREE_UNLIKELY(bits == IREE_MATH_F32_INFINITY)) {
+    return value;
+  }
+  return iree_math_sqrt_f32_native(value);
+}
+
+IREE_API_EXPORT double iree_math_sqrt_f64(double value) {
+  const uint64_t bits = iree_math_f64_to_bits(value);
+  const uint64_t magnitude = bits & IREE_MATH_F64_MAGNITUDE_MASK;
+  if (IREE_UNLIKELY(magnitude == 0)) {
+    return value;
+  }
+  if (IREE_UNLIKELY(bits > IREE_MATH_F64_INFINITY)) {
+    return iree_math_f64_canonical_nan();
+  }
+  if (IREE_UNLIKELY(bits == IREE_MATH_F64_INFINITY)) {
+    return value;
+  }
+  return iree_math_sqrt_f64_native(value);
+}
+
+IREE_API_EXPORT float iree_math_rsqrt_f32(float value) {
+  return 1.0f / iree_math_sqrt_f32(value);
+}
+
+IREE_API_EXPORT double iree_math_rsqrt_f64(double value) {
+  return 1.0 / iree_math_sqrt_f64(value);
 }
 
 IREE_API_EXPORT float iree_math_reciprocal_f32_approx(float value) {
