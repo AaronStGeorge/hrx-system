@@ -937,27 +937,37 @@ static int iree_printf_format_fixed(char* buffer, double value, int precision,
   double mul_error =
       iree_printf_mul_error(fractional_part, frac_scale, frac_scaled);
   uint64_t frac_digits = (uint64_t)frac_scaled;
-  double remainder = (frac_scaled - (double)frac_digits) + mul_error;
-  // Above 2^53 the scaled product can lose whole integer units. Apply those
-  // first so the remaining fraction is in [0, 1) for nearest-even rounding.
-  int64_t correction = (int64_t)remainder;
-  if ((double)correction > remainder) {
-    --correction;
+  double remainder = frac_scaled - (double)frac_digits;
+  if (remainder == 0.0) {
+    // Above 2^53 the product can lose whole integer units. Keep the remaining
+    // error signed: adding a small negative error to 1 could round it away.
+    int64_t correction = (int64_t)mul_error;
+    if (correction < 0) {
+      frac_digits -= (uint64_t)-correction;
+    } else {
+      frac_digits += (uint64_t)correction;
+    }
+    remainder = mul_error - (double)correction;
+    mul_error = 0.0;
   }
-  if (correction < 0) {
-    frac_digits -= (uint64_t)-correction;
-  } else {
-    frac_digits += (uint64_t)correction;
-  }
-  remainder -= (double)correction;
-  if (remainder > 0.5) {
+
+  // A nonintegral product has spacing at most 0.5. Its error can change the
+  // rounding direction only at an exact half. Compare the error separately:
+  // adding it to 0.5 can lose the bit that distinguishes a near tie from a tie.
+  if (remainder > 0.5 || (remainder == 0.5 && mul_error > 0.0)) {
     frac_digits++;
-  } else if (remainder == 0.5) {
+  } else if (remainder < -0.5) {
+    frac_digits--;
+  } else if ((remainder == 0.5 && mul_error == 0.0) || remainder == -0.5) {
     // Exactly half: determine which digit to check for evenness.
     if (effective_precision > 0) {
       // The last fractional digit determines rounding.
       if (frac_digits & 1) {
-        frac_digits++;
+        if (remainder > 0.0) {
+          frac_digits++;
+        } else {
+          frac_digits--;
+        }
       }
     } else {
       // Precision is 0: the ones digit of the integral part determines
