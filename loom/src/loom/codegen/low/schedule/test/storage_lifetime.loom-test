@@ -42,6 +42,52 @@ node 4 <- none
 
 // ====
 
+// A slice of a live source adds no storage to the candidate's pressure.
+// RUN: emit low-schedule-json @live_slice_pressure strategy=resource-stall diagnostics=candidates output=none
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @live_slice_pressure(%source: reg<test.i32 x4>, %ptr: reg<test.ptr>, %rhs: reg<test.i32>) -> (reg<test.i32 x4>, reg<test.i32>, reg<test.i32 x4>) asm {
+  %lane = slice %source[0] : reg<test.i32 x4> -> reg<test.i32>
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", rejected_packet="low.slice", rejected_projected_live_units="6", rejected_produced_live_units="0"}
+  %load = test.load.v4i32 %ptr
+  %sum = test.add.i32 %lane, %rhs
+  return %source, %sum, %load
+}
+
+// ====
+
+// A concat can reuse its one-unit source only once, not once per operand.
+// RUN: emit low-schedule-json @repeated_source_pressure strategy=resource-stall diagnostics=candidates output=none
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @repeated_source_pressure(%source: reg<test.i32>, %ptr: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32 x2>, reg<test.i32 x4>) asm {
+  %pair = concat(%source, %source) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", rejected_packet="low.concat", rejected_projected_live_units="3", rejected_produced_live_units="1"}
+  %load = test.load.v4i32 %ptr
+  return %source, %pair, %load
+}
+
+// ====
+
+// After an earlier alias dies, another copy can reuse the source's capacity.
+// RUN: emit low-schedule-json @released_alias_pressure strategy=resource-stall diagnostics=candidates output=none
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @released_alias_pressure(%source: reg<test.i32 x4>, %ptr: reg<test.ptr>) -> (reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>) asm {
+  %first = copy %source : reg<test.i32 x4> -> reg<test.i32 x4>
+  %discarded = test.add.v4i32 %first, %source
+  test.barrier
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="3", chosen_packet="low.copy", rejected_packet="test.load.v4i32", chosen_produced_live_units="0", rejected_produced_live_units="4"}
+  %second = copy %source : reg<test.i32 x4> -> reg<test.i32 x4>
+  %load = test.load.v4i32 %ptr
+  return %source, %second, %load
+}
+
+// ====
+
 // A conditional endpoint consumes its predicate; it has no forwarding payload.
 // Its fixed-register setup still follows the independent arithmetic.
 // RUN: emit low-schedule-query @consuming_condition_endpoint strategy=resource-stall order=0,1
