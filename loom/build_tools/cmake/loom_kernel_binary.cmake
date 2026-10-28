@@ -11,6 +11,9 @@ include("${CMAKE_CURRENT_LIST_DIR}/loom_module.cmake")
 # target-owned kernel emission. Libraries retain their independently declared
 # transitive closure until loom_finalize_module_libraries resolves the graph.
 function(loom_kernel_binary)
+  # Each stage declares its tool and complete module inputs. Consumer dependency
+  # closures add redundant order-only edges to every generated artifact.
+  set(CMAKE_ADD_CUSTOM_COMMAND_DEPENDS_EXPLICIT_ONLY ON)
   cmake_parse_arguments(
     _RULE
     "TESTONLY"

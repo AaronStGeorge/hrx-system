@@ -162,6 +162,8 @@ endfunction()
 
 # Declares one registered corpus after the complete target tree is available.
 function(_loom_declare_corpus_build ID)
+  # Compilation and xfail probes declare their tools and subject module inputs.
+  set(CMAKE_ADD_CUSTOM_COMMAND_DEPENDS_EXPLICIT_ONLY ON)
   foreach(_VARIABLE
       CMAKE_CURRENT_LIST_DIR CMAKE_CURRENT_SOURCE_DIR CMAKE_CURRENT_BINARY_DIR
       IREE_IDE_FOLDER)
