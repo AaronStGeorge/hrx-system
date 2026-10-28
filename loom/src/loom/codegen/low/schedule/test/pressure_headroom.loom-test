@@ -1,3 +1,42 @@
+// A growing producer exposes two consumers. Together they retire the shared
+// intermediate and both tails, so their frontier restores the original live
+// footprint and needs no activation reserve.
+// RUN: emit low-schedule-json @collective_neutral_frontier strategy=resource-stall diagnostics=candidates output=none
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @collective_neutral_frontier(%lhs: reg<test.phys>, %rhs: reg<test.phys>, %first_tail: reg<test.phys>, %second_tail: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>, reg<test.phys>, reg<test.phys>) asm {
+  // REMARK@+1: BACKEND/015 {chosen_packet="test.add.phys", rejected_packet="low.storage.reserve", chosen_projected_live_units="5", chosen_units_until_pressure_cliff="27"}
+  %shared = test.add.phys %lhs, %rhs
+  // REMARK@+1: BACKEND/015 {chosen_packet="low.storage.reserve", rejected_packet="test.add.phys"}
+  %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  // REMARK@+1: BACKEND/015 {chosen_packet="test.add.phys", rejected_packet="test.add.phys"}
+  %first = test.add.phys %shared, %first_tail
+  %second = test.add.phys %shared, %second_tail
+  return %lhs, %rhs, %first, %second
+}
+
+// ====
+
+// Keeping one tail live makes the same two-consumer frontier grow by one.
+// The shared intermediate dies once, not once per consumer; reserve one unit.
+// RUN: emit low-schedule-json @collective_growing_frontier strategy=resource-stall diagnostics=candidates output=none
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @collective_growing_frontier(%lhs: reg<test.phys>, %rhs: reg<test.phys>, %first_tail: reg<test.phys>, %second_tail: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>, reg<test.phys>, reg<test.phys>, reg<test.phys>) asm {
+  // REMARK@+1: BACKEND/015 {chosen_packet="test.add.phys", rejected_packet="low.storage.reserve", chosen_projected_live_units="5", chosen_units_until_pressure_cliff="26"}
+  %shared = test.add.phys %lhs, %rhs
+  // REMARK@+1: BACKEND/015 {chosen_packet="low.storage.reserve", rejected_packet="test.add.phys"}
+  %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  // REMARK@+1: BACKEND/015 {chosen_packet="test.add.phys", rejected_packet="test.add.phys"}
+  %first = test.add.phys %shared, %first_tail
+  %second = test.add.phys %shared, %second_tail
+  return %lhs, %rhs, %first, %second, %second_tail
+}
+
+// ====
+
 // A four-unit copy opens another four units in the 32-location physical bank.
 // The consumer demand reserves four units and alignment reserves three more,
 // leaving 17 units of headroom.
