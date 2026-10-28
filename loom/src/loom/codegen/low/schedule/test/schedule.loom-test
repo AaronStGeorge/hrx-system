@@ -481,41 +481,6 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_defers_non_acti
 }
 
 // ====
-// Five live inputs fill the scalar pressure budget. Both ready roots replace
-// one live scalar and eventually activate the same fixed-register class, but
-// only the first comparison immediately exposes fixed-register handoffs.
-// Advance that neutral storage path instead of draining the later chain first.
-// RUN: emit low-schedule-query @resource_stall_advances_neutral_storage_handoff strategy=resource-stall test.i32=5 order=* issue=*
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_advances_neutral_storage_handoff(%first: reg<test.i32>, %shift: reg<test.i32>, %zero: reg<test.i32>, %lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
-  %inside_first = test.cmp.slt.i32 %first, %zero
-  %beyond_second = test.add.i32 %shift, %zero
-  %inside_second = test.cmp.slt.i32 %beyond_second, %zero
-  %second_condition = copy %inside_second : reg<test.i32> -> reg<test.fixed.r0>
-  %wide = test.fixed.select.i32 %lhs, %rhs, %second_condition
-  %first_lower_condition = copy %inside_first : reg<test.i32> -> reg<test.fixed.r0>
-  %lower = test.fixed.select.i32 %lhs, %wide, %first_lower_condition
-  %first_upper_condition = copy %inside_first : reg<test.i32> -> reg<test.fixed.r0>
-  %upper = test.fixed.select.i32 %rhs, %zero, %first_upper_condition
-  return %lower, %upper
-}
-
-// ----
-block 0 order: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
-node 0 issue-cycle: 0
-node 1 issue-cycle: 1
-node 2 issue-cycle: 2
-node 3 issue-cycle: 2
-node 4 issue-cycle: 3
-node 5 issue-cycle: 3
-node 6 issue-cycle: 4
-node 7 issue-cycle: 4
-node 8 issue-cycle: 5
-node 9 issue-cycle: 6
-
-// ====
 // RUN: emit low-schedule-query @resource_stall_closes_unspillable_storage_before_reopening kind=order strategy=resource-stall order=0,1,2,3,4 consumer=*
 
 test.target<low_core> @test_target
@@ -1168,23 +1133,6 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_preserves_unspi
 block 0 order: 1, 8
 node 1 issue-cycle: 2
 node 8 issue-cycle: 3
-
-// ====
-// RUN: emit low-schedule-json @resource_stall_preserves_source_order_without_pressure_progress strategy=resource-stall diagnostics=candidates test.i32=6 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_preserves_source_order_without_pressure_progress(%short_lhs: reg<test.i32>, %short_rhs: reg<test.i32>, %long_lhs: reg<test.i32>, %long_rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
-  // Both candidates grow pressure by one unit and issue after one cycle. Keep
-  // the older multiply instead of opening the later add's live range merely
-  // because its delay is a data stall rather than a resource stall.
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_packet="test.mul.i32", rejected_packet="test.add.i32", chosen_data_ready_stall_cycles="0", chosen_resource_stall_cycles="1", rejected_data_ready_stall_cycles="1", rejected_resource_stall_cycles="0"}
-  %short = test.mul.i32 %short_lhs, %short_rhs
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_packet="test.add.i32", rejected_packet="test.mul.i32"}
-  %long0 = test.add.i32 %long_lhs, %long_rhs
-  %long1 = test.add.i32 %long0, %long_rhs
-  return %short, %long1, %short_lhs, %short_rhs, %long0, %long_rhs
-}
 
 // ====
 // RUN: emit low-schedule-json @resource_stall_opens_load_on_real_issue_timeline strategy=resource-stall diagnostics=candidates output=none

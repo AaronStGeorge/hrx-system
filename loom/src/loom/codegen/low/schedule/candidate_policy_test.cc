@@ -400,6 +400,81 @@ TEST_F(CandidatePolicyTest, PressureRecoveryFillsSafeIssueGaps) {
                   independent, recovery);
 }
 
+TEST_F(CandidatePolicyTest, RecoveryPreservesSourceOrderWithoutProgress) {
+  auto older = MakeCandidate(1, 0);
+  older.data_ready_stall_cycles = 0;
+  older.resource_stall_cycles = 1;
+  older.projected_live_units = 4;
+  older.produced_live_units = 1;
+  older.produced_live_value_count = 1;
+  older.critical_path_cycles = 2;
+  auto later = older;
+  later.source_ordinal = 1;
+  later.data_ready_stall_cycles = 1;
+  later.resource_stall_cycles = 0;
+  later.critical_path_cycles = 4;
+
+  // Equal pressure growth and issue time do not justify opening a later live
+  // range during recovery, regardless of the data/resource stall split.
+  for (const auto mode :
+       {LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
+        LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION}) {
+    SCOPED_TRACE(mode);
+    ExpectPreferred(mode, older, later);
+    auto ready = later;
+    ready.data_ready_stall_cycles = 0;
+    ready.effective_stall_cycles = 0;
+    ExpectPreferred(mode, ready, older);
+  }
+  ExpectPreferred(LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT, later, older);
+}
+
+TEST_F(CandidatePolicyTest, RecoveryAdvancesNeutralStorageWithoutIdleCycles) {
+  const uint16_t storage_modes[] = {
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_STORAGE,
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_STORAGE_SETUP |
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR};
+  for (const uint16_t storage_flags : storage_modes) {
+    SCOPED_TRACE(storage_flags);
+    for (const auto mode :
+         {LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF,
+          LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PACKING_COMPLETION}) {
+      SCOPED_TRACE(mode);
+      auto peer = MakeCandidate(1, 0);
+      peer.projected_live_units = 4;
+      peer.produced_live_units = 1;
+      peer.killed_live_units = 1;
+      peer.produced_live_value_count = 1;
+      peer.killed_live_value_count = 1;
+      peer.pressure_progress_kind =
+          LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NON_GROWING;
+      peer.flags = LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION;
+      auto handoff = peer;
+      handoff.source_ordinal = 1;
+      handoff.flags |= storage_flags;
+      ExpectPreferred(mode, handoff, peer);
+
+      // A neutral handoff cannot buy priority by adding an idle cycle.
+      handoff.data_ready_stall_cycles = 2;
+      handoff.effective_stall_cycles = 2;
+      ExpectPreferred(mode, peer, handoff);
+
+      // Input-free setup owns no footprint to advance. It wins only when it
+      // fills an issue gap, not simply by exposing another storage step.
+      peer.produced_live_units = peer.killed_live_units = 0;
+      peer.produced_live_value_count = peer.killed_live_value_count = 0;
+      peer.pressure_progress_kind = LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE;
+      handoff = peer;
+      handoff.source_ordinal = 1;
+      handoff.flags |= storage_flags;
+      ExpectPreferred(mode, peer, handoff);
+      handoff.data_ready_stall_cycles = 0;
+      handoff.effective_stall_cycles = 0;
+      ExpectPreferred(mode, handoff, peer);
+    }
+  }
+}
+
 TEST_F(CandidatePolicyTest, RepairableDebtMustStayWithinRequiredBanks) {
   for (uint32_t bank : {0u, 63u, 64u, 127u}) {
     SCOPED_TRACE(bank);
