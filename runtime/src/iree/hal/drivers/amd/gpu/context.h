@@ -51,6 +51,9 @@ typedef struct iree_hal_amd_gpu_context_t {
   amdf_native_event_t kernel_notification;
   // Physical identity and native family count captured at opening.
   amdf_endpoint_info_t endpoint_info;
+  // Cached endpoint attachment node, or UINT32_MAX when not reported.
+  // Independent of the application-selected placement of host workers.
+  uint32_t host_numa_node;
   // Compiler identity and compute geometry, independent of queue protocol.
   amdf_gpu_endpoint_info_t target_info;
   // Activated native identity, epoch and achieved device services.

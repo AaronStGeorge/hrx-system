@@ -279,11 +279,15 @@ static iree_status_t iree_hal_amd_gpu_device_build_spec(
     iree_hal_amd_gpu_device_t* device, iree_string_view_t display_name,
     uint32_t family_ordinal, uint32_t queue_count,
     const iree_hal_amd_fabric_asan_options_t* asan_options) {
-  const iree_hal_physical_device_spec_t physical = {
+  iree_hal_physical_device_spec_t physical = {
       .identity = {.display_name = display_name, .vendor_id = 0x1002},
       .partition_count = 1,
       .physical_device_affinity = 1,
   };
+  if (device->context->host_numa_node != UINT32_MAX) {
+    physical.identity.numa.node_id = device->context->host_numa_node;
+    physical.identity.flags |= IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_NUMA_NODE;
+  }
   const iree_hal_device_identity_spec_t identity = {
       .logical_device_id = iree_hal_amd_gpu_device_id((void*)device),
       .display_name = display_name,

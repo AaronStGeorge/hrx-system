@@ -58,11 +58,15 @@ static const iree_hal_device_vtable_t iree_hal_amd_xdna_device_vtable;
 static iree_status_t iree_hal_amd_xdna_device_build_spec(
     iree_hal_amd_xdna_context_t* context, iree_string_view_t display_name,
     iree_allocator_t host_allocator, iree_hal_device_spec_t** out_spec) {
-  const iree_hal_physical_device_spec_t physical = {
+  iree_hal_physical_device_spec_t physical = {
       .identity = {.display_name = display_name, .vendor_id = 0x1022},
       .partition_count = 1,
       .physical_device_affinity = 1,
   };
+  if (context->host_numa_node != UINT32_MAX) {
+    physical.identity.numa.node_id = context->host_numa_node;
+    physical.identity.flags |= IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_NUMA_NODE;
+  }
   const iree_hal_device_identity_spec_t identity = {
       .logical_device_id = IREE_SV("xdna"),
       .display_name = display_name,

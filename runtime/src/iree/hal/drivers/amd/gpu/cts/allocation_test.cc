@@ -152,6 +152,29 @@ class GpuNativeAllocationTest : public GpuNativeTest {
   std::array<iree_hal_semaphore_t*, 4> semaphores_ = {};
 };
 
+TEST_F(GpuNativeAllocationTest, NativeHostLocalityReachesGroupTopology) {
+  const auto* identity =
+      iree_hal_device_spec_identity(iree_hal_device_spec(device_));
+  ASSERT_EQ(identity->physical_device_count, 1u);
+  const auto& physical = identity->physical_devices[0].identity;
+  const bool has_locality = native_domain_->host_numa_node != UINT32_MAX;
+  EXPECT_EQ(iree_all_bits_set(physical.flags,
+                              IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_NUMA_NODE),
+            has_locality);
+  if (!has_locality) {
+    return;
+  }
+  EXPECT_EQ(physical.numa.node_id, native_domain_->host_numa_node);
+  const auto* topology = iree_hal_device_group_topology(group_);
+  uint32_t matching_nodes = 0;
+  for (uint32_t i = 0; i < iree_hal_topology_node_count(topology); ++i) {
+    const auto* node = iree_hal_topology_node_at(topology, i);
+    matching_nodes += node->kind == IREE_HAL_TOPOLOGY_NODE_KIND_HOST_NUMA &&
+                      node->local_ordinal == native_domain_->host_numa_node;
+  }
+  EXPECT_EQ(matching_nodes, 1u);
+}
+
 TEST_F(GpuNativeAllocationTest, CachedHostPoolRetainsGuaranteesThroughCopy) {
   using iree::hal::cts::Ref;
   const iree_hal_pool_family_access_t family = {
