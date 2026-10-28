@@ -16,6 +16,7 @@
 #include "loom/error/parameter.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/types.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/facts_builder.h"
 #include "loom/target/registers.h"
@@ -809,6 +810,80 @@ TEST_F(LowAllocationTargetConstraintsTest,
       }
     }
   }
+}
+
+TEST_F(LowAllocationTargetConstraintsTest, FixedBindingsRequireLiveRegisters) {
+  const loom_type_t register_type = loom_low_register_type(
+      target_.descriptor_set->stable_id, RegisterClassId(IREE_SV("test.i32")),
+      /*unit_count=*/1);
+  const loom_type_t types[] = {
+      register_type, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), register_type};
+  loom_value_id_t values[IREE_ARRAYSIZE(types)];
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(types); ++i) {
+    IREE_ASSERT_OK(loom_module_define_value(module_, types[i], &values[i]));
+  }
+  loom_local_value_domain_t domain = {};
+  IREE_ASSERT_OK(loom_local_value_domain_acquire_for_region(
+      module_, loom_low_func_def_body(function_op_), &arena_, &domain));
+  for (uint32_t i = 0; i < 2; ++i) {
+    loom_value_ordinal_t ordinal;
+    IREE_ASSERT_OK(
+        loom_local_value_domain_register_value(&domain, values[i], &ordinal));
+    ASSERT_EQ(ordinal, i);
+  }
+  // The local register is dead; the scalar has a lifetime but no register
+  // storage. The third value belongs to the module, not this local domain.
+  const loom_liveness_interval_t interval = {
+      .value_id = values[1],
+      .start_point = 0,
+      .end_point = 1,
+      .block_count = 1,
+      .value_class =
+          {
+              .type_kind = LOOM_TYPE_SCALAR,
+              .element_type = LOOM_SCALAR_TYPE_INDEX,
+          },
+      .unit_count = 1,
+      .definition_point = UINT32_MAX,
+  };
+  const uint32_t interval_indices[] = {UINT32_MAX, 0};
+  const loom_liveness_analysis_t liveness = {
+      .intervals = &interval,
+      .interval_count = 1,
+      .value_ids = domain.value_ids,
+      .value_count = domain.value_count,
+      .value_interval_indices = interval_indices,
+  };
+  for (loom_value_id_t value :
+       {values[0], values[1], values[2], LOOM_VALUE_ID_INVALID}) {
+    SCOPED_TRACE(value);
+    DiagnosticCapture capture = {};
+    const iree_diagnostic_emitter_t emitter = {CaptureDiagnostic, &capture};
+    loom_low_allocation_target_constraints_t constraints = {};
+    IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
+        module_, function_op_, &target_, nullptr, 0, nullptr, 0, emitter,
+        &arena_, &constraints));
+    const loom_low_allocation_fixed_value_t fixed = {
+        value, LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID, 0, 1};
+    IREE_ASSERT_OK(
+        loom_low_allocation_target_constraints_resolve_fixed_locations(
+            &constraints, &liveness, &domain, nullptr, nullptr, &fixed, 1,
+            &arena_));
+    const bool invalid_id = value == LOOM_VALUE_ID_INVALID;
+    EXPECT_EQ(capture.count, 1u);
+    EXPECT_EQ(capture.error,
+              invalid_id ? LOOM_ERR_BACKEND_032 : LOOM_ERR_BACKEND_033);
+    EXPECT_EQ(capture.op, function_op_);
+    EXPECT_EQ(constraints.error_count, 1u);
+    EXPECT_EQ(constraints.fixed_value_count, 0u);
+    ASSERT_EQ(capture.parameters.size(), invalid_id ? 7u : 6u);
+    EXPECT_EQ(capture.parameters[5].u32, value);
+    if (invalid_id) {
+      EXPECT_EQ(capture.parameters[4].u64, 0u);
+      EXPECT_EQ(capture.parameters[6].u64, module_->values.count);
+    }
+  }
+  loom_local_value_domain_release(&domain);
 }
 
 TEST_F(LowAllocationTargetConstraintsTest,

@@ -151,18 +151,6 @@ CHECK: *"name":"extent","type":"index"},"class":{"type_kind":1,"type_kind_name":
 
 // ====
 
-// RUN: emit low-allocation @unused_fixed fixed=%unused:target_id:0:1
-
-test.target<low_core> @target
-
-// Fixed requests name storage-bearing values; an unused parameter has none.
-// ERROR@+1: BACKEND/033 {function_name="unused_fixed", value_name="unused", value_id="0"}
-low.func.def target<test.low.core>(@target) @unused_fixed(%unused: reg<test.i32>) asm {
-  return
-}
-
-// ====
-
 // The four-register bank fits three scalars and the demanded half of the pair.
 // The unread half must not reserve a fifth register.
 // RUN: emit low-allocation-query @demanded_entry_units spill-count values=%guard0,%guard1,%guard2,%pair,%high
