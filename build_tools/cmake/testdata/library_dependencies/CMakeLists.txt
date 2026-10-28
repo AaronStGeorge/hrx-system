@@ -36,12 +36,20 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/library.c" "#error Binary shadow source\
 foreach(_EXTENSION hpp inc inl)
   file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/private.${_EXTENSION}" "#pragma once\n")
 endforeach()
+# This custom command has no registered producer target. The header library
+# owns its build rule and orders all of its consumers after generation.
+add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/owned.h"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/owned.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/owned.h"
+  DEPENDS owned.h.in VERBATIM)
 iree_cc_library(NAME headers
   SRCS inactive/generated.h
     "${CMAKE_CURRENT_BINARY_DIR}/private.hpp"
     "${CMAKE_CURRENT_BINARY_DIR}/private.inc"
     "${CMAKE_CURRENT_BINARY_DIR}/private.inl"
-  TEXTUAL_HDRS "${CMAKE_CURRENT_BINARY_DIR}/producer/generated.h")
+  HDRS owned.h
+  TEXTUAL_HDRS producer/generated.h)
 iree_cc_library(NAME leaf
   SRCS "${CMAKE_CURRENT_SOURCE_DIR}/leaf.hpp.c" DEFINES TRANSITIVE_VALUE=3)
 # A false condition excludes the entire list; active system includes keep their

@@ -62,28 +62,32 @@ class CMakeLibraryDependenciesTest(unittest.TestCase):
                 for program in programs:
                     self.assertEqual(run_command(str(program)), f"{expected}\n")
 
-            check(42)
+            check(44)
             timestamps = [path.stat().st_mtime_ns for path in programs]
-            check(42)
+            check(44)
             self.assertEqual([path.stat().st_mtime_ns for path in programs], timestamps)
             configure_project(source, build)
             (source / "value.txt").write_text("11\n")
-            check(50)
+            owned_header = source / "owned.h.in"
+            owned_header.write_text(
+                owned_header.read_text().replace("OWNED_VALUE 2", "OWNED_VALUE 4")
+            )
+            check(54)
             leaf_source = source / "leaf.hpp.c"
             leaf_source.write_text(
                 leaf_source.read_text().replace("return 5;", "return 6;")
             )
-            check(51)
-            for name in ("generated.h", "generated.c"):
-                (build / "producer" / name).unlink()
-            check(51)
+            check(55)
+            for name in ("owned.h", "producer/generated.h", "producer/generated.c"):
+                (build / name).unlink()
+            check(55)
             external_source = source / "external.c"
             external_source.write_text(
                 external_source.read_text().replace("return 2;", "return 3;")
             )
-            check(52)
+            check(56)
             (build / f"external-{CONFIGURATION}.o").unlink()
-            check(52)
+            check(56)
 
 
 if __name__ == "__main__":

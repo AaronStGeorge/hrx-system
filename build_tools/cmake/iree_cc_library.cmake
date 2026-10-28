@@ -136,7 +136,6 @@ function(iree_cc_library)
   # Bazel hdrs can name generated files. Point missing headers at the binary
   # tree so target_sources can attach the producer custom command edge.
   set(_RULE_HDR_TARGET_SRCS)
-  set(_RULE_GENERATED_HDR_TARGET_SRCS)
   set(_RULE_GENERATED_HDR_FILES)
   foreach(_HDR_FILE IN LISTS _RULE_HDRS _RULE_TEXTUAL_HDRS)
     if(IS_ABSOLUTE "${_HDR_FILE}" OR "${_HDR_FILE}" MATCHES "^\\$<")
@@ -146,7 +145,6 @@ function(iree_cc_library)
     else()
       set(_HDR_BINARY_FILE "${CMAKE_CURRENT_BINARY_DIR}/${_HDR_FILE}")
       list(APPEND _RULE_HDR_TARGET_SRCS "${_HDR_BINARY_FILE}")
-      list(APPEND _RULE_GENERATED_HDR_TARGET_SRCS "$<BUILD_INTERFACE:${_HDR_BINARY_FILE}>")
       list(APPEND _RULE_GENERATED_HDR_FILES "${_HDR_BINARY_FILE}")
     endif()
   endforeach()
@@ -378,10 +376,14 @@ function(iree_cc_library)
         ${IREE_DEFAULT_LINKOPTS}
         ${_RULE_LINKOPTS}
     )
-    if(_RULE_GENERATED_HDR_TARGET_SRCS)
+    # Keep generated headers on their declaring library. INTERFACE_SOURCES
+    # would make every transitive consumer rediscover the same source rules.
+    # An interface library with private sources owns their custom commands and
+    # carries the build dependency without propagating the source list.
+    if(_RULE_GENERATED_HDR_FILES)
       target_sources(${_NAME}
-        INTERFACE
-          ${_RULE_GENERATED_HDR_TARGET_SRCS}
+        PRIVATE
+          ${_RULE_GENERATED_HDR_FILES}
       )
     endif()
     target_link_libraries(${_NAME}
