@@ -105,6 +105,112 @@ class LowAllocationMovePlanTest : public ::testing::Test {
   loom_target_facts_t target_facts_ = {};
 };
 
+TEST_F(LowAllocationMovePlanTest, AppendsOnlyDemandedAssignmentUnits) {
+  struct Transport {
+    // Descriptor class supplying the unit-to-location mapping.
+    iree_string_view_t register_class;
+    // Coordinate space for both endpoints.
+    loom_low_allocation_location_kind_t location_kind;
+    // Source assignment base or aggregate view.
+    uint32_t source_base;
+    // Destination assignment base or aggregate view.
+    uint32_t destination_base;
+    // Concrete source locations in logical unit order.
+    uint32_t source_units[2];
+    // Concrete destination locations in logical unit order.
+    uint32_t destination_units[2];
+  };
+  const Transport transports[] = {
+      {IREE_SV("test.i32"),
+       LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
+       2,
+       0,
+       {2, 3},
+       {0, 1}},
+      {IREE_SV("test.phys"),
+       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+       2,
+       0,
+       {2, 3},
+       {0, 1}},
+      {IREE_SV("test.explicit32"),
+       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+       4,
+       5,
+       {0, 2},
+       {1, 3}},
+  };
+  const auto* descriptors = loom_low_descriptor_registry_lookup(
+      &registry_.registry, IREE_SV("test.low.core"));
+  ASSERT_NE(descriptors, nullptr);
+  uint32_t starts[] = {2, 2};
+  uint32_t ends[] = {6, 6};
+  const loom_low_allocation_unit_liveness_t liveness = {
+      .start_points = starts,
+      .end_points = ends,
+      .point_count = IREE_ARRAYSIZE(ends),
+  };
+  const loom_low_allocation_move_plan_context_t context = {
+      .descriptor_set = descriptors,
+      .unit_liveness = &liveness,
+  };
+  loom_low_allocation_move_plan_t plan = {};
+  IREE_ASSERT_OK(loom_low_allocation_move_plan_initialize(
+      &context, /*move_input_capacity=*/2, /*raw_group_capacity=*/2, &arena_,
+      &scratch_, &plan));
+  for (const auto& transport : transports) {
+    uint16_t register_class_id = LOOM_LOW_REG_CLASS_NONE;
+    ASSERT_TRUE(loom_low_descriptor_set_lookup_register_class(
+        descriptors, transport.register_class, &register_class_id, nullptr));
+    SCOPED_TRACE(register_class_id);
+    loom_low_allocation_assignment_t source = {
+        .descriptor_reg_class_id = register_class_id,
+        .flags = LOOM_LOW_ALLOCATION_ASSIGNMENT_FLAG_REFINED_UNIT_STARTS,
+        .start_point = 2,
+        .end_point = 6,
+        .unit_count = 2,
+        .location_kind = transport.location_kind,
+        .location_base = transport.source_base,
+        .location_count = 2,
+    };
+    auto destination = source;
+    destination.location_base = transport.destination_base;
+    for (uint32_t demanded_units = 1; demanded_units < 4; ++demanded_units) {
+      SCOPED_TRACE(demanded_units);
+      for (uint32_t unit = 0; unit < 2; ++unit) {
+        ends[unit] = demanded_units & (1u << unit) ? 6 : starts[unit];
+      }
+      // Whole assignments and individual subranges share the same demand.
+      for (uint32_t first = 0; first < 2; ++first) {
+        for (uint32_t count = 1; count <= 2 - first; ++count) {
+          SCOPED_TRACE(first);
+          SCOPED_TRACE(count);
+          iree_host_size_t move_count = 0;
+          loom_low_allocation_move_plan_append_assignment(
+              &plan, &source, first, &destination, first, count, &move_count);
+          iree_host_size_t expected_count = 0;
+          for (uint32_t unit = first; unit < first + count; ++unit) {
+            if (!(demanded_units & (1u << unit))) {
+              continue;
+            }
+            ASSERT_LT(expected_count, move_count);
+            const auto& move = plan.sequence_scratch.moves[expected_count++];
+            EXPECT_EQ(move.source.location_kind, transport.location_kind);
+            EXPECT_EQ(move.source.descriptor_reg_class_id, register_class_id);
+            EXPECT_EQ(move.source.location, transport.source_units[unit]);
+            EXPECT_EQ(move.destination.location_kind, transport.location_kind);
+            EXPECT_EQ(move.destination.descriptor_reg_class_id,
+                      register_class_id);
+            EXPECT_EQ(move.destination.location,
+                      transport.destination_units[unit]);
+          }
+          EXPECT_EQ(move_count, expected_count);
+        }
+      }
+    }
+  }
+}
+
 TEST_F(LowAllocationMovePlanTest,
        RetainsSourceIdentityAcrossScheduledSubtrees) {
   ModulePtr module = Parse(R"(
