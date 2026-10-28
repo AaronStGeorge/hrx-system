@@ -70,27 +70,43 @@ func.def @header_line() -> (i32) {
 } loc("loom/src/loom/import/cxx/test/locations.h":11:1 to 11:46)
 
 // ====
-// RUN: verify
+// RUN: with-locations pass canonicalize,cse,dce
 #line 500 "presumed.cc"
 const char* filename() {
-  // ERROR@+1: LOWERING/059 "unsupported expression: string-literal-expression"
   return __FILE__;
 }
 
-// ====
-// RUN: verify
-const char* date() {
-  // ERROR@+1: LOWERING/059 "unsupported expression: string-literal-expression"
-  return __DATE__;
-}
+// ----
+func.def public @filename() -> (buffer, offset) {
+  %2 = buffer.constant align(1) utf8("presumed.cc\u0000") : buffer loc("loom/src/loom/import/cxx/test/locations.cxx-test":3:10 to 3:18)
+  %3 = index.constant 0 : offset loc("loom/src/loom/import/cxx/test/locations.cxx-test":3:10 to 3:18)
+  func.return %2, %3 : buffer, offset loc("loom/src/loom/import/cxx/test/locations.cxx-test":3:3 to 3:19)
+} loc("loom/src/loom/import/cxx/test/locations.cxx-test":2:1 to 4:2)
 
 // ====
-// RUN: verify
-#define CURRENT_TIME __TIME__
-const char* time() {
-  // ERROR@+1: LOWERING/059 "unsupported expression: string-literal-expression"
-  return CURRENT_TIME;
+// RUN: with-locations pass canonicalize,cse,dce
+unsigned date_length() {
+  return sizeof(__DATE__);
 }
+
+// ----
+func.def public @date_length() -> (i32) {
+  %3 = scalar.constant 12 : i32 loc("loom/src/loom/import/cxx/test/locations.cxx-test":2:10 to 2:26)
+  func.return %3 : i32 loc("loom/src/loom/import/cxx/test/locations.cxx-test":2:3 to 2:27)
+} loc("loom/src/loom/import/cxx/test/locations.cxx-test":1:1 to 3:2)
+
+// ====
+// RUN: with-locations pass canonicalize,cse,dce
+#define CURRENT_TIME __TIME__
+unsigned time_length() {
+  return sizeof(CURRENT_TIME);
+}
+
+// ----
+func.def public @time_length() -> (i32) {
+  %3 = scalar.constant 9 : i32 loc("loom/src/loom/import/cxx/test/locations.cxx-test":3:10 to 3:30)
+  func.return %3 : i32 loc("loom/src/loom/import/cxx/test/locations.cxx-test":3:3 to 3:31)
+} loc("loom/src/loom/import/cxx/test/locations.cxx-test":2:1 to 4:2)
 
 // ====
 // RUN: pass unroll-scf-for

@@ -41,10 +41,21 @@ class BufferIntrinsic {
   Value call(std::span<const Value> arguments, ValueArena& arena,
              Storage& storage, cxx::AST* owner) const;
 
+  // Literal bindings consume source bytes before runtime argument evaluation.
+  bool has_literal() const {
+    return operation_ == Operation::Constant ||
+           operation_ == Operation::AllocaInit;
+  }
+  Value call_literal(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
+                     cxx::ExpressionAST* argument, Storage& storage,
+                     cxx::AST* owner) const;
+
   bool equivalent(const BufferIntrinsic& other) const;
 
  private:
   enum class Operation {
+    Constant,
+    AllocaInit,
     AllocaBytes,
     AllocaElements,
     AssumeAlignment,
@@ -52,6 +63,13 @@ class BufferIntrinsic {
     AssumeNoalias,
   };
 
+  BufferIntrinsic(Operation operation,
+                  loom_value_fact_memory_space_t memory_space,
+                  int64_t alignment, bool is_utf8)
+      : operation_(operation),
+        is_utf8_(is_utf8),
+        memory_space_(memory_space),
+        alignment_(alignment) {}
   BufferIntrinsic(const cxx::Type* element_type,
                   const cxx::Type* element_count_type,
                   loom_value_fact_memory_space_t memory_space,
@@ -80,6 +98,8 @@ class BufferIntrinsic {
 
   // Buffer operation selected by the source declaration.
   Operation operation_;
+  // Literal payload form selected by the source binding, never inferred.
+  bool is_utf8_ = false;
 
   // Source object type named by T and by the result pointee.
   const cxx::Type* element_type_ = nullptr;

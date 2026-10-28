@@ -625,26 +625,24 @@ void SourceEmbeddingServiceTest::WriteCheckpointPackage(
   std::ifstream input(directory_ + "/prepare.loom");
   ASSERT_TRUE(input.good());
   std::string prepare((std::istreambuf_iterator<char>(input)), {});
-  const std::string root = "bytes(\"656d626564\")";
+  const std::string root = "utf8(\"embed\")";
   const auto root_position = prepare.find(root);
   ASSERT_NE(root_position, std::string::npos);
   prepare.replace(root_position, root.size(),
-                  "bytes(\"656d6265645f776974685f706172616d6574657273\")");
+                  "utf8(\"embed_with_parameters\")");
   const auto result_position = prepare.find("  func.return %units,");
   ASSERT_NE(result_position, std::string::npos);
   prepare.insert(result_position, R"(
   %parameter_index = scalar.constant 0 : i32
   %parameter_input = scalar.constant 0 : i32
-  %parameter_path = global.load @checkpoint : buffer
-  %parameter_policy = global.load @policy : buffer
+  %parameter_path = buffer.constant utf8("weights.safetensors") : buffer
+  %parameter_policy = buffer.constant utf8("policy.loom") : buffer
   %parameter_source = func.call @source(%directory, %parameter_path) : (buffer, buffer) -> (i32)
   func.call @parameter(%stage, %parameter_index, %parameter_input, %parameter_source, %parameter_policy) : (i32, i32, i32, i32, buffer) -> ()
 )");
   const std::string declarations = R"(
 func.decl import("prepare") @source(%directory: buffer, %path: buffer) -> (i32)
 func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %input: i32, %source: i32, %policy: buffer)
-global.rodata.def @checkpoint = bytes("776569676874732e7361666574656e736f7273")
-global.rodata.def @policy = bytes("706f6c6963792e6c6f6f6d")
 )";
   std::ofstream bootstrap(target + "/prepare.loom");
   bootstrap << declarations << prepare;
@@ -687,11 +685,10 @@ void SourceEmbeddingServiceTest::UseDirectPackage() {
   std::ifstream input(directory_ + "/prepare.loom");
   ASSERT_TRUE(input.good());
   std::string prepare((std::istreambuf_iterator<char>(input)), {});
-  const std::string root = "bytes(\"656d626564\")";
+  const std::string root = "utf8(\"embed\")";
   const auto root_position = prepare.find(root);
   ASSERT_NE(root_position, std::string::npos);
-  prepare.replace(root_position, root.size(),
-                  "bytes(\"7265736964656e745f656d626564\")");
+  prepare.replace(root_position, root.size(), "utf8(\"resident_embed\")");
   size_t position = 0;
   while ((position = prepare.find("@stage(", position)) != std::string::npos) {
     prepare.replace(position, 7, "@dispatch(");

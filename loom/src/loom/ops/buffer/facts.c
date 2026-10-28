@@ -124,36 +124,77 @@ const loom_value_fact_domain_t loom_buffer_fact_domain = {
     .widen_extension = loom_buffer_widen_reference_extension,
 };
 
-iree_status_t loom_buffer_alloca_facts(loom_fact_context_t* context,
-                                       const loom_module_t* module,
-                                       const loom_op_t* op,
-                                       const loom_value_facts_t* operand_facts,
-                                       loom_value_facts_t* result_facts) {
-  int64_t base_alignment = loom_buffer_alloca_base_alignment(op);
+iree_status_t loom_buffer_constant_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  const loom_value_fact_buffer_reference_t reference = {
+      .maximum_byte_extent = loom_value_facts_exact_i64(
+          (int64_t)loom_buffer_constant_contents(op).data_length),
+      .minimum_alignment = loom_buffer_constant_has_alignment(op)
+                               ? (uint64_t)loom_buffer_constant_alignment(op)
+                               : 1,
+      .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT,
+      .root_value_id = loom_buffer_constant_result(op),
+      .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
+      .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_NON_NULL,
+  };
+  return loom_value_facts_make_buffer_reference(context, reference,
+                                                &result_facts[0]);
+}
+
+static iree_status_t loom_buffer_allocation_facts(
+    loom_fact_context_t* context, loom_value_id_t result,
+    loom_value_facts_t byte_extent, uint64_t minimum_alignment,
+    loom_value_fact_memory_space_t memory_space,
+    loom_value_facts_t* out_facts) {
   loom_value_fact_reference_origin_t origin = context->reference_origin;
   if (origin.kind != LOOM_VALUE_FACT_REFERENCE_ORIGIN_UNKNOWN) {
     origin.kind = LOOM_VALUE_FACT_REFERENCE_ORIGIN_ALLOCATION;
   }
   loom_value_fact_buffer_reference_t reference = {
-      .maximum_byte_extent =
-          loom_buffer_clamp_nonnegative(operand_facts[op->operand_count - 1]),
-      .minimum_alignment = base_alignment > 0 ? (uint64_t)base_alignment : 1,
-      .memory_space = loom_buffer_alloca_memory_space(op),
-      .root_value_id = loom_buffer_alloca_result(op),
-      .alias_scope_id = loom_buffer_alloca_result(op),
+      .maximum_byte_extent = byte_extent,
+      .minimum_alignment = minimum_alignment,
+      .memory_space = memory_space,
+      .root_value_id = result,
+      .alias_scope_id = result,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_NON_NULL,
       .origin = origin,
   };
-  IREE_RETURN_IF_ERROR(loom_value_facts_make_buffer_reference(
-      context, reference, &result_facts[0]));
+  IREE_RETURN_IF_ERROR(
+      loom_value_facts_make_buffer_reference(context, reference, out_facts));
   // Allocation identity follows its sharing scope, independently of the
   // requested size or backing pool. Equal sizes do not identify equal storage.
   if (reference.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
-    loom_value_facts_mark_workgroup_uniform(&result_facts[0]);
+    loom_value_facts_mark_workgroup_uniform(out_facts);
   } else {
-    loom_value_facts_mark_lane_varying(&result_facts[0]);
+    loom_value_facts_mark_lane_varying(out_facts);
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_buffer_alloca_facts(loom_fact_context_t* context,
+                                       const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       const loom_value_facts_t* operand_facts,
+                                       loom_value_facts_t* result_facts) {
+  return loom_buffer_allocation_facts(
+      context, loom_buffer_alloca_result(op),
+      loom_buffer_clamp_nonnegative(operand_facts[op->operand_count - 1]),
+      (uint64_t)loom_buffer_alloca_base_alignment(op),
+      loom_buffer_alloca_memory_space(op), &result_facts[0]);
+}
+
+iree_status_t loom_buffer_alloca_init_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  return loom_buffer_allocation_facts(
+      context, loom_buffer_alloca_init_result(op),
+      loom_value_facts_exact_i64(
+          (int64_t)loom_buffer_alloca_init_contents(op).data_length),
+      (uint64_t)loom_buffer_alloca_init_base_alignment(op),
+      loom_buffer_alloca_init_memory_space(op), &result_facts[0]);
 }
 
 static bool loom_buffer_pack_align_exact(int64_t value, int64_t alignment,

@@ -710,6 +710,7 @@ loom_cc_library(
         "//loom/src/loom/error:parameter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/kernel",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",

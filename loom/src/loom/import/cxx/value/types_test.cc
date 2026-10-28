@@ -934,6 +934,47 @@ TEST(TypesTest, BooleanObjectsHaveByteLayoutAndPredicateValues) {
   }
 }
 
+TEST(TypesTest, CharacterCodeUnitsRetainTheSourceDataModel) {
+  for (auto model : {LOOM_CXX_DATA_MODEL_LP64, LOOM_CXX_DATA_MODEL_LLP64,
+                     LOOM_CXX_DATA_MODEL_ILP32}) {
+    loom_cxx_import_options_t options;
+    loom_cxx_import_options_initialize(&options);
+    options.data_model = model;
+    Source source(IREE_SV("int entry();"), IREE_SV("types.cpp"), options);
+    Types types(source.unit(), source.diagnostics());
+    auto* control = source.unit().control();
+    auto* owner = source.unit().ast();
+    const bool windows = model == LOOM_CXX_DATA_MODEL_LLP64;
+    const struct {
+      // Source code-unit type, independent of its integer representation.
+      const cxx::Type* type;
+      // Expected signless IR scalar representation.
+      loom_scalar_type_t scalar;
+      // Expected source ABI byte width.
+      int64_t bytes;
+      // Whether widening source arithmetic zero-extends the code unit.
+      bool is_unsigned;
+    } cases[] = {
+        {control->getChar8Type(), LOOM_SCALAR_TYPE_I8, 1, true},
+        {control->getChar16Type(), LOOM_SCALAR_TYPE_I16, 2, true},
+        {control->getChar32Type(), LOOM_SCALAR_TYPE_I32, 4, true},
+        {control->getWideCharType(),
+         static_cast<loom_scalar_type_t>(windows ? LOOM_SCALAR_TYPE_I16
+                                                 : LOOM_SCALAR_TYPE_I32),
+         windows ? 2 : 4, windows},
+    };
+    for (const auto& test : cases) {
+      EXPECT_EQ(loom_type_element_type(types.get(test.type, owner)),
+                test.scalar);
+      EXPECT_EQ(types.is_unsigned(test.type), test.is_unsigned);
+      EXPECT_EQ(types.storage_size(test.type, owner), test.bytes);
+      EXPECT_EQ(
+          types.storage_size(control->getBoundedArrayType(test.type, 3), owner),
+          3 * test.bytes);
+    }
+  }
+}
+
 TEST(TypesTest, VectorProjectionSeparatesLogicalLanesFromObjectLayout) {
   loom_cxx_import_options_t options;
   loom_cxx_import_options_initialize(&options);

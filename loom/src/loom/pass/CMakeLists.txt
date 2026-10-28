@@ -361,6 +361,7 @@ loom_cc_library(
     loom::target::pass_requirements
     loom::transforms::boundary::predicate_lifetimes
     loom::transforms::boundary::projection
+    loom::transforms::buffer::materialize
     loom::transforms::cfg::branch_fusion
     loom::transforms::cfg::branch_sink
     loom::transforms::cfg::cfg_converge

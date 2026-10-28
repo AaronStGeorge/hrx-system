@@ -8,21 +8,9 @@ func.decl import("json") @members(%json: buffer) -> (buffer, i32, i64)
 
 func.decl import("json") @parse_i64(%json: buffer, %offset: i64, %length: i64) -> (i64)
 
-global.rodata.def @root = bytes("70726f6a656374")
-
-global.rodata.def @forecast_root = bytes("666f7265636173745f6d656d6f7279")
-
-global.rodata.def @empty = bytes("")
-
-global.rodata.def @name = bytes("666978747572652d70726f6a6563746f72")
-
-global.rodata.def @units_key = bytes("62617463685f756e697473")
-
-global.rodata.def @invalid = bytes("657870656374207b2262617463685f756e697473223a312e2e36347d206f72207b7d")
-
 func.def @check(%condition: i1) {
   %value = scalar.extui %condition : i1 to i32
-  %diagnostic = global.load @invalid : buffer
+  %diagnostic = buffer.constant utf8("expect {\"batch_units\":1..64} or {}") : buffer
   func.call @require(%value, %diagnostic) : (i32, buffer)
   func.return
 }
@@ -57,7 +45,7 @@ func.def @batch_units(%options: buffer) -> (i64) {
     %nonnegative = scalar.assume %key_offset [range(%key_offset, 0, 9223372036854775807)] : i64
     %key_begin = index.cast %nonnegative : i64 to offset
     %key = buffer.view %options[%key_begin] : buffer -> view<11xi8>
-    %expected = global.load @units_key : buffer
+    %expected = buffer.constant utf8("batch_units") : buffer
     %expected_key = buffer.view %expected[%origin] : buffer -> view<11xi8>
     %c0 = index.constant 0 : index
     %c1 = index.constant 1 : index
@@ -80,15 +68,15 @@ func.def @batch_units(%options: buffer) -> (i64) {
 
 // Up to 64 feature rows across arbitrary positive image request counts.
 func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64, i64, buffer, buffer, buffer) {
-  %forecast = global.load @forecast_root : buffer
+  %forecast = buffer.constant utf8("forecast_memory") : buffer
   func.call @memory_forecast(%forecast) : (buffer)
   %tag = scalar.constant 0 : i64
-  %root = global.load @root : buffer
+  %root = buffer.constant utf8("project") : buffer
   %stage = func.call @dispatch(%root, %tag) : (buffer, i64) -> (i32)
   %units = func.call @batch_units(%options) : (buffer) -> (i64)
   %input_capacity = scalar.constant 65536 : i64
   %output_capacity = scalar.constant 1024 : i64
-  %empty = global.load @empty : buffer
-  %name = global.load @name : buffer
+  %empty = buffer.constant utf8("") : buffer
+  %name = buffer.constant utf8("fixture-projector") : buffer
   func.return %units, %input_capacity, %output_capacity, %output_capacity, %empty, %name, %root : i64, i64, i64, i64, buffer, buffer, buffer
 }

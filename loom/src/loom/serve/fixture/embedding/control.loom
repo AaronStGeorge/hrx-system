@@ -4,11 +4,9 @@ func.decl import("input") @require(%condition: i32, %diagnostic: buffer)
 
 func.decl import("runner") @execute_2(%stage: i32, %input: hal.buffer, %output: hal.buffer) -> (i64)
 
-global.rodata.def @invalid = bytes("6669787475726520726571756972657320312d333120746f6b656e732070657220726f772c2064696d656e73696f6e732032206f7220342c20616e64206120726571756573742077697468696e2062617463685f756e697473")
-
 func.def @check(%condition: i1) {
   %condition32 = scalar.extui %condition : i1 to i32
-  %error = global.load @invalid : buffer
+  %error = buffer.constant utf8("fixture requires 1-31 tokens per row, dimensions 2 or 4, and a request within batch_units") : buffer
   func.call @require(%condition32, %error) : (i32, buffer)
   func.return
 }

@@ -601,13 +601,17 @@ class CxxRenderContext:
                     and id(operation) in direct_operations,
                 )
                 continue
-            if operation.name == "buffer.alloca":
+            if operation.name in {
+                "buffer.alloca",
+                "buffer.alloca.init",
+                "buffer.constant",
+            }:
                 for result in operation.results:
                     self.buffer_roots[result] = result
                     self.buffer_info[result] = BufferInfo(
                         root=result,
                         name=self.names[result],
-                        mutable=True,
+                        mutable=operation.name != "buffer.constant",
                     )
                 continue
             if operation.name == "buffer.view":
@@ -651,6 +655,15 @@ class CxxRenderContext:
                 root = self.view_roots.get(resolved.value_id("dest"))
                 if root is not None:
                     self.buffer_info[root].mutable = True
+
+        for root, information in self.buffer_info.items():
+            definition = self.definitions.get(root)
+            if (
+                information.mutable
+                and definition is not None
+                and definition.name == "buffer.constant"
+            ):
+                raise CxxRenderError(definition, "immutable buffer storage is written")
 
         # Carry integer interpretation from loads/stores to the view element.
         changed = True

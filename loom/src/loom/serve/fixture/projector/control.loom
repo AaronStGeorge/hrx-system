@@ -8,13 +8,9 @@ func.decl import("prepare") @dispatch(%root: buffer, %tag: i64) -> (i32)
 
 func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
 
-global.rodata.def @rows_key = bytes("666978747572652e70726f6a6563746f725f726f7773")
-
-global.rodata.def @invalid = bytes("70726f6a6563746f72206669787475726520726571756972657320312e2e3634206665617475726520726f7773")
-
 func.def @check(%condition: i1) {
   %condition32 = scalar.extui %condition : i1 to i32
-  %diagnostic = global.load @invalid : buffer
+  %diagnostic = buffer.constant utf8("projector fixture requires 1..64 feature rows") : buffer
   func.call @require(%condition32, %diagnostic) : (i32, buffer)
   func.return
 }
@@ -193,7 +189,7 @@ func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %
     %value = func.call @dispatch(%state, %rows64) : (buffer, i64) -> (i32)
     scf.yield %value : i32
   }
-  %key = global.load @rows_key : buffer
+  %key = buffer.constant utf8("fixture.projector_rows") : buffer
   func.call @config_i64(%stage, %key, %rows64) : (i32, buffer, i64)
   func.return %stage, %payload, %plan : i32, buffer, buffer
 }

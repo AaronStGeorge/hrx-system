@@ -667,6 +667,8 @@ static iree_status_t loom_target_pipeline_build_expanded_source_body(
   IREE_RETURN_IF_ERROR(loom_template_expansion_pipeline_build(
       builder, loom_target_pipeline_build_cleanup_expanded_target_functions,
       NULL));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
+      builder, IREE_SV("materialize-buffer-constants")));
   return loom_target_pipeline_build_run(builder,
                                         IREE_SV("materialize-locations"));
 }

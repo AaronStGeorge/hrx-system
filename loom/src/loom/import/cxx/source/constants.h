@@ -10,11 +10,28 @@
 #include <cxx/ast_fwd.h>
 #include <cxx/const_value.h>
 #include <cxx/cxx_fwd.h>
+#include <cxx/literals_fwd.h>
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace loom::cxx_import {
+
+// Exact source-ABI object bytes, independent of frontend constant storage.
+struct ObjectRepresentation {
+  // Complete initialized byte extent, including terminators and zero fill.
+  std::vector<uint8_t> bytes;
+  // A one-byte string initializer whose complete representation is valid UTF8.
+  bool is_utf8;
+};
+
+// Serializes a fully initialized, trivially copyable, address-free object.
+// The optional string origin preserves text form without inferring it for
+// arbitrary character arrays or changing any source code units.
+std::optional<ObjectRepresentation> object_representation(
+    cxx::TranslationUnit& unit, const cxx::Type* type,
+    const cxx::ConstValue& value, const cxx::StringLiteral* string = nullptr);
 
 // Evaluates a pure scalar constant, retaining the frontend's typed value.
 // Calls, mutation, overloaded operations, and volatile/runtime reads reject.

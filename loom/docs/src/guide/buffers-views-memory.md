@@ -31,20 +31,35 @@ different allocations.
 
 ## Define read-only byte payloads
 
-[`global.rodata.def`](../reference/dialects/global/ops/rodata-def.md) stores an
-exact byte sequence. Use `utf8("text")` for UTF-8 text and `bytes("hex")` for
-raw binary data:
+[`buffer.constant`](../reference/dialects/buffer/ops/constant.md) provides
+an immutable buffer containing an exact byte sequence. Use `utf8("text")` for
+UTF-8 text and `bytes("hex")` for raw binary data:
 
 ```loom
-global.rodata.def @message = utf8("ready\n")
-
-global.rodata.def @signature = bytes("0080ff")
+%message = buffer.constant utf8("ready\n") : buffer
+%signature = buffer.constant bytes("0080ff") : buffer
 ```
 
-Both forms produce byte storage accessed through `global.load`. The UTF-8 form
-supports JSON string escapes, including `\u0000` for an explicit NUL byte.
+The UTF-8 form supports JSON string escapes, including `\u0000` for an explicit
+NUL byte.
 Neither form adds a terminator or changes the payload's bytes. For example,
 `utf8("Loom")` and `bytes("4c6f6f6d")` each contain exactly four bytes.
+
+The executable owns the storage, and equal constants may share it. An optional
+`align(N)` requests byte alignment without extending the buffer's length.
+Named objects whose address identity or linkage matters use
+[`global.rodata.def`](../reference/dialects/global/ops/rodata-def.md) and
+[`global.load`](../reference/dialects/global/ops/load.md).
+
+For a fresh writable buffer initialized with those bytes, use
+[`buffer.alloca.init`](../reference/dialects/buffer/ops/alloca-init.md):
+
+```loom
+%scratch = buffer.alloca.init<private> align(16) utf8("ready") : buffer
+```
+
+Each execution creates a separate five-byte buffer. Stores change that buffer
+without affecting other initialized allocations or immutable constants.
 
 Text and bytecode round trips retain the chosen form, including empty payloads.
 An ordinary quoted attribute such as `"Loom"` is an interned string attribute,

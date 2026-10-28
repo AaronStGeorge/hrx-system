@@ -12,26 +12,6 @@ func.decl import("runner") @execute_3(%stage: i32, %request: hal.buffer, %rgb: h
 
 func.decl import("runner") @feedback(%slot: i32, %source: hal.buffer, %offset: i64, %length: i64) -> (i64)
 
-// prompt exceeds fixture text capacity
-global.rodata.def @invalid = bytes("70726f6d7074206578636565647320666978747572652074657874206361706163697479")
-
-global.rodata.def @invalid_shape = bytes("6669787475726520726571756972657320312d363420706978656c20657874656e7473")
-
-global.rodata.def @root = bytes("67656e65726174655f696d616765")
-
-global.rodata.def @pixels = bytes("666978747572652e706978656c73")
-
-global.rodata.def @batch = bytes("666978747572652e6261746368")
-
-// The fixture registers two scalar adapters with unit factors: one updates
-// the red projection and one the green projection. Their IDs are model data.
-global.rodata.def @red_lora = bytes("726564")
-
-global.rodata.def @green_lora = bytes("677265656e")
-
-// unknown or duplicate fixture LoRA ID
-global.rodata.def @invalid_lora = bytes("756e6b6e6f776e206f72206475706c69636174652066697874757265204c6f5241204944")
-
 func.def @lora_id_equal(%records: buffer, %offset: offset, %length: offset, %name: buffer) -> (i1) {
   %name_length = buffer.length %name
   %same_length = index.cmp eq, %length, %name_length : offset
@@ -55,9 +35,11 @@ func.def @select_loras(%loras: buffer) -> (f32, f32) {
   %length = buffer.length %loras
   %unselected = scalar.constant 0.0 : f32
   %false = scalar.constant false : i1
-  %red_name = global.load @red_lora : buffer
-  %green_name = global.load @green_lora : buffer
-  %error = global.load @invalid_lora : buffer
+  // The fixture registers two scalar adapters with unit factors: one updates
+  // the red projection and one the green projection. Their IDs are model data.
+  %red_name = buffer.constant utf8("red") : buffer
+  %green_name = buffer.constant utf8("green") : buffer
+  %error = buffer.constant utf8("unknown or duplicate fixture LoRA ID") : buffer
   %end, %red, %green, %red_seen, %green_seen = scf.while(%position = %origin : offset, %red = %unselected : f32, %green = %unselected : f32, %red_seen = %false : i1, %green_seen = %false : i1) -> (offset, f32, f32, i1, i1) {
     %more = index.cmp ult, %position, %length : offset
     scf.condition %more, %position, %red, %green, %red_seen, %green_seen : i1, offset, f32, f32, i1, i1
@@ -112,7 +94,7 @@ func.def public @prepare_request(%state: buffer, %height: i64, %width: i64, %pro
   %w = scalar.andi %w0, %w1 : i1
   %shape = scalar.andi %h, %w : i1
   %shape32 = scalar.extui %shape : i1 to i32
-  %shape_error = global.load @invalid_shape : buffer
+  %shape_error = buffer.constant utf8("fixture requires 1-64 pixel extents") : buffer
   func.call @require(%shape32, %shape_error) : (i32, buffer)
   %c0 = scalar.constant 0 : i32
   %c1 = scalar.constant 1 : i64
@@ -120,7 +102,7 @@ func.def public @prepare_request(%state: buffer, %height: i64, %width: i64, %pro
   %ids, %count = func.call @encode(%prompt, %c0, %bound) : (buffer, i32, i64) -> (buffer, i64)
   %fits = scalar.cmpi ule, %count, %capacity : i64
   %fits32 = scalar.extui %fits : i1 to i32
-  %error = global.load @invalid : buffer
+  %error = buffer.constant utf8("prompt exceeds fixture text capacity") : buffer
   func.call @require(%fits32, %error) : (i32, buffer)
   %length = index.constant 32 : offset
   %payload = buffer.alloca<private> align(8) %length : buffer
@@ -158,13 +140,13 @@ func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %
   %selected = scf.if %cold -> (i32) {
     scf.yield %c0 : i32
   } else {
-    %root = global.load @root : buffer
+    %root = buffer.constant utf8("generate_image") : buffer
     %stage = func.call @stage(%root, %capacity) : (buffer, i64) -> (i32)
     %workspace_limit = scalar.constant 8192 : i64
     func.call @workspace_limit(%stage, %workspace_limit) : (i32, i64)
-    %key = global.load @pixels : buffer
+    %key = buffer.constant utf8("fixture.pixels") : buffer
     func.call @config_i64(%stage, %key, %pixels) : (i32, buffer, i64)
-    %batch_key = global.load @batch : buffer
+    %batch_key = buffer.constant utf8("fixture.batch") : buffer
     func.call @config_i64(%stage, %batch_key, %count) : (i32, buffer, i64)
     scf.yield %stage : i32
   }

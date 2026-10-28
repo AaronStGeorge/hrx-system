@@ -113,3 +113,52 @@ check.scenario @allocation_freshness_values {
   }
   check.return
 }
+
+// Equal initializers share readonly backing bytes, while each writable object
+// remains independent. Runtime indices prevent specializing the byte accesses.
+func.def @initialized_allocation_observations(%entropy: i64, %output: buffer) {
+  %raw = scalar.trunci %entropy : i64 to i32
+  %mask = scalar.constant 15 : i32
+  %position = scalar.andi %raw, %mask : i32
+  %offset = index.cast %position : i32 to offset
+  %original = buffer.constant bytes("000102030405060708090a0b0c0d0e0f") : buffer
+  %first = buffer.alloca.init<private> align(4) bytes("000102030405060708090a0b0c0d0e0f") : buffer
+  %second = buffer.alloca.init<private> align(4) bytes("000102030405060708090a0b0c0d0e0f") : buffer
+  buffer.store.i8 %raw, %first[%offset]
+  %immutable = buffer.load.i8.u %original[%offset]
+  %untouched = buffer.load.i8.u %second[%offset]
+  %changed = buffer.load.i8.u %first[%offset]
+  %text = buffer.constant utf8("hé\u0000") : buffer
+  %text_length = buffer.length %text
+  %text_size = index.cast %text_length : offset to i32
+  %values = vector.from_elements %immutable, %untouched, %changed, %text_size : vector<4xi32>
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<4xi32>
+  vector.store %values, %results[0] : vector<4xi32>, view<4xi32>
+  func.return
+}
+
+func.def @initialized_allocation_oracle(%entropy: i64, %output: buffer) {
+  %raw = scalar.trunci %entropy : i64 to i32
+  %position_mask = scalar.constant 15 : i32
+  %byte_mask = scalar.constant 255 : i32
+  %position = scalar.andi %raw, %position_mask : i32
+  %changed = scalar.andi %raw, %byte_mask : i32
+  %text_size = scalar.constant 4 : i32
+  %values = vector.from_elements %position, %position, %changed, %text_size : vector<4xi32>
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<4xi32>
+  vector.store %values, %results[0] : vector<4xi32>, view<4xi32>
+  func.return
+}
+
+check.scenario @initialized_allocation_values {
+  check.trial[16](%trial: index, %entropy: check.entropy) {
+    %value = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %output = check.generate.fill value(-1) : tensor<4xi32>
+    check.compare<@initialized_allocation_observations, @initialized_allocation_oracle>(%value, %output) : (i64, tensor<4xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<4xi32>
+    }
+  }
+  check.return
+}

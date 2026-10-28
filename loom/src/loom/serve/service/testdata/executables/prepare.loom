@@ -14,8 +14,6 @@ func.decl import("runner") @execute_1(%stage: i32, %output: hal.buffer) -> (i64)
 
 func.decl import("runner") @execute_2(%stage: i32, %request: hal.buffer, %output: hal.buffer) -> (i64)
 
-global.rodata.def @empty = bytes("")
-
 func.def public @declare(%root: buffer, %left: buffer, %right: buffer, %policy: buffer, %count: i32, %tag: i64, %limit: i64) {
   %stage = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
   %c0_i64 = scalar.constant 0 : i64
@@ -25,7 +23,7 @@ func.def public @declare(%root: buffer, %left: buffer, %right: buffer, %policy: 
   }
   %c0 = scalar.constant 0 : i32
   %c1 = scalar.constant 1 : i32
-  %empty = global.load @empty : buffer
+  %empty = buffer.constant utf8("") : buffer
   %has_left = scalar.cmpi sgt, %count, %c0 : i32
   scf.if %has_left {
     %source = func.call @source(%empty, %left) : (buffer, buffer) -> (i32)
@@ -52,7 +50,7 @@ func.def public @submit(%stage: i32, %output: hal.buffer) -> (i64) {
 }
 
 func.def public @sources_only(%root: buffer, %left: buffer, %right: buffer, %policy: buffer, %count: i32, %tag: i64, %limit: i64) {
-  %empty = global.load @empty : buffer
+  %empty = buffer.constant utf8("") : buffer
   %left_source = func.call @source(%empty, %left) : (buffer, buffer) -> (i32)
   %right_source = func.call @source(%empty, %right) : (buffer, buffer) -> (i32)
   func.return
@@ -70,7 +68,7 @@ func.def public @declare_arena(%root: buffer, %left: buffer, %right: buffer, %po
 func.def public @banks(%root: buffer, %paths: buffer, %unused: buffer, %policy: buffer, %count: i32, %tag: i64, %limit: i64) {
   %stage = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
   %first_ordinal = scalar.constant 0 : i32
-  %empty = global.load @empty : buffer
+  %empty = buffer.constant utf8("") : buffer
   %origin = index.constant 0 : offset
   %source_bytes = index.constant 4 : offset
   %sources = buffer.alloca<private> align(4) %source_bytes : buffer

@@ -33,11 +33,13 @@ from loom.assembly import (
 from loom.dialect.atomic import AtomicFenceOrdering, AtomicScope
 from loom.dialect.memory import MemorySpace
 from loom.dsl import (
+    ATTR_TYPE_BYTES,
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64,
     ATTR_TYPE_I64_ARRAY,
     BUFFER,
     BYTE_PATTERN_SCALAR,
+    CONSTANT_LIKE,
     FACT_IDENTITY,
     I32,
     MEMORY_FENCE,
@@ -74,6 +76,45 @@ buffer_ops = Dialect(
     dialect_id=0x0C,
     doc="Opaque storage roots and typed view construction.",
     default_phase=OpPhase.EXECUTABLE,
+)
+
+# ============================================================================
+# buffer.constant — anonymous immutable executable storage
+# ============================================================================
+
+buffer_constant = Op(
+    name="buffer.constant",
+    group=buffer_ops,
+    doc=(
+        "Borrow anonymous immutable executable storage containing the exact "
+        "payload bytes. Evaluation performs no per-invocation allocation or "
+        "initialization. Equal contents may share storage, with no distinct "
+        "address identity guarantee. The byte extent excludes alignment padding; "
+        "UTF-8 adds no terminator or normalization. Empty payloads produce a "
+        "nonnull zero-length buffer. Omitted alignment means one byte. Named "
+        "objects with identity or linkage requirements use global.rodata.def."
+    ),
+    results=[Result("result", BUFFER, doc="Borrowed readonly storage root.")],
+    attrs=[
+        AttrDef("contents", ATTR_TYPE_BYTES, doc="Exact immutable payload bytes."),
+        AttrDef(
+            "alignment",
+            ATTR_TYPE_I64,
+            optional=True,
+            doc="Minimum power-of-two byte alignment, defaulting to one.",
+        ),
+    ],
+    traits=[PURE, CONSTANT_LIKE],
+    eager_execution_cost=1,
+    verify="loom_buffer_constant_verify",
+    facts="loom_buffer_constant_facts",
+    format=[
+        OptionalGroup([Clause("align", Attr("alignment"))], anchor="alignment"),
+        Attr("contents"),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=['%message = buffer.constant utf8("ready") : buffer'],
 )
 
 # ============================================================================
@@ -149,6 +190,50 @@ buffer_alloca = Op(
         "%scratch = buffer.alloca<workgroup> align(64) %bytes : buffer",
         "%packets = buffer.alloca<workgroup> pool(%tile_memory) align(64) %bytes : buffer",
     ],
+)
+
+# ============================================================================
+# buffer.alloca.init — literal-initialized fixed-frame storage
+# ============================================================================
+
+buffer_alloca_init = Op(
+    name="buffer.alloca.init",
+    group=buffer_ops,
+    builder_name="alloca_init",
+    doc=(
+        "Create fresh fixed-frame storage initialized with the exact payload "
+        "bytes. Extent is the payload length, without implicit terminators or "
+        "alignment padding. Ownership, lifetime, alignment, and backing-pool "
+        "selection follow buffer.alloca; equal initializers never merge writable "
+        "allocations. Workgroup initialization is collective: every workitem "
+        "encounters the same dynamic instance in workgroup-uniform control, "
+        "and the initialized bytes are visible to the whole workgroup before "
+        "participants proceed. Other allocatable spaces initialize each "
+        "invocation's independent storage without collective synchronization."
+    ),
+    operands=[
+        Operand("pool", POOL, optional=True, doc="Borrowed backing allocation resource."),
+    ],
+    results=[Result("result", BUFFER, allocates=True, doc="Fresh initialized storage root.")],
+    attrs=[
+        AttrDef("base_alignment", ATTR_TYPE_I64, doc="Minimum byte alignment of the storage base."),
+        AttrDef("memory_space", ATTR_TYPE_ENUM, enum_def=MemorySpace, doc="Allocatable scratch memory space."),
+        AttrDef("contents", ATTR_TYPE_BYTES, doc="Exact initial payload bytes."),
+    ],
+    ownership_effects=[Borrow("pool"), BorrowedResult("result")],
+    effective_traits="loom_buffer_alloca_init_effective_traits",
+    eager_execution_cost=0,
+    verify="loom_buffer_alloca_init_verify",
+    facts="loom_buffer_alloca_init_facts",
+    format=[
+        TemplateParam("memory_space"),
+        OptionalGroup([Clause("pool", Ref("pool"))], anchor="pool"),
+        Clause("align", Attr("base_alignment")),
+        Attr("contents"),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=['%scratch = buffer.alloca.init<private> align(1) utf8("ready") : buffer'],
 )
 
 # ============================================================================
@@ -691,4 +776,6 @@ ALL_BUFFER_OPS: tuple[Op, ...] = (
     buffer_fill,
     buffer_compare,
     buffer_fence,
+    buffer_constant,
+    buffer_alloca_init,
 )

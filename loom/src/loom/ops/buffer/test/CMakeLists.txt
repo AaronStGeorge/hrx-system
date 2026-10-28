@@ -15,6 +15,7 @@ loom_check_test_suite(
   SRCS
     "distribution_facts.loom-test"
     "fold.loom-test"
+    "literals.loom-test"
     "roundtrip.loom-test"
     "verify.loom-test"
 )

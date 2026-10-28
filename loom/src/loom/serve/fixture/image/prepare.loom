@@ -8,18 +8,6 @@ func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
 
 func.decl import("prepare") @workspace_limit(%stage: i32, %byte_length: i64)
 
-global.rodata.def @root = bytes("67656e65726174655f696d616765")
-
-global.rodata.def @pixels = bytes("666978747572652e706978656c73")
-
-global.rodata.def @batch = bytes("666978747572652e6261746368")
-
-global.rodata.def @tokenizer = bytes("746f6b656e697a65722e6a736f6e")
-
-global.rodata.def @name = bytes("666978747572652d696d616765")
-
-global.rodata.def @invalid = bytes("6669787475726520726571756972657320312d363420706978656c20657874656e74732c20312d34303936207465787420746f6b656e732c206e6f206164617074657220616e6420656d707479206f7074696f6e73")
-
 // A real source bootstrap with no immutable parameter roots. The two kernels
 // communicate through compiler-reflected private command workspace.
 func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buffer, %adapter: buffer, %options: buffer) -> (i64, i64, buffer, buffer, buffer) {
@@ -42,7 +30,7 @@ func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buff
   %base = index.cmp eq, %adapter_length, %origin : offset
   %valid = scalar.andi %shape, %base : i1
   %valid32 = scalar.extui %valid : i1 to i32
-  %error = global.load @invalid : buffer
+  %error = buffer.constant utf8("fixture requires 1-64 pixel extents, 1-4096 text tokens, no adapter and empty options") : buffer
   func.call @require(%valid32, %error) : (i32, buffer)
   %fields, %type, %count = func.call @members(%options) : (buffer) -> (buffer, i32, i64)
   %object_type = scalar.constant 2 : i32
@@ -51,15 +39,15 @@ func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buff
   %valid_options = scalar.andi %object, %empty : i1
   %valid_options32 = scalar.extui %valid_options : i1 to i32
   func.call @require(%valid_options32, %error) : (i32, buffer)
-  %root = global.load @root : buffer
+  %root = buffer.constant utf8("generate_image") : buffer
   %stage = func.call @stage(%root, %text) : (buffer, i64) -> (i32)
   // Execution replacements may grow private workspace within this budget.
   %workspace_limit = scalar.constant 8192 : i64
   func.call @workspace_limit(%stage, %workspace_limit) : (i32, i64)
-  %key = global.load @pixels : buffer
+  %key = buffer.constant utf8("fixture.pixels") : buffer
   %pixels = scalar.muli %height, %width : i64
   func.call @config_i64(%stage, %key, %pixels) : (i32, buffer, i64)
-  %batch_key = global.load @batch : buffer
+  %batch_key = buffer.constant utf8("fixture.batch") : buffer
   %single = scalar.constant 1 : i64
   func.call @config_i64(%stage, %batch_key, %single) : (i32, buffer, i64)
   %length = index.constant 16 : offset
@@ -69,7 +57,7 @@ func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buff
   view.store %pixels, %view[1] : i64, view<2xi64>
   %batch_units = scalar.constant 4 : i64
   %capacity = scalar.constant 128 : i64
-  %tokenizer = global.load @tokenizer : buffer
-  %name = global.load @name : buffer
+  %tokenizer = buffer.constant utf8("tokenizer.json") : buffer
+  %name = buffer.constant utf8("fixture-image") : buffer
   func.return %batch_units, %capacity, %tokenizer, %name, %state : i64, i64, buffer, buffer, buffer
 }

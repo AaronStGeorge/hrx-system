@@ -3,12 +3,10 @@ func.decl @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64, i64,
 
 func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
 
-global.rodata.def @voice_stage_name = bytes("707265706172655f766f6963655f617564696f")
-
 func.def public @speech_prepare_v2(%directory: buffer, %options: buffer) -> (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, buffer, buffer, buffer, buffer) {
   %rows, %units, %input, %conditioning, %stream, %batch, %output, %feedback, %frames, %rate, %channels, %tokenizer, %name, %state, %initial = func.call @prepare(%directory, %options) : (buffer, buffer) -> (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, buffer, buffer, buffer, buffer)
   %tag = scalar.constant 2 : i64
-  %root = global.load @voice_stage_name : buffer
+  %root = buffer.constant utf8("prepare_voice_audio") : buffer
   %stage = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
   %voices = scalar.constant 2 : i64
   %audio_bytes = scalar.constant 1048576 : i64
@@ -61,18 +59,14 @@ func.def public @speech_prepare_voice_v2(%model: buffer, %slot: i64, %samples: b
 
 func.decl @prepare_request(%model: buffer, %text: buffer, %voice: buffer, %instructions: buffer, %seed: i64, %speed: f32) -> (buffer, buffer)
 
-global.rodata.def @slot_zero_voice = bytes("706f736974697665")
-
-global.rodata.def @slot_one_voice = bytes("6e65676174697665")
-
 func.def public @speech_prepare_request_v2(%model: buffer, %text: buffer, %voice: buffer, %instructions: buffer, %seed: i64, %speed: f32) -> (buffer, buffer) {
   %origin = index.constant 0 : offset
   %voice_slot = buffer.view %voice[%origin] : buffer -> view<1xi32>
   %slot = view.load %voice_slot[0] : view<1xi32> -> i32
   %c0 = scalar.constant 0 : i32
   %first = scalar.cmpi eq, %slot, %c0 : i32
-  %positive = global.load @slot_zero_voice : buffer
-  %negative = global.load @slot_one_voice : buffer
+  %positive = buffer.constant utf8("positive") : buffer
+  %negative = buffer.constant utf8("negative") : buffer
   %name = scf.select %first, %positive, %negative : buffer
   %state, %payload = func.call @prepare_request(%model, %text, %name, %instructions, %seed, %speed) : (buffer, buffer, buffer, buffer, i64, f32) -> (buffer, buffer)
   func.return %state, %payload : buffer, buffer

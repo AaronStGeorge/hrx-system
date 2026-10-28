@@ -346,6 +346,35 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    rodata_pool
+  HDRS
+    "rodata_pool.h"
+  SRCS
+    "rodata_pool.c"
+  DEPS
+    iree::base::internal
+    iree::base::internal::arena
+    loom::ir
+    loom::ops::global
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    rodata_pool_test
+  SRCS
+    "rodata_pool_test.cc"
+  DEPS
+    ::rodata_pool
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::global
+)
+
+loom_cc_library(
+  NAME
     module_projection
   HDRS
     "module_projection.h"

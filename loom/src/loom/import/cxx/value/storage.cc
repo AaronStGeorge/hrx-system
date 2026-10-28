@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <numeric>
 
+#include "loom/import/cxx/source/constants.h"
 #include "loom/import/cxx/source/error.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
@@ -295,23 +296,90 @@ StorageAccess Storage::subscript(StorageProjection base, loom_value_id_t index,
 
 StorageAllocation Storage::allocate(const cxx::Type* type,
                                     loom_value_fact_memory_space_t memory_space,
-                                    int64_t explicit_alignment,
-                                    cxx::AST* owner) {
+                                    int64_t explicit_alignment, cxx::AST* owner,
+                                    const ObjectRepresentation* initializer) {
   auto bytes = types_.storage_size(type, owner);
   auto* layout = unit_.control()->memoryLayout();
   auto alignment = layout->alignmentOf(type);
   if (!alignment) {
     diagnostics_.reject(unit_, owner, "unknown object alignment");
   }
-  auto length =
-      scalars_.integer(bytes, LOOM_SCALAR_TYPE_OFFSET, locations_.get(owner));
-  loom_op_t* op;
-  check(loom_buffer_alloca_build(
-      &builder_, /*build_flags=*/0, memory_space, LOOM_VALUE_ID_INVALID,
-      std::max<int64_t>(*alignment, explicit_alignment), length,
-      loom_type_buffer(), locations_.get(owner), &op));
-  return record_fixed(loom_op_results(op)[0], type, memory_space, bytes,
+  const int64_t base_alignment =
+      std::max<int64_t>(*alignment, explicit_alignment);
+  loom_value_id_t root;
+  if (initializer) {
+    root = literal(iree_make_const_byte_span(initializer->bytes.data(),
+                                             initializer->bytes.size()),
+                   initializer->is_utf8, memory_space, base_alignment, owner);
+  } else {
+    auto length =
+        scalars_.integer(bytes, LOOM_SCALAR_TYPE_OFFSET, locations_.get(owner));
+    loom_op_t* op;
+    check(loom_buffer_alloca_build(&builder_, /*build_flags=*/0, memory_space,
+                                   LOOM_VALUE_ID_INVALID, base_alignment,
+                                   length, loom_type_buffer(),
+                                   locations_.get(owner), &op));
+    root = loom_buffer_alloca_result(op);
+  }
+  return record_fixed(root, type, memory_space, bytes, *alignment, owner);
+}
+
+StorageAllocation Storage::constant(const cxx::Type* type,
+                                    const ObjectRepresentation& contents,
+                                    cxx::AST* owner) {
+  auto bytes = types_.storage_size(type, owner);
+  auto alignment = unit_.control()->memoryLayout()->alignmentOf(type);
+  if (!alignment) {
+    diagnostics_.reject(unit_, owner, "unknown object alignment");
+  }
+  auto root = literal(
+      iree_make_const_byte_span(contents.bytes.data(), contents.bytes.size()),
+      contents.is_utf8, LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT, *alignment,
+      owner);
+  return record_fixed(root, type, LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT, bytes,
                       *alignment, owner);
+}
+
+loom_value_id_t Storage::literal(iree_const_byte_span_t contents, bool is_utf8,
+                                 loom_value_fact_memory_space_t memory_space,
+                                 int64_t alignment, cxx::AST* owner) {
+  loom_op_t* op;
+  const bool immutable = memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT;
+  if (immutable) {
+    check(loom_buffer_constant_build(
+        &builder_, LOOM_BUFFER_CONSTANT_BUILD_FLAG_HAS_ALIGNMENT, alignment,
+        contents, loom_type_buffer(), locations_.get(owner), &op));
+    if (is_utf8) {
+      auto bytes = loom_buffer_constant_contents(op);
+      check(loom_buffer_constant_set_contents(
+          builder_.module, op,
+          loom_attr_utf8(iree_make_string_view(
+              reinterpret_cast<const char*>(bytes.data), bytes.data_length))));
+    }
+  } else {
+    check(loom_buffer_alloca_init_build(
+        &builder_, /*build_flags=*/0, memory_space, LOOM_VALUE_ID_INVALID,
+        alignment, contents, loom_type_buffer(), locations_.get(owner), &op));
+    if (is_utf8) {
+      auto bytes = loom_buffer_alloca_init_contents(op);
+      check(loom_buffer_alloca_init_set_contents(
+          builder_.module, op,
+          loom_attr_utf8(iree_make_string_view(
+              reinterpret_cast<const char*>(bytes.data), bytes.data_length))));
+    }
+  }
+  auto root = loom_op_results(op)[0];
+  roots_[root] = {
+      .memory_space = memory_space,
+      .allocation =
+          Allocation{
+              .byte_length = static_cast<int64_t>(contents.data_length),
+              .array_type = nullptr,
+              .byte_offset = LOOM_VALUE_ID_INVALID,
+              .array_view = std::nullopt,
+          },
+  };
+  return root;
 }
 
 StorageAllocation Storage::admit_fixed(

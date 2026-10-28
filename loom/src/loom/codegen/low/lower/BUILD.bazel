@@ -159,6 +159,7 @@ loom_cc_library(
         "//loom/src/loom/ops/view",
         "//loom/src/loom/rewrite:materialize",
         "//loom/src/loom/rewrite:remap",
+        "//loom/src/loom/rewrite:rodata_pool",
         "//loom/src/loom/sanitizer:options",
         "//loom/src/loom/target:contract",
         "//loom/src/loom/target:facts",

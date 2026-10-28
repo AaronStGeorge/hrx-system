@@ -4,10 +4,6 @@ func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
 
 func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
 
-global.rodata.def @request_root = bytes("656d626564")
-
-global.rodata.def @request_units = bytes("666978747572652e756e697473")
-
 // Repack the same ragged cohort at its actual token/row extent. The requested
 // executable specializes launch dimensions and command workspace together.
 func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %packed: buffer) -> (i32, buffer, buffer) {
@@ -52,8 +48,8 @@ func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %
   %payload = buffer.alloca<private> align(16) %payload_bytes : buffer
   buffer.copy %old_payload[%origin], %payload[%origin], %header_bytes
   buffer.copy %old_payload[%old_tokens], %payload[%new_tokens], %token_bytes
-  %root = global.load @request_root : buffer
-  %key = global.load @request_units : buffer
+  %root = buffer.constant utf8("embed") : buffer
+  %key = buffer.constant utf8("fixture.units") : buffer
   %stage = func.call @stage(%root, %units64) : (buffer, i64) -> (i32)
   func.call @config_i64(%stage, %key, %units64) : (i32, buffer, i64)
   func.return %stage, %payload, %plan : i32, buffer, buffer

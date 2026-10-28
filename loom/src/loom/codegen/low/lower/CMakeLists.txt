@@ -144,6 +144,7 @@ loom_cc_library(
     loom::ops::view
     loom::rewrite::materialize
     loom::rewrite::remap
+    loom::rewrite::rodata_pool
     loom::sanitizer::options
     loom::target::abi::c::signature_layout
     loom::target::contract

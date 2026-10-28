@@ -10,39 +10,9 @@ func.decl import("runner") @execute_6(%stage: i32, %b0: hal.buffer, %b1: hal.buf
 
 func.decl import("runner") @feedback(%slot: i32, %source: hal.buffer, %offset: i64, %length: i64) -> (i64)
 
-global.rodata.def @name = bytes("666978747572652d74657874")
-
-global.rodata.def @empty = bytes("")
-
-global.rodata.def @no_tools = bytes("5b5d")
-
-global.rodata.def @terminal = bytes("23")
-
-global.rodata.def @assistant = bytes("617373697374616e74")
-
-global.rodata.def @user = bytes("75736572")
-
-global.rodata.def @system = bytes("73797374656d")
-
-global.rodata.def @thinking = bytes("656e61626c655f7468696e6b696e67")
-
-global.rodata.def @effort = bytes("726561736f6e696e675f6566666f7274")
-
-global.rodata.def @preserve = bytes("70726573657276655f7468696e6b696e67")
-
-global.rodata.def @template = bytes("636861745f74656d706c6174655f6b7761726773")
-
-global.rodata.def @options = bytes("6d6f64656c5f6f7074696f6e73")
-
-global.rodata.def @invalid = bytes("746578742066697874757265206163636570747320612f622f78206d6573736167657320776974686f757420746f6f6c732c20726561736f6e696e67206f72206d6f64656c206f7074696f6e73")
-
-global.rodata.def @unsupported = bytes("74657874206669787475726520726571756972657320706f6f6c65642065706f63687320776974686f7574204d5450")
-
-global.rodata.def @overflow = bytes("696e70757420657863656564732074686520617661696c61626c6520636f6e746578742073697a65")
-
 func.def @check(%condition: i1) {
   %value = scalar.extui %condition : i1 to i32
-  %error = global.load @invalid : buffer
+  %error = buffer.constant utf8("text fixture accepts a/b/x messages without tools, reasoning or model options") : buffer
   func.call @require(%value, %error) : (i32, buffer)
   func.return
 }
@@ -76,23 +46,13 @@ func.def @join(%a: buffer, %b: buffer) -> (buffer) {
 }
 
 func.def public @model_name() -> (buffer) {
-  %name = global.load @name : buffer
+  %name = buffer.constant utf8("fixture-text") : buffer
   func.return %name : buffer
 }
 
 func.decl import("json") @parse_i64(%source: buffer, %offset: i64, %length: i64) -> (i64)
 
 func.decl import("json") @parse_f64(%source: buffer, %offset: i64, %length: i64) -> (f64)
-
-global.rodata.def @temperature = bytes("74656d7065726174757265")
-
-global.rodata.def @top_p = bytes("746f705f70")
-
-global.rodata.def @top_k = bytes("746f705f6b")
-
-global.rodata.def @seed = bytes("73656564")
-
-global.rodata.def @sampling_error = bytes("74657874206669787475726520737570706f7274732074656d70657261747572653d302c20746f705f703d312c20746f705f6b3d30206f72203120616e6420696e7465676572207365656473")
 
 func.def public @request_defaults(%options: buffer) -> (buffer) {
   %fields, %type, %count = func.call @members(%options) : (buffer) -> (buffer, i32, i64)
@@ -102,7 +62,7 @@ func.def public @request_defaults(%options: buffer) -> (buffer) {
   %empty_options = scalar.cmpi eq, %count, %empty_count : i64
   %valid = scalar.andi %typed, %empty_options : i1
   func.call @check(%valid) : (i1)
-  %empty = global.load @empty : buffer
+  %empty = buffer.constant utf8("") : buffer
   func.return %empty : buffer
 }
 
@@ -118,10 +78,10 @@ func.def public @request_options(%defaults: buffer, %request: buffer, %nonce: i6
   %records = buffer.view %fields[%origin] : buffer -> view<[%extent]x5xi64>
   %capacity = buffer.length %request
   %storage = buffer.alloca<private> align(1) %capacity : buffer
-  %temperature = global.load @temperature : buffer
-  %top_p = global.load @top_p : buffer
-  %top_k = global.load @top_k : buffer
-  %seed = global.load @seed : buffer
+  %temperature = buffer.constant utf8("temperature") : buffer
+  %top_p = buffer.constant utf8("top_p") : buffer
+  %top_k = buffer.constant utf8("top_k") : buffer
+  %seed = buffer.constant utf8("seed") : buffer
   scf.for %i = [%c0 to %extent step %c1] {
     %begin = view.load %records[%i, 0] : view<[%extent]x5xi64> -> i64
     %length = view.load %records[%i, 1] : view<[%extent]x5xi64> -> i64
@@ -158,7 +118,7 @@ func.def public @request_options(%defaults: buffer, %request: buffer, %nonce: i6
       scf.yield %valid : i1
     }
     %condition = scalar.extui %valid : i1 to i32
-    %error = global.load @sampling_error : buffer
+    %error = buffer.constant utf8("text fixture supports temperature=0, top_p=1, top_k=0 or 1 and integer seeds") : buffer
     func.call @require(%condition, %error) : (i32, buffer)
   }
   func.return %defaults : buffer
@@ -187,7 +147,7 @@ func.def public @chat_begin(%request: buffer, %tools: buffer) -> (buffer, i64) {
   %c0_index = index.constant 0 : index
   %c1 = index.constant 1 : index
   %c0_i64 = scalar.constant 0 : i64
-  %empty = global.load @empty : buffer
+  %empty = buffer.constant utf8("") : buffer
   %tool_fields, %tool_type, %tool_count = func.call @members(%tools) : (buffer) -> (buffer, i32, i64)
   %bounded_tool_count = scalar.assume %tool_count [range(%tool_count, 0, 4096)] : i64
   %tool_bytes = index.cast %bounded_tool_count : i64 to offset
@@ -201,11 +161,11 @@ func.def public @chat_begin(%request: buffer, %tools: buffer) -> (buffer, i64) {
   %count_bounded = scalar.assume %count64 [range(%count64, 0, 2147483647)] : i64
   %count = index.cast %count_bounded : i64 to index
   %records = buffer.view %fields[%c0] : buffer -> view<[%count]x5xi64>
-  %thinking = global.load @thinking : buffer
-  %effort = global.load @effort : buffer
-  %preserve = global.load @preserve : buffer
-  %template = global.load @template : buffer
-  %options = global.load @options : buffer
+  %thinking = buffer.constant utf8("enable_thinking") : buffer
+  %effort = buffer.constant utf8("reasoning_effort") : buffer
+  %preserve = buffer.constant utf8("preserve_thinking") : buffer
+  %template = buffer.constant utf8("chat_template_kwargs") : buffer
+  %options = buffer.constant utf8("model_options") : buffer
   scf.for %i = [%c0_index to %count step %c1] {
     %begin64 = view.load %records[%i, 0] : view<[%count]x5xi64> -> i64
     %length64 = view.load %records[%i, 1] : view<[%count]x5xi64> -> i64
@@ -331,17 +291,17 @@ func.def public @chat_message(%raw: buffer, %role: buffer, %content: buffer, %pa
   %c0_i64 = scalar.constant 0 : i64
   %plain = scalar.cmpi eq, %fields, %c0_i64 : i64
   func.call @check(%plain) : (i1)
-  %assistant_role = global.load @assistant : buffer
-  %user_role = global.load @user : buffer
-  %system_role = global.load @system : buffer
+  %assistant_role = buffer.constant utf8("assistant") : buffer
+  %user_role = buffer.constant utf8("user") : buffer
+  %system_role = buffer.constant utf8("system") : buffer
   %assistant = func.call @equal(%role, %assistant_role) : (buffer, buffer) -> (i1)
   %user = func.call @equal(%role, %user_role) : (buffer, buffer) -> (i1)
   %system = func.call @equal(%role, %system_role) : (buffer, buffer) -> (i1)
   %ordinary = scalar.ori %user, %system : i1
   %supported = scalar.ori %ordinary, %assistant : i1
   func.call @check(%supported) : (i1)
-  %terminal = global.load @terminal : buffer
-  %empty = global.load @empty : buffer
+  %terminal = buffer.constant utf8("#") : buffer
+  %empty = buffer.constant utf8("") : buffer
   %suffix = scf.select %assistant, %terminal, %empty : buffer
   %has_parts = scalar.cmpi ne, %part_count, %c0_i64 : i64
   %ordered, %plan = scf.if %has_parts -> (buffer, buffer) {
@@ -355,21 +315,21 @@ func.def public @chat_message(%raw: buffer, %role: buffer, %content: buffer, %pa
 }
 
 func.def public @chat_end(%state: i64) -> (buffer, i64) {
-  %empty = global.load @empty : buffer
+  %empty = buffer.constant utf8("") : buffer
   func.return %empty, %state : buffer, i64
 }
 
 func.def public @render_tool(%name: buffer, %arguments: buffer, %ordinal: i64) -> (buffer, i64) {
   %c0 = scalar.constant 0 : i32
   %c0_i64 = scalar.constant 0 : i64
-  %error = global.load @invalid : buffer
+  %error = buffer.constant utf8("text fixture accepts a/b/x messages without tools, reasoning or model options") : buffer
   func.call @require(%c0, %error) : (i32, buffer)
-  %empty = global.load @empty : buffer
+  %empty = buffer.constant utf8("") : buffer
   func.return %empty, %c0_i64 : buffer, i64
 }
 
 func.def public @parse_tools(%schemas: buffer, %response: buffer, %truncated: i64) -> (buffer) {
-  %empty = global.load @no_tools : buffer
+  %empty = buffer.constant utf8("[]") : buffer
   func.return %empty : buffer
 }
 
@@ -421,7 +381,7 @@ func.def public @prepare_input(%text: buffer, %markers: buffer, %marker_count: i
   %tokens, %count = func.call @encode(%input, %c0_i32, %probe) : (buffer, i32, i64) -> (buffer, i64)
   %fits = scalar.cmpi ule, %count, %capacity : i64
   %fits32 = scalar.extui %fits : i1 to i32
-  %error = global.load @overflow : buffer
+  %error = buffer.constant utf8("input exceeds the available context size") : buffer
   func.call @require(%fits32, %error) : (i32, buffer)
   %bounded_marker_count = scalar.assume %marker_count [range(%marker_count, 0, 4096)] : i64
   %image_count = index.cast %bounded_marker_count : i64 to index
@@ -708,7 +668,7 @@ func.def public @step(%state: buffer, %initialize: i32, %source_position: i32, %
   %c0_i64 = scalar.constant 0 : i64
   %source_advance = scalar.muli %input_count, %c2 : i32
   %next_source_position = scalar.addi %source_position, %source_advance : i32
-  %error = global.load @unsupported : buffer
+  %error = buffer.constant utf8("text fixture requires pooled epochs without MTP") : buffer
   func.call @require(%c0, %error) : (i32, buffer)
   func.return %c0_i64, %next_source_position : i64, i32
 }

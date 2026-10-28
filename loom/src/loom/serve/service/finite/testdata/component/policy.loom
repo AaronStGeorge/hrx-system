@@ -1,9 +1,7 @@
 func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
 
-global.rodata.def @root = bytes("707265706172655f77656967687473")
-
 func.def public @prepare_weight(%key: buffer) -> (i64) {
-  %root = global.load @root : buffer
+  %root = buffer.constant utf8("prepare_weights") : buffer
   %tag = scalar.constant 0 : i64
   %command = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
   %bytes = scalar.constant 4 : i64

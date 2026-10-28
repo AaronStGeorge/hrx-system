@@ -6,21 +6,9 @@ func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
 
 func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
 
-global.rodata.def @root = bytes("656d626564")
-
-global.rodata.def @units_key = bytes("666978747572652e756e697473")
-
-global.rodata.def @tokenizer = bytes("746f6b656e697a65722e6a736f6e")
-
-global.rodata.def @name = bytes("666978747572652d656d62656464696e67")
-
-global.rodata.def @option_key = bytes("62617463685f756e697473")
-
-global.rodata.def @invalid = bytes("657870656374207b2262617463685f756e697473223a312e2e3235367d206f72207b7d")
-
 func.def @check(%condition: i1) {
   %condition32 = scalar.extui %condition : i1 to i32
-  %error = global.load @invalid : buffer
+  %error = buffer.constant utf8("expect {\"batch_units\":1..256} or {}") : buffer
   func.call @require(%condition32, %error) : (i32, buffer)
   func.return
 }
@@ -57,7 +45,7 @@ func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64
     %nonnegative_1 = scalar.assume %key_begin [range(%key_begin, 0, 9223372036854775807)] : i64
     %key_offset = index.cast %nonnegative_1 : i64 to offset
     %key = buffer.view %options[%key_offset] : buffer -> view<11xi8>
-    %expected = global.load @option_key : buffer
+    %expected = buffer.constant utf8("batch_units") : buffer
     %expected_view = buffer.view %expected[%origin] : buffer -> view<11xi8>
     %c11 = index.constant 11 : index
     scf.for %i = [%c0 to %c11 step %c1] {
@@ -98,9 +86,9 @@ func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64
   %bounded = scalar.cmpi ule, %units, %maximum : i64
   %valid_units = scalar.andi %positive, %bounded : i1
   func.call @check(%valid_units) : (i1)
-  %root = global.load @root : buffer
+  %root = buffer.constant utf8("embed") : buffer
   %stage = func.call @stage(%root, %units) : (buffer, i64) -> (i32)
-  %key = global.load @units_key : buffer
+  %key = buffer.constant utf8("fixture.units") : buffer
   func.call @config_i64(%stage, %key, %units) : (i32, buffer, i64)
   %c8 = index.constant 8 : offset
   %state = buffer.alloca<private> align(8) %c8 : buffer
@@ -111,7 +99,7 @@ func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64
   %payload_data = scalar.muli %units, %c20 : i64
   %payload = scalar.addi %payload_data, %c16 : i64
   %output = scalar.muli %units, %c16 : i64
-  %tokenizer = global.load @tokenizer : buffer
-  %name = global.load @name : buffer
+  %tokenizer = buffer.constant utf8("tokenizer.json") : buffer
+  %name = buffer.constant utf8("fixture-embedding") : buffer
   func.return %units, %payload, %output, %output, %tokenizer, %name, %state : i64, i64, i64, i64, buffer, buffer, buffer
 }

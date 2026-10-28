@@ -35,7 +35,9 @@ enum {
   LOOM_OP_BUFFER_FILL = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 11),
   LOOM_OP_BUFFER_COMPARE = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 12),
   LOOM_OP_BUFFER_FENCE = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 13),
-  LOOM_OP_BUFFER_COUNT_ = 14,
+  LOOM_OP_BUFFER_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 14),
+  LOOM_OP_BUFFER_ALLOCA_INIT = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 15),
+  LOOM_OP_BUFFER_COUNT_ = 16,
 };
 
 // LOOM_OP_BUFFER_ALLOCA: Create a fixed-frame scratch buffer root in an allocatable memory space. Each execution produces a distinct storage identity; identical allocas must not be commoned. The byte length is the requested physical byte count for the execution. Targets requiring a static frame reserve its proven finite non-negative maximum. base_alignment is the minimum byte alignment of the root storage base. Target lowering determines which allocatable spaces are legal for the containing program kind. The execution frame owns the allocation; the result borrows that storage and has no explicit release obligation. An explicit pool selects the backing allocation resource; memory_space remains an access requirement that resource must satisfy. The pool is borrowed and does not extend the allocation lifetime. Omitting it uses the containing execution's allocation resource for that space, which must be unambiguous before materialization. Lowering cannot replace an explicit pool with an ambient allocation resource.
@@ -320,6 +322,66 @@ iree_status_t loom_buffer_fence_build(
     loom_atomic_ordering_t ordering,
     loom_location_id_t location,
     loom_op_t** out_op);
+
+// LOOM_OP_BUFFER_CONSTANT: Borrow anonymous immutable executable storage containing the exact payload bytes. Evaluation performs no per-invocation allocation or initialization. Equal contents may share storage, with no distinct address identity guarantee. The byte extent excludes alignment padding; UTF-8 adds no terminator or normalization. Empty payloads produce a nonnull zero-length buffer. Omitted alignment means one byte. Named objects with identity or linkage requirements use global.rodata.def.
+// %message = buffer.constant utf8("ready") : buffer
+LOOM_DEFINE_ISA(loom_buffer_constant_isa, LOOM_OP_BUFFER_CONSTANT)
+LOOM_DEFINE_RESULT(loom_buffer_constant_result, 0)
+LOOM_DEFINE_ATTR_BYTES(loom_buffer_constant_contents, 0)
+LOOM_DEFINE_ATTR_I64(loom_buffer_constant_alignment, 1)
+enum loom_buffer_constant_build_flag_bits_e {
+  LOOM_BUFFER_CONSTANT_BUILD_FLAG_HAS_ALIGNMENT = 1u << 0,
+};
+typedef uint32_t loom_buffer_constant_build_flags_t;
+iree_status_t loom_buffer_constant_build(
+    loom_builder_t* builder,
+    loom_buffer_constant_build_flags_t build_flags,
+    loom_optional int64_t alignment,
+    iree_const_byte_span_t contents,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_buffer_constant_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_buffer_constant_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_BUFFER_ALLOCA_INIT: Create fresh fixed-frame storage initialized with the exact payload bytes. Extent is the payload length, without implicit terminators or alignment padding. Ownership, lifetime, alignment, and backing-pool selection follow buffer.alloca; equal initializers never merge writable allocations. Workgroup initialization is collective: every workitem encounters the same dynamic instance in workgroup-uniform control, and the initialized bytes are visible to the whole workgroup before participants proceed. Other allocatable spaces initialize each invocation's independent storage without collective synchronization.
+// %scratch = buffer.alloca.init<private> align(1) utf8("ready") : buffer
+LOOM_DEFINE_ISA(loom_buffer_alloca_init_isa, LOOM_OP_BUFFER_ALLOCA_INIT)
+LOOM_DEFINE_OPTIONAL_OPERAND(loom_buffer_alloca_init_pool, 0)
+LOOM_DEFINE_RESULT(loom_buffer_alloca_init_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_buffer_alloca_init_base_alignment, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_buffer_alloca_init_memory_space, 1, loom_value_fact_memory_space_t)
+LOOM_DEFINE_ATTR_BYTES(loom_buffer_alloca_init_contents, 2)
+enum loom_buffer_alloca_init_build_flag_bits_e {
+  LOOM_BUFFER_ALLOCA_INIT_BUILD_FLAG_HAS_POOL = 1u << 0,
+};
+typedef uint32_t loom_buffer_alloca_init_build_flags_t;
+iree_status_t loom_buffer_alloca_init_build(
+    loom_builder_t* builder,
+    loom_buffer_alloca_init_build_flags_t build_flags,
+    loom_value_fact_memory_space_t memory_space,
+    loom_optional loom_may_consume loom_value_id_t pool,
+    int64_t base_alignment,
+    iree_const_byte_span_t contents,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+loom_trait_flags_t loom_buffer_alloca_init_effective_traits(
+    const loom_module_t* module, const loom_op_t* op);
+iree_status_t loom_buffer_alloca_init_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_buffer_alloca_init_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the buffer dialect.
 const loom_op_vtable_t* const* loom_buffer_dialect_vtables(

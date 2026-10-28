@@ -8,6 +8,7 @@
 #define LOOM_IMPORT_CXX_SOURCE_EXPRESSIONS_H_
 
 #include <cxx/ast_fwd.h>
+#include <cxx/literals_fwd.h>
 #include <cxx/symbols_fwd.h>
 #include <cxx/types_fwd.h>
 
@@ -23,6 +24,10 @@ cxx::ExpressionAST* strip_implicit_casts(cxx::ExpressionAST* expression);
 // Returns the semantic expression beneath implicit conversions, redundant
 // parentheses, and frontend wrappers around selected member initializers.
 cxx::ExpressionAST* unwrap_expression(cxx::ExpressionAST* expression);
+
+// Returns the string literal initializing one object, including a single
+// braced clause and transparent expression wrappers, or null otherwise.
+const cxx::StringLiteral* string_initializer(cxx::ExpressionAST* initializer);
 
 // Whether an expression denotes the implicit object parameter, including
 // transparent parentheses, conversions, and an explicit dereference of this.

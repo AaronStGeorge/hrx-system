@@ -799,6 +799,7 @@ loom_cc_library(
     loom::error::error_defs
     loom::error::parameter
     loom::ir
+    loom::ops::buffer
     loom::ops::kernel
     loom::ops::op_defs
     loom::util::fact_table

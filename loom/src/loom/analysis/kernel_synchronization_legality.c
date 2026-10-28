@@ -13,6 +13,7 @@
 #include "loom/error/parameter.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/kernel/launch_config.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
@@ -260,6 +261,11 @@ loom_kernel_synchronization_legality_barrier_uniform_scope(
     const loom_op_t* op) {
   loom_atomic_scope_t scope = LOOM_ATOMIC_SCOPE_COUNT_;
   switch (op->kind) {
+    case LOOM_OP_BUFFER_ALLOCA_INIT:
+      return loom_buffer_alloca_init_memory_space(op) ==
+                     LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP
+                 ? LOOM_VALUE_FACT_UNIFORM_SCOPE_WORKGROUP
+                 : LOOM_VALUE_FACT_UNIFORM_SCOPE_NONE;
     case LOOM_OP_KERNEL_BARRIER:
       scope = loom_kernel_barrier_scope(op);
       break;

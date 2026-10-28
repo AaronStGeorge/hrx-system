@@ -74,6 +74,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::ir
     loom::ir::facts
+    loom::ops::buffer
     loom::ops::kernel
     loom::ops::op_defs
     loom::ops::scf

@@ -16,22 +16,6 @@ func.decl import("runner") @execute_3(%stage: i32, %request: hal.buffer, %output
 
 func.decl import("runner") @feedback(%slot: i32, %source: hal.buffer, %offset: i64, %length: i64) -> (i64)
 
-global.rodata.def @base = bytes("62616e6b5f696d6167655f62617365")
-
-global.rodata.def @adapted = bytes("62616e6b5f696d6167655f61646170746564")
-
-global.rodata.def @first = bytes("66697273742e7361666574656e736f7273")
-
-global.rodata.def @second = bytes("7365636f6e642e7361666574656e736f7273")
-
-global.rodata.def @policy = bytes("6c6f6f6d2f7372632f6c6f6f6d2f73657276652f72756e74696d652f706172616d657465722f74657374646174612f776569676874732f706f6c6963792e6c6f6f6d")
-
-global.rodata.def @binding = bytes("62696e645f62616e6b73")
-
-global.rodata.def @tokenizer = bytes("746f6b656e697a65722e6a736f6e")
-
-global.rodata.def @name = bytes("706172616d657465722d696d616765")
-
 // The same program exposes its direct and versioned image service contracts.
 // The source-selected bind_banks callback remains an exact, unqualified export.
 func.def public @image_prepare_v1(%height: i64, %width: i64, %text: i64, %directory: buffer, %adapter: buffer, %options: buffer) -> (i64, i64, buffer, buffer, buffer) {
@@ -57,13 +41,13 @@ func.def public @image_generate_v1(%first: i32, %count: i32, %cursor: i32, %outp
 func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buffer, %adapter: buffer, %options: buffer) -> (i64, i64, buffer, buffer, buffer) {
   %c0 = scalar.constant 0 : i32
   %zero64 = scalar.constant 0 : i64
-  %first_path = global.load @first : buffer
-  %second_path = global.load @second : buffer
+  %first_path = buffer.constant utf8("first.safetensors") : buffer
+  %second_path = buffer.constant utf8("second.safetensors") : buffer
   %first = func.call @source(%directory, %first_path) : (buffer, buffer) -> (i32)
   %second = func.call @source(%directory, %second_path) : (buffer, buffer) -> (i32)
-  %root = global.load @base : buffer
+  %root = buffer.constant utf8("bank_image_base") : buffer
   %stage = func.call @stage(%root, %zero64) : (buffer, i64) -> (i32)
-  %policy = global.load @policy : buffer
+  %policy = buffer.constant utf8("loom/src/loom/serve/runtime/parameter/testdata/weights/policy.loom") : buffer
   func.call @parameter(%stage, %c0, %c0, %first, %policy) : (i32, i32, i32, i32, buffer)
   %capacity = scalar.constant 1073741824 : i64
   %arena = func.call @parameter_arena(%capacity) : (i64) -> (i32)
@@ -82,7 +66,7 @@ func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buff
     scf.yield %enabled : i1
   }
   scf.if %declare_binding {
-    %binding = global.load @binding : buffer
+    %binding = buffer.constant utf8("bind_banks") : buffer
     func.call @bind_parameters(%binding) : (buffer)
   }
   %origin = index.constant 0 : offset
@@ -94,8 +78,8 @@ func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buff
   view.store %second, %values[2] : i32, view<3xi32>
   %c1 = scalar.constant 1 : i64
   %input_capacity = scalar.constant 24 : i64
-  %tokenizer = global.load @tokenizer : buffer
-  %name = global.load @name : buffer
+  %tokenizer = buffer.constant utf8("tokenizer.json") : buffer
+  %name = buffer.constant utf8("parameter-image") : buffer
   func.return %c1, %input_capacity, %tokenizer, %name, %state : i64, i64, buffer, buffer, buffer
 }
 
@@ -119,7 +103,7 @@ func.def public @prepare_request(%state: buffer, %height: i64, %width: i64, %pro
 
 func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %payload: buffer) -> (i32, buffer) {
   %zero64 = scalar.constant 0 : i64
-  %root = global.load @adapted : buffer
+  %root = buffer.constant utf8("bank_image_adapted") : buffer
   %stage = func.call @stage(%root, %zero64) : (buffer, i64) -> (i32)
   %origin = index.constant 0 : offset
   %values = buffer.view %state[%origin] : buffer -> view<3xi32>
@@ -127,7 +111,7 @@ func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %
   %length = index.constant 4 : offset
   %sources = buffer.alloca<private> align(4) %length : buffer
   %source_view = buffer.view %sources[%origin] : buffer -> view<1xi32>
-  %policy = global.load @policy : buffer
+  %policy = buffer.constant utf8("loom/src/loom/serve/runtime/parameter/testdata/weights/policy.loom") : buffer
   %c0 = scalar.constant 0 : i32
   %begin = index.constant 1 : index
   %end = index.constant 3 : index

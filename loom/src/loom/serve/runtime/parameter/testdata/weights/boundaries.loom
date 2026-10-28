@@ -7,8 +7,6 @@ func.decl import("prepare") @source(%directory: buffer, %path: buffer) -> (i32)
 func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %input: i32, %source: i32, %policy: buffer)
 
 // The policy boundary rejects these declarations before native compilation.
-global.rodata.def @root = bytes("6164645f636f6e66696775726564")
-
 func.def public @prepare_weight(%key: buffer) -> (i64) {
   %c0_source = scalar.constant 0 : i32
   %origin = index.constant 0 : offset
@@ -24,7 +22,7 @@ func.def public @prepare_weight(%key: buffer) -> (i64) {
   %multiple = scalar.cmpi eq, %letter, %s : i32
   %undeclared = scalar.cmpi eq, %letter, %u : i32
   %c0 = scalar.constant 0 : i64
-  %root = global.load @root : buffer
+  %root = buffer.constant utf8("add_configured") : buffer
   scf.if %undeclared {
   } else {
     %command = scf.if %direct -> (i32) {

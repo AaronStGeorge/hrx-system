@@ -964,6 +964,57 @@ kernel.def @scratch() {
 
 
 @pytest.mark.parametrize(
+    ("payload", "literal"),
+    [
+        ('bytes("")', '""'),
+        ('utf8("")', 'u8""'),
+        ('bytes("00313233ff4142")', '"\\000123\\377AB"'),
+        ('utf8("café 🧵\\u0000")', 'u8"café 🧵\\000"'),
+        ('bytes("225c0a0d09")', '"\\"\\\\\\n\\r\\t"'),
+    ],
+)
+def test_preserves_exact_inline_payload_spelling(payload: str, literal: str) -> None:
+    source = f"""\
+kernel.def @literal() {{
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+}} launch() {{
+  %payload = buffer.constant align(16) {payload} : buffer
+  kernel.return
+}}
+"""
+    assert (
+        render_module(load_module(source.encode()))
+        == f"""\
+#include <loomcxx/kernel.h>
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void literal() {{
+  auto* payload = loom::buffer::constant<16>({literal});
+}}
+"""
+    )
+
+
+def test_rejects_writing_immutable_inline_storage() -> None:
+    source = """\
+kernel.def @readonly() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch() {
+  %payload = buffer.constant bytes("00") : buffer
+  %zero = index.constant 0 : offset
+  %view = buffer.view %payload[%zero] : buffer -> view<1xi8>
+  %value = scalar.constant 1 : i8
+  view.store %value, %view[0] : i8, view<1xi8>
+  kernel.return
+}
+"""
+    with pytest.raises(CxxRenderError, match="immutable buffer storage is written"):
+        render_module(load_module(source.encode()))
+
+
+@pytest.mark.parametrize(
     ("domain", "predicate", "expression"),
     [
         ("index", "eq", "lhs == rhs"),

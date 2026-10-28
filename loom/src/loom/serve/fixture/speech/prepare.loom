@@ -4,16 +4,6 @@ func.decl import("json") @members(%json: buffer) -> (buffer, i32, i64)
 
 func.decl import("input") @require(%condition: i32, %diagnostic: buffer)
 
-global.rodata.def @initialize = bytes("696e697469616c697a655f617564696f")
-
-global.rodata.def @step = bytes("737465705f617564696f")
-
-global.rodata.def @name = bytes("666978747572652d737065656368")
-
-global.rodata.def @empty = bytes("")
-
-global.rodata.def @invalid = bytes("7370656563682066697874757265206578706563747320656d707479206f7074696f6e73")
-
 // Two immutable conditioning entries are shared across independent streams.
 global.rodata.def @conditioning = bytes("0000003e000000be")
 
@@ -26,11 +16,11 @@ func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64
   %empty = scalar.cmpi eq, %count, %c0 : i64
   %valid = scalar.andi %object, %empty : i1
   %valid32 = scalar.extui %valid : i1 to i32
-  %diagnostic = global.load @invalid : buffer
+  %diagnostic = buffer.constant utf8("speech fixture expects empty options") : buffer
   func.call @require(%valid32, %diagnostic) : (i32, buffer)
-  %initialize = global.load @initialize : buffer
+  %initialize = buffer.constant utf8("initialize_audio") : buffer
   %first = func.call @stage(%initialize, %c0) : (buffer, i64) -> (i32)
-  %step = global.load @step : buffer
+  %step = buffer.constant utf8("step_audio") : buffer
   %second = func.call @stage(%step, %c1) : (buffer, i64) -> (i32)
   %rows = scalar.constant 4 : i64
   %work_bytes = scalar.constant 64 : i64
@@ -40,8 +30,8 @@ func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64
   %output = scalar.constant 144 : i64
   %frames = scalar.constant 5 : i64
   %rate = scalar.constant 24000 : i64
-  %empty_buffer = global.load @empty : buffer
-  %name = global.load @name : buffer
+  %empty_buffer = buffer.constant utf8("") : buffer
+  %name = buffer.constant utf8("fixture-speech") : buffer
   %conditioning = global.load @conditioning : buffer
   func.return %rows, %rows, %input, %conditioning_bytes, %stream, %work_bytes, %output, %output, %frames, %rate, %c1, %empty_buffer, %name, %empty_buffer, %conditioning : i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, buffer, buffer, buffer, buffer
 }

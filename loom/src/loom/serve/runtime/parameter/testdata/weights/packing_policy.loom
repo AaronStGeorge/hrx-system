@@ -12,26 +12,9 @@ func.decl import("input") @require(%condition: i32, %diagnostic: buffer)
 
 func.decl import("json") @members(%json: buffer) -> (buffer, i32, i64)
 
-// pack / interleaved / first_offset / second_offset
-global.rodata.def @root = bytes("7061636b")
-
-global.rodata.def @layout = bytes("696e7465726c6561766564")
-
-global.rodata.def @first_offset = bytes("66697273745f6f6666736574")
-
-global.rodata.def @second_offset = bytes("7365636f6e645f6f6666736574")
-
-// dtype / F32
-global.rodata.def @dtype = bytes("6474797065")
-
-global.rodata.def @f32 = bytes("463332")
-
-// expected two F32 factor checkpoints
-global.rodata.def @diagnostic = bytes("65787065637465642074776f2046333220666163746f7220636865636b706f696e7473")
-
 func.def @check(%valid: i1) {
   %condition = scalar.extui %valid : i1 to i32
-  %diagnostic = global.load @diagnostic : buffer
+  %diagnostic = buffer.constant utf8("expected two F32 factor checkpoints") : buffer
   func.call @require(%condition, %diagnostic) : (i32, buffer)
   func.return
 }
@@ -53,8 +36,8 @@ func.def @check_metadata(%metadata: buffer) {
   %c5_i64 = scalar.constant 5 : i64
   %c0_i64 = scalar.constant 0 : i64
   %false = scalar.constant false : i1
-  %expected_key = global.load @dtype : buffer
-  %expected_value = global.load @f32 : buffer
+  %expected_key = buffer.constant utf8("dtype") : buffer
+  %expected_value = buffer.constant utf8("F32") : buffer
   %found = scf.for %i = [%c0 to %extent step %c1](%found = %false : i1) -> (i1) {
     %key_offset = view.load %record_view[%i, 0] : view<[%extent]x5xi64> -> i64
     %key_length = view.load %record_view[%i, 1] : view<[%extent]x5xi64> -> i64
@@ -115,11 +98,11 @@ func.def public @prepare_weight(%key: buffer) -> (i64) {
   %letter = buffer.load.i8.u %key[%origin]
   %low_bit = scalar.andi %letter, %c1 : i32
   %interleaved = scalar.extui %low_bit : i32 to i64
-  %root = global.load @root : buffer
+  %root = buffer.constant utf8("pack") : buffer
   %stage = func.call @stage(%root, %c0_i64) : (buffer, i64) -> (i32)
-  %layout = global.load @layout : buffer
-  %first_key = global.load @first_offset : buffer
-  %second_key = global.load @second_offset : buffer
+  %layout = buffer.constant utf8("interleaved") : buffer
+  %first_key = buffer.constant utf8("first_offset") : buffer
+  %second_key = buffer.constant utf8("second_offset") : buffer
   func.call @config_i64(%stage, %layout, %interleaved) : (i32, buffer, i64)
   func.call @config_i64(%stage, %first_key, %first) : (i32, buffer, i64)
   func.call @config_i64(%stage, %second_key, %second) : (i32, buffer, i64)

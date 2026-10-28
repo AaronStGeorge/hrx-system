@@ -9,8 +9,13 @@
 #include <cxx/ast.h>
 #include <cxx/ast_interpreter.h>
 #include <cxx/ast_visitor.h>
+#include <cxx/literals.h>
 #include <cxx/symbols.h>
 #include <cxx/translation_unit.h>
+
+#include <utility>
+
+#include "iree/base/internal/unicode.h"
 
 namespace loom::cxx_import {
 namespace {
@@ -125,6 +130,23 @@ class PureConstant final : private cxx::ASTVisitor {
 };
 
 }  // namespace
+
+std::optional<ObjectRepresentation> object_representation(
+    cxx::TranslationUnit& unit, const cxx::Type* type,
+    const cxx::ConstValue& value, const cxx::StringLiteral* string) {
+  cxx::ASTInterpreter interpreter(&unit);
+  auto bytes = interpreter.objectRepresentation(value, type);
+  if (!bytes) {
+    return std::nullopt;
+  }
+  auto traits = unit.typeTraits();
+  const bool is_utf8 =
+      string && string->codeUnitSize() == 1 && traits.is_array(type) &&
+      traits.is_char_type(traits.remove_cv(traits.get_element_type(type))) &&
+      iree_unicode_utf8_validate(iree_make_string_view(
+          reinterpret_cast<const char*>(bytes->data()), bytes->size()));
+  return ObjectRepresentation{std::move(*bytes), is_utf8};
+}
 
 std::optional<cxx::ConstValue> scalar_constant(cxx::TranslationUnit& unit,
                                                cxx::ExpressionAST* expression) {

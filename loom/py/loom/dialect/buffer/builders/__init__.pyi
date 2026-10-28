@@ -8,7 +8,7 @@ from collections.abc import Sequence
 
 from loom.builder import TiedResultSpec, ValueRef
 from loom.builders import DialectBuilder
-from loom.ir import Type
+from loom.ir import Type, Utf8Attr
 
 class BufferBuilder(DialectBuilder):
     def alloca(
@@ -155,3 +155,27 @@ class BufferBuilder(DialectBuilder):
         ordering: str,
         location_id: int | None = ...,
     ) -> None: ...
+    def constant(
+        self,
+        *,
+        alignment: int | None = ...,
+        contents: bytes | Utf8Attr,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...
+    def alloca_init(
+        self,
+        *,
+        memory_space: str,
+        pool: ValueRef | None = ...,
+        base_alignment: int,
+        contents: bytes | Utf8Attr,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...

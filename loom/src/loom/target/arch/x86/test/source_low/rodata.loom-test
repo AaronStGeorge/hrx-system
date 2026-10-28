@@ -28,10 +28,8 @@ x86.target<scalar> @__loom_target_context_0_0
 // The same scalar address descriptor feeds vector memory selection without
 // copying the data into mutable storage or scalarizing the load.
 // RUN: emit source-low target=x86:avx2 output=module
-global.rodata.def @table = align(16) bytes("0000803f000000400000404000008040")
-
 func.def public @copy_table(%output: buffer) {
-  %table = global.load @table : buffer
+  %table = buffer.constant align(16) bytes("0000803f000000400000404000008040") : buffer
   %origin = index.constant 0 : offset
   %source = buffer.view %table[%origin] : buffer -> view<4xf32>
   %target = buffer.view %output[%origin] : buffer -> view<4xf32>
@@ -41,13 +39,55 @@ func.def public @copy_table(%output: buffer) {
 }
 
 // ----
-global.rodata.def @table = align(16) bytes("0000803f000000400000404000008040")
-
 low.func.def public target<x86.avx2.core>(@__loom_target_context_0_0) abi(object_function) @copy_table(%output: reg<x86.gpr64>) asm {
-  %table = lea.symbol.gpr64 @table
+  %table = lea.symbol.gpr64 @__low_rodata_a139578e
   %values = vmovdqu32.load.xmm %table {disp32 = 0}
   vmovdqu32.store.xmm %values, %output {disp32 = 0}
   return
 }
+
+global.rodata.def @__low_rodata_a139578e = align(16) bytes("0000803f000000400000404000008040")
+
+x86.target<avx2> @__loom_target_context_0_0
+
+// ====
+
+// Initialized storage keeps a fresh stack object and uses the shared
+// buffer.copy lowering before subsequent edits and vector reads.
+// RUN: emit source-low target=x86:avx2 output=module
+func.def public @edit_table(%output: buffer, %input: index, %replacement: i32) {
+  %position = index.assume %input [range(%input, 0, 3)] : index
+  %scratch = buffer.alloca.init<private> align(16) bytes("01000000020000000300000004000000") : buffer
+  %origin = index.constant 0 : offset
+  %view = buffer.view %scratch[%origin] : buffer -> view<4xi32>
+  view.store %replacement, %view[%position] : i32, view<4xi32>
+  %target = buffer.view %output[%origin] : buffer -> view<4xi32>
+  %values = vector.load %view[0] : view<4xi32> -> vector<4xi32>
+  vector.store %values, %target[0] : vector<4xi32>, view<4xi32>
+  func.return
+}
+
+// ----
+low.func.def public target<x86.avx2.core>(@__loom_target_context_0_0) abi(object_function) @edit_table(%output: reg<x86.gpr64>, %position: reg<x86.gpr64>, %replacement: reg<x86.gpr32>) asm {
+  %3 = lea.symbol.gpr64 @__low_rodata_c251e68b
+  %4 = storage {byte_alignment = 16, byte_length = 16} : low.storage<private>
+  %scratch = storage_address %4 : low.storage<private> -> reg<x86.gpr64>
+  %6 = mov.imm64 0
+  low.br ^_bb1(%6: reg<x86.gpr64>)
+^_bb1(%7: reg<x86.gpr64>):
+  low.op.cond_br<x86.scalar.cmp.branch.imm.gpr64>(%7) {imm32 = 16, predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>)
+^_bb2:
+  %8 = movzx.load.indexed.u8.gpr32 %3, %7 {disp32 = 0, scale = 1}
+  mov.store.indexed.u8.gpr32 %8, %scratch, %7 {disp32 = 0, scale = 1}
+  %9 = lea.disp %7 {disp32 = 1}
+  low.br ^_bb1(%9: reg<x86.gpr64>)
+^_bb3:
+  mov.store.indexed.gpr32 %replacement, %scratch, %position {disp32 = 0, scale = 4}
+  %values = vmovdqu32.load.xmm %scratch {disp32 = 0}
+  vmovdqu32.store.xmm %values, %output {disp32 = 0}
+  return
+}
+
+global.rodata.def @__low_rodata_c251e68b = align(16) bytes("01000000020000000300000004000000")
 
 x86.target<avx2> @__loom_target_context_0_0
