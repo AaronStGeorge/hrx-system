@@ -96,9 +96,10 @@ exact goldens.
 
 Schedule queries build the production function model and scheduler directly.
 `emit low-schedule-json ... diagnostics=candidates output=none` compares
-candidate-decision diagnostics through inline annotations. Native residency
-policy tests supply resource curves directly to their owning C APIs; authored
-IR tests observe the program's dependencies, liveness, and scheduling results.
+candidate-decision diagnostics through inline annotations. Native residency and
+candidate-policy tests supply resource curves and scores directly to their
+owning C APIs. Authored IR tests use target-derived register capacities and
+observe the program's dependencies, liveness, and scheduling results.
 `emit low-allocation ... diagnostics=placement-decisions`
 similarly checks storage affinities directly instead of pinning incidental
 value IDs, interval endpoints, and physical register choices in JSON.

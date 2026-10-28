@@ -57,8 +57,9 @@ typedef struct loom_check_test_low_schedule_options_t {
   iree_string_view_t pressure_register_class;
   // Inclusive live-unit ceiling requested for scheduled pressure.
   uint32_t pressure_limit;
-  // Producer and consumer source nodes whose dependency timing is requested.
+  // Source-order producer node whose dependency timing is requested.
   uint32_t timing_producer_node;
+  // Source-order consumer node whose dependency timing is requested.
   uint32_t timing_consumer_node;
   // Dependency relation whose predecessor sets are observed.
   loom_check_test_low_schedule_dependency_query_t dependency_query;
@@ -68,11 +69,6 @@ typedef struct loom_check_test_low_schedule_options_t {
   loom_low_schedule_diagnostic_flags_t schedule_diagnostic_flags;
   // Invocation spaces whose synchronous boundary transport is being tested.
   loom_low_storage_space_set_t storage_transport_spaces;
-  // Low allocation budget overrides parsed from the RUN line.
-  loom_low_allocation_budget_t
-      allocation_budgets[LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_BUDGETS];
-  // Number of entries in |allocation_budgets|.
-  iree_host_size_t allocation_budget_count;
   // Presence of required or uniquely specified RUN options.
   loom_check_test_low_schedule_option_flags_t flags;
 } loom_check_test_low_schedule_options_t;
@@ -359,10 +355,9 @@ static iree_status_t loom_check_test_low_schedule_parse_option(
   } else if (iree_string_view_equal(name, IREE_SV("descriptor"))) {
     node_list = &options->descriptor_nodes;
   } else {
-    return loom_check_low_emit_parse_allocation_budget(
-        token, IREE_SV("low-schedule-query"), options->allocation_budgets,
-        IREE_ARRAYSIZE(options->allocation_budgets),
-        &options->allocation_budget_count);
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown low-schedule-query option '%.*s'",
+                            (int)name.size, name.data);
   }
   if (!iree_string_view_is_empty(*node_list)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -962,8 +957,6 @@ static iree_status_t loom_check_test_low_schedule_build(
   }
 
   loom_low_schedule_options_t schedule_options = {
-      .allocation_budgets = options->allocation_budgets,
-      .allocation_budget_count = options->allocation_budget_count,
       .emitter = emitter,
       .diagnostic_flags = options->schedule_diagnostic_flags,
       .flags = LOOM_LOW_SCHEDULE_FLAG_RETAIN_LIVENESS |
