@@ -93,6 +93,7 @@ loom_generated_cc_library(
         "//loom/src/loom/target:resolved_target",
         "//loom/src/loom/target:types",
         "//loom/src/loom/target/arch/amd/xdna:device_profile",
+        "//loom/src/loom/target/arch/amd/xdna:error_defs",
         "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
         "//loom/src/loom/target/arch/amd/xdna/aie2p:target_records",
         "//runtime/src/iree/base",

@@ -1436,21 +1436,6 @@ endif()
 if(LOOM_ARCH_AIE2P)
 loom_cc_library(
   NAME
-    bundle_fixup
-  HDRS
-    "emit/bundle_fixup.h"
-  SRCS
-    "emit/bundle_fixup.c"
-  DEPS
-    ::leaf_program
-    iree::base
-  PUBLIC
-)
-endif()
-
-if(LOOM_ARCH_AIE2P)
-loom_cc_library(
-  NAME
     bundle_plan
   HDRS
     "emit/bundle_plan.h"
@@ -1460,7 +1445,6 @@ loom_cc_library(
     ::bundle_alignment
     ::bundle_analysis
     ::bundle_encoding
-    ::bundle_fixup
     ::core_descriptors
     ::core_structure
     ::descriptor_encoding

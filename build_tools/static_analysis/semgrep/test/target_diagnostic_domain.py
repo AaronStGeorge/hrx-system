@@ -59,3 +59,9 @@ message = "The selected GPU target has no compatible lowering."
 
 # ok: iree.loom.target-diagnostics-are-target-generic
 fix_hint = "Select a target-specific lowering with the required semantics."
+
+# ruleid: iree.loom.arch-target-record-diagnostics-use-own-domain
+error = "LOOM_ERR_TARGET_082"
+
+# ok: iree.loom.arch-target-record-diagnostics-use-own-domain
+error = "LOOM_ERR_XDNA_062"

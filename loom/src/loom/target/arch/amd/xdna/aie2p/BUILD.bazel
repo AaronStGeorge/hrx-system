@@ -1227,16 +1227,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "bundle_fixup",
-    srcs = ["emit/bundle_fixup.c"],
-    hdrs = ["emit/bundle_fixup.h"],
-    deps = [
-        ":leaf_program",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "bundle_plan",
     srcs = ["emit/bundle_plan.c"],
     hdrs = ["emit/bundle_plan.h"],
@@ -1244,7 +1234,6 @@ loom_cc_library(
         ":bundle_alignment",
         ":bundle_analysis",
         ":bundle_encoding",
-        ":bundle_fixup",
         ":core_descriptors",
         ":core_structure",
         ":descriptor_encoding",

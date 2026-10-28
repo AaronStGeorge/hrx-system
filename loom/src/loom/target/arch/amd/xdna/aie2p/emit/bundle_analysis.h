@@ -89,8 +89,8 @@ typedef struct loom_aie2p_bundle_plan_analysis_t {
   iree_host_size_t call_fixup_count;
   // Accepted local-storage address fixups in source packet order.
   loom_aie2p_planned_storage_fixup_t* storage_fixups;
-  // Fixup index for each scheduled packet, or UINT32_MAX when absent.
-  uint32_t* storage_fixup_indices_by_packet;
+  // Address fixup index for each scheduled packet, or UINT32_MAX when absent.
+  uint32_t* address_fixup_indices_by_packet;
   // Number of accepted records in |storage_fixups|.
   iree_host_size_t storage_fixup_count;
   // Symbolic read-only data addresses requiring placement fixups.

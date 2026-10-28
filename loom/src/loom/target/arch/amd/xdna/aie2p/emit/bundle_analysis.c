@@ -146,7 +146,6 @@ static iree_status_t loom_aie2p_bundle_plan_analyze_storage_address(
   const uint64_t byte_offset = reference_offset + (uint64_t)operation_offset;
   if (byte_offset <= INT64_MAX) {
     *out_fixup = (loom_aie2p_planned_storage_fixup_t){
-        .bundle_index = LOOM_AIE2P_BUNDLE_PLAN_PACKET_NONE,
         .storage_space = reference.reservation.space,
         .byte_offset = byte_offset,
     };
@@ -374,12 +373,12 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
                                   sizeof(*out_analysis->storage_fixups),
                                   (void**)&out_analysis->storage_fixups));
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        scratch_arena, frame->schedule.scheduled_node_count,
-        sizeof(*out_analysis->storage_fixup_indices_by_packet),
-        (void**)&out_analysis->storage_fixup_indices_by_packet));
-    memset(out_analysis->storage_fixup_indices_by_packet, 0xFF,
+        plan_arena, frame->schedule.scheduled_node_count,
+        sizeof(*out_analysis->address_fixup_indices_by_packet),
+        (void**)&out_analysis->address_fixup_indices_by_packet));
+    memset(out_analysis->address_fixup_indices_by_packet, 0xFF,
            frame->schedule.scheduled_node_count *
-               sizeof(*out_analysis->storage_fixup_indices_by_packet));
+               sizeof(*out_analysis->address_fixup_indices_by_packet));
   }
   bool accepted = false;
   IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_analyze_move_range(
@@ -437,7 +436,7 @@ iree_status_t loom_aie2p_bundle_plan_analyze(
         if (!accepted) {
           return iree_ok_status();
         }
-        out_analysis->storage_fixup_indices_by_packet[packet.packet_index] =
+        out_analysis->address_fixup_indices_by_packet[packet.packet_index] =
             (uint32_t)out_analysis->storage_fixup_count++;
         continue;
       }

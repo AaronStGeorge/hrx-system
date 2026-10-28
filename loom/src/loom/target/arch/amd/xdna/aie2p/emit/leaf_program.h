@@ -93,8 +93,6 @@ typedef struct loom_aie2p_planned_call_fixup_t {
 
 // One contribution-relative local-storage address requiring final placement.
 typedef struct loom_aie2p_planned_storage_fixup_t {
-  // Bundle containing the address-materialization instruction.
-  uint32_t bundle_index;
   // Function-local storage space referenced by the instruction.
   loom_storage_space_t storage_space;
   // Byte offset from the placed storage-space base.
@@ -103,8 +101,8 @@ typedef struct loom_aie2p_planned_storage_fixup_t {
 
 // One read-only data address requiring final placement.
 typedef struct loom_aie2p_planned_read_only_data_fixup_t {
-  // Bundle containing the address-materialization instruction.
-  uint32_t bundle_index;
+  // Scheduled packet carrying this address, retained for planner rollback.
+  uint32_t scheduled_packet_index;
   // Retained read-only data record referenced by the instruction.
   uint32_t read_only_data_ordinal;
 } loom_aie2p_planned_read_only_data_fixup_t;
@@ -182,7 +180,7 @@ typedef struct loom_aie2p_leaf_resource_import_t {
 // Immutable physical AIE2P program produced for one Low leaf function.
 //
 // The function name and all pointer tables are owned by the plan arena. The
-// plan contains no compiler IR, schedule, allocation, storage-layout, or
+// plan points to no compiler IR, schedule, allocation, storage-layout, or
 // diagnostic state and may be emitted repeatedly without mutation.
 typedef struct loom_aie2p_leaf_program_plan_t {
   // Arena-owned function name used for native sections and symbols.
@@ -231,6 +229,10 @@ typedef struct loom_aie2p_leaf_program_plan_t {
   const loom_aie2p_planned_read_only_data_fixup_t* read_only_data_fixups;
   // Number of records in |read_only_data_fixups|.
   iree_host_size_t read_only_data_fixup_count;
+  // Arena-owned address fixup index for each scheduled packet, or UINT32_MAX
+  // when absent. Slot provenance distinguishes the storage and read-only data
+  // index domains during object encoding.
+  const uint32_t* address_fixup_indices_by_packet;
   // Core code-address sites targeting this contribution.
   const loom_aie2p_planned_code_address_fixup_t* code_address_fixups;
   // Number of records in |code_address_fixups|.

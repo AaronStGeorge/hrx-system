@@ -6,13 +6,13 @@
 
 #include "loom/target/arch/amd/xdna/aie2p/ops/target.h"
 
-#include "loom/error/error_catalog.h"
 #include "loom/error/parameter.h"
 #include "loom/ir/module.h"
 #include "loom/ops/target/ops.h"
 #include "loom/target/arch/amd/xdna/aie2p/facts.h"
 #include "loom/target/arch/amd/xdna/aie2p/ops/ops.h"
 #include "loom/target/arch/amd/xdna/device/profile.h"
+#include "loom/target/arch/amd/xdna/error_catalog.h"
 
 static const loom_xdna_device_profile_t* loom_aie2p_target_profile(
     iree_string_view_t name) {
@@ -128,7 +128,7 @@ iree_status_t loom_aie2p_target_record_verify(
   };
   const loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = LOOM_ERR_TARGET_082,
+      .error = LOOM_ERR_XDNA_062,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

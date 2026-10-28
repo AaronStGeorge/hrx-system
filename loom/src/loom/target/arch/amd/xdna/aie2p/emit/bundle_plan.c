@@ -21,7 +21,6 @@
 #include "loom/target/arch/amd/xdna/aie2p/emit/bundle_alignment.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/bundle_analysis.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/bundle_encoding.h"
-#include "loom/target/arch/amd/xdna/aie2p/emit/bundle_fixup.h"
 #include "loom/target/arch/amd/xdna/aie2p/emit/leaf_plan_metadata.h"
 
 // Native control transfers after a returned JL require two intervening issue
@@ -105,16 +104,14 @@ typedef struct loom_aie2p_bundle_plan_builder_t {
   iree_host_size_t call_fixup_count;
   // Arena-backed local-storage fixups owned by the final plan.
   loom_aie2p_planned_storage_fixup_t* storage_fixups;
-  // Fixup index for each scheduled packet, or UINT32_MAX when absent.
-  uint32_t* storage_fixup_indices_by_packet;
   // Number of populated records in |storage_fixups|.
   iree_host_size_t storage_fixup_count;
   // Arena-backed read-only data fixups owned by the final plan.
   loom_aie2p_planned_read_only_data_fixup_t* read_only_data_fixups;
-  // Fixup index for each scheduled packet, or UINT32_MAX when absent.
-  uint32_t* read_only_data_fixup_indices_by_packet;
   // Number of populated records in |read_only_data_fixups|.
   iree_host_size_t read_only_data_fixup_count;
+  // Address fixup index for each scheduled packet, or UINT32_MAX when absent.
+  uint32_t* address_fixup_indices_by_packet;
   // Arena-backed executable-address fixups owned by the final plan.
   loom_aie2p_planned_code_address_fixup_t* code_address_fixups;
   // Number of records available in |code_address_fixups|.
@@ -215,15 +212,15 @@ static void loom_aie2p_bundle_plan_append_read_only_data_fixup(
   const iree_host_size_t fixup_index = builder->read_only_data_fixup_count++;
   builder->read_only_data_fixups[fixup_index] =
       (loom_aie2p_planned_read_only_data_fixup_t){
-          .bundle_index = LOOM_AIE2P_BUNDLE_PLAN_PACKET_NONE,
+          .scheduled_packet_index = scheduled_packet_index,
           .read_only_data_ordinal = read_only_data_ordinal,
       };
   IREE_ASSERT_LT(scheduled_packet_index,
                  builder->frame->schedule.scheduled_node_count);
   IREE_ASSERT_EQ(
-      builder->read_only_data_fixup_indices_by_packet[scheduled_packet_index],
+      builder->address_fixup_indices_by_packet[scheduled_packet_index],
       UINT32_MAX);
-  builder->read_only_data_fixup_indices_by_packet[scheduled_packet_index] =
+  builder->address_fixup_indices_by_packet[scheduled_packet_index] =
       (uint32_t)fixup_index;
 }
 
@@ -1753,14 +1750,12 @@ static void loom_aie2p_bundle_plan_restore_hardware_loop(
     loom_aie2p_bundle_plan_builder_t* builder,
     const loom_aie2p_hardware_loop_snapshot_t* snapshot,
     const loom_aie2p_hardware_loop_analysis_t* loop) {
-  if (builder->read_only_data_fixup_indices_by_packet != NULL) {
-    for (iree_host_size_t i = 0;
-         i < builder->frame->schedule.scheduled_node_count; ++i) {
-      if (builder->read_only_data_fixup_indices_by_packet[i] >=
-          snapshot->read_only_data_fixup_count) {
-        builder->read_only_data_fixup_indices_by_packet[i] = UINT32_MAX;
-      }
-    }
+  for (iree_host_size_t i = snapshot->read_only_data_fixup_count;
+       i < builder->read_only_data_fixup_count; ++i) {
+    const uint32_t scheduled_packet_index =
+        builder->read_only_data_fixups[i].scheduled_packet_index;
+    builder->address_fixup_indices_by_packet[scheduled_packet_index] =
+        UINT32_MAX;
   }
   builder->bundle_count = snapshot->bundle_count;
   builder->slot_count = snapshot->slot_count;
@@ -2293,8 +2288,8 @@ static iree_status_t loom_aie2p_bundle_plan_build_impl(
       .bundle_capacity = bundle_capacity,
       .slot_capacity = slot_capacity,
       .storage_fixups = analysis.storage_fixups,
-      .storage_fixup_indices_by_packet =
-          analysis.storage_fixup_indices_by_packet,
+      .address_fixup_indices_by_packet =
+          analysis.address_fixup_indices_by_packet,
       .storage_fixup_count = analysis.storage_fixup_count,
       .block_count = frame->schedule.block_count,
       .recurrence_instruction_capacity =
@@ -2345,13 +2340,14 @@ static iree_status_t loom_aie2p_bundle_plan_build_impl(
         iree_arena_allocate_array(arena, analysis.read_only_data_fixup_count,
                                   sizeof(*builder.read_only_data_fixups),
                                   (void**)&builder.read_only_data_fixups));
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        scratch_arena, frame->schedule.scheduled_node_count,
-        sizeof(*builder.read_only_data_fixup_indices_by_packet),
-        (void**)&builder.read_only_data_fixup_indices_by_packet));
-    for (iree_host_size_t i = 0; i < frame->schedule.scheduled_node_count;
-         ++i) {
-      builder.read_only_data_fixup_indices_by_packet[i] = UINT32_MAX;
+    if (builder.address_fixup_indices_by_packet == NULL) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          arena, frame->schedule.scheduled_node_count,
+          sizeof(*builder.address_fixup_indices_by_packet),
+          (void**)&builder.address_fixup_indices_by_packet));
+      memset(builder.address_fixup_indices_by_packet, 0xFF,
+             frame->schedule.scheduled_node_count *
+                 sizeof(*builder.address_fixup_indices_by_packet));
     }
   }
   if (builder.code_address_fixup_capacity != 0) {
@@ -2412,20 +2408,6 @@ static iree_status_t loom_aie2p_bundle_plan_build_impl(
         &builder, block_analysis, builder.execution_bundle_start));
     ++block_index;
   }
-  loom_aie2p_bundle_address_fixups_t address_fixups = {
-      .scheduled_packet_count = frame->schedule.scheduled_node_count,
-      .storage_fixups = builder.storage_fixups,
-      .storage_fixup_count = builder.storage_fixup_count,
-      .storage_fixup_indices_by_packet =
-          builder.storage_fixup_indices_by_packet,
-      .read_only_data_fixups = builder.read_only_data_fixups,
-      .read_only_data_fixup_count = builder.read_only_data_fixup_count,
-      .read_only_data_fixup_indices_by_packet =
-          builder.read_only_data_fixup_indices_by_packet,
-  };
-  loom_aie2p_bundle_fixup_resolve_addresses(
-      builder.bundles, builder.bundle_count, builder.slots, &address_fixups);
-
   loom_aie2p_leaf_program_plan_t plan = {
       .register_writes = builder.register_writes,
       .block_byte_offsets = builder.block_byte_offsets,
@@ -2443,6 +2425,8 @@ static iree_status_t loom_aie2p_bundle_plan_build_impl(
       .storage_fixup_count = builder.storage_fixup_count,
       .read_only_data_fixups = builder.read_only_data_fixups,
       .read_only_data_fixup_count = builder.read_only_data_fixup_count,
+      .address_fixup_indices_by_packet =
+          builder.address_fixup_indices_by_packet,
       .code_address_fixups = builder.code_address_fixups,
       .code_address_fixup_count = builder.code_address_fixup_count,
       .encoded_byte_length = builder.encoded_byte_length,

@@ -71,3 +71,17 @@ rules:
     paths:
       include:
         - /loom/py/loom/error/target.py
+
+  - id: iree.loom.arch-target-record-diagnostics-use-own-domain
+    languages:
+      - generic
+    severity: ERROR
+    message: >-
+      Architecture target-record implementations delegate generic verification
+      to loom_target_record_verify. Diagnostics emitted locally belong to the
+      architecture's error domain, not TARGET.
+    pattern-regex: >-
+      \bLOOM_ERR_TARGET_[0-9]{3}(?:_REF)?\b
+    paths:
+      include:
+        - /loom/src/loom/target/arch/**/ops/target.c
