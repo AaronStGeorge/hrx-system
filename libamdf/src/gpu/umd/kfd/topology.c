@@ -481,12 +481,13 @@ static amdf_status_t amdf_gpu_kfd_read_memory_peers(
 
 // System allocations are not bound to a selected CPU NUMA node. Intersect
 // the widths of every reported CPU route instead of choosing the first link.
-static amdf_status_t amdf_gpu_kfd_read_host_atomics(
+static amdf_status_t amdf_gpu_kfd_read_host_access(
     int nodes, int node, uint32_t node_ordinal, uint32_t link_count,
     amdf_gpu_kfd_topology_t* topology) {
   uint32_t cpu_link_count = 0;
   bool supports_32 = true;
   bool supports_64 = true;
+  bool host_cached_vram = false;
   amdf_status_t status = AMDF_STATUS_OK;
   for (uint32_t i = 0; amdf_status_is_ok(status) && i < link_count; ++i) {
     amdf_gpu_kfd_link_t link = {0};
@@ -499,6 +500,8 @@ static amdf_status_t amdf_gpu_kfd_read_host_atomics(
     }
     if (amdf_status_is_ok(status) && gpu_id == 0) {
       ++cpu_link_count;
+      host_cached_vram |= link.type == HSA_IOLINK_TYPE_XGMI &&
+                          (link.flags & HSA_IOLINK_FLAGS_ENABLED) != 0;
       supports_32 &= (link.flags & (HSA_IOLINK_FLAGS_ENABLED |
                                     HSA_IOLINK_FLAGS_NO_ATOMICS_32_BIT)) ==
                      HSA_IOLINK_FLAGS_ENABLED;
@@ -510,6 +513,7 @@ static amdf_status_t amdf_gpu_kfd_read_host_atomics(
   if (amdf_status_is_ok(status)) {
     topology->host_atomics.supports_32 = cpu_link_count != 0 && supports_32;
     topology->host_atomics.supports_64 = cpu_link_count != 0 && supports_64;
+    topology->vram.host_cached = host_cached_vram;
   }
   return status;
 }
@@ -638,9 +642,9 @@ amdf_status_t amdf_gpu_kfd_topology_initialize(
                                                   (uint32_t)node_ordinal,
                                                   host_allocator, &topology);
           if (amdf_status_is_ok(status)) {
-            status = amdf_gpu_kfd_read_host_atomics(dirfd(directory), node,
-                                                    (uint32_t)node_ordinal,
-                                                    io_link_count, &topology);
+            status = amdf_gpu_kfd_read_host_access(dirfd(directory), node,
+                                                   (uint32_t)node_ordinal,
+                                                   io_link_count, &topology);
           }
         }
       }

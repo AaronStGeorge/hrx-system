@@ -8,7 +8,6 @@
 #include "libamdf/src/gpu/umd/kfd/memory.h"
 
 #include <drm/drm.h>
-#include <emmintrin.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <linux/kfd_ioctl.h>
@@ -248,7 +247,7 @@ static amdf_memory_host_description_t amdf_gpu_umd_memory_describe_host(
   (void)flags;
   const bool write_back =
       (properties & AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK) != 0;
-  const uint32_t line_size = write_back ? device->cache_line_size : 0;
+  const uint32_t line_size = device->cache_line_size;
   amdf_cache_transition_t flush = {0};
   if (write_back) {
     flush = (amdf_cache_transition_t){
@@ -261,21 +260,22 @@ static amdf_memory_host_description_t amdf_gpu_umd_memory_describe_host(
         .range_granularity = line_size,
     };
   } else if (device->hdp != NULL) {
+    // LOCAL can be WC VRAM or cached GTT after eviction. The native operation
+    // flushes CPU lines and the aperture; neither the initial heap nor a live
+    // mapping address establishes an immutable cache type.
     flush = (amdf_cache_transition_t){
-        .kind = AMDF_CACHE_TRANSITION_KIND_GLOBAL,
+        .kind = AMDF_CACHE_TRANSITION_KIND_RANGE,
         .executor = AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API,
         .host_operation = AMDF_HOST_CACHE_OPERATION_FLUSH,
+        .range_granularity = line_size,
     };
   }
   const amdf_cache_transition_t invalidate = {
-      .kind = write_back ? AMDF_CACHE_TRANSITION_KIND_RANGE
-                         : AMDF_CACHE_TRANSITION_KIND_GLOBAL,
+      .kind = AMDF_CACHE_TRANSITION_KIND_RANGE,
       .executor = AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT,
       .host_operation = AMDF_HOST_CACHE_OPERATION_INVALIDATE,
-      .host_instruction = write_back ? AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH
-                                     : AMDF_HOST_CACHE_INSTRUCTION_NONE,
-      .host_fence_before = write_back ? AMDF_HOST_CACHE_FENCE_X86_MFENCE
-                                      : AMDF_HOST_CACHE_FENCE_NONE,
+      .host_instruction = AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH,
+      .host_fence_before = AMDF_HOST_CACHE_FENCE_X86_MFENCE,
       .host_fence_after = AMDF_HOST_CACHE_FENCE_X86_MFENCE,
       .range_granularity = line_size,
   };
@@ -544,18 +544,14 @@ amdf_status_t amdf_gpu_umd_host_mapping_cache_control(
     amdf_gpu_umd_host_mapping_t* mapping, amdf_host_cache_operation_t operation,
     uint64_t memory_byte_offset, uint64_t byte_length) {
   const amdf_gpu_umd_memory_t* memory = (amdf_gpu_umd_memory_t*)mapping;
-  if ((memory->host_properties & AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK) != 0) {
-    // GPU snooping does not make this backing coherent with other consumers.
-    // Explicit CPU operations cover the requested bytes even on coherent GTT.
-    amdf_linux_host_cache_transfer(
-        (uint8_t*)memory->host_pointer + memory_byte_offset, byte_length,
-        memory->device->cache_line_size);
-  } else if (byte_length != 0) {
-    // WC VRAM views first drain host stores into the device aperture.
-    _mm_mfence();
-    if (operation == AMDF_HOST_CACHE_OPERATION_FLUSH) {
-      return amdf_gpu_kfd_hdp_publish_host_writes(memory->device->hdp);
-    }
+  // CLFLUSH is valid for both cached and WC mappings. It covers GTT after a
+  // native eviction without querying or retaining a transient cache type.
+  amdf_linux_host_cache_transfer(
+      (uint8_t*)memory->host_pointer + memory_byte_offset, byte_length,
+      memory->device->cache_line_size);
+  if (byte_length != 0 && operation == AMDF_HOST_CACHE_OPERATION_FLUSH &&
+      (memory->host_properties & AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK) == 0) {
+    return amdf_gpu_kfd_hdp_publish_host_writes(memory->device->hdp);
   }
   return AMDF_STATUS_OK;
 }

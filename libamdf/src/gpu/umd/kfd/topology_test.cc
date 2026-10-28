@@ -188,16 +188,16 @@ class KfdTopologyTest : public ::testing::Test {
   }
 
   void WriteIoLink(uint32_t ordinal, uint32_t destination, uint32_t gpu_id,
-                   uint32_t flags) {
+                   uint32_t flags, uint32_t type = 2) {
     const auto nodes = directory_ / "class/kfd/kfd/topology/nodes";
     const auto link = nodes / "6/io_links" / std::to_string(ordinal);
     const auto target = nodes / std::to_string(destination);
     std::filesystem::create_directories(link);
     std::filesystem::create_directories(target);
-    WriteAttribute(link / "properties", "type 2\nnode_from 6\nnode_to " +
-                                            std::to_string(destination) +
-                                            "\nflags " + std::to_string(flags) +
-                                            "\n");
+    WriteAttribute(link / "properties",
+                   "type " + std::to_string(type) + "\nnode_from 6\nnode_to " +
+                       std::to_string(destination) + "\nflags " +
+                       std::to_string(flags) + "\n");
     WriteAttribute(target / "gpu_id", std::to_string(gpu_id) + "\n");
     if (gpu_id != 0) {
       WriteAttribute(target / "properties", "drm_render_minor 168\n");
@@ -692,6 +692,27 @@ TEST_F(KfdTopologyTest, MissingCpuRouteDoesNotImplyAtomicSupport) {
     EXPECT_FALSE(topology.host_atomics.supports_32);
     EXPECT_FALSE(topology.host_atomics.supports_64);
     amdf_gpu_kfd_topology_deinitialize(&topology, amdf_allocator_system());
+  }
+}
+
+TEST_F(KfdTopologyTest, CachedVramRequiresEnabledCpuXgmiRoute) {
+  WriteProperties("io_links_count 1\n");
+  // Native link types: PCIe = 2, XGMI = 11. A GPU peer is not a CPU route.
+  for (uint32_t type : {2u, 11u}) {
+    for (uint32_t gpu_id : {0u, 42u}) {
+      for (uint32_t flags : {0u, 1u}) {
+        SCOPED_TRACE(::testing::Message()
+                     << type << "/" << gpu_id << "/" << flags);
+        WriteIoLink(0, 8, gpu_id, flags, type);
+        amdf_gpu_kfd_topology_t topology = {};
+        ASSERT_EQ(amdf_gpu_kfd_topology_initialize(
+                      &endpoint_, amdf_allocator_system(), &topology),
+                  AMDF_STATUS_OK);
+        EXPECT_EQ(topology.vram.host_cached,
+                  type == 11 && gpu_id == 0 && flags == 1);
+        amdf_gpu_kfd_topology_deinitialize(&topology, amdf_allocator_system());
+      }
+    }
   }
 }
 

@@ -64,6 +64,8 @@ typedef struct amdf_gpu_kfd_topology_t {
     uint64_t total_byte_length;
     // CPU-visible VRAM capacity in bytes.
     uint64_t visible_byte_length;
+    // CPU-connected XGMI gives VRAM the same cached CPU mapping as GTT.
+    bool host_cached;
   } vram;
   // Number of native compute queues exposed by this KFD node.
   uint32_t compute_queue_count;

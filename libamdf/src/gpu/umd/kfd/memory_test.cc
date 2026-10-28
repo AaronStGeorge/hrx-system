@@ -549,11 +549,10 @@ TEST(LinuxGpuMemoryProfileTest,
 
   const auto unavailable = local.visibility.describe_host(
       local.visibility.data, 0, flags, local.host_mapping.properties);
-  EXPECT_EQ(unavailable.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
-                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED));
+  EXPECT_EQ(unavailable.properties, AMDF_HOST_MEMORY_PROPERTY_NONE);
   EXPECT_EQ(local.host_mapping.properties, unavailable.properties);
   EXPECT_EQ(unavailable.flush.kind, AMDF_CACHE_TRANSITION_KIND_UNKNOWN);
-  EXPECT_EQ(unavailable.invalidate.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
+  EXPECT_EQ(unavailable.invalidate.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
   EXPECT_EQ(unavailable.invalidate.executor,
             AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
   EXPECT_EQ(unavailable.invalidate.host_operation,
@@ -568,7 +567,8 @@ TEST(LinuxGpuMemoryProfileTest,
   device.hdp = reinterpret_cast<amdf_gpu_kfd_hdp_t*>(uintptr_t{1});
   const auto available = local.visibility.describe_host(
       local.visibility.data, 0, flags, local.host_mapping.properties);
-  EXPECT_EQ(available.flush.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
+  EXPECT_EQ(available.flush.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
+  EXPECT_EQ(available.flush.range_granularity, 64u);
   EXPECT_EQ(available.flush.executor, AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API);
   EXPECT_EQ(available.flush.host_operation, AMDF_HOST_CACHE_OPERATION_FLUSH);
   EXPECT_EQ(available.flush.host_instruction, AMDF_HOST_CACHE_INSTRUCTION_NONE);
@@ -579,7 +579,7 @@ TEST(LinuxGpuMemoryProfileTest,
   pair = {};
   ASSERT_EQ(amdf_memory_pair_compose(&available_host, &device_site, &pair),
             AMDF_STATUS_OK);
-  EXPECT_EQ(pair.release.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
+  EXPECT_EQ(pair.release.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
   EXPECT_EQ(pair.release.executor, AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API);
   EXPECT_EQ(pair.acquire.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
   EXPECT_EQ(pair.acquire.executor, AMDF_CACHE_TRANSITION_EXECUTOR_QUEUE);
@@ -608,7 +608,7 @@ TEST(LinuxGpuMemoryProfileTest,
       &available, AMDF_MEMORY_MAP_FLAG_WRITE, false, &sdma_site);
   ASSERT_EQ(amdf_memory_pair_compose(&available_sdma_host, &sdma_site, &pair),
             AMDF_STATUS_OK);
-  EXPECT_EQ(pair.release.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
+  EXPECT_EQ(pair.release.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
   EXPECT_EQ(pair.release.executor, AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API);
   EXPECT_EQ(pair.release.host_operation, AMDF_HOST_CACHE_OPERATION_FLUSH);
   EXPECT_EQ(pair.acquire.kind, AMDF_CACHE_TRANSITION_KIND_NONE);
@@ -622,6 +622,29 @@ TEST(LinuxGpuMemoryProfileTest,
             AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
   EXPECT_EQ(system_host.flush.host_instruction,
             AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
+}
+
+TEST(LinuxGpuMemoryProfileTest, CpuConnectedLocalKeepsCachedGuarantees) {
+  auto device = MakeDiscreteGfx942Device();
+  device.cache_line_size = 64;
+  device.topology.memory_features |=
+      AMDF_GPU_DEVICE_FEATURE_HOST_VISIBLE_LOCAL_MEMORY;
+  device.topology.vram.host_cached = true;
+  const auto local = QueryProfile(&device, 2);
+  const auto host = local.visibility.describe_host(
+      local.visibility.data, 0,
+      local.guaranteed_flags | AMDF_MEMORY_FLAG_HOST_VISIBLE,
+      local.host_mapping.properties);
+  EXPECT_EQ(host.properties, AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                 AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
+  EXPECT_EQ(host.properties, local.host_mapping.properties);
+  for (const auto& transition : {host.flush, host.invalidate}) {
+    EXPECT_EQ(transition.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
+    EXPECT_EQ(transition.executor, AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
+    EXPECT_EQ(transition.host_instruction,
+              AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
+    EXPECT_EQ(transition.range_granularity, 64u);
+  }
 }
 
 TEST(LinuxGpuMemoryProfileTest, RequiresExactQueueRolesAndCacheOperations) {

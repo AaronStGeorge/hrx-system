@@ -225,51 +225,39 @@ class GpuLinuxMemoryTest : public GpuDeviceFixture {
             AMDF_STATUS_OK);
         ASSERT_NE(mapping_infos_[0].pointer, nullptr);
         EXPECT_EQ(mapping_infos_[0].properties,
-                  ((info.flags | access_info.flags) &
-                   AMDF_MEMORY_FLAG_HOST_COHERENT) != 0
-                      ? (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
-                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK)
-                      : (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
-                         AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED));
-        if (((info.flags | access_info.flags) &
-             AMDF_MEMORY_FLAG_HOST_COHERENT) != 0) {
-          EXPECT_NE(mapping_infos_[0].cache_line_size, 0u);
+                  profile.host_mapping.properties);
+        EXPECT_NE(mapping_infos_[0].cache_line_size, 0u);
+        EXPECT_EQ(mapping_infos_[0].invalidate.kind,
+                  AMDF_CACHE_TRANSITION_KIND_RANGE);
+        EXPECT_EQ(mapping_infos_[0].invalidate.executor,
+                  AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
+        EXPECT_EQ(mapping_infos_[0].invalidate.host_operation,
+                  AMDF_HOST_CACHE_OPERATION_INVALIDATE);
+        EXPECT_EQ(mapping_infos_[0].invalidate.host_instruction,
+                  AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
+        EXPECT_EQ(mapping_infos_[0].invalidate.host_fence_after,
+                  AMDF_HOST_CACHE_FENCE_X86_MFENCE);
+        if ((profile.host_mapping.properties &
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK) != 0) {
           EXPECT_EQ(mapping_infos_[0].flush.kind,
                     AMDF_CACHE_TRANSITION_KIND_RANGE);
-          EXPECT_EQ(mapping_infos_[0].invalidate.kind,
-                    AMDF_CACHE_TRANSITION_KIND_RANGE);
+          EXPECT_EQ(mapping_infos_[0].flush.executor,
+                    AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
           EXPECT_EQ(mapping_infos_[0].flush.host_instruction,
                     AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
-          EXPECT_EQ(mapping_infos_[0].invalidate.host_instruction,
-                    AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
+        } else if (mapping_infos_[0].flush.kind ==
+                   AMDF_CACHE_TRANSITION_KIND_UNKNOWN) {
+          EXPECT_EQ(mapping_infos_[0].flush.executor,
+                    AMDF_CACHE_TRANSITION_EXECUTOR_NONE);
         } else {
-          EXPECT_EQ(mapping_infos_[0].cache_line_size, 0u);
-          if (mapping_infos_[0].flush.kind ==
-              AMDF_CACHE_TRANSITION_KIND_UNKNOWN) {
-            EXPECT_EQ(mapping_infos_[0].flush.executor,
-                      AMDF_CACHE_TRANSITION_EXECUTOR_NONE);
-          } else {
-            EXPECT_EQ(mapping_infos_[0].flush.kind,
-                      AMDF_CACHE_TRANSITION_KIND_GLOBAL);
-            EXPECT_EQ(mapping_infos_[0].flush.executor,
-                      AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API);
-            EXPECT_EQ(mapping_infos_[0].flush.host_operation,
-                      AMDF_HOST_CACHE_OPERATION_FLUSH);
-            EXPECT_EQ(mapping_infos_[0].flush.host_instruction,
-                      AMDF_HOST_CACHE_INSTRUCTION_NONE);
-            EXPECT_EQ(mapping_infos_[0].flush.host_fence_before,
-                      AMDF_HOST_CACHE_FENCE_NONE);
-            EXPECT_EQ(mapping_infos_[0].flush.host_fence_after,
-                      AMDF_HOST_CACHE_FENCE_NONE);
-          }
-          EXPECT_EQ(mapping_infos_[0].invalidate.kind,
-                    AMDF_CACHE_TRANSITION_KIND_GLOBAL);
-          EXPECT_EQ(mapping_infos_[0].invalidate.executor,
-                    AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
-          EXPECT_EQ(mapping_infos_[0].invalidate.host_operation,
-                    AMDF_HOST_CACHE_OPERATION_INVALIDATE);
-          EXPECT_EQ(mapping_infos_[0].invalidate.host_fence_after,
-                    AMDF_HOST_CACHE_FENCE_X86_MFENCE);
+          EXPECT_EQ(mapping_infos_[0].flush.kind,
+                    AMDF_CACHE_TRANSITION_KIND_RANGE);
+          EXPECT_EQ(mapping_infos_[0].flush.executor,
+                    AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API);
+          EXPECT_EQ(mapping_infos_[0].flush.host_operation,
+                    AMDF_HOST_CACHE_OPERATION_FLUSH);
+          EXPECT_EQ(mapping_infos_[0].flush.range_granularity,
+                    mapping_infos_[0].cache_line_size);
         }
         const uint8_t value = static_cast<uint8_t>(0x41 + case_ordinal);
         std::memset(mapping_infos_[0].pointer, value,

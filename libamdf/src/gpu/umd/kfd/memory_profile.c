@@ -320,9 +320,13 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.allocation = allocation;
     if ((profile.roles & AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) != 0) {
       profile.host_mapping = host_mapping;
-      profile.host_mapping.properties =
-          AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
-          AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED;
+      // TTM maps ordinary VRAM write-combined, but KFD can restore an evicted
+      // allocation in cached GTT. Only CPU-connected XGMI stays cached in both
+      // domains. Cache operations cover every admitted state independently of
+      // these lifetime guarantees.
+      if (!topology->vram.host_cached) {
+        profile.host_mapping.properties = AMDF_HOST_MEMORY_PROPERTY_NONE;
+      }
     }
     if (amdf_gpu_kfd_supports_legacy_sdma_visibility(topology)) {
       profile.visibility.describe_site = amdf_gpu_kfd_sdma_local_describe_site;

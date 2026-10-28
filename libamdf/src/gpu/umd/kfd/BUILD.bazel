@@ -375,6 +375,8 @@ amdf_cc_test(
     name = "buffer_test",
     srcs = ["buffer_test.cc"],
     linkopts = [
+        "-Wl,--wrap=amdf_gpu_kfd_hdp_publish_host_writes",
+        "-Wl,--wrap=amdf_linux_host_cache_transfer",
         "-Wl,--wrap=close",
         "-Wl,--wrap=ioctl",
         "-Wl,--wrap=munmap",
@@ -383,9 +385,11 @@ amdf_cc_test(
     deps = [
         ":buffer",
         ":device_state",
+        ":hdp",
         ":memory",
         "//libamdf/src:allocator",
         "//libamdf/src/gpu/umd:memory",
+        "//libamdf/src/platform/linux:host_cache",
         "//third_party:google_test",
         "//third_party:google_test_main",
         "//third_party:linux_drm_uapi",

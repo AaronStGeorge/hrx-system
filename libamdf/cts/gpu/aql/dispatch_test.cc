@@ -16,12 +16,12 @@ namespace {
 
 void CheckDeviceLocalIngressPair(const amdf_memory_pair_info_t& pair) {
   ASSERT_NE(pair.flags & AMDF_MEMORY_PAIR_FLAG_SHARED_BACKING_REACHABLE, 0u);
-  ASSERT_EQ(pair.release.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
-  ASSERT_EQ(pair.release.executor, AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API);
+  ASSERT_TRUE(pair.release.kind == AMDF_CACHE_TRANSITION_KIND_RANGE ||
+              pair.release.kind == AMDF_CACHE_TRANSITION_KIND_GLOBAL);
+  ASSERT_TRUE(
+      pair.release.executor == AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API ||
+      pair.release.executor == AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
   ASSERT_EQ(pair.release.host_operation, AMDF_HOST_CACHE_OPERATION_FLUSH);
-  ASSERT_EQ(pair.release.host_instruction, AMDF_HOST_CACHE_INSTRUCTION_NONE);
-  ASSERT_EQ(pair.release.host_fence_before, AMDF_HOST_CACHE_FENCE_NONE);
-  ASSERT_EQ(pair.release.host_fence_after, AMDF_HOST_CACHE_FENCE_NONE);
   ASSERT_EQ(pair.acquire.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
   ASSERT_EQ(pair.acquire.executor, AMDF_CACHE_TRANSITION_EXECUTOR_QUEUE);
   ASSERT_EQ(pair.acquire.operation, AMDF_CACHE_OPERATION_ACQUIRE_FROM_SYSTEM);
@@ -168,6 +168,7 @@ TEST_F(AqlDispatchTest, HostPublishesDeviceLocalKernargsAcrossEpochs) {
   ASSERT_EQ(api_->memory_scope_query_info(local_scope_, &scope_info),
             AMDF_STATUS_OK);
   uint32_t profile_ordinal = AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN;
+  amdf_host_memory_properties_t host_properties = 0;
   for (uint32_t ordinal = 0; ordinal < scope_info.memory_profile_count;
        ++ordinal) {
     amdf_memory_profile_t profile = {
@@ -191,6 +192,7 @@ TEST_F(AqlDispatchTest, HostPublishesDeviceLocalKernargsAcrossEpochs) {
              AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) &&
         (required_flags & ~profile.supported_flags) == 0) {
       profile_ordinal = ordinal;
+      host_properties = profile.host_mapping.properties;
       break;
     }
   }
@@ -249,9 +251,7 @@ TEST_F(AqlDispatchTest, HostPublishesDeviceLocalKernargsAcrossEpochs) {
   GpuMemory* arguments = nullptr;
   ASSERT_NO_FATAL_FAILURE(CreateMemory(local_scope_, creation, &arguments));
   ASSERT_EQ(arguments->info.memory_class, AMDF_MEMORY_CLASS_LOCAL);
-  ASSERT_EQ(arguments->host.properties,
-            (AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED |
-             AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED));
+  ASSERT_EQ(arguments->host.properties, host_properties);
   ASSERT_EQ(arguments->device_address % kernel.arguments.alignment, 0u);
   const auto argument_host = arguments->HostSite();
   const auto argument_device = arguments->DeviceSite(family_.ordinal);
