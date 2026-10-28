@@ -714,13 +714,16 @@ jobs:
             $env:CXX = $env:CC
             $env:AR = Join-Path $env:BAZEL_LLVM 'bin\llvm-lib.exe'
           }
-          $repositoryResultsDir = Join-Path $env:RUNNER_TEMP "repository-test-results-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $resultArgs = @()
+          if ('${{ matrix.command }}' -ne 'iree-bazel-repository-build') {
+            $repositoryResultsDir = Join-Path $env:RUNNER_TEMP "repository-test-results-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+            $resultArgs += @('--bazel-test-results-dir', $repositoryResultsDir)
+          }
           $targetArgs = @()
           if ("${{ matrix.target_selector }}") {
             $targetArgs += @('--amdgpu-target', '${{ matrix.target_selector }}')
           }
-          python build_tools/devtools/ci.py '${{ matrix.command }}' @targetArgs `
-            --bazel-test-results-dir $repositoryResultsDir `
+          python build_tools/devtools/ci.py '${{ matrix.command }}' @targetArgs @resultArgs `
             --bazel-profile-dir "$env:RUNNER_TEMP\bazel-profiles" --keep-going
           exit $LASTEXITCODE
 
