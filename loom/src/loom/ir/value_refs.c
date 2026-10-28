@@ -224,23 +224,28 @@ typedef struct loom_attribute_dependency_build_t {
   // Module owning canonical membership.
   loom_module_t* module;
   // Union of retained TYPE sets and immediate predicate references.
-  loom_type_dependency_id_t root;
+  loom_type_dependency_sets_t dependencies;
 } loom_attribute_dependency_build_t;
 
 static iree_status_t loom_attribute_collect_type_dependencies(
     loom_type_id_t type_id, void* user_data) {
   loom_attribute_dependency_build_t* build = user_data;
-  return loom_type_dependencies_union(
-      &build->module->type_uses, build->root,
+  IREE_RETURN_IF_ERROR(loom_type_dependencies_union(
+      &build->module->type_uses, build->dependencies.all,
       loom_type_table_dependencies(&build->module->types, type_id),
-      &build->root);
+      &build->dependencies.all));
+  return loom_type_dependencies_union(
+      &build->module->type_uses, build->dependencies.dimensions,
+      loom_type_table_dimension_dependencies(&build->module->types, type_id),
+      &build->dependencies.dimensions);
 }
 
 static iree_status_t loom_attribute_collect_value_dependency(
     loom_value_id_t value_id, void* user_data) {
   loom_attribute_dependency_build_t* build = user_data;
-  return loom_type_dependencies_add(&build->module->type_uses, build->root,
-                                    value_id, &build->root);
+  return loom_type_dependencies_add(&build->module->type_uses,
+                                    build->dependencies.all, value_id,
+                                    &build->dependencies.all);
 }
 
 void loom_module_drop_attribute_uses(loom_module_t* module, loom_op_t* op,
@@ -271,7 +276,8 @@ iree_status_t loom_module_set_op_attribute(loom_module_t* module, loom_op_t* op,
       module, attribute, 0, &visitor));
   loom_type_dependency_assignment_t assignment;
   IREE_RETURN_IF_ERROR(loom_attribute_dependencies_prepare(
-      &module->type_uses, op, attribute_index, build.root, &assignment));
+      &module->type_uses, op, attribute_index, build.dependencies,
+      &assignment));
   loom_op_attrs(op)[attribute_index] = attribute;
   loom_attribute_dependencies_commit(&module->type_uses, op, attribute_index,
                                      &assignment);

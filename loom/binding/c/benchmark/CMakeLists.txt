@@ -67,6 +67,7 @@ loom_cc_library(
     ::compile_throughput_benchmark_harness
     iree::base
     iree::third_party::google_benchmark
+    loom::binding::c::interop
     loom::binding::c::loomc
   TESTONLY
   PUBLIC

@@ -42,10 +42,12 @@ typedef struct loom_type_segment_t {
   uint32_t hashes[LOOM_TYPE_SEGMENT_CAPACITY];
   // Canonical SSA dependency sets, including forward value IDs.
   loom_type_dependency_id_t dependencies[LOOM_TYPE_SEGMENT_CAPACITY];
+  // Dynamic-dimension subset of dependencies, including nested types.
+  loom_type_dependency_id_t dimension_dependencies[LOOM_TYPE_SEGMENT_CAPACITY];
 } loom_type_segment_t;
 
-static_assert(sizeof(loom_type_segment_t) == 1024,
-              "type rows and facts must retain the 1 KiB segment layout");
+static_assert(sizeof(loom_type_segment_t) == 1152,
+              "type rows and facts must retain the compact segment layout");
 
 // Append-only canonical type storage owned by the module arena. Rows and
 // payloads remain immutable and stable until module destruction. Only the
@@ -100,6 +102,15 @@ static inline loom_type_dependency_id_t loom_type_table_dependencies(
   const loom_type_segment_t* segment =
       loom_type_table_segment_for_id(table, type_id);
   return segment->dependencies[type_id & LOOM_TYPE_SEGMENT_MASK];
+}
+
+// Returns the retained dynamic-dimension dependency subset for a published
+// canonical type ID.
+static inline loom_type_dependency_id_t loom_type_table_dimension_dependencies(
+    const loom_type_table_t* table, loom_type_id_t type_id) {
+  const loom_type_segment_t* segment =
+      loom_type_table_segment_for_id(table, type_id);
+  return segment->dimension_dependencies[type_id & LOOM_TYPE_SEGMENT_MASK];
 }
 
 #ifdef __cplusplus

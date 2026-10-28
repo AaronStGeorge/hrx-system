@@ -310,6 +310,38 @@ ERR_TYPE_018 = ErrorDef(
     fix_hint="Use the same register class for '{field_a}' and '{field_b}'",
 )
 
+# ERR_TYPE_019: Dynamic dimension value_id out of range.
+ERR_TYPE_019 = ErrorDef(
+    domain=ErrorDomain.TYPE,
+    code=19,
+    severity=Severity.ERROR,
+    summary="Dynamic dimension reference out of range.",
+    message="{field_name} type references dimension value %{value_id}, "
+    "but module has only {value_count} values",
+    params=(
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("value_id", ParamKind.U32),
+        ErrorParam("value_count", ParamKind.U32),
+    ),
+    fix_hint="Bind every dynamic dimension to an index-typed value in the module",
+)
+
+# ERR_TYPE_020: Dynamic dimension provider lacks index semantics.
+ERR_TYPE_020 = ErrorDef(
+    domain=ErrorDomain.TYPE,
+    code=20,
+    severity=Severity.ERROR,
+    summary="Dynamic dimension provider must have index semantics.",
+    message="{field_name} type uses '%{value_name}' with type {actual_type} "
+    "as a dynamic dimension; expected 'index'",
+    params=(
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+    ),
+    fix_hint="Bind the dynamic dimension to an index value",
+)
+
 ALL_TYPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_TYPE_001,
     ERR_TYPE_002,
@@ -329,4 +361,6 @@ ALL_TYPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_TYPE_016,
     ERR_TYPE_017,
     ERR_TYPE_018,
+    ERR_TYPE_019,
+    ERR_TYPE_020,
 )

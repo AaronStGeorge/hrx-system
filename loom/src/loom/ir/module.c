@@ -4010,7 +4010,7 @@ static iree_status_t loom_module_clone_topological_type_from_context(
 static iree_status_t loom_module_intern_type_impl(
     loom_module_t* module, uint32_t hash, loom_intern_equal_fn_t equal_fn,
     const void* equal_context, loom_module_type_clone_fn_t clone_fn,
-    const void* clone_context, loom_type_dependency_id_t dependencies,
+    const void* clone_context, loom_type_dependency_sets_t dependencies,
     loom_type_t* out_interned_type, loom_type_id_t* out_type_id,
     bool* out_miss) {
   if (out_miss) {
@@ -4065,7 +4065,8 @@ static iree_status_t loom_module_intern_type_impl(
   const uint32_t row = new_index & LOOM_TYPE_SEGMENT_MASK;
   segment->entries[row] = type;
   segment->hashes[row] = hash;
-  segment->dependencies[row] = dependencies;
+  segment->dependencies[row] = dependencies.all;
+  segment->dimension_dependencies[row] = dependencies.dimensions;
   module->types.count++;
   loom_type_identity_commit(module, &identity_insertion);
   loom_intern_table_insert(&module->type_intern, slot, hash, new_index);
@@ -4214,17 +4215,22 @@ iree_status_t loom_module_intern_topological_type_id(
   IREE_ASSERT(expected_dependency_count == structural_dependency_count);
   IREE_ASSERT(structural_dependency_count == 0 ||
               structural_dependency_ids != NULL);
-  loom_type_dependency_id_t dependencies = 0;
+  loom_type_dependency_sets_t dependencies = {0};
   // No canonical child can have a nonempty set before the first index exists.
   // Static-only modules therefore need no dependency fold over their children.
   if (module->type_uses.index) {
     for (iree_host_size_t i = 0; i < structural_dependency_count; ++i) {
       IREE_ASSERT(structural_dependency_ids[i] < module->types.count);
       IREE_RETURN_IF_ERROR(loom_type_dependencies_union(
-          &module->type_uses, dependencies,
+          &module->type_uses, dependencies.all,
           loom_type_table_dependencies(&module->types,
                                        structural_dependency_ids[i]),
-          &dependencies));
+          &dependencies.all));
+      IREE_RETURN_IF_ERROR(loom_type_dependencies_union(
+          &module->type_uses, dependencies.dimensions,
+          loom_type_table_dimension_dependencies(&module->types,
+                                                 structural_dependency_ids[i]),
+          &dependencies.dimensions));
     }
   }
 
@@ -4306,8 +4312,9 @@ static iree_status_t loom_module_intern_type_with_dependencies(
   const loom_type_equal_context_t equal_context = {module, type};
   return loom_module_intern_type_impl(
       module, hash, loom_type_equal_fn, &equal_context,
-      loom_module_clone_type_from_context, &type, /*dependencies=*/0,
-      out_interned_type, out_type_id, /*out_miss=*/NULL);
+      loom_module_clone_type_from_context, &type,
+      /*dependencies=*/(loom_type_dependency_sets_t){0}, out_interned_type,
+      out_type_id, /*out_miss=*/NULL);
 }
 
 iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
@@ -4403,8 +4410,9 @@ iree_status_t loom_module_make_parameterized_type(
     loom_type_equal_context_t equal_context = {module, type};
     status = loom_module_intern_type_impl(
         module, hash, loom_type_equal_fn, &equal_context,
-        loom_module_retain_type_from_context, &type, /*dependencies=*/0,
-        out_type, out_type_id, &interner_miss);
+        loom_module_retain_type_from_context, &type,
+        /*dependencies=*/(loom_type_dependency_sets_t){0}, out_type,
+        out_type_id, &interner_miss);
   }
   if (!iree_status_is_ok(status) || !interner_miss) {
     iree_arena_checkpoint_restore(&checkpoint);

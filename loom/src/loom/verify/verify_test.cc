@@ -2380,6 +2380,80 @@ TEST_F(VerifyTest, RejectsDuplicateSymbolDefinition) {
 }
 
 //===----------------------------------------------------------------------===//
+// Dynamic dimension reference validation
+//===----------------------------------------------------------------------===//
+
+TEST_F(VerifyTest, DynamicDimensionOutOfRange) {
+  const loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  const loom_type_t arg_types[] = {i32_type};
+  loom_value_id_t args[1];
+  EnterTestFunc(arg_types, IREE_ARRAYSIZE(arg_types), args);
+
+  const loom_type_t tile_type =
+      loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(/*value_id=*/9999), 0);
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_convert_build(&builder_, args[0], tile_type,
+                                         LOOM_LOCATION_UNKNOWN, &op));
+
+  TerminateFunc();
+  DiagnosticCapture structured;
+  const auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 19));
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/019 out-of-range error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "result");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
+  ExpectU32Param(*entry, 1, 9999);
+}
+
+TEST_F(VerifyTest, DynamicDimensionRequiresIndexType) {
+  const loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  const loom_type_t arg_types[] = {i32_type};
+  loom_value_id_t args[1];
+  EnterTestFunc(arg_types, IREE_ARRAYSIZE(arg_types), args);
+
+  const loom_type_t tile_type = loom_type_shaped_1d(
+      LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(args[0]), 0);
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_convert_build(&builder_, args[0], tile_type,
+                                         LOOM_LOCATION_UNKNOWN, &op));
+
+  TerminateFunc();
+  DiagnosticCapture structured;
+  const auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 20));
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/020 wrong-type error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "result");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
+  ExpectTypeParam(*entry, 2, i32_type);
+}
+
+TEST_F(VerifyTest, TypedRegisterMayCarryIndexDimension) {
+  loom_type_t register_type = {};
+  IREE_ASSERT_OK(loom_module_intern_register_type(
+      module_, /*carrier_payload0=*/1, /*carrier_payload1=*/1,
+      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &register_type));
+  const loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  const loom_type_t arg_types[] = {register_type, i32_type};
+  loom_value_id_t args[2];
+  EnterTestFunc(arg_types, IREE_ARRAYSIZE(arg_types), args);
+
+  const loom_type_t tile_type = loom_type_shaped_1d(
+      LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(args[0]), 0);
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_convert_build(&builder_, args[1], tile_type,
+                                         LOOM_LOCATION_UNKNOWN, &op));
+
+  TerminateFunc();
+  const auto result = Verify();
+  EXPECT_EQ(result.error_count, 0u);
+}
+
+//===----------------------------------------------------------------------===//
 // SSA encoding reference validation
 //===----------------------------------------------------------------------===//
 

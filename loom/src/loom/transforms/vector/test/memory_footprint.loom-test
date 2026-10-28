@@ -970,9 +970,9 @@ func.def @config_decl_matvec_block_lane_vec4_origin_missing_bound(%buffer: buffe
 func.def @dynamic_unit_axis_proven_by_assume_relation_through_cast(%buffer: buffer, %base: offset, %row: index, %n: i32) {
   %layout = encoding.layout.dense : encoding<layout>
   %n_idx = index.cast %n : i32 to index
-  %view = buffer.view %buffer[%base] : buffer -> view<[%n]x4xf32, %layout>
+  %view = buffer.view %buffer[%base] : buffer -> view<[%n_idx]x4xf32, %layout>
   %row_in_bounds, %n_idx_assumed = index.assume %row, %n_idx [ge(%row, 0), lt(%row, %n_idx)] : index, index
-  %loaded = vector.load %view[%row_in_bounds, 0] : view<[%n]x4xf32, %layout> -> vector<4xf32>
+  %loaded = vector.load %view[%row_in_bounds, 0] : view<[%n_idx]x4xf32, %layout> -> vector<4xf32>
   func.return
 }
 

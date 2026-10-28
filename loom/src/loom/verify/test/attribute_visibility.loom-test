@@ -79,6 +79,16 @@ func.def @dominating_attribute(%width: index, %value: f32) -> (f32) {
 
 // ====
 
+// Type-valued attributes retain their dimension providers separately from
+// predicate and encoding references.
+func.def @non_index_attribute_dimension(%width: i32, %value: f32) -> (f32) {
+  // ERROR@+1: TYPE/020 "dict type uses '%width' with type i32 as a dynamic dimension; expected 'index'"
+  %annotated = test.attrs %value {shape = {nested = #test.options<mode = fast, element_type = vector<[%width]xf32>>}} : f32
+  func.return %annotated : f32
+}
+
+// ====
+
 // Ordinary regions inherit references; leaving isolation restores outer scope.
 func.def @restored_attribute_scope(%width: index, %condition: i1, %value: f32) {
   test.isolated_region {

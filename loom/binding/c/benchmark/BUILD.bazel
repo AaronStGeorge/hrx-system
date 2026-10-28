@@ -62,6 +62,7 @@ loom_cc_library(
     hdrs = ["workload_compile_benchmark.h"],
     deps = [
         ":compile_throughput_benchmark_harness",
+        "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
         "//runtime/src/iree/base",
         "//third_party:google_benchmark",

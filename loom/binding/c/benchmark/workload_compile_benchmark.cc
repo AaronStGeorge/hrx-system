@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "benchmark/benchmark.h"
+#include "loomc/interop.h"
 
 namespace loomc::bench {
 namespace {
@@ -53,6 +54,15 @@ struct ModuleShape {
 
   // Approximate operation count in the generic textual representation.
   int64_t printed_operation_count = 0;
+
+  // Bytes retained by the native module arena.
+  int64_t module_arena_bytes = 0;
+
+  // Bytes retained by the native type-use arena.
+  int64_t type_use_arena_bytes = 0;
+
+  // Number of canonical native types retained by the module.
+  int64_t canonical_type_count = 0;
 };
 
 static void ReplaceAll(std::string& text, const std::string& old_value,
@@ -130,8 +140,21 @@ static iree_status_t BuildAttentionSource(const loomc_source_t* fixture_source,
   return iree_ok_status();
 }
 
-static iree_status_t CaptureModuleShape(const loomc_module_t* module,
+static iree_status_t CaptureModuleShape(loomc_module_t* module,
                                         ModuleShape* out_shape) {
+  loomc_module_interop_view_t interop_view = {};
+  loomc_result_t* raw_result = nullptr;
+  IREE_RETURN_IF_ERROR(to_iree_status(loomc_module_get_interop_view(
+      module, loom_allocator(), &interop_view, &raw_result)));
+  ResultPtr result(raw_result);
+  IREE_RETURN_IF_ERROR(
+      RequireSucceededResult(result.get(), "module shape verification"));
+  out_shape->module_arena_bytes =
+      (int64_t)interop_view.module->arena.used_allocation_size;
+  out_shape->type_use_arena_bytes =
+      (int64_t)interop_view.module->type_uses.arena.used_allocation_size;
+  out_shape->canonical_type_count = (int64_t)interop_view.module->types.count;
+
   const loomc_module_serialize_options_t options = {
       .type = LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS,
       .structure_size = sizeof(options),
@@ -327,6 +350,12 @@ class AttentionCompileScenario final : public TargetCompileScenario {
     state.counters["output_bytes"] = (double)output_shape_.byte_count;
     state.counters["output_printed_ops"] =
         (double)output_shape_.printed_operation_count;
+    state.counters["output_module_arena_bytes"] =
+        (double)output_shape_.module_arena_bytes;
+    state.counters["output_type_use_arena_bytes"] =
+        (double)output_shape_.type_use_arena_bytes;
+    state.counters["output_canonical_types"] =
+        (double)output_shape_.canonical_type_count;
     state.counters["ir_amplification"] =
         input_shape_.printed_operation_count == 0
             ? 0.0
@@ -569,6 +598,12 @@ class InputScalingCompileScenario final : public TargetCompileScenario {
     state.counters["output_bytes"] = (double)output_shape_.byte_count;
     state.counters["output_printed_ops"] =
         (double)output_shape_.printed_operation_count;
+    state.counters["output_module_arena_bytes"] =
+        (double)output_shape_.module_arena_bytes;
+    state.counters["output_type_use_arena_bytes"] =
+        (double)output_shape_.type_use_arena_bytes;
+    state.counters["output_canonical_types"] =
+        (double)output_shape_.canonical_type_count;
     state.counters["ir_amplification"] =
         source_shape_.printed_operation_count == 0
             ? 0.0
@@ -753,6 +788,12 @@ class PipelineCompileScenario final : public TargetCompileScenario {
     state.counters["output_bytes"] = (double)output_shape_.byte_count;
     state.counters["output_printed_ops"] =
         (double)output_shape_.printed_operation_count;
+    state.counters["output_module_arena_bytes"] =
+        (double)output_shape_.module_arena_bytes;
+    state.counters["output_type_use_arena_bytes"] =
+        (double)output_shape_.type_use_arena_bytes;
+    state.counters["output_canonical_types"] =
+        (double)output_shape_.canonical_type_count;
     state.counters["ir_amplification"] =
         (double)output_shape_.printed_operation_count /
         (double)input_shape_.printed_operation_count;

@@ -525,8 +525,12 @@ typedef struct loom_dependency_carrier_t {
   uint32_t declared;
   // Currently active membership, or zero while dropped.
   uint32_t active;
-  // Prepared membership used by failure-atomic bulk refresh.
-  uint32_t prepared;
+  union {
+    // Prepared membership used by failure-atomic value-owner bulk refresh.
+    uint32_t prepared;
+    // Retained dimension subset for attribute owners.
+    uint32_t dimension_dependencies;
+  };
   // Previous carrier on the active root, or zero at the list head.
   uint32_t previous;
   // Next carrier on the active root, or next recycled carrier while unused.
@@ -662,21 +666,28 @@ static iree_status_t loom_dependency_prefix(loom_type_use_table_t* table,
 // Attribute payloads and TYPE IDs have already passed canonical construction.
 // Aggregate recursion visits immediate payload ownership, never a child type.
 static iree_status_t loom_dependency_collect_attribute(
-    loom_module_t* module, const loom_attribute_t* attribute, uint32_t* root) {
+    loom_module_t* module, const loom_attribute_t* attribute,
+    loom_type_dependency_sets_t* sets) {
   switch ((loom_attr_kind_t)attribute->kind) {
-    case LOOM_ATTR_TYPE:
-      return loom_type_dependencies_union(
-          &module->type_uses, *root,
+    case LOOM_ATTR_TYPE: {
+      IREE_RETURN_IF_ERROR(loom_type_dependencies_union(
+          &module->type_uses, sets->all,
           loom_type_table_dependencies(&module->types, attribute->type_id),
-          root);
+          &sets->all));
+      return loom_type_dependencies_union(
+          &module->type_uses, sets->dimensions,
+          loom_type_table_dimension_dependencies(&module->types,
+                                                 attribute->type_id),
+          &sets->dimensions);
+    }
     case LOOM_ATTR_PREDICATE_LIST:
       for (uint16_t i = 0; i < attribute->count; ++i) {
         const loom_predicate_t* predicate = &attribute->predicate_list[i];
         for (uint8_t j = 0; j < predicate->arg_count; ++j) {
           if (predicate->arg_tags[j] == LOOM_PRED_ARG_VALUE) {
             IREE_RETURN_IF_ERROR(loom_type_dependencies_add(
-                &module->type_uses, *root, (loom_value_id_t)predicate->args[j],
-                root));
+                &module->type_uses, sets->all,
+                (loom_value_id_t)predicate->args[j], &sets->all));
           }
         }
       }
@@ -684,19 +695,19 @@ static iree_status_t loom_dependency_collect_attribute(
     case LOOM_ATTR_DICT:
       for (uint16_t i = 0; i < attribute->count; ++i) {
         IREE_RETURN_IF_ERROR(loom_dependency_collect_attribute(
-            module, &attribute->dict_entries[i].value, root));
+            module, &attribute->dict_entries[i].value, sets));
       }
       break;
     case LOOM_ATTR_PARAMETERIZED:
       for (uint16_t i = 0; i < attribute->count; ++i) {
         IREE_RETURN_IF_ERROR(loom_dependency_collect_attribute(
-            module, &attribute->parameterized_slots[i], root));
+            module, &attribute->parameterized_slots[i], sets));
       }
       break;
     case LOOM_ATTR_PARAMETERIZED_ARRAY:
       for (uint16_t i = 0; i < attribute->count; ++i) {
         IREE_RETURN_IF_ERROR(loom_dependency_collect_attribute(
-            module, &attribute->parameterized_array[i], root));
+            module, &attribute->parameterized_array[i], sets));
       }
       break;
     default:
@@ -707,7 +718,7 @@ static iree_status_t loom_dependency_collect_attribute(
 
 iree_status_t loom_type_dependencies_collect_immediate(
     loom_module_t* module, loom_type_t type,
-    loom_type_dependency_id_t* out_root) {
+    loom_type_dependency_sets_t* inout_sets) {
   if (!loom_type_kind_is_valid(loom_type_kind(type)) ||
       !loom_type_may_reference_values(type)) {
     return iree_ok_status();
@@ -719,7 +730,7 @@ iree_status_t loom_type_dependencies_collect_immediate(
       const uint8_t count = loom_type_parameterized_parameter_count(type);
       for (uint8_t i = 0; i < count; ++i) {
         IREE_RETURN_IF_ERROR(loom_dependency_collect_attribute(
-            module, &parameters[i], out_root));
+            module, &parameters[i], inout_sets));
       }
       return iree_ok_status();
     }
@@ -729,16 +740,19 @@ iree_status_t loom_type_dependencies_collect_immediate(
   if (loom_type_has_dimensions(type)) {
     for (uint8_t i = 0; i < loom_type_rank(type); ++i) {
       if (loom_type_dim_is_dynamic_at(type, i)) {
+        const loom_value_id_t provider = loom_type_dim_value_id_at(type, i);
         IREE_RETURN_IF_ERROR(loom_type_dependencies_add(
-            &module->type_uses, *out_root, loom_type_dim_value_id_at(type, i),
-            out_root));
+            &module->type_uses, inout_sets->all, provider, &inout_sets->all));
+        IREE_RETURN_IF_ERROR(loom_type_dependencies_add(
+            &module->type_uses, inout_sets->dimensions, provider,
+            &inout_sets->dimensions));
       }
     }
   }
   if (loom_type_has_ssa_encoding(type)) {
     IREE_RETURN_IF_ERROR(loom_type_dependencies_add(
-        &module->type_uses, *out_root, loom_type_encoding_value_id(type),
-        out_root));
+        &module->type_uses, inout_sets->all, loom_type_encoding_value_id(type),
+        &inout_sets->all));
   }
   return iree_ok_status();
 }
@@ -943,11 +957,12 @@ void loom_type_dependencies_commit(
 
 iree_status_t loom_attribute_dependencies_prepare(
     loom_type_use_table_t* table, loom_op_t* op, uint8_t attribute_index,
-    loom_type_dependency_id_t root,
+    loom_type_dependency_sets_t dependencies,
     loom_type_dependency_assignment_t* out_assignment) {
   IREE_RETURN_IF_ERROR(loom_dependency_prepare_carrier(
-      table, loom_op_attribute_owners(op)[attribute_index], root,
+      table, loom_op_attribute_owners(op)[attribute_index], dependencies.all,
       table->value_table->count, out_assignment));
+  out_assignment->dimensions = dependencies.dimensions;
   if (out_assignment->carrier) {
     loom_dependency_carrier_t* carrier =
         loom_dependency_carrier(table->index, out_assignment->carrier);
@@ -963,6 +978,11 @@ void loom_attribute_dependencies_commit(
     const loom_type_dependency_assignment_t* assignment) {
   loom_dependency_commit_carrier(
       table, &loom_op_attribute_owners(op)[attribute_index], assignment);
+  const uint32_t carrier = loom_op_attribute_owners(op)[attribute_index];
+  if (carrier) {
+    loom_dependency_carrier(table->index, carrier)->dimension_dependencies =
+        assignment->dimensions;
+  }
 }
 
 void loom_attribute_dependencies_drop(loom_type_use_table_t* table,
@@ -1019,8 +1039,11 @@ iree_status_t loom_type_dependencies_recompute(loom_type_use_table_t* table) {
   for (uint32_t id = 1; id <= table->index->carriers.count; ++id) {
     loom_dependency_carrier_t* carrier =
         loom_dependency_carrier(table->index, id);
+    if (carrier->kind != LOOM_DEPENDENCY_OWNER_VALUE) {
+      continue;
+    }
     carrier->prepared = 0;
-    if (carrier->declared && carrier->kind == LOOM_DEPENDENCY_OWNER_VALUE &&
+    if (carrier->declared &&
         loom_dependency_carrier_is_live(loom_value_table_const_value(
             table->value_table, carrier->owner.value))) {
       IREE_RETURN_IF_ERROR(loom_dependency_prefix(table, carrier->declared,
@@ -1070,19 +1093,22 @@ bool loom_type_dependencies_has_users(const loom_type_use_table_t* table,
 void loom_type_dependencies_begin(const loom_type_use_table_t* table,
                                   loom_value_id_t value_id,
                                   loom_type_use_iterator_t* out_iterator) {
-  out_iterator->index = table->index;
-  out_iterator->pending_count = 0;
-  out_iterator->carrier = 0;
-  out_iterator->members = 0;
+  uint32_t root = 0;
   if (value_id < table->value_table->count) {
     const uint32_t carrier =
         loom_value_table_const_type_use_heads(table->value_table, value_id)
             ->carrier;
-    const uint32_t root =
-        carrier ? loom_dependency_carrier(table->index, carrier)->active : 0;
-    if (root) {
-      out_iterator->pending[out_iterator->pending_count++] = root;
-    }
+    root = carrier ? loom_dependency_carrier(table->index, carrier)->active : 0;
+  }
+  loom_type_dependency_set_begin(table, root, out_iterator);
+}
+
+void loom_type_dependency_set_begin(const loom_type_use_table_t* table,
+                                    loom_type_dependency_id_t root,
+                                    loom_type_use_iterator_t* out_iterator) {
+  *out_iterator = (loom_type_use_iterator_t){.index = table->index};
+  if (root) {
+    out_iterator->pending[out_iterator->pending_count++] = root;
   }
 }
 
@@ -1170,16 +1196,20 @@ void loom_attribute_dependencies_begin(const loom_type_use_table_t* table,
                                        const loom_op_t* op,
                                        uint8_t attribute_index,
                                        loom_type_use_iterator_t* out_iterator) {
-  out_iterator->index = table->index;
-  out_iterator->pending_count = 0;
-  out_iterator->carrier = 0;
-  out_iterator->members = 0;
   const uint32_t carrier = loom_op_attribute_owners(op)[attribute_index];
   const uint32_t root =
       carrier ? loom_dependency_carrier(table->index, carrier)->active : 0;
-  if (root) {
-    out_iterator->pending[out_iterator->pending_count++] = root;
-  }
+  loom_type_dependency_set_begin(table, root, out_iterator);
+}
+
+void loom_attribute_dimension_dependencies_begin(
+    const loom_type_use_table_t* table, const loom_op_t* op,
+    uint8_t attribute_index, loom_type_use_iterator_t* out_iterator) {
+  const uint32_t carrier = loom_op_attribute_owners(op)[attribute_index];
+  const uint32_t root = carrier ? loom_dependency_carrier(table->index, carrier)
+                                      ->dimension_dependencies
+                                : 0;
+  loom_type_dependency_set_begin(table, root, out_iterator);
 }
 
 void loom_attribute_users_begin(const loom_type_use_table_t* table,

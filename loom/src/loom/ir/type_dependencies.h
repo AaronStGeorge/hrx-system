@@ -117,6 +117,15 @@ static inline loom_value_id_t loom_value_set_cursor_next(
 // Type and attribute dependency ownership
 //===----------------------------------------------------------------------===//
 
+// Canonical dependency facts retained for one type. |dimensions| is always a
+// subset of |all| and carries only SSA values used as dynamic dimensions.
+typedef struct loom_type_dependency_sets_t {
+  // Every SSA value referenced by the type or its structural children.
+  loom_type_dependency_id_t all;
+  // SSA values supplying dynamic dimensions in the complete type.
+  loom_type_dependency_id_t dimensions;
+} loom_type_dependency_sets_t;
+
 // Combines distinct, nonempty canonical sets. The inline union handles empty
 // and identical roots before entering recursive membership construction.
 iree_status_t loom_type_dependencies_union_nonempty(
@@ -154,11 +163,12 @@ bool loom_type_dependencies_contains(const loom_type_use_table_t* table,
                                      loom_type_dependency_id_t root,
                                      loom_value_id_t provider);
 
-// Adds immediate dimensions, encodings and parameter attributes to a summary.
-// Types with only structural children are handled by the inline collector.
+// Adds immediate dimensions, encodings, and parameter attributes to retained
+// summaries. Types with only structural children are handled by the inline
+// collector.
 iree_status_t loom_type_dependencies_collect_immediate(
     loom_module_t* module, loom_type_t type,
-    loom_type_dependency_id_t* out_root);
+    loom_type_dependency_sets_t* inout_sets);
 
 // Completes a canonical type's summary from its immediate fields and retained
 // structural-child membership. The payload has passed construction validation;
@@ -167,16 +177,16 @@ iree_status_t loom_type_dependencies_collect_immediate(
 // collector call, including containers whose retained membership is empty.
 static inline iree_status_t loom_type_dependencies_collect(
     loom_module_t* module, loom_type_t type,
-    loom_type_dependency_id_t structural_dependencies,
-    loom_type_dependency_id_t* out_root) {
-  *out_root = structural_dependencies;
+    loom_type_dependency_sets_t structural_dependencies,
+    loom_type_dependency_sets_t* out_sets) {
+  *out_sets = structural_dependencies;
   switch (loom_type_kind(type)) {
     case LOOM_TYPE_FUNCTION:
     case LOOM_TYPE_DIALECT:
     case LOOM_TYPE_REGISTER:
       return iree_ok_status();
     default:
-      return loom_type_dependencies_collect_immediate(module, type, out_root);
+      return loom_type_dependencies_collect_immediate(module, type, out_sets);
   }
 }
 
@@ -185,6 +195,8 @@ static inline iree_status_t loom_type_dependencies_collect(
 typedef struct loom_type_dependency_assignment_t {
   // Full declared set, retained even while some providers are unavailable.
   loom_type_dependency_id_t declared;
+  // Dynamic-dimension subset for attribute owners; zero for value owners.
+  loom_type_dependency_id_t dimensions;
   // Prefix containing only providers below the supplied availability limit.
   loom_type_dependency_id_t active;
   // Prepared carrier slot, or zero when the declaration is dependency-free.
@@ -208,7 +220,7 @@ void loom_type_dependencies_commit(
 // unchanged on failure. No mutation may intervene before commit.
 iree_status_t loom_attribute_dependencies_prepare(
     loom_type_use_table_t* table, loom_op_t* op, uint8_t attribute_index,
-    loom_type_dependency_id_t root,
+    loom_type_dependency_sets_t dependencies,
     loom_type_dependency_assignment_t* out_assignment);
 
 // Publishes prepared attribute ownership. The caller publishes its payload in
@@ -272,8 +284,13 @@ typedef struct loom_attribute_user_t {
   uint8_t attribute_index;
 } loom_attribute_user_t;
 
-// Begins iterating the active dependencies of a value, or an empty range for an
-// out-of-range value. A dropped carrier has no active dependencies.
+// Begins iterating one canonical dependency set. Zero produces an empty range.
+void loom_type_dependency_set_begin(const loom_type_use_table_t* table,
+                                    loom_type_dependency_id_t root,
+                                    loom_type_use_iterator_t* out_iterator);
+
+// Begins iterating the active dependencies of a value, or an empty range for
+// an out-of-range value. A dropped carrier has no active dependencies.
 void loom_type_dependencies_begin(const loom_type_use_table_t* table,
                                   loom_value_id_t value_id,
                                   loom_type_use_iterator_t* out_iterator);
@@ -310,6 +327,13 @@ void loom_attribute_dependencies_begin(const loom_type_use_table_t* table,
                                        const loom_op_t* op,
                                        uint8_t attribute_index,
                                        loom_type_use_iterator_t* out_iterator);
+
+// Begins the complete dynamic-dimension provider set of an attribute. Unlike
+// active dependencies, this includes forward and out-of-range provider IDs so
+// verification can diagnose malformed bindings.
+void loom_attribute_dimension_dependencies_begin(
+    const loom_type_use_table_t* table, const loom_op_t* op,
+    uint8_t attribute_index, loom_type_use_iterator_t* out_iterator);
 
 // Begins incoming attribute owners without visiting value-type owners.
 void loom_attribute_users_begin(const loom_type_use_table_t* table,
