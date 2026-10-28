@@ -37,6 +37,8 @@ enum class SubmissionMode {
   kExplicit,
   kRecordedIndirect,
   kRemappedDefaults,
+  kRemappedExplicit,
+  kRemappedRecordedIndirect,
   kPooledDefaults,
   kAtomicDefaults,
 };
@@ -258,7 +260,6 @@ class ExecutionTest
   }
 
   void CreateVirtualStorage(iree_hal_buffer_t** out_root,
-                            std::array<Ref<iree_hal_buffer_t>, 2>* backings,
                             iree_device_size_t* out_unit) {
     iree_hal_pool_scope_t scope = {
         .family_count = families_.size(),
@@ -293,13 +294,6 @@ class ExecutionTest
                                iree_max(capabilities.mapping_granularity,
                                         capabilities.reservation_granularity));
     ASSERT_GE(unit, sizeof(Payload));
-    // Whole slabs start at source offset zero. The mapping unit constrains
-    // source ranges and reserved addresses, not the backing's own addresses.
-    for (auto& backing : *backings) {
-      IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-          mapping_pool_, iree_hal_make_pool_reservation_request(unit, 0),
-          iree_infinite_timeout(), backing.out()));
-    }
     const iree_hal_virtual_buffer_options_t options = {
         .byte_length = unit,
         .mapping_granularity = unit,
@@ -484,9 +478,12 @@ class ExecutionTest
 TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
   const bool npu_first = std::get<0>(GetParam());
   const auto mode = std::get<1>(GetParam());
-  const bool remapped = mode == SubmissionMode::kRemappedDefaults;
+  const bool remapped = mode == SubmissionMode::kRemappedDefaults ||
+                        mode == SubmissionMode::kRemappedExplicit ||
+                        mode == SubmissionMode::kRemappedRecordedIndirect;
   const bool pooled = mode == SubmissionMode::kPooledDefaults;
-  const bool recorded = mode == SubmissionMode::kRecordedIndirect;
+  const bool recorded = mode == SubmissionMode::kRecordedIndirect ||
+                        mode == SubmissionMode::kRemappedRecordedIndirect;
   const bool atomic = mode == SubmissionMode::kAtomicDefaults;
   const bool defaults = UsesDefaultBarriers(mode);
   Ref<iree_hal_semaphore_t> memory_ready;
@@ -501,8 +498,7 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
   iree_device_size_t mapping_unit = 0;
   Ref<iree_hal_buffer_t> root;
   if (remapped) {
-    ASSERT_NO_FATAL_FAILURE(
-        CreateVirtualStorage(root.out(), &backings, &mapping_unit));
+    ASSERT_NO_FATAL_FAILURE(CreateVirtualStorage(root.out(), &mapping_unit));
     if (IsSkipped()) {
       return;
     }
@@ -624,6 +620,21 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
             : iree_hal_buffer_ref_list_t{1, &gpu_reference},
         29, &native_second));
     ASSERT_NO_FATAL_FAILURE(Record(kCpu, {1, &references[2]}, 100, &consumer));
+  }
+  if (remapped) {
+    // Qualify transitions and seal recordings before any payload exists. The
+    // same recordings must remain valid as later batches replace the backing.
+    iree_hal_pool_stats_t stats;
+    iree_hal_pool_query_stats(mapping_pool_, &stats);
+    ASSERT_EQ(stats.bytes_committed, 0u);
+    // Whole slabs start at source offset zero. The mapping unit constrains
+    // source ranges and reserved addresses, not the backing's own addresses.
+    for (auto& backing : backings) {
+      IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+          mapping_pool_,
+          iree_hal_make_pool_reservation_request(mapping_unit, 0),
+          iree_infinite_timeout(), backing.out()));
+    }
   }
   auto* cpu_timeline = participants_[kCpu].timeline.get();
   for (uint32_t replay = 0; replay < (atomic ? 32u : 3u); ++replay) {
@@ -827,13 +838,15 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
 
 INSTANTIATE_TEST_SUITE_P(
     SharedBacking, ExecutionTest,
-    ::testing::Combine(::testing::Bool(),
-                       ::testing::Values(SubmissionMode::kDefaults,
-                                         SubmissionMode::kExplicit,
-                                         SubmissionMode::kRecordedIndirect,
-                                         SubmissionMode::kRemappedDefaults,
-                                         SubmissionMode::kPooledDefaults,
-                                         SubmissionMode::kAtomicDefaults)),
+    ::testing::Combine(
+        ::testing::Bool(),
+        ::testing::Values(SubmissionMode::kDefaults, SubmissionMode::kExplicit,
+                          SubmissionMode::kRecordedIndirect,
+                          SubmissionMode::kRemappedDefaults,
+                          SubmissionMode::kRemappedExplicit,
+                          SubmissionMode::kRemappedRecordedIndirect,
+                          SubmissionMode::kPooledDefaults,
+                          SubmissionMode::kAtomicDefaults)),
     [](const ::testing::TestParamInfo<ExecutionTest::ParamType>& info) {
       std::string name =
           std::get<0>(info.param) ? "CpuNpuGpuCpu" : "CpuGpuNpuCpu";
@@ -846,6 +859,10 @@ INSTANTIATE_TEST_SUITE_P(
           return name + "RecordedIndirect";
         case SubmissionMode::kRemappedDefaults:
           return name + "RemappedDefaults";
+        case SubmissionMode::kRemappedExplicit:
+          return name + "RemappedExplicit";
+        case SubmissionMode::kRemappedRecordedIndirect:
+          return name + "RemappedRecordedIndirect";
         case SubmissionMode::kPooledDefaults:
           return name + "PooledDefaults";
         case SubmissionMode::kAtomicDefaults:
