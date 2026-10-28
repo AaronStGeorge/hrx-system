@@ -225,17 +225,16 @@ iree_status_t loom_buffer_pack_facts(loom_fact_context_t* context,
 
     int64_t byte_offset = 0;
     int64_t byte_length = 0;
-    if (!exact ||
-        !loom_buffer_pack_align_exact(current_offset, minimum_alignment,
-                                      &byte_offset) ||
-        !loom_value_facts_as_exact_i64(operand_facts[i], &byte_length) ||
-        byte_length < 0 ||
-        !iree_checked_add_i64(byte_offset, byte_length, &current_offset)) {
+    if (!exact || !loom_buffer_pack_align_exact(
+                      current_offset, minimum_alignment, &byte_offset)) {
       exact = false;
       result_facts[i + 1] = loom_buffer_nonnegative_unknown_facts();
       continue;
     }
     result_facts[i + 1] = loom_value_facts_exact_i64(byte_offset);
+    exact = loom_value_facts_as_exact_i64(operand_facts[i], &byte_length) &&
+            byte_length >= 0 &&
+            iree_checked_add_i64(byte_offset, byte_length, &current_offset);
   }
 
   int64_t total_byte_length = 0;

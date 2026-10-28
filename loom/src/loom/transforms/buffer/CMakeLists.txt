@@ -41,6 +41,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal
+    iree::base::internal::arena
     loom::ir
     loom::ops::buffer
     loom::ops::index

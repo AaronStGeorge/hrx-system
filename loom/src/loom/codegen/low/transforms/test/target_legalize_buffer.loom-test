@@ -1,5 +1,59 @@
 // RUN: pass target-legalize{mode=eager,policy=reference-only}
 
+// Dynamic packing uses the offset carrier, independently of index width.
+test.target<low_core> @wide_offsets {index_bitwidth = 32, offset_bitwidth = 64}
+
+test.target<low_core> @narrow_offsets {index_bitwidth = 64, offset_bitwidth = 32}
+
+func.def target(@wide_offsets) @pack_wide(%header: offset, %payload: offset, %tail: offset) -> (offset, offset, offset, offset) {
+  %total, %header_offset, %payload_offset, %tail_offset = buffer.pack [align(4) %header, align(16) %payload, align(1) %tail] : offset
+  func.return %total, %header_offset, %payload_offset, %tail_offset : offset, offset, offset, offset
+}
+
+func.def target(@narrow_offsets) @pack_narrow(%length: offset) -> (offset, offset) {
+  %total, %origin = buffer.pack [align(2147483648) %length] : offset
+  func.return %total, %origin : offset, offset
+}
+
+// ----
+test.target<low_core> @wide_offsets {index_bitwidth = 32, offset_bitwidth = 64}
+
+test.target<low_core> @narrow_offsets {index_bitwidth = 64, offset_bitwidth = 32}
+
+func.def target(@wide_offsets) @pack_wide(%header: offset, %payload: offset, %tail: offset) -> (offset, offset, offset, offset) {
+  %header_offset = index.constant 0 : offset
+  %17 = index.add %header_offset, %header : offset
+  %18 = index.constant 15 : offset
+  %19 = index.add %17, %18 : offset
+  %20 = index.cast %19 : offset to i64
+  %21 = scalar.constant -16 : i64
+  %22 = scalar.andi %20, %21 : i64
+  %payload_offset = index.cast %22 : i64 to offset
+  %tail_offset = index.add %payload_offset, %payload : offset
+  %25 = index.add %tail_offset, %tail : offset
+  %26 = index.constant 15 : offset
+  %27 = index.add %25, %26 : offset
+  %28 = index.cast %27 : offset to i64
+  %29 = scalar.constant -16 : i64
+  %30 = scalar.andi %28, %29 : i64
+  %total = index.cast %30 : i64 to offset
+  func.return %total, %header_offset, %payload_offset, %tail_offset : offset, offset, offset, offset
+}
+
+func.def target(@narrow_offsets) @pack_narrow(%length: offset) -> (offset, offset) {
+  %origin = index.constant 0 : offset
+  %33 = index.add %origin, %length : offset
+  %34 = index.constant 2147483647 : offset
+  %35 = index.add %33, %34 : offset
+  %36 = index.cast %35 : offset to i32
+  %37 = scalar.constant -2147483648 : i32
+  %38 = scalar.andi %36, %37 : i32
+  %total = index.cast %38 : i32 to offset
+  func.return %total, %origin : offset, offset
+}
+
+// ====
+
 test.target<low_core> @test_target
 
 func.def target(@test_target) @copy(%source: buffer, %source_offset: offset, %target: buffer, %target_offset: offset, %byte_length: offset) {
