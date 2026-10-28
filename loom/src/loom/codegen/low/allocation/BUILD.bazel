@@ -1187,7 +1187,7 @@ loom_cc_test(
         ":target_constraints",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/test",
+        "//loom/src/loom/ops/low",
         "//loom/src/loom/target:facts_builder",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/test:descriptors",

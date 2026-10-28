@@ -14,7 +14,8 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
-#include "loom/ops/test/ops.h"
+#include "loom/ir/module.h"
+#include "loom/ops/low/ops.h"
 #include "loom/target/facts_builder.h"
 #include "loom/target/registers.h"
 #include "loom/target/test/descriptors.h"
@@ -56,10 +57,48 @@ class LowAllocationTargetConstraintsTest : public ::testing::Test {
         .feature_bits = target_bundle->config->contract_feature_bits,
         .descriptor_set = loom_test_low_core_descriptor_set(),
     };
+
+    loom_context_initialize(iree_allocator_system(), &context_);
+    iree_host_size_t vtable_count = 0;
+    const auto* vtables = loom_low_dialect_vtables(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_LOW, vtables, (uint16_t)vtable_count));
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
+    IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("constraints"),
+                                        &block_pool_, nullptr,
+                                        iree_allocator_system(), &module_));
+    loom_builder_t builder;
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_module_block(module_), &builder);
+    loom_string_id_t name;
+    IREE_ASSERT_OK(
+        loom_builder_intern_string(&builder, IREE_SV("owner"), &name));
+    loom_symbol_id_t symbol;
+    IREE_ASSERT_OK(loom_module_add_symbol(module_, name, &symbol));
+    loom_string_id_t descriptor_set;
+    IREE_ASSERT_OK(loom_builder_intern_string(
+        &builder, target_.descriptor_set_key, &descriptor_set));
+    IREE_ASSERT_OK(loom_low_func_def_build(
+        &builder, 0, /*visibility=*/0, /*retain=*/0, /*cc=*/0,
+        /*effect_contract=*/0, /*inline_policy=*/0, /*allocation=*/0,
+        /*schedule=*/0, descriptor_set, /*target=*/{}, /*abi=*/0, {}, {},
+        LOOM_STRING_ID_INVALID, {}, loom_symbol_ref_t{0, symbol},
+        /*arg_types=*/nullptr, /*arg_types_count=*/0,
+        /*result_types=*/nullptr, /*result_count=*/0,
+        /*tied_results=*/nullptr, /*tied_result_count=*/0,
+        /*predicates=*/nullptr, /*predicates_count=*/0, LOOM_LOCATION_UNKNOWN,
+        &function_op_));
+    loom_builder_enter_region(&builder, function_op_,
+                              loom_low_func_def_body(function_op_));
+    loom_op_t* return_op = nullptr;
+    IREE_ASSERT_OK(loom_low_return_build(&builder, nullptr, 0,
+                                         LOOM_LOCATION_UNKNOWN, &return_op));
   }
 
   void TearDown() override {
     iree_arena_deinitialize(&arena_);
+    loom_module_free(module_);
+    loom_context_deinitialize(&context_);
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
@@ -70,12 +109,19 @@ class LowAllocationTargetConstraintsTest : public ::testing::Test {
     return reg_class_id;
   }
 
+  // Reusable blocks for native constraint data and diagnostic ownership.
   iree_arena_block_pool_t block_pool_;
+  // Owns resolved constraints and indexes.
   iree_arena_allocator_t arena_;
-  loom_module_t module_ = {};
-  loom_op_t function_op_ = {};
+  // Registered Low operations used by the diagnostic owner.
+  loom_context_t context_;
+  // Owns function and value identities used by the constraints.
+  loom_module_t* module_ = nullptr;
+  // Empty Low function anchoring diagnostics, not an allocator input program.
+  loom_op_t* function_op_ = nullptr;
   // Complete synthetic target facts borrowed by |target_|.
   loom_target_facts_t target_facts_ = {};
+  // Resolved target whose register contract is under test.
   loom_low_resolved_target_t target_ = {};
 };
 
@@ -87,7 +133,7 @@ TEST_F(LowAllocationTargetConstraintsTest, ClampsBudgetToDescriptorCapacity) {
 
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, &budget, /*budget_count=*/1,
+      module_, function_op_, &target_, &budget, /*budget_count=*/1,
       /*reserved_ranges=*/nullptr, /*reserved_range_count=*/0,
       /*emitter=*/iree_diagnostic_emitter_t{}, &arena_, &constraints));
 
@@ -109,7 +155,7 @@ TEST_F(LowAllocationTargetConstraintsTest, AppliesBudgetToUnboundedClass) {
 
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, &budget, /*budget_count=*/1,
+      module_, function_op_, &target_, &budget, /*budget_count=*/1,
       /*reserved_ranges=*/nullptr, /*reserved_range_count=*/0,
       /*emitter=*/iree_diagnostic_emitter_t{}, &arena_, &constraints));
 
@@ -140,7 +186,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
   };
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, budgets, IREE_ARRAYSIZE(budgets),
+      module_, function_op_, &target_, budgets, IREE_ARRAYSIZE(budgets),
       /*reserved_ranges=*/nullptr, /*reserved_range_count=*/0,
       /*emitter=*/iree_diagnostic_emitter_t{}, &arena_, &constraints));
 
@@ -167,7 +213,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
   };
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, &budget, /*budget_count=*/1,
+      module_, function_op_, &target_, &budget, /*budget_count=*/1,
       reserved_ranges, IREE_ARRAYSIZE(reserved_ranges), {}, &arena_,
       &constraints));
 
@@ -188,7 +234,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, 1, 2};
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, /*budgets=*/nullptr,
+      module_, function_op_, &target_, /*budgets=*/nullptr,
       /*budget_count=*/0, &reservation, /*reserved_range_count=*/1, {}, &arena_,
       &constraints));
 
@@ -231,7 +277,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, r0, 1};
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, /*budgets=*/nullptr,
+      module_, function_op_, &target_, /*budgets=*/nullptr,
       /*budget_count=*/0, &reservation, /*reserved_range_count=*/1, {}, &arena_,
       &constraints));
 
@@ -255,7 +301,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
       IREE_SV("test.i32"), LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID, 5, 2};
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, &budget, /*budget_count=*/1,
+      module_, function_op_, &target_, &budget, /*budget_count=*/1,
       &reservation, /*reserved_range_count=*/1, {}, &arena_, &constraints));
 
   EXPECT_EQ(
@@ -268,15 +314,15 @@ TEST_F(LowAllocationTargetConstraintsTest,
        MoveFailureRetainsDescriptorClassIdentity) {
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
+      module_, function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
       &constraints));
   const uint16_t reg_class_id = RegisterClassId(IREE_SV("test.phys"));
   loom_low_allocation_target_constraints_record_move_failure(
-      &constraints, &function_op_, reg_class_id, 2, 3,
+      &constraints, function_op_, reg_class_id, 2, 3,
       IREE_SV("parallel-move-no-scratch-unit"));
 
   EXPECT_EQ(constraints.error_count, 1u);
-  EXPECT_EQ(constraints.failure.op, &function_op_);
+  EXPECT_EQ(constraints.failure.op, function_op_);
   EXPECT_EQ(constraints.failure.value_id, LOOM_VALUE_ID_INVALID);
   EXPECT_EQ(constraints.failure.descriptor_reg_class_id, reg_class_id);
   EXPECT_EQ(constraints.failure.value_class.type_kind, LOOM_TYPE_REGISTER);
@@ -299,7 +345,7 @@ TEST_F(LowAllocationTargetConstraintsTest, ReferenceSpillingIsTargetDeclared) {
 
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, /*budgets=*/nullptr,
+      module_, function_op_, &target_, /*budgets=*/nullptr,
       /*budget_count=*/0, /*reserved_ranges=*/nullptr,
       /*reserved_range_count=*/0, /*emitter=*/iree_diagnostic_emitter_t{},
       &arena_, &constraints));
@@ -329,7 +375,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
   };
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, &budget, /*budget_count=*/1,
+      module_, function_op_, &target_, &budget, /*budget_count=*/1,
       /*reserved_ranges=*/nullptr, /*reserved_range_count=*/0, emitter, &arena_,
       &constraints));
 
@@ -340,7 +386,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
           &constraints, reg_class_id,
           LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
           /*location_base=*/15, /*location_count=*/1, IREE_SV("test"),
-          &function_op_, &valid));
+          function_op_, &valid));
   EXPECT_TRUE(valid);
 
   IREE_ASSERT_OK(
@@ -348,7 +394,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
           &constraints, reg_class_id,
           LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
           /*location_base=*/20, /*location_count=*/1, IREE_SV("test"),
-          &function_op_, &valid));
+          function_op_, &valid));
   EXPECT_FALSE(valid);
 
   IREE_ASSERT_OK(
@@ -356,7 +402,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
           &constraints, reg_class_id,
           LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
           /*location_base=*/32, /*location_count=*/8, IREE_SV("test"),
-          &function_op_, &valid));
+          function_op_, &valid));
   EXPECT_TRUE(valid);
 
   IREE_ASSERT_OK(
@@ -364,7 +410,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
           &constraints, reg_class_id,
           LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
           /*location_base=*/31, /*location_count=*/2, IREE_SV("test"),
-          &function_op_, &valid));
+          function_op_, &valid));
   EXPECT_FALSE(valid);
 
   IREE_ASSERT_OK(
@@ -372,7 +418,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
           &constraints, reg_class_id,
           LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
           /*location_base=*/40, /*location_count=*/1, IREE_SV("test"),
-          &function_op_, &valid));
+          function_op_, &valid));
   EXPECT_FALSE(valid);
   EXPECT_EQ(capture.count, 3u);
   EXPECT_EQ(constraints.error_count, 3u);
@@ -401,7 +447,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
     const iree_diagnostic_emitter_t emitter = {CaptureDiagnostic, &capture};
     loom_low_allocation_target_constraints_t constraints = {};
     IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-        &module_, &function_op_, &target_, &budget, /*budget_count=*/1,
+        module_, function_op_, &target_, &budget, /*budget_count=*/1,
         &reservation, /*reserved_range_count=*/1, emitter, &arena_,
         &constraints));
     EXPECT_EQ(capture.count, 0u);
@@ -442,7 +488,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
   };
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, /*budgets=*/nullptr,
+      module_, function_op_, &target_, /*budgets=*/nullptr,
       /*budget_count=*/0, reserved_ranges, IREE_ARRAYSIZE(reserved_ranges),
       emitter, &arena_, &constraints));
   EXPECT_EQ(constraints.error_count, 1u);
@@ -462,7 +508,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
 
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, /*budgets=*/nullptr,
+      module_, function_op_, &target_, /*budgets=*/nullptr,
       /*budget_count=*/0, &reserved_range, /*reserved_range_count=*/1,
       /*emitter=*/iree_diagnostic_emitter_t{}, &arena_, &constraints));
 
@@ -483,7 +529,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
        PhysicalExtentsSeparateAbiFixedLocationWindow) {
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, /*budgets=*/nullptr,
+      module_, function_op_, &target_, /*budgets=*/nullptr,
       /*budget_count=*/0, /*reserved_ranges=*/nullptr,
       /*reserved_range_count=*/0, /*emitter=*/iree_diagnostic_emitter_t{},
       &arena_, &constraints));
@@ -512,7 +558,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
        PhysicalExtentsIncludeMoveScratchLocations) {
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, /*budgets=*/nullptr,
+      module_, function_op_, &target_, /*budgets=*/nullptr,
       /*budget_count=*/0, /*reserved_ranges=*/nullptr,
       /*reserved_range_count=*/0, /*emitter=*/iree_diagnostic_emitter_t{},
       &arena_, &constraints));
@@ -545,7 +591,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
 
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, /*budgets=*/nullptr,
+      module_, function_op_, &target_, /*budgets=*/nullptr,
       /*budget_count=*/0, &reserved_range, /*reserved_range_count=*/1,
       /*emitter=*/iree_diagnostic_emitter_t{}, &arena_, &constraints));
 
@@ -594,7 +640,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
   };
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      &module_, &function_op_, &target_, /*budgets=*/nullptr,
+      module_, function_op_, &target_, /*budgets=*/nullptr,
       /*budget_count=*/0, reserved_ranges, IREE_ARRAYSIZE(reserved_ranges),
       /*emitter=*/iree_diagnostic_emitter_t{}, &arena_, &constraints));
   ASSERT_EQ(constraints.error_count, 0u);
@@ -684,13 +730,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
 
 TEST_F(LowAllocationTargetConstraintsTest,
        PropagatesFixedBindingsAcrossRetainedTiedOrigins) {
-  loom_context_t context;
-  loom_context_initialize(iree_allocator_system(), &context);
-  IREE_ASSERT_OK(loom_context_finalize(&context));
-  loom_module_t* module = nullptr;
-  IREE_ASSERT_OK(loom_module_allocate(&context, IREE_SV("fixed"), &block_pool_,
-                                      nullptr, iree_allocator_system(),
-                                      &module));
+  loom_module_t* module = module_;
   // Placement retains one origin for the required chain 1 -> 2 -> 0,
   // independently of local value registration order. Exercise every nonempty
   // subset and ordering of explicit bindings, including an inferred origin.
@@ -777,7 +817,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
       }
       loom_low_allocation_target_constraints_t constraints = {};
       IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-          module, &function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
+          module, function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
           &constraints));
       IREE_ASSERT_OK(
           loom_low_allocation_target_constraints_resolve_fixed_locations(
@@ -827,19 +867,11 @@ TEST_F(LowAllocationTargetConstraintsTest,
     } while (std::next_permutation(std::begin(order), std::end(order)));
   }
   loom_local_value_domain_release(&domain);
-  loom_module_free(module);
-  loom_context_deinitialize(&context);
 }
 
 TEST_F(LowAllocationTargetConstraintsTest,
        FixedValuesRespectRetainedOperandWindow) {
-  loom_context_t context;
-  loom_context_initialize(iree_allocator_system(), &context);
-  IREE_ASSERT_OK(loom_context_finalize(&context));
-  loom_module_t* module = nullptr;
-  IREE_ASSERT_OK(loom_module_allocate(&context, IREE_SV("fixed"), &block_pool_,
-                                      nullptr, iree_allocator_system(),
-                                      &module));
+  loom_module_t* module = module_;
   const uint16_t reg_class_id = RegisterClassId(IREE_SV("test.phys"));
   loom_value_id_t value;
   IREE_ASSERT_OK(loom_module_define_value(
@@ -895,7 +927,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
     const iree_diagnostic_emitter_t emitter = {CaptureDiagnostic, &capture};
     loom_low_allocation_target_constraints_t constraints = {};
     IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-        module, &function_op_, &target_, nullptr, 0, nullptr, 0, emitter,
+        module, function_op_, &target_, nullptr, 0, nullptr, 0, emitter,
         &arena_, &constraints));
     const loom_low_allocation_fixed_value_t fixed = {
         value, LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, location, 1};
@@ -917,19 +949,11 @@ TEST_F(LowAllocationTargetConstraintsTest,
     }
   }
   loom_local_value_domain_release(&domain);
-  loom_module_free(module);
-  loom_context_deinitialize(&context);
 }
 
 TEST_F(LowAllocationTargetConstraintsTest,
        IndexesFixedValuesAndLifetimeOverlap) {
-  loom_context_t context;
-  loom_context_initialize(iree_allocator_system(), &context);
-  IREE_ASSERT_OK(loom_context_finalize(&context));
-  loom_module_t* module = nullptr;
-  IREE_ASSERT_OK(loom_module_allocate(&context, IREE_SV("fixed"), &block_pool_,
-                                      nullptr, iree_allocator_system(),
-                                      &module));
+  loom_module_t* module = module_;
   const uint32_t ranges[][3] = {
       {12, 18, 0}, {2, 60, 1},  {8, 10, 0}, {2, 3, 0},
       {36, 40, 0}, {22, 25, 2}, {8, 12, 0}, {50, 52, 0},
@@ -1014,7 +1038,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
   unit_liveness.storage_segments.entries = segments;
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      module, &function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
+      module, function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
       &constraints));
   const loom_low_placement_table_t placement = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_resolve_fixed_locations(
@@ -1166,19 +1190,11 @@ TEST_F(LowAllocationTargetConstraintsTest,
       &constraints, &unit_liveness, &candidate,
       /*ignored_value_ids=*/nullptr, /*ignored_value_count=*/0));
   loom_local_value_domain_release(&domain);
-  loom_module_free(module);
-  loom_context_deinitialize(&context);
 }
 
 TEST_F(LowAllocationTargetConstraintsTest,
        IndexesExplicitWideAndNarrowPhysicalAliases) {
-  loom_context_t context;
-  loom_context_initialize(iree_allocator_system(), &context);
-  IREE_ASSERT_OK(loom_context_finalize(&context));
-  loom_module_t* module = nullptr;
-  IREE_ASSERT_OK(loom_module_allocate(&context, IREE_SV("fixed_alias"),
-                                      &block_pool_, nullptr,
-                                      iree_allocator_system(), &module));
+  loom_module_t* module = module_;
 
   const uint16_t wide_reg_class_id =
       RegisterClassId(IREE_SV("test.atomic.narrow"));
@@ -1241,7 +1257,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
       wide_register_id, 1};
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      module, &function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
+      module, function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
       &constraints));
   const loom_low_placement_table_t placement = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_resolve_fixed_locations(
@@ -1276,8 +1292,6 @@ TEST_F(LowAllocationTargetConstraintsTest,
   }
 
   loom_local_value_domain_release(&domain);
-  loom_module_free(module);
-  loom_context_deinitialize(&context);
 }
 
 }  // namespace
