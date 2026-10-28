@@ -17,7 +17,7 @@ extern "C" {
 
 // Returns the generic buffer legalizer provider. Pipelines should compose this
 // after target-specific providers so native bulk-memory operations win before
-// portable byte-loop decomposition.
+// portable exact-range decomposition.
 const loom_target_legalizer_provider_t* loom_buffer_target_legalizer_provider(
     void);
 

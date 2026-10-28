@@ -1,4 +1,4 @@
-// RUN: with-checks emit source-low output=low control-flow=structured-low
+// RUN: emit source-low output=low control-flow=structured-low
 
 wasm.target<simd128> @target
 
@@ -8,11 +8,63 @@ func.def target(@target) @copy(%source: buffer, %source_offset: offset, %target:
 }
 
 // ----
-CHECK: low.scf.for unsigned [* to %byte_length step *] do(*) {
-CHECK: %* = i32.load8_u %*
-CHECK: i32.store8 %*, %*
-CHECK-NOT: low.br *
-CHECK-NOT: low.cond_br *
+low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @copy(%source: reg<wasm.i32>, %source_offset: reg<wasm.i32>, %target: reg<wasm.i32>, %target_offset: reg<wasm.i32>, %byte_length: reg<wasm.i32>) asm {
+  %59 = i32.const 0
+  %60 = i32.const -16
+  %61 = i32.and %byte_length, %60
+  %62 = i32.const 16
+  low.scf.for unsigned [%59 to %61 step %62] do(%63: reg<wasm.i32>) {
+    %64 = i32.add %source_offset, %63
+    %65 = i32.add %source, %64
+    %66 = v128.load %65
+    %67 = i32.add %target_offset, %63
+    %68 = i32.add %target, %67
+    v128.store %68, %66
+  }
+  %69 = i32.const -8
+  %70 = i32.and %byte_length, %69
+  %71 = i32.lt_u %61, %70
+  low.scf.if %71 {
+    %72 = i32.add %source_offset, %61
+    %73 = i32.add %source, %72
+    %74 = i64.load %73
+    %75 = i32.add %target_offset, %61
+    %76 = i32.add %target, %75
+    i64.store %76, %74
+  }
+  %77 = i32.const -4
+  %78 = i32.and %byte_length, %77
+  %79 = i32.lt_u %70, %78
+  low.scf.if %79 {
+    %80 = i32.add %source_offset, %70
+    %81 = i32.add %source, %80
+    %82 = i32.load %81
+    %83 = i32.add %target_offset, %70
+    %84 = i32.add %target, %83
+    i32.store %84, %82
+  }
+  %85 = i32.const -2
+  %86 = i32.and %byte_length, %85
+  %87 = i32.lt_u %78, %86
+  low.scf.if %87 {
+    %88 = i32.add %source_offset, %78
+    %89 = i32.add %source, %88
+    %90 = i32.load16_u %89
+    %91 = i32.add %target_offset, %78
+    %92 = i32.add %target, %91
+    i32.store16 %92, %90
+  }
+  %93 = i32.lt_u %86, %byte_length
+  low.scf.if %93 {
+    %94 = i32.add %source_offset, %86
+    %95 = i32.add %source, %94
+    %96 = i32.load8_u %95
+    %97 = i32.add %target_offset, %86
+    %98 = i32.add %target, %97
+    i32.store8 %98, %96
+  }
+  return
+}
 
 // ====
 
@@ -24,14 +76,58 @@ func.def target(@target) @fill_f32(%pattern: f32, %target: buffer, %target_offse
 }
 
 // ----
-CHECK: %* = i32.reinterpret_f32 %pattern
-CHECK: %* = low.scf.for unsigned [* to %byte_length step *] iter_args(*) -> (reg<wasm.i32>) do(*) {
-CHECK: i32.store8 %*, %*
-CHECK: %* = i32.shr_u %*, %*
-CHECK: %* = i32.shl %*, %*
-CHECK: low.scf.yield %* : reg<wasm.i32>
-CHECK-NOT: low.br *
-CHECK-NOT: low.cond_br *
+low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @fill_f32(%pattern: reg<wasm.f32>, %target: reg<wasm.i32>, %target_offset: reg<wasm.i32>, %byte_length: reg<wasm.i32>) asm {
+  %57 = i32.const 0
+  %58 = i32.reinterpret_f32 %pattern
+  %59 = i32.const -16
+  %60 = i32.and %byte_length, %59
+  %61 = i32x4.splat %58
+  %62 = i32.const 16
+  low.scf.for unsigned [%57 to %60 step %62] do(%63: reg<wasm.i32>) {
+    %64 = i32.add %target_offset, %63
+    %65 = i32.add %target, %64
+    v128.store %65, %61
+  }
+  %66 = i32.const -8
+  %67 = i32.and %byte_length, %66
+  %68 = i64.extend_i32_u %58
+  %69 = i64.const 32
+  %70 = i64.shl %68, %69
+  %71 = i64.or %68, %70
+  %72 = i32.lt_u %60, %67
+  low.scf.if %72 {
+    %73 = i32.add %target_offset, %60
+    %74 = i32.add %target, %73
+    i64.store %74, %71
+  }
+  %75 = i32.const -4
+  %76 = i32.and %byte_length, %75
+  %77 = i32.lt_u %67, %76
+  low.scf.if %77 {
+    %78 = i32.add %target_offset, %67
+    %79 = i32.add %target, %78
+    i32.store %79, %58
+  }
+  %80 = i32.const -2
+  %81 = i32.and %byte_length, %80
+  %82 = i32.lt_u %76, %81
+  low.scf.if %82 {
+    %83 = i32.add %target_offset, %76
+    %84 = i32.add %target, %83
+    i32.store16 %84, %58
+  }
+  %85 = i32.const 3
+  %86 = i32.and %81, %85
+  %87 = i32.shl %86, %85
+  %88 = i32.shr_u %58, %87
+  %89 = i32.lt_u %81, %byte_length
+  low.scf.if %89 {
+    %90 = i32.add %target_offset, %81
+    %91 = i32.add %target, %90
+    i32.store8 %91, %88
+  }
+  return
+}
 
 // ====
 
@@ -43,12 +139,72 @@ func.def target(@target) @fill_f8(%pattern: f8E4M3, %target: buffer, %target_off
 }
 
 // ----
-CHECK: %* = i32.const 255
-CHECK: %* = i32.and %pattern, %*
-CHECK: low.scf.for unsigned [* to %byte_length step *] do(*) {
-CHECK: i32.store8 %*, %*
-CHECK-NOT: low.br *
-CHECK-NOT: low.cond_br *
+low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @fill_f8(%pattern: reg<wasm.i32>, %target: reg<wasm.i32>, %target_offset: reg<wasm.i32>, %byte_length: reg<wasm.i32>) asm {
+  %91 = i32.const 0
+  %92 = i32.const 255
+  %93 = i32.and %pattern, %92
+  %94 = i32.const -16
+  %95 = i32.and %byte_length, %94
+  %96 = i32.const 8
+  %97 = i32.shl %93, %96
+  %98 = i32.or %93, %97
+  %99 = i32.const 16
+  %100 = i32.shl %98, %99
+  %101 = i32.or %98, %100
+  %102 = i32x4.splat %101
+  low.scf.for unsigned [%91 to %95 step %99] do(%104: reg<wasm.i32>) {
+    %105 = i32.add %target_offset, %104
+    %106 = i32.add %target, %105
+    v128.store %106, %102
+  }
+  %107 = i32.const -8
+  %108 = i32.and %byte_length, %107
+  %109 = i64.extend_i32_u %93
+  %110 = i64.extend_i32_u %97
+  %111 = i64.or %109, %110
+  %112 = i64.const 16
+  %113 = i64.shl %111, %112
+  %114 = i64.or %111, %113
+  %115 = i64.const 32
+  %116 = i64.shl %114, %115
+  %117 = i64.or %114, %116
+  %118 = i32.lt_u %95, %108
+  low.scf.if %118 {
+    %119 = i32.add %target_offset, %95
+    %120 = i32.add %target, %119
+    i64.store %120, %117
+  }
+  %121 = i32.const -4
+  %122 = i32.and %byte_length, %121
+  %123 = i32.lt_u %108, %122
+  low.scf.if %123 {
+    %124 = i32.add %target_offset, %108
+    %125 = i32.add %target, %124
+    i32.store %125, %101
+  }
+  %126 = i32.const -2
+  %127 = i32.and %byte_length, %126
+  %128 = i32.shl %93, %99
+  %129 = i32.shr_u %128, %99
+  %130 = i32.shl %129, %96
+  %131 = i32.const 65535
+  %132 = i32.and %93, %131
+  %134 = i32.and %130, %131
+  %135 = i32.or %132, %134
+  %136 = i32.lt_u %122, %127
+  low.scf.if %136 {
+    %137 = i32.add %target_offset, %122
+    %138 = i32.add %target, %137
+    i32.store16 %138, %135
+  }
+  %139 = i32.lt_u %127, %byte_length
+  low.scf.if %139 {
+    %140 = i32.add %target_offset, %127
+    %141 = i32.add %target, %140
+    i32.store8 %141, %93
+  }
+  return
+}
 
 // ====
 
@@ -60,13 +216,57 @@ func.def target(@target) @fill_bf16(%pattern: bf16, %target: buffer, %target_off
 }
 
 // ----
-CHECK: %* = i32.const 65535
-CHECK: %* = i32.and %pattern, %*
-CHECK: %* = low.scf.for unsigned [* to %byte_length step *] iter_args(*) -> (reg<wasm.i32>) do(*) {
-CHECK: i32.store8 %*, %*
-CHECK: low.scf.yield %* : reg<wasm.i32>
-CHECK-NOT: low.br *
-CHECK-NOT: low.cond_br *
+low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @fill_bf16(%pattern: reg<wasm.i32>, %target: reg<wasm.i32>, %target_offset: reg<wasm.i32>, %byte_length: reg<wasm.i32>) asm {
+  %55 = i32.const 0
+  %56 = i32.const 65535
+  %57 = i32.and %pattern, %56
+  %58 = i32.const 16
+  %59 = i32.shl %57, %58
+  %60 = i32.or %57, %59
+  %61 = i32.const -16
+  %62 = i32.and %byte_length, %61
+  %63 = i32x4.splat %60
+  low.scf.for unsigned [%55 to %62 step %58] do(%65: reg<wasm.i32>) {
+    %66 = i32.add %target_offset, %65
+    %67 = i32.add %target, %66
+    v128.store %67, %63
+  }
+  %68 = i32.const -8
+  %69 = i32.and %byte_length, %68
+  %70 = i64.extend_i32_u %60
+  %71 = i64.const 32
+  %72 = i64.shl %70, %71
+  %73 = i64.or %70, %72
+  %74 = i32.lt_u %62, %69
+  low.scf.if %74 {
+    %75 = i32.add %target_offset, %62
+    %76 = i32.add %target, %75
+    i64.store %76, %73
+  }
+  %77 = i32.const -4
+  %78 = i32.and %byte_length, %77
+  %79 = i32.lt_u %69, %78
+  low.scf.if %79 {
+    %80 = i32.add %target_offset, %69
+    %81 = i32.add %target, %80
+    i32.store %81, %60
+  }
+  %82 = i32.const -2
+  %83 = i32.and %byte_length, %82
+  %84 = i32.lt_u %78, %83
+  low.scf.if %84 {
+    %85 = i32.add %target_offset, %78
+    %86 = i32.add %target, %85
+    i32.store16 %86, %60
+  }
+  %87 = i32.lt_u %83, %byte_length
+  low.scf.if %87 {
+    %88 = i32.add %target_offset, %83
+    %89 = i32.add %target, %88
+    i32.store8 %89, %60
+  }
+  return
+}
 
 // ====
 
@@ -78,13 +278,63 @@ func.def target(@target) @fill_f64(%pattern: f64, %target: buffer, %target_offse
 }
 
 // ----
-CHECK: %* = i64.reinterpret_f64 %pattern
-CHECK: %* = low.scf.for unsigned [* to %byte_length step *] iter_args(*) -> (reg<wasm.i64>) do(*) {
-CHECK: %* = i32.wrap_i64 %*
-CHECK: i32.store8 %*, %*
-CHECK: low.scf.yield %* : reg<wasm.i64>
-CHECK-NOT: low.br *
-CHECK-NOT: low.cond_br *
+low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @fill_f64(%pattern: reg<wasm.f64>, %target: reg<wasm.i32>, %target_offset: reg<wasm.i32>, %byte_length: reg<wasm.i32>) asm {
+  %61 = i32.const 0
+  %62 = i64.reinterpret_f64 %pattern
+  %63 = i32.const -16
+  %64 = i32.and %byte_length, %63
+  %65 = i64x2.splat %62
+  %66 = i32.const 16
+  low.scf.for unsigned [%61 to %64 step %66] do(%67: reg<wasm.i32>) {
+    %68 = i32.add %target_offset, %67
+    %69 = i32.add %target, %68
+    v128.store %69, %65
+  }
+  %70 = i32.const -8
+  %71 = i32.and %byte_length, %70
+  %72 = i32.lt_u %64, %71
+  low.scf.if %72 {
+    %73 = i32.add %target_offset, %64
+    %74 = i32.add %target, %73
+    i64.store %74, %62
+  }
+  %75 = i32.const -4
+  %76 = i32.and %byte_length, %75
+  %77 = i32.wrap_i64 %62
+  %78 = i32.lt_u %71, %76
+  low.scf.if %78 {
+    %79 = i32.add %target_offset, %71
+    %80 = i32.add %target, %79
+    i32.store %80, %77
+  }
+  %81 = i32.const -2
+  %82 = i32.and %byte_length, %81
+  %83 = i64.extend_i32_u %76
+  %84 = i64.const 7
+  %85 = i64.and %83, %84
+  %86 = i64.const 3
+  %87 = i64.shl %85, %86
+  %88 = i64.shr_u %62, %87
+  %89 = i32.wrap_i64 %88
+  %90 = i32.lt_u %76, %82
+  low.scf.if %90 {
+    %91 = i32.add %target_offset, %76
+    %92 = i32.add %target, %91
+    i32.store16 %92, %89
+  }
+  %93 = i64.extend_i32_u %82
+  %94 = i64.and %93, %84
+  %95 = i64.shl %94, %86
+  %96 = i64.shr_u %62, %95
+  %97 = i32.wrap_i64 %96
+  %98 = i32.lt_u %82, %byte_length
+  low.scf.if %98 {
+    %99 = i32.add %target_offset, %82
+    %100 = i32.add %target, %99
+    i32.store8 %100, %97
+  }
+  return
+}
 
 // ====
 
@@ -96,10 +346,68 @@ func.def target(@target) @compare(%lhs: buffer, %lhs_offset: offset, %rhs: buffe
 }
 
 // ----
-CHECK: %*, %order = low.scf.while(*) -> (reg<wasm.i32>, reg<wasm.i32>) {
-CHECK: low.scf.condition %*, %*, %* : reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>
-CHECK: %* = i32.load8_u %*
-CHECK: %* = i32.select %*, %*, %*
-CHECK: return %order
-CHECK-NOT: low.br *
-CHECK-NOT: low.cond_br *
+low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @compare(%lhs: reg<wasm.i32>, %lhs_offset: reg<wasm.i32>, %rhs: reg<wasm.i32>, %rhs_offset: reg<wasm.i32>, %byte_length: reg<wasm.i32>) -> (reg<wasm.i32>) asm {
+  %83 = i32.const 0
+  %85 = i32.const -1
+  %86 = i32.const 1
+  %87 = i32.const -8
+  %88 = i32.and %byte_length, %87
+  %89 = i64.const 0
+  %90 = i32.const 8
+  %94, %95, %96 = low.scf.while(%91 = %83 : reg<wasm.i32>, %92 = %89 : reg<wasm.i64>, %93 = %89 : reg<wasm.i64>) -> (reg<wasm.i32>, reg<wasm.i64>, reg<wasm.i64>) {
+    %100 = i32.lt_u %91, %88
+    %101 = i64.eq %92, %93
+    %102 = i32.and %100, %101
+    low.scf.condition %102, %91, %92, %93 : reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i64>, reg<wasm.i64>
+  } do(%97: reg<wasm.i32>, %98: reg<wasm.i64>, %99: reg<wasm.i64>) {
+    %103 = i32.add %lhs_offset, %97
+    %104 = i32.add %lhs, %103
+    %105 = i64.load %104
+    %106 = i32.add %rhs_offset, %97
+    %107 = i32.add %rhs, %106
+    %108 = i64.load %107
+    %109 = i32.add %97, %90
+    low.scf.yield %109, %105, %108 : reg<wasm.i32>, reg<wasm.i64>, reg<wasm.i64>
+  }
+  %110 = i64.eq %95, %96
+  %111, %112 = low.scf.if %110 -> (reg<wasm.i64>, reg<wasm.i64>) {
+    %117, %118, %119 = low.scf.while(%114 = %88 : reg<wasm.i32>, %115 = %83 : reg<wasm.i32>, %116 = %83 : reg<wasm.i32>) -> (reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>) {
+      %123 = i32.lt_u %114, %byte_length
+      %124 = i32.eq %115, %116
+      %125 = i32.and %123, %124
+      low.scf.condition %125, %114, %115, %116 : reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>
+    } do(%120: reg<wasm.i32>, %121: reg<wasm.i32>, %122: reg<wasm.i32>) {
+      %126 = i32.add %lhs_offset, %120
+      %127 = i32.add %lhs, %126
+      %128 = i32.load8_u %127
+      %129 = i32.add %rhs_offset, %120
+      %130 = i32.add %rhs, %129
+      %131 = i32.load8_u %130
+      %132 = i32.add %120, %86
+      low.scf.yield %132, %128, %131 : reg<wasm.i32>, reg<wasm.i32>, reg<wasm.i32>
+    }
+    %133 = i64.extend_i32_u %118
+    %134 = i64.extend_i32_u %119
+    low.scf.yield %133, %134 : reg<wasm.i64>, reg<wasm.i64>
+  } else {
+    low.scf.yield %95, %96 : reg<wasm.i64>, reg<wasm.i64>
+  }
+  %135 = i64.ne %111, %112
+  %order = low.scf.if %135 -> (reg<wasm.i32>) {
+    %137 = i64.xor %111, %112
+    %138 = i64.ctz %137
+    %139 = i64.const -8
+    %140 = i64.and %138, %139
+    %141 = i64.const 255
+    %142 = i64.shr_u %111, %140
+    %143 = i64.and %142, %141
+    %144 = i64.shr_u %112, %140
+    %145 = i64.and %144, %141
+    %146 = i64.lt_u %143, %145
+    %147 = i32.select %85, %86, %146
+    low.scf.yield %147 : reg<wasm.i32>
+  } else {
+    low.scf.yield %83 : reg<wasm.i32>
+  }
+  return %order
+}

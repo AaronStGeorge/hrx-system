@@ -314,6 +314,14 @@ static const loom_target_bitstream_policy_t kWasmBitstreamPolicy = {
 };
 
 static const loom_low_lower_policy_t kWasmLowLowerPolicy = {
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 2 | 4 | 8,
+                           .vector_byte_widths = 16,
+                           .scalar_alignment = 1,
+                           .vector_alignment = 1},
     .name = IREE_SVL("wasm-lower"),
     .error_catalog = &loom_wasm_error_catalog,
     .vector_packet_policy = &kWasmVectorPacketPolicy,

@@ -1,15 +1,12 @@
-// RUN: emit source-low output=low control-flow=structured-low
+// RUN: emit spirv-low target=spirv:vulkan1.3+bda features=STORAGE_BUFFER_8BIT_ACCESS,-INT8,-INT16 control-flow=structured-low
 
-// Vulkan shader plus StorageBuffer8BitAccess, deliberately without Int8.
-spirv.target<vulkan1_3> @target {contract_feature_bits = 130}
-
-func.def target(@target) @copy(%source: buffer, %source_offset: offset, %target: buffer, %target_offset: offset, %byte_length: offset) {
+func.def @copy(%source: buffer, %source_offset: offset, %target: buffer, %target_offset: offset, %byte_length: offset) {
   buffer.copy %source[%source_offset], %target[%target_offset], %byte_length
   func.return
 }
 
 // ----
-low.func.def target<spirv.logical.core>(@target) abi(shader_entry_point) @copy(%source: reg<spirv.ptr.storage_buffer>, %source_offset: reg<spirv.offset64>, %target: reg<spirv.ptr.storage_buffer>, %target_offset: reg<spirv.offset64>, %byte_length: reg<spirv.offset64>) asm {
+low.func.def target<spirv.logical.core> abi(shader_entry_point) @copy(%source: reg<spirv.ptr.storage_buffer>, %source_offset: reg<spirv.offset64>, %target: reg<spirv.ptr.storage_buffer>, %target_offset: reg<spirv.offset64>, %byte_length: reg<spirv.offset64>) asm {
   %16 = OpConstant.offset64 0
   %17 = OpConstant.offset64 1
   low.scf.for unsigned [%16 to %byte_length step %17] do(%18: reg<spirv.offset64>) {
@@ -29,16 +26,13 @@ low.func.def target<spirv.logical.core>(@target) abi(shader_entry_point) @copy(%
 
 // ====
 
-// Vulkan shader plus StorageBuffer8BitAccess, deliberately without Int8.
-spirv.target<vulkan1_3> @target {contract_feature_bits = 130}
-
-func.def target(@target) @fill(%pattern: i32, %target: buffer, %target_offset: offset, %byte_length: offset) {
+func.def @fill(%pattern: i32, %target: buffer, %target_offset: offset, %byte_length: offset) {
   buffer.fill %pattern, %target[%target_offset], %byte_length : i32
   func.return
 }
 
 // ----
-low.func.def target<spirv.logical.core>(@target) abi(shader_entry_point) @fill(%pattern: reg<spirv.id : i32>, %target: reg<spirv.ptr.storage_buffer>, %target_offset: reg<spirv.offset64>, %byte_length: reg<spirv.offset64>) asm {
+low.func.def target<spirv.logical.core> abi(shader_entry_point) @fill(%pattern: reg<spirv.id : i32>, %target: reg<spirv.ptr.storage_buffer>, %target_offset: reg<spirv.offset64>, %byte_length: reg<spirv.offset64>) asm {
   %19 = OpConstant.offset64 0
   %20 = OpConstant.offset64 1
   %21 = OpConstant.i32 8
@@ -59,45 +53,215 @@ low.func.def target<spirv.logical.core>(@target) abi(shader_entry_point) @fill(%
 
 // ====
 
-// Vulkan shader plus StorageBuffer8BitAccess, deliberately without Int8.
-spirv.target<vulkan1_3> @target {contract_feature_bits = 130}
-
-func.def target(@target) @compare(%lhs: buffer, %lhs_offset: offset, %rhs: buffer, %rhs_offset: offset, %byte_length: offset) -> (i32) {
+func.def @compare(%lhs: buffer, %lhs_offset: offset, %rhs: buffer, %rhs_offset: offset, %byte_length: offset) -> (i32) {
   %order = buffer.compare %lhs[%lhs_offset], %rhs[%rhs_offset], %byte_length
   func.return %order : i32
 }
 
 // ----
-low.func.def target<spirv.logical.core>(@target) abi(shader_entry_point) @compare(%lhs: reg<spirv.ptr.storage_buffer>, %lhs_offset: reg<spirv.offset64>, %rhs: reg<spirv.ptr.storage_buffer>, %rhs_offset: reg<spirv.offset64>, %byte_length: reg<spirv.offset64>) -> (reg<spirv.id : i32>) asm {
-  %36 = OpConstant.offset64 0
-  %37 = OpConstant.offset64 1
-  %38 = OpConstant.i32 0
-  %39 = OpConstant.i32 -1
-  %40 = OpConstant.i32 1
-  %43, %order = low.scf.while(%41 = %36 : reg<spirv.offset64>, %42 = %38 : reg<spirv.id : i32>) -> (reg<spirv.offset64>, reg<spirv.id : i32>) {
-    %47 = OpULessThan.offset64 %41, %byte_length
-    %48 = OpIEqual %42, %38
-    %49 = OpLogicalAnd.bool %47, %48
-    low.scf.condition %49, %41, %42 : reg<spirv.id : i1>, reg<spirv.offset64>, reg<spirv.id : i32>
-  } do(%45: reg<spirv.offset64>, %46: reg<spirv.id : i32>) {
-    %50 = OpIAdd.offset64 %lhs_offset, %45
-    %51 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %lhs, %50
-    %52 = OpLoad.storage_buffer.raw_u8 %51
-    %53 = OpUConvert.raw_u8.u32 %52
-    %54 = OpBitcast.u32.i32 %53
-    %55 = OpIAdd.offset64 %rhs_offset, %45
-    %56 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %rhs, %55
-    %57 = OpLoad.storage_buffer.raw_u8 %56
-    %58 = OpUConvert.raw_u8.u32 %57
-    %59 = OpBitcast.u32.i32 %58
-    %60 = OpIEqual %54, %59
-    %61 = OpBitcast.i32.u32 %54
-    %62 = OpBitcast.i32.u32 %59
-    %63 = OpULessThan.u32 %61, %62
-    %64 = OpSelect %63, %39, %40
-    %65 = OpSelect %60, %38, %64
-    %66 = OpIAdd.offset64 %45, %37
-    low.scf.yield %66, %65 : reg<spirv.offset64>, reg<spirv.id : i32>
+low.func.def target<spirv.logical.core> abi(shader_entry_point) @compare(%lhs: reg<spirv.ptr.storage_buffer>, %lhs_offset: reg<spirv.offset64>, %rhs: reg<spirv.ptr.storage_buffer>, %rhs_offset: reg<spirv.offset64>, %byte_length: reg<spirv.offset64>) -> (reg<spirv.id : i32>) asm {
+  %40 = OpConstant.offset64 0
+  %41 = OpConstant.i32 0
+  %42 = OpConstant.i32 -1
+  %43 = OpConstant.i32 1
+  %44 = OpConstant.offset64 1
+  %48, %49, %50 = low.scf.while(%45 = %40 : reg<spirv.offset64>, %46 = %41 : reg<spirv.id : i32>, %47 = %41 : reg<spirv.id : i32>) -> (reg<spirv.offset64>, reg<spirv.id : i32>, reg<spirv.id : i32>) {
+    %54 = OpULessThan.offset64 %45, %byte_length
+    %55 = OpIEqual %46, %47
+    %56 = OpLogicalAnd.bool %54, %55
+    low.scf.condition %56, %45, %46, %47 : reg<spirv.id : i1>, reg<spirv.offset64>, reg<spirv.id : i32>, reg<spirv.id : i32>
+  } do(%51: reg<spirv.offset64>, %52: reg<spirv.id : i32>, %53: reg<spirv.id : i32>) {
+    %57 = OpIAdd.offset64 %lhs_offset, %51
+    %58 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %lhs, %57
+    %59 = OpLoad.storage_buffer.raw_u8 %58
+    %60 = OpUConvert.raw_u8.u32 %59
+    %61 = OpBitcast.u32.i32 %60
+    %62 = OpIAdd.offset64 %rhs_offset, %51
+    %63 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %rhs, %62
+    %64 = OpLoad.storage_buffer.raw_u8 %63
+    %65 = OpUConvert.raw_u8.u32 %64
+    %66 = OpBitcast.u32.i32 %65
+    %67 = OpIAdd.offset64 %51, %44
+    low.scf.yield %67, %61, %66 : reg<spirv.offset64>, reg<spirv.id : i32>, reg<spirv.id : i32>
+  }
+  %68 = OpIEqual %49, %50
+  %69 = OpBitcast.i32.u32 %49
+  %70 = OpBitcast.i32.u32 %50
+  %71 = OpULessThan.u32 %69, %70
+  %72 = OpSelect %71, %42, %43
+  %order = OpSelect %68, %41, %72
+  return %order
+}
+
+// ====
+
+func.def @aligned_copy(%input: buffer, %output: buffer) {
+  %source = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
+  %destination = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
+  %origin = index.constant 0 : offset
+  %length = index.constant 13 : offset
+  buffer.copy %source[%origin], %destination[%origin], %length
+  func.return
+}
+
+// ----
+low.func.def target<spirv.logical.core> abi(shader_entry_point) @aligned_copy(%source: reg<spirv.ptr.storage_buffer>, %destination: reg<spirv.ptr.storage_buffer>) asm {
+  %23 = OpConstant.offset64 0
+  %24 = OpConstant.offset64 12
+  %25 = OpConstant.offset64 4
+  low.scf.for unsigned [%23 to %24 step %25] do(%26: reg<spirv.offset64>) {
+    %27 = OpPtrAccessChain.storage_buffer.i32.byte_offset %source, %26
+    %28 = OpLoad.storage_buffer.i32 %27
+    %29 = OpPtrAccessChain.storage_buffer.i32.byte_offset %destination, %26
+    OpStore.storage_buffer.i32 %29, %28
+  }
+  %30 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %source, %24
+  %31 = OpLoad.storage_buffer.raw_u8 %30
+  %32 = OpUConvert.raw_u8.u32 %31
+  %33 = OpBitcast.u32.i32 %32
+  %34 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %destination, %24
+  %35 = OpBitcast.i32.u32 %33
+  %36 = OpUConvert.u32.raw_u8 %35
+  OpStore.storage_buffer.raw_u8 %34, %36
+  return
+}
+
+// ====
+
+func.def @aligned_fill(%pattern: i32, %output: buffer) {
+  %destination = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
+  %origin = index.constant 0 : offset
+  %length = index.constant 13 : offset
+  buffer.fill %pattern, %destination[%origin], %length : i32
+  func.return
+}
+
+// ----
+low.func.def target<spirv.logical.core> abi(shader_entry_point) @aligned_fill(%pattern: reg<spirv.id : i32>, %destination: reg<spirv.ptr.storage_buffer>) asm {
+  %16 = OpConstant.offset64 0
+  %17 = OpConstant.offset64 12
+  %18 = OpConstant.offset64 4
+  low.scf.for unsigned [%16 to %17 step %18] do(%19: reg<spirv.offset64>) {
+    %20 = OpPtrAccessChain.storage_buffer.i32.byte_offset %destination, %19
+    OpStore.storage_buffer.i32 %20, %pattern
+  }
+  %21 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %destination, %17
+  %22 = OpBitcast.i32.u32 %pattern
+  %23 = OpUConvert.u32.raw_u8 %22
+  OpStore.storage_buffer.raw_u8 %21, %23
+  return
+}
+
+// ====
+
+func.def @aligned_compare(%input: buffer, %output: buffer) -> (i32) {
+  %source = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
+  %destination = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
+  %origin = index.constant 0 : offset
+  %length = index.constant 13 : offset
+  %order = buffer.compare %source[%origin], %destination[%origin], %length
+  func.return %order : i32
+}
+
+// ----
+low.func.def target<spirv.logical.core> abi(shader_entry_point) @aligned_compare(%source: reg<spirv.ptr.storage_buffer>, %destination: reg<spirv.ptr.storage_buffer>) -> (reg<spirv.id : i32>) asm {
+  %63 = OpConstant.offset64 0
+  %64 = OpConstant.i32 0
+  %65 = OpConstant.i32 -1
+  %66 = OpConstant.i32 1
+  %67 = OpConstant.offset64 12
+  %68 = OpConstant.offset64 4
+  %72, %73, %74 = low.scf.while(%69 = %63 : reg<spirv.offset64>, %70 = %64 : reg<spirv.id : i32>, %71 = %64 : reg<spirv.id : i32>) -> (reg<spirv.offset64>, reg<spirv.id : i32>, reg<spirv.id : i32>) {
+    %78 = OpULessThan.offset64 %69, %67
+    %79 = OpIEqual %70, %71
+    %80 = OpLogicalAnd.bool %78, %79
+    low.scf.condition %80, %69, %70, %71 : reg<spirv.id : i1>, reg<spirv.offset64>, reg<spirv.id : i32>, reg<spirv.id : i32>
+  } do(%75: reg<spirv.offset64>, %76: reg<spirv.id : i32>, %77: reg<spirv.id : i32>) {
+    %81 = OpPtrAccessChain.storage_buffer.i32.byte_offset %source, %75
+    %82 = OpLoad.storage_buffer.i32 %81
+    %83 = OpPtrAccessChain.storage_buffer.i32.byte_offset %destination, %75
+    %84 = OpLoad.storage_buffer.i32 %83
+    %85 = OpIAdd.offset64 %75, %68
+    low.scf.yield %85, %82, %84 : reg<spirv.offset64>, reg<spirv.id : i32>, reg<spirv.id : i32>
+  }
+  %86 = OpIEqual %73, %74
+  %87, %88 = low.scf.if %86 -> (reg<spirv.id : i32>, reg<spirv.id : i32>) {
+    %89 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %source, %67
+    %90 = OpLoad.storage_buffer.raw_u8 %89
+    %91 = OpUConvert.raw_u8.u32 %90
+    %92 = OpBitcast.u32.i32 %91
+    %93 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %destination, %67
+    %94 = OpLoad.storage_buffer.raw_u8 %93
+    %95 = OpUConvert.raw_u8.u32 %94
+    %96 = OpBitcast.u32.i32 %95
+    low.scf.yield %92, %96 : reg<spirv.id : i32>, reg<spirv.id : i32>
+  } else {
+    low.scf.yield %73, %74 : reg<spirv.id : i32>, reg<spirv.id : i32>
+  }
+  %97 = OpINotEqual %87, %88
+  %order = low.scf.if %97 -> (reg<spirv.id : i32>) {
+    %99 = OpBitwiseXor %87, %88
+    %100 = OpConstant.i32 0 : reg<spirv.id>
+    %101 = OpISub %100, %99 : reg<spirv.id>
+    %102 = OpBitwiseAnd %99, %101 : reg<spirv.id>
+    %103 = OpConstant.i32 1 : reg<spirv.id>
+    %104 = OpISub %102, %103 : reg<spirv.id>
+    %105 = OpBitCount.i32 %104
+    %106 = OpConstant.i32 -8
+    %107 = OpBitwiseAnd %105, %106
+    %108 = OpConstant.i32 255
+    %109 = OpShiftRightLogical %87, %107
+    %110 = OpBitwiseAnd %109, %108
+    %111 = OpShiftRightLogical %88, %107
+    %112 = OpBitwiseAnd %111, %108
+    %113 = OpBitcast.i32.u32 %110
+    %114 = OpBitcast.i32.u32 %112
+    %115 = OpULessThan.u32 %113, %114
+    %116 = OpSelect %115, %65, %66
+    low.scf.yield %116 : reg<spirv.id : i32>
+  } else {
+    low.scf.yield %64 : reg<spirv.id : i32>
   }
   return %order
+}
+
+// ====
+
+func.def @dynamic_aligned_copy(%input: buffer, %output: buffer, %length: offset) {
+  %source = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
+  %destination = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
+  %origin = index.constant 0 : offset
+  buffer.copy %source[%origin], %destination[%origin], %length
+  func.return
+}
+
+// ----
+low.func.def target<spirv.logical.core> abi(shader_entry_point) @dynamic_aligned_copy(%source: reg<spirv.ptr.storage_buffer>, %destination: reg<spirv.ptr.storage_buffer>, %length: reg<spirv.offset64>) asm {
+  %28 = OpConstant.offset64 0
+  %29 = OpUConvert.offset64.u32 %length
+  %30 = OpBitcast.u32.i32 %29
+  %31 = OpConstant.i32 3
+  %32 = OpBitwiseAnd %30, %31
+  %33 = OpBitcast.i32.u32 %32
+  %34 = OpUConvert.u32.offset64 %33
+  %35 = OpISub.offset64 %length, %34
+  %36 = OpConstant.offset64 4
+  low.scf.for unsigned [%28 to %35 step %36] do(%37: reg<spirv.offset64>) {
+    %38 = OpPtrAccessChain.storage_buffer.i32.byte_offset %source, %37
+    %39 = OpLoad.storage_buffer.i32 %38
+    %40 = OpPtrAccessChain.storage_buffer.i32.byte_offset %destination, %37
+    OpStore.storage_buffer.i32 %40, %39
+  }
+  %41 = OpConstant.offset64 1
+  low.scf.for unsigned [%35 to %length step %41] do(%42: reg<spirv.offset64>) {
+    %43 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %source, %42
+    %44 = OpLoad.storage_buffer.raw_u8 %43
+    %45 = OpUConvert.raw_u8.u32 %44
+    %46 = OpBitcast.u32.i32 %45
+    %47 = OpPtrAccessChain.storage_buffer.raw_u8.byte_offset %destination, %42
+    %48 = OpBitcast.i32.u32 %46
+    %49 = OpUConvert.u32.raw_u8 %48
+    OpStore.storage_buffer.raw_u8 %47, %49
+  }
+  return
 }

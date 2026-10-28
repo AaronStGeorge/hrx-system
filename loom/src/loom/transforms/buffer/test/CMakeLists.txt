@@ -13,8 +13,113 @@ loom_check_test_suite(
   NAME
     test
   SRCS
+    "compare.loom-test"
+    "copy.loom-test"
+    "fill.loom-test"
     "materialize.loom-test"
     "vm_literals.loom-test"
 )
+
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_generated_file(
+  NAME
+    bulk_scalar_object
+  GENERATOR
+    loom::tools::loom-compile
+  OUTPUT
+    "bulk_scalar.o"
+  OUTPUT_FLAG
+    "--output="
+  ARGS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/transforms/buffer/test/bulk.loom"
+    "--target=x86:scalar"
+  INPUTS
+    "bulk.loom"
+  TESTONLY
+)
+endif()
+
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_generated_file(
+  NAME
+    bulk_avx2_object
+  GENERATOR
+    loom::tools::loom-compile
+  OUTPUT
+    "bulk_avx2.o"
+  OUTPUT_FLAG
+    "--output="
+  ARGS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/transforms/buffer/test/bulk.loom"
+    "--target=x86:avx2"
+  INPUTS
+    "bulk.loom"
+  TESTONLY
+)
+endif()
+
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_generated_file(
+  NAME
+    bulk_avx512_object
+  GENERATOR
+    loom::tools::loom-compile
+  OUTPUT
+    "bulk_avx512.o"
+  OUTPUT_FLAG
+    "--output="
+  ARGS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/transforms/buffer/test/bulk.loom"
+    "--target=x86:avx512"
+  INPUTS
+    "bulk.loom"
+  TESTONLY
+)
+endif()
+
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_cc_test(
+  NAME
+    bulk_scalar_test
+  SRCS
+    "bulk_scalar.o"
+    "bulk_test.cc"
+  DEFINES
+    "LOOM_TEST_VECTOR_BITS=0"
+  DEPS
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_cc_test(
+  NAME
+    bulk_avx2_test
+  SRCS
+    "bulk_avx2.o"
+    "bulk_test.cc"
+  DEFINES
+    "LOOM_TEST_VECTOR_BITS=256"
+  DEPS
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+if(IREE_ARCH STREQUAL "x86_64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_cc_test(
+  NAME
+    bulk_avx512_test
+  SRCS
+    "bulk_avx512.o"
+    "bulk_test.cc"
+  DEFINES
+    "LOOM_TEST_VECTOR_BITS=512"
+  DEPS
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -9,18 +9,48 @@ func.def target(@target) @copy(%source: buffer, %source_offset: offset, %target:
 
 // ----
 low.func.def target<x86.scalar.core>(@target) abi(object_function) @copy(%source: reg<x86.gpr64>, %source_offset: reg<x86.gpr64>, %target: reg<x86.gpr64>, %target_offset: reg<x86.gpr64>, %byte_length: reg<x86.gpr64>) asm {
-  %21 = mov.imm64 0
-  low.br ^_bb1(%21: reg<x86.gpr64>)
-^_bb1(%20: reg<x86.gpr64>):
-  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%20, %byte_length) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
+  %54 = mov.imm64 0
+  %55 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %56 = and.imm.gpr64 %55 {imm32 = -8}
+  low.br ^_bb1(%54: reg<x86.gpr64>)
+^_bb1(%53: reg<x86.gpr64>):
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%53, %56) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
 ^_bb2:
-  %22 = lea %source_offset, %20
-  %23 = movzx.load.indexed.u8.gpr32 %source, %22 {disp32 = 0, scale = 1}
-  %24 = lea %target_offset, %20
-  mov.store.indexed.u8.gpr32 %23, %target, %24 {disp32 = 0, scale = 1}
-  %25 = lea.disp %20 {disp32 = 1}
-  low.br ^_bb1(%25: reg<x86.gpr64>)
+  %57 = lea %source_offset, %53
+  %58 = mov.load.indexed.gpr64 %source, %57 {disp32 = 0, scale = 1}
+  %59 = lea %target_offset, %53
+  mov.store.indexed.gpr64 %58, %target, %59 {disp32 = 0, scale = 1}
+  %60 = lea.disp %53 {disp32 = 8}
+  low.br ^_bb1(%60: reg<x86.gpr64>)
 ^_bb3:
+  %61 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %62 = and.imm.gpr64 %61 {imm32 = -4}
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%56, %62) {predicate = 2}, ^_bb4, ^_bb5 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb4:
+  %63 = lea %source_offset, %56
+  %64 = mov.load.indexed.gpr32 %source, %63 {disp32 = 0, scale = 1}
+  %65 = lea %target_offset, %56
+  mov.store.indexed.gpr32 %64, %target, %65 {disp32 = 0, scale = 1}
+  low.br ^_bb5
+^_bb5:
+  %66 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %67 = and.imm.gpr64 %66 {imm32 = -2}
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%62, %67) {predicate = 2}, ^_bb6, ^_bb7 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb6:
+  %68 = lea %source_offset, %62
+  %69 = movzx.load.indexed.u16.gpr32 %source, %68 {disp32 = 0, scale = 1}
+  %70 = lea %target_offset, %62
+  mov.store.indexed.u16.gpr32 %69, %target, %70 {disp32 = 0, scale = 1}
+  low.br ^_bb7
+^_bb7:
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%67, %byte_length) {predicate = 2}, ^_bb8, ^_bb9 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb8:
+  %71 = lea %source_offset, %67
+  %72 = movzx.load.indexed.u8.gpr32 %source, %71 {disp32 = 0, scale = 1}
+  %73 = lea %target_offset, %67
+  mov.store.indexed.u8.gpr32 %72, %target, %73 {disp32 = 0, scale = 1}
+  low.br ^_bb9
+^_bb9:
   return
 }
 
@@ -35,23 +65,73 @@ func.def target(@target) @fill_f32(%pattern: f32, %target: buffer, %target_offse
 
 // ----
 low.func.def target<x86.avx2.core>(@target) abi(object_function) abi_layout({signature = (f32, buffer, offset, offset) -> ()}) @fill_f32(%pattern: reg<x86.xmm>, %target: reg<x86.gpr64>, %target_offset: reg<x86.gpr64>, %byte_length: reg<x86.gpr64>) asm {
-  %28 = vmovd.gpr32.xmm %pattern
-  %29 = mov.imm64 0
-  low.br ^_bb1(%29: reg<x86.gpr64>, %28: reg<x86.gpr32>)
-^_bb1(%26: reg<x86.gpr64>, %27: reg<x86.gpr32>):
-  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%26, %byte_length) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
+  %73 = mov.imm64 0
+  %74 = vmovd.gpr32.xmm %pattern
+  %75 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %76 = and.imm.gpr64 %75 {imm32 = -32}
+  %77 = vmovd.xmm.gpr32 %74
+  %78 = vpbroadcastd.ymm %77
+  low.br ^_bb1(%73: reg<x86.gpr64>)
+^_bb1(%72: reg<x86.gpr64>):
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%72, %76) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
 ^_bb2:
-  %30 = lea %target_offset, %26
-  mov.store.indexed.u8.gpr32 %27, %target, %30 {disp32 = 0, scale = 1}
-  %31 = copy %27 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %32 = shr.imm.gpr32 %31 {shift = 8}
-  %33 = copy %27 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %34 = shl.imm.gpr32 %33 {shift = 24}
-  %35 = copy %32 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %36 = or.gpr32 %35, %34
-  %37 = lea.disp %26 {disp32 = 1}
-  low.br ^_bb1(%37: reg<x86.gpr64>, %36: reg<x86.gpr32>)
+  %79 = lea %target_offset, %72
+  vmovdqu32.store.indexed.ymm %78, %target, %79 {disp32 = 0, scale = 1}
+  %80 = lea.disp %72 {disp32 = 32}
+  low.br ^_bb1(%80: reg<x86.gpr64>)
 ^_bb3:
+  %81 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %82 = and.imm.gpr64 %81 {imm32 = -16}
+  %84 = avx2.vpbroadcastd.xmm %77
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%76, %82) {predicate = 2}, ^_bb4, ^_bb5 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb4:
+  %85 = lea %target_offset, %76
+  vmovdqu32.store.indexed.xmm %84, %target, %85 {disp32 = 0, scale = 1}
+  low.br ^_bb5
+^_bb5:
+  %86 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %87 = and.imm.gpr64 %86 {imm32 = -8}
+  %88 = movzx.gpr64.gpr32 %74
+  %89 = copy %88 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %90 = shl.imm.gpr64 %89 {shift = 32}
+  %91 = copy %88 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %92 = or.gpr64 %91, %90
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%82, %87) {predicate = 2}, ^_bb6, ^_bb7 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb6:
+  %93 = lea %target_offset, %82
+  mov.store.indexed.gpr64 %92, %target, %93 {disp32 = 0, scale = 1}
+  low.br ^_bb7
+^_bb7:
+  %94 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %95 = and.imm.gpr64 %94 {imm32 = -4}
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%87, %95) {predicate = 2}, ^_bb8, ^_bb9 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb8:
+  %96 = lea %target_offset, %87
+  mov.store.indexed.gpr32 %74, %target, %96 {disp32 = 0, scale = 1}
+  low.br ^_bb9
+^_bb9:
+  %97 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %98 = and.imm.gpr64 %97 {imm32 = -2}
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%95, %98) {predicate = 2}, ^_bb10, ^_bb11 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb10:
+  %99 = lea %target_offset, %95
+  mov.store.indexed.u16.gpr32 %74, %target, %99 {disp32 = 0, scale = 1}
+  low.br ^_bb11
+^_bb11:
+  %100 = mov.trunc.gpr32.gpr64 %98
+  %101 = copy %100 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %102 = and.imm.gpr32 %101 {imm32 = 3}
+  %103 = copy %102 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %104 = shl.imm.gpr32 %103 {shift = 3}
+  %105 = copy %74 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %106 = copy %104 : reg<x86.gpr32> -> reg<x86.ecx>
+  %107 = shr.cl.gpr32 %105, %106
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%98, %byte_length) {predicate = 2}, ^_bb12, ^_bb13 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb12:
+  %108 = lea %target_offset, %98
+  mov.store.indexed.u8.gpr32 %107, %target, %108 {disp32 = 0, scale = 1}
+  low.br ^_bb13
+^_bb13:
   return
 }
 
@@ -66,17 +146,66 @@ func.def target(@target) @fill_f8(%pattern: f8E4M3, %target: buffer, %target_off
 
 // ----
 low.func.def target<x86.scalar.core>(@target) abi(object_function) abi_layout({signature = (f8E4M3, buffer, offset, offset) -> ()}) @fill_f8(%pattern: reg<x86.gpr32>, %target: reg<x86.gpr64>, %target_offset: reg<x86.gpr64>, %byte_length: reg<x86.gpr64>) asm {
-  %19 = movzx.u8.gpr32 %pattern
-  %20 = mov.imm64 0
-  low.br ^_bb1(%20: reg<x86.gpr64>)
-^_bb1(%18: reg<x86.gpr64>):
-  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%18, %byte_length) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
+  %71 = mov.imm64 0
+  %72 = movzx.u8.gpr32 %pattern
+  %73 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %74 = and.imm.gpr64 %73 {imm32 = -8}
+  %75 = movzx.gpr64.gpr32 %72
+  %76 = copy %72 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %77 = shl.imm.gpr32 %76 {shift = 8}
+  %78 = movzx.gpr64.gpr32 %77
+  %79 = copy %75 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %80 = or.gpr64 %79, %78
+  %81 = copy %80 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %82 = shl.imm.gpr64 %81 {shift = 16}
+  %83 = copy %80 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %84 = or.gpr64 %83, %82
+  %85 = copy %84 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %86 = shl.imm.gpr64 %85 {shift = 32}
+  %87 = copy %84 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %88 = or.gpr64 %87, %86
+  low.br ^_bb1(%71: reg<x86.gpr64>)
+^_bb1(%70: reg<x86.gpr64>):
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%70, %74) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
 ^_bb2:
-  %21 = lea %target_offset, %18
-  mov.store.indexed.u8.gpr32 %19, %target, %21 {disp32 = 0, scale = 1}
-  %22 = lea.disp %18 {disp32 = 1}
-  low.br ^_bb1(%22: reg<x86.gpr64>)
+  %89 = lea %target_offset, %70
+  mov.store.indexed.gpr64 %88, %target, %89 {disp32 = 0, scale = 1}
+  %90 = lea.disp %70 {disp32 = 8}
+  low.br ^_bb1(%90: reg<x86.gpr64>)
 ^_bb3:
+  %91 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %92 = and.imm.gpr64 %91 {imm32 = -4}
+  %93 = copy %72 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %94 = or.gpr32 %93, %77
+  %95 = copy %94 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %96 = shl.imm.gpr32 %95 {shift = 16}
+  %97 = copy %94 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %98 = or.gpr32 %97, %96
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%74, %92) {predicate = 2}, ^_bb4, ^_bb5 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb4:
+  %99 = lea %target_offset, %74
+  mov.store.indexed.gpr32 %98, %target, %99 {disp32 = 0, scale = 1}
+  low.br ^_bb5
+^_bb5:
+  %100 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %101 = and.imm.gpr64 %100 {imm32 = -2}
+  %102 = movsx.i16.gpr32 %72
+  %103 = copy %102 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %104 = shl.imm.gpr32 %103 {shift = 8}
+  %105 = copy %72 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %106 = or.gpr32 %105, %104
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%92, %101) {predicate = 2}, ^_bb6, ^_bb7 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb6:
+  %107 = lea %target_offset, %92
+  mov.store.indexed.u16.gpr32 %106, %target, %107 {disp32 = 0, scale = 1}
+  low.br ^_bb7
+^_bb7:
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%101, %byte_length) {predicate = 2}, ^_bb8, ^_bb9 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb8:
+  %108 = lea %target_offset, %101
+  mov.store.indexed.u8.gpr32 %72, %target, %108 {disp32 = 0, scale = 1}
+  low.br ^_bb9
+^_bb9:
   return
 }
 
@@ -91,27 +220,50 @@ func.def target(@target) @fill_bf16(%pattern: bf16, %target: buffer, %target_off
 
 // ----
 low.func.def target<x86.scalar.core>(@target) abi(object_function) abi_layout({signature = (bf16, buffer, offset, offset) -> ()}) @fill_bf16(%pattern: reg<x86.gpr32>, %target: reg<x86.gpr64>, %target_offset: reg<x86.gpr64>, %byte_length: reg<x86.gpr64>) asm {
-  %32 = movzx.u16.gpr32 %pattern
-  %33 = copy %32 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %34 = shl.imm.gpr32 %33 {shift = 16}
-  %35 = copy %32 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %36 = or.gpr32 %35, %34
-  %37 = mov.imm64 0
-  low.br ^_bb1(%37: reg<x86.gpr64>, %36: reg<x86.gpr32>)
-^_bb1(%30: reg<x86.gpr64>, %31: reg<x86.gpr32>):
-  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%30, %byte_length) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
+  %51 = mov.imm64 0
+  %52 = movzx.u16.gpr32 %pattern
+  %53 = copy %52 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %54 = shl.imm.gpr32 %53 {shift = 16}
+  %55 = copy %52 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %56 = or.gpr32 %55, %54
+  %57 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %58 = and.imm.gpr64 %57 {imm32 = -8}
+  %59 = movzx.gpr64.gpr32 %56
+  %60 = copy %59 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %61 = shl.imm.gpr64 %60 {shift = 32}
+  %62 = copy %59 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %63 = or.gpr64 %62, %61
+  low.br ^_bb1(%51: reg<x86.gpr64>)
+^_bb1(%50: reg<x86.gpr64>):
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%50, %58) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
 ^_bb2:
-  %38 = lea %target_offset, %30
-  mov.store.indexed.u8.gpr32 %31, %target, %38 {disp32 = 0, scale = 1}
-  %39 = copy %31 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %40 = shr.imm.gpr32 %39 {shift = 8}
-  %41 = copy %31 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %42 = shl.imm.gpr32 %41 {shift = 24}
-  %43 = copy %40 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %44 = or.gpr32 %43, %42
-  %45 = lea.disp %30 {disp32 = 1}
-  low.br ^_bb1(%45: reg<x86.gpr64>, %44: reg<x86.gpr32>)
+  %64 = lea %target_offset, %50
+  mov.store.indexed.gpr64 %63, %target, %64 {disp32 = 0, scale = 1}
+  %65 = lea.disp %50 {disp32 = 8}
+  low.br ^_bb1(%65: reg<x86.gpr64>)
 ^_bb3:
+  %66 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %67 = and.imm.gpr64 %66 {imm32 = -4}
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%58, %67) {predicate = 2}, ^_bb4, ^_bb5 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb4:
+  %68 = lea %target_offset, %58
+  mov.store.indexed.gpr32 %56, %target, %68 {disp32 = 0, scale = 1}
+  low.br ^_bb5
+^_bb5:
+  %69 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %70 = and.imm.gpr64 %69 {imm32 = -2}
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%67, %70) {predicate = 2}, ^_bb6, ^_bb7 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb6:
+  %71 = lea %target_offset, %67
+  mov.store.indexed.u16.gpr32 %56, %target, %71 {disp32 = 0, scale = 1}
+  low.br ^_bb7
+^_bb7:
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%70, %byte_length) {predicate = 2}, ^_bb8, ^_bb9 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb8:
+  %72 = lea %target_offset, %70
+  mov.store.indexed.u8.gpr32 %56, %target, %72 {disp32 = 0, scale = 1}
+  low.br ^_bb9
+^_bb9:
   return
 }
 
@@ -126,23 +278,57 @@ func.def target(@target) @fill_i64(%pattern: i64, %target: buffer, %target_offse
 
 // ----
 low.func.def target<x86.scalar.core>(@target) abi(object_function) @fill_i64(%pattern: reg<x86.gpr64>, %target: reg<x86.gpr64>, %target_offset: reg<x86.gpr64>, %byte_length: reg<x86.gpr64>) asm {
-  %28 = mov.imm64 0
-  low.br ^_bb1(%28: reg<x86.gpr64>, %pattern: reg<x86.gpr64>)
-^_bb1(%26: reg<x86.gpr64>, %27: reg<x86.gpr64>):
-  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%26, %byte_length) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
+  %56 = mov.imm64 0
+  %57 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %58 = and.imm.gpr64 %57 {imm32 = -8}
+  low.br ^_bb1(%56: reg<x86.gpr64>)
+^_bb1(%55: reg<x86.gpr64>):
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%55, %58) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
 ^_bb2:
-  %29 = mov.trunc.gpr32.gpr64 %27
-  %30 = lea %target_offset, %26
-  mov.store.indexed.u8.gpr32 %29, %target, %30 {disp32 = 0, scale = 1}
-  %31 = copy %27 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %32 = shr.imm.gpr64 %31 {shift = 8}
-  %33 = copy %27 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %34 = shl.imm.gpr64 %33 {shift = 56}
-  %35 = copy %32 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %36 = or.gpr64 %35, %34
-  %37 = lea.disp %26 {disp32 = 1}
-  low.br ^_bb1(%37: reg<x86.gpr64>, %36: reg<x86.gpr64>)
+  %59 = lea %target_offset, %55
+  mov.store.indexed.gpr64 %pattern, %target, %59 {disp32 = 0, scale = 1}
+  %60 = lea.disp %55 {disp32 = 8}
+  low.br ^_bb1(%60: reg<x86.gpr64>)
 ^_bb3:
+  %61 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %62 = and.imm.gpr64 %61 {imm32 = -4}
+  %63 = mov.trunc.gpr32.gpr64 %pattern
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%58, %62) {predicate = 2}, ^_bb4, ^_bb5 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb4:
+  %64 = lea %target_offset, %58
+  mov.store.indexed.gpr32 %63, %target, %64 {disp32 = 0, scale = 1}
+  low.br ^_bb5
+^_bb5:
+  %65 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %66 = and.imm.gpr64 %65 {imm32 = -2}
+  %67 = copy %62 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %68 = and.imm.gpr64 %67 {imm32 = 7}
+  %69 = copy %68 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %70 = shl.imm.gpr64 %69 {shift = 3}
+  %71 = copy %pattern : reg<x86.gpr64> -> reg<x86.gpr64>
+  %72 = copy %70 : reg<x86.gpr64> -> reg<x86.rcx>
+  %73 = shr.cl.gpr64 %71, %72
+  %74 = mov.trunc.gpr32.gpr64 %73
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%62, %66) {predicate = 2}, ^_bb6, ^_bb7 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb6:
+  %75 = lea %target_offset, %62
+  mov.store.indexed.u16.gpr32 %74, %target, %75 {disp32 = 0, scale = 1}
+  low.br ^_bb7
+^_bb7:
+  %76 = copy %66 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %77 = and.imm.gpr64 %76 {imm32 = 7}
+  %78 = copy %77 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %79 = shl.imm.gpr64 %78 {shift = 3}
+  %80 = copy %pattern : reg<x86.gpr64> -> reg<x86.gpr64>
+  %81 = copy %79 : reg<x86.gpr64> -> reg<x86.rcx>
+  %82 = shr.cl.gpr64 %80, %81
+  %83 = mov.trunc.gpr32.gpr64 %82
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%66, %byte_length) {predicate = 2}, ^_bb8, ^_bb9 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb8:
+  %84 = lea %target_offset, %66
+  mov.store.indexed.u8.gpr32 %83, %target, %84 {disp32 = 0, scale = 1}
+  low.br ^_bb9
+^_bb9:
   return
 }
 
@@ -157,24 +343,77 @@ func.def target(@target) @fill_f64(%pattern: f64, %target: buffer, %target_offse
 
 // ----
 low.func.def target<x86.avx2.core>(@target) abi(object_function) abi_layout({signature = (f64, buffer, offset, offset) -> ()}) @fill_f64(%pattern: reg<x86.xmm>, %target: reg<x86.gpr64>, %target_offset: reg<x86.gpr64>, %byte_length: reg<x86.gpr64>) asm {
-  %29 = vmovq.gpr64.xmm %pattern
-  %30 = mov.imm64 0
-  low.br ^_bb1(%30: reg<x86.gpr64>, %29: reg<x86.gpr64>)
-^_bb1(%27: reg<x86.gpr64>, %28: reg<x86.gpr64>):
-  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%27, %byte_length) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
+  %77 = mov.imm64 0
+  %78 = vmovq.gpr64.xmm %pattern
+  %79 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %80 = and.imm.gpr64 %79 {imm32 = -32}
+  %81 = vmovq.xmm.gpr64 %78
+  %82 = vpbroadcastq.ymm %81
+  low.br ^_bb1(%77: reg<x86.gpr64>)
+^_bb1(%76: reg<x86.gpr64>):
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%76, %80) {predicate = 2}, ^_bb2, ^_bb3 : (reg<x86.gpr64>, reg<x86.gpr64>)
 ^_bb2:
-  %31 = mov.trunc.gpr32.gpr64 %28
-  %32 = lea %target_offset, %27
-  mov.store.indexed.u8.gpr32 %31, %target, %32 {disp32 = 0, scale = 1}
-  %33 = copy %28 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %34 = shr.imm.gpr64 %33 {shift = 8}
-  %35 = copy %28 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %36 = shl.imm.gpr64 %35 {shift = 56}
-  %37 = copy %34 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %38 = or.gpr64 %37, %36
-  %39 = lea.disp %27 {disp32 = 1}
-  low.br ^_bb1(%39: reg<x86.gpr64>, %38: reg<x86.gpr64>)
+  %83 = lea %target_offset, %76
+  vmovdqu32.store.indexed.ymm %82, %target, %83 {disp32 = 0, scale = 1}
+  %84 = lea.disp %76 {disp32 = 32}
+  low.br ^_bb1(%84: reg<x86.gpr64>)
 ^_bb3:
+  %85 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %86 = and.imm.gpr64 %85 {imm32 = -16}
+  %88 = avx2.vpbroadcastq.xmm %81
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%80, %86) {predicate = 2}, ^_bb4, ^_bb5 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb4:
+  %89 = lea %target_offset, %80
+  vmovdqu32.store.indexed.xmm %88, %target, %89 {disp32 = 0, scale = 1}
+  low.br ^_bb5
+^_bb5:
+  %90 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %91 = and.imm.gpr64 %90 {imm32 = -8}
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%86, %91) {predicate = 2}, ^_bb6, ^_bb7 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb6:
+  %92 = lea %target_offset, %86
+  mov.store.indexed.gpr64 %78, %target, %92 {disp32 = 0, scale = 1}
+  low.br ^_bb7
+^_bb7:
+  %93 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %94 = and.imm.gpr64 %93 {imm32 = -4}
+  %95 = mov.trunc.gpr32.gpr64 %78
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%91, %94) {predicate = 2}, ^_bb8, ^_bb9 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb8:
+  %96 = lea %target_offset, %91
+  mov.store.indexed.gpr32 %95, %target, %96 {disp32 = 0, scale = 1}
+  low.br ^_bb9
+^_bb9:
+  %97 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %98 = and.imm.gpr64 %97 {imm32 = -2}
+  %99 = copy %94 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %100 = and.imm.gpr64 %99 {imm32 = 7}
+  %101 = copy %100 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %102 = shl.imm.gpr64 %101 {shift = 3}
+  %103 = copy %78 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %104 = copy %102 : reg<x86.gpr64> -> reg<x86.rcx>
+  %105 = shr.cl.gpr64 %103, %104
+  %106 = mov.trunc.gpr32.gpr64 %105
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%94, %98) {predicate = 2}, ^_bb10, ^_bb11 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb10:
+  %107 = lea %target_offset, %94
+  mov.store.indexed.u16.gpr32 %106, %target, %107 {disp32 = 0, scale = 1}
+  low.br ^_bb11
+^_bb11:
+  %108 = copy %98 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %109 = and.imm.gpr64 %108 {imm32 = 7}
+  %110 = copy %109 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %111 = shl.imm.gpr64 %110 {shift = 3}
+  %112 = copy %78 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %113 = copy %111 : reg<x86.gpr64> -> reg<x86.rcx>
+  %114 = shr.cl.gpr64 %112, %113
+  %115 = mov.trunc.gpr32.gpr64 %114
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%98, %byte_length) {predicate = 2}, ^_bb12, ^_bb13 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb12:
+  %116 = lea %target_offset, %98
+  mov.store.indexed.u8.gpr32 %115, %target, %116 {disp32 = 0, scale = 1}
+  low.br ^_bb13
+^_bb13:
   return
 }
 
@@ -189,28 +428,74 @@ func.def target(@target) @compare(%lhs: buffer, %lhs_offset: offset, %rhs: buffe
 
 // ----
 low.func.def target<x86.scalar.core>(@target) abi(object_function) @compare(%lhs: reg<x86.gpr64>, %lhs_offset: reg<x86.gpr64>, %rhs: reg<x86.gpr64>, %rhs_offset: reg<x86.gpr64>, %byte_length: reg<x86.gpr64>) -> (reg<x86.gpr32>) asm {
-  %46 = mov.imm64 0
-  %47 = mov.imm32 0
-  %48 = mov.imm32 -1
-  %49 = mov.imm32 1
-  low.br ^_bb1(%46: reg<x86.gpr64>, %47: reg<x86.gpr32>)
-^_bb1(%44: reg<x86.gpr64>, %45: reg<x86.gpr32>):
-  %50 = cmp.gpr64 %44, %byte_length, "ult"
-  %51 = cmp.imm.gpr32 %45, 0, "eq"
-  %52 = copy %50 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %53 = and.gpr32 %52, %51
-  low.cond_br %53, ^_bb2, ^_bb3 : reg<x86.gpr32>
+  %117 = mov.imm64 0
+  %118 = mov.imm32 0
+  %119 = mov.imm32 -1
+  %120 = mov.imm32 1
+  %121 = copy %byte_length : reg<x86.gpr64> -> reg<x86.gpr64>
+  %122 = and.imm.gpr64 %121 {imm32 = -8}
+  low.br ^_bb1(%117: reg<x86.gpr64>, %117: reg<x86.gpr64>, %117: reg<x86.gpr64>)
+^_bb1(%108: reg<x86.gpr64>, %109: reg<x86.gpr64>, %110: reg<x86.gpr64>):
+  %124 = cmp.gpr64 %108, %122, "ult"
+  %125 = cmp.gpr64 %109, %110, "eq"
+  %126 = copy %124 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %127 = and.gpr32 %126, %125
+  low.cond_br %127, ^_bb2, ^_bb3 : reg<x86.gpr32>
 ^_bb2:
-  %54 = lea %lhs_offset, %44
-  %55 = movzx.load.indexed.u8.gpr32 %lhs, %54 {disp32 = 0, scale = 1}
-  %56 = lea %rhs_offset, %44
-  %57 = movzx.load.indexed.u8.gpr32 %rhs, %56 {disp32 = 0, scale = 1}
-  %58 = copy %49 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %59 = cmp.select.gpr32.gpr32 %55, %57, %48, %58, "ult"
-  %60 = copy %59 : reg<x86.gpr32> -> reg<x86.gpr32>
-  %61 = cmp.select.gpr32.gpr32 %55, %57, %47, %60, "eq"
-  %62 = lea.disp %44 {disp32 = 1}
-  low.br ^_bb1(%62: reg<x86.gpr64>, %61: reg<x86.gpr32>)
+  %128 = lea %lhs_offset, %108
+  %129 = mov.load.indexed.gpr64 %lhs, %128 {disp32 = 0, scale = 1}
+  %130 = lea %rhs_offset, %108
+  %131 = mov.load.indexed.gpr64 %rhs, %130 {disp32 = 0, scale = 1}
+  %132 = lea.disp %108 {disp32 = 8}
+  low.br ^_bb1(%132: reg<x86.gpr64>, %129: reg<x86.gpr64>, %131: reg<x86.gpr64>)
 ^_bb3:
-  return %45
+  low.cond_br %125, ^_bb4, ^_bb8 : reg<x86.gpr32>
+^_bb4:
+  low.br ^_bb5(%122: reg<x86.gpr64>, %118: reg<x86.gpr32>, %118: reg<x86.gpr32>)
+^_bb5(%111: reg<x86.gpr64>, %112: reg<x86.gpr32>, %113: reg<x86.gpr32>):
+  %133 = cmp.gpr64 %111, %byte_length, "ult"
+  %134 = cmp.gpr32 %112, %113, "eq"
+  %135 = copy %133 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %136 = and.gpr32 %135, %134
+  low.cond_br %136, ^_bb6, ^_bb7 : reg<x86.gpr32>
+^_bb6:
+  %137 = lea %lhs_offset, %111
+  %138 = movzx.load.indexed.u8.gpr32 %lhs, %137 {disp32 = 0, scale = 1}
+  %139 = lea %rhs_offset, %111
+  %140 = movzx.load.indexed.u8.gpr32 %rhs, %139 {disp32 = 0, scale = 1}
+  %141 = lea.disp %111 {disp32 = 1}
+  low.br ^_bb5(%141: reg<x86.gpr64>, %138: reg<x86.gpr32>, %140: reg<x86.gpr32>)
+^_bb7:
+  %142 = movzx.gpr64.gpr32 %112
+  %143 = movzx.gpr64.gpr32 %113
+  low.br ^_bb9(%142: reg<x86.gpr64>, %143: reg<x86.gpr64>)
+^_bb8:
+  low.br ^_bb9(%109: reg<x86.gpr64>, %110: reg<x86.gpr64>)
+^_bb9(%114: reg<x86.gpr64>, %115: reg<x86.gpr64>):
+  low.op.cond_br<x86.scalar.cmp.branch.gpr64>(%114, %115) {predicate = 5}, ^_bb10, ^_bb11 : (reg<x86.gpr64>, reg<x86.gpr64>)
+^_bb10:
+  %144 = copy %114 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %145 = xor.gpr64 %144, %115
+  %146 = bsf.gpr64 %145
+  %147 = mov.imm64 64
+  %148 = cmp.select.imm.gpr64.gpr64 %145, %147, %146, 0, "eq"
+  %149 = copy %148 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %150 = and.imm.gpr64 %149 {imm32 = -8}
+  %151 = copy %114 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %152 = copy %150 : reg<x86.gpr64> -> reg<x86.rcx>
+  %153 = shr.cl.gpr64 %151, %152
+  %154 = copy %153 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %155 = and.imm.gpr64 %154 {imm32 = 255}
+  %156 = copy %115 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %157 = copy %150 : reg<x86.gpr64> -> reg<x86.rcx>
+  %158 = shr.cl.gpr64 %156, %157
+  %159 = copy %158 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %160 = and.imm.gpr64 %159 {imm32 = 255}
+  %161 = copy %120 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %162 = cmp.select.gpr64.gpr32 %155, %160, %119, %161, "ult"
+  low.br ^_bb12(%162: reg<x86.gpr32>)
+^_bb11:
+  low.br ^_bb12(%118: reg<x86.gpr32>)
+^_bb12(%order: reg<x86.gpr32>):
+  return %order
 }

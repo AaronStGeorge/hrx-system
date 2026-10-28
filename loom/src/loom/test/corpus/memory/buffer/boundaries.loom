@@ -312,6 +312,120 @@ func.def @vector_boundary_observations(%ordinal: index, %left_entropy: i64, %rig
   func.return
 }
 
+// Exercise every suffix length across the scalar and vector transfer widths.
+// The complete output includes untouched prefix/suffix canaries. Source and
+// destination offsets deliberately have different alignment residues.
+func.def @copy_exact_range(%input: buffer, %output: buffer, %length: index) {
+  %bounded = index.assume %length [range(%length, 0, 129)] : index
+  %mask = index.constant 31 : index
+  %source_position = index.andi %bounded, %mask : index
+  %factor = index.constant 3 : index
+  %shift = index.constant 7 : index
+  %product = index.madd %bounded, %factor, %shift : index
+  %target_position = index.andi %product, %mask : index
+  %source_offset = index.cast %source_position : index to offset
+  %target_offset = index.cast %target_position : index to offset
+  %byte_length = index.cast %bounded : index to offset
+  buffer.copy %input[%source_offset], %output[%target_offset], %byte_length
+  func.return
+}
+
+// Each region exercises one pattern period with every partial repetition and
+// destination alignment. Floating-point patterns are compared as raw bytes.
+func.def @fill_exact_range(%output: buffer, %length: index, %bits: i64) {
+  %bounded = index.assume %length [range(%length, 0, 129)] : index
+  %mask = index.constant 31 : index
+  %position = index.andi %bounded, %mask : index
+  %origin = index.cast %position : index to offset
+  %byte_length = index.cast %bounded : index to offset
+  %region1 = index.constant 192 : offset
+  %region2 = index.constant 384 : offset
+  %region3 = index.constant 576 : offset
+  %offset1 = index.add %origin, %region1 : offset
+  %offset2 = index.add %origin, %region2 : offset
+  %offset3 = index.add %origin, %region3 : offset
+  %byte = scalar.trunci %bits : i64 to i8
+  %half = scalar.trunci %bits : i64 to i16
+  %word = scalar.trunci %bits : i64 to i32
+  %double = scalar.bitcast %bits : i64 to f64
+  buffer.fill %byte, %output[%origin], %byte_length : i8
+  buffer.fill %half, %output[%offset1], %byte_length : i16
+  buffer.fill %word, %output[%offset2], %byte_length : i32
+  buffer.fill %double, %output[%offset3], %byte_length : f64
+  func.return
+}
+
+// Every byte can be the first mismatch. A later byte has the opposite order,
+// so comparing little-endian words numerically would produce the wrong result.
+func.def @compare_first_difference(%left_storage: buffer, %right_storage: buffer, %position: index, %output: buffer) {
+  %bounded = index.assume %position [range(%position, 0, 129)] : index
+  %mismatch = index.cast %bounded : index to offset
+  %origin = index.constant 0 : offset
+  %length = index.constant 129 : offset
+  %last = index.constant 128 : offset
+  %left = buffer.assume.alignment %left_storage {minimum_alignment = 4} : buffer
+  %right = buffer.assume.alignment %right_storage {minimum_alignment = 4} : buffer
+  %pattern = scalar.constant 85 : i8
+  buffer.fill %pattern, %left[%origin], %length : i8
+  buffer.fill %pattern, %right[%origin], %length : i8
+  %differs = index.cmp ult, %mismatch, %length : offset
+  scf.if %differs {
+    %high = scalar.constant 128 : i32
+    %low = scalar.constant 127 : i32
+    buffer.store.i8 %high, %left[%mismatch]
+    buffer.store.i8 %low, %right[%mismatch]
+    %has_suffix = index.cmp ult, %mismatch, %last : offset
+    scf.if %has_suffix {
+      %c0 = scalar.constant 0 : i32
+      %maximum = scalar.constant 255 : i32
+      buffer.store.i8 %c0, %left[%last]
+      buffer.store.i8 %maximum, %right[%last]
+    }
+  }
+  %forward = buffer.compare %left[%origin], %right[%origin], %length
+  %reverse = buffer.compare %right[%origin], %left[%origin], %length
+  %prefix = buffer.compare %left[%origin], %right[%origin], %mismatch
+  %results = buffer.view %output[%origin] : buffer -> view<3xi32>
+  view.store %forward, %results[0] : i32, view<3xi32>
+  view.store %reverse, %results[1] : i32, view<3xi32>
+  view.store %prefix, %results[2] : i32, view<3xi32>
+  func.return
+}
+
+check.scenario @compare_first_difference_values {
+  check.trial[130](%trial: index, %entropy: check.entropy) {
+    %left = check.generate.fill value(0) : tensor<33xi32>
+    %right = check.generate.fill value(0) : tensor<33xi32>
+    %output = check.generate.fill value(0) : tensor<3xi32>
+    check.compare<@compare_first_difference>(%left, %right, %trial, %output) : (tensor<33xi32>, tensor<33xi32>, index, tensor<3xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<3xi32>
+    }
+  }
+  check.return
+}
+
+check.scenario @fill_exact_range_values {
+  check.trial[130](%trial: index, %entropy: check.entropy) {
+    %bits = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %output = check.generate.fill value(85) : tensor<768xi8>
+    check.compare<@fill_exact_range>(%output, %trial, %bits) : (tensor<768xi8>, index, i64) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<768xi8>
+    }
+  }
+  check.return
+}
+
+check.scenario @copy_exact_range_values {
+  check.trial[130](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-128) step(1) : tensor<192xi8>
+    %output = check.generate.fill value(85) : tensor<192xi8>
+    check.compare<@copy_exact_range>(%input, %output, %trial) : (tensor<192xi8>, tensor<192xi8>, index) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<192xi8>
+    }
+  }
+  check.return
+}
+
 check.scenario @byte_boundary_values {
   check.trial[16](%trial: index, %entropy: check.entropy) {
     %left_source = check.entropy.fork %entropy name("left") : check.entropy

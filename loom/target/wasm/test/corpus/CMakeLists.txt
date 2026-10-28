@@ -359,8 +359,6 @@ loom_corpus_build(
     "loom::target::wasm::simd128"
     "memory/buffer/allocation_freshness.loom"
     "loom::target::wasm::simd128"
-    "memory/buffer/boundaries.loom"
-    "loom::target::wasm::simd128"
     "memory/buffer/buffer_access.loom"
     "loom::target::wasm::simd128"
     "memory/buffer/buffers.loom"

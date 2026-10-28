@@ -36,35 +36,32 @@ kernel.def @descending_scratch_addresses() {
 low.kernel.def target<amdgpu.cdna3.core> abi_layout({constant_count = 3, direct_arg_count = 2, direct_arg_names = {arg0 = "position", arg1 = "fill"}, direct_arg_offsets = [0, 8], direct_arg_parameter_indices = [0, 1], direct_arg_sizes = [8, 4], parameter_count = 3, resource_count = 1, resource_offsets = [16], resource_parameter_indices = [2], uses_kernarg_segment_ptr = true}) workgroup_size(15, 1, 1) workgroup_count(1, 1, 1) @descending_scratch_addresses(%position: reg<amdgpu.sgpr x2>, %fill: reg<amdgpu.sgpr>) where [range(%position, 0, 14)] asm {
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {extent = 120, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %52 = storage {byte_alignment = 4, byte_length = 60} : low.storage<private>
+  %44 = storage {byte_alignment = 4, byte_length = 60} : low.storage<private>
   %base = s_mov_b32 0
   %bytes = s_mov_b32 60
-  %64 = s_mov_b32 1
-  %65 = v_mov_b32_copy %fill
-  low.br ^_bb1(%base: reg<amdgpu.sgpr>, %65: reg<amdgpu.vgpr>)
-^_bb1(%48: reg<amdgpu.sgpr>, %49: reg<amdgpu.vgpr>):
-  %66 = s_cmp_lt_u32 %48, %bytes
-  low.cond_br %66, ^_bb2, ^_bb3 : reg<amdgpu.scc>
+  %56 = s_mov_b32 4
+  low.br ^_bb1(%base: reg<amdgpu.sgpr>)
+^_bb1(%41: reg<amdgpu.sgpr>):
+  %57 = s_cmp_lt_u32 %41, %bytes
+  low.cond_br %57, ^_bb2, ^_bb3 : reg<amdgpu.scc>
 ^_bb2:
-  %67 = v_mov_b32_copy %48
-  scratch_store_byte_vaddr %67, %49
-  %68 = v_lshrrev_b32_src0_inline %49, 8
-  %69 = v_lshlrev_b32_src0_inline %49, 24
-  %70 = v_or_b32 %68, %69
-  %71 = s_add_u32 %48, %64
-  low.br ^_bb1(%71: reg<amdgpu.sgpr>, %70: reg<amdgpu.vgpr>)
+  %58 = v_mov_b32_copy %fill
+  %59 = v_mov_b32_copy %41
+  scratch_store_b32_vaddr %59, %58
+  %60 = s_add_u32 %41, %56
+  low.br ^_bb1(%60: reg<amdgpu.sgpr>)
 ^_bb3:
-  %101 = slice %position[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %102 = v_mov_b32_copy %101
-  %103 = v_mov_b32 4294967292
-  %104 = v_mul_lo_u32 %102, %103
-  %105 = v_add_u32_src0_inline %104, 56
-  %uniform_value = scratch_load_b32_vaddr %105 : reg<amdgpu.vgpr>
-  %108 = v_mul_lo_u32 %lane, %103
-  %109 = v_add_u32_src0_inline %108, 56
-  %varying_value = scratch_load_b32_vaddr %109 : reg<amdgpu.vgpr>
-  %111 = v_lshlrev_b32_src0_inline %lane, 3
-  global_store_dword_saddr %111, %uniform_value, %output_view
-  global_store_dword_saddr %111, %varying_value, %output_view {offset = 4}
+  %90 = slice %position[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %91 = v_mov_b32_copy %90
+  %92 = v_mov_b32 4294967292
+  %93 = v_mul_lo_u32 %91, %92
+  %94 = v_add_u32_src0_inline %93, 56
+  %uniform_value = scratch_load_b32_vaddr %94 : reg<amdgpu.vgpr>
+  %97 = v_mul_lo_u32 %lane, %92
+  %98 = v_add_u32_src0_inline %97, 56
+  %varying_value = scratch_load_b32_vaddr %98 : reg<amdgpu.vgpr>
+  %100 = v_lshlrev_b32_src0_inline %lane, 3
+  global_store_dword_saddr %100, %uniform_value, %output_view
+  global_store_dword_saddr %100, %varying_value, %output_view {offset = 4}
   return
 }

@@ -885,6 +885,16 @@ static iree_status_t loom_x86_emit_op(void* user_data,
 }
 
 static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 2 | 4 | 8,
+                           .vector_byte_widths = 16 | 32 | 64,
+                           .scalar_alignment = 1,
+                           .vector_alignment = 1},
     .name = IREE_SVL("x86-avx512-low-lower"),
     .vector_packet_policy = &kX86Avx512VectorPacketPolicy,
     .bitstream_policy = &kX86Avx512BitstreamPolicy,
@@ -918,6 +928,16 @@ static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
 };
 
 static const loom_low_lower_policy_t kX86Avx2LowLowerPolicy = {
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 2 | 4 | 8,
+                           .vector_byte_widths = 16 | 32,
+                           .scalar_alignment = 1,
+                           .vector_alignment = 1},
     .name = IREE_SVL("x86-avx2-low-lower"),
     .vector_packet_policy = &kX86Avx2VectorPacketPolicy,
     .bitstream_policy = &kX86Avx2BitstreamPolicy,
@@ -951,6 +971,16 @@ static const loom_low_lower_policy_t kX86Avx2LowLowerPolicy = {
 };
 
 static const loom_low_lower_policy_t kX86Avx2FeaturesLowLowerPolicy = {
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 2 | 4 | 8,
+                           .vector_byte_widths = 16 | 32,
+                           .scalar_alignment = 1,
+                           .vector_alignment = 1},
     .name = IREE_SVL("x86-avx2-features-low-lower"),
     .vector_packet_policy = &kX86Avx2VectorPacketPolicy,
     .bitstream_policy = &kX86Avx2BitstreamPolicy,
@@ -990,6 +1020,16 @@ static const loom_low_lower_policy_t kX86Avx2FeaturesLowLowerPolicy = {
 };
 
 static const loom_low_lower_policy_t kX86ScalarLowLowerPolicy = {
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 2 | 4 | 8,
+                           .vector_byte_widths = 0,
+                           .scalar_alignment = 1,
+                           .vector_alignment = 1},
     .name = IREE_SVL("x86-scalar-low-lower"),
     .function_storage = {kX86FunctionStorage,
                          IREE_ARRAYSIZE(kX86FunctionStorage)},
@@ -1010,6 +1050,16 @@ static const loom_low_lower_policy_t kX86ScalarLowLowerPolicy = {
 };
 
 static const loom_low_lower_policy_t kX86PackedDotLowLowerPolicy = {
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 2 | 4 | 8,
+                           .vector_byte_widths = 0,
+                           .scalar_alignment = 1,
+                           .vector_alignment = 1},
     .name = IREE_SVL("x86-packed-dot-low-lower"),
     .error_catalog = &loom_error_catalog_core,
     .map_abi_layout = {.fn = loom_x86_map_native_abi_layout},
@@ -1027,6 +1077,16 @@ static const loom_low_lower_policy_t kX86PackedDotLowLowerPolicy = {
 };
 
 static const loom_low_lower_policy_t kX86Avx512FeaturesLowLowerPolicy = {
+    .bulk_memory_policy = {.memory_spaces =
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT) |
+                               (1u << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC),
+                           .scalar_byte_widths = 1 | 2 | 4 | 8,
+                           .vector_byte_widths = 16 | 32 | 64,
+                           .scalar_alignment = 1,
+                           .vector_alignment = 1},
     .name = IREE_SVL("x86-avx512-features-low-lower"),
     .vector_packet_policy = &kX86Avx512VectorPacketPolicy,
     .bitstream_policy = &kX86Avx512BitstreamPolicy,
