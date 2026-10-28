@@ -252,6 +252,25 @@ code: 48 83 ec 08 c5 f9 7e 04 24 c5 f9 6e 04 24 48 83 c4 08 c3
 
 // ====
 
+// Half-precision calls cross from GPR carriers to XMM ABI registers and back.
+// The unused second result stays in its ABI register without caller transport.
+// RUN: emit x86-native-bytes @half_call
+x86.target<avx2> @target
+
+low.func.def noinline target<x86.avx2.core>(@target) abi_layout({signature = (f16) -> (f16, f16)}) @half_pair(%value: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.gpr32>) asm {
+  return %value, %value
+}
+
+low.func.def target<x86.avx2.core>(@target) @half_call(%value: reg<x86.gpr32>) -> (reg<x86.gpr32>) asm {
+  %result, %unused = low.func.call @half_pair(%value) : (reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.gpr32>)
+  return %result
+}
+
+// ----
+code: 48 83 ec 08 c5 f9 6e c7 e8 00 00 00 00 c5 f9 7e c1 8b c1 48 83 c4 08 c3
+
+// ====
+
 // Equal descriptor-branch successors collapse to their shared fallthrough
 // without materializing the comparison or a conditional transfer.
 // RUN: emit x86-native-bytes @same_descriptor_successor
