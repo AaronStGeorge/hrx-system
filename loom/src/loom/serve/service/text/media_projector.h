@@ -77,7 +77,10 @@ iree_status_t loom_serve_text_media_projector_allocate(
 // is sealed/full, not request failure. Each projection is selected at most
 // once. consumer_bytes is the prepared language continuation's footprint,
 // excluding features. It is captured before the CPU forecast loan; no consumer
-// state or residency is accessed from that loan.
+// state or residency is accessed from that loan. Each logical request may join
+// one output cohort shared with peers; its other cohorts contain only its own
+// projections. Source forecasts can therefore bound retained peer backing by
+// one maximum cohort output, independent of the projection count.
 bool loom_serve_text_media_projector_offer(
     loom_serve_text_media_projector_t* projector,
     loom_serve_text_media_request_t* request, uint64_t consumer_bytes);

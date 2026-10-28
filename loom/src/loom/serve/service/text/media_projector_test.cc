@@ -102,7 +102,7 @@ class MediaProjectorTest : public ::testing::Test {
     loom_serve_workspace_set_observer(loom_serve_pool_workspace(storage_owner_),
                                       observer);
     IREE_ASSERT_OK(loom_serve_text_media_projector_allocate(
-        model_, requests_.size(), loom_serve_host_executor(host), proactor,
+        model_, requests_.size() * 3, loom_serve_host_executor(host), proactor,
         observer, host_allocator_, &projector_));
     image_.data_url = IREE_SV(
         "data:image/x-portable-arbitrarymap;base64,"
@@ -269,6 +269,68 @@ TEST_F(MediaProjectorTest, RejectsImpossibleContinuationBeforeSubmission) {
       loom_serve_text_media_request_take_status(requests_[0]));
   EXPECT_FALSE(loom_serve_text_media_request_bind(requests_[0], &input_, 0));
   EXPECT_EQ(loom_serve_finite_model_parameters(model_).pin_count, 0u);
+}
+
+TEST_F(MediaProjectorTest, SharesOneCohortAndBatchesRemainingOwnerProjections) {
+  // The first owner's 1+32 rows leave room for each peer's first row. The
+  // remaining 32-row projections still fit together, but must not make another
+  // owner's entire result live for this request a second time.
+  std::array<loom_serve_text_chat_image_t, 3> images = {image_, image_, image_};
+  std::array<loom_serve_text_media_projection_t, 3> projections = {};
+  std::array<loom_serve_text_media_span_t, 3> spans = {};
+  uint32_t input_offset = 0;
+  for (size_t i = 0; i < projections.size(); ++i) {
+    const uint32_t rows = i ? 32 : 1;
+    projections[i] = {
+        .image_begin = static_cast<uint32_t>(i),
+        .image_count = 1,
+        .feature_count = rows,
+    };
+    spans[i] = {
+        .projection_index = static_cast<uint32_t>(i),
+        .input_offset = input_offset,
+        .input_count = rows,
+    };
+    input_offset += rows;
+  }
+  chat_.images.count = images.size();
+  chat_.images.values = images.data();
+  chat_.projections.count = projections.size();
+  chat_.projections.values = projections.data();
+  input_.media_spans = spans.data();
+  input_.media_span_count = spans.size();
+  for (size_t i = 0; i < requests_.size(); ++i) {
+    ASSERT_NO_FATAL_FAILURE(Offer(i, 0));
+  }
+  ASSERT_TRUE(loom_serve_text_media_projector_start(projector_));
+  ASSERT_NO_FATAL_FAILURE(AdvanceUntil([&] {
+    return loom_serve_text_media_projector_is_collecting(projector_);
+  }));
+  std::array<const loom_serve_text_media_input_t*, 3> inputs = {};
+  for (size_t i = 0; i < requests_.size(); ++i) {
+    IREE_ASSERT_OK(loom_serve_text_media_request_take_status(requests_[i]));
+    ASSERT_TRUE(loom_serve_text_media_request_bind(requests_[i], &input_, 0));
+    inputs[i] = loom_serve_text_media_request_input(requests_[i]);
+  }
+  const auto* shared = inputs[0]->spans[0].result;
+  EXPECT_EQ(inputs[0]->spans[1].result, shared);
+  EXPECT_EQ(inputs[1]->spans[0].result, shared);
+  EXPECT_EQ(inputs[2]->spans[0].result, shared);
+  EXPECT_EQ(loom_serve_finite_result_output_length(shared), 35 * 16u);
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    const auto* private_result = inputs[i]->spans[2].result;
+    EXPECT_NE(private_result, shared);
+    EXPECT_EQ(loom_serve_finite_result_output_length(private_result),
+              (i ? 64 : 32) * 16u);
+    if (i) {
+      EXPECT_EQ(inputs[i]->spans[1].result, private_result);
+      EXPECT_NE(private_result, inputs[i - 1]->spans[2].result);
+    }
+  }
+  for (auto* request : requests_) {
+    loom_serve_text_media_request_begin(request);
+    loom_serve_text_media_request_consume(request, input_offset);
+  }
 }
 
 }  // namespace

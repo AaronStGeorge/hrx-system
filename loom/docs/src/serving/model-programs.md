@@ -646,6 +646,13 @@ output roots, and gathered output rows with 16-byte row alignment. Retained
 output is excluded from the private peak and includes padded/shared roots;
 gather storage includes separate copies of aliased rows.
 
+A logical text request can join one projector cohort shared with peers. Its
+other cohorts contain only its own projections. The retained-output estimate
+can therefore include private projection output plus one maximum cohort root,
+instead of multiplying every projection by the maximum peer count. Compatible
+frame pairs within a video continue to batch across the request's private
+cohorts.
+
 These trusted source estimates let the server reject a request that cannot fit
 alone before pixel decoding or weight activation. It checks producer and
 language-consumer phases separately. The forecast does not reserve future

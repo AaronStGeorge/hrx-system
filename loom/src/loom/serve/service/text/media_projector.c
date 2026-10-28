@@ -46,6 +46,10 @@ struct loom_serve_text_media_request_t {
   bool await_producer;
   // CPU planning has settled this request, including a failed forecast.
   bool forecasted;
+  // One selected cohort may share output backing with peers. All subsequent
+  // cohorts are private, bounding retained peer storage independently of the
+  // number of projections and preparation windows.
+  bool shared_cohort;
   // CPU-only forecast result, transferred after the planning loan joins.
   iree_status_t forecast_status;
   // Owned request rejection, transferred to the HTTP response owner.
@@ -573,6 +577,8 @@ static void loom_serve_text_media_projector_select(
     loom_serve_text_media_projector_t* projector) {
   uint64_t remaining = loom_serve_finite_model_batch_limit(projector->model);
   uint64_t tag = 0;
+  loom_serve_text_media_request_t* first_request = NULL;
+  bool shared = false;
   projector->cohort_count = 0;
   for (iree_host_size_t i = 0; i < projector->count; ++i) {
     loom_serve_text_media_job_t* job = &projector->jobs[i];
@@ -582,10 +588,16 @@ static void loom_serve_text_media_projector_select(
     }
     if (!projector->cohort_count) {
       tag = job->prepared.tag;
+      first_request = job->request;
     }
     if (job->prepared.tag != tag || job->prepared.units > remaining) {
       continue;
     }
+    if (job->request != first_request &&
+        (first_request->shared_cohort || job->request->shared_cohort)) {
+      continue;
+    }
+    shared |= job->request != first_request;
     remaining -= job->prepared.units;
     const iree_host_size_t index = projector->cohort_count++;
     projector->cohort[index] = job;
@@ -593,6 +605,14 @@ static void loom_serve_text_media_projector_select(
     projector->rows[index] = job->rows;
   }
   if (projector->cohort_count) {
+    // Commit sharing after selection so later projections of the same owners
+    // remain eligible in this cohort. Cancellation cannot restore this credit:
+    // a surviving peer may already retain the complete output root.
+    if (shared) {
+      for (iree_host_size_t i = 0; i < projector->cohort_count; ++i) {
+        projector->cohort[i]->request->shared_cohort = true;
+      }
+    }
     projector->phase = MEDIA_BATCHING;
     loom_serve_text_readiness_schedule(&projector->readiness,
                                        loom_serve_text_media_projector_batch,
