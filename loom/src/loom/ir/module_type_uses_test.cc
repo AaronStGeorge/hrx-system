@@ -111,6 +111,23 @@ class ModuleTypeUsesTest : public ::testing::Test {
     return result;
   }
 
+  std::vector<loom_value_id_t> DimensionDependencies(loom_type_id_t type_id) {
+    std::vector<loom_value_id_t> result;
+    loom_type_use_iterator_t iterator;
+    loom_type_dependency_set_begin(
+        &module_->type_uses,
+        loom_type_table_dimension_dependencies(&module_->types, type_id),
+        &iterator);
+    for (auto provider = loom_type_dependencies_next(&iterator);
+         provider != LOOM_VALUE_ID_INVALID;
+         provider = loom_type_dependencies_next(&iterator)) {
+      result.push_back(provider);
+    }
+    EXPECT_TRUE(std::is_sorted(result.begin(), result.end()));
+    EXPECT_EQ(std::adjacent_find(result.begin(), result.end()), result.end());
+    return result;
+  }
+
   std::vector<loom_value_id_t> Users(loom_value_id_t provider) {
     std::vector<loom_value_id_t> result;
     loom_type_use_iterator_t iterator;
@@ -159,6 +176,7 @@ TEST_F(ModuleTypeUsesTest, StaticTypesDoNotAllocateDependencyState) {
   EXPECT_EQ(module_->type_uses.arena.total_allocation_size, 0u);
   for (iree_host_size_t i = 0; i < module_->types.count; ++i) {
     EXPECT_EQ(loom_type_table_dependencies(&module_->types, i), 0u);
+    EXPECT_EQ(loom_type_table_dimension_dependencies(&module_->types, i), 0u);
   }
   IREE_ASSERT_OK(loom_module_recompute_type_uses(module_));
   EXPECT_FALSE(loom_module_has_active_type_uses(module_));
@@ -193,11 +211,16 @@ TEST_F(ModuleTypeUsesTest, RebuildAndReinsertReuseFragmentedCapacity) {
 TEST_F(ModuleTypeUsesTest, RepeatedSharedChildrenHaveOneDependency) {
   auto type_id = Intern(loom_type_group_1d(loom_dim_pack_dynamic(width_)));
   const auto singleton = loom_type_table_dependencies(&module_->types, type_id);
+  const auto dimension_singleton =
+      loom_type_table_dimension_dependencies(&module_->types, type_id);
+  EXPECT_EQ(dimension_singleton, singleton);
   const auto used_bytes = module_->type_uses.arena.used_allocation_size;
   for (int depth = 0; depth < 48; ++depth) {
     type_id = Pair(type_id, type_id);
     EXPECT_EQ(loom_type_table_dependencies(&module_->types, type_id),
               singleton);
+    EXPECT_EQ(loom_type_table_dimension_dependencies(&module_->types, type_id),
+              dimension_singleton);
   }
   EXPECT_EQ(module_->type_uses.arena.used_allocation_size, used_bytes);
   const auto carrier =
@@ -253,6 +276,54 @@ TEST_F(ModuleTypeUsesTest, MembershipIsCanonicalButOccurrenceWalkingIsOrdered) {
       &occurrences));
   EXPECT_EQ(occurrences,
             (std::vector<loom_value_id_t>{height, width_, height, width_}));
+}
+
+TEST_F(ModuleTypeUsesTest, DimensionMembershipExcludesOtherValueReferences) {
+  const auto height = AddArgument(loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
+  const auto encoding = AddArgument(
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT));
+  auto encoded_matrix = loom_type_shaped_2d(
+      LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(width_),
+      loom_dim_pack_dynamic(height), 0);
+  encoded_matrix.encoding_id = static_cast<uint16_t>(encoding);
+  encoded_matrix.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+  const auto matrix_id = Intern(encoded_matrix);
+
+  EXPECT_EQ(DimensionDependencies(matrix_id),
+            (std::vector<loom_value_id_t>{width_, height}));
+  const auto carrier =
+      AddArgument(loom_type_table_get(&module_->types, matrix_id));
+  EXPECT_EQ(Dependencies(carrier),
+            (std::vector<loom_value_id_t>{width_, height, encoding}));
+
+  const auto condition = AddArgument(loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
+  loom_predicate_t predicate = {
+      LOOM_PREDICATE_EQ,      2, {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE}, {},
+      {condition, condition},
+  };
+  loom_string_id_t predicate_key = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("predicate"), &predicate_key));
+  const loom_named_attr_t nested[] = {
+      {predicate_key, {}, loom_attr_predicate_list(&predicate, 1)},
+  };
+  const loom_attribute_t parameters[] = {
+      loom_attr_type(matrix_id),
+      loom_attr_absent(),
+      loom_make_canonical_attr_dict(nested, IREE_ARRAYSIZE(nested)),
+  };
+  loom_type_t parameterized_type = {};
+  loom_type_id_t parameterized_type_id = LOOM_TYPE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_make_parameterized_type(
+      module_, &loom_test_array_type_parameterized_descriptor, parameters,
+      IREE_ARRAYSIZE(parameters), &parameterized_type, &parameterized_type_id));
+
+  EXPECT_EQ(DimensionDependencies(parameterized_type_id),
+            (std::vector<loom_value_id_t>{width_, height}));
+  const auto parameterized_carrier = AddArgument(parameterized_type);
+  EXPECT_EQ(
+      Dependencies(parameterized_carrier),
+      (std::vector<loom_value_id_t>{width_, height, encoding, condition}));
 }
 
 TEST_F(ModuleTypeUsesTest, OverlapDoesNotMultiplyIncomingCarriers) {
@@ -555,6 +626,8 @@ TEST_F(ModuleTypeUsesTest,
                 loom_type_table_entry(&types, first));
       EXPECT_EQ(loom_type_table_dependencies(&module_->types, first),
                 loom_type_table_dependencies(&types, first));
+      EXPECT_EQ(loom_type_table_dimension_dependencies(&module_->types, first),
+                loom_type_table_dimension_dependencies(&types, first));
       EXPECT_EQ(module_->types.count, types.count);
       EXPECT_EQ(module_->arena.used_allocation_size, payload_bytes);
       EXPECT_FALSE(loom_module_has_active_type_uses(module_));
@@ -569,11 +642,16 @@ TEST_F(ModuleTypeUsesTest,
     const auto retained_bytes = module_->type_uses.arena.used_allocation_size;
     const auto retained_root =
         loom_type_table_dependencies(&module_->types, result_id);
+    const auto retained_dimension_root =
+        loom_type_table_dimension_dependencies(&module_->types, result_id);
     IREE_ASSERT_OK(loom_module_make_parameterized_type(
         module_, &loom_test_array_type_parameterized_descriptor, parameters,
         IREE_ARRAYSIZE(parameters), &result, &result_id));
     EXPECT_EQ(loom_type_table_dependencies(&module_->types, result_id),
               retained_root);
+    EXPECT_EQ(
+        loom_type_table_dimension_dependencies(&module_->types, result_id),
+        retained_dimension_root);
     EXPECT_EQ(module_->type_uses.arena.used_allocation_size, retained_bytes);
   }
 }
