@@ -204,6 +204,42 @@ _FLOAT_MATH_ORDINARY_UNARY_VALUES = (
         "rounding. Signed zero and infinity are preserved, subnormal inputs "
         "are not flushed, and every NaN becomes the canonical positive quiet NaN.",
     ),
+    (
+        "log",
+        17,
+        "Returns the stable iree/math log mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Either zero returns negative infinity; negative "
+        "inputs and every NaN become the canonical positive quiet NaN; positive "
+        "infinity is preserved.",
+    ),
+    (
+        "log2",
+        18,
+        "Returns the stable iree/math log2 mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Either zero returns negative infinity; negative "
+        "inputs and every NaN become the canonical positive quiet NaN; positive "
+        "infinity is preserved.",
+    ),
+    (
+        "log10",
+        19,
+        "Returns the stable iree/math log10 mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Either zero returns negative infinity; negative "
+        "inputs and every NaN become the canonical positive quiet NaN; positive "
+        "infinity is preserved.",
+    ),
+    (
+        "log1p",
+        20,
+        "Returns the stable iree/math log1p mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Signed zero and positive infinity are "
+        "preserved; -1 returns negative infinity; inputs below -1 and every NaN "
+        "become the canonical positive quiet NaN.",
+    ),
 )
 
 FLOAT_MATH_F32_SELECTOR = _selector(

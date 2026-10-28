@@ -173,6 +173,7 @@ loom_corpus_test(
             "memory/buffer/packing.loom",
             "numeric/float/exponent.loom",
             "numeric/float/exponential.loom",
+            "numeric/float/logarithm.loom",
             "numeric/float/roots.loom",
             "numeric/float/reciprocal.loom",
             "numeric/float/inverse_hyperbolic.loom",

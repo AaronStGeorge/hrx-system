@@ -16,6 +16,22 @@ func.def @elementary_f64(%value: f64) -> (f64, f64, f64, f64) {
   func.return %root, %inverse, %natural, %base_two : f64, f64, f64, f64
 }
 
+func.def @logarithms_f32(%value: f32) -> (f32, f32, f32, f32) {
+  %natural = scalar.logf %value : f32
+  %base_two = scalar.log2f %value : f32
+  %base_ten = scalar.log10f %value : f32
+  %increment = scalar.log1pf %value : f32
+  func.return %natural, %base_two, %base_ten, %increment : f32, f32, f32, f32
+}
+
+func.def @logarithms_f64(%value: f64) -> (f64, f64, f64, f64) {
+  %natural = scalar.logf %value : f64
+  %base_two = scalar.log2f %value : f64
+  %base_ten = scalar.log10f %value : f64
+  %increment = scalar.log1pf %value : f64
+  func.return %natural, %base_two, %base_ten, %increment : f64, f64, f64, f64
+}
+
 check.case public @ordinary_f32 {
   %input = check.literal value(0.5) : f32
   %root, %inverse, %natural, %base_two = func.call @elementary_f32(%input) : (f32) -> (f32, f32, f32, f32)
@@ -26,6 +42,15 @@ check.case public @ordinary_f32 {
   check.expect.approximate actual(%inverse) expected(%sqrt_two) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32, f32
   check.expect.approximate actual(%natural) expected(%exp_half) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32, f32
   check.expect.approximate actual(%base_two) expected(%sqrt_two) atol(1.1999999999999999e-07) rtol(0.0) nan(different) : f32, f32
+  %log, %log2, %log10, %log1p = func.call @logarithms_f32(%input) : (f32) -> (f32, f32, f32, f32)
+  %ln_half = check.literal value(-0.69314718246459961) : f32
+  %minus_one = check.literal value(-1.0) : f32
+  %log10_half = check.literal value(-0.30103000998497009) : f32
+  %ln_one_half = check.literal value(0.40546509623527527) : f32
+  check.expect.approximate actual(%log) expected(%ln_half) atol(5.9604644775390625e-08) rtol(0.0) nan(different) : f32, f32
+  check.expect.equal actual(%log2) expected(%minus_one) : f32
+  check.expect.approximate actual(%log10) expected(%log10_half) atol(5.9604644775390625e-08) rtol(0.0) nan(different) : f32, f32
+  check.expect.approximate actual(%log1p) expected(%ln_one_half) atol(5.9604644775390625e-08) rtol(0.0) nan(different) : f32, f32
   check.return
 }
 
@@ -39,5 +64,14 @@ check.case public @ordinary_f64 {
   check.expect.approximate actual(%inverse) expected(%sqrt_two) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64, f64
   check.expect.approximate actual(%natural) expected(%exp_half) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64, f64
   check.expect.approximate actual(%base_two) expected(%sqrt_two) atol(2.2999999999999999e-16) rtol(0.0) nan(different) : f64, f64
+  %log, %log2, %log10, %log1p = func.call @logarithms_f64(%input) : (f64) -> (f64, f64, f64, f64)
+  %ln_half = check.literal value(-0.69314718055994529) : f64
+  %minus_one = check.literal value(-1.0) : f64
+  %log10_half = check.literal value(-0.3010299956639812) : f64
+  %ln_one_half = check.literal value(0.40546510810816438) : f64
+  check.expect.approximate actual(%log) expected(%ln_half) atol(1.1102230246251565e-16) rtol(0.0) nan(different) : f64, f64
+  check.expect.equal actual(%log2) expected(%minus_one) : f64
+  check.expect.approximate actual(%log10) expected(%log10_half) atol(1.1102230246251565e-16) rtol(0.0) nan(different) : f64, f64
+  check.expect.approximate actual(%log1p) expected(%ln_one_half) atol(1.1102230246251565e-16) rtol(0.0) nan(different) : f64, f64
   check.return
 }

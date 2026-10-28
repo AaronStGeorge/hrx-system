@@ -34,3 +34,25 @@ func.def @vector_cube_roots() -> (vector<2xf16>, vector<2xf64>) {
   %wide_roots = vector.constant 1.7031839360032603e-108 : vector<2xf64>
   func.return %narrow_roots, %wide_roots : vector<2xf16>, vector<2xf64>
 }
+
+// ====
+func.def @vector_logarithms() -> (vector<2xf32>, vector<2xf64>, vector<2xf16>, vector<2xbf16>) {
+  %a = vector.constant 2.0 : vector<2xf32>
+  %b = vector.constant 4.9406564584124654e-324 : vector<2xf64>
+  %c = vector.constant 10.0 : vector<2xf16>
+  %d = vector.constant -0.00390625 : vector<2xbf16>
+  %natural = vector.logf %a : vector<2xf32>
+  %base_two = vector.log2f %b : vector<2xf64>
+  %base_ten = vector.log10f %c : vector<2xf16>
+  %increment = vector.log1pf %d : vector<2xbf16>
+  func.return %natural, %base_two, %base_ten, %increment : vector<2xf32>, vector<2xf64>, vector<2xf16>, vector<2xbf16>
+}
+
+// ----
+func.def @vector_logarithms() -> (vector<2xf32>, vector<2xf64>, vector<2xf16>, vector<2xbf16>) {
+  %natural = vector.constant 0.69314718246459961 : vector<2xf32>
+  %base_two = vector.constant -1074.0 : vector<2xf64>
+  %base_ten = vector.constant 1.0 : vector<2xf16>
+  %increment = vector.constant -0.00390625 : vector<2xbf16>
+  func.return %natural, %base_two, %base_ten, %increment : vector<2xf32>, vector<2xf64>, vector<2xf16>, vector<2xbf16>
+}

@@ -885,6 +885,22 @@ static void loom_math_legalize_unary_source_initialize(
       out_source->unary_build =
           is_scalar ? loom_scalar_rsqrtf_build : loom_vector_rsqrtf_build;
       return;
+    case LOOM_TARGET_MATH_OP_LOGF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_logf_build : loom_vector_logf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_LOG2F:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_log2f_build : loom_vector_log2f_build;
+      return;
+    case LOOM_TARGET_MATH_OP_LOG10F:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_log10f_build : loom_vector_log10f_build;
+      return;
+    case LOOM_TARGET_MATH_OP_LOG1PF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_log1pf_build : loom_vector_log1pf_build;
+      return;
     case LOOM_TARGET_MATH_OP_CBRTF:
       out_source->unary_build =
           is_scalar ? loom_scalar_cbrtf_build : loom_vector_cbrtf_build;
@@ -1047,6 +1063,10 @@ static iree_status_t loom_math_legalize_build_widen_f32_round(
     case LOOM_TARGET_MATH_OP_EXP2F:
     case LOOM_TARGET_MATH_OP_SQRTF:
     case LOOM_TARGET_MATH_OP_RSQRTF:
+    case LOOM_TARGET_MATH_OP_LOGF:
+    case LOOM_TARGET_MATH_OP_LOG2F:
+    case LOOM_TARGET_MATH_OP_LOG10F:
+    case LOOM_TARGET_MATH_OP_LOG1PF:
     case LOOM_TARGET_MATH_OP_CBRTF:
     case LOOM_TARGET_MATH_OP_CEILF:
     case LOOM_TARGET_MATH_OP_FLOORF:

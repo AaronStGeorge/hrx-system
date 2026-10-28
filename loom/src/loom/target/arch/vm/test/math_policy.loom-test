@@ -33,9 +33,16 @@ func.def target(@vm) @wide_cosine(%value: f64) -> (f64) {
 vm.target<core> @vm
 
 func.def target(@vm) @exact_log2(%value: f32) -> (f32) {
-  // ERROR@+1: TARGET/003 {target_key="vm", export_name="exact_log2", config_key="vm", function_name="exact_log2", op_name="scalar.log2f", subject_role="flags", subject_name="fastmath", constraint_key="has_all.afn"}
   %result = scalar.log2f %value : f32
   func.return %result : f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @exact_log2(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>) asm {
+  %result = float.math.unary.f32 %value, "log2"
+  return %result
 }
 
 // ====
@@ -43,9 +50,16 @@ func.def target(@vm) @exact_log2(%value: f32) -> (f32) {
 vm.target<core> @vm
 
 func.def target(@vm) @wide_log2(%value: f64) -> (f64) {
-  // ERROR@+1: TARGET/002 {target_key="vm", export_name="wide_log2", config_key="vm", function_name="wide_log2", op_name="scalar.log2f", field_name="input", actual_type="f64", expected_type="f32"}
   %result = scalar.log2f<afn> %value : f64
   func.return %result : f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @wide_log2(%value: reg<vm.value : f64>) -> (reg<vm.value : f64>) asm {
+  %result = float.math.unary.f64 %value, "log2"
+  return %result
 }
 
 // ====
@@ -53,9 +67,16 @@ func.def target(@vm) @wide_log2(%value: f64) -> (f64) {
 vm.target<core> @vm
 
 func.def target(@vm) @exact_log(%value: f32) -> (f32) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.logf", phase_name="legalize-math", policy_name="vm-math", math_op="logf", lane_domain="scalar", element_type="f32", constraint_key="math.recipe.afn_f32"}
   %result = scalar.logf %value : f32
   func.return %result : f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @exact_log(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>) asm {
+  %result = float.math.unary.f32 %value, "log"
+  return %result
 }
 
 // ====
@@ -63,9 +84,16 @@ func.def target(@vm) @exact_log(%value: f32) -> (f32) {
 vm.target<core> @vm
 
 func.def target(@vm) @wide_log(%value: f64) -> (f64) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.logf", phase_name="legalize-math", policy_name="vm-math", math_op="logf", lane_domain="scalar", element_type="f64", constraint_key="math.recipe.afn_f32"}
   %result = scalar.logf<afn> %value : f64
   func.return %result : f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @wide_log(%value: reg<vm.value : f64>) -> (reg<vm.value : f64>) asm {
+  %result = float.math.unary.f64 %value, "log"
+  return %result
 }
 
 // ====
@@ -216,4 +244,61 @@ low.func.def target<vm.core>(@vm) abi(vm_function) @cube_roots(%input0: reg<vm.v
   %root4 = float.math.unary.f32 %input4, "cbrt"
   %root5 = float.math.unary.f64 %input5, "cbrt"
   return %root0, %root1, %root2, %root3, %root4, %root5
+}
+
+// ====
+// Every narrow carrier uses the same F32 evaluation and final format rounding.
+vm.target<core> @vm
+
+func.def target(@vm) @narrow_logarithms(%a: f8E4M3, %b: f8E5M2, %c: f16, %d: bf16) -> (f8E4M3, f8E5M2, f16, bf16) {
+  %natural = scalar.logf %a : f8E4M3
+  %base_two = scalar.log2f %b : f8E5M2
+  %base_ten = scalar.log10f %c : f16
+  %increment = scalar.log1pf %d : bf16
+  func.return %natural, %base_two, %base_ten, %increment : f8E4M3, f8E5M2, f16, bf16
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_logarithms(%a: reg<vm.value : f8E4M3>, %b: reg<vm.value : f8E5M2>, %c: reg<vm.value : f16>, %d: reg<vm.value : bf16>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f16>, reg<vm.value : bf16>) asm {
+  %8 = conversion.float.extend %a, "f8e4m3.to.f32" : reg<vm.value : f32>
+  %9 = float.math.unary.f32 %8, "log"
+  %natural = conversion.float.truncate %9, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %11 = conversion.float.extend %b, "f8e5m2.to.f32" : reg<vm.value : f32>
+  %12 = float.math.unary.f32 %11, "log2"
+  %base_two = conversion.float.truncate %12, "f32.to.f8e5m2" : reg<vm.value : f8E5M2>
+  %14 = conversion.float.extend %c, "f16.to.f32" : reg<vm.value : f32>
+  %15 = float.math.unary.f32 %14, "log10"
+  %base_ten = conversion.float.truncate %15, "f32.to.f16" : reg<vm.value : f16>
+  %17 = conversion.float.extend %d, "bf16.to.f32" : reg<vm.value : f32>
+  %18 = float.math.unary.f32 %17, "log1p"
+  %increment = conversion.float.truncate %18, "f32.to.bf16" : reg<vm.value : bf16>
+  return %natural, %base_two, %base_ten, %increment
+}
+
+// ====
+vm.target<core> @vm
+
+func.def target(@vm) @wide_logarithms(%values: vector<2xf64>) -> (vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>) {
+  %natural = vector.logf %values : vector<2xf64>
+  %base_two = vector.log2f %values : vector<2xf64>
+  %base_ten = vector.log10f %values : vector<2xf64>
+  %increment = vector.log1pf %values : vector<2xf64>
+  func.return %natural, %base_two, %base_ten, %increment : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @wide_logarithms(%0: reg<vm.value : f64>, %1: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %10 = float.math.unary.f64 %0, "log"
+  %11 = float.math.unary.f64 %1, "log"
+  %12 = float.math.unary.f64 %0, "log2"
+  %13 = float.math.unary.f64 %1, "log2"
+  %14 = float.math.unary.f64 %0, "log10"
+  %15 = float.math.unary.f64 %1, "log10"
+  %16 = float.math.unary.f64 %0, "log1p"
+  %17 = float.math.unary.f64 %1, "log1p"
+  return %10, %11, %12, %13, %14, %15, %16, %17
 }

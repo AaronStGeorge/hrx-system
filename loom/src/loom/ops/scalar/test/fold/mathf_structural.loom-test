@@ -197,3 +197,32 @@ func.def @cube_roots() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
   %root5 = scalar.constant 1.2599210498948732 : f64
   func.return %root0, %root1, %root2, %root3, %root4, %root5 : f8E4M3, f8E5M2, f16, bf16, f32, f64
 }
+
+// ====
+// Logarithms share numerical mappings across narrow and native carriers.
+func.def @ordinary_logarithms() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %a = scalar.constant 2.0 : f8E4M3
+  %b = scalar.constant 0.5 : f8E5M2
+  %c = scalar.constant 10.0 : f16
+  %d = scalar.constant 0.00390625 : bf16
+  %minimum = scalar.constant 1.4012984643248171e-45 : f32
+  %tiny = scalar.constant 4.9406564584124654e-324 : f64
+  %natural = scalar.logf %a : f8E4M3
+  %base_two = scalar.log2f %b : f8E5M2
+  %base_ten = scalar.log10f %c : f16
+  %increment = scalar.log1pf %d : bf16
+  %subnormal = scalar.log2f %minimum : f32
+  %cancellation = scalar.log1pf %tiny : f64
+  func.return %natural, %base_two, %base_ten, %increment, %subnormal, %cancellation : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}
+
+// ----
+func.def @ordinary_logarithms() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %natural = scalar.constant 0.6875 : f8E4M3
+  %base_two = scalar.constant -1.0 : f8E5M2
+  %base_ten = scalar.constant 1.0 : f16
+  %increment = scalar.constant 0.00390625 : bf16
+  %subnormal = scalar.constant -149.0 : f32
+  %cancellation = scalar.constant 4.9406564584124654e-324 : f64
+  func.return %natural, %base_two, %base_ten, %increment, %subnormal, %cancellation : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}

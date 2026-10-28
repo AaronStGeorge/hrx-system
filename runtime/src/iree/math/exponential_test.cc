@@ -46,54 +46,12 @@ TEST_F(ElementaryTest, Exp2F32ApproxFrozenFiniteMapping) {
                    UINT32_C(0x3E7F3D4D));
 }
 
-TEST_F(ElementaryTest, Log2F32ApproxExceptionalAndFlushBoundaries) {
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x00000000),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x80000000),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x00000001),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x807FFFFF),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0xBF800000),
-                   UINT32_C(0x7FC00000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0xFF800000),
-                   UINT32_C(0x7FC00000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x7F800000),
-                   UINT32_C(0x7F800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x7F800001),
-                   UINT32_C(0x7FC00000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0xFFC01234),
-                   UINT32_C(0x7FC00000));
-}
-
-TEST_F(ElementaryTest, Log2F32ApproxFrozenFiniteMapping) {
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x00800000),
-                   UINT32_C(0xC2FC0000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x3F000000),
-                   UINT32_C(0xBF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x3F800000),
-                   UINT32_C(0x00000000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x40000000),
-                   UINT32_C(0x3F800000));
-  // These inputs distinguish the selected mapping from correct rounding and
-  // direct AMDGPU primitives, respectively.
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x70006067),
-                   UINT32_C(0x42C2022B));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x3F7FFFFF),
-                   UINT32_C(0xB3B8AA3B));
-}
-
 TEST_F(ElementaryTest, ExponentialApproxMappingsIgnoreHostDenormalFlush) {
   EnableFlushDenormalsToZero();
   ExpectF32Mapping(iree_math_exp2_f32_approx, UINT32_C(0x00000001),
                    UINT32_C(0x3F800000));
   ExpectF32Mapping(iree_math_exp2_f32_approx, UINT32_C(0xC2FC0000),
                    UINT32_C(0x00800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x00000001),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x70006067),
-                   UINT32_C(0x42C2022B));
 }
 
 // MPFR 4.2.2, directed 256-bit intervals whose endpoints round to the same

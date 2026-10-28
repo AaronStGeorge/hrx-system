@@ -33,14 +33,6 @@ IREE_API_EXPORT double iree_math_exp2_f64(double value);
 // round-to-nearest-even arithmetic.
 IREE_API_EXPORT float iree_math_exp2_f32_approx(float value);
 
-// Returns one frozen machine-like approximation of log2(value).
-// Finite normal-path results differ from the correctly rounded result by at
-// most one adjacent f32 value. Zeros and subnormals flush to zero and return
-// negative infinity. Negative normal values and every NaN return the canonical
-// positive quiet NaN, and positive infinity is preserved. The caller must
-// establish non-trapping round-to-nearest-even arithmetic.
-IREE_API_EXPORT float iree_math_log2_f32_approx(float value);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

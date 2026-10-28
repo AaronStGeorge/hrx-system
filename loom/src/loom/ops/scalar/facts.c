@@ -16,6 +16,7 @@
 
 #include "iree/base/internal/math.h"
 #include "iree/math/exponential.h"
+#include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
 #include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
@@ -328,10 +329,13 @@ FLOAT_UNARY_FACTS(loom_scalar_expf_facts, iree_math_exp_f32, iree_math_exp_f64)
 FLOAT_UNARY_FACTS(loom_scalar_exp2f_facts, iree_math_exp2_f32,
                   iree_math_exp2_f64)
 FLOAT_UNARY_FACTS(loom_scalar_expm1f_facts, expm1f, expm1)
-FLOAT_UNARY_FACTS(loom_scalar_logf_facts, logf, log)
-FLOAT_UNARY_FACTS(loom_scalar_log2f_facts, log2f, log2)
-FLOAT_UNARY_FACTS(loom_scalar_log10f_facts, log10f, log10)
-FLOAT_UNARY_FACTS(loom_scalar_log1pf_facts, log1pf, log1p)
+FLOAT_UNARY_FACTS(loom_scalar_logf_facts, iree_math_log_f32, iree_math_log_f64)
+FLOAT_UNARY_FACTS(loom_scalar_log2f_facts, iree_math_log2_f32,
+                  iree_math_log2_f64)
+FLOAT_UNARY_FACTS(loom_scalar_log10f_facts, iree_math_log10_f32,
+                  iree_math_log10_f64)
+FLOAT_UNARY_FACTS(loom_scalar_log1pf_facts, iree_math_log1p_f32,
+                  iree_math_log1p_f64)
 FLOAT_BINARY_FACTS(loom_scalar_powf_facts, powf, pow)
 FLOAT_UNARY_FACTS(loom_scalar_sqrtf_facts, iree_math_sqrt_f32,
                   iree_math_sqrt_f64)

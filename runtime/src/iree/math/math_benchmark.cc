@@ -6,6 +6,7 @@
 
 #include "iree/base/internal/fpu_state.h"
 #include "iree/math/exponential.h"
+#include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
 #include "iree/math/trigonometry.h"
 #include "iree/testing/benchmark.h"
