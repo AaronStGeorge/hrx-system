@@ -200,7 +200,7 @@ func.def public @text_chat_begin_v1(%request: buffer, %tools: buffer) -> (buffer
   func.return %empty, %c0_i64 : buffer, i64
 }
 
-func.def public @text_chat_message_v1(%raw: buffer, %role: buffer, %content: buffer, %parts: buffer, %reasoning: buffer, %calls: buffer, %state: i64, %ordinal: i64, %fields: i64, %part_count: i64) -> (buffer, i64, buffer) {
+func.def public @text_chat_message_v1(%raw: buffer, %role: buffer, %content: buffer, %parts: buffer, %frames: buffer, %reasoning: buffer, %calls: buffer, %state: i64, %ordinal: i64, %fields: i64, %part_count: i64) -> (buffer, i64, buffer, i64) {
   %c0_i64 = scalar.constant 0 : i64
   %plain = scalar.cmpi eq, %fields, %c0_i64 : i64
   func.call @check(%plain) : (i1)
@@ -217,7 +217,7 @@ func.def public @text_chat_message_v1(%raw: buffer, %role: buffer, %content: buf
   %empty = buffer.constant utf8("") : buffer
   %suffix = scf.select %assistant, %terminal, %empty : buffer
   %fragment = func.call @join(%content, %suffix) : (buffer, buffer) -> (buffer)
-  func.return %fragment, %state, %empty : buffer, i64, buffer
+  func.return %fragment, %state, %empty, %c0_i64 : buffer, i64, buffer, i64
 }
 
 func.def public @text_chat_end_v1(%state: i64) -> (buffer, i64) {

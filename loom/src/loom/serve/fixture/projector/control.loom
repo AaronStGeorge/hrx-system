@@ -139,19 +139,13 @@ func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %
     %image = buffer.view %packed[%source] : buffer -> view<8xi32>
     %count32 = view.load %image[2] : view<8xi32> -> i32
     %plane_base = index.add %source, %c32_bytes : offset
-    %plane = buffer.view %packed[%plane_base] : buffer -> view<12xi32>
-    %offset32 = view.load %plane[6] : view<12xi32> -> i32
-    %format = view.load %plane[8] : view<12xi32> -> i32
+    %plane_count32 = view.load %image[1] : view<8xi32> -> i32
+    %bounded_planes = scalar.assume %plane_count32 [range(%plane_count32, 1, 4096)] : i32
+    %plane_count = index.cast %bounded_planes : i32 to index
+    %plane_stride = index.constant 48 : offset
     %bounded_count = scalar.assume %count32 [range(%count32, 1, 64)] : i32
     %count = index.cast %bounded_count : i32 to index
     %count64 = scalar.extui %count32 : i32 to i64
-    %offset64 = scalar.extui %offset32 : i32 to i64
-    %bounded_offset = scalar.assume %offset64 [range(%offset64, 0, 4294967295)] : i64
-    %offset = index.cast %bounded_offset : i64 to offset
-    %relative = index.add %source, %offset : offset
-    %absolute = index.add %pixel_base, %relative : offset
-    %absolute64 = index.cast %absolute : offset to i64
-    %absolute32 = scalar.trunci %absolute64 : i64 to i32
     %begin64 = index.cast %begin : index to i64
     view.store %begin64, %requests[%i, 0] : i64, view<[%request_count]x3xi64>
     view.store %count64, %requests[%i, 1] : i64, view<[%request_count]x3xi64>
@@ -159,7 +153,21 @@ func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %
     scf.for %j = [%c0 to %count step %c1] {
       %row_value = index.add %begin, %j : index
       %row = index.assume %row_value [range(%row_value, 0, 63), lt(%row_value, %rows)] : index
-      %ordinal = index.cast %j : index to i32
+      %plane_index = index.rem %j, %plane_count : index
+      %plane_delta = index.scale %plane_index, %plane_stride : index, offset -> offset
+      %plane_position = index.add %plane_base, %plane_delta : offset
+      %plane = buffer.view %packed[%plane_position] : buffer -> view<12xi32>
+      %offset32 = view.load %plane[6] : view<12xi32> -> i32
+      %format = view.load %plane[8] : view<12xi32> -> i32
+      %offset64 = scalar.extui %offset32 : i32 to i64
+      %bounded_offset = scalar.assume %offset64 [range(%offset64, 0, 4294967295)] : i64
+      %offset = index.cast %bounded_offset : i64 to offset
+      %relative = index.add %source, %offset : offset
+      %absolute = index.add %pixel_base, %relative : offset
+      %absolute64 = index.cast %absolute : offset to i64
+      %absolute32 = scalar.trunci %absolute64 : i64 to i32
+      %pixel_index = index.div %j, %plane_count : index
+      %ordinal = index.cast %pixel_index : index to i32
       view.store %absolute32, %work[%row, 0] : i32, view<64x4xi32>
       view.store %ordinal, %work[%row, 1] : i32, view<64x4xi32>
       view.store %format, %work[%row, 2] : i32, view<64x4xi32>

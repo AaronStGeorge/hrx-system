@@ -12,7 +12,7 @@
 #include "loom/serve/service/text/chat.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  if (size < 3 || size > 16384) {
+  if (size < 4 || size > 16384) {
     return 0;
   }
   const auto allocator = iree_allocator_system();
@@ -22,6 +22,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   chat.images.values = images.data();
   chat.images.capacity = images.size();
   chat.images.count = data[0] % (images.size() + 1);
+  for (auto& image : images) {
+    image.kind = LOOM_SERVE_TEXT_CHAT_CONTENT_VIDEO;
+  }
   iree_string_builder_initialize(allocator, &chat.prompt);
   iree_string_builder_initialize(allocator, &chat.projections.metadata);
   std::array<char, 512> prompt;
@@ -30,7 +33,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       &chat.prompt, iree_make_string_view(prompt.data(), prompt.size()));
   if (iree_status_is_ok(status)) {
     status = loom_serve_text_media_apply_message_plan(
-        &chat, 0, data[1], 256, iree_make_const_byte_span(data + 3, size - 3));
+        &chat, 0, data[1], 256, data[3] % 5,
+        iree_make_const_byte_span(data + 4, size - 4));
   }
   loom_serve_text_chat_media_identity_t identity = {};
   if (iree_status_is_ok(status)) {
@@ -55,7 +59,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     const size_t span_bytes = marker_count *
                               LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_COUNT *
                               sizeof(uint32_t);
-    const size_t available = size - 3 < span_bytes ? size - 3 : span_bytes;
+    const size_t available = size - 4 < span_bytes ? size - 4 : span_bytes;
     status = loom_serve_text_media_parse_spans(
         &chat, chat.projections.count - marker_count,
         iree_make_const_byte_span(data + size - available, available), 512,

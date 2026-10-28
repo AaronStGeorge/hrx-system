@@ -347,6 +347,29 @@ ordered placement, detail and resolved source metadata, so reuse cannot cross
 a change in those semantics. A complete retained media prefix skips pixel
 decoding and projection; it does not require a separate image-feature cache.
 
+Models with temporal source policy also accept timestamped frame images:
+
+```json
+{
+  "type": "video_frames",
+  "video_frames": {
+    "frames": [
+      {"timestamp": 0.0, "url": "data:image/png;base64,..."},
+      {"timestamp": 0.75, "url": "data:image/png;base64,..."}
+    ],
+    "detail": "auto"
+  }
+}
+```
+
+The frame array is nonempty. Timestamps are finite, nonnegative seconds in
+nondecreasing presentation order; repeated timestamps are valid. Each URL
+follows the image codec and limit rules above, and each frame counts toward the
+source-declared input limit. The model policy owns temporal grouping, spatial
+resizing, timestamp tokens, and positional encoding. Supplied frame sampling is
+preserved. This interface requires no MP4 or WebM decoder; compressed clips
+are not accepted by this content part.
+
 ### Retained conversations
 
 Untagged requests can reuse a matching completed conversation still resident

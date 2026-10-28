@@ -76,6 +76,19 @@ class SourceChatPolicyTest : public ::testing::Test {
            "\"}},{\"type\":\"text\",\"text\":\"" + after + "\"}]}";
   }
 
+  static std::string VideoFrame(const std::string& timestamp,
+                                const char* base64) {
+    return "{\"timestamp\":" + timestamp +
+           ",\"url\":\"data:image/x-portable-arbitrarymap;base64," + base64 +
+           "\"}";
+  }
+
+  static std::string VideoMessage(const std::string& frames) {
+    return "{\"role\":\"user\",\"content\":[{\"type\":\"video_frames\","
+           "\"video_frames\":{\"frames\":[" +
+           frames + "]}}]}";
+  }
+
   // Real encoded image inputs observed by the source policy's media plan.
   static constexpr char kPam[] =
       "UDcKV0lEVEggMgpIRUlHSFQgMgpERVBUSCAzCk1BWFZBTCAyNTUKVFVQTFRZUEUg"
@@ -385,6 +398,95 @@ TEST_F(SourceChatPolicyTest, OrderedImagesReachSourceDefinedInputSpans) {
   EXPECT_EQ(input.media_spans[1].input_count, 1u);
   loom_serve_text_input_deinitialize(&input, host_allocator_);
   loom_serve_text_chat_deinitialize(&chat);
+}
+
+TEST_F(SourceChatPolicyTest, TimestampedFramesReachSourceAsOneOrderedPart) {
+  if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {
+    GTEST_SKIP() << "image input is disabled in this build";
+  }
+  const auto* policy = loom_serve_test_text_policy_chat(policy_owner_);
+  const std::string image =
+      ImageMessage("", "image/x-portable-arbitrarymap", kPam, "high", "");
+  const std::string video = VideoMessage(VideoFrame("0.125", kPam) + "," +
+                                         VideoFrame("1.75", kAlphaPam));
+  const std::string body = Request(image + "," + video, 4);
+  loom_serve_text_chat_t chat = {};
+  IREE_ASSERT_OK(loom_serve_text_chat_initialize(
+      policy, policy->name, iree_make_cstring_view(body.c_str()), 10, 4,
+      host_allocator_, &chat));
+  ASSERT_EQ(chat.images.count, 3u);
+  ASSERT_EQ(chat.projections.count, 2u);
+  EXPECT_EQ(chat.projections.values[1].image_begin, 1u);
+  EXPECT_EQ(chat.projections.values[1].image_count, 2u);
+  EXPECT_EQ(chat.images.values[1].kind, LOOM_SERVE_TEXT_CHAT_CONTENT_VIDEO);
+  EXPECT_EQ(chat.images.values[2].timestamp, 1.75);
+  const auto& projection = chat.projections.values[1];
+  ASSERT_EQ(projection.metadata_length, 32u);
+  const char* metadata =
+      iree_string_builder_buffer(&chat.projections.metadata) +
+      projection.metadata_offset;
+  EXPECT_EQ(iree_unaligned_load_le_u32(metadata), 2u);
+  EXPECT_EQ(iree_unaligned_load_le_u32(metadata + 4), 2u);
+  EXPECT_DOUBLE_EQ(iree_unaligned_load_le_f64(metadata + 8), 0.125);
+  EXPECT_DOUBLE_EQ(iree_unaligned_load_le_f64(metadata + 24), 1.75);
+  loom_serve_text_input_t input = {};
+  int32_t scratch[16];
+  IREE_ASSERT_OK(loom_serve_text_input_prepare(&chat, {}, false,
+                                               IREE_ARRAYSIZE(scratch), scratch,
+                                               &input, host_allocator_));
+  ASSERT_EQ(input.media_span_count, 2u);
+  EXPECT_EQ(input.media_spans[1].projection_index, 1u);
+  EXPECT_EQ(input.media_spans[1].input_offset, 1u);
+  EXPECT_EQ(input.media_spans[1].input_count, 2u);
+  loom_serve_text_input_deinitialize(&input, host_allocator_);
+
+  loom_serve_text_chat_media_identity_t identity = {};
+  IREE_ASSERT_OK(loom_serve_text_chat_media_identity_initialize(
+      &chat, host_allocator_, &identity));
+  loom_serve_text_chat_deinitialize(&chat);
+  // Timestamps can change while encoded pixels, text, and model rows stay
+  // equal.
+  const std::string changed =
+      Request(image + "," +
+                  VideoMessage(VideoFrame("0.125", kPam) + "," +
+                               VideoFrame("0.125", kAlphaPam)),
+              4);
+  IREE_ASSERT_OK(loom_serve_text_chat_initialize(
+      policy, policy->name, iree_make_cstring_view(changed.c_str()), 11, 4,
+      host_allocator_, &chat));
+  EXPECT_FALSE(
+      loom_serve_text_chat_media_identity_equal_chat(&identity, &chat));
+  loom_serve_text_chat_media_identity_deinitialize(&identity);
+  loom_serve_text_chat_deinitialize(&chat);
+}
+
+TEST_F(SourceChatPolicyTest, RejectsInvalidFramesBeforeSourceProjection) {
+  if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {
+    GTEST_SKIP() << "image input is disabled in this build";
+  }
+  const auto* policy = loom_serve_test_text_policy_chat(policy_owner_);
+  const std::string frame = VideoFrame("0", kPam);
+  const std::vector<std::string> invalid = {
+      "",
+      "{}",
+      VideoFrame("-1", kPam),
+      VideoFrame("1e400", kPam),
+      VideoFrame("\"0\"", kPam),
+      VideoFrame("2", kPam) + "," + frame,
+      frame + "," + frame + "," + frame + "," + frame + "," + frame};
+  for (const auto& frames : invalid) {
+    SCOPED_TRACE(frames);
+    const std::string body = Request(VideoMessage(frames), 4);
+    loom_serve_text_chat_t chat = {};
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        loom_serve_text_chat_initialize(policy, policy->name,
+                                        iree_make_cstring_view(body.c_str()),
+                                        10, 4, host_allocator_, &chat));
+    EXPECT_EQ(chat.images.count, 0u);
+    EXPECT_EQ(chat.projections.count, 0u);
+    loom_serve_text_chat_deinitialize(&chat);
+  }
 }
 
 TEST_F(SourceChatPolicyTest, RetainedHistoryRequiresExactOrderedMedia) {

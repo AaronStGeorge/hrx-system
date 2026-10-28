@@ -45,7 +45,7 @@ func.def public @chat_begin(%request: buffer, %tools: buffer) -> (buffer, i64) {
   func.return %empty, %c0 : buffer, i64
 }
 
-func.def public @chat_message(%raw: buffer, %role: buffer, %content: buffer, %parts: buffer, %reasoning: buffer, %calls: buffer, %state: i64, %ordinal: i64, %fields: i64, %part_count: i64) -> (buffer, i64, buffer) {
+func.def public @chat_message(%raw: buffer, %role: buffer, %content: buffer, %parts: buffer, %frames: buffer, %reasoning: buffer, %calls: buffer, %state: i64, %ordinal: i64, %fields: i64, %part_count: i64) -> (buffer, i64, buffer, i64) {
   %label = buffer.constant utf8(": ") : buffer
   %newline = buffer.constant utf8("\n") : buffer
   %prefix = func.call @join(%role, %label) : (buffer, buffer) -> (buffer)
@@ -55,7 +55,8 @@ func.def public @chat_message(%raw: buffer, %role: buffer, %content: buffer, %pa
   %c1 = scalar.constant 1 : i64
   %next = scalar.addi %state, %c1 : i64
   %empty = buffer.constant utf8("") : buffer
-  func.return %result, %next, %empty : buffer, i64, buffer
+  %count = scalar.constant 0 : i64
+  func.return %result, %next, %empty, %count : buffer, i64, buffer, i64
 }
 
 func.def public @chat_end(%state: i64) -> (buffer, i64) {

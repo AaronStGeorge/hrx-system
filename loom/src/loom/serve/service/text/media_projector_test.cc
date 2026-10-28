@@ -36,6 +36,7 @@ TEST(MediaRequestTest, BindsOptionalMetadataAtItsProjectionOffset) {
       projection.metadata_offset = prefix.size;
       projection.metadata_length = metadata.size;
       chat.projections.count = 1;
+      projection.image_count = 1;
       chat.projections.values = &projection;
       loom_serve_text_media_span_t span = {.input_count = 1};
       const loom_serve_text_input_t input = {
@@ -107,6 +108,7 @@ class MediaProjectorTest : public ::testing::Test {
         "data:image/x-portable-arbitrarymap;base64,"
         "UDcKV0lEVEggMgpIRUlHSFQgMgpERVBUSCAzCk1BWFZBTCAyNTUKVFVQTFRZUEUg"
         "UkdCCkVOREhEUgr/AAAA/wAAAP////8=");
+    projection_.image_count = 1;
     projection_.feature_count = 1;
     policy_.images.limits = {
         .compressed_bytes = 1024,
