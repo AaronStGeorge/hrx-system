@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-// Queries ordinary rank-one static slices implemented as register windows.
+// Queries rank-one static slices implemented as register windows.
 iree_status_t loom_x86_query_vector_slice_contract(
     const loom_target_contract_query_environment_t* environment,
     const loom_op_t* source_op,

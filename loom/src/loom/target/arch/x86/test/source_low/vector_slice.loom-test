@@ -61,3 +61,157 @@ low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({s
   %aligned_qword = slice %25[0] : reg<x86.zmm> -> reg<x86.ymm>
   return %cross, %high_half, %assembled, %quarter, %aligned_dword, %aligned_qword
 }
+
+// ====
+// RUN: emit source-low output=module
+
+x86.target<avx2> @target
+
+func.def target(@target) @avx2_predicate_widen(%source: vector<16xi1>) -> (vector<4xi1>) {
+  %result = vector.slice %source[3] : vector<16xi1> -> vector<4xi1>
+  func.return %result : vector<4xi1>
+}
+
+// ----
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) abi(object_function) abi_layout({signature = (vector<16xi1>) -> (vector<4xi1>)}) @avx2_predicate_widen(%source: reg<x86.xmm>) -> (reg<x86.xmm>) asm {
+  %2 = vpsrldq.xmm %source, 3
+  %result = vpmovsxbd.xmm %2
+  return %result
+}
+
+// ====
+// RUN: emit source-low output=module
+
+x86.target<avx2> @target
+
+func.def target(@target) @avx2_predicate_narrow(%lhs: vector<4xi64>, %rhs: vector<4xi64>, %true_value: vector<4xi8>, %false_value: vector<4xi8>) -> (vector<4xi8>) {
+  %condition = vector.cmpi slt, %lhs, %rhs : vector<4xi64> -> vector<4xi1>
+  %window = vector.slice %condition[0] : vector<4xi1> -> vector<4xi1>
+  %result = vector.select %window, %true_value, %false_value : vector<4xi8>
+  func.return %result : vector<4xi8>
+}
+
+// ----
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) abi(object_function) abi_layout({signature = (vector<4xi64>, vector<4xi64>, vector<4xi8>, vector<4xi8>) -> (vector<4xi8>)}) @avx2_predicate_narrow(%lhs: reg<x86.ymm>, %rhs: reg<x86.ymm>, %true_value: reg<x86.xmm>, %false_value: reg<x86.xmm>) -> (reg<x86.xmm>) asm {
+  %condition = vpcmpgtq.ymm %rhs, %lhs
+  %6 = slice %condition[0] : reg<x86.ymm> -> reg<x86.xmm>
+  %7 = vextractf128.xmm %condition, 1
+  %8 = vshufps.xmm %6, %7, 136
+  %9 = vpackssdw.xmm %8, %8
+  %window = vpacksswb.xmm %9, %9
+  %result = vpblendvb.xmm %false_value, %true_value, %window
+  return %result
+}
+
+// ====
+// RUN: emit source-low output=module
+
+x86.target<avx512> @target
+
+func.def target(@target) @avx512_mask_slice(%lhs: vector<16xi32>, %rhs: vector<16xi32>, %true_value: vector<8xi64>, %false_value: vector<8xi64>) -> (vector<8xi64>) {
+  %condition = vector.cmpi slt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
+  %window = vector.slice %condition[4] : vector<16xi1> -> vector<8xi1>
+  %result = vector.select %window, %true_value, %false_value : vector<8xi64>
+  func.return %result : vector<8xi64>
+}
+
+func.def target(@target) @avx512_mask_expand(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<8xi1>) {
+  %condition = vector.cmpi slt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
+  %result = vector.slice %condition[4] : vector<16xi1> -> vector<8xi1>
+  func.return %result : vector<8xi1>
+}
+
+func.def target(@target) @avx512_mask_compress(%source: vector<16xi1>, %true_value: vector<16xi32>, %false_value: vector<16xi32>) -> (vector<16xi32>) {
+  %condition = vector.slice %source[0] : vector<16xi1> -> vector<16xi1>
+  %result = vector.select %condition, %true_value, %false_value : vector<16xi32>
+  func.return %result : vector<16xi32>
+}
+
+func.def target(@target) @avx512_predicate_narrow(%lhs: vector<4xi64>, %rhs: vector<4xi64>, %true_value: vector<4xi8>, %false_value: vector<4xi8>) -> (vector<4xi8>) {
+  %condition = vector.cmpi slt, %lhs, %rhs : vector<4xi64> -> vector<4xi1>
+  %window = vector.slice %condition[0] : vector<4xi1> -> vector<4xi1>
+  %result = vector.select %window, %true_value, %false_value : vector<4xi8>
+  func.return %result : vector<4xi8>
+}
+
+// ----
+x86.target<avx512> @target
+
+low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({signature = (vector<16xi32>, vector<16xi32>, vector<8xi64>, vector<8xi64>) -> (vector<8xi64>)}) @avx512_mask_slice(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %true_value: reg<x86.zmm>, %false_value: reg<x86.zmm>) -> (reg<x86.zmm>) asm {
+  %condition = vpcmpd %lhs, %rhs, 1
+  %window = kshiftrq %condition, 4
+  %result = vpblendmq %window, %true_value, %false_value
+  return %result
+}
+
+low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({signature = (vector<16xi32>, vector<16xi32>) -> (vector<8xi1>)}) @avx512_mask_expand(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.xmm>) asm {
+  %condition = vpcmpd %lhs, %rhs, 1
+  %12 = kshiftrq %condition, 4
+  %result = avx512.vpmovm2w.xmm.k %12
+  return %result
+}
+
+low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({signature = (vector<16xi1>, vector<16xi32>, vector<16xi32>) -> (vector<16xi32>)}) @avx512_mask_compress(%source: reg<x86.xmm>, %true_value: reg<x86.zmm>, %false_value: reg<x86.zmm>) -> (reg<x86.zmm>) asm {
+  %condition = avx512.vpmovb2m.k.xmm %source
+  %result = vpblendmd %condition, %true_value, %false_value
+  return %result
+}
+
+low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({signature = (vector<4xi64>, vector<4xi64>, vector<4xi8>, vector<4xi8>) -> (vector<4xi8>)}) @avx512_predicate_narrow(%lhs: reg<x86.ymm>, %rhs: reg<x86.ymm>, %true_value: reg<x86.xmm>, %false_value: reg<x86.xmm>) -> (reg<x86.xmm>) asm {
+  %condition = vpcmpq.ymm %lhs, %rhs, 1
+  %window = avx512.vpmovm2b.xmm.k %condition
+  %result = vpblendvb.xmm %false_value, %true_value, %window
+  return %result
+}
+
+// ====
+// RUN: emit source-low output=module
+
+x86.target<avx512> @target {features = [-avx512vl]}
+
+func.def target(@target) @avx512_mask_expand_without_vl(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<8xi1>) {
+  %condition = vector.cmpi slt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
+  %result = vector.slice %condition[4] : vector<16xi1> -> vector<8xi1>
+  func.return %result : vector<8xi1>
+}
+
+func.def target(@target) @avx512_mask_compress_without_vl(%source: vector<64xi1>, %true_value: vector<16xi32>, %false_value: vector<16xi32>) -> (vector<16xi32>) {
+  %condition = vector.slice %source[0] : vector<64xi1> -> vector<16xi1>
+  %result = vector.select %condition, %true_value, %false_value : vector<16xi32>
+  func.return %result : vector<16xi32>
+}
+
+// ----
+x86.target<avx512> @target {features = [-avx512vl]}
+
+low.func.def target<x86.avx512_features.core>(@target) abi(object_function) abi_layout({signature = (vector<16xi32>, vector<16xi32>) -> (vector<8xi1>)}) @avx512_mask_expand_without_vl(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.xmm>) asm {
+  %condition = vpcmpd %lhs, %rhs, 1
+  %4 = kshiftrq %condition, 4
+  %5 = avx512.vpmovm2w.zmm.k %4
+  %result = slice %5[0] : reg<x86.zmm> -> reg<x86.xmm>
+  return %result
+}
+
+low.func.def target<x86.avx512_features.core>(@target) abi(object_function) abi_layout({signature = (vector<64xi1>, vector<16xi32>, vector<16xi32>) -> (vector<16xi32>)}) @avx512_mask_compress_without_vl(%source: reg<x86.zmm>, %true_value: reg<x86.zmm>, %false_value: reg<x86.zmm>) -> (reg<x86.zmm>) asm {
+  %11 = slice %source[0] : reg<x86.zmm> -> reg<x86.xmm>
+  %12 = vxorps.zero
+  %13 = vinsertf32x4.zmm.xmm %12, %11, 0
+  %condition = avx512.vpmovb2m.k.zmm %13
+  %result = vpblendmd %condition, %true_value, %false_value
+  return %result
+}
+
+// ====
+// RUN: emit source-low output=low
+
+x86.target<avx2> @target
+
+func.def target(@target) @dynamic_slice_is_not_a_register_window(%source: vector<8xf32>, %position: index) -> (vector<4xf32>) {
+  // ERROR@+1: TARGET/032 {op_name="vector.slice", op_constraint="target_contract.register_permutation.provider_required"}
+  %result = vector.slice %source[%position] : vector<8xf32> -> vector<4xf32>
+  func.return %result : vector<4xf32>
+}
