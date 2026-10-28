@@ -13,20 +13,23 @@
 extern "C" {
 #endif
 
-/// Physical placement class of a memory profile or live attachment.
+/// Native allocation domain of a memory profile or live attachment. Selection
+/// establishes the backing's origin; it does not pin physical residency against
+/// OS eviction. Access and host-mapping guarantees hold throughout its
+/// lifetime.
 typedef uint32_t amdf_memory_class_t;
 enum amdf_memory_class_e {
   /// No placement class. This value is never accepted by memory creation.
   AMDF_MEMORY_CLASS_UNKNOWN = 0,
   /// System memory accessible through a host mapping, including borrowed pages.
   AMDF_MEMORY_CLASS_SYSTEM = 1,
-  /// Device-local physical memory that may not be host visible.
+  /// Device-local allocation domain that may not be host visible.
   AMDF_MEMORY_CLASS_LOCAL = 2,
   /// Native-private storage qualified by its live scope owner.
   AMDF_MEMORY_CLASS_PRIVATE = 3,
 };
 
-/// Additional physical placement required from an allocating profile.
+/// Additional initial placement required from an allocating profile.
 /// Scope selection already establishes SYSTEM or device-local storage. These
 /// constraints refine that choice without selecting device consumers.
 typedef uint32_t amdf_memory_placement_kind_t;
@@ -43,7 +46,7 @@ enum amdf_memory_placement_kind_e {
 /// needs no capability bit and is always valid for an allocating profile.
 typedef uint32_t amdf_memory_placement_kinds_t;
 
-/// Required or achieved refinement of an allocation's physical placement.
+/// Required or achieved refinement of an allocation's initial placement.
 typedef struct amdf_memory_placement_t {
   /// Placement constraint; NONE is the zero-initialized default.
   amdf_memory_placement_kind_t kind;
@@ -58,7 +61,7 @@ typedef uint64_t amdf_memory_flags_t;
 enum amdf_memory_flag_bits_e {
   /// The allocation can be explicitly mapped for host access.
   AMDF_MEMORY_FLAG_HOST_VISIBLE = UINT64_C(1) << 0,
-  /// The physical placement is local to the attached device. Unified SYSTEM
+  /// The allocation domain is local to the attached device. Unified SYSTEM
   /// storage may also provide this property; it does not require a separate
   /// device-only heap. Host visibility and cache policy remain independent.
   AMDF_MEMORY_FLAG_DEVICE_LOCAL = UINT64_C(1) << 1,

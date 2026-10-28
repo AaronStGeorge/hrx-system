@@ -254,6 +254,7 @@ TEST_F(KfdInstanceTest, NativeMemoryQueryPrecedesBootstrapAndPublication) {
   topology.virtual_address.alignment = 65536;
   topology.vram.total_byte_length = UINT64_C(8) << 30;
   topology.vram.visible_byte_length = UINT64_C(256) << 20;
+  topology.gtt_byte_length = UINT64_C(16) << 30;
   int descriptor = -7;
   ASSERT_EQ(PrepareVm(11, &descriptor, &topology), AMDF_STATUS_OK);
   EXPECT_EQ(native_.queried_descriptor, descriptor);

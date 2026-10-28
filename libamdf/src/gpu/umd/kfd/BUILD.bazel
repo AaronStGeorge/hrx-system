@@ -387,6 +387,7 @@ amdf_cc_test(
         ":device_state",
         ":hdp",
         ":memory",
+        ":topology",
         "//libamdf/src:allocator",
         "//libamdf/src/gpu/umd:memory",
         "//libamdf/src/platform/linux:host_cache",

@@ -66,12 +66,12 @@ not initialize the devices needed to obtain that storage or establish access.
 The caller explicitly initializes those devices before device-dependent memory
 construction. CPU-only system-memory allocation requires no accelerator.
 
-Physical locality identifies where backing lives; it does not make the public
-allocation interface an operation on one originating device. Shared access is
-established through the scope-taking operation, including for local memory when
-supported. A context-private aperture has the narrower access and lifetime rules
-of its actual owner. The same scope-taking memory operations serve all three
-cases.
+Physical locality identifies the backing allocation domain; it does not make
+the public allocation interface an operation on one originating device. Shared
+access is established through the scope-taking operation, including for local
+memory when supported. A context-private aperture has the narrower access and
+lifetime rules of its actual owner. The same scope-taking memory operations
+serve all three cases.
 
 Within a scope, memory profiles describe supported combinations of placement,
 construction method, access, alignment, host mapping, and sharing. A profile is
@@ -116,6 +116,31 @@ retain that native status when explaining why a required route is unavailable,
 or continue selecting among other profiles when their policy permits it.
 An OK availability value reserves no capacity and does not make construction
 infallible. Construction reports changes in permissions, limits, and resources.
+
+### Allocation domain and residency
+
+Selecting SYSTEM or LOCAL selects a native allocation domain. A required
+domain is available only when the native allocator honors that request; an
+unsupported request does not silently become a different domain. The operating
+system can subsequently evict or migrate backing. Domain selection does not
+promise permanent physical residency. Access, host-mapping guarantees, and
+visibility operations remain valid throughout the allocation's lifetime.
+
+The Linux GPU provider supports the KFD allocator contract in Linux 6.15 and
+newer, alongside its minimum KFD 1.18 interface. On an APU that allocator
+redirects VRAM requests to GTT when physical VRAM is smaller than the initialized
+GTT manager. libamdf reads those initialized totals and exposes LOCAL only when
+the allocator honors it. Equal totals admit LOCAL. Discovery does not allocate
+memory or sample current free space, and changing a module parameter after
+driver initialization does not change the cached decision.
+
+This is capability discovery, not pool placement policy. SYSTEM remains
+available independently. Callers select a domain and query the complete
+consumer set, required host properties, atomic operations, and interop needs
+before allocating. A host-visible LOCAL allocation does not imply cached CPU
+access or file-I/O support. KFD may restore ordinary VRAM allocations in cached
+GTT after eviction; LOCAL host-property guarantees and cache operations cover
+both states. CPU-connected XGMI LOCAL memory retains cached CPU guarantees.
 
 ### Required host placement
 
@@ -501,7 +526,7 @@ Linux KFD's WRITE_BACK GTT profile retains its DMA-BUF source during
 construction when requested. A CPU reservation can then install any admitted
 source range without another export or import, while the GPU keeps its
 ordinary access to the same physical bytes. The backing remains caller-owned
-through all aliases. LOCAL/WC backing, arbitrary registered pointers and
+through all aliases. LOCAL backing, arbitrary registered pointers and
 Windows WDDM allocation handles do not provide this host-source capability.
 
 `memory_reservation_query_access_info` returns the stable base even when the

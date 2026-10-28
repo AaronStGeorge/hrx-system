@@ -22,6 +22,7 @@
 #include "gtest/gtest.h"
 #include "libamdf/src/allocator.h"
 #include "libamdf/src/gpu/umd/kfd/hdp.h"
+#include "libamdf/src/gpu/umd/kfd/topology.h"
 #include "libamdf/src/gpu/umd/memory.h"
 #include "libamdf/src/platform/linux/host_cache.h"
 
@@ -984,6 +985,33 @@ TEST_F(KfdBufferNativeTest, LocalMappingMaintainsEveryAdmittedCacheType) {
     amdf_gpu_umd_host_mapping_destroy(mapping);
     ASSERT_EQ(amdf_gpu_umd_memory_destroy(memory), AMDF_STATUS_OK);
   }
+}
+
+TEST_F(KfdBufferNativeTest, ReservedApuLocalUsesVramAllocation) {
+  device_.topology.integrated = true;
+  device_.topology.vram.total_byte_length = UINT64_C(96) << 30;
+  device_.topology.vram.visible_byte_length = UINT64_C(96) << 30;
+  device_.topology.gtt_byte_length = UINT64_C(16) << 30;
+  device_.topology.memory_features =
+      amdf_gpu_kfd_topology_memory_features(&device_.topology, true);
+  amdf_memory_native_profile_t profile;
+  ASSERT_EQ(amdf_gpu_umd_device_query_memory_profile(&device_, 2, &profile),
+            AMDF_STATUS_OK);
+  ASSERT_EQ(profile.memory_class, AMDF_MEMORY_CLASS_LOCAL);
+  const amdf_memory_native_create_info_t create_info = {
+      .device_access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+      .byte_length = 4096,
+      .minimum_alignment = 4096,
+  };
+  amdf_gpu_umd_memory_t* memory = nullptr;
+  amdf_gpu_umd_memory_result_t result = {};
+  ASSERT_EQ(amdf_gpu_umd_memory_prepare(&device_, 0, nullptr, &profile,
+                                        &create_info, &memory, &result),
+            AMDF_STATUS_OK);
+  expected_metadata_free_count_ = 2;
+  EXPECT_NE(native_.allocation.flags & KFD_IOC_ALLOC_MEM_FLAGS_VRAM, 0u);
+  EXPECT_EQ(native_.allocation.flags & KFD_IOC_ALLOC_MEM_FLAGS_GTT, 0u);
+  ASSERT_EQ(amdf_gpu_umd_memory_destroy(memory), AMDF_STATUS_OK);
 }
 
 TEST_F(KfdBufferNativeTest, MemoryOwnerRetainsPartialBufferPreparation) {

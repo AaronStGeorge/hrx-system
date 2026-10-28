@@ -121,6 +121,35 @@ TEST(LinuxGpuMemoryProfileTest, UnifiedCachedSystemStorageCanBeDeviceLocal) {
 }
 
 TEST(LinuxGpuMemoryProfileTest,
+     ReservedApuLocalDoesNotInheritCachedSystemGuarantees) {
+  amdf_gpu_umd_device_t device = {
+      .native_lifetime = AMDF_NATIVE_LIFETIME_INSTANCE,
+      .page_size = 4096,
+      .cache_line_size = 64,
+  };
+  device.topology.virtual_address.begin = UINT64_C(0x10000);
+  device.topology.virtual_address.end = UINT64_C(1) << 48;
+  device.topology.integrated = true;
+  device.topology.memory_features =
+      AMDF_GPU_DEVICE_FEATURE_LOCAL_MEMORY |
+      AMDF_GPU_DEVICE_FEATURE_HOST_VISIBLE_LOCAL_MEMORY;
+  const auto system =
+      QueryProfile(&device, AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_CACHED);
+  const auto local =
+      QueryProfile(&device, AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_COUNT);
+  EXPECT_EQ(system.memory_class, AMDF_MEMORY_CLASS_SYSTEM);
+  EXPECT_EQ(system.host_mapping.properties,
+            AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
+  EXPECT_NE(system.supported_flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL, 0u);
+  EXPECT_EQ(local.memory_class, AMDF_MEMORY_CLASS_LOCAL);
+  EXPECT_EQ(local.host_mapping.properties, AMDF_HOST_MEMORY_PROPERTY_NONE);
+  EXPECT_NE(local.supported_flags & AMDF_MEMORY_FLAG_HOST_VISIBLE, 0u);
+  EXPECT_NE(local.guaranteed_flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL, 0u);
+  EXPECT_EQ(local.supported_flags & AMDF_MEMORY_FLAG_HOST_FILE_IO, 0u);
+}
+
+TEST(LinuxGpuMemoryProfileTest,
      OwnedHostImportsDoNotAdvertiseForeignOwnership) {
   for (auto lifetime :
        {AMDF_NATIVE_LIFETIME_PROCESS, AMDF_NATIVE_LIFETIME_INSTANCE}) {

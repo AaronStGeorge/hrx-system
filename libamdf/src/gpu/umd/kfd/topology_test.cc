@@ -15,6 +15,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 
 #include "gtest/gtest.h"
@@ -114,6 +115,7 @@ class KfdTopologyTest : public ::testing::Test {
     WriteAttribute(node / "gpu_id", "53458\n");
     WriteAttribute(device / "mem_info_vram_total", "206141652992\n");
     WriteAttribute(device / "mem_info_vis_vram_total", "206141652992\n");
+    WriteAttribute(device / "mem_info_gtt_total", "68719476736\n");
     WriteAttribute(sdma / "major", "4\n");
     WriteAttribute(sdma / "minor", "4\n");
     WriteAttribute(sdma / "revision", "2\n");
@@ -234,6 +236,7 @@ TEST_F(KfdTopologyTest, DiscoversMemoryAndSdmaWithoutComputeStorageMetadata) {
   EXPECT_EQ(topology.properties.topology.xcc_count, 8u);
   EXPECT_EQ(topology.vram.total_byte_length, UINT64_C(206141652992));
   EXPECT_EQ(topology.vram.visible_byte_length, UINT64_C(206141652992));
+  EXPECT_EQ(topology.gtt_byte_length, UINT64_C(68719476736));
   EXPECT_EQ(topology.sdma.engine_count, 2u);
   EXPECT_EQ(topology.sdma.xgmi_engine_count, 14u);
   EXPECT_EQ(topology.sdma.queue_count_per_engine, 8u);
@@ -244,6 +247,83 @@ TEST_F(KfdTopologyTest, DiscoversMemoryAndSdmaWithoutComputeStorageMetadata) {
   EXPECT_EQ(topology.context_save_restore_byte_length, 0u);
   EXPECT_EQ(topology.control_stack_byte_length, 0u);
   amdf_gpu_kfd_topology_deinitialize(&topology, amdf_allocator_system());
+}
+
+TEST_F(KfdTopologyTest, LocalAdmissionUsesInitializedAllocationDomains) {
+  WriteProperties("");
+  const auto device = directory_ / "dev/char/226:160/device";
+  struct Configuration {
+    // Native package identity, independent of host aperture size.
+    bool integrated;
+    // Initialized physical VRAM capacity in MiB.
+    uint64_t vram_mib;
+    // Initialized GTT manager capacity in MiB.
+    uint64_t gtt_mib;
+    // CPU-visible VRAM aperture in MiB.
+    uint64_t visible_mib;
+    // Whether the native allocator honors a LOCAL request.
+    bool local;
+    // Whether all admitted LOCAL memory can be mapped on the CPU.
+    bool host_visible;
+  };
+  const Configuration configurations[] = {
+      {true, 512, 98304, 512, false, false},
+      {true, 98304, 16384, 98304, true, true},
+      {true, 16384, 16384, 16384, true, true},
+      {true, 16384, 16385, 16384, false, false},
+      {true, 16384, 16384, 256, true, false},
+      {true, 0, 16384, 0, false, false},
+      {true, 16384, 0, 16384, true, true},
+      {false, 16384, 98304, 16384, true, true},
+      {false, 16384, 98304, 256, true, false},
+      {false, 0, 98304, 0, false, false},
+  };
+  for (const auto& configuration : configurations) {
+    SCOPED_TRACE(::testing::Message()
+                 << "integrated=" << configuration.integrated << " vram="
+                 << configuration.vram_mib << " gtt=" << configuration.gtt_mib
+                 << " visible=" << configuration.visible_mib);
+    WriteAttribute(device / "mem_info_vram_total",
+                   std::to_string(configuration.vram_mib << 20) + "\n");
+    WriteAttribute(device / "mem_info_gtt_total",
+                   std::to_string(configuration.gtt_mib << 20) + "\n");
+    WriteAttribute(device / "mem_info_vis_vram_total",
+                   std::to_string(configuration.visible_mib << 20) + "\n");
+    native_.info.ids_flags =
+        configuration.integrated ? AMDGPU_IDS_FLAGS_FUSION : 0;
+    amdf_gpu_kfd_topology_t topology = {};
+    ASSERT_EQ(amdf_gpu_kfd_topology_initialize(
+                  &endpoint_, amdf_allocator_system(), &topology),
+              AMDF_STATUS_OK);
+    int descriptor = -1;
+    ASSERT_EQ(amdf_linux_endpoint_open_file(&endpoint_, &descriptor),
+              AMDF_STATUS_OK);
+    ASSERT_EQ(amdf_gpu_kfd_topology_query_memory(
+                  descriptor, endpoint_.info.pci.device_id, &topology),
+              AMDF_STATUS_OK);
+    EXPECT_EQ(topology.integrated, configuration.integrated);
+    EXPECT_EQ(topology.memory_features,
+              (configuration.local ? AMDF_GPU_DEVICE_FEATURE_LOCAL_MEMORY : 0) |
+                  (configuration.host_visible
+                       ? AMDF_GPU_DEVICE_FEATURE_HOST_VISIBLE_LOCAL_MEMORY
+                       : 0));
+    EXPECT_EQ(amdf_linux_file_close(&descriptor), AMDF_STATUS_OK);
+    amdf_gpu_kfd_topology_deinitialize(&topology, amdf_allocator_system());
+  }
+  EXPECT_EQ(native_.query_count, std::size(configurations));
+}
+
+TEST_F(KfdTopologyTest, MalformedHeapMetadataDoesNotBecomeAbsentCapability) {
+  WriteProperties("");
+  WriteAttribute(directory_ / "dev/char/226:160/device/mem_info_gtt_total",
+                 "invalid\n");
+  amdf_gpu_kfd_topology_t topology = {.gpu_id = 123};
+  const auto original = topology;
+  EXPECT_EQ(amdf_gpu_kfd_topology_initialize(
+                &endpoint_, amdf_allocator_system(), &topology),
+            amdf_linux_error(EPROTO));
+  EXPECT_EQ(std::memcmp(&topology, &original, sizeof(topology)), 0);
+  EXPECT_EQ(native_.query_count, 0u);
 }
 
 TEST_F(KfdTopologyTest, NativeGcIdentityDoesNotUseCompilerTargetAliases) {

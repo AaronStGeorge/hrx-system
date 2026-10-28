@@ -67,6 +67,9 @@ typedef struct amdf_gpu_kfd_topology_t {
     // CPU-connected XGMI gives VRAM the same cached CPU mapping as GTT.
     bool host_cached;
   } vram;
+  // Initialized GTT manager capacity in bytes, independent of current usage
+  // and later changes to the module parameter that selected its initial size.
+  uint64_t gtt_byte_length;
   // Number of native compute queues exposed by this KFD node.
   uint32_t compute_queue_count;
   // Qualified AQL scalar trap-reservation feature, or zero when unknown.
