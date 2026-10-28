@@ -60,43 +60,6 @@ low.func.def target<test.low.core>(@target) @generated_edge_store_source_spill(%
 
 // ====
 
-// Spilling an ordinary payload before the unchanged carrier rebases the
-// identity interval retained by the rebuilt branch.
-// RUN: emit low-allocation-query @spill_rebases_identity_interval strategy=source test.i32=2 fixed=%retained:target_id:0:1 materialize-spills
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @spill_rebases_identity_interval(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>) -> (reg<test.i32>) asm {
-  low.br.identity(2, 1) ^join(%prefix: reg<test.i32>, %suffix: reg<test.i32>, %retained: reg<test.i32>)
-^join(%prefix_result: reg<test.i32>, %suffix_result: reg<test.i32>, %retained_result: reg<test.i32>):
-  %neighbors = test.add.i32 %prefix_result, %suffix_result
-  %result = test.add.i32 %neighbors, %retained_result
-  return %result
-}
-
-// ----
-storage: 2 reservations, 8 bytes
-traffic: 2 stores, 2 reloads
-errors: 0
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @spill_rebases_identity_interval(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>) -> (reg<test.i32>) asm {
-  %spill_rebases_identity_interval_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  %spill_rebases_identity_interval_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  low.spill %suffix, %spill_rebases_identity_interval_spill_storage_0 : reg<test.i32>, low.storage<private>
-  %11 = low.reload %spill_rebases_identity_interval_spill_storage_0 : low.storage<private> -> reg<test.i32>
-  low.spill %11, %spill_rebases_identity_interval_spill_storage_1 : reg<test.i32>, low.storage<private>
-  low.br.identity(1, 1) ^join(%prefix: reg<test.i32>, %retained: reg<test.i32>)
-^join(%prefix_result: reg<test.i32>, %retained_result: reg<test.i32>):
-  %12 = low.reload %spill_rebases_identity_interval_spill_storage_1 : low.storage<private> -> reg<test.i32>
-  %neighbors = test.add.i32 %prefix_result, %12
-  %result = test.add.i32 %neighbors, %retained_result
-  return %result
-}
-
-// ====
-
 // Three live four-unit loads exceed the eight-unit bank. The complete repair
 // finishes with no unresolved spills but retains its inserted memory traffic.
 // RUN: emit low-allocation-query @materialized_spill_traffic strategy=source spill-free spill-count copy-count test.i32=8

@@ -293,6 +293,124 @@ low.func.def target<test.low.core>(@test_target) @block_arg_spill(%row: reg<test
 
 // ====
 
+// Removing an ordinary branch payload rebases the following identity range.
+// The pointer carrier stays in its separate bank while scalar pressure spills
+// the local state and its receiving block argument.
+// RUN: pass low-materialize-allocation{budgets=test.i32=2}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_rebases_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.br.identity(1, 1) ^join(%local: reg<test.i32>, %address: reg<test.ptr>)
+^join(%state: reg<test.i32>, %pointer: reg<test.ptr>):
+  %pair = test.add.i32 %left, %right
+  %sum = test.add.i32 %pair, %state
+  return %sum, %pointer
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_rebases_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  %spill_rebases_identity_range_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %spill_rebases_identity_range_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.spill %left, %spill_rebases_identity_range_spill_storage_0 : reg<test.i32>, low.storage<private>
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.spill %local, %spill_rebases_identity_range_spill_storage_1 : reg<test.i32>, low.storage<private>
+  low.br.identity(0, 1) ^join(%address: reg<test.ptr>)
+^join(%pointer: reg<test.ptr>):
+  %11 = low.reload %spill_rebases_identity_range_spill_storage_0 : low.storage<private> -> reg<test.i32>
+  %pair = test.add.i32 %11, %right
+  %13 = low.reload %spill_rebases_identity_range_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %sum = test.add.i32 %pair, %13
+  return %sum, %pointer
+}
+
+// ====
+
+// Removing an identity payload shrinks the range while preserving its pointer
+// carrier, which uses an independent register bank.
+// RUN: pass low-materialize-allocation{budgets=test.i32=2}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_shrinks_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.br.identity(0, 2) ^join(%local: reg<test.i32>, %address: reg<test.ptr>)
+^join(%state: reg<test.i32>, %pointer: reg<test.ptr>):
+  %pair = test.add.i32 %left, %right
+  %sum = test.add.i32 %pair, %state
+  return %sum, %pointer
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_shrinks_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  %spill_shrinks_identity_range_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %spill_shrinks_identity_range_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.spill %left, %spill_shrinks_identity_range_spill_storage_0 : reg<test.i32>, low.storage<private>
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.spill %local, %spill_shrinks_identity_range_spill_storage_1 : reg<test.i32>, low.storage<private>
+  low.br.identity(0, 1) ^join(%address: reg<test.ptr>)
+^join(%pointer: reg<test.ptr>):
+  %11 = low.reload %spill_shrinks_identity_range_spill_storage_0 : low.storage<private> -> reg<test.i32>
+  %pair = test.add.i32 %11, %right
+  %13 = low.reload %spill_shrinks_identity_range_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %sum = test.add.i32 %pair, %13
+  return %sum, %pointer
+}
+
+// ====
+
+// Removing the final identity payload leaves an ordinary branch carrying the
+// unchanged pointer argument.
+// RUN: pass low-materialize-allocation{budgets=test.i32=2}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_removes_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.br.identity(0, 1) ^join(%local: reg<test.i32>, %address: reg<test.ptr>)
+^join(%state: reg<test.i32>, %pointer: reg<test.ptr>):
+  %pair = test.add.i32 %left, %right
+  %sum = test.add.i32 %pair, %state
+  return %sum, %pointer
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_removes_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  %spill_removes_identity_range_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %spill_removes_identity_range_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.spill %left, %spill_removes_identity_range_spill_storage_0 : reg<test.i32>, low.storage<private>
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.spill %local, %spill_removes_identity_range_spill_storage_1 : reg<test.i32>, low.storage<private>
+  low.br ^join(%address: reg<test.ptr>)
+^join(%pointer: reg<test.ptr>):
+  %11 = low.reload %spill_removes_identity_range_spill_storage_0 : low.storage<private> -> reg<test.i32>
+  %pair = test.add.i32 %11, %right
+  %13 = low.reload %spill_removes_identity_range_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %sum = test.add.i32 %pair, %13
+  return %sum, %pointer
+}
+
+// ====
+
 // Each materialized spill rebuilds the complete allocation snapshot. Resetting
 // the attempt arena keeps all three attempts within one owned block; the used
 // byte count remains observable without pinning internal table layout.
