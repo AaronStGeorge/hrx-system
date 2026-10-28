@@ -995,15 +995,27 @@ typedef struct amdf_memory_site_t {
   } value;
 } amdf_memory_site_t;
 
+/// Properties of a prospective access, independent of backing placement.
+typedef uint32_t amdf_memory_profile_site_flags_t;
+enum amdf_memory_profile_site_flag_e {
+  /// HOST describes memory_reservation_map instead of memory_map. The backing
+  /// must be prepared with HOST_MAPPING_SOURCE and permit the requested host
+  /// access. The query describes the reservation alias's CPU cache protocol,
+  /// conditional on corresponding source bytes being installed. It reserves
+  /// no addresses, allocates no backing, and inspects no current mappings.
+  AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION = UINT32_C(1) << 0,
+};
+
 /// One prospective access within a scope/profile construction contract.
 /// DEVICE names an exact queue family; it does not qualify shader/program-side
-/// cache operations. HOST and FILE_IO name a view created through memory_map
-/// on that backing; FILE_IO additionally requires its reported view feature.
+/// cache operations. HOST normally names a view created through memory_map;
+/// HOST_RESERVATION selects the independently mapped reservation view. FILE_IO
+/// names memory_map on that backing and requires its reported view feature.
 typedef struct amdf_memory_profile_site_t {
   /// Selects the active member of value.
   amdf_memory_site_kind_t kind;
-  /// Reserved for compatible growth; must be zero.
-  uint32_t reserved;
+  /// View qualification; zero selects the backing's ordinary access.
+  amdf_memory_profile_site_flags_t flags;
   /// Local execution site or intended host-view permissions.
   union {
     /// Device access in the query's caller-ordered live consumer array.

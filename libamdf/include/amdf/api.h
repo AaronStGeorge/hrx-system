@@ -610,8 +610,9 @@ typedef struct amdf_api_t {
   ///
   /// Success supplies sufficient release/acquire recipes for every successful
   /// construction with the same scope, profile, backing requirements, complete
-  /// live consumer set and registration host properties. Host sites require
-  /// HOST_VISIBLE in required_flags. Views must provide the declared
+  /// live consumer set and registration host properties. Ordinary host sites
+  /// require HOST_VISIBLE; reservation host sites require HOST_MAPPING_SOURCE.
+  /// Views must provide the declared
   /// permissions. Allocation size, addresses and host-view ranges may vary
   /// within the profile; callers still satisfy each transition's range and
   /// execution requirements. This describes access to one shared backing, not
@@ -632,6 +633,10 @@ typedef struct amdf_api_t {
   /// and provenance supplied at construction. Opaque payloads preserve their
   /// exporter-provided interpretation; changing the tag does not qualify a
   /// foreign payload.
+  /// HOST_RESERVATION instead qualifies the CPU alias of prepared backing
+  /// installed into a reservation. Its cache recipe belongs to that alias,
+  /// independently of the source's ordinary memory_map recipe. Reservation
+  /// address geometry and device-domain admission are queried separately.
   ///
   /// This thread-safe cold metadata query uses the same native selection and
   /// visibility policy as construction and concrete pair queries. It performs

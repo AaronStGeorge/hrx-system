@@ -954,7 +954,8 @@ amdf_status_t amdf_memory_scope_plan_validate_registration(
 static amdf_status_t amdf_memory_profile_validate_site(
     const amdf_memory_scope_plan_t* plan, amdf_memory_flags_t required_flags,
     const amdf_memory_profile_site_t* site) {
-  if (site->reserved != 0) {
+  if ((site->flags & ~AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION) != 0 ||
+      (site->flags != 0 && site->kind != AMDF_MEMORY_SITE_KIND_HOST)) {
     return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
   }
   if (site->kind == AMDF_MEMORY_SITE_KIND_DEVICE) {
@@ -968,6 +969,14 @@ static amdf_status_t amdf_memory_profile_validate_site(
       (site->value.host_access &
        ~(AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE)) != 0) {
     return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  }
+  if ((site->flags & AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION) != 0) {
+    return ((required_flags | plan->profile.guaranteed_flags) &
+            AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE) != 0 &&
+                   (site->value.host_access &
+                    ~plan->profile.host_mapping.supported_access) == 0
+               ? AMDF_STATUS_OK
+               : amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
   }
   if ((required_flags & AMDF_MEMORY_FLAG_HOST_VISIBLE) == 0 ||
       (plan->profile.roles & AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) == 0 ||
@@ -1032,9 +1041,17 @@ static amdf_status_t amdf_memory_profile_describe_site(
   }
 
   amdf_memory_host_description_t host;
-  if (plan->access_count == 0 ||
-      (plan->backing_access_ordinal == plan->access_count &&
-       peer->kind != AMDF_MEMORY_SITE_KIND_DEVICE)) {
+  if ((site->flags & AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION) != 0) {
+    // Reservation aliases use the process-page mapping protocol, independently
+    // of the backing owner's ordinary CPU mapping (which can have a native
+    // publication operation). Keep this identical to host_memory_create_view.
+    const amdf_status_t status = amdf_host_memory_query_description(&host);
+    if (!amdf_status_is_ok(status)) {
+      return status;
+    }
+  } else if (plan->access_count == 0 ||
+             (plan->backing_access_ordinal == plan->access_count &&
+              peer->kind != AMDF_MEMORY_SITE_KIND_DEVICE)) {
     // Host-only access has no device visibility edge and no native exporter.
     // REGISTER admission has already established ordinary write-back pages.
     host = (amdf_memory_host_description_t){

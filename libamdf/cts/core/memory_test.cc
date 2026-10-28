@@ -366,9 +366,9 @@ TEST_F(HostMemoryTest, QualifiesCpuPairsAndRejectsUnestablishedRegistration) {
   }
   query.registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
                                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
-  query.producer.reserved = 1;
+  query.producer.flags = UINT32_MAX;
   expect_rejection(AMDF_STATUS_CODE_INVALID_ARGUMENT);
-  query.producer.reserved = 0;
+  query.producer.flags = 0;
   query.required_flags = 0;
   expect_rejection(AMDF_STATUS_CODE_UNSUPPORTED);
   query.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
