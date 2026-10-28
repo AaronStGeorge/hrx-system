@@ -38,6 +38,7 @@ load(
     "SERIALIZED_REFERENCE_PROFILE",
     "loom_library_rules_test_suite",
 )
+load(":loom_model_rules_test.bzl", "loom_model_rules_test_suite")
 load(
     ":loom_target_profile_rules_test.bzl",
     "loom_target_profile_rules_test_suite",
@@ -95,6 +96,20 @@ loom_kernel_library(
         "link_kernels.loom",
     ],
     targets = ["//loom/target/amdgpu:gfx11-generic"],
+)
+
+loom_kernel_library(
+    name = "production_kernel_library",
+    srcs = ["link_kernels.loom"],
+    benchmark_smoke = False,
+    targets = ["//loom/target/amdgpu:gfx11-generic"],
+)
+
+loom_test(
+    name = "separated_kernel_test",
+    srcs = ["link_checks.loom"],
+    compile_targets = ["//loom/target/amdgpu:gfx11-generic"],
+    deps = [":production_kernel_library"],
 )
 
 loom_library(
@@ -217,6 +232,13 @@ loom_test(
 )
 
 loom_test(
+    name = "custom_runner_test",
+    execution_profiles = [EXPLICIT_RUNNER_PROFILE],
+    module = ":profiled_module",
+    tags = ["manual"],
+)
+
+loom_test(
     name = "correctness_only_test",
     benchmark_smoke = False,
     case = "benchmark_case",
@@ -266,6 +288,8 @@ loom_check_rules_test_suite(name = "loom_check_rules_tests")
 loom_corpus_rules_test_suite(name = "loom_corpus_rules_tests")
 
 loom_library_rules_test_suite(name = "loom_library_rules_tests")
+
+loom_model_rules_test_suite(name = "loom_model_rules_tests")
 
 loom_binary_rules_test_suite(name = "loom_binary_rules_tests")
 
@@ -348,7 +372,7 @@ py_test(
         "--combined=$(rootpath :profiled_test_selected_execute_reference_test)",
         "--correctness=$(rootpath :correctness_only_test_execute_reference_test)",
         "--format=$(rootpath :public_kernel_library_format_0_test)",
-        "--plan=$(rootpath :public_kernel_library_plan_test)",
+        "--plan=$(rootpath :profiled_test_selected_plan_test)",
         "--artifacts=$(rootpath :public_kernel_library_kernel_binary_gfx11_generic_test)",
         "--library=$(rootpath :linked_module)",
     ],
@@ -356,9 +380,9 @@ py_test(
         ":correctness_only_test_execute_reference_test",
         ":linked_module",
         ":profiled_test_selected_execute_reference_test",
+        ":profiled_test_selected_plan_test",
         ":public_kernel_library_format_0_test",
         ":public_kernel_library_kernel_binary_gfx11_generic_test",
-        ":public_kernel_library_plan_test",
     ],
 )
 
@@ -397,6 +421,7 @@ test_suite(
         ":loom_library_aggregate_direct_test",
         ":loom_library_module_direct_test",
         ":loom_library_rules_tests",
+        ":loom_model_rules_tests",
         ":loom_module_direct_test",
         ":loom_target_profile_rules_tests",
         ":profiled_module_test",

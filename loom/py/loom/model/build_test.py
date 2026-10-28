@@ -64,6 +64,26 @@ def test_auxiliary_code_is_not_silently_indexed():
         build(plan, "unavailable-linker")
 
 
+@pytest.mark.parametrize("change", ["role", "options", "data"])
+def test_analysis_composition_rejects_stale_provider_contract(change):
+    plan = _plan()
+    document = json.loads(Path(plan["card"]).read_text())
+    declared = document["programs"]["source"]
+    plan["program_declarations"] = {
+        role: declared[role] for role in ("inputs", "libraries")
+    }
+    if change == "role":
+        declared["libraries"].append(declared["inputs"].pop())
+    elif change == "options":
+        declared["inputs"][0]["options"] = ["cxx:std=c++20"]
+    else:
+        declared["inputs"][0]["data"] = []
+    with pytest.raises(
+        ManifestError, match="does not match Bazel provider composition"
+    ):
+        build(plan, "unavailable-linker")
+
+
 def test_output_documents_have_reserved_paths(tmp_path):
     plan = _plan()
     document = json.loads(Path(plan["card"]).read_text())

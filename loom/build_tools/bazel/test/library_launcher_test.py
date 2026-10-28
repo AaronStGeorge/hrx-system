@@ -105,6 +105,22 @@ class LibraryLauncherTest(unittest.TestCase):
             reports[-1]["summary"]["planned"]["selected_benchmark_count"], 1
         )
 
+    def test_plan_uses_workload_selection_without_execution(self):
+        for arguments, expected_case in (
+            ((), "benchmark_case"),
+            (("--case=@scalar_case",), "scalar_case"),
+        ):
+            with self.subTest(arguments=arguments):
+                reports = self.read_reports(self.run_launcher("plan", *arguments))
+                self.assertTrue(reports[0]["dry_run"])
+                self.assertEqual(
+                    {row["case"] for row in reports if "case" in row},
+                    {expected_case},
+                )
+                self.assertEqual(
+                    reports[-1]["summary"]["planned"]["selected_benchmark_count"], 1
+                )
+
     def test_quoted_argument_boundaries(self):
         with tempfile.TemporaryDirectory(prefix="loom output 'quoted' ") as directory:
             reports = self.read_reports(

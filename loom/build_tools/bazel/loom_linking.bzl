@@ -11,7 +11,9 @@ _LOOM_LINK_TOOLCHAIN_TYPE = Label("//loom/build_tools/bazel:link_toolchain_type"
 LoomLibraryInfo = provider(
     doc = "One relocatable Loom module and its independent dependencies.",
     fields = {
+        "component": "Owned module, ordered original sources, auxiliary files, and importer settings.",
         "module": "Relocatable Loom bytecode module owned by this library.",
+        "transitive_components": "Preorder depset of dependency components, excluding this library.",
         "transitive_dependencies": "Depset of separate dependency modules, excluding module.",
     },
 )

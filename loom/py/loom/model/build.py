@@ -21,12 +21,34 @@ from pathlib import Path
 from loom.model import ManifestError, ModelCard
 
 
+def _provider_declaration(value):
+    """Projects runtime compiler facts, independent of acquisition annotations."""
+    record = {"path": value} if isinstance(value, str) else value
+    result = {
+        key: record[key] for key in ("path", "format", "options") if key in record
+    }
+    if record.get("data"):
+        result["data"] = [_provider_declaration(item) for item in record["data"]]
+    return result if len(result) > 1 else result["path"]
+
+
 def build(plan: dict, linker: str | None = None) -> None:
     selection = ModelCard.parse(Path(plan["card"]).read_text(encoding="utf-8")).select(
         plan["preset"],
         programs=plan.get("programs"),
         partition=plan.get("partition"),
     )
+    declarations = plan.get("program_declarations")
+    if declarations is not None:
+        actual = {
+            role: [_provider_declaration(value) for value in selection.program[role]]
+            for role in ("inputs", "libraries")
+        }
+        if actual != declarations:
+            raise ManifestError(
+                f"programs.{selection.programs} does not match Bazel provider "
+                "composition; synchronize the model card's compiler file lists"
+            )
     providers = {
         name for name, file in selection.files.items() if "program" in file.roles
     }

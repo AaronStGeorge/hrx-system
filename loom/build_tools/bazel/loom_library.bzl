@@ -180,7 +180,20 @@ def _loom_library_impl(ctx):
             dependency_reports = depset([artifacts.dependency_report]),
         ),
         LoomLibraryInfo(
+            component = struct(
+                label = ctx.label,
+                sources = tuple(ctx.files.srcs),
+                data = tuple(ctx.files.data),
+                input_format = ctx.attr.input_format,
+                inputopts = tuple(ctx.attr.inputopts),
+                module = artifacts.module,
+            ),
             module = artifacts.module,
+            transitive_components = depset(
+                direct = [info.component for info in dependency_infos],
+                transitive = [info.transitive_components for info in dependency_infos],
+                order = "preorder",
+            ),
             transitive_dependencies = artifacts.transitive_dependencies,
         ),
     ]
@@ -503,7 +516,7 @@ def _loom_plan_test_launcher_impl(ctx):
             "--dry-run",
             "--output-format=jsonl",
             "--compile-report=none",
-        ],
+        ] + ctx.attr.workload_args,
     )
     return [
         DefaultInfo(
@@ -521,6 +534,7 @@ _loom_plan_test_launcher = rule(
             providers = [_LoomTestModuleInfo],
             doc = "Linked root-owned test module whose benchmarks are planned.",
         ),
+        "workload_args": attr.string_list(doc = "Workload configuration and case selection."),
     },
     doc = "Generates a launcher that plans every declared Loom benchmark.",
     executable = True,
@@ -720,7 +734,7 @@ def _declare_library(
         inputopts,
         execution_profiles,
         kernel_targets,
-        plan_benchmarks,
+        benchmark_smoke,
         module_testonly,
         module_visibility,
         tags,
@@ -741,7 +755,7 @@ def _declare_library(
     tests = _declare_source_format_tests(name, srcs, tags, target_compatible_with)
 
     test_module = None
-    if plan_benchmarks or execution_profiles:
+    if benchmark_smoke or execution_profiles:
         test_module = name + "_test_module"
         _loom_test_module(
             name = test_module,
@@ -753,7 +767,7 @@ def _declare_library(
             visibility = ["//visibility:private"],
         )
 
-    if plan_benchmarks:
+    if benchmark_smoke:
         plan_test_name = name + "_plan_test"
         _declare_launcher_test(
             name = plan_test_name,
@@ -771,6 +785,7 @@ def _declare_library(
     if execution_profiles:
         tests.extend(_declare_execution_tests(
             name = name,
+            benchmark_smoke = benchmark_smoke,
             module = ":" + test_module,
             profiles = execution_profiles,
             test_runner_args = [],
@@ -852,7 +867,7 @@ def loom_library(
         inputopts = inputopts,
         execution_profiles = [],
         kernel_targets = [],
-        plan_benchmarks = False,
+        benchmark_smoke = False,
         module_testonly = False,
         module_visibility = visibility,
         tags = package_attributes.tags,
@@ -1016,8 +1031,11 @@ def loom_test(
     selected. The linked module is the only Loom input to the runners.
     Default execution profiles run ``loom-test`` for correctness. When
     benchmark smoke is enabled, ``loom-benchmark`` then executes each
-    benchmark with one measured iteration and no warmup. A profile with an
-    explicit runner delegates the linked module to that runner once.
+    benchmark with one measured iteration and no warmup. Each workload also
+    plans its benchmarks once in a host-only test, independent of execution
+    profiles. A profile with an explicit runner delegates the linked module to
+    that runner once and owns its benchmark policy; exclusively custom runners
+    do not create an implicit host benchmark plan.
 
     Runtime test arguments follow declared arguments, so scalar options can
     override their defaults. Combined launchers pass runtime arguments to both
@@ -1050,7 +1068,8 @@ def loom_test(
       compile_targets: Typed compiler profiles qualifying the same linked test
           module offline, without execution profiles' device requirements.
           At least one execution or compiler profile is required.
-      benchmark_smoke: Whether correctness tests also run one benchmark iteration.
+      benchmark_smoke: Whether workloads plan benchmarks on the host and
+          correctness tests also run one benchmark iteration.
       size: Bazel test size.
       tags: Additional tags applied to the test.
       visibility: Bazel visibility of the generated test target.
@@ -1106,6 +1125,22 @@ def loom_test(
             visibility = visibility,
             target_compatible_with = target_compatible_with,
         ))
+        if benchmark_smoke and (
+            not execution_profiles or any([profile.runner == None for profile in execution_profiles])
+        ):
+            plan_test_name = workload_name + "_plan_test"
+            _declare_launcher_test(
+                name = plan_test_name,
+                launcher_rule = _loom_plan_test_launcher,
+                launcher_attrs = {"module": module, "workload_args": workload_args},
+                test_kwargs = {
+                    "size": size,
+                    "tags": tags + ["hostonly"],
+                    "target_compatible_with": target_compatible_with,
+                    "visibility": visibility,
+                },
+            )
+            tests.append(plan_test_name)
         tests.extend(loom_check_compile_tests(
             name = workload_name,
             src = module,
@@ -1132,17 +1167,23 @@ def loom_kernel_library(
         inputopts = [],
         execution_profiles = [],
         targets = [],
+        benchmark_smoke = True,
         tags = [],
         visibility = None):
     """Declares launchable kernels with format, plan, and target coverage.
 
     Cases and benchmarks in ``srcs`` form one root-owned test module;
     test-only symbols from ``deps`` are excluded. Each execution profile runs
-    that module as one correctness and benchmark-smoke test. Each entry in
+    that module for correctness and, when enabled, benchmark smoke. Each entry in
     ``targets`` generates a private ``loom_kernel_binary`` and a test that
     checks its loader artifact and reports. The generated binary uses this
     library as its direct input, so only this library's exports become roots
     while dependencies remain closure-only candidates.
+
+    Inline cases and benchmarks support single-file iteration. Authors may also
+    put checks in a separate ``loom_test`` depending on this library. Set
+    ``benchmark_smoke = False`` when benchmark planning and execution belong to
+    that separate test; correctness execution profiles remain available.
     """
     package_attributes = _apply_package_policy(name, tags, [])
     _declare_library(
@@ -1154,7 +1195,7 @@ def loom_kernel_library(
         inputopts = inputopts,
         execution_profiles = execution_profiles,
         kernel_targets = targets,
-        plan_benchmarks = True,
+        benchmark_smoke = benchmark_smoke,
         module_testonly = False,
         module_visibility = visibility,
         tags = package_attributes.tags,
