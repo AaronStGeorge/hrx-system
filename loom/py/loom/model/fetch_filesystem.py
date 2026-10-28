@@ -12,9 +12,11 @@ import ctypes
 import errno
 import os
 import sys
+import tempfile
 from functools import cache
 from pathlib import Path
 
+from .fetch_progress import ByteProgress
 from .fetch_source import FetchError
 
 
@@ -85,7 +87,7 @@ class SharingUnavailable(FetchError):
     """Both link strategies are unavailable for this source/destination pair."""
 
 
-def _sharing_unavailable(error: Exception) -> bool:
+def _sharing_unavailable(error: BaseException) -> bool:
     if isinstance(error, NotImplementedError):
         return True
     return isinstance(error, OSError) and (
@@ -108,34 +110,65 @@ def share_file(source: Path, destination: Path) -> str:
     """Creates a readable shared view, or fails without copying or replacing."""
     # HF snapshots may use relative symlinks. Resolve their blob before changing
     # directory layout; os.link's optional follow_symlinks flag is not portable.
-    source = source.resolve(strict=True)
     try:
-        os.link(source, destination)
-        return "hardlink"
-    except (NotImplementedError, OSError) as error:
-        if not _sharing_unavailable(error):
-            raise
-        hardlink_error = str(error)
-    try:
-        os.symlink(source, destination)
-    except (NotImplementedError, OSError) as error:
-        if not _sharing_unavailable(error):
-            raise
-        symlink_error = str(error)
-    else:
+        source = source.resolve(strict=True)
+    except RuntimeError as error:
+        # Python before 3.13 reports symlink loops as RuntimeError, not ELOOP.
+        raise FetchError(f"cannot resolve shared source {source}: {error}") from error
+    failures = []
+    for kind, create in (("hardlink", os.link), ("symlink", os.symlink)):
         try:
-            # Windows can permit creation but deny following a link, especially
-            # across network paths. Creating the directory entry is not enough.
+            create(source, destination)
+        except (NotImplementedError, OSError) as error:
+            if not _sharing_unavailable(error):
+                raise
+            failures.append(f"{kind}: {error}")
+            continue
+        try:
+            # Link creation can succeed while opening through this destination
+            # is denied, especially by Windows network/symlink evaluation policy.
             with destination.open("rb") as stream:
                 stream.read(1)
-            return "symlink"
+            return kind
         except BaseException as error:
             destination.unlink()
             if not _sharing_unavailable(error):
                 raise
-            symlink_error = str(error)
+            failures.append(f"{kind}: {error}")
     raise SharingUnavailable(
-        f"cannot share {source} with {destination}: "
-        f"hardlink: {hardlink_error}; symlink: {symlink_error}. "
+        f"cannot share {source} with {destination}: {'; '.join(failures)}. "
         "Use a filesystem/path that permits links or select --materialize=copy"
     )
+
+
+def copy_file(
+    source: Path, destination: Path, size: int, *, cancelled, progress
+) -> None:
+    """Copies in bounded chunks beside the destination, then publishes exclusively."""
+    descriptor, name = tempfile.mkstemp(prefix=".loom-fetch-", dir=destination.parent)
+    temporary = Path(name)
+    counter = ByteProgress(progress, "copy")
+    try:
+        with os.fdopen(descriptor, "wb") as output, source.open("rb") as input_stream:
+            count = 0
+            counter(count, size)
+            while True:
+                if cancelled.is_set():
+                    raise FetchError("model acquisition cancelled")
+                chunk = input_stream.read(min(1024 * 1024, size - count + 1))
+                if not chunk:
+                    break
+                count += len(chunk)
+                if count > size:
+                    raise FetchError(f"source changed size while copying {source}")
+                output.write(chunk)
+                counter(count, size)
+            if count != size:
+                raise FetchError(f"source changed size while copying {source}")
+            output.flush()
+            os.fsync(output.fileno())
+        if cancelled.is_set():
+            raise FetchError("model acquisition cancelled")
+        publish_file(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)

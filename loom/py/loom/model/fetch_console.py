@@ -79,9 +79,11 @@ class _ByteCount:
 class ConsoleProgress:
     """Plain stderr observations for terminals, pipes, and redirected logs."""
 
-    def __init__(self, output: TextIO):
+    def __init__(self, output: TextIO, *, quiet: bool = False):
         # Caller-owned status stream, independent of result stdout.
         self.output = output
+        # Suppresses routine progress, but not materialization policy warnings.
+        self.quiet = quiet
         # First occurrence of each stage prints promptly, even for short fetches.
         self.phases = set()
         # Coarse steady-state cadence prevents large downloads from flooding logs.
@@ -92,6 +94,15 @@ class ConsoleProgress:
         self.counts = {}
 
     def __call__(self, event):
+        if event.phase == "warning":
+            context = f"{event.path}: " if event.path is not None else ""
+            self.output.write(
+                "loom-fetch  Warning   " + display_text(context + event.message) + "\n"
+            )
+            self.output.flush()
+            return
+        if self.quiet:
+            return
         if event.total_files is not None:
             self.files = (event.completed_files, event.total_files)
         now = time.monotonic()
@@ -126,6 +137,7 @@ class ConsoleProgress:
             "verify": "Verify",
             "transform": "Transform",
             "install": "Install",
+            "copy": "Copy",
             "complete": "Complete",
         }
         counter = self.counts.get((phase, event.path))

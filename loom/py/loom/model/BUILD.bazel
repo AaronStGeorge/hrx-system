@@ -205,7 +205,10 @@ iree_py_library(
 iree_py_library(
     name = "fetch_filesystem",
     srcs = ["fetch_filesystem.py"],
-    deps = [":fetch_source"],
+    deps = [
+        ":fetch_progress",
+        ":fetch_source",
+    ],
 )
 
 iree_py_test(
@@ -216,7 +219,10 @@ iree_py_test(
     ],
     args = ["loom.model.fetch_filesystem_test"],
     main = "pytest_style_runner.py",
-    deps = [":fetch_filesystem"],
+    deps = [
+        ":fetch_filesystem",
+        ":fetch_source",
+    ],
 )
 
 iree_py_library(

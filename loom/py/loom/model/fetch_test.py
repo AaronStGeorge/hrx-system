@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import errno
 import hashlib
 import http.server
 import json
@@ -1023,6 +1024,237 @@ def test_copy_is_an_explicit_independent_materialization(tmp_path):
     )
     (tmp_path / "weights.data").write_bytes(b"changed")
     assert (tmp_path / "output/weights.data").read_bytes() == b"weights"
+
+
+@pytest.mark.parametrize("mode", ["auto", "share", "copy"])
+@pytest.mark.parametrize("quiet", [False, True])
+def test_cli_handles_link_incapable_storage_without_a_traceback(
+    tmp_path, capsys, mode, quiet
+):
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    output = tmp_path / "installed"
+    cache = tmp_path / "cache"
+    with _server(_card(), files) as (base, requests, _):
+        arguments = [
+            base + "/model.json",
+            "--no-input",
+            "--json",
+            "--output=" + str(output),
+            "--cache=" + str(cache),
+            "--materialize=" + mode,
+        ] + (["--quiet"] if quiet else [])
+        with (
+            patch(
+                "os.link", side_effect=NotImplementedError("hardlinks unavailable")
+            ) as link,
+            patch(
+                "os.symlink",
+                side_effect=PermissionError(errno.EACCES, "symlink policy"),
+            ) as symlink,
+        ):
+            result = main(arguments)
+        captured = capsys.readouterr()
+        assert "Traceback" not in captured.err
+        if mode == "share":
+            assert result == 1
+            assert json.loads(captured.out)["kind"] == "error"
+            assert "--materialize=copy" in captured.err
+            assert "hardlinks unavailable" in captured.err
+            assert "symlink policy" in captured.err
+            assert requests == ["/model.json", "/model.json.lock"]
+            assert not (output / "model.json").exists()
+        else:
+            assert result == 0, captured.err
+            assert json.loads(captured.out)["card"] == str(output / "model.json")
+            assert ("Warning" in captured.err) == (mode == "auto")
+            if mode == "copy":
+                link.assert_not_called()
+                symlink.assert_not_called()
+            for name, content in files.items():
+                blob = cache / "blob/sha256" / hashlib.sha256(content).hexdigest()
+                assert blob.read_bytes() == content
+                assert (output / name).read_bytes() == content
+                assert not (output / name).samefile(blob)
+            # Reuse verified files even if link capabilities remain unavailable.
+            with patch(
+                "os.link", side_effect=AssertionError("unexpected sharing probe")
+            ):
+                assert main(arguments) == 0
+            assert "Warning" not in capsys.readouterr().err
+
+
+def test_auto_warns_before_payload_acquisition(tmp_path):
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    events = []
+    with _server(_card(), files) as (base, requests, _):
+
+        def observe(event):
+            if event.phase == "warning":
+                assert requests == ["/model.json", "/model.json.lock"]
+            events.append(event)
+
+        cache = ContentCache(tmp_path / "cache", progress=observe)
+        plan = _remote_plan(base, cache)
+        with (
+            patch("os.link", side_effect=OSError(errno.EXDEV, "other volume")),
+            patch("os.symlink", side_effect=OSError(errno.ENOTSUP, "no symlinks")),
+        ):
+            install(plan, cache, tmp_path / "output")
+    assert sum(event.phase == "warning" for event in events) == 1
+    assert any(event.phase == "copy" and event.total_bytes == 7 for event in events)
+
+
+def test_local_sources_do_not_probe_unused_or_read_only_cache(tmp_path):
+    (tmp_path / "code.loom").write_bytes(b"code")
+    (tmp_path / "weights.data").write_bytes(b"weights")
+    # A non-directory cache makes any accidental cache write fail immediately.
+    cache_path = tmp_path / "cache"
+    cache_path.write_bytes(b"cache not needed")
+    cache = ContentCache(cache_path)
+    card = _card()
+    plan = plan_fetch(
+        Document(str(tmp_path / "model.json"), json.dumps(card)),
+        ModelCard(card).select(),
+        cache,
+        no_lock=True,
+        offline=True,
+    )
+    install(plan, cache, tmp_path / "output")
+    assert (tmp_path / "output/weights.data").samefile(tmp_path / "weights.data")
+    assert cache_path.read_bytes() == b"cache not needed"
+
+
+@pytest.mark.parametrize("mode", ["auto", "copy"])
+def test_repeated_unlocked_local_copy_verifies_source_and_preserves_edits(
+    tmp_path, mode
+):
+    (tmp_path / "model.json").write_text(json.dumps(_card()))
+    (tmp_path / "code.loom").write_bytes(b"code")
+    (tmp_path / "weights.data").write_bytes(b"weights")
+    cache = ContentCache(tmp_path / "cache")
+    plan = plan_fetch(
+        cache.read_document(str(tmp_path / "model.json"), offline=True),
+        ModelCard(_card()).select(),
+        cache,
+        no_lock=True,
+        offline=True,
+    )
+    output = tmp_path / "output"
+    with (
+        patch("os.link", side_effect=NotImplementedError("no hardlinks")),
+        patch("os.symlink", side_effect=PermissionError(errno.EACCES, "no symlinks")),
+    ):
+        install(plan, cache, output, materialize=mode)
+        (output / "code.loom").write_bytes(b"my edits")
+        install(plan, cache, output, materialize=mode)
+        assert (output / "code.loom").read_bytes() == b"my edits"
+        (tmp_path / "weights.data").write_bytes(b"changed")
+        with pytest.raises(ManifestError, match="integrity mismatch"):
+            install(plan, cache, output, materialize=mode)
+    assert (output / "weights.data").read_bytes() == b"weights"
+
+
+def test_sharing_capabilities_are_per_path_not_device_number(tmp_path):
+    card = _card()
+    card["variants"]["v"]["services"]["text"]["parameters"]["scope"]["files"].append(
+        "second.data"
+    )
+    for name in ("code.loom", "weights.data", "second.data"):
+        (tmp_path / name).write_bytes(name.encode())
+    events = []
+    cache = ContentCache(tmp_path / "cache", progress=events.append)
+    plan = plan_fetch(
+        Document(str(tmp_path / "model.json"), json.dumps(card)),
+        ModelCard(card).select(),
+        cache,
+        no_lock=True,
+    )
+    link, symlink = os.link, os.symlink
+
+    def link_with_path_policy(source, destination):
+        if source.name == "second.data":
+            raise OSError(errno.EXDEV, "different path policy on the same device")
+        return link(source, destination)
+
+    def symlink_with_path_policy(source, destination):
+        if source.name == "second.data":
+            raise PermissionError(errno.EACCES, "symlink policy")
+        return symlink(source, destination)
+
+    output = tmp_path / "output"
+    with (
+        patch("os.link", link_with_path_policy),
+        patch("os.symlink", symlink_with_path_policy),
+    ):
+        install(plan, cache, output)
+    assert (output / "weights.data").samefile(tmp_path / "weights.data")
+    assert not (output / "second.data").samefile(tmp_path / "second.data")
+    warnings = [event for event in events if event.phase == "warning"]
+    assert len(warnings) == 1 and warnings[0].path == "second.data"
+
+
+def test_cancelled_install_copy_preserves_existing_files_and_verified_cache(tmp_path):
+    files = {"code.loom": b"code", "weights.data": b"weights"}
+    output = tmp_path / "output"
+    output.mkdir()
+    (output / "code.loom").write_bytes(b"code")
+
+    def cancel_copy(event):
+        if event.phase == "copy" and event.path == "weights.data":
+            cache.cancel()
+
+    cache = ContentCache(tmp_path / "cache", progress=cancel_copy)
+    with _server(_card(), files) as (base, _, _):
+        plan = _remote_plan(base, cache)
+        with pytest.raises(FetchError, match="cancelled"):
+            install(plan, cache, output, materialize="copy")
+    assert (output / "code.loom").read_bytes() == b"code"
+    assert not (output / "weights.data").exists()
+    assert not (output / "model.json").exists()
+    assert not list(output.glob(".loom-fetch-*"))
+    assert (
+        cache.blob_path(hashlib.sha256(b"weights").hexdigest()).read_bytes()
+        == b"weights"
+    )
+
+
+@pytest.mark.parametrize("mode", ["auto", "share"])
+def test_final_sharing_rechecks_policy_after_a_successful_probe(tmp_path, mode):
+    (tmp_path / "code.loom").write_bytes(b"code")
+    (tmp_path / "weights.data").write_bytes(b"weights")
+    events = []
+    cache = ContentCache(tmp_path / "cache", progress=events.append)
+    card = _card()
+    plan = plan_fetch(
+        Document(str(tmp_path / "model.json"), json.dumps(card)),
+        ModelCard(card).select(),
+        cache,
+        no_lock=True,
+    )
+    output = tmp_path / "output"
+    link, symlink = os.link, os.symlink
+
+    def link_with_policy(source, destination):
+        if destination == output / "weights.data":
+            raise OSError(errno.EXDEV, "mount changed")
+        return link(source, destination)
+
+    def symlink_with_policy(source, destination):
+        if destination == output / "weights.data":
+            raise PermissionError(errno.EACCES, "policy changed")
+        return symlink(source, destination)
+
+    with patch("os.link", link_with_policy), patch("os.symlink", symlink_with_policy):
+        if mode == "share":
+            with pytest.raises(FetchError, match="policy changed"):
+                install(plan, cache, output, materialize=mode)
+            assert not (output / "code.loom").exists()
+            assert not (output / "model.json").exists()
+        else:
+            install(plan, cache, output)
+            assert (output / "weights.data").read_bytes() == b"weights"
+            assert not (output / "weights.data").samefile(tmp_path / "weights.data")
+            assert sum(event.phase == "warning" for event in events) == 1
 
 
 @pytest.mark.parametrize("materialize", [None, "auto", "share", "copy"])

@@ -251,6 +251,7 @@ iree_py_library(
   SRCS
     "fetch_filesystem.py"
   DEPS
+    loom::py::loom::model::fetch_progress
     loom::py::loom::model::fetch_source
 )
 
@@ -266,6 +267,7 @@ iree_py_test(
     "loom.model.fetch_filesystem_test"
   DEPS
     loom::py::loom::model::fetch_filesystem
+    loom::py::loom::model::fetch_source
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"

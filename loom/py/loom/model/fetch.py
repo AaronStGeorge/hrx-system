@@ -12,7 +12,6 @@ import copy
 import hashlib
 import json
 import os
-import shutil
 import tempfile
 from collections.abc import Iterable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -21,7 +20,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from urllib.parse import urljoin
 
-from .fetch_filesystem import publish_file, share_file
+from .fetch_filesystem import SharingUnavailable, copy_file, publish_file, share_file
 from .fetch_hf import AccessRequired
 from .fetch_progress import ByteProgress
 from .fetch_source import (
@@ -624,13 +623,24 @@ def _check_outputs(
             if not editable and (
                 plan.selection.files[name].transform is not None
                 or source.transport["kind"] != "local"
-                or not os.path.samefile(source.transport["path"], destination)
             ):
                 raise FetchError(
                     f"cannot verify existing destination {destination} "
                     "before transfer; "
                     "use a matching lock or choose another output"
                 )
+            if not editable and not os.path.samefile(
+                source.transport["path"], destination
+            ):
+                # An independent local copy can be verified before transfer too.
+                # Without a lock, its expected identity must come from the source.
+                size, digest = file_digest(
+                    Path(source.transport["path"]),
+                    cancelled=cancelled,
+                    progress=counter,
+                )
+                identity = FileIdentity(source.origin, size, digest, source.resolved)
+        if identity is None:
             size, digest = file_digest(
                 destination, cancelled=cancelled, progress=counter
             )
@@ -673,45 +683,79 @@ def _check_lock_output(plan: FetchPlan, directory: Path, relocated: dict, roots:
     _check_installation_lock(path, expected)
 
 
+def _try_share(source: Path, destination: Path, *, automatic: bool, progress) -> bool:
+    try:
+        share_file(source, destination)
+        return True
+    except SharingUnavailable as error:
+        if not automatic:
+            raise
+        progress.emit(
+            "warning",
+            message=f"{error}. Automatic materialization will use independent "
+            "copies for this source/output path, requiring additional disk space.",
+        )
+        return False
+
+
 def _probe_sharing(
     plan: FetchPlan,
     cache: ContentCache,
     directory: Path,
     sources: dict[str, Source],
-) -> None:
-    roots = {cache.root}
-    if any(
-        source.transport["kind"] == "hf"
-        and plan.selection.files[name].transform is None
-        for name, source in sources.items()
-    ):
-        roots.add(cache.huggingface.cache_directory)
+    *,
+    automatic: bool,
+) -> set[str]:
+    shared = set()
     with ExitStack() as stack:
-        paths = set()
-        for root in roots:
-            root.mkdir(parents=True, exist_ok=True)
-            temporary = stack.enter_context(
-                tempfile.TemporaryDirectory(prefix=".loom-fetch-", dir=root)
-            )
-            path = Path(temporary) / "probe"
-            path.write_bytes(b"")
-            paths.add(path)
-        paths.update(
-            Path(source.transport["path"])
-            for name, source in sources.items()
-            if source.transport["kind"] == "local"
-            and plan.selection.files[name].transform is None
-        )
-        with tempfile.TemporaryDirectory(prefix=".loom-fetch-", dir=directory) as probe:
-            destination = Path(probe) / "shared"
-            devices = set()
-            for source in paths:
-                device = source.stat().st_dev
-                if device in devices:
-                    continue
-                share_file(source, destination)
-                destination.unlink()
-                devices.add(device)
+        probes = {}
+        destinations = {}
+        results = {}
+        for name, source in sources.items():
+            transform = plan.selection.files[name].transform
+            kind = source.transport["kind"]
+            if transform is None and kind == "local":
+                path = Path(source.transport["path"])
+            else:
+                identity = plan.identities.get(name)
+                path = cache.blob_path(identity.sha256) if identity else None
+                if path is None or not path.is_file():
+                    root = (
+                        cache.huggingface.cache_directory
+                        if kind == "hf" and transform is None
+                        else cache.root / "blob" / "sha256"
+                    )
+                    if root not in probes:
+                        root.mkdir(parents=True, exist_ok=True)
+                        temporary = stack.enter_context(
+                            tempfile.TemporaryDirectory(prefix=".loom-fetch-", dir=root)
+                        )
+                        probes[root] = Path(temporary) / "probe"
+                        probes[root].write_bytes(b"probe")
+                    path = probes[root]
+            # A subdirectory may be a mount point with different capabilities.
+            # st_dev also cannot distinguish local and UNC spellings on Windows.
+            parent = (directory / name).parent
+            if parent not in destinations:
+                parent.mkdir(parents=True, exist_ok=True)
+                temporary = stack.enter_context(
+                    tempfile.TemporaryDirectory(prefix=".loom-fetch-", dir=parent)
+                )
+                destinations[parent] = Path(temporary) / "shared"
+            key = (path, parent)
+            if key not in results:
+                destination = destinations[parent]
+                results[key] = _try_share(
+                    path,
+                    destination,
+                    automatic=automatic,
+                    progress=cache.progress.file(name),
+                )
+                if results[key]:
+                    destination.unlink()
+            if results[key]:
+                shared.add(name)
+    return shared
 
 
 def install(
@@ -750,7 +794,17 @@ def install(
         )
         _check_lock_output(plan, directory, relocated, roots)
         if shared:
-            _probe_sharing(plan, cache, directory, shared)
+            shared = _probe_sharing(
+                plan,
+                cache,
+                directory,
+                {
+                    name: source
+                    for name, source in shared.items()
+                    if name not in present
+                },
+                automatic=materialize == "auto",
+            )
         required = lock_files(plan.selection, plan.lock_scope)
         acquired = _acquire_sources(
             {
@@ -819,16 +873,27 @@ def install(
                     destination = directory / name
                     cache.progress.file(name).emit("install")
                     destination.parent.mkdir(parents=True, exist_ok=True)
-                    path = acquired[
+                    item = acquired[
                         file_key(source.origin, plan.selection.files[name].transform)
-                    ].path
-                    if name not in shared:
-                        copied = staging / "payload"
-                        shutil.copyfile(path, copied)
-                        publish_file(copied, destination)
-                        copied.unlink(missing_ok=True)
-                    else:
-                        share_file(path, destination)
+                    ]
+                    if name not in shared or not _try_share(
+                        item.path,
+                        destination,
+                        automatic=materialize == "auto",
+                        progress=cache.progress.file(name),
+                    ):
+                        try:
+                            copy_file(
+                                item.path,
+                                destination,
+                                item.identity.size,
+                                cancelled=cache.cancelled,
+                                progress=cache.progress.file(name),
+                            )
+                        except OSError as error:
+                            raise FetchError(
+                                f"cannot copy {name} to {destination}: {error}"
+                            ) from error
                     published.append(destination)
                     cache.progress.emit(
                         "install",

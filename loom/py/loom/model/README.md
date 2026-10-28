@@ -495,14 +495,35 @@ and their auxiliary files, so editing them cannot alter the cache, the source
 checkout, or another installation. This follows declared roles for every
 program format, including text, bytecode, and C++ inputs. Assets such as weights
 and tokenizers share cache or local-source storage, so changing only preset
-does not copy weights.
+does not copy weights. Sharing tries a hardlink first, then an absolute symlink
+that can be read from the output. If neither works, `auto` warns and makes
+independent copies for the affected source/output paths. The warning remains
+visible with `--quiet` and identifies the extra disk-space requirement.
 
 `--materialize=share` explicitly shares every file, including programs;
 `--materialize=copy` makes every file independent, including weights. Shared
 files remain shared: editing one view can alter another, and a later locked
-fetch detects that modification. Filesystems without sharing require
-`--materialize=copy`. Verified existing destinations can be reused; conflicts
-fail before payload transfer. Fetch never prunes an output.
+fetch detects that modification. Explicit `share` fails if either link creation
+or link traversal is unavailable; it never falls back to copying. Verified
+existing destinations can be reused; conflicts fail before payload transfer.
+Fetch never prunes an output.
+
+Hardlinks require compatible paths on the same filesystem. Symlinks can cross
+volumes, but their targets must stay accessible; Windows additionally applies
+creation privileges and local/remote link-evaluation policy. Capabilities are
+probed on the selected source/output paths before payload acquisition rather
+than inferred from OS or volume identity. An unused cache is not probed. Neither
+fetch mode changes machine security policy.
+
+Copy mode needs no link support. Complete copied files and installation metadata
+are published without replacing existing files, and each copy is staged beside
+its destination, including in mounted output subdirectories. Copies expose byte
+progress and support cancellation; failures remove incomplete staging and leave
+verified cached downloads reusable. Disk-full, quota, read-only, and IO failures
+remain errors, not sharing fallbacks. Filesystem per-file limits still apply:
+for example, a single file of 4 GiB or more cannot fit on FAT32 even when the
+volume has enough free space. A large-file filesystem such as exFAT or NTFS is
+needed for such parameter files.
 
 The selected `model.json` is published after acquisition and all required checks
 succeed. An installation lock preserves the original coverage scope. Editable

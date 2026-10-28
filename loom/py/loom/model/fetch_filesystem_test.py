@@ -13,7 +13,13 @@ from unittest.mock import patch
 
 import pytest
 
-from loom.model.fetch_filesystem import SharingUnavailable, publish_file, share_file
+from loom.model.fetch_filesystem import (
+    SharingUnavailable,
+    copy_file,
+    publish_file,
+    share_file,
+)
+from loom.model.fetch_source import FetchError
 
 
 def test_publish_needs_no_links_and_never_replaces_existing_content(tmp_path):
@@ -166,3 +172,89 @@ def test_symlink_fallback_never_replaces_an_existing_destination(tmp_path):
     ):
         share_file(source, destination)
     assert destination.read_bytes() == b"keep me"
+
+
+@pytest.mark.parametrize("winerror", [1, 50, 1314, 1463])
+def test_windows_link_capability_codes_are_recognized(tmp_path, winerror):
+    source = tmp_path / "source"
+    source.write_bytes(b"weights")
+    error = OSError(errno.EINVAL, "Windows link capability")
+    error.winerror = winerror
+    with (
+        patch("os.link", side_effect=error),
+        patch("os.symlink", side_effect=error),
+        pytest.raises(SharingUnavailable, match="Windows link capability"),
+    ):
+        share_file(source, tmp_path / "shared")
+
+
+def test_copy_stages_beside_destination_and_reports_its_full_extent(tmp_path):
+    source = tmp_path / "source"
+    source.write_bytes(b"x" * (1024 * 1024 + 1))
+    mounted = tmp_path / "output/mounted"
+    mounted.mkdir(parents=True)
+    destination = mounted / "weights"
+    events = []
+
+    def publish_same_directory(staged, target):
+        assert staged.parent == target.parent
+        publish_file(staged, target)
+
+    with patch("loom.model.fetch_filesystem.publish_file", publish_same_directory):
+        copy_file(
+            source,
+            destination,
+            source.stat().st_size,
+            cancelled=threading.Event(),
+            progress=events.append,
+        )
+    assert destination.read_bytes() == source.read_bytes()
+    assert not destination.samefile(source)
+    assert list(mounted.iterdir()) == [destination]
+    assert events[0].completed_bytes == 0
+    assert events[-1].completed_bytes == source.stat().st_size
+    assert all(event.total_bytes == source.stat().st_size for event in events)
+
+
+@pytest.mark.parametrize("code", [errno.ENOSPC, errno.EFBIG, errno.EROFS, errno.EIO])
+def test_copy_flush_failure_keeps_destination_absent_and_removes_staging(
+    tmp_path, code
+):
+    source, destination = tmp_path / "source", tmp_path / "destination"
+    source.write_bytes(b"payload")
+    with (
+        patch("os.fsync", side_effect=OSError(code, "storage failure")),
+        pytest.raises(OSError, match="storage failure"),
+    ):
+        copy_file(source, destination, 7, cancelled=threading.Event(), progress=None)
+    assert list(tmp_path.iterdir()) == [source]
+
+
+@pytest.mark.parametrize("cancel_after", [0, 1024 * 1024])
+def test_copy_cancellation_never_publishes_partial_content(tmp_path, cancel_after):
+    source, destination = tmp_path / "source", tmp_path / "destination"
+    source.write_bytes(b"x" * (1024 * 1024 + 1))
+    cancelled = threading.Event()
+
+    def observe(event):
+        if event.completed_bytes == cancel_after:
+            cancelled.set()
+
+    with pytest.raises(FetchError, match="cancelled"):
+        copy_file(
+            source,
+            destination,
+            source.stat().st_size,
+            cancelled=cancelled,
+            progress=observe,
+        )
+    assert list(tmp_path.iterdir()) == [source]
+
+
+@pytest.mark.parametrize("size", [2, 5])
+def test_copy_rejects_source_size_changes(tmp_path, size):
+    source, destination = tmp_path / "source", tmp_path / "destination"
+    source.write_bytes(b"code")
+    with pytest.raises(FetchError, match="source changed size"):
+        copy_file(source, destination, size, cancelled=threading.Event(), progress=None)
+    assert list(tmp_path.iterdir()) == [source]
