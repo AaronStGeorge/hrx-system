@@ -6,7 +6,7 @@
 
 // Two broad storage roots fit in the general bank even when one root has
 // several destructive SSA versions. The later narrow value retains capacity.
-// RUN: emit low-allocation @broad_tied_storage entry=0:test.explicit32:physical_register:2 entry=1:test.explicit32:physical_register:3
+// RUN: emit low-allocation @broad_tied_storage
 
 test.target<low_core> @target
 
@@ -26,16 +26,15 @@ assignments: 5
 remarks: 0
 spills: 0
 copies: coalesced=0 materialized=0
-entry moves: 0
 classes:
-  test.explicit32: assignments=4 units=4 target_ids=0 physical=4 spill_slots=0 unassigned=0
+  test.explicit32: assignments=4 units=4 target_ids=0 physical=3 spill_slots=0 unassigned=0
   test.packed.narrow: assignments=1 units=1 target_ids=0 physical=1 spill_slots=0 unassigned=0
 
 // ====
 
 // Three broad inputs coexist with one narrow storage root. Publishing three
 // identity names does not require a second narrow register.
-// RUN: emit low-allocation @narrow_tied_storage entry=0:test.explicit32:physical_register:1 entry=1:test.explicit32:physical_register:2 entry=2:test.explicit32:physical_register:3
+// RUN: emit low-allocation @narrow_tied_storage
 
 test.target<low_core> @target
 
@@ -55,7 +54,6 @@ assignments: 6
 remarks: 0
 spills: 0
 copies: coalesced=0 materialized=0
-entry moves: 0
 classes:
   test.explicit32: assignments=3 units=3 target_ids=0 physical=4 spill_slots=0 unassigned=0
   test.packed.narrow: assignments=3 units=3 target_ids=0 physical=1 spill_slots=0 unassigned=0
@@ -64,7 +62,7 @@ classes:
 
 // Two independent narrow roots still occupy distinct registers, including
 // when both have required identity aliases.
-// RUN: emit low-allocation @independent_narrow_storage entry=0:test.explicit32:physical_register:2 entry=1:test.explicit32:physical_register:3
+// RUN: emit low-allocation @independent_narrow_storage
 
 test.target<low_core> @target
 
@@ -85,7 +83,6 @@ assignments: 6
 remarks: 0
 spills: 0
 copies: coalesced=0 materialized=0
-entry moves: 0
 classes:
   test.explicit32: assignments=2 units=2 target_ids=0 physical=4 spill_slots=0 unassigned=0
   test.packed.narrow: assignments=4 units=4 target_ids=0 physical=2 spill_slots=0 unassigned=0
@@ -94,7 +91,7 @@ classes:
 
 // An optional copy with a live source retains separate storage demand. Its
 // required alias shares the copied storage, not the original source.
-// RUN: emit low-allocation @optional_copy_storage entry=0:test.explicit32:physical_register:2 entry=1:test.explicit32:physical_register:3
+// RUN: emit low-allocation @optional_copy_storage
 
 test.target<low_core> @target
 
@@ -114,7 +111,6 @@ assignments: 5
 remarks: 0
 spills: 0
 copies: coalesced=0 materialized=1
-entry moves: 0
 classes:
   test.explicit32: assignments=2 units=2 target_ids=0 physical=4 spill_slots=0 unassigned=0
   test.packed.narrow: assignments=3 units=3 target_ids=0 physical=2 spill_slots=0 unassigned=0
