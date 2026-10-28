@@ -11,6 +11,7 @@
 
 #include "iree/base/internal/json.h"
 #include "iree/base/internal/unicode.h"
+#include "iree/base/printf.h"
 #include "iree/vm/buffer.h"
 #include "iree/vm/reflection.h"
 
@@ -297,12 +298,46 @@ static iree_status_t loom_serve_json_parse_number(
   return iree_ok_status();
 }
 
+static iree_status_t loom_serve_json_format_number(
+    loom_serve_json_module_t* module, const iree_vm_call_packet_t* call) {
+  const uint64_t bits = iree_vm_call_value_argument_load(call, 0);
+  double value = 0.0;
+  memcpy(&value, &bits, sizeof(value));
+  const int32_t precision = (int32_t)iree_vm_call_value_argument_load(call, 1);
+  if (!isfinite(value)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "JSON numbers must be finite");
+  }
+  if ((uint32_t)precision > 17) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "fixed JSON precision must be from 0 through 17");
+  }
+  // Binary64 has at most 309 integral digits. The bounded fractional precision
+  // leaves room for the sign, decimal point, and formatter's terminator.
+  char text[1 + 309 + 1 + 17 + 1];
+  const int length =
+      iree_snprintf(text, sizeof(text), "%.*f", precision, value);
+  iree_vm_buffer_t* output = NULL;
+  IREE_RETURN_IF_ERROR(iree_vm_buffer_clone(
+      IREE_VM_BUFFER_ACCESS_FLAG_READ, iree_make_const_byte_span(text, length),
+      1, module->host_allocator, &output));
+  iree_vm_ref_t result =
+      iree_vm_buffer_ref_from_ptr_move(&module->types, &output);
+  iree_vm_call_ref_result_store_move(call, 0, &result);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_serve_json_module_start(
     iree_vm_module_t* base,
     const iree_vm_module_function_start_params_t* params,
     iree_vm_execution_outcome_t* out_outcome) {
   loom_serve_json_module_t* module = (loom_serve_json_module_t*)base;
   const iree_vm_call_packet_t* call = &params->call;
+  if (params->function_ordinal == 6) {
+    IREE_RETURN_IF_ERROR(loom_serve_json_format_number(module, call));
+    *out_outcome = IREE_VM_EXECUTION_OUTCOME_COMPLETED;
+    return iree_ok_status();
+  }
   iree_vm_ref_t input_ref = iree_vm_ref_null();
   iree_vm_call_ref_argument_load_borrow(call, 0, &input_ref);
   if (!input_ref.object) {
@@ -363,11 +398,15 @@ static const iree_vm_module_signature_type_t json_range_arguments[] = {
     {IREE_VM_SCALAR_TYPE_I64, 0}};
 static const iree_vm_module_signature_type_t json_float_result[] = {
     {IREE_VM_SCALAR_TYPE_F64, 0}};
+static const iree_vm_module_signature_type_t json_format_arguments[] = {
+    {IREE_VM_SCALAR_TYPE_F64, 0}, {IREE_VM_SCALAR_TYPE_I32, 0}};
 static const iree_vm_module_callable_type_declaration_t json_callables[] = {
     {.signature = {.arguments = {json_buffer_type, 1, 0, 1, 0},
                    .results = {json_buffer_type, 1, 0, 1, 0}}},
     {.signature = {.arguments = {json_buffer_type, 1, 0, 1, 0},
                    .results = {json_members_results, 3, 2, 1, 0}}},
+    {.signature = {.arguments = {json_format_arguments, 2, 2, 0, 0},
+                   .results = {json_buffer_type, 1, 0, 1, 0}}},
     {.signature = {.arguments = {json_range_arguments, 3, 2, 1, 0},
                    .results = {json_i64_result, 1, 1, 0, 0}}},
     {.signature = {.arguments = {json_range_arguments, 3, 2, 1, 0},
@@ -381,20 +420,23 @@ static const iree_vm_module_export_declaration_t json_exports[] = {
     {.export_name = IREE_SVL("compact"),
      .callable_type_ordinal = 0,
      .function_ordinal = 0},
+    {.export_name = IREE_SVL("format_f64"),
+     .callable_type_ordinal = 2,
+     .function_ordinal = 6},
     {.export_name = IREE_SVL("members"),
      .callable_type_ordinal = 1,
      .function_ordinal = 1},
     {.export_name = IREE_SVL("members_range"),
-     .callable_type_ordinal = 4,
+     .callable_type_ordinal = 5,
      .function_ordinal = 5},
     {.export_name = IREE_SVL("parse_f64"),
-     .callable_type_ordinal = 3,
+     .callable_type_ordinal = 4,
      .function_ordinal = 4},
     {.export_name = IREE_SVL("parse_i64"),
-     .callable_type_ordinal = 2,
+     .callable_type_ordinal = 3,
      .function_ordinal = 3},
     {.export_name = IREE_SVL("unescape"),
-     .callable_type_ordinal = 5,
+     .callable_type_ordinal = 6,
      .function_ordinal = 2},
 };
 
@@ -453,10 +495,10 @@ iree_status_t loom_serve_json_module_create(iree_vm_environment_t* environment,
       .name = IREE_SVL("json"),
       .flags = IREE_VM_MODULE_FLAG_LINKABLE,
       .ref_types = {&module->types.buffer, 1},
-      .counts = {.function_count = 6,
+      .counts = {.function_count = 7,
                  .callable_type_count = IREE_ARRAYSIZE(json_callables),
                  .export_count = IREE_ARRAYSIZE(json_exports),
-                 .callable_fields = {.value_count = 16, .ref_count = 10}},
+                 .callable_fields = {.value_count = 18, .ref_count = 11}},
   };
   iree_status_t status = iree_vm_module_initialize(
       &json_module_vtable, &module->descriptor, &module->base);
