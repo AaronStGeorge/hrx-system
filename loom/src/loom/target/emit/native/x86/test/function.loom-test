@@ -112,6 +112,40 @@ code: 48 83 ec 28 c5 fe 6f 07 c5 fc 11 04 24 48 8b fe c5 f8 77 e8 00 00 00 00 c5
 
 // ====
 
+// Calls force live SIMD values into spill storage through the ordinary ABI.
+// The first two values occupy the same block and require distinct cells; the
+// third value can reuse a cell after entering the next block. Authored storage
+// remains separate from every generated spill cell.
+// RUN: emit x86-native-bytes @spill_block_lifetimes
+x86.target<avx512> @target
+
+low.func.decl target<x86.avx512.core>(@target) @advance(%address: reg<x86.gpr64>) -> (reg<x86.gpr64>)
+
+low.func.def target<x86.avx512.core>(@target) @spill_block_lifetimes(%input: reg<x86.gpr64>) asm {
+  %retained = storage {byte_alignment = 16, byte_length = 32} : low.storage<stack>
+  %preserved = vmovdqu32.load.ymm %input {disp32 = 96}
+  low.spill %preserved, %retained : reg<x86.ymm>, low.storage<stack>
+  %first = vmovdqu32.load.ymm %input {disp32 = 0}
+  %middle_address = low.func.call @advance(%input) : (reg<x86.gpr64>) -> (reg<x86.gpr64>)
+  vmovdqu32.store.ymm %first, %middle_address {disp32 = 0}
+  %middle = vmovdqu32.load.ymm %middle_address {disp32 = 32}
+  %last_address = low.func.call @advance(%middle_address) : (reg<x86.gpr64>) -> (reg<x86.gpr64>)
+  vmovdqu32.store.ymm %middle, %last_address {disp32 = 32}
+  low.br ^last
+^last:
+  %last = vmovdqu32.load.ymm %last_address {disp32 = 64}
+  %output = low.func.call @advance(%last_address) : (reg<x86.gpr64>) -> (reg<x86.gpr64>)
+  vmovdqu32.store.ymm %last, %output {disp32 = 64}
+  %restored = low.reload %retained : low.storage<stack> -> reg<x86.ymm>
+  vmovdqu32.store.ymm %restored, %output {disp32 = 96}
+  return
+}
+
+// ----
+code: 48 83 ec 68 c5 fe 6f 47 60 c5 fc 11 04 24 c5 fe 6f 07 c5 fc 11 44 24 20 c5 f8 77 e8 00 00 00 00 c5 fc 10 44 24 20 c5 fe 7f 00 c5 fe 6f 40 20 c5 fc 11 44 24 40 48 8b f8 c5 f8 77 e8 00 00 00 00 c5 fc 10 44 24 40 c5 fe 7f 40 20 c5 fe 6f 40 40 c5 fc 11 44 24 20 48 8b f8 c5 f8 77 e8 00 00 00 00 c5 fc 10 44 24 20 c5 fe 7f 40 40 c5 fc 10 04 24 c5 fe 7f 40 60 48 83 c4 68 c5 f8 77 c3
+
+// ====
+
 // A half-precision value crosses the platform boundary in XMM while its Low
 // carrier occupies four-byte GPR storage. The explicit spill and reload fold
 // into entry and return transport without an intermediate GPR.
