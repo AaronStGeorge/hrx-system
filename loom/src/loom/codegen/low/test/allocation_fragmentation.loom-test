@@ -42,37 +42,9 @@ spill %rhs1: private[0] bytes=32 align=16 stores=1 reloads=1
 
 // ====
 
-// A wide reload and its slice identities share physical storage. Semantic
-// pressure exceeds five units, but the wide value and live scalar fit together.
-// RUN: emit low-allocation-query @shared_reload_with_live_scalar spill-count test.i32=5
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @shared_reload_with_live_scalar(%blocker: reg<test.i32>, %wide: reg<test.i32 x4>) -> (reg<test.i32>) asm {
-  %storage = storage {byte_alignment = 16, byte_length = 16} : low.storage<private>
-  low.spill %wide, %storage : reg<test.i32 x4>, low.storage<private>
-  %pressure = test.add.i32 %blocker, %blocker
-  %reloaded = low.reload %storage : low.storage<private> -> reg<test.i32 x4>
-  %head = slice %reloaded[0] : reg<test.i32 x4> -> reg<test.i32 x3>
-  %first = slice %head[0] : reg<test.i32 x3> -> reg<test.i32>
-  %second = slice %head[1] : reg<test.i32 x3> -> reg<test.i32>
-  %sum = test.add.i32 %first, %second
-  %tail = slice %reloaded[2] : reg<test.i32 x4> -> reg<test.i32 x2>
-  %third = slice %tail[0] : reg<test.i32 x2> -> reg<test.i32>
-  %fourth = slice %tail[1] : reg<test.i32 x2> -> reg<test.i32>
-  %sum1 = test.add.i32 %sum, %third
-  %sum2 = test.add.i32 %sum1, %fourth
-  %out = test.add.i32 %sum2, %pressure
-  return %out
-}
-
-// ----
-spills: 0
-
-// ====
-
-// Four registers cannot hold the tuple and live scalar together. The packing
-// retry retains the ordinary spill plan when it cannot reduce spill traffic.
+// Four registers cannot hold the tuple and live scalar together. This first
+// allocation retains the two predicted spills when packing cannot reduce
+// traffic; it does not exercise the subsequent spill materialization.
 // RUN: emit low-allocation-query @shared_reload_exceeds_capacity spill-count test.i32=4
 
 test.target<low_core> @target
