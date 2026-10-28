@@ -21,7 +21,7 @@ low.func.def schedule(locked) target<test.low.core>(@target) @aligned_view(%left
 
 // Equal aggregate storage is zero-copy only when logical units have the same
 // order in both register classes.
-// RUN: emit low-allocation-query @aligned_ordered_units copy-count values=%unit0,%unit1,%source,%result copies=%result fixed=%unit0:physical_register:0:1 fixed=%unit1:physical_register:2:1 fixed=%source:physical_register:4:2 fixed=%result:physical_register:4:2
+// RUN: emit low-allocation-query @aligned_ordered_units copy-count values=%unit0,%unit1,%source,%result copies=%result
 
 test.target<low_core> @target
 
@@ -44,7 +44,7 @@ copy %source -> %result: coalesced
 // The full aggregate has the same atomic footprint in both classes, but
 // packed.wide orders the middle units as r2,r1 instead of r1,r2. The copy is a
 // real permutation and cannot use q0 as a zero-copy alias.
-// RUN: emit low-allocation-query @permuted_ordered_units failure copy-count values=%unit0,%unit1,%unit2,%unit3,%source,%result copies=%result fixed=%unit0:physical_register:0:1 fixed=%unit1:physical_register:1:1 fixed=%unit2:physical_register:2:1 fixed=%unit3:physical_register:3:1 fixed=%source:physical_register:6:4 fixed=%result:physical_register:6:4
+// RUN: emit low-allocation-query @permuted_ordered_units failure copy-count values=%unit0,%unit1,%unit2,%unit3,%source,%result copies=%result
 
 test.target<low_core> @target
 
