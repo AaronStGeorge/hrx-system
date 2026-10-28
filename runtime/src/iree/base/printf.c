@@ -662,9 +662,9 @@ static void iree_printf_format_pointer(iree_printf_output_t* out,
 //
 // Approach: IEEE 754 bit extraction for sign/special values. Exponential
 // formatting converts the exact binary coefficient to decimal integer limbs;
-// fixed formatting decomposes integral and fractional parts arithmetically.
-// Both are accurate to 17 significant digits (full double precision).
-// Precision is capped at 17; beyond that we pad with zeros.
+// fixed formatting retains exact integral digits and decomposes fractional
+// parts arithmetically. Fractional/significant precision is bounded below;
+// additional requested fractional digits are emitted as trailing zeros.
 
 // Maximum precision we compute accurately. Beyond this, we emit zeros.
 // 17 significant digits covers the full precision of IEEE 754 double.
@@ -693,12 +693,16 @@ typedef union {
 #define IREE_PRINTF_BIGINT_BASE UINT32_C(1000000000)
 #define IREE_PRINTF_BIGINT_MAX_LIMBS 86
 typedef struct iree_printf_bigint_t {
+  // Little-endian base-1e9 digits of the nonnegative coefficient.
   uint32_t limbs[IREE_PRINTF_BIGINT_MAX_LIMBS];
+  // Populated extent, including one limb for zero.
   int limb_count;
 } iree_printf_bigint_t;
 
 typedef struct iree_printf_decimal_digits_t {
+  // Rounded significant digits, with no leading zeros.
   uint64_t significand;
+  // Decimal power of the leading significant digit.
   int exponent;
 } iree_printf_decimal_digits_t;
 
@@ -758,14 +762,10 @@ static uint64_t iree_printf_bigint_to_u64(const iree_printf_bigint_t* value) {
   return result;
 }
 
-// Extracts |significant_digit_count| correctly-rounded decimal digits and the
-// base-10 exponent for a positive finite binary64 value. The binary value is
-// converted to an exact integer coefficient times a decimal power, then
-// rounded to nearest-even using the discarded decimal digits. This keeps
-// serialization-grade precision independent of libc and target floating-point
-// scaling behavior.
-static iree_printf_decimal_digits_t iree_printf_extract_significant_digits(
-    double value, int significant_digit_count) {
+// Converts a positive finite binary64 value to an exact integer coefficient
+// times 10^-scale. The returned scale is zero for integral input.
+static int iree_printf_extract_decimal_coefficient(
+    double value, iree_printf_bigint_t* out_coefficient) {
   iree_printf_double_bits_t representation = {.value = value};
   const int exponent_bits = (int)((representation.bits >> 52) & 0x7FF);
   uint64_t coefficient = representation.bits & UINT64_C(0x000FFFFFFFFFFFFF);
@@ -783,19 +783,29 @@ static iree_printf_decimal_digits_t iree_printf_extract_significant_digits(
     ++binary_exponent;
   }
 
-  iree_printf_bigint_t decimal_coefficient;
-  iree_printf_bigint_initialize(coefficient, &decimal_coefficient);
+  iree_printf_bigint_initialize(coefficient, out_coefficient);
   int decimal_scale = 0;
   if (binary_exponent >= 0) {
     for (int i = 0; i < binary_exponent; ++i) {
-      iree_printf_bigint_multiply_small(&decimal_coefficient, 2);
+      iree_printf_bigint_multiply_small(out_coefficient, 2);
     }
   } else {
     decimal_scale = -binary_exponent;
     for (int i = 0; i < decimal_scale; ++i) {
-      iree_printf_bigint_multiply_small(&decimal_coefficient, 5);
+      iree_printf_bigint_multiply_small(out_coefficient, 5);
     }
   }
+  return decimal_scale;
+}
+
+// Extracts |significant_digit_count| correctly-rounded decimal digits and the
+// base-10 exponent for a positive finite binary64 value. Rounding the exact
+// coefficient keeps serialization independent of floating-point scaling.
+static iree_printf_decimal_digits_t iree_printf_extract_significant_digits(
+    double value, int significant_digit_count) {
+  iree_printf_bigint_t decimal_coefficient;
+  const int decimal_scale =
+      iree_printf_extract_decimal_coefficient(value, &decimal_coefficient);
 
   iree_printf_decimal_digits_t result = {0};
   const int decimal_digit_count =
@@ -860,97 +870,11 @@ static inline bool iree_printf_double_is_inf(double value) {
   return exponent == 0x7FF && mantissa == 0;
 }
 
-// Compute floor(log10(value)) for positive, finite, non-zero values.
-// Uses the base-2 exponent from IEEE 754 bits and a correction factor.
-// Accuracy: exact for most values; may be off by 1, which the caller corrects.
-//
-// Subnormals require special handling: the biased exponent is 0 for ALL
-// subnormals (spanning ~5e-324 to ~2.2e-308), so the normal approximation
-// collapses them all to the same estimate. For subnormals, we find the
-// highest set bit in the mantissa to compute the effective binary exponent.
-static int iree_printf_log10_approx(double value) {
-  iree_printf_double_bits_t u = {0};
-  u.value = value;
-  int exponent_biased = (int)((u.bits >> 52) & 0x7FF);
-  int effective_log2 = 0;
-
-  if (exponent_biased == 0) {
-    // Subnormal: value = 2^(-1022) * (mantissa / 2^52).
-    // Effective binary exponent = -1074 + position_of_highest_set_bit.
-    uint64_t mantissa = u.bits & 0x000FFFFFFFFFFFFFull;
-    if (mantissa == 0) {
-      return 0;  // ±0, shouldn't reach here.
-    }
-    // Count leading zeros in the 52-bit mantissa field.
-    // Start from bit 51 (MSB of mantissa) and count down.
-    int highest_bit = 0;
-    for (int bit = 51; bit >= 0; bit--) {
-      if (mantissa & (1ull << bit)) {
-        highest_bit = bit;
-        break;
-      }
-    }
-    effective_log2 = -1074 + highest_bit;
-  } else {
-    effective_log2 = exponent_biased - 1023;
-  }
-
-  // log10(2) ≈ 0.30103. Use integer arithmetic: log10 ≈ log2 * 301 / 1000.
-  // For negative values, C integer division truncates toward zero, which gives
-  // us ceil(log10) instead of floor(log10). Correct by subtracting 1 when the
-  // product is negative and not evenly divisible.
-  int product = effective_log2 * 301;
-  int log10_estimate = product / 1000;
-  if (product < 0 && product % 1000 != 0) {
-    log10_estimate--;
-  }
-  return log10_estimate;
-}
-
-// Powers of 10 as doubles, for exponents 0..22. Beyond 22, 10^n is not exactly
-// representable as a double, but we only need this for normalization where
-// small errors are acceptable (they affect the last displayed digit at most).
+// Exact powers of ten used by the bounded fractional-digit path (0..19).
 static const double kPowersOf10[] = {
-    1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,  1e8,  1e9,  1e10, 1e11,
-    1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
+    1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,  1e8,  1e9,
+    1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19,
 };
-
-static double iree_printf_pow10(int n) {
-  // Keep the table lookup behind a simple checked unsigned magnitude. GCC 11 at
-  // -O3 can otherwise warn with a false-positive -Warray-bounds after inlining
-  // and constprop when it reasons about wrapped unsigned values.
-  unsigned int abs_n = n < 0 ? -(unsigned int)n : (unsigned int)n;
-  if (abs_n <= 22) {
-    return n < 0 ? 1.0 / kPowersOf10[abs_n] : kPowersOf10[abs_n];
-  }
-
-  // For large exponents, use iterative multiplication/division.
-  // This loses precision in the last few digits but is fine for our use case
-  // (debug formatting at precision <= 17).
-  double result = 1.0;
-  if (n > 0) {
-    double base = 10.0;
-    int exp = n;
-    while (exp > 0) {
-      if (exp & 1) {
-        result *= base;
-      }
-      base *= base;
-      exp >>= 1;
-    }
-  } else {
-    double base = 10.0;
-    int exp = -n;
-    while (exp > 0) {
-      if (exp & 1) {
-        result /= base;
-      }
-      base *= base;
-      exp >>= 1;
-    }
-  }
-  return result;
-}
 
 // Format a non-negative, finite double in %f style (fixed-point notation).
 // Writes computed digits into |buffer| and returns the number of characters
@@ -987,7 +911,7 @@ static int iree_printf_format_fixed(char* buffer, double value, int precision,
     if (fractional_part > 0.0) {
       while (effective_precision < precision &&
              effective_precision < IREE_PRINTF_MAX_FIXED_FRACTION_DIGITS) {
-        double next_scale = iree_printf_pow10(effective_precision + 1);
+        double next_scale = kPowersOf10[effective_precision + 1];
         if (fractional_part * next_scale >= 9.0e15) {
           break;
         }
@@ -998,7 +922,7 @@ static int iree_printf_format_fixed(char* buffer, double value, int precision,
 
   // Convert fractional part to integer digits by multiplying by 10^precision.
   // This gives us the fractional digits as an integer that we can extract.
-  double frac_scale = iree_printf_pow10(effective_precision);
+  double frac_scale = kPowersOf10[effective_precision];
   double frac_scaled = fractional_part * frac_scale;
   uint64_t frac_max = (uint64_t)frac_scale;
 
@@ -1068,47 +992,20 @@ static int iree_printf_format_fixed(char* buffer, double value, int precision,
       buffer[position++] = int_digits[i];
     }
   } else {
-    // Very large float (> UINT64_MAX, ~1.8e19). IEEE 754 double has at most
-    // 17 significant digits; beyond that the digits are determined by the
-    // binary-to-decimal conversion, not the original value. We extract the
-    // significant digits via normalization and pad the rest with zeros —
-    // this matches what libc printf does.
-    int exponent = iree_printf_log10_approx(integral_part);
-    double normalized = integral_part / iree_printf_pow10(exponent);
-    // Correct approximation.
-    if (normalized >= 10.0) {
-      normalized /= 10.0;
-      exponent++;
-    } else if (normalized < 1.0) {
-      normalized *= 10.0;
-      exponent--;
+    // Fixed notation includes every integral digit, not just the 17 digits
+    // sufficient for round-trip notation. These values have no binary
+    // fractional bits, so their exact decimal coefficient needs no scaling.
+    iree_printf_bigint_t coefficient;
+    iree_printf_extract_decimal_coefficient(integral_part, &coefficient);
+    const int digit_count =
+        iree_printf_bigint_decimal_digit_count(&coefficient);
+    int cursor = position + digit_count;
+    while (cursor > position) {
+      --cursor;
+      buffer[cursor] =
+          '0' + (char)iree_printf_bigint_divide_by_10(&coefficient);
     }
-
-    // Extract up to 17 significant digits from the normalized value.
-    int sig_digits = IREE_PRINTF_MAX_FLOAT_PRECISION;
-    if (sig_digits > exponent + 1) {
-      sig_digits = exponent + 1;
-    }
-    // Scale to get all significant digits as an integer.
-    double scaled = normalized * iree_printf_pow10(sig_digits - 1);
-    uint64_t sig_value = (uint64_t)(scaled + 0.5);
-
-    // Extract digits in reverse.
-    char sig_buffer[IREE_PRINTF_MAX_FLOAT_PRECISION + 1];
-    int sig_count = 0;
-    while (sig_value > 0) {
-      sig_buffer[sig_count++] = '0' + (char)(sig_value % 10);
-      sig_value /= 10;
-    }
-    // Emit significant digits in forward order.
-    for (int i = sig_count - 1; i >= 0; i--) {
-      buffer[position++] = sig_buffer[i];
-    }
-    // Pad remaining digits with zeros.
-    int zero_pad_count = (exponent + 1) - sig_count;
-    for (int i = 0; i < zero_pad_count; i++) {
-      buffer[position++] = '0';
-    }
+    position += digit_count;
   }
 
   // Decimal point and fractional digits.

@@ -354,6 +354,21 @@ TEST(Printf, FloatFixedRounding) {
   EXPECT_EQ(Format("%.1f", 1.25), "1.2");  // 1.25 → 1.2 (round to even).
 }
 
+TEST(Printf, FloatFixedPreservesLargeIntegralDigits) {
+  // Fixed notation includes every integral digit of the represented binary
+  // value, even when its decimal integer needs more than 17 digits.
+  EXPECT_EQ(Format("%.1f", 1e23), "99999999999999991611392.0");
+  EXPECT_EQ(Format("%.0f", std::nextafter(0x1p64, INFINITY)),
+            "18446744073709555712");
+  for (double value : {0x1p64, std::nextafter(0x1p64, INFINITY), 1e23, 1e200,
+                       std::numeric_limits<double>::max()}) {
+    for (const char* format : {"%.0f", "%#.0f", "%+032.2f"}) {
+      ExpectMatchesLibc(format, value);
+      ExpectMatchesLibc(format, -value);
+    }
+  }
+}
+
 TEST(Printf, FloatFixedWidth) {
   EXPECT_EQ(Format("%10.2f", 3.14), "      3.14");
   EXPECT_EQ(Format("%-10.2f", 3.14), "3.14      ");
