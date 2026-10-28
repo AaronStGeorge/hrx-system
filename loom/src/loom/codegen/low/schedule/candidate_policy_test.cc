@@ -280,7 +280,7 @@ TEST_F(CandidatePolicyTest, PhysicalCliffPrecedesAggregateReliefAndReadiness) {
                   crossing);
 }
 
-TEST_F(CandidatePolicyTest, RetainedSetupNeedsSafeInputBearingProgress) {
+TEST_F(CandidatePolicyTest, RetainedSetupRequiresBoundedProgress) {
   auto setup = MakeCandidate(0, 0);
   setup.projected_live_units = 4;
   setup.killed_live_units = 1;
@@ -320,6 +320,27 @@ TEST_F(CandidatePolicyTest, RetainedSetupNeedsSafeInputBearingProgress) {
     leaf.pressure_progress_kind = LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE;
     leaf.flags |= LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_REMATERIALIZABLE_LEAF;
     ExpectPreferred(mode, independent, leaf);
+
+    // Several leaves may be needed before a pinned transaction can finish.
+    // Its retained terminal path admits them only while their storage fits.
+    leaf.active_unspillable_completion_capacity = 1;
+    leaf.active_unspillable_completion_domain_id = 0;
+    leaf.active_unspillable_transaction_final_capacity = 1;
+    leaf.flags |=
+        LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_CONSTRAINED_COMPLETION;
+    leaf.pressure_progress_kind =
+        LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_CONSTRAINED_COMPLETION;
+    ExpectPreferred(mode, leaf, independent);
+    for (const uint16_t flag :
+         {LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REGISTER_DEBT,
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY}) {
+      auto infeasible = leaf;
+      infeasible.flags |= flag;
+      infeasible.pressure_risk = LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT;
+      infeasible.pressure_cliff_penalty = 1;
+      infeasible.pressure_cliff_units = 4;
+      ExpectPreferred(mode, independent, infeasible);
+    }
 
     auto constrained = setup;
     constrained.pressure_risk = LOOM_LOW_SCHEDULE_PRESSURE_RISK_NEAR_CLIFF;

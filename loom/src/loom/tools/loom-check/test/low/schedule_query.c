@@ -57,8 +57,6 @@ typedef struct loom_check_test_low_schedule_options_t {
   iree_string_view_t pressure_register_class;
   // Comma-separated values whose lifetimes require physical registers.
   iree_string_view_t required_register_value_selectors;
-  // Comma-separated private producers whose per-user placement is retained.
-  iree_string_view_t per_user_placement_value_selectors;
   // Inclusive live-unit ceiling requested for scheduled pressure.
   uint32_t pressure_limit;
   // Producer and consumer source nodes whose dependency timing is requested.
@@ -401,22 +399,16 @@ static iree_status_t loom_check_test_low_schedule_parse_option(
     options->schedule_flags |= LOOM_LOW_SCHEDULE_FLAG_HAS_LOWERED_SPILL_TRAFFIC;
     return iree_ok_status();
   }
-  iree_string_view_t* value_selectors = NULL;
   if (iree_string_view_equal(name, IREE_SV("required-register-values"))) {
-    value_selectors = &options->required_register_value_selectors;
-  } else if (iree_string_view_equal(name,
-                                    IREE_SV("per-user-placement-values"))) {
-    value_selectors = &options->per_user_placement_value_selectors;
-  }
-  if (value_selectors != NULL) {
-    if (!iree_string_view_is_empty(*value_selectors)) {
+    if (!iree_string_view_is_empty(
+            options->required_register_value_selectors)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "duplicate low-schedule-query option '%.*s'",
                               (int)name.size, name.data);
     }
     IREE_RETURN_IF_ERROR(
         loom_check_test_low_schedule_validate_value_selectors(name, value));
-    *value_selectors = value;
+    options->required_register_value_selectors = value;
     return iree_ok_status();
   }
   iree_string_view_t* node_list = NULL;
@@ -1075,17 +1067,11 @@ static iree_status_t loom_check_test_low_schedule_build(
       native_module->module, low_function,
       options->required_register_value_selectors, "required register",
       request->case_arena, &required_register_values));
-  iree_bitmap_t per_user_placement_values = {0};
-  IREE_RETURN_IF_ERROR(loom_check_test_low_schedule_resolve_values(
-      native_module->module, low_function,
-      options->per_user_placement_value_selectors, "per-user placement",
-      request->case_arena, &per_user_placement_values));
 
   loom_low_schedule_options_t schedule_options = {
       .allocation_budgets = options->allocation_budgets,
       .allocation_budget_count = options->allocation_budget_count,
       .required_register_values = required_register_values,
-      .per_user_placement_values = per_user_placement_values,
       .emitter = emitter,
       .diagnostic_flags = options->schedule_diagnostic_flags,
       .flags = options->schedule_flags |
