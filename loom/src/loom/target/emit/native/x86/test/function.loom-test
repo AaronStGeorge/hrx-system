@@ -177,6 +177,35 @@ code: 53 48 83 ec 60 c5 fc 11 04 24 c5 f8 77 e8 00 00 00 00 48 8b d8 c5 fc 10 04
 
 // ====
 
+// The loop argument crosses a call in the header. Its incoming stores occupy
+// both predecessors, keeping its cell separate from backedge-local spills.
+// RUN: emit x86-native-bytes @loop_spill_cells
+x86.target<avx512> @target
+
+low.func.decl target<x86.avx512.core>(@target) @advance(%address: reg<x86.gpr64>) -> (reg<x86.gpr64>)
+
+low.func.def target<x86.avx512.core>(@target) @loop_spill_cells(%input: reg<x86.gpr64>, %repeat: reg<x86.gpr32>) asm {
+  %seed = vmovdqu32.load.ymm %input {disp32 = 0}
+  low.br ^loop(%seed: reg<x86.ymm>)
+^loop(%state: reg<x86.ymm>):
+  %address = low.func.call @advance(%input) : (reg<x86.gpr64>) -> (reg<x86.gpr64>)
+  vmovdqu32.store.ymm %state, %address {disp32 = 0}
+  low.cond_br %repeat, ^backedge, ^exit : reg<x86.gpr32>
+^backedge:
+  %temporary = vmovdqu32.load.ymm %address {disp32 = 32}
+  %next_address = low.func.call @advance(%address) : (reg<x86.gpr64>) -> (reg<x86.gpr64>)
+  vmovdqu32.store.ymm %temporary, %next_address {disp32 = 32}
+  %updated = vmovdqu32.load.ymm %next_address {disp32 = 64}
+  low.br ^loop(%updated: reg<x86.ymm>)
+^exit:
+  return
+}
+
+// ----
+code: 53 55 48 83 ec 48 48 8b df 8b ee c5 fe 6f 03 c5 fc 11 04 24 48 8b fb c5 f8 77 e8 00 00 00 00 c5 fc 10 04 24 c5 fe 7f 00 85 ed 0f 84 30 00 00 00 c5 fe 6f 40 20 c5 fc 11 44 24 20 48 8b f8 c5 f8 77 e8 00 00 00 00 c5 fc 10 44 24 20 c5 fe 7f 40 20 c5 fe 6f 40 40 c5 fc 11 04 24 e9 b4 ff ff ff 48 83 c4 48 5d 5b c5 f8 77 c3
+
+// ====
+
 // A half-precision value crosses the platform boundary in XMM while its Low
 // carrier occupies four-byte GPR storage. The explicit spill and reload fold
 // into entry and return transport without an intermediate GPR.
