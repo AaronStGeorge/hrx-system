@@ -83,8 +83,12 @@ class ImageInput {
   ~ImageInput() { loom_serve_media_image_input_deinitialize(&input_); }
 
   iree_status_t Initialize(const std::string& url) {
+    return Initialize(loom_serve_media_image_source_from_data_url(View(url)));
+  }
+
+  iree_status_t Initialize(loom_serve_media_image_source_t source) {
     return loom_serve_media_image_input_initialize(
-        View(url), &kLimits, iree_allocator_system(), &input_);
+        source, &kLimits, iree_allocator_system(), &input_);
   }
 
   const loom_serve_media_image_info_t& info() const { return input_.info; }
@@ -110,8 +114,9 @@ bool Available(loom_serve_media_image_format_t format, const std::string& url) {
   loom_serve_media_image_info_t info;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_UNIMPLEMENTED,
-      loom_serve_media_image_inspect(View(url), &kLimits,
-                                     iree_allocator_system(), &info));
+      loom_serve_media_image_inspect(
+          loom_serve_media_image_source_from_data_url(View(url)), &kLimits,
+          iree_allocator_system(), &info));
   EXPECT_EQ(info.width, 0u);
   EXPECT_EQ(info.height, 0u);
   return false;
@@ -131,6 +136,45 @@ TEST(ImageTest, RegistryMatchesBuildConfiguration) {
     for (size_t j = i + 1; j < count; ++j) {
       EXPECT_NE(codecs[i]->format, codecs[j]->format);
     }
+  }
+}
+
+TEST(ImageTest, BareBase64PreservesIdentityAndPixels) {
+  const char* mime[] = {"image/png", "image/jpeg", "image/gif", "image/webp",
+                        "image/x-portable-arbitrarymap"};
+  const char* encoded[] = {kPng, kOrientedJpeg, kGif, kWebP, kPam};
+  const loom_serve_media_image_format_t formats[] = {
+      LOOM_SERVE_MEDIA_IMAGE_FORMAT_PNG, LOOM_SERVE_MEDIA_IMAGE_FORMAT_JPEG,
+      LOOM_SERVE_MEDIA_IMAGE_FORMAT_GIF, LOOM_SERVE_MEDIA_IMAGE_FORMAT_WEBP,
+      LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(formats); ++i) {
+    SCOPED_TRACE(mime[i]);
+    const std::string url = DataUrl(mime[i], encoded[i]);
+    if (!Available(formats[i], url)) {
+      continue;
+    }
+    ImageInput from_url;
+    ImageInput from_base64;
+    IREE_ASSERT_OK(from_url.Initialize(url));
+    const loom_serve_media_image_source_t source = {
+        .value = iree_make_cstring_view(encoded[i]),
+        .format = formats[i],
+    };
+    IREE_ASSERT_OK(from_base64.Initialize(source));
+    EXPECT_TRUE(loom_serve_media_digest_equal(&from_url.info().digest,
+                                              &from_base64.info().digest));
+    std::vector<uint8_t> expected(from_url.info().pixel_length);
+    std::vector<uint8_t> actual(from_base64.info().pixel_length);
+    IREE_ASSERT_OK(from_url.Decode(expected));
+    IREE_ASSERT_OK(from_base64.Decode(actual));
+    EXPECT_EQ(actual, expected);
+    auto limits = kLimits;
+    limits.compressed_bytes = from_url.info().compressed_length - 1;
+    loom_serve_media_image_info_t info = {};
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          loom_serve_media_image_inspect(
+                              source, &limits, iree_allocator_system(), &info));
+    EXPECT_EQ(info.pixel_length, 0u);
   }
 }
 
@@ -311,7 +355,8 @@ TEST(ImageTest, MixedBatchPreservesOrdinalsAndIsolatesDestinationErrors) {
       continue;
     }
     IREE_ASSERT_OK(loom_serve_media_image_input_initialize(
-        View(url), &kLimits, iree_allocator_system(), &storage[i]));
+        loom_serve_media_image_source_from_data_url(View(url)), &kLimits,
+        iree_allocator_system(), &storage[i]));
     const auto& info = storage[i].info;
     EXPECT_EQ(info.pixel_length, info.width * info.height * info.pixel_format);
     EXPECT_EQ(storage[i].allocation_size, url.size());
@@ -364,7 +409,8 @@ TEST(ImageTest, BatchAllocationFailureDoesNotStartAnyImage) {
   }
   loom_serve_media_image_input_t input;
   IREE_ASSERT_OK(loom_serve_media_image_input_initialize(
-      View(url), &kLimits, iree_allocator_system(), &input));
+      loom_serve_media_image_source_from_data_url(View(url)), &kLimits,
+      iree_allocator_system(), &input));
   const loom_serve_media_image_input_t* inputs[] = {&input};
   std::vector<uint8_t> pixels(12, 0x5a);
   const auto destination = iree_make_byte_span(pixels.data(), pixels.size());
@@ -426,7 +472,8 @@ TEST(ImageTest, AcceptsEscapedJsonStringContent) {
   }
   loom_serve_media_image_info_t info;
   IREE_ASSERT_OK(loom_serve_media_image_inspect(
-      View(url), &kLimits, iree_allocator_system(), &info));
+      loom_serve_media_image_source_from_data_url(View(url)), &kLimits,
+      iree_allocator_system(), &info));
   EXPECT_EQ(info.width, 2u);
   EXPECT_EQ(info.height, 2u);
 }
@@ -446,8 +493,9 @@ TEST(ImageTest, RejectsAnimationsBeforePixelAllocation) {
     loom_serve_media_image_info_t info;
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_INVALID_ARGUMENT,
-        loom_serve_media_image_inspect(View(url), &kLimits,
-                                       iree_allocator_system(), &info));
+        loom_serve_media_image_inspect(
+            loom_serve_media_image_source_from_data_url(View(url)), &kLimits,
+            iree_allocator_system(), &info));
   }
 }
 
@@ -457,8 +505,9 @@ TEST(ImageTest, RejectsMimeSignatureMismatch) {
   if (Available(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM, mismatch)) {
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_INVALID_ARGUMENT,
-        loom_serve_media_image_inspect(View(mismatch), &kLimits,
-                                       iree_allocator_system(), &info));
+        loom_serve_media_image_inspect(
+            loom_serve_media_image_source_from_data_url(View(mismatch)),
+            &kLimits, iree_allocator_system(), &info));
   }
 }
 
@@ -485,12 +534,14 @@ TEST(ImageTest, RequestBoundsAreInvalidInputAndLeaveInspectionReusable) {
     loom_serve_media_image_info_t info;
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_INVALID_ARGUMENT,
-        loom_serve_media_image_inspect(View(pam), &limit,
-                                       iree_allocator_system(), &info));
+        loom_serve_media_image_inspect(
+            loom_serve_media_image_source_from_data_url(View(pam)), &limit,
+            iree_allocator_system(), &info));
     EXPECT_EQ(info.width, 0u);
     EXPECT_EQ(info.height, 0u);
     IREE_ASSERT_OK(loom_serve_media_image_inspect(
-        View(pam), &kLimits, iree_allocator_system(), &info));
+        loom_serve_media_image_source_from_data_url(View(pam)), &kLimits,
+        iree_allocator_system(), &info));
     EXPECT_EQ(info.width, 2u);
     EXPECT_EQ(info.height, 2u);
   }

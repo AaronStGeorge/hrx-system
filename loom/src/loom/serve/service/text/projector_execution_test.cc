@@ -114,8 +114,9 @@ TEST_P(PixelProjectorExecutionTest, RgbAndRgbaCohortConditionsRetainedText) {
   };
   for (size_t i = 0; i < inputs_.size(); ++i) {
     auto status = loom_serve_media_image_input_initialize(
-        iree_make_string_view(urls[i].data(), urls[i].size()), &limits,
-        host_allocator_, &inputs_[i]);
+        loom_serve_media_image_source_from_data_url(
+            iree_make_string_view(urls[i].data(), urls[i].size())),
+        &limits, host_allocator_, &inputs_[i]);
     if (iree_status_is_unimplemented(status)) {
       IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
       return;

@@ -347,28 +347,51 @@ ordered placement, detail and resolved source metadata, so reuse cannot cross
 a change in those semantics. A complete retained media prefix skips pixel
 decoding and projection; it does not require a separate image-feature cache.
 
-Models with temporal source policy also accept timestamped frame images:
+Models with temporal source policy accept the [vLLM pre-extracted JPEG
+sequence convention](https://docs.vllm.ai/en/latest/features/multimodal_inputs/#video-inputs)
+through `video_url`. A request can interleave video, images, and text:
 
 ```json
 {
-  "type": "video_frames",
-  "video_frames": {
-    "frames": [
-      {"timestamp": 0.0, "url": "data:image/png;base64,..."},
-      {"timestamp": 0.75, "url": "data:image/png;base64,..."}
-    ],
-    "detail": "auto"
-  }
+  "model": "your-vision-model",
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type": "video_url", "video_url": {
+        "url": "data:video/jpeg;base64,<first-JPEG-base64>,<second-JPEG-base64>"
+      }},
+      {"type": "text", "text": "Describe how the scene changes."}
+    ]
+  }],
+  "media_io_kwargs": {"video": {
+    "fps": 100,
+    "frames_indices": [0, 75],
+    "num_frames": -1,
+    "do_sample_frames": false
+  }}
 }
 ```
 
-The frame array is nonempty. Timestamps are finite, nonnegative seconds in
-nondecreasing presentation order; repeated timestamps are valid. Each URL
-follows the image codec and limit rules above, and each frame counts toward the
-source-declared input limit. The model policy owns temporal grouping, spatial
-resizing, timestamp tokens, and positional encoding. Supplied frame sampling is
-preserved. This interface requires no MP4 or WebM decoder; compressed clips
-are not accepted by this content part.
+Each comma-separated payload is a complete JPEG image. Frame timestamps are
+`frames_indices[i] / fps`, giving 0 and 0.75 seconds in this example. `fps`
+defaults to 1 and must be positive and finite; omitted indices default to
+consecutive integers starting at zero. Explicit indices are nonnegative,
+nondecreasing integers with exactly one entry per supplied frame. Repeated
+indices are valid. Timing metadata applies to every video in the request.
+
+This subset consumes client-selected frames. Set `num_frames: -1` to consume
+all supplied frames; with the field omitted, clips are limited to 32 frames,
+matching vLLM's default without silently discarding additional frames. Positive
+`num_frames` and `do_sample_frames: true` are unsupported. Optional
+`total_num_frames` must be positive and at least the supplied frame count;
+`duration` must be finite, nonnegative seconds. These describe the original
+clip and do not resample the selected sequence.
+
+Each frame counts toward the source-declared image input limit and uses the
+existing compressed-byte and geometry bounds. The model policy owns temporal
+grouping, spatial resizing, timestamp tokens, and positional encoding. Remote
+URLs, MP4/WebM containers, and other media-I/O options are rejected. Frame input
+uses the JPEG codec and requires no video-container decoder.
 
 ### Retained conversations
 

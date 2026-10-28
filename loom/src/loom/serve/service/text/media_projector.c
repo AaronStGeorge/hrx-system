@@ -466,7 +466,7 @@ static iree_status_t loom_serve_text_media_projector_prepare(void* user_data) {
     for (iree_host_size_t j = 0;
          j < projection->image_count && iree_status_is_ok(job->status); ++j) {
       job->status = loom_serve_media_image_input_initialize(
-          chat->images.values[projection->image_begin + j].data_url,
+          chat->images.values[projection->image_begin + j].source,
           &chat->policy->images.limits, projector->host_allocator,
           &inputs[input_count++]);
     }

@@ -54,8 +54,9 @@ class ImageRequestTest : public ::testing::Test {
 
   bool Open(size_t index, const char* url) {
     auto status = loom_serve_media_image_input_initialize(
-        iree_make_cstring_view(url), &kLimits, iree_allocator_system(),
-        &inputs_[index]);
+        loom_serve_media_image_source_from_data_url(
+            iree_make_cstring_view(url)),
+        &kLimits, iree_allocator_system(), &inputs_[index]);
     if (iree_status_is_unimplemented(status)) {
       IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
       return false;

@@ -89,12 +89,12 @@ typedef enum loom_serve_text_media_span_field_e {
   LOOM_SERVE_TEXT_MEDIA_SPAN_FIELD_COUNT = 3,
 } loom_serve_text_media_span_field_t;
 
-// One inspected image occurrence borrowing its escaped data URL from the HTTP
+// One inspected image occurrence borrowing its encoded source from the HTTP
 // body. Pixel storage is deliberately absent until admission establishes that
 // the image-conditioned prefix is not already resident.
 typedef struct loom_serve_text_chat_image_t {
-  // Raw escaped JSON string contents, excluding surrounding quotes.
-  iree_string_view_t data_url;
+  // Encoded image bytes borrowed from the request until bounded realization.
+  loom_serve_media_image_source_t source;
   // Source-visible processing hint participating in semantic identity.
   loom_serve_text_chat_image_detail_t detail;
   // Image or video content kind; all frames in one part have the same kind.

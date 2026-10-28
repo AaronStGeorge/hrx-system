@@ -70,9 +70,133 @@ static iree_status_t loom_serve_text_chat_text_content(
       field->value, loom_serve_text_chat_text_part, output);
 }
 
+// Request-wide metadata for client-selected JPEG frames. The timestamp table
+// is built once, then shared by every video content part as in media_io_kwargs.
+typedef struct loom_serve_text_chat_video_options_t {
+  // Source frame rate used to turn frame indices into seconds.
+  double fps;
+  // Number of source frames, or zero when the client omitted it.
+  uint64_t total_num_frames;
+  // Per-clip transport bound; zero means all supplied frames were requested.
+  iree_host_size_t maximum_frames;
+  // Optional array of native doubles corresponding to frames_indices.
+  iree_string_builder_t timestamps;
+} loom_serve_text_chat_video_options_t;
+
+typedef struct loom_serve_text_chat_video_indices_t {
+  // Request-wide destination for the validated timestamps.
+  loom_serve_text_chat_video_options_t* options;
+  // Model input limit bounding timestamp storage before inspecting any image.
+  iree_host_size_t maximum_count;
+  // Last accepted source index, establishing presentation order.
+  uint64_t last_index;
+} loom_serve_text_chat_video_indices_t;
+
+static iree_status_t loom_serve_text_chat_video_index(
+    void* user_data, iree_host_size_t index, iree_json_value_type_t type,
+    iree_string_view_t value) {
+  loom_serve_text_chat_video_indices_t* indices = user_data;
+  loom_serve_text_chat_video_options_t* options = indices->options;
+  if (type != IREE_JSON_VALUE_TYPE_NUMBER || index >= indices->maximum_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "video frames_indices must contain integers within "
+                            "the model input count bound");
+  }
+  uint64_t frame_index = 0;
+  IREE_RETURN_IF_ERROR(iree_json_parse_uint64(value, &frame_index));
+  const double timestamp = (double)frame_index / options->fps;
+  if ((index && frame_index < indices->last_index) || !isfinite(timestamp)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "video frames_indices must be nondecreasing and "
+                            "produce finite timestamps");
+  }
+  indices->last_index = frame_index;
+  return iree_string_builder_append_string(
+      &options->timestamps,
+      iree_make_string_view((const char*)&timestamp, sizeof(timestamp)));
+}
+
+static iree_status_t loom_serve_text_chat_video_options_read(
+    iree_string_view_t object, iree_host_size_t maximum_count,
+    loom_serve_text_chat_video_options_t* options) {
+  options->fps = 1.0;
+  options->maximum_frames = 32;
+  if (!object.data) {
+    return iree_ok_status();
+  }
+  loom_serve_text_chat_field_t modalities[] = {
+      {"video", LOOM_SERVE_TEXT_CHAT_OBJECT}};
+  IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
+      object, IREE_ARRAYSIZE(modalities), modalities, 0));
+  if (!modalities[0].value.data) {
+    return iree_ok_status();
+  }
+  loom_serve_text_chat_field_t fields[] = {
+      {"fps", LOOM_SERVE_TEXT_CHAT_NUMBER},
+      {"frames_indices", LOOM_SERVE_TEXT_CHAT_ARRAY},
+      {"total_num_frames", LOOM_SERVE_TEXT_CHAT_NUMBER},
+      {"duration", LOOM_SERVE_TEXT_CHAT_NUMBER},
+      {"num_frames", LOOM_SERVE_TEXT_CHAT_NUMBER},
+      {"do_sample_frames", LOOM_SERVE_TEXT_CHAT_BOOL}};
+  IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
+      modalities[0].value, IREE_ARRAYSIZE(fields), fields, 0));
+  if (fields[0].value.data &&
+      (!iree_string_view_atod(fields[0].value, &options->fps) ||
+       !isfinite(options->fps) || options->fps <= 0.0)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "video fps must be positive and finite");
+  }
+  if (fields[1].value.data) {
+    loom_serve_text_chat_video_indices_t indices = {
+        .options = options, .maximum_count = maximum_count};
+    IREE_RETURN_IF_ERROR(iree_json_enumerate_array_typed(
+        fields[1].value, loom_serve_text_chat_video_index, &indices));
+    if (!options->timestamps.size) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "video frames_indices must not be empty");
+    }
+  }
+  if (fields[2].value.data) {
+    IREE_RETURN_IF_ERROR(
+        iree_json_parse_uint64(fields[2].value, &options->total_num_frames));
+    if (!options->total_num_frames) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "video total_num_frames must be positive");
+    }
+  }
+  if (fields[3].value.data) {
+    double duration = 0.0;
+    if (!iree_string_view_atod(fields[3].value, &duration) ||
+        !isfinite(duration) || duration < 0.0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "video duration must be finite and nonnegative");
+    }
+    // Duration and total_num_frames describe the original clip. Client-selected
+    // frames already establish this request's timeline without resampling.
+  }
+  if (fields[4].value.data) {
+    int64_t num_frames = 0;
+    IREE_RETURN_IF_ERROR(iree_json_parse_int64(fields[4].value, &num_frames));
+    if (num_frames != -1) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "video num_frames supports only -1 (all supplied "
+                              "frames); select frames in the client");
+    }
+    options->maximum_frames = 0;
+  }
+  if (fields[5].type == IREE_JSON_VALUE_TYPE_TRUE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "video requires do_sample_frames=false; select "
+                            "frames in the client");
+  }
+  return iree_ok_status();
+}
+
 typedef struct loom_serve_text_chat_content_t {
   // Request receiving inspected image descriptors.
   loom_serve_text_chat_t* chat;
+  // Validated request-wide video timing and frame-selection options.
+  const loom_serve_text_chat_video_options_t* video;
   // Message ordinal containing these parts.
   iree_host_size_t message_ordinal;
   // Decoded text concatenated in content-part order.
@@ -153,7 +277,8 @@ static iree_status_t loom_serve_text_chat_media_detail(
 // request and the message-local source frame table. Pixels remain deferred.
 static iree_status_t loom_serve_text_chat_inspect_image(
     loom_serve_text_chat_content_t* content, iree_host_size_t content_ordinal,
-    loom_serve_text_chat_content_kind_t kind, iree_string_view_t data_url,
+    loom_serve_text_chat_content_kind_t kind,
+    loom_serve_media_image_source_t source,
     loom_serve_text_chat_image_detail_t detail, double timestamp) {
   if (content->message_ordinal > UINT32_MAX || content_ordinal > UINT32_MAX) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -172,7 +297,7 @@ static iree_status_t loom_serve_text_chat_inspect_image(
   }
   loom_serve_media_image_info_t info;
   IREE_RETURN_IF_ERROR(loom_serve_media_image_inspect(
-      data_url, &content->chat->policy->images.limits,
+      source, &content->chat->policy->images.limits,
       content->chat->host_allocator, &info));
   const iree_host_size_t image_index = content->chat->images.count;
   const iree_host_size_t required_capacity = image_index + 1;
@@ -193,7 +318,7 @@ static iree_status_t loom_serve_text_chat_inspect_image(
       content->frames,
       iree_make_string_view((const char*)frame, sizeof(frame))));
   content->chat->images.values[image_index] = (loom_serve_text_chat_image_t){
-      .data_url = data_url,
+      .source = source,
       .detail = detail,
       .kind = kind,
       .timestamp = timestamp,
@@ -221,81 +346,127 @@ static iree_status_t loom_serve_text_chat_image_part(
       (uint32_t)(content->chat->images.count - content->first_image);
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_inspect_image(
       content, content_ordinal, LOOM_SERVE_TEXT_CHAT_CONTENT_IMAGE,
-      fields[0].value, detail, 0.0));
+      loom_serve_media_image_source_from_data_url(fields[0].value), detail,
+      0.0));
   return loom_serve_text_chat_content_record(content,
                                              LOOM_SERVE_TEXT_CHAT_CONTENT_IMAGE,
                                              0, 0, image_begin, 1, detail);
 }
 
-typedef struct loom_serve_text_chat_video_t {
-  // Synchronous content parser owning the inspected inputs.
-  loom_serve_text_chat_content_t* content;
-  // Content part shared by every frame in this clip.
-  iree_host_size_t content_ordinal;
-  // Source processing hint shared by every frame.
-  loom_serve_text_chat_image_detail_t detail;
-  // Last accepted timestamp, used to validate presentation order.
-  double last_timestamp;
-} loom_serve_text_chat_video_t;
-
-static iree_status_t loom_serve_text_chat_video_frame(
-    void* user_data, iree_host_size_t index, iree_json_value_type_t type,
-    iree_string_view_t value) {
-  loom_serve_text_chat_video_t* video = user_data;
-  if (type != IREE_JSON_VALUE_TYPE_OBJECT) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "video frames must be timestamped image objects");
+// Split a validated JSON string without copying the clip. A comma may itself
+// be escaped as \u002c; other complete escapes remain in the borrowed slice
+// for the image transport decoder. JSON parsing already checked escape bounds.
+static iree_string_view_t loom_serve_text_chat_video_component(
+    iree_string_view_t* cursor) {
+  iree_host_size_t offset = 0;
+  iree_host_size_t delimiter_length = 0;
+  while (offset < cursor->size) {
+    const char* data = cursor->data + offset;
+    if (*data == ',') {
+      delimiter_length = 1;
+      break;
+    }
+    if (*data == '\\') {
+      if (data[1] == 'u' && data[2] == '0' && data[3] == '0' &&
+          data[4] == '2' && (data[5] == 'c' || data[5] == 'C')) {
+        delimiter_length = 6;
+        break;
+      }
+      offset += data[1] == 'u' ? 6 : 2;
+    } else {
+      ++offset;
+    }
   }
-  loom_serve_text_chat_field_t fields[] = {
-      {"timestamp", LOOM_SERVE_TEXT_CHAT_NUMBER},
-      {"url", LOOM_SERVE_TEXT_CHAT_STRING}};
-  IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
-      value, IREE_ARRAYSIZE(fields), fields, 0));
-  IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[0]));
-  IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[1]));
-  double timestamp = 0.0;
-  if (!iree_string_view_atod(fields[0].value, &timestamp) ||
-      !isfinite(timestamp) || timestamp < 0.0 ||
-      (index && timestamp < video->last_timestamp)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "video timestamps must be finite nonnegative "
-                            "seconds in nondecreasing order");
-  }
-  if (timestamp == 0.0) {
-    timestamp = 0.0;  // Canonicalize signed zero.
-  }
-  IREE_RETURN_IF_ERROR(loom_serve_text_chat_inspect_image(
-      video->content, video->content_ordinal,
-      LOOM_SERVE_TEXT_CHAT_CONTENT_VIDEO, fields[1].value, video->detail,
-      timestamp));
-  video->last_timestamp = timestamp;
-  return iree_ok_status();
+  const iree_string_view_t component =
+      iree_string_view_substr(*cursor, 0, offset);
+  *cursor = delimiter_length
+                ? iree_string_view_substr(*cursor, offset + delimiter_length,
+                                          IREE_HOST_SIZE_MAX)
+                : iree_string_view_empty();
+  return component;
 }
 
 static iree_status_t loom_serve_text_chat_video_part(
     loom_serve_text_chat_content_t* content, iree_host_size_t content_ordinal,
     iree_string_view_t value) {
   loom_serve_text_chat_field_t fields[] = {
-      {"frames", LOOM_SERVE_TEXT_CHAT_ARRAY},
-      {"detail", LOOM_SERVE_TEXT_CHAT_STRING}};
+      {"url", LOOM_SERVE_TEXT_CHAT_STRING}};
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
       value, IREE_ARRAYSIZE(fields), fields, 0));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[0]));
-  loom_serve_text_chat_video_t video = {.content = content,
-                                        .content_ordinal = content_ordinal};
+  iree_string_view_t cursor = fields[0].value;
+  const iree_string_view_t header =
+      loom_serve_text_chat_video_component(&cursor);
+  char prefix[sizeof("data:video/jpeg;base64") - 1];
+  iree_host_size_t prefix_length = 0;
   IREE_RETURN_IF_ERROR(
-      loom_serve_text_chat_media_detail(&fields[1], &video.detail));
-  const iree_host_size_t first = content->chat->images.count;
-  IREE_RETURN_IF_ERROR(iree_json_enumerate_array_typed(
-      fields[0].value, loom_serve_text_chat_video_frame, &video));
-  const iree_host_size_t count = content->chat->images.count - first;
-  if (!count) {
+      iree_json_unescape_string(header, 0, NULL, &prefix_length));
+  if (!cursor.data || prefix_length != sizeof(prefix)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "video frames must not be empty");
+                            "video_url requires a data:video/jpeg;base64 "
+                            "frame sequence; containers and remote URLs are "
+                            "not supported");
+  }
+  IREE_RETURN_IF_ERROR(iree_json_unescape_string(header, sizeof(prefix), prefix,
+                                                 &prefix_length));
+  if (!iree_string_view_equal_case(iree_make_string_view(prefix, prefix_length),
+                                   IREE_SV("data:video/jpeg;base64"))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "video_url requires data:video/jpeg;base64");
+  }
+  const loom_serve_text_chat_video_options_t* options = content->video;
+  const iree_host_size_t timestamp_count =
+      options->timestamps.size / sizeof(double);
+  const char* timestamps = iree_string_builder_buffer(&options->timestamps);
+  const iree_host_size_t first = content->chat->images.count;
+  iree_host_size_t count = 0;
+  iree_status_t status = iree_ok_status();
+  while (iree_status_is_ok(status) && cursor.data) {
+    if (options->maximum_frames && count >= options->maximum_frames) {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "video has more than 32 frames; set media_io_kwargs.video.num_frames "
+          "to -1 to consume every supplied frame");
+    } else if (timestamp_count && count >= timestamp_count) {
+      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "video frames_indices must match the supplied "
+                                "frame count");
+    } else {
+      double timestamp = (double)count / options->fps;
+      if (timestamp_count) {
+        memcpy(&timestamp, timestamps + count * sizeof(double),
+               sizeof(timestamp));
+      }
+      if (!isfinite(timestamp)) {
+        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "video fps produces a nonfinite timestamp");
+      } else {
+        const loom_serve_media_image_source_t source = {
+            .value = loom_serve_text_chat_video_component(&cursor),
+            .format = LOOM_SERVE_MEDIA_IMAGE_FORMAT_JPEG,
+        };
+        status = loom_serve_text_chat_inspect_image(
+            content, content_ordinal, LOOM_SERVE_TEXT_CHAT_CONTENT_VIDEO,
+            source, LOOM_SERVE_TEXT_CHAT_IMAGE_DETAIL_AUTO, timestamp);
+        ++count;
+      }
+    }
+  }
+  IREE_RETURN_IF_ERROR(status);
+  if (timestamp_count && count != timestamp_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "video frames_indices must match the supplied frame count");
+  }
+  if (options->total_num_frames && options->total_num_frames < count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "video total_num_frames must cover the supplied frames");
   }
   return loom_serve_text_chat_content_record(
       content, LOOM_SERVE_TEXT_CHAT_CONTENT_VIDEO, 0, 0,
-      (uint32_t)(first - content->first_image), (uint32_t)count, video.detail);
+      (uint32_t)(first - content->first_image), (uint32_t)count,
+      LOOM_SERVE_TEXT_CHAT_IMAGE_DETAIL_AUTO);
 }
 
 static iree_status_t loom_serve_text_chat_ordered_content_part(
@@ -310,7 +481,7 @@ static iree_status_t loom_serve_text_chat_ordered_content_part(
       {"type", LOOM_SERVE_TEXT_CHAT_STRING},
       {"text", LOOM_SERVE_TEXT_CHAT_STRING},
       {"image_url", LOOM_SERVE_TEXT_CHAT_OBJECT},
-      {"video_frames", LOOM_SERVE_TEXT_CHAT_OBJECT}};
+      {"video_url", LOOM_SERVE_TEXT_CHAT_OBJECT}};
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
       value, IREE_ARRAYSIZE(fields), fields, 0));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[0]));
@@ -341,11 +512,11 @@ static iree_status_t loom_serve_text_chat_ordered_content_part(
     if (fields[1].value.data || fields[3].value.data) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "image content parts cannot contain text or video_frames");
+          "image content parts cannot contain text or video_url");
     }
     return loom_serve_text_chat_image_part(content, index, fields[2].value);
   }
-  if (iree_string_view_equal(fields[0].value, IREE_SV("video_frames"))) {
+  if (iree_string_view_equal(fields[0].value, IREE_SV("video_url"))) {
     IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[3]));
     if (fields[1].value.data || fields[2].value.data) {
       return iree_make_status(
@@ -356,14 +527,15 @@ static iree_status_t loom_serve_text_chat_ordered_content_part(
   }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "content part type must be text, image_url, or video_frames");
+      "content part type must be text, image_url, or video_url");
 }
 
 static iree_status_t loom_serve_text_chat_ordered_content(
     const loom_serve_text_chat_field_t* field, loom_serve_text_chat_t* chat,
-    iree_host_size_t message_ordinal, iree_string_builder_t* text,
-    iree_string_builder_t* records, iree_string_builder_t* frames,
-    iree_host_size_t* out_count) {
+    iree_host_size_t message_ordinal,
+    const loom_serve_text_chat_video_options_t* video,
+    iree_string_builder_t* text, iree_string_builder_t* records,
+    iree_string_builder_t* frames, iree_host_size_t* out_count) {
   iree_string_builder_reset(text);
   iree_string_builder_reset(records);
   iree_string_builder_reset(frames);
@@ -375,6 +547,7 @@ static iree_status_t loom_serve_text_chat_ordered_content(
     return loom_serve_text_chat_append_decoded(text, field->value);
   }
   loom_serve_text_chat_content_t content = {.chat = chat,
+                                            .video = video,
                                             .message_ordinal = message_ordinal,
                                             .text = text,
                                             .records = records,
@@ -925,6 +1098,8 @@ typedef struct loom_serve_text_chat_history_t {
   iree_string_view_t model_name;
   // Request being rendered.
   loom_serve_text_chat_t* chat;
+  // Request-wide video timing, shared by every content part.
+  loom_serve_text_chat_video_options_t video;
   // Decoded message content scratch.
   iree_string_builder_t scratch;
   // Ordered source-policy content records for one message.
@@ -993,7 +1168,7 @@ static iree_status_t loom_serve_text_chat_history_message(
   const iree_host_size_t first_image = history->chat->images.count;
   iree_host_size_t content_count = 0;
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_ordered_content(
-      &fields[1], history->chat, index, &history->scratch,
+      &fields[1], history->chat, index, &history->video, &history->scratch,
       &history->content_records, &history->frame_records, &content_count));
   IREE_RETURN_IF_ERROR(
       loom_serve_text_chat_text_content(&fields[2], &history->reasoning));
@@ -1053,11 +1228,15 @@ static iree_status_t loom_serve_text_chat_request_render(
       {"seed", LOOM_SERVE_TEXT_CHAT_NUMBER},
       {"reasoning_effort", LOOM_SERVE_TEXT_CHAT_STRING},
       {"preserve_thinking", LOOM_SERVE_TEXT_CHAT_BOOL},
-      {"chat_template_kwargs", LOOM_SERVE_TEXT_CHAT_OBJECT}};
+      {"chat_template_kwargs", LOOM_SERVE_TEXT_CHAT_OBJECT},
+      {"media_io_kwargs", LOOM_SERVE_TEXT_CHAT_OBJECT}};
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_fields_read(
       object, IREE_ARRAYSIZE(fields), fields, 0));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[1]));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&fields[0]));
+  IREE_RETURN_IF_ERROR(loom_serve_text_chat_video_options_read(
+      fields[18].value, history->chat->policy->images.maximum_count,
+      &history->video));
   if (fields[17].value.data) {
     loom_serve_text_chat_field_t options[] = {
         {"enable_thinking", LOOM_SERVE_TEXT_CHAT_BOOL},
@@ -1200,6 +1379,7 @@ iree_status_t loom_serve_text_chat_initialize(
   iree_string_builder_initialize(host_allocator, &out_chat->output.reasoning);
   loom_serve_text_chat_history_t history = {.model_name = model_name,
                                             .chat = out_chat};
+  iree_string_builder_initialize(host_allocator, &history.video.timestamps);
   iree_string_builder_initialize(host_allocator, &history.scratch);
   iree_string_builder_initialize(host_allocator, &history.content_records);
   iree_string_builder_initialize(host_allocator, &history.frame_records);
@@ -1216,6 +1396,7 @@ iree_status_t loom_serve_text_chat_initialize(
   iree_string_builder_deinitialize(&history.frame_records);
   iree_string_builder_deinitialize(&history.content_records);
   iree_string_builder_deinitialize(&history.scratch);
+  iree_string_builder_deinitialize(&history.video.timestamps);
   if (!iree_status_is_ok(status)) {
     loom_serve_text_chat_deinitialize(out_chat);
   }
