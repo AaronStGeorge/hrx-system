@@ -107,16 +107,16 @@ jobs:
 
       - name: Run installed tests
         id: core_tests
-        if: ${{ inputs.run_tests }}
+        if: ${{ inputs.run_tests && !inputs.package }}
         run: python build_tools/ci/ci_core_windows.py test
 
       - name: Package
         if: ${{ inputs.package }}
         run: python build_tools/ci/ci_core_windows.py package
 
-      - name: Relocate and retest package
+      - name: Relocate and test package
         id: relocated_tests
-        if: ${{ inputs.package }}
+        if: ${{ inputs.run_tests && inputs.package }}
         shell: pwsh
         run: |
           $relocated = "${{ github.workspace }}/build/windows/${{ inputs.windows_toolchain }}/relocated"
