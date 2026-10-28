@@ -40,11 +40,13 @@ iree_runtime_cc_library(
             "-fno-fast-math",
             "-fno-math-errno",
             "-ffp-contract=off",
+            "-ffp-eval-method=source",
         ],
         "//build_tools/bazel:cc_compiler_clang_cl": [
             "/clang:-fno-fast-math",
             "/clang:-fno-math-errno",
             "/clang:-ffp-contract=off",
+            "/clang:-ffp-eval-method=source",
         ],
         "//build_tools/bazel:cc_compiler_gcc": [
             "-fno-fast-math",

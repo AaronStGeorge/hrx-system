@@ -101,7 +101,7 @@ TEST_F(ElementaryTest, SqrtF32ApproxFrozenFiniteMapping) {
                    UINT32_C(0x50606BB2));
 }
 
-TEST_F(ElementaryTest, ApproxMappingsIgnoreHostDenormalFlush) {
+TEST_F(ElementaryTest, RootApproxMappingsIgnoreHostDenormalFlush) {
   EnableFlushDenormalsToZero();
   ExpectF32Mapping(iree_math_reciprocal_f32_approx, UINT32_C(0x7F7FFFFF),
                    UINT32_C(0x00000000));

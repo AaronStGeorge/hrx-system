@@ -84,7 +84,7 @@ TEST_F(ElementaryTest, Log2F32ApproxFrozenFiniteMapping) {
                    UINT32_C(0xB3B8AA3B));
 }
 
-TEST_F(ElementaryTest, ApproxMappingsIgnoreHostDenormalFlush) {
+TEST_F(ElementaryTest, ExponentialApproxMappingsIgnoreHostDenormalFlush) {
   EnableFlushDenormalsToZero();
   ExpectF32Mapping(iree_math_exp2_f32_approx, UINT32_C(0x00000001),
                    UINT32_C(0x3F800000));

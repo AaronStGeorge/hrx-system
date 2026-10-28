@@ -61,6 +61,8 @@ one host FPU transition instead of one transition per scalar operation.
 Package-owned compile options prevent an embedding application's unrestricted
 fast-math flags from changing the frozen mappings. Implicit contraction is
 disabled; fused arithmetic, where required by an algorithm, must be explicit.
+Clang evaluates intermediates at their declared source width, including when
+an embedding application requests wider expression evaluation globally.
 The ordinary mappings require
 gradual underflow, while approximation leaves own their documented flush rules.
 
