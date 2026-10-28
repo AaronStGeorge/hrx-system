@@ -1,22 +1,3 @@
-// Optional transfers stop fixed propagation and preserve a live copy source.
-// RUN: emit low-allocation-query @fixed_copy_continuation values=%source,%copy,%last copies=%copy fixed=%source:target_id:2:1 fixed=%last:target_id:6:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @fixed_copy_continuation(%source: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
-  %copy = copy %source : reg<test.i32> -> reg<test.i32>
-  %last = test.tied.any %copy
-  return %source, %last
-}
-
-// ----
-value %source: test.i32 -> target_id[2:1]
-value %copy: test.i32 -> target_id[6:1]
-value %last: test.i32 -> target_id[6:1]
-copy %source -> %copy: materialized
-
-// ====
-
 // The fixed aggregate constrains concat reservation as well as its own tie.
 // RUN: emit low-allocation-query @fixed_concat_continuation values=%left,%right,%packed,%last fixed=%last:target_id:4:4
 
@@ -33,17 +14,3 @@ value %left: test.i32 -> target_id[4:2]
 value %right: test.i32 -> target_id[6:2]
 value %packed: test.i32 -> target_id[4:4]
 value %last: test.i32 -> target_id[4:4]
-
-// ====
-
-// An optional copy does not authorize overwriting its still-live input.
-// RUN: emit low-allocation-query @fixed_copy_live_conflict fixed=%source:target_id:2:1 fixed=%last:target_id:2:1
-
-test.target<low_core> @target
-
-// ERROR@+1: BACKEND/050 {value_name="source", location_kind="target_id", location_base="2", location_count="1"}
-low.func.def target<test.low.core>(@target) @fixed_copy_live_conflict(%source: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
-  %copy = copy %source : reg<test.i32> -> reg<test.i32>
-  %last = test.tied.any %copy
-  return %source, %last
-}

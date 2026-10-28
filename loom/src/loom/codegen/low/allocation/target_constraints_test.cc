@@ -1247,10 +1247,11 @@ TEST_F(LowAllocationTargetConstraintsTest,
   unit_liveness.values_with_incomplete_storage_segments = {
       kValueCount, incomplete_storage_words};
   unit_liveness.storage_segments.entries = segments;
+  DiagnosticCapture capture = {};
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      module, function_op_, &target_, nullptr, 0, nullptr, 0, {}, &arena_,
-      &constraints));
+      module, function_op_, &target_, nullptr, 0, nullptr, 0,
+      {CaptureDiagnostic, &capture}, &arena_, &constraints));
   const loom_low_placement_table_t placement = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_resolve_fixed_locations(
       &constraints, &liveness, &domain,
@@ -1400,6 +1401,29 @@ TEST_F(LowAllocationTargetConstraintsTest,
   EXPECT_TRUE(loom_low_allocation_target_constraints_fixed_storage_conflicts(
       &constraints, &unit_liveness, &candidate,
       /*ignored_value_ids=*/nullptr, /*ignored_value_count=*/0));
+
+  // A conflicting fixed request reports its own owner and concrete span.
+  loom_string_id_t candidate_name;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("contender"), &candidate_name));
+  IREE_ASSERT_OK(
+      loom_module_set_value_name(module, candidate.value_id, candidate_name));
+  IREE_ASSERT_OK(
+      loom_low_allocation_target_constraints_emit_fixed_value_conflict(
+          &constraints, &candidate));
+  EXPECT_EQ(constraints.error_count, 1u);
+  EXPECT_EQ(capture.count, 1u);
+  EXPECT_EQ(capture.error, LOOM_ERR_BACKEND_050);
+  EXPECT_EQ(capture.op, function_op_);
+  ASSERT_EQ(capture.parameters.size(), 8u);
+  EXPECT_TRUE(
+      iree_string_view_equal(capture.parameters[3].string, IREE_SV("owner")));
+  EXPECT_TRUE(iree_string_view_equal(capture.parameters[4].string,
+                                     IREE_SV("contender")));
+  EXPECT_TRUE(iree_string_view_equal(capture.parameters[5].string,
+                                     IREE_SV("target_id")));
+  EXPECT_EQ(capture.parameters[6].u32, candidate.location_base);
+  EXPECT_EQ(capture.parameters[7].u32, candidate.location_count);
   loom_local_value_domain_release(&domain);
 }
 
