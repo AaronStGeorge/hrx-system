@@ -206,59 +206,168 @@ TEST_F(LowAllocationMovePlanTest, AppendsOnlyDemandedAssignmentUnits) {
   }
 }
 
-TEST_F(LowAllocationMovePlanTest, CycleRowsSurviveScratchRelease) {
-  uint16_t register_class = LOOM_LOW_REG_CLASS_NONE;
-  ASSERT_TRUE(loom_low_descriptor_set_lookup_register_class(
-      target_.descriptor_set, IREE_SV("test.phys"), &register_class, nullptr));
-  loom_low_allocation_target_constraints_t constraints = {};
-  IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
-      diagnostic_module_, diagnostic_function_, &target_, nullptr, 0, nullptr,
-      0, {}, &arena_, &constraints));
-  // Only the transfer locations are occupied; no other values are live.
-  const loom_low_allocation_unit_liveness_t unit_liveness = {};
-  const loom_low_allocation_move_plan_context_t context = {
-      .descriptor_set = target_.descriptor_set,
-      .target_constraints = &constraints,
-      .unit_liveness = &unit_liveness,
+TEST_F(LowAllocationMovePlanTest, CycleTemporariesRespectStorageSupport) {
+  struct StorageClass {
+    // Descriptor class defining the transfer width and spill policy.
+    iree_string_view_t name;
+    // Coordinate space of the two input locations.
+    loom_low_allocation_location_kind_t location_kind;
+    // Memory space allowed by this class when registers are saturated.
+    loom_storage_space_t space;
+    // Bytes and power-of-two alignment of one saved unit for these classes.
+    uint32_t byte_length;
+    // Whether the class permits saving a unit in memory.
+    bool spillable;
   };
-  const auto checkpoint = iree_arena_checkpoint_save(&scratch_);
-  loom_low_allocation_move_plan_t plan = {};
-  IREE_ASSERT_OK(loom_low_allocation_move_plan_initialize(
-      &context, /*move_input_capacity=*/2, /*raw_group_capacity=*/2, &arena_,
-      &scratch_, &plan));
-  const loom_low_move_location_t lhs = {
-      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, register_class, 0};
-  const loom_low_move_location_t rhs = {
-      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, register_class, 1};
-  plan.sequence_scratch.moves[0] = {.destination = lhs, .source = rhs};
-  plan.sequence_scratch.moves[1] = {.destination = rhs, .source = lhs};
-  loom_low_move_group_t group = {};
-  IREE_ASSERT_OK(loom_low_allocation_move_plan_append_group(
-      &plan, diagnostic_function_, /*read_point=*/0, /*write_point=*/0,
-      /*raw_move_count=*/2, &group, nullptr));
-  ASSERT_EQ(constraints.error_count, 0u);
-  iree_arena_checkpoint_restore(&checkpoint);
-  iree_arena_block_pool_trim(&pool_);
-
-  ASSERT_EQ(group.moves.count, 3u);
-  ASSERT_EQ(group.scratch_move_index_count, 1u);
-  const auto* moves = plan.moves + group.moves.start;
-  const auto scratch_index =
-      plan.scratch_move_indices[group.scratch_move_index_start];
-  EXPECT_EQ(scratch_index, group.moves.start);
-  EXPECT_EQ(moves[0].destination.location, 2u);
-  uint32_t locations[32] = {};
-  locations[0] = 23;
-  locations[1] = 17;
-  for (iree_host_size_t i = 0; i < group.moves.count; ++i) {
-    EXPECT_EQ(moves[i].kind, LOOM_LOW_MOVE_KIND_COPY);
-    ASSERT_LT(moves[i].destination.location, IREE_ARRAYSIZE(locations));
-    ASSERT_LT(moves[i].source.location, IREE_ARRAYSIZE(locations));
-    locations[moves[i].destination.location] =
-        locations[moves[i].source.location];
+  const StorageClass classes[] = {
+      {IREE_SV("test.i8"), LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
+       LOOM_STORAGE_SPACE_PRIVATE, 1, true},
+      {IREE_SV("test.f32"), LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
+       LOOM_STORAGE_SPACE_PRIVATE, 4, true},
+      {IREE_SV("test.i64"), LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
+       LOOM_STORAGE_SPACE_PRIVATE, 8, true},
+      {IREE_SV("test.phys"), LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+       LOOM_STORAGE_SPACE_STACK, 64, true},
+      {IREE_SV("test.pressure.alias64"),
+       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, LOOM_STORAGE_SPACE_STACK,
+       8, true},
+      {IREE_SV("test.spillable.explicit32"),
+       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, LOOM_STORAGE_SPACE_STACK,
+       4, true},
+      {IREE_SV("test.explicit32"),
+       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+       LOOM_STORAGE_SPACE_PRIVATE, 4, false},
+  };
+  for (const auto& storage_class : classes) {
+    SCOPED_TRACE(storage_class.name.data);
+    uint16_t register_class = LOOM_LOW_REG_CLASS_NONE;
+    ASSERT_TRUE(loom_low_descriptor_set_lookup_register_class(
+        target_.descriptor_set, storage_class.name, &register_class, nullptr));
+    for (uint32_t capacity : {2u, 3u}) {
+      SCOPED_TRACE(capacity);
+      for (auto spaces :
+           {LOOM_LOW_STORAGE_SPACE_SET_NONE, LOOM_LOW_STORAGE_SPACE_SET_PRIVATE,
+            LOOM_LOW_STORAGE_SPACE_SET_STACK}) {
+        SCOPED_TRACE(spaces);
+        const bool has_register = capacity == 3;
+        const bool has_storage =
+            storage_class.spillable &&
+            loom_low_storage_space_set_contains(spaces, storage_class.space);
+        const loom_low_allocation_budget_t budget = {storage_class.name,
+                                                     capacity};
+        loom_low_allocation_target_constraints_t constraints = {};
+        IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
+            diagnostic_module_, diagnostic_function_, &target_, &budget, 1,
+            nullptr, 0, {}, &arena_, &constraints));
+        // Only the transfer locations are occupied; no other values are live.
+        const loom_low_allocation_unit_liveness_t unit_liveness = {};
+        const loom_low_allocation_move_plan_context_t context = {
+            .descriptor_set = target_.descriptor_set,
+            .target_constraints = &constraints,
+            .unit_liveness = &unit_liveness,
+            .storage_spaces = spaces,
+        };
+        const auto checkpoint = iree_arena_checkpoint_save(&scratch_);
+        loom_low_allocation_move_plan_t plan = {};
+        IREE_ASSERT_OK(loom_low_allocation_move_plan_initialize(
+            &context, /*move_input_capacity=*/4, /*raw_group_capacity=*/2,
+            &arena_, &scratch_, &plan));
+        const loom_low_move_location_t lhs = {
+            static_cast<uint16_t>(storage_class.location_kind), register_class,
+            0};
+        const loom_low_move_location_t rhs = {
+            static_cast<uint16_t>(storage_class.location_kind), register_class,
+            1};
+        loom_low_move_group_t groups[2] = {};
+        for (auto& group : groups) {
+          plan.sequence_scratch.moves[0] = {.destination = lhs, .source = rhs};
+          plan.sequence_scratch.moves[1] = {.destination = rhs, .source = lhs};
+          IREE_ASSERT_OK(loom_low_allocation_move_plan_append_group(
+              &plan, diagnostic_function_, /*read_point=*/0,
+              /*write_point=*/0, /*raw_move_count=*/2, &group, nullptr));
+          if (!has_register && !has_storage) {
+            ASSERT_EQ(constraints.error_count, 1u);
+            EXPECT_TRUE(iree_string_view_equal(
+                constraints.failure.failure_code,
+                IREE_SV("parallel-move-no-scratch-unit")));
+            EXPECT_EQ(constraints.failure.op, diagnostic_function_);
+            EXPECT_EQ(constraints.failure.descriptor_reg_class_id,
+                      register_class);
+            EXPECT_EQ(constraints.failure.budget_units, capacity);
+            EXPECT_EQ(constraints.failure.required_unit_count, 1u);
+            EXPECT_EQ(group.moves.count, 0u);
+            EXPECT_EQ(plan.move_count, 0u);
+            EXPECT_EQ(plan.storage_count, 0u);
+            EXPECT_EQ(plan.scratch_move_index_count, 0u);
+            break;
+          }
+          ASSERT_EQ(constraints.error_count, 0u);
+        }
+        iree_arena_checkpoint_restore(&checkpoint);
+        iree_arena_block_pool_trim(&pool_);
+        if (!has_register && !has_storage) {
+          continue;
+        }
+        ASSERT_EQ(plan.move_count, 6u);
+        ASSERT_EQ(plan.scratch_move_index_count, 2u);
+        EXPECT_EQ(groups[0].moves.start, 0u);
+        EXPECT_EQ(groups[1].moves.start, 3u);
+        EXPECT_EQ(groups[0].scratch_move_index_start, 0u);
+        EXPECT_EQ(groups[1].scratch_move_index_start, 1u);
+        ASSERT_EQ(plan.storage_count, has_register ? 0u : 1u);
+        if (!has_register) {
+          EXPECT_EQ(plan.storage[0].register_class, register_class);
+          EXPECT_EQ(plan.storage[0].space, storage_class.space);
+          EXPECT_EQ(plan.storage[0].byte_length, storage_class.byte_length);
+          EXPECT_EQ(plan.storage[0].byte_alignment, storage_class.byte_length);
+        }
+        for (const auto& group : groups) {
+          ASSERT_EQ(group.moves.count, 3u);
+          ASSERT_EQ(group.scratch_move_index_count, 1u);
+          EXPECT_EQ(plan.scratch_move_indices[group.scratch_move_index_start],
+                    group.moves.start);
+          const auto* moves = plan.moves + group.moves.start;
+          EXPECT_EQ(moves[0].destination.location_kind,
+                    has_register ? storage_class.location_kind
+                                 : LOOM_LOW_ALLOCATION_LOCATION_MOVE_STORAGE);
+          EXPECT_EQ(moves[0].destination.location, has_register ? 2u : 0u);
+          uint32_t registers[] = {23, 17, 0};
+          uint32_t cell = 0;
+          for (iree_host_size_t i = 0; i < group.moves.count; ++i) {
+            EXPECT_EQ(moves[i].kind, LOOM_LOW_MOVE_KIND_COPY);
+            EXPECT_EQ(moves[i].source.descriptor_reg_class_id, register_class);
+            EXPECT_EQ(moves[i].destination.descriptor_reg_class_id,
+                      register_class);
+            const auto& source = moves[i].source;
+            const auto& destination = moves[i].destination;
+            ASSERT_LT(source.location, IREE_ARRAYSIZE(registers));
+            ASSERT_LT(destination.location, IREE_ARRAYSIZE(registers));
+            if (source.location_kind ==
+                LOOM_LOW_ALLOCATION_LOCATION_MOVE_STORAGE) {
+              EXPECT_EQ(source.location, 0u);
+            } else {
+              EXPECT_EQ(source.location_kind, storage_class.location_kind);
+            }
+            const uint32_t value =
+                source.location_kind ==
+                        LOOM_LOW_ALLOCATION_LOCATION_MOVE_STORAGE
+                    ? cell
+                    : registers[source.location];
+            if (destination.location_kind ==
+                LOOM_LOW_ALLOCATION_LOCATION_MOVE_STORAGE) {
+              EXPECT_EQ(destination.location, 0u);
+              cell = value;
+            } else {
+              EXPECT_EQ(destination.location_kind, storage_class.location_kind);
+              registers[destination.location] = value;
+            }
+          }
+          EXPECT_EQ(registers[0], 17u);
+          EXPECT_EQ(registers[1], 23u);
+        }
+      }
+    }
   }
-  EXPECT_EQ(locations[0], 17u);
-  EXPECT_EQ(locations[1], 23u);
 }
 
 }  // namespace

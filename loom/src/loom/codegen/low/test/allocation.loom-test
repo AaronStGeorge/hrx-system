@@ -389,22 +389,6 @@ value %next1: test.i32 -> target_id[6:1]
 
 // ====
 
-// RUN: emit low-allocation-query @edge_cycle_without_scratch failure test.phys=2 fixed=%lhs:physical_register:0:1 fixed=%rhs:physical_register:1:1 fixed=%dst_lhs:physical_register:1:1 fixed=%dst_rhs:physical_register:0:1
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @edge_cycle_without_scratch(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>) asm {
-  // ERROR@+1: BACKEND/005 {function_name="edge_cycle_without_scratch", value_class="test.phys", budget="2", peak="1", failure_code="parallel-move-no-scratch-unit"}
-  low.br ^join(%lhs: reg<test.phys>, %rhs: reg<test.phys>)
-^join(%dst_lhs: reg<test.phys>, %dst_rhs: reg<test.phys>):
-  return %dst_lhs, %dst_rhs
-}
-
-// ----
-failure: parallel-move-no-scratch-unit kind=unknown class=test.phys required=1 budget=2 peak=1
-
-// ====
-
 // RUN: emit low-allocation-json @edge_cycle_uses_other_branch_hole test.phys=3 fixed=%lhs:physical_register:0:1 fixed=%rhs:physical_register:1:1 fixed=%other:physical_register:2:1 fixed=%dst_lhs:physical_register:1:1 fixed=%dst_rhs:physical_register:0:1
 
 // Register 2 is live toward exit, but available for cycle scratch on swap.
