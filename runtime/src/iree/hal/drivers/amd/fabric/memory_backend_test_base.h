@@ -324,6 +324,11 @@ struct FakeNative {
     }
     out_info->release.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
     out_info->acquire.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
+    if (self->host_alias_coherent &&
+        ((query->producer.flags | query->consumer.flags) &
+         AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION)) {
+      return AMDF_STATUS_OK;
+    }
     if (self->host_coherent && !registered &&
         (query->producer.kind == AMDF_MEMORY_SITE_KIND_HOST ||
          query->consumer.kind == AMDF_MEMORY_SITE_KIND_HOST)) {
@@ -709,6 +714,8 @@ struct FakeNative {
   bool host_reservation_enabled = false;
   // Whether owned backing supports independently replaceable CPU aliases.
   bool host_source_enabled = false;
+  // Independent host aliases can have a different cache protocol than owners.
+  bool host_alias_coherent = false;
   // Whether the native profile admits ordinary host buffers for file I/O.
   bool file_io_enabled = false;
   // Exact capabilities reported by prepared host views.

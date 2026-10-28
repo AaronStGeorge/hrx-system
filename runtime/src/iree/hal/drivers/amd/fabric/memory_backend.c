@@ -276,6 +276,8 @@ typedef struct iree_hal_amd_fabric_memory_transition_query_t {
   bool host_coherent;
   // Whether every admitted host/queue pair has a complete native route.
   bool complete;
+  // Qualifies reservation host aliases instead of ordinary source mappings.
+  bool reservation_alias;
 } iree_hal_amd_fabric_memory_transition_query_t;
 
 // Complete consumer requirements shared by all candidate storage scopes. This
@@ -389,6 +391,9 @@ static void iree_hal_amd_fabric_memory_accumulate_pair(
     query->host_coherent &=
         pair->acquire.kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE;
   }
+  if (query->reservation_alias) {
+    return;
+  }
   if (producer->kind == IREE_HAL_AMD_FABRIC_MEMORY_SITE_HOST &&
       consumer->kind == IREE_HAL_AMD_FABRIC_MEMORY_SITE_QUEUE) {
     const bool coherent =
@@ -478,6 +483,16 @@ static iree_status_t iree_hal_amd_fabric_memory_query_transition(
   }
   query->native.producer = producer->native;
   query->native.consumer = consumer->native;
+  if (query->reservation_alias) {
+    if (query->native.producer.kind == AMDF_MEMORY_SITE_KIND_HOST) {
+      query->native.producer.flags |=
+          AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION;
+    }
+    if (query->native.consumer.kind == AMDF_MEMORY_SITE_KIND_HOST) {
+      query->native.consumer.flags |=
+          AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION;
+    }
+  }
   const iree_hal_amd_fabric_slab_provider_options_t* options =
       query->provider_options;
   const iree_host_size_t owned_count =
@@ -530,7 +545,7 @@ static iree_status_t iree_hal_amd_fabric_memory_query_transition(
       status = iree_hal_amd_fabric_memory_translate_pair(&native, &info);
     }
     if (iree_status_is_ok(status)) {
-      if (producer_id == consumer_id &&
+      if (!query->reservation_alias && producer_id == consumer_id &&
           producer->kind == IREE_HAL_AMD_FABRIC_MEMORY_SITE_QUEUE) {
         const amdf_memory_access_capabilities_t* capabilities =
             (i < owned_count ? query->owned_capabilities
@@ -1108,6 +1123,32 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
     }
     iree_hal_memory_contract_finalize_atomic_operations(contract);
     plan->base.info.host = contract->host;
+    contract->allowed_access =
+        iree_hal_buffer_usage_access(usage) | host.access;
+    contract->allowed_usage = usage | mapping_usage;
+    // Device aliases retain their backing protocol. Independently mapped CPU
+    // aliases use the reservation protocol, even when the source's ordinary
+    // host view has a different cache executor or needs owner-specific work.
+    bool has_host_alias = false;
+    for (uint32_t id = 1; id < scope_count; ++id) {
+      has_host_alias |=
+          query->transition_sites[id].kind ==
+              IREE_HAL_AMD_FABRIC_MEMORY_SITE_HOST &&
+          iree_any_bit_set(contract->scopes[id].interfaces,
+                           1u << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE);
+    }
+    if (iree_status_is_ok(status) && requirements_satisfied && has_host_alias) {
+      iree_hal_amd_fabric_memory_transition_query_t alias_query =
+          transition_query;
+      alias_query.reservation_alias = true;
+      alias_query.complete = true;
+      status = iree_hal_memory_contract_initialize_mapping_transitions(
+          contract,
+          IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+              IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+          iree_hal_amd_fabric_memory_query_transition, &alias_query);
+      requirements_satisfied &= alias_query.complete;
+    }
     if (iree_status_is_ok(status) && requirements_satisfied) {
       if (transition_query.host_coherent) {
         memory_type |= IREE_HAL_MEMORY_TYPE_HOST_COHERENT;
@@ -1115,9 +1156,6 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
       plan->provider_options.memory_type = memory_type;
       plan->provider_options.maintenance_alignment =
           transition_query.maintenance_alignment;
-      contract->allowed_access =
-          iree_hal_buffer_usage_access(usage) | host.access;
-      contract->allowed_usage = usage | mapping_usage;
       plan_consumed = true;
       status = query->callback.fn(query->callback.user_data, &plan->base);
     } else if (iree_status_is_ok(status)) {

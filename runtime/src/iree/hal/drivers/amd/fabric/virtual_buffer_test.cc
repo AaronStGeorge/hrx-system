@@ -17,6 +17,40 @@
 
 namespace iree::hal::amd::fabric {
 
+TEST_F(MemoryBackendTest, SourceCapturesReservationAliasProtocolBeforePayload) {
+  native_.mapping_enabled = true;
+  native_.host_reservation_enabled = true;
+  native_.host_source_enabled = true;
+  native_.host_alias_coherent = true;
+  native_.required_flags |= AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
+  const uint64_t mapping_source = UINT64_C(1)
+                                  << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  iree_hal_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, &pool,
+                            mapping_source, IREE_HAL_MEMORY_ACCESS_ALL,
+                            IREE_HAL_BUFFER_USAGE_STORAGE, {}, mapping_source));
+  const auto* alias =
+      iree_hal_memory_contract_mapping_alias(pool->memory_contract);
+  ASSERT_NE(alias, pool->memory_contract);
+  const auto gpu = ResolveScope(IREE_HAL_MEMORY_SITE_QUEUE, families_[0]);
+  const auto host = ResolveScope(IREE_HAL_MEMORY_SITE_HOST);
+  const auto cpu = ResolveScope(IREE_HAL_MEMORY_SITE_QUEUE,
+                                iree_hal_device_queue_family(cpu_device_, 0));
+  const int query_count = native_.pair_query_count;
+  for (auto producer : {host, cpu}) {
+    iree_hal_memory_transition_pair_t pair;
+    IREE_ASSERT_OK(iree_hal_memory_transition_prepare_pair(
+        {alias}, producer, gpu, IREE_HAL_MEMORY_TRANSITION_RELEASE, &pair));
+    EXPECT_EQ(iree_hal_memory_transition_query({alias}, pair).release.bits, 0u);
+    EXPECT_NE(iree_hal_pool_query_transition(pool, producer, gpu).release.bits,
+              0u);
+  }
+  EXPECT_EQ(native_.pair_query_count, query_count);
+  EXPECT_EQ(native_.create_count, 0);
+  EXPECT_EQ(native_.reservation_count, 0);
+  iree_hal_pool_release(pool);
+}
+
 TEST_F(MemoryBackendTest, RejectsUnavailableNativeNpuReservations) {
   const iree_hal_pool_family_access_t access = {
       .family = families_[0],

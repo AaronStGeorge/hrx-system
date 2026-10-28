@@ -547,6 +547,11 @@ static iree_status_t iree_hal_vulkan_slab_pool_query_owner(
       contract->allowed_usage = usage | mapping_usage;
       if (mapping_source) {
         contract->mapping_source.type = IREE_HAL_MEMORY_BACKEND_VULKAN;
+        contract->mapping_source.native_type_mask =
+            (options->owned.mode == IREE_HAL_SLAB_POOL_OWNED_ENABLED
+                 ? UINT64_C(1) << i
+                 : 0) |
+            import_memory_type_bits;
         contract->mapping_source.requirements =
             (iree_hal_pool_mapping_requirements_t){
                 .minimum_granularity = mapping_granularity,

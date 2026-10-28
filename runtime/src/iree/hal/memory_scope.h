@@ -262,6 +262,14 @@ typedef struct iree_hal_memory_contract_t {
     iree_hal_memory_backend_type_t type;
     // Captured geometry independent of payload allocation or installed aliases.
     iree_hal_pool_mapping_requirements_t requirements;
+    // Backend-defined allocation classes that may back this source. A target
+    // of the same native schema must accept every set bit. Zero means the
+    // backend has no additional allocation-class distinctions.
+    uint64_t native_type_mask;
+    // Owned qualification of reservation aliases when it differs from the
+    // ordinary source views. NULL reuses this contract's own qualification.
+    // This metadata retains neither physical backing nor its allocation owner.
+    struct iree_hal_memory_contract_t* alias_contract;
   } mapping_source;
   // Immutable site facts in this allocation, indexed by memory scope ID.
   iree_hal_memory_scope_access_t* scopes;
@@ -629,6 +637,27 @@ typedef iree_status_t(IREE_API_PTR* iree_hal_memory_pair_query_fn_t)(
 IREE_API_EXPORT iree_status_t iree_hal_memory_contract_initialize_transitions(
     iree_hal_memory_contract_t* contract, iree_hal_memory_pair_query_fn_t query,
     void* user_data);
+
+// Captures the cache protocol of independently mapped aliases of a prepared
+// source. Only sites with MAPPING_SOURCE participate. Atomic promises remain
+// bounded by the source qualification. The alias host properties are qualified
+// for the reservation view, independently of the ordinary source mapping.
+// Called during source construction; failure leaves no partial alias contract.
+IREE_API_EXPORT iree_status_t
+iree_hal_memory_contract_initialize_mapping_transitions(
+    iree_hal_memory_contract_t* contract,
+    iree_hal_host_memory_properties_t host_properties,
+    iree_hal_memory_pair_query_fn_t query, void* user_data);
+
+// Borrows immutable alias facts from a prepared mapping source. This is cold
+// construction/admission metadata, never an installed-mapping lookup.
+static inline const iree_hal_memory_contract_t*
+iree_hal_memory_contract_mapping_alias(
+    const iree_hal_memory_contract_t* contract) {
+  return contract->mapping_source.alias_contract
+             ? contract->mapping_source.alias_contract
+             : contract;
+}
 
 #ifdef __cplusplus
 }  // extern "C"

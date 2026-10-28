@@ -205,6 +205,7 @@ IREE_API_EXPORT void iree_hal_memory_contract_retain(
 IREE_API_EXPORT void iree_hal_memory_contract_release(
     iree_hal_memory_contract_t* contract) {
   if (contract && iree_atomic_ref_count_dec(&contract->ref_count) == 1) {
+    iree_hal_memory_contract_release(contract->mapping_source.alias_contract);
     iree_allocator_free(contract->host_allocator, contract->transition_details);
     iree_allocator_free_aligned(contract->host_allocator, contract);
   }
@@ -999,6 +1000,42 @@ IREE_API_EXPORT iree_status_t iree_hal_memory_contract_initialize_transitions(
     memcpy(contract->transitions, cells, cell_count * sizeof(*cells));
   }
   iree_allocator_free(contract->host_allocator, scratch);
+  return status;
+}
+
+//===----------------------------------------------------------------------===//
+// Mapping-source alias qualification
+//===----------------------------------------------------------------------===//
+
+IREE_API_EXPORT iree_status_t
+iree_hal_memory_contract_initialize_mapping_transitions(
+    iree_hal_memory_contract_t* contract,
+    iree_hal_host_memory_properties_t host_properties,
+    iree_hal_memory_pair_query_fn_t query, void* user_data) {
+  iree_hal_memory_contract_t* alias = NULL;
+  IREE_RETURN_IF_ERROR(iree_hal_memory_contract_create(
+      contract->domain, contract->scope_count, &contract->binding_layout,
+      contract->host_allocator, &alias));
+  alias->allowed_access = contract->allowed_access;
+  alias->allowed_usage = contract->allowed_usage;
+  for (uint32_t id = 1; id < contract->scope_count; ++id) {
+    if (iree_any_bit_set(contract->scopes[id].interfaces,
+                         1u << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE)) {
+      alias->scopes[id] = contract->scopes[id];
+    }
+  }
+  if (alias->scopes[1].interfaces) {
+    alias->host = contract->host;
+    alias->host.properties = host_properties;
+  }
+  iree_hal_memory_contract_finalize_atomic_operations(alias);
+  iree_status_t status =
+      iree_hal_memory_contract_initialize_transitions(alias, query, user_data);
+  if (iree_status_is_ok(status)) {
+    contract->mapping_source.alias_contract = alias;
+  } else {
+    iree_hal_memory_contract_release(alias);
+  }
   return status;
 }
 
