@@ -1219,21 +1219,6 @@ node 1 issue-cycle: 4
 node 2 issue-cycle: 4
 
 // ====
-// RUN: emit low-schedule-json @resource_stall_does_not_persist_speculative_reserve strategy=resource-stall diagnostics=candidates test.i32=71 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_does_not_persist_speculative_reserve(%pad: reg<test.i32 x65>, %ptr: reg<test.ptr>, %rhs: reg<test.i32>) -> (reg<test.i32 x65>, reg<test.i32>) asm {
-  %source = test.load.v4i32 %ptr
-  %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_packet="low.slice", rejected_packet="low.storage.reserve", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="3"}
-  %lane = slice %source[0] : reg<test.i32 x4> -> reg<test.i32>
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="2", chosen_packet="test.add.i32", rejected_packet="low.storage.reserve", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_penalty="0"}
-  %sum = test.add.i32 %lane, %rhs
-  return %pad, %sum
-}
-
-// ====
 // RUN: emit low-schedule-json @resource_stall_accounts_for_collective_descriptor_frontier strategy=resource-stall diagnostics=candidates test.i32=29 output=none
 
 test.target<low_core> @test_target

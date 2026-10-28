@@ -97,6 +97,7 @@ TEST_F(CandidatePressureTest, RequiredOwnershipUsesRetainedInstructionPhases) {
   };
   loom_low_schedule_completion_domain_t domain = {.capacity = 4};
   uint16_t domain_id = 0;
+  uint32_t register_limit = 4;
   uint32_t activation_units = 0;
   loom_low_schedule_build_state_t state = {
       .options = &options,
@@ -109,6 +110,7 @@ TEST_F(CandidatePressureTest, RequiredOwnershipUsesRetainedInstructionPhases) {
       .node_unspillable_activation_units = &activation_units,
       .pressure_limits =
           {
+              .by_reg_class = &register_limit,
               .unspillable_completion_domains = &domain,
               .unspillable_completion_domain_ids_by_reg_class = &domain_id,
               .unspillable_completion_domain_count = 1,
@@ -173,6 +175,29 @@ TEST_F(CandidatePressureTest, RequiredOwnershipUsesRetainedInstructionPhases) {
       EXPECT_EQ(pressure.candidate_operand_use_counts[0], 0u);
     }
   }
+
+  // Commit a spillable early-write candidate. Its six-unit temporary overlap
+  // exceeds the four-unit limit more than its realized four-unit live set.
+  // Only the realized penalty carries into the next scheduling decision.
+  required.live_units = 0;
+  node.flags = LOOM_LOW_SCHEDULE_NODE_FLAG_EARLY_CLOBBER;
+  values[0].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
+  values[1].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_EARLY_WRITE;
+  values[2].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
+  loom_low_schedule_register_debt_word_t debt = {};
+  loom_low_schedule_candidate_score_t score = {};
+  loom_low_schedule_pressure_score_candidate(&state, &pressure, &ready,
+                                             &indegree, 0, &debt, &score);
+  EXPECT_EQ(score.pressure_cliff_penalty, 3u);
+  EXPECT_EQ(score.persistent_pressure_cliff_penalty, 1u);
+  node.scheduled_ordinal = 0;
+  loom_low_schedule_pressure_note_node_scheduled(&state, &pressure, 0, &score);
+  EXPECT_EQ(pressure.current_persistent_pressure_penalty, 1u);
+  EXPECT_EQ(pressure.current_live_units, 4u);
+  EXPECT_EQ(values[0].remaining_use_count, 0u);
+  EXPECT_EQ(values[0].live_unit_count, 0u);
+  EXPECT_EQ(values[1].live_unit_count, 2u);
+  EXPECT_EQ(values[2].live_unit_count, 2u);
 }
 
 TEST_F(CandidatePressureTest, RetainedPlacementAndReplayHaveSeparateLifetimes) {
