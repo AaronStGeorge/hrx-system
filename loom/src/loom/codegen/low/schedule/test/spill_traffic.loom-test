@@ -59,14 +59,13 @@ scheduled pressure amdgpu.vgpr: peak-live-units=6 peak-live-values=4
 
 // ====
 
-// Required scratch setup must not displace wider private arithmetic that its
-// consumer still needs. EXEC readers also precede the restore, so their extra
-// dependency prevents the single-successor setup order from serializing them.
-// RUN: emit low-schedule-query @private_arithmetic strategy=resource-stall amdgpu.vgpr=4 required-register-values=%address per-user-placement-values=%left,%right order=* scheduled-pressure=amdgpu.vgpr
+// Arithmetic and scratch transfers read EXEC before its saved value is
+// restored. Address materialization can wait until the stored sum is ready.
+// RUN: emit low-schedule-query @scratch_arithmetic strategy=resource-stall order=* scheduled-pressure=amdgpu.vgpr kind=state consumer=7
 
 amdgpu.target<gfx942> @target
 
-low.func.def target<amdgpu.cdna3.core>(@target) @private_arithmetic(%input: reg<amdgpu.vgpr x2>, %held: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+low.func.def target<amdgpu.cdna3.core>(@target) @scratch_arithmetic(%input: reg<amdgpu.vgpr x2>, %held: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
   %saved_exec = s_mov_b64_exec_read
   %storage = storage {byte_alignment = 8, byte_length = 8} : low.storage<private>
   %left = v_mul_f64 %input, %input
@@ -79,5 +78,6 @@ low.func.def target<amdgpu.cdna3.core>(@target) @private_arithmetic(%input: reg<
 }
 
 // ----
-block 0 order: 0, 1, 2, 3, 5, 4, 6, 7, 8
+block 0 order: 2, 3, 5, 1, 4, 6, 0, 7, 8
 scheduled pressure amdgpu.vgpr: peak-live-units=8 peak-live-values=4
+node 7 <- 0, 2, 3, 5, 6
