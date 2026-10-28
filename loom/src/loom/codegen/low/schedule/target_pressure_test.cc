@@ -162,13 +162,17 @@ TEST_F(TargetPressureScoringTest, GrowthUsesCanonicalBankAndOwnership) {
     bool opens_debt;
     // Remaining capacity in a growing bank, or no cliff for other banks.
     uint32_t units_until_limit;
+    // Capacity penalty at the peak read/write phase.
+    uint32_t peak_penalty;
+    // Capacity penalty after all reads and writes have completed.
+    uint32_t persistent_penalty;
   } cases[] = {
-      {3, 1, 0, 0, false, no_cliff}, {4, 1, 0, 0, true, no_cliff},
-      {5, 0, 0, 0, false, no_cliff}, {5, -1, 0, 0, false, no_cliff},
-      {4, 0, 1, 0, true, no_cliff},  {4, 0, 0, 1, true, no_cliff},
-      {2, 0, 0, 0, false, no_cliff}, {2, -1, 0, 0, false, no_cliff},
-      {2, 1, 0, 0, false, 1},        {2, 0, 1, 0, false, 1},
-      {2, 0, 0, 1, false, 1},
+      {3, 1, 0, 0, false, no_cliff, 1, 1}, {4, 1, 0, 0, true, no_cliff, 2, 2},
+      {5, 0, 0, 0, false, no_cliff, 2, 2}, {5, -1, 0, 0, false, no_cliff, 1, 1},
+      {4, 0, 1, 0, true, no_cliff, 2, 1},  {4, 0, 0, 1, true, no_cliff, 2, 1},
+      {2, 0, 0, 0, false, no_cliff, 0, 0}, {2, -1, 0, 0, false, no_cliff, 0, 0},
+      {2, 1, 0, 0, false, 1, 0, 0},        {2, 0, 1, 0, false, 1, 0, 0},
+      {2, 0, 0, 1, false, 1, 0, 0},
   };
   for (uint16_t reg_class_id = 0; reg_class_id < 3; ++reg_class_id) {
     for (bool required : {false, true}) {
@@ -314,6 +318,9 @@ TEST_F(TargetPressureScoringTest, GrowthUsesCanonicalBankAndOwnership) {
           EXPECT_EQ(debt.required_banks, required ? expected_bank : 0);
           EXPECT_EQ(score.units_until_pressure_cliff,
                     test_case.units_until_limit);
+          EXPECT_EQ(score.pressure_cliff_penalty, test_case.peak_penalty);
+          EXPECT_EQ(score.persistent_pressure_cliff_penalty,
+                    test_case.persistent_penalty);
           EXPECT_EQ(iree_any_bit_set(
                         score.flags,
                         LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REGISTER_DEBT),

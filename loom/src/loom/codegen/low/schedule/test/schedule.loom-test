@@ -1349,18 +1349,6 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_accounts_for_co
 }
 
 // ====
-// RUN: emit low-schedule-json @resource_stall_scores_pressure_limit_debt_for_neutral_work strategy=resource-stall diagnostics=candidates test.i32=69 output=none
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_scores_pressure_limit_debt_for_neutral_work(%pad: reg<test.i32 x66>, %source: reg<test.i32 x4>) -> (reg<test.i32 x66>, reg<test.i32>) asm {
-  %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", scored_candidate_count="2", chosen_packet="low.slice", rejected_packet="low.storage.reserve", chosen_pressure_cliff_penalty="2", rejected_pressure_cliff_penalty="5"}
-  %lane = slice %source[0] : reg<test.i32 x4> -> reg<test.i32>
-  return %pad, %lane
-}
-
-// ====
 // RUN: emit low-schedule-json @resource_stall_compacts_ready_concat_before_scalar_work strategy=resource-stall diagnostics=candidates output=none
 
 test.target<low_core> @test_target

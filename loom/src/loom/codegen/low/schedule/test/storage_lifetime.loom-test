@@ -57,6 +57,20 @@ low.func.def target<test.low.core>(@target) @live_slice_pressure(%source: reg<te
 
 // ====
 
+// A dying source releases its full width; its surviving slice retains one unit.
+// RUN: emit low-schedule-json @dying_slice_pressure strategy=resource-stall diagnostics=candidates output=none
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @dying_slice_pressure(%source: reg<test.i32 x4>) -> (reg<test.i32>) asm {
+  %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  // REMARK@+1: BACKEND/015 {chosen_packet="low.slice", chosen_projected_live_units="1", chosen_killed_live_units="4", chosen_produced_live_units="1"}
+  %lane = slice %source[0] : reg<test.i32 x4> -> reg<test.i32>
+  return %lane
+}
+
+// ====
+
 // A concat can reuse its one-unit source only once, not once per operand.
 // RUN: emit low-schedule-json @repeated_source_pressure strategy=resource-stall diagnostics=candidates output=none
 
