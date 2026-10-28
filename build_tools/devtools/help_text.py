@@ -540,7 +540,7 @@ Single-target runs forward interruption signals and return the fuzzer exit code.
   python dev.py cmake fuzz iree::tokenizer::special_tokens_fuzz -- -max_total_time=60
 
 This builds the named CMake fuzz target, resolves the executable with the CMake
-File API, then execs it directly. Fuzz targets are configure-time CMake targets;
+target map, then execs it directly. Fuzz targets are configure-time CMake targets;
 run iree-cmake-configure -DIREE_ENABLE_FUZZING=ON first.""",
         )
     if command == "run" and lane == "cmake":
@@ -552,7 +552,7 @@ run iree-cmake-configure -DIREE_ENABLE_FUZZING=ON first.""",
   python dev.py cmake run iree::tools::iree-dump-cpuinfo -- --help
   python dev.py cmake run -p iree-dump-cpuinfo
 
-This resolves the executable with the CMake File API and then execs it from the
+This resolves the executable with the CMake target map and then execs it from the
 current directory. It does not build; run `iree-cmake-build <target>` first.""",
         )
     if command in ("try", "fuzz"):
@@ -995,7 +995,7 @@ records before execution. Source-only selections perform no build."""
         return """## iree-cmake-run
 
 Run an already-built executable target from the configured CMake build tree. It
-resolves the target with the CMake File API and execs the binary from the
+resolves the target with the CMake target map and execs the binary from the
 current directory. It does not build; run `iree-cmake-build <target>` first.
 
 ```bash
@@ -1035,7 +1035,7 @@ disable inference and `-k/--keep` to inspect the generated scratch build."""
 
 Use `iree-cmake-fuzz` for CMake libFuzzer targets. Configure the build tree
 with fuzzing enabled, then name the CMake target or configured alias. The
-wrapper builds that target, resolves the executable with the CMake File API,
+wrapper builds that target, resolves the executable with the CMake target map,
 then execs it directly.
 
 ```bash

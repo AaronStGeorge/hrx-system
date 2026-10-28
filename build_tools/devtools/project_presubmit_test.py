@@ -159,7 +159,7 @@ class ProjectPresubmitTest(unittest.TestCase):
             executable_path.parent.mkdir(parents=True)
             executable_path.write_text("tool\n", encoding="utf-8")
             executable_path.chmod(0o755)
-            target = project_presubmit.cmake_file_api.CMakeExecutableTarget(
+            target = project_presubmit.cmake_targets.CMakeExecutableTarget(
                 name="example_tool",
                 path=executable_path,
             )
@@ -176,7 +176,7 @@ class ProjectPresubmitTest(unittest.TestCase):
                     return_value=True,
                 ) as validate_cmake_build_tree,
                 mock.patch.object(
-                    project_presubmit.cmake_file_api,
+                    project_presubmit.cmake_targets,
                     "resolve_target_name",
                     return_value="example_tool",
                 ) as resolve_target_name,
@@ -184,7 +184,7 @@ class ProjectPresubmitTest(unittest.TestCase):
                     project_presubmit, "run_command", return_value=True
                 ) as run_command,
                 mock.patch.object(
-                    project_presubmit.cmake_file_api,
+                    project_presubmit.cmake_targets,
                     "resolve_executable",
                     return_value=target,
                 ) as resolve_executable,

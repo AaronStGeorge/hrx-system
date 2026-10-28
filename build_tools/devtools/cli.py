@@ -15,7 +15,7 @@ from pathlib import Path
 from build_tools.devtools import bazel as bazel_dev
 from build_tools.devtools import cmake as cmake_dev
 from build_tools.devtools import (
-    cmake_file_api,
+    cmake_targets,
     doctor,
     help_text,
     hooks,
@@ -1511,7 +1511,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_arguments(sys.argv[1:] if argv is None else argv)
     try:
         plan = args.handler(args)
-    except (FileNotFoundError, ValueError, cmake_file_api.FileApiError) as exc:
+    except (FileNotFoundError, ValueError, cmake_targets.CMakeMetadataError) as exc:
         print(f"dev.py: {exc}", file=sys.stderr)
         return 2
     return plan.run(dry_run=args.dry_run, verbose=args.verbose)

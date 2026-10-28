@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
-from build_tools.devtools import cmake_cache, cmake_file_api, cmake_fuzz, cmake_try
+from build_tools.devtools import cmake_cache, cmake_fuzz, cmake_targets, cmake_try
 from build_tools.devtools import ctest as ctest_dev
 from build_tools.devtools.command_plan import (
     CommandPlan,
@@ -87,6 +87,34 @@ class _PrepareFreshCMakeConfigureStep:
             print(
                 f"dev.py: failed to remove CMake build tree {self.build_dir}: {exc}",
                 file=sys.stderr,
+            )
+            return 1
+        return 0
+
+
+@dataclass(frozen=True)
+class _RetireCMakeCodemodelQueryStep:
+    # Only a tree marked by this wrapper owns the historical anonymous query.
+    build_dir: Path
+
+    def describe(self) -> str:
+        return "# retire obsolete wrapper CMake File API query"
+
+    def run(self, verbose: bool = False) -> int:
+        marker = self.build_dir / CMAKE_BUILD_TREE_MARKER
+        query = self.build_dir / ".cmake/api/v1/query/codemodel-v2"
+        try:
+            if not marker.is_file() or not query.is_file():
+                return 0
+            if marker.read_text(encoding="utf-8") != CMAKE_BUILD_TREE_MARKER_CONTENT:
+                return 0
+            # The wrapper wrote an empty stateless query. Leave client-owned
+            # queries (including IDE queries) and nonempty requests untouched.
+            if query.stat().st_size == 0:
+                query.unlink()
+        except OSError as exc:
+            print(
+                f"dev.py: failed to retire CMake query {query}: {exc}", file=sys.stderr
             )
             return 1
         return 0
@@ -222,7 +250,7 @@ def build_args(
         raw_args = []
 
     cmake_args = []
-    resolved_target_names = cmake_file_api.resolve_target_names(
+    resolved_target_names = cmake_targets.resolve_target_names(
         requested_build_dir,
         target_names,
     )
@@ -242,7 +270,7 @@ def _is_managed_cmake_build_tree(build_dir: Path) -> bool:
 
     try:
         entries = cmake_cache.load_cmake_cache(build_dir)
-    except cmake_file_api.FileApiError:
+    except cmake_targets.CMakeMetadataError:
         return False
     values = {entry.name: entry.value for entry in entries}
     home_directory = values.get("CMAKE_HOME_DIRECTORY", "")
@@ -285,7 +313,7 @@ def _cmake_definition_value(arguments: list[str], name: str) -> str | None:
 def _configured_cmake_generator(build_dir: Path) -> _CMakeGenerator | None:
     try:
         entries = cmake_cache.load_cmake_cache(build_dir)
-    except cmake_file_api.FileApiError:
+    except cmake_targets.CMakeMetadataError:
         return None
     values = {entry.name: entry.value for entry in entries}
     name = values.get("CMAKE_GENERATOR", "")
@@ -406,7 +434,6 @@ def configure_plan(
     env: dict[str, str] | None = None,
 ) -> CommandPlan:
     requested_build_dir = build_dir(configured_build_dir)
-    codemodel_query_path = cmake_file_api.codemodel_query_path(requested_build_dir)
     command_env = tool_env.path_env() if env is None else env
     fresh_steps, configure_args = _prepare_fresh_configure(
         requested_build_dir, backend_args, command_env
@@ -420,12 +447,7 @@ def configure_plan(
     return CommandPlan(
         [
             *fresh_steps,
-            EnsureDirectoryStep(codemodel_query_path.parent),
-            WriteFileStep(
-                codemodel_query_path,
-                "",
-                label="request CMake File API codemodel",
-            ),
+            _RetireCMakeCodemodelQueryStep(requested_build_dir),
             CommandStep(
                 [
                     tool_env.tool("cmake"),
@@ -463,7 +485,7 @@ class CMakeRunStep:
     def describe(self) -> str:
         lines = [
             f"# cmake run {self.command.target}",
-            f"# resolve executable with CMake File API from {self.build_dir}",
+            f"# resolve executable with CMake target map from {self.build_dir}",
         ]
         if self.command.print_path:
             lines.append("# print built executable path")
@@ -476,11 +498,11 @@ class CMakeRunStep:
 
     def run(self, verbose: bool = False) -> int:
         try:
-            target = cmake_file_api.resolve_executable(
+            target = cmake_targets.resolve_executable(
                 self.build_dir,
                 self.command.target,
             )
-        except cmake_file_api.FileApiError as exc:
+        except cmake_targets.CMakeMetadataError as exc:
             print(f"dev.py: {exc}", file=sys.stderr)
             return 1
         if not target.path.is_file():

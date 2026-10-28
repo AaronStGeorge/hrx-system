@@ -17,7 +17,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from build_tools.devtools import bazel as bazel_dev
-from build_tools.devtools import cmake_file_api
+from build_tools.devtools import cmake_targets
 
 CMAKE_BUILD_DIR_ENV = "IREE_CMAKE_BUILD_DIR"
 BAZEL_CONFIGS_ENV = "IREE_PRESUBMIT_BAZEL_CONFIGS"
@@ -206,10 +206,8 @@ def build_and_resolve_executable(
         if not validate_cmake_build_tree(project_name, build_dir):
             return None
         try:
-            resolved_target = cmake_file_api.resolve_target_name(
-                build_dir, cmake_target
-            )
-        except cmake_file_api.FileApiError as exc:
+            resolved_target = cmake_targets.resolve_target_name(build_dir, cmake_target)
+        except cmake_targets.CMakeMetadataError as exc:
             print(f"{project_name} presubmit: {exc}", file=sys.stderr)
             return None
         if not run_command(
@@ -227,10 +225,10 @@ def build_and_resolve_executable(
         ):
             return None
         try:
-            executable_path = cmake_file_api.resolve_executable(
+            executable_path = cmake_targets.resolve_executable(
                 build_dir, cmake_target
             ).path
-        except cmake_file_api.FileApiError as exc:
+        except cmake_targets.CMakeMetadataError as exc:
             print(f"{project_name} presubmit: {exc}", file=sys.stderr)
             return None
     else:
