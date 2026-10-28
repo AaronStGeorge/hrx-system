@@ -64,6 +64,8 @@ loom_check_test_suite(
     "check_resources.cxx-test"
     "check_scenarios.cxx-test"
     "check_scenarios_invalid.cxx-test"
+    "check_typed_expectations.cxx-test"
+    "check_typed_expectations_invalid.cxx-test"
     "class_conversions.cxx-test"
     "class_conversions_invalid.cxx-test"
     "condition_declarations.cxx-test"

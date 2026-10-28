@@ -137,12 +137,18 @@ typedef enum loom_testbench_expectation_kind_e {
   LOOM_TESTBENCH_EXPECTATION_EQUAL = 1,
   // check.expect.bitwise over scalar values or shaped buffer views.
   LOOM_TESTBENCH_EXPECTATION_BITWISE = 2,
-  // check.expect.close approximate comparison.
-  LOOM_TESTBENCH_EXPECTATION_CLOSE = 3,
+  // check.expect.approximate floating-point comparison.
+  LOOM_TESTBENCH_EXPECTATION_APPROXIMATE = 3,
   // check.expect.shape metadata comparison.
   LOOM_TESTBENCH_EXPECTATION_SHAPE = 4,
   // check.expect.event<provider> structured runtime event validation.
   LOOM_TESTBENCH_EXPECTATION_EVENT = 5,
+  // check.expect.close.signed exact integer-distance comparison.
+  LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED = 6,
+  // check.expect.close.unsigned exact integer-distance comparison.
+  LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED = 7,
+  // Legacy check.expect.close approximate comparison.
+  LOOM_TESTBENCH_EXPECTATION_CLOSE = 8,
 } loom_testbench_expectation_kind_t;
 
 typedef struct loom_testbench_plan_options_t {
@@ -397,6 +403,31 @@ typedef struct loom_testbench_close_expectation_plan_t {
   loom_check_expect_close_nan_t nan_policy;
 } loom_testbench_close_expectation_plan_t;
 
+typedef struct loom_testbench_approximate_expectation_plan_t {
+  // Absolute tolerance.
+  double absolute_tolerance;
+  // Relative tolerance.
+  double relative_tolerance;
+  // NaN comparison policy.
+  loom_check_expect_approximate_nan_t nan_policy;
+  // Numeric descriptor kind used to decode the actual operand.
+  uint8_t actual_numeric_kind;
+  // Numeric descriptor kind used to decode the expected operand.
+  uint8_t expected_numeric_kind;
+} loom_testbench_approximate_expectation_plan_t;
+
+static_assert(sizeof(loom_testbench_approximate_expectation_plan_t) == 24,
+              "approximate expectation plans must remain compact");
+
+typedef struct loom_testbench_integer_close_expectation_plan_t {
+  // Inclusive exact distance accepted by the expectation.
+  uint64_t maximum_distance;
+  // Numeric descriptor kind used to decode the actual operand.
+  uint8_t actual_numeric_kind;
+  // Numeric descriptor kind used to decode the expected operand.
+  uint8_t expected_numeric_kind;
+} loom_testbench_integer_close_expectation_plan_t;
+
 typedef struct loom_testbench_shape_expectation_plan_t {
   // Borrowed dynamic dimension value IDs in source order.
   const loom_value_id_t* dimension_value_ids;
@@ -429,6 +460,10 @@ typedef struct loom_testbench_expectation_plan_t {
   // Type of |actual_value_id| at planning time.
   loom_type_t type;
   union {
+    // Payload for check.expect.approximate.
+    loom_testbench_approximate_expectation_plan_t approximate;
+    // Payload for check.expect.close.signed and close.unsigned.
+    loom_testbench_integer_close_expectation_plan_t integer_close;
     // Payload for check.expect.close.
     loom_testbench_close_expectation_plan_t close;
     // Payload for check.expect.shape.
@@ -437,6 +472,10 @@ typedef struct loom_testbench_expectation_plan_t {
     loom_testbench_event_expectation_plan_t event;
   };
 } loom_testbench_expectation_plan_t;
+
+static_assert(IREE_PTR_SIZE != 8 ||
+                  sizeof(loom_testbench_expectation_plan_t) == 88,
+              "expectation plan must retain its 64-bit layout");
 
 typedef struct loom_testbench_issue_t {
   // Structured issue classification.

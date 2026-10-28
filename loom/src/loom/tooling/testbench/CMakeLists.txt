@@ -29,6 +29,7 @@ loom_cc_library(
     "operation_plan.c"
   DEPS
     ::api
+    ::numeric_value
     loom::ir::builders
   PUBLIC
 )
@@ -381,6 +382,7 @@ loom_cc_test(
   DEPS
     ::device_event
     ::expectation
+    ::numeric_value
     ::testbench
     ::value_materializer
     iree::base

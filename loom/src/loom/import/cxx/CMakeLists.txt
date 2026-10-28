@@ -60,6 +60,7 @@ loom_cc_library(
     loom::import::cxx::binding::assumptions
     loom::import::cxx::binding::check
     loom::import::cxx::binding::config
+    loom::import::cxx::binding::constant_attributes
     loom::import::cxx::binding::constexpr
     loom::import::cxx::binding::exponent
     loom::import::cxx::binding::fastmath

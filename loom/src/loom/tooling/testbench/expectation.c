@@ -23,6 +23,12 @@ const char* loom_testbench_expectation_kind_name(
       return "equal";
     case LOOM_TESTBENCH_EXPECTATION_BITWISE:
       return "bitwise";
+    case LOOM_TESTBENCH_EXPECTATION_APPROXIMATE:
+      return "approximate";
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED:
+      return "close.signed";
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED:
+      return "close.unsigned";
     case LOOM_TESTBENCH_EXPECTATION_CLOSE:
       return "close";
     case LOOM_TESTBENCH_EXPECTATION_SHAPE:
@@ -40,12 +46,18 @@ static loom_error_ref_t loom_testbench_expectation_diagnostic_ref(
       return LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 1);
     case LOOM_TESTBENCH_EXPECTATION_BITWISE:
       return LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 2);
-    case LOOM_TESTBENCH_EXPECTATION_CLOSE:
-      return LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 3);
+    case LOOM_TESTBENCH_EXPECTATION_APPROXIMATE:
+      return LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 6);
     case LOOM_TESTBENCH_EXPECTATION_SHAPE:
       return LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 4);
     case LOOM_TESTBENCH_EXPECTATION_EVENT:
       return LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 5);
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED:
+      return LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 7);
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED:
+      return LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 8);
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE:
+      return LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_EXPECT, 3);
     case LOOM_TESTBENCH_EXPECTATION_NONE:
       return LOOM_ERROR_REF_NONE;
   }
@@ -309,13 +321,11 @@ static iree_status_t loom_testbench_compare_scalar_equal(
 
 static bool loom_testbench_f64_close(double actual, double expected,
                                      double absolute_tolerance,
-                                     double relative_tolerance,
-                                     loom_check_expect_close_nan_t nan_policy) {
+                                     double relative_tolerance, bool nan_same) {
   const bool actual_is_nan = isnan(actual);
   const bool expected_is_nan = isnan(expected);
   if (actual_is_nan || expected_is_nan) {
-    return nan_policy == LOOM_CHECK_EXPECT_CLOSE_NAN_SAME && actual_is_nan &&
-           expected_is_nan;
+    return nan_same && actual_is_nan && expected_is_nan;
   }
   if (isinf(actual) || isinf(expected)) {
     return actual == expected;
@@ -324,55 +334,32 @@ static bool loom_testbench_f64_close(double actual, double expected,
          absolute_tolerance + relative_tolerance * fabs(expected);
 }
 
-static iree_status_t loom_testbench_compare_scalar_close(
-    const loom_testbench_expectation_plan_t* expectation,
+static iree_status_t loom_testbench_compare_scalar_approximate(
+    const loom_testbench_numeric_type_t* actual_numeric_type,
+    const loom_testbench_numeric_type_t* expected_numeric_type,
+    double absolute_tolerance, double relative_tolerance, bool nan_same,
     const loom_testbench_value_t* actual,
     const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
   *out_matched = false;
   const iree_tooling_value_t* actual_value = &actual->scalar;
   const iree_tooling_value_t* expected_value = &expected->scalar;
-  if (actual_value->kind != expected_value->kind) {
-    return iree_string_builder_append_format(
-        detail_builder, "actual scalar type %s does not match expected %s",
-        loom_testbench_tooling_value_kind_name(actual_value->kind),
-        loom_testbench_tooling_value_kind_name(expected_value->kind));
-  }
-
-  double actual_f64 = 0.0;
-  double expected_f64 = 0.0;
-  // Narrow scalars share a raw integer carrier; their interpretation belongs
-  // to the source type retained by expectation planning.
-  const loom_scalar_type_t scalar_type =
-      loom_type_element_type(expectation->type);
-  const loom_testbench_numeric_type_t* numeric_type =
-      loom_testbench_numeric_type_from_scalar_type(scalar_type);
-  if (!numeric_type || !loom_testbench_numeric_type_is_float(numeric_type)) {
-    return iree_string_builder_append_format(
-        detail_builder,
-        "close expectation requires floating-point scalar values, "
-        "but source type is %s",
-        loom_scalar_type_name(scalar_type));
-  }
-  actual_f64 = numeric_type->load_f64(
+  const double actual_f64 = actual_numeric_type->load_f64(
       (const uint8_t*)(const void*)&actual_value->storage);
-  expected_f64 = numeric_type->load_f64(
+  const double expected_f64 = expected_numeric_type->load_f64(
       (const uint8_t*)(const void*)&expected_value->storage);
-
-  const loom_testbench_close_expectation_plan_t* close_plan =
-      &expectation->close;
-  *out_matched = loom_testbench_f64_close(
-      actual_f64, expected_f64, close_plan->absolute_tolerance,
-      close_plan->relative_tolerance, close_plan->nan_policy);
+  *out_matched =
+      loom_testbench_f64_close(actual_f64, expected_f64, absolute_tolerance,
+                               relative_tolerance, nan_same);
   if (*out_matched) {
     return iree_ok_status();
   }
   return iree_string_builder_append_format(
       detail_builder,
-      "actual %s value %.17g is not close to expected %.17g "
+      "actual %s value %.17g is not close to expected %s value %.17g "
       "(atol=%.17g, rtol=%.17g)",
-      loom_scalar_type_name(scalar_type), actual_f64, expected_f64,
-      close_plan->absolute_tolerance, close_plan->relative_tolerance);
+      actual_numeric_type->name, actual_f64, expected_numeric_type->name,
+      expected_f64, absolute_tolerance, relative_tolerance);
 }
 
 static void loom_testbench_expectation_buffer_view(
@@ -403,12 +390,38 @@ static iree_status_t loom_testbench_compare_buffer_exact(
                                           out_matched);
 }
 
-static iree_status_t loom_testbench_compare_buffer_close(
-    const loom_testbench_close_expectation_plan_t* close_plan,
+typedef struct loom_testbench_numeric_buffer_pair_t {
+  iree_hal_buffer_mapping_t actual_mapping;
+  iree_hal_buffer_mapping_t expected_mapping;
+  iree_host_size_t element_count;
+  bool actual_mapped;
+  bool expected_mapped;
+} loom_testbench_numeric_buffer_pair_t;
+
+static iree_status_t loom_testbench_numeric_buffer_pair_deinitialize(
+    loom_testbench_numeric_buffer_pair_t* pair) {
+  iree_status_t status = iree_ok_status();
+  if (pair->expected_mapped) {
+    status = iree_status_join(
+        status, iree_hal_buffer_unmap_range(&pair->expected_mapping));
+  }
+  if (pair->actual_mapped) {
+    status = iree_status_join(
+        status, iree_hal_buffer_unmap_range(&pair->actual_mapping));
+  }
+  memset(pair, 0, sizeof(*pair));
+  return status;
+}
+
+static iree_status_t loom_testbench_prepare_numeric_buffer_pair(
+    const loom_testbench_numeric_type_t* actual_numeric_type,
+    const loom_testbench_numeric_type_t* expected_numeric_type,
     const loom_testbench_value_t* actual,
     const loom_testbench_value_t* expected,
-    iree_string_builder_t* detail_builder, bool* out_matched) {
-  *out_matched = false;
+    iree_string_builder_t* detail_builder,
+    loom_testbench_numeric_buffer_pair_t* out_pair, bool* out_ready) {
+  memset(out_pair, 0, sizeof(*out_pair));
+  *out_ready = false;
   iree_hal_buffer_view_t* actual_buffer_view = NULL;
   iree_hal_buffer_view_t* expected_buffer_view = NULL;
   loom_testbench_expectation_buffer_view(actual, &actual_buffer_view);
@@ -417,100 +430,285 @@ static iree_status_t loom_testbench_compare_buffer_close(
     return loom_testbench_append_value_kind_mismatch(actual, expected,
                                                      detail_builder);
   }
-
-  IREE_RETURN_IF_ERROR(iree_hal_buffer_view_match_metadata_like(
-      expected_buffer_view, actual_buffer_view, detail_builder, out_matched));
-  if (!*out_matched) {
-    return iree_ok_status();
+  const iree_host_size_t actual_rank =
+      iree_hal_buffer_view_shape_rank(actual_buffer_view);
+  const iree_host_size_t expected_rank =
+      iree_hal_buffer_view_shape_rank(expected_buffer_view);
+  if (actual_rank != expected_rank) {
+    return iree_string_builder_append_format(
+        detail_builder,
+        "actual rank %" PRIhsz " does not match expected rank %" PRIhsz,
+        actual_rank, expected_rank);
   }
-  *out_matched = false;
-
+  const iree_hal_dim_t* actual_shape =
+      iree_hal_buffer_view_shape_dims(actual_buffer_view);
+  const iree_hal_dim_t* expected_shape =
+      iree_hal_buffer_view_shape_dims(expected_buffer_view);
+  for (iree_host_size_t dimension = 0; dimension < actual_rank; ++dimension) {
+    if (actual_shape[dimension] != expected_shape[dimension]) {
+      return iree_string_builder_append_format(
+          detail_builder,
+          "actual dimension %" PRIhsz " (%" PRIdim
+          ") does not match expected (%" PRIdim ")",
+          dimension, actual_shape[dimension], expected_shape[dimension]);
+    }
+  }
   if (iree_hal_buffer_view_encoding_type(actual_buffer_view) !=
-      IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "close expectation requires dense row-major "
-                            "buffer views");
+          IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR ||
+      iree_hal_buffer_view_encoding_type(expected_buffer_view) !=
+          IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR) {
+    return iree_string_builder_append_string(
+        detail_builder,
+        IREE_SV("numerical expectations require dense row-major values"));
+  }
+  const iree_hal_element_type_t actual_element_type =
+      iree_hal_buffer_view_element_type(actual_buffer_view);
+  if (!loom_testbench_numeric_type_matches_storage(actual_numeric_type,
+                                                   actual_element_type)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        detail_builder, "actual buffer storage does not match declared %s: ",
+        actual_numeric_type->name));
+    return iree_hal_append_element_type_string(actual_element_type,
+                                               detail_builder);
+  }
+  const iree_hal_element_type_t expected_element_type =
+      iree_hal_buffer_view_element_type(expected_buffer_view);
+  if (!loom_testbench_numeric_type_matches_storage(expected_numeric_type,
+                                                   expected_element_type)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        detail_builder, "expected buffer storage does not match declared %s: ",
+        expected_numeric_type->name));
+    return iree_hal_append_element_type_string(expected_element_type,
+                                               detail_builder);
   }
 
-  iree_hal_element_type_t element_type =
-      iree_hal_buffer_view_element_type(actual_buffer_view);
-  const loom_testbench_numeric_type_t* numeric_type =
-      loom_testbench_numeric_type_from_hal_element_type(element_type);
-  if (!numeric_type || !loom_testbench_numeric_type_is_float(numeric_type)) {
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
-        detail_builder, IREE_SV("close expectation requires floating-point "
-                                "buffer elements, but actual has ")));
-    IREE_RETURN_IF_ERROR(
-        iree_hal_append_element_type_string(element_type, detail_builder));
+  out_pair->element_count =
+      iree_hal_buffer_view_element_count(actual_buffer_view);
+  if (out_pair->element_count == 0) {
+    *out_ready = true;
     return iree_ok_status();
   }
-
-  iree_hal_buffer_mapping_t actual_mapping = {0};
-  iree_hal_buffer_mapping_t expected_mapping = {0};
-  bool actual_mapped = false;
-  bool expected_mapped = false;
   iree_status_t status = iree_hal_buffer_map_range(
       iree_hal_buffer_view_buffer(actual_buffer_view),
       IREE_HAL_MAPPING_MODE_SCOPED, IREE_HAL_MEMORY_ACCESS_READ,
-      IREE_HAL_BUFFER_MAP_FLAG_NONE, 0, IREE_HAL_WHOLE_BUFFER, &actual_mapping);
+      IREE_HAL_BUFFER_MAP_FLAG_NONE, 0,
+      iree_hal_buffer_view_byte_length(actual_buffer_view),
+      &out_pair->actual_mapping);
   if (iree_status_is_ok(status)) {
-    actual_mapped = true;
+    out_pair->actual_mapped = true;
     status = iree_hal_buffer_map_range(
         iree_hal_buffer_view_buffer(expected_buffer_view),
         IREE_HAL_MAPPING_MODE_SCOPED, IREE_HAL_MEMORY_ACCESS_READ,
-        IREE_HAL_BUFFER_MAP_FLAG_NONE, 0, IREE_HAL_WHOLE_BUFFER,
-        &expected_mapping);
+        IREE_HAL_BUFFER_MAP_FLAG_NONE, 0,
+        iree_hal_buffer_view_byte_length(expected_buffer_view),
+        &out_pair->expected_mapping);
   }
   if (iree_status_is_ok(status)) {
-    expected_mapped = true;
-    if (actual_mapping.contents.data_length > 0 &&
-        !iree_all_bits_set(iree_hal_buffer_memory_type(actual_mapping.buffer),
-                           IREE_HAL_MEMORY_TYPE_HOST_COHERENT)) {
-      status = iree_hal_buffer_mapping_invalidate_range(&actual_mapping, 0,
-                                                        IREE_HAL_WHOLE_BUFFER);
+    out_pair->expected_mapped = true;
+    if (!iree_all_bits_set(
+            iree_hal_buffer_memory_type(out_pair->actual_mapping.buffer),
+            IREE_HAL_MEMORY_TYPE_HOST_COHERENT)) {
+      status = iree_hal_buffer_mapping_invalidate_range(
+          &out_pair->actual_mapping, 0, IREE_HAL_WHOLE_BUFFER);
     }
   }
-  if (iree_status_is_ok(status) && expected_mapping.contents.data_length > 0 &&
-      !iree_all_bits_set(iree_hal_buffer_memory_type(expected_mapping.buffer),
-                         IREE_HAL_MEMORY_TYPE_HOST_COHERENT)) {
-    status = iree_hal_buffer_mapping_invalidate_range(&expected_mapping, 0,
-                                                      IREE_HAL_WHOLE_BUFFER);
+  if (iree_status_is_ok(status) &&
+      !iree_all_bits_set(
+          iree_hal_buffer_memory_type(out_pair->expected_mapping.buffer),
+          IREE_HAL_MEMORY_TYPE_HOST_COHERENT)) {
+    status = iree_hal_buffer_mapping_invalidate_range(
+        &out_pair->expected_mapping, 0, IREE_HAL_WHOLE_BUFFER);
   }
-  if (iree_status_is_ok(status)) {
-    iree_host_size_t element_count =
-        iree_hal_buffer_view_element_count(actual_buffer_view);
-    const uint8_t* actual_data = actual_mapping.contents.data;
-    const uint8_t* expected_data = expected_mapping.contents.data;
-    *out_matched = true;
-    for (iree_host_size_t i = 0; i < element_count; ++i) {
-      double actual_value =
-          loom_testbench_numeric_load_f64_at(numeric_type, actual_data, i);
-      double expected_value =
-          loom_testbench_numeric_load_f64_at(numeric_type, expected_data, i);
-      if (!loom_testbench_f64_close(
-              actual_value, expected_value, close_plan->absolute_tolerance,
-              close_plan->relative_tolerance, close_plan->nan_policy)) {
-        *out_matched = false;
-        status = iree_string_builder_append_format(
-            detail_builder,
-            "element at index %" PRIhsz
-            " (%.17g) is not close to expected (%.17g) "
-            "(atol=%.17g, rtol=%.17g)",
-            i, actual_value, expected_value, close_plan->absolute_tolerance,
-            close_plan->relative_tolerance);
-        break;
-      }
+  if (!iree_status_is_ok(status)) {
+    return iree_status_join(
+        status, loom_testbench_numeric_buffer_pair_deinitialize(out_pair));
+  }
+  *out_ready = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_compare_buffer_approximate(
+    const loom_testbench_numeric_type_t* actual_numeric_type,
+    const loom_testbench_numeric_type_t* expected_numeric_type,
+    double absolute_tolerance, double relative_tolerance, bool nan_same,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
+    iree_string_builder_t* detail_builder, bool* out_matched) {
+  *out_matched = false;
+  loom_testbench_numeric_buffer_pair_t pair;
+  bool ready = false;
+  IREE_RETURN_IF_ERROR(loom_testbench_prepare_numeric_buffer_pair(
+      actual_numeric_type, expected_numeric_type, actual, expected,
+      detail_builder, &pair, &ready));
+  if (!ready) {
+    return iree_ok_status();
+  }
+  *out_matched = true;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t element = 0; element < pair.element_count; ++element) {
+    const double actual_value = loom_testbench_numeric_load_f64_at(
+        actual_numeric_type, pair.actual_mapping.contents.data, element);
+    const double expected_value = loom_testbench_numeric_load_f64_at(
+        expected_numeric_type, pair.expected_mapping.contents.data, element);
+    if (!loom_testbench_f64_close(actual_value, expected_value,
+                                  absolute_tolerance, relative_tolerance,
+                                  nan_same)) {
+      *out_matched = false;
+      status = iree_string_builder_append_format(
+          detail_builder,
+          "element at index %" PRIhsz
+          ": actual %s %.17g is not close to "
+          "expected %s %.17g (atol=%.17g, rtol=%.17g)",
+          element, actual_numeric_type->name, actual_value,
+          expected_numeric_type->name, expected_value, absolute_tolerance,
+          relative_tolerance);
+      break;
     }
   }
-  if (expected_mapped) {
-    status = iree_status_join(status,
-                              iree_hal_buffer_unmap_range(&expected_mapping));
+  return iree_status_join(
+      status, loom_testbench_numeric_buffer_pair_deinitialize(&pair));
+}
+
+static uint64_t loom_testbench_signed_distance(int64_t actual,
+                                               int64_t expected) {
+  return actual >= expected ? (uint64_t)actual - (uint64_t)expected
+                            : (uint64_t)expected - (uint64_t)actual;
+}
+
+static iree_status_t loom_testbench_compare_scalar_close_signed(
+    const loom_testbench_integer_close_expectation_plan_t* close_plan,
+    const loom_testbench_numeric_type_t* actual_numeric_type,
+    const loom_testbench_numeric_type_t* expected_numeric_type,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
+    iree_string_builder_t* detail_builder, bool* out_matched) {
+  const int64_t actual_value = actual_numeric_type->load_i64(
+      (const uint8_t*)(const void*)&actual->scalar.storage);
+  const int64_t expected_value = expected_numeric_type->load_i64(
+      (const uint8_t*)(const void*)&expected->scalar.storage);
+  const uint64_t distance =
+      loom_testbench_signed_distance(actual_value, expected_value);
+  *out_matched = distance <= close_plan->maximum_distance;
+  if (*out_matched) {
+    return iree_ok_status();
   }
-  if (actual_mapped) {
-    status =
-        iree_status_join(status, iree_hal_buffer_unmap_range(&actual_mapping));
+  return iree_string_builder_append_format(
+      detail_builder,
+      "actual %s value %" PRId64 " differs from expected %s value %" PRId64
+      " by %" PRIu64 " (max_distance=%" PRIu64 ")",
+      actual_numeric_type->name, actual_value, expected_numeric_type->name,
+      expected_value, distance, close_plan->maximum_distance);
+}
+
+static iree_status_t loom_testbench_compare_scalar_close_unsigned(
+    const loom_testbench_integer_close_expectation_plan_t* close_plan,
+    const loom_testbench_numeric_type_t* actual_numeric_type,
+    const loom_testbench_numeric_type_t* expected_numeric_type,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
+    iree_string_builder_t* detail_builder, bool* out_matched) {
+  const uint64_t actual_value = actual_numeric_type->load_u64(
+      (const uint8_t*)(const void*)&actual->scalar.storage);
+  const uint64_t expected_value = expected_numeric_type->load_u64(
+      (const uint8_t*)(const void*)&expected->scalar.storage);
+  const uint64_t distance = actual_value >= expected_value
+                                ? actual_value - expected_value
+                                : expected_value - actual_value;
+  *out_matched = distance <= close_plan->maximum_distance;
+  if (*out_matched) {
+    return iree_ok_status();
   }
-  return status;
+  return iree_string_builder_append_format(
+      detail_builder,
+      "actual %s value %" PRIu64 " differs from expected %s value %" PRIu64
+      " by %" PRIu64 " (max_distance=%" PRIu64 ")",
+      actual_numeric_type->name, actual_value, expected_numeric_type->name,
+      expected_value, distance, close_plan->maximum_distance);
+}
+
+static iree_status_t loom_testbench_compare_buffer_close_signed(
+    const loom_testbench_integer_close_expectation_plan_t* close_plan,
+    const loom_testbench_numeric_type_t* actual_numeric_type,
+    const loom_testbench_numeric_type_t* expected_numeric_type,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
+    iree_string_builder_t* detail_builder, bool* out_matched) {
+  *out_matched = false;
+  loom_testbench_numeric_buffer_pair_t pair;
+  bool ready = false;
+  IREE_RETURN_IF_ERROR(loom_testbench_prepare_numeric_buffer_pair(
+      actual_numeric_type, expected_numeric_type, actual, expected,
+      detail_builder, &pair, &ready));
+  if (!ready) {
+    return iree_ok_status();
+  }
+  *out_matched = true;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t element = 0; element < pair.element_count; ++element) {
+    const int64_t actual_value = loom_testbench_numeric_load_i64_at(
+        actual_numeric_type, pair.actual_mapping.contents.data, element);
+    const int64_t expected_value = loom_testbench_numeric_load_i64_at(
+        expected_numeric_type, pair.expected_mapping.contents.data, element);
+    const uint64_t distance =
+        loom_testbench_signed_distance(actual_value, expected_value);
+    if (distance > close_plan->maximum_distance) {
+      *out_matched = false;
+      status = iree_string_builder_append_format(
+          detail_builder,
+          "element at index %" PRIhsz ": actual %s %" PRId64
+          " differs from expected %s %" PRId64 " by %" PRIu64
+          " (max_distance=%" PRIu64 ")",
+          element, actual_numeric_type->name, actual_value,
+          expected_numeric_type->name, expected_value, distance,
+          close_plan->maximum_distance);
+      break;
+    }
+  }
+  return iree_status_join(
+      status, loom_testbench_numeric_buffer_pair_deinitialize(&pair));
+}
+
+static iree_status_t loom_testbench_compare_buffer_close_unsigned(
+    const loom_testbench_integer_close_expectation_plan_t* close_plan,
+    const loom_testbench_numeric_type_t* actual_numeric_type,
+    const loom_testbench_numeric_type_t* expected_numeric_type,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
+    iree_string_builder_t* detail_builder, bool* out_matched) {
+  *out_matched = false;
+  loom_testbench_numeric_buffer_pair_t pair;
+  bool ready = false;
+  IREE_RETURN_IF_ERROR(loom_testbench_prepare_numeric_buffer_pair(
+      actual_numeric_type, expected_numeric_type, actual, expected,
+      detail_builder, &pair, &ready));
+  if (!ready) {
+    return iree_ok_status();
+  }
+  *out_matched = true;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t element = 0; element < pair.element_count; ++element) {
+    const uint64_t actual_value = loom_testbench_numeric_load_u64_at(
+        actual_numeric_type, pair.actual_mapping.contents.data, element);
+    const uint64_t expected_value = loom_testbench_numeric_load_u64_at(
+        expected_numeric_type, pair.expected_mapping.contents.data, element);
+    const uint64_t distance = actual_value >= expected_value
+                                  ? actual_value - expected_value
+                                  : expected_value - actual_value;
+    if (distance > close_plan->maximum_distance) {
+      *out_matched = false;
+      status = iree_string_builder_append_format(
+          detail_builder,
+          "element at index %" PRIhsz ": actual %s %" PRIu64
+          " differs from expected %s %" PRIu64 " by %" PRIu64
+          " (max_distance=%" PRIu64 ")",
+          element, actual_numeric_type->name, actual_value,
+          expected_numeric_type->name, expected_value, distance,
+          close_plan->maximum_distance);
+      break;
+    }
+  }
+  return iree_status_join(
+      status, loom_testbench_numeric_buffer_pair_deinitialize(&pair));
 }
 
 static iree_status_t loom_testbench_compare_buffer_reference_equal(
@@ -579,13 +777,9 @@ static iree_status_t loom_testbench_compare_equal(
                 iree_hal_buffer_view_element_type(actual_buffer_view))
           : NULL;
   if (numeric_type && loom_testbench_numeric_type_is_float(numeric_type)) {
-    loom_testbench_close_expectation_plan_t exact_float = {
-        .absolute_tolerance = 0.0,
-        .relative_tolerance = 0.0,
-        .nan_policy = LOOM_CHECK_EXPECT_CLOSE_NAN_DIFFERENT,
-    };
-    return loom_testbench_compare_buffer_close(&exact_float, actual, expected,
-                                               detail_builder, out_matched);
+    return loom_testbench_compare_buffer_approximate(
+        numeric_type, numeric_type, 0.0, 0.0, /*nan_same=*/false, actual,
+        expected, detail_builder, out_matched);
   }
 
   return loom_testbench_compare_buffer_exact(actual, expected, detail_builder,
@@ -610,13 +804,91 @@ static iree_status_t loom_testbench_compare_close(
     const loom_testbench_value_t* actual,
     const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
+  const loom_testbench_numeric_type_t* numeric_type =
+      loom_testbench_numeric_type_from_scalar_type(
+          loom_type_element_type(expectation->type));
+  IREE_ASSERT(numeric_type &&
+              loom_testbench_numeric_type_is_float(numeric_type));
+  const loom_testbench_close_expectation_plan_t* close_plan =
+      &expectation->close;
+  const bool nan_same =
+      close_plan->nan_policy == LOOM_CHECK_EXPECT_CLOSE_NAN_SAME;
   if (loom_testbench_value_is_scalar(actual) &&
       loom_testbench_value_is_scalar(expected)) {
-    return loom_testbench_compare_scalar_close(expectation, actual, expected,
-                                               detail_builder, out_matched);
+    return loom_testbench_compare_scalar_approximate(
+        numeric_type, numeric_type, close_plan->absolute_tolerance,
+        close_plan->relative_tolerance, nan_same, actual, expected,
+        detail_builder, out_matched);
   }
-  return loom_testbench_compare_buffer_close(
-      &expectation->close, actual, expected, detail_builder, out_matched);
+  return loom_testbench_compare_buffer_approximate(
+      numeric_type, numeric_type, close_plan->absolute_tolerance,
+      close_plan->relative_tolerance, nan_same, actual, expected,
+      detail_builder, out_matched);
+}
+
+static iree_status_t loom_testbench_compare_approximate(
+    const loom_testbench_expectation_plan_t* expectation,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
+    iree_string_builder_t* detail_builder, bool* out_matched) {
+  const loom_testbench_approximate_expectation_plan_t* approximate_plan =
+      &expectation->approximate;
+  const loom_testbench_numeric_type_t* actual_numeric_type =
+      loom_testbench_numeric_type(
+          (loom_testbench_numeric_kind_t)approximate_plan->actual_numeric_kind);
+  const loom_testbench_numeric_type_t* expected_numeric_type =
+      loom_testbench_numeric_type((loom_testbench_numeric_kind_t)
+                                      approximate_plan->expected_numeric_kind);
+  IREE_ASSERT(actual_numeric_type && expected_numeric_type);
+  const bool nan_same =
+      approximate_plan->nan_policy == LOOM_CHECK_EXPECT_APPROXIMATE_NAN_SAME;
+  if (loom_testbench_value_is_scalar(actual) &&
+      loom_testbench_value_is_scalar(expected)) {
+    return loom_testbench_compare_scalar_approximate(
+        actual_numeric_type, expected_numeric_type,
+        approximate_plan->absolute_tolerance,
+        approximate_plan->relative_tolerance, nan_same, actual, expected,
+        detail_builder, out_matched);
+  }
+  return loom_testbench_compare_buffer_approximate(
+      actual_numeric_type, expected_numeric_type,
+      approximate_plan->absolute_tolerance,
+      approximate_plan->relative_tolerance, nan_same, actual, expected,
+      detail_builder, out_matched);
+}
+
+static iree_status_t loom_testbench_compare_integer_close(
+    const loom_testbench_expectation_plan_t* expectation,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
+    iree_string_builder_t* detail_builder, bool* out_matched) {
+  const loom_testbench_integer_close_expectation_plan_t* close_plan =
+      &expectation->integer_close;
+  const loom_testbench_numeric_type_t* actual_numeric_type =
+      loom_testbench_numeric_type(
+          (loom_testbench_numeric_kind_t)close_plan->actual_numeric_kind);
+  const loom_testbench_numeric_type_t* expected_numeric_type =
+      loom_testbench_numeric_type(
+          (loom_testbench_numeric_kind_t)close_plan->expected_numeric_kind);
+  IREE_ASSERT(actual_numeric_type && expected_numeric_type);
+  const bool is_signed =
+      expectation->kind == LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED;
+  if (loom_testbench_value_is_scalar(actual) &&
+      loom_testbench_value_is_scalar(expected)) {
+    return is_signed
+               ? loom_testbench_compare_scalar_close_signed(
+                     close_plan, actual_numeric_type, expected_numeric_type,
+                     actual, expected, detail_builder, out_matched)
+               : loom_testbench_compare_scalar_close_unsigned(
+                     close_plan, actual_numeric_type, expected_numeric_type,
+                     actual, expected, detail_builder, out_matched);
+  }
+  return is_signed ? loom_testbench_compare_buffer_close_signed(
+                         close_plan, actual_numeric_type, expected_numeric_type,
+                         actual, expected, detail_builder, out_matched)
+                   : loom_testbench_compare_buffer_close_unsigned(
+                         close_plan, actual_numeric_type, expected_numeric_type,
+                         actual, expected, detail_builder, out_matched);
 }
 
 static iree_status_t loom_testbench_value_as_nonnegative_dim(
@@ -1601,6 +1873,13 @@ static iree_status_t loom_testbench_evaluate_single_expectation(
     case LOOM_TESTBENCH_EXPECTATION_BITWISE:
       return loom_testbench_compare_bitwise(actual, expected, detail_builder,
                                             out_matched);
+    case LOOM_TESTBENCH_EXPECTATION_APPROXIMATE:
+      return loom_testbench_compare_approximate(expectation, actual, expected,
+                                                detail_builder, out_matched);
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE_SIGNED:
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE_UNSIGNED:
+      return loom_testbench_compare_integer_close(expectation, actual, expected,
+                                                  detail_builder, out_matched);
     case LOOM_TESTBENCH_EXPECTATION_CLOSE:
       return loom_testbench_compare_close(expectation, actual, expected,
                                           detail_builder, out_matched);

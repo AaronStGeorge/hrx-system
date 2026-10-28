@@ -113,6 +113,15 @@ NanPolicy = EnumDef(
     doc="NaN comparison policy for approximate expectations.",
 )
 
+ApproximateNanPolicy = EnumDef(
+    "ApproximateNanPolicy",
+    [
+        EnumCase("same", 1, doc="NaNs compare equal only when both sides are NaN."),
+        EnumCase("different", 2, doc="NaNs compare unequal."),
+    ],
+    doc="NaN comparison policy for approximate expectations.",
+)
+
 FileWriteMode = EnumDef(
     "FileWriteMode",
     [
@@ -403,8 +412,8 @@ check_compare = Op(
         Region("comparison"),
     ],
     examples=[
-        "check.compare<@logarithm>(%bits) : (i32) -> [actual(%actual: f32), expected(%expected: f32)] {\n  check.expect.close actual(%actual) expected(%expected) atol(0.0) rtol(1.0e-6) nan(same) : f32\n}",
-        "check.compare<@logarithm, @logarithm_oracle>(%bits) : (i32) -> [actual(%actual: f32), expected(%expected: f32)] {\n  check.expect.close actual(%actual) expected(%expected) atol(0.0) rtol(1.0e-6) nan(same) : f32\n}",
+        "check.compare<@logarithm>(%bits) : (i32) -> [actual(%actual: f32), expected(%expected: f32)] {\n  check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(1.0e-6) nan(same) : f32, f32\n}",
+        "check.compare<@logarithm, @logarithm_oracle>(%bits) : (i32) -> [actual(%actual: f32), expected(%expected: f32)] {\n  check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(1.0e-6) nan(same) : f32, f32\n}",
         "check.compare<@update>(%storage) : (tensor<256xf32>) -> () {\n  check.expect.bitwise actual(%storage) expected(%storage) : tensor<256xf32>\n}",
     ],
 )
@@ -898,6 +907,75 @@ check_expect_bitwise = Op(
     ],
 )
 
+check_expect_approximate = Op(
+    "check.expect.approximate",
+    group=check_ops,
+    doc="Requires independently typed floating-point values to be approximately equal.",
+    operands=_EXPECT_OPERANDS,
+    attrs=[
+        AttrDef("atol", "f64"),
+        AttrDef("rtol", "f64"),
+        AttrDef("nan", "enum", enum_def=ApproximateNanPolicy),
+    ],
+    traits=_EXPECT_BODY_TRAITS,
+    verify="loom_check_expect_approximate_verify",
+    format=[
+        *_EXPECT_VALUE_CLAUSES,
+        Clause("atol", Attr("atol")),
+        Clause("rtol", Attr("rtol")),
+        Clause("nan", Attr("nan")),
+        COLON,
+        TypeOf("actual"),
+        COMMA,
+        TypeOf("expected"),
+    ],
+    examples=[
+        "check.expect.approximate actual(%actual) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<[%m]xbf16>, tensor<[%m]xf64>",
+    ],
+)
+
+check_expect_close_signed = Op(
+    "check.expect.close.signed",
+    group=check_ops,
+    doc="Requires independently typed signed integer values to be within an exact distance.",
+    operands=_EXPECT_OPERANDS,
+    attrs=[AttrDef("max_distance", "i64")],
+    traits=_EXPECT_BODY_TRAITS,
+    verify="loom_check_expect_close_signed_verify",
+    format=[
+        *_EXPECT_VALUE_CLAUSES,
+        Clause("max_distance", Attr("max_distance")),
+        COLON,
+        TypeOf("actual"),
+        COMMA,
+        TypeOf("expected"),
+    ],
+    examples=[
+        "check.expect.close.signed actual(%actual) expected(%expected) max_distance(2) : tensor<[%m]xi16>, tensor<[%m]xi32>",
+    ],
+)
+
+check_expect_close_unsigned = Op(
+    "check.expect.close.unsigned",
+    group=check_ops,
+    doc="Requires independently typed unsigned integer bit patterns to be within an exact distance.",
+    operands=_EXPECT_OPERANDS,
+    attrs=[AttrDef("max_distance", "i64")],
+    traits=_EXPECT_BODY_TRAITS,
+    verify="loom_check_expect_close_unsigned_verify",
+    format=[
+        *_EXPECT_VALUE_CLAUSES,
+        Clause("max_distance", Attr("max_distance")),
+        COLON,
+        TypeOf("actual"),
+        COMMA,
+        TypeOf("expected"),
+    ],
+    examples=[
+        "check.expect.close.unsigned actual(%actual) expected(%expected) max_distance(2) : tensor<[%m]xi8>, tensor<[%m]xi16>",
+    ],
+)
+
 check_expect_close = Op(
     "check.expect.close",
     group=check_ops,
@@ -1018,7 +1096,7 @@ ALL_CHECK_OPS = (
     check_oracle_call,
     check_expect_equal,
     check_expect_bitwise,
-    check_expect_close,
+    check_expect_approximate,
     check_expect_shape,
     check_expect_event,
     check_benchmark,
@@ -1031,4 +1109,7 @@ ALL_CHECK_OPS = (
     check_entropy_fork,
     check_entropy_read,
     check_generate,
+    check_expect_close_signed,
+    check_expect_close_unsigned,
+    check_expect_close,
 )

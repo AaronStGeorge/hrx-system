@@ -56,6 +56,10 @@ static int64_t loom_testbench_numeric_load_u8_i64(const uint8_t* data) {
   return data[0];
 }
 
+static uint64_t loom_testbench_numeric_load_u8_u64(const uint8_t* data) {
+  return data[0];
+}
+
 static double loom_testbench_numeric_load_u8_f64(const uint8_t* data) {
   return (double)loom_testbench_numeric_load_u8_i64(data);
 }
@@ -71,6 +75,12 @@ static double loom_testbench_numeric_load_i16_f64(const uint8_t* data) {
 }
 
 static int64_t loom_testbench_numeric_load_u16_i64(const uint8_t* data) {
+  uint16_t value = 0;
+  memcpy(&value, data, sizeof(value));
+  return value;
+}
+
+static uint64_t loom_testbench_numeric_load_u16_u64(const uint8_t* data) {
   uint16_t value = 0;
   memcpy(&value, data, sizeof(value));
   return value;
@@ -96,6 +106,12 @@ static int64_t loom_testbench_numeric_load_u32_i64(const uint8_t* data) {
   return value;
 }
 
+static uint64_t loom_testbench_numeric_load_u32_u64(const uint8_t* data) {
+  uint32_t value = 0;
+  memcpy(&value, data, sizeof(value));
+  return value;
+}
+
 static double loom_testbench_numeric_load_u32_f64(const uint8_t* data) {
   return (double)loom_testbench_numeric_load_u32_i64(data);
 }
@@ -108,6 +124,16 @@ static int64_t loom_testbench_numeric_load_i64_i64(const uint8_t* data) {
 
 static double loom_testbench_numeric_load_i64_f64(const uint8_t* data) {
   return (double)loom_testbench_numeric_load_i64_i64(data);
+}
+
+static uint64_t loom_testbench_numeric_load_u64_u64(const uint8_t* data) {
+  uint64_t value = 0;
+  memcpy(&value, data, sizeof(value));
+  return value;
+}
+
+static double loom_testbench_numeric_load_u64_f64(const uint8_t* data) {
+  return (double)loom_testbench_numeric_load_u64_u64(data);
 }
 
 static const loom_testbench_numeric_type_t kLoomTestbenchNumericTypes[] = {
@@ -192,6 +218,7 @@ static const loom_testbench_numeric_type_t kLoomTestbenchNumericTypes[] = {
             .domain = LOOM_TESTBENCH_NUMERIC_DOMAIN_INTEGER,
             .load_f64 = loom_testbench_numeric_load_u8_f64,
             .load_i64 = loom_testbench_numeric_load_u8_i64,
+            .load_u64 = loom_testbench_numeric_load_u8_u64,
             .minimum_i64 = 0,
             .maximum_i64 = UINT8_MAX,
         },
@@ -216,6 +243,7 @@ static const loom_testbench_numeric_type_t kLoomTestbenchNumericTypes[] = {
             .domain = LOOM_TESTBENCH_NUMERIC_DOMAIN_INTEGER,
             .load_f64 = loom_testbench_numeric_load_u16_f64,
             .load_i64 = loom_testbench_numeric_load_u16_i64,
+            .load_u64 = loom_testbench_numeric_load_u16_u64,
             .minimum_i64 = 0,
             .maximum_i64 = UINT16_MAX,
         },
@@ -240,6 +268,7 @@ static const loom_testbench_numeric_type_t kLoomTestbenchNumericTypes[] = {
             .domain = LOOM_TESTBENCH_NUMERIC_DOMAIN_INTEGER,
             .load_f64 = loom_testbench_numeric_load_u32_f64,
             .load_i64 = loom_testbench_numeric_load_u32_i64,
+            .load_u64 = loom_testbench_numeric_load_u32_u64,
             .minimum_i64 = 0,
             .maximum_i64 = UINT32_MAX,
         },
@@ -253,6 +282,19 @@ static const loom_testbench_numeric_type_t kLoomTestbenchNumericTypes[] = {
             .load_f64 = loom_testbench_numeric_load_i64_f64,
             .load_i64 = loom_testbench_numeric_load_i64_i64,
             .minimum_i64 = INT64_MIN,
+            .maximum_i64 = INT64_MAX,
+        },
+    [LOOM_TESTBENCH_NUMERIC_U64] =
+        {
+            .kind = LOOM_TESTBENCH_NUMERIC_U64,
+            .name = "u64",
+            .hal_element_type = IREE_HAL_ELEMENT_TYPE_UINT_64,
+            .byte_count = 8,
+            .domain = LOOM_TESTBENCH_NUMERIC_DOMAIN_INTEGER,
+            .load_f64 = loom_testbench_numeric_load_u64_f64,
+            .load_i64 = NULL,
+            .load_u64 = loom_testbench_numeric_load_u64_u64,
+            .minimum_i64 = 0,
             .maximum_i64 = INT64_MAX,
         },
 };
@@ -272,8 +314,10 @@ const loom_testbench_numeric_type_t* loom_testbench_numeric_type(
 
 const loom_testbench_numeric_type_t* loom_testbench_numeric_type_parse(
     iree_string_view_t value) {
+  // U64 is an exact comparison interpretation, not a reference-matmul
+  // contract: that reference implementation accumulates through int64_t.
   for (loom_testbench_numeric_kind_t kind = LOOM_TESTBENCH_NUMERIC_F8E4M3;
-       kind < LOOM_TESTBENCH_NUMERIC_COUNT_; ++kind) {
+       kind < LOOM_TESTBENCH_NUMERIC_U64; ++kind) {
     const loom_testbench_numeric_type_t* numeric_type =
         loom_testbench_numeric_type(kind);
     if (iree_string_view_equal(value,
@@ -351,6 +395,33 @@ loom_testbench_numeric_type_from_scalar_type(loom_scalar_type_t scalar_type) {
   }
 }
 
+const loom_testbench_numeric_type_t*
+loom_testbench_numeric_type_from_signed_scalar_type(
+    loom_scalar_type_t scalar_type) {
+  const loom_testbench_numeric_type_t* numeric_type =
+      loom_testbench_numeric_type_from_scalar_type(scalar_type);
+  return numeric_type && loom_testbench_numeric_type_is_integer(numeric_type)
+             ? numeric_type
+             : NULL;
+}
+
+const loom_testbench_numeric_type_t*
+loom_testbench_numeric_type_from_unsigned_scalar_type(
+    loom_scalar_type_t scalar_type) {
+  switch (scalar_type) {
+    case LOOM_SCALAR_TYPE_I8:
+      return loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_U8);
+    case LOOM_SCALAR_TYPE_I16:
+      return loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_U16);
+    case LOOM_SCALAR_TYPE_I32:
+      return loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_U32);
+    case LOOM_SCALAR_TYPE_I64:
+      return loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_U64);
+    default:
+      return NULL;
+  }
+}
+
 bool loom_testbench_numeric_type_matches_storage(
     const loom_testbench_numeric_type_t* numeric_type,
     iree_hal_element_type_t element_type) {
@@ -369,6 +440,20 @@ bool loom_testbench_numeric_type_matches_storage(
       (element_type == IREE_HAL_ELEMENT_TYPE_SINT_32 ||
        element_type == IREE_HAL_ELEMENT_TYPE_UINT_32 ||
        element_type == IREE_HAL_ELEMENT_TYPE_INT_32)) {
+    return true;
+  }
+  if ((numeric_type->kind == LOOM_TESTBENCH_NUMERIC_U16 ||
+       numeric_type->kind == LOOM_TESTBENCH_NUMERIC_I16) &&
+      (element_type == IREE_HAL_ELEMENT_TYPE_SINT_16 ||
+       element_type == IREE_HAL_ELEMENT_TYPE_UINT_16 ||
+       element_type == IREE_HAL_ELEMENT_TYPE_INT_16)) {
+    return true;
+  }
+  if ((numeric_type->kind == LOOM_TESTBENCH_NUMERIC_U64 ||
+       numeric_type->kind == LOOM_TESTBENCH_NUMERIC_I64) &&
+      (element_type == IREE_HAL_ELEMENT_TYPE_SINT_64 ||
+       element_type == IREE_HAL_ELEMENT_TYPE_UINT_64 ||
+       element_type == IREE_HAL_ELEMENT_TYPE_INT_64)) {
     return true;
   }
   return false;

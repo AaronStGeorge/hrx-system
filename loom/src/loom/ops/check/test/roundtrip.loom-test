@@ -45,6 +45,24 @@ check.benchmark<@fixture_case> @fixture_m16_n24 {m = 16, n = 24}
 
 // ====
 
+// Numerical expectations retain each operand's authored type. Floating-point
+// approximation and signed or unsigned integer distance are distinct
+// operations with distinct numerical contracts.
+check.case @typed_numerical_expectations {
+  %actual_f16 = check.literal value(1.0) : f16
+  %expected_f64 = check.literal value(1.0001) : f64
+  %actual_i8 = check.literal value(-7) : i8
+  %expected_i64 = check.literal value(-6) : i64
+  %actual_u8 = check.literal value(254) : i8
+  %expected_u16 = check.literal value(255) : i16
+  check.expect.approximate actual(%actual_f16) expected(%expected_f64) atol(0.001) rtol(0.0) nan(different) : f16, f64
+  check.expect.close.signed actual(%actual_i8) expected(%expected_i64) max_distance(1) : i8, i64
+  check.expect.close.unsigned actual(%actual_u8) expected(%expected_u16) max_distance(1) : i8, i16
+  check.return
+}
+
+// ====
+
 // Open provider spaces are still cold structural dispatch points.
 check.case @provider_case {
   check.requires<target.feature> {feature = "test.feature"}

@@ -38,6 +38,7 @@ loom_cc_library(
     srcs = ["operation_plan.c"],
     deps = [
         ":api",
+        ":numeric_value",
         "//loom/src/loom/ir:builders",
     ],
 )
@@ -345,6 +346,7 @@ loom_cc_test(
     deps = [
         ":device_event",
         ":expectation",
+        ":numeric_value",
         ":testbench",
         ":value_materializer",
         "//loom/src/loom/format/text:parser",

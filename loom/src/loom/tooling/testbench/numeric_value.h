@@ -47,6 +47,8 @@ typedef enum loom_testbench_numeric_kind_e {
   LOOM_TESTBENCH_NUMERIC_U32 = 12,
   // Signed 64-bit integer.
   LOOM_TESTBENCH_NUMERIC_I64 = 13,
+  // Unsigned 64-bit integer.
+  LOOM_TESTBENCH_NUMERIC_U64 = 14,
   LOOM_TESTBENCH_NUMERIC_COUNT_,
 } loom_testbench_numeric_kind_t;
 
@@ -64,6 +66,9 @@ typedef double (*loom_testbench_numeric_load_f64_fn_t)(const uint8_t* data);
 // Loads one dense integer element exactly into a signed 64-bit carrier.
 typedef int64_t (*loom_testbench_numeric_load_i64_fn_t)(const uint8_t* data);
 
+// Loads one dense integer element exactly into an unsigned 64-bit carrier.
+typedef uint64_t (*loom_testbench_numeric_load_u64_fn_t)(const uint8_t* data);
+
 typedef struct loom_testbench_numeric_type_t {
   // Stable interpretation identity.
   loom_testbench_numeric_kind_t kind;
@@ -79,9 +84,11 @@ typedef struct loom_testbench_numeric_type_t {
   loom_testbench_numeric_load_f64_fn_t load_f64;
   // Fixed exact integer decoder, or NULL for floating-point types.
   loom_testbench_numeric_load_i64_fn_t load_i64;
-  // Smallest value represented by an integer interpretation.
+  // Fixed exact unsigned integer decoder, or NULL when not applicable.
+  loom_testbench_numeric_load_u64_fn_t load_u64;
+  // Smallest signed i64 accepted by integer reference generation.
   int64_t minimum_i64;
-  // Largest value represented by an integer interpretation.
+  // Largest signed i64 accepted by integer reference generation.
   int64_t maximum_i64;
 } loom_testbench_numeric_type_t;
 
@@ -102,6 +109,16 @@ loom_testbench_numeric_type_from_hal_element_type(
 // interpretation. Integer scalar types use signed interpretation.
 const loom_testbench_numeric_type_t*
 loom_testbench_numeric_type_from_scalar_type(loom_scalar_type_t scalar_type);
+
+// Resolves an i8/i16/i32/i64 scalar to its signed interpretation.
+const loom_testbench_numeric_type_t*
+loom_testbench_numeric_type_from_signed_scalar_type(
+    loom_scalar_type_t scalar_type);
+
+// Resolves an i8/i16/i32/i64 scalar to its unsigned interpretation.
+const loom_testbench_numeric_type_t*
+loom_testbench_numeric_type_from_unsigned_scalar_type(
+    loom_scalar_type_t scalar_type);
 
 // Returns true when |element_type| has the storage width and representation
 // required by |numeric_type|. Signless HAL integers admit either interpretation
@@ -138,7 +155,15 @@ static inline int64_t loom_testbench_numeric_load_i64_at(
                                 element_offset * numeric_type->byte_count);
 }
 
-// Returns true when |value| fits the descriptor's integer interpretation.
+// Loads unsigned integer element |element_offset| from dense storage exactly.
+static inline uint64_t loom_testbench_numeric_load_u64_at(
+    const loom_testbench_numeric_type_t* numeric_type, const uint8_t* data,
+    iree_host_size_t element_offset) {
+  return numeric_type->load_u64(data +
+                                element_offset * numeric_type->byte_count);
+}
+
+// Returns true when |value| can feed integer reference generation.
 static inline bool loom_testbench_numeric_type_contains_i64(
     const loom_testbench_numeric_type_t* numeric_type, int64_t value) {
   return loom_testbench_numeric_type_is_integer(numeric_type) &&

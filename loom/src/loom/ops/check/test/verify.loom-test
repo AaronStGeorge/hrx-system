@@ -164,6 +164,111 @@ check.case @bad_expect_types {
 
 // ====
 
+// Numerical expectations compare independently typed values within one
+// explicit numerical family.
+check.case @typed_numerical_expectations {
+  %actual_float = check.literal value(1.0) : bf16
+  %expected_float = check.literal value(1.0) : f64
+  %actual_integer = check.literal value(41) : i8
+  %expected_integer = check.literal value(42) : i64
+  check.expect.approximate actual(%actual_float) expected(%expected_float) atol(0.0) rtol(0.0) nan(same) : bf16, f64
+  check.expect.close.signed actual(%actual_integer) expected(%expected_integer) max_distance(1) : i8, i64
+  check.expect.close.unsigned actual(%actual_integer) expected(%expected_integer) max_distance(1) : i8, i64
+  check.return
+}
+
+// ====
+
+check.case @approximate_rejects_integer {
+  %actual = check.literal value(1) : i32
+  %expected = check.literal value(1.0) : f32
+  // ERROR@+1: TYPE/003 "actual" "floating-point"
+  check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(0.0) nan(same) : i32, f32
+  check.return
+}
+
+// ====
+
+check.case @approximate_rejects_expected_integer {
+  %actual = check.literal value(1.0) : f32
+  %expected = check.literal value(1) : i32
+  // ERROR@+1: TYPE/003 "expected" "floating-point"
+  check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(0.0) nan(same) : f32, i32
+  check.return
+}
+
+// ====
+
+check.case @integer_close_rejects_index {
+  %actual = check.literal value(1) : index
+  %expected = check.literal value(1) : i32
+  // ERROR@+1: TYPE/003 "actual" "i8, i16, i32, or i64"
+  check.expect.close.signed actual(%actual) expected(%expected) max_distance(0) : index, i32
+  check.return
+}
+
+// ====
+
+check.case @approximate_requires_matching_shape {
+  %actual = check.generate.fill value(1.0) : tensor<2xf16>
+  %expected = check.generate.fill value(1.0) : tensor<3xf64>
+  // ERROR@+1: TYPE/001 "actual" "expected"
+  check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<2xf16>, tensor<3xf64>
+  check.return
+}
+
+// ====
+
+check.case @approximate_rejects_negative_tolerance {
+  %actual = check.literal value(1.0) : f32
+  %expected = check.literal value(1.0) : f64
+  // ERROR@+1: STRUCTURE/064 {attr_name="atol", actual_value="-0.5", expected_constraint="a finite non-negative tolerance"}
+  check.expect.approximate actual(%actual) expected(%expected) atol(-0.5) rtol(0.0) nan(same) : f32, f64
+  check.return
+}
+
+// ====
+
+check.case @approximate_rejects_infinite_tolerance {
+  %actual = check.literal value(1.0) : f32
+  %expected = check.literal value(1.0) : f64
+  // ERROR@+1: STRUCTURE/064 {attr_name="rtol", actual_value="inf", expected_constraint="a finite non-negative tolerance"}
+  check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(inf) nan(same) : f32, f64
+  check.return
+}
+
+// ====
+
+check.case @approximate_rejects_nan_tolerance {
+  %actual = check.literal value(1.0) : f32
+  %expected = check.literal value(1.0) : f64
+  // ERROR@+1: STRUCTURE/064 {attr_name="rtol", actual_value="nan", expected_constraint="a finite non-negative tolerance"}
+  check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(nan) nan(same) : f32, f64
+  check.return
+}
+
+// ====
+
+check.case @integer_close_rejects_negative_distance {
+  %actual = check.literal value(1) : i8
+  %expected = check.literal value(1) : i64
+  // ERROR@+1: STRUCTURE/014 "max_distance" "-1" "non-negative integer distance"
+  check.expect.close.unsigned actual(%actual) expected(%expected) max_distance(-1) : i8, i64
+  check.return
+}
+
+// ====
+
+check.case @approximate_rejects_encoded_values {
+  %actual = check.file.read.npy path("actual.npy") : tensor<4xf32, #encoding.f8e4m3fn>
+  %expected = check.file.read.npy path("expected.npy") : tensor<4xf64>
+  // ERROR@+1: TYPE/003 "actual" "unencoded" "floating-point"
+  check.expect.approximate actual(%actual) expected(%expected) atol(0.0) rtol(0.0) nan(same) : tensor<4xf32, #encoding.f8e4m3fn>, tensor<4xf64>
+  check.return
+}
+
+// ====
+
 // Every benchmark has an explicit identity, even without assignments.
 check.case @unnamed_case {
   check.return
@@ -260,13 +365,31 @@ check.scenario @wrong_trial_signature {
 
 // ====
 
-// Actual and expected result bindings are paired by type.
+// Pair structure remaps dependent dimensions without requiring equal element
+// types. Each typed expectation owns the numerical interpretation.
+func.decl @mixed_result_target() -> (%width: index, vector<[%width]xbf16>)
+
+func.decl @mixed_result_oracle() -> (%width: index, vector<[%width]xf64>)
+
+check.scenario @mixed_dependent_results {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    check.compare<@mixed_result_target, @mixed_result_oracle>() : () -> [actual(%actual_width: index, %actual_values: vector<[%actual_width]xbf16>), expected(%expected_width: index, %expected_values: vector<[%expected_width]xf64>)] {
+      check.expect.equal actual(%actual_width) expected(%expected_width) : index
+      check.expect.approximate actual(%actual_values) expected(%expected_values) atol(0.0) rtol(0.0) nan(same) : vector<[%actual_width]xbf16>, vector<[%expected_width]xf64>
+    }
+  }
+  check.return
+}
+
+// ====
+
+// Actual and expected result bindings must have the same structural shape.
 func.decl @mismatched_pair_subject() -> (f32)
 
 check.scenario @mismatched_pair {
   check.trial[1](%trial: index, %entropy: check.entropy) {
     // ERROR@+1: TYPE/001 "actual result" "expected result"
-    check.compare<@mismatched_pair_subject>() : () -> [actual(%actual: f32), expected(%expected: i32)] {
+    check.compare<@mismatched_pair_subject>() : () -> [actual(%actual: f32), expected(%expected: tensor<1xi32>)] {
       check.return
     }
   }

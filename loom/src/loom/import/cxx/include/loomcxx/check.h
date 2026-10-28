@@ -61,6 +61,12 @@ template <class... Args>
 
 namespace loom::check {
 
+// Selects whether two NaN values satisfy a floating-point approximation.
+enum class nan_policy : unsigned char {
+  same,
+  different,
+};
+
 // Stable source representation of a configuration or trial-domain ordinal.
 // Check ordinals project to Loom index values while retaining convenient
 // unsigned conversion for constructing host-side test data.
@@ -259,6 +265,27 @@ template <class T>
                                                      double absolute_tolerance,
                                                      double relative_tolerance,
                                                      const char* nan = "same");
+
+// Compares independently typed floating scalars or tensors using
+// abs(actual - expected) <= absolute_tolerance + relative_tolerance *
+// abs(expected). Tolerances are finite, non-negative compile-time constants.
+template <class Actual, class Expected>
+[[loom::op("check.expect.approximate")]] void expect_approximate(
+    Actual actual, Expected expected, double absolute_tolerance,
+    double relative_tolerance, nan_policy nan = nan_policy::same);
+
+// Compares independently typed integer scalars or tensors after sign extension.
+// The exact absolute distance and maximum are never converted to floating
+// point.
+template <class Actual, class Expected>
+[[loom::op("check.expect.close.signed")]] void expect_close_signed(
+    Actual actual, Expected expected, unsigned long long maximum_distance);
+
+// Compares independently typed integer scalar or tensor bit patterns after
+// zero extension. This preserves byte-oriented RGB, YUV, and codec values.
+template <class Actual, class Expected>
+[[loom::op("check.expect.close.unsigned")]] void expect_close_unsigned(
+    Actual actual, Expected expected, unsigned long long maximum_distance);
 
 // Declares provider metadata using a string provider followed by name/value
 // pairs. Names and string values are literals; scalar values are compile-time

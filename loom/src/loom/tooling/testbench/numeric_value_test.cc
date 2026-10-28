@@ -38,6 +38,10 @@ TEST(NumericValueTest, ResolvesStorageAndScalarTypes) {
       i32, IREE_HAL_ELEMENT_TYPE_UINT_32));
 
   EXPECT_EQ(loom_testbench_numeric_type_parse(IREE_SV("unknown")), nullptr);
+  EXPECT_EQ(loom_testbench_numeric_type_parse(IREE_SV("u64")), nullptr);
+  EXPECT_EQ(loom_testbench_numeric_type_from_hal_element_type(
+                IREE_HAL_ELEMENT_TYPE_UINT_64),
+            nullptr);
   EXPECT_EQ(
       loom_testbench_numeric_type_from_scalar_type(LOOM_SCALAR_TYPE_INDEX),
       nullptr);
@@ -99,11 +103,75 @@ TEST(NumericValueTest, LoadsIntegerElementsExactly) {
                 loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_I64),
                 reinterpret_cast<const uint8_t*>(i64), 0),
             INT64_MIN);
+  const uint64_t u64[] = {UINT64_C(9007199254740993), UINT64_MAX};
+  EXPECT_EQ(loom_testbench_numeric_load_u64_at(
+                loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_U64),
+                reinterpret_cast<const uint8_t*>(u64), 0),
+            UINT64_C(9007199254740993));
+  EXPECT_EQ(loom_testbench_numeric_load_u64_at(
+                loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_U64),
+                reinterpret_cast<const uint8_t*>(u64), 1),
+            UINT64_MAX);
   EXPECT_TRUE(loom_testbench_numeric_type_contains_i64(
       loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_I8), INT8_MAX));
   EXPECT_FALSE(loom_testbench_numeric_type_contains_i64(
       loom_testbench_numeric_type(LOOM_TESTBENCH_NUMERIC_I8),
       static_cast<int64_t>(INT8_MAX) + 1));
+}
+
+TEST(NumericValueTest, MapsEveryFixedWidthIntegerInterpretation) {
+  struct IntegerFormat {
+    // Authored signless Loom scalar type.
+    loom_scalar_type_t scalar_type;
+    // Signed numerical interpretation.
+    loom_testbench_numeric_kind_t signed_kind;
+    // Unsigned numerical interpretation.
+    loom_testbench_numeric_kind_t unsigned_kind;
+    // Signed HAL storage spelling.
+    iree_hal_element_type_t signed_storage;
+    // Unsigned HAL storage spelling.
+    iree_hal_element_type_t unsigned_storage;
+    // Signless HAL storage spelling.
+    iree_hal_element_type_t signless_storage;
+  };
+  const IntegerFormat formats[] = {
+      {LOOM_SCALAR_TYPE_I8, LOOM_TESTBENCH_NUMERIC_I8,
+       LOOM_TESTBENCH_NUMERIC_U8, IREE_HAL_ELEMENT_TYPE_SINT_8,
+       IREE_HAL_ELEMENT_TYPE_UINT_8, IREE_HAL_ELEMENT_TYPE_INT_8},
+      {LOOM_SCALAR_TYPE_I16, LOOM_TESTBENCH_NUMERIC_I16,
+       LOOM_TESTBENCH_NUMERIC_U16, IREE_HAL_ELEMENT_TYPE_SINT_16,
+       IREE_HAL_ELEMENT_TYPE_UINT_16, IREE_HAL_ELEMENT_TYPE_INT_16},
+      {LOOM_SCALAR_TYPE_I32, LOOM_TESTBENCH_NUMERIC_I32,
+       LOOM_TESTBENCH_NUMERIC_U32, IREE_HAL_ELEMENT_TYPE_SINT_32,
+       IREE_HAL_ELEMENT_TYPE_UINT_32, IREE_HAL_ELEMENT_TYPE_INT_32},
+      {LOOM_SCALAR_TYPE_I64, LOOM_TESTBENCH_NUMERIC_I64,
+       LOOM_TESTBENCH_NUMERIC_U64, IREE_HAL_ELEMENT_TYPE_SINT_64,
+       IREE_HAL_ELEMENT_TYPE_UINT_64, IREE_HAL_ELEMENT_TYPE_INT_64},
+  };
+  for (iree_host_size_t format_index = 0;
+       format_index < IREE_ARRAYSIZE(formats); ++format_index) {
+    const auto& format = formats[format_index];
+    const auto* signed_type =
+        loom_testbench_numeric_type_from_signed_scalar_type(format.scalar_type);
+    const auto* unsigned_type =
+        loom_testbench_numeric_type_from_unsigned_scalar_type(
+            format.scalar_type);
+    ASSERT_NE(signed_type, nullptr);
+    ASSERT_NE(unsigned_type, nullptr);
+    EXPECT_EQ(signed_type->kind, format.signed_kind);
+    EXPECT_EQ(unsigned_type->kind, format.unsigned_kind);
+    for (const auto* numeric_type : {signed_type, unsigned_type}) {
+      EXPECT_TRUE(loom_testbench_numeric_type_matches_storage(
+          numeric_type, format.signed_storage));
+      EXPECT_TRUE(loom_testbench_numeric_type_matches_storage(
+          numeric_type, format.unsigned_storage));
+      EXPECT_TRUE(loom_testbench_numeric_type_matches_storage(
+          numeric_type, format.signless_storage));
+      const auto& other = formats[(format_index + 1) % IREE_ARRAYSIZE(formats)];
+      EXPECT_FALSE(loom_testbench_numeric_type_matches_storage(
+          numeric_type, other.signless_storage));
+    }
+  }
 }
 
 }  // namespace

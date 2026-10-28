@@ -23,9 +23,11 @@
 #include <unordered_set>
 #include <vector>
 
+#include "loom/import/cxx/binding/constant_attributes.h"
 #include "loom/import/cxx/source/attributes.h"
 #include "loom/import/cxx/source/constants.h"
 #include "loom/import/cxx/source/error.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/check/ops.h"
 #include "loom/ops/func/ops.h"
@@ -548,6 +550,30 @@ class CheckBody {
       return scalars_.constant_attribute(*value, source->type, source);
     }
     fail(source, "check attributes require pure scalar constants");
+  }
+
+  loom_attribute_t descriptor_constant(loom_op_kind_t operation_kind,
+                                       uint8_t attribute_index,
+                                       cxx::ExpressionAST* source,
+                                       const char* failure_message) {
+    if (auto* initializer =
+            cxx::ast_cast<cxx::DefaultInitializerExpressionAST>(source)) {
+      source = initializer->expression;
+    }
+    auto value = scalar_constant(unit_, source);
+    if (!value) {
+      fail(source, failure_message);
+    }
+    const loom_op_vtable_t* vtable =
+        loom_context_resolve_op(builder_.module->context, operation_kind);
+    IREE_ASSERT(vtable && attribute_index < vtable->attribute_count);
+    auto decoded = decode_constant_attribute(
+        unit_, builder_.module, vtable->attr_descriptors[attribute_index],
+        source->type, *value);
+    if (!decoded) {
+      fail(source, failure_message);
+    }
+    return decoded.value;
   }
 
   cxx::CallExpressionAST* direct_call(cxx::ExpressionAST* source) {
@@ -1118,6 +1144,74 @@ class CheckBody {
             nan == "same" ? LOOM_CHECK_EXPECT_CLOSE_NAN_SAME
                           : LOOM_CHECK_EXPECT_CLOSE_NAN_DIFFERENT,
             location, &op));
+        break;
+      }
+      case Operation::Approximate: {
+        auto actual = expression(first->value);
+        auto expected = expression(first->next->value);
+        auto* absolute = first->next->next;
+        auto* relative = absolute->next;
+        const double absolute_tolerance = tolerance(absolute->value);
+        const double relative_tolerance = tolerance(relative->value);
+        const loom_attribute_t nan = descriptor_constant(
+            LOOM_OP_CHECK_EXPECT_APPROXIMATE, 2, relative->next->value,
+            "check NaN policy requires nan_policy::same or "
+            "nan_policy::different");
+        const loom_value_id_t actual_value =
+            actual.is_tensor()
+                ? static_cast<const TensorPartition&>(actual.partition())
+                      .tensor_value(actual.components())
+                : actual.ssa();
+        const loom_value_id_t expected_value =
+            expected.is_tensor()
+                ? static_cast<const TensorPartition&>(expected.partition())
+                      .tensor_value(expected.components())
+                : expected.ssa();
+        check(loom_check_expect_approximate_build(
+            &builder_, actual_value, expected_value, absolute_tolerance,
+            relative_tolerance,
+            (loom_check_expect_approximate_nan_t)loom_attr_as_enum(nan),
+            location, &op));
+        break;
+      }
+      case Operation::CloseSigned:
+      case Operation::CloseUnsigned: {
+        auto actual = expression(first->value);
+        auto expected = expression(first->next->value);
+        const bool is_signed = binding.operation == Operation::CloseSigned;
+        const loom_op_kind_t operation_kind =
+            is_signed ? LOOM_OP_CHECK_EXPECT_CLOSE_SIGNED
+                      : LOOM_OP_CHECK_EXPECT_CLOSE_UNSIGNED;
+        const loom_attribute_t maximum_distance_attribute = descriptor_constant(
+            operation_kind, 0, first->next->next->value,
+            "check maximum distance must be a non-negative integer "
+            "constant no greater than INT64_MAX");
+        const int64_t maximum_distance =
+            loom_attr_as_i64(maximum_distance_attribute);
+        if (maximum_distance < 0) {
+          fail(first->next->next->value,
+               "check maximum distance must be a non-negative integer "
+               "constant no greater than INT64_MAX");
+        }
+        const loom_value_id_t actual_value =
+            actual.is_tensor()
+                ? static_cast<const TensorPartition&>(actual.partition())
+                      .tensor_value(actual.components())
+                : actual.ssa();
+        const loom_value_id_t expected_value =
+            expected.is_tensor()
+                ? static_cast<const TensorPartition&>(expected.partition())
+                      .tensor_value(expected.components())
+                : expected.ssa();
+        if (is_signed) {
+          check(loom_check_expect_close_signed_build(
+              &builder_, actual_value, expected_value, maximum_distance,
+              location, &op));
+        } else {
+          check(loom_check_expect_close_unsigned_build(
+              &builder_, actual_value, expected_value, maximum_distance,
+              location, &op));
+        }
         break;
       }
       case Operation::Launch: {

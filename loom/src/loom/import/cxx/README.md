@@ -1857,21 +1857,37 @@ geometry and configurations. Tensors are test data handles, not C++ pointers
 that can be passed to ordinary functions. `expect_bitwise` compares equal-typed
 tensors exactly, including floating-point payload bits.
 
-`expect_close(actual, expected, absolute_tolerance, relative_tolerance)` compares
-floating scalars or equal-typed floating tensors. Finite elements must satisfy
-`abs(actual - expected) <= absolute_tolerance + relative_tolerance * abs(expected)`.
-Both tolerances are explicit, finite, non-negative compile-time constants. An
-optional final literal `"same"` (the default) accepts two NaNs; `"different"`
-rejects any NaN. Infinities compare only when they have the same sign. For example:
+`expect_approximate(actual, expected, absolute_tolerance,
+relative_tolerance)` compares independently typed floating scalars or tensors
+with the same shape. Finite elements must satisfy `abs(actual - expected) <=
+absolute_tolerance + relative_tolerance * abs(expected)`. Each operand is
+decoded in its authored type, so a narrow actual value can be checked directly
+against an f64 reference without narrowing the reference first. Both tolerances
+are explicit, finite, non-negative compile-time constants. The optional scoped
+NaN policy defaults to accepting two NaNs; infinities compare only when they
+have the same sign. For example:
 
 ```cpp
-loom::check::expect_close(actual, expected, 1e-5, 1e-4, "different");
+loom::check::expect_approximate(
+    actual_bf16, expected_f64, 1e-5, 1e-4,
+    loom::check::nan_policy::different);
 ```
 
-This emits `check.expect.close` and uses the runner's existing numerical
-comparison. The source chooses an accuracy requirement independently of the
-kernel's instruction selection; exact storage and guard checks can still use
-`expect_bitwise` in the same case.
+Integer error budgets remain exact. `expect_close_signed` sign-extends each
+fixed-width integer operand before measuring absolute distance;
+`expect_close_unsigned` zero-extends the same bit patterns. Both admit mixed
+i8/i16/i32/i64 widths and take an inclusive non-negative maximum distance. The
+unsigned form is suitable for image and codec channels where a one- or two-unit
+error is meaningful:
+
+```cpp
+loom::check::expect_close_unsigned(actual_rgb8, reference_rgb16, 2);
+```
+
+These emit `check.expect.approximate`, `check.expect.close.signed`, and
+`check.expect.close.unsigned`, respectively. The source chooses an accuracy
+requirement independently of the kernel's instruction selection; exact storage
+and guard checks can still use `expect_bitwise` in the same case.
 
 These calls produce the same IR as authored Loom checks:
 
