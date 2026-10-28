@@ -1,4 +1,4 @@
-// RUN: with-checks emit low-allocation @unused_entry test.i32=1
+// RUN: emit low-allocation @unused_entry
 
 test.target<low_core> @target
 
@@ -8,12 +8,20 @@ low.func.def target<test.low.core>(@target) @unused_entry(%before: reg<test.i32>
 }
 
 // ----
-CHECK: assignments: 1
-CHECK: spills: 0
+low-allocation @unused_entry
+target: target
+descriptor_set: test.low.core
+mode: virtual
+assignments: 1
+remarks: 0
+spills: 0
+copies: coalesced=0 materialized=0
+classes:
+  test.i32: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
 
 // ====
 
-// RUN: with-checks emit low-allocation @unused_branch test.i32=1
+// RUN: emit low-allocation @unused_branch
 
 test.target<low_core> @target
 
@@ -25,12 +33,20 @@ low.func.def target<test.low.core>(@target) @unused_branch(%input: reg<test.i32>
 }
 
 // ----
-CHECK: assignments: 2
-CHECK: spills: 0
+low-allocation @unused_branch
+target: target
+descriptor_set: test.low.core
+mode: virtual
+assignments: 2
+remarks: 0
+spills: 0
+copies: coalesced=0 materialized=0
+classes:
+  test.i32: assignments=2 units=2 target_ids=1 physical=0 spill_slots=0 unassigned=0
 
 // ====
 
-// RUN: with-checks emit low-allocation @empty_handoff test.i32=1
+// RUN: emit low-allocation @empty_handoff
 
 test.target<low_core> @target
 
@@ -44,12 +60,20 @@ low.func.def target<test.low.core>(@target) @empty_handoff(%input: reg<test.i32>
 }
 
 // ----
-CHECK: assignments: 2
-CHECK: spills: 0
+low-allocation @empty_handoff
+target: target
+descriptor_set: test.low.core
+mode: virtual
+assignments: 2
+remarks: 0
+spills: 0
+copies: coalesced=0 materialized=0
+classes:
+  test.i32: assignments=2 units=2 target_ids=1 physical=0 spill_slots=0 unassigned=0
 
 // ====
 
-// RUN: with-checks emit low-allocation @unused_result
+// RUN: emit low-allocation @unused_result
 
 test.target<low_core> @target
 
@@ -60,8 +84,16 @@ low.func.def target<test.low.core>(@target) @unused_result(%input: reg<test.i32>
 }
 
 // ----
-CHECK: assignments: 2
-CHECK: spills: 0
+low-allocation @unused_result
+target: target
+descriptor_set: test.low.core
+mode: virtual
+assignments: 2
+remarks: 0
+spills: 0
+copies: coalesced=0 materialized=0
+classes:
+  test.i32: assignments=2 units=2 target_ids=2 physical=0 spill_slots=0 unassigned=0
 
 // ====
 
@@ -83,7 +115,7 @@ CHECK: *"name":"iv","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_n
 
 // ====
 
-// RUN: with-checks emit low-allocation @attribute_use
+// RUN: emit low-allocation @attribute_use
 
 test.target<low_core> @target
 
@@ -94,8 +126,16 @@ low.func.def target<test.low.core>(@target) @attribute_use(%bound: reg<test.i32>
 }
 
 // ----
-CHECK: assignments: 3
-CHECK: spills: 0
+low-allocation @attribute_use
+target: target
+descriptor_set: test.low.core
+mode: virtual
+assignments: 3
+remarks: 0
+spills: 0
+copies: coalesced=0 materialized=0
+classes:
+  test.i32: assignments=3 units=3 target_ids=2 physical=0 spill_slots=0 unassigned=0
 
 // ====
 
