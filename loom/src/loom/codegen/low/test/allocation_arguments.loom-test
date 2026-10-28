@@ -172,15 +172,14 @@ value %high: test.explicit32 -> physical_register[2:1]
 
 // ====
 
-// Six simultaneous units cannot fit in five registers; entry recoloring
-// cannot turn a genuine shortage into a successful allocation.
-// RUN: emit low-allocation @entry_capacity_shortage test.i32=5 entry=0:test.i32:target_id:2 entry=1:test.i32:target_id:0
+// Five simultaneous units cannot fit in the four-register spillable bank.
+// Repacking can change the victim, but it cannot eliminate the spill.
+// RUN: emit low-allocation @entry_capacity_shortage
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @entry_capacity_shortage(%first: reg<test.i32>, %second: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
-  %wide = test.load.v4i32 %address
-  return %first, %second, %wide
+low.func.def target<test.low.core>(@target) @entry_capacity_shortage(%first: reg<test.explicit_range32>, %second: reg<test.explicit_range32>, %third: reg<test.explicit_range32>, %pair: reg<test.explicit_range32 x2>) -> (reg<test.explicit_range32>, reg<test.explicit_range32>, reg<test.explicit_range32>, reg<test.explicit_range32 x2>) asm {
+  return %first, %second, %third, %pair
 }
 
 // ----
@@ -192,10 +191,8 @@ assignments: 4
 remarks: 1
 spills: 1
 copies: coalesced=0 materialized=0
-entry moves: 0
 classes:
-  test.i32: assignments=3 units=6 target_ids=3 physical=0 spill_slots=4 unassigned=0
-  test.ptr: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
+  test.explicit_range32: assignments=4 units=5 target_ids=0 physical=3 spill_slots=2 unassigned=0
 
 // ====
 
@@ -257,9 +254,8 @@ classes:
 
 // ====
 
-// Every candidate in the unspillable physical class is occupied. Moving an
-// incoming value cannot create capacity for another live scalar.
-// RUN: emit low-allocation @entry_physical_shortage entry=0:test.explicit32:physical_register:0 entry=1:test.explicit32:physical_register:1 entry=2:test.explicit32:physical_register:2 entry=3:test.explicit32:physical_register:3
+// Five simultaneous scalars cannot fit in the four-register unspillable bank.
+// RUN: emit low-allocation @entry_physical_shortage
 
 test.target<low_core> @target
 
