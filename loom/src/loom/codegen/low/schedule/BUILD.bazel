@@ -276,6 +276,7 @@ loom_cc_test(
         "required_pressure.h",
         "required_pressure_test.cc",
         "setup_order.h",
+        "setup_order_test.cc",
         "storage_lifetime.h",
         "storage_relation_index.h",
         "target_pressure.h",

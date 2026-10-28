@@ -74,7 +74,8 @@ void loom_low_schedule_setup_order_classify_node(
 // already depends on that consumer. External prerequisites can therefore
 // precede the entire setup chain without creating a cycle.
 iree_status_t loom_low_schedule_setup_order_finish(
-    struct loom_low_schedule_build_state_t* state, uint32_t node_count);
+    struct loom_low_schedule_build_state_t* state, uint32_t node_count,
+    uint16_t block_count);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -363,7 +363,8 @@ static iree_status_t loom_low_schedule_setup_order_resolve_successors(
 }
 
 iree_status_t loom_low_schedule_setup_order_finish(
-    loom_low_schedule_build_state_t* state, uint32_t node_count) {
+    loom_low_schedule_build_state_t* state, uint32_t node_count,
+    uint16_t block_count) {
   loom_low_schedule_setup_order_t* order = &state->setup_order;
   if (order->completion_nodes == NULL) {
     return iree_ok_status();
@@ -380,8 +381,7 @@ iree_status_t loom_low_schedule_setup_order_finish(
     IREE_RETURN_IF_ERROR(status);
   }
   for (uint16_t block_index = 0;
-       block_index < state->body->block_count && iree_status_is_ok(status);
-       ++block_index) {
+       block_index < block_count && iree_status_is_ok(status); ++block_index) {
     const loom_low_schedule_block_t* block = &state->blocks[block_index];
     uint32_t range_end = block->node_start + block->node_count;
     for (uint32_t i = range_end;
