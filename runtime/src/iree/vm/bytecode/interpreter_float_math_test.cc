@@ -210,5 +210,28 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, FmaRoundsOnce) {
       UINT64_C(0xB970000000000000));
 }
 
+TEST_F(VMBytecodeInterpreterFloatMathTest, FmaPreservesRangeAndCanonicalNaNs) {
+  // A rounded F64 intermediate lands on the wrong subnormal F32 midpoint.
+  EXPECT_EQ(ExecuteFma<iree_vm_bytecode_float_fma_f32_t>(
+                iree_vm_bytecode_execute_float_fma_f32, UINT32_C(0x1A008040),
+                UINT32_C(0x19FF0080), UINT32_C(0x00080000)),
+            UINT32_C(0x00080001));
+  // The product overflows but the final fused result is representable.
+  EXPECT_EQ(
+      ExecuteFma<iree_vm_bytecode_float_fma_f64_t>(
+          iree_vm_bytecode_execute_float_fma_f64, UINT64_C(0x7FEFFFFFFFFFFFFF),
+          UINT64_C(0x4000000000000000), UINT64_C(0xFFEFFFFFFFFFFFFF)),
+      UINT64_C(0x7FEFFFFFFFFFFFFF));
+  EXPECT_EQ(ExecuteFma<iree_vm_bytecode_float_fma_f32_t>(
+                iree_vm_bytecode_execute_float_fma_f32, UINT32_C(0xFFC01234),
+                UINT32_C(0x3F800000), UINT32_C(0x3F800000)),
+            UINT32_C(0x7FC00000));
+  EXPECT_EQ(
+      ExecuteFma<iree_vm_bytecode_float_fma_f64_t>(
+          iree_vm_bytecode_execute_float_fma_f64, UINT64_C(0x3FF0000000000000),
+          UINT64_C(0x3FF0000000000000), UINT64_C(0xFFF0000000000001)),
+      UINT64_C(0x7FF8000000000000));
+}
+
 }  // namespace
 }  // namespace iree::vm::bytecode::testing

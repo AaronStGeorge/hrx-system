@@ -1356,47 +1356,6 @@ static void ExpectFloatFma(loom_scalar_type_t scalar_type, double a, double b,
   }
 }
 
-TEST(FloatFacts, NarrowFmaRoundsOnceAtMidpoints) {
-  // 129/128 * 3/2 is halfway between two BF16 values. A tiny signed addend
-  // selects the side even when it disappears in both F32 and F64 arithmetic.
-  for (const double sign : {1.0, -1.0}) {
-    ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, sign * 0x1.02p0, 1.5, -sign * 0x1p-30,
-                   sign * 0x1.82p0);
-    ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, sign * 0x1.02p0, 1.5,
-                   -sign * 0x1p-133, sign * 0x1.82p0);
-    ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, sign * 0x1.06p0, 1.5, sign * 0x1p-133,
-                   sign * 0x1.8ap0);
-    ExpectFloatFma(LOOM_SCALAR_TYPE_F16, sign * 0x1.004p0, 1.5, -sign * 0x1p-24,
-                   sign * 0x1.804p0);
-    ExpectFloatFma(LOOM_SCALAR_TYPE_F8E5M2, -sign * 0x1.4p7, 0x1.8p6,
-                   sign * 0x1.4p-14, -sign * 0x1.cp13);
-  }
-  // Exact midpoints retain ties-to-even rather than always rounding away.
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1.02p0, 1.5, 0.0, 0x1.84p0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1.06p0, 1.5, 0.0, 0x1.88p0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 1.125, 1.5, 0.0, 1.75);
-}
-
-TEST(FloatFacts, NarrowFmaPreservesSubnormalAndOverflowBoundaries) {
-  // Products may exceed the narrow range before cancellation by the addend.
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1.fep127, 2.0, -0x1.fep127,
-                 0x1.fep127);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F16, 65504.0, 2.0, -65504.0, 65504.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E5M2, 57344.0, 2.0, -57344.0, 57344.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 448.0, 2.0, -448.0, 448.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 448.0, 2.0, 0.0, 448.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F16, 65504.0, 2.0, 0.0, INFINITY);
-
-  // Subnormal result rounding, including a tie to zero and a tie to two units.
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1p-133, 0.5, 0.0, 0.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, -0x1p-133, 0.5, -0.0, -0.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1p-133, 0.5, 0x1p-133, 0x1p-132);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F16, 0x1p-24, 0.5, 0x1p-24, 0x1p-23);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E5M2, 0x1p-16, 0.5, 0x1p-16, 0x1p-15);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 0x1p-9, 0.5, 0x1p-9, 0x1p-8);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1p-133, 0x1p-133, 1.0, 1.0);
-}
-
 TEST(FloatFacts, FmaPreservesSpecialValuesAndDynamicOperands) {
   for (const auto scalar_type :
        {LOOM_SCALAR_TYPE_F8E4M3, LOOM_SCALAR_TYPE_F8E5M2, LOOM_SCALAR_TYPE_F16,
@@ -1421,6 +1380,14 @@ TEST(FloatFacts, FmaPreservesSpecialValuesAndDynamicOperands) {
       EXPECT_TRUE(loom_value_facts_is_unknown(result));
     }
   }
+  // Each narrow format retains its own final rounding after shared evaluation.
+  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 1.125, 1.5, 0.0, 1.75);
+  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E5M2, 0x1p-16, 0.5, 0x1p-16, 0x1p-15);
+  ExpectFloatFma(LOOM_SCALAR_TYPE_F16, 0x1.004p0, 1.5, -0x1p-24, 0x1.804p0);
+  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1.02p0, 1.5, -0x1p-133, 0x1.82p0);
+  // An F64 intermediate alone rounds this subnormal F32 result twice.
+  ExpectFloatFma(LOOM_SCALAR_TYPE_F32, 0x20201p-92, 0x1fe01p-92, 0x1p-130,
+                 0x1.00002p-130);
   // The binary64 path keeps true fused arithmetic instead of staging a product.
   ExpectFloatFma(LOOM_SCALAR_TYPE_F64, 0x1.0000002p0, 0x1.ffffffcp-1, -1.0,
                  -0x1p-54);

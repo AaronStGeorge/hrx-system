@@ -19,12 +19,16 @@ iree_runtime_cc_library(
     srcs = [
         "exponential.c",
         "float_bits.h",
+        "fma.c",
+        "fma_software.c",
+        "fma_software.h",
         "roots.c",
         "roots_integer.h",
         "trigonometry.c",
     ],
     hdrs = [
         "exponential.h",
+        "fma.h",
         "roots.h",
         "trigonometry.h",
     ],
@@ -38,7 +42,8 @@ iree_runtime_cc_library(
             "-ffp-contract=off",
         ],
         "//build_tools/bazel:cc_compiler_clang_cl": [
-            "/fp:precise",
+            "/clang:-fno-fast-math",
+            "/clang:-fno-math-errno",
             "/clang:-ffp-contract=off",
         ],
         "//build_tools/bazel:cc_compiler_gcc": [
@@ -53,6 +58,7 @@ iree_runtime_cc_library(
     }),
     deps = [
         "//runtime/src/iree/base:core_headers",
+        "//runtime/src/iree/base/internal",
     ],
 )
 
@@ -61,12 +67,15 @@ iree_runtime_cc_test(
     srcs = [
         "elementary_test_util.h",
         "exponential_test.cc",
+        "fma_software.h",
+        "fma_test.cc",
         "roots_integer.h",
         "roots_test.cc",
         "trigonometry_test.cc",
     ],
     deps = [
         ":math",
+        "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:fpu_state",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

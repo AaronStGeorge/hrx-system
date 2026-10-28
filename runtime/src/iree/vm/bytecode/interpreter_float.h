@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "iree/base/api.h"
+#include "iree/math/fma.h"
 #include "iree/vm/bytecode/interpreter_float_math.h"
 #include "iree/vm/bytecode/wire/core.h"
 
@@ -61,7 +62,7 @@
 #define IREE_VM_BYTECODE_FLOAT_INFINITY_BITS UINT32_C(0x7F800000)
 #define IREE_VM_BYTECODE_FLOAT_QUIET_NAN_BITS UINT32_C(0x7FC00000)
 #define IREE_VM_BYTECODE_FLOAT_FMOD fmodf
-#define IREE_VM_BYTECODE_FLOAT_FMA fmaf
+#define IREE_VM_BYTECODE_FLOAT_FMA iree_math_fma_f32
 #include "iree/vm/bytecode/interpreter_float_impl.inl"
 #undef IREE_VM_BYTECODE_FLOAT_FMA
 #undef IREE_VM_BYTECODE_FLOAT_FMOD
@@ -84,7 +85,7 @@
 #define IREE_VM_BYTECODE_FLOAT_INFINITY_BITS UINT64_C(0x7FF0000000000000)
 #define IREE_VM_BYTECODE_FLOAT_QUIET_NAN_BITS UINT64_C(0x7FF8000000000000)
 #define IREE_VM_BYTECODE_FLOAT_FMOD fmod
-#define IREE_VM_BYTECODE_FLOAT_FMA fma
+#define IREE_VM_BYTECODE_FLOAT_FMA iree_math_fma_f64
 #include "iree/vm/bytecode/interpreter_float_impl.inl"
 #undef IREE_VM_BYTECODE_FLOAT_FMA
 #undef IREE_VM_BYTECODE_FLOAT_FMOD

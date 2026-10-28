@@ -20,6 +20,7 @@
 
 #include "iree/base/internal/math.h"
 #include "iree/math/exponential.h"
+#include "iree/math/fma.h"
 #include "iree/math/roots.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/float_facts.h"
@@ -1664,7 +1665,7 @@ static bool loom_vector_dot4f8_apply(uint8_t kind, uint32_t lhs_raw,
     uint8_t rhs_field = (uint8_t)(rhs_raw >> shift);
     float lhs = loom_vector_dot4f8_decode_field(lhs_format, lhs_field);
     float rhs = loom_vector_dot4f8_decode_field(rhs_format, rhs_field);
-    *accumulator = fmaf(lhs, rhs, *accumulator);
+    *accumulator = iree_math_fma_f32(lhs, rhs, *accumulator);
   }
   return true;
 }

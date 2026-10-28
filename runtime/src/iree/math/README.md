@@ -23,6 +23,14 @@ rounding points and at most one adjacent value of error from correct rounding.
 Their exceptional-value behavior and arithmetic profile are part of their
 stable mapping, not host library policy.
 
+Fused multiply-add rounds the exact product and addend once. F32/F64 use a
+native instruction when enabled by the build ISA, with an owned software
+implementation otherwise. Narrow formats share an intermediate that preserves
+the side of their final rounding midpoint, including tiny addends lost by
+ordinary F64 addition. Compiler folding uses all three paths, and F32/F64 VM
+instructions use the same typed functions. Neither depends on a platform `fma`
+implementation.
+
 The f32 approximation operations model machine-shaped leaves used by ML target
 recipes:
 
@@ -61,6 +69,7 @@ gradual underflow, while approximation leaves own their documented flush rules.
 Operations are grouped by algorithm family and provenance:
 
 - `exponential.h` owns natural/base-two exponential and base-two logarithm.
+- `fma.h` owns fused arithmetic and narrow-format intermediate evaluation.
 - `roots.h` owns reciprocal, reciprocal square root, and square root.
 - `trigonometry.h` owns turns-based sine and cosine.
 
