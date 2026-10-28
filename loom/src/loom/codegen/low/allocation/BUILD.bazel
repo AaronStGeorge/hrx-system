@@ -495,6 +495,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/util:adaptive_sort",
+        "//loom/src/loom/util:cfg_graph",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:arena",
@@ -507,13 +508,20 @@ loom_cc_library(
     hdrs = ["spill_storage.h"],
     deps = [
         ":table",
-        "//loom/src/loom/analysis:liveness",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
         "//loom/src/loom/util:adaptive_sort",
-        "//loom/src/loom/util:cfg_graph",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "spill_storage_test",
+    srcs = ["spill_storage_test.cc"],
+    deps = [
+        ":spill_storage",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

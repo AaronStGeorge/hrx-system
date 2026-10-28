@@ -15,6 +15,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/registers.h"
 #include "loom/util/adaptive_sort.h"
+#include "loom/util/cfg_graph.h"
 
 #define LOOM_LOW_ALLOCATION_SPILL_PLAN_MAX_NATURAL_ALIGNMENT 16u
 
@@ -1216,6 +1217,46 @@ static iree_status_t loom_low_spill_materialization_plan_copy(
   return iree_ok_status();
 }
 
+static loom_low_spill_storage_interval_t
+loom_low_spill_materialization_storage_interval(
+    const loom_low_allocation_table_t* table,
+    const loom_low_allocation_spill_plan_t* plan, uint32_t plan_index) {
+  const loom_low_allocation_assignment_t* assignment =
+      &table->assignments[plan->assignment_index];
+  loom_low_spill_storage_interval_t interval = {
+      .plan = plan,
+      .plan_index = plan_index,
+      .first_block = loom_liveness_block_index_at_point(
+          &table->liveness, assignment->start_point),
+      .last_block = loom_liveness_block_index_at_point(
+          &table->liveness, assignment->end_point - 1u),
+  };
+  const loom_value_t* value = loom_module_value(table->module, plan->value_id);
+  if (loom_value_is_block_arg(value)) {
+    const uint16_t block_index =
+        loom_block_region_index(loom_value_def_block(value));
+    if (block_index == 0) {
+      // Unique entry cells permit stores to join the incoming ABI transport.
+      interval.first_block = 0;
+      interval.last_block = UINT16_MAX;
+    } else {
+      const loom_cfg_block_index_span_t predecessors =
+          loom_cfg_graph_predecessors(&table->cfg_graph, block_index);
+      for (iree_host_size_t i = 0; i < predecessors.count; ++i) {
+        interval.first_block =
+            iree_min(interval.first_block, predecessors.values[i]);
+        interval.last_block =
+            iree_max(interval.last_block, predecessors.values[i]);
+      }
+    }
+  } else if (loom_low_func_call_isa(loom_value_def_op(value))) {
+    // Result stores can likewise join their call's outgoing ABI transport.
+    interval.first_block = 0;
+    interval.last_block = UINT16_MAX;
+  }
+  return interval;
+}
+
 static iree_status_t loom_low_spill_materialization_plan_storage(
     loom_low_spill_materialization_plan_builder_t* builder,
     iree_arena_allocator_t* arena) {
@@ -1228,25 +1269,23 @@ static iree_status_t loom_low_spill_materialization_plan_storage(
     return iree_ok_status();
   }
 
-  const iree_host_size_t word_count =
-      iree_bitmap_calculate_words(builder->spill_plan_count);
-  iree_bitmap_t included_plans = {
-      .bit_count = builder->spill_plan_count,
-  };
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      &builder->scratch_arena, word_count, sizeof(*included_plans.words),
-      (void**)&included_plans.words));
-  memset(included_plans.words, 0, word_count * sizeof(*included_plans.words));
+  loom_low_spill_storage_interval_t* intervals = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&builder->scratch_arena, included_plan_count,
+                                sizeof(*intervals), (void**)&intervals));
+  iree_host_size_t interval_count = 0;
   for (uint32_t i = 0; i < builder->spill_plan_count; ++i) {
     if (loom_low_spill_materialization_record_has_traffic(
             &builder->records[i])) {
-      iree_bitmap_set(included_plans, i);
+      intervals[interval_count++] =
+          loom_low_spill_materialization_storage_interval(
+              builder->table, &builder->spill_plans[i], i);
     }
   }
 
   const uint32_t* scratch_representatives = NULL;
   IREE_RETURN_IF_ERROR(loom_low_allocation_spill_storage_plan(
-      builder->table, builder->spill_plans, included_plans,
+      intervals, interval_count, builder->spill_plan_count,
       &builder->scratch_arena, &scratch_representatives));
   if (scratch_representatives != NULL) {
     IREE_RETURN_IF_ERROR(

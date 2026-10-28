@@ -26,6 +26,7 @@ TEST(LowAllocationSpillPlanTest, ComputesByteLayout) {
   const LayoutCase cases[] = {
       {1, 8, 1, 1},    {2, 8, 2, 2},    {3, 16, 6, 4}, {3, 24, 9, 8},
       {4, 32, 16, 16}, {4, 64, 32, 16}, {8, 1, 1, 4},  {9, 1, 2, 4},
+      {8, 8, 8, 4},    {2, 32, 8, 8},
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(::testing::Message() << "units=" << test_case.unit_count
