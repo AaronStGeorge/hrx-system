@@ -472,7 +472,7 @@ iree_py_library(
   IMPORTS
     "."
   DEPS
-    loom::py::loom::model::fetch_storage
+    loom::py::loom::model::fetch_filesystem
     loom::py::loom::model::manifest
 )
 endif()

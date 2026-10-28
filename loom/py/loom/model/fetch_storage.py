@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import errno
 import hashlib
 import json
 import os
@@ -18,6 +17,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from .fetch_filesystem import publish_file
 from .fetch_hf import HuggingFace, hf_url_source
 from .fetch_progress import ByteProgress, Progress, ProgressEvent
 from .fetch_safetensors import repack
@@ -47,34 +47,6 @@ def atomic_write(path: Path, content: bytes) -> None:
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-
-
-def share_file(source: Path, destination: Path) -> str:
-    """Creates an explicitly shared view; never silently allocates a full copy."""
-    # Repository snapshots often contain relative symlinks. Some platforms link
-    # the symlink inode even with follow_symlinks=True; sharing the resolved blob
-    # preserves its bytes across a different destination directory layout.
-    source = source.resolve(strict=True)
-    try:
-        os.link(source, destination, follow_symlinks=True)
-        return "hardlink"
-    except OSError as error:
-        if error.errno not in (
-            errno.EXDEV,
-            errno.EPERM,
-            errno.EACCES,
-            errno.ENOTSUP,
-            errno.EOPNOTSUPP,
-        ):
-            raise
-    try:
-        os.symlink(source.absolute(), destination)
-        return "symlink"
-    except OSError as error:
-        raise FetchError(
-            "this filesystem cannot share the selected file; use an output on "
-            "the cache/source volume or explicitly select --materialize=copy"
-        ) from error
 
 
 @contextmanager
@@ -269,7 +241,7 @@ class ContentCache:
         path = self.blob_path(identity.sha256)
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            os.link(temporary, path)
+            publish_file(temporary, path)
         except FileExistsError:
             # Keep the existing shared inode: replacing it would leave two whole
             # copies alive when an installation still links the older inode.

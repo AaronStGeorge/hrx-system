@@ -18,8 +18,9 @@ from pathlib import Path
 import pytest
 
 from loom.model import ManifestError
+from loom.model.fetch_filesystem import share_file
 from loom.model.fetch_source import FetchError, Source
-from loom.model.fetch_storage import ContentCache, installation_lock, share_file
+from loom.model.fetch_storage import ContentCache, installation_lock
 from loom.model.http_test_server import serving_http
 from loom.model.lock import FileIdentity
 

@@ -247,10 +247,40 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    fetch_filesystem
+  SRCS
+    "fetch_filesystem.py"
+  DEPS
+    loom::py::loom::model::fetch_progress
+    loom::py::loom::model::fetch_source
+)
+
+iree_py_test(
+  NAME
+    fetch_filesystem_test
+  MAIN
+    "../tools/pytest_style_runner.py"
+  SRCS
+    "fetch_filesystem_test.py"
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.model.fetch_filesystem_test"
+  DEPS
+    loom::py::loom::model::fetch_filesystem
+    loom::py::loom::model::fetch_source
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
+iree_py_library(
+  NAME
     fetch_storage
   SRCS
     "fetch_storage.py"
   DEPS
+    loom::py::loom::model::fetch_filesystem
     loom::py::loom::model::fetch_hf
     loom::py::loom::model::fetch_progress
     loom::py::loom::model::fetch_safetensors
@@ -266,6 +296,7 @@ iree_py_library(
   SRCS
     "fetch.py"
   DEPS
+    loom::py::loom::model::fetch_filesystem
     loom::py::loom::model::fetch_hf
     loom::py::loom::model::fetch_progress
     loom::py::loom::model::fetch_source
@@ -379,6 +410,7 @@ iree_py_test(
   DEPS
     loom::py::loom::model::fetch
     loom::py::loom::model::fetch_cli
+    loom::py::loom::model::fetch_filesystem
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_storage
     loom::py::loom::model::http_test_server
@@ -424,6 +456,7 @@ iree_py_test(
   ARGS
     "loom.model.fetch_storage_test"
   DEPS
+    loom::py::loom::model::fetch_filesystem
     loom::py::loom::model::fetch_source
     loom::py::loom::model::fetch_storage
     loom::py::loom::model::http_test_server

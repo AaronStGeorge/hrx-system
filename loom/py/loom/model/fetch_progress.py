@@ -28,6 +28,8 @@ class ProgressEvent:
     completed_files: int | None = None
     # Selected unique acquisitions or installed destinations for this phase.
     total_files: int | None = None
+    # Diagnostic for a warning; contains no provider URLs or credentials.
+    message: str | None = None
 
 
 class Progress:

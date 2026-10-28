@@ -96,11 +96,26 @@ replaces an installed model.
 The default `--materialize=auto` copies programs and their auxiliary files so
 you can edit them independently. It shares cached weights and other assets;
 two installations that differ only in execution settings can share the same
-parameter files. `--materialize=copy` makes every file independent when moving
-an installation or using a filesystem that cannot share them.
+parameter files. Fetch tries hardlinks, then readable symlinks. When neither is
+available, automatic mode warns and copies the affected files instead; allow
+enough space for those independent copies. The warning also appears with
+`--quiet` and stays on stderr in JSON mode.
+
+`--materialize=copy` makes every file independent when moving an installation
+or storing it on removable media. Copies need no link support and report byte
+progress. A failed or cancelled copy does not publish a partial model card;
+completed cached downloads remain reusable.
 `--materialize=share` also shares programs with their source or cache, so edits
-can affect other installations. Keep the backing cache and local source files
-available while using shared files.
+can affect other installations. This explicit mode fails if sharing is
+unavailable instead of silently copying. Keep the backing cache and local
+source files available while using shared files.
+
+Hardlinks cannot cross filesystems. Symlinks can, but Windows requires symlink
+creation privileges or Developer Mode, and network paths have separate
+link-evaluation policies. Fetch probes the selected paths without changing
+those settings. Copying cannot bypass disk quotas, read-only storage, or
+per-file size limits: FAT32, for example, cannot hold a single file of 4 GiB or
+more. Use a large-file filesystem such as exFAT or NTFS for those weights.
 
 With an asset-scoped lock, editing a program requires no lock update, and a
 repeat fetch into the same installation preserves that edit. Git can version

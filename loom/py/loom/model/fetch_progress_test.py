@@ -7,8 +7,25 @@
 import io
 from unittest.mock import patch
 
+import pytest
+
 from loom.model.fetch_console import ConsoleProgress
 from loom.model.fetch_progress import ByteProgress, ProgressEvent
+
+
+@pytest.mark.parametrize("quiet", [False, True])
+def test_warnings_are_unthrottled_sanitized_and_visible_when_quiet(quiet):
+    output = io.StringIO()
+    progress = ConsoleProgress(output, quiet=quiet)
+    with patch("loom.model.fetch_console.time.monotonic", return_value=0):
+        progress(
+            ProgressEvent("warning", path="one\n.data", message="copy\x1b instead")
+        )
+        progress(ProgressEvent("warning", path="two.data", message="copy instead"))
+    assert output.getvalue().splitlines() == [
+        "loom-fetch  Warning   one\\u000a.data: copy\\u001b instead",
+        "loom-fetch  Warning   two.data: copy instead",
+    ]
 
 
 def test_byte_observations_are_bounded_but_completion_is_immediate():

@@ -199,8 +199,8 @@ def main(argv: list[str] | None = None) -> int:
         choices=("auto", "share", "copy"),
         default="auto",
         help="auto (default) copies programs and their auxiliary files while "
-        "sharing assets; share links every file to its source/cache; "
-        "copy makes every file independent",
+        "sharing assets, warning and copying if links are unavailable; "
+        "share requires links for every file; copy makes every file independent",
     )
     parser.add_argument(
         "--preserve-sources",
@@ -267,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
         cache = ContentCache(
             args.cache,
             wait_for_access=wait,
-            progress=None if args.quiet else ConsoleProgress(sys.stderr),
+            progress=ConsoleProgress(sys.stderr, quiet=args.quiet),
         )
         snapshot = None
         if args.card is None:
