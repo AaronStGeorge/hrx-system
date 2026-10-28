@@ -31,19 +31,49 @@ jobs:
           fi
           python3 loom/packaging/python/release.py check-tag "$GITHUB_REF_NAME"
 
-  build:
-    name: Build and qualify SDK
+  build_release:
+    name: SDK / Release
     needs: identity
     uses: ./.github/workflows/build_loom_sdk.yml
     with:
-      profiles: '["Release", "Tracy", "Debug", "ASAN"]'
+      profile: Release
+    permissions:
+      actions: read
+      contents: read
+
+  build_tracy:
+    name: SDK / Tracy
+    needs: identity
+    uses: ./.github/workflows/build_loom_sdk.yml
+    with:
+      profile: Tracy
+    permissions:
+      actions: read
+      contents: read
+
+  build_debug:
+    name: SDK / Debug
+    needs: identity
+    uses: ./.github/workflows/build_loom_sdk.yml
+    with:
+      profile: Debug
+    permissions:
+      actions: read
+      contents: read
+
+  build_asan:
+    name: SDK / ASAN
+    needs: identity
+    uses: ./.github/workflows/build_loom_sdk.yml
+    with:
+      profile: ASAN
     permissions:
       actions: read
       contents: read
 
   bundle:
     name: Verify complete artifact set
-    needs: build
+    needs: [build_release, build_tracy, build_debug, build_asan]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

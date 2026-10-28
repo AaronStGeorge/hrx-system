@@ -929,124 +929,62 @@ class CiTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "repository-wide"):
             ci.steps_from_args(args)
 
-    def test_bazel_repository_integration_exercises_supported_repository_tests(self):
+    def test_bazel_repository_tests_build_only_their_dependencies(self):
+        args = ci.parse_arguments(["iree-bazel-repository-integration"])
+        for platform_coverage in ("0", "1"):
+            with (
+                self.subTest(platform_coverage=platform_coverage),
+                mock.patch.dict(
+                    ci.os.environ,
+                    {"IREE_CI_PLATFORM_COVERAGE": platform_coverage},
+                    clear=True,
+                ),
+            ):
+                configure, test = ci.steps_from_args(args)
+                self.assertEqual(configure.argv[2:4], ("bazel", "configure"))
+                self.assertEqual(test.argv[2:4], ("bazel", "test"))
+                self.assertIn("--build_tests_only", test.argv)
+                self.assertNotIn("--//loom/config:shared_tools", test.argv)
+                self.assertEqual(
+                    "--test_lang_filters=-py" in test.argv, platform_coverage == "0"
+                )
+
+    def test_bazel_repository_device_compilation_shares_the_build_invocation(self):
         args = ci.parse_arguments(
-            [
-                "iree-bazel-repository-integration",
-                "--amdgpu-target",
-                "gfx11-generic",
-            ]
+            ["iree-bazel-repository-build", "--amdgpu-target", "gfx11-generic"]
         )
-
-        with mock.patch.dict(
-            ci.os.environ,
-            {
-                "HRX_ROCM_ROOT": "/tmp/rocm-root",
-                "IREE_CI_PLATFORM_COVERAGE": "1",
-            },
-            clear=True,
-        ):
-            steps = ci.steps_from_args(args)
-
-        self.assertEqual(
-            [step.name for step in steps],
-            [
-                "Configure Bazel",
-                "Build repository",
-                "Build AMDGPU device toolchain smoke",
-                "Test repository",
-                "Run dynamic library environment smoke",
-                "Run executable alias smoke",
-                "Test shared Loom tools",
-            ],
-        )
-        configure_step = steps[0]
-        self.assertIn("-DIREE_ROCM_PATH=/tmp/rocm-root", configure_step.argv)
-        device_build_step = steps[2]
-        for target in ci_config.BAZEL_REPOSITORY_INTEGRATION_DEVICE_TARGETS:
-            self.assertIn(target, device_build_step.argv)
+        with mock.patch.dict(ci.os.environ, {"HRX_ROCM_ROOT": "/tmp/rocm-root"}):
+            configure, build = ci.steps_from_args(args)
+        self.assertIn("-DIREE_ROCM_PATH=/tmp/rocm-root", configure.argv)
+        self.assertEqual(build.argv[2:4], ("bazel", "build"))
+        self.assertIn("//...", build.argv)
         self.assertIn(
             "--//runtime/src/iree/hal/drivers/amdgpu:targets=gfx11-generic",
-            device_build_step.argv,
+            build.argv,
         )
-        integration_test_step = steps[3]
-        self.assertEqual(integration_test_step.argv[-1], "//...")
-        self.assertIn(
-            "--test_tag_filters=" + ",".join(ci_config.CPU_RESOURCE_TAG_EXCLUDES),
-            integration_test_step.argv,
-        )
-        self.assertFalse(
-            any(
-                arg.startswith("--test_lang_filters=")
-                for arg in integration_test_step.argv
-            )
-        )
-        self.assertEqual(
-            steps[4].argv[-1],
-            ci_config.BAZEL_REPOSITORY_INTEGRATION_DYNAMIC_LIBRARY_TARGET,
-        )
-        self.assertEqual(
-            steps[5].argv[-3:],
-            (
-                ci_config.BAZEL_REPOSITORY_INTEGRATION_ALIAS_TARGET,
-                "--",
-                "--help",
-            ),
-        )
-        self.assertIn("--//loom/config:shared_tools", steps[6].argv)
-        self.assertIn("//loom/src/loom/tools/loom-opt:execution_test", steps[6].argv)
-        self.assertIn("//loom/src/loom/tools/loom-format:execution_test", steps[6].argv)
-        self.assertIn("//loom/src/loom/tools/loom-link:execution_test", steps[6].argv)
-        self.assertIn("//loom/src/loom/tools/loom-run:execution_test", steps[6].argv)
-        self.assertIn(
-            "//loom/src/loom/tooling/target/cpu:run_cxx_input_test", steps[6].argv
-        )
-        self.assertIn(
-            "//loom/src/loom/import/cxx/test:export_roundtrip_test", steps[6].argv
-        )
-        self.assertIn("//loom/src/loom/tooling/target/cpu/serve:all", steps[6].argv)
-        for tool in ("loom-check", "loom-test", "loom-benchmark"):
-            self.assertIn(f"//loom/src/loom/tools/{tool}:execution_test", steps[6].argv)
-        self.assertIn("//loom/src/loom/tools/loom-check/test:core_test", steps[6].argv)
-        for step in steps[:6]:
-            self.assertNotIn("--//loom/config:shared_tools", step.argv)
 
-    def test_bazel_repository_integration_secondary_lane_skips_duplicate_coverage(
-        self,
-    ):
-        args = ci.parse_arguments(["iree-bazel-repository-integration"])
-
-        with mock.patch.dict(
-            ci.os.environ,
-            {
-                "HRX_ROCM_ROOT": "/tmp/rocm-root",
-                "IREE_CI_PLATFORM_COVERAGE": "0",
-            },
-            clear=True,
-        ):
-            steps = ci.steps_from_args(args)
-
-        self.assertNotIn("Build repository", [step.name for step in steps])
-        self.assertIn(
-            "Build AMDGPU device toolchain smoke", [step.name for step in steps]
+    def test_bazel_repository_device_compilation_requires_rocm(self):
+        args = ci.parse_arguments(
+            ["iree-bazel-repository-build", "--amdgpu-target", "gfx11-generic"]
         )
-        self.assertIn("Test repository", [step.name for step in steps])
-        integration_test_step = next(
-            step for step in steps if step.name == "Test repository"
-        )
-        self.assertIn(
-            "--test_tag_filters="
-            + ",".join(ci_config.CPU_RESOURCE_TAG_EXCLUDES + ("-loom-corpus",)),
-            integration_test_step.argv,
-        )
-        self.assertIn("--test_lang_filters=-py", integration_test_step.argv)
-
-    def test_bazel_repository_integration_requires_rocm_device_tools(self):
-        args = ci.parse_arguments(["iree-bazel-repository-integration"])
-
         with mock.patch.dict(ci.os.environ, {}, clear=True):
             with self.assertRaisesRegex(ValueError, "requires HRX_ROCM_ROOT"):
                 ci.steps_from_args(args)
+
+    def test_shared_tool_commands_do_not_run_a_static_configuration(self):
+        for command in (
+            "iree-bazel-repository-shared-tools",
+            "iree-bazel-cpu-shared-tools-asan",
+        ):
+            with self.subTest(command=command):
+                configure, test = ci.steps_from_args(ci.parse_arguments([command]))
+                self.assertEqual(configure.argv[2:4], ("bazel", "configure"))
+                self.assertEqual(test.argv[2:4], ("bazel", "test"))
+                self.assertIn("--//loom/config:shared_tools", test.argv)
+                with self.assertRaisesRegex(ValueError, "--target"):
+                    ci.steps_from_args(
+                        ci.parse_arguments([command, "--target", "//example:test"])
+                    )
 
     def test_bazel_repository_integration_rejects_partial_target_scope(self):
         args = ci.parse_arguments(
@@ -1465,12 +1403,8 @@ class CiTest(unittest.TestCase):
         self.assertFalse(any("--config=ubsan" in line for line in command_lines))
         self.assertFalse(any("--config=tsan" in line for line in command_lines))
         self.assertFalse(any("--config=msan" in line for line in command_lines))
-        shared_step = next(
-            step for step in steps if step.name == "Test shared Loom tools"
-        )
-        self.assertIn("--//loom/config/import:enable=cxx", shared_step.argv)
-        self.assertIn(
-            "//loom/src/loom/tools/loom-import-cxx:execution_test", shared_step.argv
+        self.assertFalse(
+            any("--//loom/config:shared_tools" in step.argv for step in steps)
         )
 
     def test_bazel_cpu_msan_command_builds_without_tests(self):
@@ -1910,43 +1844,21 @@ fi
             )
         )
 
-    def test_cmake_cpu_qualifies_static_then_shared_in_the_same_tree(self):
-        steps = ci.steps_from_args(ci.parse_arguments(["iree-cmake-cpu"]))
-        configure_index = next(
-            index
-            for index, step in enumerate(steps)
-            if step.name == "Configure shared Loom tools"
-        )
-        self.assertTrue(
-            any(step.name == "Test IREE CMake" for step in steps[:configure_index])
-        )
-        for step in steps[:configure_index]:
-            self.assertNotIn("-DLOOM_LINK_SHARED_TOOLS=ON", step.argv)
-        for step in steps[configure_index:]:
-            self.assertTrue(self.uses_cmake_build_dir(step, "iree-cmake-cpu"))
-        self.assertNotIn("--fresh", steps[configure_index].argv)
-        self.assertIn("-DLOOM_LINK_SHARED_TOOLS=ON", steps[configure_index].argv)
-        self.assertIn("-DLOOM_IMPORT_CXX=ON", steps[configure_index].argv)
-        self.assertIn("loom-import-cxx", steps[configure_index + 1].argv)
-        self.assertIn("loom-format", steps[configure_index + 1].argv)
-        self.assertIn("loom-link", steps[configure_index + 1].argv)
-        self.assertIn("loom-run", steps[configure_index + 1].argv)
-        for tool in ("loom-check", "loom-check-test", "loom-test", "loom-benchmark"):
-            self.assertIn(tool, steps[configure_index + 1].argv)
-        for tool in ("loom-check", "loom-test", "loom-benchmark"):
-            self.assertIn(tool, steps[-1].argv[steps[-1].argv.index("-R") + 1])
-        self.assertIn("loom-link", steps[-1].argv[steps[-1].argv.index("-R") + 1])
-        self.assertIn("loom-format", steps[-1].argv[steps[-1].argv.index("-R") + 1])
-        self.assertIn("loom-run", steps[-1].argv[steps[-1].argv.index("-R") + 1])
-        self.assertIn(
-            "loom/tooling/target/cpu/run_cxx_input_test",
-            steps[-1].argv[steps[-1].argv.index("-R") + 1],
-        )
-        self.assertIn(
-            "loom_tooling_target_cpu_serve_loom-serve-test-tool",
-            steps[configure_index + 1].argv,
-        )
-        self.assertEqual(steps[-1].name, "Test shared Loom tools")
+    def test_cmake_link_modes_have_independent_configuration_trees(self):
+        for command, shared in (
+            ("iree-cmake-cpu", False),
+            ("iree-cmake-shared-tools", True),
+        ):
+            with self.subTest(command=command):
+                steps = ci.steps_from_args(ci.parse_arguments([command]))
+                configure_steps = [step for step in steps if "configure" in step.argv]
+                self.assertEqual(len(configure_steps), 1)
+                self.assertIn("--fresh", configure_steps[0].argv)
+                self.assertEqual(
+                    "-DLOOM_LINK_SHARED_TOOLS=ON" in configure_steps[0].argv, shared
+                )
+                for step in steps:
+                    self.assertTrue(self.uses_cmake_build_dir(step, command))
 
     def test_cmake_cpu_sanitizers_command_runs_each_configuration(self):
         args = ci.parse_arguments(["iree-cmake-cpu-sanitizers"])

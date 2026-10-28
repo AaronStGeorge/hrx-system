@@ -470,13 +470,14 @@ jobs:
 
       - name: Run installed tests
         id: core_tests
+        if: ${{ !matrix.package }}
         run: python build_tools/ci/ci_core_windows.py test
 
       - name: Package
         if: ${{ matrix.package }}
         run: python build_tools/ci/ci_core_windows.py package
 
-      - name: Relocate and retest package
+      - name: Relocate and test package
         id: relocated_tests
         if: ${{ matrix.package }}
         shell: pwsh
