@@ -38,6 +38,7 @@ def _manifest_with_rule(rule: MigrationRuleMetadata) -> MigrationManifest:
 
 
 def test_current_manifest_has_no_releases_before_first_release() -> None:
+    assert CURRENT_TEXT_BASELINE == "loom-source-format-2026-10-28"
     assert CURRENT_MANIFEST.current_text_baseline == CURRENT_TEXT_BASELINE
     assert CURRENT_MANIFEST.current_bytecode_version == CURRENT_BYTECODE_VERSION
     assert CURRENT_MANIFEST.releases == ()

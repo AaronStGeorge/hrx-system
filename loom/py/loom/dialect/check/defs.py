@@ -62,6 +62,7 @@ from loom.dsl import (
     HasAnyAncestor,
     HasParent,
     ImplicitTerminator,
+    LegacyFormat,
     LiteralMatchesElementType,
     OffsetCountMatchesRank,
     Op,
@@ -928,6 +929,21 @@ check_expect_approximate = Op(
         TypeOf("actual"),
         COMMA,
         TypeOf("expected"),
+    ],
+    legacy_formats=[
+        LegacyFormat(
+            "check.expect.close.approximate",
+            format=[
+                *_EXPECT_VALUE_CLAUSES,
+                Clause("atol", Attr("atol")),
+                Clause("rtol", Attr("rtol")),
+                Clause("nan", Attr("nan")),
+                COLON,
+                TypeOf("actual"),
+            ],
+            replaced_by="loom-source-format-2026-10-28",
+            rewrite_hook="check_expect_close_approximate",
+        )
     ],
     examples=[
         "check.expect.approximate actual(%actual) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<[%m]xbf16>, tensor<[%m]xf64>",

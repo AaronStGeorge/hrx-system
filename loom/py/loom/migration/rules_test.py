@@ -19,6 +19,7 @@ from loom.migration.driver import (
 )
 from loom.migration.rules import (
     BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID,
+    CHECK_EXPECT_CLOSE_APPROXIMATE_RULE_ID,
     MigrationRuleApplication,
     migration_rules_from_ops,
 )
@@ -29,6 +30,117 @@ def test_default_rules_are_generated_from_op_legacy_formats() -> None:
     rule_ids = tuple(rule.rule_id for rule in default_migration_rules())
 
     assert BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID in rule_ids
+    assert CHECK_EXPECT_CLOSE_APPROXIMATE_RULE_ID in rule_ids
+
+
+def test_check_expect_close_rewrites_to_typed_approximate() -> None:
+    text = (
+        "check.case @case {\n"
+        "  %actual = check.literal value(1.0) : f32\n"
+        "  %expected = check.literal value(1.0) : f32\n"
+        "  check.expect.close actual(%actual) expected(%expected) "
+        "atol(0.0) rtol(1.0e-5) nan(same) : f32\n"
+        "  check.return\n"
+        "}\n"
+    )
+
+    result = migrate_source_text(text, filename=Path("input.loom"))
+
+    assert result.ok, result.diagnostics
+    assert result.changed
+    assert result.text == (
+        "check.case @case {\n"
+        "  %actual = check.literal value(1.0) : f32\n"
+        "  %expected = check.literal value(1.0) : f32\n"
+        "  check.expect.approximate actual(%actual) expected(%expected) "
+        "atol(0.0) rtol(1.0e-5) nan(same) : f32, f32\n"
+        "  check.return\n"
+        "}\n"
+    )
+
+
+def test_check_expect_close_rewrite_tolerates_zero_length_compact_types() -> None:
+    text = (
+        "func.def @empty() -> (vector<0xi32>) {\n"
+        "  %empty = vector.constant [] : vector<0xi32>\n"
+        "  func.return %empty : vector<0xi32>\n"
+        "}\n"
+        "check.case @case {\n"
+        "  %actual = check.literal value(1.0) : f32\n"
+        "  check.expect.close actual(%actual) expected(%actual) "
+        "atol(0.0) rtol(0.0) nan(same) : f32\n"
+        "  check.return\n"
+        "}\n"
+    )
+
+    result = migrate_source_text(text, filename=Path("input.loom"))
+
+    assert result.ok, result.diagnostics
+    assert result.changed
+    assert result.text.count("vector<0xi32>") == 3
+    assert "check.expect.approximate" in result.text
+
+
+def test_check_expect_approximate_current_syntax_is_noop() -> None:
+    text = (
+        "check.case @case {\n"
+        "  %actual = check.literal value(1.0) : f16\n"
+        "  %expected = check.literal value(1.0) : f64\n"
+        "  check.expect.approximate actual(%actual) expected(%expected) "
+        "atol(0.0) rtol(1.0e-5) nan(same) : f16, f64\n"
+        "  check.return\n"
+        "}\n"
+    )
+
+    result = migrate_source_text(text, filename=Path("input.loom"))
+
+    assert result.ok
+    assert not result.changed
+    assert result.text == text
+
+
+def test_check_expect_close_rewrite_is_idempotent() -> None:
+    text = (
+        "check.case @case {\n"
+        "  %actual = check.literal value(1.0) : bf16\n"
+        "  %expected = check.literal value(1.0) : bf16\n"
+        "  check.expect.close actual(%actual) expected(%expected) "
+        "atol(0.01) rtol(0.0) nan(different) : bf16\n"
+        "  check.return\n"
+        "}\n"
+    )
+
+    first_result = migrate_source_text(text, filename=Path("input.loom"))
+    second_result = migrate_source_text(
+        first_result.text,
+        filename=Path("input.loom"),
+    )
+
+    assert first_result.ok, first_result.diagnostics
+    assert first_result.changed
+    assert second_result.ok
+    assert not second_result.changed
+
+
+def test_check_expect_close_rewrites_loom_test_input_only() -> None:
+    legacy = (
+        "check.case @case {\n"
+        "  %actual = check.literal value(1.0) : f32\n"
+        "  check.expect.close actual(%actual) expected(%actual) "
+        "atol(0.0) rtol(0.0) nan(same) : f32\n"
+        "  check.return\n"
+        "}\n"
+    )
+    text = "// RUN: roundtrip\n\n" + legacy + "// ----\n" + legacy
+
+    result = migrate_loom_test_text(text, filename=Path("case.loom-test"))
+
+    assert result.ok, result.diagnostics
+    assert result.changed
+    input_text, expected_text = result.text.split("// ----\n", maxsplit=1)
+    assert "check.expect.approximate" in input_text
+    assert " : f32, f32" in input_text
+    assert expected_text == legacy
 
 
 def test_buffer_assume_memory_space_attr_dict_rewrites_source() -> None:

@@ -31,7 +31,7 @@ REQUIRED_ACTIVE_RULE_TEST_KINDS = frozenset(
     )
 )
 
-CURRENT_TEXT_BASELINE = "loom-source-format-2026-06-09"
+CURRENT_TEXT_BASELINE = "loom-source-format-2026-10-28"
 CURRENT_BYTECODE_VERSION = FORMAT_VERSION
 
 
@@ -425,7 +425,14 @@ def _rule_baseline_position(
 CURRENT_MANIFEST = MigrationManifest(
     text_baselines=(
         TextBaseline("pre-release", "Development before migration tracking."),
-        TextBaseline(CURRENT_TEXT_BASELINE, "Initial Loom source-format baseline."),
+        TextBaseline(
+            "loom-source-format-2026-06-09",
+            "Initial Loom source-format baseline.",
+        ),
+        TextBaseline(
+            CURRENT_TEXT_BASELINE,
+            "Typed numerical expectation source format.",
+        ),
     ),
     current_text_baseline=CURRENT_TEXT_BASELINE,
     current_bytecode_version=CURRENT_BYTECODE_VERSION,

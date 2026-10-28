@@ -3471,6 +3471,8 @@ class Parser:
                                 and tok.peek().text in attr_def.enum_def.keywords
                             )
                 return tok.at(TokenKind.BARE_IDENT)
+            case AttrDict():
+                return tok.at(TokenKind.LBRACE)
             case SymbolRef():
                 return tok.at(TokenKind.SYMBOL)
             case BlockRef():
