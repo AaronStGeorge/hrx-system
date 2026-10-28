@@ -84,7 +84,8 @@ TEST(SetupMembershipTest, StructuralSetupRequiresPolicyOrRetainedRegister) {
         .flags = LOOM_LOW_SCHEDULE_NODE_FLAG_STORAGE_SETUP,
         .value_ordinals = {.inline_value_ordinals = {0, 1}},
     };
-    loom_low_schedule_setup_order_classify_node(&state, &node,
+    state.nodes = &node;
+    loom_low_schedule_setup_order_classify_node(&state, 0,
                                                 test_case.order_structural);
     EXPECT_EQ(
         iree_any_bit_set(node.flags, LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP),
@@ -157,8 +158,9 @@ TEST(SetupMembershipTest, SingletonRequiredStorageNeedsExclusionOrdering) {
     if (test_case.storage_setup) {
       node.flags = LOOM_LOW_SCHEDULE_NODE_FLAG_STORAGE_SETUP;
     }
+    state.nodes = &node;
     loom_low_schedule_setup_order_classify_node(
-        &state, &node, /*order_structural_setup=*/false);
+        &state, 0, /*order_structural_setup=*/false);
     EXPECT_EQ(
         iree_any_bit_set(node.flags, LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP),
         test_case.ordered);
@@ -240,8 +242,107 @@ TEST(SetupMembershipTest, CapturedRequiredStorageMustPreserveItsFootprint) {
         .value_ordinals = {.inline_value_ordinals = {0, 1}},
     };
     loom_low_schedule_node_result_ordinals(&node)[0] = 2;
+    state.nodes = &node;
     loom_low_schedule_setup_order_classify_node(
-        &state, &node, /*order_structural_setup=*/true);
+        &state, 0, /*order_structural_setup=*/true);
+    EXPECT_EQ(
+        iree_any_bit_set(node.flags, LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP),
+        test_case.ordered);
+    EXPECT_EQ(state.setup_order.has_members, test_case.ordered);
+  }
+}
+
+TEST(SetupMembershipTest, DescriptorMembershipPreservesRequiredReadPhases) {
+  const loom_low_reg_class_t reg_class = {
+      .alloc_unit_bits = 32,
+      .allocatable_count = 8,
+  };
+  const loom_low_descriptor_set_t descriptors = {
+      .reg_classes = &reg_class,
+      .reg_class_count = 1,
+  };
+  const struct {
+    // Retained packet read/write phase information.
+    loom_low_schedule_node_flags_t flags;
+    // Physical units held by the captured input.
+    uint32_t input_units;
+    // Whether the input requires physical storage.
+    bool input_required;
+    // Result arity of the descriptor packet.
+    uint16_t result_count;
+    // Whether setup ordering preserves required storage.
+    bool ordered;
+  } cases[] = {
+      {0, 1, true, 0, false},
+      {0, 1, true, 2, false},
+      {0, 1, true, 1, true},
+      {0, 4, true, 1, false},
+      {LOOM_LOW_SCHEDULE_NODE_FLAG_EARLY_CLOBBER, 1, true, 1, false},
+      {LOOM_LOW_SCHEDULE_NODE_FLAG_LATE_READS, 1, true, 1, false},
+      {LOOM_LOW_SCHEDULE_NODE_FLAG_EARLY_CLOBBER, 1, false, 1, true},
+      {LOOM_LOW_SCHEDULE_NODE_FLAG_LATE_READS, 1, false, 1, true},
+  };
+  loom_value_id_t value_ids[] = {7, 19, 29};
+  loom_local_value_domain_t domain = {
+      .value_ids = value_ids,
+      .value_count = IREE_ARRAYSIZE(value_ids),
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "flags=" << test_case.flags
+                 << " units=" << test_case.input_units
+                 << " required=" << test_case.input_required
+                 << " results=" << test_case.result_count);
+    loom_low_descriptor_t descriptor = {
+        .operand_count = uint16_t(test_case.result_count + 1),
+        .result_count = test_case.result_count,
+    };
+    if (test_case.flags & LOOM_LOW_SCHEDULE_NODE_FLAG_EARLY_CLOBBER) {
+      descriptor.flags |= LOOM_LOW_DESCRIPTOR_FLAG_EARLY_CLOBBER;
+    }
+    if (test_case.flags & LOOM_LOW_SCHEDULE_NODE_FLAG_LATE_READS) {
+      descriptor.flags |= LOOM_LOW_DESCRIPTOR_FLAG_LATE_READ;
+    }
+    uint64_t placement_word = 0;
+    uint64_t required_word = 0;
+    loom_low_schedule_options_t options = {
+        .required_register_values = {64, &required_word},
+        .per_user_placement_values = {64, &placement_word},
+    };
+    loom_low_schedule_value_record_t values[] = {
+        {.unit_count = test_case.input_units, .register_class_id = 0},
+        {.unit_count = 1, .register_class_id = 0},
+        {.unit_count = 1, .register_class_id = 0},
+    };
+    if (test_case.input_required) {
+      iree_bitmap_set(options.required_register_values, value_ids[0]);
+      values[0].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+    }
+    for (uint16_t i = 1; i <= test_case.result_count; ++i) {
+      iree_bitmap_set(options.per_user_placement_values, value_ids[i]);
+      iree_bitmap_set(options.required_register_values, value_ids[i]);
+      values[i].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+    }
+    loom_low_schedule_node_t node = {
+        .descriptor = &descriptor,
+        .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
+        .operand_count = 1,
+        .result_count = test_case.result_count,
+        .flags = test_case.flags,
+        .value_ordinals = {.inline_value_ordinals = {0, 1, 2}},
+    };
+    if (test_case.flags & LOOM_LOW_SCHEDULE_NODE_FLAG_LATE_READS) {
+      node.value_ordinals.inline_value_ordinals[2] = 1;
+    }
+    loom_low_schedule_build_state_t state = {
+        .options = &options,
+        .target = {.descriptor_set = &descriptors},
+        .value_domain = &domain,
+        .values = values,
+        .nodes = &node,
+    };
+    loom_low_schedule_setup_order_classify_node(
+        &state, 0, /*order_structural_setup=*/false);
     EXPECT_EQ(
         iree_any_bit_set(node.flags, LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP),
         test_case.ordered);
@@ -336,6 +437,218 @@ class SetupOrderTest : public ::testing::Test {
   // Native closure inputs and outputs, borrowing the arrays above.
   loom_low_schedule_build_state_t state_ = {};
 };
+
+TEST_F(SetupOrderTest, ContinuationsConsumeRetainedStorageIdentity) {
+  enum SourceKind {
+    kComputed,
+    kConstant,
+    kObservable,
+    kNotRematerializable,
+    kOtherBlock,
+  };
+  constexpr uint32_t kSource = 1u;
+  constexpr uint32_t kResult = 2u;
+  const struct {
+    // Producer behavior whose native facts were retained during graph building.
+    SourceKind source_kind;
+    // Whether the partial value must retain physical storage.
+    bool source_required;
+    // Whether the completing packet belongs to a rematerialization recipe.
+    bool result_rematerializable;
+    // Nodes with allocation-owned private placement, indexed by node ordinal.
+    uint32_t retained;
+    // Expected setup members, indexed by node ordinal.
+    uint32_t members;
+  } cases[] = {
+      {kComputed, true, false, 0, 0},
+      {kComputed, true, false, kSource, kSource | kResult},
+      {kComputed, false, false, kSource, kSource | kResult},
+      {kComputed, true, false, kResult, kSource | kResult},
+      {kComputed, false, false, kResult, kResult},
+      {kNotRematerializable, true, false, kResult, kResult},
+      {kObservable, true, false, kResult, kResult},
+      {kOtherBlock, true, false, kResult, kResult},
+      {kConstant, false, true, kSource, 0},
+      {kConstant, true, true, kSource, kSource},
+      {kConstant, true, true, kResult, kResult},
+      {kConstant, true, false, kSource, kSource | kResult},
+  };
+  const loom_low_reg_class_t reg_class = {
+      .alloc_unit_bits = 32,
+      .allocatable_count = 8,
+  };
+  loom_segmented_storage_t relations;
+  loom_segmented_storage_initialize(
+      sizeof(loom_low_schedule_storage_relation_t),
+      alignof(loom_low_schedule_storage_relation_t), &relations);
+  loom_low_schedule_storage_relation_t* relation = nullptr;
+  IREE_ASSERT_OK(loom_segmented_storage_append(
+      &relations, &arena_, reinterpret_cast<void**>(&relation)));
+  uint32_t relation_starts[] = {0, 0, 1};
+  loom_value_id_t value_ids[] = {5, 11, 19, 29};
+  loom_local_value_domain_t domain = {
+      .value_ids = value_ids,
+      .value_count = IREE_ARRAYSIZE(value_ids),
+  };
+  uint32_t producers[] = {LOOM_LOW_SCHEDULE_NODE_NONE,
+                          LOOM_LOW_SCHEDULE_NODE_NONE, 0, 1};
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "source=" << test_case.source_kind
+                 << " required=" << test_case.source_required
+                 << " rematerializable=" << test_case.result_rematerializable
+                 << " retained=" << test_case.retained);
+    const bool constant = test_case.source_kind == kConstant;
+    const uint16_t source_operand_count = constant ? 0 : 1;
+    const uint16_t result_operand_count = constant ? 1 : 2;
+    const loom_low_descriptor_t descriptors[] = {
+        {
+            .operand_count = uint16_t(source_operand_count + 1),
+            .result_count = 1,
+        },
+        {
+            .operand_start = 2,
+            .operand_count = uint16_t(result_operand_count + 1),
+            .result_count = 1,
+            .layout_index = 1,
+        },
+    };
+    loom_low_operand_t operands[] = {
+        {.role = LOOM_LOW_OPERAND_ROLE_RESULT, .unit_count = 1},
+        {
+            .role = LOOM_LOW_OPERAND_ROLE_RESULT,
+            .flags = LOOM_LOW_OPERAND_FLAG_TIED |
+                     LOOM_LOW_OPERAND_FLAG_STORAGE_CONTINUATION,
+            .unit_count = 1,
+        },
+        {.role = LOOM_LOW_OPERAND_ROLE_OPERAND, .unit_count = 1},
+        {
+            .source_value_index = uint16_t(result_operand_count - 1),
+            .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
+            .flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT |
+                     LOOM_LOW_OPERAND_FLAG_TIED |
+                     LOOM_LOW_OPERAND_FLAG_STORAGE_CONTINUATION,
+            .unit_count = 1,
+        },
+    };
+    if (test_case.source_kind != kNotRematerializable) {
+      operands[0].flags |= LOOM_LOW_OPERAND_FLAG_REMATERIALIZABLE;
+    }
+    if (test_case.result_rematerializable) {
+      operands[1].flags |= LOOM_LOW_OPERAND_FLAG_REMATERIALIZABLE;
+    }
+    uint16_t operand_indices[] = {0, 2, 1, uint16_t(constant ? 3 : 2), 3};
+    const loom_low_descriptor_layout_t layouts[] = {
+        {
+            .minimum_packet_operand_count = source_operand_count,
+            .op_kind = static_cast<loom_low_descriptor_op_kind_t>(
+                constant ? LOOM_LOW_DESCRIPTOR_OP_KIND_CONST
+                         : LOOM_LOW_DESCRIPTOR_OP_KIND_OP),
+        },
+        {
+            .minimum_packet_operand_count = result_operand_count,
+            .op_kind = LOOM_LOW_DESCRIPTOR_OP_KIND_OP,
+        },
+    };
+    const loom_low_descriptor_set_t descriptor_set = {
+        .descriptors = descriptors,
+        .descriptor_layouts = layouts,
+        .descriptor_layout_count = IREE_ARRAYSIZE(layouts),
+        .descriptor_count = IREE_ARRAYSIZE(descriptors),
+        .descriptor_ordinal_count = IREE_ARRAYSIZE(descriptors),
+        .operands = operands,
+        .operand_count = IREE_ARRAYSIZE(operands),
+        .operand_indices = operand_indices,
+        .operand_index_count = IREE_ARRAYSIZE(operand_indices),
+        .reg_classes = &reg_class,
+        .reg_class_count = 1,
+    };
+    uint64_t placement_word = 0;
+    uint64_t required_word = 0;
+    loom_low_schedule_options_t options = {
+        .required_register_values = {64, &required_word},
+        .per_user_placement_values = {64, &placement_word},
+    };
+    loom_low_schedule_value_record_t values[4] = {};
+    for (auto& value : values) {
+      value.unit_count = 1;
+    }
+    for (uint32_t i = 0; i < 2; ++i) {
+      if (test_case.retained & (1u << i)) {
+        iree_bitmap_set(options.per_user_placement_values, value_ids[i + 2]);
+      }
+      if (i == 1 || test_case.source_required) {
+        iree_bitmap_set(options.required_register_values, value_ids[i + 2]);
+        values[i + 2].flags = LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+      }
+    }
+    loom_low_schedule_node_t nodes[] = {
+        {
+            .descriptor = &descriptors[0],
+            .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
+            .operand_count = source_operand_count,
+            .result_count = 1,
+            .value_ordinals = {.inline_value_ordinals = {0, 2}},
+        },
+        {
+            .descriptor = &descriptors[1],
+            .source_descriptor_ordinal = 1,
+            .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
+            .operand_count = result_operand_count,
+            .result_count = 1,
+            .storage_relation_count = 1,
+            .value_ordinals = {.inline_value_ordinals = {1, 2, 3}},
+        },
+    };
+    if (constant) {
+      loom_low_schedule_node_result_ordinals(&nodes[0])[0] = 2;
+      loom_low_schedule_node_operand_ordinals(&nodes[1])[0] = 2;
+      loom_low_schedule_node_result_ordinals(&nodes[1])[0] = 3;
+    }
+    if (test_case.source_kind == kObservable) {
+      nodes[0].traits = LOOM_TRAIT_OBSERVABLE_EFFECT;
+    }
+    if (test_case.source_kind == kOtherBlock) {
+      nodes[1].block_index = 1;
+    }
+    *relation = {
+        .destination_ordinal = 3,
+        .source_ordinal = 2,
+        .unit_count = 1,
+        .source_operand_index = uint16_t(result_operand_count - 1),
+        .flags = LOOM_LOW_STORAGE_RELATION_FLAG_HARD |
+                 LOOM_LOW_STORAGE_RELATION_FLAG_WRITES_STORAGE,
+        .kind = LOOM_LOW_STORAGE_RELATION_SAME_STORAGE,
+        .cause = LOOM_LOW_STORAGE_RELATION_CAUSE_TIED_RESULT,
+    };
+    loom_low_schedule_build_state_t state = {
+        .options = &options,
+        .target = {.descriptor_set = &descriptor_set},
+        .value_domain = &domain,
+        .values = values,
+        .value_producer_nodes = producers,
+        .nodes = nodes,
+        .storage_relations = {relation_starts, &relations, 2, 1},
+    };
+    for (bool order_structural : {false, true}) {
+      SCOPED_TRACE(order_structural);
+      for (auto& node : nodes) {
+        node.flags = 0;
+      }
+      state.setup_order.has_members = false;
+      for (uint32_t i = 0; i < IREE_ARRAYSIZE(nodes); ++i) {
+        loom_low_schedule_setup_order_classify_node(&state, i,
+                                                    order_structural);
+      }
+      for (uint32_t i = 0; i < IREE_ARRAYSIZE(nodes); ++i) {
+        EXPECT_EQ(iree_any_bit_set(nodes[i].flags,
+                                   LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP),
+                  (test_case.members & (1u << i)) != 0);
+      }
+      EXPECT_EQ(state.setup_order.has_members, test_case.members != 0);
+    }
+  }
+}
 
 TEST_F(SetupOrderTest, OrdersSharedCompletionAfterItsPrerequisites) {
   Initialize({4});

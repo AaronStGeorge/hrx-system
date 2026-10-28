@@ -209,63 +209,69 @@ static void loom_low_schedule_setup_order_mark_continuation_source(
 // writes stay pressure-scheduled: forcing them behind every prerequisite can
 // keep unrelated vector intermediates live while their consumers are blocked.
 static void loom_low_schedule_setup_order_classify_storage_continuation(
-    loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node) {
-  if (node->descriptor == NULL || node->op->tied_result_count == 0) {
+    loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node,
+    uint32_t node_index) {
+  if (node->descriptor == NULL || node->storage_relation_count == 0) {
     return;
   }
   const loom_low_descriptor_set_t* descriptor_set =
       state->target.descriptor_set;
-  const loom_value_ordinal_t* operand_ordinals =
-      loom_low_schedule_node_const_operand_ordinals(node);
-  const loom_tied_result_t* tied_results = loom_op_tied_results(node->op);
-  for (uint16_t i = 0; i < node->op->tied_result_count; ++i) {
-    const loom_tied_result_t tied = tied_results[i];
-    const loom_low_operand_t* result = loom_low_descriptor_operand(
-        descriptor_set, node->descriptor, tied.result_index);
-    if (!iree_any_bit_set(result->flags,
-                          LOOM_LOW_OPERAND_FLAG_STORAGE_CONTINUATION)) {
-      continue;
-    }
-    const loom_value_ordinal_t source_ordinal =
-        operand_ordinals[tied.operand_index];
-    const uint32_t producer = state->value_producer_nodes[source_ordinal];
-    bool requires_register = false;
-    if (!loom_low_schedule_setup_order_has_per_user_placement(
-            state, node, &requires_register) &&
-        (producer == LOOM_LOW_SCHEDULE_NODE_NONE ||
-         !loom_low_schedule_setup_order_has_per_user_placement(
-             state, &state->nodes[producer], &requires_register))) {
-      continue;
-    }
-    // Input-free constant recipes remain available to pressure scheduling.
-    // Forcing their partial writes behind consumer prerequisites can retain
-    // those inputs while the constant is constructed. Explicit private
-    // placement still orders these nodes through ordinary setup membership.
-    if (node->operand_count == 1 &&
-        loom_low_descriptor_result_can_rematerialize(
-            descriptor_set, node->descriptor, tied.result_index) &&
-        producer != LOOM_LOW_SCHEDULE_NODE_NONE &&
-        state->nodes[producer].descriptor != NULL &&
-        loom_low_descriptor_layout(descriptor_set,
-                                   state->nodes[producer].descriptor)
-                ->op_kind == LOOM_LOW_DESCRIPTOR_OP_KIND_CONST) {
-      continue;
-    }
-    if (!loom_low_schedule_setup_order_mark_node(state, node)) {
-      continue;
-    }
-    if (producer != LOOM_LOW_SCHEDULE_NODE_NONE &&
-        state->nodes[producer].block_index == node->block_index) {
-      loom_low_schedule_setup_order_mark_continuation_source(
-          state, source_ordinal, producer);
-    }
+  const loom_low_operand_t* result =
+      loom_low_descriptor_operand(descriptor_set, node->descriptor, 0);
+  if (!iree_any_bit_set(result->flags,
+                        LOOM_LOW_OPERAND_FLAG_STORAGE_CONTINUATION)) {
+    return;
+  }
+  // Membership requires one result. Its verified descriptor tie is unique,
+  // so the retained relation already identifies the continuation source.
+  const loom_low_schedule_storage_relation_t* relation =
+      loom_low_schedule_storage_relation_index_at(
+          &state->storage_relations,
+          loom_low_schedule_storage_relation_index_begin(
+              &state->storage_relations, node_index));
+  const loom_value_ordinal_t source_ordinal = relation->source_ordinal;
+  const uint32_t producer = state->value_producer_nodes[source_ordinal];
+  bool requires_register = false;
+  if (!loom_low_schedule_setup_order_has_per_user_placement(
+          state, node, &requires_register) &&
+      (producer == LOOM_LOW_SCHEDULE_NODE_NONE ||
+       !loom_low_schedule_setup_order_has_per_user_placement(
+           state, &state->nodes[producer], &requires_register))) {
+    return;
+  }
+  // Input-free constant recipes remain available to pressure scheduling.
+  // Forcing their partial writes behind consumer prerequisites can retain
+  // those inputs while the constant is constructed. Explicit private
+  // placement still orders these nodes through ordinary setup membership.
+  if (node->operand_count == 1 &&
+      loom_low_descriptor_result_can_rematerialize(descriptor_set,
+                                                   node->descriptor, 0) &&
+      producer != LOOM_LOW_SCHEDULE_NODE_NONE &&
+      state->nodes[producer].descriptor != NULL &&
+      loom_low_descriptor_layout(descriptor_set,
+                                 state->nodes[producer].descriptor)
+              ->op_kind == LOOM_LOW_DESCRIPTOR_OP_KIND_CONST) {
+    return;
+  }
+  if (!loom_low_schedule_setup_order_mark_node(state, node)) {
+    return;
+  }
+  if (producer != LOOM_LOW_SCHEDULE_NODE_NONE &&
+      state->nodes[producer].block_index == node->block_index) {
+    loom_low_schedule_setup_order_mark_continuation_source(
+        state, source_ordinal, producer);
   }
 }
 
 void loom_low_schedule_setup_order_classify_node(
-    loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node,
+    loom_low_schedule_build_state_t* state, uint32_t node_index,
     bool order_structural_setup) {
-  loom_low_schedule_setup_order_classify_storage_continuation(state, node);
+  loom_low_schedule_node_t* node = &state->nodes[node_index];
+  if (node->result_count != 1) {
+    return;
+  }
+  loom_low_schedule_setup_order_classify_storage_continuation(state, node,
+                                                              node_index);
   if (loom_low_schedule_setup_order_is_member(state, node,
                                               order_structural_setup)) {
     (void)loom_low_schedule_setup_order_mark_node(state, node);

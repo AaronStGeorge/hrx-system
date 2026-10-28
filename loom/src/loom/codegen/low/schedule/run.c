@@ -804,7 +804,7 @@ static iree_status_t loom_low_schedule_initialize_descriptor_tables(
       state->options->flags, LOOM_LOW_SCHEDULE_FLAG_ORDER_STRUCTURAL_SETUP);
   for (iree_host_size_t node_index = 0; node_index < node_count; ++node_index) {
     loom_low_schedule_node_t* node = &state->nodes[node_index];
-    loom_low_schedule_setup_order_classify_node(state, node,
+    loom_low_schedule_setup_order_classify_node(state, (uint32_t)node_index,
                                                 order_structural_setup);
     if (node->descriptor != NULL) {
       max_descriptor_operand_count =
