@@ -60,8 +60,8 @@ static iree_status_t loom_serve_text_checkpoint_http_end(
   const bool release =
       request->action == LOOM_SERVE_TEXT_CHECKPOINT_ACTION_RELEASE;
   if (!result) {
-    int code = 503;
-    const char* reason = "Service Unavailable";
+    int code = 500;
+    const char* reason = "Internal Server Error";
     if (iree_status_is_not_found(failure)) {
       code = 404;
       reason = "Not Found";
@@ -73,6 +73,11 @@ static iree_status_t loom_serve_text_checkpoint_http_end(
     } else if (iree_status_is_failed_precondition(failure)) {
       code = 400;
       reason = "Bad Request";
+    } else if (iree_status_is_resource_exhausted(failure) ||
+               iree_status_is_unavailable(failure) ||
+               iree_status_is_cancelled(failure)) {
+      code = 503;
+      reason = "Service Unavailable";
     }
     return loom_serve_text_http_reject(telemetry, self, *receipt, code, reason,
                                        iree_status_clone(failure),

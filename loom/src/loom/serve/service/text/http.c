@@ -33,8 +33,9 @@ static iree_status_t loom_serve_text_http_error(iree_status_t failure,
     status = loom_serve_text_http_quote(output, message);
   }
   if (iree_status_is_ok(status)) {
-    status =
-        iree_string_builder_append_format(output, ",\"type\":\"%s\"}}", type);
+    status = iree_string_builder_append_format(
+        output, ",\"type\":\"%s\",\"code\":\"%s\"}}", type,
+        iree_status_code_string(iree_status_code(failure)));
   }
   iree_status_free(failure);
   return status;
@@ -258,8 +259,8 @@ static void loom_serve_text_http_release(
 static iree_status_t loom_serve_text_http_reject_consumer(
     void* self, iree_status_t failure) {
   loom_serve_text_http_consumer_t* consumer = self;
-  int code = 503;
-  const char* reason = "Service Unavailable";
+  int code = 500;
+  const char* reason = "Internal Server Error";
   if (iree_status_is_invalid_argument(failure) ||
       iree_status_is_out_of_range(failure)) {
     code = 400;
@@ -273,6 +274,13 @@ static iree_status_t loom_serve_text_http_reject_consumer(
   } else if (iree_status_is_failed_precondition(failure)) {
     code = 409;
     reason = "Conflict";
+  } else if (iree_status_is_resource_exhausted(failure) ||
+             iree_status_is_unavailable(failure) ||
+             iree_status_is_cancelled(failure)) {
+    // Queued work rejected during overload or service shutdown can be retried
+    // against an available deployment. Other failures are not availability.
+    code = 503;
+    reason = "Service Unavailable";
   }
   const iree_status_t status = loom_serve_text_http_reply_failure(
       consumer->telemetry, consumer->connection, consumer->receipt, code,

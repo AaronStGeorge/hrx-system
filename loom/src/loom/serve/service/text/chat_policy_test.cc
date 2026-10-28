@@ -300,6 +300,23 @@ TEST_F(SourceChatPolicyTest,
   EXPECT_EQ(input.tokens, prepared);
   EXPECT_TRUE(std::all_of(std::begin(scratch), std::end(scratch),
                           [](int32_t value) { return value == -7; }));
+  // The same full prompt exceeds this smaller context with or without reuse.
+  // Diagnostics count retained input too, not merely the newly encoded suffix.
+  for (const auto limited_prefix : {prefix, loom_serve_text_input_prefix_t{}}) {
+    loom_serve_text_input_t limited = {};
+    auto failure = loom_serve_text_input_prepare(
+        &next, limited_prefix, false, 6, scratch, &limited, host_allocator_);
+    EXPECT_EQ(iree_status_code(failure), IREE_STATUS_OUT_OF_RANGE);
+    const auto message = iree_status_message(failure);
+    EXPECT_EQ(std::string(message.data, message.size),
+              "request exceeds the available context size of 6 tokens: "
+              "4 input tokens and max_tokens=4 require 7 stored tokens; "
+              "compact history or lower max_tokens");
+    iree_status_free(failure);
+    EXPECT_EQ(limited.tokens, nullptr);
+    EXPECT_EQ(limited.history, nullptr);
+    loom_serve_text_input_deinitialize(&limited, host_allocator_);
+  }
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_serve_text_input_prepare(&next, {}, true, IREE_ARRAYSIZE(scratch),

@@ -240,6 +240,12 @@ Either `max_tokens` or `max_completion_tokens` sets the output limit, from 1
 through 16384; supplying both rejects. Omission uses the deployment default.
 The limit counts selected tokens, including terminal EOS when generated, so
 completion-token usage can exceed the number of visibly decoded tokens.
+Input and reserved output must fit the deployment's context. Overflow rejects
+with HTTP 400 instead of silently trimming history or reducing the output
+budget. The combined-budget diagnostic reports input tokens, `max_tokens`,
+required stored tokens, and capacity; the last selected output token does not
+need another stored position. A source input check may reject earlier, before
+the full input count is available.
 
 `temperature`, `top_p`, `top_k` and `seed` are numeric request fields interpreted
 by the model's source policy. Omission uses source-defined deployment defaults;
@@ -290,13 +296,24 @@ order. No required-field, range, enum, or permission checks run in that codec.
 The [model-authoring contract](model-programs.md#tool-call-translation)
 describes its representation rules.
 
+Generation stopped by `max_tokens` returns `finish_reason:"length"`, including
+when complete tool calls precede the limit. An unfinished final XML call is
+omitted rather than repaired or presented as executable. Completed calls,
+visible text, reasoning, and token usage remain available; the client decides
+how to continue. EOS returns `tool_calls` when calls were generated, or `stop`
+otherwise. History with an omitted suffix cannot reuse different retained
+device state.
+
 An output translation failure returns an error object with
 `"type":"loom_output_error"`: HTTP 500 for a nonstreaming completion, or an SSE
 error followed by `[DONE]` after streaming has begun. This is distinct from
-`loom_request_error`, which describes a rejected request. Broken model framing
-such as an unterminated XML parameter is a translation error; its diagnostic
-identifies the call ordinal and byte offset. A failed tool-call list publishes
-no partial structured calls.
+`loom_request_error`, which describes a rejected request. Both carry a human
+`message` and a `code` naming the native failure, such as `INVALID_ARGUMENT`,
+`OUT_OF_RANGE`, or `UNAVAILABLE`. Admission and checkpoint failures distinguish
+temporary unavailability (503) from internal failure (500).
+Broken model framing, including an unterminated XML parameter at EOS, is a
+translation error; its diagnostic identifies the call ordinal and byte offset.
+A failed tool-call list publishes no partial structured calls.
 Earlier successful tool results remain the client's conversation history;
 resuming an unfinished turn preserves those results and any created artifacts
 rather than repeating their side effects. The server does not automatically

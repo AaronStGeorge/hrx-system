@@ -4,7 +4,7 @@ func.decl import("input") @encode(%text: buffer, %flags: i32, %capacity: i64) ->
 
 func.decl import("input") @require(%condition: i32, %diagnostic: buffer)
 
-global.rodata.def @overflow = bytes("696e7075742065786365656473206361706163697479")
+global.rodata.def @overflow = bytes("696e70757420657863656564732074686520617661696c61626c6520636f6e746578742073697a65")
 
 global.rodata.def @name = bytes("706f727461626c652d63686174")
 

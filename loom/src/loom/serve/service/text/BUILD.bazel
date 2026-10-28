@@ -968,6 +968,7 @@ loom_cc_test(
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
     deps = [
         ":chat",
+        ":checkpoint_http",
         ":consumer",
         ":http",
         ":telemetry",

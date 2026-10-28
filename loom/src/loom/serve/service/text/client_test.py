@@ -202,6 +202,35 @@ class ClientTest(unittest.TestCase):
                     )
                     self.check_completion(result, "", "stop", 11, 1)
 
+                    # Context rejection carries the counts the server used,
+                    # and is distinguishable from an execution failure.
+                    for streaming in (False, True):
+                        rejected = self.request(
+                            address,
+                            self.body(max_tokens=94, stream=streaming),
+                            expected=400,
+                        )
+                        self.assertEqual(rejected["error"]["code"], "OUT_OF_RANGE")
+                        self.assertEqual(
+                            rejected["error"]["message"],
+                            "request exceeds the available context size of 96 tokens: "
+                            "4 input tokens and max_tokens=94 require 97 stored tokens; "
+                            "compact history or lower max_tokens",
+                        )
+                        rejected = self.request(
+                            address,
+                            self.body(
+                                messages=[{"role": "user", "content": "b" * 97}],
+                                stream=streaming,
+                            ),
+                            expected=400,
+                        )
+                        self.assertEqual(rejected["error"]["code"], "INVALID_ARGUMENT")
+                        self.assertEqual(
+                            rejected["error"]["message"],
+                            "input exceeds the available context size",
+                        )
+
                     # Real concurrent requests can use different output modes
                     # without changing the model's scheduling or math.
                     with ThreadPoolExecutor(max_workers=4) as clients:

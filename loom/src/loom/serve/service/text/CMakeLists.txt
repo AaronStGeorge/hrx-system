@@ -1187,6 +1187,7 @@ loom_cc_test(
     "http_test.cc"
   DEPS
     ::chat
+    ::checkpoint_http
     ::consumer
     ::http
     ::telemetry
