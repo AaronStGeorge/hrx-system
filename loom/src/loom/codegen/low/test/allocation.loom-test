@@ -596,21 +596,6 @@ value %blocker: test.i32 -> target_id[16:4]
 
 // ====
 
-// RUN: emit low-allocation-query @slice_uses_source_subrange values=%wide,%middle fixed=%wide:target_id:4:4
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @slice_uses_source_subrange(%wide: reg<test.i32 x4>) -> (reg<test.i32>) asm {
-  %middle = slice %wide[2] : reg<test.i32 x4> -> reg<test.i32>
-  return %middle
-}
-
-// ----
-value %wide: test.i32 -> target_id[4:4]
-value %middle: test.i32 -> target_id[6:1]
-
-// ====
-
 // RUN: emit low-allocation-query @missing_low_allocation_symbol
 
 // ERROR@+1: SYMBOL/002 {symbol_name="missing_low_allocation_symbol"}

@@ -6,6 +6,8 @@
 
 #include "loom/codegen/low/allocation/interval_assignment.h"
 
+#include <tuple>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -582,17 +584,27 @@ TEST_F(LowAllocationIntervalAssignmentTest,
   loom_local_value_domain_release(&value_domain);
 }
 
-TEST_F(LowAllocationIntervalAssignmentTest,
-       AssignsTiedFixedValuesToSharedLocation) {
+class LowFixedSubrangeAssignmentTest
+    : public LowAllocationIntervalAssignmentTest,
+      public ::testing::WithParamInterface<std::tuple<uint32_t, bool>> {};
+
+TEST_P(LowFixedSubrangeAssignmentTest, PreservesOffsetAndTiedOwner) {
+  // The wide owner ends at the scalar capture. The capture and its required
+  // continuation share one location; fixing only the source must discover the
+  // offset, while also fixing the result must preserve that same placement.
   loom_module_t* module = module_;
   const uint64_t descriptor_set_id = 17;
-  const loom_value_id_t source_value = DefineValue(descriptor_set_id, 1);
+  const auto [source_offset, fix_result] = GetParam();
+  const loom_value_id_t source_value = DefineValue(descriptor_set_id, 4);
+  const loom_value_id_t partial_value = DefineValue(descriptor_set_id, 1);
   const loom_value_id_t result_value = DefineValue(descriptor_set_id, 1);
   loom_module_value_ordinal_scratch_acquire(module);
   loom_module_value_ordinal_scratch_set(module, source_value,
                                         /*ordinal=*/0);
-  loom_module_value_ordinal_scratch_set(module, result_value,
+  loom_module_value_ordinal_scratch_set(module, partial_value,
                                         /*ordinal=*/1);
+  loom_module_value_ordinal_scratch_set(module, result_value,
+                                        /*ordinal=*/2);
 
   const loom_liveness_value_class_t value_class =
       RegisterValueClass(descriptor_set_id);
@@ -600,20 +612,27 @@ TEST_F(LowAllocationIntervalAssignmentTest,
       {
           .value_id = source_value,
           .start_point = 0,
+          .end_point = 2,
+          .value_class = value_class,
+          .unit_count = 4,
+      },
+      {
+          .value_id = partial_value,
+          .start_point = 2,
           .end_point = 6,
           .value_class = value_class,
           .unit_count = 1,
       },
       {
           .value_id = result_value,
-          .start_point = 2,
+          .start_point = 4,
           .end_point = 6,
           .value_class = value_class,
           .unit_count = 1,
       },
   };
-  loom_value_id_t value_ids[] = {source_value, result_value};
-  const uint32_t interval_indices[] = {0, 1};
+  loom_value_id_t value_ids[] = {source_value, partial_value, result_value};
+  const uint32_t interval_indices[] = {0, 1, 2};
   loom_liveness_analysis_t liveness = {
       .intervals = intervals,
       .interval_count = IREE_ARRAYSIZE(intervals),
@@ -622,9 +641,10 @@ TEST_F(LowAllocationIntervalAssignmentTest,
       .value_interval_indices = interval_indices,
   };
 
-  loom_low_allocation_unit_liveness_value_t unit_values[] = {{0, 0}, {1, 2}};
-  uint32_t unit_start_points[] = {0, 0};
-  uint32_t unit_end_points[] = {6, 6};
+  loom_low_allocation_unit_liveness_value_t unit_values[] = {
+      {0, 0}, {4, 2}, {5, 4}};
+  uint32_t unit_start_points[] = {0, 0, 0, 0, 2, 2};
+  uint32_t unit_end_points[] = {2, 2, 2, 2, 6, 6};
   uint64_t edge_handoff_words[] = {0};
   loom_low_allocation_unit_liveness_t unit_liveness = {
       .values = unit_values,
@@ -635,49 +655,44 @@ TEST_F(LowAllocationIntervalAssignmentTest,
                                                   edge_handoff_words},
   };
 
-  const uint32_t relation_indices_by_source[] = {0};
-  loom_low_placement_relation_t relation = {
-      .result_ordinal = 1,
-      .source_ordinal = 0,
-      .unit_count = 1,
-      .kind = LOOM_LOW_PLACEMENT_RELATION_SAME_STORAGE,
-      .cause = LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT,
-      .flags = LOOM_LOW_PLACEMENT_RELATION_FLAG_HARD |
-               LOOM_LOW_PLACEMENT_RELATION_FLAG_CAN_ALIAS_STORAGE,
-  };
-  loom_low_placement_relation_range_t ranges_by_result[] = {
+  const uint32_t relation_indices_by_source[] = {0, 1};
+  loom_low_placement_relation_t relations[] = {
       {
-          .start = 0,
-          .count = 0,
+          .result_ordinal = 1,
+          .source_ordinal = 0,
+          .source_unit_offset = source_offset,
+          .unit_count = 1,
+          .kind = LOOM_LOW_PLACEMENT_RELATION_SUBRANGE,
+          .cause = LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE,
+          .flags = LOOM_LOW_PLACEMENT_RELATION_FLAG_CAN_ALIAS_STORAGE,
       },
       {
-          .start = 0,
-          .count = 1,
-      },
-  };
-  loom_low_placement_relation_range_t ranges_by_source[] = {
-      {
-          .start = 0,
-          .count = 1,
-      },
-      {
-          .start = 1,
-          .count = 0,
+          .result_ordinal = 2,
+          .source_ordinal = 1,
+          .unit_count = 1,
+          .kind = LOOM_LOW_PLACEMENT_RELATION_SAME_STORAGE,
+          .cause = LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT,
+          .flags = LOOM_LOW_PLACEMENT_RELATION_FLAG_HARD |
+                   LOOM_LOW_PLACEMENT_RELATION_FLAG_CAN_ALIAS_STORAGE,
       },
   };
+  const loom_low_placement_relation_range_t ranges_by_result[] = {
+      {0, 0}, {0, 1}, {1, 1}};
+  const loom_low_placement_relation_range_t ranges_by_source[] = {
+      {0, 1}, {1, 1}, {2, 0}};
   loom_low_placement_table_t placement = {
       .module = module,
       .value_ids = value_ids,
       .value_count = IREE_ARRAYSIZE(value_ids),
-      .relations = &relation,
-      .relation_count = 1,
+      .relations = relations,
+      .relation_count = IREE_ARRAYSIZE(relations),
       .ranges_by_result_ordinal = ranges_by_result,
       .relation_indices_by_source_ordinal = relation_indices_by_source,
       .ranges_by_source_ordinal = ranges_by_source,
   };
-  const loom_value_ordinal_t tied_origins[] = {0, 0};
+  const loom_value_ordinal_t tied_origins[] = {0, 1, 1};
   placement.tied_storage_origins_by_value_ordinal = tied_origins;
-  const loom_value_ordinal_t storage_order[] = {1, 0};
+  const loom_value_ordinal_t storage_order[] = {2, 1, 0};
   placement.storage_value_order = storage_order;
   placement.storage_value_order_count = IREE_ARRAYSIZE(storage_order);
 
@@ -706,13 +721,13 @@ TEST_F(LowAllocationIntervalAssignmentTest,
       {
           .value_id = source_value,
           .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-          .location_base = 3,
-          .location_count = 1,
+          .location_base = 4,
+          .location_count = 4,
       },
       {
           .value_id = result_value,
           .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-          .location_base = 3,
+          .location_base = 4 + source_offset,
           .location_count = 1,
       },
   };
@@ -726,7 +741,8 @@ TEST_F(LowAllocationIntervalAssignmentTest,
       &target_constraints, &liveness, &value_domain,
       placement.operand_constraints_by_interval,
       placement.tied_storage_origins_by_value_ordinal, fixed_values,
-      IREE_ARRAYSIZE(fixed_values), &arena_));
+      fix_result ? IREE_ARRAYSIZE(fixed_values) : 1, &arena_));
+  ASSERT_EQ(target_constraints.fixed_value_count, fix_result ? 3u : 1u);
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_finalize_fixed_values(
       &target_constraints, &liveness, &unit_liveness, &arena_));
 
@@ -753,17 +769,25 @@ TEST_F(LowAllocationIntervalAssignmentTest,
   IREE_ASSERT_OK(loom_low_allocation_interval_assignment_build(
       &context, &decision_arena_, &result));
 
-  ASSERT_EQ(result.assignment_count, 2u);
-  EXPECT_EQ(result.assignment_indices_by_value_ordinal[0], 0u);
-  EXPECT_EQ(result.assignment_indices_by_value_ordinal[1], 1u);
-  EXPECT_EQ(result.assignments[0].value_id, source_value);
-  EXPECT_EQ(result.assignments[0].location_base, 3u);
-  EXPECT_EQ(result.assignments[1].value_id, result_value);
-  EXPECT_EQ(result.assignments[1].location_base, 3u);
-  EXPECT_FALSE(result.has_packable_aggregates);
+  ASSERT_EQ(target_constraints.error_count, 0u);
+  ASSERT_EQ(result.assignment_count, IREE_ARRAYSIZE(value_ids));
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(value_ids); ++i) {
+    const uint32_t assignment_index =
+        result.assignment_indices_by_value_ordinal[i];
+    ASSERT_LT(assignment_index, result.assignment_count);
+    const auto& assignment = result.assignments[assignment_index];
+    EXPECT_EQ(assignment.value_id, value_ids[i]);
+    EXPECT_EQ(assignment.location_base, i == 0 ? 4 : 4 + source_offset);
+    EXPECT_EQ(assignment.location_count, i == 0 ? 4u : 1u);
+  }
+  EXPECT_TRUE(result.has_packable_aggregates);
 
   loom_local_value_domain_release(&value_domain);
 }
+
+INSTANTIATE_TEST_SUITE_P(AllScalarOffsets, LowFixedSubrangeAssignmentTest,
+                         ::testing::Combine(::testing::Values(0u, 1u, 2u, 3u),
+                                            ::testing::Bool()));
 
 // Four required owners occupy the low window before a fifth required value
 // arrives. Earlier fixed and ordinary intervals distinguish current
