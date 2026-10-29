@@ -1,10 +1,12 @@
-// RUN: emit low-allocation-query @concat_into_declared_edge_pair spill-count values=%state,%low,%high,%pair fixed=%state:physical_register:5:2
+// RUN: emit low-allocation-query @concat_into_declared_edge_pair spill-count values=%guard,%initial,%state,%low,%high,%pair
 
 test.target<low_core> @target
 
-// The loop header reserves l1 before the next iteration's sources are assigned.
-// Its parts are r1 and r3, not consecutive physical IDs starting at 5.
-low.func.def target<test.low.core>(@target) @concat_into_declared_edge_pair(%condition: reg<test.i32>, %initial: reg<test.explicit32 x2>) -> (reg<test.explicit32 x2>) asm {
+// The guard keeps the initializer in l1, then releases r0 before the loop.
+// The loop header retains that view for the next iteration's sources: r1 and
+// r3, not consecutive physical IDs starting at 5 or the now-free l0 view.
+low.func.def target<test.low.core>(@target) @concat_into_declared_edge_pair(%condition: reg<test.i32>, %guard: reg<test.explicit32>, %initial: reg<test.explicit32 x2>) -> (reg<test.explicit32 x2>, reg<test.i32>) asm {
+  %saved_guard = copy %guard : reg<test.explicit32> -> reg<test.i32>
   low.br ^loop(%initial: reg<test.explicit32 x2>)
 ^loop(%state: reg<test.explicit32 x2>):
   low.cond_br %condition, ^produce, ^exit : reg<test.i32>
@@ -14,11 +16,13 @@ low.func.def target<test.low.core>(@target) @concat_into_declared_edge_pair(%con
   %pair = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
   low.br ^loop(%pair: reg<test.explicit32 x2>)
 ^exit:
-  return %state
+  return %state, %saved_guard
 }
 
 // ----
 spills: 0
+value %guard: test.explicit32 -> physical_register[0:1]
+value %initial: test.explicit32 -> physical_register[5:2]
 value %state: test.explicit32 -> physical_register[5:2]
 value %low: test.explicit32 -> physical_register[1:1]
 value %high: test.explicit32 -> physical_register[3:1]
