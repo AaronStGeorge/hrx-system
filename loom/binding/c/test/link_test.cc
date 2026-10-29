@@ -21,7 +21,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/temp_file.h"
 #include "link_index.h"
-#include "loom/binding/c/test/testdata/link_target_specialization_testdata.h"
+#include "loom/binding/c/test/testdata/link_target_specialization/link_target_specialization_testdata.h"
 #include "loom/format/bytecode/writer.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
