@@ -18,7 +18,7 @@
 #include "iree/hal/cts/util/test_base.h"
 #include "iree/hal/drivers/vulkan/buffer.h"
 #include "iree/hal/drivers/vulkan/command_buffer.h"
-#include "iree/hal/drivers/vulkan/cts/bda_spirv_test_spv.h"
+#include "iree/hal/drivers/vulkan/cts/testdata/bda_spirv_test_spv.h"
 #include "iree/hal/drivers/vulkan/queue_stats.h"
 #include "iree/hal/drivers/vulkan/queue_test_util.h"
 #include "iree/hal/memory/tlsf_pool.h"

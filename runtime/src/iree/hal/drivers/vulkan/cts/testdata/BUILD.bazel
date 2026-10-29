@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
 load("//build_tools/spirv:asm_module.bzl", "iree_spirv_asm_module")
 
 package(
@@ -37,3 +38,17 @@ _BDA_SPIRV_TEST_FIXTURES = [
     )
     for fixture in _BDA_SPIRV_TEST_FIXTURES
 ]
+
+iree_c_embed_data(
+    name = "bda_spirv_test_spv",
+    testonly = True,
+    srcs = [":%s" % fixture for fixture in _BDA_SPIRV_TEST_FIXTURES],
+    c_file_output = "bda_spirv_test_spv.c",
+    flatten = True,
+    h_file_output = "bda_spirv_test_spv.h",
+    identifier = "iree_hal_vulkan_cts_bda_spirv_test_spv",
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_vulkan": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)

@@ -6,7 +6,6 @@
 
 # Focused CTS coverage for the Vulkan HAL.
 
-load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
@@ -52,37 +51,6 @@ iree_runtime_cc_library(
         "//runtime/src/iree/testing:temp_file",
     ],
     alwayslink = True,
-)
-
-_BDA_SPIRV_TEST_FIXTURES = [
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_descriptor_storage_variable",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_i32_add7",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_i32_add7_binding_1_length_4_17",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_i32_add7_bindings_2",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_i32_add7_constant_length_4",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_i32_add7_descriptor_decorated",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_i32_add7_no_metadata",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_missing_physical_storage_buffer_addresses",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_missing_push_constant_root",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_noop_binding_requirements",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_noop_bindings_2_constant_length_8",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_noop_without_push_constant_root",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_subgroup_sizes",
-    "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_subgroup_unsupported",
-]
-
-iree_c_embed_data(
-    name = "bda_spirv_test_spv",
-    testonly = True,
-    srcs = _BDA_SPIRV_TEST_FIXTURES,
-    c_file_output = "bda_spirv_test_spv.c",
-    flatten = True,
-    h_file_output = "bda_spirv_test_spv.h",
-    identifier = "iree_hal_vulkan_cts_bda_spirv_test_spv",
-    target_compatible_with = select({
-        "//runtime/config/hal:driver_vulkan": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
 )
 
 iree_runtime_cc_test(
@@ -303,12 +271,12 @@ iree_runtime_cc_test(
     ],
     deps = [
         ":backends",
-        ":bda_spirv_test_spv",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/cts/util:registry",
         "//runtime/src/iree/hal/cts/util:test_base",
         "//runtime/src/iree/hal/cts/util:test_main",
+        "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_spirv_test_spv",
         "//runtime/src/iree/testing:gtest",
     ],
 )
@@ -321,7 +289,6 @@ iree_runtime_cc_test(
     ],
     deps = [
         ":backends",
-        ":bda_spirv_test_spv",
         ":replay_cache_backends",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/hal",
@@ -332,6 +299,7 @@ iree_runtime_cc_test(
         "//runtime/src/iree/hal/drivers/vulkan",
         "//runtime/src/iree/hal/drivers/vulkan:headers",
         "//runtime/src/iree/hal/drivers/vulkan:queue_test_util",
+        "//runtime/src/iree/hal/drivers/vulkan/cts/testdata:bda_spirv_test_spv",
         "//runtime/src/iree/hal/memory:tlsf_pool",
         "//runtime/src/iree/testing:gtest",
     ],
