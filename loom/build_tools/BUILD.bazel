@@ -26,26 +26,6 @@ py_test(
 )
 
 py_test(
-    name = "bazel_to_cmake_config_test",
-    srcs = ["bazel_to_cmake/config_test.py"],
-    data = [
-        "bazel_to_cmake/loom_corpus.py",
-        "//:loom/.bazel_to_cmake.cfg.py",
-        "//build_tools/bazel:package_policy.bzl",
-        "//build_tools/bazel:requirements.bzl",
-        "//build_tools/vulkan/requirements:defs.bzl",
-        "//loom/build_tools/amdgpu:target_config.bzl",
-        "//loom/build_tools/bazel:build_defs.bzl",
-        "//loom/requirements:defs.bzl",
-        "//loom/requirements:package_policy.bzl",
-        "//runtime:.bazel_to_cmake.cfg.py",
-    ],
-    main = "bazel_to_cmake/config_test.py",
-    tags = ["manual"],
-    deps = ["//build_tools/bazel_to_cmake:converter"],
-)
-
-py_test(
     name = "presubmit_test",
     size = "small",
     srcs = [
@@ -65,32 +45,15 @@ py_test(
     ],
 )
 
-py_test(
-    name = "loom_source_lint_self_test",
-    size = "small",
-    srcs = ["linters/loom_source_lint.py"],
-    args = ["--self-test"],
-    main = "linters/loom_source_lint.py",
-    tags = ["manual"],
-    deps = ["//loom/py/loom/tools:source_inventory"],
-)
-
-py_binary(
-    name = "loom_source_lint",
-    srcs = ["linters/loom_source_lint.py"],
-    main = "linters/loom_source_lint.py",
-    deps = ["//loom/py/loom/tools:source_inventory"],
-)
-
 # Project policy tests run in the repository Presubmit lane when this
 # build_tools subtree or its shared support changes.
 test_suite(
     name = "presubmit_tests",
     tags = ["manual"],
     tests = [
-        ":bazel_to_cmake_config_test",
-        ":loom_source_lint_self_test",
         ":presubmit_test",
+        "//loom/build_tools/bazel_to_cmake:config_test",
         "//loom/build_tools/hygiene:presubmit_tests",
+        "//loom/build_tools/linters:loom_source_lint_self_test",
     ],
 )

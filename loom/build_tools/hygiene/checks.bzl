@@ -77,7 +77,7 @@ _repository_format_source_check = rule(
 _CHECKS = {
     "authoring": ("sources", "//loom/py/loom/tools:loom-lint", "LoomAuthoringPolicy"),
     "format": ("format_sources", "//loom/src/loom/tools/loom-format:loom-format", "LoomSourceFormat"),
-    "repository": ("policy_sources", "//loom/build_tools:loom_source_lint", "LoomRepositoryPolicy"),
+    "repository": ("policy_sources", "//loom/build_tools/linters:loom_source_lint", "LoomRepositoryPolicy"),
 }
 
 def loom_hygiene_check(name, check, **kwargs):
