@@ -113,6 +113,18 @@ def _compile_action_name(language):
         return CPP_COMPILE_ACTION_NAME
     fail("unsupported source language: %s" % language)
 
+def _module_map_name(module_map):
+    if module_map.name != None:
+        return module_map.name
+    owner = str(module_map.file.owner)
+
+    # Match rules_cc's module-map naming for the main repository while
+    # retaining canonical repository names for external dependencies.
+    # buildifier: disable=canonical-repository
+    if owner.startswith("@@//"):
+        return owner[2:]
+    return owner
+
 def _compile_variables_extension(feature_configuration, compilation_context):
     variables = {}
 
@@ -130,7 +142,7 @@ def _compile_variables_extension(feature_configuration, compilation_context):
     if module_maps_enabled and hasattr(compilation_context, "_module_map"):
         module_map = compilation_context._module_map
         if module_map:
-            variables["module_name"] = module_map.name
+            variables["module_name"] = _module_map_name(module_map)
             variables["module_map_file"] = module_map.file.path
 
     if layering_check_enabled and hasattr(compilation_context, "_direct_module_maps"):
