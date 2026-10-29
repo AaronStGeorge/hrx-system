@@ -1039,37 +1039,39 @@ value %gap: test.i32 -> target_id[3:1]
 
 // ====
 
-// RUN: emit low-allocation-query @sequential_loop_relocation_rebuilds_queries values=%seed,%first_state,%first_next,%second_state,%second_next fixed=%seed:target_id:0:1 fixed=%first_next:target_id:5:1 fixed=%second_next:target_id:6:1
+// RUN: emit low-allocation-query @sequential_loop_relocation values=%seed,%first_state,%first_next,%second_state,%second_next
 
 test.target<low_core> @test_target
 
-// Relocating the first header changes the assignment that enters the second.
-// The second header must query that current assignment instead of a
-// function-wide snapshot from before the first relocation.
-low.func.def target<test.low.core>(@test_target) @sequential_loop_relocation_rebuilds_queries(%condition: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
-  low.br ^first_loop(%seed: reg<test.i32>)
-^first_loop(%first_state: reg<test.i32>):
+// Both headers start in the seed's register and must relocate to their own
+// backedge slices. The tuple widths place the slices at distinct nonzero
+// locations, so relocating the first header cannot satisfy the second.
+low.func.def target<test.low.core>(@test_target) @sequential_loop_relocation(%condition: reg<test.i32>, %seed: reg<test.pressure.alias32>, %first_input: reg<test.i32 x5>, %second_input: reg<test.i32 x6>) -> (reg<test.pressure.alias32>) asm {
+  low.br ^first_loop(%seed: reg<test.pressure.alias32>)
+^first_loop(%first_state: reg<test.pressure.alias32>):
   low.cond_br %condition, ^first_body, ^first_exit : reg<test.i32>
 ^first_body:
-  %first_next = test.const.i32 1
-  low.br ^first_loop(%first_next: reg<test.i32>)
+  %first_tuple = copy %first_input : reg<test.i32 x5> -> reg<test.pressure.alias32 x5>
+  %first_next = slice %first_tuple[4] : reg<test.pressure.alias32 x5> -> reg<test.pressure.alias32>
+  low.br ^first_loop(%first_next: reg<test.pressure.alias32>)
 ^first_exit:
-  low.br ^second_loop(%first_state: reg<test.i32>)
-^second_loop(%second_state: reg<test.i32>):
+  low.br ^second_loop(%first_state: reg<test.pressure.alias32>)
+^second_loop(%second_state: reg<test.pressure.alias32>):
   low.cond_br %condition, ^second_body, ^exit : reg<test.i32>
 ^second_body:
-  %second_next = test.const.i32 2
-  low.br ^second_loop(%second_next: reg<test.i32>)
+  %second_tuple = copy %second_input : reg<test.i32 x6> -> reg<test.pressure.alias32 x6>
+  %second_next = slice %second_tuple[5] : reg<test.pressure.alias32 x6> -> reg<test.pressure.alias32>
+  low.br ^second_loop(%second_next: reg<test.pressure.alias32>)
 ^exit:
   return %second_state
 }
 
 // ----
-value %seed: test.i32 -> target_id[0:1]
-value %first_state: test.i32 -> target_id[5:1]
-value %first_next: test.i32 -> target_id[5:1]
-value %second_state: test.i32 -> target_id[6:1]
-value %second_next: test.i32 -> target_id[6:1]
+value %seed: test.pressure.alias32 -> physical_register[0:1]
+value %first_state: test.pressure.alias32 -> physical_register[4:1]
+value %first_next: test.pressure.alias32 -> physical_register[4:1]
+value %second_state: test.pressure.alias32 -> physical_register[5:1]
+value %second_next: test.pressure.alias32 -> physical_register[5:1]
 
 // ====
 
