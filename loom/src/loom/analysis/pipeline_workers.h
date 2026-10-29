@@ -98,6 +98,9 @@ typedef struct loom_pipeline_transport_cohort_t {
   // Natural loop containing its copies, or LOOP_NEST_NONE. Independent replay
   // loops remain separate batches even when their execution counts agree.
   uint16_t copy_scope;
+  // Consecutive source admissions before any copy or release. Separate
+  // ownership intervals stay distinct even when their loop scopes agree.
+  uint32_t admission_sequence;
 } loom_pipeline_transport_cohort_t;
 
 // An ordered sequence of source records with the same destinations and replay

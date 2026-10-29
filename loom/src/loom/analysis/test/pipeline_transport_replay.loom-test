@@ -308,3 +308,100 @@ pipeline.def<kernel> public retain target(@array_target) @test() run(%input_arg:
 
 // ----
 CHECK: *{"category":"pipeline-transport","worker":1,"eligibility":"unproven","execution_counts":"exact","batches":0,"streams":0}*
+
+// ====
+// RUN: with-checks pass-report pipeline=source-low
+aie2p.target<array> @array_target {device_profile = "amd.xdna.strix_halo.17f0_11"}
+
+func.def inline @ingress(%input: buffer, %incoming: channel<tile<16xi32>>, %count: index) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %bytes = index.constant 64 : offset
+  scf.for %record = [%c0 to %count step %c1] unroll {
+    %offset = index.scale %record, %bytes : index, offset -> offset
+    %external = buffer.view %input[%offset] : buffer -> view<16xi32>
+    %write, %payload = channel.reserve %incoming : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+    %copy = kernel.async.copy %external to %payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+    channel.publish %write : write<tile<16xi32>>
+  }
+  func.return
+}
+
+func.def inline @egress(%source: channel<tile<16xi32>>, %output: buffer, %base: offset, %count: index) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %bytes = index.constant 64 : offset
+  scf.for %record = [%c0 to %count step %c1] unroll {
+    %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+    %relative = index.scale %record, %bytes : index, offset -> offset
+    %offset = index.add %base, %relative : offset
+    %external = buffer.view %output[%offset] : buffer -> view<16xi32>
+    %copy = kernel.async.copy %payload to %external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
+    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+    channel.release %read : read<tile<16xi32>>
+  }
+  func.return
+}
+
+// A folded one-iteration replay still separates successive owned batches.
+func.def inline @pair(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
+  %a = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %b = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %last_a, %last_b = scf.for %replay = [%c0 to %c1 step %c1](%read_a = %a : read<tile<16xi32>>, %read_b = %b : read<tile<16xi32>>) -> (read<tile<16xi32>>, read<tile<16xi32>>) {
+    %keep_a, %copy_a = channel.fanout %read_a : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+    %write_a, %payload_a = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+    channel.copy %copy_a -> %write_a : read<tile<16xi32>>, write<tile<16xi32>>
+    %keep_b, %copy_b = channel.fanout %read_b : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+    %write_b, %payload_b = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+    channel.copy %copy_b -> %write_b : read<tile<16xi32>>, write<tile<16xi32>>
+    scf.yield %keep_a, %keep_b : read<tile<16xi32>>, read<tile<16xi32>>
+  }
+  channel.release %last_a : read<tile<16xi32>>
+  channel.release %last_b : read<tile<16xi32>>
+  func.return
+}
+
+func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
+  func.call @pair(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
+  func.call @pair(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
+  func.return
+}
+
+pipeline.def<kernel> public retain target(@array_target) @test() run(%input_arg: buffer, %output_arg: buffer) {
+  %input_unique, %output_unique = buffer.assume.noalias %input_arg, %output_arg : buffer, buffer
+  %input, %output = buffer.assume.alignment %input_unique, %output_unique {minimum_alignment = 64} : buffer, buffer
+  %origin = index.constant 0 : offset
+  %slot_bytes = index.constant 64 : offset
+  %source_bytes = index.constant 128 : offset
+  %source_capacity = index.constant 2 : index
+  %destination_capacity = index.constant 1 : index
+  %sram = pipeline.memory<workgroup>[0, 1] : pool
+  %left_memory = pipeline.memory<workgroup>[0, 2] : pool
+  %source_storage = buffer.alloca<workgroup> pool(%sram) align(64) %source_bytes : buffer
+  %source_slots = buffer.view %source_storage[%origin] : buffer -> view<2x16xi32>
+  %source = channel.bind<fifo> %source_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
+  %left_storage = buffer.alloca<workgroup> pool(%left_memory) align(64) %slot_bytes : buffer
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
+  %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %source_count = index.constant 4 : index
+  %left_count = index.constant 4 : index
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    func.call @ingress(%input, %source, %source_count) : (buffer, channel<tile<16xi32>>, index)
+  }
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    func.call @worker(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
+  }
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    func.call @egress(%left, %output, %origin, %left_count) : (channel<tile<16xi32>>, buffer, offset, index)
+  }
+}
+
+// ----
+CHECK: *{"category":"pipeline-transport","worker":1,"eligibility":"channel-copy","execution_counts":"exact","batches":2,"streams":0}*
+CHECK: *"worker":1,"batch":0,"record":1,*"batch_records":2,"admissions":1,"transfers":1,"replays":1,"final_release":true*
+CHECK: *"worker":1,"batch":1,"record":0,*"batch_records":2,"admissions":1,"transfers":1,"replays":1,"final_release":true*

@@ -105,10 +105,14 @@ static iree_status_t loom_pipeline_transport_cohorts(
                                                  sizeof(*cohort_indices),
                                                  (void**)&cohort_indices));
   iree_host_size_t cohort_count = 0;
+  uint32_t admission_sequence = 0;
+  bool consumed_since_admission = false;
   for (iree_host_size_t i = 0; i < step_count; ++i) {
     const loom_channel_plan_action_t* action = steps[i].source.channel;
     const loom_op_t* op = action->op;
     if (loom_channel_acquire_isa(op) || loom_channel_accept_isa(op)) {
+      admission_sequence += consumed_since_admission;
+      consumed_since_admission = false;
       if (loom_channel_acquire_isa(op) &&
           !loom_value_has_no_uses(
               loom_module_value(module, loom_channel_acquire_view(op)))) {
@@ -129,14 +133,16 @@ static iree_status_t loom_pipeline_transport_cohorts(
           .admissions = admissions,
           .admission_scope = loom_cfg_loop_nest_innermost(
               &structure->loops, op->parent_block->region_index),
-          .copy_scope = LOOM_CFG_LOOP_NEST_NONE};
+          .copy_scope = LOOM_CFG_LOOP_NEST_NONE,
+          .admission_sequence = admission_sequence};
     } else if (loom_channel_reserve_isa(op)) {
       if (!loom_value_has_no_uses(
               loom_module_value(module, loom_channel_reserve_view(op)))) {
         return iree_ok_status();
       }
-    } else if (!loom_channel_fanout_isa(op) && !loom_channel_copy_isa(op) &&
-               !loom_channel_release_isa(op)) {
+    } else if (loom_channel_copy_isa(op) || loom_channel_release_isa(op)) {
+      consumed_since_admission = true;
+    } else if (!loom_channel_fanout_isa(op)) {
       return iree_ok_status();
     }
   }
@@ -267,6 +273,7 @@ static iree_status_t loom_pipeline_transport_batches(
                first->transfers == record->transfers &&
                first->admission_scope == record->admission_scope &&
                first->copy_scope == record->copy_scope &&
+               first->admission_sequence == record->admission_sequence &&
                (first->release != NULL) == (record->release != NULL) &&
                first->destination_count == record->destination_count;
       for (iree_host_size_t j = 0; append && j < first->destination_count;

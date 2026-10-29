@@ -1,5 +1,7 @@
-// Five alternating retained batches share one multicast path. The controller
-// joins both consumers before refilling shared SRAM from their mutable state.
+// Five retained batches share one multicast path. The first two batches use
+// the same geometry once each; later batches replay and change geometry.
+// The controller joins both consumers before refilling shared SRAM from their
+// mutable state.
 // The phase count exceeds the four-entry DMA queue, and the final phase reuses
 // the first geometry. Fresh trials and guards cover restart and full retirement.
 aie2p.target<array> @device
@@ -32,10 +34,9 @@ func.def inline @forward(%read: read<tile<16xi32>>, %left: channel<tile<16xi32>>
 func.def inline @replay_two(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) {
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
-  %c2 = index.constant 2 : index
   %first, %first_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
   %second, %second_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-  %last_first, %last_second = scf.for %replay = [%c0 to %c2 step %c1](%a = %first : read<tile<16xi32>>, %b = %second : read<tile<16xi32>>) -> (read<tile<16xi32>>, read<tile<16xi32>>) {
+  %last_first, %last_second = scf.for %replay = [%c0 to %c1 step %c1](%a = %first : read<tile<16xi32>>, %b = %second : read<tile<16xi32>>) -> (read<tile<16xi32>>, read<tile<16xi32>>) {
     %next_a = func.call @forward(%a, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
     %next_b = func.call @forward(%b, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
     scf.yield %next_a, %next_b : read<tile<16xi32>>, read<tile<16xi32>>
@@ -74,9 +75,9 @@ func.def inline @consume(%save_state: i1, %records: channel<tile<16xi32>>, %read
   %origin = index.constant 0 : offset
   %bytes = index.constant 64 : offset
   %end = scf.for %phase = [%c0 to %c5 step %c1](%base = %origin : offset) -> (offset) unroll {
-    %parity = index.rem %phase, %c2 : index
-    %odd = index.cmp ne, %parity, %c0 : index
-    %count = scf.select %odd, %c6, %c4 : index
+    %pair = index.div %phase, %c2 : index
+    %three_records = index.cmp eq, %pair, %c1 : index
+    %count = scf.select %three_records, %c6, %c2 : index
     %last = index.sub %count, %c1 : index
     scf.for %record = [%c0 to %count step %c1] {
       %read, %payload = channel.acquire %records : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
@@ -146,9 +147,9 @@ pipeline.def<kernel> public retain target(@device) @ordered_replay() run(%input_
     scf.for %phase = [%c1 to %c5 step %c1] unroll {
       %left_read, %unused_left = channel.acquire %left_ready : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
       %right_read, %unused_right = channel.acquire %right_ready : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-      %parity = index.rem %phase, %c2 : index
-      %odd = index.cmp ne, %parity, %c0 : index
-      scf.if %odd {
+      %pair = index.div %phase, %c2 : index
+      %three_records = index.cmp eq, %pair, %c1 : index
+      scf.if %three_records {
         func.call @fill(%state, %c3, %batch_three) : (buffer, index, channel<tile<16xi32>>)
       } else {
         func.call @fill(%state, %c2, %batch_two) : (buffer, index, channel<tile<16xi32>>)
@@ -159,9 +160,9 @@ pipeline.def<kernel> public retain target(@device) @ordered_replay() run(%input_
   }
   pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
     scf.for %phase = [%c0 to %c5 step %c1] unroll {
-      %parity = index.rem %phase, %c2 : index
-      %odd = index.cmp ne, %parity, %c0 : index
-      scf.if %odd {
+      %pair = index.div %phase, %c2 : index
+      %three_records = index.cmp eq, %pair, %c1 : index
+      scf.if %three_records {
         func.call @replay_three(%batch_three, %left, %right) : (channel<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>)
       } else {
         func.call @replay_two(%batch_two, %left, %right) : (channel<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>)
@@ -188,23 +189,35 @@ func.def @reference(%input: buffer, %state: buffer, %left: buffer, %right: buffe
   %intermediate = buffer.view %state[%origin] : buffer -> view<6x16xi32>
   %left_values = buffer.view %left[%origin] : buffer -> view<24x16xi32>
   %right_values = buffer.view %right[%origin] : buffer -> view<24x16xi32>
+  %snapshot_bytes = index.constant 192 : offset
+  %snapshot_storage = buffer.alloca<private> align(64) %snapshot_bytes : buffer
+  %snapshot = buffer.view %snapshot_storage[%origin] : buffer -> view<3x16xi32>
   %end = scf.for %phase = [%c0 to %c5 step %c1](%base = %c0 : index) -> (index) unroll {
-    %parity = index.rem %phase, %c2 : index
-    %odd = index.cmp ne, %parity, %c0 : index
-    %period = scf.select %odd, %c3, %c2 : index
-    %count = index.mul %period, %c2 : index
+    %pair = index.div %phase, %c2 : index
+    %three_records = index.cmp eq, %pair, %c1 : index
+    %period = scf.select %three_records, %c3, %c2 : index
+    %replays = scf.select %three_records, %c2, %c1 : index
+    %count = index.mul %period, %replays : index
     %last = index.sub %count, %c1 : index
-    %next_phase = index.add %phase, %c1 : index
-    %pair = index.div %next_phase, %c2 : index
-    %flip = index.rem %pair, %c2 : index
+    %initial = index.cmp eq, %phase, %c0 : index
+    scf.for %record = [%c0 to %period step %c1] {
+      scf.for %word = [%c0 to %words step %c1] {
+        %value = scf.if %initial -> (i32) {
+          %input_value = view.load %source[%record, %word] : view<2x16xi32> -> i32
+          scf.yield %input_value : i32
+        } else {
+          %state_value = view.load %intermediate[%record, %word] : view<6x16xi32> -> i32
+          scf.yield %state_value : i32
+        }
+        view.store %value, %snapshot[%record, %word] : i32, view<3x16xi32>
+      }
+    }
     scf.for %record = [%c0 to %count step %c1] {
       %member = index.rem %record, %period : index
-      %shifted = index.add %member, %flip : index
-      %source_index = index.rem %shifted, %c2 : index
       %output_index = index.add %base, %record : index
       %reverse = index.sub %last, %record : index
       scf.for %word = [%c0 to %words step %c1] {
-        %value = view.load %source[%source_index, %word] : view<2x16xi32> -> i32
+        %value = view.load %snapshot[%member, %word] : view<3x16xi32> -> i32
         view.store %value, %left_values[%output_index, %word] : i32, view<24x16xi32>
         view.store %value, %right_values[%output_index, %word] : i32, view<24x16xi32>
         view.store %value, %intermediate[%reverse, %word] : i32, view<6x16xi32>
