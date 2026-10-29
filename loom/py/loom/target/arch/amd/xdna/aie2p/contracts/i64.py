@@ -18,6 +18,9 @@ from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.scf import defs as scf
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
+from loom.target.arch.amd.xdna.aie2p.contracts.integer_division import (
+    append_runtime_unsigned_division_steps,
+)
 from loom.target.arch.amd.xdna.aie2p.contracts.packet_program import PairPacketProgram
 from loom.target.arch.amd.xdna.aie2p.contracts.scalar_program import ScalarProgram
 from loom.target.arch.amd.xdna.aie2p.core_descriptors import (
@@ -448,6 +451,58 @@ def _pair_multiply_rule() -> DescriptorRule:
             *program.emits,
             _concat_pair(low_product, result_high),
         ),
+    )
+
+
+def _pair_unsigned_remainder_by_word_rule() -> DescriptorRule:
+    """Continues the native divider state across both dividend words."""
+    lhs_emits, lhs_low, lhs_high = _split_pair(ValueRef.operand("lhs"), "lhs")
+    divisor = ValueRef.temporary("divisor")
+    zero = ValueRef.temporary("zero")
+    move_to_state = _descriptor("amd.xdna.aie2p.move.to.division-state")
+    divide_step = _descriptor("amd.xdna.aie2p.divide.step.unsigned.i32")
+    zero_descriptor = _descriptor("amd.xdna.aie2p.constant.i32.short")
+    emits: list[EmitRegisterSlice | EmitDescriptorOp | EmitRegisterConcat] = [
+        *lhs_emits,
+        EmitRegisterSlice(source=ValueRef.operand("rhs"), result=divisor, unit_count=1),
+        EmitDescriptorOp(
+            descriptor=zero_descriptor,
+            results={"dst": zero},
+            result_types={"dst": DescriptorResultType()},
+            immediates={"i": 0},
+            form=DescriptorEmitForm.CONST,
+        ),
+    ]
+
+    remainder = zero
+    for word_name, word in (("high", lhs_high), ("low", lhs_low)):
+        state = ValueRef.temporary(f"{word_name}_division_state_0")
+        emits.append(
+            EmitDescriptorOp(
+                descriptor=move_to_state,
+                operands={"src": word},
+                results={"dst": state},
+                result_types={"dst": DescriptorResultType()},
+                form=DescriptorEmitForm.OP,
+            )
+        )
+        state, remainder = append_runtime_unsigned_division_steps(
+            emits,
+            initial_state=state,
+            initial_remainder=remainder,
+            divisor=divisor,
+            temporary_prefix=f"{word_name}_division_",
+        )
+    emits.append(_concat_pair(remainder, zero))
+    return DescriptorRule(
+        source_op=scalar_arithmetic.scalar_remui,
+        descriptor=divide_step,
+        priority=1,
+        guards=(
+            *_typed_guards(("lhs", "rhs", "result"), _I64),
+            Guard.value_i64_range("rhs", 1, 2**32 - 1),
+        ),
+        emit=tuple(emits),
     )
 
 
@@ -1169,6 +1224,7 @@ AIE2P_I64_RULES = (
         "add.carry_out.i32",
         "add.carry.i32",
     ),
+    _pair_unsigned_remainder_by_word_rule(),
     _pair_multiply_rule(),
     *(_pair_bounded_left_shift_rule(word_index) for word_index in range(2)),
     _pair_left_shift_rule(),

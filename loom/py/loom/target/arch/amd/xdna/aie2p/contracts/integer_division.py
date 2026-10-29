@@ -12,7 +12,9 @@ from loom.dsl import Op
 from loom.target.arch.amd.xdna.aie2p.contracts.scalar_program import ScalarProgram
 from loom.target.arch.amd.xdna.aie2p.core_descriptors import AIE2P_CORE_DESCRIPTOR_SET
 from loom.target.contracts import (
+    DescriptorResultType,
     DescriptorRule,
+    EmitDescriptorOp,
     Guard,
     Scalar,
     TypePattern,
@@ -26,6 +28,44 @@ _I32 = Scalar("i32")
 _INDEX = Scalar("index")
 _LHS = ValueRef.operand("lhs")
 _RHS = ValueRef.operand("rhs")
+
+
+def append_runtime_unsigned_division_steps(
+    emits: list[EmitDescriptorOp],
+    *,
+    initial_state: ValueRef,
+    initial_remainder: ValueRef,
+    divisor: ValueRef,
+    temporary_prefix: str,
+    final_remainder: ValueRef | None = None,
+) -> tuple[ValueRef, ValueRef]:
+    """Appends one word of native bit-serial unsigned division."""
+    divide_step = descriptor_by_key(
+        AIE2P_CORE_DESCRIPTOR_SET, "amd.xdna.aie2p.divide.step.unsigned.i32"
+    )
+    state = initial_state
+    remainder = initial_remainder
+    for step in range(1, 33):
+        next_remainder = (
+            final_remainder
+            if step == 32 and final_remainder is not None
+            else ValueRef.temporary(f"{temporary_prefix}remainder_{step}")
+        )
+        next_state = ValueRef.temporary(f"{temporary_prefix}state_{step}")
+        emits.append(
+            EmitDescriptorOp(
+                descriptor=divide_step,
+                operands={"sd": state, "s0": remainder, "s1": divisor},
+                results={"d0": next_remainder, "sd_out": next_state},
+                result_types={
+                    "d0": DescriptorResultType(),
+                    "sd_out": DescriptorResultType(),
+                },
+            )
+        )
+        state = next_state
+        remainder = next_remainder
+    return state, remainder
 
 
 def _magic_rule(
