@@ -244,6 +244,7 @@ LoopSchedule::LoopSchedule(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
 loom_op_t* LoopSchedule::build(loom_builder_t* builder, loom_value_id_t lower,
                                loom_value_id_t upper, loom_value_id_t step,
                                std::span<const loom_value_id_t> initial,
+                               std::span<const loom_type_t> result_types,
                                loom_value_id_t pipeline_depth,
                                loom_value_id_t unroll_factor,
                                loom_location_id_t location) const {
@@ -252,10 +253,10 @@ loom_op_t* LoopSchedule::build(loom_builder_t* builder, loom_value_id_t lower,
   auto factor =
       schedule_index(unit_, builder, unroll_factor_, unroll_factor, location);
   loom_op_t* op;
-  check(loom_scf_for_build(builder, flags_, lower, upper, step, initial.data(),
-                           initial.size(), /*result_types=*/nullptr, nullptr, 0,
-                           depth, factor, unroll_policy_, unroll_schedule_,
-                           location, &op));
+  check(loom_scf_for_build(
+      builder, flags_, lower, upper, step, initial.data(), initial.size(),
+      result_types.empty() ? nullptr : result_types.data(), nullptr, 0, depth,
+      factor, unroll_policy_, unroll_schedule_, location, &op));
   return op;
 }
 

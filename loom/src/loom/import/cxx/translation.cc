@@ -4387,6 +4387,23 @@ class Translator final : private Initialization::Evaluation {
     auto initial = current(written);
     auto outer_values = values_;
     auto source = locations_.get(ast);
+    auto dependent_state_sources = dependent_source_types(written, ast);
+    auto bind_loop_signatures =
+        [&](std::span<const loom_type_t> header_suffix_types,
+            bool require_result_types) {
+          if (!dependent_state_sources.empty()) {
+            return bind_condition_loop_signatures(
+                types_, dependent_state_sources, ast, &builder_,
+                header_suffix_types, require_result_types);
+          }
+          if (require_result_types) {
+            auto state_sources = source_types(written);
+            return bind_condition_loop_signatures(
+                types_, state_sources, ast, &builder_, header_suffix_types,
+                require_result_types);
+          }
+          return BoundConditionLoopSignatures{};
+        };
     auto evaluate_condition = [&] {
       return condition_expression
                  ? expression(condition_expression).ssa()
@@ -4400,17 +4417,16 @@ class Translator final : private Initialization::Evaluation {
             scalars_.integer(true, LOOM_SCALAR_TYPE_I1, locations_.get(ast));
         auto header_initial = initial;
         header_initial.push_back(active);
-        std::vector<const cxx::Type*> result_sources;
-        result_sources.reserve(written.size());
-        for (auto* symbol : written) {
-          result_sources.push_back(types_.unqualified_value(symbol->type()));
-        }
-        auto result_signature =
-            bind_signature(types_, result_sources, ast, &builder_);
+        const std::array<loom_type_t, 1> header_suffix_types = {
+            loom_type_scalar(LOOM_SCALAR_TYPE_I1)};
+        auto signatures = bind_loop_signatures(header_suffix_types,
+                                               /*require_result_types=*/true);
         check(loom_scf_while_build(
             &builder_, header_initial.data(), header_initial.size(),
-            /*iter_args_types=*/nullptr, result_signature.types.data(),
-            result_signature.types.size(), nullptr, 0, source, &op));
+            signatures.header_types.empty() ? nullptr
+                                            : signatures.header_types.data(),
+            signatures.result_types.data(), initial.size(), nullptr, 0, source,
+            &op));
         auto* before = loom_scf_while_before(op);
         auto saved = loom_builder_enter_region(&builder_, op, before);
         bind(written, before);
@@ -4444,10 +4460,15 @@ class Translator final : private Initialization::Evaluation {
                                    source, &terminator));
         loom_builder_restore(&builder_, saved);
       } else {
-        check(loom_scf_while_build(&builder_, initial.data(), initial.size(),
-                                   /*iter_args_types=*/nullptr,
-                                   /*result_types=*/nullptr, initial.size(),
-                                   nullptr, 0, source, &op));
+        auto signatures =
+            bind_loop_signatures({}, /*require_result_types=*/false);
+        check(loom_scf_while_build(
+            &builder_, initial.data(), initial.size(),
+            signatures.header_types.empty() ? nullptr
+                                            : signatures.header_types.data(),
+            signatures.result_types.empty() ? nullptr
+                                            : signatures.result_types.data(),
+            initial.size(), nullptr, 0, source, &op));
         auto* before = loom_scf_while_before(op);
         auto saved = loom_builder_enter_region(&builder_, op, before);
         bind(written, before);
@@ -4481,10 +4502,14 @@ class Translator final : private Initialization::Evaluation {
     }
 
     loom_op_t* op;
-    check(loom_scf_while_build(&builder_, initial.data(), initial.size(),
-                               /*iter_args_types=*/nullptr,
-                               /*result_types=*/nullptr, initial.size(),
-                               nullptr, 0, source, &op));
+    auto signatures = bind_loop_signatures({}, /*require_result_types=*/false);
+    check(loom_scf_while_build(
+        &builder_, initial.data(), initial.size(),
+        signatures.header_types.empty() ? nullptr
+                                        : signatures.header_types.data(),
+        signatures.result_types.empty() ? nullptr
+                                        : signatures.result_types.data(),
+        initial.size(), nullptr, 0, source, &op));
     auto* before = loom_scf_while_before(op);
     auto saved = loom_builder_enter_region(&builder_, op, before);
     bind(written, before);
@@ -4594,9 +4619,14 @@ class Translator final : private Initialization::Evaluation {
     auto written = live_mutations(loop);
     std::erase(written, induction);
     auto initial = current(written);
+    BoundSignature result_signature;
+    auto state_sources = dependent_source_types(written, loop);
+    if (!state_sources.empty()) {
+      result_signature = bind_signature(types_, state_sources, loop, &builder_);
+    }
     auto outer_values = values_;
-    auto* op = schedule.build(&builder_, lower, upper, step, initial, depth,
-                              factor, source);
+    auto* op = schedule.build(&builder_, lower, upper, step, initial,
+                              result_signature.types, depth, factor, source);
     auto* body = loom_scf_for_body(op);
     auto saved = loom_builder_enter_region(&builder_, op, body);
     auto iteration = name(loom_region_entry_arg_id(body, 0),
@@ -4638,6 +4668,31 @@ class Translator final : private Initialization::Evaluation {
     }
     return result;
   }
+
+  std::vector<const cxx::Type*> source_types(
+      std::span<cxx::Symbol* const> symbols) {
+    std::vector<const cxx::Type*> result;
+    result.reserve(symbols.size());
+    for (auto* symbol : symbols) {
+      result.push_back(types_.unqualified_value(symbol->type()));
+    }
+    return result;
+  }
+
+  // Returns the complete state type list only when at least one source type
+  // depends on destination identities. Ordinary scalar loops take the empty,
+  // allocation-free path and let the generated builders infer their schemes.
+  std::vector<const cxx::Type*> dependent_source_types(
+      std::span<cxx::Symbol* const> symbols, cxx::AST* owner) {
+    for (auto* symbol : symbols) {
+      if (types_.requires_binding(types_.unqualified_value(symbol->type()),
+                                  owner)) {
+        return source_types(symbols);
+      }
+    }
+    return {};
+  }
+
   std::vector<loom_value_id_t> current(
       const std::vector<cxx::Symbol*>& symbols) {
     std::vector<loom_value_id_t> result;

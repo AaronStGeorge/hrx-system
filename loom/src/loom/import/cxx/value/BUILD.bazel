@@ -225,6 +225,7 @@ loom_cc_test(
     deps = [
         ":builder_test",
         ":signature",
+        "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/test",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

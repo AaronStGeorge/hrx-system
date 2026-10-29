@@ -74,6 +74,26 @@ void typed_view_copy(const float* input, float* output, unsigned rows,
   }
 }
 
+[[loom::kernel, loom::workgroup_size(1, 1, 1), loom::workgroup_count(1, 1, 1)]]
+void typed_view_loop(const unsigned* left, const unsigned* right,
+                     unsigned* output, unsigned rows, unsigned stride,
+                     unsigned iterations, bool use_right, bool share_root) {
+  loom::assume(rows >= 3 && rows <= 8);
+  loom::assume(stride >= 7 && stride <= 16);
+  loom::assume(iterations <= 2);
+  auto layout = loom::encoding::layout::strided(stride, 1u);
+  const unsigned* right_root = share_root ? left : right;
+  const unsigned* source = use_right ? right_root + 3u : left + 2u;
+  auto selected = loom::buffer::view<loomt::dynamic, 7>(source, {rows}, layout);
+  for (unsigned i = 0; i < iterations; ++i) {
+    --rows;
+    loom::assume(rows >= 1 && rows <= 8);
+    selected = loom::view::subview(selected, {1u, 0u}, {rows});
+  }
+  auto cell = loom::view::subview<1, 1>(selected, {0u, 0u}, {});
+  output[0] = loom::view::load(cell, 0u, 0u);
+}
+
 [[loom::kernel, loom::workgroup_size(16, 1, 1), loom::workgroup_count(1, 1, 1)]]
 void typed_storage_rank3(
     [[loom::noalias, loom::assume_aligned(64)]] const Weight* input,
