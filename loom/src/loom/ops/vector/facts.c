@@ -3884,7 +3884,8 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_expf_facts, iree_math_exp_f32,
                               iree_math_exp_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_exp2f_facts, iree_math_exp2_f32,
                               iree_math_exp2_f64)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_expm1f_facts, expm1f, expm1)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_expm1f_facts, iree_math_expm1_f32,
+                              iree_math_expm1_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_logf_facts, iree_math_log_f32,
                               iree_math_log_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_log2f_facts, iree_math_log2_f32,

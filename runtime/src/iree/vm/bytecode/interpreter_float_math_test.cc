@@ -225,6 +225,17 @@ TEST_F(VMBytecodeInterpreterFloatMathTest,
   EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_LOG1P, 1), 1);
 }
 
+TEST_F(VMBytecodeInterpreterFloatMathTest, Expm1PreservesSmallInputsAndLimits) {
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_EXPM1, 1), 1);
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_EXPM1, 1), 1);
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_EXPM1,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x80000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_EXPM1,
+                            UINT64_C(0xFFF0000000000000)),
+            UINT64_C(0xBFF0000000000000));
+}
+
 TEST_F(VMBytecodeInterpreterFloatMathTest, FmaRoundsOnce) {
   EXPECT_EQ(ExecuteFma<iree_vm_bytecode_float_fma_f32_t>(
                 iree_vm_bytecode_execute_float_fma_f32, UINT32_C(0x3F800001),

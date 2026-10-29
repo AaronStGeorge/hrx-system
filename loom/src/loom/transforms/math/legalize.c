@@ -263,6 +263,9 @@ static loom_target_math_op_t loom_math_legalize_op_kind(const loom_op_t* op) {
     case LOOM_OP_SCALAR_LOG10F:
     case LOOM_OP_VECTOR_LOG10F:
       return LOOM_TARGET_MATH_OP_LOG10F;
+    case LOOM_OP_SCALAR_EXPM1F:
+    case LOOM_OP_VECTOR_EXPM1F:
+      return LOOM_TARGET_MATH_OP_EXPM1F;
     case LOOM_OP_SCALAR_LOG1PF:
     case LOOM_OP_VECTOR_LOG1PF:
       return LOOM_TARGET_MATH_OP_LOG1PF;

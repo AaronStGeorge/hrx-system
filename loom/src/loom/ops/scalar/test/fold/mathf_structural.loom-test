@@ -226,3 +226,19 @@ func.def @ordinary_logarithms() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
   %cancellation = scalar.constant 4.9406564584124654e-324 : f64
   func.return %natural, %base_two, %base_ten, %increment, %subnormal, %cancellation : f8E4M3, f8E5M2, f16, bf16, f32, f64
 }
+
+// ====
+func.def @exponential_difference() -> (f32, f64) {
+  %tiny = scalar.constant 1.4012984643248171e-45 : f32
+  %small = scalar.constant -0.00390625 : f64
+  %single = scalar.expm1f %tiny : f32
+  %wide = scalar.expm1f %small : f64
+  func.return %single, %wide : f32, f64
+}
+
+// ----
+func.def @exponential_difference() -> (f32, f64) {
+  %single = scalar.constant 1.4012984643248171e-45 : f32
+  %wide = scalar.constant -0.00389863052988251 : f64
+  func.return %single, %wide : f32, f64
+}

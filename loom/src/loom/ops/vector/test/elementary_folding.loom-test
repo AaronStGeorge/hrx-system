@@ -56,3 +56,19 @@ func.def @vector_logarithms() -> (vector<2xf32>, vector<2xf64>, vector<2xf16>, v
   %increment = vector.constant -0.00390625 : vector<2xbf16>
   func.return %natural, %base_two, %base_ten, %increment : vector<2xf32>, vector<2xf64>, vector<2xf16>, vector<2xbf16>
 }
+
+// ====
+func.def @vector_exponential_difference() -> (vector<2xf16>, vector<2xf64>) {
+  %small = vector.constant 0.00390625 : vector<2xf16>
+  %tiny = vector.constant 4.9406564584124654e-324 : vector<2xf64>
+  %narrow = vector.expm1f %small : vector<2xf16>
+  %wide = vector.expm1f %tiny : vector<2xf64>
+  func.return %narrow, %wide : vector<2xf16>, vector<2xf64>
+}
+
+// ----
+func.def @vector_exponential_difference() -> (vector<2xf16>, vector<2xf64>) {
+  %narrow = vector.constant 0.00391387939453125 : vector<2xf16>
+  %wide = vector.constant 4.9406564584124654e-324 : vector<2xf64>
+  func.return %narrow, %wide : vector<2xf16>, vector<2xf64>
+}

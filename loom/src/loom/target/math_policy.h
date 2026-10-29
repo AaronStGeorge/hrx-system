@@ -69,10 +69,11 @@ typedef enum loom_target_math_op_e {
   LOOM_TARGET_MATH_OP_CBRTF = 32,
   LOOM_TARGET_MATH_OP_LOG10F = 33,
   LOOM_TARGET_MATH_OP_LOG1PF = 34,
+  LOOM_TARGET_MATH_OP_EXPM1F = 35,
 } loom_target_math_op_t;
 
 // Number of operation ordinals available to operation-indexed policy tables.
-#define LOOM_TARGET_MATH_OP_COUNT ((int)LOOM_TARGET_MATH_OP_LOG1PF + 1)
+#define LOOM_TARGET_MATH_OP_COUNT ((int)LOOM_TARGET_MATH_OP_EXPM1F + 1)
 
 typedef enum loom_target_math_lane_domain_e {
   LOOM_TARGET_MATH_LANE_DOMAIN_UNKNOWN = 0,

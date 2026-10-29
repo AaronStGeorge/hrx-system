@@ -21,6 +21,9 @@ An integer restoring algorithm supplies the same payloads on hardware without
 square root. Reciprocal square root rounds after both square root and division.
 The exponentials use Arm's table-and-polynomial algorithms with fixed unfused
 rounding points and at most one adjacent value of error from correct rounding.
+`expm1` uses compensated reduction and a rational approximation to retain
+small differences that would vanish in `exp(x)-1`; both widths share that
+algorithm, with parallel polynomial evaluation for F64.
 Their exceptional-value behavior and arithmetic profile are part of their
 stable mapping, not host library policy.
 
@@ -82,7 +85,7 @@ own their documented flush rules.
 
 Operations are grouped by algorithm family and provenance:
 
-- `exponential.h` owns natural and base-two exponentials.
+- `exponential.h` owns natural/base-two exponentials and `expm1`.
 - `logarithm.h` owns natural/base-two/base-ten logarithms and `log1p`.
 - `fma.h` owns fused arithmetic and narrow-format intermediate evaluation.
 - `roots.h` owns reciprocal, reciprocal square root, square root, and cube root.

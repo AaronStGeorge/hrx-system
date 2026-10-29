@@ -190,6 +190,7 @@ _MATH_SOURCE_OPS = {
     "rsqrt": math.scalar_rsqrtf,
     "exp": math.scalar_expf,
     "exp2": math.scalar_exp2f,
+    "expm1": math.scalar_expm1f,
     "cbrt": math.scalar_cbrtf,
     "log": math.scalar_logf,
     "log2": math.scalar_log2f,

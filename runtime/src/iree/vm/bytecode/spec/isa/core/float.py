@@ -240,6 +240,15 @@ _FLOAT_MATH_ORDINARY_UNARY_VALUES = (
         "preserved; -1 returns negative infinity; inputs below -1 and every NaN "
         "become the canonical positive quiet NaN.",
     ),
+    (
+        "expm1",
+        21,
+        "Returns the stable iree/math exp(x)-1 mapping without cancellation "
+        "near zero, with fixed unfused rounding points and at most one "
+        "adjacent value of error from correct rounding. Signed zero and "
+        "positive infinity are preserved; negative infinity returns -1; "
+        "every NaN becomes the canonical positive quiet NaN.",
+    ),
 )
 
 FLOAT_MATH_F32_SELECTOR = _selector(

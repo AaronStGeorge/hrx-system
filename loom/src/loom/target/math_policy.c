@@ -390,7 +390,8 @@ bool loom_target_math_policy_prefers_fma(
   _(DIVF, op_divf, "divf")                               \
   _(CBRTF, op_cbrtf, "cbrtf")                            \
   _(LOG10F, op_log10f, "log10f")                         \
-  _(LOG1PF, op_log1pf, "log1pf")
+  _(LOG1PF, op_log1pf, "log1pf")                         \
+  _(EXPM1F, op_expm1f, "expm1f")
 
 #define LOOM_TARGET_MATH_LANE_DOMAIN_NAMES(_) \
   _(UNKNOWN, lane_unknown, "unknown")         \

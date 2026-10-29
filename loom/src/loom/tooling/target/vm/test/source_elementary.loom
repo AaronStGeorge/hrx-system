@@ -1,5 +1,15 @@
 // Ordinary source operations compile into direct VM math selectors. The same
 // cases run before and after linking to Loom bytecode, without native imports.
+func.def @exponential_difference_f64(%input: f64) -> (f64) {
+  %result = scalar.expm1f %input : f64
+  func.return %result : f64
+}
+
+func.def @exponential_difference_f32(%input: f32) -> (f32) {
+  %result = scalar.expm1f %input : f32
+  func.return %result : f32
+}
+
 func.def @elementary_f32(%value: f32) -> (f32, f32, f32, f32) {
   %root = scalar.sqrtf %value : f32
   %inverse = scalar.rsqrtf %value : f32
@@ -51,6 +61,9 @@ check.case public @ordinary_f32 {
   check.expect.equal actual(%log2) expected(%minus_one) : f32
   check.expect.approximate actual(%log10) expected(%log10_half) atol(5.9604644775390625e-08) rtol(0.0) nan(different) : f32, f32
   check.expect.approximate actual(%log1p) expected(%ln_one_half) atol(5.9604644775390625e-08) rtol(0.0) nan(different) : f32, f32
+  %difference = func.call @exponential_difference_f32(%input) : (f32) -> (f32)
+  %expected_difference = check.literal value(0.64872127771377563) : f32
+  check.expect.approximate actual(%difference) expected(%expected_difference) atol(5.9604644775390625e-08) rtol(0.0) nan(different) : f32, f32
   check.return
 }
 
@@ -73,5 +86,8 @@ check.case public @ordinary_f64 {
   check.expect.equal actual(%log2) expected(%minus_one) : f64
   check.expect.approximate actual(%log10) expected(%log10_half) atol(1.1102230246251565e-16) rtol(0.0) nan(different) : f64, f64
   check.expect.approximate actual(%log1p) expected(%ln_one_half) atol(1.1102230246251565e-16) rtol(0.0) nan(different) : f64, f64
+  %difference = func.call @exponential_difference_f64(%input) : (f64) -> (f64)
+  %expected_difference = check.literal value(0.64872127070012819) : f64
+  check.expect.approximate actual(%difference) expected(%expected_difference) atol(1.1102230246251565e-16) rtol(0.0) nan(different) : f64, f64
   check.return
 }

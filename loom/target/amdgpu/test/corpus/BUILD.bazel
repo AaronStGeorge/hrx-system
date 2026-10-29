@@ -195,6 +195,7 @@ loom_corpus_test(
             "memory/view/nested_selection.loom:@nested_selection_values": "LOWERING/044",
             "memory/view/offset_recurrence.loom:@window_recurrence_values": "LOWERING/044",
             "memory/view/selected_crops.loom:@selected_crop_values": "LOWERING/044",
+            "numeric/float/exponential.loom:@exponential_difference_values": "LOWERING/036",
             "numeric/float/exponential.loom:@exponential_values": "EXPECT/002,EXPECT/006",
             "numeric/float/logarithm.loom:@logarithm_values": "EXPECT/006",
             "numeric/float/logarithm.loom:@ordinary_logarithm_values": "LOWERING/036",

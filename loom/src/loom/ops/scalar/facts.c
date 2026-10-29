@@ -328,7 +328,8 @@ iree_status_t loom_scalar_clampf_facts(loom_fact_context_t* context,
 FLOAT_UNARY_FACTS(loom_scalar_expf_facts, iree_math_exp_f32, iree_math_exp_f64)
 FLOAT_UNARY_FACTS(loom_scalar_exp2f_facts, iree_math_exp2_f32,
                   iree_math_exp2_f64)
-FLOAT_UNARY_FACTS(loom_scalar_expm1f_facts, expm1f, expm1)
+FLOAT_UNARY_FACTS(loom_scalar_expm1f_facts, iree_math_expm1_f32,
+                  iree_math_expm1_f64)
 FLOAT_UNARY_FACTS(loom_scalar_logf_facts, iree_math_log_f32, iree_math_log_f64)
 FLOAT_UNARY_FACTS(loom_scalar_log2f_facts, iree_math_log2_f32,
                   iree_math_log2_f64)

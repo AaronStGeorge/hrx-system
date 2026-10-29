@@ -11,6 +11,191 @@
 
 #include "iree/math/float_bits.h"
 
+//===----------------------------------------------------------------------===//
+// Cancellation-preserving natural exponential
+//===----------------------------------------------------------------------===//
+
+// Adapted from Sun/OpenLibm revision 5fe399749f9276eaa0b8403e507470da05cbbb3f
+// (s_expm1.c and s_expm1f.c), with Naohiko Shimizu's parallel F64 polynomial
+// evaluation from glibc revision ef321e23c20eebc6d6fb4044425c00e6df27b05f.
+// Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+// Developed at SunPro, a Sun Microsystems, Inc. business.
+// Permission to use, copy, modify, and distribute this software is freely
+// granted, provided that this notice is preserved.
+// F32 conversion by Ian Lance Taylor; parallel evaluation by Naohiko Shimizu.
+
+IREE_API_EXPORT float iree_math_expm1_f32(float value) {
+  const uint32_t bits = iree_math_f32_to_bits(value);
+  const uint32_t magnitude = bits & IREE_MATH_F32_MAGNITUDE_MASK;
+  const bool negative = (bits & IREE_MATH_F32_SIGN_BIT) != 0;
+  if (IREE_UNLIKELY(magnitude >= UINT32_C(0x4195B844))) {
+    if (magnitude > IREE_MATH_F32_INFINITY) {
+      return iree_math_f32_canonical_nan();
+    }
+    if (negative) {
+      return -1.0f;
+    }
+    if (magnitude >= UINT32_C(0x42B17218)) {
+      return iree_math_f32_from_bits(IREE_MATH_F32_INFINITY);
+    }
+  }
+  // value = exponent*ln(2) + residual + correction. Splitting ln(2) keeps
+  // its high-part product exact throughout the finite reconstruction range.
+  const float ln2_high = 0x1.62e3p-1f;
+  const float ln2_low = 0x1.2fefa2p-17f;
+  int exponent = 0;
+  float correction = 0.0f;
+  if (magnitude > UINT32_C(0x3EB17218)) {
+    float high;
+    float low;
+    if (magnitude < UINT32_C(0x3F851592)) {
+      if (negative) {
+        exponent = -1;
+        high = value + ln2_high;
+        low = -ln2_low;
+      } else {
+        exponent = 1;
+        high = value - ln2_high;
+        low = ln2_low;
+      }
+    } else {
+      exponent = (int)(0x1.715476p0f * value + (negative ? -0.5f : 0.5f));
+      high = value - (float)exponent * ln2_high;
+      low = (float)exponent * ln2_low;
+    }
+    value = high - low;
+    correction = (high - value) - low;
+  } else if (magnitude < UINT32_C(0x33000000)) {
+    return value;
+  }
+
+  // Rational approximation on |residual| <= ln(2)/2, retaining the small
+  // expm1 result instead of subtracting one from a rounded exponential.
+  const float half = 0.5f * value;
+  const float squared_half = value * half;
+  const float polynomial =
+      1.0f + squared_half * (-0x1.1110dp-5f + squared_half * 0x1.9e602p-10f);
+  const float denominator = 3.0f - polynomial * half;
+  float error = squared_half *
+                ((polynomial - denominator) / (6.0f - value * denominator));
+  if (exponent == 0) {
+    return value - (value * error - squared_half);
+  }
+  error = value * (error - correction) - correction;
+  error -= squared_half;
+  if (exponent == -1) {
+    return 0.5f * (value - error) - 0.5f;
+  }
+  if (exponent == 1) {
+    return value < -0.25f ? -2.0f * (error - (value + 0.5f))
+                          : 1.0f + 2.0f * (value - error);
+  }
+
+  const float scale = iree_math_f32_from_bits((uint32_t)(127 + exponent) << 23);
+  if (exponent <= -2 || exponent > 56) {
+    const float result = 1.0f - (error - value);
+    // Split the largest scale so a finite result need not form 2^128.
+    return (exponent == 128 ? result * 2.0f * 0x1p127f : result * scale) - 1.0f;
+  }
+  if (exponent < 23) {
+    const float offset = iree_math_f32_from_bits(
+        UINT32_C(0x3F800000) - (UINT32_C(0x01000000) >> exponent));
+    return (offset - (error - value)) * scale;
+  }
+  const float inverse_scale =
+      iree_math_f32_from_bits((uint32_t)(127 - exponent) << 23);
+  return ((value - (error + inverse_scale)) + 1.0f) * scale;
+}
+
+IREE_API_EXPORT double iree_math_expm1_f64(double value) {
+  const uint64_t bits = iree_math_f64_to_bits(value);
+  const uint64_t magnitude = bits & IREE_MATH_F64_MAGNITUDE_MASK;
+  const uint32_t magnitude_high = (uint32_t)(magnitude >> 32);
+  const bool negative = (bits & IREE_MATH_F64_SIGN_BIT) != 0;
+  if (IREE_UNLIKELY(magnitude_high >= UINT32_C(0x4043687A))) {
+    if (magnitude > IREE_MATH_F64_INFINITY) {
+      return iree_math_f64_canonical_nan();
+    }
+    if (negative) {
+      return -1.0;
+    }
+    if (value > 0x1.62e42fefa39efp9) {
+      return iree_math_f64_from_bits(IREE_MATH_F64_INFINITY);
+    }
+  }
+  const double ln2_high = 0x1.62e42feep-1;
+  const double ln2_low = 0x1.a39ef35793c76p-33;
+  int exponent = 0;
+  double correction = 0.0;
+  if (magnitude_high > UINT32_C(0x3FD62E42)) {
+    double high;
+    double low;
+    if (magnitude_high < UINT32_C(0x3FF0A2B2)) {
+      if (negative) {
+        exponent = -1;
+        high = value + ln2_high;
+        low = -ln2_low;
+      } else {
+        exponent = 1;
+        high = value - ln2_high;
+        low = ln2_low;
+      }
+    } else {
+      exponent = (int)(0x1.71547652b82fep0 * value + (negative ? -0.5 : 0.5));
+      high = value - (double)exponent * ln2_high;
+      low = (double)exponent * ln2_low;
+    }
+    value = high - low;
+    correction = (high - value) - low;
+  } else if (magnitude_high < UINT32_C(0x3C900000)) {
+    return value;
+  }
+
+  const double half = 0.5 * value;
+  const double squared_half = value * half;
+  // Independent polynomial chains shorten the dependency path while keeping
+  // the original approximation coefficients and explicit rounding points.
+  const double fourth = squared_half * squared_half;
+  const double eighth = fourth * fourth;
+  const double first = 1.0 + squared_half * -0x1.11111111110f4p-5;
+  const double second =
+      0x1.a01a019fe5585p-10 + squared_half * -0x1.4ce199eaadbb7p-14;
+  const double third =
+      0x1.0cfca86e65239p-18 + squared_half * -0x1.afdb76e09c32dp-23;
+  const double polynomial = first + fourth * second + eighth * third;
+  const double denominator = 3.0 - polynomial * half;
+  double error =
+      squared_half * ((polynomial - denominator) / (6.0 - value * denominator));
+  if (exponent == 0) {
+    return value - (value * error - squared_half);
+  }
+  error = value * (error - correction) - correction;
+  error -= squared_half;
+  if (exponent == -1) {
+    return 0.5 * (value - error) - 0.5;
+  }
+  if (exponent == 1) {
+    return value < -0.25 ? -2.0 * (error - (value + 0.5))
+                         : 1.0 + 2.0 * (value - error);
+  }
+
+  const double scale =
+      iree_math_f64_from_bits((uint64_t)(1023 + exponent) << 52);
+  if (exponent <= -2 || exponent > 56) {
+    const double result = 1.0 - (error - value);
+    return (exponent == 1024 ? result * 2.0 * 0x1p1023 : result * scale) - 1.0;
+  }
+  if (exponent < 20) {
+    const double offset = iree_math_f64_from_bits(
+        (uint64_t)(UINT32_C(0x3FF00000) - (UINT32_C(0x00200000) >> exponent))
+        << 32);
+    return (offset - (error - value)) * scale;
+  }
+  const double inverse_scale =
+      iree_math_f64_from_bits((uint64_t)(1023 - exponent) << 52);
+  return ((value - (error + inverse_scale)) + 1.0) * scale;
+}
+
 // The finite F32 kernels derive from Arm Optimized Routines revision
 // 67126040cf80f956676fbf473c2d9bebdb475283. IREE supplies explicit exceptional
 // shells and freezes the resulting F32 mappings as its own named operations.

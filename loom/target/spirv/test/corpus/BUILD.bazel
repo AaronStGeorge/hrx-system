@@ -537,6 +537,7 @@ _SPIRV_EXECUTION_XFAILS = {
     "numeric/conversion/narrow_arithmetic.loom:@arithmetic_f8e5m2_values": "LOWERING/036",
     "numeric/float/activations.loom:@activation_core_values": "LOWERING/036",
     "numeric/float/activations.loom:@activation_values": "LOWERING/036",
+    "numeric/float/exponential.loom:@exponential_difference_values": "LOWERING/036",
     "numeric/float/exponential.loom:@exponential_values": "EXPECT/002,EXPECT/006",
     "numeric/float/logarithm.loom:@logarithm_values": "EXPECT/006",
     "numeric/float/logarithm.loom:@ordinary_logarithm_values": "LOWERING/036",
