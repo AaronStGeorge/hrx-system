@@ -317,12 +317,30 @@ TEST_F(LowAllocationIntervalAssignmentTest,
   result = {};
   IREE_ASSERT_OK(loom_low_allocation_interval_assignment_build(
       &bounded_context, &decision_arena_, &result));
+  iree_arena_reset(&decision_arena_);
+  iree_arena_block_pool_trim(&block_pool_);
   EXPECT_FALSE(result.reached_spill_traffic_limit);
-  EXPECT_EQ(result.assignment_count, 1u);
+  ASSERT_EQ(result.assignment_count, 1u);
+  EXPECT_EQ(result.assignments[0].location_kind,
+            LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT);
   EXPECT_EQ(result.spill_count, 1u);
   EXPECT_EQ(result.spill_traffic_bytes, 16u);
-  EXPECT_EQ(result.spill_plan_count, 1u);
-  EXPECT_EQ(result.remark_count, 1u);
+  ASSERT_EQ(result.spill_plan_count, 1u);
+  ASSERT_NE(result.spill_plans, nullptr);
+  const auto& plan = result.spill_plans[0];
+  EXPECT_EQ(plan.assignment_index, 0u);
+  EXPECT_EQ(plan.value_id, value);
+  EXPECT_EQ(plan.slot_index, 0u);
+  EXPECT_EQ(plan.byte_size, 8u);
+  EXPECT_EQ(plan.byte_alignment, 8u);
+  EXPECT_EQ(plan.store_count, 1u);
+  EXPECT_EQ(plan.reload_count, 1u);
+  ASSERT_EQ(result.remark_count, 1u);
+  ASSERT_NE(result.remarks, nullptr);
+  EXPECT_EQ(result.remarks[0].kind, LOOM_LOW_ALLOCATION_REMARK_SPILL);
+  EXPECT_EQ(result.remarks[0].assignment_index, plan.assignment_index);
+  EXPECT_EQ(result.remarks[0].budget_units, 1u);
+  EXPECT_EQ(result.remarks[0].required_units, 2u);
 
   loom_local_value_domain_release(&value_domain);
 }
