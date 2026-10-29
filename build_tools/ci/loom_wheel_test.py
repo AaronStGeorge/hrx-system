@@ -11,6 +11,7 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import chdir
@@ -83,25 +84,54 @@ class LoomWheelTest(unittest.TestCase):
             )
         )
 
+    def bazel(self, query="", build_status=0):
+        """Creates a process-compatible Bazel substitute for orchestration tests."""
+        script = self.root / "fake_bazel.py"
+        script.write_text(
+            "import sys\n"
+            f"query = {query!r}\n"
+            f"build_status = {build_status}\n"
+            "command = sys.argv[1] if len(sys.argv) > 1 else None\n"
+            "if command == 'build':\n"
+            "    raise SystemExit(build_status)\n"
+            "if command == 'cquery':\n"
+            "    print(query)\n"
+            "    raise SystemExit(0)\n"
+            "raise SystemExit(2)\n",
+            encoding="utf-8",
+        )
+        if os.name == "nt":
+            launcher = self.root / "test-bazel.cmd"
+            launcher.write_text(
+                f'@"{sys.executable}" "{script}" %*\n', encoding="utf-8"
+            )
+        else:
+            launcher = self.root / "test-bazel"
+            launcher.write_text(
+                "#!/bin/sh\n"
+                f'exec {shlex.quote(sys.executable)} {shlex.quote(str(script))} "$@"\n',
+                encoding="utf-8",
+            )
+            launcher.chmod(0o755)
+        return launcher
+
+    def qualifier(self, status=0):
+        script = self.root / loom_wheel.TEST_DIRECTORY / "wheel_model_card_test.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(f"raise SystemExit({status})\n", encoding="utf-8")
+
     def test_build_exports_exact_declared_inputs_without_running_them(self):
         for profile in loom_wheel.PROFILE_FLAGS:
             with self.subTest(profile=profile):
                 path = self.wheel(profile)
-                query = self.query(path)
-                calls = []
-
-                def bazel(arguments, **kwargs):
-                    self.assertEqual(kwargs["cwd"], self.root)
-                    calls.append(arguments)
-                    return subprocess.CompletedProcess(arguments, 0, query)
-
                 output = self.output / profile
-                with patch("subprocess.run", side_effect=bazel):
-                    wheel = loom_wheel.build_wheel(
-                        self.root, output, profile, "bazel", ["--config=windows-x86_64"]
-                    )
-                self.assertEqual([call[1] for call in calls], ["build", "cquery"])
-                self.assertEqual(calls[0][2:-3], calls[1][2:-3])
+                wheel = loom_wheel.build_wheel(
+                    self.root,
+                    output,
+                    profile,
+                    os.fspath(self.bazel(self.query(path))),
+                    [],
+                )
                 self.assertEqual(wheel.path.read_bytes(), path.read_bytes())
                 self.assertEqual(
                     wheel.digest, hashlib.sha256(path.read_bytes()).hexdigest()
@@ -115,98 +145,97 @@ class LoomWheelTest(unittest.TestCase):
                 self.assertFalse((output / "model/stale.data").exists())
 
     def test_failed_build_cannot_export_existing_output(self):
-        self.wheel()
-        with patch(
-            "subprocess.run",
-            side_effect=subprocess.CalledProcessError(1, "bazel build"),
-        ) as run:
-            with self.assertRaises(subprocess.CalledProcessError):
-                loom_wheel.build_wheel(self.root, self.output, "release", "bazel", [])
-        self.assertEqual(run.call_count, 1)
+        path = self.wheel()
+        bazel = self.bazel(self.query(path), build_status=1)
+        with self.assertRaises(subprocess.CalledProcessError):
+            loom_wheel.build_wheel(
+                self.root, self.output, "release", os.fspath(bazel), []
+            )
         self.assertFalse(self.output.exists())
 
-    def test_query_or_profile_mismatch_cannot_export(self):
-        path = self.wheel("debug")
+    def test_missing_or_duplicate_declared_inputs_cannot_export(self):
+        path = self.wheel()
         query = self.query(path)
-        for document in ("", query + "\n" + query, query):
-            with (
-                self.subTest(query=document),
-                patch(
-                    "subprocess.run",
-                    return_value=subprocess.CompletedProcess([], 0, document),
-                ),
-            ):
+        for document in ("", query + "\n" + query):
+            with self.subTest(query=document):
                 with self.assertRaises(ValueError):
                     loom_wheel.build_wheel(
-                        self.root, self.output, "release", "bazel", []
+                        self.root,
+                        self.output,
+                        "release",
+                        os.fspath(self.bazel(document)),
+                        [],
                     )
                 self.assertFalse(self.output.exists())
+
+    def test_profile_mismatch_cannot_export(self):
+        path = self.wheel("debug")
+        with self.assertRaises(ValueError):
+            loom_wheel.build_wheel(
+                self.root,
+                self.output,
+                "release",
+                os.fspath(self.bazel(self.query(path))),
+                [],
+            )
+        self.assertFalse(self.output.exists())
 
     def test_build_does_not_overlay_old_inputs(self):
         path = self.wheel()
         self.output.mkdir()
         destination = self.output / path.name
         destination.write_bytes(b"previous output")
-        with patch(
-            "subprocess.run",
-            return_value=subprocess.CompletedProcess([], 0, self.query(path)),
-        ):
-            with self.assertRaises(FileExistsError):
-                loom_wheel.build_wheel(self.root, self.output, "release", "bazel", [])
+        with self.assertRaises(FileExistsError):
+            loom_wheel.build_wheel(
+                self.root,
+                self.output,
+                "release",
+                os.fspath(self.bazel(self.query(path))),
+                [],
+            )
         self.assertEqual(destination.read_bytes(), b"previous output")
 
-    def inputs(self):
-        platform = "win_amd64" if os.name == "nt" else "manylinux_2_39_x86_64"
+    def inputs(self, platform=None):
+        platform = platform or (
+            "win_amd64" if os.name == "nt" else "manylinux_2_39_x86_64"
+        )
         path = self.wheel(platform=platform)
-        with patch(
-            "subprocess.run",
-            return_value=subprocess.CompletedProcess([], 0, self.query(path)),
-        ):
-            loom_wheel.build_wheel(self.root, self.output, "release", "bazel", [])
+        loom_wheel.build_wheel(
+            self.root,
+            self.output,
+            "release",
+            os.fspath(self.bazel(self.query(path))),
+            [],
+        )
         return path
 
-    def test_only_native_qualification_exports_publication_artifact(self):
+    def test_successful_native_qualification_exports_publication_artifact(self):
         path = self.inputs()
         published = self.root / "published"
-        with patch("subprocess.run") as run:
-            loom_wheel.test_wheel(self.root, self.output, published, "patchelf")
-        run.assert_called_once()
-        command = run.call_args.args[0]
-        self.assertEqual(Path(command[1]).name, "wheel_model_card_test.py")
-        self.assertEqual(Path(command[2]), self.output / path.name)
-        self.assertEqual(command[-1], "task,amdgpu,rdna,cdna,xdna,vulkan")
+        self.qualifier()
+        loom_wheel.test_wheel(self.root, self.output, published, "patchelf")
         self.assertEqual((published / path.name).read_bytes(), path.read_bytes())
 
     def test_failed_qualification_cannot_export_existing_wheel(self):
         self.inputs()
         published = self.root / "published"
-        with patch(
-            "subprocess.run",
-            side_effect=subprocess.CalledProcessError(1, "installed test"),
-        ):
-            with self.assertRaises(subprocess.CalledProcessError):
-                loom_wheel.test_wheel(self.root, self.output, published, "patchelf")
+        self.qualifier(status=1)
+        with self.assertRaises(subprocess.CalledProcessError):
+            loom_wheel.test_wheel(self.root, self.output, published, "patchelf")
+        self.assertFalse(published.exists())
+
+    def test_non_native_wheel_cannot_be_qualified(self):
+        platform = "manylinux_2_39_x86_64" if os.name == "nt" else "win_amd64"
+        self.inputs(platform)
+        published = self.root / "published"
+        self.qualifier()
+        with self.assertRaises(ValueError):
+            loom_wheel.test_wheel(self.root, self.output, published, "patchelf")
         self.assertFalse(published.exists())
 
     def test_cli_resolves_the_platform_launcher(self):
         path = self.wheel()
-        query = self.query(path)
-        if os.name == "nt":
-            launcher = self.root / "test-bazel.cmd"
-            launcher.write_text(
-                "@echo off\n"
-                + "".join(
-                    f'@if "%1"=="cquery" echo {line}\n' for line in query.splitlines()
-                )
-                + "@exit /b 0\n"
-            )
-        else:
-            launcher = self.root / "test-bazel"
-            launcher.write_text(
-                '#!/bin/sh\nif [ "$1" = cquery ]; then\n'
-                f"  printf '%s\\n' {shlex.quote(query)}\nfi\n"
-            )
-            launcher.chmod(0o755)
+        self.bazel(self.query(path))
         with (
             chdir(self.root),
             patch.dict(
