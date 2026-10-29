@@ -9,11 +9,16 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load(":settings.bzl", "OPTIONS")
 
+filegroup(
+    name = "header_inputs",
+    srcs = ["generated.h.in"],
+)
+
 iree_cmake_extra_content(
     content = """
 iree_py_library(NAME generator MAIN generator.py SRCS generator.py)
 iree_py_generated_files(NAME header GENERATOR ::generator
-  INPUTS generated.h.in
+  INPUTS header_inputs.stamp
   ARGS "--input=${_IREE_PACKAGE_SOURCE_DIR}/generated.h.in"
   OUTPUTS generated.h OUTPUT_FLAGS --output)
 """,

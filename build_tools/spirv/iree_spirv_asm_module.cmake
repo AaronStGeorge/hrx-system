@@ -26,6 +26,7 @@ include(iree_c_embed_data)
 # TESTONLY: When added, this target will only be built if IREE_BUILD_TESTS=ON.
 # PUBLIC: Add this so that generated libraries are exported under ${PACKAGE}::.
 function(iree_spirv_asm_module)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     "PUBLIC;TESTONLY"
@@ -68,8 +69,8 @@ function(iree_spirv_asm_module)
 
   if(IS_ABSOLUTE "${_RULE_SRC}")
     set(_SRC_PATH "${_RULE_SRC}")
-  elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_RULE_SRC}")
-    set(_SRC_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${_RULE_SRC}")
+  elseif(EXISTS "${_IREE_PACKAGE_SOURCE_DIR}/${_RULE_SRC}")
+    set(_SRC_PATH "${_IREE_PACKAGE_SOURCE_DIR}/${_RULE_SRC}")
   elseif(EXISTS "${IREE_SOURCE_DIR}/${_RULE_SRC}")
     set(_SRC_PATH "${IREE_SOURCE_DIR}/${_RULE_SRC}")
   else()

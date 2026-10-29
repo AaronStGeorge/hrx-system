@@ -67,11 +67,7 @@ function(iree_wasm_cc_library)
   add_library(${_NAME} INTERFACE)
 
   # Convert source file paths to absolute.
-  set(_ABS_SRCS)
-  foreach(_SRC ${_RULE_SRCS})
-    get_filename_component(_ABS_SRC "${_SRC}" ABSOLUTE)
-    list(APPEND _ABS_SRCS "${_ABS_SRC}")
-  endforeach()
+  iree_resolve_source_files(_ABS_SRCS ${_RULE_SRCS})
 
   # Build the module:path entries list for transitive propagation.
   set(_JS_ENTRIES "")
@@ -179,12 +175,8 @@ function(iree_wasm_entry)
   add_library(${_NAME} INTERFACE)
 
   # Resolve entry point and source paths to absolute.
-  get_filename_component(_MAIN_ABS "${_RULE_MAIN}" ABSOLUTE)
-  set(_ABS_SRCS)
-  foreach(_SRC ${_RULE_SRCS})
-    get_filename_component(_ABS_SRC "${_SRC}" ABSOLUTE)
-    list(APPEND _ABS_SRCS "${_ABS_SRC}")
-  endforeach()
+  iree_resolve_source_files(_MAIN_ABS "${_RULE_MAIN}")
+  iree_resolve_source_files(_ABS_SRCS ${_RULE_SRCS})
 
   # Set custom properties for entry point metadata.
   set_target_properties(${_NAME} PROPERTIES
@@ -283,7 +275,7 @@ function(_iree_wasm_setup_bundler)
   # Determine the entry point.
   if(_RULE_MAIN)
     # Explicit entry point (iree_wasm_cc_binary with MAIN parameter).
-    get_filename_component(_EFFECTIVE_MAIN "${_RULE_MAIN}" ABSOLUTE)
+    iree_resolve_source_files(_EFFECTIVE_MAIN "${_RULE_MAIN}")
     set(_ENTRY_SRCS "")
   else()
     # Discover entry point from direct deps via generation-time genexes.
@@ -372,6 +364,7 @@ function(iree_wasm_cc_binary)
   list(TRANSFORM _RULE_DEPS REPLACE "^::" "${_PACKAGE_NS}::")
 
   # Create the wasm executable.
+  iree_resolve_source_files(_RULE_SRCS ${_RULE_SRCS})
   add_executable(${_WASM_NAME} ${_RULE_SRCS})
   if(_RULE_COPTS)
     target_compile_options(${_WASM_NAME} PRIVATE ${_RULE_COPTS})

@@ -800,6 +800,7 @@ function(iree_link_js_library)
   string(REGEX REPLACE "^::" "${_PACKAGE_NS}::" _RULE_TARGET ${_RULE_TARGET})
   string(REPLACE "::" "_" _RULE_TARGET ${_RULE_TARGET})
 
+  iree_resolve_source_files(_RULE_SRCS ${_RULE_SRCS})
   foreach(_SRC_FILE ${_RULE_SRCS})
     # If the JS file is changed, we want to relink dependent binaries, but
     # unfortunately it is not possible to make a link step depend directly on a
@@ -838,10 +839,9 @@ function(iree_link_js_library)
     # linker command line as it is. The advantage of doing it this way is
     # that the js-library will also be automatically linked to targets that
     # depend on this target.
-    get_filename_component(_SRC_ABSOLUTE_PATH "${_SRC_FILE}" ABSOLUTE)
     target_link_libraries(${_RULE_TARGET}
       PUBLIC
-        "--js-library \"${_SRC_ABSOLUTE_PATH}\""
+        "--js-library \"${_SRC_FILE}\""
     )
 
     math(EXPR _LINK_JS_COUNTER "${_LINK_JS_COUNTER} + 1")
