@@ -250,6 +250,54 @@ _FLOAT_MATH_ORDINARY_UNARY_VALUES = (
         "positive infinity are preserved; negative infinity returns -1; "
         "every NaN becomes the canonical positive quiet NaN.",
     ),
+    (
+        "sinh",
+        22,
+        "Returns the stable iree/math sinh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Signed zero and infinity are preserved; finite overflow returns signed infinity.",
+    ),
+    (
+        "cosh",
+        23,
+        "Returns the stable iree/math cosh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Either zero returns one, and either infinity or finite overflow returns positive infinity.",
+    ),
+    (
+        "tanh",
+        24,
+        "Returns the stable iree/math tanh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Signed zero is preserved; saturation and infinities return signed one.",
+    ),
+    (
+        "asinh",
+        25,
+        "Returns the stable iree/math asinh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Signed zero and infinity are preserved; intermediate squares do not overflow.",
+    ),
+    (
+        "acosh",
+        26,
+        "Returns the stable iree/math acosh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. One returns positive zero, positive infinity is preserved, and inputs below one return canonical NaN.",
+    ),
+    (
+        "atanh",
+        27,
+        "Returns the stable iree/math atanh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Signed zero is preserved; +/-1 return signed infinity; inputs outside [-1,1] return canonical NaN.",
+    ),
 )
 
 FLOAT_MATH_F32_SELECTOR = _selector(

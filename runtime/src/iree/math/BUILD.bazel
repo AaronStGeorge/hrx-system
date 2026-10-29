@@ -22,6 +22,7 @@ iree_runtime_cc_library(
         "fma.c",
         "fma_software.c",
         "fma_software.h",
+        "hyperbolic.c",
         "logarithm.c",
         "logarithm_reduction.h",
         "roots.c",
@@ -31,6 +32,7 @@ iree_runtime_cc_library(
     hdrs = [
         "exponential.h",
         "fma.h",
+        "hyperbolic.h",
         "logarithm.h",
         "roots.h",
         "trigonometry.h",
@@ -74,6 +76,7 @@ iree_runtime_cc_test(
         "exponential_test.cc",
         "fma_software.h",
         "fma_test.cc",
+        "hyperbolic_test.cc",
         "logarithm_test.cc",
         "roots_integer.h",
         "roots_test.cc",

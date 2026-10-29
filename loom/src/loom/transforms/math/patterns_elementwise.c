@@ -877,6 +877,30 @@ static void loom_math_legalize_unary_source_initialize(
       out_source->unary_build =
           is_scalar ? loom_scalar_expf_build : loom_vector_expf_build;
       return;
+    case LOOM_TARGET_MATH_OP_SINHF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_sinhf_build : loom_vector_sinhf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_COSHF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_coshf_build : loom_vector_coshf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_TANHF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_tanhf_build : loom_vector_tanhf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_ASINHF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_asinhf_build : loom_vector_asinhf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_ACOSHF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_acoshf_build : loom_vector_acoshf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_ATANHF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_atanhf_build : loom_vector_atanhf_build;
+      return;
     case LOOM_TARGET_MATH_OP_EXPM1F:
       out_source->unary_build =
           is_scalar ? loom_scalar_expm1f_build : loom_vector_expm1f_build;
@@ -1069,6 +1093,12 @@ static iree_status_t loom_math_legalize_build_widen_f32_round(
       return loom_math_legalize_build_widen_f32_round_binary(builder, context,
                                                              op, out_value);
     case LOOM_TARGET_MATH_OP_EXPF:
+    case LOOM_TARGET_MATH_OP_SINHF:
+    case LOOM_TARGET_MATH_OP_COSHF:
+    case LOOM_TARGET_MATH_OP_TANHF:
+    case LOOM_TARGET_MATH_OP_ASINHF:
+    case LOOM_TARGET_MATH_OP_ACOSHF:
+    case LOOM_TARGET_MATH_OP_ATANHF:
     case LOOM_TARGET_MATH_OP_EXPM1F:
     case LOOM_TARGET_MATH_OP_EXP2F:
     case LOOM_TARGET_MATH_OP_SQRTF:

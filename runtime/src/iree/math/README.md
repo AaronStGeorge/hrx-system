@@ -6,8 +6,9 @@ public function names one stable operation, format, and numerical contract so
 constant evaluation and dynamic execution can agree across hosts.
 
 Ordinary F32/F64 square root, reciprocal square root, cube root, exponentials,
-logarithms, and real powers preserve gradual underflow. Both scalar and vector
-constant folding and the Core VM call these same typed functions:
+logarithms, real powers, and hyperbolic functions preserve gradual underflow.
+Both scalar and vector constant folding and the Core VM call these same typed
+functions:
 
 ```c
 float root = iree_math_sqrt_f32(x);
@@ -43,6 +44,12 @@ F32 evaluates its logarithm in F64, and F64 carries a high part and tail. They
 share exponential reconstruction, including signed subnormal results, while
 handling negative bases and exponent parity explicitly. Composing ordinary
 rounded `log` and `exp` calls would discard the precision needed by `pow`.
+
+Hyperbolic functions share the owned exponentials, logarithms, and roots.
+Cancellation-safe interval formulas preserve small sinh/asinh/atanh results and
+acosh near one. Scaled exponential reconstruction retains finite sinh/cosh
+results even when exp would overflow. Compact rational tanh approximations
+avoid cancellation without adding another exponential table.
 
 Fused multiply-add rounds the exact product and addend once. F32/F64 use a
 native instruction when enabled by the build ISA, with an owned software
@@ -93,6 +100,7 @@ Operations are grouped by algorithm family and provenance:
 
 - `exponential.h` owns natural/base-two exponentials, `expm1`, and real powers.
 - `logarithm.h` owns natural/base-two/base-ten logarithms and `log1p`.
+- `hyperbolic.h` owns sinh/cosh/tanh and their inverses.
 - `fma.h` owns fused arithmetic and narrow-format intermediate evaluation.
 - `roots.h` owns reciprocal, reciprocal square root, square root, and cube root.
 - `trigonometry.h` owns turns-based sine and cosine.

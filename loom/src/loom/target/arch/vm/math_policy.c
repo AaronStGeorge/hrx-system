@@ -8,20 +8,16 @@
 
 #include <stddef.h>
 
-#define LOOM_VM_MATH_CONSTRAINTS(_)                                       \
-  _(ELEMENT_F32_F64, element_f32_f64, "math.element.f32_f64")             \
-  _(INVERSE_HYPERBOLIC_AFN, inverse_hyperbolic_afn,                       \
-    "math.inverse_hyperbolic.afn")                                        \
-  _(INVERSE_HYPERBOLIC_F32_EVALUATION, inverse_hyperbolic_f32_evaluation, \
-    "math.inverse_hyperbolic.f32_evaluation")                             \
-  _(OP_SELECTED_WIDTH, op_selected_width, "math.op.selected_width")       \
-  _(OP_SUPPORTED, op_supported, "math.op.supported")                      \
-  _(RECIPE_AFN_F32, recipe_afn_f32, "math.recipe.afn_f32")                \
-  _(RECIPE_INVERSE_HYPERBOLIC_F32, recipe_inverse_hyperbolic_f32,         \
-    "math.recipe.inverse_hyperbolic_f32")                                 \
-  _(RECIPE_ROUND_AWAY, recipe_round_away, "math.recipe.round_away")       \
-  _(RECIPE_WIDEN_F32_ROUND, recipe_widen_f32_round,                       \
-    "math.recipe.widen_f32_round")                                        \
+#define LOOM_VM_MATH_CONSTRAINTS(_)                                 \
+  _(ELEMENT_F32_F64, element_f32_f64, "math.element.f32_f64")       \
+  _(OP_SELECTED_WIDTH, op_selected_width, "math.op.selected_width") \
+  _(OP_SUPPORTED, op_supported, "math.op.supported")                \
+  _(RECIPE_AFN_F32, recipe_afn_f32, "math.recipe.afn_f32")          \
+  _(RECIPE_INVERSE_HYPERBOLIC_F32, recipe_inverse_hyperbolic_f32,   \
+    "math.recipe.inverse_hyperbolic_f32")                           \
+  _(RECIPE_ROUND_AWAY, recipe_round_away, "math.recipe.round_away") \
+  _(RECIPE_WIDEN_F32_ROUND, recipe_widen_f32_round,                 \
+    "math.recipe.widen_f32_round")                                  \
   _(TURNS_TRIG_F32, turns_trig_f32, "math.turns_trig.f32")
 
 enum loom_vm_math_constraint_e {
@@ -105,6 +101,9 @@ static const loom_target_math_policy_direct_rule_t
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(EXPF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(EXP2F),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(EXPM1F),
+        LOOM_VM_MATH_SELECTED_WIDTH_RULE(SINHF),
+        LOOM_VM_MATH_SELECTED_WIDTH_RULE(COSHF),
+        LOOM_VM_MATH_SELECTED_WIDTH_RULE(TANHF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(POWF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(SQRTF),
         LOOM_VM_MATH_SELECTED_WIDTH_RULE(RSQRTF),
@@ -143,7 +142,7 @@ static const loom_target_math_policy_direct_rule_t
       LOOM_TARGET_MATH_RECIPE_INVERSE_HYPERBOLIC_F32,               \
       LOOM_VM_MATH_EVALUATION_SOURCE_F32,                           \
       LOOM_VM_MATH_CONSTRAINT_RECIPE_INVERSE_HYPERBOLIC_F32,        \
-      LOOM_VM_MATH_CONSTRAINT_INVERSE_HYPERBOLIC_AFN)
+      LOOM_VM_MATH_CONSTRAINT_NONE)
         LOOM_VM_MATH_INVERSE_RULE(ASINHF),
         LOOM_VM_MATH_INVERSE_RULE(ACOSHF),
         LOOM_VM_MATH_INVERSE_RULE(ATANHF),
@@ -161,13 +160,22 @@ static const loom_target_math_policy_direct_rule_t
   }
 
 enum loom_vm_math_rule_e {
-  LOOM_VM_MATH_RULE_ARITHMETIC_NARROW = 0,
+  LOOM_VM_MATH_RULE_INVERSE_ORDINARY = 0,
   LOOM_VM_MATH_RULE_INVERSE_NARROW,
+  LOOM_VM_MATH_RULE_ARITHMETIC_NARROW,
   LOOM_VM_MATH_RULE_COUNT_,
 };
 
 static const loom_target_math_policy_rule_t
     kVmMathRules[LOOM_VM_MATH_RULE_COUNT_] = {
+        [LOOM_VM_MATH_RULE_INVERSE_ORDINARY] =
+            {
+                .match = LOOM_VM_MATH_MATCH(
+                    LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64,
+                    LOOM_TARGET_MATH_FASTMATH_FLAG_NONE),
+                .decision_constraint =
+                    LOOM_VM_MATH_CONSTRAINT_OP_SELECTED_WIDTH,
+            },
         [LOOM_VM_MATH_RULE_ARITHMETIC_NARROW] =
             {
                 .match =
@@ -185,8 +193,6 @@ static const loom_target_math_policy_rule_t
                 .evaluation = LOOM_VM_MATH_EVALUATION_WIDENED_F32,
                 .decision_constraint =
                     LOOM_VM_MATH_CONSTRAINT_RECIPE_INVERSE_HYPERBOLIC_F32,
-                .permission_constraint =
-                    LOOM_VM_MATH_CONSTRAINT_INVERSE_HYPERBOLIC_AFN,
             },
 };
 
@@ -212,6 +218,9 @@ static const loom_target_math_policy_rule_span_t
         LOOM_VM_MATH_ARITHMETIC_SPAN(EXPF),
         LOOM_VM_MATH_ARITHMETIC_SPAN(EXP2F),
         LOOM_VM_MATH_ARITHMETIC_SPAN(EXPM1F),
+        LOOM_VM_MATH_ARITHMETIC_SPAN(SINHF),
+        LOOM_VM_MATH_ARITHMETIC_SPAN(COSHF),
+        LOOM_VM_MATH_ARITHMETIC_SPAN(TANHF),
         LOOM_VM_MATH_ARITHMETIC_SPAN(POWF),
         LOOM_VM_MATH_ARITHMETIC_SPAN(SQRTF),
         LOOM_VM_MATH_ARITHMETIC_SPAN(RSQRTF),
@@ -234,10 +243,10 @@ static const loom_target_math_policy_rule_span_t
         LOOM_VM_MATH_FALLBACK(SINTURNSF, TURNS_TRIG_F32),
         LOOM_VM_MATH_FALLBACK(COSTURNSF, TURNS_TRIG_F32),
 #undef LOOM_VM_MATH_FALLBACK
-#define LOOM_VM_MATH_INVERSE_SPAN(op_)             \
-  [LOOM_TARGET_MATH_OP_##op_] = LOOM_VM_MATH_SPAN( \
-      LOOM_VM_MATH_RULE_INVERSE_NARROW, 1,         \
-      LOOM_VM_MATH_CONSTRAINT_INVERSE_HYPERBOLIC_F32_EVALUATION)
+#define LOOM_VM_MATH_INVERSE_SPAN(op_)                         \
+  [LOOM_TARGET_MATH_OP_##op_] =                                \
+      LOOM_VM_MATH_SPAN(LOOM_VM_MATH_RULE_INVERSE_ORDINARY, 3, \
+                        LOOM_VM_MATH_CONSTRAINT_ELEMENT_F32_F64)
         LOOM_VM_MATH_INVERSE_SPAN(ASINHF),
         LOOM_VM_MATH_INVERSE_SPAN(ACOSHF),
         LOOM_VM_MATH_INVERSE_SPAN(ATANHF),

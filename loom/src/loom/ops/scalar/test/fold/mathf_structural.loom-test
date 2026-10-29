@@ -263,3 +263,32 @@ func.def @power_full_precision() -> (f32, f64) {
   %wide = scalar.constant 6.7039039649712985e+153 : f64
   func.return %single, %wide : f32, f64
 }
+
+// ====
+
+func.def @scalar_hyperbolic_boundaries() -> (f32, f64, f64, f16, bf16, f64) {
+  %tanh_input = scalar.constant 0.40029323101043701 : f32
+  %tanh_result = scalar.tanhf %tanh_input : f32
+  %sinh_input = scalar.constant 710.0 : f64
+  %sinh_result = scalar.sinhf %sinh_input : f64
+  %cosh_input = scalar.constant 710.0 : f64
+  %cosh_result = scalar.coshf %cosh_input : f64
+  %asinh_input = scalar.constant 6.103515625e-05 : f16
+  %asinh_result = scalar.asinhf %asinh_input : f16
+  %acosh_input = scalar.constant 1.0078125 : bf16
+  %acosh_result = scalar.acoshf %acosh_input : bf16
+  %atanh_input = scalar.constant 4.9406564584124654e-324 : f64
+  %atanh_result = scalar.atanhf %atanh_input : f64
+  func.return %tanh_result, %sinh_result, %cosh_result, %asinh_result, %acosh_result, %atanh_result : f32, f64, f64, f16, bf16, f64
+}
+
+// ----
+func.def @scalar_hyperbolic_boundaries() -> (f32, f64, f64, f16, bf16, f64) {
+  %tanh_result = scalar.constant 0.38019981980323792 : f32
+  %sinh_result = scalar.constant 1.1169973830808557e+308 : f64
+  %cosh_result = scalar.constant 1.1169973830808557e+308 : f64
+  %asinh_result = scalar.constant 6.103515625e-05 : f16
+  %acosh_result = scalar.constant 0.125 : bf16
+  %atanh_result = scalar.constant 4.9406564584124654e-324 : f64
+  func.return %tanh_result, %sinh_result, %cosh_result, %asinh_result, %acosh_result, %atanh_result : f32, f64, f64, f16, bf16, f64
+}

@@ -265,6 +265,45 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, Expm1PreservesSmallInputsAndLimits) {
             UINT64_C(0xBFF0000000000000));
 }
 
+TEST_F(VMBytecodeInterpreterFloatMathTest, HyperbolicSelectorDomains) {
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_SINH,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x80000000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_COSH,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x3F800000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_TANH,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x80000000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ASINH,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x80000000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ACOSH,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x7FC00000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ATANH,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x80000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_SINH,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x8000000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_COSH,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x3FF0000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_TANH,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x8000000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ASINH,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x8000000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ACOSH,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x7FF8000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ATANH,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x8000000000000000));
+}
+
 TEST_F(VMBytecodeInterpreterFloatMathTest, FmaRoundsOnce) {
   EXPECT_EQ(ExecuteFma<iree_vm_bytecode_float_fma_f32_t>(
                 iree_vm_bytecode_execute_float_fma_f32, UINT32_C(0x3F800001),

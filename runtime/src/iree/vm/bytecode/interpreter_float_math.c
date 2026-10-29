@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "iree/math/exponential.h"
+#include "iree/math/hyperbolic.h"
 #include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
 #include "iree/math/trigonometry.h"
@@ -77,6 +78,24 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits) {
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP2:
       result = iree_math_exp2_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SINH:
+      result = iree_math_sinh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_COSH:
+      result = iree_math_cosh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_TANH:
+      result = iree_math_tanh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ASINH:
+      result = iree_math_asinh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ACOSH:
+      result = iree_math_acosh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ATANH:
+      result = iree_math_atanh_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXPM1:
       result = iree_math_expm1_f32(source);
@@ -155,6 +174,24 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXP2:
       result = iree_math_exp2_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SINH:
+      result = iree_math_sinh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_COSH:
+      result = iree_math_cosh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_TANH:
+      result = iree_math_tanh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ASINH:
+      result = iree_math_asinh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ACOSH:
+      result = iree_math_acosh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ATANH:
+      result = iree_math_atanh_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXPM1:
       result = iree_math_expm1_f64(source);

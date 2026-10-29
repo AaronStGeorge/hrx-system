@@ -120,7 +120,7 @@ class SpecificationTest(unittest.TestCase):
                 len(NUMERIC_TABLES),
                 sum(len(table.values) for table in NUMERIC_TABLES),
             ),
-            (12, 184, 21, 212, tuple(range(1, 14)), 59, 9, 30),
+            (12, 184, 21, 224, tuple(range(1, 14)), 59, 9, 30),
         )
 
     def test_layout_rejects_implicit_alignment_padding(self) -> None:
@@ -187,6 +187,12 @@ class SpecificationTest(unittest.TestCase):
             ("log10", 19),
             ("log1p", 20),
             ("expm1", 21),
+            ("sinh", 22),
+            ("cosh", 23),
+            ("tanh", 24),
+            ("asinh", 25),
+            ("acosh", 26),
+            ("atanh", 27),
         )
         self.assertEqual(
             tuple(

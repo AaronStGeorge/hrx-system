@@ -1,0 +1,130 @@
+// Ordinary hyperbolic functions across every floating source format. The two
+// lanes have opposite signs; acosh shifts its inputs to straddle its domain.
+// Independent MPFR results are rounded into each source format by the oracle.
+// Scalar functions are covered by the source/linked-bytecode VM tests; this
+// scenario exercises lane-wise execution and narrow final rounding.
+
+func.def @hyperbolic_observations(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %input_view = buffer.view %input[%origin] : buffer -> view<1xf64>
+  %value = view.load %input_view[0] : view<1xf64> -> f64
+  %negative = scalar.negf %value : f64
+  %unit = scalar.constant 1.0 : f64
+  %above = scalar.addf %unit, %value : f64
+  %below = scalar.addf %unit, %negative : f64
+  %pair = vector.from_elements %value, %negative : vector<2xf64>
+  %domain = vector.from_elements %above, %below : vector<2xf64>
+  %results = buffer.view %output[%origin] : buffer -> view<6x12xf64>
+  %e4_pair = vector.fptrunc %pair : vector<2xf64> to vector<2xf8E4M3>
+  %e4_domain = vector.fptrunc %domain : vector<2xf64> to vector<2xf8E4M3>
+  %e4_sinh = vector.sinhf %e4_pair : vector<2xf8E4M3>
+  %e4_cosh = vector.coshf %e4_pair : vector<2xf8E4M3>
+  %e4_tanh = vector.tanhf %e4_pair : vector<2xf8E4M3>
+  %e4_asinh = vector.asinhf %e4_pair : vector<2xf8E4M3>
+  %e4_acosh = vector.acoshf %e4_domain : vector<2xf8E4M3>
+  %e4_atanh = vector.atanhf %e4_pair : vector<2xf8E4M3>
+  %e4_values = vector.concat<0> %e4_sinh, %e4_cosh, %e4_tanh, %e4_asinh, %e4_acosh, %e4_atanh : vector<2xf8E4M3>, vector<2xf8E4M3>, vector<2xf8E4M3>, vector<2xf8E4M3>, vector<2xf8E4M3>, vector<2xf8E4M3> -> vector<12xf8E4M3>
+  %e4_wide = vector.extf %e4_values : vector<12xf8E4M3> to vector<12xf64>
+  vector.store %e4_wide, %results[0, 0] : vector<12xf64>, view<6x12xf64>
+  %e5_pair = vector.fptrunc %pair : vector<2xf64> to vector<2xf8E5M2>
+  %e5_domain = vector.fptrunc %domain : vector<2xf64> to vector<2xf8E5M2>
+  %e5_sinh = vector.sinhf %e5_pair : vector<2xf8E5M2>
+  %e5_cosh = vector.coshf %e5_pair : vector<2xf8E5M2>
+  %e5_tanh = vector.tanhf %e5_pair : vector<2xf8E5M2>
+  %e5_asinh = vector.asinhf %e5_pair : vector<2xf8E5M2>
+  %e5_acosh = vector.acoshf %e5_domain : vector<2xf8E5M2>
+  %e5_atanh = vector.atanhf %e5_pair : vector<2xf8E5M2>
+  %e5_values = vector.concat<0> %e5_sinh, %e5_cosh, %e5_tanh, %e5_asinh, %e5_acosh, %e5_atanh : vector<2xf8E5M2>, vector<2xf8E5M2>, vector<2xf8E5M2>, vector<2xf8E5M2>, vector<2xf8E5M2>, vector<2xf8E5M2> -> vector<12xf8E5M2>
+  %e5_wide = vector.extf %e5_values : vector<12xf8E5M2> to vector<12xf64>
+  vector.store %e5_wide, %results[1, 0] : vector<12xf64>, view<6x12xf64>
+  %half_pair = vector.fptrunc %pair : vector<2xf64> to vector<2xf16>
+  %half_domain = vector.fptrunc %domain : vector<2xf64> to vector<2xf16>
+  %half_sinh = vector.sinhf %half_pair : vector<2xf16>
+  %half_cosh = vector.coshf %half_pair : vector<2xf16>
+  %half_tanh = vector.tanhf %half_pair : vector<2xf16>
+  %half_asinh = vector.asinhf %half_pair : vector<2xf16>
+  %half_acosh = vector.acoshf %half_domain : vector<2xf16>
+  %half_atanh = vector.atanhf %half_pair : vector<2xf16>
+  %half_values = vector.concat<0> %half_sinh, %half_cosh, %half_tanh, %half_asinh, %half_acosh, %half_atanh : vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16> -> vector<12xf16>
+  %half_wide = vector.extf %half_values : vector<12xf16> to vector<12xf64>
+  vector.store %half_wide, %results[2, 0] : vector<12xf64>, view<6x12xf64>
+  %brain_pair = vector.fptrunc %pair : vector<2xf64> to vector<2xbf16>
+  %brain_domain = vector.fptrunc %domain : vector<2xf64> to vector<2xbf16>
+  %brain_sinh = vector.sinhf %brain_pair : vector<2xbf16>
+  %brain_cosh = vector.coshf %brain_pair : vector<2xbf16>
+  %brain_tanh = vector.tanhf %brain_pair : vector<2xbf16>
+  %brain_asinh = vector.asinhf %brain_pair : vector<2xbf16>
+  %brain_acosh = vector.acoshf %brain_domain : vector<2xbf16>
+  %brain_atanh = vector.atanhf %brain_pair : vector<2xbf16>
+  %brain_values = vector.concat<0> %brain_sinh, %brain_cosh, %brain_tanh, %brain_asinh, %brain_acosh, %brain_atanh : vector<2xbf16>, vector<2xbf16>, vector<2xbf16>, vector<2xbf16>, vector<2xbf16>, vector<2xbf16> -> vector<12xbf16>
+  %brain_wide = vector.extf %brain_values : vector<12xbf16> to vector<12xf64>
+  vector.store %brain_wide, %results[3, 0] : vector<12xf64>, view<6x12xf64>
+  %single_pair = vector.fptrunc %pair : vector<2xf64> to vector<2xf32>
+  %single_domain = vector.fptrunc %domain : vector<2xf64> to vector<2xf32>
+  %single_sinh = vector.sinhf %single_pair : vector<2xf32>
+  %single_cosh = vector.coshf %single_pair : vector<2xf32>
+  %single_tanh = vector.tanhf %single_pair : vector<2xf32>
+  %single_asinh = vector.asinhf %single_pair : vector<2xf32>
+  %single_acosh = vector.acoshf %single_domain : vector<2xf32>
+  %single_atanh = vector.atanhf %single_pair : vector<2xf32>
+  %single_values = vector.concat<0> %single_sinh, %single_cosh, %single_tanh, %single_asinh, %single_acosh, %single_atanh : vector<2xf32>, vector<2xf32>, vector<2xf32>, vector<2xf32>, vector<2xf32>, vector<2xf32> -> vector<12xf32>
+  %single_wide = vector.extf %single_values : vector<12xf32> to vector<12xf64>
+  vector.store %single_wide, %results[4, 0] : vector<12xf64>, view<6x12xf64>
+  %wide_sinh = vector.sinhf %pair : vector<2xf64>
+  %wide_cosh = vector.coshf %pair : vector<2xf64>
+  %wide_tanh = vector.tanhf %pair : vector<2xf64>
+  %wide_asinh = vector.asinhf %pair : vector<2xf64>
+  %wide_acosh = vector.acoshf %domain : vector<2xf64>
+  %wide_atanh = vector.atanhf %pair : vector<2xf64>
+  %wide_values = vector.concat<0> %wide_sinh, %wide_cosh, %wide_tanh, %wide_asinh, %wide_acosh, %wide_atanh : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64> -> vector<12xf64>
+  vector.store %wide_values, %results[5, 0] : vector<12xf64>, view<6x12xf64>
+  func.return
+}
+
+// Directed 256-bit MPFR intervals round to these F64 constants. No hyperbolic
+// operation occurs in the oracle, including when the subject runs on the VM.
+func.def @hyperbolic_oracle(%input: buffer, %output: buffer) {
+  %sinh0 = scalar.constant 0.52109530549374738 : f64
+  %sinh1 = scalar.constant -0.52109530549374738 : f64
+  %cosh0 = scalar.constant 1.1276259652063807 : f64
+  %cosh1 = scalar.constant 1.1276259652063807 : f64
+  %tanh0 = scalar.constant 0.46211715726000974 : f64
+  %tanh1 = scalar.constant -0.46211715726000974 : f64
+  %asinh0 = scalar.constant 0.48121182505960347 : f64
+  %asinh1 = scalar.constant -0.48121182505960347 : f64
+  %acosh0 = scalar.constant 0.96242365011920694 : f64
+  %acosh1 = scalar.constant nan : f64
+  %atanh0 = scalar.constant 0.54930614433405489 : f64
+  %atanh1 = scalar.constant -0.54930614433405489 : f64
+  %values = vector.from_elements %sinh0, %sinh1, %cosh0, %cosh1, %tanh0, %tanh1, %asinh0, %asinh1, %acosh0, %acosh1, %atanh0, %atanh1 : vector<12xf64>
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<6x12xf64>
+  %e4 = vector.fptrunc %values : vector<12xf64> to vector<12xf8E4M3>
+  %e4_wide = vector.extf %e4 : vector<12xf8E4M3> to vector<12xf64>
+  vector.store %e4_wide, %results[0, 0] : vector<12xf64>, view<6x12xf64>
+  %e5 = vector.fptrunc %values : vector<12xf64> to vector<12xf8E5M2>
+  %e5_wide = vector.extf %e5 : vector<12xf8E5M2> to vector<12xf64>
+  vector.store %e5_wide, %results[1, 0] : vector<12xf64>, view<6x12xf64>
+  %half = vector.fptrunc %values : vector<12xf64> to vector<12xf16>
+  %half_wide = vector.extf %half : vector<12xf16> to vector<12xf64>
+  vector.store %half_wide, %results[2, 0] : vector<12xf64>, view<6x12xf64>
+  %brain = vector.fptrunc %values : vector<12xf64> to vector<12xbf16>
+  %brain_wide = vector.extf %brain : vector<12xbf16> to vector<12xf64>
+  vector.store %brain_wide, %results[3, 0] : vector<12xf64>, view<6x12xf64>
+  %single = vector.fptrunc %values : vector<12xf64> to vector<12xf32>
+  %single_wide = vector.extf %single : vector<12xf32> to vector<12xf64>
+  vector.store %single_wide, %results[4, 0] : vector<12xf64>, view<6x12xf64>
+  vector.store %values, %results[5, 0] : vector<12xf64>, view<6x12xf64>
+  func.return
+}
+
+check.scenario @ordinary_hyperbolic {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.fill value(0.5) : tensor<1xf64>
+    %output = check.generate.fill value(-1.0) : tensor<6x12xf64>
+    check.compare<@hyperbolic_observations, @hyperbolic_oracle>(%input, %output) : (tensor<1xf64>, tensor<6x12xf64>) -> () {
+      check.expect.approximate actual(%output) expected(%output) atol(0.0) rtol(1.1999999999999999e-07) nan(same) : tensor<6x12xf64>, tensor<6x12xf64>
+    }
+  }
+  check.return
+}

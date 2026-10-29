@@ -30,7 +30,10 @@ TEST(MathPolicyTest, OrdinaryElementaryFamily) {
       LOOM_TARGET_MATH_OP_CBRTF,  LOOM_TARGET_MATH_OP_LOGF,
       LOOM_TARGET_MATH_OP_LOG2F,  LOOM_TARGET_MATH_OP_LOG10F,
       LOOM_TARGET_MATH_OP_LOG1PF, LOOM_TARGET_MATH_OP_EXPM1F,
-      LOOM_TARGET_MATH_OP_POWF,
+      LOOM_TARGET_MATH_OP_POWF,   LOOM_TARGET_MATH_OP_SINHF,
+      LOOM_TARGET_MATH_OP_COSHF,  LOOM_TARGET_MATH_OP_TANHF,
+      LOOM_TARGET_MATH_OP_ASINHF, LOOM_TARGET_MATH_OP_ACOSHF,
+      LOOM_TARGET_MATH_OP_ATANHF,
   };
   for (auto operation : operations) {
     SCOPED_TRACE(operation);
@@ -56,11 +59,20 @@ TEST(MathPolicyTest, OrdinaryElementaryFamily) {
           loom_target_math_policy_decision_t decision = {};
           loom_target_math_policy_query(policy, &query, &decision);
           const bool narrow = loom_scalar_type_bitwidth(element) < 32;
+          const bool inverse_recipe =
+              approximate && element != LOOM_SCALAR_TYPE_F64 &&
+              (operation == LOOM_TARGET_MATH_OP_ASINHF ||
+               operation == LOOM_TARGET_MATH_OP_ACOSHF ||
+               operation == LOOM_TARGET_MATH_OP_ATANHF);
           EXPECT_EQ(decision.action,
-                    narrow ? LOOM_TARGET_MATH_POLICY_ACTION_REWRITE
-                           : LOOM_TARGET_MATH_POLICY_ACTION_KEEP);
-          if (narrow) {
-            EXPECT_EQ(decision.recipe, LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND);
+                    narrow || inverse_recipe
+                        ? LOOM_TARGET_MATH_POLICY_ACTION_REWRITE
+                        : LOOM_TARGET_MATH_POLICY_ACTION_KEEP);
+          if (narrow || inverse_recipe) {
+            EXPECT_EQ(decision.recipe,
+                      inverse_recipe
+                          ? LOOM_TARGET_MATH_RECIPE_INVERSE_HYPERBOLIC_F32
+                          : LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND);
           }
           EXPECT_EQ(decision.recipe_fastmath_flags, 0);
         }

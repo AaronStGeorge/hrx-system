@@ -105,3 +105,61 @@ check.case public @ordinary_f64 {
   check.expect.approximate actual(%difference) expected(%expected_difference) atol(1.1102230246251565e-16) rtol(0.0) nan(different) : f64, f64
   check.return
 }
+
+func.def @hyperbolic_f32(%input: f32, %domain: f32) -> (f32, f32, f32, f32, f32, f32) {
+  %sinh = scalar.sinhf %input : f32
+  %cosh = scalar.coshf %input : f32
+  %tanh = scalar.tanhf %input : f32
+  %asinh = scalar.asinhf %input : f32
+  %acosh = scalar.acoshf %domain : f32
+  %atanh = scalar.atanhf %input : f32
+  func.return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh : f32, f32, f32, f32, f32, f32
+}
+
+check.case public @ordinary_hyperbolic_f32 {
+  %input = check.literal value(0.5) : f32
+  %domain = check.literal value(1.5) : f32
+  %sinh, %cosh, %tanh, %asinh, %acosh, %atanh = func.call @hyperbolic_f32(%input, %domain) : (f32, f32) -> (f32, f32, f32, f32, f32, f32)
+  %sinh_reference = check.literal value(0.52109527587890625) : f32
+  check.expect.approximate actual(%sinh) expected(%sinh_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %cosh_reference = check.literal value(1.1276259422302246) : f32
+  check.expect.approximate actual(%cosh) expected(%cosh_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %tanh_reference = check.literal value(0.46211716532707214) : f32
+  check.expect.approximate actual(%tanh) expected(%tanh_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %asinh_reference = check.literal value(0.48121181130409241) : f32
+  check.expect.approximate actual(%asinh) expected(%asinh_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %acosh_reference = check.literal value(0.96242362260818481) : f32
+  check.expect.approximate actual(%acosh) expected(%acosh_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %atanh_reference = check.literal value(0.54930615425109863) : f32
+  check.expect.approximate actual(%atanh) expected(%atanh_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  check.return
+}
+
+func.def @hyperbolic_f64(%input: f64, %domain: f64) -> (f64, f64, f64, f64, f64, f64) {
+  %sinh = scalar.sinhf %input : f64
+  %cosh = scalar.coshf %input : f64
+  %tanh = scalar.tanhf %input : f64
+  %asinh = scalar.asinhf %input : f64
+  %acosh = scalar.acoshf %domain : f64
+  %atanh = scalar.atanhf %input : f64
+  func.return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh : f64, f64, f64, f64, f64, f64
+}
+
+check.case public @ordinary_hyperbolic_f64 {
+  %input = check.literal value(0.5) : f64
+  %domain = check.literal value(1.5) : f64
+  %sinh, %cosh, %tanh, %asinh, %acosh, %atanh = func.call @hyperbolic_f64(%input, %domain) : (f64, f64) -> (f64, f64, f64, f64, f64, f64)
+  %sinh_reference = check.literal value(0.52109530549374738) : f64
+  check.expect.approximate actual(%sinh) expected(%sinh_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %cosh_reference = check.literal value(1.1276259652063807) : f64
+  check.expect.approximate actual(%cosh) expected(%cosh_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %tanh_reference = check.literal value(0.46211715726000974) : f64
+  check.expect.approximate actual(%tanh) expected(%tanh_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %asinh_reference = check.literal value(0.48121182505960347) : f64
+  check.expect.approximate actual(%asinh) expected(%asinh_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %acosh_reference = check.literal value(0.96242365011920694) : f64
+  check.expect.approximate actual(%acosh) expected(%acosh_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %atanh_reference = check.literal value(0.54930614433405489) : f64
+  check.expect.approximate actual(%atanh) expected(%atanh_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  check.return
+}

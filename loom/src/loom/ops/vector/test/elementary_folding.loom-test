@@ -91,3 +91,32 @@ func.def @vector_real_powers() -> (vector<2xbf16>, vector<2xf64>) {
   %wide = vector.constant 6.7039039649712985e+153 : vector<2xf64>
   func.return %narrow, %wide : vector<2xbf16>, vector<2xf64>
 }
+
+// ====
+
+func.def @vector_hyperbolic_boundaries() -> (vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf16>, vector<2xbf16>, vector<2xf64>) {
+  %tanh_input = vector.constant 0.40029323101043701 : vector<2xf32>
+  %tanh_result = vector.tanhf %tanh_input : vector<2xf32>
+  %sinh_input = vector.constant 710.0 : vector<2xf64>
+  %sinh_result = vector.sinhf %sinh_input : vector<2xf64>
+  %cosh_input = vector.constant 710.0 : vector<2xf64>
+  %cosh_result = vector.coshf %cosh_input : vector<2xf64>
+  %asinh_input = vector.constant 6.103515625e-05 : vector<2xf16>
+  %asinh_result = vector.asinhf %asinh_input : vector<2xf16>
+  %acosh_input = vector.constant 1.0078125 : vector<2xbf16>
+  %acosh_result = vector.acoshf %acosh_input : vector<2xbf16>
+  %atanh_input = vector.constant 4.9406564584124654e-324 : vector<2xf64>
+  %atanh_result = vector.atanhf %atanh_input : vector<2xf64>
+  func.return %tanh_result, %sinh_result, %cosh_result, %asinh_result, %acosh_result, %atanh_result : vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf16>, vector<2xbf16>, vector<2xf64>
+}
+
+// ----
+func.def @vector_hyperbolic_boundaries() -> (vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf16>, vector<2xbf16>, vector<2xf64>) {
+  %tanh_result = vector.constant 0.38019981980323792 : vector<2xf32>
+  %sinh_result = vector.constant 1.1169973830808557e+308 : vector<2xf64>
+  %cosh_result = vector.constant 1.1169973830808557e+308 : vector<2xf64>
+  %asinh_result = vector.constant 6.103515625e-05 : vector<2xf16>
+  %acosh_result = vector.constant 0.125 : vector<2xbf16>
+  %atanh_result = vector.constant 4.9406564584124654e-324 : vector<2xf64>
+  func.return %tanh_result, %sinh_result, %cosh_result, %asinh_result, %acosh_result, %atanh_result : vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf16>, vector<2xbf16>, vector<2xf64>
+}

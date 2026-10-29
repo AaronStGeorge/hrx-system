@@ -16,6 +16,7 @@
 
 #include "iree/base/internal/math.h"
 #include "iree/math/exponential.h"
+#include "iree/math/hyperbolic.h"
 #include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
 #include "loom/ir/float_facts.h"
@@ -378,12 +379,18 @@ FLOAT_UNARY_FACTS(loom_scalar_asinf_facts, asinf, asin)
 FLOAT_UNARY_FACTS(loom_scalar_acosf_facts, acosf, acos)
 FLOAT_UNARY_FACTS(loom_scalar_atanf_facts, atanf, atan)
 FLOAT_BINARY_FACTS(loom_scalar_atan2f_facts, atan2f, atan2)
-FLOAT_UNARY_FACTS(loom_scalar_sinhf_facts, sinhf, sinh)
-FLOAT_UNARY_FACTS(loom_scalar_coshf_facts, coshf, cosh)
-FLOAT_UNARY_FACTS(loom_scalar_tanhf_facts, tanhf, tanh)
-FLOAT_UNARY_FACTS(loom_scalar_asinhf_facts, asinhf, asinh)
-FLOAT_UNARY_FACTS(loom_scalar_acoshf_facts, acoshf, acosh)
-FLOAT_UNARY_FACTS(loom_scalar_atanhf_facts, atanhf, atanh)
+FLOAT_UNARY_FACTS(loom_scalar_sinhf_facts, iree_math_sinh_f32,
+                  iree_math_sinh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_coshf_facts, iree_math_cosh_f32,
+                  iree_math_cosh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_tanhf_facts, iree_math_tanh_f32,
+                  iree_math_tanh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_asinhf_facts, iree_math_asinh_f32,
+                  iree_math_asinh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_acoshf_facts, iree_math_acosh_f32,
+                  iree_math_acosh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_atanhf_facts, iree_math_atanh_f32,
+                  iree_math_atanh_f64)
 FLOAT_UNARY_FACTS(loom_scalar_erff_facts, erff, erf)
 FLOAT_UNARY_FACTS(loom_scalar_erfcf_facts, erfcf, erfc)
 FLOAT_UNARY_FACTS(loom_scalar_logisticf_facts, loom_float_logistic_f32,

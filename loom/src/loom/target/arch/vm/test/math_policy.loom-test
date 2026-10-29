@@ -355,3 +355,76 @@ low.func.def target<vm.core>(@vm) abi(vm_function) @real_powers(%0: reg<vm.value
   %19 = conversion.float.truncate %18, "f32.to.f16" : reg<vm.value : f16>
   return %15, %19, %native, %double_width
 }
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @hyperbolic_f32(%value: f32) -> (f32, f32, f32, f32, f32, f32) {
+  %sinh = scalar.sinhf %value : f32
+  %cosh = scalar.coshf %value : f32
+  %tanh = scalar.tanhf %value : f32
+  %asinh = scalar.asinhf %value : f32
+  %acosh = scalar.acoshf %value : f32
+  %atanh = scalar.atanhf %value : f32
+  func.return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh : f32, f32, f32, f32, f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @hyperbolic_f32(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %sinh = float.math.unary.f32 %value, "sinh"
+  %cosh = float.math.unary.f32 %value, "cosh"
+  %tanh = float.math.unary.f32 %value, "tanh"
+  %asinh = float.math.unary.f32 %value, "asinh"
+  %acosh = float.math.unary.f32 %value, "acosh"
+  %atanh = float.math.unary.f32 %value, "atanh"
+  return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @hyperbolic_f64(%value: f64) -> (f64, f64, f64, f64, f64, f64) {
+  %sinh = scalar.sinhf %value : f64
+  %cosh = scalar.coshf %value : f64
+  %tanh = scalar.tanhf %value : f64
+  %asinh = scalar.asinhf %value : f64
+  %acosh = scalar.acoshf %value : f64
+  %atanh = scalar.atanhf %value : f64
+  func.return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh : f64, f64, f64, f64, f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @hyperbolic_f64(%value: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %sinh = float.math.unary.f64 %value, "sinh"
+  %cosh = float.math.unary.f64 %value, "cosh"
+  %tanh = float.math.unary.f64 %value, "tanh"
+  %asinh = float.math.unary.f64 %value, "asinh"
+  %acosh = float.math.unary.f64 %value, "acosh"
+  %atanh = float.math.unary.f64 %value, "atanh"
+  return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @ordinary_narrow_hyperbolic(%value: bf16) -> (bf16) {
+  %result = scalar.tanhf %value : bf16
+  func.return %result : bf16
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @ordinary_narrow_hyperbolic(%value: reg<vm.value : bf16>) -> (reg<vm.value : bf16>) asm {
+  %2 = conversion.float.extend %value, "bf16.to.f32" : reg<vm.value : f32>
+  %3 = float.math.unary.f32 %2, "tanh"
+  %result = conversion.float.truncate %3, "f32.to.bf16" : reg<vm.value : bf16>
+  return %result
+}
