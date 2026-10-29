@@ -451,6 +451,16 @@ static inline uint64_t iree_math_round_up_to_pow2_u64(uint64_t n) {
 static inline void iree_math_mul_u64_to_u128(uint64_t lhs, uint64_t rhs,
                                              uint64_t* out_high,
                                              uint64_t* out_low) {
+#if defined(IREE_COMPILER_MSVC_COMPAT) && defined(IREE_ARCH_X86_64)
+  *out_low = _umul128(lhs, rhs, out_high);
+#elif defined(IREE_COMPILER_MSVC_COMPAT) && defined(IREE_ARCH_ARM_64)
+  *out_high = __umulh(lhs, rhs);
+  *out_low = lhs * rhs;
+#elif defined(__SIZEOF_INT128__) && !defined(IREE_COMPILER_MSVC_COMPAT)
+  const __uint128_t product = (__uint128_t)lhs * (__uint128_t)rhs;
+  *out_high = (uint64_t)(product >> 64);
+  *out_low = (uint64_t)product;
+#else
   const uint64_t lhs_low = (uint32_t)lhs;
   const uint64_t lhs_high = lhs >> 32;
   const uint64_t rhs_low = (uint32_t)rhs;
@@ -474,6 +484,7 @@ static inline void iree_math_mul_u64_to_u128(uint64_t lhs, uint64_t rhs,
 
   *out_high = high;
   *out_low = low;
+#endif
 }
 
 // Divides a 128-bit unsigned integer by a 64-bit unsigned integer. Returns
