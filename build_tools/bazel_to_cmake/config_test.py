@@ -209,6 +209,27 @@ package_group(
         self.assertEqual(cmake.count("iree_add_all_subdirs()"), 1)
         self.assertNotIn("implementation_consumers", cmake)
 
+    def test_package_boundary_has_no_cmake_target(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        repo_cfg = SimpleNamespace(PROJECTS=[], REPO_MAP={"@hrx": ""})
+
+        cmake = bazel_to_cmake_converter.convert_build_file(
+            """
+load("//build_tools/bazel:package_boundary.bzl", "iree_package_boundary")
+
+iree_package_boundary(
+    allowed_descendant_paths = ["include/**"],
+    reason = "Preserve installed include paths.",
+)
+""",
+            repo_cfg,
+            str(repo_root / "synthetic"),
+            repo_root=str(repo_root),
+        )
+
+        self.assertEqual(cmake.count("iree_add_all_subdirs()"), 1)
+        self.assertNotIn("package_boundary_policy", cmake)
+
     def test_unhandled_loaded_rule_fails_loudly(self):
         repo_root = Path(__file__).resolve().parents[2]
         repo_cfg = SimpleNamespace(PROJECTS=[], REPO_MAP={"@hrx": ""})

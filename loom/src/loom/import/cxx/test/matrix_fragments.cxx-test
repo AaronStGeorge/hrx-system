@@ -143,6 +143,63 @@ func.def public @load_mma_store(%lhs_source_dim0: index, %lhs_source_dim1: index
 }
 
 // ====
+// Static template origins remain indexed-memory attributes while dynamic
+// entries alone are carried as SSA operands.
+#include <loomcxx/vector.h>
+
+namespace fragment = loom::vector::fragment;
+namespace loomt = loom::type;
+using Half16 = _Float16 __attribute__((ext_vector_type(16)));
+using Scale2 = unsigned __attribute__((ext_vector_type(2)));
+using Layout2 = loomt::encoding<loom::encoding::role::layout, 2>;
+using Storage2 = loomt::encoding<loom::encoding::role::storage, 2>;
+using Input = loomt::view<loomt::shape<16, 16>, const _Float16, Layout2>;
+using EncodedInput =
+    loomt::view<loomt::shape<16, 16>, const _Float16, Storage2>;
+using Output = loomt::view<loomt::shape<16, 16>, _Float16, Layout2>;
+
+struct Auxiliary {
+  Scale2 scale;
+};
+
+void static_fragment_origins(Input source, EncodedInput encoded, Output output,
+                             loomt::index row, loomt::size_type m,
+                             loomt::size_type n, Scale2 scale) {
+  auto fixed = fragment::load<fragment::role::lhs, Half16, 0, 4>(
+      source, fragment::shape{m, n});
+  auto mixed =
+      fragment::load<fragment::role::rhs, Half16, loomt::dynamic, 4>(
+          source, {row}, fragment::shape{m, n});
+  auto scaled = fragment::load<fragment::role::rhs, Half16, 0, 0>(
+      encoded, fragment::shape{m, n}, Auxiliary{scale});
+  fragment::store<fragment::role::result, 0, 0>(
+      fixed, output, fragment::shape{m, n});
+  fragment::store<fragment::role::result, loomt::dynamic, 8>(
+      mixed, output, {row}, fragment::shape{m, n});
+  (void)scaled;
+}
+
+// ----
+func.def public @static_fragment_origins(%source_layout: encoding<layout>, %source: view<16x16xf16, %source_layout>, %encoded_storage: encoding<storage>, %encoded: view<16x16xf16, %encoded_storage>, %output_layout: encoding<layout>, %output: view<16x16xf16, %output_layout>, %row: index, %m: i64, %n: i64, %scale: vector<2xi32>) {
+  %10 = index.cast %m : i64 to index
+  %11 = index.cast %n : i64 to index
+  %fixed = vector.fragment.load<lhs> %source[0, 4] shape [%10, %11] : view<16x16xf16, %source_layout> -> vector<16xf16>
+  %13 = index.cast %m : i64 to index
+  %14 = index.cast %n : i64 to index
+  %mixed = vector.fragment.load<rhs> %source[%row, 4] shape [%13, %14] : view<16x16xf16, %source_layout> -> vector<16xf16>
+  %16 = index.cast %m : i64 to index
+  %17 = index.cast %n : i64 to index
+  %scaled = vector.fragment.load<rhs> %encoded[0, 0] shape [%16, %17] using {scale = %scale : vector<2xi32>} : view<16x16xf16, %encoded_storage> -> vector<16xf16>
+  %19 = index.cast %m : i64 to index
+  %20 = index.cast %n : i64 to index
+  vector.fragment.store<result> %fixed, %output[0, 0] shape [%19, %20] : vector<16xf16>, view<16x16xf16, %output_layout>
+  %21 = index.cast %m : i64 to index
+  %22 = index.cast %n : i64 to index
+  vector.fragment.store<result> %mixed, %output[%row, 8] shape [%21, %22] : vector<16xf16>, view<16x16xf16, %output_layout>
+  func.return
+}
+
+// ====
 // Saturation is an explicit numerical permission on integer MMA.
 #include <loomcxx/vector.h>
 

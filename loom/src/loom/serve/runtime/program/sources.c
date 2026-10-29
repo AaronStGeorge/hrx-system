@@ -170,56 +170,6 @@ iree_status_t loom_serve_sources_open(const loom_serve_sources_t* sources,
   return status;
 }
 
-static void loom_serve_sources_release_view(void* user_data,
-                                            loomc_byte_span_t contents) {
-  loomc_source_release(user_data);
-}
-
-iree_status_t loom_serve_sources_open_provider(
-    const loom_serve_sources_t* sources, const loom_model_provider_t* provider,
-    iree_allocator_t host_allocator, loomc_source_t** out_source) {
-  *out_source = NULL;
-  const iree_string_view_t format = provider->file.format;
-  if (provider->options.count) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "Loom providers do not accept importer options");
-  }
-  loomc_source_format_t source_format = LOOMC_SOURCE_FORMAT_UNKNOWN;
-  if (iree_string_view_equal(format, IREE_SV("loom"))) {
-    source_format = LOOMC_SOURCE_FORMAT_TEXT;
-  } else if (iree_string_view_equal(format, IREE_SV("loombc"))) {
-    source_format = LOOMC_SOURCE_FORMAT_BYTECODE;
-  } else if (format.size) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "model provider format '%.*s' is not supported by "
-        "this linker; supported formats are loom and loombc",
-        (int)format.size, format.data);
-  }
-  if (source_format == LOOMC_SOURCE_FORMAT_UNKNOWN) {
-    return loom_serve_sources_open(sources, provider->file.path, host_allocator,
-                                   out_source);
-  }
-  loomc_source_t* storage = NULL;
-  IREE_RETURN_IF_ERROR(loom_serve_sources_open(sources, provider->file.path,
-                                               host_allocator, &storage));
-  const loomc_source_options_t options = {
-      .type = LOOMC_STRUCTURE_TYPE_SOURCE_OPTIONS,
-      .structure_size = sizeof(options),
-      .format = source_format,
-      .identifier = loomc_source_identifier(storage),
-      .contents = loomc_source_contents(storage),
-      .storage = LOOMC_SOURCE_STORAGE_EXTERNAL,
-      .release = loom_serve_sources_release_view,
-      .release_user_data = storage};
-  iree_status_t status = iree_status_from_loomc(loomc_source_create(
-      &options, loomc_allocator_from_iree(host_allocator), out_source));
-  if (!iree_status_is_ok(status)) {
-    loomc_source_release(storage);
-  }
-  return status;
-}
-
 bool loom_serve_path_is_absolute(iree_string_view_t path) {
 #if defined(IREE_PLATFORM_WINDOWS)
   return (path.size >= 2 && ((path.data[0] == '\\' && path.data[1] == '\\') ||

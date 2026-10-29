@@ -299,7 +299,15 @@ class CxxRenderContext:
             if len(users) != 1:
                 continue
             user = users[0]
-            if user.name in {"view.load", "vector.load"} and len(user.results) == 1:
+            if (
+                user.name
+                in {
+                    "view.load",
+                    "vector.load",
+                    "vector.fragment.load",
+                }
+                and len(user.results) == 1
+            ):
                 loaded_name = preferred[user.results[0]]
                 if not is_generated(user.results[0]):
                     preferred[result] = f"{loaded_name}_view"
@@ -742,7 +750,11 @@ class CxxRenderContext:
                     if source in self.view_signed and result not in self.view_signed:
                         self.view_signed.add(result)
                         changed = True
-                elif operation.name in {"view.load", "vector.load"}:
+                elif operation.name in {
+                    "view.load",
+                    "vector.load",
+                    "vector.fragment.load",
+                }:
                     resolved = self._resolved(operation)
                     view_id = resolved.value_id("view")
                     result_id = operation.results[0]

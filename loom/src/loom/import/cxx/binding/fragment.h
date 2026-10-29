@@ -72,8 +72,16 @@ class FragmentIntrinsic {
   uint8_t mma_flags_ = 0;
   // Logical shape record carried by fragment operations.
   Shape shape_;
-  // Full-rank logical origin record carried by load/store.
+  // Unsigned source interpretations for runtime origin components.
   uint16_t origin_unsigned_mask_ = 0;
+  // Mixed static/dynamic origin pattern, or empty for a fully runtime origin.
+  std::vector<int64_t> static_origin_;
+  // Runtime origin record argument, or UINT8_MAX for an all-static origin.
+  uint8_t origin_argument_ = UINT8_MAX;
+  // Logical shape record argument.
+  uint8_t shape_argument_ = 0;
+  // Named parameter/auxiliary record argument, or UINT8_MAX when absent.
+  uint8_t named_operand_argument_ = UINT8_MAX;
   // Admitted source/destination view for load/store.
   const ViewPartition* view_ = nullptr;
   // Exact physical vector result for non-store operations.

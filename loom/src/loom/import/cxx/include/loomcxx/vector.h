@@ -398,6 +398,55 @@ template <role Role, class Result, class T, loom::type::size_type... Extents,
     loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, Shape logical_shape, Auxiliary auxiliary);
 
+// Preserves a mixed static/dynamic logical origin in the source
+// specialization. Each loom::type::dynamic entry consumes one value from the
+// runtime origin record; all-static origins omit that empty record.
+template <role Role, class Result, loom::type::size_type... OriginPattern,
+          class T, loom::type::size_type... Extents, class Encoding,
+          class Shape>
+  requires(sizeof...(OriginPattern) == sizeof...(Extents) &&
+           ((OriginPattern != loom::type::dynamic) && ...))
+[[loom::op("vector.fragment.load")]] Result load(
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
+    Shape logical_shape);
+
+template <role Role, class Result, loom::type::size_type... OriginPattern,
+          class T, loom::type::size_type... Extents, class Encoding,
+          class Shape, class Auxiliary>
+  requires(sizeof...(OriginPattern) == sizeof...(Extents) &&
+           ((OriginPattern != loom::type::dynamic) && ...))
+[[loom::op("vector.fragment.load")]] Result load(
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
+    Shape logical_shape, Auxiliary auxiliary);
+
+template <role Role, class Result, loom::type::size_type... OriginPattern,
+          class T, loom::type::size_type... Extents, class Encoding,
+          class Shape>
+  requires(sizeof...(OriginPattern) == sizeof...(Extents) &&
+           ((OriginPattern == loom::type::dynamic) || ...))
+[[loom::op("vector.fragment.load")]] Result load(
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
+    loom::type::indices<(loom::type::size_type{0} + ... +
+                         (OriginPattern == loom::type::dynamic
+                              ? loom::type::size_type{1}
+                              : loom::type::size_type{0}))>
+        dynamic_origin,
+    Shape logical_shape);
+
+template <role Role, class Result, loom::type::size_type... OriginPattern,
+          class T, loom::type::size_type... Extents, class Encoding,
+          class Shape, class Auxiliary>
+  requires(sizeof...(OriginPattern) == sizeof...(Extents) &&
+           ((OriginPattern == loom::type::dynamic) || ...))
+[[loom::op("vector.fragment.load")]] Result load(
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
+    loom::type::indices<(loom::type::size_type{0} + ... +
+                         (OriginPattern == loom::type::dynamic
+                              ? loom::type::size_type{1}
+                              : loom::type::size_type{0}))>
+        dynamic_origin,
+    Shape logical_shape, Auxiliary auxiliary);
+
 // Stores one target-shaped carrier at a full-rank logical origin.
 template <role Role, class Vector, class T, loom::type::size_type... Extents,
           class Encoding, class Shape,
@@ -406,6 +455,31 @@ template <role Role, class Vector, class T, loom::type::size_type... Extents,
     Vector value,
     loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
     Origin origin, Shape logical_shape);
+
+template <role Role, loom::type::size_type... OriginPattern, class Vector,
+          class T, loom::type::size_type... Extents, class Encoding,
+          class Shape>
+  requires(sizeof...(OriginPattern) == sizeof...(Extents) &&
+           ((OriginPattern != loom::type::dynamic) && ...))
+[[loom::op("vector.fragment.store")]] void store(
+    Vector value,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
+    Shape logical_shape);
+
+template <role Role, loom::type::size_type... OriginPattern, class Vector,
+          class T, loom::type::size_type... Extents, class Encoding,
+          class Shape>
+  requires(sizeof...(OriginPattern) == sizeof...(Extents) &&
+           ((OriginPattern == loom::type::dynamic) || ...))
+[[loom::op("vector.fragment.store")]] void store(
+    Vector value,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
+    loom::type::indices<(loom::type::size_type{0} + ... +
+                         (OriginPattern == loom::type::dynamic
+                              ? loom::type::size_type{1}
+                              : loom::type::size_type{0}))>
+        dynamic_origin,
+    Shape logical_shape);
 
 }  // namespace fragment
 

@@ -160,6 +160,37 @@ TEST_F(ProgramTest, CardRolesNeverFallBackToBareExports) {
   iree_vm_module_release(module);
 }
 
+TEST_F(ProgramTest, UnconfiguredProviderNamesMissingImporter) {
+  constexpr char kCard[] = R"json({
+    "schema_version": 1,
+    "model": {"id": "fixture/foreign", "name": "Foreign provider fixture"},
+    "programs": {"source": {
+      "inputs": [{"path": "program.source", "format": "missing"}],
+      "libraries": []
+    }},
+    "services": {"test": {"kind": "test", "version": 1}},
+    "variants": {"default": {"services": {"test": {
+      "programs": ["source"]
+    }}}}
+  })json";
+  loom_model_card_t* card = nullptr;
+  IREE_ASSERT_OK(loom_model_card_parse(iree_make_cstring_view(kCard), nullptr,
+                                       host_allocator_, &card));
+  std::unique_ptr<loom_model_card_t, decltype(&loom_model_card_release)>
+      card_owner(card, loom_model_card_release);
+  const loom_serve_sources_t sources = {.card = card};
+  const iree_string_view_t root = IREE_SV("answer");
+  iree_vm_module_t* module = nullptr;
+  iree::Status status = loom_serve_program_compile(
+      target_environment_, environment_, &sources, {}, 1, &root, &compilation_,
+      host_allocator_, &module);
+  EXPECT_THAT(status, StatusIs(iree::StatusCode::kUnimplemented));
+  EXPECT_THAT(status.ToString(),
+              ::testing::HasSubstr(
+                  "input format 'missing' is not linked into this tool"));
+  EXPECT_EQ(module, nullptr);
+}
+
 TEST_F(ProgramTest, ComponentAbiSurvivesCompileLinkLookupAndBinding) {
   for (int version : {0, 1, 7}) {
     const std::string component =

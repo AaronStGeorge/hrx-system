@@ -79,6 +79,7 @@ def render_preamble(
             "vector.dotf",
             "vector.decode",
             "vector.fragment",
+            "vector.fragment.load",
             "vector.fragment.store",
             "vector.interleave",
             "vector.iota",

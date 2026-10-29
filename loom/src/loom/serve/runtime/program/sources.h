@@ -75,13 +75,6 @@ iree_status_t loom_serve_sources_open(const loom_serve_sources_t* sources,
                                       iree_allocator_t host_allocator,
                                       loomc_source_t** out_source);
 
-// Opens a selected linker provider with its declared format. Unsupported
-// importer formats/options fail before indexing; explicit formats never depend
-// on the destination's extension. Package bytes retain their existing owner.
-iree_status_t loom_serve_sources_open_provider(
-    const loom_serve_sources_t* sources, const loom_model_provider_t* provider,
-    iree_allocator_t host_allocator, loomc_source_t** out_source);
-
 // Reports whether a locator is absolute in the local filesystem namespace.
 bool loom_serve_path_is_absolute(iree_string_view_t path);
 
