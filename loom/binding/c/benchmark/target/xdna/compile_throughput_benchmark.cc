@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/binding/c/benchmark/kernels/ffn_gate_up_smoke.h"
+#include "loom/binding/c/benchmark/kernels/ffn/ffn_gate_up_smoke.h"
 #include "loom/binding/c/benchmark/workload_compile_benchmark.h"
 #include "loomc/target/amd/xdna.h"
 

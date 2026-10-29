@@ -61,9 +61,9 @@ iree_py_library(
         "//loom/py/loom/dialect/scf",
         "//loom/py/loom/dialect/vector",
         "//loom/py/loom/dialect/view",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:scalar_families",
         "//loom/py/loom/target/arch/x86:vector_families",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
         "//loom/py/loom/target/emit:float_narrowing",
     ],
@@ -81,8 +81,8 @@ iree_py_test(
         ":contracts",
         "//loom/py/loom/dialect/vector",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:target_info",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -98,8 +98,8 @@ iree_py_test(
     deps = [
         ":contracts",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:target_info",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -115,7 +115,7 @@ iree_py_test(
     deps = [
         ":contracts",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -133,8 +133,8 @@ iree_py_test(
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:vector_families",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -151,8 +151,8 @@ iree_py_test(
         ":contracts",
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:vector_families",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -187,7 +187,7 @@ iree_py_test(
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",
         "//loom/py/loom/dialect/view",
-        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -206,9 +206,9 @@ iree_py_test(
         "//loom/py/loom/dialect/scf",
         "//loom/py/loom/dialect/vector",
         "//loom/py/loom/dialect/view",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:target_info",
         "//loom/py/loom/target/arch/x86:vector_families",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -230,9 +230,9 @@ iree_py_test(
         "//loom/py/loom/dialect/vector",
         "//loom/py/loom/dialect/view",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:scalar_families",
         "//loom/py/loom/target/arch/x86:vector_families",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -249,7 +249,7 @@ iree_py_test(
         ":contracts",
         "//loom/py/loom/dialect/index",
         "//loom/py/loom/dialect/scalar",
-        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -265,8 +265,8 @@ iree_py_test(
     deps = [
         ":contracts",
         "//loom/py/loom/dialect/vector",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:vector_families",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -283,7 +283,7 @@ iree_py_test(
         ":contracts",
         "//loom/py/loom/dialect/index",
         "//loom/py/loom/dialect/scalar",
-        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -301,7 +301,7 @@ iree_py_test(
         "//loom/py/loom/dialect/index",
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",
-        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -317,7 +317,7 @@ iree_py_test(
     deps = [
         ":contracts",
         "//loom/py/loom/dialect/vector",
-        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -335,8 +335,8 @@ iree_py_test(
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/scf",
         "//loom/py/loom/dialect/vector",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:vector_families",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -353,7 +353,7 @@ iree_py_test(
         ":contracts",
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",
-        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86/descriptors",
         "//loom/py/loom/target/contracts",
     ],
 )

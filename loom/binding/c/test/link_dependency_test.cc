@@ -13,7 +13,7 @@
 
 #include "iree/base/api.h"
 #include "iree/testing/gtest.h"
-#include "loom/binding/c/test/testdata/link_dependency_testdata.h"
+#include "loom/binding/c/test/testdata/link_dependency/link_dependency_testdata.h"
 #include "test/util.h"
 
 namespace {

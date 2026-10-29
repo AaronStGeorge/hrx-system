@@ -17,14 +17,14 @@
 #include <vector>
 
 #include "benchmark/benchmark.h"
-#include "loom/binding/c/benchmark/kernels/attention_prefill_smoke.h"
-#include "loom/binding/c/benchmark/kernels/ffn_gate_up_smoke.h"
-#include "loom/binding/c/benchmark/kernels/ffn_routed_gate_up_smoke.h"
-#include "loom/binding/c/benchmark/kernels/synthetic_i32_chain_smoke.h"
-#include "loom/binding/c/benchmark/kernels/synthetic_packed_table_lookup_smoke.h"
-#include "loom/binding/c/benchmark/kernels/synthetic_paired_matrix_smoke.h"
-#include "loom/binding/c/benchmark/kernels/synthetic_pipeline_smoke.h"
-#include "loom/binding/c/benchmark/kernels/synthetic_unroll_smoke.h"
+#include "loom/binding/c/benchmark/kernels/attention/attention_prefill_smoke.h"
+#include "loom/binding/c/benchmark/kernels/ffn/ffn_gate_up_smoke.h"
+#include "loom/binding/c/benchmark/kernels/ffn/ffn_routed_gate_up_smoke.h"
+#include "loom/binding/c/benchmark/kernels/synthetic/synthetic_i32_chain_smoke.h"
+#include "loom/binding/c/benchmark/kernels/synthetic/synthetic_packed_table_lookup_smoke.h"
+#include "loom/binding/c/benchmark/kernels/synthetic/synthetic_paired_matrix_smoke.h"
+#include "loom/binding/c/benchmark/kernels/synthetic/synthetic_pipeline_smoke.h"
+#include "loom/binding/c/benchmark/kernels/synthetic/synthetic_unroll_smoke.h"
 #include "loom/binding/c/benchmark/workload_compile_benchmark.h"
 #include "loomc/target/amdgpu.h"
 

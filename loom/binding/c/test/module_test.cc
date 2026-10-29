@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "iree/testing/gtest.h"
-#include "loom/binding/c/test/testdata/diagnostic_type_testdata.h"
+#include "loom/binding/c/test/testdata/diagnostic_types/diagnostic_type_testdata.h"
 #include "loomc/compile.h"
 #include "loomc/context.h"
 #include "loomc/diagnostic.h"

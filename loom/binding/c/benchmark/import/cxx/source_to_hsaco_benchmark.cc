@@ -13,7 +13,7 @@
 
 #include "benchmark/benchmark.h"
 #include "loom/binding/c/benchmark/compile_throughput_benchmark.h"
-#include "loom/binding/c/benchmark/import/cxx/kernels.h"
+#include "loom/binding/c/benchmark/import/cxx/inputs/kernels.h"
 #include "loomc/import/cxx.h"
 #include "loomc/target/amdgpu.h"
 

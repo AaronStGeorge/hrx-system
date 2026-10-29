@@ -11,7 +11,7 @@
 
 #include "benchmark/benchmark.h"
 #include "loom/binding/c/benchmark/compile_throughput_benchmark.h"
-#include "loom/binding/c/benchmark/import/cxx/q8s32_sources.h"
+#include "loom/binding/c/benchmark/import/cxx/inputs/q8s32_sources.h"
 #include "loomc/import/cxx.h"
 
 namespace loomc::bench {

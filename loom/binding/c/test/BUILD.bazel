@@ -197,7 +197,7 @@ loom_cc_test(
     deps = [
         ":test_util",
         "//loom/binding/c:loomc",
-        "//loom/binding/c/test/testdata:link_dependency",
+        "//loom/binding/c/test/testdata/link_dependency:fixtures",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -249,7 +249,7 @@ loom_cc_test(
     deps = [
         ":test_util",
         "//loom/binding/c:loomc",
-        "//loom/binding/c/test/testdata:link_target_specialization",
+        "//loom/binding/c/test/testdata/link_specialization:fixtures",
         "//loom/src/loom/format/bytecode:writer",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/format/text:printer",
@@ -287,7 +287,7 @@ loom_cc_test(
     deps = [
         ":test_util",
         "//loom/binding/c:loomc",
-        "//loom/binding/c/test/testdata:diagnostic_types",
+        "//loom/binding/c/test/testdata/diagnostic_types:fixtures",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

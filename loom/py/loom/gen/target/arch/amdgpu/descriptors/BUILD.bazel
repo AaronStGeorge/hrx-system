@@ -28,9 +28,9 @@ iree_py_library(
     deps = [
         ":package_init",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:isa_xml",
         "//loom/py/loom/target/arch/amdgpu:target_info",
+        "//loom/py/loom/target/arch/amdgpu/descriptors",
     ],
 )
 
@@ -54,9 +54,9 @@ iree_py_library(
         "//loom/py/loom/gen/target/arch/amdgpu:target_table_family",
         "//loom/py/loom/gen/target/low:low_descriptors",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:isa_xml",
         "//loom/py/loom/target/arch/amdgpu:target_info",
+        "//loom/py/loom/target/arch/amdgpu/descriptors",
     ],
 )
 
@@ -89,8 +89,8 @@ iree_py_library(
         ":planning_table_inputs",
         "//loom/py/loom/gen/support",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:target_info",
+        "//loom/py/loom/target/arch/amdgpu/descriptors",
     ],
 )
 
@@ -110,9 +110,9 @@ iree_py_library(
         "//loom/py/loom/gen/support",
         "//loom/py/loom/gen/target/low:low_descriptors",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:isa_xml",
         "//loom/py/loom/target/arch/amdgpu:target_info",
+        "//loom/py/loom/target/arch/amdgpu/descriptors",
     ],
 )
 
@@ -138,9 +138,9 @@ iree_py_binary(
         "//loom/py/loom/gen/target/arch/amdgpu/refs:target_refs_module",
         "//loom/py/loom/gen/target/low:low_descriptors",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:isa_xml",
         "//loom/py/loom/target/arch/amdgpu:target_info",
+        "//loom/py/loom/target/arch/amdgpu/descriptors",
     ],
 )
 
@@ -182,6 +182,6 @@ iree_py_test(
     deps = [
         ":wait_packet_tables_module",
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu/descriptors",
     ],
 )

@@ -130,9 +130,9 @@ loom_test(
 loom_module(
     name = "gfx11_test_module",
     srcs = [
-        "//loom/binding/c/benchmark/kernels:attention/prefill_f16_wmma_amdgpu.loom",
-        "//loom/binding/c/benchmark/kernels:synthetic/paired_matrix_helpers.loom",
-        "//loom/binding/c/benchmark/kernels:synthetic/paired_scoped_matrix_helpers.loom",
+        "//loom/binding/c/benchmark/kernels/attention:prefill_f16_wmma_amdgpu.loom",
+        "//loom/binding/c/benchmark/kernels/synthetic:paired_matrix_helpers.loom",
+        "//loom/binding/c/benchmark/kernels/synthetic:paired_scoped_matrix_helpers.loom",
     ] + glob(
         ["gfx11/*.loom"],
         exclude = ["gfx11/wave64_reductions.loom"],

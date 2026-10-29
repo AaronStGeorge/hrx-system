@@ -18,38 +18,14 @@ package(
 )
 
 loom_cc_library(
-    name = "benchmark_support",
-    testonly = True,
-    srcs = ["util/benchmark_support.cc"],
-    hdrs = ["util/benchmark_support.h"],
-    deps = [
-        "//loom/binding/c:loomc",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "compile_pool_prototype",
-    testonly = True,
-    srcs = ["util/compile_pool_prototype.c"],
-    hdrs = ["util/compile_pool_prototype.h"],
-    deps = [
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal",
-        "//runtime/src/iree/base/threading:thread",
-        "//runtime/src/iree/task",
-    ],
-)
-
-loom_cc_library(
     name = "compile_throughput_benchmark_harness",
     testonly = True,
     srcs = ["compile_throughput_benchmark.cc"],
     hdrs = ["compile_throughput_benchmark.h"],
     deps = [
-        ":benchmark_support",
-        ":compile_pool_prototype",
         "//loom/binding/c:loomc",
+        "//loom/binding/c/benchmark/util:benchmark_support",
+        "//loom/binding/c/benchmark/util:compile_pool_prototype",
         "//runtime/src/iree/base",
         "//third_party:google_benchmark",
     ],
@@ -77,9 +53,9 @@ loom_cc_benchmark(
         "targetless_compile_throughput_benchmark.cc",
     ],
     deps = [
-        ":benchmark_support",
         ":compile_throughput_benchmark_harness",
         "//loom/binding/c:loomc",
+        "//loom/binding/c/benchmark/util:benchmark_support",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",
     ],
@@ -89,8 +65,8 @@ loom_cc_benchmark(
     name = "link_throughput_benchmark",
     srcs = ["link_throughput_benchmark.cc"],
     deps = [
-        ":benchmark_support",
         "//loom/binding/c:loomc",
+        "//loom/binding/c/benchmark/util:benchmark_support",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",
     ],
@@ -100,8 +76,8 @@ loom_cc_benchmark(
     name = "link_request_benchmark",
     srcs = ["link_request_benchmark.cc"],
     deps = [
-        ":benchmark_support",
         "//loom/binding/c:loomc",
+        "//loom/binding/c/benchmark/util:benchmark_support",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",
     ],
@@ -111,8 +87,8 @@ loom_cc_benchmark(
     name = "link_sources_benchmark",
     srcs = ["link_sources_benchmark.cc"],
     deps = [
-        ":benchmark_support",
         "//loom/binding/c:loomc",
+        "//loom/binding/c/benchmark/util:benchmark_support",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",
     ],
@@ -122,8 +98,8 @@ loom_cc_benchmark(
     name = "product_throughput_benchmark",
     srcs = ["product_throughput_benchmark.cc"],
     deps = [
-        ":benchmark_support",
         "//loom/binding/c:loomc",
+        "//loom/binding/c/benchmark/util:benchmark_support",
         "//loom/binding/c/target/cmd",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",

@@ -18,7 +18,7 @@ clang_tidy_test_plugin = rule(
     attrs = {
         "_plugin": attr.label(
             cfg = "exec",
-            default = Label("//build_tools/clang_tidy:IREEClangTidyPlugin.so"),
+            default = Label("//build_tools/clang_tidy/iree:IREEClangTidyPlugin.so"),
         ),
     },
     doc = "Selects the same execution-configured plugin used by analysis actions. Target instrumentation cannot be loaded into the prebuilt analyzer.",
