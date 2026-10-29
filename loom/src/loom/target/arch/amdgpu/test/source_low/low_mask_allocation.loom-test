@@ -1,5 +1,5 @@
 // Allocation without a scheduler retains the mask after its final SSA use.
-// RUN: with-checks emit low-allocation-json @dead_mask fixed=%mask:physical_register:0:2 fixed=%source:physical_register:4:1
+// RUN: with-checks emit low-allocation-json @dead_mask
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
@@ -177,24 +177,38 @@ low.func.def target<amdgpu.rdna4.core>(@target) @rdna4_keeps_default_carry_sched
 
 // ====
 
-// A scalar memory result replaces the remembered words without an ALU hazard.
-// RUN: emit amdgpu-assembly @memory_replaces_mask strategy=source fixed=%mask:physical_register:0:2 fixed=%pointer:physical_register:4:2 fixed=%loaded:physical_register:0:2
+// The loop carries the mask and reload in the same storage. The memory write
+// releases both remembered words for the scalar result; the pointer stays live.
+// RUN: emit amdgpu-assembly @memory_replaces_carried_mask strategy=source
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
-low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @memory_replaces_mask(%value: reg<amdgpu.vgpr>, %incoming_mask: reg<amdgpu.sgpr x2>, %pointer: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) asm {
-  %mask = low.assume %incoming_mask [] : reg<amdgpu.sgpr x2>
+low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @memory_replaces_carried_mask(%incoming_mask: reg<amdgpu.sgpr x2>, %pointer: reg<amdgpu.sgpr x2>, %value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) asm {
+  low.br.identity(0, 1) ^loop(%incoming_mask: reg<amdgpu.sgpr x2>)
+^loop(%mask: reg<amdgpu.sgpr x2>):
   %selected = v_cndmask_b32_src0_inline %value, %mask {false_value = 0}
   %loaded = s_load_dwordx2_offset_only %pointer
-  %result = s_or_b64 %loaded, %pointer
-  return %selected, %result
+  %condition = s_cmp_eq_u64 %loaded, %pointer
+  low.cond_br %condition, ^retry, ^exit : reg<amdgpu.scc>
+^retry:
+  low.br.identity(0, 1) ^loop(%loaded: reg<amdgpu.sgpr x2>)
+^exit:
+  %updated = s_or_b64 %loaded, %pointer
+  return %selected, %updated, %pointer
 }
 
 // ----
-  v_cndmask_b32 v0, 0, v0, s[0:1]
-  s_load_dwordx2 s[0:1], s[4:5], 0
+.Lbb1:
+  v_cndmask_b32 v1, 0, v0, s[2:3]
+  s_load_dwordx2 s[2:3], s[0:1], 0
   s_waitcnt vmcnt(63) lgkmcnt(0)
-  s_or_b64 s[0:1], s[0:1], s[4:5]
+  s_cmp_eq_u64 s[2:3], s[0:1]
+  s_delay_alu instid0(SALU_CYCLE_1)
+  s_cbranch_scc0 .Lbb3
+.Lbb2:
+  s_branch .Lbb1
+.Lbb3:
+  s_or_b64 s[2:3], s[2:3], s[0:1]
   s_endpgm
 
 // ====
