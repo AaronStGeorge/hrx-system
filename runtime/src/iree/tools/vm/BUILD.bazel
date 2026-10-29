@@ -41,7 +41,7 @@ iree_runtime_cc_binary(
 
 iree_execution_test_suite(
     name = "execution_test",
-    data = ["//runtime/src/iree/vm/bytecode:testdata/launch_config.vmasm"],
+    data = ["//runtime/src/iree/vm/bytecode/testdata:launch_config.vmasm"],
     manifests = ["vm-tools.test.json"],
     tools = {
         "vm-as": ":vm-as",

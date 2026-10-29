@@ -92,7 +92,7 @@ iree_runtime_cc_library(
 iree_c_embed_data(
     name = "execution_testdata",
     testonly = True,
-    srcs = ["testdata/core_execution.vmasm"],
+    srcs = ["//runtime/src/iree/vm/bytecode/testdata:core_execution.vmasm"],
     c_file_output = "execution_testdata.c",
     flatten = True,
     h_file_output = "execution_testdata.h",
@@ -102,7 +102,7 @@ iree_c_embed_data(
 iree_c_embed_data(
     name = "launch_config_testdata",
     testonly = True,
-    srcs = ["testdata/launch_config.vmasm"],
+    srcs = ["//runtime/src/iree/vm/bytecode/testdata:launch_config.vmasm"],
     c_file_output = "launch_config_testdata.c",
     flatten = True,
     h_file_output = "launch_config_testdata.h",
@@ -112,7 +112,7 @@ iree_c_embed_data(
 iree_c_embed_data(
     name = "verifier_testdata",
     testonly = True,
-    srcs = ["testdata/structural.vmasm"],
+    srcs = ["//runtime/src/iree/vm/bytecode/testdata:structural.vmasm"],
     c_file_output = "verifier_testdata.c",
     flatten = True,
     h_file_output = "verifier_testdata.h",

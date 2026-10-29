@@ -19,7 +19,7 @@ iree_c_embed_data(
     srcs = [
         "crlf.bin",
         "first.txt",
-        "nested/second.txt",
+        "//build_tools/embed_data/testdata/nested:second.txt",
     ],
     c_file_output = "flat_embed.c",
     flatten = True,
@@ -40,7 +40,7 @@ iree_c_embed_data(
     srcs = [
         "crlf.bin",
         "first.txt",
-        "nested/second.txt",
+        "//build_tools/embed_data/testdata/nested:second.txt",
     ],
     c_file_output = "path_embed.c",
     h_file_output = "path_embed.h",
