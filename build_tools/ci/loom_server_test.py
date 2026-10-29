@@ -28,9 +28,8 @@ class LoomServerTest(unittest.TestCase):
         self.root = Path(self.temporary.name)
         package = self.root / "loom/packaging/python"
         package.mkdir(parents=True)
-        (package / "version.json").write_text(
-            json.dumps({"package-version": "1.2.3", "model-catalog": None})
-        )
+        self.identity = release.Identity("1.2.3", None)
+        (package / "version.json").write_text(json.dumps(self.identity.document()))
         self.commit = "a" * 40
         self.llvm_bin = self.root / "llvm/bin"
         self.llvm_bin.mkdir(parents=True)
@@ -148,62 +147,73 @@ class LoomServerTest(unittest.TestCase):
                     self.llvm_bin / "llvm-readobj", self.root / "loom-serve.exe"
                 )
 
-    def server_inputs(self) -> Path:
-        inputs = self.root / "inputs"
+    def server_inputs(self, platform: str) -> Path:
+        inputs = self.root / f"inputs-{platform}"
         inputs.mkdir()
-        binary = inputs / "loom-serve"
+        binary = inputs / release.SERVER_BINARIES[platform]
         binary.write_bytes(b"standalone server")
         return inputs
 
     def test_native_qualification_is_the_only_archive_export_boundary(self):
-        inputs = self.server_inputs()
-        first = self.root / "first"
-        second = self.root / "second"
-        with mock.patch(
-            "subprocess.run", return_value=subprocess.CompletedProcess([], 0)
-        ) as run:
-            one = loom_server.qualify_server(
-                self.root,
-                inputs,
-                first,
-                release.LINUX_X86_64_PLATFORM,
-                self.commit,
-            )
-            two = loom_server.qualify_server(
-                self.root,
-                inputs,
-                second,
-                release.LINUX_X86_64_PLATFORM,
-                self.commit,
-            )
-        self.assertEqual(one.path.read_bytes(), two.path.read_bytes())
-        self.assertEqual(one.digest, two.digest)
-        command = run.call_args_list[0].args[0]
-        self.assertEqual(Path(command[1]).name, "loom_server_qualify.py")
-        self.assertEqual(command[-2:], ["1.2.3", self.commit])
-        with ZipFile(one.path) as archive:
-            self.assertEqual(archive.namelist(), ["loom-serve"])
-            information = archive.getinfo("loom-serve")
-            self.assertEqual(information.date_time, (1980, 1, 1, 0, 0, 0))
-            self.assertEqual(stat.S_IMODE(information.external_attr >> 16), 0o755)
-            self.assertEqual(archive.read("loom-serve"), b"standalone server")
+        for platform in release.PLATFORMS:
+            with self.subTest(platform=platform):
+                inputs = self.server_inputs(platform)
+                first = self.root / f"first-{platform}"
+                second = self.root / f"second-{platform}"
+                with (
+                    mock.patch.object(
+                        loom_server, "_native_platform", return_value=platform
+                    ),
+                    mock.patch(
+                        "subprocess.run",
+                        return_value=subprocess.CompletedProcess([], 0),
+                    ) as run,
+                ):
+                    one = loom_server.qualify_server(
+                        self.root, inputs, first, platform, self.commit
+                    )
+                    two = loom_server.qualify_server(
+                        self.root, inputs, second, platform, self.commit
+                    )
+                self.assertEqual(one.path.read_bytes(), two.path.read_bytes())
+                self.assertEqual(one.digest, two.digest)
+                command = run.call_args_list[0].args[0]
+                self.assertEqual(Path(command[1]).name, "loom_server_qualify.py")
+                self.assertEqual(command[-2:], ["1.2.3", self.commit])
+                binary_name = release.SERVER_BINARIES[platform]
+                self.assertEqual(
+                    one.path.name, release.server_archive_name(self.identity, platform)
+                )
+                with ZipFile(one.path) as archive:
+                    self.assertEqual(archive.namelist(), [binary_name])
+                    information = archive.getinfo(binary_name)
+                    self.assertEqual(information.date_time, (1980, 1, 1, 0, 0, 0))
+                    self.assertEqual(
+                        stat.S_IMODE(information.external_attr >> 16), 0o755
+                    )
+                    self.assertEqual(archive.read(binary_name), b"standalone server")
 
-    def test_failed_or_non_native_qualification_exports_nothing(self):
-        inputs = self.server_inputs()
+    def test_failed_native_qualification_exports_nothing(self):
+        platform = release.LINUX_X86_64_PLATFORM
+        inputs = self.server_inputs(platform)
         output = self.root / "published"
-        with mock.patch(
-            "subprocess.run",
-            side_effect=subprocess.CalledProcessError(1, "qualification"),
+        with (
+            mock.patch.object(loom_server, "_native_platform", return_value=platform),
+            mock.patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, "qualification"),
+            ),
         ):
             with self.assertRaises(subprocess.CalledProcessError):
                 loom_server.qualify_server(
-                    self.root,
-                    inputs,
-                    output,
-                    release.LINUX_X86_64_PLATFORM,
-                    self.commit,
+                    self.root, inputs, output, platform, self.commit
                 )
         self.assertFalse(output.exists())
+
+    def test_non_native_qualification_exports_nothing(self):
+        platform = release.LINUX_X86_64_PLATFORM
+        inputs = self.server_inputs(platform)
+        output = self.root / "published"
         with mock.patch.object(
             loom_server,
             "_native_platform",
@@ -211,24 +221,20 @@ class LoomServerTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(ValueError, "native OS"):
                 loom_server.qualify_server(
-                    self.root,
-                    inputs,
-                    output,
-                    release.LINUX_X86_64_PLATFORM,
-                    self.commit,
+                    self.root, inputs, output, platform, self.commit
                 )
         self.assertFalse(output.exists())
 
     def test_qualification_rejects_companion_files(self):
-        inputs = self.server_inputs()
+        platform = release.LINUX_X86_64_PLATFORM
+        inputs = self.server_inputs(platform)
         (inputs / "libloom.so").write_bytes(b"companion")
-        with self.assertRaisesRegex(ValueError, "require only loom-serve"):
+        with (
+            mock.patch.object(loom_server, "_native_platform", return_value=platform),
+            self.assertRaisesRegex(ValueError, "require only loom-serve"),
+        ):
             loom_server.qualify_server(
-                self.root,
-                inputs,
-                self.root / "published",
-                release.LINUX_X86_64_PLATFORM,
-                self.commit,
+                self.root, inputs, self.root / "published", platform, self.commit
             )
 
 
