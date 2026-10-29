@@ -34,7 +34,8 @@ class CMakeLoomCorpusTest(unittest.TestCase):
             "loom/.bazel_to_cmake.cfg.py",
         )
         with tempfile.TemporaryDirectory(prefix="cmake loom corpus ") as temporary:
-            source, build = Path(temporary) / "source", Path(temporary) / "build"
+            temporary_root = Path(temporary)
+            source, build = temporary_root / "fixture", temporary_root / "build"
             shutil.copytree(FIXTURE, source)
             shutil.copy2(
                 REPO_ROOT / "build_tools/cmake/testdata/loom_binary/tool.c",
@@ -44,7 +45,14 @@ class CMakeLoomCorpusTest(unittest.TestCase):
             source_functions = project.build_file_functions(
                 converter=source_converter,
                 targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@hrx": ""}),
-                build_dir=str(source),
+                build_dir=str(REPO_ROOT / "fixture"),
+                repo_root=str(REPO_ROOT),
+            )
+            nested_source_converter = SimpleNamespace(body="")
+            nested_source_functions = project.build_file_functions(
+                converter=nested_source_converter,
+                targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@hrx": ""}),
+                build_dir=str(REPO_ROOT / "fixture/nested"),
                 repo_root=str(REPO_ROOT),
             )
             target_converter = SimpleNamespace(body="")
@@ -55,9 +63,12 @@ class CMakeLoomCorpusTest(unittest.TestCase):
                 repo_root=str(REPO_ROOT),
             )
             manifest = source_functions.loom_corpus_manifest(
-                "examples", "//fixture", ["identity.loom"]
+                "examples",
+                "//fixture",
+                ["nested/fixture.loom", "identity.loom"],
             )
             source_functions.loom_corpus_sources("sources", manifest)
+            nested_source_functions.loom_corpus_sources("sources", manifest)
             profiles = []
             for name, expression in (
                 ("unconditional", None),
@@ -108,6 +119,8 @@ class CMakeLoomCorpusTest(unittest.TestCase):
             )
             converted_source = source / "converted_source.cmake"
             converted_source.write_text(source_converter.body)
+            converted_nested_source = source / "converted_nested_source.cmake"
+            converted_nested_source.write_text(nested_source_converter.body)
             converted_target = source / "converted_target.cmake"
             converted_target.write_text(target_converter.body)
             for enabled in (True, False):
@@ -116,6 +129,7 @@ class CMakeLoomCorpusTest(unittest.TestCase):
                         source,
                         build,
                         f"-DLOOM_CONVERTED_SOURCE_RULES={converted_source}",
+                        f"-DLOOM_CONVERTED_NESTED_SOURCE_RULES={converted_nested_source}",
                         f"-DLOOM_CONVERTED_TARGET_RULES={converted_target}",
                         f"-DFEATURE_ENABLED={'ON' if enabled else 'OFF'}",
                         "-DFEATURE_DISABLED=OFF",
@@ -137,6 +151,10 @@ class CMakeLoomCorpusTest(unittest.TestCase):
                         {
                             f"fixture/target/examples_identity_test_execute_{name}_test"
                             for name in expected_profiles
+                        }
+                        | {
+                            f"fixture/target/examples_nested_fixture_test_execute_{name}_test"
+                            for name in expected_profiles
                         },
                     )
                     self.assertEqual(
@@ -144,7 +162,10 @@ class CMakeLoomCorpusTest(unittest.TestCase):
                         [
                             "fixture_source_examples_identity",
                             "fixture_source_examples_identity_library",
+                            "fixture_source_nested_nested_examples_nested_fixture",
+                            "fixture_source_nested_nested_examples_nested_fixture_library",
                             "fixture_target_examples_identity_subjects",
+                            "fixture_target_examples_nested_fixture_subjects",
                         ],
                     )
                     for test in tests:
@@ -155,12 +176,25 @@ class CMakeLoomCorpusTest(unittest.TestCase):
                         )
                         self.assertIn("loom-corpus", labels)
 
-            artifact, report = [
-                Path(path)
-                for path in (build / "artifacts.txt").read_text().splitlines()
-            ]
+            artifact_line, report_line = (
+                (build / "artifacts.txt").read_text().splitlines()
+            )
+            artifacts = [Path(path) for path in artifact_line.split(";")]
+            reports = [Path(path) for path in report_line.split(";")]
+            self.assertEqual(len(artifacts), 2)
+            self.assertEqual(len(reports), 2)
+            self.assertIn("examples_nested_fixture", str(artifacts[0]))
+            self.assertIn("examples_identity", str(artifacts[1]))
+            artifact = next(
+                path for path in artifacts if "examples_identity" in str(path)
+            )
+            nested_artifact = next(
+                path for path in artifacts if "examples_nested_fixture" in str(path)
+            )
+            report = next(path for path in reports if "examples_identity" in str(path))
             build_project(build, "fixture_target_compile")
             self.assertIn("func.def @identity", artifact.read_text())
+            self.assertIn("func.def @nested", nested_artifact.read_text())
             timestamp = artifact.stat().st_mtime_ns
             build_project(build, "fixture_target_compile")
             self.assertEqual(artifact.stat().st_mtime_ns, timestamp)
