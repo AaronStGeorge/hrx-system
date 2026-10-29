@@ -1195,7 +1195,6 @@ def cmake_shared_tool_steps(command_name: str) -> list[CiStep]:
                 "loom-check-test",
                 "loom-test",
                 "loom-benchmark",
-                "loom_tooling_target_cpu_serve_loom-serve-test-tool",
             ),
         ),
         cmake_test_step(
