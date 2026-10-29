@@ -174,7 +174,7 @@ class LoomWheelTest(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(Path(command[1]).name, "wheel_model_card_test.py")
         self.assertEqual(Path(command[2]), self.output / path.name)
-        self.assertEqual(command[-1], "task,amdgpu,rdna,cdna,xdna")
+        self.assertEqual(command[-1], "task,amdgpu,rdna,cdna,xdna,vulkan")
         self.assertEqual((published / path.name).read_bytes(), path.read_bytes())
 
     def test_failed_qualification_cannot_export_existing_wheel(self):

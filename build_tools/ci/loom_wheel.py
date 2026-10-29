@@ -130,7 +130,7 @@ def test_wheel(root: Path, inputs: Path, output: Path, elf_inspector: str) -> No
             elf_inspector,
             str(package / "version.json"),
             str(package / "PYPI_README.md"),
-            "task,amdgpu,rdna,cdna,xdna",
+            "task,amdgpu,rdna,cdna,xdna,vulkan",
         ],
         cwd=root,
         env=environment,
