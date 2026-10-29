@@ -212,6 +212,10 @@ struct ViewPartition final : Partition {
   ShapeExtents extents;
   // Component labels in transport order; an empty label names the view itself.
   std::vector<std::string> component_names;
+  // Stable overflow storage for an all-static plain view type.
+  BoundTypeStorage static_type_storage;
+  // Prebound all-static plain High type; unused by dependent views.
+  loom_type_t static_type = {};
 };
 
 // Canonical dense rank-one source tensor handle. Scalar objects project to one

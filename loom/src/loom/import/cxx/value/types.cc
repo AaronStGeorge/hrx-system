@@ -707,6 +707,16 @@ const ViewPartition* Types::view(const cxx::ClassType* input, cxx::AST* owner) {
                                                                  : "storage");
   }
   result->component_names.emplace_back();
+  if (!result->requires_binding()) {
+    std::array<uint64_t, LOOM_TYPE_MAX_RANK> dimensions;
+    for (size_t axis = 0; axis < result->extents.size(); ++axis) {
+      dimensions[axis] = loom_dim_pack_static(result->extents[axis]);
+    }
+    result->static_type = make_view_type(
+        result->element,
+        std::span<const uint64_t>(dimensions).first(result->extents.size()),
+        std::nullopt, result->static_type_storage);
+  }
   auto* admitted = result.get();
   views_.emplace(source, std::move(result));
   return admitted;
@@ -1310,6 +1320,10 @@ void Types::append_bound(const cxx::Type* input, cxx::AST* owner,
     }
     case ValueKind::View: {
       const auto& view = static_cast<const ViewPartition&>(admitted);
+      if (!view.requires_binding()) {
+        output.push_back(view.static_type);
+        return;
+      }
       if (view.requires_binding() &&
           identities.size() != admitted.component_count) {
         diagnostics_.reject(

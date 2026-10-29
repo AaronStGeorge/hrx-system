@@ -701,6 +701,8 @@ TEST(TypesTest, ProjectsEverySupportedViewRankAndEncodingRole) {
     using Schema = loom::type::encoding<loom::encoding::role::schema, 0>;
     using Storage = loom::type::encoding<loom::encoding::role::storage, 15>;
     using Transform = loom::type::encoding<loom::encoding::role::transform, 0>;
+    using StaticVolume = loom::type::view<
+        loom::type::shape<2, 3, 5>, const float>;
   )";
   for (size_t rank = 1; rank <= LOOM_TYPE_MAX_RANK; ++rank) {
     source_text += "using Rank" + std::to_string(rank) +
@@ -744,6 +746,14 @@ TEST(TypesTest, ProjectsEverySupportedViewRankAndEncodingRole) {
     EXPECT_EQ(encoding.role, test.role);
     EXPECT_EQ(encoding.rank, test.rank);
   }
+
+  std::vector<loom_type_t> static_volume_types;
+  types.append(source_type("StaticVolume"), owner, static_volume_types);
+  ASSERT_EQ(static_volume_types.size(), 1u);
+  EXPECT_EQ(loom_type_rank(static_volume_types[0]), 3u);
+  EXPECT_EQ(loom_type_dim_static_size_at(static_volume_types[0], 0), 2);
+  EXPECT_EQ(loom_type_dim_static_size_at(static_volume_types[0], 1), 3);
+  EXPECT_EQ(loom_type_dim_static_size_at(static_volume_types[0], 2), 5);
 
   for (size_t rank = 1; rank <= LOOM_TYPE_MAX_RANK; ++rank) {
     auto* input = source_type("Rank" + std::to_string(rank));
