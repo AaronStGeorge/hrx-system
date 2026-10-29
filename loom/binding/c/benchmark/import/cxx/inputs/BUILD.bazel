@@ -1,0 +1,72 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],
+)
+
+_IMPORT_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/import:cxx",
+    "//loom/config/import/cxx:embed_includes_enabled",
+])
+
+_AMDGPU_COMPATIBLE_WITH = _IMPORT_COMPATIBLE_WITH + loom_config_compatible_with([
+    "//loom/config/emit:amdgpu_elf",
+])
+
+_KERNEL_SOURCES = [
+    "collective_scans.cxx",
+    "configured_workgroup_storage.cxx",
+    "flash_attention.cxx",
+    "iq4xs_gate_up.cxx",
+    "mxfp_group_dot.cxx",
+    "nvfp4_matrix.cxx",
+    "nvfp4_matrix.h",
+    "nvfp4_matrix_benchmark.cxx",
+    "nvfp4_matrix_providers.cxx",
+    "paged_online_softmax_loop_f32.cxx",
+    "q4k_q8_swiglu.cxx",
+]
+
+_Q8S32_SOURCES = [
+    "q8s32_specialization.cxx",
+    "q8s32_specialization.h",
+    "q8s32_specialization_providers.cxx",
+    "q8s32_specialization_providers.loom",
+]
+
+# Timed translation units are private, controlled inputs. Tests and authoring
+# examples must not depend on their snapshots.
+exports_files(
+    _KERNEL_SOURCES + _Q8S32_SOURCES,
+    visibility = ["//visibility:private"],
+)
+
+iree_c_embed_data(
+    name = "kernels",
+    testonly = True,
+    srcs = _KERNEL_SOURCES,
+    c_file_output = "kernels.c",
+    flatten = True,
+    h_file_output = "kernels.h",
+    identifier = "loomc_cxx_benchmark_kernels",
+    target_compatible_with = _AMDGPU_COMPATIBLE_WITH,
+)
+
+iree_c_embed_data(
+    name = "q8s32_sources",
+    testonly = True,
+    srcs = _Q8S32_SOURCES,
+    c_file_output = "q8s32_sources.c",
+    flatten = True,
+    h_file_output = "q8s32_sources.h",
+    identifier = "loomc_cxx_benchmark_q8s32_sources",
+    target_compatible_with = _IMPORT_COMPATIBLE_WITH,
+)

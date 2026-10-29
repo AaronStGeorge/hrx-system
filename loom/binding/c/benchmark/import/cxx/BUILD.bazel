@@ -4,7 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_benchmark", "loom_config_compatible_with")
 
 package(
@@ -25,64 +24,14 @@ _AMDGPU_COMPATIBLE_WITH = _IMPORT_COMPATIBLE_WITH + loom_config_compatible_with(
     "//loom/config/emit:amdgpu_elf",
 ])
 
-_KERNEL_SOURCES = [
-    "inputs/collective_scans.cxx",
-    "inputs/configured_workgroup_storage.cxx",
-    "inputs/flash_attention.cxx",
-    "inputs/iq4xs_gate_up.cxx",
-    "inputs/mxfp_group_dot.cxx",
-    "inputs/nvfp4_matrix.cxx",
-    "inputs/nvfp4_matrix.h",
-    "inputs/nvfp4_matrix_benchmark.cxx",
-    "inputs/nvfp4_matrix_providers.cxx",
-    "inputs/paged_online_softmax_loop_f32.cxx",
-    "inputs/q4k_q8_swiglu.cxx",
-]
-
-_Q8S32_SOURCES = [
-    "inputs/q8s32_specialization.cxx",
-    "inputs/q8s32_specialization.h",
-    "inputs/q8s32_specialization_providers.cxx",
-    "inputs/q8s32_specialization_providers.loom",
-]
-
-# Timed translation units are private, controlled inputs. Tests and authoring
-# examples must not depend on their snapshots.
-exports_files(
-    _KERNEL_SOURCES + _Q8S32_SOURCES,
-    visibility = ["//visibility:private"],
-)
-
-iree_c_embed_data(
-    name = "kernels",
-    testonly = True,
-    srcs = _KERNEL_SOURCES,
-    c_file_output = "kernels.c",
-    flatten = True,
-    h_file_output = "kernels.h",
-    identifier = "loomc_cxx_benchmark_kernels",
-    target_compatible_with = _AMDGPU_COMPATIBLE_WITH,
-)
-
-iree_c_embed_data(
-    name = "q8s32_sources",
-    testonly = True,
-    srcs = _Q8S32_SOURCES,
-    c_file_output = "q8s32_sources.c",
-    flatten = True,
-    h_file_output = "q8s32_sources.h",
-    identifier = "loomc_cxx_benchmark_q8s32_sources",
-    target_compatible_with = _IMPORT_COMPATIBLE_WITH,
-)
-
 loom_cc_benchmark(
     name = "q8s32_selection_benchmark",
     srcs = ["q8s32_selection_benchmark.cc"],
     target_compatible_with = _AMDGPU_TARGET_COMPATIBLE_WITH,
     deps = [
-        ":q8s32_sources",
         "//loom/binding/c:loomc",
         "//loom/binding/c/benchmark:compile_throughput_benchmark_harness",
+        "//loom/binding/c/benchmark/import/cxx/inputs:q8s32_sources",
         "//loom/binding/c/import/cxx",
         "//loom/binding/c/target/amdgpu",
         "//runtime/src/iree/base",
@@ -96,9 +45,9 @@ loom_cc_benchmark(
     args = ["--benchmark_min_time=1x"],
     target_compatible_with = _AMDGPU_COMPATIBLE_WITH,
     deps = [
-        ":kernels",
         "//loom/binding/c:loomc",
         "//loom/binding/c/benchmark:compile_throughput_benchmark_harness",
+        "//loom/binding/c/benchmark/import/cxx/inputs:kernels",
         "//loom/binding/c/import/cxx",
         "//loom/binding/c/target/amdgpu",
         "//runtime/src/iree/base",
@@ -111,9 +60,9 @@ loom_cc_benchmark(
     srcs = ["source_to_module_benchmark.cc"],
     target_compatible_with = _IMPORT_COMPATIBLE_WITH,
     deps = [
-        ":q8s32_sources",
         "//loom/binding/c:loomc",
         "//loom/binding/c/benchmark:compile_throughput_benchmark_harness",
+        "//loom/binding/c/benchmark/import/cxx/inputs:q8s32_sources",
         "//loom/binding/c/import/cxx",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",

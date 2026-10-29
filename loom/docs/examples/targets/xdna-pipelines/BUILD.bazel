@@ -18,7 +18,7 @@ sh_test(
     srcs = [".doc-generate.sh"],
     data = [
         "run.sh",
-        "//loom/binding/c/benchmark/kernels:ffn/gate_up_quadratic_bf16_xdna.loom",
+        "//loom/binding/c/benchmark/kernels/ffn:gate_up_quadratic_bf16_xdna.loom",
         "//loom/docs/examples:example.shlib",
         "//loom/src/loom/tools/loom-compile",
         "//loom/src/loom/tools/loom-format",
