@@ -58,9 +58,6 @@ _BF16 = Scalar("bf16")
 _BF16_VECTOR = Vector("bf16", minimum_static_elements=1, maximum_static_elements=32)
 _BF16X8_VECTOR = Vector("bf16", lanes=8)
 _BF16X16_VECTOR = Vector("bf16", lanes=16)
-_BF16_DOT2_VECTOR = Vector(
-    "bf16", minimum_static_elements=2, maximum_static_elements=32
-)
 _BF16X32_VECTOR = Vector("bf16", lanes=32)
 _BF16X64_VECTOR = Vector("bf16", lanes=64)
 _F32_VECTOR = Vector("f32", minimum_static_elements=1, maximum_static_elements=16)
@@ -96,11 +93,6 @@ _BF16_ORIGIN_SCALE_BITS = 0x3FB9
 _BF16_ORIGIN_SCALE_REPAIR_FACTOR = 185 << 8
 _BF16_ORIGIN_SCALE_REPAIR_LIMIT = 89
 _BF16_ORIGIN_SCALE_REPAIR_SHUFFLE = 18
-# AIE2P T16_32x2_lo/hi select the even and odd BF16 lanes from a 512-bit
-# source. Two ordered VMACs over those streams implement vector.dot2f's two
-# sequential fused accumulations without weakening its exact source contract.
-_BF16_DOT2_DEINTERLEAVE_CONTROLS = (2, 3)
-
 _BF16_OUTER_PRODUCT_SHUFFLE_CONTROLS = (52, 53)
 _BF16_OUTER_PRODUCT_MULTIPLY_CONTROL = _BF16_ELEMENTWISE_MULTIPLY_CONTROL
 
@@ -849,188 +841,6 @@ def _scalar_extremum_bf16_rule(
     )
 
 
-def _vector_dot2f_bf16_rule(
-    input_type: TypePattern,
-    result_type: TypePattern,
-    *,
-    initial_accumulator: Literal["source", "zero"],
-    accumulator_in_accumulator: bool,
-    result_in_accumulator: bool,
-    report_key: str,
-    rhs_form: Literal["packed", "interleaved"] = "packed",
-) -> DescriptorRule:
-    config_constant = _descriptor("amd.xdna.aie2p.constant.i32.mova")
-    shuffle = _descriptor("amd.xdna.aie2p.shuffle.x.configured")
-    clear = _descriptor("amd.xdna.aie2p.accumulator.clear.f32x64")
-    move_to_accumulator = _descriptor(
-        "amd.xdna.aie2p.move.vector512.to.accumulator512.low"
-    )
-    accumulate = _descriptor("amd.xdna.aie2p.accumulate.bf16x32.configured")
-    first_accumulate = (
-        accumulate
-        if initial_accumulator == "zero"
-        else _descriptor("amd.xdna.aie2p.accumulate.bf16x16.configured")
-    )
-    move_from_accumulator = _descriptor(
-        "amd.xdna.aie2p.move.accumulator512.to.vector512"
-    )
-
-    emits: list[ContractEmit] = []
-    input_values = {
-        operand_name: ValueRef.operand(operand_name) for operand_name in ("lhs", "rhs")
-    }
-    for lane_group, control in zip(
-        ("even", "odd"), _BF16_DOT2_DEINTERLEAVE_CONTROLS, strict=True
-    ):
-        control_value = ValueRef.temporary(f"{lane_group}_control")
-        emits.append(_constant_emit(config_constant, control_value, control))
-        emits.extend(
-            _op_emit(
-                shuffle,
-                operands={
-                    "s1": input_values[operand_name],
-                    "s2": input_values[operand_name],
-                    "mod": control_value,
-                },
-                results={"dst": ValueRef.temporary(f"{operand_name}_{lane_group}")},
-                result_types={"dst": DescriptorResultType()},
-            )
-            for operand_name in (
-                ("lhs",) if rhs_form == "interleaved" else ("lhs", "rhs")
-            )
-        )
-
-    # An interleave supplies the low sixteen even/odd lanes directly. Only
-    # those accumulator lanes belong to the source result; carrier padding
-    # does not participate in the returned dot product.
-    rhs_values = {
-        lane_group: (
-            ValueRef.operand(lane_group, source_node="interleave")
-            if rhs_form == "interleaved"
-            else ValueRef.temporary(f"rhs_{lane_group}")
-        )
-        for lane_group in ("even", "odd")
-    }
-    accumulator = ValueRef.temporary(
-        "zero_accumulator" if initial_accumulator == "zero" else "initial_accumulator"
-    )
-    guards = (
-        Guard.value_type("lhs", input_type),
-        Guard.value_type("rhs", input_type),
-        Guard.value_type("acc", result_type),
-        Guard.value_type("result", result_type),
-        Guard.low_value_register_class(
-            "acc",
-            "aie2p.ebmll" if accumulator_in_accumulator else "aie2p.vec256",
-        ),
-        Guard.low_value_register_class(
-            "result",
-            "aie2p.ebmll" if result_in_accumulator else "aie2p.vec256",
-        ),
-    )
-    if initial_accumulator == "zero":
-        # Exact floating facts distinguish positive zero from negative zero.
-        guards += (Guard.value_float_equals("acc", 0.0),)
-        emits.append(
-            _op_emit(
-                clear,
-                results={"dst": accumulator},
-                result_types={"dst": DescriptorResultType()},
-            )
-        )
-    else:
-        if accumulator_in_accumulator:
-            accumulator = ValueRef.operand("acc")
-        else:
-            emits.append(
-                _op_emit(
-                    move_to_accumulator,
-                    operands={"src": ValueRef.operand("acc")},
-                    results={"dst": accumulator},
-                    result_types={"dst": DescriptorResultType()},
-                )
-            )
-    emits.extend(
-        (
-            _constant_emit(
-                config_constant,
-                ValueRef.temporary("accumulate_control"),
-                _BF16_ELEMENTWISE_MULTIPLY_CONTROL,
-            ),
-            _op_emit(
-                first_accumulate,
-                operands={
-                    "acc1": accumulator,
-                    "s1": ValueRef.temporary("lhs_even"),
-                    "s2": rhs_values["even"],
-                    "acc": ValueRef.temporary("accumulate_control"),
-                },
-                results={"dst": ValueRef.temporary("even_accumulator")},
-                result_types={"dst": DescriptorResultType()},
-            ),
-            _op_emit(
-                accumulate,
-                operands={
-                    "acc1": ValueRef.temporary("even_accumulator"),
-                    "s1": ValueRef.temporary("lhs_odd"),
-                    "s2": rhs_values["odd"],
-                    "acc": ValueRef.temporary("accumulate_control"),
-                },
-                results={"dst": ValueRef.temporary("result_accumulator")},
-                result_types={"dst": DescriptorResultType()},
-            ),
-        )
-    )
-    result_accumulator_unit = ValueRef.temporary("result_accumulator_unit")
-    emits.append(
-        EmitRegisterSlice(
-            source=ValueRef.temporary("result_accumulator"),
-            result=result_accumulator_unit,
-            unit_count=1,
-        )
-    )
-    if result_in_accumulator:
-        emits.append(
-            EmitRegisterCopy(
-                source=result_accumulator_unit,
-                result=ValueRef.result("result"),
-            )
-        )
-    else:
-        emits.append(
-            _op_emit(
-                move_from_accumulator,
-                operands={"src": result_accumulator_unit},
-                results={"dst": ValueRef.result("result")},
-            )
-        )
-    return DescriptorRule(
-        source_op=vector.vector_dot2f,
-        descriptor=accumulate,
-        source_nodes=(
-            (
-                SourceNode.adjacent_definition(
-                    "interleave",
-                    source_op=vector.vector_interleave,
-                    parent_operand=ValueRef.operand("rhs"),
-                    node_result=ValueRef.result("result"),
-                    guards=(
-                        Guard.value_type("even", Vector("bf16", lanes=16)),
-                        Guard.value_type("odd", Vector("bf16", lanes=16)),
-                        Guard.i64_range("axis", 0, 0),
-                    ),
-                ),
-            )
-            if rhs_form == "interleaved"
-            else ()
-        ),
-        priority=1 if rhs_form == "interleaved" else 0,
-        guards=guards,
-        emit=tuple(emits),
-        report_key=report_key,
-    )
-
-
 def _matrix_multiply_bf16bf16_m8n8k1_rule() -> DescriptorRule:
     config_constant = _descriptor("amd.xdna.aie2p.constant.i32.mova")
     broadcast = _descriptor("amd.xdna.aie2p.broadcast.bf16x8.to.bf16x32")
@@ -1598,55 +1408,5 @@ AIE2P_FLOATING_RULES = (
                 "amd.xdna.aie2p.sub.f32x16.configured",
             ),
         )
-    ),
-    *(
-        _vector_dot2f_bf16_rule(
-            _BF16X32_VECTOR,
-            _F32X16_VECTOR,
-            initial_accumulator="zero",
-            accumulator_in_accumulator=accumulator_in_accumulator,
-            result_in_accumulator=result_in_accumulator,
-            rhs_form="interleaved",
-            report_key="bf16_dot2_interleaved_rhs_zero",
-        )
-        for accumulator_in_accumulator in (False, True)
-        for result_in_accumulator in (False, True)
-    ),
-    *(
-        _vector_dot2f_bf16_rule(
-            _BF16X32_VECTOR,
-            _F32X16_VECTOR,
-            initial_accumulator="source",
-            accumulator_in_accumulator=accumulator_in_accumulator,
-            result_in_accumulator=result_in_accumulator,
-            rhs_form="interleaved",
-            report_key="bf16_dot2_interleaved_rhs",
-        )
-        for accumulator_in_accumulator in (False, True)
-        for result_in_accumulator in (False, True)
-    ),
-    *(
-        _vector_dot2f_bf16_rule(
-            _BF16_DOT2_VECTOR,
-            _F32_VECTOR,
-            initial_accumulator="zero",
-            accumulator_in_accumulator=accumulator_in_accumulator,
-            result_in_accumulator=result_in_accumulator,
-            report_key="bf16_dot2_zero",
-        )
-        for accumulator_in_accumulator in (False, True)
-        for result_in_accumulator in (False, True)
-    ),
-    *(
-        _vector_dot2f_bf16_rule(
-            _BF16_DOT2_VECTOR,
-            _F32_VECTOR,
-            initial_accumulator="source",
-            accumulator_in_accumulator=accumulator_in_accumulator,
-            result_in_accumulator=result_in_accumulator,
-            report_key="bf16_dot2",
-        )
-        for accumulator_in_accumulator in (False, True)
-        for result_in_accumulator in (False, True)
     ),
 )

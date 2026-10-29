@@ -37,6 +37,9 @@ from loom.target.arch.amd.xdna.aie2p.contracts.floating import (
     AIE2P_BF16_MATRIX_RULES,
     AIE2P_FLOATING_RULES,
 )
+from loom.target.arch.amd.xdna.aie2p.contracts.floating_dot import (
+    AIE2P_FLOATING_DOT_RULES,
+)
 from loom.target.arch.amd.xdna.aie2p.contracts.floating_sign import (
     AIE2P_FLOATING_SIGN_RULES,
 )
@@ -852,6 +855,7 @@ def aie2p_core_cases() -> Sequence[ContractCase]:
         *AIE2P_NONLINEAR_RULES,
         core_rules._matrix_accumulator_zero_rule(),
         *AIE2P_FLOATING_RULES,
+        *AIE2P_FLOATING_DOT_RULES,
         *AIE2P_POWER_OF_TWO_SCALE_RULES,
         *(
             core_rules._vector_constant_rule(

@@ -25,10 +25,12 @@ from loom.target.arch.amd.xdna.aie2p.contracts.data_path import (
     F32_ACCUMULATOR_ADD_CONTROL,
 )
 from loom.target.arch.amd.xdna.aie2p.contracts.floating import (
-    _BF16_DOT2_DEINTERLEAVE_CONTROLS,
     _BF16_ELEMENTWISE_MULTIPLY_CONTROL,
     _BF16_OUTER_PRODUCT_MULTIPLY_CONTROL,
     _BF16_OUTER_PRODUCT_SHUFFLE_CONTROLS,
+)
+from loom.target.arch.amd.xdna.aie2p.contracts.floating_dot import (
+    _BF16_DOT2_DEINTERLEAVE_CONTROLS,
 )
 from loom.target.arch.amd.xdna.aie2p.contracts.memory import (
     AIE2P_VIEW_ELEMENT_TYPES,
