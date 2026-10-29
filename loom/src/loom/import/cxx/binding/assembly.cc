@@ -118,11 +118,22 @@ std::optional<AssemblyIntrinsic> AssemblyIntrinsic::resolve(
     diagnostics.reject(unit, owner,
                        "assembly first parameter must be const char*");
   }
+  size_t argument_count = 0;
   for (auto* parameter : std::span(parameters).subspan(1)) {
-    if (types.partition(parameter, owner).kind != ValueKind::SSA) {
+    if (types.requires_binding(parameter, owner)) {
       diagnostics.reject(unit, owner,
-                         "assembly operands require scalar or vector values");
+                         "assembly operands require static source values");
     }
+    const auto& partition = types.partition(parameter, owner);
+    if (partition.kind != ValueKind::SSA &&
+        partition.kind != ValueKind::Buffer &&
+        partition.kind != ValueKind::Address &&
+        partition.kind != ValueKind::Vector) {
+      diagnostics.reject(
+          unit, owner,
+          "assembly operands require scalar, vector, or typed buffer values");
+    }
+    argument_count += partition.component_count;
   }
   auto* result = types.unqualified(signature->returnType());
   auto* selected_result = cxx::template_argument_type(arguments[1]);
@@ -131,16 +142,34 @@ std::optional<AssemblyIntrinsic> AssemblyIntrinsic::resolve(
         unit, owner,
         "assembly return type must match its result type argument");
   }
-  loom_type_t result_type = loom_type_none();
+  const Partition* result_partition = nullptr;
+  std::vector<loom_type_t> result_types;
   if (result->kind() != cxx::TypeKind::kVoid) {
-    if (types.partition(result, owner).kind != ValueKind::SSA) {
+    if (types.requires_binding(result, owner)) {
+      diagnostics.reject(unit, owner,
+                         "assembly result requires a static source value");
+    }
+    result_partition = &types.partition(result, owner);
+    if (result_partition->kind != ValueKind::SSA &&
+        result_partition->kind != ValueKind::Vector &&
+        result_partition->kind != ValueKind::Record) {
       diagnostics.reject(
           unit, owner,
-          "assembly result requires a scalar, vector, or void type");
+          "assembly result requires a scalar, vector, trivial result record, "
+          "or void type");
     }
-    result_type = types.get(result, owner);
+    types.append(result, owner, result_types);
+    for (loom_type_t type : result_types) {
+      if (loom_type_kind(type) != LOOM_TYPE_SCALAR &&
+          loom_type_kind(type) != LOOM_TYPE_VECTOR) {
+        diagnostics.reject(
+            unit, owner,
+            "assembly result records require scalar or vector fields");
+      }
+    }
   }
-  return AssemblyIntrinsic(representation, parameters.size() - 1, result_type);
+  return AssemblyIntrinsic(representation, argument_count, result_partition,
+                           std::move(result_types));
 }
 
 loom_symbol_ref_t AssemblyIntrinsic::fragment(
@@ -207,8 +236,7 @@ loom_symbol_ref_t AssemblyIntrinsic::fragment(
   auto* body = loom_func_like_body(callable);
   auto* entry = loom_region_entry_block(body);
   if (entry->arg_count != argument_count_ ||
-      function->result_count !=
-          ((loom_type_kind(result_type_) == LOOM_TYPE_NONE) ? 0 : 1)) {
+      function->result_count != result_types_.size()) {
     diagnostics.reject(unit, source,
                        "assembly register signature must match the C++ operand "
                        "and result counts");
@@ -230,28 +258,39 @@ loom_symbol_ref_t AssemblyIntrinsic::fragment(
 
 std::optional<Value> AssemblyIntrinsic::call(
     loom_symbol_ref_t fragment, std::span<const Value> arguments,
-    loom_builder_t* builder, loom_location_id_t location) const {
+    ValueArena& arena, loom_builder_t* builder,
+    loom_location_id_t location) const {
   std::vector<loom_value_id_t> operands;
-  operands.reserve(arguments.size());
+  operands.reserve(argument_count_);
   for (const auto& argument : arguments) {
-    operands.push_back(argument.ssa());
+    argument.append_to(operands);
   }
   loom_op_t* op;
   check(loom_low_invoke_build(
       builder, LOOM_LOW_INVOKE_BUILD_FLAG_HAS_INLINE_POLICY, 0,
       LOOM_INLINE_POLICY_INLINE, fragment, operands.data(), operands.size(),
-      &result_type_, (loom_type_kind(result_type_) == LOOM_TYPE_NONE) ? 0 : 1,
-      nullptr, 0, location, &op));
-  if (loom_type_kind(result_type_) == LOOM_TYPE_NONE) {
+      result_types_.data(), result_types_.size(), nullptr, 0, location, &op));
+  if (!result_partition_) {
     return std::nullopt;
   }
-  return Value(loom_op_results(op)[0]);
+  return arena.capture(
+      *result_partition_,
+      {loom_op_results(op), result_partition_->component_count});
 }
 
 bool AssemblyIntrinsic::equivalent(const AssemblyIntrinsic& other) const {
-  return contract_ == other.contract_ &&
-         argument_count_ == other.argument_count_ &&
-         loom_type_equal(result_type_, other.result_type_);
+  if (contract_ != other.contract_ ||
+      argument_count_ != other.argument_count_ ||
+      result_partition_ != other.result_partition_ ||
+      result_types_.size() != other.result_types_.size()) {
+    return false;
+  }
+  for (size_t index = 0; index < result_types_.size(); ++index) {
+    if (!loom_type_equal(result_types_[index], other.result_types_[index])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace loom::cxx_import

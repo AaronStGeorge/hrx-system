@@ -15,6 +15,7 @@
 #include <span>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "loom/error/source.h"
@@ -62,10 +63,10 @@ class AssemblyIntrinsic {
                              loom_module_t* module,
                              const loom_cxx_import_options_t& options);
 
-  // Emits the already-admitted fragment using ordinary scalar/vector SSA
-  // values.
+  // Emits the already-admitted fragment after flattening each static source
+  // value through its ordinary call-boundary representation.
   std::optional<Value> call(loom_symbol_ref_t fragment,
-                            std::span<const Value> arguments,
+                            std::span<const Value> arguments, ValueArena& arena,
                             loom_builder_t* builder,
                             loom_location_id_t location) const;
 
@@ -73,17 +74,21 @@ class AssemblyIntrinsic {
 
  private:
   AssemblyIntrinsic(std::string_view contract, size_t argument_count,
-                    loom_type_t result_type)
+                    const Partition* result_partition,
+                    std::vector<loom_type_t> result_types)
       : contract_(contract),
         argument_count_(argument_count),
-        result_type_(result_type) {}
+        result_partition_(result_partition),
+        result_types_(std::move(result_types)) {}
 
   // Frontend-owned stable contract key, valid for this import invocation.
   std::string_view contract_;
-  // Semantic scalar/vector operands following the source literal.
+  // Flattened semantic operands following the source literal.
   size_t argument_count_;
-  // Semantic scalar/vector result, or none for a void signature.
-  loom_type_t result_type_;
+  // Admitted static source result, or null for a void signature.
+  const Partition* result_partition_;
+  // Flattened semantic result types in source transport order.
+  std::vector<loom_type_t> result_types_;
   // Admitted literal identities and their module-owned private functions.
   std::unordered_map<cxx::StringLiteralExpressionAST*, loom_symbol_ref_t>
       fragments_;

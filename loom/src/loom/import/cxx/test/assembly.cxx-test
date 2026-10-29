@@ -94,3 +94,31 @@ low.func.def target<test.low.core> @__loom_assembly$(%value: reg<test.i32>) -> (
   %sum = test.add.i32 %value, %value
   return %sum
 }
+
+// ====
+// Typed buffer operands and aggregate results flatten through the same source
+// transport as ordinary functions while the literal owns physical registers.
+#include <loomcxx/buffer.h>
+#include <loomcxx/low.h>
+struct [[loom::representation("test.low.core")]] Contract {};
+struct Pair {
+  int first;
+  int second;
+};
+Pair split(loom::type::buffer<unsigned char> source, int first, int second) {
+  return loom::low::assembly<Contract, Pair>(R"(
+      (%source: reg<test.ptr>, %first: reg<test.i32>, %second: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+        return %first, %second
+      }
+  )", source, first, second);
+}
+
+// ----
+func.def public @split(%source: buffer, %first: i32, %second: i32) -> (i32, i32) {
+  %10, %11 = low.invoke pure inline @__loom_assembly$(%source, %first, %second) : (buffer, i32, i32) -> (i32, i32)
+  func.return %10, %11 : i32, i32
+}
+
+low.func.def target<test.low.core> @__loom_assembly$(%source: reg<test.ptr>, %first: reg<test.i32>, %second: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  return %first, %second
+}
