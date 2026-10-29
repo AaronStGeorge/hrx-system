@@ -591,6 +591,29 @@ def _check_document(path: Path, expected: dict) -> None:
         )
 
 
+def _check_provenance(path: Path, expected: dict) -> None:
+    if not path.exists():
+        return
+    actual = parse_json(path.read_text(encoding="utf-8"))
+    # An authored URL and its shorthand can name the same pinned publication.
+    # Keep the original receipt, but compare its immutable location and revision
+    # instead of the user's spelling. Card identity and all other facts still match.
+    catalog = expected.get("catalog")
+    if isinstance(catalog, dict) and "location" in catalog:
+        expected = {
+            **expected,
+            "catalog": {
+                key: value for key, value in catalog.items() if key != "source"
+            },
+        }
+        if isinstance(actual, dict) and isinstance(actual.get("catalog"), dict):
+            actual["catalog"].pop("source", None)
+    if actual != expected:
+        raise FetchError(
+            f"conflicting installation document: {path}; choose another output"
+        )
+
+
 def _check_installation_lock(path: Path, document: dict) -> None:
     if not path.exists():
         return
@@ -610,7 +633,7 @@ def _check_outputs(
     _check_document(_destination(directory, "model.json"), card)
     _destination(directory, "model.json.lock")
     if plan.provenance is not None:
-        _check_document(_destination(directory, ".loom-fetch.json"), plan.provenance)
+        _check_provenance(_destination(directory, ".loom-fetch.json"), plan.provenance)
     present = {}
     for name, source in plan.sources.items():
         destination = _destination(directory, name)

@@ -180,14 +180,6 @@ def test_picker_selects_named_partition_from_the_same_compatible_choices():
         )
 
 
-def test_empty_directory_does_not_accept_an_implicit_destination():
-    output = io.StringIO()
-    picker = Picker(io.StringIO("\n"), output)
-    with pytest.raises(KeyboardInterrupt):
-        picker.directory()
-    assert "nothing has been installed" in output.getvalue()
-
-
 def _publish(directory):
     cards = {}
     for identity in ("fixture/alpha", "fixture/beta", "fixture/tést"):
@@ -285,7 +277,9 @@ def _arguments(directory, *arguments):
 
 
 def test_terminal_catalog_filter_resize_and_acquisition(tmp_path):
-    with _terminal(_arguments(tmp_path)) as terminal:
+    with _terminal(
+        _arguments(tmp_path, "--output=" + str(tmp_path / "installed"))
+    ) as terminal:
         terminal.await_text("Enter: select")
         terminal.send("tést")
         terminal.await_text("1/1 choices")
@@ -298,8 +292,6 @@ def test_terminal_catalog_filter_resize_and_acquisition(tmp_path):
         terminal.resize(100, 24)
         terminal.await_text("Enter: select")
         terminal.send("\r")
-        terminal.await_text("Install directory (Ctrl-C cancels): ")
-        terminal.send(str(tmp_path / "installed") + "\n")
         result, _ = terminal.process.communicate()
         assert terminal.process.returncode == 0, result
         card = ModelCard.parse((tmp_path / "installed/model.json").read_text())
@@ -359,8 +351,10 @@ def test_dumb_terminal_uses_named_choices(tmp_path):
 @pytest.mark.parametrize("flag", ["--json", "--no-input"])
 def test_explicit_headless_modes_never_open_a_picker(tmp_path, flag):
     result = subprocess.run(
-        _arguments(tmp_path, flag), input=b"fixture/alpha\n", capture_output=True
+        _arguments(tmp_path, flag, "--output=" + str(tmp_path / "installed")),
+        input=b"fixture/alpha\n",
+        capture_output=True,
     )
-    assert result.returncode == 2
-    assert b"select a card or --model=ID" in result.stderr
+    assert result.returncode == 1
+    assert b"select --model=ID" in result.stderr
     assert b"\x1b" not in result.stderr

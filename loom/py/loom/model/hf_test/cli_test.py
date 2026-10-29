@@ -89,6 +89,7 @@ def test_redirected_progress_arrives_before_hf_download_completes(tmp_path):
                 for line in process.stderr:
                     observed.append(line)
                     if line.startswith("loom-fetch  Download ") and "code.loom" in line:
+                        assert any("loom-fetch  Output" in prior for prior in observed)
                         assert not hub.release_body.is_set()
                         assert not (output / "model.json").exists()
                         hub.release_body.set()

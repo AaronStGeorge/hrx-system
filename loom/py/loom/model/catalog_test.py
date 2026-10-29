@@ -12,8 +12,8 @@ import pytest
 
 from loom.model import ManifestError, ModelCard
 from loom.model.catalog import ModelCatalog, generate
-from loom.model.fetch_catalog import load_catalog
-from loom.model.fetch_source import Document, FetchError
+from loom.model.fetch_publication import load_publication
+from loom.model.fetch_source import Document, FetchError, SourceNotFound
 from loom.model.fetch_storage import ContentCache
 
 
@@ -43,22 +43,23 @@ class Documents:
             return self.cached[location]
         self.requests.append(location)
         if location not in self.remote:
-            raise FetchError("source returned HTTP 404")
+            raise SourceNotFound("source returned HTTP 404")
+        if isinstance(self.remote[location], Exception):
+            raise self.remote[location]
         document = Document(location, json.dumps(self.remote[location]))
         self.cached[location] = document
         return document
 
 
-_REFERENCE = "https://api.github.com/repos/fixture/library/git/ref/tags/compatible"
+_REFERENCE = (
+    "https://api.github.com/repos/fixture/library/commits/compatible?per_page=1"
+)
 _RAW = "https://raw.githubusercontent.com/fixture/library/"
 _SOURCE = "github:fixture/library@compatible"
 
 
 def _publish(documents, revision, catalog=None):
-    documents.remote[_REFERENCE] = {
-        "ref": "refs/tags/compatible",
-        "object": {"type": "commit", "sha": revision},
-    }
+    documents.remote[_REFERENCE] = {"sha": revision}
     documents.remote[_RAW + revision + "/catalog.json"] = catalog or _catalog()
     documents.remote[_RAW + revision + "/model/moonshine/model.json"] = _card().document
 
@@ -114,131 +115,200 @@ def test_local_catalog_discovery_does_not_read_cards(tmp_path):
     path = tmp_path / "catalog.json"
     path.write_text(json.dumps(_catalog()))
     cache = ContentCache(tmp_path / "cache")
-    snapshot = load_catalog(str(path), cache, offline=True)
+    snapshot = load_publication(str(path), cache, offline=True, catalog=True)
     assert snapshot.revision is None
-    assert snapshot.catalog.document == _catalog()
+    assert snapshot.content.document == _catalog()
     assert not (tmp_path / "cache").exists()
 
 
 def test_moved_tag_changes_next_discovery_without_changing_current_selection(tmp_path):
     documents = Documents(tmp_path)
     _publish(documents, "a" * 40)
-    first = load_catalog(_SOURCE, documents, offline=False)
+    first = load_publication(_SOURCE, documents, offline=False, catalog=True)
     assert documents.requests == [_REFERENCE, _RAW + "a" * 40 + "/catalog.json"]
     added = _catalog()
     added["models"]["fixture/another"] = copy.deepcopy(
         next(iter(added["models"].values()))
     )
     _publish(documents, "b" * 40, added)
-    second = load_catalog(_SOURCE, documents, offline=False)
+    second = load_publication(_SOURCE, documents, offline=False, catalog=True)
     assert second.revision == "b" * 40
-    assert "fixture/another" in second.catalog.document["models"]
-    assert "fixture/another" not in first.catalog.document["models"]
+    assert "fixture/another" in second.content.document["models"]
+    assert "fixture/another" not in first.content.document["models"]
     document, _ = first.read_model(
         "moonshine-ai/moonshine-streaming-tiny", documents, offline=False
     )
     assert document.location == _RAW + "a" * 40 + "/model/moonshine/model.json"
     requests = list(documents.requests)
-    assert load_catalog(_SOURCE, documents, offline=True).revision == "b" * 40
+    assert (
+        load_publication(_SOURCE, documents, offline=True, catalog=True).revision
+        == "b" * 40
+    )
     assert documents.requests == requests
 
 
 def test_failed_refresh_preserves_previous_complete_offline_snapshot(tmp_path):
     documents = Documents(tmp_path)
     _publish(documents, "a" * 40)
-    load_catalog(_SOURCE, documents, offline=False)
+    load_publication(_SOURCE, documents, offline=False, catalog=True)
     _publish(documents, "b" * 40, {"schema_version": 55, "models": {}})
     with pytest.raises(ManifestError, match="unsupported model-catalog"):
-        load_catalog(_SOURCE, documents, offline=False)
-    assert load_catalog(_SOURCE, documents, offline=True).revision == "a" * 40
+        load_publication(_SOURCE, documents, offline=False, catalog=True)
+    assert (
+        load_publication(_SOURCE, documents, offline=True, catalog=True).revision
+        == "a" * 40
+    )
     del documents.remote[_REFERENCE]
     with pytest.raises(FetchError, match="404"):
-        load_catalog(_SOURCE, documents, offline=False)
+        load_publication(_SOURCE, documents, offline=False, catalog=True)
 
 
-def test_annotated_tags_are_peeled_without_changing_repository(tmp_path):
+def test_default_branch_is_resolved_without_assuming_its_name(tmp_path):
     documents = Documents(tmp_path)
     _publish(documents, "c" * 40)
-    documents.remote[_REFERENCE]["object"] = {
-        "type": "tag",
-        "sha": "a" * 40,
-        "url": "https://untrusted.example/tag",
-    }
-    tag_root = "https://api.github.com/repos/fixture/library/git/tags/"
-    documents.remote[tag_root + "a" * 40] = {
-        "sha": "a" * 40,
-        "object": {"type": "tag", "sha": "b" * 40},
-    }
-    documents.remote[tag_root + "b" * 40] = {
-        "sha": "b" * 40,
-        "object": {"type": "commit", "sha": "c" * 40},
-    }
-    assert load_catalog(_SOURCE, documents, offline=False).revision == "c" * 40
+    location = "https://api.github.com/repos/fixture/library/commits?per_page=1"
+    documents.remote[location] = [{"sha": "c" * 40}]
+    assert (
+        load_publication(
+            "github:fixture/library", documents, offline=False, catalog=True
+        ).revision
+        == "c" * 40
+    )
     assert documents.requests == [
-        _REFERENCE,
-        tag_root + "a" * 40,
-        tag_root + "b" * 40,
+        location,
         _RAW + "c" * 40 + "/catalog.json",
     ]
 
 
 @pytest.mark.parametrize(
     "target",
-    [{}, {"type": "tree", "sha": "a" * 40}, {"type": "commit", "sha": "../bad"}],
+    [{}, {"sha": None}, {"sha": "../bad"}, [], {"sha": "a" * 39}],
 )
 def test_invalid_reference_objects_do_not_select_another_ref(tmp_path, target):
     documents = Documents(tmp_path)
-    documents.remote[_REFERENCE] = {"ref": "refs/tags/compatible", "object": target}
+    documents.remote[_REFERENCE] = target
     with pytest.raises(FetchError):
-        load_catalog(_SOURCE, documents, offline=False)
+        load_publication(_SOURCE, documents, offline=False, catalog=True)
     assert documents.requests == [_REFERENCE]
 
 
 def test_missing_offline_snapshot_performs_no_requests(tmp_path):
     documents = Documents(tmp_path)
     with pytest.raises(FetchError, match="no cached snapshot"):
-        load_catalog(_SOURCE, documents, offline=True)
+        load_publication(_SOURCE, documents, offline=True, catalog=True)
     assert documents.requests == []
 
 
-def test_reference_response_must_match_the_requested_tag(tmp_path):
+def test_root_card_precedes_catalog_and_reads_only_its_snapshot(tmp_path):
     documents = Documents(tmp_path)
     _publish(documents, "a" * 40)
-    documents.remote[_REFERENCE]["ref"] = "refs/heads/main"
-    with pytest.raises(FetchError, match="different catalog reference"):
-        load_catalog(_SOURCE, documents, offline=False)
-    assert documents.requests == [_REFERENCE]
-
-
-def test_cyclic_annotated_tag_is_rejected(tmp_path):
-    documents = Documents(tmp_path)
-    _publish(documents, "a" * 40)
-    documents.remote[_REFERENCE]["object"]["type"] = "tag"
-    location = "https://api.github.com/repos/fixture/library/git/tags/" + "a" * 40
-    documents.remote[location] = {
-        "sha": "a" * 40,
-        "object": {"type": "tag", "sha": "a" * 40},
-    }
-    with pytest.raises(FetchError, match="does not resolve to a commit"):
-        load_catalog(_SOURCE, documents, offline=False)
+    location = _RAW + "a" * 40 + "/model.json"
+    documents.remote[location] = _card().document
+    snapshot = load_publication(_SOURCE, documents, offline=False)
+    assert isinstance(snapshot.content, ModelCard)
     assert documents.requests == [_REFERENCE, location]
+    _publish(documents, "b" * 40)
+    document, card = snapshot.read_model(
+        _card().document["model"]["id"], documents, offline=False
+    )
+    assert document.location == location
+    assert card.document == _card().document
+    requests = list(documents.requests)
+    assert (
+        load_publication(_SOURCE, documents, offline=True).document.location == location
+    )
+    assert documents.requests == requests
+
+
+def test_root_catalog_discovery_is_remembered_offline(tmp_path):
+    documents = Documents(tmp_path)
+    _publish(documents, "a" * 40)
+    snapshot = load_publication(_SOURCE, documents, offline=False)
+    assert isinstance(snapshot.content, ModelCatalog)
+    assert documents.requests == [
+        _REFERENCE,
+        _RAW + "a" * 40 + "/model.json",
+        _RAW + "a" * 40 + "/catalog.json",
+    ]
+    requests = list(documents.requests)
+    documents.remote.clear()
+    assert (
+        load_publication(_SOURCE, documents, offline=True).revision == snapshot.revision
+    )
+    assert documents.requests == requests
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [FetchError("HTTP 403"), FetchError("transport failed"), {"schema_version": 99}],
+)
+def test_only_genuine_card_absence_can_discover_a_catalog(tmp_path, failure):
+    documents = Documents(tmp_path)
+    _publish(documents, "a" * 40)
+    location = _RAW + "a" * 40 + "/model.json"
+    documents.remote[location] = failure
+    with pytest.raises((FetchError, ManifestError)):
+        load_publication(_SOURCE, documents, offline=False)
+    assert documents.requests == [_REFERENCE, location]
+    with pytest.raises(FetchError, match="no cached snapshot"):
+        load_publication(_SOURCE, documents, offline=True)
+
+
+def test_missing_repository_is_not_treated_as_missing_card(tmp_path):
+    documents = Documents(tmp_path)
+    source = "github:fixture/library@" + "a" * 40
+    with pytest.raises(SourceNotFound):
+        load_publication(source, documents, offline=False)
+    assert documents.requests == [
+        "https://api.github.com/repos/fixture/library/commits/"
+        + "a" * 40
+        + "?per_page=1"
+    ]
+
+
+def test_missing_entry_points_have_a_direct_diagnostic(tmp_path):
+    documents = Documents(tmp_path)
+    documents.remote[_REFERENCE] = {"sha": "a" * 40}
+    with pytest.raises(
+        FetchError, match=r"neither a root model\.json nor catalog\.json"
+    ):
+        load_publication(_SOURCE, documents, offline=False)
+
+
+def test_revision_slashes_are_not_publication_directories(tmp_path):
+    documents = Documents(tmp_path)
+    _publish(documents, "a" * 40)
+    location = (
+        "https://api.github.com/repos/fixture/library/commits/release%2Fv1?per_page=1"
+    )
+    documents.remote[location] = {"sha": "a" * 40}
+    snapshot = load_publication(
+        "github:fixture/library:streaming@release/v1",
+        documents,
+        offline=False,
+        catalog=True,
+    )
+    assert snapshot.preset == "streaming"
+    assert documents.requests == [location, _RAW + "a" * 40 + "/catalog.json"]
 
 
 def test_offline_evicted_document_does_not_refresh_the_tag(tmp_path):
     documents = Documents(tmp_path)
     _publish(documents, "a" * 40)
-    load_catalog(_SOURCE, documents, offline=False)
+    load_publication(_SOURCE, documents, offline=False, catalog=True)
     requests = list(documents.requests)
     documents.cached.clear()
     with pytest.raises(FetchError, match="not cached"):
-        load_catalog(_SOURCE, documents, offline=True)
+        load_publication(_SOURCE, documents, offline=True, catalog=True)
     assert documents.requests == requests
 
 
 def test_unpinned_remote_catalog_is_not_treated_as_a_snapshot(tmp_path):
     documents = Documents(tmp_path)
     with pytest.raises(ManifestError, match="catalog discovery requires"):
-        load_catalog("https://example.com/catalog.json", documents, offline=False)
+        load_publication(
+            "https://example.com/catalog.json", documents, offline=False, catalog=True
+        )
     assert documents.requests == []
 
 
@@ -246,7 +316,10 @@ def test_explicit_commit_does_not_resolve_a_tag(tmp_path):
     documents = Documents(tmp_path)
     _publish(documents, "a" * 40)
     source = "github:fixture/library@" + "a" * 40
-    assert load_catalog(source, documents, offline=False).revision == "a" * 40
+    assert (
+        load_publication(source, documents, offline=False, catalog=True).revision
+        == "a" * 40
+    )
     assert documents.requests == [_RAW + "a" * 40 + "/catalog.json"]
 
 
@@ -255,7 +328,7 @@ def test_selected_card_identity_is_verified(tmp_path):
     _publish(documents, "a" * 40)
     document = documents.remote[_RAW + "a" * 40 + "/model/moonshine/model.json"]
     document["model"]["id"] = "fixture/different"
-    snapshot = load_catalog(_SOURCE, documents, offline=False)
+    snapshot = load_publication(_SOURCE, documents, offline=False, catalog=True)
     with pytest.raises(ManifestError, match="identity differs"):
         snapshot.read_model(
             "moonshine-ai/moonshine-streaming-tiny", documents, offline=False

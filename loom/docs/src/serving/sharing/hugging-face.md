@@ -126,7 +126,7 @@ branch before sharing its release tag or commit.
 Now exercise acquisition from the uploaded catalog:
 
 ```sh
-python smoke.py --catalog=https://huggingface.co/YOUR_NAME/loom-models/resolve/main/catalog.json
+python smoke.py --catalog=huggingface:YOUR_NAME/loom-models
 ```
 
 This uses the same result check as the local smoke, but fetches the published
@@ -134,31 +134,45 @@ files through Hugging Face. It does not substitute local model files. Access
 approval and credentials are handled by `loom-fetch`; `--no-input` keeps the
 script from waiting for an interactive prompt.
 
-For releases, use a tag or full repository commit in place of `main` in the
-catalog URL. Fetch resolves a branch or tag once, then acquires relative cards,
-locks, and programs at that commit. A branch changing during acquisition cannot
+For releases, append `@REVISION` with a tag or full repository commit to the
+repository reference. Fetch resolves a branch or tag once, then acquires
+relative cards, locks, and programs at that commit. A branch changing during acquisition cannot
 mix publication revisions. An offline fetch uses the cached snapshot; it does
 not discover newer uploads.
 
-## Give users a catalog URL
+## Give users a repository URL
 
-Users can list the catalog without downloading model payloads:
+The example has one catalog model and one preset, so users can fetch it with:
 
 ```sh
-loom-fetch --catalog=https://huggingface.co/YOUR_NAME/loom-models/resolve/main/catalog.json --list --json
+loom-fetch https://huggingface.co/YOUR_NAME/loom-models
+loom-serve --device=task --pool_backing=fixed --model=./example/tiny-text/model.json --listen=127.0.0.1:8080
 ```
 
-Or select and install a specific preset without terminal interaction:
+Fetch uses `./<model.id>` by default, preserving the model's namespace; here
+that is `./example/tiny-text`. `--output` selects another installation location.
+A repository may instead publish a root `model.json` without a catalog. The
+card takes precedence for repository discovery; an explicit `--catalog`
+selects the catalog even when both exist. Authentication and malformed metadata
+are errors, not reasons to try another entry point.
+
+Users can list a multi-model catalog without downloading payloads, then select
+a model and preset without terminal interaction:
 
 ```sh
-loom-fetch --catalog=https://huggingface.co/YOUR_NAME/loom-models/resolve/main/catalog.json --model=example/tiny-text --preset=default --output=./installed --no-input --json
-loom-serve --device=task --pool_backing=fixed --model=./installed/model.json --listen=127.0.0.1:8080
+loom-fetch huggingface:YOUR_NAME/loom-models --list --json
+loom-fetch huggingface:YOUR_NAME/loom-models:default --model=example/tiny-text --output=./installed --no-input --json
 ```
 
 The fetch result includes the installed card path and selected catalog
 revision. Scripts use its exit status for success and its JSON for the result
-or access/error diagnostic. A direct `model.json` URL also works when discovery
-is unnecessary. The [fetch-and-serve workflow](../workflows/fetch-and-serve.md)
+or access/error diagnostic. `:default` is the example's preset name, not a
+special default-selection rule: only unique choices select automatically.
+Append `@REVISION` to pin a branch, tag, or commit, for example
+`huggingface:YOUR_NAME/loom-models:default@v1`. The same selector syntax works
+with `github:OWNER/REPO`. Direct `model.json` URLs and nested catalog file URLs
+also work when root discovery is unnecessary.
+The [fetch-and-serve workflow](../workflows/fetch-and-serve.md)
 covers caches, materialization, gated checkpoints, and diagnosing failures.
 
 Serving uses the acquired local files and needs no Hugging Face credential.

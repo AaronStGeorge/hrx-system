@@ -14,6 +14,7 @@ from loom.model.fetch_source import (
     Document,
     FetchError,
     Source,
+    SourceNotFound,
     SourceResolver,
     open_source,
 )
@@ -39,6 +40,10 @@ def _selection(root):
 def _server():
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path in ("/missing", "/denied"):
+                self.send_response(404 if self.path == "/missing" else 403)
+                self.end_headers()
+                return
             if self.path == "/redirect":
                 self.send_response(302)
                 self.send_header("Location", "/content")
@@ -76,6 +81,18 @@ def test_http_redirect_retains_logical_coordinates():
             assert size == 4
         assert source.origin == "@library/program.loom"
         assert source.transport["url"] == base + "/redirect"
+
+
+def test_http_absence_retains_its_type_without_conflating_permission_failures():
+    with _server() as base:
+        for path, failure in (("/missing", SourceNotFound), ("/denied", FetchError)):
+            source = Source("x", {"kind": "url", "url": base + path})
+            with (
+                pytest.raises(FetchError) as caught,
+                open_source(source, offline=False),
+            ):
+                raise AssertionError("failed source was exposed")
+            assert type(caught.value) is failure
 
 
 def test_http_length_mismatch_fails_before_payload_is_exposed():

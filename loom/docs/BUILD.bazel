@@ -6,11 +6,21 @@
 
 # bazel-to-cmake: skip
 
+load("//build_tools/bazel:package_boundary.bzl", "iree_package_boundary")
 load("//build_tools/bazel:python.bzl", "iree_py_test")
 
 package(
     default_visibility = ["//visibility:private"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+iree_package_boundary(
+    allowed_descendant_paths = [
+        "hooks/prepare.py",
+        "hooks/prepare_test.py",
+        "src/**",
+    ],
+    reason = "The pages, static assets, and preparation hook form one MkDocs site. Their nested paths are the site's navigation and hook-loading contract, not independent libraries.",
 )
 
 exports_files(

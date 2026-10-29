@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from .fetch_progress import ByteProgress
-from .fetch_source import FetchError
+from .fetch_source import FetchError, SourceNotFound
 from .fetch_transfer import run_transfer
 from .manifest import _origin_object, _url
 
@@ -191,10 +191,10 @@ def _hub_request(operation: str, options: dict, *, progress=None):
         raise _download_failure(error, options) from None
 
 
-def hf_url_source(
+def hf_url_path(
     location: str, *, endpoint: str | None = None
-) -> tuple[dict, str] | None:
-    """Recognizes model file URLs without importing the optional SDK."""
+) -> tuple[str, str] | None:
+    """Returns a recognized Hub-relative URL path and its endpoint, without SDK IO."""
     parsed = urlsplit(location)
     endpoints = (endpoint or os.getenv("HF_ENDPOINT", ""), "https://huggingface.co")
     for candidate in endpoints:
@@ -208,25 +208,33 @@ def hf_url_source(
             base.netloc,
         ) or not parsed.path.startswith(prefix):
             continue
-        match = re.fullmatch(
-            r"([^/]+(?:/[^/]+)?)/(?:blob|resolve)/([^/]+)/(.+)",
-            parsed.path[len(prefix) :],
-        )
-        if match is None:
-            continue
-        _url(location, "Hugging Face file URL")
-        if set(parse_qs(parsed.query, keep_blank_values=True)) - {"download"}:
-            raise FetchError("Hugging Face file URL has unsupported query parameters")
-        repository, revision, path = map(unquote, match.groups())
-        source = {
-            "kind": "hf",
-            "repository": repository,
-            "revision": revision,
-            "path": path,
-        }
-        _origin_object(source, "Hugging Face file URL", root=False)
-        return source, candidate
+        _url(location, "Hugging Face URL")
+        return parsed.path[len(prefix) :], candidate
     return None
+
+
+def hf_url_source(
+    location: str, *, endpoint: str | None = None
+) -> tuple[dict, str] | None:
+    """Recognizes model file URLs without importing the optional SDK."""
+    recognized = hf_url_path(location, endpoint=endpoint)
+    if recognized is None:
+        return None
+    relative, endpoint = recognized
+    match = re.fullmatch(r"([^/]+(?:/[^/]+)?)/(?:blob|resolve)/([^/]+)/(.+)", relative)
+    if match is None:
+        return None
+    if set(parse_qs(urlsplit(location).query, keep_blank_values=True)) - {"download"}:
+        raise FetchError("Hugging Face file URL has unsupported query parameters")
+    repository, revision, path = map(unquote, match.groups())
+    source = {
+        "kind": "hf",
+        "repository": repository,
+        "revision": revision,
+        "path": path,
+    }
+    _origin_object(source, "Hugging Face file URL", root=False)
+    return source, endpoint
 
 
 class HuggingFace:
@@ -325,7 +333,7 @@ class HuggingFace:
     ) -> AccessRequired:
         status = error.status
         if error.kind == "file":
-            raise FetchError(
+            raise SourceNotFound(
                 f"selected Hugging Face file does not exist in {repository}"
             ) from error
         if error.kind == "revision":

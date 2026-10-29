@@ -16,8 +16,8 @@ import pytest
 from loom.model import ManifestError, ModelCard
 from loom.model.catalog import generate
 from loom.model.fetch import install, plan_fetch
-from loom.model.fetch_catalog import load_catalog
 from loom.model.fetch_hf import HuggingFace
+from loom.model.fetch_publication import load_publication
 from loom.model.fetch_source import FetchError
 from loom.model.fetch_storage import ContentCache
 from loom.model.hf_test.hub import running_hub
@@ -85,7 +85,7 @@ def test_snapshot_survives_branch_advance_and_offline_install(tmp_path):
     with running_hub(tmp_path) as hub:
         _publish(hub)
         cache = _cache(tmp_path, hub)
-        first = load_catalog(_URL, cache, offline=False)
+        first = load_publication(_URL, cache, offline=False, catalog=True)
         assert first.revision == "a" * 40
         assert first.document.location.endswith("/resolve/" + "a" * 40 + "/" + _CATALOG)
         assert not any("/model/tiny/" in path for _, path in hub.requests)
@@ -102,7 +102,7 @@ def test_snapshot_survives_branch_advance_and_offline_install(tmp_path):
         assert not any(path.endswith("unused.data") for _, path in hub.requests)
 
         cache = _cache(tmp_path, hub)
-        second = load_catalog(_URL, cache, offline=False)
+        second = load_publication(_URL, cache, offline=False, catalog=True)
         assert second.revision == "b" * 40
         document, card = second.read_model("example/tiny", cache, offline=False)
         installed = install(
@@ -113,7 +113,7 @@ def test_snapshot_survives_branch_advance_and_offline_install(tmp_path):
         requests = list(hub.requests)
         hub.approved = False
         cache = _cache(tmp_path, hub)
-        offline = load_catalog(_URL, cache, offline=True)
+        offline = load_publication(_URL, cache, offline=True, catalog=True)
         assert offline.revision == second.revision
         document, card = offline.read_model("example/tiny", cache, offline=True)
         installed = install(
@@ -129,16 +129,18 @@ def test_invalid_refresh_preserves_last_valid_offline_catalog(tmp_path):
     with running_hub(tmp_path) as hub:
         _publish(hub)
         with pytest.raises(FetchError, match="no cached snapshot"):
-            load_catalog(_URL, _cache(tmp_path, hub), offline=True)
+            load_publication(_URL, _cache(tmp_path, hub), offline=True, catalog=True)
         assert hub.requests == []
-        load_catalog(_URL, _cache(tmp_path, hub), offline=False)
+        load_publication(_URL, _cache(tmp_path, hub), offline=False, catalog=True)
         hub.snapshots[hub.revision] = dict(hub.files)
         hub.revision = "b" * 40
         hub.files[_CATALOG] = b'{"schema_version":99,"models":{}}'
         with pytest.raises(ManifestError, match="unsupported model-catalog"):
-            load_catalog(_URL, _cache(tmp_path, hub), offline=False)
+            load_publication(_URL, _cache(tmp_path, hub), offline=False, catalog=True)
         requests = list(hub.requests)
-        snapshot = load_catalog(_URL, _cache(tmp_path, hub), offline=True)
+        snapshot = load_publication(
+            _URL, _cache(tmp_path, hub), offline=True, catalog=True
+        )
         assert snapshot.revision == "a" * 40
         assert hub.requests == requests
 
@@ -186,3 +188,156 @@ def test_cli_lists_acquires_and_reports_access_without_prompts(tmp_path):
         assert denied.returncode == 1, denied.stderr
         assert json.loads(denied.stdout)["kind"] == "action_required"
         assert "fixture-first" not in denied.stdout + denied.stderr
+
+
+def _root_publication(hub, *, catalog):
+    _publish(hub)
+    prefix = "publication/" if catalog else _DIRECTORY
+    hub.files = {
+        path.removeprefix(prefix): data
+        for path, data in hub.files.items()
+        if path.startswith(prefix)
+    }
+    path = "model/tiny/model.json" if catalog else "model.json"
+    card = json.loads(hub.files[path])
+    card["presets"] = {
+        "chat": {"service": "chat", "variant": "original", "programs": "source"}
+    }
+    hub.files[path] = json.dumps(card).encode()
+
+
+def _run(hub, source, *arguments):
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "loom.model.fetch_main",
+            source,
+            "--cache=" + str(hub.cache_dir.parent / "cache"),
+            "--json",
+            "--no-input",
+            *arguments,
+        ],
+        env=hub.environment(),
+        cwd=hub.cache_dir.parent,
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.mark.parametrize("catalog", [False, True])
+@pytest.mark.parametrize("url", [False, True])
+def test_repository_cli_acquires_unique_choices_and_repeats_offline(
+    tmp_path, catalog, url
+):
+    with running_hub(tmp_path) as hub:
+        _root_publication(hub, catalog=catalog)
+        source = (
+            hub.endpoint + "/fixture/model"
+            if url
+            else "huggingface:fixture/model:chat@main"
+        )
+        result = _run(hub, source)
+        assert result.returncode == 0, result.stderr
+        summary = json.loads(result.stdout)
+        assert summary["model"] == "example/tiny"
+        assert summary["preset"] == "chat"
+        assert summary["output"] == str(tmp_path / "example/tiny")
+        assert (
+            tmp_path / "example/tiny/weights.data"
+        ).read_bytes() == b"tiny checkpoint"
+        assert (tmp_path / "example/tiny/code.loom").read_bytes() == b"code"
+        assert result.stderr.index("loom-fetch  Output") < result.stderr.index(
+            "loom-fetch  Fetch"
+        )
+        if catalog:
+            assert summary["catalog"]["revision"] == hub.revision
+        reads = [path for _, path in hub.requests if "/resolve/" in path]
+        assert reads and all("/resolve/" + hub.revision + "/" in path for path in reads)
+        assert len([path for _, path in hub.requests if "/revision/" in path]) == 1
+        requests = list(hub.requests)
+        hub.approved = False
+        alias = (
+            "huggingface:fixture/model:chat"
+            if url
+            else hub.endpoint + "/fixture/model/tree/main"
+        )
+        repeated = _run(hub, alias, "--offline")
+        assert repeated.returncode == 0, repeated.stderr
+        assert (
+            tmp_path / "example/tiny/weights.data"
+        ).read_bytes() == b"tiny checkpoint"
+        assert hub.requests == requests
+
+
+@pytest.mark.parametrize("failure", ["gate", "repository", "malformed"])
+def test_repository_discovery_never_falls_through_access_or_invalid_card(
+    tmp_path, failure
+):
+    with running_hub(tmp_path) as hub:
+        _root_publication(hub, catalog=False)
+        hub.files["catalog.json"] = b'{"schema_version":1,"models":{}}'
+        if failure == "malformed":
+            hub.files["model.json"] = b'{"schema_version":99}'
+        else:
+            hub.approved = False
+            if failure == "repository":
+                hub.denial = 404, "RepoNotFound"
+        result = _run(hub, "huggingface:fixture/model", "--list")
+        assert result.returncode == 1, result.stderr
+        assert "Traceback" not in result.stderr
+        assert json.loads(result.stdout)["kind"] == (
+            "action_required" if failure == "gate" else "error"
+        )
+        assert not any(path.endswith("catalog.json") for _, path in hub.requests)
+
+
+def test_repository_cli_requires_explicit_model_for_multiple_entries(tmp_path):
+    with running_hub(tmp_path) as hub:
+        _root_publication(hub, catalog=True)
+        catalog = json.loads(hub.files["catalog.json"])
+        catalog["models"]["example/another"] = catalog["models"]["example/tiny"]
+        hub.files["catalog.json"] = json.dumps(catalog).encode()
+        result = _run(
+            hub, "huggingface:fixture/model", "--output=" + str(tmp_path / "out")
+        )
+        assert result.returncode == 1, result.stderr
+        assert "select --model=ID" in json.loads(result.stdout)["message"]
+        assert not any("/model/tiny/" in path for _, path in hub.requests)
+        listed = _run(hub, "huggingface:fixture/model", "--list")
+        assert listed.returncode == 0, listed.stderr
+        assert set(json.loads(listed.stdout)["models"]) == {
+            "example/tiny",
+            "example/another",
+        }
+        selected = _run(
+            hub,
+            "huggingface:fixture/model",
+            "--model=example/tiny",
+            "--output=" + str(tmp_path / "out"),
+        )
+        assert selected.returncode == 0, selected.stderr
+
+
+def test_repository_preset_conflict_is_not_silently_overridden(tmp_path):
+    with running_hub(tmp_path) as hub:
+        _root_publication(hub, catalog=False)
+        result = _run(
+            hub,
+            "huggingface:fixture/model:chat",
+            "--preset=other",
+            "--output=" + str(tmp_path / "out"),
+        )
+        assert result.returncode == 1, result.stderr
+        assert "conflicts with --preset" in json.loads(result.stdout)["message"]
+        assert not any(path.endswith("weights.data") for _, path in hub.requests)
+
+
+def test_explicit_catalog_ignores_root_model_card(tmp_path):
+    with running_hub(tmp_path) as hub:
+        _root_publication(hub, catalog=True)
+        hub.files["model.json"] = b"not a card"
+        result = _run(hub, "--catalog=huggingface:fixture/model", "--list")
+        assert result.returncode == 0, result.stderr
+        assert set(json.loads(result.stdout)["models"]) == {"example/tiny"}
+        assert not any(path.endswith("/model.json") for _, path in hub.requests)

@@ -258,12 +258,15 @@ No weight or provider targets belong in this rule's dependency closure.
 
 The [Python SDK wheel](../../../packaging/python/README.md) installs the
 `loom-fetch` command and includes an optional `hf` provider extra.
-`//loom/py/loom/model:loom-fetch` installs the selected closure from a local card
-or raw HTTP(S) card URL. The Python API exposes `plan_fetch` and `install`;
-`ContentCache` owns document reads and verified payload storage. Listing reads
-only the card. Named maps remain available to ordinary JSON tools:
+`//loom/py/loom/model:loom-fetch` installs the selected closure from a local card,
+HTTP(S) card URL, or explicit provider repository. The Python API exposes
+`plan_fetch` and `install`; `ContentCache` owns document reads and verified
+payload storage. Listing reads only discovery metadata. Named maps remain
+available to ordinary JSON tools:
 
 ```sh
+loom-fetch huggingface:benvanik/hrx-loom-serve-example
+loom-fetch https://huggingface.co/benvanik/hrx-loom-serve-example
 loom-fetch model.json --list --json | jq '.variants | keys[]'
 loom-fetch model.json --preset=streaming --output=./installed --dry-run
 loom-fetch model.json --preset=streaming --output=./installed
@@ -317,8 +320,9 @@ a completion callback runs after publication. An exception remains the API's
 failure result. Applications should consume events as they arrive instead of
 retaining an unbounded history for large acquisitions.
 
-Phases are `discover` (metadata), `access`, `acquire` (unique source counts),
-`download` (file reconstruction), `transfer` (provider-reported network bytes),
+Phases are `discover` (metadata), `access`, `destination` (selected CLI output
+directory), `acquire` (unique source counts), `download` (file reconstruction),
+`transfer` (provider-reported network bytes),
 `read` (local/inline reads), `verify`, `transform`, `install` (destination
 counts), and `complete`. Byte counts apply to one file and phase, not to the
 whole model. Unknown totals are `None`. Download/reconstruction and transfer
@@ -337,12 +341,17 @@ its choices directly; explicit flags override them. Program sets follow the
 preset or the sole compatible choice. An ambiguous card needs a named preset
 or an explicit developer `--programs` override.
 
-The picker asks for an installation directory when `--output` is absent. Screen
-controls and input modes are restored on completion or cancellation. Unsupported
-terminals use named line input, including `/text` filtering and `/cancel`.
+The output defaults to `./<model.id>`, preserving namespace components. An ID
+that is not a portable relative path requires `--output=DIR`; implicit output
+paths cannot traverse symbolic links or junctions. An explicit `--output`
+selects storage independently of the model ID. Fetch reports the destination
+before payload transfer and rejects conflicting installations instead of
+overwriting or choosing a numbered directory.
+
+Screen controls and input modes are restored on completion or cancellation.
+Unsupported terminals use named line input, including `/text` filtering and `/cancel`.
 `--no-input`, `--json`, or redirected input/status output resolve choices from
-flags and card defaults. They require `--output` for acquisition and never open
-the picker.
+flags or unique available choices and never open the picker.
 
 The acquisition path requires a matching `model.json.lock`, or an explicit
 `--lockfile` path/URL. Version 2 locks declare their coverage with `scope`:
@@ -597,6 +606,19 @@ executes acquisition transforms.
 
 ## Catalog discovery
 
+Both providers support `PROVIDER:OWNER/REPOSITORY[:PRESET][@REVISION]`, where
+`PROVIDER` is `huggingface` or `github`. A preset suffix is equivalent to
+`--preset=PRESET`, with no special interpretation of quantization names or
+checkpoint filenames. `REVISION` can be a branch, tag, or commit; omitting it
+selects the repository's default branch. Bare `OWNER/REPOSITORY` stays a local
+path. Ordinary repository URLs and `/tree/REVISION` URLs also work.
+
+Repository discovery reads root `model.json`, then root `catalog.json` only
+when the card is absent. Access, transport, and malformed-document failures
+remain errors. A sole catalog model selects automatically; ambiguous catalogs
+require `--model=MODEL_ID` or a terminal selection. `--catalog` explicitly
+selects a catalog even when the repository also contains a root card.
+
 An SDK wheel can associate itself with a compatible catalog tag independently of
 its Python package version. `loom-fetch --list --json` lists that catalog's named
 `models` map. Select an entry with `--model=MODEL_ID`, then use the same variant,
@@ -612,14 +634,14 @@ the catalog's relative cards, sibling locks, and card-relative files stay on
 that immutable revision. Listing reads the catalog only, without downloading
 models or checking access to their external checkpoints.
 
-`--catalog=github:OWNER/REPOSITORY@TAG_OR_COMMIT` selects a GitHub publication.
-The client resolves a tag once, including annotated tags, then reads
-`catalog.json`, its relative cards, and their sibling locks at that commit.
-An advancing tag affects the next discovery operation. It cannot change a
-selection already being acquired. Missing tags fail explicitly; the client
-never substitutes `main` or an older online result.
+`--catalog=github:OWNER/REPOSITORY@REVISION` selects a GitHub publication.
+The client resolves the revision once, including branches and annotated tags,
+then reads `catalog.json`, its relative cards, and their sibling locks at that commit.
+An advancing branch or tag affects the next discovery operation. It cannot
+change a selection already being acquired. Missing revisions fail explicitly;
+the client never substitutes `main` or an older online result.
 
-`--offline` reuses the last successfully loaded catalog snapshot. A failed
+`--offline` reuses the last successfully loaded publication snapshot. A failed
 refresh leaves that snapshot intact. Listing reads only discovery metadata;
 it does not read every card or check access to model weights. The selected card
 still owns service ABI and model-format admission.
@@ -642,5 +664,7 @@ discovery index, not qualification evidence. Its
 
 Catalog acquisitions publish `.loom-fetch.json` before publishing `model.json`.
 This receipt records the source catalog, resolved commit, selected card location,
-and card digest. It participates in the same conflict checks and rollback as the
-rest of the installation. Native hosts do not consume acquisition receipts.
+and card digest. Conflict checks compare pinned document identity, not the
+user's equivalent URL or shorthand spelling. Repeated acquisition preserves
+the original receipt. It participates in the same rollback as the rest of the
+installation. Native hosts do not consume acquisition receipts.

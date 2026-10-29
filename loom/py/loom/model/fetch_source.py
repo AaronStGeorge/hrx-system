@@ -30,6 +30,10 @@ class FetchError(RuntimeError):
     """An acquisition, storage, or provider requirement could not be satisfied."""
 
 
+class SourceNotFound(FetchError):
+    """The transport reported absence; repository access is established separately."""
+
+
 @dataclass(frozen=True)
 class Document:
     # Absolute authored URL or host-local file path, independent of redirects.
@@ -112,7 +116,8 @@ def open_source(source: Source, *, offline: bool, size: int | None = None):
         except urllib.error.HTTPError as error:
             # Signed redirect targets and credentials are not diagnostics or
             # persistent source identities.
-            raise FetchError(
+            failure = SourceNotFound if error.code == 404 else FetchError
+            raise failure(
                 f"source returned HTTP {error.code}: {error.reason}"
             ) from error
         except urllib.error.URLError as error:
