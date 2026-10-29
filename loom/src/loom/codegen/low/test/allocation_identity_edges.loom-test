@@ -1,5 +1,5 @@
-// Wide required aliases use the indexed active storage path without fixed slots.
-// RUN: with-checks emit low-allocation-json @wide_identity
+// Wide reconstructed payloads reuse the header's unchanged units.
+// RUN: emit low-allocation-query @wide_identity values=%current,%alias,%same
 
 test.target<low_core> @target
 
@@ -18,11 +18,13 @@ low.func.def schedule(locked) target<test.low.core>(@target) @wide_identity(%con
 }
 
 // ----
-CHECK: *"name":"same","type":"reg<test.i32 x32>"*,"location":{"kind":"target_id","base":0,"count":32}*
+value %current: test.i32 -> target_id[0:32]
+value %alias: test.i32 -> target_id[0:32]
+value %same: test.i32 -> target_id[0:32]
 
 // ====
 // The reconstructed edge payload and the still-observable header are identical.
-// RUN: with-checks emit low-allocation-json @identity fixed=%current:target_id:0:2
+// RUN: emit low-allocation-query @identity copy-count values=%current,%alias,%first,%forwarded,%second,%same copies=%forwarded
 
 test.target<low_core> @target
 
@@ -42,12 +44,18 @@ low.func.def schedule(locked) target<test.low.core>(@target) @identity(%conditio
 }
 
 // ----
-CHECK: *"name":"same","type":"reg<test.i32 x2>"*,"location":{"kind":"target_id","base":0,"count":2}*
-CHECK: *"coalesced_copy_count":1,"materialized_copy_count":0,*
+copies: coalesced=1 materialized=0
+value %current: test.i32 -> target_id[0:2]
+value %alias: test.i32 -> target_id[0:2]
+value %first: test.i32 -> target_id[0:1]
+value %forwarded: test.i32 -> target_id[0:1]
+value %second: test.i32 -> target_id[1:1]
+value %same: test.i32 -> target_id[0:2]
+copy %first -> %forwarded: coalesced
 
 // ====
 // Nonconsecutive physical-register IDs preserve the same unit identities.
-// RUN: with-checks emit low-allocation-json @explicit_identity fixed=%current:physical_register:5:2
+// RUN: emit low-allocation-query @explicit_identity values=%current,%alias,%first,%second,%same
 
 test.target<low_core> @target
 
@@ -66,11 +74,15 @@ low.func.def schedule(locked) target<test.low.core>(@target) @explicit_identity(
 }
 
 // ----
-CHECK: *"name":"same","type":"reg<test.explicit32 x2>"*,"location":{"kind":"physical_register","base":5,"count":2}*
+value %current: test.explicit32 -> physical_register[4:2]
+value %alias: test.explicit32 -> physical_register[4:2]
+value %first: test.explicit32 -> physical_register[0:1]
+value %second: test.explicit32 -> physical_register[2:1]
+value %same: test.explicit32 -> physical_register[4:2]
 
 // ====
 // A permutation must preserve the original header until the exit decision.
-// RUN: with-checks emit low-allocation-json @permuted fixed=%current:target_id:0:2
+// RUN: emit low-allocation-query @permuted values=%current,%first,%second,%swapped
 
 test.target<low_core> @target
 
@@ -88,12 +100,14 @@ low.func.def schedule(locked) target<test.low.core>(@target) @permuted(%conditio
 }
 
 // ----
-CHECK: *"name":"first","type":"reg<test.i32>"*,"location":{"kind":"target_id","base":3,"count":1}*
-CHECK: *"name":"second","type":"reg<test.i32>"*,"location":{"kind":"target_id","base":1,"count":1}*
+value %current: test.i32 -> target_id[0:2]
+value %first: test.i32 -> target_id[3:1]
+value %second: test.i32 -> target_id[1:1]
+value %swapped: test.i32 -> target_id[2:2]
 
 // ====
 // Preserving one unit does not establish identity for the whole edge.
-// RUN: with-checks emit low-allocation-json @partial fixed=%current:target_id:0:2
+// RUN: emit low-allocation-query @partial values=%current,%first,%repeated
 
 test.target<low_core> @target
 
@@ -110,11 +124,13 @@ low.func.def schedule(locked) target<test.low.core>(@target) @partial(%condition
 }
 
 // ----
-CHECK: *"name":"repeated","type":"reg<test.i32 x2>"*,"location":{"kind":"target_id","base":3,"count":2}*
+value %current: test.i32 -> target_id[0:2]
+value %first: test.i32 -> target_id[3:1]
+value %repeated: test.i32 -> target_id[3:2]
 
 // ====
 // Required storage ties write new bits and cannot inherit copy identity.
-// RUN: with-checks emit low-allocation-json @destructive fixed=%current:target_id:0:4
+// RUN: emit low-allocation-query @destructive copy-count values=%current,%copied,%changed,%first,%second,%reassembled copies=%copied
 
 test.target<low_core> @target
 
@@ -134,5 +150,11 @@ low.func.def schedule(locked) target<test.low.core>(@target) @destructive(%condi
 }
 
 // ----
-CHECK: *"name":"changed","type":"reg<test.i32 x4>"*,"location":{"kind":"target_id","base":5,"count":4}*
-CHECK: *"coalesced_copy_count":0,"materialized_copy_count":1,*
+copies: coalesced=0 materialized=1
+value %current: test.i32 -> target_id[0:4]
+value %copied: test.i32 -> target_id[5:4]
+value %changed: test.i32 -> target_id[5:4]
+value %first: test.i32 -> target_id[5:2]
+value %second: test.i32 -> target_id[7:2]
+value %reassembled: test.i32 -> target_id[0:4]
+copy %current -> %copied: materialized

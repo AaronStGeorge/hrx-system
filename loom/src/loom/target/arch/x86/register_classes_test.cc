@@ -212,6 +212,69 @@ TEST(X86RegisterClassesTest, CountClassesAliasTheSamePhysicalRegister) {
   }
 }
 
+TEST(X86RegisterClassesTest, FixedViewsShareGeneralBankPackingCapacity) {
+  for (const auto* descriptor_set : {
+           loom_x86_scalar_core_descriptor_set(),
+           loom_x86_avx2_core_descriptor_set(),
+           loom_x86_avx2_features_core_descriptor_set(),
+           loom_x86_avx512_core_descriptor_set(),
+           loom_x86_avx512_features_core_descriptor_set(),
+       }) {
+    SCOPED_TRACE(ToString(loom_low_descriptor_set_string(
+        descriptor_set, descriptor_set->key_string_ref)));
+    const loom_low_register_packing_resource_t* resource = nullptr;
+    for (uint32_t i = 0; i < descriptor_set->register_packing_resource_count;
+         ++i) {
+      const auto& candidate = descriptor_set->register_packing_resources[i];
+      if (iree_string_view_equal(loom_low_descriptor_set_string(
+                                     descriptor_set, candidate.name_string_ref),
+                                 IREE_SV("x86.gpr.units"))) {
+        ASSERT_EQ(resource, nullptr);
+        resource = &candidate;
+      }
+    }
+    ASSERT_NE(resource, nullptr);
+    EXPECT_EQ(resource->capacity, 16u);
+    EXPECT_EQ(resource->member_count, 8u);
+    const auto& capacity_member =
+        descriptor_set->register_packing_resource_members
+            [resource->capacity_member_index];
+    EXPECT_EQ(ToString(loom_low_descriptor_set_string(
+                  descriptor_set,
+                  descriptor_set->reg_classes[capacity_member.reg_class_id]
+                      .name_string_ref)),
+              "x86.gpr64");
+    for (const auto name : {
+             IREE_SV("x86.gpr32"),
+             IREE_SV("x86.gpr64"),
+             IREE_SV("x86.eax"),
+             IREE_SV("x86.rax"),
+             IREE_SV("x86.edx"),
+             IREE_SV("x86.rdx"),
+             IREE_SV("x86.ecx"),
+             IREE_SV("x86.rcx"),
+         }) {
+      SCOPED_TRACE(ToString(name));
+      uint16_t class_id = LOOM_LOW_REG_CLASS_NONE;
+      const loom_low_reg_class_t* reg_class = nullptr;
+      ASSERT_TRUE(loom_low_descriptor_set_lookup_register_class(
+          descriptor_set, name, &class_id, &reg_class));
+      uint32_t occurrences = 0;
+      for (uint16_t i = 0; i < resource->member_count; ++i) {
+        const auto& member =
+            descriptor_set
+                ->register_packing_resource_members[resource->member_start + i];
+        if (member.reg_class_id == class_id) {
+          ++occurrences;
+          EXPECT_EQ(member.register_unit_count, 1u);
+          EXPECT_EQ(member.resource_unit_count, 1u);
+        }
+      }
+      EXPECT_EQ(occurrences, 1u);
+    }
+  }
+}
+
 TEST(X86RegisterClassesTest, VexRowsImportedIntoWideViewsStayLow16) {
   const loom_low_descriptor_set_t* avx512_descriptor_set =
       loom_x86_avx512_core_descriptor_set();

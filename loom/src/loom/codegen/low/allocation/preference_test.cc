@@ -8,6 +8,10 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/ir/context.h"
+#include "loom/ir/local_value_domain.h"
+#include "loom/ir/module.h"
+#include "loom/target/registers.h"
 #include "loom/target/test/descriptors.h"
 
 namespace loom {
@@ -553,6 +557,91 @@ TEST_F(HardOrdinalCopyPreferenceTest, LeavesPublishedPeerToHardLegality) {
   EXPECT_EQ(query.structural.placement, nullptr);
   EXPECT_EQ(Penalty(query, 0), 0u);
   EXPECT_EQ(Penalty(query, 1), 0u);
+}
+
+TEST_F(LowAllocationPreferenceTest, CopyAffinityUsesFutureFixedCounterpart) {
+  // The fixed-binding lookup borrows a real local ordinal domain. No source
+  // program is needed: the scorer consumes resolved placement facts.
+  loom_context_t context;
+  loom_context_initialize(iree_allocator_system(), &context);
+  IREE_ASSERT_OK(loom_context_finalize(&context));
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate(&context, IREE_SV("preference"), &pool_,
+                                      nullptr, iree_allocator_system(),
+                                      &module));
+  descriptors_.stable_id = 17;
+  loom_local_value_domain_t domain = {};
+  IREE_ASSERT_OK(loom_local_value_domain_acquire_for_region(
+      module, module->body, &arena_, &domain));
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(value_ids_); ++i) {
+    loom_value_id_t value;
+    IREE_ASSERT_OK(loom_module_define_value(
+        module, loom_low_register_type(descriptors_.stable_id, 0, 2), &value));
+    ASSERT_EQ(value, value_ids_[i]);
+    loom_value_ordinal_t ordinal;
+    IREE_ASSERT_OK(
+        loom_local_value_domain_register_value(&domain, value, &ordinal));
+    ASSERT_EQ(ordinal, i);
+    assignments_[i].value_id = value;
+    assignments_[i].end_point = 8;
+    intervals_[i].value_id = value;
+    intervals_[i].end_point = 8;
+    intervals_[i].value_class.register_descriptor_set_stable_id =
+        descriptors_.stable_id;
+  }
+  loom_low_allocation_resolved_fixed_value_t fixed = {
+      .assignment = assignments_[1],
+      .value_ordinal = 1,
+      .tied_root_ordinal = 1,
+      .semantic_end_point = 8,
+  };
+  fixed.assignment.location_base = 4;
+  uint32_t fixed_indices[] = {0, 1, 0, 0};
+  constraints_.fixed_values = &fixed;
+  constraints_.fixed_value_domain = &domain;
+  constraints_.fixed_value_indices_by_ordinal = fixed_indices;
+  loom_low_placement_relation_t relation = {
+      .unit_count = 2,
+      .kind = LOOM_LOW_PLACEMENT_RELATION_SAME_STORAGE,
+      .flags = LOOM_LOW_PLACEMENT_RELATION_FLAG_CAN_ALIAS_STORAGE,
+      .priority = 7,
+  };
+  placement_.relations = &relation;
+  placement_.relation_count = 1;
+  const uint32_t source_relation = 0;
+  placement_.relation_indices_by_source_ordinal = &source_relation;
+  index_.instruction_use_count = index_.use_count;
+  for (auto cause :
+       {LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY, LOOM_LOW_PLACEMENT_CAUSE_LOW_MOVE}) {
+    SCOPED_TRACE(cause);
+    relation.cause = cause;
+    for (uint32_t result_ordinal : {0u, 1u}) {
+      SCOPED_TRACE(result_ordinal);
+      relation.result_ordinal = result_ordinal;
+      relation.source_ordinal = 1 - result_ordinal;
+      ranges_[result_ordinal] = {0, 1};
+      ranges_[1 - result_ordinal] = {};
+      source_ranges_[result_ordinal] = {};
+      source_ranges_[1 - result_ordinal] = {0, 1};
+      constraints_.fixed_value_count = 0;
+      constraints_.preassigned_fixed_value_count = 0;
+      assignment_indices_[1] = UINT32_MAX;
+      EXPECT_EQ(Penalty(Prepare(), 0), 0u);
+      constraints_.fixed_value_count = 1;
+      constraints_.preassigned_fixed_value_count = 1;
+      const auto query = Prepare();
+      EXPECT_EQ(Penalty(query, 0), 7u);
+      EXPECT_EQ(Penalty(query, 4), 0u);
+      // Once published, ordinary coalescing owns the transfer; this search
+      // preference must no longer contribute a duplicate cost.
+      assignments_[1] = fixed.assignment;
+      assignment_indices_[1] = 1;
+      EXPECT_EQ(Penalty(Prepare(), 0), 0u);
+    }
+  }
+  loom_local_value_domain_release(&domain);
+  loom_module_free(module);
+  loom_context_deinitialize(&context);
 }
 
 TEST_F(LowAllocationPreferenceTest, EmptyIndexAllocatesNothing) {

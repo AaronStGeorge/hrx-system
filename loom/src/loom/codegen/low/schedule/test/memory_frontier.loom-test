@@ -1,3 +1,95 @@
+// A successor starts at issue cycle zero. The source branch carries the
+// outstanding store's completion requirement across the boundary.
+// RUN: emit low-schedule-query @direct_effect_edge strategy=source issue=0,1,2 edge=effect:0:1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @direct_effect_edge(%address: reg<test.ptr>, %payload: reg<test.i32 x4>) -> (reg<test.i32 x4>) asm {
+  test.store.v4i32 %address, %payload
+  low.br ^consume
+^consume:
+  %loaded = test.load.v4i32 %address
+  return %loaded
+}
+
+// ----
+node 0 issue-cycle: 0
+node 1 issue-cycle: 2
+node 2 issue-cycle: 0
+edge effect 0 -> 1: separation=2 source=event-pair quality=exact producer-event=test.memory.write consumer-event=test.memory.read
+
+// ====
+
+// The read through the empty block needs more separation than the write on
+// the other path. Both successors constrain the source branch.
+// RUN: emit low-schedule-query @diamond_effect_edge strategy=source issue=0,1 edge=effect:0:1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @diamond_effect_edge(%condition: reg<test.i32>, %address: reg<test.ptr>, %payload: reg<test.i32 x4>) -> (reg<test.i32 x4>) asm {
+  test.store.v4i32 %address, %payload
+  low.cond_br %condition, ^empty, ^write : reg<test.i32>
+^empty:
+  low.br ^read
+^read:
+  %loaded = test.load.v4i32 %address
+  return %loaded
+^write:
+  test.store.v4i32 %address, %payload
+  return %payload
+}
+
+// ----
+node 0 issue-cycle: 0
+node 1 issue-cycle: 2
+edge effect 0 -> 1: separation=2 source=event-pair quality=exact producer-event=test.memory.write consumer-event=test.memory.read
+
+// ====
+
+// Without a future read, the weaker write-to-write timing controls the branch.
+// RUN: emit low-schedule-query @diamond_write_effect strategy=source issue=0,1 edge=effect:0:1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @diamond_write_effect(%condition: reg<test.i32>, %address: reg<test.ptr>, %payload: reg<test.i32 x4>) asm {
+  test.store.v4i32 %address, %payload
+  low.cond_br %condition, ^empty, ^write : reg<test.i32>
+^empty:
+  low.br ^write
+^write:
+  test.store.v4i32 %address, %payload
+  return
+}
+
+// ----
+node 0 issue-cycle: 0
+node 1 issue-cycle: 1
+edge effect 0 -> 1: separation=1 source=event-pair quality=exact producer-event=test.memory.write consumer-event=test.memory.write
+
+// ====
+
+// The next iteration's first read constrains the current loop backedge.
+// RUN: emit low-schedule-query @loop_effect_edge strategy=source issue=2,3 edge=effect:2:3
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @loop_effect_edge(%condition: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32 x4>) asm {
+  low.br ^loop
+^loop:
+  %loaded = test.load.v4i32 %address
+  test.barrier
+  low.cond_br %condition, ^loop, ^exit : reg<test.i32>
+^exit:
+  return %loaded
+}
+
+// ----
+node 2 issue-cycle: 4
+node 3 issue-cycle: 6
+edge effect 2 -> 3: separation=2 source=event-pair quality=exact producer-event=test.memory.write consumer-event=test.memory.read
+
+// ====
+
 // RUN: emit low-schedule-query @read_only kind=effect strategy=resource-stall consumer=*
 
 // Reads alone acquire no memory-ordering edges.

@@ -44,12 +44,10 @@ loom_low_schedule_candidate_policy_reset_register_debt(
 }
 
 static bool loom_low_schedule_candidate_opens_other_register_debt(
-    const loom_low_schedule_build_state_t* state,
+    iree_host_size_t register_debt_word_count,
     const loom_low_schedule_candidate_score_t* required,
     const loom_low_schedule_candidate_score_t* alternative) {
-  const iree_host_size_t word_count =
-      (state->target.descriptor_set->reg_class_count + 63) / 64;
-  for (iree_host_size_t i = 0; i < word_count; ++i) {
+  for (iree_host_size_t i = 0; i < register_debt_word_count; ++i) {
     if ((alternative->register_debt[i].banks &
          ~required->register_debt[i].required_banks) != 0) {
       return true;
@@ -58,18 +56,11 @@ static bool loom_low_schedule_candidate_opens_other_register_debt(
   return false;
 }
 
-enum loom_low_schedule_recovery_policy_flag_bits_e {
-  LOOM_LOW_SCHEDULE_RECOVERY_POLICY_FLAG_REJECT_PRESSURE_DEBT = 1u << 0,
-  LOOM_LOW_SCHEDULE_RECOVERY_POLICY_FLAG_REQUIRE_PRESSURE_PROGRESS = 1u << 1,
-};
-
 typedef struct loom_low_schedule_recovery_policy_t {
   // Ready views contributing additional recovery nominees.
   loom_low_schedule_ready_view_t ready_views[3];
   // Number of populated entries in ready_views.
   uint8_t ready_view_count;
-  // loom_low_schedule_recovery_policy_flag_bits_e bits.
-  uint8_t flags;
 } loom_low_schedule_recovery_policy_t;
 
 enum {
@@ -79,26 +70,23 @@ enum {
 };
 
 static const loom_low_schedule_recovery_policy_t
-    kLoomLowScheduleRecoveryPolicies[LOOM_LOW_SCHEDULE_RECOVERY_POLICY_COUNT] = {
-        [LOOM_LOW_SCHEDULE_RECOVERY_POLICY_DEFAULT] =
-            {
-                .ready_views = {LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE},
-                .ready_view_count = 1,
-                .flags =
-                    LOOM_LOW_SCHEDULE_RECOVERY_POLICY_FLAG_REJECT_PRESSURE_DEBT,
-            },
-        [LOOM_LOW_SCHEDULE_RECOVERY_POLICY_PRESSURE] =
-            {
-                .ready_views =
-                    {
-                        LOOM_LOW_SCHEDULE_READY_VIEW_PRESSURE,
-                        LOOM_LOW_SCHEDULE_READY_VIEW_STORAGE,
-                        LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE,
-                    },
-                .ready_view_count = 3,
-                .flags =
-                    LOOM_LOW_SCHEDULE_RECOVERY_POLICY_FLAG_REQUIRE_PRESSURE_PROGRESS,
-            },
+    kLoomLowScheduleRecoveryPolicies[LOOM_LOW_SCHEDULE_RECOVERY_POLICY_COUNT] =
+        {
+            [LOOM_LOW_SCHEDULE_RECOVERY_POLICY_DEFAULT] =
+                {
+                    .ready_views = {LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE},
+                    .ready_view_count = 1,
+                },
+            [LOOM_LOW_SCHEDULE_RECOVERY_POLICY_PRESSURE] =
+                {
+                    .ready_views =
+                        {
+                            LOOM_LOW_SCHEDULE_READY_VIEW_PRESSURE,
+                            LOOM_LOW_SCHEDULE_READY_VIEW_STORAGE,
+                            LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE,
+                        },
+                    .ready_view_count = 3,
+                },
 };
 
 // A pinned completion may need several setup values before any consumer can
@@ -354,7 +342,63 @@ static bool loom_low_schedule_candidate_has_ready_pair_affinity(
          score->data_ready_stall_cycles == 0 && score->hazard_stall_cycles == 0;
 }
 
-static loom_low_schedule_candidate_compare_mode_t
+loom_low_schedule_pressure_progress_kind_t
+loom_low_schedule_classify_candidate_pressure_progress(
+    const loom_low_schedule_candidate_score_t* score) {
+  const bool unlocks_descriptor = iree_any_bit_set(
+      score->flags, LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_DESCRIPTOR);
+  const bool unlocks_non_growing_descriptor = iree_any_bit_set(
+      score->flags,
+      LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_UNLOCKS_NON_GROWING_DESCRIPTOR);
+  const bool has_register_activity = score->killed_live_value_count != 0 ||
+                                     score->produced_live_value_count != 0;
+  if (iree_any_bit_set(
+          score->flags,
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_CONSTRAINED_COMPLETION)) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_CONSTRAINED_COMPLETION;
+  }
+  const bool grows_packing_resource = iree_any_bit_set(
+      score->flags, LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_GROWS_PACKING_RESOURCE);
+  if (!grows_packing_resource &&
+      score->killed_live_units > score->produced_live_units) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_REDUCTION;
+  }
+  const bool is_non_growing =
+      !grows_packing_resource &&
+      score->killed_live_units >= score->produced_live_units;
+  if (score->storage_relation_count != 0 && is_non_growing) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_STORAGE;
+  }
+  if (unlocks_descriptor && unlocks_non_growing_descriptor) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_FRONTIER;
+  }
+  if (has_register_activity && is_non_growing) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NON_GROWING;
+  }
+  return LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE;
+}
+
+loom_low_schedule_pressure_risk_t
+loom_low_schedule_classify_candidate_pressure_risk(
+    const loom_low_schedule_candidate_score_t* score,
+    uint32_t current_persistent_pressure_penalty) {
+  if (score->pressure_cliff_penalty > current_persistent_pressure_penalty) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT;
+  }
+  if (iree_any_bit_set(
+          score->flags,
+          LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_NEEDS_COMPLETION_RECOVERY) ||
+      (score->units_until_pressure_cliff !=
+           LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE &&
+       score->units_until_pressure_cliff <=
+           iree_max(score->activation_reserve_units,
+                    score->pressure_demand_units))) {
+    return LOOM_LOW_SCHEDULE_PRESSURE_RISK_NEAR_CLIFF;
+  }
+  return LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE;
+}
+
+loom_low_schedule_candidate_compare_mode_t
 loom_low_schedule_choose_candidate_compare_mode(
     const loom_low_schedule_candidate_score_t* scores,
     iree_host_size_t score_count,
@@ -374,11 +418,43 @@ loom_low_schedule_choose_candidate_compare_mode(
                            : LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT;
 }
 
-static bool loom_low_schedule_candidate_score_less(
-    const loom_low_schedule_build_state_t* state,
+bool loom_low_schedule_candidate_policy_admits_ranked_nominee(
+    const loom_low_schedule_candidate_score_t* score,
+    uint32_t maximum_source_critical_path_cycles, bool is_graph_nominee) {
+  if (score->produced_live_units <= score->killed_live_units) {
+    return true;
+  }
+  const bool exceeds_critical_path_band =
+      score->critical_path_cycles > maximum_source_critical_path_cycles &&
+      score->critical_path_cycles - maximum_source_critical_path_cycles >
+          LOOM_LOW_SCHEDULE_READY_CRITICAL_PATH_BAND_CYCLES;
+  return !is_graph_nominee &&
+         score->pressure_risk == LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE &&
+         !exceeds_critical_path_band;
+}
+
+bool loom_low_schedule_candidate_policy_admits_recovery_nominee(
+    loom_low_schedule_candidate_compare_mode_t compare_mode,
+    const loom_low_schedule_candidate_score_t* score,
+    const loom_low_schedule_candidate_score_t* chosen_score) {
+  if (compare_mode == LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT) {
+    return score->pressure_risk != LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT;
+  }
+  return score->pressure_progress_kind !=
+             LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE ||
+         loom_low_schedule_candidate_defers_materialization(compare_mode,
+                                                            chosen_score) ||
+         (loom_low_schedule_candidate_exceeds_unspillable_capacity(
+              chosen_score) &&
+          !loom_low_schedule_candidate_exceeds_unspillable_capacity(score));
+}
+
+bool loom_low_schedule_candidate_score_less(
+    const loom_low_schedule_options_t* options,
     loom_low_schedule_candidate_compare_mode_t compare_mode,
     const loom_low_schedule_candidate_score_t* lhs,
-    const loom_low_schedule_candidate_score_t* rhs) {
+    const loom_low_schedule_candidate_score_t* rhs,
+    iree_host_size_t register_debt_word_count) {
   const bool lhs_exceeds_unspillable_capacity =
       loom_low_schedule_candidate_exceeds_unspillable_capacity(lhs);
   const bool rhs_exceeds_unspillable_capacity =
@@ -426,7 +502,7 @@ static bool loom_low_schedule_candidate_score_less(
   // Other candidates sharing a full unspillable domain also compete by ready
   // progress, subject to aggregate handoff and spill-traffic ordering.
   if (loom_low_schedule_candidate_policy_uses_ready_progress_order(
-          state, compare_mode, lhs, rhs)) {
+          options, compare_mode, lhs, rhs)) {
     return lhs->effective_stall_cycles < rhs->effective_stall_cycles;
   }
   // Under pressure, an unspillable path with the same risk and no greater
@@ -436,7 +512,7 @@ static bool loom_low_schedule_candidate_score_less(
   // footprint yet, so it only wins when it fills an actual issue gap;
   // otherwise running setup early can overlap later storage lifetimes without
   // making room.
-  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
+  if (options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
       compare_mode != LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT &&
       lhs->pressure_risk == rhs->pressure_risk &&
       iree_any_bit_set(
@@ -470,7 +546,7 @@ static bool loom_low_schedule_candidate_score_less(
   // Once hard-capacity feasibility ties, advance the tighter full bank's
   // pending completion. Waiting until both candidates exceed capacity lets
   // other chains consume the temporary storage that completion still needs.
-  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
+  if (options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
       compare_mode != LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT) {
     if (lhs->active_unspillable_transaction_final_capacity !=
         rhs->active_unspillable_transaction_final_capacity) {
@@ -491,7 +567,7 @@ static bool loom_low_schedule_candidate_score_less(
   const bool rhs_advances_constrained_completion = iree_any_bit_set(
       rhs->flags,
       LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_ADVANCES_CONSTRAINED_COMPLETION);
-  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
+  if (options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
       compare_mode != LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT &&
       lhs_advances_constrained_completion !=
           rhs_advances_constrained_completion) {
@@ -510,7 +586,7 @@ static bool loom_low_schedule_candidate_score_less(
   // banks. Opening debt in another bank is not relief: repeatedly postponing
   // a required reload can otherwise spill all of its consumers' setup there.
   // Cross-bank alternatives keep the ordinary pressure/cost comparison.
-  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
+  if (options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
       compare_mode != LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT) {
     const bool lhs_opens_required_debt = iree_any_bit_set(
         lhs->flags,
@@ -524,7 +600,7 @@ static bool loom_low_schedule_candidate_score_less(
       const loom_low_schedule_candidate_score_t* alternative =
           lhs_opens_required_debt ? rhs : lhs;
       if (!loom_low_schedule_candidate_opens_other_register_debt(
-              state, required, alternative)) {
+              register_debt_word_count, required, alternative)) {
         return !lhs_opens_required_debt;
       }
     }
@@ -539,7 +615,7 @@ static bool loom_low_schedule_candidate_score_less(
       loom_low_schedule_compare_candidate_pressure_efficiency(lhs, rhs);
   const int live_value_order =
       loom_low_schedule_compare_candidate_live_values(lhs, rhs);
-  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
+  if (options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
     if (compare_mode != LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT) {
       const bool lhs_makes_pressure_progress =
           lhs->pressure_progress_kind !=
@@ -683,7 +759,7 @@ static bool loom_low_schedule_candidate_score_less(
       return lhs->critical_path_cycles > rhs->critical_path_cycles;
     }
   }
-  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING) {
+  if (options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING) {
     if (lhs->dependency_latency_cycles != rhs->dependency_latency_cycles) {
       return lhs->dependency_latency_cycles < rhs->dependency_latency_cycles;
     }
@@ -691,7 +767,7 @@ static bool loom_low_schedule_candidate_score_less(
       return lhs->latency_cycles > rhs->latency_cycles;
     }
   }
-  if (state->options->strategy != LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
+  if (options->strategy != LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
       lhs->pressure_cliff_penalty != rhs->pressure_cliff_penalty) {
     return lhs->pressure_cliff_penalty < rhs->pressure_cliff_penalty;
   }
@@ -919,18 +995,9 @@ void loom_low_schedule_candidate_policy_select(
     for (uint8_t i = source_view_nominee_count; i < nominee_count; ++i) {
       const loom_low_schedule_candidate_score_t* nominee_score =
           &nominee_scores[i];
-      const bool grows_live_frontier =
-          nominee_score->produced_live_units > nominee_score->killed_live_units;
-      const bool exceeds_critical_path_band =
-          nominee_score->critical_path_cycles >
-              maximum_source_critical_path_cycles &&
-          nominee_score->critical_path_cycles -
-                  maximum_source_critical_path_cycles >
-              LOOM_LOW_SCHEDULE_READY_CRITICAL_PATH_BAND_CYCLES;
-      if (grows_live_frontier && (nominees[i] == graph_nominee ||
-                                  nominee_score->pressure_risk !=
-                                      LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE ||
-                                  exceeds_critical_path_band)) {
+      if (!loom_low_schedule_candidate_policy_admits_ranked_nominee(
+              nominee_score, maximum_source_critical_path_cycles,
+              nominees[i] == graph_nominee)) {
         // Keep the two possible rejected ordinary scores beyond recovery's
         // array budget. A recovery view may nominate the same node under a
         // different admission rule; its exact score has not changed.
@@ -952,9 +1019,9 @@ void loom_low_schedule_candidate_policy_select(
   for (uint8_t i = 0; i < nominee_count; ++i) {
     const uint32_t node_index = nominees[i];
     if (out_selection->chosen_node == LOOM_LOW_SCHEDULE_NODE_NONE ||
-        loom_low_schedule_candidate_score_less(state, compare_mode,
-                                               &nominee_scores[i],
-                                               &out_selection->chosen_score)) {
+        loom_low_schedule_candidate_score_less(
+            state->options, compare_mode, &nominee_scores[i],
+            &out_selection->chosen_score, policy->register_debt_word_count)) {
       if (out_selection->chosen_node != LOOM_LOW_SCHEDULE_NODE_NONE) {
         out_selection->rejected_node = out_selection->chosen_node;
         out_selection->rejected_score = out_selection->chosen_score;
@@ -963,8 +1030,9 @@ void loom_low_schedule_candidate_policy_select(
       out_selection->chosen_score = nominee_scores[i];
     } else if (out_selection->rejected_node == LOOM_LOW_SCHEDULE_NODE_NONE ||
                loom_low_schedule_candidate_score_less(
-                   state, compare_mode, &nominee_scores[i],
-                   &out_selection->rejected_score)) {
+                   state->options, compare_mode, &nominee_scores[i],
+                   &out_selection->rejected_score,
+                   policy->register_debt_word_count)) {
       out_selection->rejected_node = node_index;
       out_selection->rejected_score = nominee_scores[i];
     }
@@ -1045,37 +1113,22 @@ void loom_low_schedule_candidate_policy_select(
             &nominee_scores[i], &latency_window_source_score) > 0) {
       continue;
     }
-    if (iree_any_bit_set(
-            recovery_policy->flags,
-            LOOM_LOW_SCHEDULE_RECOVERY_POLICY_FLAG_REJECT_PRESSURE_DEBT) &&
-        nominee_scores[i].pressure_risk ==
-            LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT) {
+    if (!loom_low_schedule_candidate_policy_admits_recovery_nominee(
+            compare_mode, &nominee_scores[i], &out_selection->chosen_score)) {
       continue;
     }
-    if (iree_any_bit_set(
-            recovery_policy->flags,
-            LOOM_LOW_SCHEDULE_RECOVERY_POLICY_FLAG_REQUIRE_PRESSURE_PROGRESS) &&
-        nominee_scores[i].pressure_progress_kind ==
-            LOOM_LOW_SCHEDULE_PRESSURE_PROGRESS_NONE &&
-        !loom_low_schedule_candidate_defers_materialization(
-            compare_mode, &out_selection->chosen_score) &&
-        !(loom_low_schedule_candidate_exceeds_unspillable_capacity(
-              &out_selection->chosen_score) &&
-          !loom_low_schedule_candidate_exceeds_unspillable_capacity(
-              &nominee_scores[i]))) {
-      continue;
-    }
-    if (loom_low_schedule_candidate_score_less(state, compare_mode,
-                                               &nominee_scores[i],
-                                               &out_selection->chosen_score)) {
+    if (loom_low_schedule_candidate_score_less(
+            state->options, compare_mode, &nominee_scores[i],
+            &out_selection->chosen_score, policy->register_debt_word_count)) {
       out_selection->rejected_node = out_selection->chosen_node;
       out_selection->rejected_score = out_selection->chosen_score;
       out_selection->chosen_node = nominees[i];
       out_selection->chosen_score = nominee_scores[i];
     } else if (out_selection->rejected_node == LOOM_LOW_SCHEDULE_NODE_NONE ||
                loom_low_schedule_candidate_score_less(
-                   state, compare_mode, &nominee_scores[i],
-                   &out_selection->rejected_score)) {
+                   state->options, compare_mode, &nominee_scores[i],
+                   &out_selection->rejected_score,
+                   policy->register_debt_word_count)) {
       out_selection->rejected_node = nominees[i];
       out_selection->rejected_score = nominee_scores[i];
     }

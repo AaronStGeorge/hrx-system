@@ -309,6 +309,8 @@ loom_cc_test(
     srcs = ["preference_test.cc"],
     deps = [
         ":preference",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/target:registers",
         "//loom/src/loom/target/test:descriptors",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -351,6 +353,7 @@ loom_cc_test(
     deps = [
         ":search",
         "//loom/src/loom/ir",
+        "//loom/src/loom/target:registers",
         "//loom/src/loom/target:residency",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -419,6 +422,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/target:residency",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 
@@ -428,6 +432,7 @@ loom_cc_test(
     deps = [
         ":active_set",
         ":concat_reservation",
+        ":target_constraints",
         "//loom/src/loom/ir",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target:residency",
@@ -474,6 +479,7 @@ loom_cc_test(
         ":coalescing",
         ":storage_lease",
         "//loom/src/loom/ir",
+        "//loom/src/loom/target:registers",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -494,6 +500,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/util:adaptive_sort",
+        "//loom/src/loom/util:cfg_graph",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:arena",
@@ -506,13 +513,20 @@ loom_cc_library(
     hdrs = ["spill_storage.h"],
     deps = [
         ":table",
-        "//loom/src/loom/analysis:liveness",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
         "//loom/src/loom/util:adaptive_sort",
-        "//loom/src/loom/util:cfg_graph",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "spill_storage_test",
+    srcs = ["spill_storage_test.cc"],
+    deps = [
+        ":spill_storage",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -528,34 +542,10 @@ loom_cc_library(
 )
 
 loom_cc_test(
-    name = "spill_traffic_test",
-    srcs = ["spill_traffic_test.cc"],
-    deps = [
-        ":spill_traffic",
-        "//loom/src/loom/codegen/low:diagnostics",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/target/test:descriptors",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "spill_plan_test",
     srcs = ["spill_plan_test.cc"],
     deps = [
         ":spill_plan",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:registers",
-        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -916,8 +906,10 @@ loom_cc_test(
     deps = [
         ":interval_assignment",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/test",
         "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/util:cfg_graph",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -1186,8 +1178,9 @@ loom_cc_test(
     deps = [
         ":target_constraints",
         "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:parameter",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/test",
+        "//loom/src/loom/ops/low",
         "//loom/src/loom/target:facts_builder",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/test:descriptors",
@@ -1312,15 +1305,12 @@ loom_cc_test(
     srcs = ["move_plan_test.cc"],
     deps = [
         ":move_plan",
-        "//loom/src/loom/codegen/low:frame",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/format/text:parser",
+        ":target_constraints",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:facts_builder",
-        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/target/test:target_record_table",
-        "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -1335,26 +1325,6 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "move_topology_test",
-    srcs = ["move_topology_test.cc"],
-    deps = [
-        ":move_topology",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/target/test:descriptors",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

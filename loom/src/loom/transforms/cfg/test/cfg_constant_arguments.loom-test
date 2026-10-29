@@ -1,5 +1,37 @@
 // RUN: pass cfg-simplify
 
+// Hoisting an exact constant must not replace a freshly consumed loop owner.
+test.decl @consume_index(%input: index) -> (%input as index)
+
+func.def @retains_consumed_constant(%again: i1) -> (index) {
+  %seed = index.constant 7 : index
+  cfg.br ^loop(%seed: index)
+^loop(%state: index):
+  %changed = test.invoke @consume_index(%state) : (index) -> (%state as index)
+  cfg.cond_br %again, ^backedge, ^exit
+^backedge:
+  cfg.br ^loop(%seed: index)
+^exit:
+  func.return %changed : index
+}
+
+// ----
+test.decl @consume_index(%input: index) -> (%input as index)
+
+func.def @retains_consumed_constant(%again: i1) -> (index) {
+  %seed = index.constant 7 : index
+  cfg.br ^loop(%seed: index)
+^loop(%state: index):
+  %changed = test.invoke @consume_index(%state) : (index) -> (%state as index)
+  cfg.cond_br %again, ^backedge, ^exit
+^backedge:
+  cfg.br ^loop(%seed: index)
+^exit:
+  func.return %changed : index
+}
+
+// ====
+
 // Equal branch-local constants need no carried state, even when adjacent
 // arguments vary and both branches have observable effects.
 func.def @constant_scalar_arguments(%choose: i1, %left_value: i32, %right_value: i32) -> (index, offset, i1, i8, i16, i32, i64, f8E4M3, f8E5M2, f16, bf16, f32, f64, i32) {

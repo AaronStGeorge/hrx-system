@@ -1687,5 +1687,88 @@ TEST_F(LowAllocationUnitLivenessTest, RetainsSparseTiedStorageReservations) {
   EXPECT_EQ(liveness.segment_count, IREE_ARRAYSIZE(segments));
 }
 
+TEST_F(LowAllocationUnitLivenessTest, RetainsBackwardStorageDemandsAndHoles) {
+  for (uint32_t unit_count : {1u, 4u}) {
+    for (bool independent_extension : {false, true}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "units=" << unit_count
+                   << " independent=" << independent_extension);
+      const loom_value_id_t value_ids[] = {0};
+      const uint32_t interval_indices[] = {0};
+      loom_liveness_interval_t intervals[] = {
+          RegisterInterval(0, 12, 14, unit_count)};
+      intervals[0].definition_point = 12;
+      loom_liveness_block_info_t blocks[4] = {};
+      blocks[0].end_point = 5;
+      blocks[1].start_point = 6;
+      blocks[1].end_point = 8;
+      blocks[2].start_point = 9;
+      blocks[2].end_point = 11;
+      blocks[3].start_point = 12;
+      blocks[3].end_point = 18;
+      const loom_liveness_segment_t segments[] = {{12, 14}};
+      const loom_liveness_segment_range_t ranges[] = {{0, 1}};
+      loom_liveness_analysis_t liveness = Liveness(
+          value_ids, IREE_ARRAYSIZE(value_ids), interval_indices, intervals,
+          IREE_ARRAYSIZE(intervals), blocks, IREE_ARRAYSIZE(blocks));
+      liveness.segments = segments;
+      liveness.segment_count = IREE_ARRAYSIZE(segments);
+      liveness.value_segment_ranges = ranges;
+
+      // Edge reads precede the definition in layout and leave a sibling block
+      // unused. Overlapping, unordered contributions merge with the semantic
+      // segment without filling that hole. An independent extension instead
+      // requires the conservative hull, even with the same edge observations.
+      loom_low_allocation_storage_demand_t demands[] = {
+          {0, {9, 11}}, {0, {2, 5}}, {0, {10, 12}}, {0, {3, 5}}};
+      loom_low_allocation_unit_liveness_value_t values[] = {{0, 2}};
+      uint32_t starts[4] = {};
+      uint32_t ends[4] = {};
+      for (uint32_t i = 0; i < unit_count; ++i) {
+        starts[i] = i < unit_count / 2 ? 12 : 2;
+        ends[i] = independent_extension ? 18 : 14;
+      }
+      uint64_t incomplete[] = {1};
+      uint64_t independent[] = {independent_extension ? 1u : 0u};
+      loom_low_allocation_unit_liveness_t unit_liveness = {
+          .values = values,
+          .start_points = starts,
+          .end_points = ends,
+          .point_count = unit_count,
+          .values_with_incomplete_storage_segments = {1, incomplete},
+          .values_with_independent_storage_extensions = {1, independent},
+      };
+      unit_liveness.storage_segments.entries = segments;
+      unit_liveness.storage_segments.demands = demands;
+      unit_liveness.storage_segments.demand_count = IREE_ARRAYSIZE(demands);
+      unit_liveness.storage_segments.demand_capacity = IREE_ARRAYSIZE(demands);
+      loom_low_placement_table_t placement = {
+          .value_count = IREE_ARRAYSIZE(value_ids),
+      };
+      RetainAndPropagateStorage(&unit_liveness, &liveness, &placement);
+
+      const loom_liveness_segment_range_t range =
+          loom_low_allocation_unit_liveness_storage_segment_range_for_value_ordinal(
+              &unit_liveness, &liveness, 0);
+      ASSERT_EQ(range.count, independent_extension ? 1u : 2u);
+      const loom_liveness_segment_t* reservations =
+          &unit_liveness.storage_segments.entries[range.start];
+      EXPECT_EQ(reservations[0].start_point, 2u);
+      EXPECT_EQ(reservations[0].end_point, independent_extension ? 18u : 5u);
+      if (!independent_extension) {
+        EXPECT_EQ(reservations[1].start_point, 9u);
+        EXPECT_EQ(reservations[1].end_point, 14u);
+      }
+      EXPECT_EQ(unit_liveness.storage_segments.entries[0].start_point, 12u);
+      EXPECT_EQ(unit_liveness.storage_segments.entries[0].end_point, 14u);
+      for (uint32_t i = 0; i < unit_count; ++i) {
+        EXPECT_EQ(starts[i], i < unit_count / 2 ? 12u : 2u);
+      }
+      EXPECT_EQ(liveness.segments, segments);
+      EXPECT_EQ(liveness.value_segment_ranges, ranges);
+    }
+  }
+}
+
 }  // namespace
 }  // namespace loom

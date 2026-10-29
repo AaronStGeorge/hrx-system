@@ -39,12 +39,37 @@ lives beside the subsystem whose behavior it covers, with input and expected
 output visible together. IR formatters and migration tools can then operate on
 the program directly, and all such tests share the `loom-check` executable.
 
+The complete input boundary determines the test's home. An IR test supplies a
+program and ordinary compilation contracts, such as its target profile, and
+observes the resulting IR, diagnostics, analysis, or emitted code. A native
+unit test supplies compact, valid data directly to the API that owns the
+behavior. Stack-layout arithmetic and register encoding are native contracts;
+ABI lowering and instruction selection from authored operations are IR
+contracts. Exact output is useful in both kinds of test.
+
+Combining an IR program with injected register assignments, rewritten internal
+tables, or a resource inventory invented by the runner crosses those boundaries.
+Such a fixture depends on both program semantics and private compiler state.
+Moving that state into pass options or synthetic IR attributes preserves the
+same coupling. Existing checker controls of this kind are not templates for
+new coverage.
+
+Analysis inspection observes results produced under the normal compiler
+ownership and lifetime rules. Calling production analysis functions from a
+custom setup sequence does not by itself preserve that ownership: the setup
+may substitute its own facts, resource bindings, or phase order. A test-only
+provider still needs the same boundary discipline. Missing observable behavior
+calls for examining the production contract, rather than adding another
+checker-owned planner or a shipping API used only by tests.
+
 A C++ test acquiring `format/text:parser` just to set up an allocator or pass
 has crossed that boundary. Embedding source strings, generating whole programs
 in C++, or loading external IR into that unit executable all create the same
 compiler-stack dependency. Parser API unit tests are different: parsing itself
-is the behavior under test. Small valid analysis-data fixtures remain useful
-for API boundary cases, paired with `.loom-test` coverage of the real producer.
+is the behavior under test. Small builders are useful when the API genuinely
+owns IR; constructing an entire program merely to manufacture algorithm state
+is not a native data fixture. Each assertion belongs at its actual owner,
+without requiring duplicate program and native tests for the same behavior.
 
 Each fixture is listed in its owning `test/BUILD.bazel` using
 `loom_check_test_suite`. The default runner, `loom-check-test`, includes the
@@ -70,19 +95,22 @@ class's exact peak live units and values. These compact outputs use ordinary
 exact goldens.
 
 Schedule queries build the production function model and scheduler directly.
-Tests of unavoidable register debt or explicit residency cliffs use
-`emit low-schedule-json ... diagnostics=candidates output=none` with inline
-decision annotations. `emit low-allocation ... diagnostics=placement-decisions`
+`emit low-schedule-json ... diagnostics=candidates output=none` compares
+candidate-decision diagnostics through inline annotations. Native residency and
+candidate-policy tests supply resource curves and scores directly to their
+owning C APIs. Authored IR tests use target-derived register capacities and
+observe the program's dependencies, liveness, and scheduling results.
+`emit low-allocation ... diagnostics=placement-decisions`
 similarly checks storage affinities directly instead of pinning incidental
 value IDs, interval endpoints, and physical register choices in JSON.
 
 `emit low-allocation-query @function` selects exact assignments with
 `values=%source,%result`, reports spill counts with `spill-count`, and lists
-physical edge transfers with `edge-moves`. Optional `fixed=%source:target_id:0:2`
-bindings constrain locations through the production allocation interface.
-`reverse-blocks` reverses the nonentry block table after parsing, preserving the
-CFG and SSA dominance while exercising allocation when physical block order
-differs from dominance order. Authored text still defines values before uses.
+physical edge transfers with `edge-moves`.
+`lifetimes=%source,%result` reports each allocation unit's half-open storage
+lifetime in the completed allocation's instruction-boundary program points.
+These can differ from whole-value SSA lifetimes: a decomposed branch can read
+an aggregate's constituent storage without keeping the aggregate itself live.
 `spill-free` runs the complete production repair loop before querying the final
 allocation. With `spill-count`, it also reports inserted store/reload traffic,
 so a zero final spill count cannot hide materialized spills. `materialize-spills`

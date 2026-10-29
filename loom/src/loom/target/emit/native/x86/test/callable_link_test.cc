@@ -95,6 +95,8 @@ extern "C" void write_exact_avx2_lanes(uint8_t* byte_output,
                                        int64_t* qword_output);
 extern "C" void add_constant_i32x4(const int32_t* input, int32_t* output);
 extern "C" void reverse_i8x32_lanes(const uint8_t* input, uint8_t* output);
+extern "C" void rotate_i32x8_rows(const uint32_t* input, uint32_t* output,
+                                  uint32_t iterations);
 extern "C" void spill_i8x32(const uint8_t* input, uint8_t* output);
 extern "C" void write_mixed_results(const int32_t* input,
                                     int32_t* vector_output,
@@ -116,6 +118,13 @@ extern "C" void call_vector_mix(uint64_t* output, I32x8 v0, uint64_t g0,
                                 I32x8 v3, uint64_t g3, I32x8 v4, uint64_t g4,
                                 I32x8 v5, uint64_t g5, I32x8 v6, uint64_t g6,
                                 I32x8 v7, I32x8 v8);
+extern "C" void stored_mixed_stack(uint64_t* output, uint64_t unused0,
+                                   uint64_t unused1, uint64_t unused2,
+                                   uint64_t unused3, uint64_t unused4,
+                                   uint64_t scalar, I32x8 vector0,
+                                   I32x8 vector1, I32x8 vector2, I32x8 vector3,
+                                   I32x8 vector4, I32x8 vector5, I32x8 vector6,
+                                   I32x8 vector7, I32x8 vector8);
 extern "C" void native_vector_mix(uint64_t* output, I32x8 v0, uint64_t g0,
                                   I32x8 v1, uint64_t g1, I32x8 v2, uint64_t g2,
                                   I32x8 v3, uint64_t g3, I32x8 v4, uint64_t g4,
@@ -531,6 +540,29 @@ TEST(NativeCallableTest, Avx2VectorFunctionUsesOrdinaryCLinkage) {
                                     INT64_C(0x0123456789abcdef), -2}));
 }
 
+TEST(NativeCallableTest, Avx2FullBankRotationPreservesEveryLane) {
+  constexpr size_t kRowCount = 16;
+  constexpr size_t kLaneCount = 8;
+  std::array<uint32_t, kRowCount * kLaneCount> input;
+  for (size_t i = 0; i < input.size(); ++i) {
+    input[i] = UINT32_C(0x13579bdf) ^
+               (static_cast<uint32_t>(i) * UINT32_C(0x01020305));
+  }
+  for (uint32_t iterations : {0u, 1u, 2u, 15u, 16u, 17u}) {
+    SCOPED_TRACE(iterations);
+    std::array<uint32_t, kRowCount * kLaneCount> output = {};
+    rotate_i32x8_rows(input.data(), output.data(), iterations);
+    for (size_t row = 0; row < kRowCount; ++row) {
+      const size_t source_row = (row + iterations) % kRowCount;
+      for (size_t lane = 0; lane < kLaneCount; ++lane) {
+        ASSERT_EQ(output[row * kLaneCount + lane],
+                  input[source_row * kLaneCount + lane])
+            << "row " << row << ", lane " << lane;
+      }
+    }
+  }
+}
+
 template <typename Bits, typename Copy>
 void CheckScalarMemory(const std::array<Bits, 8>& patterns, Copy copy) {
   constexpr Bits kGuard = static_cast<Bits>(0xDEADBEEFCAFE1234ull);
@@ -881,6 +913,25 @@ TEST(NativeCallableTest, IndependentIntegerAndSseArgumentBanks) {
   for (uint64_t scalar : scalars) {
     EXPECT_EQ(output[output_index++], scalar);
   }
+}
+
+TEST(NativeCallableTest, StoredStackArgumentsRetainCallerBaseAcrossClasses) {
+  // Keep a wrongly selected scalar-as-address load inside valid memory so a
+  // base-register regression reports different payloads instead of crashing.
+  std::array<uint32_t, 24> other_payload;
+  other_payload.fill(0xdeadbeef);
+  const uint64_t scalar = reinterpret_cast<uintptr_t>(other_payload.data());
+  const I32x8 unused = {};
+  const I32x8 vector = {11, -23, 37, -41, 53, -67, 79, -83};
+  std::array<uint64_t, 5> output = {};
+  stored_mixed_stack(output.data(), 1, 2, 3, 4, 5, scalar, unused, unused,
+                     unused, unused, unused, unused, unused, unused, vector);
+  I32x8 actual;
+  std::memcpy(&actual, output.data(), sizeof(actual));
+  for (size_t lane = 0; lane < 8; ++lane) {
+    EXPECT_EQ(actual[lane], vector[lane]);
+  }
+  EXPECT_EQ(output[4], scalar);
 }
 
 TEST(NativeCallableTest, ScalarSseStackArgumentsAndReturns) {

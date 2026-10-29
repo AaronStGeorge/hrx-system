@@ -43,11 +43,10 @@
 //                           Applies to every mode except verify.
 //   // RUN: format <target> Parse -> convert format -> print -> compare.
 //   // RUN: emit <target>   Parse -> emit analysis or target-structured
-//                           output -> compare. Core targets include
-//                           target-low-registry-manifest and source-low.
+//                           output -> compare. Source lowering uses source-low.
 //                           Analysis targets include liveness-json @function,
 //                           low-schedule-json @function [strategy=...]
-//                           [diagnostics=...] [cliff=<reg-class>:...],
+//                           [diagnostics=...],
 //                           low-allocation @function
 //                           [diagnostics=...] [class=units...]
 //                           [fixed=%value:<kind>:<base>:<count>],

@@ -1052,8 +1052,8 @@ static bool loom_cfg_simplify_can_redirect_successor(
     return loom_cfg_br_dest(terminator) == old_dest &&
            args.count == old_dest->arg_count &&
            args.count == new_dest->arg_count &&
-           loom_cfg_block_arguments_can_replace(state->module, state->dominance,
-                                                new_dest, args, terminator);
+           loom_cfg_block_arguments_can_bind(state->module, state->dominance,
+                                             new_dest, args, terminator);
   }
   if (loom_cfg_cond_br_isa(terminator)) {
     return old_dest->arg_count == 0 && new_dest->arg_count == 0 &&
@@ -1234,9 +1234,12 @@ static iree_status_t loom_cfg_simplify_merge_equivalent_blocks(
 // Block argument removal
 //===----------------------------------------------------------------------===//
 
-static bool loom_cfg_simplify_type_allows_replacement(
+static bool loom_cfg_simplify_can_forward_argument(
     const loom_module_t* module, loom_value_id_t old_value,
     loom_value_id_t replacement) {
+  if (!loom_cfg_block_argument_can_forward(module, old_value, replacement)) {
+    return false;
+  }
   loom_type_t old_type = loom_module_value_type(module, old_value);
   loom_type_t replacement_type = loom_module_value_type(module, replacement);
   loom_type_value_remap_t remap = {
@@ -1298,7 +1301,7 @@ static bool loom_cfg_simplify_find_identity_arg_replacement(
   const loom_value_id_t old_arg = loom_block_arg_id(block, arg_index);
   const loom_value_id_t replacement =
       loom_cfg_value_identity_table_lookup(&state->value_identities, old_arg);
-  if (replacement == old_arg || !loom_cfg_simplify_type_allows_replacement(
+  if (replacement == old_arg || !loom_cfg_simplify_can_forward_argument(
                                     state->module, old_arg, replacement)) {
     return false;
   }
@@ -1346,8 +1349,8 @@ static bool loom_cfg_simplify_find_type_dependency_arg_replacement(
             pred_branches, predecessor_count, arg_index, candidate_index)) {
       continue;
     }
-    if (!loom_cfg_simplify_type_allows_replacement(state->module, old_arg,
-                                                   candidate)) {
+    if (!loom_cfg_simplify_can_forward_argument(state->module, old_arg,
+                                                candidate)) {
       continue;
     }
     best_candidate_index = candidate_index;
@@ -1386,8 +1389,8 @@ static bool loom_cfg_simplify_find_forwarded_arg_replacement(
   if (replacement == LOOM_VALUE_ID_INVALID) {
     return false;
   }
-  if (!loom_cfg_simplify_type_allows_replacement(state->module, old_arg,
-                                                 replacement)) {
+  if (!loom_cfg_simplify_can_forward_argument(state->module, old_arg,
+                                              replacement)) {
     return false;
   }
 
@@ -1423,6 +1426,11 @@ static iree_status_t loom_cfg_simplify_materialize_constant_arg(
   *out_replacement = LOOM_VALUE_ID_INVALID;
   const loom_value_id_t argument = loom_block_arg_id(block, arg_index);
   if (!loom_module_value_has_uses(state->module, argument)) {
+    return iree_ok_status();
+  }
+  // Entry-hoisted constants do not recreate ownership at each block entry.
+  if (loom_value_ownership_use_count(
+          loom_module_value(state->module, argument)) != 0) {
     return iree_ok_status();
   }
   const loom_type_t type = loom_module_value_type(state->module, argument);
@@ -1608,7 +1616,7 @@ static iree_status_t loom_cfg_simplify_remove_redundant_block_args_from_block(
     const loom_value_id_t resolved = loom_cfg_simplify_resolve_arg_replacement(
         state, block, argument_scratch, replacement);
     if (resolved == old_arg ||
-        (resolved != replacement && !loom_cfg_simplify_type_allows_replacement(
+        (resolved != replacement && !loom_cfg_simplify_can_forward_argument(
                                         state->module, old_arg, resolved))) {
       continue;
     }
@@ -1639,8 +1647,8 @@ static iree_status_t loom_cfg_simplify_remove_redundant_block_args_from_block(
       continue;
     }
     if (resolved != replacement &&
-        (!loom_cfg_simplify_type_allows_replacement(state->module, old_arg,
-                                                    resolved) ||
+        (!loom_cfg_simplify_can_forward_argument(state->module, old_arg,
+                                                 resolved) ||
          !loom_value_is_available_before_op(
              state->dominance, resolved,
              block->first_op ? block->first_op : block->last_op))) {

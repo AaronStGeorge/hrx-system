@@ -21,6 +21,20 @@ TEST(LowDescriptorRegistryTest, RegistryVerifiesSelectedTargetPackages) {
   EXPECT_NE(registry.registry.descriptor_set_providers, nullptr);
   IREE_EXPECT_OK(loom_target_low_descriptor_registry_verify(
       &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
+
+  ASSERT_EQ(
+      loom_low_descriptor_registry_descriptor_set_count(&registry.registry),
+      1u);
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_descriptor_registry_descriptor_set_at(&registry.registry, 0);
+  ASSERT_NE(descriptor_set, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(
+      loom_low_descriptor_set_string(descriptor_set,
+                                     descriptor_set->key_string_ref),
+      IREE_SV("test.low.core")));
+  EXPECT_EQ(loom_low_descriptor_registry_lookup(&registry.registry,
+                                                IREE_SV("test.low.core")),
+            descriptor_set);
 }
 
 TEST(LowDescriptorRegistryTest, AppendToTablesBuildsBorrowedSubset) {

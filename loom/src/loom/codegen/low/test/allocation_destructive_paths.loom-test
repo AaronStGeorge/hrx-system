@@ -1,4 +1,4 @@
-// RUN: with-checks emit low-allocation-json @loop_body_write_does_not_reach_drain_use fixed=%state:target_id:8:4
+// RUN: emit low-allocation-query @loop_body_write_does_not_reach_drain_use spill-count copy-count values=%state,%copy,%next,%drain_copy,%drain_result copies=%copy,%drain_copy
 
 test.target<low_core> @target
 
@@ -20,14 +20,19 @@ low.func.def schedule(locked) target<test.low.core>(@target) @loop_body_write_do
 }
 
 // ----
-CHECK: *"spill_count":0,*
-CHECK: *"coalesced_copy_count":2,"materialized_copy_count":0,*
-CHECK: *"kind":"coalesced","source_value":{"id":*,"name":"state","type":"reg<test.i32 x4>"},"result_value":{"id":*,"name":"copy","type":"reg<test.i32 x4>"}*
-CHECK: *"kind":"coalesced","source_value":{"id":*,"name":"state","type":"reg<test.i32 x4>"},"result_value":{"id":*,"name":"drain_copy","type":"reg<test.i32 x4>"}*
+spills: 0
+copies: coalesced=2 materialized=0
+value %state: test.i32 -> target_id[0:4]
+value %copy: test.i32 -> target_id[0:4]
+value %next: test.i32 -> target_id[0:4]
+value %drain_copy: test.i32 -> target_id[0:4]
+value %drain_result: test.i32 -> target_id[0:4]
+copy %state -> %copy: coalesced
+copy %state -> %drain_copy: coalesced
 
 // ====
 
-// RUN: with-checks emit low-allocation-json @loop_body_write_precedes_old_content_use
+// RUN: emit low-allocation-query @loop_body_write_precedes_old_content_use spill-count copy-count values=%state,%observed,%copy,%next,%old_contents,%drain_copy copies=%copy,%drain_copy
 
 test.target<low_core> @target
 
@@ -48,14 +53,20 @@ low.func.def schedule(locked) target<test.low.core>(@target) @loop_body_write_pr
 }
 
 // ----
-CHECK: *"spill_count":0,*
-CHECK: *"coalesced_copy_count":1,"materialized_copy_count":1,*
-CHECK: *"kind":"materialized","source_value":{"id":*,"name":"state","type":"reg<test.i32 x4>"},"result_value":{"id":*,"name":"copy","type":"reg<test.i32 x4>"}*
-CHECK: *"kind":"coalesced","source_value":{"id":*,"name":"state","type":"reg<test.i32 x4>"},"result_value":{"id":*,"name":"drain_copy","type":"reg<test.i32 x4>"}*
+spills: 0
+copies: coalesced=1 materialized=1
+value %state: test.i32 -> target_id[0:4]
+value %observed: test.i32 -> target_id[5:4]
+value %copy: test.i32 -> target_id[8:4]
+value %next: test.i32 -> target_id[8:4]
+value %old_contents: test.i32 -> target_id[0:4]
+value %drain_copy: test.i32 -> target_id[0:4]
+copy %state -> %copy: materialized
+copy %state -> %drain_copy: coalesced
 
 // ====
 
-// RUN: with-checks emit low-allocation @copy_result_survives_source_write
+// RUN: emit low-allocation-query @copy_result_survives_source_write spill-count copy-count values=%seed,%saved,%changed,%result copies=%saved
 
 test.target<low_core> @target
 
@@ -70,12 +81,17 @@ low.func.def target<test.low.core>(@target) @copy_result_survives_source_write(%
 }
 
 // ----
-CHECK: spills: 0
-CHECK: copies: coalesced=0 materialized=1
+spills: 0
+copies: coalesced=0 materialized=1
+value %seed: test.i32 -> target_id[0:1]
+value %saved: test.i32 -> target_id[1:1]
+value %changed: test.i32 -> target_id[0:1]
+value %result: test.i32 -> target_id[1:1]
+copy %seed -> %saved: materialized
 
 // ====
 
-// RUN: with-checks emit low-allocation @copy_result_dies_before_source_write
+// RUN: emit low-allocation-query @copy_result_dies_before_source_write spill-count copy-count values=%seed,%saved,%changed copies=%saved
 
 test.target<low_core> @target
 
@@ -89,12 +105,16 @@ low.func.def target<test.low.core>(@target) @copy_result_dies_before_source_writ
 }
 
 // ----
-CHECK: spills: 0
-CHECK: copies: coalesced=1 materialized=0
+spills: 0
+copies: coalesced=1 materialized=0
+value %seed: test.i32 -> target_id[0:1]
+value %saved: test.i32 -> target_id[0:1]
+value %changed: test.i32 -> target_id[0:1]
+copy %seed -> %saved: coalesced
 
 // ====
 
-// RUN: with-checks emit low-allocation @copy_chain_preserves_contents_across_source_write
+// RUN: emit low-allocation-query @copy_chain_preserves_contents_across_source_write spill-count copy-count values=%seed,%saved0,%saved1,%changed,%result copies=%saved0,%saved1
 
 test.target<low_core> @target
 
@@ -110,12 +130,19 @@ low.func.def target<test.low.core>(@target) @copy_chain_preserves_contents_acros
 }
 
 // ----
-CHECK: spills: 0
-CHECK: copies: coalesced=1 materialized=1
+spills: 0
+copies: coalesced=1 materialized=1
+value %seed: test.i32 -> target_id[0:1]
+value %saved0: test.i32 -> target_id[0:1]
+value %saved1: test.i32 -> target_id[1:1]
+value %changed: test.i32 -> target_id[0:1]
+value %result: test.i32 -> target_id[1:1]
+copy %seed -> %saved0: coalesced
+copy %saved0 -> %saved1: materialized
 
 // ====
 
-// RUN: with-checks emit low-allocation @copy_result_chain_survives_source_write
+// RUN: emit low-allocation-query @copy_result_chain_survives_source_write spill-count copy-count values=%seed,%saved,%changed0,%changed1,%result0,%result1 copies=%saved
 
 test.target<low_core> @target
 
@@ -132,5 +159,12 @@ low.func.def target<test.low.core>(@target) @copy_result_chain_survives_source_w
 }
 
 // ----
-CHECK: spills: 0
-CHECK: copies: coalesced=0 materialized=1
+spills: 0
+copies: coalesced=0 materialized=1
+value %seed: test.i32 -> target_id[0:1]
+value %saved: test.i32 -> target_id[1:1]
+value %changed0: test.i32 -> target_id[0:1]
+value %changed1: test.i32 -> target_id[0:1]
+value %result0: test.i32 -> target_id[1:1]
+value %result1: test.i32 -> target_id[1:1]
+copy %seed -> %saved: materialized

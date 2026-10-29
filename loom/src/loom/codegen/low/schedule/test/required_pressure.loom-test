@@ -1,226 +1,65 @@
-// A pinned completion may require setup in its own full bank. Complete the
-// other live value first; the setup cannot spill any required owner.
-// RUN: emit low-schedule-query @required_leaf strategy=resource-stall test.i32=2 required-register-values=%first,%second,%setup order=* scheduled-pressure=test.i32
+// Two of the four physical registers are held across a source-order fence.
+// Their outer completion must not pin the new inner register chains.
+// RUN: emit low-schedule-query @required_completion_after_fence strategy=resource-stall order=* scheduled-pressure=test.explicit32
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @required_leaf(%first_source: reg<test.i64>, %second_source: reg<test.i64>) -> (reg<test.i32>, reg<test.i64>) asm {
-  %first = copy %first_source : reg<test.i64> -> reg<test.i32>
+low.func.def target<test.low.core>(@target) @required_completion_after_fence(%seed: reg<test.i32 x2>) -> (reg<test.explicit32 x2>, reg<test.explicit32>) asm {
+  %held = copy %seed : reg<test.i32 x2> -> reg<test.explicit32 x2>
   low.schedule.fence
-  %second = copy %second_source : reg<test.i64> -> reg<test.i32>
-  low.schedule.fence
-  %setup = test.const.i32 1
-  %result = test.add.i32 %first, %setup
-  %released = copy %second : reg<test.i32> -> reg<test.i64>
-  return %result, %released
+  %first = test.const.explicit32 1
+  %second = test.const.explicit32 2
+  %third = test.const.explicit32 3
+  %left = test.rematerialize.pair.explicit32 %first, %third
+  %inner = test.rematerialize.pair.explicit32 %left, %second
+  return %held, %inner
 }
 
 // ----
-block 0 order: 0, 1, 2, 3, 6, 4, 5, 7
-scheduled pressure test.i32: peak-live-units=2 peak-live-values=2
+block 0 order: 0, 1, 2, 4, 5, 3, 6, 7
+scheduled pressure test.explicit32: peak-live-units=4 peak-live-values=3
 
 // ====
 
-// Cross-bank setup still needs a free unit in its destination. Releasing its
-// source in another bank cannot pay that hard requirement.
-// RUN: emit low-schedule-query @required_cross_bank strategy=resource-stall test.i32=2 required-register-values=%first,%second,%setup order=* scheduled-pressure=test.i32
+// The same later range has identical pressure when the held physical storage
+// enters as a function argument.
+// RUN: emit low-schedule-query @required_completion_from_argument strategy=resource-stall order=* scheduled-pressure=test.explicit32
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @required_cross_bank(%first_source: reg<test.i64>, %second_source: reg<test.i64>, %setup_source: reg<test.i64>) -> (reg<test.i32>, reg<test.i64>) asm {
-  %first = copy %first_source : reg<test.i64> -> reg<test.i32>
+low.func.def target<test.low.core>(@target) @required_completion_from_argument(%held: reg<test.explicit32 x2>) -> (reg<test.explicit32 x2>, reg<test.explicit32>) asm {
   low.schedule.fence
-  %second = copy %second_source : reg<test.i64> -> reg<test.i32>
-  low.schedule.fence
-  %setup = copy %setup_source : reg<test.i64> -> reg<test.i32>
-  %result = test.add.i32 %first, %setup
-  %released = copy %second : reg<test.i32> -> reg<test.i64>
-  return %result, %released
+  %first = test.const.explicit32 1
+  %second = test.const.explicit32 2
+  %third = test.const.explicit32 3
+  %left = test.rematerialize.pair.explicit32 %first, %third
+  %inner = test.rematerialize.pair.explicit32 %left, %second
+  return %held, %inner
 }
 
 // ----
-block 0 order: 0, 1, 2, 3, 6, 4, 5, 7
-scheduled pressure test.i32: peak-live-units=2 peak-live-values=2
+block 0 order: 0, 1, 3, 4, 2, 5, 6
+scheduled pressure test.explicit32: peak-live-units=4 peak-live-values=3
 
 // ====
 
-// Required owners share capacity across alias register classes. The second
-// owner must retire before the first transaction creates its other input.
-// RUN: emit low-schedule-query @required_shared_bank strategy=resource-stall test.pressure.alias32=2 required-register-values=%first,%second,%setup order=*
+// Three physical registers stay live while independent work needs a fourth.
+// Finish the singleton transaction, including both scalar leaves, before
+// materializing that result. Neither leaf alone makes the update ready.
+// RUN: emit low-schedule-query @physical_completion_leaves strategy=resource-stall order=*
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @required_shared_bank(%first_source: reg<test.i32>, %second_source: reg<test.i64>, %setup_source: reg<test.i32>) -> (reg<test.i32 x2>, reg<test.i64>) asm {
-  %first = copy %first_source : reg<test.i32> -> reg<test.pressure.alias32>
-  low.schedule.fence
-  %second = copy %second_source : reg<test.i64> -> reg<test.pressure.alias64>
-  low.schedule.fence
-  %setup = copy %setup_source : reg<test.i32> -> reg<test.pressure.alias32>
-  %pair = concat(%first, %setup) : (reg<test.pressure.alias32>, reg<test.pressure.alias32>) -> reg<test.pressure.alias32 x2>
-  %result = copy %pair : reg<test.pressure.alias32 x2> -> reg<test.i32 x2>
-  %released = copy %second : reg<test.pressure.alias64> -> reg<test.i64>
-  return %result, %released
+low.func.def target<test.low.core>(@target) @physical_completion_leaves(%initial: reg<test.fixed.r0>, %condition: reg<test.i32>, %seed: reg<test.i32>, %held: reg<test.explicit32 x3>) -> (reg<test.i32>, reg<test.explicit32>, reg<test.explicit32 x3>) asm {
+  %fixed = test.fixed.update.i32 %initial, %condition
+  %unrelated = test.rematerialize.explicit32 %seed
+  %left = test.const.i32 1
+  %right = test.const.i32 2
+  %delta = test.add.i32 %left, %right
+  %updated = test.fixed.update.i32 %fixed, %delta
+  %result = copy %updated : reg<test.fixed.r0> -> reg<test.i32>
+  return %result, %unrelated, %held
 }
 
 // ----
-block 0 order: 0, 1, 2, 3, 7, 4, 5, 6, 8
-
-// ====
-
-// An early result overlaps the old required input even when that input dies
-// at this instruction. Free the independent owner before creating the result.
-// RUN: emit low-schedule-query @required_early_write strategy=resource-stall test.i32=8 required-register-values=%held,%source,%result order=* scheduled-pressure=test.i32
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_early_write(%held: reg<test.i32 x4>, %source: reg<test.i32 x4>) -> (reg<test.i32 x4>, reg<test.i64 x4>) asm {
-  %result = test.early_clobber.v4i32 %source
-  %released = copy %held : reg<test.i32 x4> -> reg<test.i64 x4>
-  return %result, %released
-}
-
-// ----
-block 0 order: 1, 0, 2
-scheduled pressure test.i32: peak-live-units=8 peak-live-values=2
-
-// ====
-
-// The subtraction/cmov sequence still reads its original input after writing
-// the result. Release the independent GPR before starting that sequence.
-// RUN: emit low-schedule-query @required_late_read strategy=resource-stall x86.gpr32=2 required-register-values=%held,%source,%result order=* scheduled-pressure=x86.gpr32
-
-x86.target<avx2> @target
-
-low.func.def target<x86.avx2.core>(@target) @required_late_read(%held: reg<x86.gpr32>, %source: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.xmm>) asm {
-  %result = sub.if_uge.imm.gpr32 %source, 17
-  %released = copy %held : reg<x86.gpr32> -> reg<x86.xmm>
-  return %result, %released
-}
-
-// ----
-block 0 order: 1, 0, 2
-scheduled pressure x86.gpr32: peak-live-units=2 peak-live-values=2
-
-// ====
-
-// Required pressure is rebuilt at each block boundary. A value live through
-// both blocks occupies one unit throughout, leaving one temporary slot.
-// RUN: emit low-schedule-query @required_live_through strategy=resource-stall test.i32=2 required-register-values=%held,%first,%second,%third order=* scheduled-pressure=test.i32
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_live_through(%held: reg<test.i32>) -> (reg<test.i32>) asm {
-  low.br ^work
-^work:
-  %first = test.const.i32 1
-  test.event.memory.write.i32 %first
-  %second = test.const.i32 2
-  test.event.memory.write.i32 %second
-  low.br ^exit
-^exit:
-  %third = test.const.i32 3
-  test.event.memory.write.i32 %third
-  return %held
-}
-
-// ----
-block 0 order: 0
-block 1 order: 1, 2, 3, 4, 5
-block 2 order: 6, 7, 8
-scheduled pressure test.i32: peak-live-units=2 peak-live-values=2
-
-// ====
-
-// A producer before a source-order fence is a live input to the later range.
-// Its outer completion must not pin the new inner required-register chains.
-// RUN: emit low-schedule-query @required_completion_after_fence strategy=resource-stall test.i32=3 required-register-values=%held,%first,%second,%third order=* scheduled-pressure=test.i32
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_completion_after_fence() -> (reg<test.i32>) asm {
-  %held = test.const.i32 7
-  low.schedule.fence
-  %first = test.const.i32 1
-  %second = test.const.i32 2
-  %third = test.const.i32 3
-  %left = test.add.i32 %first, %third
-  %inner = test.add.i32 %left, %second
-  %done = test.add.i32 %held, %inner
-  return %done
-}
-
-// ----
-block 0 order: 0, 1, 2, 4, 5, 3, 6, 7, 8
-scheduled pressure test.i32: peak-live-units=3 peak-live-values=3
-
-// ====
-
-// The same later range has identical pressure when the held value enters as
-// a required function argument.
-// RUN: emit low-schedule-query @required_completion_from_argument strategy=resource-stall test.i32=3 required-register-values=%held,%first,%second,%third order=* scheduled-pressure=test.i32
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_completion_from_argument(%held: reg<test.i32>) -> (reg<test.i32>) asm {
-  low.schedule.fence
-  %first = test.const.i32 1
-  %second = test.const.i32 2
-  %third = test.const.i32 3
-  %left = test.add.i32 %first, %third
-  %inner = test.add.i32 %left, %second
-  %done = test.add.i32 %held, %inner
-  return %done
-}
-
-// ----
-block 0 order: 0, 1, 3, 4, 2, 5, 6, 7
-scheduled pressure test.i32: peak-live-units=3 peak-live-values=3
-
-// ====
-
-// The held payload must survive to a later store. Once the second load issues,
-// its arithmetic consumer is latency-stalled while the store can immediately
-// retire another required owner in the same full bank. Fill that latency slot
-// without increasing peak pressure.
-// RUN: emit low-schedule-query @required_memory_completion_after_fence strategy=resource-stall test.i32=12 required-register-values=%payload,%first,%second order=* scheduled-pressure=test.i32
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_memory_completion_after_fence(%address: reg<test.ptr>, %held: reg<test.i32 x4>, %seed: reg<test.i32 x4>) -> (reg<test.i32 x4>) asm {
-  %payload = test.add.v4i32 %seed, %seed
-  low.schedule.fence
-  %first = test.load.v4i32 %address
-  %released = test.add.v4i32 %first, %held
-  %second = test.load.v4i32 %address
-  test.store.v4i32 %address, %payload
-  %result = test.add.v4i32 %second, %released
-  return %result
-}
-
-// ----
-block 0 order: 0, 1, 2, 3, 4, 5, 6, 7
-scheduled pressure test.i32: peak-live-units=12 peak-live-values=3
-
-// ====
-
-// Equal capacities do not identify the same physical register domain. The
-// float store cannot borrow readiness priority from the full integer domain;
-// preserving its independent completion keeps integer pressure at 12 units.
-// RUN: emit low-schedule-query @distinct_completion_domains strategy=resource-stall test.i32=12 test.f32=12 required-register-values=%payload,%first,%second,%f_payload,%f_held0,%f_held1 order=* scheduled-pressure=test.i32
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @distinct_completion_domains(%address: reg<test.ptr>, %held: reg<test.i32 x4>, %seed: reg<test.i32 x4>, %f_payload: reg<test.f32 x4>, %f_held0: reg<test.f32 x4>, %f_held1: reg<test.f32 x4>) -> (reg<test.i32 x4>, reg<test.i32 x4>, reg<test.f32 x4>, reg<test.f32 x4>) asm {
-  %payload = test.add.v4i32 %seed, %seed
-  low.schedule.fence
-  %first = test.load.v4i32 %address
-  %released = test.add.v4i32 %first, %held
-  %second = test.load.v4i32 %address
-  test.store.v4f32 %address, %f_payload
-  %result = test.add.v4i32 %second, %released
-  return %result, %payload, %f_held0, %f_held1
-}
-
-// ----
-block 0 order: 0, 1, 2, 3, 4, 6, 5, 7
-scheduled pressure test.i32: peak-live-units=12 peak-live-values=3
+block 0 order: 0, 2, 3, 4, 5, 6, 1, 7

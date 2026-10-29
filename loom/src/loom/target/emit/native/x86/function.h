@@ -14,6 +14,7 @@
 #include "loom/target/emit/native/object.h"
 #include "loom/target/emit/native/x86/abi.h"
 #include "loom/target/emit/native/x86/encoding.h"
+#include "loom/target/emit/native/x86/transport.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,34 @@ typedef struct loom_x86_instruction_t {
 
 static_assert(sizeof(loom_x86_instruction_t) == 24,
               "prepared x86 instructions must remain compact");
+
+// Concrete stack adjustments after callee-save pushes. Byte emission consumes
+// this layout without recomputing alignment or selecting scratch registers.
+typedef struct loom_x86_stack_frame_t {
+  // Bytes subtracted from RSP after any alignment adjustment.
+  uint32_t allocation_size;
+  // Required alignment of the body RSP, or zero without a stack requirement.
+  uint32_t alignment;
+  // Dynamic restoration for alignments stronger than the SysV entry promise.
+  struct {
+    // Immediate AND mask, or zero when static padding suffices.
+    int32_t mask;
+    // Byte offset of the saved pre-alignment RSP within the allocation.
+    uint32_t saved_pointer_offset;
+    // Caller-clobbered register used before invocation transport.
+    uint8_t scratch_register;
+  } realignment;
+} loom_x86_stack_frame_t;
+
+// Incoming argument addresses retained before the preservation envelope is
+// known. Each row names native instructions, never source operations.
+typedef struct loom_x86_incoming_fixup_t {
+  // Saved pre-alignment pointer load, or UINT32_MAX with static alignment or
+  // a vector input using the shared caller-stack base.
+  uint32_t pointer_instruction;
+  // Argument load with an initial displacement from caller RSP.
+  uint32_t value_instruction;
+} loom_x86_incoming_fixup_t;
 
 // Prepared instructions borrow no IR, schedule, or allocation storage. They
 // remain valid until their arena is reset. The producer consumes each shared
@@ -62,24 +91,61 @@ typedef struct loom_x86_function_t {
   const uint32_t* upper_vector_call_cleanup_indices;
   // Number of entries in |upper_vector_call_cleanup_indices|.
   iree_host_size_t upper_vector_call_cleanup_count;
-  // Fixed stack allocation after callee saves. Byte emission consumes these
-  // concrete adjustments without computing alignment or selecting scratch.
-  struct {
-    // Bytes subtracted from RSP after any alignment adjustment.
-    uint32_t allocation_size;
-    // Required alignment of the body RSP, or zero without local storage.
-    uint32_t alignment;
-    // Dynamic restoration for alignments stronger than the SysV entry promise.
-    struct {
-      // Immediate AND mask, or zero when static padding suffices.
-      int32_t mask;
-      // Byte offset of the saved pre-alignment RSP within the allocation.
-      uint32_t saved_pointer_offset;
-      // Caller-clobbered register used before invocation transport.
-      uint8_t scratch_register;
-    } realignment;
-  } stack;
+  // Fixed stack allocation and restoration after callee saves.
+  loom_x86_stack_frame_t stack;
 } loom_x86_function_t;
+
+// Appends a concrete instruction to caller-reserved storage and accumulates
+// scalar GPR writes for the preservation envelope. Vector descriptor producers
+// retain class-aware effects separately; packed encoding recipes do not carry
+// register classes. The caller provides space for one more instruction.
+void loom_x86_function_append(loom_x86_function_t* function,
+                              uint16_t encoding_format_id, uint16_t encoding_id,
+                              loom_x86_encoding_operands_t operands,
+                              uint32_t reference);
+
+// Appends a selected transfer and retains its GPR/upper-vector-state effects.
+// Coalesced transfers append nothing and have no preservation effect. The
+// caller provides space for at most one more instruction.
+void loom_x86_function_append_transport(
+    loom_x86_function_t* function,
+    const loom_x86_transport_instruction_t* instruction);
+
+// Lays out admitted storage and the SysV preservation envelope. Alignment is a
+// power of two within signed 32-bit addressing, or zero without a requirement;
+// incoming stack arguments supply at least eight-byte alignment even without
+// local storage. The saved-register mask uses architectural GPR numbers.
+// Returns false when ABI padding or the restoration slot makes the final
+// adjustment exceed signed 32 bits. No IR, allocation, or diagnostics are owned
+// here; the preparation caller retains incoming-load fixups and reports
+// failure.
+bool loom_x86_function_layout_stack(uint32_t storage_byte_length,
+                                    uint32_t storage_alignment,
+                                    uint16_t saved_registers,
+                                    loom_x86_stack_frame_t* out_stack);
+
+// Resolves retained incoming addresses after final stack layout. Argument
+// displacements include callee-save pushes and, without dynamic realignment,
+// the local allocation. Pointer loads address the restoration slot instead.
+// |vector_base_reload_instruction| is the shared vector-base load, or
+// UINT32_MAX when absent. Applies each fixup once without scanning
+// instructions.
+void loom_x86_function_fixup_incoming(loom_x86_function_t* function,
+                                      const loom_x86_incoming_fixup_t* fixups,
+                                      iree_host_size_t fixup_count,
+                                      uint32_t vector_base_reload_instruction);
+
+// Borrows R11 as the caller-stack base for vector argument loads after dynamic
+// realignment. Preserves its allocated value at |spill_offset|, or omits the
+// save when the offset is UINT64_MAX. The caller provides space for at most
+// two instructions. Returns the pointer-load index for final address fixup.
+uint32_t loom_x86_function_begin_vector_stack_inputs(
+    loom_x86_function_t* function, uint64_t spill_offset);
+
+// Restores R11 after the vector argument loads using the same |spill_offset|
+// passed to begin. The caller provides space for at most one instruction.
+void loom_x86_function_end_vector_stack_inputs(loom_x86_function_t* function,
+                                               uint64_t spill_offset);
 
 // Returns the allocator reservations needed by the native function envelope.
 // Descriptor fragments without GPR values need no reservation: the envelope

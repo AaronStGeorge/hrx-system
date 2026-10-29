@@ -1102,128 +1102,6 @@ loom_low_allocation_coalescing_assign_concat_source_from_result(
       /*may_relocate_blocker=*/true, out_assigned);
 }
 
-static bool loom_low_allocation_coalescing_concat_source_has_unique_affinity(
-    const loom_low_allocation_coalescing_context_t* context,
-    loom_value_ordinal_t source_ordinal) {
-  return loom_low_placement_relation_range_for_source_value_ordinal(
-             context->placement, source_ordinal)
-             .count == 1;
-}
-
-static iree_status_t
-loom_low_allocation_coalescing_prepare_concat_reservation_sources(
-    loom_low_allocation_coalescing_context_t* context,
-    const loom_liveness_interval_t* result_interval,
-    const loom_low_placement_relation_range_t* range,
-    loom_value_id_t inline_ignored_value_ids[8],
-    iree_host_size_t inline_ignored_value_capacity,
-    loom_low_allocation_concat_reservation_sources_t* out_sources) {
-  *out_sources = (loom_low_allocation_concat_reservation_sources_t){
-      .ignored_value_ids = inline_ignored_value_ids,
-  };
-  const loom_low_descriptor_set_t* descriptor_set =
-      context->search_context->descriptor_set;
-  const uint16_t result_reg_class_id =
-      result_interval->value_class.register_class_id;
-  const loom_low_reg_class_t* result_reg_class =
-      &descriptor_set->reg_classes[result_reg_class_id];
-  const bool result_is_explicit =
-      loom_low_reg_class_uses_explicit_physical_registers(result_reg_class);
-  const loom_low_allocation_location_kind_t result_location_kind =
-      loom_low_allocation_storage_reg_class_location_kind(result_reg_class);
-  for (uint32_t i = 0; i < range->count; ++i) {
-    const loom_low_placement_relation_t* relation =
-        &context->placement->relations[range->start + i];
-    if (relation->cause != LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT ||
-        !loom_low_placement_relation_can_alias(relation)) {
-      continue;
-    }
-    const loom_low_allocation_assignment_t* source_assignment =
-        loom_low_allocation_coalescing_current_assignment_for_value_ordinal(
-            context, relation->source_ordinal);
-    if (source_assignment != NULL &&
-        !loom_low_allocation_coalescing_concat_source_has_unique_affinity(
-            context, relation->source_ordinal)) {
-      // A committed source shared by multiple placement affinities cannot
-      // uniquely anchor this aggregate. Keep it as real interference so the
-      // result may assemble elsewhere and materialize only this source.
-      continue;
-    }
-    if (out_sources->ignored_value_count == UINT16_MAX) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "low.concat placement source count exceeds "
-                              "uint16_t");
-    }
-    ++out_sources->ignored_value_count;
-    if (out_sources->source_constraint.kind ==
-        LOOM_LOW_ALLOCATION_CONCAT_SOURCE_CONSTRAINT_INCOMPATIBLE) {
-      continue;
-    }
-    // Ignoring a source's interference is safe only when the reservation
-    // preserves its committed location, including repeated source operands.
-    if (source_assignment == NULL) {
-      const loom_low_allocation_resolved_fixed_value_t* fixed =
-          loom_low_allocation_target_constraints_fixed_value_for_value_ordinal(
-              context->target_constraints, relation->source_ordinal);
-      source_assignment = fixed != NULL ? &fixed->assignment : NULL;
-    }
-    if (source_assignment == NULL) {
-      continue;
-    }
-    if (result_is_explicit) {
-      out_sources->source_constraint.kind =
-          LOOM_LOW_ALLOCATION_CONCAT_SOURCE_CONSTRAINT_EXPLICIT_CANDIDATE;
-      continue;
-    }
-    uint32_t result_location_base = 0;
-    if (!loom_low_allocation_storage_find_corresponding_subrange_location(
-            descriptor_set, result_reg_class_id, result_location_kind,
-            result_interval->unit_count, relation->result_unit_offset,
-            source_assignment, relation->source_unit_offset,
-            relation->unit_count, &result_location_base) ||
-        (out_sources->source_constraint.kind ==
-             LOOM_LOW_ALLOCATION_CONCAT_SOURCE_CONSTRAINT_LINEAR_LOCATION &&
-         out_sources->source_constraint.linear_result_location_base !=
-             result_location_base)) {
-      out_sources->source_constraint.kind =
-          LOOM_LOW_ALLOCATION_CONCAT_SOURCE_CONSTRAINT_INCOMPATIBLE;
-      continue;
-    }
-    out_sources->source_constraint.kind =
-        LOOM_LOW_ALLOCATION_CONCAT_SOURCE_CONSTRAINT_LINEAR_LOCATION;
-    out_sources->source_constraint.linear_result_location_base =
-        result_location_base;
-  }
-  loom_value_id_t* ignored_value_ids = inline_ignored_value_ids;
-  if (out_sources->ignored_value_count > inline_ignored_value_capacity) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        context->arena, out_sources->ignored_value_count,
-        sizeof(*ignored_value_ids), (void**)&ignored_value_ids));
-    out_sources->ignored_value_ids = ignored_value_ids;
-  }
-
-  uint16_t ignored_value_index = 0;
-  for (uint32_t i = 0; i < range->count; ++i) {
-    const loom_low_placement_relation_t* relation =
-        &context->placement->relations[range->start + i];
-    if (relation->cause != LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT ||
-        !loom_low_placement_relation_can_alias(relation)) {
-      continue;
-    }
-    const loom_low_allocation_assignment_t* source_assignment =
-        loom_low_allocation_coalescing_current_assignment_for_value_ordinal(
-            context, relation->source_ordinal);
-    if (source_assignment != NULL &&
-        !loom_low_allocation_coalescing_concat_source_has_unique_affinity(
-            context, relation->source_ordinal)) {
-      continue;
-    }
-    ignored_value_ids[ignored_value_index++] = loom_low_placement_value_id(
-        context->placement, relation->source_ordinal);
-  }
-  return iree_ok_status();
-}
-
 static bool loom_low_allocation_coalescing_edge_relation_covers_concat_source(
     const loom_low_placement_relation_t* edge_relation,
     const loom_low_placement_relation_t* concat_relation) {
@@ -1446,10 +1324,10 @@ loom_low_allocation_coalescing_assign_concat_source_relation(
   if (is_reservation_trigger) {
     loom_value_id_t inline_ignored_value_ids[8];
     loom_low_allocation_concat_reservation_sources_t reservation_sources;
-    IREE_RETURN_IF_ERROR(
-        loom_low_allocation_coalescing_prepare_concat_reservation_sources(
-            context, result_interval, &result_range, inline_ignored_value_ids,
-            IREE_ARRAYSIZE(inline_ignored_value_ids), &reservation_sources));
+    IREE_RETURN_IF_ERROR(loom_low_allocation_concat_reservation_prepare_sources(
+        context->search_context, result_interval, &result_range,
+        inline_ignored_value_ids, IREE_ARRAYSIZE(inline_ignored_value_ids),
+        context->arena, &reservation_sources));
     loom_low_allocation_assignment_t reservation;
     IREE_RETURN_IF_ERROR(loom_low_allocation_concat_reservation_find(
         context->search_context, interval, relation, result_interval,
@@ -1691,10 +1569,10 @@ loom_low_allocation_coalescing_assign_concat_source_relation(
 
   loom_value_id_t inline_ignored_value_ids[8];
   loom_low_allocation_concat_reservation_sources_t reservation_sources;
-  IREE_RETURN_IF_ERROR(
-      loom_low_allocation_coalescing_prepare_concat_reservation_sources(
-          context, result_interval, &result_range, inline_ignored_value_ids,
-          IREE_ARRAYSIZE(inline_ignored_value_ids), &reservation_sources));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_concat_reservation_prepare_sources(
+      context->search_context, result_interval, &result_range,
+      inline_ignored_value_ids, IREE_ARRAYSIZE(inline_ignored_value_ids),
+      context->arena, &reservation_sources));
   loom_low_placement_relation_t reservation_relation = *relation;
   if (can_redirect_reservation) {
     reservation_relation.result_ordinal = reservation_edge->result_ordinal;

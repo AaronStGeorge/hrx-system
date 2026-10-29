@@ -92,94 +92,40 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_recovers_descri
 }
 
 // ====
-// RUN: emit low-schedule-query @resource_stall_refreshes_ready_sole_consumer strategy=resource-stall test.i32=16 order=*
+// RUN: emit low-schedule-query @resource_stall_refreshes_ready_sole_consumer strategy=resource-stall order=*
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @resource_stall_refreshes_ready_sole_consumer(%shared: reg<test.i32 x4>, %anchor: reg<test.i32 x4>, %lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>) -> (reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>) asm {
-  // Scheduling the dead bridge leaves the final add as the sole consumer of
-  // both inputs. The final add begins outside the bounded source window; its
-  // refreshed pressure key must nominate it before unrelated ready work.
-  %bridge = test.add.v4i32 %shared, %anchor
-  %independent0 = test.add.v4i32 %lhs, %rhs
-  %independent1 = test.add.v4i32 %lhs, %rhs
-  %independent2 = test.add.v4i32 %lhs, %rhs
-  %independent3 = test.add.v4i32 %lhs, %rhs
-  %independent4 = test.add.v4i32 %lhs, %rhs
-  %independent5 = test.add.v4i32 %lhs, %rhs
-  %independent6 = test.add.v4i32 %lhs, %rhs
-  %independent7 = test.add.v4i32 %lhs, %rhs
-  %independent8 = test.add.v4i32 %lhs, %rhs
-  %independent9 = test.add.v4i32 %lhs, %rhs
-  %independent10 = test.add.v4i32 %lhs, %rhs
-  %independent11 = test.add.v4i32 %lhs, %rhs
-  %independent12 = test.add.v4i32 %lhs, %rhs
-  %independent13 = test.add.v4i32 %lhs, %rhs
-  %independent14 = test.add.v4i32 %lhs, %rhs
-  %independent15 = test.add.v4i32 %lhs, %rhs
-  %independent16 = test.add.v4i32 %lhs, %rhs
-  %independent17 = test.add.v4i32 %lhs, %rhs
-  %final = test.add.v4i32 %shared, %anchor
+low.func.def target<test.low.core>(@test_target) @resource_stall_refreshes_ready_sole_consumer(%shared: reg<test.pressure.alias32 x5>, %source: reg<test.i32>) -> (reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.i32 x5>) asm {
+  // The shared input occupies five of the bank's eight physical units. After
+  // the dead bridge, only the final read can retire it. That read starts beyond
+  // the bounded source window; its refreshed pressure key must nominate it
+  // before unrelated ready work grows the bank's live footprint.
+  %bridge = test.move.from.pressure.alias32.x5 %shared
+  %independent0 = test.move.to.pressure.alias32 %source
+  %independent1 = test.move.to.pressure.alias32 %source
+  %independent2 = test.move.to.pressure.alias32 %source
+  %independent3 = test.move.to.pressure.alias32 %source
+  %independent4 = test.move.to.pressure.alias32 %source
+  %independent5 = test.move.to.pressure.alias32 %source
+  %independent6 = test.move.to.pressure.alias32 %source
+  %independent7 = test.move.to.pressure.alias32 %source
+  %independent8 = test.move.to.pressure.alias32 %source
+  %independent9 = test.move.to.pressure.alias32 %source
+  %independent10 = test.move.to.pressure.alias32 %source
+  %independent11 = test.move.to.pressure.alias32 %source
+  %independent12 = test.move.to.pressure.alias32 %source
+  %independent13 = test.move.to.pressure.alias32 %source
+  %independent14 = test.move.to.pressure.alias32 %source
+  %independent15 = test.move.to.pressure.alias32 %source
+  %independent16 = test.move.to.pressure.alias32 %source
+  %independent17 = test.move.to.pressure.alias32 %source
+  %final = test.move.from.pressure.alias32.x5 %shared
   return %independent0, %independent1, %independent2, %independent3, %independent4, %independent5, %independent6, %independent7, %independent8, %independent9, %independent10, %independent11, %independent12, %independent13, %independent14, %independent15, %independent16, %independent17, %final
 }
 
 // ----
 block 0 order: 0, 19, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20
-
-// ====
-// The source frontier exactly fills the bounded nominee window. Graph ranking
-// reaches the extract one critical-path cycle beyond that window, but opening
-// its live range and downstream activation reaches the register budget.
-// Repeated graph nominations can otherwise accumulate each extracted lane
-// before the bounded source paths close their live ranges.
-// RUN: emit low-schedule-query @resource_stall_rejects_risky_graph_nominee strategy=resource-stall test.i32=10 order=0,32,33
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @resource_stall_rejects_risky_graph_nominee(%vector: reg<test.i32 x4>, %part0: reg<test.i32>, %part1: reg<test.i32>, %part2: reg<test.i32>, %part3: reg<test.i32>) asm {
-  %independent0 = test.add.v4i32 %vector, %vector
-  %discarded_independent0 = test.add.v4i32 %independent0, %independent0
-  %independent1 = test.add.v4i32 %vector, %vector
-  %discarded_independent1 = test.add.v4i32 %independent1, %independent1
-  %independent2 = test.add.v4i32 %vector, %vector
-  %discarded_independent2 = test.add.v4i32 %independent2, %independent2
-  %independent3 = test.add.v4i32 %vector, %vector
-  %discarded_independent3 = test.add.v4i32 %independent3, %independent3
-  %independent4 = test.add.v4i32 %vector, %vector
-  %discarded_independent4 = test.add.v4i32 %independent4, %independent4
-  %independent5 = test.add.v4i32 %vector, %vector
-  %discarded_independent5 = test.add.v4i32 %independent5, %independent5
-  %independent6 = test.add.v4i32 %vector, %vector
-  %discarded_independent6 = test.add.v4i32 %independent6, %independent6
-  %independent7 = test.add.v4i32 %vector, %vector
-  %discarded_independent7 = test.add.v4i32 %independent7, %independent7
-  %independent8 = test.add.v4i32 %vector, %vector
-  %discarded_independent8 = test.add.v4i32 %independent8, %independent8
-  %independent9 = test.add.v4i32 %vector, %vector
-  %discarded_independent9 = test.add.v4i32 %independent9, %independent9
-  %independent10 = test.add.v4i32 %vector, %vector
-  %discarded_independent10 = test.add.v4i32 %independent10, %independent10
-  %independent11 = test.add.v4i32 %vector, %vector
-  %discarded_independent11 = test.add.v4i32 %independent11, %independent11
-  %independent12 = test.add.v4i32 %vector, %vector
-  %discarded_independent12 = test.add.v4i32 %independent12, %independent12
-  %independent13 = test.add.v4i32 %vector, %vector
-  %discarded_independent13 = test.add.v4i32 %independent13, %independent13
-  %independent14 = test.add.v4i32 %vector, %vector
-  %discarded_independent14 = test.add.v4i32 %independent14, %independent14
-  %independent15 = test.add.v4i32 %vector, %vector
-  %discarded_independent15 = test.add.v4i32 %independent15, %independent15
-  %packed = concat(%part0, %part1, %part2, %part3) : (reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>) -> reg<test.i32 x4>
-  %lane0 = test.extract_lane.i32 %packed, 0
-  %lane0_step0 = test.add.i32 %lane0, %lane0
-  %lane0_step1 = test.add.i32 %lane0_step0, %lane0_step0
-  %discarded_lane0 = test.add.i32 %lane0_step1, %lane0_step1
-  %discarded_lane1 = test.extract_lane.i32 %packed, 1
-  return
-}
-
-// ----
-block 0 order: 32, 0, 33
 
 // ====
 // RUN: emit low-schedule-query @critical_alias_after_pending_producer strategy=resource-stall order=* issue=19,20
@@ -220,3 +166,61 @@ low.func.def target<test.low.core>(@target) @critical_alias_after_pending_produc
 block 0 order: 0, 1, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9, 21, 10, 11, 12, 13, 14, 15, 16, 17, 18, 22
 node 19 issue-cycle: 1
 node 20 issue-cycle: 2
+
+// ====
+
+// A copy with independent storage cannot expose a descriptor beyond a source
+// boundary. Finish unrelated ready work before preparing the copied operand.
+// RUN: emit low-schedule-query @setup_waits_for_consumer_range strategy=resource-stall order=*
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @setup_waits_for_consumer_range(%rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %copied = copy %rhs {detached = true} : reg<test.i32> -> reg<test.i32>
+  %ordinary = test.const.zero.i32
+  test.barrier
+  %result = test.add.i32 %copied, %rhs
+  return %ordinary, %result
+}
+
+// ----
+block 0 order: 1, 0, 2, 3, 4
+
+// ====
+
+// A later-range consumer stays blocked when an earlier producer leaves it
+// with one remaining dependency. Its copied operand still cannot unlock it.
+// RUN: emit low-schedule-query @incremental_unlock_waits_for_consumer_range strategy=resource-stall order=*
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @incremental_unlock_waits_for_consumer_range(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %copied = copy %lhs {detached = true} : reg<test.i32> -> reg<test.i32>
+  %prepared = test.add.i32 %lhs, %rhs
+  %ordinary = test.mul.i32 %prepared, %rhs
+  test.barrier
+  %result = test.add.i32 %copied, %prepared
+  return %ordinary, %result
+}
+
+// ----
+block 0 order: 1, 2, 0, 3, 4, 5
+
+// ====
+
+// Entering a later range publishes its remaining-producer relationships.
+// The copy can now expose its consumer before independent work.
+// RUN: emit low-schedule-query @setup_unlocks_admitted_consumer strategy=resource-stall order=*
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @setup_unlocks_admitted_consumer(%rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  test.barrier
+  %copied = copy %rhs {detached = true} : reg<test.i32> -> reg<test.i32>
+  %ordinary = test.const.zero.i32
+  %result = test.add.i32 %copied, %rhs
+  return %ordinary, %result
+}
+
+// ----
+block 0 order: 0, 1, 3, 2, 4

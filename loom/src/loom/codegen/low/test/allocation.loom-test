@@ -64,7 +64,7 @@ value %sum: test.i32 -> target_id[0:1]
 
 // ====
 
-// RUN: emit low-allocation-query @ordinary_packet_reuses_dead_input values=%lhs,%rhs,%sum test.i32=8
+// RUN: emit low-allocation-query @ordinary_packet_reuses_dead_input values=%lhs,%rhs,%sum
 
 test.target<low_core> @test_target
 
@@ -80,7 +80,7 @@ value %sum: test.i32 -> target_id[0:4]
 
 // ====
 
-// RUN: emit low-allocation-query @early_clobber_preserves_input values=%source,%result test.i32=8
+// RUN: emit low-allocation-query @early_clobber_preserves_input values=%source,%result
 
 test.target<low_core> @test_target
 
@@ -95,7 +95,7 @@ value %result: test.i32 -> target_id[4:4]
 
 // ====
 
-// RUN: emit low-allocation-query @contiguous_early_clobber_read values=%source,%result spill-count test.i32=8
+// RUN: emit low-allocation-query @contiguous_early_clobber_read values=%source,%result spill-count
 
 test.target<low_core> @test_target
 
@@ -117,12 +117,14 @@ value %result: test.i32 -> target_id[4:4]
 
 // ====
 
-// RUN: emit low-allocation-query @sparse_early_clobber_read values=%source,%rhs,%result spill-count test.i32=8
+// The predicate uses a separate bank, leaving an aligned source whose sparse
+// hole is reusable by %lhs. Its final physical read must still exclude %result.
+// RUN: emit low-allocation-query @sparse_early_clobber_read values=%source,%lhs,%rhs,%result spill-count
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @sparse_early_clobber_read(%condition: reg<test.i32>, %source: reg<test.i32 x4>, %pointer: reg<test.ptr>) -> (reg<test.i32 x4>) asm {
-  low.cond_br %condition, ^other_path, ^read_path : reg<test.i32>
+low.func.def target<test.low.core>(@test_target) @sparse_early_clobber_read(%condition: reg<test.i8>, %source: reg<test.i32 x4>, %pointer: reg<test.ptr>) -> (reg<test.i32 x4>) asm {
+  low.cond_br %condition, ^other_path, ^read_path : reg<test.i8>
 ^other_path:
   %lhs = test.load.v4i32 %pointer
   %rhs = test.load.v4i32 %pointer
@@ -135,13 +137,14 @@ low.func.def target<test.low.core>(@test_target) @sparse_early_clobber_read(%con
 
 // ----
 spills: 0
-value %source: test.i32 -> target_id[4:4]
+value %source: test.i32 -> target_id[0:4]
+value %lhs: test.i32 -> target_id[0:4]
 value %rhs: test.i32 -> target_id[4:4]
-value %result: test.i32 -> target_id[0:4]
+value %result: test.i32 -> target_id[4:4]
 
 // ====
 
-// RUN: emit low-allocation-query @sparse_late_read values=%source,%other copies=%other test.phys=1
+// RUN: emit low-allocation-query @sparse_late_read values=%source,%other copies=%other
 
 test.target<low_core> @test_target
 
@@ -163,7 +166,7 @@ copy %seed -> %other: materialized
 
 // ====
 
-// RUN: emit low-allocation-query @early_tied_reuses_input values=%source,%result test.i32=4
+// RUN: emit low-allocation-query @early_tied_reuses_input values=%source,%result
 
 test.target<low_core> @test_target
 
@@ -178,7 +181,7 @@ value %result: test.i32 -> target_id[0:4]
 
 // ====
 
-// RUN: emit low-allocation-query @fact_identity_reuses_input values=%source,%assumed test.i32=4
+// RUN: emit low-allocation-query @fact_identity_reuses_input values=%source,%assumed
 
 test.target<low_core> @test_target
 
@@ -339,7 +342,7 @@ value %late_read: test.i32 -> target_id[0:1]
 
 // ====
 
-// RUN: emit low-allocation-query @loop_body_chain_reuses_exit_live_state values=%state,%scaled,%next test.i32=4
+// RUN: emit low-allocation-query @loop_body_chain_reuses_exit_live_state values=%state,%scaled,%next
 
 test.target<low_core> @test_target
 
@@ -389,122 +392,6 @@ value %next1: test.i32 -> target_id[6:1]
 
 // ====
 
-// RUN: emit low-allocation-query @edge_copy_tail_enters_cycle edge-moves values=%source_b,%source_c,%dst_a,%dst_b,%dst_c fixed=%source_b:physical_register:1:1 fixed=%source_c:physical_register:2:1 fixed=%dst_a:physical_register:0:1 fixed=%dst_b:physical_register:1:1 fixed=%dst_c:physical_register:2:1
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @edge_copy_tail_enters_cycle(%source_b: reg<test.phys>, %source_c: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>, reg<test.phys>) asm {
-  low.br ^join(%source_b: reg<test.phys>, %source_c: reg<test.phys>, %source_b: reg<test.phys>)
-^join(%dst_a: reg<test.phys>, %dst_b: reg<test.phys>, %dst_c: reg<test.phys>):
-  return %dst_a, %dst_b, %dst_c
-}
-
-// ----
-edge moves: 4
-move test.phys:physical_register[0] <- test.phys:physical_register[1]
-move test.phys:physical_register[3] <- test.phys:physical_register[2]
-move test.phys:physical_register[2] <- test.phys:physical_register[1]
-move test.phys:physical_register[1] <- test.phys:physical_register[3]
-value %source_b: test.phys -> physical_register[1:1]
-value %source_c: test.phys -> physical_register[2:1]
-value %dst_a: test.phys -> physical_register[0:1]
-value %dst_b: test.phys -> physical_register[1:1]
-value %dst_c: test.phys -> physical_register[2:1]
-
-// ====
-
-// RUN: emit low-allocation-query @edge_cycle_without_scratch failure test.phys=2 fixed=%lhs:physical_register:0:1 fixed=%rhs:physical_register:1:1 fixed=%dst_lhs:physical_register:1:1 fixed=%dst_rhs:physical_register:0:1
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @edge_cycle_without_scratch(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>) asm {
-  // ERROR@+1: BACKEND/005 {function_name="edge_cycle_without_scratch", value_class="test.phys", budget="2", peak="1", failure_code="parallel-move-no-scratch-unit"}
-  low.br ^join(%lhs: reg<test.phys>, %rhs: reg<test.phys>)
-^join(%dst_lhs: reg<test.phys>, %dst_rhs: reg<test.phys>):
-  return %dst_lhs, %dst_rhs
-}
-
-// ----
-failure: parallel-move-no-scratch-unit kind=unknown class=test.phys required=1 budget=2 peak=1
-
-// ====
-
-// RUN: emit low-allocation-json @edge_cycle_uses_other_branch_hole test.phys=3 fixed=%lhs:physical_register:0:1 fixed=%rhs:physical_register:1:1 fixed=%other:physical_register:2:1 fixed=%dst_lhs:physical_register:1:1 fixed=%dst_rhs:physical_register:0:1
-
-// Register 2 is live toward exit, but available for cycle scratch on swap.
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @edge_cycle_uses_other_branch_hole(%condition: reg<test.i32>, %lhs: reg<test.phys>, %rhs: reg<test.phys>, %other: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>) asm {
-  low.cond_br %condition, ^swap, ^exit : reg<test.i32>
-^swap:
-  low.br ^join(%lhs: reg<test.phys>, %rhs: reg<test.phys>)
-^join(%dst_lhs: reg<test.phys>, %dst_rhs: reg<test.phys>):
-  return %dst_lhs, %dst_rhs
-^exit:
-  return %other, %other
-}
-
-// ----
-{"format":"loom.low.allocation.v0","function":"edge_cycle_uses_other_branch_hole","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":6,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"condition","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":1,"value":{"id":1,"name":"lhs","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.phys"},"start_point":0,"end_point":3,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}},{"index":2,"value":{"id":2,"name":"rhs","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.phys"},"start_point":0,"end_point":3,"unit_count":1,"location":{"kind":"physical_register","base":1,"count":1}},{"index":3,"value":{"id":3,"name":"other","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.phys"},"start_point":0,"end_point":7,"unit_count":1,"location":{"kind":"physical_register","base":2,"count":1}},{"index":4,"value":{"id":6,"name":"dst_lhs","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.phys"},"start_point":4,"end_point":5,"unit_count":1,"location":{"kind":"physical_register","base":1,"count":1}},{"index":5,"value":{"id":7,"name":"dst_rhs","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.phys"},"start_point":4,"end_point":5,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
-
-// ====
-
-// RUN: emit low-allocation-json @target_id_cycle_uses_other_branch_hole test.f32=3 fixed=%lhs:target_id:0:1 fixed=%rhs:target_id:1:1 fixed=%other:target_id:2:1 fixed=%dst_lhs:target_id:1:1 fixed=%dst_rhs:target_id:0:1
-
-// Target IDs share the same sparse-lifetime contract as physical registers.
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @target_id_cycle_uses_other_branch_hole(%condition: reg<test.i32>, %lhs: reg<test.f32>, %rhs: reg<test.f32>, %other: reg<test.f32>) -> (reg<test.f32>, reg<test.f32>) asm {
-  low.cond_br %condition, ^swap, ^exit : reg<test.i32>
-^swap:
-  low.br ^join(%lhs: reg<test.f32>, %rhs: reg<test.f32>)
-^join(%dst_lhs: reg<test.f32>, %dst_rhs: reg<test.f32>):
-  return %dst_lhs, %dst_rhs
-^exit:
-  return %other, %other
-}
-
-// ----
-{"format":"loom.low.allocation.v0","function":"target_id_cycle_uses_other_branch_hole","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":6,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"condition","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":1,"value":{"id":1,"name":"lhs","type":"reg<test.f32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.f32"},"start_point":0,"end_point":3,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":2,"value":{"id":2,"name":"rhs","type":"reg<test.f32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.f32"},"start_point":0,"end_point":3,"unit_count":1,"location":{"kind":"target_id","base":1,"count":1}},{"index":3,"value":{"id":3,"name":"other","type":"reg<test.f32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.f32"},"start_point":0,"end_point":7,"unit_count":1,"location":{"kind":"target_id","base":2,"count":1}},{"index":4,"value":{"id":6,"name":"dst_lhs","type":"reg<test.f32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.f32"},"start_point":4,"end_point":5,"unit_count":1,"location":{"kind":"target_id","base":1,"count":1}},{"index":5,"value":{"id":7,"name":"dst_rhs","type":"reg<test.f32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.f32"},"start_point":4,"end_point":5,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
-
-// ====
-
-// RUN: emit low-allocation-json @explicit_cycle_uses_other_branch_hole test.explicit32=3 fixed=%lhs:physical_register:0:1 fixed=%rhs:physical_register:1:1 fixed=%other:physical_register:2:1 fixed=%dst_lhs:physical_register:1:1 fixed=%dst_rhs:physical_register:0:1
-
-// Explicit physical IDs map to atomic storage through the descriptor table.
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @explicit_cycle_uses_other_branch_hole(%condition: reg<test.i32>, %lhs: reg<test.explicit32>, %rhs: reg<test.explicit32>, %other: reg<test.explicit32>) -> (reg<test.explicit32>, reg<test.explicit32>) asm {
-  low.cond_br %condition, ^swap, ^exit : reg<test.i32>
-^swap:
-  low.br ^join(%lhs: reg<test.explicit32>, %rhs: reg<test.explicit32>)
-^join(%dst_lhs: reg<test.explicit32>, %dst_rhs: reg<test.explicit32>):
-  return %dst_lhs, %dst_rhs
-^exit:
-  return %other, %other
-}
-
-// ----
-{"format":"loom.low.allocation.v0","function":"explicit_cycle_uses_other_branch_hole","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":6,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"condition","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":1,"value":{"id":1,"name":"lhs","type":"reg<test.explicit32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.explicit32"},"start_point":0,"end_point":3,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}},{"index":2,"value":{"id":2,"name":"rhs","type":"reg<test.explicit32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.explicit32"},"start_point":0,"end_point":3,"unit_count":1,"location":{"kind":"physical_register","base":1,"count":1}},{"index":3,"value":{"id":3,"name":"other","type":"reg<test.explicit32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.explicit32"},"start_point":0,"end_point":7,"unit_count":1,"location":{"kind":"physical_register","base":2,"count":1}},{"index":4,"value":{"id":6,"name":"dst_lhs","type":"reg<test.explicit32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.explicit32"},"start_point":4,"end_point":5,"unit_count":1,"location":{"kind":"physical_register","base":1,"count":1}},{"index":5,"value":{"id":7,"name":"dst_rhs","type":"reg<test.explicit32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.explicit32"},"start_point":4,"end_point":5,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
-
-// ====
-
-// RUN: emit low-allocation-query @structural_physical_span_rebased_at_capacity values=%wide,%tail,%packed fixed=%wide:physical_register:20:12 fixed=%tail:physical_register:0:1
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @structural_physical_span_rebased_at_capacity(%wide: reg<test.phys x12>, %tail: reg<test.phys>) -> (reg<test.phys x13>) asm {
-  %packed = concat(%wide, %tail) : (reg<test.phys x12>, reg<test.phys>) -> reg<test.phys x13>
-  return %packed
-}
-
-// ----
-value %wide: test.phys -> physical_register[20:12]
-value %tail: test.phys -> physical_register[0:1]
-value %packed: test.phys -> physical_register[0:13]
-
-// ====
-
 // RUN: emit low-allocation-query @explicit_physical_aggregate_views values=%wide,%low,%high,%packed
 
 test.target<low_core> @test_target
@@ -521,21 +408,6 @@ value %wide: test.explicit32 -> physical_register[4:2]
 value %low: test.explicit32 -> physical_register[0:1]
 value %high: test.explicit32 -> physical_register[2:1]
 value %packed: test.explicit32 -> physical_register[4:2]
-
-// ====
-
-// RUN: emit low-allocation-query @same_register_ordinal_selects_matching_tuple values=%primary,%partner fixed=%primary:physical_register:1:1
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @same_register_ordinal_selects_matching_tuple() -> (reg<test.packed.narrow>, reg<test.coindexed.partner>) asm {
-  %primary, %partner = test.coindexed.results
-  return %primary, %partner
-}
-
-// ----
-value %primary: test.packed.narrow -> physical_register[1:1]
-value %partner: test.coindexed.partner -> physical_register[3:1]
 
 // ====
 
@@ -588,12 +460,15 @@ failure: unspillable-register-exhausted kind=location-constraint value=%lhs clas
 
 // ====
 
-// RUN: emit low-allocation-query @wide_concat_source_pressure_cliff values=%high_blocker,%early,%late,%packed fixed=%high_blocker:target_id:28:1
+// RUN: emit low-allocation-query @wide_concat_reuses_early_source values=%high_blocker,%early,%late,%packed
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @wide_concat_source_pressure_cliff(%lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>, %block0: reg<test.i32 x4>, %block1: reg<test.i32 x4>, %block2: reg<test.i32 x4>, %block3: reg<test.i32 x4>, %high_blocker: reg<test.i32>) -> (reg<test.i32 x8>) asm {
+// The sources are separated by independent work. The complete tuple keeps
+// the early source in place and transfers only the late source.
+low.func.def target<test.low.core>(@test_target) @wide_concat_reuses_early_source(%lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>, %block0: reg<test.i32 x4>, %block1: reg<test.i32 x4>, %block2: reg<test.i32 x4>, %block3: reg<test.i32 x4>) -> (reg<test.i32 x8>) asm {
   %early = test.add.v4i32 %lhs, %rhs
+  %high_blocker = test.const.i32 7
   %hold0 = test.add.v4i32 %lhs, %block0
   %hold1 = test.add.v4i32 %rhs, %block1
   %hold2 = test.add.v4i32 %block2, %block3
@@ -613,20 +488,26 @@ value %packed: test.i32 -> target_id[24:8]
 
 // ====
 
-// RUN: emit low-allocation-query @compact_wide_concat_reserves_fragmented_span values=%middle_blocker,%first,%second,%packed fixed=%middle_blocker:target_id:12:4
+// RUN: emit low-allocation-query @compact_wide_concat_reserves_fragmented_span values=%temporary,%middle_blocker,%first,%second,%packed
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @compact_wide_concat_reserves_fragmented_span(%lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>, %middle_blocker: reg<test.i32 x4>) -> (reg<test.i32 x8>, reg<test.i32 x4>, reg<test.i32>) asm {
+// Consuming the temporary opens a four-unit hole while the two inputs and
+// persistent blocker still prevent an eight-unit assembly there.
+low.func.def target<test.low.core>(@test_target) @compact_wide_concat_reserves_fragmented_span(%lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>) -> (reg<test.phys x4>, reg<test.i32 x8>, reg<test.i32 x4>, reg<test.i32>) asm {
+  %temporary = test.add.v4i32 %lhs, %rhs
+  %middle_blocker = test.add.v4i32 %lhs, %rhs
+  %saved = copy %temporary : reg<test.i32 x4> -> reg<test.phys x4>
   %first = test.add.v4i32 %lhs, %rhs
   %second = test.add.v4i32 %lhs, %rhs
   %packed = concat(%first, %second) : (reg<test.i32 x4>, reg<test.i32 x4>) -> reg<test.i32 x8>
   %packed0 = slice %packed[0] : reg<test.i32 x8> -> reg<test.i32>
   %consume = test.add.i32 %packed0, %packed0
-  return %packed, %middle_blocker, %consume
+  return %saved, %packed, %middle_blocker, %consume
 }
 
 // ----
+value %temporary: test.i32 -> target_id[8:4]
 value %middle_blocker: test.i32 -> target_id[12:4]
 value %first: test.i32 -> target_id[16:4]
 value %second: test.i32 -> target_id[20:4]
@@ -696,57 +577,12 @@ value %blocker: test.i32 -> target_id[16:4]
 
 // ====
 
-// RUN: emit low-allocation-query @slice_uses_source_subrange values=%wide,%middle fixed=%wide:target_id:4:4
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @slice_uses_source_subrange(%wide: reg<test.i32 x4>) -> (reg<test.i32>) asm {
-  %middle = slice %wide[2] : reg<test.i32 x4> -> reg<test.i32>
-  return %middle
-}
-
-// ----
-value %wide: test.i32 -> target_id[4:4]
-value %middle: test.i32 -> target_id[6:1]
-
-// ====
-
-// RUN: emit low-allocation-query @fixed_physical_span_exceeds_capacity fixed=%value:physical_register:40:1
-
-test.target<low_core> @test_target
-
-// ERROR@+1: BACKEND/022 {function_name="fixed_physical_span_exceeds_capacity", request_kind="fixed_value", register_class="test.phys", location_base="40", location_count="1", location_end="41", allocation_capacity="32"}
-low.func.def target<test.low.core>(@test_target) @fixed_physical_span_exceeds_capacity(%value: reg<test.phys>) -> (reg<test.phys>) asm {
-  return %value
-}
-// ====
-
 // RUN: emit low-allocation-query @missing_low_allocation_symbol
 
 // ERROR@+1: SYMBOL/002 {symbol_name="missing_low_allocation_symbol"}
 test.target<low_core> @test_target
 
 low.func.def target<test.low.core>(@test_target) @low_allocation_symbol_anchor(%value: reg<test.i32>) -> (reg<test.i32>) asm {
-  return %value
-}
-// ====
-
-// RUN: emit low-allocation-query @unknown_budget_register_class test.missing=1
-
-test.target<low_core> @test_target
-
-// ERROR@+1: BACKEND/023 {function_name="unknown_budget_register_class", register_class="test.missing", descriptor_set_key="test.low.core"}
-low.func.def target<test.low.core>(@test_target) @unknown_budget_register_class(%value: reg<test.i32>) -> (reg<test.i32>) asm {
-  return %value
-}
-// ====
-
-// RUN: emit low-allocation-query @duplicate_budget_register_class test.i32=1 test.i32=2
-
-test.target<low_core> @test_target
-
-// ERROR@+1: BACKEND/024 {function_name="duplicate_budget_register_class", register_class="test.i32", existing_register_class="test.i32"}
-low.func.def target<test.low.core>(@test_target) @duplicate_budget_register_class(%value: reg<test.i32>) -> (reg<test.i32>) asm {
   return %value
 }
 // ====
@@ -761,17 +597,7 @@ low.func.def target<test.low.core>(@test_target) @unknown_fixed_value_selector(%
 }
 // ====
 
-// RUN: emit low-allocation-query @fixed_value_unit_count_mismatch fixed=%value:target_id:0:1
-
-test.target<low_core> @test_target
-
-// ERROR@+1: BACKEND/034 {function_name="fixed_value_unit_count_mismatch", value_name="value", value_id="0", required_unit_count="2", location_count="1"}
-low.func.def target<test.low.core>(@test_target) @fixed_value_unit_count_mismatch(%value: reg<test.i32 x2>) -> (reg<test.i32 x2>) asm {
-  return %value
-}
-// ====
-
-// RUN: emit low-allocation-query @unspillable_interval_exceeds_budget_reports_failure failure test.special=1
+// RUN: emit low-allocation-query @unspillable_interval_exceeds_budget_reports_failure failure
 
 test.target<low_core> @test_target
 
@@ -799,7 +625,7 @@ failure: unspillable-register-exhausted kind=no-assignable-location value=%wide 
 
 // ====
 
-// RUN: emit low-allocation-query @unspillable_active_conflict_reports_failure failure test.special=1
+// RUN: emit low-allocation-query @unspillable_active_conflict_reports_failure failure
 
 test.target<low_core> @test_target
 
@@ -867,14 +693,16 @@ low.func.def target<test.low.core>(@test_target) @placement_affinity_accepted(%s
 
 // ====
 
-// RUN: emit low-allocation-query @placement_affinity_rejected diagnostics=placement-decisions fixed=%state:target_id:0:1 fixed=%copy:target_id:1:1
+// RUN: emit low-allocation-query @placement_affinity_rejected diagnostics=placement-decisions
 
 test.target<low_core> @test_target
 
 low.func.def target<test.low.core>(@test_target) @placement_affinity_rejected(%state: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
   // REMARK@+1: BACKEND/043 {function_name="placement_affinity_rejected", op_name="low.copy", source_value_name="state", result_value_name="copy", value_class="test.i32", placement_cause="low.copy", decision="rejected", reason_key="assigned-locations-differ"}
   %copy = copy %state : reg<test.i32> -> reg<test.i32>
-  return %copy, %state
+  // REMARK@+1: BACKEND/043 {function_name="placement_affinity_rejected", op_name="low.op", source_value_name="state", result_value_name="changed", value_class="test.i32", placement_cause="tied-result", decision="accepted", reason_key="assigned-locations-match"}
+  %changed = test.tied.any %state
+  return %copy, %changed
 }
 
 // ----
@@ -996,50 +824,6 @@ low.func.def target<test.low.core>(@test_target) @structured_for_concat_backedge
 
 // ----
 spills: 0
-
-// ====
-
-// RUN: emit low-allocation-query @tied_source_uses_extended_endpoint values=%source,%tied,%future fixed=%future_source0:target_id:10:1 fixed=%future_source1:target_id:11:1 fixed=%future:target_id:0:2
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @tied_source_uses_extended_endpoint() -> (reg<test.i32>) asm {
-  %future_source0 = test.const.i32 0
-  %future_source1 = test.const.i32 1
-  %source = test.const.i32 2
-  %tied = test.tied.any %source
-  %future = concat(%future_source0, %future_source1) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
-  %use = test.add.i32 %tied, %tied
-  return %use
-}
-
-// ----
-value %source: test.i32 -> target_id[2:1]
-value %tied: test.i32 -> target_id[2:1]
-value %future: test.i32 -> target_id[0:2]
-
-// ====
-
-// RUN: emit low-allocation-query @transitive_tied_source_uses_terminal_endpoint values=%source,%first,%last,%future fixed=%future_source0:target_id:10:1 fixed=%future_source1:target_id:11:1 fixed=%future:target_id:0:2
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @transitive_tied_source_uses_terminal_endpoint() -> (reg<test.i32>) asm {
-  %future_source0 = test.const.i32 0
-  %future_source1 = test.const.i32 1
-  %source = test.const.i32 2
-  %first = test.tied.any %source
-  %last = test.tied.any %first
-  %future = concat(%future_source0, %future_source1) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
-  %use = test.add.i32 %last, %last
-  return %use
-}
-
-// ----
-value %source: test.i32 -> target_id[2:1]
-value %first: test.i32 -> target_id[2:1]
-value %last: test.i32 -> target_id[2:1]
-value %future: test.i32 -> target_id[0:2]
 
 // ====
 
@@ -1168,20 +952,7 @@ copy %state -> %copy: materialized
 
 // ====
 
-// RUN: emit low-allocation-query @physical_budget_clamps_to_allocatable_count test.alias32=64 diagnostics=predicted-spills
-
-test.target<low_core> @test_target
-
-// WARNING@+1: BACKEND/008 {function_name="physical_budget_clamps_to_allocatable_count", value_name="rhs", value_class="test.alias32", spill_cause="register-budget-conflict"}
-low.func.def target<test.low.core>(@test_target) @physical_budget_clamps_to_allocatable_count(%lhs: reg<test.alias32>, %rhs: reg<test.alias32>) -> (reg<test.alias32>, reg<test.alias32>) asm {
-  return %lhs, %rhs
-}
-
-// ----
-
-// ====
-
-// RUN: emit low-allocation-query @physical_alias_classes_share_storage test.alias32=64 diagnostics=predicted-spills
+// RUN: emit low-allocation-query @physical_alias_classes_share_storage diagnostics=predicted-spills
 
 test.target<low_core> @test_target
 
@@ -1194,37 +965,17 @@ low.func.def target<test.low.core>(@test_target) @physical_alias_classes_share_s
 
 // ====
 
-// RUN: emit low-allocation-query @multi_victim_spill test.i32=4 diagnostics=predicted-spills
+// RUN: emit low-allocation-query @provisional_spill_skips_packet_move_planning diagnostics=predicted-spills
 
 test.target<low_core> @test_target
 
-// WARNING@+1: BACKEND/008 {function_name="multi_victim_spill", value_name="extra", value_class="test.i32", spill_cause="register-budget-conflict"}
-low.func.def target<test.low.core>(@test_target) @multi_victim_spill(%row: reg<test.i32>, %carry: reg<test.i32>, %extra: reg<test.i32>) -> (reg<test.i32>) asm {
-  low.br ^late
-^late:
-  %late_state0 = test.const.i32 7
-  %late_state1 = test.const.i32 9
-  %late_state = concat(%late_state0, %late_state1) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
-  low.br ^join(%late_state: reg<test.i32 x2>)
-^join(%state: reg<test.i32 x2>):
-  %state0 = slice %state[0] : reg<test.i32 x2> -> reg<test.i32>
-  %sum = test.add.i32 %row, %state0
-  %sum2 = test.add.i32 %sum, %carry
-  %out = test.add.i32 %sum2, %extra
-  return %out
-}
-
-// ----
-
-// ====
-
-// RUN: emit low-allocation-query @provisional_spill_skips_packet_move_planning test.i32=2 diagnostics=predicted-spills fixed=%lhs:target_id:1:1 fixed=%rhs:target_id:0:1 fixed=%packed:target_id:0:2
-
-test.target<low_core> @test_target
-
-// WARNING@+1: BACKEND/008 {function_name="provisional_spill_skips_packet_move_planning", value_name="wide", value_class="test.i32", spill_cause="register-budget-conflict"}
-low.func.def target<test.low.core>(@test_target) @provisional_spill_skips_packet_move_planning(%lhs: reg<test.i32>, %rhs: reg<test.i32>, %wide: reg<test.i32 x3>) -> (reg<test.i32 x2>, reg<test.i32 x3>) asm {
-  %packed = concat(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+// Reversing two halves fills the physical bank with a parallel move cycle.
+// Spill repair must precede move planning for the provisional assignment.
+// WARNING@+1: BACKEND/008 {function_name="provisional_spill_skips_packet_move_planning", value_name="wide", value_class="test.pressure.alias32", spill_cause="register-budget-conflict"}
+low.func.def target<test.low.core>(@test_target) @provisional_spill_skips_packet_move_planning(%source: reg<test.pressure.alias32 x8>, %wide: reg<test.pressure.alias32 x9>) -> (reg<test.pressure.alias32 x8>, reg<test.pressure.alias32 x9>) asm {
+  %lhs = slice %source[0] : reg<test.pressure.alias32 x8> -> reg<test.pressure.alias32 x4>
+  %rhs = slice %source[4] : reg<test.pressure.alias32 x8> -> reg<test.pressure.alias32 x4>
+  %packed = concat(%rhs, %lhs) : (reg<test.pressure.alias32 x4>, reg<test.pressure.alias32 x4>) -> reg<test.pressure.alias32 x8>
   return %packed, %wide
 }
 
@@ -1232,31 +983,34 @@ low.func.def target<test.low.core>(@test_target) @provisional_spill_skips_packet
 
 // ====
 
-// RUN: emit low-allocation-query @active_and_direct_spill_slot_ranges spill-count values=%wide,%huge spill-plans=%wide,%huge test.i32=4
+// RUN: emit low-allocation-query @wide_spill_slot_ranges spill-count values=%wide,%huge spill-plans=%wide,%huge
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @active_and_direct_spill_slot_ranges(%wide: reg<test.i32 x4>, %scalar0: reg<test.i32>, %scalar1: reg<test.i32>, %huge: reg<test.i32 x5>) -> (reg<test.i32 x4>, reg<test.i32>, reg<test.i32 x5>) asm {
-  %use0 = test.add.i32 %scalar0, %scalar1
+// The short scalar inputs compete with a full-bank tuple, while the oversized
+// tuple cannot fit at all. Their spills need disjoint, full-width slot ranges.
+low.func.def target<test.low.core>(@test_target) @wide_spill_slot_ranges(%wide: reg<test.pressure.alias32 x8>, %scalar0: reg<test.pressure.alias32>, %scalar1: reg<test.pressure.alias32>, %huge: reg<test.pressure.alias32 x9>) -> (reg<test.pressure.alias32 x8>, reg<test.i32>, reg<test.pressure.alias32 x9>) asm {
+  %left = copy %scalar0 : reg<test.pressure.alias32> -> reg<test.i32>
+  %right = copy %scalar1 : reg<test.pressure.alias32> -> reg<test.i32>
+  %use0 = test.add.i32 %left, %right
   return %wide, %use0, %huge
 }
 
 // ----
 spills: 2
-value %wide: test.i32 -> spill_slot[0:4]
-value %huge: test.i32 -> spill_slot[4:5]
-spill %wide: private[0] bytes=16 align=16 stores=1 reloads=1
-spill %huge: private[4] bytes=20 align=16 stores=1 reloads=1
+value %wide: test.pressure.alias32 -> spill_slot[0:8]
+value %huge: test.pressure.alias32 -> spill_slot[8:9]
+spill %wide: stack[0] bytes=32 align=16 stores=1 reloads=1
+spill %huge: stack[8] bytes=36 align=16 stores=1 reloads=1
 
 // ====
 
-// RUN: emit low-allocation-query @loop_backedge_layout_recolors_shared_storage values=%seed0,%seed1,%state0,%state1,%next0,%next1,%gap fixed=%gap:target_id:3:1
+// RUN: emit low-allocation-query @loop_backedge_layout_recolors_shared_storage values=%seed0,%seed1,%state0,%state1,%next0,%next1,%gap
 
 test.target<low_core> @test_target
 
-// %gap occupies the hole between the two queried loop-edge locations. The
-// header-local envelope may retain it, but exact overlap must exclude it from
-// relocation conflicts.
+// Both header values move to their backedge locations by recoloring interfering
+// body values. The live %gap lies between those locations and remains untouched.
 low.func.def target<test.low.core>(@test_target) @loop_backedge_layout_recolors_shared_storage(%condition: reg<test.i32>, %seed0: reg<test.i32>, %seed1: reg<test.i32>, %lhs: reg<test.i32>, %rhs: reg<test.i32>, %gap: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
   low.br ^loop(%seed0: reg<test.i32>, %seed1: reg<test.i32>)
 ^loop(%state0: reg<test.i32>, %state1: reg<test.i32>):
@@ -1283,49 +1037,51 @@ value %state0: test.i32 -> target_id[1:1]
 value %state1: test.i32 -> target_id[6:1]
 value %next0: test.i32 -> target_id[1:1]
 value %next1: test.i32 -> target_id[6:1]
-value %gap: test.i32 -> target_id[3:1]
+value %gap: test.i32 -> target_id[5:1]
 
 // ====
 
-// RUN: emit low-allocation-query @sequential_loop_relocation_rebuilds_queries values=%seed,%first_state,%first_next,%second_state,%second_next fixed=%seed:target_id:0:1 fixed=%first_next:target_id:5:1 fixed=%second_next:target_id:6:1
+// RUN: emit low-allocation-query @sequential_loop_relocation values=%seed,%first_state,%first_next,%second_state,%second_next
 
 test.target<low_core> @test_target
 
-// Relocating the first header changes the assignment that enters the second.
-// The second header must query that current assignment instead of a
-// function-wide snapshot from before the first relocation.
-low.func.def target<test.low.core>(@test_target) @sequential_loop_relocation_rebuilds_queries(%condition: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
-  low.br ^first_loop(%seed: reg<test.i32>)
-^first_loop(%first_state: reg<test.i32>):
+// Both headers start in the seed's register and must relocate to their own
+// backedge slices. The tuple widths place the slices at distinct nonzero
+// locations, so relocating the first header cannot satisfy the second.
+low.func.def target<test.low.core>(@test_target) @sequential_loop_relocation(%condition: reg<test.i32>, %seed: reg<test.pressure.alias32>, %first_input: reg<test.i32 x5>, %second_input: reg<test.i32 x6>) -> (reg<test.pressure.alias32>) asm {
+  low.br ^first_loop(%seed: reg<test.pressure.alias32>)
+^first_loop(%first_state: reg<test.pressure.alias32>):
   low.cond_br %condition, ^first_body, ^first_exit : reg<test.i32>
 ^first_body:
-  %first_next = test.const.i32 1
-  low.br ^first_loop(%first_next: reg<test.i32>)
+  %first_tuple = copy %first_input : reg<test.i32 x5> -> reg<test.pressure.alias32 x5>
+  %first_next = slice %first_tuple[4] : reg<test.pressure.alias32 x5> -> reg<test.pressure.alias32>
+  low.br ^first_loop(%first_next: reg<test.pressure.alias32>)
 ^first_exit:
-  low.br ^second_loop(%first_state: reg<test.i32>)
-^second_loop(%second_state: reg<test.i32>):
+  low.br ^second_loop(%first_state: reg<test.pressure.alias32>)
+^second_loop(%second_state: reg<test.pressure.alias32>):
   low.cond_br %condition, ^second_body, ^exit : reg<test.i32>
 ^second_body:
-  %second_next = test.const.i32 2
-  low.br ^second_loop(%second_next: reg<test.i32>)
+  %second_tuple = copy %second_input : reg<test.i32 x6> -> reg<test.pressure.alias32 x6>
+  %second_next = slice %second_tuple[5] : reg<test.pressure.alias32 x6> -> reg<test.pressure.alias32>
+  low.br ^second_loop(%second_next: reg<test.pressure.alias32>)
 ^exit:
   return %second_state
 }
 
 // ----
-value %seed: test.i32 -> target_id[0:1]
-value %first_state: test.i32 -> target_id[5:1]
-value %first_next: test.i32 -> target_id[5:1]
-value %second_state: test.i32 -> target_id[6:1]
-value %second_next: test.i32 -> target_id[6:1]
+value %seed: test.pressure.alias32 -> physical_register[0:1]
+value %first_state: test.pressure.alias32 -> physical_register[4:1]
+value %first_next: test.pressure.alias32 -> physical_register[4:1]
+value %second_state: test.pressure.alias32 -> physical_register[5:1]
+value %second_next: test.pressure.alias32 -> physical_register[5:1]
 
 // ====
 
-// RUN: emit low-allocation-query @loop_relocation_requires_augmenting_path spill-count values=%state0,%state1,%short,%long fixed=%condition:target_id:2:1 fixed=%lhs:target_id:3:1 fixed=%rhs:target_id:4:1 fixed=%state1_used:target_id:7:1 fixed=%short_used:target_id:8:1 fixed=%blocker:target_id:1:1 fixed=%long_used:target_id:9:1 fixed=%state0_used:target_id:10:1 fixed=%next0:target_id:5:1 fixed=%next1:target_id:6:1 fixed=%sink:target_id:11:1
+// RUN: emit low-allocation-query @loop_relocation_requires_augmenting_path spill-count values=%state0,%state1,%short,%long
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @loop_relocation_requires_augmenting_path(%condition: reg<test.i32>, %seed0: reg<test.i32>, %seed1: reg<test.i32>, %lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+low.func.def target<test.low.core>(@test_target) @loop_relocation_requires_augmenting_path(%condition: reg<test.i32>, %seed0: reg<test.i32>, %seed1: reg<test.i32>, %lhs: reg<test.i32>, %rhs: reg<test.i32>, %backedge_input: reg<test.f32 x7>) -> (reg<test.i32>, reg<test.i32>) asm {
   low.br ^loop(%seed0: reg<test.i32>, %seed1: reg<test.i32>)
 ^loop(%state0: reg<test.i32>, %state1: reg<test.i32>):
   low.cond_br %condition, ^body, ^exit : reg<test.i32>
@@ -1334,20 +1090,21 @@ low.func.def target<test.low.core>(@test_target) @loop_relocation_requires_augme
   %long = test.mul.i32 %lhs, %rhs
   %state1_used = test.add.i32 %state1, %rhs
   %short_used = test.add.i32 %short, %rhs
-  %blocker = test.add.i32 %state1_used, %short_used
-  %long_used = test.add.i32 %long, %blocker
+  %blocker = test.add_mul.i32 %state1, %state1_used, %short
+  %long_used = test.add_mul.i32 %long, %blocker, %short_used
   %state0_used = test.add.i32 %state0, %long_used
-  %next0 = test.mul.i32 %lhs, %rhs
-  %next1 = test.add.i32 %lhs, %rhs
+  %tuple = copy %backedge_input : reg<test.f32 x7> -> reg<test.i32 x7>
+  %next0 = slice %tuple[5] : reg<test.i32 x7> -> reg<test.i32>
+  %next1 = slice %tuple[6] : reg<test.i32 x7> -> reg<test.i32>
   %sink = test.mul.i32 %state0_used, %rhs
   low.br ^loop(%next0: reg<test.i32>, %next1: reg<test.i32>)
 ^exit:
   return %state0, %state1
 }
 
-// The first eviction color can use either vacated header location. The second
-// overlaps %blocker at location 1 and can use only location 0, so retaining
-// both header moves requires an augmenting path that rematches the first color.
+// Both headers can adopt their backedge slots only if %short moves to location
+// 1 and %long moves to 0. The blocker overlaps %long but not %short at location
+// 1, so initially choosing 0 for %short requires rematching that first choice.
 
 // ----
 spills: 0
@@ -1451,18 +1208,19 @@ value %rhs: test.explicit32 -> physical_register[5:2]
 
 // ====
 
-// RUN: emit low-allocation-query @sparse_tied_join values=%seed,%state,%refilled,%joined,%next,%final fixed=%state:target_id:0:1 fixed=%joined:target_id:0:1 fixed=%condition:target_id:1:1
+// RUN: emit low-allocation-query @sparse_tied_join values=%seed,%state,%refilled,%joined,%next,%final
 
 // Mutually exclusive refill and exit results reserve the original state
-// without occupying the joined body. Both state generations use one location.
+// without occupying the joined body. Both state generations use one location;
+// the condition's independent register class leaves that data storage available.
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @sparse_tied_join(%condition: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
+low.func.def target<test.low.core>(@test_target) @sparse_tied_join(%condition: reg<test.i8>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
   low.br ^loop(%seed: reg<test.i32>)
 ^loop(%state: reg<test.i32>):
-  low.cond_br %condition, ^check, ^exit : reg<test.i32>
+  low.cond_br %condition, ^check, ^exit : reg<test.i8>
 ^check:
-  low.cond_br %condition, ^ready, ^refill : reg<test.i32>
+  low.cond_br %condition, ^ready, ^refill : reg<test.i8>
 ^ready:
   low.br ^available(%state: reg<test.i32>)
 ^refill:
@@ -1486,35 +1244,39 @@ value %final: test.i32 -> target_id[0:1]
 
 // ====
 
-// The selected middle payload aliases its destination physically. Neighboring
-// payloads remain ordinary edge transfers.
-// RUN: emit low-allocation-query @branch_identity_range edge-moves values=%prefix,%retained,%suffix,%prefix_result,%retained_result,%suffix_result fixed=%prefix:target_id:0:1 fixed=%retained:target_id:1:1 fixed=%suffix:target_id:2:1 fixed=%prefix_result:target_id:3:1 fixed=%suffix_result:target_id:4:1 test.i32=5
+// The middle payload retains its storage. Its neighbors must enter the
+// instruction's low-register window after the wide input releases that window.
+// RUN: emit low-allocation-query @branch_identity_range spill-count edge-moves values=%prefix,%retained,%suffix,%prefix_result,%retained_result,%suffix_result
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @branch_identity_range(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+low.func.def target<test.low.core>(@test_target) @branch_identity_range(%wide: reg<test.i32 x4>, %prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.pressure.alias32 x4>) asm {
+  %saved_wide = copy %wide : reg<test.i32 x4> -> reg<test.pressure.alias32 x4>
   low.br.identity(1, 1) ^exit(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>)
 ^exit(%prefix_result: reg<test.i32>, %retained_result: reg<test.i32>, %suffix_result: reg<test.i32>):
-  return %prefix_result, %retained_result, %suffix_result
+  %prefix_use = test.add.low4.i32 %prefix_result, %suffix_result
+  %sum = test.add.low4.i32 %suffix_result, %prefix_use
+  return %sum, %retained_result, %saved_wide
 }
 
 // ----
+spills: 0
 edge moves: 2
-move test.i32:target_id[3] <- test.i32:target_id[0]
-move test.i32:target_id[4] <- test.i32:target_id[2]
-value %prefix: test.i32 -> target_id[0:1]
-value %retained: test.i32 -> target_id[1:1]
-value %suffix: test.i32 -> target_id[2:1]
-value %prefix_result: test.i32 -> target_id[3:1]
-value %retained_result: test.i32 -> target_id[1:1]
-value %suffix_result: test.i32 -> target_id[4:1]
+move test.i32:target_id[0] <- test.i32:target_id[4]
+move test.i32:target_id[1] <- test.i32:target_id[6]
+value %prefix: test.i32 -> target_id[4:1]
+value %retained: test.i32 -> target_id[5:1]
+value %suffix: test.i32 -> target_id[6:1]
+value %prefix_result: test.i32 -> target_id[0:1]
+value %retained_result: test.i32 -> target_id[5:1]
+value %suffix_result: test.i32 -> target_id[1:1]
 
 // ====
 
 // A carrier remains live along the loop continuation after one dynamic path
-// captures it. The explicit branch identity still requires the resume argument
-// to inherit its storage when optional edge coalescing rejects the overlap.
-// RUN: emit low-allocation-query @loop_branch_identity values=%source,%result test.i32=8
+// captures it. The resume argument shares that carrier's storage while the
+// continuing path can still read the original value.
+// RUN: emit low-allocation-query @loop_branch_identity values=%source,%result
 
 test.target<low_core> @test_target
 

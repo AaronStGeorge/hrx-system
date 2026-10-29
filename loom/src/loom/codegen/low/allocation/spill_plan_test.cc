@@ -6,197 +6,73 @@
 
 #include "loom/codegen/low/allocation/spill_plan.h"
 
-#include <string>
-#include <tuple>
-#include <vector>
-
-#include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/ir/context.h"
-#include "loom/ir/module.h"
-#include "loom/ops/low/ops.h"
-#include "loom/target/registers.h"
 
 namespace loom {
 namespace {
 
-class LowAllocationSpillPlanTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
-                                     &block_pool_);
-    iree_arena_initialize(&block_pool_, &arena_);
-    loom_context_initialize(iree_allocator_system(), &context_);
-    IREE_ASSERT_OK(loom_context_finalize(&context_));
-  }
-
-  void TearDown() override {
-    loom_context_deinitialize(&context_);
-    iree_arena_deinitialize(&arena_);
-    iree_arena_block_pool_deinitialize(&block_pool_);
-  }
-
-  loom_module_t* AllocateModule() {
-    loom_module_t* module = nullptr;
-    IREE_CHECK_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
-                                       nullptr, iree_allocator_system(),
-                                       &module));
-    return module;
-  }
-
-  iree_arena_block_pool_t block_pool_;
-  iree_arena_allocator_t arena_;
-  loom_context_t context_;
-};
-
-loom_low_allocation_assignment_t Assignment(loom_value_id_t value_id,
-                                            uint32_t unit_count) {
-  loom_low_allocation_assignment_t assignment = {
-      .value_id = value_id,
-      .unit_count = unit_count,
+TEST(LowAllocationSpillPlanTest, ComputesByteLayout) {
+  struct LayoutCase {
+    // Number of allocation units occupied by the spilled value.
+    uint32_t unit_count;
+    // Bit width of one allocation unit.
+    uint16_t alloc_unit_bits;
+    // Complete storage size, rounding partial bytes upward.
+    uint32_t byte_size;
+    // Natural alignment, capped at the spill layout's supported maximum.
+    uint32_t byte_alignment;
   };
-  return assignment;
-}
-
-TEST_F(LowAllocationSpillPlanTest, ComputesByteLayout) {
-  const loom_low_allocation_assignment_t assignment =
-      Assignment(LOOM_VALUE_ID_INVALID, /*unit_count=*/3);
-
-  uint32_t byte_size = 0;
-  uint32_t byte_alignment = 0;
-  IREE_ASSERT_OK(loom_low_allocation_spill_plan_layout(
-      &assignment, /*alloc_unit_bits=*/16, &byte_size, &byte_alignment));
-  EXPECT_EQ(byte_size, 6u);
-  EXPECT_EQ(byte_alignment, 4u);
-
-  IREE_ASSERT_OK(loom_low_allocation_spill_plan_layout(
-      &assignment, /*alloc_unit_bits=*/24, &byte_size, &byte_alignment));
-  EXPECT_EQ(byte_size, 9u);
-  EXPECT_EQ(byte_alignment, 8u);
-
-  const loom_low_allocation_assignment_t wide_assignment =
-      Assignment(LOOM_VALUE_ID_INVALID, /*unit_count=*/4);
-  IREE_ASSERT_OK(loom_low_allocation_spill_plan_layout(
-      &wide_assignment, /*alloc_unit_bits=*/32, &byte_size, &byte_alignment));
-  EXPECT_EQ(byte_size, 16u);
-  EXPECT_EQ(byte_alignment, 16u);
-}
-
-struct SliceRange {
-  // First source register unit projected by the slice.
-  int64_t offset;
-  // Number of register units in the result.
-  uint32_t unit_count;
-};
-
-struct SliceReloadCase {
-  // Stable case name reported by the parameterized test.
-  const char* name;
-  // Number of register units in the spilled value.
-  uint32_t source_unit_count;
-  // Bit width of one allocation unit.
-  uint16_t alloc_unit_bits;
-  // Slice uses in one block, including overlapping ranges.
-  std::vector<SliceRange> slices;
-  // Number of reload operations after block-local grouping.
-  uint32_t reload_count;
-  // Total bytes reloaded after block-local grouping.
-  uint64_t reload_bytes;
-};
-
-class LowAllocationSliceReloadTest
-    : public LowAllocationSpillPlanTest,
-      public ::testing::WithParamInterface<
-          std::tuple<SliceReloadCase, uint16_t>> {};
-
-TEST_P(LowAllocationSliceReloadTest, PredictsTraffic) {
-  const auto& [test_case, block_count] = GetParam();
-  loom_module_t* module = AllocateModule();
-  loom_region_t* body = nullptr;
-  IREE_ASSERT_OK(loom_module_allocate_region(module, block_count, &body));
-  loom_type_t source_type = loom_low_register_type(
-      /*descriptor_set_stable_id=*/23, /*register_class_id=*/0,
-      test_case.source_unit_count);
-  IREE_ASSERT_OK(loom_module_intern_type(module, source_type, &source_type));
-
-  loom_value_id_t source_value = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_module_define_value(module, source_type, &source_value));
-  // Keep uses sparse in the CFG and group the first and last blocks separately.
-  const uint16_t used_block_count = block_count == 1 ? 1 : 2;
-  for (uint16_t i = 0; i < used_block_count; ++i) {
-    loom_builder_t builder;
-    loom_builder_initialize(module, &module->arena,
-                            body->blocks[i == 0 ? 0 : block_count - 1],
-                            &builder);
-    for (const auto& range : test_case.slices) {
-      loom_type_t result_type = loom_low_register_carrier_type_with_unit_count(
-          source_type, range.unit_count);
-      IREE_ASSERT_OK(
-          loom_module_intern_type(module, result_type, &result_type));
-      loom_op_t* slice = nullptr;
-      IREE_ASSERT_OK(loom_low_slice_build(&builder, source_value, range.offset,
-                                          result_type, LOOM_LOCATION_UNKNOWN,
-                                          &slice));
-    }
+  const LayoutCase cases[] = {
+      {1, 8, 1, 1},    {2, 8, 2, 2},    {3, 16, 6, 4}, {3, 24, 9, 8},
+      {4, 32, 16, 16}, {4, 64, 32, 16}, {8, 1, 1, 4},  {9, 1, 2, 4},
+      {8, 8, 8, 4},    {2, 32, 8, 8},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(::testing::Message() << "units=" << test_case.unit_count
+                                      << " bits=" << test_case.alloc_unit_bits);
+    const loom_low_allocation_assignment_t assignment = {
+        .value_id = LOOM_VALUE_ID_INVALID,
+        .unit_count = test_case.unit_count,
+    };
+    uint32_t byte_size = 0;
+    uint32_t byte_alignment = 0;
+    IREE_ASSERT_OK(loom_low_allocation_spill_plan_layout(
+        &assignment, test_case.alloc_unit_bits, &byte_size, &byte_alignment));
+    EXPECT_EQ(byte_size, test_case.byte_size);
+    EXPECT_EQ(byte_alignment, test_case.byte_alignment);
   }
-
-  const loom_low_allocation_assignment_t assignment =
-      Assignment(source_value, test_case.source_unit_count);
-  loom_cfg_graph_t cfg_graph = {};
-  IREE_ASSERT_OK(loom_cfg_graph_build(module, body, &arena_, &cfg_graph));
-  loom_low_allocation_spill_plan_traffic_workspace_t workspace = {};
-  IREE_ASSERT_OK(loom_low_allocation_spill_plan_traffic_workspace_initialize(
-      body, &arena_, &workspace));
-  // A completed query leaves no counts or bytes for the next value to inherit.
-  for (int i = 0; i < 2; ++i) {
-    loom_low_allocation_spill_plan_traffic_t traffic = {};
-    IREE_ASSERT_OK(loom_low_allocation_spill_plan_traffic(
-        module, &cfg_graph, &assignment, test_case.alloc_unit_bits, &workspace,
-        &traffic));
-    EXPECT_EQ(traffic.store_count, 1u);
-    EXPECT_EQ(
-        traffic.store_bytes,
-        (test_case.source_unit_count * test_case.alloc_unit_bits + 7u) / 8u);
-    EXPECT_EQ(traffic.reload_count, used_block_count * test_case.reload_count);
-    EXPECT_EQ(traffic.reload_bytes, used_block_count * test_case.reload_bytes);
-  }
-
-  loom_module_free(module);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    SliceWidths, LowAllocationSliceReloadTest,
-    ::testing::Combine(
-        ::testing::Values(
-            SliceReloadCase{"SparseScalars", 4, 32, {{0, 1}, {3, 1}}, 2, 8},
-            SliceReloadCase{"SingleWideSlice", 4, 32, {{1, 3}}, 1, 12},
-            SliceReloadCase{"MixedWidths", 4, 32, {{0, 1}, {2, 2}}, 2, 12},
-            SliceReloadCase{"EqualBytes", 4, 32, {{0, 1}, {1, 3}}, 2, 16},
-            SliceReloadCase{
-                "OverlappingWidths", 4, 32, {{0, 3}, {2, 2}}, 1, 16},
-            SliceReloadCase{"HalfwordUnits", 4, 16, {{0, 3}, {2, 2}}, 1, 8},
-            SliceReloadCase{"DenseScalarUses",
-                            8,
-                            32,
-                            {{0, 1},
-                             {1, 1},
-                             {2, 1},
-                             {3, 1},
-                             {4, 1},
-                             {5, 1},
-                             {6, 1},
-                             {7, 1}},
-                            1,
-                            32},
-            SliceReloadCase{"PackedBitUnits", 8, 1, {{0, 1}, {4, 4}}, 2, 2}),
-        ::testing::Values<uint16_t>(1, 64, 65, 257)),
-    [](const auto& info) {
-      return std::string(std::get<0>(info.param).name) + "Blocks" +
-             std::to_string(std::get<1>(info.param));
-    });
+TEST(LowAllocationSpillPlanTest, GroupsSlicesByTrafficAndDensity) {
+  struct GroupCase {
+    // Number of byte-addressable slice uses in one block.
+    uint32_t slice_count;
+    // Bytes transferred by separate narrow reloads.
+    uint64_t narrow_reload_bytes;
+    // Bytes transferred by one reload of the complete source.
+    uint32_t spill_byte_size;
+    // Whether one full reload replaces the separate slice reloads.
+    bool use_full_reload;
+  };
+  const GroupCase cases[] = {
+      {1, 12, 16, false}, {2, 8, 16, false}, {2, 12, 16, false},
+      {2, 16, 16, false}, {2, 20, 16, true}, {2, 10, 8, true},
+      {7, 28, 32, false}, {8, 32, 32, true}, {9, 36, 36, true},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "slices=" << test_case.slice_count
+                 << " narrow bytes=" << test_case.narrow_reload_bytes
+                 << " full bytes=" << test_case.spill_byte_size);
+    EXPECT_EQ(loom_low_allocation_spill_plan_use_full_slice_reload(
+                  test_case.slice_count, test_case.narrow_reload_bytes,
+                  test_case.spill_byte_size),
+              test_case.use_full_reload);
+  }
+}
 
-TEST_F(LowAllocationSpillPlanTest, RecordsSpillRemarks) {
+TEST(LowAllocationSpillPlanTest, RecordsSpillRemarks) {
   loom_low_allocation_remark_t remarks[1] = {};
   iree_host_size_t remark_count = 0;
   loom_low_allocation_spill_remark_record(

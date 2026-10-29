@@ -13,7 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ir/types.h"
+#include "loom/target/registers.h"
 #include "loom/target/residency.h"
 
 namespace loom {
@@ -67,15 +67,11 @@ class LowAllocationSearchTest : public ::testing::Test {
     return module;
   }
 
-  loom_value_id_t DefineValue(loom_module_t* module) {
-    loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-    IREE_CHECK_OK(loom_module_define_value(
-        module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &value_id));
-    return value_id;
-  }
-
+  // Backing blocks for module and allocation scratch.
   iree_arena_block_pool_t block_pool_;
+  // Scratch storage for native allocation queries.
   iree_arena_allocator_t arena_;
+  // Context shared by the fixture's modules.
   loom_context_t context_;
 };
 
@@ -171,10 +167,14 @@ loom_liveness_block_info_t Block(uint32_t start_point, uint32_t end_point) {
   return block;
 }
 
-loom_value_id_t DefineModuleValue(loom_module_t* module) {
+loom_value_id_t DefineValue(loom_module_t* module, uint64_t descriptor_set_id,
+                            uint32_t unit_count) {
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
   IREE_CHECK_OK(loom_module_define_value(
-      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &value_id));
+      module,
+      loom_low_register_type(descriptor_set_id, /*register_class_id=*/0,
+                             unit_count),
+      &value_id));
   return value_id;
 }
 
@@ -393,14 +393,16 @@ uint32_t FindFreeLocationWithStorageLease(
     loom_module_t* module, iree_arena_allocator_t* arena,
     const StorageLeaseSearchOptions& options,
     bool use_anonymous_lifetime = false) {
-  const loom_value_id_t candidate_value = DefineModuleValue(module);
-  const loom_value_id_t leased_value = DefineModuleValue(module);
+  const uint64_t descriptor_set_id = 29;
+  const loom_value_id_t candidate_value =
+      DefineValue(module, descriptor_set_id, options.unit_count);
+  const loom_value_id_t leased_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/1);
   loom_module_value_ordinal_scratch_acquire(module);
   loom_module_value_ordinal_scratch_set(module, candidate_value,
                                         /*ordinal=*/0);
   loom_module_value_ordinal_scratch_set(module, leased_value, /*ordinal=*/1);
 
-  const uint64_t descriptor_set_id = 29;
   const loom_liveness_value_class_t value_class =
       RegisterValueClass(descriptor_set_id);
   const loom_liveness_interval_t intervals[] = {
@@ -608,8 +610,8 @@ uint32_t FindFreeLocationWithStorageLeaseAtResidencyCliff(
 
 TEST_F(LowAllocationSearchTest, PreservesFirstFitWithoutPlacementPreference) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t counterpart_value = DefineValue(module);
+  const loom_value_id_t candidate_value = DefineValue(module, 5, 1);
+  const loom_value_id_t counterpart_value = DefineValue(module, 5, 1);
 
   EXPECT_EQ(FindFreeLocationWithPlacement(
                 module, &arena_, candidate_value, counterpart_value,
@@ -622,8 +624,8 @@ TEST_F(LowAllocationSearchTest, PreservesFirstFitWithoutPlacementPreference) {
 TEST_F(LowAllocationSearchTest,
        RetainsLocationInsteadOfSearchingLowerRegisters) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t counterpart_value = DefineValue(module);
+  const loom_value_id_t candidate_value = DefineValue(module, 5, 1);
+  const loom_value_id_t counterpart_value = DefineValue(module, 5, 1);
   const auto retained = Assignment(candidate_value, 2, 6, RegisterValueClass(5),
                                    /*location_base=*/3, /*location_count=*/1,
                                    /*unit_point_start=*/0);
@@ -646,8 +648,8 @@ TEST_F(LowAllocationSearchTest,
 
 TEST_F(LowAllocationSearchTest, ExplicitCandidateOrderAndSoftPreference) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t counterpart_value = DefineValue(module);
+  const loom_value_id_t candidate_value = DefineValue(module, 5, 1);
+  const loom_value_id_t counterpart_value = DefineValue(module, 5, 1);
   loom_low_reg_class_t reg_class =
       RegClass(4, LOOM_LOW_REG_CLASS_FLAG_PHYSICAL |
                       LOOM_LOW_REG_CLASS_FLAG_EXPLICIT_PHYSICAL_REGISTERS);
@@ -755,16 +757,19 @@ TEST_F(LowAllocationSearchTest, ExplicitCandidateOrderAndSoftPreference) {
 TEST_F(LowAllocationSearchTest,
        PlannedScalarPackingPreservesWidePressureFrontier) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t scalar_value = DefineValue(module);
-  const loom_value_id_t wide_value = DefineValue(module);
-  const loom_value_id_t unrelated_scalar_value = DefineValue(module);
+  const uint64_t descriptor_set_id = 31;
+  const loom_value_id_t scalar_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/1);
+  const loom_value_id_t wide_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/4);
+  const loom_value_id_t unrelated_scalar_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/1);
   loom_module_value_ordinal_scratch_acquire(module);
   loom_module_value_ordinal_scratch_set(module, scalar_value, /*ordinal=*/0);
   loom_module_value_ordinal_scratch_set(module, wide_value, /*ordinal=*/1);
   loom_module_value_ordinal_scratch_set(module, unrelated_scalar_value,
                                         /*ordinal=*/2);
 
-  const uint64_t descriptor_set_id = 31;
   const loom_liveness_value_class_t value_class =
       RegisterValueClass(descriptor_set_id);
   const loom_liveness_interval_t intervals[] = {
@@ -930,6 +935,25 @@ TEST_F(LowAllocationSearchTest,
   EXPECT_FALSE(loom_low_allocation_search_find_free_location(
       &context, &intervals[0], Capacity(/*max_units=*/8), &location_base));
 
+  // Repair fills the legal aggregate gap instead of repeating the ordinary
+  // aligned-first choice. A reserved scalar makes the two orders distinct.
+  reserved_range.location_count = 1;
+  auto ordinary_context = context;
+  ordinary_context.scalar_packing = {};
+  EXPECT_TRUE(loom_low_allocation_search_find_free_location(
+      &ordinary_context, &intervals[1], Capacity(/*max_units=*/8),
+      &location_base));
+  EXPECT_EQ(location_base, 4u);
+  // The ordinary search must also use the unaligned gap when its preferred
+  // aligned base would exceed capacity.
+  EXPECT_TRUE(loom_low_allocation_search_find_free_location(
+      &ordinary_context, &intervals[1], Capacity(/*max_units=*/5),
+      &location_base));
+  EXPECT_EQ(location_base, 1u);
+  EXPECT_TRUE(loom_low_allocation_search_find_free_location(
+      &context, &intervals[1], Capacity(/*max_units=*/8), &location_base));
+  EXPECT_EQ(location_base, 1u);
+
   // The preferred descending range intersects an active tuple. Keep the
   // first-fit packing order when active conflicts and reserved gaps alternate.
   assignments[0] = Assignment(wide_value, /*start=*/0, /*end=*/7, value_class,
@@ -1057,8 +1081,8 @@ TEST_F(LowAllocationSearchTest, PressureReleaseComparesLegalMinimaNotPacking) {
 
 TEST_F(LowAllocationSearchTest, SelectsDifferentMaskedResultLocation) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t counterpart_value = DefineValue(module);
+  const loom_value_id_t candidate_value = DefineValue(module, 5, 1);
+  const loom_value_id_t counterpart_value = DefineValue(module, 5, 1);
   loom_low_placement_relation_t relation = LocationRelation(
       /*result_ordinal=*/0, /*source_ordinal=*/1,
       LOOM_LOW_PLACEMENT_RELATION_DIFFERENT_MASKED_LOCATION,
@@ -1074,8 +1098,8 @@ TEST_F(LowAllocationSearchTest, SelectsDifferentMaskedResultLocation) {
 
 TEST_F(LowAllocationSearchTest, SelectsDifferentMaskedSourceLocation) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t counterpart_value = DefineValue(module);
+  const loom_value_id_t candidate_value = DefineValue(module, 5, 1);
+  const loom_value_id_t counterpart_value = DefineValue(module, 5, 1);
   loom_low_placement_relation_t relation = LocationRelation(
       /*result_ordinal=*/1, /*source_ordinal=*/0,
       LOOM_LOW_PLACEMENT_RELATION_DIFFERENT_MASKED_LOCATION,
@@ -1091,8 +1115,8 @@ TEST_F(LowAllocationSearchTest, SelectsDifferentMaskedSourceLocation) {
 
 TEST_F(LowAllocationSearchTest, SelectsDisjointStorage) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t counterpart_value = DefineValue(module);
+  const loom_value_id_t candidate_value = DefineValue(module, 5, 1);
+  const loom_value_id_t counterpart_value = DefineValue(module, 5, 1);
   loom_low_placement_relation_t relation = LocationRelation(
       /*result_ordinal=*/0, /*source_ordinal=*/1,
       LOOM_LOW_PLACEMENT_RELATION_DISJOINT_STORAGE,
@@ -1108,8 +1132,8 @@ TEST_F(LowAllocationSearchTest, SelectsDisjointStorage) {
 
 TEST_F(LowAllocationSearchTest, FallsBackWhenPreferenceCannotBeSatisfied) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t counterpart_value = DefineValue(module);
+  const loom_value_id_t candidate_value = DefineValue(module, 5, 1);
+  const loom_value_id_t counterpart_value = DefineValue(module, 5, 1);
   loom_low_placement_relation_t relation = LocationRelation(
       /*result_ordinal=*/0, /*source_ordinal=*/1,
       LOOM_LOW_PLACEMENT_RELATION_DIFFERENT_MASKED_LOCATION,
@@ -1125,15 +1149,17 @@ TEST_F(LowAllocationSearchTest, FallsBackWhenPreferenceCannotBeSatisfied) {
 
 TEST_F(LowAllocationSearchTest, FindsFreeLocationAfterActiveAndReservedRanges) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t active_value = DefineValue(module);
+  const uint64_t descriptor_set_id = 7;
+  const loom_value_id_t candidate_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/2);
+  const loom_value_id_t active_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/2);
   loom_module_value_ordinal_scratch_acquire(module);
   loom_module_value_ordinal_scratch_set(module, candidate_value,
                                         /*ordinal=*/0);
   loom_module_value_ordinal_scratch_set(module, active_value,
                                         /*ordinal=*/1);
 
-  const uint64_t descriptor_set_id = 7;
   const loom_liveness_value_class_t value_class =
       RegisterValueClass(descriptor_set_id);
   const loom_liveness_interval_t intervals[] = {
@@ -1254,16 +1280,19 @@ TEST_F(LowAllocationSearchTest, FindsFreeLocationAfterActiveAndReservedRanges) {
 TEST_F(LowAllocationSearchTest,
        SelectsActiveSpillVictimSetAfterPressureLeaseRelease) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t active_value = DefineValue(module);
-  const loom_value_id_t leased_value = DefineValue(module);
+  const uint64_t descriptor_set_id = 11;
+  const loom_value_id_t candidate_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/2);
+  const loom_value_id_t active_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/2);
+  const loom_value_id_t leased_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/1);
   loom_module_value_ordinal_scratch_acquire(module);
   loom_module_value_ordinal_scratch_set(module, candidate_value,
                                         /*ordinal=*/0);
   loom_module_value_ordinal_scratch_set(module, active_value,
                                         /*ordinal=*/1);
 
-  const uint64_t descriptor_set_id = 11;
   const loom_liveness_value_class_t value_class =
       RegisterValueClass(descriptor_set_id);
   const loom_liveness_interval_t intervals[] = {
@@ -1440,9 +1469,13 @@ TEST_F(LowAllocationSearchTest,
 
 TEST_F(LowAllocationSearchTest, SelectsLowerTrafficActiveSpillVictimSetTie) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t expensive_value = DefineValue(module);
-  const loom_value_id_t cheap_value = DefineValue(module);
+  const uint64_t descriptor_set_id = 17;
+  const loom_value_id_t candidate_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/2);
+  const loom_value_id_t expensive_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/2);
+  const loom_value_id_t cheap_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/2);
   loom_module_value_ordinal_scratch_acquire(module);
   loom_module_value_ordinal_scratch_set(module, candidate_value,
                                         /*ordinal=*/0);
@@ -1450,7 +1483,6 @@ TEST_F(LowAllocationSearchTest, SelectsLowerTrafficActiveSpillVictimSetTie) {
                                         /*ordinal=*/1);
   loom_module_value_ordinal_scratch_set(module, cheap_value, /*ordinal=*/2);
 
-  const uint64_t descriptor_set_id = 17;
   const loom_liveness_value_class_t value_class =
       RegisterValueClass(descriptor_set_id);
   const loom_liveness_interval_t intervals[] = {
@@ -1660,10 +1692,15 @@ TEST_F(LowAllocationSearchTest, SelectsLowerTrafficActiveSpillVictimSetTie) {
 
 TEST_F(LowAllocationSearchTest, SelectsLowerTrafficOverFewerVictims) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t candidate_value = DefineValue(module);
-  const loom_value_id_t expensive_value = DefineValue(module);
-  const loom_value_id_t cheap_value0 = DefineValue(module);
-  const loom_value_id_t cheap_value1 = DefineValue(module);
+  const uint64_t descriptor_set_id = 19;
+  const loom_value_id_t candidate_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/2);
+  const loom_value_id_t expensive_value =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/2);
+  const loom_value_id_t cheap_value0 =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/1);
+  const loom_value_id_t cheap_value1 =
+      DefineValue(module, descriptor_set_id, /*unit_count=*/1);
   loom_module_value_ordinal_scratch_acquire(module);
   loom_module_value_ordinal_scratch_set(module, candidate_value,
                                         /*ordinal=*/0);
@@ -1672,7 +1709,6 @@ TEST_F(LowAllocationSearchTest, SelectsLowerTrafficOverFewerVictims) {
   loom_module_value_ordinal_scratch_set(module, cheap_value0, /*ordinal=*/2);
   loom_module_value_ordinal_scratch_set(module, cheap_value1, /*ordinal=*/3);
 
-  const uint64_t descriptor_set_id = 19;
   const loom_liveness_value_class_t value_class =
       RegisterValueClass(descriptor_set_id);
   const loom_liveness_interval_t intervals[] = {

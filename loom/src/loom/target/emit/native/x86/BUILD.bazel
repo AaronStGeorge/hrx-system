@@ -90,6 +90,8 @@ loom_cc_test(
     deps = [
         ":encoding",
         ":function",
+        ":transport",
+        "//loom/src/loom/target/arch/x86:register_classes",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",

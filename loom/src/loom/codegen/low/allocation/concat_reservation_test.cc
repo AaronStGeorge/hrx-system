@@ -9,7 +9,9 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/ir/context.h"
+#include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/target/registers.h"
@@ -39,6 +41,12 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(value_ids); ++i) {
     loom_module_value_ordinal_scratch_set(module, value_ids[i], i);
   }
+  const loom_local_value_domain_t value_domain = {
+      .module = module,
+      .value_ids = value_ids,
+      .value_count = IREE_ARRAYSIZE(value_ids),
+      .flags = LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED,
+  };
 
   loom_liveness_value_class_t value_class = {
       .type_kind = LOOM_TYPE_REGISTER,
@@ -57,6 +65,8 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
   intervals[1].end_point = 4;
   intervals[2].start_point = 4;
   intervals[2].end_point = 10;
+  intervals[3].start_point = 5;
+  intervals[3].end_point = 14;
   const uint32_t interval_indices[] = {0, 1, 2, 3};
   loom_liveness_analysis_t liveness = {
       .intervals = intervals,
@@ -138,6 +148,7 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
   loom_low_allocation_assignment_t future = {
       .value_id = value_ids[3],
       .descriptor_reg_class_id = value_class.register_class_id,
+      .start_point = 5,
       .end_point = 14,
       .unit_count = 2,
       .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
@@ -163,10 +174,99 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
       .placement = &placement,
       .storage_leases = &leases,
   };
-  const loom_low_allocation_concat_reservation_sources_t reservation_sources = {
-      .ignored_value_ids = value_ids,
-      .ignored_value_count = 2,
-  };
+  loom_value_id_t inline_ignored_value_ids[2];
+  loom_low_allocation_concat_reservation_sources_t reservation_sources;
+  IREE_ASSERT_OK(loom_low_allocation_concat_reservation_prepare_sources(
+      &context, &intervals[2], &result_ranges[2], inline_ignored_value_ids,
+      IREE_ARRAYSIZE(inline_ignored_value_ids), &arena, &reservation_sources));
+  EXPECT_EQ(reservation_sources.source_constraint.kind,
+            LOOM_LOW_ALLOCATION_CONCAT_SOURCE_CONSTRAINT_NONE);
+
+  // Source feasibility is retained before candidate search. A fixed source
+  // constrains the assembly even before assignment; a committed source has
+  // the same requirement. Two compatible two-unit sources anchor base 2.
+  // Moving the second source to 6 makes their aggregate impossible.
+  for (uint32_t second_base : {4u, 6u}) {
+    loom_low_allocation_resolved_fixed_value_t fixed_sources[2] = {};
+    for (uint32_t i = 0; i < IREE_ARRAYSIZE(fixed_sources); ++i) {
+      fixed_sources[i].assignment = {
+          .value_id = value_ids[i],
+          .descriptor_reg_class_id = value_class.register_class_id,
+          .unit_count = 2,
+          .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+          .location_base = i == 0 ? 2u : second_base,
+          .location_count = 2,
+      };
+      fixed_sources[i].value_ordinal = i;
+      fixed_sources[i].tied_root_ordinal = i;
+      fixed_sources[i].semantic_end_point = intervals[i].end_point;
+    }
+    uint32_t fixed_indices[] = {1, 2, 0, 0};
+    uint32_t fixed_high_water[] = {second_base + 2};
+    uint32_t assigned_high_water[] = {0};
+    auto source_constraints = constraints;
+    source_constraints.fixed_values = fixed_sources;
+    source_constraints.fixed_value_count = IREE_ARRAYSIZE(fixed_sources);
+    source_constraints.preassigned_fixed_value_count =
+        IREE_ARRAYSIZE(fixed_sources);
+    source_constraints.fixed_value_domain = &value_domain;
+    source_constraints.fixed_value_indices_by_ordinal = fixed_indices;
+    source_constraints.max_constrained_location_end_by_reg_class =
+        fixed_high_water;
+    source_constraints.max_assigned_location_end_by_reg_class =
+        assigned_high_water;
+    IREE_ASSERT_OK(loom_low_allocation_target_constraints_finalize_fixed_values(
+        &source_constraints, &liveness, &unit_liveness, &arena));
+    for (bool committed : {false, true}) {
+      SCOPED_TRACE(::testing::Message() << "second base=" << second_base
+                                        << " committed=" << committed);
+      const uint32_t source_assignment_indices[] = {
+          committed ? 0u : UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+      auto source_assignments = assignments;
+      source_assignments.assignments = &fixed_sources[0].assignment;
+      source_assignments.assignment_count = committed ? 1 : 0;
+      source_assignments.assignment_indices_by_value_ordinal =
+          source_assignment_indices;
+      assigned_high_water[0] = committed ? 4 : 0;
+      loom_low_allocation_active_set_t source_active_set = {};
+      IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
+          &descriptors, &unit_liveness, 1, 16, 16, &arena, &source_active_set));
+      if (committed) {
+        loom_low_allocation_active_set_insert(
+            &source_active_set, &descriptors, source_assignments.assignments,
+            source_assignments.assignment_count, 0);
+      }
+      auto source_context = context;
+      source_context.assignment_map = &source_assignments;
+      source_context.target_constraints = &source_constraints;
+      source_context.active_set = &source_active_set;
+      loom_value_id_t ignored_value_ids[2];
+      loom_low_allocation_concat_reservation_sources_t sources;
+      IREE_ASSERT_OK(loom_low_allocation_concat_reservation_prepare_sources(
+          &source_context, &intervals[2], &result_ranges[2], ignored_value_ids,
+          IREE_ARRAYSIZE(ignored_value_ids), &arena, &sources));
+      EXPECT_EQ(sources.ignored_value_ids, ignored_value_ids);
+      ASSERT_EQ(sources.ignored_value_count, 2u);
+      EXPECT_EQ(sources.ignored_value_ids[0], value_ids[0]);
+      EXPECT_EQ(sources.ignored_value_ids[1], value_ids[1]);
+      EXPECT_EQ(
+          sources.source_constraint.kind,
+          second_base == 4
+              ? LOOM_LOW_ALLOCATION_CONCAT_SOURCE_CONSTRAINT_LINEAR_LOCATION
+              : LOOM_LOW_ALLOCATION_CONCAT_SOURCE_CONSTRAINT_INCOMPATIBLE);
+      if (second_base == 4) {
+        EXPECT_EQ(sources.source_constraint.linear_result_location_base, 2u);
+      }
+      loom_low_allocation_assignment_t reservation;
+      const uint32_t source_ordinal = committed ? 1 : 0;
+      IREE_ASSERT_OK(loom_low_allocation_concat_reservation_find(
+          &source_context, &intervals[source_ordinal],
+          &relations[source_ordinal], &intervals[2], &result_ranges[2],
+          &sources,
+          /*source_has_unique_affinity_path=*/false, &reservation));
+      EXPECT_EQ(reservation.value_id, LOOM_VALUE_ID_INVALID);
+    }
+  }
 
   const loom_low_placement_value_ref_t values[] = {
       {0, LOOM_LOW_PLACEMENT_VALUE_OPERAND, 0},
@@ -196,6 +296,38 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
   IREE_ASSERT_OK(loom_low_allocation_preference_workspace_initialize(
       &preferences, &arena, &workspace));
   context.preference_workspace = &workspace;
+
+  // The ordinary source fits before the future value, but its whole assembly
+  // does not. Repair reserves the first dense span instead of repeating the
+  // aligned-first choice. The four-unit aggregate and two-unit future value
+  // establish the retained six-unit pressure frontier.
+  future.location_base = 5;
+  future.start_point = intervals[3].start_point = 5;
+  intervals[3].end_point = 14;
+  high_water[0] = 7;
+  loom_low_allocation_active_set_t repair_active_set = {};
+  IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
+      &descriptors, &unit_liveness, 1, 16, 16, &arena, &repair_active_set));
+  loom_low_allocation_active_set_insert(&repair_active_set, &descriptors,
+                                        &future, 1, 0);
+  const uint32_t repair_frontiers[] = {6};
+  auto repair_context = context;
+  repair_context.active_set = &repair_active_set;
+  for (bool repair : {false, true}) {
+    SCOPED_TRACE(repair);
+    repair_context.scalar_packing.frontiers_by_reg_class =
+        repair ? repair_frontiers : nullptr;
+    loom_low_allocation_assignment_t reservation;
+    IREE_ASSERT_OK(loom_low_allocation_concat_reservation_find(
+        &repair_context, &intervals[0], &relations[0], &intervals[2],
+        &result_ranges[2], &reservation_sources,
+        /*source_has_unique_affinity_path=*/false, &reservation));
+    EXPECT_EQ(reservation.value_id, value_ids[2]);
+    EXPECT_EQ(reservation.location_base, repair ? 7u : 8u);
+    EXPECT_EQ(reservation.location_count, 4u);
+    EXPECT_EQ(assignments.assignment_count, 1u);
+  }
+  high_water[0] = 6;
 
   // Both two-unit sources fit at 2 and 4 before the future reservation starts.
   // Their four-unit result must also fit from point 4 through point 10. A
@@ -242,6 +374,50 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
           EXPECT_EQ(reservation.value_id, LOOM_VALUE_ID_INVALID);
         }
         EXPECT_EQ(assignments.assignment_count, 1u);
+
+        // A resolved aggregate binding also constrains early reservation.
+        // Neither a free source location nor a better preference may move it.
+        for (uint32_t fixed_base : {6u, 8u, 12u}) {
+          SCOPED_TRACE(::testing::Message() << "fixed base=" << fixed_base);
+          loom_low_allocation_resolved_fixed_value_t fixed = {
+              .assignment =
+                  {
+                      .value_id = value_ids[2],
+                      .descriptor_reg_class_id = value_class.register_class_id,
+                      .unit_count = 4,
+                      .location_kind =
+                          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+                      .location_base = fixed_base,
+                      .location_count = 4,
+                  },
+              .value_ordinal = 2,
+              .tied_root_ordinal = 2,
+              .semantic_end_point = intervals[2].end_point,
+          };
+          uint32_t fixed_indices[] = {0, 0, 1, 0};
+          uint32_t fixed_high_water[] = {fixed_base + 4};
+          auto fixed_constraints = constraints;
+          fixed_constraints.fixed_values = &fixed;
+          fixed_constraints.preassigned_fixed_value_count = 1;
+          fixed_constraints.fixed_value_count = 1;
+          fixed_constraints.fixed_value_domain = &value_domain;
+          fixed_constraints.fixed_value_indices_by_ordinal = fixed_indices;
+          fixed_constraints.max_constrained_location_end_by_reg_class =
+              fixed_high_water;
+          IREE_ASSERT_OK(
+              loom_low_allocation_target_constraints_finalize_fixed_values(
+                  &fixed_constraints, &liveness, &unit_liveness, &arena));
+          auto fixed_context = context;
+          fixed_context.target_constraints = &fixed_constraints;
+          IREE_ASSERT_OK(loom_low_allocation_concat_reservation_find(
+              &fixed_context, &intervals[0], &relations[0], &intervals[2],
+              &result_ranges[2], &reservation_sources,
+              /*source_has_unique_affinity_path=*/false, &reservation));
+          EXPECT_EQ(reservation.value_id, value_ids[2]);
+          EXPECT_EQ(reservation.location_base, fixed_base);
+          EXPECT_EQ(reservation.location_count, 4u);
+          EXPECT_EQ(assignments.assignment_count, 1u);
+        }
       }
     }
   }
@@ -376,7 +552,14 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
                                         IREE_ARRAYSIZE(sweep_assignments),
                                         /*start_point=*/3);
   context.active_set = &swept_active_set;
+  IREE_ASSERT_OK(loom_low_allocation_concat_reservation_prepare_sources(
+      &context, &intervals[2], &result_ranges[2], inline_ignored_value_ids,
+      IREE_ARRAYSIZE(inline_ignored_value_ids), &arena, &reservation_sources));
   loom_low_allocation_assignment_t swept_reservation;
+  EXPECT_EQ(reservation_sources.source_constraint.kind,
+            LOOM_LOW_ALLOCATION_CONCAT_SOURCE_CONSTRAINT_LINEAR_LOCATION);
+  EXPECT_EQ(reservation_sources.source_constraint.linear_result_location_base,
+            2u);
   IREE_ASSERT_OK(loom_low_allocation_concat_reservation_find(
       &context, &intervals[1], &relations[1], &intervals[2], &result_ranges[2],
       &reservation_sources, /*source_has_unique_affinity_path=*/false,

@@ -1,6 +1,6 @@
-// The last local use does not release either loop-invariant input. Only one
-// temporary fits beside them, even while waiting for its consumer to be ready.
-// RUN: emit low-schedule-query @loop_live_out strategy=resource-stall test.i32=3 order=1,2,3,4,5 scheduled-pressure=test.i32
+// The last local use does not release either loop-invariant input. Each
+// temporary overlaps both inputs in the authored order.
+// RUN: emit low-schedule-query @loop_live_out strategy=source scheduled-pressure=test.i32
 
 test.target<low_core> @target
 
@@ -16,22 +16,23 @@ low.func.def target<test.low.core>(@target) @loop_live_out(%held: reg<test.i32>,
 }
 
 // ----
-block 1 order: 1, 2, 3, 4, 5
 scheduled pressure test.i32: peak-live-units=3 peak-live-values=3
 
 // ====
 
 // The held value has no local use, and the seed survives its final local use.
 // Both occupy registers throughout the intermediate block.
-// RUN: emit low-schedule-query @live_through strategy=resource-stall test.i32=3 order=1,2,3,4 scheduled-pressure=test.i32
+// RUN: emit low-schedule-query @live_through strategy=resource-stall diagnostics=candidates order=1,2,3,4 scheduled-pressure=test.i32
 
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @live_through(%held: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
   low.br ^work
 ^work:
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_projected_live_units="3", chosen_killed_live_units="0"}
   %first = test.event.fast.i32 %seed, %seed
   test.event.memory.write.i32 %first
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_projected_live_units="4", chosen_killed_live_units="0"}
   %second = test.event.fast.i32 %seed, %seed
   test.event.memory.write.i32 %second
   low.br ^exit
@@ -40,44 +41,52 @@ low.func.def target<test.low.core>(@target) @live_through(%held: reg<test.i32>, 
 }
 
 // ----
-block 1 order: 1, 2, 3, 4
-scheduled pressure test.i32: peak-live-units=3 peak-live-values=3
+block 1 order: 1, 3, 2, 4
+scheduled pressure test.i32: peak-live-units=4 peak-live-values=4
 
 // ====
 
 // An alias's final local read cannot release the loop-invariant source. The
 // alias still shares its source's pressure instead of allocating another unit.
-// RUN: emit low-schedule-query @aliased_loop_live_out strategy=resource-stall test.i32=3 order=1,2,3,4,5,6
+// Dependent arithmetic leaves the alias access ready during a latency gap.
+// RUN: emit low-schedule-query @aliased_loop_live_out strategy=resource-stall diagnostics=candidates order=1,2,3,4,5,6
 
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @aliased_loop_live_out(%held: reg<test.i32>, %seed: reg<test.i32>) asm {
   low.br ^loop
 ^loop:
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_projected_live_units="3", chosen_produced_live_units="0"}
   %alias = copy %held : reg<test.i32> -> reg<test.i32>
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="2", chosen_projected_live_units="3", chosen_killed_live_units="0"}
   test.event.memory.write.i32 %alias
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_projected_live_units="3", rejected_packet="low.copy", rejected_produced_live_units="0"}
   %first = test.event.fast.i32 %seed, %seed
   test.event.memory.write.i32 %first
-  %second = test.event.fast.i32 %seed, %seed
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="3", chosen_projected_live_units="4", chosen_killed_live_units="0"}
+  %second = test.event.fast.i32 %first, %seed
   test.event.memory.write.i32 %second
   low.br ^loop
 }
 
 // ----
-block 1 order: 1, 2, 3, 4, 5, 6
+block 1 order: 3, 1, 2, 5, 4, 6
 
 // ====
 
-// A result used only by a successor still produces live storage. Delay that
-// result until the temporaries are consumed instead of treating it as dead.
-// RUN: emit low-schedule-query @successor_only_result strategy=resource-stall test.i32=3 order=0,1,2,3,4 scheduled-pressure=test.i32
+// A result used only by a successor still produces live storage. Its producer
+// increases candidate pressure even though there is no local consumer.
+// RUN: emit low-schedule-query @successor_only_result strategy=resource-stall diagnostics=candidates order=0,1,2,3,4 scheduled-pressure=test.i32
 
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @successor_only_result(%seed: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="2", chosen_projected_live_units="4", chosen_produced_live_units="1", chosen_killed_live_units="0"}
   %held = test.add.i32 %seed, %seed
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_projected_live_units="2", chosen_killed_live_units="0"}
   %first = test.event.fast.i32 %seed, %seed
   test.event.memory.write.i32 %first
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_projected_live_units="3", rejected_packet="test.add.i32", rejected_produced_live_units="1"}
   %second = test.event.fast.i32 %seed, %seed
   test.event.memory.write.i32 %second
   low.br ^exit
@@ -86,31 +95,74 @@ low.func.def target<test.low.core>(@target) @successor_only_result(%seed: reg<te
 }
 
 // ----
-block 0 order: 1, 2, 3, 4, 0
-scheduled pressure test.i32: peak-live-units=2 peak-live-values=2
+block 0 order: 1, 3, 0, 2, 4
+scheduled pressure test.i32: peak-live-units=4 peak-live-values=4
 
 // ====
 
-// The source schedule already needs three units: two loop-invariant inputs and
-// one temporary. That residency cliff is unavoidable; the next cliff at four
-// units still penalizes issuing the second temporary before retiring the first.
-// RUN: emit low-schedule-json @loop_residency strategy=resource-stall cliff=test.i32:3:16:15 cliff=test.i32:4:15:14 diagnostics=candidates output=none
+// A value with no local uses still contributes its full width to pressure
+// throughout the intermediate block.
+// RUN: emit low-schedule-query @live_through_source_pressure strategy=source scheduled-pressure=test.i32
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @loop_residency(%held: reg<test.i32>, %seed: reg<test.i32>) asm {
-  low.br ^loop
-^loop:
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.event.memory.write.i32", rejected_packet="test.event.fast.i32", chosen_killed_live_units="0", rejected_pressure_cliff_penalty="0"}
-  test.event.memory.write.i32 %held
-  // REMARK@+1: BACKEND/015 {chosen_projected_live_units="3", chosen_pressure_cliff_penalty="0", chosen_units_until_pressure_cliff="1"}
-  %first = test.event.fast.i32 %seed, %seed
-  // REMARK@+1: BACKEND/015 {chosen_packet="test.event.memory.write.i32", rejected_packet="test.event.fast.i32", chosen_pressure_cliff_penalty="0", rejected_pressure_cliff_units="4", rejected_pressure_cliff_penalty="1"}
-  test.event.memory.write.i32 %first
-  %second = test.event.fast.i32 %seed, %seed
-  test.event.memory.write.i32 %second
-  low.br ^loop
+low.func.def target<test.low.core>(@target) @live_through_source_pressure(%held: reg<test.i32 x8>, %ptr0: reg<test.ptr>, %ptr1: reg<test.ptr>, %lhs: reg<test.i32 x4>) -> (reg<test.i32 x8>, reg<test.i32 x4>) asm {
+  low.br ^work
+^work:
+  %load0 = test.load.v4i32 %ptr0
+  %use0 = test.add.v4i32 %load0, %lhs
+  %load1 = test.load.v4i32 %ptr1
+  %use1 = test.add.v4i32 %load1, %use0
+  low.br ^exit
+^exit:
+  return %held, %use1
 }
+
+// ----
+scheduled pressure test.i32: peak-live-units=16 peak-live-values=3
+
+// ====
+
+// Successor arguments begin at their definitions rather than overlapping the
+// predecessor values passed to them.
+// RUN: emit low-schedule-query @block_argument_source_pressure strategy=source scheduled-pressure=test.i32
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @block_argument_source_pressure(%seed: reg<test.i32 x8>, %ptr0: reg<test.ptr>, %ptr1: reg<test.ptr>) -> (reg<test.i32 x8>, reg<test.i32>, reg<test.i32 x4>) asm {
+  %load0 = test.load.v4i32 %ptr0
+  %lane = test.extract_lane.i32 %load0, 0
+  %load1 = test.load.v4i32 %ptr1
+  low.br ^exit(%seed: reg<test.i32 x8>, %lane: reg<test.i32>, %load1: reg<test.i32 x4>)
+^exit(%state: reg<test.i32 x8>, %result_lane: reg<test.i32>, %result_load: reg<test.i32 x4>):
+  return %state, %result_lane, %result_load
+}
+
+// ----
+scheduled pressure test.i32: peak-live-units=13 peak-live-values=3
+
+// ====
+
+// Aliases and forwarded block arguments retain their own SSA lifetimes. Block
+// boundaries cannot extend predecessor values through successor definitions.
+// RUN: emit low-schedule-query @alias_handoff_source_pressure strategy=source scheduled-pressure=test.i32
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @alias_handoff_source_pressure(%held: reg<test.i32>, %source: reg<test.i32 x4>, %ptr: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
+  low.br ^body(%held: reg<test.i32>, %source: reg<test.i32 x4>)
+^body(%block_held: reg<test.i32>, %block_source: reg<test.i32 x4>):
+  %copy = copy %block_source : reg<test.i32 x4> -> reg<test.i32 x4>
+  %discarded = test.add.v4i32 %block_source, %copy
+  %lane = test.extract_lane.i32 %copy, 0
+  %load = test.load.v4i32 %ptr
+  low.br ^exit(%block_held: reg<test.i32>, %lane: reg<test.i32>, %load: reg<test.i32 x4>)
+^exit(%result_held: reg<test.i32>, %result_lane: reg<test.i32>, %result_load: reg<test.i32 x4>):
+  return %result_held, %result_lane, %result_load
+}
+
+// ----
+scheduled pressure test.i32: peak-live-units=9 peak-live-values=3
 
 // ====
 
@@ -138,3 +190,38 @@ scheduled pressure test.i32: peak-live-units=2 peak-live-values=2
 node 3 <- 2
 node 4 <- 3
 node 5 <- 4
+
+// ====
+
+// Three physical registers remain live across both blocks, leaving one
+// temporary slot. Each transfer must free that slot before the next producer.
+// Candidate totals also include the independent scalar seed.
+// RUN: emit low-schedule-query @physical_live_through strategy=resource-stall diagnostics=candidates order=* scheduled-pressure=test.explicit32
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @physical_live_through(%held: reg<test.explicit32 x3>, %seed: reg<test.i32>) -> (reg<test.explicit32 x3>) asm {
+  low.br ^work
+^work:
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_projected_live_units="5", chosen_pressure_cliff_source="test.explicit32", chosen_pressure_cliff_units="4", chosen_pressure_cliff_penalty="2"}
+  %first = test.rematerialize.explicit32 %seed
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_packet="low.copy", chosen_projected_live_units="5", rejected_projected_live_units="6", rejected_pressure_cliff_penalty="3"}
+  %first_value = copy %first : reg<test.explicit32> -> reg<test.i32>
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="2", chosen_projected_live_units="4", rejected_projected_live_units="6"}
+  test.event.memory.write.i32 %first_value
+  %second = test.rematerialize.explicit32 %seed
+  %second_value = copy %second : reg<test.explicit32> -> reg<test.i32>
+  test.event.memory.write.i32 %second_value
+  low.br ^exit
+^exit:
+  %third = test.rematerialize.explicit32 %seed
+  %third_value = copy %third : reg<test.explicit32> -> reg<test.i32>
+  test.event.memory.write.i32 %third_value
+  return %held
+}
+
+// ----
+block 0 order: 0
+block 1 order: 1, 2, 3, 4, 5, 6, 7
+block 2 order: 8, 9, 10, 11
+scheduled pressure test.explicit32: peak-live-units=4 peak-live-values=2

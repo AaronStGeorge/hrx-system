@@ -1,30 +1,31 @@
 // Both scalar inputs remain live when the carry result is written. Their
-// transient pressure makes the independent storage operation preferable.
-// RUN: emit low-schedule-query @two_uniform_late_reads strategy=resource-stall diagnostics=candidates amdgpu.sgpr=4 order=0,1,2
+// four-unit overlap plus one alignment-reserve unit leaves 101 of 106 SGPRs.
+// RUN: emit low-schedule-query @two_uniform_late_reads strategy=resource-stall diagnostics=candidates order=0,1,2
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
 low.func.def target<amdgpu.rdna3_5.core>(@target) @two_uniform_late_reads(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) asm {
+  // REMARK@+1: BACKEND/015 {chosen_pressure_cliff_source="amdgpu.sgpr", chosen_units_until_pressure_cliff="101", chosen_killed_live_units="2"}
   %result, %carry = v_add_co_u32 %lhs, %rhs
-  // REMARK@+1: BACKEND/015 {rejected_pressure_cliff_source="amdgpu.sgpr", rejected_pressure_cliff_units="4", rejected_pressure_cliff_penalty="2"}
   %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
   return %result, %carry
 }
 
 // ----
-block 0 order: 1, 0, 2
+block 0 order: 0, 1, 2
 
 // ====
 
 // A dying slice keeps one unit of its early-read owner live through the write.
-// RUN: emit low-schedule-query @late_slice_of_carry strategy=resource-stall diagnostics=candidates amdgpu.sgpr=3 order=0,1,2,3
+// Three overlapping SGPR units plus alignment reserve leave 102 of 106 SGPRs.
+// RUN: emit low-schedule-query @late_slice_of_carry strategy=resource-stall diagnostics=candidates order=0,1,2,3
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
 low.func.def target<amdgpu.rdna3_5.core>(@target) @late_slice_of_carry(%carry_in: reg<amdgpu.sgpr x2>, %varying: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) asm {
-  // REMARK@+1: BACKEND/015
+  // REMARK@+1: BACKEND/015 {chosen_packet="low.slice", chosen_projected_live_units="3", chosen_produced_live_units="0"}
   %uniform = slice %carry_in[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  // REMARK@+1: BACKEND/015 {chosen_pressure_cliff_source="amdgpu.sgpr", chosen_pressure_cliff_units="3", chosen_pressure_cliff_penalty="2"}
+  // REMARK@+1: BACKEND/015 {chosen_pressure_cliff_source="amdgpu.sgpr", chosen_units_until_pressure_cliff="102"}
   %result, %carry = v_add_co_ci_u32 %uniform, %varying, %carry_in
   %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
   return %result, %carry
@@ -36,16 +37,17 @@ block 0 order: 0, 1, 2, 3
 // ====
 
 // Repeated late operands consume one storage lifetime, not two.
-// RUN: emit low-schedule-query @repeated_late_read strategy=resource-stall diagnostics=candidates amdgpu.sgpr=3 order=0,1,2
+// The outputs produce one vector and two scalar units after retiring that input.
+// RUN: emit low-schedule-query @repeated_late_read strategy=resource-stall diagnostics=candidates order=0,1,2
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
 low.func.def target<amdgpu.rdna3_5.core>(@target) @repeated_late_read(%uniform: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) asm {
+  // REMARK@+1: BACKEND/015 {chosen_projected_live_units="3", chosen_killed_live_units="1", chosen_produced_live_units="3"}
   %result, %carry = v_add_co_u32 %uniform, %uniform
-  // REMARK@+1: BACKEND/015 {rejected_pressure_cliff_source="amdgpu.sgpr", rejected_pressure_cliff_units="3", rejected_pressure_cliff_penalty="3"}
   %scratch = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
   return %result, %carry
 }
 
 // ----
-block 0 order: 1, 0, 2
+block 0 order: 0, 1, 2

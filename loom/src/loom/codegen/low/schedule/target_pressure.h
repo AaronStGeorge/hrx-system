@@ -132,6 +132,15 @@ uint32_t loom_low_schedule_target_pressure_full_unspillable_completion_capacity(
     const loom_low_schedule_pressure_state_t* pressure_state,
     uint16_t completion_domain_id);
 
+// Scores shared register-packing footprints across the candidate's lifetime
+// phases. NODE_NONE omits node-specific completion priority; the native
+// pressure records and resolved resource capacities still determine capacity
+// and debt.
+void loom_low_schedule_score_candidate_register_packing_resources(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_pressure_state_t* pressure_state,
+    uint32_t candidate_node_index, loom_low_schedule_candidate_score_t* score);
+
 // Scores all target-authored pressure cliffs, limits, and derived resources
 // against the candidate deltas already present in |pressure_state|.
 void loom_low_schedule_target_pressure_score_candidate(

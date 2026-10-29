@@ -222,23 +222,24 @@ node 1 <- none
 
 // ====
 
-// Delaying the comparison until the independent vector is prepared would
-// retain eight vector units. Consuming its inputs first fits the six-unit
-// budget. Both predicate writes remain available to pressure scheduling.
-// RUN: emit low-schedule-query @contracting_partial_producer strategy=resource-stall aie2p.vec256=6 order=* kind=order consumer=0,1 scheduled-pressure=aie2p.vec256
+// The comparison consumes two vector inputs while producing a partial predicate.
+// Neither predicate write is forced behind the independent vector preparation.
+// RUN: emit low-schedule-query @contracting_partial_producer strategy=resource-stall diagnostics=candidates order=* kind=order consumer=0,1 scheduled-pressure=aie2p.vec256
 
 aie2p.target<core> @target
 
 low.func.def target<amd.xdna.aie2p.core>(@target) @contracting_partial_producer(%magnitude: reg<aie2p.vec256 x2>, %threshold: reg<aie2p.vec256 x2>, %seed: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", chosen_projected_live_units="3", chosen_killed_live_units="4", chosen_produced_live_units="1"}
   %low = vge.u32x16.el.low32 %magnitude, %threshold
   %predicate = predicate.complete.zero.high32 %low, 0
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", rejected_packet="amd.xdna.aie2p.predicate.complete.zero.high32", rejected_killed_live_units="1", rejected_produced_live_units="1"}
   %prepared = vsub.32 %seed, %seed
   %result = vsel.32.mask64 %seed, %prepared, %predicate
   return %result
 }
 
 // ----
-block 0 order: 0, 1, 2, 3, 4
+block 0 order: 0, 2, 1, 3, 4
 scheduled pressure aie2p.vec256: peak-live-units=6 peak-live-values=3
 node 0 <- none
 node 1 <- none
@@ -281,27 +282,6 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @wide_constant_predicate_setup
 
 // ----
 node 0 <- none
-node 1 <- none
-
-// ====
-
-// Allocation repair can require private placement of the constant recipe.
-// That retained requirement still closes the consumer's other prerequisites
-// before either word acquires storage.
-// RUN: emit low-schedule-query @private_constant_predicate_setup kind=order consumer=0,1 per-user-placement-values=%low,%predicate required-register-values=%low,%predicate
-
-aie2p.target<core> @target
-
-low.func.def target<amd.xdna.aie2p.core>(@target) @private_constant_predicate_setup(%lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
-  %low = predicate.constant.low32 56
-  %predicate = predicate.complete.constant.high32 %low, 112
-  %prepared = vsub.32 %lhs, %rhs
-  %result = vsel.8 %lhs, %prepared, %predicate
-  return %result
-}
-
-// ----
-node 0 <- 2
 node 1 <- none
 
 // ====
@@ -726,13 +706,13 @@ low.func.def schedule(phased) target<amd.xdna.aie2p.core>(@target) @phase_setup_
 
 // ====
 
-// Lock operands cannot expose the acquire until all preceding work finishes.
-// Materializing the private scalar last keeps it out of that work's live set.
-// RUN: emit low-schedule-query @private_lock_operand strategy=resource-stall per-user-placement-values=%lock_value order=* issue=*
+// A ready lock operand cannot expose the acquire before preceding arithmetic
+// finishes. The scalar materialization itself can share the first issue cycle.
+// RUN: emit low-schedule-query @lock_operand strategy=resource-stall order=* issue=*
 
 aie2p.target<core> @target
 
-low.func.def target<amd.xdna.aie2p.core>(@target) @private_lock_operand(%lhs: reg<aie2p.er>, %rhs: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+low.func.def target<amd.xdna.aie2p.core>(@target) @lock_operand(%lhs: reg<aie2p.er>, %rhs: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
   %lock_value = mov.short -1
   %sum = add.rr %lhs, %rhs
   %result = add.rr %sum, %rhs
@@ -741,31 +721,9 @@ low.func.def target<amd.xdna.aie2p.core>(@target) @private_lock_operand(%lhs: re
 }
 
 // ----
-block 0 order: 1, 2, 0, 3, 4
-node 0 issue-cycle: 1
+block 0 order: 0, 1, 2, 3, 4
+node 0 issue-cycle: 0
 node 1 issue-cycle: 0
 node 2 issue-cycle: 1
 node 3 issue-cycle: 2
 node 4 issue-cycle: 3
-
-// ====
-
-// A retained computed predicate keeps its original consuming write. Its wide
-// inputs stay available while the select that releases the competing predicate
-// runs first; explicit placement does not require cloning the consumed value.
-// RUN: emit low-schedule-query @retained_partial_predicate strategy=source order=* kind=order consumer=0,1 per-user-placement-values=%low
-
-aie2p.target<core> @target
-
-low.func.def target<amd.xdna.aie2p.core>(@target) @retained_partial_predicate(%live: reg<aie2p.elpredicate>, %lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
-  %low = vge.u32x16.el.low32 %lhs, %rhs
-  %predicate = predicate.complete.zero.high32 %low, 0
-  %prepared = vsel.32.mask64 %lhs, %rhs, %live
-  %result = vsel.32.mask64 %lhs, %prepared, %predicate
-  return %result
-}
-
-// ----
-block 0 order: 2, 0, 1, 3, 4
-node 0 <- 2
-node 1 <- none

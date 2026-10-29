@@ -25,9 +25,3 @@ loom_low_allocation_move_topology_packet_move_op_kind(const loom_op_t* op) {
   }
   return LOOM_LOW_ALLOCATION_PACKET_MOVE_OP_NONE;
 }
-
-bool loom_low_allocation_move_topology_op_has_packet_moves(
-    const loom_op_t* op) {
-  return loom_low_allocation_move_topology_packet_move_op_kind(op) !=
-         LOOM_LOW_ALLOCATION_PACKET_MOVE_OP_NONE;
-}

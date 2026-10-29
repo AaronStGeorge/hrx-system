@@ -23,8 +23,10 @@ bool loom_low_capture_source_is_stable(const loom_module_t* module,
 
 // Returns whether replacing a fresh, equal-typed capture result with its source
 // preserves independent ownership and observations. |source_occurrences| counts
-// source operand occurrences removed with the capture. Consumes retained use
-// classifications and definition traits without following users or aliases.
+// source operand occurrences removed with the capture. Sole-observation
+// ownership transfers also require both definitions in the same block, where
+// each execution recreates both owners. Consumes retained use classifications
+// and definition metadata without following users or aliases.
 bool loom_low_capture_can_forward(const loom_module_t* module,
                                   loom_value_id_t source,
                                   loom_value_id_t result,

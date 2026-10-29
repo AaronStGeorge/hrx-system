@@ -170,9 +170,9 @@ iree_status_t loom_cfg_forward_empty_blocks(
           loom_cfg_br_isa(payload) ? loom_cfg_br_args((loom_op_t*)payload)
                                    : loom_low_br_args((loom_op_t*)payload);
       loom_block_t* destination = loom_op_successors(payload)[0];
-      if (loom_cfg_block_arguments_can_replace(rewriter->module, dominance,
-                                               destination, arguments,
-                                               terminator)) {
+      if (loom_cfg_block_arguments_can_bind(rewriter->module, dominance,
+                                            destination, arguments,
+                                            terminator)) {
         edit.destination = destination;
         edit.payload = payload;
       }

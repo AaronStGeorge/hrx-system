@@ -1,7 +1,125 @@
+// Inlining appends the producer after its loop, and CFG simplification forwards
+// the invariant argument to that later concat. Its scalar source must remain
+// live across repeated edge reads, with sparse reservations preserving holes.
+// The three-unit budget makes these physical lifetimes visible in spill IR.
+// RUN: pass inline-callables,cfg-simplify,low-materialize-allocation{budgets=test.i32=3}
+
+test.target<low_core> @target
+
+low.func.def inline target<test.low.core>(@target) @choose_seed(%choose: reg<test.i32>, %value: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.cond_br %choose, ^left, ^right : reg<test.i32>
+^left:
+  return %value
+^right:
+  %doubled = test.add.i32 %value, %value
+  return %doubled
+}
+
+low.func.def public target<test.low.core>(@target) @decomposed_reads_after_inlining(%choose: reg<test.i32>, %repeat: reg<test.i32>, %value: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %selected = low.func.call @choose_seed(%choose, %value) : (reg<test.i32>, reg<test.i32>) -> (reg<test.i32>)
+  %seed = test.add.i32 %selected, %selected
+  %tuple = concat(%seed) : (reg<test.i32>) -> reg<test.i32>
+  low.br ^header(%tuple: reg<test.i32>)
+^header(%invariant: reg<test.i32>):
+  %initial = test.add.i32 %repeat, %repeat
+  low.cond_br %repeat, ^primary, ^alternate : reg<test.i32>
+^primary:
+  low.br ^body(%invariant: reg<test.i32>)
+^alternate:
+  low.br ^body(%initial: reg<test.i32>)
+^body(%state: reg<test.i32>):
+  %result = test.tied.any %state
+  low.cond_br %repeat, ^latch, ^exit : reg<test.i32>
+^latch:
+  low.br ^header(%invariant: reg<test.i32>)
+^exit:
+  return %result, %initial
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def public target<test.low.core>(@target) @decomposed_reads_after_inlining(%choose: reg<test.i32>, %repeat: reg<test.i32>, %value: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %decomposed_reads_after_inlining_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %decomposed_reads_after_inlining_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %decomposed_reads_after_inlining_spill_storage_2 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.spill %repeat, %decomposed_reads_after_inlining_spill_storage_1 : reg<test.i32>, low.storage<private>
+  low.cond_br %choose, ^_bb6, ^_bb7 : reg<test.i32>
+^_bb8(%selected: reg<test.i32>):
+  %seed = test.add.i32 %selected, %selected
+  low.spill %seed, %decomposed_reads_after_inlining_spill_storage_0 : reg<test.i32>, low.storage<private>
+  %18 = low.reload %decomposed_reads_after_inlining_spill_storage_0 : low.storage<private> -> reg<test.i32>
+  %tuple = concat(%18) : (reg<test.i32>) -> reg<test.i32>
+  low.br ^header
+^header:
+  %20 = low.reload %decomposed_reads_after_inlining_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %21 = low.reload %decomposed_reads_after_inlining_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %initial = test.add.i32 %20, %21
+  low.spill %initial, %decomposed_reads_after_inlining_spill_storage_2 : reg<test.i32>, low.storage<private>
+  %22 = low.reload %decomposed_reads_after_inlining_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  low.cond_br %22, ^primary, ^alternate : reg<test.i32>
+^primary:
+  low.br ^body(%tuple: reg<test.i32>)
+^alternate:
+  %25 = low.reload %decomposed_reads_after_inlining_spill_storage_2 : low.storage<private> -> reg<test.i32>
+  low.br ^body(%25: reg<test.i32>)
+^body(%state: reg<test.i32>):
+  %result = test.tied.any %state
+  %23 = low.reload %decomposed_reads_after_inlining_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  low.cond_br %23, ^header, ^exit : reg<test.i32>
+^exit:
+  %26 = low.reload %decomposed_reads_after_inlining_spill_storage_2 : low.storage<private> -> reg<test.i32>
+  return %result, %26
+^_bb6:
+  low.br ^_bb8(%value: reg<test.i32>)
+^_bb7:
+  %doubled = test.add.i32 %value, %value
+  low.br ^_bb8(%doubled: reg<test.i32>)
+}
+
+// ====
+
+// Competing slice-used inputs share the estimator workspace. Each candidate's
+// cost must remain independent of the values considered before it. The right
+// vector also feeds a whole-vector store, so spilling the left is cheaper.
+// RUN: pass low-materialize-allocation{budgets=test.i32=9}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @independent_slice_spill_costs(%left: reg<test.i32 x4>, %right: reg<test.i32 x4>, %blocker: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32 x3>, reg<test.i32>, reg<test.i32 x3>, reg<test.i32>) asm {
+  %temporary = test.add.i32 %blocker, %blocker
+  %pressure = test.add.i32 %blocker, %temporary
+  %left_head = slice %left[0] : reg<test.i32 x4> -> reg<test.i32 x3>
+  %left_tail = slice %left[3] : reg<test.i32 x4> -> reg<test.i32>
+  %right_head = slice %right[0] : reg<test.i32 x4> -> reg<test.i32 x3>
+  %right_tail = slice %right[3] : reg<test.i32 x4> -> reg<test.i32>
+  test.store.v4i32 %address, %right
+  return %pressure, %left_head, %left_tail, %right_head, %right_tail
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @independent_slice_spill_costs(%left: reg<test.i32 x4>, %right: reg<test.i32 x4>, %blocker: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32 x3>, reg<test.i32>, reg<test.i32 x3>, reg<test.i32>) asm {
+  %independent_slice_spill_costs_spill_storage_0 = storage {byte_alignment = 16, byte_length = 16} : low.storage<private>
+  low.spill %left, %independent_slice_spill_costs_spill_storage_0 : reg<test.i32 x4>, low.storage<private>
+  %temporary = test.add.i32 %blocker, %blocker
+  %pressure = test.add.i32 %blocker, %temporary
+  %16 = low.reload %independent_slice_spill_costs_spill_storage_0 : low.storage<private> -> reg<test.i32 x3>
+  %17 = low.reload %independent_slice_spill_costs_spill_storage_0 {offset = 12} : low.storage<private> -> reg<test.i32>
+  %right_head = slice %right[0] : reg<test.i32 x4> -> reg<test.i32 x3>
+  %right_tail = slice %right[3] : reg<test.i32 x4> -> reg<test.i32>
+  test.store.v4i32 %address, %right
+  return %pressure, %16, %17, %right_head, %right_tail
+}
+
+// ====
+
 // Inlining appends the producer continuation after the existing loop. Two
 // helper returns and two loop predecessors keep both blocks through CFG
-// simplification, which forwards the loop argument to the later identity.
-// Allocation must reserve the identity's source first despite that layout.
+// simplification, which forwards the loop argument to a read-only concat.
+// Decomposing that concat reads the later identity before its definition in
+// storage order. Allocation must reserve the identity's source first.
 // RUN: pass inline-callables,cfg-simplify,low-materialize-allocation{budgets=test.i32=5}
 
 test.target<low_core> @target
@@ -19,7 +137,8 @@ low.func.def public target<test.low.core>(@target) @identity_after_inlined_conti
   %selected = low.func.call @select_seed(%choose, %seed) : (reg<test.i32>, reg<test.i32>) -> (reg<test.i32>)
   %source = test.add.i32 %selected, %seed
   %identity = low.assume %source [] : reg<test.i32>
-  low.br ^loop(%identity: reg<test.i32>)
+  %tuple = concat(%identity) : (reg<test.i32>) -> reg<test.i32>
+  low.br ^loop(%tuple: reg<test.i32>)
 ^loop(%forwarded: reg<test.i32>):
   %sum = test.add.i32 %forwarded, %seed
   low.cond_br %again, ^backedge, ^returned : reg<test.i32>
@@ -37,9 +156,10 @@ low.func.def public target<test.low.core>(@target) @identity_after_inlined_conti
 ^_bb5(%selected: reg<test.i32>):
   %source = test.add.i32 %selected, %seed
   %identity = low.assume %source [] : reg<test.i32>
+  %tuple = concat(%identity) : (reg<test.i32>) -> reg<test.i32>
   low.br ^loop
 ^loop:
-  %sum = test.add.i32 %identity, %seed
+  %sum = test.add.i32 %tuple, %seed
   low.cond_br %again, ^loop, ^returned : reg<test.i32>
 ^returned:
   return %sum
@@ -169,6 +289,124 @@ low.func.def target<test.low.core>(@test_target) @block_arg_spill(%row: reg<test
   %10 = low.reload %block_arg_spill_spill_storage_1 : low.storage<private> -> reg<test.i32>
   %out = test.add.i32 %sum, %10
   return %out
+}
+
+// ====
+
+// Removing an ordinary branch payload rebases the following identity range.
+// The pointer carrier stays in its separate bank while scalar pressure spills
+// the local state and its receiving block argument.
+// RUN: pass low-materialize-allocation{budgets=test.i32=2}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_rebases_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.br.identity(1, 1) ^join(%local: reg<test.i32>, %address: reg<test.ptr>)
+^join(%state: reg<test.i32>, %pointer: reg<test.ptr>):
+  %pair = test.add.i32 %left, %right
+  %sum = test.add.i32 %pair, %state
+  return %sum, %pointer
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_rebases_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  %spill_rebases_identity_range_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %spill_rebases_identity_range_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.spill %left, %spill_rebases_identity_range_spill_storage_0 : reg<test.i32>, low.storage<private>
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.spill %local, %spill_rebases_identity_range_spill_storage_1 : reg<test.i32>, low.storage<private>
+  low.br.identity(0, 1) ^join(%address: reg<test.ptr>)
+^join(%pointer: reg<test.ptr>):
+  %11 = low.reload %spill_rebases_identity_range_spill_storage_0 : low.storage<private> -> reg<test.i32>
+  %pair = test.add.i32 %11, %right
+  %13 = low.reload %spill_rebases_identity_range_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %sum = test.add.i32 %pair, %13
+  return %sum, %pointer
+}
+
+// ====
+
+// Removing an identity payload shrinks the range while preserving its pointer
+// carrier, which uses an independent register bank.
+// RUN: pass low-materialize-allocation{budgets=test.i32=2}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_shrinks_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.br.identity(0, 2) ^join(%local: reg<test.i32>, %address: reg<test.ptr>)
+^join(%state: reg<test.i32>, %pointer: reg<test.ptr>):
+  %pair = test.add.i32 %left, %right
+  %sum = test.add.i32 %pair, %state
+  return %sum, %pointer
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_shrinks_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  %spill_shrinks_identity_range_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %spill_shrinks_identity_range_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.spill %left, %spill_shrinks_identity_range_spill_storage_0 : reg<test.i32>, low.storage<private>
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.spill %local, %spill_shrinks_identity_range_spill_storage_1 : reg<test.i32>, low.storage<private>
+  low.br.identity(0, 1) ^join(%address: reg<test.ptr>)
+^join(%pointer: reg<test.ptr>):
+  %11 = low.reload %spill_shrinks_identity_range_spill_storage_0 : low.storage<private> -> reg<test.i32>
+  %pair = test.add.i32 %11, %right
+  %13 = low.reload %spill_shrinks_identity_range_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %sum = test.add.i32 %pair, %13
+  return %sum, %pointer
+}
+
+// ====
+
+// Removing the final identity payload leaves an ordinary branch carrying the
+// unchanged pointer argument.
+// RUN: pass low-materialize-allocation{budgets=test.i32=2}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_removes_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.br.identity(0, 1) ^join(%local: reg<test.i32>, %address: reg<test.ptr>)
+^join(%state: reg<test.i32>, %pointer: reg<test.ptr>):
+  %pair = test.add.i32 %left, %right
+  %sum = test.add.i32 %pair, %state
+  return %sum, %pointer
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @spill_removes_identity_range(%left: reg<test.i32>, %right: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.ptr>) asm {
+  %spill_removes_identity_range_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %spill_removes_identity_range_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.spill %left, %spill_removes_identity_range_spill_storage_0 : reg<test.i32>, low.storage<private>
+  low.br ^late
+^late:
+  %local = test.const.i32 7
+  low.spill %local, %spill_removes_identity_range_spill_storage_1 : reg<test.i32>, low.storage<private>
+  low.br ^join(%address: reg<test.ptr>)
+^join(%pointer: reg<test.ptr>):
+  %11 = low.reload %spill_removes_identity_range_spill_storage_0 : low.storage<private> -> reg<test.i32>
+  %pair = test.add.i32 %11, %right
+  %13 = low.reload %spill_removes_identity_range_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  %sum = test.add.i32 %pair, %13
+  return %sum, %pointer
 }
 
 // ====
@@ -1418,4 +1656,51 @@ low.func.def target<test.low.core>(@target) @repeated_storage_address(%a: reg<te
   %first = test.add.i32 %ab, %twice
   %result = test.add.i32 %first, %bc
   return %result
+}
+
+// ====
+
+// A wide reload and its overlapping slices share storage with one scalar.
+// The complete allocation pass must introduce no additional spill traffic.
+// RUN: with-low-asm pass low-materialize-allocation{budgets=test.i32=5}
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @shared_reload_with_live_scalar(%blocker: reg<test.i32>, %wide: reg<test.i32 x4>) -> (reg<test.i32>) asm {
+  %storage = storage {byte_alignment = 16, byte_length = 16} : low.storage<private>
+  low.spill %wide, %storage : reg<test.i32 x4>, low.storage<private>
+  %pressure = test.add.i32 %blocker, %blocker
+  %reloaded = low.reload %storage : low.storage<private> -> reg<test.i32 x4>
+  %head = slice %reloaded[0] : reg<test.i32 x4> -> reg<test.i32 x3>
+  %first = slice %head[0] : reg<test.i32 x3> -> reg<test.i32>
+  %second = slice %head[1] : reg<test.i32 x3> -> reg<test.i32>
+  %sum = test.add.i32 %first, %second
+  %tail = slice %reloaded[2] : reg<test.i32 x4> -> reg<test.i32 x2>
+  %third = slice %tail[0] : reg<test.i32 x2> -> reg<test.i32>
+  %fourth = slice %tail[1] : reg<test.i32 x2> -> reg<test.i32>
+  %sum1 = test.add.i32 %sum, %third
+  %sum2 = test.add.i32 %sum1, %fourth
+  %out = test.add.i32 %sum2, %pressure
+  return %out
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @shared_reload_with_live_scalar(%blocker: reg<test.i32>, %wide: reg<test.i32 x4>) -> (reg<test.i32>) asm {
+  %storage = storage {byte_alignment = 16, byte_length = 16} : low.storage<private>
+  low.spill %wide, %storage : reg<test.i32 x4>, low.storage<private>
+  %pressure = test.add.i32 %blocker, %blocker
+  %reloaded = low.reload %storage : low.storage<private> -> reg<test.i32 x4>
+  %head = slice %reloaded[0] : reg<test.i32 x4> -> reg<test.i32 x3>
+  %first = slice %head[0] : reg<test.i32 x3> -> reg<test.i32>
+  %second = slice %head[1] : reg<test.i32 x3> -> reg<test.i32>
+  %sum = test.add.i32 %first, %second
+  %tail = slice %reloaded[2] : reg<test.i32 x4> -> reg<test.i32 x2>
+  %third = slice %tail[0] : reg<test.i32 x2> -> reg<test.i32>
+  %fourth = slice %tail[1] : reg<test.i32 x2> -> reg<test.i32>
+  %sum1 = test.add.i32 %sum, %third
+  %sum2 = test.add.i32 %sum1, %fourth
+  %out = test.add.i32 %sum2, %pressure
+  return %out
 }

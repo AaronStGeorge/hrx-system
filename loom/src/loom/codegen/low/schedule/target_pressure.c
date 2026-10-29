@@ -1094,7 +1094,7 @@ static void loom_low_schedule_score_active_unspillable_completions(
   }
 }
 
-static void loom_low_schedule_score_candidate_register_packing_resources(
+void loom_low_schedule_score_candidate_register_packing_resources(
     const loom_low_schedule_build_state_t* state,
     const loom_low_schedule_pressure_state_t* pressure_state,
     uint32_t candidate_node_index, loom_low_schedule_candidate_score_t* score) {

@@ -261,7 +261,8 @@ low.func.def target<amdgpu.rdna3.core>(@target) @replicate_live_in(%lhs: reg<amd
 
 // ====
 
-// Public kernel emission retains a valid entry interface.
+// Public kernel emission keeps an already-fitting ABI input in place. The
+// native instruction reads the original pair without a split copy or spill.
 // RUN: emit amdgpu-kernel-assembly
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}

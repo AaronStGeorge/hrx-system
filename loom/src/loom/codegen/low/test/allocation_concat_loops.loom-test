@@ -1,4 +1,4 @@
-// RUN: emit low-allocation-json @entry test.i32=7
+// RUN: emit low-allocation-json @entry
 
 // Decomposing the invariant tuple reads the scalar seed on every header edge.
 // Its semantic SSA use at the pre-loop concat does not describe that storage
@@ -25,9 +25,9 @@ low.func.def target<test.low.core>(@target) @entry(%repeat: reg<test.i32>) -> (r
 
 // ====
 
-// Distinct invariant sources are retained independently. The seven-unit budget
-// fits the condition, two seeds, and four-unit destination exactly; no second
-// four-unit reservation may survive for the structural concat.
+// Distinct invariant sources are retained independently. The condition, two
+// seeds, and four-unit destination occupy seven units; no second four-unit
+// reservation may survive for the structural concat.
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @entry(%repeat: reg<test.i32>) -> (reg<test.i32 x4>) asm {
@@ -99,6 +99,7 @@ low.func.def target<test.low.core>(@target) @entry(%repeat: reg<test.i32>) -> (r
 
 // A rotated loop reaches the destructive consumer before the reinitializing
 // edge. Both the initial handoff and repeated handoff read the same seed.
+// RUN: emit low-allocation-json @entry
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @entry(%repeat: reg<test.i32>) -> (reg<test.i32 x4>) asm {
@@ -117,7 +118,7 @@ low.func.def target<test.low.core>(@target) @entry(%repeat: reg<test.i32>) -> (r
 }
 
 // ----
-{"format":"loom.low.allocation.v0","function":"entry","target":"target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":5,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"repeat","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":0,"end_point":11,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":1,"value":{"id":3,"name":"tuple","type":"reg<test.i32 x4>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":2,"end_point":11,"unit_count":4,"location":{"kind":"target_id","base":1,"count":4}},{"index":2,"value":{"id":2,"name":"seed","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":1,"end_point":11,"unit_count":1,"location":{"kind":"target_id","base":1,"count":1}},{"index":3,"value":{"id":4,"name":"state","type":"reg<test.i32 x4>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":4,"end_point":12,"unit_count":4,"location":{"kind":"target_id","base":2,"count":4}},{"index":4,"value":{"id":5,"name":"result","type":"reg<test.i32 x4>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":5,"end_point":12,"unit_count":4,"location":{"kind":"target_id","base":2,"count":4}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
+{"format":"loom.low.allocation.v0","function":"entry","target":"target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":5,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"repeat","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":0,"end_point":11,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":1,"value":{"id":3,"name":"tuple","type":"reg<test.i32 x4>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":2,"end_point":11,"unit_count":4,"location":{"kind":"target_id","base":1,"count":4}},{"index":2,"value":{"id":2,"name":"seed","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":1,"end_point":11,"unit_count":1,"location":{"kind":"target_id","base":1,"count":1}},{"index":3,"value":{"id":4,"name":"state","type":"reg<test.i32 x4>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":4,"end_point":12,"unit_count":4,"location":{"kind":"target_id","base":4,"count":4}},{"index":4,"value":{"id":5,"name":"result","type":"reg<test.i32 x4>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":null,"register_class":"test.i32"},"start_point":5,"end_point":12,"unit_count":4,"location":{"kind":"target_id","base":4,"count":4}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
 
 // ====
 
@@ -148,7 +149,7 @@ low.func.def target<test.low.core>(@target) @entry(%repeat: reg<test.i32>) -> (r
 // A repeated physical source cannot share a loop destination when it remains
 // observable after the handoff, even though both destination units carry the
 // same initial bits.
-// RUN: emit low-allocation-json @retained_physical_broadcast test.i32=7
+// RUN: emit low-allocation-json @retained_physical_broadcast
 test.target<low_core> @target
 
 low.func.def target<test.low.core>(@target) @retained_physical_broadcast(%repeat: reg<test.i32>) -> (reg<test.explicit32 x2>, reg<test.explicit32>) asm {

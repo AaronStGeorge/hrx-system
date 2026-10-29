@@ -33,9 +33,6 @@ typedef enum loom_low_allocation_packet_move_op_kind_e {
 loom_low_allocation_packet_move_op_kind_t
 loom_low_allocation_move_topology_packet_move_op_kind(const loom_op_t* op);
 
-// Returns true when |op| may require packet-local moves after allocation.
-bool loom_low_allocation_move_topology_op_has_packet_moves(const loom_op_t* op);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif

@@ -1,118 +1,25 @@
-// A later spill must reload the incoming value used by an edge store that an
-// earlier block-argument spill created in the same immutable batch.
-// RUN: emit low-allocation-query @generated_edge_store_source_spill strategy=source test.i32=2 materialize-spills
+// A seven-unit spill source leaves one physical unit for three scalar results.
+// The complete repair has no unresolved spills but retains its memory traffic
+// across repair iterations. The authored store is not part of that total.
+// RUN: emit low-allocation-query @materialized_spill_traffic strategy=source spill-free spill-count copy-count
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @generated_edge_store_source_spill(%init: reg<test.i32>, %delta: reg<test.i32>, %cond: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
-  low.br ^loop(%init: reg<test.i32>, %init: reg<test.i32>, %init: reg<test.i32>)
-^loop(%a0: reg<test.i32>, %a1: reg<test.i32>, %a2: reg<test.i32>):
-  low.cond_br %cond, ^body, ^exit : reg<test.i32>
-^body:
-  %n0 = test.add.i32 %a0, %delta
-  %n1 = test.add.i32 %a1, %delta
-  %n2 = test.add.i32 %a2, %delta
-  low.br ^loop(%n0: reg<test.i32>, %n1: reg<test.i32>, %n2: reg<test.i32>)
-^exit:
-  return %a0, %a1, %a2
-}
-
-// ----
-storage: 5 reservations, 20 bytes
-traffic: 7 stores, 9 reloads
-errors: 0
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @generated_edge_store_source_spill(%init: reg<test.i32>, %delta: reg<test.i32>, %cond: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
-  %generated_edge_store_source_spill_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  %generated_edge_store_source_spill_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  %generated_edge_store_source_spill_spill_storage_2 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  %generated_edge_store_source_spill_spill_storage_3 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  %generated_edge_store_source_spill_spill_storage_4 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  low.spill %cond, %generated_edge_store_source_spill_spill_storage_0 : reg<test.i32>, low.storage<private>
-  low.spill %delta, %generated_edge_store_source_spill_spill_storage_3 : reg<test.i32>, low.storage<private>
-  low.spill %init, %generated_edge_store_source_spill_spill_storage_1 : reg<test.i32>, low.storage<private>
-  low.spill %init, %generated_edge_store_source_spill_spill_storage_2 : reg<test.i32>, low.storage<private>
-  low.br ^loop(%init: reg<test.i32>)
-^loop(%a0: reg<test.i32>):
-  %17 = low.reload %generated_edge_store_source_spill_spill_storage_0 : low.storage<private> -> reg<test.i32>
-  low.cond_br %17, ^body, ^exit : reg<test.i32>
-^body:
-  %18 = low.reload %generated_edge_store_source_spill_spill_storage_3 : low.storage<private> -> reg<test.i32>
-  %n0 = test.add.i32 %a0, %18
-  %19 = low.reload %generated_edge_store_source_spill_spill_storage_1 : low.storage<private> -> reg<test.i32>
-  %20 = low.reload %generated_edge_store_source_spill_spill_storage_3 : low.storage<private> -> reg<test.i32>
-  %n1 = test.add.i32 %19, %20
-  %21 = low.reload %generated_edge_store_source_spill_spill_storage_2 : low.storage<private> -> reg<test.i32>
-  %22 = low.reload %generated_edge_store_source_spill_spill_storage_3 : low.storage<private> -> reg<test.i32>
-  %n2 = test.add.i32 %21, %22
-  low.spill %n2, %generated_edge_store_source_spill_spill_storage_4 : reg<test.i32>, low.storage<private>
-  low.spill %n1, %generated_edge_store_source_spill_spill_storage_1 : reg<test.i32>, low.storage<private>
-  %23 = low.reload %generated_edge_store_source_spill_spill_storage_4 : low.storage<private> -> reg<test.i32>
-  low.spill %23, %generated_edge_store_source_spill_spill_storage_2 : reg<test.i32>, low.storage<private>
-  low.br ^loop(%n0: reg<test.i32>)
-^exit:
-  %24 = low.reload %generated_edge_store_source_spill_spill_storage_1 : low.storage<private> -> reg<test.i32>
-  %25 = low.reload %generated_edge_store_source_spill_spill_storage_2 : low.storage<private> -> reg<test.i32>
-  return %a0, %24, %25
-}
-
-// ====
-
-// Spilling an ordinary payload before the unchanged carrier rebases the
-// identity interval retained by the rebuilt branch.
-// RUN: emit low-allocation-query @spill_rebases_identity_interval strategy=source test.i32=2 fixed=%retained:target_id:0:1 materialize-spills
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @spill_rebases_identity_interval(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>) -> (reg<test.i32>) asm {
-  low.br.identity(2, 1) ^join(%prefix: reg<test.i32>, %suffix: reg<test.i32>, %retained: reg<test.i32>)
-^join(%prefix_result: reg<test.i32>, %suffix_result: reg<test.i32>, %retained_result: reg<test.i32>):
-  %neighbors = test.add.i32 %prefix_result, %suffix_result
-  %result = test.add.i32 %neighbors, %retained_result
-  return %result
-}
-
-// ----
-storage: 2 reservations, 8 bytes
-traffic: 2 stores, 2 reloads
-errors: 0
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @spill_rebases_identity_interval(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>) -> (reg<test.i32>) asm {
-  %spill_rebases_identity_interval_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  %spill_rebases_identity_interval_spill_storage_1 = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  low.spill %suffix, %spill_rebases_identity_interval_spill_storage_0 : reg<test.i32>, low.storage<private>
-  %11 = low.reload %spill_rebases_identity_interval_spill_storage_0 : low.storage<private> -> reg<test.i32>
-  low.spill %11, %spill_rebases_identity_interval_spill_storage_1 : reg<test.i32>, low.storage<private>
-  low.br.identity(1, 1) ^join(%prefix: reg<test.i32>, %retained: reg<test.i32>)
-^join(%prefix_result: reg<test.i32>, %retained_result: reg<test.i32>):
-  %12 = low.reload %spill_rebases_identity_interval_spill_storage_1 : low.storage<private> -> reg<test.i32>
-  %neighbors = test.add.i32 %prefix_result, %12
-  %result = test.add.i32 %neighbors, %retained_result
-  return %result
-}
-
-// ====
-
-// Three live four-unit loads exceed the eight-unit bank. The complete repair
-// finishes with no unresolved spills but retains its inserted memory traffic.
-// RUN: emit low-allocation-query @materialized_spill_traffic strategy=source spill-free spill-count copy-count test.i32=8
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @materialized_spill_traffic(%address: reg<test.ptr>) -> (reg<test.i32 x4>) asm {
-  %first = test.load.v4i32 %address
-  %second = test.load.v4i32 %address
-  %third = test.load.v4i32 %address
-  %pair = test.add.v4i32 %first, %second
-  %result = test.add.v4i32 %pair, %third
+low.func.def target<test.low.core>(@target) @materialized_spill_traffic(%wide: reg<test.pressure.alias32 x7>, %seed0: reg<test.i32>, %seed1: reg<test.i32>, %seed2: reg<test.i32>) -> (reg<test.i32>) asm {
+  %wide_storage = storage {byte_alignment = 4, byte_length = 28} : low.storage<stack>
+  %first = test.move.to.pressure.alias32 %seed0
+  %second = test.move.to.pressure.alias32 %seed1
+  %third = test.move.to.pressure.alias32 %seed2
+  %first_value = copy %first : reg<test.pressure.alias32> -> reg<test.i32>
+  %second_value = copy %second : reg<test.pressure.alias32> -> reg<test.i32>
+  %third_value = copy %third : reg<test.pressure.alias32> -> reg<test.i32>
+  %pair = test.add.i32 %first_value, %second_value
+  %result = test.add.i32 %pair, %third_value
+  low.spill %wide, %wide_storage : reg<test.pressure.alias32 x7>, low.storage<stack>
   return %result
 }
 
 // ----
 spills: 0
-materialized traffic: stores=2 reloads=2
-copies: coalesced=0 materialized=0
+materialized traffic: stores=3 reloads=3
+copies: coalesced=0 materialized=3

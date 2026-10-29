@@ -1,5 +1,26 @@
 // RUN: pass cfg-simplify
 
+// An incoming tensor is a snapshot, not an ownership transfer from the source.
+// Even a single-predecessor block must preserve this destructive-use boundary.
+func.def @retains_tensor_snapshot(%source: tensor<4xf32>, %tile: tile<4xf32>) {
+  cfg.br ^body(%source: tensor<4xf32>)
+^body(%snapshot: tensor<4xf32>):
+  %changed = test.update %tile, %snapshot[0] : tile<4xf32> -> (%snapshot as tensor<4xf32>)
+  test.use %source, %changed : tensor<4xf32>, tensor<4xf32>
+  func.return
+}
+
+// ----
+func.def @retains_tensor_snapshot(%source: tensor<4xf32>, %tile: tile<4xf32>) {
+  cfg.br ^body(%source: tensor<4xf32>)
+^body(%snapshot: tensor<4xf32>):
+  %changed = test.update %tile, %snapshot[0] : tile<4xf32> -> (%snapshot as tensor<4xf32>)
+  test.use %source, %changed : tensor<4xf32>, tensor<4xf32>
+  func.return
+}
+
+// ====
+
 // Dependent types follow substitutions across every incoming branch in a chain.
 func.def @dependent_chain(%layout: encoding<layout>, %view: view<4xf32, %layout>) {
   cfg.br ^start(%layout: encoding<layout>, %view: view<4xf32, %layout>)

@@ -1,21 +1,28 @@
-// RUN: emit low-allocation-query @copy_declared_pair values=%source,%result copies=%result fixed=%source:physical_register:5:2
+// RUN: emit low-allocation-query @copy_declared_pair values=%guard,%source,%result copies=%result
 
 test.target<low_core> @target
 
-// Physical ID 5 names l1 (r1,r3); it is not an unaligned linear pair.
-low.func.def target<test.low.core>(@target) @copy_declared_pair(%source: reg<test.explicit32 x2>) -> (reg<test.explicit32 x2>) asm {
+// A live scalar forces the source into l1 before releasing r0. The later copy
+// preserves l1 even though l0 is now free; its odd ID names a declared view,
+// not an unaligned linear range.
+low.func.def target<test.low.core>(@target) @copy_declared_pair(%guard: reg<test.explicit32>) -> (reg<test.i32>, reg<test.explicit32 x2>) asm {
+  %low = test.const.explicit32 11
+  %high = test.const.explicit32 23
+  %source = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
+  %released = copy %guard : reg<test.explicit32> -> reg<test.i32>
   %result = copy %source : reg<test.explicit32 x2> -> reg<test.explicit32 x2>
-  return %result
+  return %released, %result
 }
 
 // ----
+value %guard: test.explicit32 -> physical_register[0:1]
 value %source: test.explicit32 -> physical_register[5:2]
 value %result: test.explicit32 -> physical_register[5:2]
 copy %source -> %result: coalesced
 
 // ====
 
-// RUN: emit low-allocation-query @join_preserves_loop_storage values=%initial,%state,%fresh,%merged fixed=%initial:physical_register:4:2
+// RUN: emit low-allocation-query @join_preserves_loop_storage values=%initial,%state,%fresh,%merged
 
 test.target<low_core> @target
 
@@ -127,39 +134,24 @@ value %restricted: test.packed.narrow -> physical_register[0:1]
 
 // ====
 
-// RUN: emit low-allocation-query @copy_keeps_general_storage values=%source,%result copies=%result fixed=%source:physical_register:2:1
+// RUN: emit low-allocation-query @copy_keeps_general_storage spill-count values=%source,%result,%short,%restricted copies=%result
 
 test.target<low_core> @target
 
-// The source is already in general-only storage while one narrow candidate is
-// idle. Preserve the copy affinity because it does not consume the candidate
-// reserved for the overlapping restricted value.
-low.func.def target<test.low.core>(@target) @copy_keeps_general_storage(%source: reg<test.explicit32>, %peer0: reg<test.explicit32>, %peer1: reg<test.explicit32>, %restricted: reg<test.packed.narrow>) -> (reg<test.explicit32>, reg<test.explicit32>, reg<test.explicit32>, reg<test.packed.narrow>) asm {
+// Two narrow inputs keep the source in general storage. Releasing one before
+// the copy opens a narrow candidate, but the copy still keeps its source.
+low.func.def target<test.low.core>(@target) @copy_keeps_general_storage(%source: reg<test.explicit32>, %peer: reg<test.explicit32>, %short: reg<test.packed.narrow>, %restricted: reg<test.packed.narrow>) -> (reg<test.i32>, reg<test.explicit32>, reg<test.explicit32>, reg<test.packed.narrow>) asm {
+  %released = copy %short : reg<test.packed.narrow> -> reg<test.i32>
   %result = copy %source : reg<test.explicit32> -> reg<test.explicit32>
-  return %result, %peer0, %peer1, %restricted
+  return %released, %result, %peer, %restricted
 }
 
 // ----
+spills: 0
 value %source: test.explicit32 -> physical_register[2:1]
 value %result: test.explicit32 -> physical_register[2:1]
-copy %source -> %result: coalesced
-
-// ====
-
-// RUN: emit low-allocation-query @future_fixed_copy values=%source,%result copies=%result fixed=%result:physical_register:2:1
-
-test.target<low_core> @target
-
-// The later result location is known before interval assignment. Preserve that
-// copy affinity instead of moving the source through idle narrower storage.
-low.func.def target<test.low.core>(@target) @future_fixed_copy(%source: reg<test.explicit32>, %peer0: reg<test.explicit32>, %peer1: reg<test.explicit32>, %restricted: reg<test.packed.narrow>) -> (reg<test.explicit32>, reg<test.explicit32>, reg<test.explicit32>, reg<test.packed.narrow>) asm {
-  %result = copy %source : reg<test.explicit32> -> reg<test.explicit32>
-  return %result, %peer0, %peer1, %restricted
-}
-
-// ----
-value %source: test.explicit32 -> physical_register[2:1]
-value %result: test.explicit32 -> physical_register[2:1]
+value %short: test.packed.narrow -> physical_register[0:1]
+value %restricted: test.packed.narrow -> physical_register[1:1]
 copy %source -> %result: coalesced
 
 // ====
@@ -190,25 +182,32 @@ value %restricted: test.packed.narrow -> physical_register[0:1]
 
 // ====
 
-// RUN: emit low-allocation-query @loop_relocation_observes_atomic_alias values=%seed,%state,%next,%blocker_source,%blocker,%peer fixed=%seed:physical_register:2:1 fixed=%next:physical_register:0:1 fixed=%peer:physical_register:8:1
+// RUN: emit low-allocation-query @loop_relocation_observes_atomic_alias values=%seed,%state,%next,%blocker_source,%blocker,%peer
 
 test.target<low_core> @target
 
 // test.r0 and test.a0 have distinct physical-register IDs but own the same
 // atomic storage unit. The exit-only alias can share with the backedge source,
 // but it blocks relocating the loop header onto that source location. %peer
-// occupies the other alias candidate without fixing the blocker itself.
-low.func.def target<test.low.core>(@target) @loop_relocation_observes_atomic_alias(%condition: reg<test.i32>, %seed: reg<test.explicit32>, %peer: reg<test.alias.narrow>) -> (reg<test.explicit32>, reg<test.alias.narrow>, reg<test.alias.narrow>) asm {
+// occupies the other alias candidate while %guard is live. The seed and
+// backedge use different units of the declared pair, keeping their locations
+// distinct even though their scalar register classes match.
+low.func.def target<test.low.core>(@target) @loop_relocation_observes_atomic_alias(%condition: reg<test.i32>, %initial: reg<test.explicit32 x2>, %peer_input: reg<test.i32>, %backedge_input: reg<test.f32 x2>) -> (reg<test.explicit32>, reg<test.alias.narrow>, reg<test.alias.narrow>, reg<test.i32>) asm {
+  %guard = slice %initial[0] : reg<test.explicit32 x2> -> reg<test.explicit32>
+  %seed = slice %initial[1] : reg<test.explicit32 x2> -> reg<test.explicit32>
+  %peer = copy %peer_input : reg<test.i32> -> reg<test.alias.narrow>
+  %released = copy %guard : reg<test.explicit32> -> reg<test.i32>
   low.br ^loop(%seed: reg<test.explicit32>)
 ^loop(%state: reg<test.explicit32>):
   low.cond_br %condition, ^body, ^exit : reg<test.i32>
 ^body:
-  %next = test.const.explicit32 1
+  %tuple = copy %backedge_input : reg<test.f32 x2> -> reg<test.explicit32 x2>
+  %next = slice %tuple[0] : reg<test.explicit32 x2> -> reg<test.explicit32>
   low.br ^loop(%next: reg<test.explicit32>)
 ^exit:
   %blocker_source = test.const.explicit32 2
   %blocker = copy %blocker_source : reg<test.explicit32> -> reg<test.alias.narrow>
-  return %state, %blocker, %peer
+  return %state, %blocker, %peer, %released
 }
 
 // ----
@@ -274,36 +273,6 @@ low.func.def target<test.low.core>(@target) @disjoint_domains_preserve_transfer(
 value %source: test.packed.narrow -> physical_register[0:1]
 value %result: test.coindexed.partner -> physical_register[2:1]
 copy %source -> %result: materialized
-
-// ====
-
-// RUN: emit low-allocation-query @fixed_binding_overrides_preference values=%persistent,%restricted fixed=%persistent:physical_register:0:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @fixed_binding_overrides_preference(%persistent: reg<test.explicit32>) -> (reg<test.explicit32>, reg<test.packed.narrow>) asm {
-  %restricted = test.const.packed.narrow 7
-  return %persistent, %restricted
-}
-
-// ----
-value %persistent: test.explicit32 -> physical_register[0:1]
-value %restricted: test.packed.narrow -> physical_register[1:1]
-
-// ====
-
-// RUN: emit low-allocation-query @budget_overrides_preference values=%persistent,%restricted test.explicit32=2
-
-test.target<low_core> @target
-
-// The broad budget excludes the otherwise preferred idle r3 candidate.
-low.func.def target<test.low.core>(@target) @budget_overrides_preference(%persistent: reg<test.explicit32>, %restricted: reg<test.coindexed.partner>) -> (reg<test.explicit32>, reg<test.coindexed.partner>) asm {
-  return %persistent, %restricted
-}
-
-// ----
-value %persistent: test.explicit32 -> physical_register[0:1]
-value %restricted: test.coindexed.partner -> physical_register[2:1]
 
 // ====
 
@@ -414,7 +383,7 @@ value %fixed1: test.fixed.r0 -> physical_register[0:1]
 
 // The first result must leave a matching register for the second result even
 // though its own register class has no conflict at ordinal zero.
-// RUN: emit low-allocation-query @coindexed_result_peer values=%live,%primary,%partner fixed=%live:physical_register:2:1
+// RUN: emit low-allocation-query @coindexed_result_peer values=%live,%primary,%partner
 
 test.target<low_core> @target
 
@@ -430,32 +399,35 @@ value %partner: test.coindexed.partner -> physical_register[3:1]
 
 // ====
 
+// The short input holds r2 until it is consumed, placing the blocker in r3.
 // The first tuple initially chooses ordinal zero. The later tuple cannot use
-// ordinal one while its partner overlaps the fixed r3 value, and its primary
+// ordinal one while its partner overlaps the r3 input, and its primary
 // cannot use ordinal zero while the first primary remains live. Recolor the
 // complete first tuple to ordinal one before assigning the second tuple.
-// RUN: emit low-allocation-query @recolor_coindexed_tuple values=%blocker,%a_primary,%w_primary,%w_partner,%a_partner fixed=%blocker:physical_register:3:1
+// RUN: emit low-allocation-query @recolor_coindexed_tuple values=%blocker,%first_primary,%second_primary,%second_partner,%first_partner
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @recolor_coindexed_tuple(%blocker: reg<test.coindexed.partner>) -> (reg<test.packed.narrow>, reg<test.coindexed.partner>, reg<test.packed.narrow>, reg<test.coindexed.partner>) asm {
-  %a_primary = test.const.packed.narrow 1
-  %w_primary = test.const.packed.narrow 2
-  %w_partner_seed = test.const.i32 3
-  %w_partner = copy %w_partner_seed : reg<test.i32> -> reg<test.coindexed.partner>
+low.func.def target<test.low.core>(@target) @recolor_coindexed_tuple(%short: reg<test.coindexed.partner>, %blocker: reg<test.coindexed.partner>) -> (reg<test.packed.narrow>, reg<test.coindexed.partner>, reg<test.packed.narrow>, reg<test.coindexed.partner>) asm {
+  %released = copy %short : reg<test.coindexed.partner> -> reg<test.i32>
+  test.event.memory.write.i32 %released
+  %first_primary = test.const.packed.narrow 1
+  %second_primary = test.const.packed.narrow 2
+  %second_partner_seed = test.const.i32 3
+  %second_partner = copy %second_partner_seed : reg<test.i32> -> reg<test.coindexed.partner>
   %blocker_value = copy %blocker : reg<test.coindexed.partner> -> reg<test.explicit32>
   %blocker_virtual = copy %blocker_value : reg<test.explicit32> -> reg<test.i32>
   test.event.memory.write.i32 %blocker_virtual
-  %a_partner_seed = test.const.i32 4
-  %a_partner = copy %a_partner_seed : reg<test.i32> -> reg<test.coindexed.partner>
-  test.coindexed.operands %w_primary, %w_partner
-  test.coindexed.operands %a_primary, %a_partner
-  return %a_primary, %a_partner, %w_primary, %w_partner
+  %first_partner_seed = test.const.i32 4
+  %first_partner = copy %first_partner_seed : reg<test.i32> -> reg<test.coindexed.partner>
+  test.coindexed.operands %second_primary, %second_partner
+  test.coindexed.operands %first_primary, %first_partner
+  return %first_primary, %first_partner, %second_primary, %second_partner
 }
 
 // ----
 value %blocker: test.coindexed.partner -> physical_register[3:1]
-value %a_primary: test.packed.narrow -> physical_register[1:1]
-value %w_primary: test.packed.narrow -> physical_register[0:1]
-value %w_partner: test.coindexed.partner -> physical_register[2:1]
-value %a_partner: test.coindexed.partner -> physical_register[3:1]
+value %first_primary: test.packed.narrow -> physical_register[1:1]
+value %second_primary: test.packed.narrow -> physical_register[0:1]
+value %second_partner: test.coindexed.partner -> physical_register[2:1]
+value %first_partner: test.coindexed.partner -> physical_register[3:1]

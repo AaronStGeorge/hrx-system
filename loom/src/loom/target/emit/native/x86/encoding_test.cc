@@ -95,6 +95,18 @@ TEST(EncodingTest, VectorRegisterPrefixesAndBehaviors) {
   operands.inputs[2] = 3;
   ExpectVectorEncoding(0x8320, 0xa4b8, operands,
                        {0x62, 0xf6, 0x6d, 0x48, 0xb8, 0xcb});
+
+  // The last VEX register can feed the last EVEX register without losing
+  // either operand's extension bits: VMOVSS, VBROADCASTSS, VMOVDQU32.
+  operands = {.immediate = 4, .result = 15, .inputs = {7}};
+  ExpectVectorEncoding(0xc1c0, 0x0910, operands,
+                       {0xc5, 0x7a, 0x10, 0x7f, 0x04});
+  operands = {.result = 31, .inputs = {15}};
+  ExpectVectorEncoding(0x8140, 0xa618, operands,
+                       {0x62, 0x42, 0x7d, 0x48, 0x18, 0xff});
+  operands = {.inputs = {31, 6}};
+  ExpectVectorEncoding(0xd2c1, 0xa97f, operands,
+                       {0x62, 0x61, 0x7e, 0x48, 0x7f, 0x3e});
 }
 
 TEST(EncodingTest, IntegerToScalarFloat) {
@@ -664,9 +676,19 @@ TEST(EncodingTest, MandatoryF3UnaryWidthsAndExtendedRegisters) {
   ExpectEncoding(LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM,
                  LOOM_X86_ENCODING_OPCODE_0F | 0xbd, operands,
                  {0xf3, 0x0f, 0xbd, 0xca}, 1u << 1);
+  ExpectEncoding(LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM,
+                 LOOM_X86_ENCODING_OPCODE_0F | 0xb8 | LOOM_X86_ENCODING_REX_W,
+                 operands, {0xf3, 0x48, 0x0f, 0xb8, 0xca}, 1u << 1);
 
   operands.result = 9;
   operands.inputs[0] = 10;
+  ExpectEncoding(
+      LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM,
+      LOOM_X86_ENCODING_OPCODE_0F | 0xbd | LOOM_X86_ENCODING_OPERAND_16,
+      operands, {0xf3, 0x66, 0x45, 0x0f, 0xbd, 0xca}, 1u << 9);
+  ExpectEncoding(LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM,
+                 LOOM_X86_ENCODING_OPCODE_0F | 0xbc, operands,
+                 {0xf3, 0x45, 0x0f, 0xbc, 0xca}, 1u << 9);
   ExpectEncoding(LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM,
                  LOOM_X86_ENCODING_OPCODE_0F | 0xb8 | LOOM_X86_ENCODING_REX_W,
                  operands, {0xf3, 0x4d, 0x0f, 0xb8, 0xca}, 1u << 9);

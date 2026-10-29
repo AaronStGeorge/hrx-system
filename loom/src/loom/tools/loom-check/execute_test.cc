@@ -1463,6 +1463,14 @@ TEST_F(ExecuteTest, UnknownEmitTargetListsProviderTargets) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, ScheduleOptionsRejectNativePressureOverrides) {
+  ExpectFirstFailsWithDetail("// RUN: emit low-schedule-json @f test.i32=10\n",
+                             "unknown low-schedule-json option 'test.i32'");
+  ExpectFirstFailsWithDetail(
+      "// RUN: emit low-schedule-json @f cliff=test.i32:8:4:3\n",
+      "unknown low-schedule-json option 'cliff'");
+}
+
 TEST_F(ExecuteTest, XfailDoesNotHideRequiresHarnessFailure) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
@@ -1473,22 +1481,6 @@ TEST_F(ExecuteTest, XfailDoesNotHideRequiresHarnessFailure) {
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitTargetLowRegistryManifestReportsDescriptorSets) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit target-low-registry-manifest\n"
-                   "func.def @unused() {\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  const std::string actual_output = ActualOutputString(result);
-  EXPECT_NE(actual_output.find("\"descriptor_set_count\":1"),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("\"key\":\"test.low.core\""), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

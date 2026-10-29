@@ -7,8 +7,8 @@
 #include <inttypes.h>
 
 #include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/allocation/live_range.h"
 #include "loom/codegen/low/allocation_materialization.h"
-#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/format/text/printer.h"
 #include "loom/tools/loom-check/diagnostics.h"
@@ -23,9 +23,8 @@ enum loom_check_test_low_allocation_option_flag_bits_e {
   LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_COPY_COUNT = 1u << 4,
   LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_FAILURE = 1u << 5,
   LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_EDGE_MOVES = 1u << 6,
-  LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_REVERSE_BLOCKS = 1u << 7,
-  LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_MATERIALIZE_SPILLS = 1u << 8,
-  LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_SPILL_FREE = 1u << 9,
+  LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_MATERIALIZE_SPILLS = 1u << 7,
+  LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_SPILL_FREE = 1u << 8,
 };
 typedef uint32_t loom_check_test_low_allocation_option_flags_t;
 
@@ -34,6 +33,8 @@ typedef struct loom_check_test_low_allocation_options_t {
   iree_string_view_t function_symbol_name;
   // Comma-separated authored values whose locations are requested.
   iree_string_view_t value_selectors;
+  // Comma-separated authored values whose per-unit lifetimes are requested.
+  iree_string_view_t lifetime_selectors;
   // Comma-separated copy result values whose decisions are requested.
   iree_string_view_t copy_result_selectors;
   // Comma-separated spilled values whose plans are requested.
@@ -163,17 +164,6 @@ static iree_status_t loom_check_test_low_allocation_parse_option(
     options->flags |= LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_EDGE_MOVES;
     return iree_ok_status();
   }
-  if (iree_string_view_equal(token, IREE_SV("reverse-blocks"))) {
-    if (iree_any_bit_set(
-            options->flags,
-            LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_REVERSE_BLOCKS)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "duplicate low-allocation-query option 'reverse-blocks'");
-    }
-    options->flags |= LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_REVERSE_BLOCKS;
-    return iree_ok_status();
-  }
   if (iree_string_view_equal(token, IREE_SV("materialize-spills"))) {
     if (iree_any_bit_set(
             options->flags,
@@ -204,6 +194,10 @@ static iree_status_t loom_check_test_low_allocation_parse_option(
   if (iree_string_view_equal(name, IREE_SV("values"))) {
     return loom_check_test_low_allocation_parse_unique_selector_option(
         name, value, &options->value_selectors);
+  }
+  if (iree_string_view_equal(name, IREE_SV("lifetimes"))) {
+    return loom_check_test_low_allocation_parse_unique_selector_option(
+        name, value, &options->lifetime_selectors);
   }
   if (iree_string_view_equal(name, IREE_SV("copies"))) {
     return loom_check_test_low_allocation_parse_unique_selector_option(
@@ -328,7 +322,7 @@ static iree_status_t loom_check_test_low_allocation_append_value_reference(
 
 static iree_status_t loom_check_test_low_allocation_append_value(
     const loom_low_allocation_table_t* allocation, iree_string_view_t selector,
-    iree_string_builder_t* builder) {
+    bool print_lifetimes, iree_string_builder_t* builder) {
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_check_test_low_allocation_resolve_selector(
       allocation, selector, &value_id));
@@ -340,6 +334,24 @@ static iree_status_t loom_check_test_low_allocation_append_value(
         IREE_STATUS_FAILED_PRECONDITION,
         "low-allocation-query value '%.*s' has no allocation assignment",
         (int)selector.size, selector.data);
+  }
+  if (print_lifetimes) {
+    iree_status_t status = iree_ok_status();
+    for (uint32_t i = 0;
+         i < assignment->unit_count && iree_status_is_ok(status); ++i) {
+      const uint32_t start_point =
+          loom_low_allocation_live_range_assignment_unit_start_point(
+              allocation->unit_start_points, allocation->unit_point_count,
+              assignment, i);
+      const uint32_t end_point =
+          loom_low_allocation_live_range_assignment_unit_end_point(
+              allocation->unit_end_points, allocation->unit_point_count,
+              assignment, i);
+      status = iree_string_builder_append_format(
+          builder, "lifetime %.*s[%" PRIu32 "]: [%" PRIu32 ", %" PRIu32 ")\n",
+          (int)selector.size, selector.data, i, start_point, end_point);
+    }
+    return status;
   }
   iree_string_view_t register_class = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
@@ -529,12 +541,12 @@ static iree_status_t loom_check_test_low_allocation_append_spill_plan(
 
 static iree_status_t loom_check_test_low_allocation_append_selected_values(
     const loom_low_allocation_table_t* allocation, iree_string_view_t selectors,
-    iree_string_builder_t* builder) {
+    bool print_lifetimes, iree_string_builder_t* builder) {
   iree_string_view_t selector = iree_string_view_empty();
   while (
       loom_check_test_low_allocation_consume_selector(&selectors, &selector)) {
     IREE_RETURN_IF_ERROR(loom_check_test_low_allocation_append_value(
-        allocation, selector, builder));
+        allocation, selector, print_lifetimes, builder));
   }
   return iree_ok_status();
 }
@@ -616,30 +628,6 @@ static iree_status_t loom_check_test_low_allocation_execute(
   IREE_RETURN_IF_ERROR(
       loom_check_test_low_allocation_parse_options(request, &options));
 
-  if (iree_any_bit_set(options.flags,
-                       LOOM_CHECK_TEST_ALLOCATION_OPTION_FLAG_REVERSE_BLOCKS)) {
-    loom_op_t* function = NULL;
-    IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
-        native_module->module, options.function_symbol_name, request->test_case,
-        request->filename, request->diagnostic_collector,
-        (iree_diagnostic_emitter_t){0}, &function));
-    if (function == NULL) {
-      return iree_ok_status();
-    }
-    // Text keeps definitions before uses. Physical layout may put a use block
-    // before its dominator; reverse nonentry blocks after verified parsing to
-    // exercise that allocation contract without forward SSA declarations.
-    loom_region_t* body = loom_low_function_body(function);
-    for (uint16_t first = 1, last = body->block_count - 1; first < last;
-         ++first, --last) {
-      loom_block_t* temporary = body->blocks[first];
-      body->blocks[first] = body->blocks[last];
-      body->blocks[last] = temporary;
-      body->blocks[first]->region_index = first;
-      body->blocks[last]->region_index = last;
-    }
-  }
-
   const loom_low_emission_frame_options_t frame_options = {
       .schedule_strategy = options.schedule_strategy,
       .allocation_budgets = options.allocation_budgets,
@@ -706,6 +694,7 @@ static iree_status_t loom_check_test_low_allocation_execute(
 
   const bool has_value_queries =
       !iree_string_view_is_empty(options.value_selectors) ||
+      !iree_string_view_is_empty(options.lifetime_selectors) ||
       !iree_string_view_is_empty(options.copy_result_selectors) ||
       !iree_string_view_is_empty(options.spill_plan_selectors);
   if (has_value_queries) {
@@ -714,7 +703,13 @@ static iree_status_t loom_check_test_low_allocation_execute(
         loom_low_allocation_acquire_value_scratch(allocation, &value_scratch);
     if (iree_status_is_ok(status)) {
       status = loom_check_test_low_allocation_append_selected_values(
-          allocation, options.value_selectors, output);
+          allocation, options.value_selectors, /*print_lifetimes=*/false,
+          output);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_check_test_low_allocation_append_selected_values(
+          allocation, options.lifetime_selectors, /*print_lifetimes=*/true,
+          output);
     }
     if (iree_status_is_ok(status)) {
       status = loom_check_test_low_allocation_append_selected_copies(

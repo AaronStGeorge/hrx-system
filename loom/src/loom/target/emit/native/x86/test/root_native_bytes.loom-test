@@ -183,7 +183,7 @@ code: 62 f5 7c 48 51 c0 62 f6 7d 48 4e c0 c3
 
 // ====
 
-// RUN: emit x86-native-bytes @native_counts_i16 fixed=%input:physical_register:7:1 fixed=%leading:physical_register:9:1 fixed=%trailing:physical_register:10:1 fixed=%population:physical_register:0:1
+// RUN: emit x86-native-bytes @native_counts_i16
 x86.target<scalar> @target {features = [bmi, popcnt, lzcnt]}
 
 low.func.def target<x86.scalar.core>(@target) @native_counts_i16() -> (reg<x86.gpr32>) asm {
@@ -195,11 +195,11 @@ low.func.def target<x86.scalar.core>(@target) @native_counts_i16() -> (reg<x86.g
 }
 
 // ----
-code: bf ff ff 00 00 f3 66 44 0f bd cf f3 66 45 0f bc d1 f3 66 41 0f b8 c2 c3
+code: b8 ff ff 00 00 f3 66 0f bd c0 f3 66 0f bc c0 f3 66 0f b8 c0 c3
 
 // ====
 
-// RUN: emit x86-native-bytes @native_counts_i32 fixed=%input:physical_register:7:1 fixed=%leading:physical_register:9:1 fixed=%trailing:physical_register:10:1 fixed=%population:physical_register:0:1
+// RUN: emit x86-native-bytes @native_counts_i32
 x86.target<scalar> @target {features = [bmi, popcnt, lzcnt]}
 
 low.func.def target<x86.scalar.core>(@target) @native_counts_i32() -> (reg<x86.gpr32>) asm {
@@ -211,11 +211,11 @@ low.func.def target<x86.scalar.core>(@target) @native_counts_i32() -> (reg<x86.g
 }
 
 // ----
-code: bf ff ff ff 7f f3 44 0f bd cf f3 45 0f bc d1 f3 41 0f b8 c2 c3
+code: b8 ff ff ff 7f f3 0f bd c0 f3 0f bc c0 f3 0f b8 c0 c3
 
 // ====
 
-// RUN: emit x86-native-bytes @native_counts_i64 fixed=%input:physical_register:7:1 fixed=%leading:physical_register:9:1 fixed=%trailing:physical_register:10:1 fixed=%population:physical_register:0:1
+// RUN: emit x86-native-bytes @native_counts_i64
 x86.target<scalar> @target {features = [bmi, popcnt, lzcnt]}
 
 low.func.def target<x86.scalar.core>(@target) @native_counts_i64() -> (reg<x86.gpr64>) asm {
@@ -227,4 +227,4 @@ low.func.def target<x86.scalar.core>(@target) @native_counts_i64() -> (reg<x86.g
 }
 
 // ----
-code: bf 2a 00 00 00 f3 4c 0f bd cf f3 4d 0f bc d1 f3 49 0f b8 c2 c3
+code: b8 2a 00 00 00 f3 48 0f bd c0 f3 48 0f bc c0 f3 48 0f b8 c0 c3

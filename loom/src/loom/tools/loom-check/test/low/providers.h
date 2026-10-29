@@ -21,10 +21,6 @@ extern const loom_check_emit_provider_t loom_check_test_low_allocation_provider;
 // Reports focused schedule relationships for authored Low operations.
 extern const loom_check_emit_provider_t loom_check_test_low_schedule_provider;
 
-// Supplies synthetic target hazard events to exercise Low hazard planning.
-extern const loom_check_emit_provider_t
-    loom_check_test_low_synthetic_hazard_provider;
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif

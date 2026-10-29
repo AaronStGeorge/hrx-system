@@ -10,7 +10,6 @@
 #define LOOM_CODEGEN_LOW_ALLOCATION_SPILL_STORAGE_H_
 
 #include "iree/base/api.h"
-#include "iree/base/bitmap.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation/table.h"
 
@@ -18,26 +17,34 @@
 extern "C" {
 #endif
 
-// Groups equally sized/aligned spill plans in the same storage space when their
-// enclosing block lifetimes do not overlap. Whole-block intervals remain valid
-// when materialization inserts traffic in source order and later scheduling
-// reorders instructions within blocks. The intervals include sparse holes so
-// expanded-execution stores cannot overwrite inactive-lane contents. Incoming
-// argument stores extend the interval through their predecessor blocks.
-// Callable entry/result cells keep exclusive reservations for direct ABI
-// storage transport.
+// One storage lifetime supplied by immutable spill planning. Whole-block
+// intervals remain valid when later scheduling reorders inserted traffic.
+typedef struct loom_low_spill_storage_interval_t {
+  // Borrowed spill plan supplying the storage space, byte size, and alignment.
+  const loom_low_allocation_spill_plan_t* plan;
+  // Original plan index, preserved through sorting.
+  uint32_t plan_index;
+  // First block whose execution may access this spilled value.
+  uint16_t first_block;
+  // Last block whose execution may access this spilled value, inclusive.
+  uint16_t last_block;
+} loom_low_spill_storage_interval_t;
+
+// Groups equally sized/aligned spill plans in the same storage space when
+// their block intervals do not overlap. Sorts |intervals| in place; the caller
+// supplies at least two intervals for plans with retained traffic. The producer
+// includes sparse holes and predecessor stores in each lifetime, and supplies
+// a function-wide interval for cells requiring exclusive ABI storage.
 //
-// |plans| contains |included_plans.bit_count| entries. Only selected plans
-// participate in coloring; excluded plans map to themselves and cannot occupy
-// a reservation. Each result names the earliest included plan sharing that
-// reservation. Materialization can therefore create reservations in plan order
-// without forward references. NULL denotes no shared reservations, the
-// allocation-free single-block case, or fewer than two included plans. Results
-// belong to |arena| and are consumed before rewriting this snapshot;
-// reservations from previous repairs retain their placements.
+// Each interval names a distinct index below |plan_count|. Unselected plans
+// map to themselves and cannot occupy a reservation. Each result names the
+// earliest selected plan sharing that reservation, so materialization creates
+// reservations in plan order without forward references. NULL denotes no shared
+// reservations. Results belong to |arena| and are consumed before rewriting the
+// snapshot. Reservations from previous repairs retain their placements.
 iree_status_t loom_low_allocation_spill_storage_plan(
-    const loom_low_allocation_table_t* table,
-    const loom_low_allocation_spill_plan_t* plans, iree_bitmap_t included_plans,
+    loom_low_spill_storage_interval_t* intervals,
+    iree_host_size_t interval_count, iree_host_size_t plan_count,
     iree_arena_allocator_t* arena, const uint32_t** out_representatives);
 
 #ifdef __cplusplus
