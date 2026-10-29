@@ -54,69 +54,6 @@ iree_runtime_cc_benchmark(
 )
 
 #===------------------------------------------------------------------------===#
-# Regex Compiler (Internal Components)
-#===------------------------------------------------------------------------===#
-
-iree_runtime_cc_library(
-    name = "internal_lexer",
-    srcs = ["internal/lexer.c"],
-    hdrs = ["internal/lexer.h"],
-    deps = [
-        ":exec",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:unicode",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "internal_ast",
-    hdrs = ["internal/ast.h"],
-    deps = [
-        "//runtime/src/iree/base",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "internal_parser",
-    srcs = ["internal/parser.c"],
-    hdrs = ["internal/parser.h"],
-    deps = [
-        ":exec",
-        ":internal_ast",
-        ":internal_lexer",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "internal_nfa",
-    srcs = ["internal/nfa.c"],
-    hdrs = ["internal/nfa.h"],
-    deps = [
-        ":exec",
-        ":internal_ast",
-        ":internal_lexer",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/base/internal:unicode",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "internal_dfa",
-    srcs = ["internal/dfa.c"],
-    hdrs = ["internal/dfa.h"],
-    deps = [
-        ":exec",
-        ":internal_nfa",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-#===------------------------------------------------------------------------===#
 # Regex Compiler (Public API)
 #===------------------------------------------------------------------------===#
 
@@ -128,11 +65,11 @@ iree_runtime_cc_library(
     hdrs = ["compile.h"],
     deps = [
         ":exec",
-        ":internal_dfa",
-        ":internal_nfa",
-        ":internal_parser",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/tokenizer/regex/internal:dfa",
+        "//runtime/src/iree/tokenizer/regex/internal:nfa",
+        "//runtime/src/iree/tokenizer/regex/internal:parser",
     ],
 )
 
@@ -142,10 +79,10 @@ iree_runtime_cc_test(
     deps = [
         ":compile",
         ":exec",
-        ":internal_parser",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/tokenizer/regex/internal:parser",
     ],
 )
 
