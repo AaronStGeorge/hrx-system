@@ -34,6 +34,7 @@
 // a second worker in the relay array. The wrapper then parks on its exhausted
 // configuration input; the native command suffix owns custom DMA drain and
 // placement quiescence before controller completion.
+
 aie2p.target<array> @array_target
 
 aie2p.target<core> @core_target
