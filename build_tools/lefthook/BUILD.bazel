@@ -7,7 +7,7 @@
 # Python repository-policy tools have no CMake target surface.
 # bazel-to-cmake: skip
 
-load("@rules_python//python:defs.bzl", "py_test")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -16,6 +16,19 @@ package(default_visibility = ["//visibility:public"])
 _PRESUBMIT_TEST_SIZE = "small"
 
 _PRESUBMIT_TEST_TAGS = ["manual"]
+
+py_library(
+    name = "package_boundary",
+    srcs = ["package_boundary.py"],
+)
+
+py_test(
+    name = "package_boundary_test",
+    size = _PRESUBMIT_TEST_SIZE,
+    srcs = ["package_boundary_test.py"],
+    tags = _PRESUBMIT_TEST_TAGS,
+    deps = [":package_boundary"],
+)
 
 py_test(
     name = "commit_msg_test",
@@ -39,6 +52,7 @@ py_test(
     main = "presubmit_test.py",
     tags = _PRESUBMIT_TEST_TAGS,
     deps = [
+        ":package_boundary",
         "//build_tools/devtools",
         "//libamdf/build_tools/bazel:configure",
         "//runtime/build_tools/bazel:configure",
@@ -50,6 +64,7 @@ test_suite(
     tags = _PRESUBMIT_TEST_TAGS,
     tests = [
         ":commit_msg_test",
+        ":package_boundary_test",
         ":presubmit_test",
     ],
 )

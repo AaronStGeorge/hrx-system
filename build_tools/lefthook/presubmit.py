@@ -48,6 +48,7 @@ from build_tools.devtools.source_lock import (
     NonEmptyTrackedFileSnapshot,
     source_mutation_lock,
 )
+from build_tools.lefthook import package_boundary
 
 BUILDIFIER_EXTENSIONS = {".bzl", ".BUILD"}
 BUILDIFIER_NAMES = {
@@ -1570,7 +1571,25 @@ def run_amdgpu_target_map(paths: list[str], fix: bool, verbose: bool) -> bool:
     return ok
 
 
-def run_hygiene(paths: list[str], fix: bool, verbose: bool) -> bool:
+def run_package_boundary_check(inputs: PresubmitInputs, verbose: bool) -> bool:
+    if inputs.mode == "all":
+        return skip_step(
+            "Bazel package boundaries",
+            "requires a changed-file scope while legacy packages are repaired",
+        )
+    return run_inline_check(
+        "Bazel package boundaries",
+        lambda: package_boundary.check_touched_packages(
+            REPO_ROOT,
+            inputs.selected_paths,
+            verbose=verbose,
+        ),
+        verbose,
+    )
+
+
+def run_hygiene(inputs: PresubmitInputs, fix: bool, verbose: bool) -> bool:
+    paths = inputs.selected_paths
     print_section("Hygiene")
     # The dependency graph spans the repository. Check its generated lock even
     # for narrow commits, without network access or rewriting global outputs.
@@ -1595,6 +1614,7 @@ def run_hygiene(paths: list[str], fix: bool, verbose: bool) -> bool:
     )
     ok = run_inline_check("Watchwords", lambda: run_watchwords(paths), verbose) and ok
     ok = run_buildifier(paths, fix=fix, verbose=verbose) and ok
+    ok = run_package_boundary_check(inputs, verbose=verbose) and ok
     ok = run_ruff(paths, fix=fix, verbose=verbose) and ok
     ok = run_clang_format(paths, fix=fix, verbose=verbose) and ok
     ok = run_amdgpu_target_map(paths, fix=fix, verbose=verbose) and ok
@@ -2815,7 +2835,7 @@ def run_presubmit(
 
     ok = True
     if args.hygiene:
-        ok = run_hygiene(paths, fix=args.fix, verbose=args.verbose) and ok
+        ok = run_hygiene(inputs, fix=args.fix, verbose=args.verbose) and ok
         ok = (
             run_project_presubmits(
                 projects,
