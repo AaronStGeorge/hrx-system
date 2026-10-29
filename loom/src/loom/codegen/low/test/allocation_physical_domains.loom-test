@@ -134,21 +134,24 @@ value %restricted: test.packed.narrow -> physical_register[0:1]
 
 // ====
 
-// RUN: emit low-allocation-query @copy_keeps_general_storage values=%source,%result copies=%result fixed=%source:physical_register:2:1
+// RUN: emit low-allocation-query @copy_keeps_general_storage spill-count values=%source,%result,%short,%restricted copies=%result
 
 test.target<low_core> @target
 
-// The source is already in general-only storage while one narrow candidate is
-// idle. Preserve the copy affinity because it does not consume the candidate
-// reserved for the overlapping restricted value.
-low.func.def target<test.low.core>(@target) @copy_keeps_general_storage(%source: reg<test.explicit32>, %peer0: reg<test.explicit32>, %peer1: reg<test.explicit32>, %restricted: reg<test.packed.narrow>) -> (reg<test.explicit32>, reg<test.explicit32>, reg<test.explicit32>, reg<test.packed.narrow>) asm {
+// Two narrow inputs keep the source in general storage. Releasing one before
+// the copy opens a narrow candidate, but the copy still keeps its source.
+low.func.def target<test.low.core>(@target) @copy_keeps_general_storage(%source: reg<test.explicit32>, %peer: reg<test.explicit32>, %short: reg<test.packed.narrow>, %restricted: reg<test.packed.narrow>) -> (reg<test.i32>, reg<test.explicit32>, reg<test.explicit32>, reg<test.packed.narrow>) asm {
+  %released = copy %short : reg<test.packed.narrow> -> reg<test.i32>
   %result = copy %source : reg<test.explicit32> -> reg<test.explicit32>
-  return %result, %peer0, %peer1, %restricted
+  return %released, %result, %peer, %restricted
 }
 
 // ----
+spills: 0
 value %source: test.explicit32 -> physical_register[2:1]
 value %result: test.explicit32 -> physical_register[2:1]
+value %short: test.packed.narrow -> physical_register[0:1]
+value %restricted: test.packed.narrow -> physical_register[1:1]
 copy %source -> %result: coalesced
 
 // ====
