@@ -12,13 +12,14 @@ import contextlib
 import io
 import json
 import os
+import stat
 import subprocess
 import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
 from unittest.mock import patch
-from zipfile import ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from build_tools.ci import github_api, loom_release
 from loom.packaging.python import release
@@ -58,11 +59,25 @@ class LoomReleaseTest(unittest.TestCase):
                         prefix + "loom.json",
                         json.dumps({"catalog": self.identity.catalog}),
                     )
+        for platform in release.PLATFORMS:
+            path = self.directory / f"loom-serve-{version}-{platform}.zip"
+            binary_name = "loom-serve.exe" if platform == "win_amd64" else "loom-serve"
+            information = ZipInfo(binary_name, (1980, 1, 1, 0, 0, 0))
+            information.create_system = 3
+            information.external_attr = (stat.S_IFREG | 0o755) << 16
+            information.compress_type = ZIP_DEFLATED
+            with ZipFile(
+                path, "w", compression=ZIP_DEFLATED, compresslevel=9
+            ) as archive:
+                archive.writestr(information, b"native executable")
         self.wheels = release.release_wheels(
             self.directory, self.identity, self.description
         )
-        release.write_checksums(self.directory, self.wheels)
-        self.assets = {wheel.path.name: wheel.path for wheel in self.wheels}
+        self.artifacts = release.release_artifacts(
+            self.directory, self.identity, self.description
+        )
+        release.write_checksums(self.directory, self.artifacts)
+        self.assets = {artifact.path.name: artifact.path for artifact in self.artifacts}
         self.assets["SHA256SUMS"] = self.directory / "SHA256SUMS"
 
     def publish(self):
@@ -70,7 +85,7 @@ class LoomReleaseTest(unittest.TestCase):
             "fixture/sdk",
             self.tag,
             self.identity,
-            self.wheels,
+            self.artifacts,
             self.assets["SHA256SUMS"],
         )
 
@@ -84,7 +99,7 @@ class LoomReleaseTest(unittest.TestCase):
         actual = loom_release.verified_release(
             self.directory, self.identity, self.description, self.tag
         )
-        self.assertEqual(actual, self.wheels)
+        self.assertEqual(actual, self.artifacts)
         path = self.wheels[0].path
         path.write_bytes(path.read_bytes() + b"changed archive bytes")
         with self.assertRaisesRegex(ValueError, "SHA256SUMS differs"):
@@ -121,6 +136,8 @@ class LoomReleaseTest(unittest.TestCase):
                 self.assertEqual("--prerelease" in command, version.endswith("rc1"))
                 body = command[command.index("--notes") + 1]
                 self.assertIn(f"hrx-loom=={version}", body)
+                self.assertIn(f"loom-serve-{version}-manylinux_2_39_x86_64.zip", body)
+                self.assertIn("./loom-serve --version", body)
                 self.assertIn("Release, Tracy, Debug, and ASAN", body)
                 self.assertIn("SHA256SUMS", body)
                 self.assertLessEqual(
@@ -202,7 +219,7 @@ class LoomReleaseTest(unittest.TestCase):
             patch("subprocess.run", side_effect=gh) as run,
         ):
             self.publish()
-        self.assertEqual(run.call_count, 9)
+        self.assertEqual(run.call_count, 11)
 
     def test_conflicting_release_metadata_stops_before_commands(self):
         for change in ({"draft": True}, {"prerelease": True}, {"tag_name": "v2.0.0"}):
@@ -221,6 +238,7 @@ class LoomReleaseTest(unittest.TestCase):
         for records in (
             self.records([name, name]),
             self.records(["unexpected.whl"]),
+            self.records(["loom-serve-0.0.1-win_amd64.zip"]),
             [{"name": name, "state": "starter"}],
         ):
             with (
@@ -247,7 +265,7 @@ class LoomReleaseTest(unittest.TestCase):
             ) as get,
             patch("subprocess.run") as run,
         ):
-            with self.assertRaisesRegex(ValueError, "Unexpected GitHub wheel"):
+            with self.assertRaisesRegex(ValueError, "Unexpected GitHub release"):
                 self.publish()
             self.assertIn("page=2", get.call_args.args[0])
             run.assert_not_called()

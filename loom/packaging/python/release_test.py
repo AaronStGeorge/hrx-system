@@ -10,20 +10,23 @@ import contextlib
 import hashlib
 import io
 import json
+import stat
 import tempfile
 import unittest
 from pathlib import Path
-from zipfile import ZipFile
+from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 from release import (
     PLATFORMS,
     PROFILES,
     checksum_document,
+    inspect_server_archive,
     inspect_wheel,
     main,
     parse_identity,
     read_identity,
-    release_wheels,
+    release_artifacts,
+    release_servers,
     write_checksums,
 )
 
@@ -65,6 +68,33 @@ class ReleaseTest(unittest.TestCase):
         with ZipFile(path, "w") as archive:
             for name, text in files.items():
                 archive.writestr(prefix + name, text)
+        return path
+
+    def server(
+        self,
+        platform=PLATFORMS[0],
+        *,
+        member_name=None,
+        timestamp=(1980, 1, 1, 0, 0, 0),
+        create_system=3,
+        mode=stat.S_IFREG | 0o755,
+        compression=ZIP_DEFLATED,
+        extra=b"",
+        member_comment=b"",
+        archive_comment=b"",
+        payload=b"native executable",
+    ):
+        path = self.root / f"loom-serve-{self.identity.version}-{platform}.zip"
+        expected_name = "loom-serve.exe" if platform == "win_amd64" else "loom-serve"
+        information = ZipInfo(member_name or expected_name, timestamp)
+        information.create_system = create_system
+        information.external_attr = mode << 16
+        information.compress_type = compression
+        information.extra = extra
+        information.comment = member_comment
+        with ZipFile(path, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
+            archive.comment = archive_comment
+            archive.writestr(information, payload)
         return path
 
     def command(self, *arguments):
@@ -205,6 +235,49 @@ class ReleaseTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     inspect_wheel(renamed, self.identity, self.description)
 
+    def test_standalone_server_archives_preserve_platform_identity(self):
+        for platform in PLATFORMS:
+            with self.subTest(platform=platform):
+                path = self.server(platform)
+                server = inspect_server_archive(path, self.identity)
+                self.assertEqual(server.platform, platform)
+                self.assertEqual(
+                    server.digest, hashlib.sha256(path.read_bytes()).hexdigest()
+                )
+
+    def test_standalone_server_archive_shape_is_exact(self):
+        invalid = (
+            {"member_name": "nested/loom-serve"},
+            {"timestamp": (2026, 1, 1, 0, 0, 0)},
+            {"create_system": 0},
+            {"mode": stat.S_IFREG | 0o644},
+            {"compression": ZIP_STORED},
+            {"extra": b"\xfe\xca\x00\x00"},
+            {"member_comment": b"comment"},
+            {"archive_comment": b"comment"},
+            {"payload": b""},
+        )
+        for options in invalid:
+            with self.subTest(options=options):
+                path = self.server(**options)
+                with self.assertRaises(ValueError):
+                    inspect_server_archive(path, self.identity)
+
+        path = self.server()
+        with ZipFile(path, "a") as archive:
+            archive.writestr("companion.txt", "not part of the distribution")
+        with self.assertRaisesRegex(ValueError, "must contain only"):
+            inspect_server_archive(path, self.identity)
+
+    def test_standalone_server_filename_cannot_relabel_an_archive(self):
+        path = self.server()
+        renamed = path.with_name(path.name.replace(self.identity.version, "1.2.4"))
+        path.rename(renamed)
+        with self.assertRaisesRegex(ValueError, "Unexpected standalone"):
+            inspect_server_archive(renamed, self.identity)
+        with self.assertRaisesRegex(ValueError, "Unexpected standalone"):
+            release_servers(self.root, self.identity)
+
     def test_bundle_is_complete_and_retries_preserve_exact_bytes(self):
         self.wheel()
         with self.assertRaises(SystemExit):
@@ -213,21 +286,26 @@ class ReleaseTest(unittest.TestCase):
         for profile in PROFILES:
             for platform in PLATFORMS:
                 self.wheel(profile, platform)
+        with self.assertRaises(SystemExit):
+            self.command("bundle", str(self.root), "--tag", "v" + self.identity.version)
+        for platform in PLATFORMS:
+            self.server(platform)
         self.command("bundle", str(self.root), "--tag", "v" + self.identity.version)
-        wheels = release_wheels(self.root, self.identity, self.description)
+        artifacts = release_artifacts(self.root, self.identity, self.description)
         checksum = self.root / "SHA256SUMS"
         original = checksum.read_bytes()
-        self.assertEqual(original, checksum_document(wheels).encode())
-        write_checksums(self.root, wheels)
+        self.assertEqual(len(artifacts), len(PROFILES) * len(PLATFORMS) + 2)
+        self.assertEqual(original, checksum_document(artifacts).encode())
+        write_checksums(self.root, artifacts)
         self.assertEqual(checksum.read_bytes(), original)
         checksum.write_bytes(original.replace(b"\n", b"\r\n"))
         with self.assertRaisesRegex(ValueError, "SHA256SUMS differs"):
-            write_checksums(self.root, wheels)
+            write_checksums(self.root, artifacts)
         self.assertEqual(checksum.read_bytes(), original.replace(b"\n", b"\r\n"))
         checksum.write_bytes(original)
-        with ZipFile(wheels[0].path, "a") as archive:
+        with ZipFile(artifacts[0].path, "a") as archive:
             archive.writestr("changed-payload", "different bytes, identical metadata")
-        changed = release_wheels(self.root, self.identity, self.description)
+        changed = release_artifacts(self.root, self.identity, self.description)
         with self.assertRaisesRegex(ValueError, "SHA256SUMS differs"):
             write_checksums(self.root, changed)
         self.assertEqual(checksum.read_bytes(), original)
