@@ -6,8 +6,10 @@
 
 # Testing utilities for IREE.
 
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_binary", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_benchmark_library")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
 package(
@@ -16,7 +18,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-iree_runtime_cc_library(
+iree_runtime_benchmark_library(
     name = "benchmark",
     srcs = [
         "benchmark_full.cc",
@@ -24,6 +26,11 @@ iree_runtime_cc_library(
     hdrs = [
         "benchmark.h",
     ],
+    disabled_deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/tooling:flags",
+    ],
+    disabled_srcs = ["benchmark_nop.c"],
     deps = [
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
@@ -55,6 +62,11 @@ iree_runtime_cc_library(
     ],
 )
 
+iree_cmake_extra_content(
+    content = "if(IREE_TARGET_HAS_THREADS)",
+    inline = True,
+)
+
 iree_runtime_cc_binary(
     name = "benchmark_result_fixture",
     testonly = True,
@@ -71,6 +83,11 @@ iree_execution_test_suite(
     name = "benchmark_result_test",
     manifests = ["benchmark_result.test.json"],
     tools = {"benchmark": ":benchmark_result_fixture"},
+)
+
+iree_cmake_extra_content(
+    content = "endif()",
+    inline = True,
 )
 
 iree_runtime_cc_library(
@@ -97,6 +114,11 @@ iree_runtime_cc_library(
     ],
 )
 
+iree_cmake_extra_content(
+    content = "if(IREE_TARGET_HAS_THREADS)",
+    inline = True,
+)
+
 iree_runtime_cc_library(
     name = "gbenchmark_harness",
     testonly = True,
@@ -106,6 +128,11 @@ iree_runtime_cc_library(
         "//third_party:google_benchmark",
         "//third_party:google_benchmark_main",
     ],
+)
+
+iree_cmake_extra_content(
+    content = "endif()",
+    inline = True,
 )
 
 iree_runtime_cc_library(
@@ -127,12 +154,22 @@ iree_runtime_cc_test(
     ],
 )
 
+iree_cmake_extra_content(
+    content = "if(IREE_TARGET_HAS_THREADS)",
+    inline = True,
+)
+
 iree_runtime_cc_test(
     name = "gbenchmark_harness_demo",
     srcs = ["gbenchmark_harness_demo.cc"],
     deps = [
         ":gbenchmark_harness",
     ],
+)
+
+iree_cmake_extra_content(
+    content = "endif()",
+    inline = True,
 )
 
 iree_runtime_cc_library(

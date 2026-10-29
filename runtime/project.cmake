@@ -137,7 +137,12 @@ include(iree_runtime_amdgpu_toolchain)
 include(iree_runtime_hal_cts_testdata)
 include(iree_runtime_hal_cts_test_suite)
 include(iree_wasm_library)
+include(iree_runtime_tracing)
 
 function(iree_runtime_configure_project)
   iree_runtime_configure_amdgpu_toolchain()
+  if(IREE_ENABLE_RUNTIME_TRACING AND IREE_TRACING_MODE GREATER 0 AND
+      IREE_TRACING_PROVIDER STREQUAL "tracy")
+    include("${IREE_SOURCE_DIR}/build_tools/third_party/tracy_client/tracy_client.cmake")
+  endif()
 endfunction()

@@ -96,6 +96,27 @@ class RuntimeBuildFileFunctions(
             **kwargs,
         )
 
+    def iree_runtime_tracing_provider(self, name, header, **kwargs):
+        self.iree_runtime_cc_library(
+            name=name,
+            defines=[
+                f'IREE_TRACING_PROVIDER_H=\\"{header}\\"',
+                "IREE_TRACING_MODE=${IREE_TRACING_MODE}",
+            ],
+            **kwargs,
+        )
+
+    def iree_runtime_benchmark_library(
+        self, name, srcs, deps, disabled_srcs, disabled_deps, **kwargs
+    ):
+        self._converter.body += "if(IREE_TARGET_HAS_THREADS AND (IREE_BUILD_TESTS OR IREE_BUILD_BENCHMARKS))\n"
+        self.iree_runtime_cc_library(name=name, srcs=srcs, deps=deps, **kwargs)
+        self._converter.body += "else()\n"
+        self.iree_runtime_cc_library(
+            name=name, srcs=disabled_srcs, deps=disabled_deps, **kwargs
+        )
+        self._converter.body += "endif()\n\n"
+
     def iree_runtime_cc_fuzz(self, deps=[], **kwargs):
         kwargs = self._apply_runtime_cmake_policy(kwargs)
         self.iree_cc_fuzz(deps=deps + ["//runtime/src:defines"], **kwargs)

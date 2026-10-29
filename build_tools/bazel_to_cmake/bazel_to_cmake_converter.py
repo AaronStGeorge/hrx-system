@@ -17,6 +17,7 @@ import hashlib
 import itertools
 import os
 import re
+import shlex
 
 import bazel_to_cmake_config
 import bazel_to_cmake_loads
@@ -305,17 +306,22 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         )
 
     def _condition_select_compatibility_condition(self, condition_select):
-        compatible_conditions = []
+        conditions = []
+        selected = []
         for label, value in condition_select.conditions.items():
             if label == "//conditions:default":
                 continue
-            # Empty list means compatible for this condition.
+            condition = self._convert_select_condition(label)
+            if not condition:
+                raise NotImplementedError(f"target_compatible_with: {label}")
+            selected.append(f"({condition})")
             if value == []:
-                condition = self._convert_select_condition(label)
-                _append_unique_condition(compatible_conditions, condition)
-        if not compatible_conditions:
-            return None
-        return " OR ".join(compatible_conditions)
+                conditions.append(condition)
+        if condition_select.conditions.get("//conditions:default") == []:
+            if not selected:
+                return None
+            conditions.append("NOT (" + " OR ".join(selected) + ")")
+        return " OR ".join(conditions) if conditions else "FALSE"
 
     def _target_compatible_condition(self, target_compatible_with):
         if not target_compatible_with:
@@ -766,6 +772,30 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
             converted_value = self._convert_test_location_arg(value)
             converted_env.append("%s=%s" % (key, converted_value))
         return converted_env or None
+
+    def _convert_cc_test_args(self, args):
+        # Bazel cc_test applies Bourne tokenization after location expansion.
+        # Protect paths until CMake resolves them: their spelling may contain
+        # spaces, but quoting around the location still controls argument groups.
+        converted_args = []
+        paths = []
+
+        def replace_location(match):
+            locations = self._cmake_location_paths(match.group(2))
+            if not match.group(1).endswith("s") and len(locations) != 1:
+                raise ValueError(f"single-file location has {len(locations)} files")
+            placeholders = []
+            for path in locations:
+                placeholders.append(f"\x00{len(paths)}\x00")
+                paths.append("{{%s}}" % path)
+            return " ".join(placeholders)
+
+        for arg in args or []:
+            for token in shlex.split(_LOCATION_PATTERN.sub(replace_location, arg)):
+                converted_args.append(
+                    re.sub(r"\x00(\d+)\x00", lambda m: paths[int(m[1])], token)
+                )
+        return converted_args
 
     def _has_unresolved_external_location(self, value):
         for match in _LOCATION_PATTERN.finditer(value):
@@ -1969,7 +1999,9 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         data_block = self._convert_data_list_block(data)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
         args_block = self._convert_string_list_block(
-            "ARGS", self._convert_test_location_args(args), sort=False
+            "ARGS",
+            self._convert_cc_test_args(args),
+            sort=False,
         )
         env_block = self._convert_string_list_block(
             "ENV", self._convert_test_env(env), sort=False

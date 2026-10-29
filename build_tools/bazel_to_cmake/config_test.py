@@ -42,6 +42,51 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertIn('  SRCS\n    "identity.c"\n', converter.body)
 
+    def test_cc_test_tokenizes_arguments_after_location_expansion(self):
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=SimpleNamespace(body=""),
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+        functions.filegroup(name="inputs", srcs=["first.txt", "second.txt"])
+        self.assertEqual(
+            functions._convert_cc_test_args(
+                [
+                    "'--payload=two words' --enabled",
+                    "--input=$(location :first.txt)",
+                    "$(locations :inputs)",
+                    "'$(locations :inputs)'",
+                ]
+            ),
+            [
+                "--payload=two words",
+                "--enabled",
+                "--input={{${PROJECT_SOURCE_DIR}/pkg/first.txt}}",
+                "{{${PROJECT_SOURCE_DIR}/pkg/first.txt}}",
+                "{{${PROJECT_SOURCE_DIR}/pkg/second.txt}}",
+                "{{${PROJECT_SOURCE_DIR}/pkg/first.txt}} {{${PROJECT_SOURCE_DIR}/pkg/second.txt}}",
+            ],
+        )
+
+    def test_target_compatibility_preserves_default_exclusions(self):
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=SimpleNamespace(body=""),
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+        condition = functions.select(
+            {
+                "@platforms//os:windows": ["@platforms//:incompatible"],
+                "//conditions:default": [],
+            }
+        )
+        self.assertEqual(
+            functions._target_compatible_condition(condition),
+            'NOT ((CMAKE_SYSTEM_NAME STREQUAL "Windows"))',
+        )
+
     def test_compile_options_preserve_language_and_platform(self):
         for rule in ("cc_library", "cc_binary", "cc_test", "iree_cc_fuzz"):
             with self.subTest(rule=rule):
@@ -944,7 +989,9 @@ cc_library(
             build_dir="/repo/pkg",
             repo_root="/repo",
         )
-        functions.iree_spirv_asm_module(name="generated_data", src="input.spvasm")
+        functions.iree_spirv_asm_module(
+            name="generated_data", src="input.spvasm", target_compatible_with=[]
+        )
         functions.iree_py_test(
             name="generated_data_test",
             srcs=["test.py"],
@@ -962,7 +1009,9 @@ cc_library(
             build_dir="/repo/pkg",
             repo_root="/repo",
         )
-        functions.iree_spirv_asm_module(name="generated_data", src="input.spvasm")
+        functions.iree_spirv_asm_module(
+            name="generated_data", src="input.spvasm", target_compatible_with=[]
+        )
         functions.iree_py_test(
             name="configured_data_test",
             srcs=["test.py"],

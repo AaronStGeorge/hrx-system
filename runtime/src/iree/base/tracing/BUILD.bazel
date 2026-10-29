@@ -4,8 +4,10 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
+load("//runtime/build_tools/bazel:tracing.bzl", "iree_runtime_tracing_provider")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -45,14 +47,11 @@ alias(
 # Console (stderr)
 #===------------------------------------------------------------------------===#
 
-iree_runtime_cc_library(
+iree_runtime_tracing_provider(
     name = "console",
     srcs = ["console.c"],
     hdrs = ["console.h"],
-    defines = [
-        "IREE_TRACING_PROVIDER_H=\\\"iree/base/tracing/console.h\\\"",
-        "IREE_TRACING_MODE=2",
-    ],
+    header = "iree/base/tracing/console.h",
     deps = [
         "//build_tools/bazel:pthreads",
         "//runtime/src/iree/base:core_headers",
@@ -80,7 +79,7 @@ iree_runtime_cc_test(
 # Tracy
 #===------------------------------------------------------------------------===#
 
-iree_runtime_cc_library(
+iree_runtime_tracing_provider(
     name = "tracy",
     srcs = ["tracy.cc"],
     hdrs = ["tracy.h"],
@@ -97,10 +96,7 @@ iree_runtime_cc_library(
         ],
         "//conditions:default": [],
     }),
-    defines = [
-        "IREE_TRACING_PROVIDER_H=\\\"iree/base/tracing/tracy.h\\\"",
-        "IREE_TRACING_MODE=2",
-    ],
+    header = "iree/base/tracing/tracy.h",
     target_compatible_with = select({
         "//runtime/config/base/tracing:provider_tracy": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -128,4 +124,9 @@ iree_runtime_cc_test(
         "//runtime/src/iree/testing:gtest_main",
         "@tracy_client//:runtime",
     ],
+)
+
+iree_cmake_extra_content(
+    content = "iree_runtime_configure_tracing()",
+    inline = True,
 )
