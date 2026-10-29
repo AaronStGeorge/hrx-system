@@ -99,10 +99,11 @@ loom_low_allocation_assignment_t Assignment(
   return assignment;
 }
 
-TEST_F(LowAllocationCoalescingTest, ConcatMayPrecedeItsSourceAssignments) {
+TEST_F(LowAllocationCoalescingTest, ConcatRequiresCompatibleSourceStorage) {
   loom_module_t* module = AllocateModule();
-  const loom_value_id_t value_ids[] = {DefineValue(module), DefineValue(module),
-                                       DefineValue(module, /*unit_count=*/2)};
+  const loom_value_id_t value_ids[] = {DefineValue(module, /*unit_count=*/2),
+                                       DefineValue(module, /*unit_count=*/2),
+                                       DefineValue(module, /*unit_count=*/4)};
   loom_module_value_ordinal_scratch_acquire(module);
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(value_ids); ++i) {
     loom_module_value_ordinal_scratch_set(module, value_ids[i], i);
@@ -114,7 +115,9 @@ TEST_F(LowAllocationCoalescingTest, ConcatMayPrecedeItsSourceAssignments) {
       Interval(value_ids[1], /*start=*/11, /*end=*/12, value_class),
       Interval(value_ids[2], /*start=*/2, /*end=*/14, value_class),
   };
-  intervals[2].unit_count = 2;
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(intervals); ++i) {
+    intervals[i].unit_count = i == 2 ? 4 : 2;
+  }
   const uint32_t interval_indices[] = {0, 1, 2};
   loom_liveness_analysis_t liveness = {
       .intervals = intervals,
@@ -128,8 +131,8 @@ TEST_F(LowAllocationCoalescingTest, ConcatMayPrecedeItsSourceAssignments) {
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(relations); ++i) {
     relations[i].result_ordinal = 2;
     relations[i].source_ordinal = i;
-    relations[i].result_unit_offset = i;
-    relations[i].unit_count = 1;
+    relations[i].result_unit_offset = i * 2;
+    relations[i].unit_count = 2;
     relations[i].kind = LOOM_LOW_PLACEMENT_RELATION_SUBRANGE;
     relations[i].cause = LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT;
     relations[i].flags = LOOM_LOW_PLACEMENT_RELATION_FLAG_CAN_ALIAS_STORAGE;
@@ -152,6 +155,7 @@ TEST_F(LowAllocationCoalescingTest, ConcatMayPrecedeItsSourceAssignments) {
   loom_low_allocation_assignment_t first_assignment =
       Assignment(value_ids[0], /*start=*/0, /*end=*/12, value_class,
                  /*location_base=*/0, /*unit_point_start=*/0);
+  first_assignment.unit_count = first_assignment.location_count = 2;
   uint32_t assignment_indices[] = {UINT32_MAX, UINT32_MAX, UINT32_MAX};
   loom_low_allocation_assignment_map_t assignment_map = {
       .module = module,
@@ -207,6 +211,104 @@ TEST_F(LowAllocationCoalescingTest, ConcatMayPrecedeItsSourceAssignments) {
     EXPECT_FALSE(assigned);
     EXPECT_EQ(assignment_map.assignment_count, assigned_count);
     EXPECT_EQ(assignment_indices[2], UINT32_MAX);
+  }
+
+  // With both sources available, the concat may share a matching source and
+  // copy a disjoint one. A nonmatching source inside the candidate aggregate
+  // remains interference even though another source already matches.
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(intervals); ++i) {
+    intervals[i].start_point = i;
+    intervals[i].end_point = 6;
+  }
+  loom_low_allocation_unit_liveness_value_t unit_values[] = {
+      {0, 0}, {2, 1}, {4, 2}};
+  uint32_t unit_start_points[] = {0, 0, 1, 1, 0, 0, 1, 1};
+  uint32_t unit_end_points[] = {6, 6, 6, 6, 6, 6, 6, 6};
+  uint64_t incomplete_storage_words[] = {0};
+  const loom_low_allocation_unit_liveness_t unit_liveness = {
+      .values = unit_values,
+      .start_points = unit_start_points,
+      .end_points = unit_end_points,
+      .point_count = IREE_ARRAYSIZE(unit_end_points),
+      .values_with_incomplete_storage_segments = {liveness.value_count,
+                                                  incomplete_storage_words},
+  };
+  loom_low_allocation_assignment_t source_assignments[] = {
+      Assignment(value_ids[0], 0, 6, value_class, 0, 0),
+      Assignment(value_ids[1], 1, 6, value_class, 2, 2),
+  };
+  for (auto& assignment : source_assignments) {
+    assignment.unit_count = assignment.location_count = 2;
+  }
+  assignment_map.assignments = source_assignments;
+  assignment_map.assignment_count = IREE_ARRAYSIZE(source_assignments);
+  assignment_indices[0] = 0;
+  assignment_indices[1] = 1;
+  uint32_t assigned_high_water[] = {4};
+  target_constraints.module = module;
+  target_constraints.max_assigned_location_end_by_reg_class =
+      assigned_high_water;
+  loom_low_allocation_storage_lease_state_t leases = {};
+  search_context.module = module;
+  search_context.unit_liveness = &unit_liveness;
+  search_context.target_constraints = &target_constraints;
+  search_context.assignment_map = &assignment_map;
+  search_context.storage_leases = &leases;
+
+  struct Publication {
+    // Assignment passed to the allocator's terminal publication callback.
+    loom_low_allocation_assignment_t assignment;
+    // Source leases allowed to share the published aggregate.
+    loom_value_id_t shared_values[2];
+    // Number of source leases passed to publication.
+    uint16_t shared_count;
+  } publication = {};
+  context.user_data = &publication;
+  context.append_assignment =
+      [](void* user_data, const loom_low_allocation_assignment_t* assignment,
+         const loom_value_id_t* shared_values,
+         uint16_t shared_count) -> iree_status_t {
+    auto* publication = static_cast<Publication*>(user_data);
+    publication->assignment = *assignment;
+    publication->shared_count = shared_count;
+    for (uint16_t i = 0; i < iree_min(shared_count, 2); ++i) {
+      publication->shared_values[i] = shared_values[i];
+    }
+    return iree_ok_status();
+  };
+  for (uint32_t second_base : {2u, 3u, 4u}) {
+    SCOPED_TRACE(second_base);
+    source_assignments[1].location_base = second_base;
+    assigned_high_water[0] = second_base + 2;
+    loom_low_allocation_active_set_t active_set = {};
+    IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
+        &descriptor_set, &unit_liveness, IREE_ARRAYSIZE(source_assignments), 7,
+        reg_class.allocatable_count, &arena_, &active_set));
+    for (uint32_t i = 0; i < IREE_ARRAYSIZE(source_assignments); ++i) {
+      loom_low_allocation_active_set_insert(
+          &active_set, &descriptor_set, source_assignments,
+          IREE_ARRAYSIZE(source_assignments), i);
+    }
+    search_context.active_set = &active_set;
+    publication = {};
+    publication.assignment.value_id = LOOM_VALUE_ID_INVALID;
+    bool assigned = false;
+    IREE_ASSERT_OK(loom_low_allocation_coalescing_assign_structural_interval(
+        &context, &intervals[2], &assigned));
+    EXPECT_EQ(assigned, second_base != 3);
+    if (second_base == 3) {
+      EXPECT_EQ(publication.assignment.value_id, LOOM_VALUE_ID_INVALID);
+      EXPECT_EQ(publication.shared_count, 0u);
+    } else {
+      EXPECT_EQ(publication.assignment.value_id, value_ids[2]);
+      EXPECT_EQ(publication.assignment.location_base, 0u);
+      EXPECT_EQ(publication.assignment.location_count, 4u);
+      EXPECT_EQ(publication.shared_count, second_base == 2 ? 2u : 1u);
+      EXPECT_EQ(publication.shared_values[0], value_ids[0]);
+      if (second_base == 2) {
+        EXPECT_EQ(publication.shared_values[1], value_ids[1]);
+      }
+    }
   }
 
   for (loom_value_id_t value_id : value_ids) {
