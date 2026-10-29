@@ -129,7 +129,7 @@ if(NOT DEFINED AMDF_BUILD_DEFAULT)
     set(AMDF_BUILD_DEFAULT ON)
   endif()
 endif()
-include("${CMAKE_CURRENT_LIST_DIR}/libamdf/project.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/libamdf/build_tools/cmake/amdf_project.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/libhrx/project.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/loom/project.cmake")
 

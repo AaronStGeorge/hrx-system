@@ -65,9 +65,9 @@ Runtime-only consumers outside `libamdf/` retain their own subsystem prefix.
 - Project-specific build rules live under `build_tools/bazel/` and
   `build_tools/cmake/`. Do not add build logic to the repository root or to a
   handwritten package `CMakeLists.txt`.
-- `packaging/package_smoke/CMakeLists.txt` is the one handwritten exception. It
-  is an external consumer used to validate the installed package and never
-  participates in the repository build graph.
+- `build_tools/cmake/package_smoke/` is an external consumer used to validate
+  the installed package. Its authored CMake belongs to build tooling and never
+  participates in the repository product graph.
 - The public distribution consists of the shared library, the explicit static
   library, and headers under `include/amdf/`. Tests and examples are not part
   of the installed package.
@@ -81,5 +81,5 @@ Runtime-only consumers outside `libamdf/` retain their own subsystem prefix.
 ## Verification
 
 Exercise both Bazel and CMake for build-system changes. Installation changes
-also require the standalone consumer under `packaging/package_smoke/` to build
-against the installed package rather than build-tree targets.
+also require the standalone consumer under `build_tools/cmake/package_smoke/`
+to build against the installed package rather than build-tree targets.
