@@ -399,7 +399,8 @@ bool loom_target_math_policy_prefers_fma(
   _(ATANF, op_atanf, "atanf")                            \
   _(ATAN2F, op_atan2f, "atan2f")                         \
   _(TANF, op_tanf, "tanf")                               \
-  _(ERFCF, op_erfcf, "erfcf")
+  _(ERFCF, op_erfcf, "erfcf")                            \
+  _(REMF, op_remf, "remf")
 
 #define LOOM_TARGET_MATH_LANE_DOMAIN_NAMES(_) \
   _(UNKNOWN, lane_unknown, "unknown")         \

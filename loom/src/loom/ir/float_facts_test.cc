@@ -13,6 +13,7 @@
 
 #include "iree/base/internal/fpu_state.h"
 #include "iree/base/internal/math.h"
+#include "iree/math/remainder.h"
 #include "iree/testing/gtest.h"
 
 namespace loom {
@@ -183,6 +184,37 @@ TEST(FloatFacts, BinaryExponentFamily) {
                                       &exponent);
     EXPECT_FALSE(loom_value_facts_is_exact(fraction));
     EXPECT_FALSE(loom_value_facts_is_exact(exponent));
+  }
+  iree_fpu_state_pop(saved);
+}
+
+TEST(FloatFacts, RemainderPreservesEachFormatsBinaryGrid) {
+  const iree_fpu_state_t saved =
+      iree_fpu_state_push(IREE_FPU_STATE_FLAG_MASK_EXCEPTIONS |
+                          IREE_FPU_STATE_FLAG_ROUND_TO_NEAREST);
+  const double minimums[] = {0x1p-9,   0x1p-16,  0x1p-24,
+                             0x1p-133, 0x1p-149, 0x1p-1074};
+  for (loom_scalar_type_t type = LOOM_SCALAR_TYPE_F8E4M3;
+       type <= LOOM_SCALAR_TYPE_F64; ++type) {
+    SCOPED_TRACE(loom_scalar_type_name(type));
+    for (double unit : {0.25, minimums[type - LOOM_SCALAR_TYPE_F8E4M3]}) {
+      for (double numerator_sign : {-1.0, 1.0}) {
+        for (double denominator_sign : {-1.0, 1.0}) {
+          for (int numerator : {0, 1, 6, 7}) {
+            const auto left = loom_value_facts_exact_float(
+                type, numerator_sign * numerator * unit);
+            const auto right =
+                loom_value_facts_exact_float(type, denominator_sign * 3 * unit);
+            loom_value_facts_t result = {};
+            loom_value_facts_eval_float_binary(type, &left, &right,
+                                               iree_math_fmod_f32,
+                                               iree_math_fmod_f64, &result);
+            EXPECT_EQ(DoubleBits(numerator_sign * (numerator % 3) * unit),
+                      DoubleBits(ExactFloatValue(type, result)));
+          }
+        }
+      }
+    }
   }
   iree_fpu_state_pop(saved);
 }

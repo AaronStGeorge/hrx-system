@@ -36,6 +36,7 @@ loom_check_test_suite(
         "partial_lane_facts.loom-test",
         "partition_projection.loom-test",
         "range_mask_facts.loom-test",
+        "remainder.loom-test",
         "roundtrip.loom-test",
         "scaling.loom-test",
         "selection_facts.loom-test",

@@ -137,6 +137,7 @@ loom_cc_test(
         ":facts",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:fpu_state",
+        "//runtime/src/iree/math",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

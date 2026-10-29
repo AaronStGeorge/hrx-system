@@ -1,0 +1,328 @@
+// Signed fractional remainder on a grid exactly representable in every float
+// format. The independent oracle uses integer remainder before scaling. Each
+// format exercises both scalar execution and two nonuniform vector lanes.
+func.def @remainder_inputs(%input: buffer) {
+  %origin = index.constant 0 : offset
+  %inputs = buffer.view %input[%origin] : buffer -> view<16xi32>
+  %negative_odd = scalar.constant -7 : i32
+  %negative_multiple = scalar.constant -6 : i32
+  %negative_neighbor = scalar.constant -5 : i32
+  %negative_divisor = scalar.constant -3 : i32
+  %negative_fraction = scalar.constant -1 : i32
+  %zero_dividend = scalar.constant 0 : i32
+  %positive_fraction = scalar.constant 1 : i32
+  %positive_divisor = scalar.constant 3 : i32
+  %positive_neighbor = scalar.constant 5 : i32
+  %positive_odd = scalar.constant 7 : i32
+  %pairs = vector.from_elements %negative_odd, %positive_divisor, %negative_multiple, %positive_divisor, %negative_neighbor, %negative_divisor, %negative_fraction, %positive_odd, %zero_dividend, %positive_divisor, %positive_fraction, %negative_odd, %positive_neighbor, %positive_divisor, %positive_odd, %negative_divisor : vector<16xi32>
+  vector.store %pairs, %inputs[0] : vector<16xi32>, view<16xi32>
+  func.return
+}
+
+func.def inline @store_remainder_f32(%output: buffer, %row: index, %scalar: f32, %first: f32, %second: f32) {
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<8x3xf32>
+  view.store %scalar, %results[%row, 0] : f32, view<8x3xf32>
+  view.store %first, %results[%row, 1] : f32, view<8x3xf32>
+  view.store %second, %results[%row, 2] : f32, view<8x3xf32>
+  func.return
+}
+
+func.def @remainder_reference_f32(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %inputs = buffer.view %input[%origin] : buffer -> view<8x2xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %quarter = scalar.constant 0.25 : f32
+  scf.for %row = [%begin to %end step %step] {
+    %left = view.load %inputs[%row, 0] : view<8x2xi32> -> i32
+    %right = view.load %inputs[%row, 1] : view<8x2xi32> -> i32
+    %integer = scalar.remsi %left, %right : i32
+    %converted = scalar.sitofp %integer : i32 to f32
+    %scaled = scalar.mulf %converted, %quarter : f32
+    %sign = scalar.sitofp %left : i32 to f32
+    %result = scalar.copysignf %scaled, %sign : f32
+    %opposite = scalar.negf %result : f32
+    func.call @store_remainder_f32(%output, %row, %result, %result, %opposite) : (buffer, index, f32, f32, f32)
+  }
+  func.return
+}
+
+func.def inline @store_remainder_f64(%output: buffer, %row: index, %scalar: f64, %first: f64, %second: f64) {
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<8x3xf64>
+  view.store %scalar, %results[%row, 0] : f64, view<8x3xf64>
+  view.store %first, %results[%row, 1] : f64, view<8x3xf64>
+  view.store %second, %results[%row, 2] : f64, view<8x3xf64>
+  func.return
+}
+
+func.def @remainder_reference_f64(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %inputs = buffer.view %input[%origin] : buffer -> view<8x2xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %quarter = scalar.constant 0.25 : f64
+  scf.for %row = [%begin to %end step %step] {
+    %left = view.load %inputs[%row, 0] : view<8x2xi32> -> i32
+    %right = view.load %inputs[%row, 1] : view<8x2xi32> -> i32
+    %integer = scalar.remsi %left, %right : i32
+    %converted = scalar.sitofp %integer : i32 to f64
+    %scaled = scalar.mulf %converted, %quarter : f64
+    %sign = scalar.sitofp %left : i32 to f64
+    %result = scalar.copysignf %scaled, %sign : f64
+    %opposite = scalar.negf %result : f64
+    func.call @store_remainder_f64(%output, %row, %result, %result, %opposite) : (buffer, index, f64, f64, f64)
+  }
+  func.return
+}
+
+func.def @remainder_f8E4M3(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %inputs = buffer.view %input[%origin] : buffer -> view<8x2xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %quarter = scalar.constant 0.25 : f32
+  scf.for %row = [%begin to %end step %step] {
+    %left = view.load %inputs[%row, 0] : view<8x2xi32> -> i32
+    %right = view.load %inputs[%row, 1] : view<8x2xi32> -> i32
+    %left_float = scalar.sitofp %left : i32 to f32
+    %right_float = scalar.sitofp %right : i32 to f32
+    %a_wide = scalar.mulf %left_float, %quarter : f32
+    %b_wide = scalar.mulf %right_float, %quarter : f32
+    %a = scalar.fptrunc %a_wide : f32 to f8E4M3
+    %b = scalar.fptrunc %b_wide : f32 to f8E4M3
+    %negative = scalar.negf %a : f8E4M3
+    %numerators = vector.from_elements %a, %negative : vector<2xf8E4M3>
+    %denominators = vector.splat %b : vector<2xf8E4M3>
+    %scalar = scalar.remf %a, %b : f8E4M3
+    %lanes = vector.remf %numerators, %denominators : vector<2xf8E4M3>
+    %first = vector.extract %lanes[0] : vector<2xf8E4M3> -> f8E4M3
+    %second = vector.extract %lanes[1] : vector<2xf8E4M3> -> f8E4M3
+    %scalar_wide = scalar.extf %scalar : f8E4M3 to f32
+    %first_wide = scalar.extf %first : f8E4M3 to f32
+    %second_wide = scalar.extf %second : f8E4M3 to f32
+    func.call @store_remainder_f32(%output, %row, %scalar_wide, %first_wide, %second_wide) : (buffer, index, f32, f32, f32)
+  }
+  func.return
+}
+
+check.scenario @remainder_f8E4M3_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.fill value(0) : tensor<8x2xi32>
+    check.generate<@remainder_inputs>(%input) : (tensor<8x2xi32>) -> ()
+    %output = check.generate.fill value(0.0) : tensor<8x3xf32>
+    check.compare<@remainder_f8E4M3, @remainder_reference_f32>(%input, %output) : (tensor<8x2xi32>, tensor<8x3xf32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<8x3xf32>
+    }
+  }
+  check.return
+}
+
+func.def @remainder_f8E5M2(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %inputs = buffer.view %input[%origin] : buffer -> view<8x2xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %quarter = scalar.constant 0.25 : f32
+  scf.for %row = [%begin to %end step %step] {
+    %left = view.load %inputs[%row, 0] : view<8x2xi32> -> i32
+    %right = view.load %inputs[%row, 1] : view<8x2xi32> -> i32
+    %left_float = scalar.sitofp %left : i32 to f32
+    %right_float = scalar.sitofp %right : i32 to f32
+    %a_wide = scalar.mulf %left_float, %quarter : f32
+    %b_wide = scalar.mulf %right_float, %quarter : f32
+    %a = scalar.fptrunc %a_wide : f32 to f8E5M2
+    %b = scalar.fptrunc %b_wide : f32 to f8E5M2
+    %negative = scalar.negf %a : f8E5M2
+    %numerators = vector.from_elements %a, %negative : vector<2xf8E5M2>
+    %denominators = vector.splat %b : vector<2xf8E5M2>
+    %scalar = scalar.remf %a, %b : f8E5M2
+    %lanes = vector.remf %numerators, %denominators : vector<2xf8E5M2>
+    %first = vector.extract %lanes[0] : vector<2xf8E5M2> -> f8E5M2
+    %second = vector.extract %lanes[1] : vector<2xf8E5M2> -> f8E5M2
+    %scalar_wide = scalar.extf %scalar : f8E5M2 to f32
+    %first_wide = scalar.extf %first : f8E5M2 to f32
+    %second_wide = scalar.extf %second : f8E5M2 to f32
+    func.call @store_remainder_f32(%output, %row, %scalar_wide, %first_wide, %second_wide) : (buffer, index, f32, f32, f32)
+  }
+  func.return
+}
+
+check.scenario @remainder_f8E5M2_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.fill value(0) : tensor<8x2xi32>
+    check.generate<@remainder_inputs>(%input) : (tensor<8x2xi32>) -> ()
+    %output = check.generate.fill value(0.0) : tensor<8x3xf32>
+    check.compare<@remainder_f8E5M2, @remainder_reference_f32>(%input, %output) : (tensor<8x2xi32>, tensor<8x3xf32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<8x3xf32>
+    }
+  }
+  check.return
+}
+
+func.def @remainder_f16(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %inputs = buffer.view %input[%origin] : buffer -> view<8x2xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %quarter = scalar.constant 0.25 : f32
+  scf.for %row = [%begin to %end step %step] {
+    %left = view.load %inputs[%row, 0] : view<8x2xi32> -> i32
+    %right = view.load %inputs[%row, 1] : view<8x2xi32> -> i32
+    %left_float = scalar.sitofp %left : i32 to f32
+    %right_float = scalar.sitofp %right : i32 to f32
+    %a_wide = scalar.mulf %left_float, %quarter : f32
+    %b_wide = scalar.mulf %right_float, %quarter : f32
+    %a = scalar.fptrunc %a_wide : f32 to f16
+    %b = scalar.fptrunc %b_wide : f32 to f16
+    %negative = scalar.negf %a : f16
+    %numerators = vector.from_elements %a, %negative : vector<2xf16>
+    %denominators = vector.splat %b : vector<2xf16>
+    %scalar = scalar.remf %a, %b : f16
+    %lanes = vector.remf %numerators, %denominators : vector<2xf16>
+    %first = vector.extract %lanes[0] : vector<2xf16> -> f16
+    %second = vector.extract %lanes[1] : vector<2xf16> -> f16
+    %scalar_wide = scalar.extf %scalar : f16 to f32
+    %first_wide = scalar.extf %first : f16 to f32
+    %second_wide = scalar.extf %second : f16 to f32
+    func.call @store_remainder_f32(%output, %row, %scalar_wide, %first_wide, %second_wide) : (buffer, index, f32, f32, f32)
+  }
+  func.return
+}
+
+check.scenario @remainder_f16_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.fill value(0) : tensor<8x2xi32>
+    check.generate<@remainder_inputs>(%input) : (tensor<8x2xi32>) -> ()
+    %output = check.generate.fill value(0.0) : tensor<8x3xf32>
+    check.compare<@remainder_f16, @remainder_reference_f32>(%input, %output) : (tensor<8x2xi32>, tensor<8x3xf32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<8x3xf32>
+    }
+  }
+  check.return
+}
+
+func.def @remainder_bf16(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %inputs = buffer.view %input[%origin] : buffer -> view<8x2xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %quarter = scalar.constant 0.25 : f32
+  scf.for %row = [%begin to %end step %step] {
+    %left = view.load %inputs[%row, 0] : view<8x2xi32> -> i32
+    %right = view.load %inputs[%row, 1] : view<8x2xi32> -> i32
+    %left_float = scalar.sitofp %left : i32 to f32
+    %right_float = scalar.sitofp %right : i32 to f32
+    %a_wide = scalar.mulf %left_float, %quarter : f32
+    %b_wide = scalar.mulf %right_float, %quarter : f32
+    %a = scalar.fptrunc %a_wide : f32 to bf16
+    %b = scalar.fptrunc %b_wide : f32 to bf16
+    %negative = scalar.negf %a : bf16
+    %numerators = vector.from_elements %a, %negative : vector<2xbf16>
+    %denominators = vector.splat %b : vector<2xbf16>
+    %scalar = scalar.remf %a, %b : bf16
+    %lanes = vector.remf %numerators, %denominators : vector<2xbf16>
+    %first = vector.extract %lanes[0] : vector<2xbf16> -> bf16
+    %second = vector.extract %lanes[1] : vector<2xbf16> -> bf16
+    %scalar_wide = scalar.extf %scalar : bf16 to f32
+    %first_wide = scalar.extf %first : bf16 to f32
+    %second_wide = scalar.extf %second : bf16 to f32
+    func.call @store_remainder_f32(%output, %row, %scalar_wide, %first_wide, %second_wide) : (buffer, index, f32, f32, f32)
+  }
+  func.return
+}
+
+check.scenario @remainder_bf16_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.fill value(0) : tensor<8x2xi32>
+    check.generate<@remainder_inputs>(%input) : (tensor<8x2xi32>) -> ()
+    %output = check.generate.fill value(0.0) : tensor<8x3xf32>
+    check.compare<@remainder_bf16, @remainder_reference_f32>(%input, %output) : (tensor<8x2xi32>, tensor<8x3xf32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<8x3xf32>
+    }
+  }
+  check.return
+}
+
+func.def @remainder_f32(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %inputs = buffer.view %input[%origin] : buffer -> view<8x2xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %quarter = scalar.constant 0.25 : f32
+  scf.for %row = [%begin to %end step %step] {
+    %left = view.load %inputs[%row, 0] : view<8x2xi32> -> i32
+    %right = view.load %inputs[%row, 1] : view<8x2xi32> -> i32
+    %left_float = scalar.sitofp %left : i32 to f32
+    %right_float = scalar.sitofp %right : i32 to f32
+    %a = scalar.mulf %left_float, %quarter : f32
+    %b = scalar.mulf %right_float, %quarter : f32
+    %negative = scalar.negf %a : f32
+    %numerators = vector.from_elements %a, %negative : vector<2xf32>
+    %denominators = vector.splat %b : vector<2xf32>
+    %scalar = scalar.remf %a, %b : f32
+    %lanes = vector.remf %numerators, %denominators : vector<2xf32>
+    %first = vector.extract %lanes[0] : vector<2xf32> -> f32
+    %second = vector.extract %lanes[1] : vector<2xf32> -> f32
+    func.call @store_remainder_f32(%output, %row, %scalar, %first, %second) : (buffer, index, f32, f32, f32)
+  }
+  func.return
+}
+
+check.scenario @remainder_f32_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.fill value(0) : tensor<8x2xi32>
+    check.generate<@remainder_inputs>(%input) : (tensor<8x2xi32>) -> ()
+    %output = check.generate.fill value(0.0) : tensor<8x3xf32>
+    check.compare<@remainder_f32, @remainder_reference_f32>(%input, %output) : (tensor<8x2xi32>, tensor<8x3xf32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<8x3xf32>
+    }
+  }
+  check.return
+}
+
+func.def @remainder_f64(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %inputs = buffer.view %input[%origin] : buffer -> view<8x2xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 8 : index
+  %step = index.constant 1 : index
+  %quarter = scalar.constant 0.25 : f64
+  scf.for %row = [%begin to %end step %step] {
+    %left = view.load %inputs[%row, 0] : view<8x2xi32> -> i32
+    %right = view.load %inputs[%row, 1] : view<8x2xi32> -> i32
+    %left_float = scalar.sitofp %left : i32 to f64
+    %right_float = scalar.sitofp %right : i32 to f64
+    %a = scalar.mulf %left_float, %quarter : f64
+    %b = scalar.mulf %right_float, %quarter : f64
+    %negative = scalar.negf %a : f64
+    %numerators = vector.from_elements %a, %negative : vector<2xf64>
+    %denominators = vector.splat %b : vector<2xf64>
+    %scalar = scalar.remf %a, %b : f64
+    %lanes = vector.remf %numerators, %denominators : vector<2xf64>
+    %first = vector.extract %lanes[0] : vector<2xf64> -> f64
+    %second = vector.extract %lanes[1] : vector<2xf64> -> f64
+    func.call @store_remainder_f64(%output, %row, %scalar, %first, %second) : (buffer, index, f64, f64, f64)
+  }
+  func.return
+}
+
+check.scenario @remainder_f64_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.fill value(0) : tensor<8x2xi32>
+    check.generate<@remainder_inputs>(%input) : (tensor<8x2xi32>) -> ()
+    %output = check.generate.fill value(0.0) : tensor<8x3xf64>
+    check.compare<@remainder_f64, @remainder_reference_f64>(%input, %output) : (tensor<8x2xi32>, tensor<8x3xf64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<8x3xf64>
+    }
+  }
+  check.return
+}

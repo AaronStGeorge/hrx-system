@@ -22,6 +22,7 @@ loom_check_test_suite(
         "inverse_hyperbolic.loom-test",
         "math_contraction.loom-test",
         "math_policy.loom-test",
+        "remainder.loom-test",
         "rounding.loom-test",
         "scalar.loom-test",
         "scaling.loom-test",

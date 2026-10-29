@@ -332,6 +332,9 @@ static loom_target_math_op_t loom_math_legalize_op_kind(const loom_op_t* op) {
     case LOOM_OP_SCALAR_DIVF:
     case LOOM_OP_VECTOR_DIVF:
       return LOOM_TARGET_MATH_OP_DIVF;
+    case LOOM_OP_SCALAR_REMF:
+    case LOOM_OP_VECTOR_REMF:
+      return LOOM_TARGET_MATH_OP_REMF;
     case LOOM_OP_SCALAR_GELUF:
       return loom_math_legalize_scalar_geluf_op(op);
     case LOOM_OP_VECTOR_GELUF:
@@ -992,6 +995,12 @@ static const loom_target_legalizer_rule_t kMathLegalizerRules[] = {
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
     },
     {
+        .root_kind = LOOM_OP_SCALAR_REMF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .legalize = loom_math_target_legalize_binary,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+    },
+    {
         .root_kind = LOOM_OP_VECTOR_ADDF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
         .legalize = loom_math_target_legalize_binary,
@@ -1011,6 +1020,12 @@ static const loom_target_legalizer_rule_t kMathLegalizerRules[] = {
     },
     {
         .root_kind = LOOM_OP_VECTOR_DIVF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .legalize = loom_math_target_legalize_binary,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_REMF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
         .legalize = loom_math_target_legalize_binary,
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,

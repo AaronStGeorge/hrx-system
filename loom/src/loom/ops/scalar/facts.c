@@ -21,6 +21,7 @@
 #include "iree/math/hyperbolic.h"
 #include "iree/math/inverse_trigonometry.h"
 #include "iree/math/logarithm.h"
+#include "iree/math/remainder.h"
 #include "iree/math/roots.h"
 #include "iree/math/rounding.h"
 #include "iree/math/trigonometry.h"
@@ -214,7 +215,8 @@ FLOAT_BINARY_FACTS(loom_scalar_addf_facts, add_f32, add_f64)
 FLOAT_BINARY_FACTS(loom_scalar_subf_facts, sub_f32, sub_f64)
 FLOAT_BINARY_FACTS(loom_scalar_mulf_facts, mul_f32, mul_f64)
 FLOAT_BINARY_FACTS(loom_scalar_divf_facts, div_f32, div_f64)
-FLOAT_BINARY_FACTS(loom_scalar_remf_facts, fmodf, fmod)
+FLOAT_BINARY_FACTS(loom_scalar_remf_facts, iree_math_fmod_f32,
+                   iree_math_fmod_f64)
 
 iree_status_t loom_scalar_negf_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,

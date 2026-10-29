@@ -46,6 +46,7 @@ NUMERIC_CORPUS = loom_corpus_manifest(
         "float/logarithm.loom",
         "float/narrow_reduction.loom",
         "float/reciprocal.loom",
+        "float/remainder.loom",
         "float/rounding.loom",
         "float/roots.loom",
         "float/scalar_f32.loom",

@@ -169,6 +169,7 @@ loom_corpus_test(
             "numeric/float/roots.loom",
             "numeric/float/rounding.loom",
             "numeric/float/reciprocal.loom",
+            "numeric/float/remainder.loom",
             "numeric/float/inverse_hyperbolic.loom",
             "numeric/float/inverse_hyperbolic_narrow.loom",
         ],

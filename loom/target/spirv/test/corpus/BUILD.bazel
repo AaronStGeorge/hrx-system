@@ -75,6 +75,7 @@ _ADAPTER_ONLY_SCENARIOS = [
     "numeric/float/comparison.loom",
     "numeric/float/exponent.loom",
     "numeric/float/reciprocal.loom",
+    "numeric/float/remainder.loom",
     "numeric/float/error_functions.loom",
     "numeric/float/exponential.loom",
     "numeric/float/extrema.loom",
@@ -629,6 +630,14 @@ _SPIRV_EXECUTION_ALLOWED_FAILURES = {
     "numeric/float/narrow_reduction.loom:@narrow_reduction_subnormal_values": "TARGET/003,EXPECT/002",
     "numeric/float/reciprocal.loom:@double_reciprocal_scalar_values": "EXPECT/002",
     "numeric/float/reciprocal.loom:@double_reciprocal_vector_values": "EXPECT/002",
+    # OpFRem inherits inexact quotient arithmetic. Exact multiples may
+    # produce a nonzero remainder even for ordinary finite inputs.
+    "numeric/float/remainder.loom:@remainder_bf16_values": "EXPECT/002",
+    "numeric/float/remainder.loom:@remainder_f16_values": "EXPECT/002",
+    "numeric/float/remainder.loom:@remainder_f32_values": "EXPECT/002",
+    "numeric/float/remainder.loom:@remainder_f64_values": "EXPECT/002",
+    "numeric/float/remainder.loom:@remainder_f8E4M3_values": "EXPECT/002",
+    "numeric/float/remainder.loom:@remainder_f8E5M2_values": "EXPECT/002",
     "numeric/float/scalar_float64.loom:@scalar_float64_random_values": "EXPECT/002",
     "numeric/float/scalar_float64.loom:@scalar_float64_remainder_random_values": "EXPECT/002",
     "numeric/float/scalar_float64.loom:@scalar_float64_remainder_special_values": "EXPECT/002",

@@ -210,4 +210,43 @@ TEST(MathPolicyTest, ActivationFamily) {
   }
 }
 
+TEST(MathPolicyTest, RemainderFamily) {
+  loom_target_math_policy_registry_t registry = {};
+  loom_spirv_math_policy_registry_initialize(&registry);
+  const auto* policy = loom_target_math_policy_registry_lookup(
+      &registry, UINT64_C(0x5b86e123b2b92ba9));
+  ASSERT_NE(policy, nullptr);
+  const loom_target_config_t config = {};
+  const loom_target_bundle_t bundle = {.config = &config};
+  for (loom_scalar_type_t type = LOOM_SCALAR_TYPE_F8E4M3;
+       type <= LOOM_SCALAR_TYPE_F64; ++type) {
+    SCOPED_TRACE(type);
+    for (int lanes : {0, 1, 3, 8}) {
+      SCOPED_TRACE(lanes);
+      const loom_target_math_query_t query = {
+          .target_bundle = &bundle,
+          .math_op = LOOM_TARGET_MATH_OP_REMF,
+          .lane_domain = lanes ? LOOM_TARGET_MATH_LANE_DOMAIN_VECTOR
+                               : LOOM_TARGET_MATH_LANE_DOMAIN_SCALAR,
+          .value_type =
+              lanes ? loom_type_shaped_1d(LOOM_TYPE_VECTOR, type,
+                                          loom_dim_pack_static(lanes), 0)
+                    : loom_type_scalar(type),
+          .element_type = type,
+      };
+      loom_target_math_policy_decision_t decision = {};
+      loom_target_math_policy_query(policy, &query, &decision);
+      const bool native = type == LOOM_SCALAR_TYPE_F16 ||
+                          type == LOOM_SCALAR_TYPE_F32 ||
+                          type == LOOM_SCALAR_TYPE_F64;
+      EXPECT_EQ(decision.action, native
+                                     ? LOOM_TARGET_MATH_POLICY_ACTION_KEEP
+                                     : LOOM_TARGET_MATH_POLICY_ACTION_REWRITE);
+      if (!native) {
+        EXPECT_EQ(decision.recipe, LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND);
+      }
+    }
+  }
+}
+
 }  // namespace

@@ -26,6 +26,7 @@
 #include "iree/math/hyperbolic.h"
 #include "iree/math/inverse_trigonometry.h"
 #include "iree/math/logarithm.h"
+#include "iree/math/remainder.h"
 #include "iree/math/roots.h"
 #include "iree/math/rounding.h"
 #include "iree/math/trigonometry.h"
@@ -3701,7 +3702,8 @@ iree_status_t loom_vector_mulf_facts(loom_fact_context_t* context,
 
 LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_divf_facts, loom_vector_div_f32,
                                loom_vector_div_f64)
-LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_remf_facts, fmodf, fmod)
+LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_remf_facts, iree_math_fmod_f32,
+                               iree_math_fmod_f64)
 
 iree_status_t loom_vector_negf_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,

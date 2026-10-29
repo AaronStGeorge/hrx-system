@@ -886,19 +886,19 @@ _BINARY_DEFINITIONS = (
         0x88,
         FloatBinaryOperation.REM,
         32,
-        "Computes width-matched f32 fmod. A numeric result has the dividend's sign, "
+        "Computes the exact f32 remainder with a quotient truncated toward zero. A numeric result has the dividend's sign, "
         "including zero; a zero divisor or infinite dividend produces an arithmetic "
         "NaN, while an infinite divisor returns a finite dividend unchanged.",
-        "host_math(fmod, left, right, 32)",
+        "iree_math_fmod_f32(left, right)",
     ),
     _BinaryDefinition(
         0x89,
         FloatBinaryOperation.REM,
         64,
-        "Computes width-matched f64 fmod. A numeric result has the dividend's sign, "
+        "Computes the exact f64 remainder with a quotient truncated toward zero. A numeric result has the dividend's sign, "
         "including zero; a zero divisor or infinite dividend produces an arithmetic "
         "NaN, while an infinite divisor returns a finite dividend unchanged.",
-        "host_math(fmod, left, right, 64)",
+        "iree_math_fmod_f64(left, right)",
     ),
     _BinaryDefinition(
         0x96,

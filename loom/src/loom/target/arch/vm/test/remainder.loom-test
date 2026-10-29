@@ -1,0 +1,42 @@
+// RUN: emit source-low
+
+vm.target<core> @vm
+
+func.def target(@vm) @remainder_wide(%a: f32, %b: f32, %c: f64, %d: f64) -> (f32, f64) {
+  %single = scalar.remf %a, %b : f32
+  %double = scalar.remf %c, %d : f64
+  func.return %single, %double : f32, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @remainder_wide(%a: reg<vm.value : f32>, %b: reg<vm.value : f32>, %c: reg<vm.value : f64>, %d: reg<vm.value : f64>) -> (reg<vm.value : f32>, reg<vm.value : f64>) asm {
+  %single = float.rem.f32 %a, %b
+  %double = float.rem.f64 %c, %d
+  return %single, %double
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @remainder_narrow(%a: vector<2xbf16>, %b: vector<2xbf16>) -> (vector<2xbf16>) {
+  %result = vector.remf %a, %b : vector<2xbf16>
+  func.return %result : vector<2xbf16>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @remainder_narrow(%0: reg<vm.value : bf16>, %1: reg<vm.value : bf16>, %2: reg<vm.value : bf16>, %3: reg<vm.value : bf16>) -> (reg<vm.value : bf16>, reg<vm.value : bf16>) asm {
+  %6 = conversion.float.extend %0, "bf16.to.f32" : reg<vm.value : f32>
+  %7 = conversion.float.extend %2, "bf16.to.f32" : reg<vm.value : f32>
+  %8 = float.rem.f32 %6, %7
+  %9 = conversion.float.truncate %8, "f32.to.bf16" : reg<vm.value : bf16>
+  %10 = conversion.float.extend %1, "bf16.to.f32" : reg<vm.value : f32>
+  %11 = conversion.float.extend %3, "bf16.to.f32" : reg<vm.value : f32>
+  %12 = float.rem.f32 %10, %11
+  %13 = conversion.float.truncate %12, "f32.to.bf16" : reg<vm.value : bf16>
+  return %9, %13
+}
