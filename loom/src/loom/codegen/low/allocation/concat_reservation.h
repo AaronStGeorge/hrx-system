@@ -10,6 +10,7 @@
 #define LOOM_CODEGEN_LOW_ALLOCATION_CONCAT_RESERVATION_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation/assignment.h"
 #include "loom/codegen/low/allocation/search.h"
 
@@ -48,6 +49,23 @@ typedef struct loom_low_allocation_concat_reservation_sources_t {
   // Feasibility constraint imposed by fixed or committed source assignments.
   loom_low_allocation_concat_source_constraint_t source_constraint;
 } loom_low_allocation_concat_reservation_sources_t;
+
+// Retains source feasibility and the corresponding ignored source set for one
+// prospective reservation. Fixed and already assigned sources constrain the
+// aggregate's location; committed sources with competing affinities remain
+// ordinary interference. Uses caller-owned inline storage when it fits, or
+// allocates from |arena|. Both storage lifetimes must extend through
+// reservation search and publication. The source set and constraint describe
+// one snapshot of the current assignments and must be prepared again after
+// assignments change.
+iree_status_t loom_low_allocation_concat_reservation_prepare_sources(
+    const loom_low_allocation_search_context_t* context,
+    const loom_liveness_interval_t* result_interval,
+    const loom_low_placement_relation_range_t* range,
+    loom_value_id_t* inline_ignored_value_ids,
+    iree_host_size_t inline_ignored_value_capacity,
+    iree_arena_allocator_t* arena,
+    loom_low_allocation_concat_reservation_sources_t* out_sources);
 
 // Selects a future concat result reservation or a current source assignment
 // when that avoids a lower residency tier. The source and result intervals

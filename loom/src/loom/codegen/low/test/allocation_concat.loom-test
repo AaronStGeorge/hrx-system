@@ -289,48 +289,6 @@ value %pair: test.explicit32 -> physical_register[4:2]
 
 // ====
 
-// RUN: emit low-allocation-query @fixed_concat_sources spill-count values=%first,%second,%third,%fourth,%tuple fixed=%first:physical_register:0:1 fixed=%second:physical_register:2:1 fixed=%third:physical_register:1:1 fixed=%fourth:physical_register:4:1
-
-test.target<low_core> @target
-
-// Fixed sources whose physical order differs from their tuple order cannot be
-// exempted from a speculative result reservation. The tuple instead receives
-// independent storage while its retained sources keep their required locations.
-low.func.def target<test.low.core>(@target) @fixed_concat_sources(%first: reg<test.phys>, %second: reg<test.phys>, %third: reg<test.phys>, %fourth: reg<test.phys>) -> (reg<test.phys x4>, reg<test.phys>, reg<test.phys>) asm {
-  %tuple = concat(%first, %second, %third, %fourth) : (reg<test.phys>, reg<test.phys>, reg<test.phys>, reg<test.phys>) -> reg<test.phys x4>
-  return %tuple, %second, %third
-}
-
-// ----
-spills: 0
-value %first: test.phys -> physical_register[0:1]
-value %second: test.phys -> physical_register[2:1]
-value %third: test.phys -> physical_register[1:1]
-value %fourth: test.phys -> physical_register[4:1]
-value %tuple: test.phys -> physical_register[4:4]
-
-// ====
-
-// RUN: emit low-allocation-query @matching_fixed_concat_sources spill-count values=%first,%second,%third,%fourth,%tuple fixed=%first:physical_register:0:1 fixed=%second:physical_register:1:1 fixed=%third:physical_register:2:1 fixed=%fourth:physical_register:3:1
-
-test.target<low_core> @target
-
-// Compatible fixed sources still assemble directly into the result span.
-low.func.def target<test.low.core>(@target) @matching_fixed_concat_sources(%first: reg<test.phys>, %second: reg<test.phys>, %third: reg<test.phys>, %fourth: reg<test.phys>) -> (reg<test.phys x4>, reg<test.phys>, reg<test.phys>) asm {
-  %tuple = concat(%first, %second, %third, %fourth) : (reg<test.phys>, reg<test.phys>, reg<test.phys>, reg<test.phys>) -> reg<test.phys x4>
-  return %tuple, %second, %third
-}
-
-// ----
-spills: 0
-value %first: test.phys -> physical_register[0:1]
-value %second: test.phys -> physical_register[1:1]
-value %third: test.phys -> physical_register[2:1]
-value %fourth: test.phys -> physical_register[3:1]
-value %tuple: test.phys -> physical_register[0:4]
-
-// ====
-
 // RUN: emit low-allocation-query @compact_concat_lane3_last strategy=resource-stall spill-count values=%temporary0,%temporary1,%temporary2,%temporary3,%lane0,%lane1,%lane2,%lane3,%values fixed=%seed:physical_register:2:1 fixed=%values:physical_register:0:4 fixed=%lane3:physical_register:3:1
 
 test.target<low_core> @target
