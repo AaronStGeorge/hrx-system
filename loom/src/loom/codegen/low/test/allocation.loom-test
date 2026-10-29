@@ -1205,18 +1205,19 @@ value %rhs: test.explicit32 -> physical_register[5:2]
 
 // ====
 
-// RUN: emit low-allocation-query @sparse_tied_join values=%seed,%state,%refilled,%joined,%next,%final fixed=%state:target_id:0:1 fixed=%joined:target_id:0:1 fixed=%condition:target_id:1:1
+// RUN: emit low-allocation-query @sparse_tied_join values=%seed,%state,%refilled,%joined,%next,%final
 
 // Mutually exclusive refill and exit results reserve the original state
-// without occupying the joined body. Both state generations use one location.
+// without occupying the joined body. Both state generations use one location;
+// the condition's independent register class leaves that data storage available.
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @sparse_tied_join(%condition: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
+low.func.def target<test.low.core>(@test_target) @sparse_tied_join(%condition: reg<test.i8>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
   low.br ^loop(%seed: reg<test.i32>)
 ^loop(%state: reg<test.i32>):
-  low.cond_br %condition, ^check, ^exit : reg<test.i32>
+  low.cond_br %condition, ^check, ^exit : reg<test.i8>
 ^check:
-  low.cond_br %condition, ^ready, ^refill : reg<test.i32>
+  low.cond_br %condition, ^ready, ^refill : reg<test.i8>
 ^ready:
   low.br ^available(%state: reg<test.i32>)
 ^refill:

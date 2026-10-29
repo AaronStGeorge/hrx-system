@@ -1309,6 +1309,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
   loom_liveness_interval_t intervals[kValueCount] = {};
   loom_liveness_segment_t segments[kValueCount + 1] = {};
   loom_liveness_segment_range_t segment_ranges[kValueCount] = {};
+  loom_liveness_segment_range_t semantic_ranges[kValueCount] = {};
   uint32_t interval_indices[kValueCount];
   loom_low_allocation_unit_liveness_value_t unit_values[kValueCount];
   uint32_t unit_starts[kValueCount];
@@ -1344,6 +1345,7 @@ TEST_F(LowAllocationTargetConstraintsTest,
                                    intervals[i].end_point};
       segment_ranges[i].count = 1;
     }
+    semantic_ranges[i] = segment_ranges[i];
     interval_indices[i] = i;
     unit_values[i] = {i, intervals[i].start_point};
     unit_starts[i] = intervals[i].start_point;
@@ -1355,6 +1357,11 @@ TEST_F(LowAllocationTargetConstraintsTest,
       fixed_values[i].location_count = 1;
     }
   }
+  // The sparse value is semantically dead at 23, but a tied result retains its
+  // storage at [24, 25). Fixed claims must include that physical extension and
+  // preserve the hole at [23, 24), not use either semantic or linear liveness.
+  semantic_ranges[5].count = 1;
+  intervals[5].end_point = 23;
   loom_local_value_domain_t domain = {
       .module = module,
       .value_ids = values,
@@ -1370,17 +1377,18 @@ TEST_F(LowAllocationTargetConstraintsTest,
       .segments = segments,
   };
   liveness.segment_count = segment_count;
-  liveness.value_segment_ranges = segment_ranges;
+  liveness.value_segment_ranges = semantic_ranges;
   loom_low_allocation_unit_liveness_t unit_liveness = {
       .values = unit_values,
       .start_points = unit_starts,
       .end_points = unit_ends,
       .point_count = kValueCount,
   };
-  uint64_t incomplete_storage_words[] = {0};
+  uint64_t incomplete_storage_words[] = {1u << 5};
   unit_liveness.values_with_incomplete_storage_segments = {
       kValueCount, incomplete_storage_words};
   unit_liveness.storage_segments.entries = segments;
+  unit_liveness.storage_segments.refined_ranges = segment_ranges;
   DiagnosticCapture capture = {};
   loom_low_allocation_target_constraints_t constraints = {};
   IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
