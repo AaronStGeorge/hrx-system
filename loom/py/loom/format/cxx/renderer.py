@@ -464,17 +464,14 @@ class CxxRenderer(CxxExpressionRenderer):
             resolved = self._resolved(operation)
             role = resolved.attr("role")
             shape = self._fragment_shape(operation, resolved)
-            origin = self._mixed_index_record(
-                resolved,
-                dynamic_field="indices",
-                static_field="static_indices",
-            )
+            template, origin = self._fragment_origin(resolved)
             value = self.expression(resolved.value_id("value"))
             view = self.expression(resolved.value_id("view"))
+            arguments = ", ".join([value, view, *origin, shape])
             self.writer.line(
                 "loom::vector::fragment::store<"
-                f"loom::vector::fragment::role::{role}>("
-                f"{value}, {view}, {origin}, {shape});"
+                f"loom::vector::fragment::role::{role}{template}>("
+                f"{arguments});"
             )
             return ("role", "static_indices")
         return None

@@ -11,9 +11,11 @@
 #include <cxx/symbols.h>
 #include <cxx/types.h>
 
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <string>
+#include <utility>
 
 #include "loom/import/cxx/binding/index_values.h"
 #include "loom/import/cxx/source/error.h"
@@ -40,6 +42,46 @@ uint8_t constant_selector(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
         std::string(role) + " requires a constant enum template argument");
   }
   return static_cast<uint8_t>(number->toUIntMax());
+}
+
+std::optional<std::vector<int64_t>> constant_origin_pattern(
+    cxx::TranslationUnit& unit, Diagnostics& diagnostics,
+    cxx::FunctionSymbol* function, size_t first, size_t rank, cxx::AST* owner) {
+  auto arguments =
+      cxx::expand_template_arguments(function->templateArguments());
+  if (arguments.size() <= first) {
+    return std::nullopt;
+  }
+  auto first_value = cxx::template_argument_value(arguments[first]);
+  if (!first_value || !std::get_if<cxx::ConstInt>(&*first_value)) {
+    return std::nullopt;
+  }
+  if (rank == 0 || arguments.size() < first + rank) {
+    diagnostics.reject(unit, owner,
+                       "fragment static origin must match the view rank");
+  }
+  std::vector<int64_t> pattern;
+  pattern.reserve(rank);
+  for (size_t axis = 0; axis < rank; ++axis) {
+    auto value = cxx::template_argument_value(arguments[first + axis]);
+    auto* number = value ? std::get_if<cxx::ConstInt>(&*value) : nullptr;
+    if (!number || number->isNegative()) {
+      diagnostics.reject(
+          unit, owner,
+          "fragment static origin requires nonnegative constant selectors");
+    }
+    auto wide = number->toUWide();
+    if (wide == std::numeric_limits<size_t>::max()) {
+      pattern.push_back(std::numeric_limits<int64_t>::min());
+    } else if (wide <= static_cast<uint64_t>(INT64_MAX)) {
+      pattern.push_back(static_cast<int64_t>(number->toUIntMax()));
+    } else {
+      diagnostics.reject(
+          unit, owner,
+          "fragment static origin selector is outside the index domain");
+    }
+  }
+  return pattern;
 }
 
 const ViewPartition& require_view(cxx::TranslationUnit& unit,
@@ -234,9 +276,11 @@ std::optional<FragmentIntrinsic> FragmentIntrinsic::resolve(
                            "vector.fragment must preserve its vector type");
       }
       shape_index = 1;
+      result.shape_argument_ = static_cast<uint8_t>(shape_index);
       if (parameters.size() == 3) {
         result.named_operand_names_ = require_named_operands(
             unit, diagnostics, types, parameters[2], true, module, owner);
+        result.named_operand_argument_ = 2;
       }
       break;
     }
@@ -248,14 +292,13 @@ std::optional<FragmentIntrinsic> FragmentIntrinsic::resolve(
             "vector.fragment.repack requires source and result vectors");
       }
       shape_index = 1;
+      result.shape_argument_ = static_cast<uint8_t>(shape_index);
       break;
     }
     case Operation::Load: {
-      if (parameters.size() != 3 && parameters.size() != 4) {
-        diagnostics.reject(
-            unit, owner,
-            "vector.fragment.load requires view, origin, shape, and optional "
-            "auxiliaries");
+      if (parameters.empty()) {
+        diagnostics.reject(unit, owner,
+                           "vector.fragment.load requires a source view");
       }
       result.view_ =
           &require_view(unit, diagnostics, types, parameters[0], owner);
@@ -264,22 +307,62 @@ std::optional<FragmentIntrinsic> FragmentIntrinsic::resolve(
                            "vector.fragment.load does not support volatile "
                            "views");
       }
-      result.origin_unsigned_mask_ = require_index_record(
-          unit, diagnostics, types, parameters[1], result.view_->extents.size(),
-          owner, "fragment origin");
       if (!types.native_vector(signature->returnType())) {
         diagnostics.reject(unit, owner,
                            "vector.fragment.load must return a vector");
       }
-      shape_index = 2;
-      if (parameters.size() == 4) {
+      auto static_origin = constant_origin_pattern(
+          unit, diagnostics, function, 2, result.view_->extents.size(), owner);
+      if (!static_origin) {
+        if (parameters.size() != 3 && parameters.size() != 4) {
+          diagnostics.reject(
+              unit, owner,
+              "vector.fragment.load requires view, origin, shape, and "
+              "optional auxiliaries");
+        }
+        result.origin_unsigned_mask_ = require_index_record(
+            unit, diagnostics, types, parameters[1],
+            result.view_->extents.size(), owner, "fragment origin");
+        result.origin_argument_ = 1;
+        shape_index = 2;
+      } else {
+        result.static_origin_ = std::move(*static_origin);
+        size_t dynamic_count = std::count(result.static_origin_.begin(),
+                                          result.static_origin_.end(),
+                                          std::numeric_limits<int64_t>::min());
+        if (dynamic_count == 0) {
+          if (parameters.size() != 2 && parameters.size() != 3) {
+            diagnostics.reject(
+                unit, owner,
+                "all-static vector.fragment.load requires view, shape, and "
+                "optional auxiliaries");
+          }
+          shape_index = 1;
+        } else {
+          if (parameters.size() != 3 && parameters.size() != 4) {
+            diagnostics.reject(
+                unit, owner,
+                "mixed vector.fragment.load requires view, dynamic origin, "
+                "shape, and optional auxiliaries");
+          }
+          result.origin_unsigned_mask_ = require_index_record(
+              unit, diagnostics, types, parameters[1], dynamic_count, owner,
+              "fragment dynamic origin");
+          result.origin_argument_ = 1;
+          shape_index = 2;
+        }
+      }
+      result.shape_argument_ = static_cast<uint8_t>(shape_index);
+      if (parameters.size() == shape_index + 2) {
         result.named_operand_names_ = require_named_operands(
-            unit, diagnostics, types, parameters[3], false, module, owner);
+            unit, diagnostics, types, parameters[shape_index + 1], false,
+            module, owner);
+        result.named_operand_argument_ = static_cast<uint8_t>(shape_index + 1);
       }
       break;
     }
     case Operation::Store: {
-      if (parameters.size() != 4 ||
+      if (parameters.size() < 2 ||
           !unit.typeTraits().is_void(signature->returnType()) ||
           !types.native_vector(parameters[0])) {
         diagnostics.reject(
@@ -297,18 +380,55 @@ std::optional<FragmentIntrinsic> FragmentIntrinsic::resolve(
                            "vector.fragment.store does not support volatile "
                            "views");
       }
-      result.origin_unsigned_mask_ = require_index_record(
-          unit, diagnostics, types, parameters[2], result.view_->extents.size(),
-          owner, "fragment origin");
-      shape_index = 3;
+      auto static_origin = constant_origin_pattern(
+          unit, diagnostics, function, 1, result.view_->extents.size(), owner);
+      if (!static_origin) {
+        if (parameters.size() != 4) {
+          diagnostics.reject(
+              unit, owner,
+              "vector.fragment.store requires value, view, origin, and shape");
+        }
+        result.origin_unsigned_mask_ = require_index_record(
+            unit, diagnostics, types, parameters[2],
+            result.view_->extents.size(), owner, "fragment origin");
+        result.origin_argument_ = 2;
+        shape_index = 3;
+      } else {
+        result.static_origin_ = std::move(*static_origin);
+        size_t dynamic_count = std::count(result.static_origin_.begin(),
+                                          result.static_origin_.end(),
+                                          std::numeric_limits<int64_t>::min());
+        if (dynamic_count == 0) {
+          if (parameters.size() != 3) {
+            diagnostics.reject(
+                unit, owner,
+                "all-static vector.fragment.store requires value, view, and "
+                "shape");
+          }
+          shape_index = 2;
+        } else {
+          if (parameters.size() != 4) {
+            diagnostics.reject(
+                unit, owner,
+                "mixed vector.fragment.store requires value, view, dynamic "
+                "origin, and shape");
+          }
+          result.origin_unsigned_mask_ = require_index_record(
+              unit, diagnostics, types, parameters[2], dynamic_count, owner,
+              "fragment dynamic origin");
+          result.origin_argument_ = 2;
+          shape_index = 3;
+        }
+      }
+      result.shape_argument_ = static_cast<uint8_t>(shape_index);
       break;
     }
     case Operation::Mma:
       IREE_ASSERT_UNREACHABLE("vector.mma returned above");
       IREE_BUILTIN_UNREACHABLE();
   }
-  result.shape_ =
-      require_shape(unit, diagnostics, types, parameters[shape_index], owner);
+  result.shape_ = require_shape(unit, diagnostics, types,
+                                parameters[result.shape_argument_], owner);
   if (*operation != Operation::Store) {
     result.result_type_ = types.get(signature->returnType(), owner);
   }
@@ -336,12 +456,7 @@ std::optional<Value> FragmentIntrinsic::call(
   }
 
   std::array<loom_value_id_t, 3> shape_values;
-  cast_components(arguments[operation_ == Operation::Attach ||
-                                    operation_ == Operation::Repack
-                                ? 1
-                            : operation_ == Operation::Load ? 2
-                                                            : 3],
-                  shape_.unsigned_mask,
+  cast_components(arguments[shape_argument_], shape_.unsigned_mask,
                   std::span(shape_values).first(shape_.rank));
   const bool blocked = shape_.rank == 3;
   const loom_value_id_t blocks =
@@ -361,8 +476,8 @@ std::optional<Value> FragmentIntrinsic::call(
 
   switch (operation_) {
     case Operation::Attach: {
-      if (!named_operand_names_.empty()) {
-        bind_named(arguments[2]);
+      if (named_operand_argument_ != UINT8_MAX) {
+        bind_named(arguments[named_operand_argument_]);
       }
       check(loom_vector_fragment_build(
           builder, blocked ? LOOM_VECTOR_FRAGMENT_BUILD_FLAG_HAS_BLOCKS : 0,
@@ -380,33 +495,55 @@ std::optional<Value> FragmentIntrinsic::call(
       return Value(loom_op_results(op)[0]);
     case Operation::Load: {
       std::array<loom_value_id_t, LOOM_TYPE_MAX_RANK> indices;
-      cast_components(arguments[1], origin_unsigned_mask_,
-                      std::span(indices).first(view_->extents.size()));
       std::array<int64_t, LOOM_TYPE_MAX_RANK> static_indices;
-      static_indices.fill(std::numeric_limits<int64_t>::min());
-      if (!named_operand_names_.empty()) {
-        bind_named(arguments[3]);
+      size_t dynamic_count = 0;
+      if (static_origin_.empty()) {
+        static_indices.fill(std::numeric_limits<int64_t>::min());
+        dynamic_count = view_->extents.size();
+      } else {
+        std::copy(static_origin_.begin(), static_origin_.end(),
+                  static_indices.begin());
+        dynamic_count = std::count(static_origin_.begin(), static_origin_.end(),
+                                   std::numeric_limits<int64_t>::min());
+      }
+      if (origin_argument_ != UINT8_MAX) {
+        cast_components(arguments[origin_argument_], origin_unsigned_mask_,
+                        std::span(indices).first(dynamic_count));
+      }
+      if (named_operand_argument_ != UINT8_MAX) {
+        bind_named(arguments[named_operand_argument_]);
       }
       auto build_flags =
           blocked ? LOOM_VECTOR_FRAGMENT_LOAD_BUILD_FLAG_HAS_BLOCKS : 0;
       check(loom_vector_fragment_load_build(
           builder, build_flags, role_, view_component(arguments[0]),
-          indices.data(), view_->extents.size(), static_indices.data(),
+          indices.data(), dynamic_count, static_indices.data(),
           view_->extents.size(), blocks, rows, columns, named_operands.data(),
           named_operand_names_.size(), 0, 0, result_type_, location, &op));
       return Value(loom_op_results(op)[0]);
     }
     case Operation::Store: {
       std::array<loom_value_id_t, LOOM_TYPE_MAX_RANK> indices;
-      cast_components(arguments[2], origin_unsigned_mask_,
-                      std::span(indices).first(view_->extents.size()));
       std::array<int64_t, LOOM_TYPE_MAX_RANK> static_indices;
-      static_indices.fill(std::numeric_limits<int64_t>::min());
+      size_t dynamic_count = 0;
+      if (static_origin_.empty()) {
+        static_indices.fill(std::numeric_limits<int64_t>::min());
+        dynamic_count = view_->extents.size();
+      } else {
+        std::copy(static_origin_.begin(), static_origin_.end(),
+                  static_indices.begin());
+        dynamic_count = std::count(static_origin_.begin(), static_origin_.end(),
+                                   std::numeric_limits<int64_t>::min());
+      }
+      if (origin_argument_ != UINT8_MAX) {
+        cast_components(arguments[origin_argument_], origin_unsigned_mask_,
+                        std::span(indices).first(dynamic_count));
+      }
       auto build_flags =
           blocked ? LOOM_VECTOR_FRAGMENT_STORE_BUILD_FLAG_HAS_BLOCKS : 0;
       check(loom_vector_fragment_store_build(
           builder, build_flags, role_, arguments[0].ssa(),
-          view_component(arguments[1]), indices.data(), view_->extents.size(),
+          view_component(arguments[1]), indices.data(), dynamic_count,
           static_indices.data(), view_->extents.size(), blocks, rows, columns,
           0, 0, location, &op));
       return std::nullopt;
@@ -423,6 +560,10 @@ bool FragmentIntrinsic::equivalent(const FragmentIntrinsic& other) const {
   return operation_ == other.operation_ && role_ == other.role_ &&
          mma_flags_ == other.mma_flags_ && shape_ == other.shape_ &&
          origin_unsigned_mask_ == other.origin_unsigned_mask_ &&
+         static_origin_ == other.static_origin_ &&
+         origin_argument_ == other.origin_argument_ &&
+         shape_argument_ == other.shape_argument_ &&
+         named_operand_argument_ == other.named_operand_argument_ &&
          view_ == other.view_ &&
          loom_type_equal(result_type_, other.result_type_) &&
          named_operand_names_ == other.named_operand_names_;
