@@ -10,6 +10,7 @@
 #include <cxx/symbols.h>
 #include <cxx/types.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <limits>
@@ -65,16 +66,29 @@ const ViewPartition& require_view(cxx::TranslationUnit& unit,
 }
 
 size_t dynamic_extent_count(const ViewPartition& view) {
-  return view.component_count - 2;
+  return std::count_if(view.extents.begin(), view.extents.end(),
+                       [](int64_t extent) { return extent < 0; });
 }
 
 loom_value_id_t view_component(Value value) {
   return value.components().back();
 }
 
-loom_value_id_t encoding_component(Value value) {
+loom_value_id_t encoding_component(Value value, const ViewPartition& view) {
+  IREE_ASSERT(view.encoding);
   auto components = value.components();
   return components[components.size() - 2];
+}
+
+bool plain_subview_preserves_dense_suffix(const ViewPartition& source,
+                                          const ViewPartition& result) {
+  for (size_t axis = 1; axis < source.extents.size(); ++axis) {
+    if (source.extents[axis] < 0 ||
+        source.extents[axis] != result.extents[axis]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool subview_preserves_dense_suffix(
@@ -217,11 +231,10 @@ std::optional<ViewIntrinsic> ViewIntrinsic::resolve(
           dynamic_extent_count(*result.result_view_), owner, "view dimensions");
       const auto& layout =
           require_encoding(unit, diagnostics, types, parameters[2], owner);
-      if (layout.rank != result.result_view_->extents.size() ||
-          layout.role != result.result_view_->encoding_role) {
+      if (result.result_view_->encoding != &layout) {
         diagnostics.reject(unit, owner,
-                           "buffer.view encoding rank and role must match its "
-                           "result view");
+                           "buffer.view encoding type must match its result "
+                           "view");
       }
       result.result_source_type_ = signature->returnType();
       return result;
@@ -239,11 +252,18 @@ std::optional<ViewIntrinsic> ViewIntrinsic::resolve(
       }
       if (result.source_view_->extents.size() !=
               result.result_view_->extents.size() ||
-          result.source_view_->encoding_role !=
-              result.result_view_->encoding_role) {
+          result.source_view_->encoding != result.result_view_->encoding) {
         diagnostics.reject(
             unit, owner,
-            "subview must preserve its source view rank and encoding role");
+            "subview must preserve its source view rank and encoding type");
+      }
+      if (!result.source_view_->encoding &&
+          !plain_subview_preserves_dense_suffix(*result.source_view_,
+                                                *result.result_view_)) {
+        diagnostics.reject(
+            unit, owner,
+            "plain subview must preserve every static dense suffix extent; "
+            "use an encoded view for a remapped or dynamic suffix");
       }
       result.unsigned_origin_mask_ = require_index_record(
           unit, diagnostics, types, parameters[1],
@@ -377,14 +397,18 @@ std::optional<Value> ViewIntrinsic::call(std::span<const Value> arguments,
               arguments[0], *source_view_, *result_view_,
               std::span<const loom_value_id_t>(components)
                   .first(component_count));
+      IREE_ASSERT(!capture_physical_encoding || result_view_->encoding);
       std::array<loom_value_id_t, 2> result_ids;
       const size_t result_count = capture_physical_encoding ? 2 : 1;
       check(loom_builder_reserve_values(builder, result_count,
                                         result_ids.data()));
-      components[component_count++] = capture_physical_encoding ? result_ids[1]
-                                      : operation_ == Operation::BufferView
-                                          ? arguments[2].components()[0]
-                                          : encoding_component(arguments[0]);
+      if (result_view_->encoding) {
+        components[component_count++] =
+            capture_physical_encoding ? result_ids[1]
+            : operation_ == Operation::BufferView
+                ? arguments[2].components()[0]
+                : encoding_component(arguments[0], *source_view_);
+      }
       components[component_count++] = result_ids[0];
       std::vector<loom_type_t> result_types;
       BoundTypeStorage type_storage;
@@ -399,10 +423,10 @@ std::optional<Value> ViewIntrinsic::call(std::span<const Value> arguments,
       } else {
         std::array<int64_t, LOOM_TYPE_MAX_RANK> static_offsets;
         static_offsets.fill(std::numeric_limits<int64_t>::min());
-        std::array<loom_type_t, 2> subview_result_types = {
-            result_type,
-            result_types[result_types.size() - 2],
-        };
+        std::array<loom_type_t, 2> subview_result_types = {result_type, {}};
+        if (capture_physical_encoding) {
+          subview_result_types[1] = result_types[result_types.size() - 2];
+        }
         check(loom_view_subview_build(
             builder, view_component(arguments[0]), offsets.data(),
             result_view_->extents.size(), static_offsets.data(),

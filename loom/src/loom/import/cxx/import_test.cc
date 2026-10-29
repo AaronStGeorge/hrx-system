@@ -191,7 +191,7 @@ TEST_F(ImportTest, ViewFacadePreservesItsObjectContractAcrossDataModels) {
       "namespace loomt = loom::type;\n"
       "using Layout = loomt::encoding<loom::encoding::role::layout, 2>;\n"
       "using Rows = loomt::view<loomt::shape<loomt::dynamic, 32>, "
-      "const float>;\n"
+      "const float, Layout>;\n"
       "static_assert(__is_trivially_copyable(Layout));\n"
       "static_assert(__is_trivially_copyable(Rows));\n"
       "static_assert(sizeof(Layout) == 2 * sizeof(loomt::size_type));\n"
@@ -212,11 +212,40 @@ TEST_F(ImportTest, ViewFacadePreservesItsObjectContractAcrossDataModels) {
   EXPECT_EQ(diagnostic_count_, 0);
 }
 
+TEST_F(ImportTest, PlainViewsPreserveFunctionSignaturesAndDenseSubviews) {
+  const auto source = IREE_SV(
+      "#include <loomcxx/view.h>\n"
+      "namespace loomt = loom::type;\n"
+      "using Matrix = loomt::view<loomt::shape<4, 64>, const float>;\n"
+      "using Row = loomt::view<loomt::shape<1, 64>, const float>;\n"
+      "[[loom::symbol(\"library.row\")]] Row row(Matrix input) {\n"
+      "  return loom::view::subview<1, 64>(input, {2, 0}, {});\n"
+      "}\n"
+      "[[loom::symbol(\"library.first\")]] float first(Row input) {\n"
+      "  return loom::view::load(input, 0, 0);\n"
+      "}\n");
+  IREE_ASSERT_OK(Import(source));
+  ASSERT_NE(module_, nullptr);
+  auto text = Print();
+  EXPECT_NE(text.find("func.def public @library.row(%input: view<4x64xf32>) "
+                      "-> (view<1x64xf32>)"),
+            std::string::npos);
+  EXPECT_NE(text.find(" = view.subview %input["), std::string::npos);
+  EXPECT_NE(text.find(": view<4x64xf32> -> view<1x64xf32>"), std::string::npos);
+  EXPECT_NE(text.find("func.def public @library.first(%input: "
+                      "view<1x64xf32>) -> (f32)"),
+            std::string::npos);
+  EXPECT_EQ(text.find("encoding<layout>"), std::string::npos);
+  EXPECT_EQ(diagnostic_count_, 0);
+}
+
 TEST_F(ImportTest, MutableViewReferencesRetainTypeChangingTies) {
   const auto source = IREE_SV(
       "#include <loomcxx/view.h>\n"
       "namespace loomt = loom::type;\n"
-      "using Rows = loomt::view<loomt::shape<loomt::dynamic, 4>, float>;\n"
+      "using Layout = loomt::encoding<loom::encoding::role::layout, 2>;\n"
+      "using Rows = loomt::view<loomt::shape<loomt::dynamic, 4>, float, "
+      "Layout>;\n"
       "static void replace(Rows& rows, Rows replacement) {\n"
       "  rows = replacement;\n"
       "}\n"

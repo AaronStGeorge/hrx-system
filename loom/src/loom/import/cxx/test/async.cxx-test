@@ -1,8 +1,12 @@
 // RUN: roundtrip
 #include <loomcxx/kernel.h>
 
-using lane_view = loom::type::view<loom::type::shape<4>, unsigned char>;
-using tile_view = loom::type::view<loom::type::shape<64, 4>, unsigned char>;
+using layout1 = loom::type::encoding<loom::encoding::role::layout, 1>;
+using layout2 = loom::type::encoding<loom::encoding::role::layout, 2>;
+using lane_view =
+    loom::type::view<loom::type::shape<4>, unsigned char, layout1>;
+using tile_view =
+    loom::type::view<loom::type::shape<64, 4>, unsigned char, layout2>;
 
 LOOM_FORCE_INLINE void copy_pair(lane_view source, lane_view destination,
                                  bool enabled) {

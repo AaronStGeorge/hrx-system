@@ -1,19 +1,22 @@
 // RUN: verify
 // A buffer view requires an encoding with the same logical rank.
 #include <loomcxx/view.h>
-using View = loom::type::view<loom::type::shape<4, 4>, float>;
+using ResultLayout = loom::type::encoding<loom::encoding::role::layout, 2>;
+using View =
+    loom::type::view<loom::type::shape<4, 4>, float, ResultLayout>;
 using Layout = loom::type::encoding<loom::encoding::role::layout, 3>;
-// ERROR@+1: LOWERING/059 "buffer.view encoding rank and role must match its result view"
+// ERROR@+1: LOWERING/059 "buffer.view encoding type must match its result view"
 [[loom::op("buffer.view")]] View invalid(float*, loom::detail::dimensions<0>,
                                          Layout);
 
 // ====
 // A buffer view requires the encoding role declared by its result type.
 #include <loomcxx/view.h>
+using Storage = loom::type::encoding<loom::encoding::role::storage, 2>;
 using View = loom::type::view<loom::type::shape<4, 4>, float,
-                              loom::encoding::role::storage>;
+                              Storage>;
 using Layout = loom::type::encoding<loom::encoding::role::layout, 2>;
-// ERROR@+1: LOWERING/059 "buffer.view encoding rank and role must match its result view"
+// ERROR@+1: LOWERING/059 "buffer.view encoding type must match its result view"
 [[loom::op("buffer.view")]] View invalid(float*, loom::detail::dimensions<0>,
                                          Layout);
 
@@ -21,18 +24,18 @@ using Layout = loom::type::encoding<loom::encoding::role::layout, 2>;
 // A typed buffer's source element must match the view element.
 #include <loomcxx/view.h>
 using Buffer = loom::type::buffer<unsigned>;
-using View = loom::type::view<loom::type::shape<4>, float>;
 using Layout = loom::type::encoding<loom::encoding::role::layout, 1>;
+using View = loom::type::view<loom::type::shape<4>, float, Layout>;
 // ERROR@+1: LOWERING/059 "buffer.view source element type must match its result view"
 [[loom::op("buffer.view")]] View invalid(Buffer,
                                          loom::detail::dimensions<0>, Layout);
 
 // ====
-// A subview preserves the source rank and encoding role.
+// A subview preserves the source rank and encoding type.
 #include <loomcxx/view.h>
 using Matrix = loom::type::view<loom::type::shape<4, 4>, float>;
 using Line = loom::type::view<loom::type::shape<4>, float>;
-// ERROR@+1: LOWERING/059 "subview must preserve its source view rank and encoding role"
+// ERROR@+1: LOWERING/059 "subview must preserve its source view rank and encoding type"
 [[loom::op("view.subview")]] Line invalid(
     Matrix, loom::type::coordinates<2>, loom::detail::dimensions<0>);
 
@@ -67,7 +70,8 @@ float invalid(const float* data) {
 // Runtime dimensions supply exactly the dynamic axes in source order.
 #include <loomcxx/view.h>
 using View = loom::type::view<
-    loom::type::shape<loom::type::dynamic, 4, loom::type::dynamic>, float>;
+    loom::type::shape<loom::type::dynamic, 4, loom::type::dynamic>, float,
+    loom::type::encoding<loom::encoding::role::layout, 3>>;
 using Layout = loom::type::encoding<loom::encoding::role::layout, 3>;
 // ERROR@+1: LOWERING/059 "view dimensions has the wrong arity"
 [[loom::op("buffer.view")]] View invalid(float*, loom::detail::dimensions<1>,
@@ -93,14 +97,16 @@ using View = loom::type::view<
 // Numeric schemas do not directly own view addressing.
 #include <loomcxx/view.h>
 using View = loom::type::view<loom::type::shape<4>, float,
-                              loom::encoding::role::schema>;
-// ERROR@+1: LOWERING/059 "view encoding role must be layout or physical storage"
+                              loom::type::encoding<
+                                  loom::encoding::role::schema, 0>>;
+// ERROR@+1: LOWERING/059 "view encoding must be a layout or physical storage encoding with the same rank"
 [[loom::op("view.load")]] float invalid(View, loom::type::size_type);
 
 // ====
 // Numeric transforms do not directly own view addressing.
 #include <loomcxx/view.h>
 using View = loom::type::view<loom::type::shape<4>, float,
-                              loom::encoding::role::transform>;
-// ERROR@+1: LOWERING/059 "view encoding role must be layout or physical storage"
+                              loom::type::encoding<
+                                  loom::encoding::role::transform, 0>>;
+// ERROR@+1: LOWERING/059 "view encoding must be a layout or physical storage encoding with the same rank"
 [[loom::op("view.load")]] float invalid(View, loom::type::size_type);

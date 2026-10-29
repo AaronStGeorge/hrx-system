@@ -122,66 +122,66 @@ template <class Result>
 // selects its static register shape while the view supplies element type,
 // layout, extents, alignment, and observation semantics.
 template <class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role,
+          class Encoding,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.load")]] Result load(
-    loom::type::view<loom::type::shape<Extents...>, T, Role> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin);
 
 // Loads one semantic vector at a full-rank logical origin. Dimensions supplies
 // one index for each dynamic result axis in source-axis order.
 template <class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role,
+          class Encoding,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.load")]] Result load(
-    loom::type::view<loom::type::shape<Extents...>, T, Role> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, loom::detail::vector_dimensions<Result> dimensions);
 
 // Stores one contiguous vector at a full-rank logical origin. A semantic value
 // carries its dynamic dimensions. Const destination element types are rejected
 // during source admission.
 template <class Vector, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role,
+          class Encoding,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.store")]] void store(
     Vector value,
-    loom::type::view<loom::type::shape<Extents...>, T, Role> destination,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
     Origin origin);
 
 // Loads active lanes from their corresponding footprint positions and takes
 // inactive lanes from passthrough. Nonzero integer mask lanes are active.
 template <class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role, class Mask,
+          class Encoding, class Mask,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.load.mask")]] Result load_mask(
-    loom::type::view<loom::type::shape<Extents...>, T, Role> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, Mask mask, Result passthrough);
 
 // Stores value lanes whose corresponding integer mask lane is nonzero.
 template <class Vector, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role, class Mask,
+          class Encoding, class Mask,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.store.mask")]] void store_mask(
     Vector value,
-    loom::type::view<loom::type::shape<Extents...>, T, Role> destination,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
     Origin origin, Mask mask);
 
 // Densely consumes consecutive source elements for active lanes and takes
 // inactive lanes from passthrough. Nonzero integer mask lanes are active.
 template <class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role, class Mask,
+          class Encoding, class Mask,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.load.expand")]] Result load_expand(
-    loom::type::view<loom::type::shape<Extents...>, T, Role> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, Mask mask, Result passthrough);
 
 // Densely writes active value lanes to consecutive destination elements.
 template <class Vector, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role, class Mask,
+          class Encoding, class Mask,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.store.compress")]] void store_compress(
     Vector value,
-    loom::type::view<loom::type::shape<Extents...>, T, Role> destination,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
     Origin origin, Mask mask);
 
 // Extracts a rank-preserving register subvector. Offsets supplies one index or
@@ -267,27 +267,26 @@ template <role Role, class Result, class Source, class Shape>
 // Loads one target-shaped carrier at a full-rank logical origin. Auxiliary is
 // a flat record of named runtime values required by the view's storage schema.
 template <role Role, class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role EncodingRole, class Shape,
+          class Encoding, class Shape,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.fragment.load")]] Result load(
-    loom::type::view<loom::type::shape<Extents...>, T, EncodingRole> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, Shape logical_shape);
 
 template <role Role, class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role EncodingRole, class Shape, class Auxiliary,
+          class Encoding, class Shape, class Auxiliary,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.fragment.load")]] Result load(
-    loom::type::view<loom::type::shape<Extents...>, T, EncodingRole> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, Shape logical_shape, Auxiliary auxiliary);
 
 // Stores one target-shaped carrier at a full-rank logical origin.
 template <role Role, class Vector, class T, loom::type::size_type... Extents,
-          loom::encoding::role EncodingRole, class Shape,
+          class Encoding, class Shape,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.fragment.store")]] void store(
     Vector value,
-    loom::type::view<loom::type::shape<Extents...>, T, EncodingRole>
-        destination,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
     Origin origin, Shape logical_shape);
 
 }  // namespace fragment

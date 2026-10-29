@@ -85,41 +85,45 @@ enum class direction : unsigned char {
 // sizes. Direction and advisory cache policy remain explicit source contracts.
 template <direction Direction, cache::scope CacheScope,
           cache::temporal CacheTemporal, class SourceShape, class SourceType,
-          encoding::role SourceRole, class DestinationShape,
-          class DestinationType, encoding::role DestinationRole>
+          class SourceEncoding, class DestinationShape, class DestinationType,
+          class DestinationEncoding>
 [[loom::op("kernel.async.copy")]] type::async_token copy(
-    type::view<SourceShape, SourceType, SourceRole> source,
-    type::view<DestinationShape, DestinationType, DestinationRole> destination);
+    type::view<SourceShape, SourceType, SourceEncoding> source,
+    type::view<DestinationShape, DestinationType, DestinationEncoding>
+        destination);
 
 // Predicated copy. A false predicate performs no memory access and returns an
 // already-complete token so every invocation can retain the same group shape.
 template <direction Direction, cache::scope CacheScope,
           cache::temporal CacheTemporal, class SourceShape, class SourceType,
-          encoding::role SourceRole, class DestinationShape,
-          class DestinationType, encoding::role DestinationRole>
+          class SourceEncoding, class DestinationShape, class DestinationType,
+          class DestinationEncoding>
 [[loom::op("kernel.async.copy.mask")]] type::async_token copy_mask(
-    type::view<SourceShape, SourceType, SourceRole> source,
-    type::view<DestinationShape, DestinationType, DestinationRole> destination,
+    type::view<SourceShape, SourceType, SourceEncoding> source,
+    type::view<DestinationShape, DestinationType, DestinationEncoding>
+        destination,
     bool predicate);
 
 // Collectively gathers each subgroup invocation's source view into the
 // corresponding lane of one subgroup-uniform workgroup destination tile.
 template <cache::scope CacheScope, cache::temporal CacheTemporal,
-          class SourceShape, class SourceType, encoding::role SourceRole,
+          class SourceShape, class SourceType, class SourceEncoding,
           class DestinationShape, class DestinationType,
-          encoding::role DestinationRole>
+          class DestinationEncoding>
 [[loom::op("kernel.async.gather")]] type::async_token gather(
-    type::view<SourceShape, SourceType, SourceRole> source,
-    type::view<DestinationShape, DestinationType, DestinationRole> destination);
+    type::view<SourceShape, SourceType, SourceEncoding> source,
+    type::view<DestinationShape, DestinationType, DestinationEncoding>
+        destination);
 
 // Predicated subgroup gather preserving a uniform async group shape.
 template <cache::scope CacheScope, cache::temporal CacheTemporal,
-          class SourceShape, class SourceType, encoding::role SourceRole,
+          class SourceShape, class SourceType, class SourceEncoding,
           class DestinationShape, class DestinationType,
-          encoding::role DestinationRole>
+          class DestinationEncoding>
 [[loom::op("kernel.async.gather.mask")]] type::async_token gather_mask(
-    type::view<SourceShape, SourceType, SourceRole> source,
-    type::view<DestinationShape, DestinationType, DestinationRole> destination,
+    type::view<SourceShape, SourceType, SourceEncoding> source,
+    type::view<DestinationShape, DestinationType, DestinationEncoding>
+        destination,
     bool predicate);
 
 namespace cluster {
@@ -127,22 +131,24 @@ namespace cluster {
 // Collectively gathers corresponding values for the workgroup-cluster ranks
 // named by participant_mask. Bit N names flat cluster rank N.
 template <cache::scope CacheScope, cache::temporal CacheTemporal,
-          class SourceShape, class SourceType, encoding::role SourceRole,
+          class SourceShape, class SourceType, class SourceEncoding,
           class DestinationShape, class DestinationType,
-          encoding::role DestinationRole>
+          class DestinationEncoding>
 [[loom::op("kernel.async.cluster.gather")]] type::async_token gather(
-    type::view<SourceShape, SourceType, SourceRole> source,
-    type::view<DestinationShape, DestinationType, DestinationRole> destination,
+    type::view<SourceShape, SourceType, SourceEncoding> source,
+    type::view<DestinationShape, DestinationType, DestinationEncoding>
+        destination,
     unsigned participant_mask);
 
 // Predicated cluster gather preserving a uniform async group shape.
 template <cache::scope CacheScope, cache::temporal CacheTemporal,
-          class SourceShape, class SourceType, encoding::role SourceRole,
+          class SourceShape, class SourceType, class SourceEncoding,
           class DestinationShape, class DestinationType,
-          encoding::role DestinationRole>
+          class DestinationEncoding>
 [[loom::op("kernel.async.cluster.gather.mask")]] type::async_token gather_mask(
-    type::view<SourceShape, SourceType, SourceRole> source,
-    type::view<DestinationShape, DestinationType, DestinationRole> destination,
+    type::view<SourceShape, SourceType, SourceEncoding> source,
+    type::view<DestinationShape, DestinationType, DestinationEncoding>
+        destination,
     unsigned participant_mask, bool predicate);
 
 }  // namespace cluster

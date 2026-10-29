@@ -45,16 +45,18 @@ struct alignas(16) Q8_1Group {
 static_assert(sizeof(Q8_1Group) == 144);
 static_assert(__builtin_offsetof(Q8_1Group, quants) == 16);
 
+template <loom::type::size_type Rank>
+using Layout = loom::type::encoding<loom::encoding::role::layout, Rank>;
 using Q8F16View = loom::type::view<
     loom::type::shape<loom::type::dynamic, loom::type::dynamic,
                       sizeof(Q8_1Group) / sizeof(std::float16_t)>,
-    const std::float16_t>;
+    const std::float16_t, Layout<3>>;
 using Q8I8View =
     loom::type::view<loom::type::shape<loom::type::dynamic, loom::type::dynamic,
                                        sizeof(Q8_1Group)>,
-                     const signed char>;
-using WeightU32View =
-    loom::type::view<loom::type::shape<loom::type::dynamic>, const unsigned>;
+                     const signed char, Layout<3>>;
+using WeightU32View = loom::type::view<loom::type::shape<loom::type::dynamic>,
+                                       const unsigned, Layout<1>>;
 
 struct Q4ScaleMinimum {
   unsigned scale;

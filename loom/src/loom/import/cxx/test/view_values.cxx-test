@@ -5,9 +5,9 @@
 namespace loomt = loom::type;
 using layout2 = loomt::encoding<loom::encoding::role::layout, 2>;
 using rows32 =
-    loomt::view<loomt::shape<loomt::dynamic, 32>, const float>;
+    loomt::view<loomt::shape<loomt::dynamic, 32>, const float, layout2>;
 using rows16 =
-    loomt::view<loomt::shape<loomt::dynamic, 16>, const float>;
+    loomt::view<loomt::shape<loomt::dynamic, 16>, const float, layout2>;
 static_assert(__is_trivially_copyable(layout2));
 static_assert(__is_trivially_copyable(rows32));
 static_assert(__is_trivially_copyable(rows16));
@@ -143,7 +143,8 @@ namespace loomt = loom::type;
 using Weight = loomt::float8_e4m3fn_t;
 using Weights =
     loomt::view<loomt::shape<loomt::dynamic, loomt::dynamic, 16>,
-                const Weight, loom::encoding::role::storage>;
+                const Weight,
+                loomt::encoding<loom::encoding::role::storage, 3>>;
 
 static Weights preserve_weights(Weights weights) { return weights; }
 

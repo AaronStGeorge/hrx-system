@@ -314,7 +314,9 @@ func.def @constrained_increment(%value$4: i32, %limit: i32) -> (%value$4 as i32)
 #include <loomcxx/view.h>
 
 namespace loomt = loom::type;
-using Rows = loomt::view<loomt::shape<loomt::dynamic, 4>, const float>;
+using Rows = loomt::view<
+    loomt::shape<loomt::dynamic, 4>, const float,
+    loomt::encoding<loom::encoding::role::layout, 2>>;
 
 static void trim(Rows& rows, unsigned first, unsigned remaining) {
   rows = loom::view::subview(rows, {first, 0}, {remaining});

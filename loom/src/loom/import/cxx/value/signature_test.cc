@@ -21,23 +21,23 @@ namespace loom::cxx_import {
 namespace {
 
 TEST_F(ValueBuilderTest, BindsFunctionArgumentsAndResultsToTheirOwnIdentities) {
-  Source source(IREE_SV("namespace loom { namespace encoding { "
-                        "enum class role { layout }; } namespace type { "
-                        "using size_type = __SIZE_TYPE__; "
-                        "inline constexpr size_type dynamic = ~size_type{0}; "
-                        "template <loom::encoding::role Role, size_type Rank> "
-                        "struct [[loom::type(\"encoding\")]] encoding { "
-                        "size_type strides[Rank]; }; "
-                        "template <size_type... Extents> "
-                        "struct [[loom::type(\"shape\")]] shape {}; "
-                        "template <class Shape, class T, "
-                        "loom::encoding::role Role = "
-                        "loom::encoding::role::layout> "
-                        "struct [[loom::type(\"view\")]] view { T* data; }; "
-                        "} } using Plane = loom::type::view<"
-                        "loom::type::shape<loom::type::dynamic, 32>, "
-                        "const float>;"),
-                IREE_SV("signature.cpp"), options());
+  Source source(
+      IREE_SV("namespace loom { namespace encoding { "
+              "enum class role { layout }; } namespace type { "
+              "using size_type = __SIZE_TYPE__; "
+              "inline constexpr size_type dynamic = ~size_type{0}; "
+              "template <loom::encoding::role Role, size_type Rank> "
+              "struct [[loom::type(\"encoding\")]] encoding { "
+              "size_type strides[Rank]; }; "
+              "template <size_type... Extents> "
+              "struct [[loom::type(\"shape\")]] shape {}; "
+              "template <class Shape, class T, class Encoding = void> "
+              "struct [[loom::type(\"view\")]] view { T* data; }; "
+              "} } using Plane = loom::type::view<"
+              "loom::type::shape<loom::type::dynamic, 32>, "
+              "const float, loom::type::encoding<"
+              "loom::encoding::role::layout, 2>>;"),
+      IREE_SV("signature.cpp"), options());
   Types types(source.unit(), source.diagnostics());
   auto symbols = source.unit().globalScope()->find("Plane");
   ASSERT_NE(symbols.begin(), symbols.end());
@@ -179,20 +179,23 @@ TEST_F(ValueBuilderTest, LeavesStaticConditionLoopSignaturesInferred) {
 }
 
 TEST_F(ValueBuilderTest, BindsConditionLoopHeaderAndResultsIndependently) {
-  Source source(IREE_SV("namespace loom { namespace encoding { "
-                        "enum class role { layout }; } namespace type { "
-                        "using size_type = __SIZE_TYPE__; "
-                        "inline constexpr size_type dynamic = ~size_type{0}; "
-                        "template <size_type... Extents> "
-                        "struct [[loom::type(\"shape\")]] shape {}; "
-                        "template <class Shape, class T, "
-                        "loom::encoding::role Role = "
-                        "loom::encoding::role::layout> "
-                        "struct [[loom::type(\"view\")]] view { T* data; }; "
-                        "} } using Row = loom::type::view<"
-                        "loom::type::shape<loom::type::dynamic>, "
-                        "const float>;"),
-                IREE_SV("condition_loop_signature.cxx"), options());
+  Source source(
+      IREE_SV("namespace loom { namespace encoding { "
+              "enum class role { layout }; } namespace type { "
+              "using size_type = __SIZE_TYPE__; "
+              "inline constexpr size_type dynamic = ~size_type{0}; "
+              "template <size_type... Extents> "
+              "struct [[loom::type(\"shape\")]] shape {}; "
+              "template <loom::encoding::role Role, size_type Rank> "
+              "struct [[loom::type(\"encoding\")]] encoding { "
+              "size_type strides[Rank]; }; "
+              "template <class Shape, class T, class Encoding = void> "
+              "struct [[loom::type(\"view\")]] view { T* data; }; "
+              "} } using Row = loom::type::view<"
+              "loom::type::shape<loom::type::dynamic>, "
+              "const float, loom::type::encoding<"
+              "loom::encoding::role::layout, 1>>;"),
+      IREE_SV("condition_loop_signature.cxx"), options());
   Types types(source.unit(), source.diagnostics());
   auto symbols = source.unit().globalScope()->find("Row");
   ASSERT_NE(symbols.begin(), symbols.end());

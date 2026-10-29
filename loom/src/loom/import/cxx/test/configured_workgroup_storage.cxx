@@ -11,7 +11,8 @@
 
 namespace loomt = loom::type;
 
-using StageView = loomt::view<loomt::shape<loomt::dynamic>, unsigned>;
+using StageView = loomt::view<loomt::shape<loomt::dynamic>, unsigned,
+                              loomt::encoding<loom::encoding::role::layout, 1>>;
 
 constexpr unsigned kWorkgroupSize = 32u;
 

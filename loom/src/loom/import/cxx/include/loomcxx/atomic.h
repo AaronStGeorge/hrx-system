@@ -67,9 +67,9 @@ template <loom::atomic::ordering Ordering, loom::atomic::scope Scope, class T>
 // Observes one logical view element without rebuilding its address as a
 // pointer. One index is required for every source axis.
 template <loom::atomic::ordering Ordering, loom::atomic::scope Scope,
-          class Shape, class T, loom::encoding::role Role, class... Indices>
-[[loom::op("view.atomic.load")]] T load(loom::type::view<Shape, T, Role> source,
-                                        Indices... indices);
+          class Shape, class T, class Encoding, class... Indices>
+[[loom::op("view.atomic.load")]] T load(
+    loom::type::view<Shape, T, Encoding> source, Indices... indices);
 
 // Publishes one pointer object or logical view element without reading its old
 // value. Indices is empty for a pointer and has one value per view axis.
