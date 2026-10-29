@@ -986,13 +986,17 @@ low.func.def target<test.low.core>(@test_target) @multi_victim_spill(%row: reg<t
 
 // ====
 
-// RUN: emit low-allocation-query @provisional_spill_skips_packet_move_planning test.i32=2 diagnostics=predicted-spills fixed=%lhs:target_id:1:1 fixed=%rhs:target_id:0:1 fixed=%packed:target_id:0:2
+// RUN: emit low-allocation-query @provisional_spill_skips_packet_move_planning diagnostics=predicted-spills
 
 test.target<low_core> @test_target
 
-// WARNING@+1: BACKEND/008 {function_name="provisional_spill_skips_packet_move_planning", value_name="wide", value_class="test.i32", spill_cause="register-budget-conflict"}
-low.func.def target<test.low.core>(@test_target) @provisional_spill_skips_packet_move_planning(%lhs: reg<test.i32>, %rhs: reg<test.i32>, %wide: reg<test.i32 x3>) -> (reg<test.i32 x2>, reg<test.i32 x3>) asm {
-  %packed = concat(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+// Reversing two halves fills the physical bank with a parallel move cycle.
+// Spill repair must precede move planning for the provisional assignment.
+// WARNING@+1: BACKEND/008 {function_name="provisional_spill_skips_packet_move_planning", value_name="wide", value_class="test.pressure.alias32", spill_cause="register-budget-conflict"}
+low.func.def target<test.low.core>(@test_target) @provisional_spill_skips_packet_move_planning(%source: reg<test.pressure.alias32 x8>, %wide: reg<test.pressure.alias32 x9>) -> (reg<test.pressure.alias32 x8>, reg<test.pressure.alias32 x9>) asm {
+  %lhs = slice %source[0] : reg<test.pressure.alias32 x8> -> reg<test.pressure.alias32 x4>
+  %rhs = slice %source[4] : reg<test.pressure.alias32 x8> -> reg<test.pressure.alias32 x4>
+  %packed = concat(%rhs, %lhs) : (reg<test.pressure.alias32 x4>, reg<test.pressure.alias32 x4>) -> reg<test.pressure.alias32 x8>
   return %packed, %wide
 }
 
