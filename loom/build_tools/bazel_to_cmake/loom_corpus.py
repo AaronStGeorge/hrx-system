@@ -95,13 +95,19 @@ class LoomCorpusBuildFileFunctions:
     def loom_corpus_manifest(self, name, package, srcs):
         programs = []
         for source in srcs:
+            source_directory, separator, source_name = source.rpartition("/")
+            source_package = package
+            if separator:
+                source_package += "/" + source_directory
             source_stem = self._loom_corpus_target_stem(source.removesuffix(".loom"))
             programs.append(
                 {
                     "identity": f"{name}/{source}",
-                    "label": f"{package}:{source}",
+                    "label": f"{source_package}:{source_name}",
                     "manifest": name,
+                    "package": source_package,
                     "source": source,
+                    "source_name": source_name,
                     "target_name": f"{name}_{source_stem}",
                 }
             )
@@ -127,11 +133,44 @@ class LoomCorpusBuildFileFunctions:
         self._check_no_unhandled_kwargs("loom_corpus_sources", kwargs)
         if manifest["kind"] != "loom_corpus_manifest":
             raise ValueError(f"{name} does not reference a Loom corpus manifest")
+        current_package = "//" + self._current_package()
+        manifest_package = manifest["package"]
+        if current_package != manifest_package and not current_package.startswith(
+            manifest_package + "/"
+        ):
+            raise ValueError(
+                f"Loom corpus manifest {manifest['name']} owns {manifest_package} "
+                f"and its descendants, not {current_package}"
+            )
+        local_programs = [
+            program
+            for program in manifest["programs"]
+            if program["package"] == current_package
+        ]
+        if current_package != manifest_package and not local_programs:
+            raise ValueError(
+                f"Loom corpus package {current_package} owns no sources in "
+                f"manifest {manifest['name']}"
+            )
         self._converter.body += (
             "loom_corpus_sources(\n"
             + self._convert_string_arg_block("NAME", name)
             + self._convert_string_arg_block("MANIFEST", manifest["name"])
-            + self._convert_string_list_block("SRCS", manifest["srcs"], sort=False)
+            + self._convert_string_list_block(
+                "MANIFEST_SRCS",
+                manifest["srcs"] if current_package == manifest_package else None,
+                sort=False,
+            )
+            + self._convert_string_list_block(
+                "SOURCE_IDS",
+                [program["source"] for program in local_programs] or None,
+                sort=False,
+            )
+            + self._convert_string_list_block(
+                "SRCS",
+                [program["source_name"] for program in local_programs] or None,
+                sort=False,
+            )
             + ")\n\n"
         )
 

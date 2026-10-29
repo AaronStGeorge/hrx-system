@@ -1,0 +1,44 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+
+package(
+    default_visibility = ["//visibility:private"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_check_test_suite(
+    name = "test",
+    srcs = [
+        "assembly.loom-test",
+        "atomic_policy.loom-test",
+        "effects.loom-test",
+        "inverse_hyperbolic.loom-test",
+        "math_contraction.loom-test",
+        "math_policy.loom-test",
+        "scalar.loom-test",
+    ],
+    target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
+)
+
+loom_check_test_suite(
+    name = "artifact_test",
+    srcs = [
+        "buffer_packets.loom-test",
+        "call_overflow.loom-test",
+        "calls.loom-test",
+        "emission.loom-test",
+        "imports.loom-test",
+        "native_references.loom-test",
+        "storage.loom-test",
+    ],
+    compile_targets = {"emission.loom-test": ["//loom/target/vm:core"]},
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/emit:vm_binary",
+    ]),
+)

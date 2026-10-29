@@ -11,10 +11,11 @@ function(_loom_corpus_program_stem OUTPUT SOURCE_ID)
   set(${OUTPUT} "${_PROGRAM_STEM}" PARENT_SCOPE)
 endfunction()
 
-# Owns one reusable test module for each semantic corpus source.
+# Declares a semantic manifest or contributes source-local modules to it.
 function(loom_corpus_sources)
   iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
-  cmake_parse_arguments(_RULE "" "NAME;MANIFEST" "SRCS" ${ARGN})
+  cmake_parse_arguments(
+    _RULE "" "NAME;MANIFEST" "MANIFEST_SRCS;SOURCE_IDS;SRCS" ${ARGN})
   if(NOT _RULE_NAME)
     message(FATAL_ERROR "loom_corpus_sources requires NAME")
   endif()
@@ -22,11 +23,13 @@ function(loom_corpus_sources)
     message(FATAL_ERROR
       "loom_corpus_sources(${_RULE_NAME}) requires MANIFEST")
   endif()
-  if(NOT _RULE_SRCS)
+  list(LENGTH _RULE_SOURCE_IDS _SOURCE_ID_COUNT)
+  list(LENGTH _RULE_SRCS _SOURCE_COUNT)
+  if(NOT _SOURCE_ID_COUNT EQUAL _SOURCE_COUNT)
     message(FATAL_ERROR
-      "loom_corpus_sources(${_RULE_NAME}) requires SRCS")
+      "loom_corpus_sources(${_RULE_NAME}) SOURCE_IDS and SRCS must correspond")
   endif()
-  file(GLOB_RECURSE _INVENTORY
+  file(GLOB _INVENTORY
     CONFIGURE_DEPENDS
     RELATIVE "${_IREE_PACKAGE_SOURCE_DIR}"
     "${_IREE_PACKAGE_SOURCE_DIR}/*.loom"
@@ -41,26 +44,48 @@ function(loom_corpus_sources)
   endif()
 
   set(_MANIFEST_PROPERTY "LOOM_CORPUS_MANIFEST_${_RULE_MANIFEST}")
-  get_property(_REGISTERED GLOBAL PROPERTY "${_MANIFEST_PROPERTY}_SOURCE_IDS" SET)
-  if(_REGISTERED)
-    message(FATAL_ERROR
-      "loom_corpus_sources repeats manifest ${_RULE_MANIFEST}")
+  if(_RULE_MANIFEST_SRCS)
+    get_property(_DECLARED GLOBAL
+      PROPERTY "${_MANIFEST_PROPERTY}_EXPECTED_SOURCE_IDS" SET)
+    if(_DECLARED)
+      message(FATAL_ERROR
+        "loom_corpus_sources repeats manifest ${_RULE_MANIFEST}")
+    endif()
+    set(_EXPECTED_SOURCE_IDS)
+    foreach(_SOURCE IN LISTS _RULE_MANIFEST_SRCS)
+      list(APPEND _EXPECTED_SOURCE_IDS "${_RULE_MANIFEST}/${_SOURCE}")
+    endforeach()
+    set_property(GLOBAL PROPERTY
+      "${_MANIFEST_PROPERTY}_EXPECTED_SOURCE_IDS" "${_EXPECTED_SOURCE_IDS}")
   endif()
-  set(_SOURCE_IDS)
-  set(_SOURCE_PATHS)
-  set(_SOURCE_MODULE_TARGETS)
-  foreach(_SOURCE IN LISTS _RULE_SRCS)
-    set(_SOURCE_ID "${_RULE_MANIFEST}/${_SOURCE}")
-    list(APPEND _SOURCE_IDS "${_SOURCE_ID}")
-    list(APPEND _SOURCE_PATHS "${_IREE_PACKAGE_SOURCE_DIR}/${_SOURCE}")
-    _loom_corpus_program_stem(_PROGRAM_STEM "${_SOURCE_ID}")
-    loom_test_module(
-      NAME "${_PROGRAM_STEM}"
-      SRCS "${_SOURCE}"
-    )
-    iree_package_target_name(_MODULE_TARGET "::${_PROGRAM_STEM}")
-    list(APPEND _SOURCE_MODULE_TARGETS "${_MODULE_TARGET}")
-  endforeach()
+
+  get_property(_SOURCE_IDS GLOBAL
+    PROPERTY "${_MANIFEST_PROPERTY}_SOURCE_IDS")
+  get_property(_SOURCE_PATHS GLOBAL
+    PROPERTY "${_MANIFEST_PROPERTY}_SOURCE_PATHS")
+  get_property(_SOURCE_MODULE_TARGETS GLOBAL
+    PROPERTY "${_MANIFEST_PROPERTY}_MODULE_TARGETS")
+  if(_RULE_SRCS)
+    math(EXPR _LAST_SOURCE_INDEX "${_SOURCE_COUNT} - 1")
+    foreach(_INDEX RANGE 0 ${_LAST_SOURCE_INDEX})
+      list(GET _RULE_SOURCE_IDS ${_INDEX} _SEMANTIC_SOURCE)
+      list(GET _RULE_SRCS ${_INDEX} _SOURCE)
+      set(_SOURCE_ID "${_RULE_MANIFEST}/${_SEMANTIC_SOURCE}")
+      if(_SOURCE_ID IN_LIST _SOURCE_IDS)
+        message(FATAL_ERROR
+          "loom_corpus_sources repeats source ${_SOURCE_ID}")
+      endif()
+      _loom_corpus_program_stem(_PROGRAM_STEM "${_SOURCE_ID}")
+      loom_test_module(
+        NAME "${_PROGRAM_STEM}"
+        SRCS "${_SOURCE}"
+      )
+      iree_package_target_name(_MODULE_TARGET "::${_PROGRAM_STEM}")
+      list(APPEND _SOURCE_IDS "${_SOURCE_ID}")
+      list(APPEND _SOURCE_PATHS "${_IREE_PACKAGE_SOURCE_DIR}/${_SOURCE}")
+      list(APPEND _SOURCE_MODULE_TARGETS "${_MODULE_TARGET}")
+    endforeach()
+  endif()
   set_property(GLOBAL PROPERTY
     "${_MANIFEST_PROPERTY}_SOURCE_IDS" "${_SOURCE_IDS}")
   set_property(GLOBAL PROPERTY
@@ -77,20 +102,39 @@ function(_loom_corpus_resolve_manifests
   set(_MODULE_TARGETS)
   foreach(_MANIFEST IN LISTS ARGN)
     set(_MANIFEST_PROPERTY "LOOM_CORPUS_MANIFEST_${_MANIFEST}")
-    get_property(_REGISTERED GLOBAL
-      PROPERTY "${_MANIFEST_PROPERTY}_SOURCE_IDS" SET)
-    if(NOT _REGISTERED)
+    get_property(_DECLARED GLOBAL
+      PROPERTY "${_MANIFEST_PROPERTY}_EXPECTED_SOURCE_IDS" SET)
+    if(NOT _DECLARED)
       message(FATAL_ERROR "unknown Loom corpus manifest ${_MANIFEST}")
     endif()
+    get_property(_EXPECTED_SOURCE_IDS GLOBAL
+      PROPERTY "${_MANIFEST_PROPERTY}_EXPECTED_SOURCE_IDS")
     get_property(_MANIFEST_SOURCE_IDS GLOBAL
       PROPERTY "${_MANIFEST_PROPERTY}_SOURCE_IDS")
     get_property(_MANIFEST_SOURCE_PATHS GLOBAL
       PROPERTY "${_MANIFEST_PROPERTY}_SOURCE_PATHS")
     get_property(_MANIFEST_MODULE_TARGETS GLOBAL
       PROPERTY "${_MANIFEST_PROPERTY}_MODULE_TARGETS")
-    list(APPEND _SOURCE_IDS ${_MANIFEST_SOURCE_IDS})
-    list(APPEND _SOURCE_PATHS ${_MANIFEST_SOURCE_PATHS})
-    list(APPEND _MODULE_TARGETS ${_MANIFEST_MODULE_TARGETS})
+    list(LENGTH _EXPECTED_SOURCE_IDS _EXPECTED_SOURCE_COUNT)
+    list(LENGTH _MANIFEST_SOURCE_IDS _MANIFEST_SOURCE_COUNT)
+    if(NOT _EXPECTED_SOURCE_COUNT EQUAL _MANIFEST_SOURCE_COUNT)
+      message(FATAL_ERROR
+        "Loom corpus manifest ${_MANIFEST} declared "
+        "${_EXPECTED_SOURCE_COUNT} sources but registered "
+        "${_MANIFEST_SOURCE_COUNT}")
+    endif()
+    foreach(_SOURCE_ID IN LISTS _EXPECTED_SOURCE_IDS)
+      list(FIND _MANIFEST_SOURCE_IDS "${_SOURCE_ID}" _SOURCE_INDEX)
+      if(_SOURCE_INDEX EQUAL -1)
+        message(FATAL_ERROR
+          "Loom corpus manifest ${_MANIFEST} did not register ${_SOURCE_ID}")
+      endif()
+      list(GET _MANIFEST_SOURCE_PATHS ${_SOURCE_INDEX} _SOURCE_PATH)
+      list(GET _MANIFEST_MODULE_TARGETS ${_SOURCE_INDEX} _MODULE_TARGET)
+      list(APPEND _SOURCE_IDS "${_SOURCE_ID}")
+      list(APPEND _SOURCE_PATHS "${_SOURCE_PATH}")
+      list(APPEND _MODULE_TARGETS "${_MODULE_TARGET}")
+    endforeach()
   endforeach()
   set(_UNIQUE_SOURCE_IDS ${_SOURCE_IDS})
   list(REMOVE_DUPLICATES _UNIQUE_SOURCE_IDS)

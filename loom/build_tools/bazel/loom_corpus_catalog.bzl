@@ -17,6 +17,15 @@ LOOM_CORPUS_TAG = "loom-corpus"
 def _target_stem(value):
     return value.replace("/", "_").replace(".", "_").replace("-", "_").replace("+", "_")
 
+def _source_location(package, source):
+    components = source.split("/")
+    source_name = components[-1]
+    source_directory = "/".join(components[:-1])
+    source_package = package
+    if source_directory:
+        source_package += "/" + source_directory
+    return source_package, source_name
+
 def _validate_manifest(manifest):
     if getattr(manifest, "kind", None) != _MANIFEST_KIND:
         fail("expected a Loom corpus manifest, got %r" % manifest)
@@ -30,7 +39,8 @@ def loom_corpus_manifest(name, package, srcs):
 
     Args:
       name: Stable semantic package name used in source identities and targets.
-      package: Absolute Bazel package containing the authored sources.
+      package: Absolute Bazel package owning the semantic manifest. Source
+        directories below it are independent Bazel packages.
       srcs: Sources using the scenario correctness harness.
 
     Returns:
@@ -53,6 +63,7 @@ def loom_corpus_manifest(name, package, srcs):
         if source in seen_sources:
             fail("Loom corpus manifest %s repeats source %r" % (name, source))
         seen_sources[source] = None
+        source_package, source_name = _source_location(package, source)
         source_stem = _target_stem(source[:-len(".loom")])
         target_name = name + "_" + source_stem
         if target_name in seen_targets:
@@ -63,10 +74,12 @@ def loom_corpus_manifest(name, package, srcs):
         seen_targets[target_name] = source
         programs.append(struct(
             identity = name + "/" + source,
-            label = package + ":" + source,
+            label = source_package + ":" + source_name,
             manifest = name,
-            module_label = package + ":" + target_name,
+            module_label = source_package + ":" + target_name,
+            package = source_package,
             source = source,
+            source_name = source_name,
             target_name = target_name,
         ))
 
@@ -116,36 +129,58 @@ def loom_corpus_catalog(manifests):
     )
 
 def loom_corpus_sources(name, manifest, visibility = ["//visibility:public"]):
-    """Owns one reusable test module for each semantic corpus source.
+    """Owns reusable test modules in one semantic corpus source package.
+
+    A call in the manifest package also declares the complete source aggregate.
+    Calls in descendant source packages declare their direct sources only. The
+    manifest remains the single ordered inventory for both forms.
 
     Args:
-      name: Target-neutral filegroup name for the semantic package.
-      manifest: Manifest owned by the current Bazel package.
+      name: Target-neutral filegroup name for this source package. In the
+        manifest package this aggregates the complete semantic family.
+      manifest: Manifest owned by the current package or one of its ancestors.
       visibility: Visibility of the source modules and exported inventory.
     """
     _validate_manifest(manifest)
     current_package = "//" + native.package_name()
-    if manifest.package != current_package:
+    if (current_package != manifest.package and
+        not current_package.startswith(manifest.package + "/")):
         fail(
-            "Loom corpus manifest %s belongs to %s, not %s" %
+            "Loom corpus manifest %s owns %s and its descendants, not %s" %
             (manifest.name, manifest.package, current_package),
         )
-    srcs = iree_checked_glob(
-        files = manifest.srcs,
-        include = ["**/*.loom"],
-        allow_empty = False,
+
+    local_programs = [
+        program
+        for program in manifest.programs
+        if program.package == current_package
+    ]
+    if current_package != manifest.package and not local_programs:
+        fail(
+            "Loom corpus package %s owns no sources in manifest %s" %
+            (current_package, manifest.name),
+        )
+    local_sources = [program.source_name for program in local_programs]
+    local_sources = iree_checked_glob(
+        files = local_sources,
+        include = ["*.loom"],
+        allow_empty = True,
     )
-    native.exports_files(srcs, visibility = visibility)
-    for program in manifest.programs:
+    if local_sources:
+        native.exports_files(local_sources, visibility = visibility)
+    for program in local_programs:
         loom_test_module(
             name = program.target_name,
-            srcs = [program.source],
+            srcs = [program.source_name],
             tags = [LOOM_CORPUS_TAG],
             visibility = visibility,
         )
+    filegroup_sources = local_sources
+    if current_package == manifest.package:
+        filegroup_sources = [program.label for program in manifest.programs]
     native.filegroup(
         name = name,
-        srcs = srcs,
+        srcs = filegroup_sources,
         visibility = visibility,
     )
 

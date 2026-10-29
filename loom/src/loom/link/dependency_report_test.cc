@@ -15,7 +15,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/link/module_index.h"
-#include "loom/link/testdata/dependency_analysis_testdata.h"
+#include "loom/link/testdata/dependency_analysis/dependency_analysis_testdata.h"
 #include "loom/ops/op_registry.h"
 #include "loom/util/stream.h"
 

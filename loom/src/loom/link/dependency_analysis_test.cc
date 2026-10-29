@@ -21,7 +21,7 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/link/testdata/dependency_analysis_testdata.h"
+#include "loom/link/testdata/dependency_analysis/dependency_analysis_testdata.h"
 #include "loom/ops/op_registry.h"
 
 namespace loom {

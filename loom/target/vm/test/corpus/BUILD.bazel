@@ -190,5 +190,5 @@ loom_test(
         "manual",
         "stress",
     ],
-    deps = ["//loom/src/loom/test/corpus/numeric:inverse_hyperbolic_narrow"],
+    deps = ["//loom/src/loom/test/corpus/numeric/float:inverse_hyperbolic_narrow"],
 )

@@ -8,19 +8,13 @@ load(
     "//build_tools/spirv:registry_sources.bzl",
     "loom_spirv_registry_sources",
 )
-load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_benchmark",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_config_compatible_with",
     "loom_generated_cc_library",
     "loom_generated_source",
-)
-load(
-    "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_test_suite",
 )
 
 package(
@@ -43,10 +37,6 @@ exports_files(
 
 _SPIRV_C_API_VISIBILITY = ["//loom/binding/c/target/spirv:__pkg__"]
 
-_SPIRV_ARCH_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/arch:spirv",
-])
-
 _SPIRV_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/spirv:__pkg__"]
 
 _SPIRV_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/spirv/lower:__pkg__"]
@@ -64,41 +54,6 @@ _SPIRV_PROVIDER_VISIBILITY = [
 _SPIRV_TOOLING_VISIBILITY = [
     "//loom/src/loom/tooling/target/spirv:__pkg__",
 ]
-
-loom_cc_library(
-    name = "check_source_low",
-    srcs = ["check/source_low.c"],
-    hdrs = ["check/source_low.h"],
-    deps = [
-        "//loom/binding/c:loomc",
-        "//loom/binding/c/target/spirv:profile",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:source_low",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "check_provider",
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
-    visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
-    deps = [
-        ":check_source_low",
-        "//loom/src/loom/tools/loom-check:provider",
-        "//runtime/src/iree/base",
-    ],
-)
-
-iree_execution_test_suite(
-    name = "check_source_low_test",
-    manifests = ["check/source_low.test.json"],
-    tags = ["hostonly"],
-    target_compatible_with = _SPIRV_ARCH_COMPATIBLE_WITH,
-    tools = {
-        "loom-check": "//loom/src/loom/tools/loom-check",
-    },
-)
 
 #===------------------------------------------------------------------------===#
 # SPIR-V low descriptors
@@ -529,88 +484,4 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
-)
-
-loom_check_test_suite(
-    name = "loom_check_file_test",
-    # Explicit-CFG corpora (carried_counter_store, selected_payload_transport,
-    # shared_conditional_values, uniform_predicate_control) are inapplicable:
-    # SPIR-V requires structured control flow. control_flow_legality owns that
-    # rejection contract.
-    srcs = [
-        "test/bfloat_collective_legalization.loom-test",
-        "test/source_low/barrier.loom-test",
-        "test/source_low/baseline.loom-test",
-        "test/source_low/buffer_bulk.loom-test",
-        "test/source_low/buffer_raw.loom-test",
-        "test/source_low/buffer_selection.loom-test",
-        "test/source_low/builtin_queries.loom-test",
-        "test/source_low/callable_values.loom-test",
-        "test/source_low/control_flow_legality.loom-test",
-        "test/source_low/index_addressing.loom-test",
-        "test/source_low/integer_bit_counts.loom-test",
-        "test/source_low/integer_rotations.loom-test",
-        "test/source_low/loop_counter_offset.loom-test",
-        "test/source_low/low_verify_diagnostics.loom-test",
-        "test/source_low/math_contraction.loom-test",
-        "test/source_low/memory_access_flags.loom-test",
-        "test/source_low/memory_constant.loom-test",
-        "test/source_low/memory_scalar_addressing.loom-test",
-        "test/source_low/memory_shared_components.loom-test",
-        "test/source_low/memory_wide_carriers.loom-test",
-        "test/source_low/memory_workgroup_scalar_addressing.loom-test",
-        "test/source_low/narrow_float_payloads.loom-test",
-        "test/source_low/nested_view_selection.loom-test",
-        "test/source_low/numeric_activations.loom-test",
-        "test/source_low/numeric_bfloat_narrow.loom-test",
-        "test/source_low/numeric_bfloat_widen.loom-test",
-        "test/source_low/numeric_extended_math.loom-test",
-        "test/source_low/numeric_float_arithmetic.loom-test",
-        "test/source_low/numeric_float_comparison.loom-test",
-        "test/source_low/numeric_float_extrema.loom-test",
-        "test/source_low/numeric_integer_extrema.loom-test",
-        "test/source_low/numeric_narrow_address.loom-test",
-        "test/source_low/numeric_narrow_float_carriers.loom-test",
-        "test/source_low/numeric_narrow_float_signs.loom-test",
-        "test/source_low/numeric_rounding.loom-test",
-        "test/source_low/numeric_scalar_f32.loom-test",
-        "test/source_low/numeric_scalar_f32_values.loom-test",
-        "test/source_low/numeric_trigonometry.loom-test",
-        "test/source_low/numeric_unsigned_remainder.loom-test",
-        "test/source_low/ordinary_vector_alu.loom-test",
-        "test/source_low/ordinary_vector_concat.loom-test",
-        "test/source_low/ordinary_vector_conversion.loom-test",
-        "test/source_low/ordinary_vector_float.loom-test",
-        "test/source_low/ordinary_vector_scale.loom-test",
-        "test/source_low/ordinary_vector_structure.loom-test",
-        "test/source_low/packed_bitstream_words.loom-test",
-        "test/source_low/packed_memory_alignment.loom-test",
-        "test/source_low/pass_specialization.loom-test",
-        "test/source_low/predicate_truncation.loom-test",
-        "test/source_low/predicate_truncation_diagnostics.loom-test",
-        "test/source_low/predicate_vector_packets.loom-test",
-        "test/source_low/scalar_float_conversion.loom-test",
-        "test/source_low/semantic_assertions.loom-test",
-        "test/source_low/source_low.loom-test",
-        "test/source_low/source_low_diagnostics.loom-test",
-        "test/source_low/source_unroll.loom-test",
-        "test/source_low/split_barrier.loom-test",
-        "test/source_low/structural_value_types_bytecode.loom-test",
-        "test/source_low/structured_control.loom-test",
-        "test/source_low/subgroup_ballot.loom-test",
-        "test/source_low/subgroup_predicates.loom-test",
-        "test/source_low/subgroup_reductions.loom-test",
-        "test/source_low/subgroup_shuffle.loom-test",
-        "test/source_low/subgroup_transport.loom-test",
-        "test/source_low/target_legalize.loom-test",
-        "test/source_low/unbound_low.loom-test",
-        "test/source_low/vector_atomic_policy.loom-test",
-        "test/source_low/vector_large_insert.loom-test",
-        "test/source_low/view_transport.loom-test",
-        "test/source_low/workgroup_payload_projection.loom-test",
-        "test/source_low/workgroup_storage.loom-test",
-        "test/source_low/workgroup_storage_reuse.loom-test",
-        "test/subgroup_packet_legalization.loom-test",
-    ],
-    test_name_prefix_to_strip = "test/source_low/",
 )

@@ -13,8 +13,6 @@ package(
     licenses = ["notice"],
 )
 
-_VM_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check:__pkg__"]
-
 _VM_BINARY_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/emit:vm_binary",
 ])
@@ -51,32 +49,6 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
         "//runtime/src/iree/vm",
-    ],
-)
-
-loom_cc_library(
-    name = "loom_check",
-    srcs = ["check/loom_check.c"],
-    hdrs = ["check/loom_check.h"],
-    target_compatible_with = _VM_BINARY_COMPATIBLE_WITH,
-    deps = [
-        "//loom/binding/c:loomc",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/vm/bytecode:disassembler",
-    ],
-)
-
-loom_cc_library(
-    name = "check_provider",
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
-    target_compatible_with = _VM_BINARY_COMPATIBLE_WITH,
-    visibility = _VM_CHECK_VISIBILITY,
-    deps = [
-        ":loom_check",
-        "//loom/src/loom/tools/loom-check:provider",
-        "//runtime/src/iree/base",
     ],
 )
 

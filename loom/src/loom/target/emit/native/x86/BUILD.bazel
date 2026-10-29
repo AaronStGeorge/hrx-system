@@ -4,19 +4,10 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:executable.bzl", "iree_executable_test")
-load("//build_tools/bazel:python.bzl", "iree_py_test")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_config_compatible_with",
-    "loom_generated_file",
-)
-load(
-    "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_test",
-    "loom_check_test_suite",
 )
 
 package(
@@ -24,10 +15,6 @@ package(
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
-
-_TASK_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/execute:x86_task_hal",
-]) + ["@platforms//cpu:x86_64"]
 
 #===------------------------------------------------------------------------===#
 # x86 native functions
@@ -196,8 +183,8 @@ loom_cc_library(
 
 loom_cc_library(
     name = "loom_check",
-    srcs = ["check/loom_check.c"],
-    hdrs = ["check/loom_check.h"],
+    srcs = ["loom_check.c"],
+    hdrs = ["loom_check.h"],
     deps = [
         ":abi",
         ":function",
@@ -212,242 +199,12 @@ loom_cc_library(
 
 loom_cc_library(
     name = "check_provider",
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
+    srcs = ["loom_check_provider.c"],
+    hdrs = ["loom_check_provider.h"],
     visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
     deps = [
         ":loom_check",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
-)
-
-loom_check_test_suite(
-    name = "loom_check_file_test",
-    srcs = [
-        "test/branch_edge_coalescing.loom-test",
-        "test/float_integer_native_bytes.loom-test",
-        "test/function.loom-test",
-        "test/integer_unary.loom-test",
-        "test/operand_ties.loom-test",
-        "test/root_native_bytes.loom-test",
-        "test/scalar_memory_native_bytes.loom-test",
-        "test/spill_pressure.loom-test",
-        "test/unused_abi_inputs.loom-test",
-    ],
-)
-
-loom_check_test(
-    name = "native_diagnostics_test",
-    src = "test/native_diagnostics.loom-test",
-    args = ["--target=x86:scalar"],
-    runner = "//loom/src/loom/tools/loom-check:loom-check",
-)
-
-iree_py_test(
-    name = "report_test",
-    srcs = ["report_test.py"],
-    args = [
-        "$(rootpath //loom/src/loom/tools/loom-compile:loom-compile)",
-        "$(rootpath test/callable.loom)",
-        "$(rootpath test/hal_dispatch.loom)",
-        "$(rootpath test/schedule_model_callable.loom)",
-    ],
-    data = [
-        "test/callable.loom",
-        "test/hal_dispatch.loom",
-        "test/schedule_model_callable.loom",
-        "//loom/src/loom/tools/loom-compile",
-    ],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/emit:x86_elf",
-    ]),
-    deps = [
-        "//loom/py/loom/reporting",
-        "//loom/py/loom/tools:compile_report",
-    ],
-)
-
-# The native object is a normal linker input. The caller contains no compiler
-# library, loader, runtime trampoline, or generated-code inspection machinery.
-loom_generated_file(
-    name = "callable_object",
-    testonly = True,
-    args = [
-        "$(location test/callable.loom)",
-        "--target=x86:scalar",
-    ],
-    generator = "//loom/src/loom/tools/loom-compile:loom-compile",
-    inputs = ["test/callable.loom"],
-    output = "callable.o",
-    output_flag = "--output=",
-    target_compatible_with = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:linux",
-    ],
-)
-
-loom_generated_file(
-    name = "vector_callable_object",
-    testonly = True,
-    args = [
-        "$(location test/vector_callable.loom)",
-        "--target=x86:avx2",
-    ],
-    generator = "//loom/src/loom/tools/loom-compile:loom-compile",
-    inputs = ["test/vector_callable.loom"],
-    output = "vector_callable.o",
-    output_flag = "--output=",
-    target_compatible_with = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:linux",
-    ],
-)
-
-loom_generated_file(
-    name = "runtime_division_object",
-    testonly = True,
-    args = [
-        "$(location test/runtime_division.loom)",
-        "--target=x86:avx2",
-    ],
-    generator = "//loom/src/loom/tools/loom-compile:loom-compile",
-    inputs = ["test/runtime_division.loom"],
-    output = "runtime_division.o",
-    output_flag = "--output=",
-    target_compatible_with = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:linux",
-    ],
-)
-
-loom_generated_file(
-    name = "avx512_callable_object",
-    testonly = True,
-    args = [
-        "$(location test/avx512_callable.loom)",
-        "--target=x86:avx512",
-    ],
-    generator = "//loom/src/loom/tools/loom-compile:loom-compile",
-    inputs = ["test/avx512_callable.loom"],
-    output = "avx512_callable.o",
-    output_flag = "--output=",
-    target_compatible_with = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:linux",
-    ],
-)
-
-loom_generated_file(
-    name = "avx512_bf16_callable_object",
-    testonly = True,
-    args = [
-        "$(location test/avx512_bf16_callable.loom)",
-        "--target=x86:avx512_packed_dot",
-    ],
-    generator = "//loom/src/loom/tools/loom-compile:loom-compile",
-    inputs = ["test/avx512_bf16_callable.loom"],
-    output = "avx512_bf16_callable.o",
-    output_flag = "--output=",
-    target_compatible_with = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:linux",
-    ],
-)
-
-loom_generated_file(
-    name = "packed_dot_callable_object",
-    testonly = True,
-    args = [
-        "$(location test/packed_dot_callable.loom)",
-        "--target=x86:packed_dot",
-    ],
-    generator = "//loom/src/loom/tools/loom-compile:loom-compile",
-    inputs = ["test/packed_dot_callable.loom"],
-    output = "packed_dot_callable.o",
-    output_flag = "--output=",
-    target_compatible_with = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:linux",
-    ],
-)
-
-loom_cc_test(
-    name = "callable_link_test",
-    srcs = [
-        "avx512_bf16_callable.o",
-        "avx512_callable.o",
-        "callable.o",
-        "callable_link_test.cc",
-        "packed_dot_callable.o",
-        "vector_callable.o",
-    ],
-    copts = ["-mavx2"],
-    target_compatible_with = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:linux",
-    ],
-    deps = [
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "runtime_division_link_test",
-    srcs = [
-        "runtime_division.o",
-        "runtime_division_link_test.cc",
-    ],
-    copts = ["-mavx2"],
-    target_compatible_with = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:linux",
-    ],
-    deps = [
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_generated_file(
-    name = "hal_dispatch_image",
-    testonly = True,
-    args = [
-        "$(location test/hal_dispatch.loom)",
-        "--target=x86:avx2",
-    ],
-    generator = "//loom/src/loom/tools/loom-compile:loom-compile",
-    inputs = ["test/hal_dispatch.loom"],
-    output = "hal_dispatch.so",
-    output_flag = "--output=",
-)
-
-iree_executable_test(
-    name = "hal_dispatch_test",
-    src = "//loom/src/loom/target/abi/task:dispatch_test_runner",
-    args = ["--executable_file=$(rootpath :hal_dispatch_image)"],
-    data = [":hal_dispatch_image"],
-    target_compatible_with = _TASK_HAL_COMPATIBLE_WITH,
-)
-
-loom_generated_file(
-    name = "hal_dispatch_c_api_image",
-    testonly = True,
-    args = [
-        "$(location test/hal_dispatch.loom)",
-        "x86:avx2",
-    ],
-    generator = "//loom/binding/c/example:compile_artifact",
-    inputs = ["test/hal_dispatch.loom"],
-    output = "hal_dispatch_c_api.so",
-    output_flag = "{path}",
-)
-
-iree_executable_test(
-    name = "hal_dispatch_c_api_test",
-    src = "//loom/src/loom/target/abi/task:dispatch_test_runner",
-    args = ["--executable_file=$(rootpath :hal_dispatch_c_api_image)"],
-    data = [":hal_dispatch_c_api_image"],
-    target_compatible_with = _TASK_HAL_COMPATIBLE_WITH,
 )

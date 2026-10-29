@@ -16,6 +16,7 @@ load(
 
 _FIXTURE = "//loom/build_tools/bazel/test/testdata/corpus/target"
 _SOURCE_FIXTURE = "//loom/build_tools/bazel/test/testdata/corpus/source"
+_NESTED_SOURCE_FIXTURE = _SOURCE_FIXTURE + "/nested"
 
 def _actions_with_mnemonic(actions, mnemonic):
     return [action for action in actions if action.mnemonic == mnemonic]
@@ -266,7 +267,7 @@ def _test_source_owner_supplies_execution_module(name, **kwargs):
         targets = {
             "consumer_suite": ":sample_nested_fixture_test",
             "execution": ":sample_nested_fixture_test_execute_reference_test_launcher",
-            "source_suite": _SOURCE_FIXTURE + ":sample_nested_fixture_test",
+            "source_suite": _NESTED_SOURCE_FIXTURE + ":sample_nested_fixture_test",
         },
         **kwargs
     )
@@ -286,7 +287,7 @@ def _test_source_owner_supplies_execution_module_impl(env, targets):
         env.fail("target consumer owns non-execution tests %r" % consumer_tests)
     module = targets.execution[LoomExecutionTestInfo].module
     if module.short_path != (
-        "loom/build_tools/bazel/test/testdata/corpus/source/" +
+        "loom/build_tools/bazel/test/testdata/corpus/source/nested/" +
         "sample_nested_fixture.loombc"
     ):
         env.fail("execution did not consume its source-owned module: %s" % module.short_path)

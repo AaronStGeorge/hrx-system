@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/native/x86/check/loom_check.h"
+#include "loom/target/emit/native/x86/loom_check.h"
 
 #include "iree/io/vec_stream.h"
 #include "loom/analysis/symbol_facts.h"

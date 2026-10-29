@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/bazel:package_boundary.bzl", "iree_package_boundary")
 load("//build_tools/bazel:query.bzl", "iree_assert_dependency_boundary")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
@@ -17,6 +18,17 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+iree_package_boundary(
+    allowed_descendant_paths = [
+        "cmake/iree_exports.lds",
+        "cmake/iree_exports.macos",
+        "cmake/loomc_exports.lds",
+        "cmake/loomc_exports.macos",
+        "include/**",
+    ],
+    reason = "The installed LoomC SDK preserves its public include tree and platform export-map paths.",
 )
 
 iree_cmake_extra_content(

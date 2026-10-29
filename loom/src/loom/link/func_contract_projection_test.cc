@@ -18,7 +18,7 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/link/testdata/func_contract_projection_testdata.h"
+#include "loom/link/testdata/func_contract_projection/func_contract_projection_testdata.h"
 #include "loom/ops/op_registry.h"
 #include "loom/rewrite/remap.h"
 
