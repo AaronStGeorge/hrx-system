@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -29,3 +30,26 @@ def test_each_instruction_slot_requires_an_exact_singleton_bundle(slot: str) -> 
 
 def test_check_validates_without_output() -> None:
     assert encoding_tables.main(["--check"]) == 0
+
+
+@pytest.mark.parametrize(
+    "outputs",
+    [
+        {"encoding": "encoding_tables.inl"},
+        {"machine": "machine_tables.inl"},
+        {
+            "register": "register_tables.inl",
+            "descriptor-header": "core_descriptors.h",
+            "descriptor-source": "core_descriptors.c",
+            "array-descriptor-header": "array_descriptors.h",
+            "array-descriptor-source": "array_descriptors.c",
+            "configuration-descriptor-header": "configuration_descriptors.h",
+            "configuration-descriptor-source": "configuration_descriptors.c",
+        },
+    ],
+)
+def test_packages_generate_only_their_owned_outputs(tmp_path: Path, outputs: dict[str, str]) -> None:
+    arguments = [argument for name, filename in outputs.items() for argument in (f"--{name}-output", str(tmp_path / filename))]
+    assert encoding_tables.main(arguments) == 0
+    assert {path.name for path in tmp_path.iterdir()} == set(outputs.values())
+    assert all((tmp_path / filename).stat().st_size > 0 for filename in outputs.values())

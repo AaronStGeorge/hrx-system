@@ -1,0 +1,217 @@
+// RUN: emit pipeline-transport @test
+
+// Equal replay counts in independent loops are distinct batches, in execution order.
+func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c3 = index.constant 3 : index
+  %limit = index.constant 3 : index
+  %first = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  cfg.br ^first_header(%c0: index, %first: read<tile<16xi32>>)
+^first_header(%i: index, %first_read: read<tile<16xi32>>):
+  %more_first = index.cmp ult, %i, %c3 : index
+  cfg.cond_br %more_first, ^first_body, ^between
+^first_body:
+  %first_keep, %first_copy = channel.fanout %first_read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %first_write, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %first_copy -> %first_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %next_i = index.add %i, %c1 : index
+  cfg.br ^first_header(%next_i: index, %first_keep: read<tile<16xi32>>)
+^between:
+  channel.release %first_read : read<tile<16xi32>>
+  %second = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  cfg.br ^second_header(%c0: index, %second: read<tile<16xi32>>)
+^second_header(%j: index, %second_read: read<tile<16xi32>>):
+  %more_second = index.cmp ult, %j, %limit : index
+  cfg.cond_br %more_second, ^second_body, ^done
+^second_body:
+  %second_keep, %second_copy = channel.fanout %second_read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %second_write, %second_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %second_copy -> %second_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %next_j = index.add %j, %c1 : index
+  cfg.br ^second_header(%next_j: index, %second_keep: read<tile<16xi32>>)
+^done:
+  channel.release %second_read : read<tile<16xi32>>
+  func.return
+}
+
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: buffer) {
+  %origin = index.constant 0 : offset
+  %source_capacity = index.constant 1 : index
+  %destination_capacity = index.constant 1 : index
+  %source_slots = buffer.view %source_storage[%origin] : buffer -> view<1x16xi32>
+  %source = channel.bind<fifo> %source_slots, %source_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
+  %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
+  }
+}
+
+// ----
+worker 0: transport=channel-copy execution_counts=exact batches=2 streams=0
+  batch 0: records=1 replays=3
+    record 0: admission=%first source=%source admissions=1 transfers=3 final_release=yes destinations=%left
+  batch 1: records=1 replays=3
+    record 0: admission=%second source=%source admissions=1 transfers=3 final_release=yes destinations=%left
+
+// ====
+// RUN: emit pipeline-transport @test
+
+// Each independent batch retains its own replay count.
+func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c3 = index.constant 3 : index
+  %limit = index.constant 5 : index
+  %first = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  cfg.br ^first_header(%c0: index, %first: read<tile<16xi32>>)
+^first_header(%i: index, %first_read: read<tile<16xi32>>):
+  %more_first = index.cmp ult, %i, %c3 : index
+  cfg.cond_br %more_first, ^first_body, ^between
+^first_body:
+  %first_keep, %first_copy = channel.fanout %first_read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %first_write, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %first_copy -> %first_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %next_i = index.add %i, %c1 : index
+  cfg.br ^first_header(%next_i: index, %first_keep: read<tile<16xi32>>)
+^between:
+  channel.release %first_read : read<tile<16xi32>>
+  %second = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  cfg.br ^second_header(%c0: index, %second: read<tile<16xi32>>)
+^second_header(%j: index, %second_read: read<tile<16xi32>>):
+  %more_second = index.cmp ult, %j, %limit : index
+  cfg.cond_br %more_second, ^second_body, ^done
+^second_body:
+  %second_keep, %second_copy = channel.fanout %second_read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %second_write, %second_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %second_copy -> %second_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %next_j = index.add %j, %c1 : index
+  cfg.br ^second_header(%next_j: index, %second_keep: read<tile<16xi32>>)
+^done:
+  channel.release %second_read : read<tile<16xi32>>
+  func.return
+}
+
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: buffer) {
+  %origin = index.constant 0 : offset
+  %source_capacity = index.constant 1 : index
+  %destination_capacity = index.constant 1 : index
+  %source_slots = buffer.view %source_storage[%origin] : buffer -> view<1x16xi32>
+  %source = channel.bind<fifo> %source_slots, %source_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
+  %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
+  }
+}
+
+// ----
+worker 0: transport=channel-copy execution_counts=exact batches=2 streams=0
+  batch 0: records=1 replays=3
+    record 0: admission=%first source=%source admissions=1 transfers=3 final_release=yes destinations=%left
+  batch 1: records=1 replays=5
+    record 0: admission=%second source=%source admissions=1 transfers=5 final_release=yes destinations=%left
+
+// ====
+// RUN: emit pipeline-transport @test
+
+// One held record crossing unrelated replay loops cannot become a single replay.
+func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c3 = index.constant 3 : index
+  %limit = index.constant 3 : index
+  %first = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  cfg.br ^first_header(%c0: index, %first: read<tile<16xi32>>)
+^first_header(%i: index, %first_read: read<tile<16xi32>>):
+  %more_first = index.cmp ult, %i, %c3 : index
+  cfg.cond_br %more_first, ^first_body, ^between
+^first_body:
+  %first_keep, %first_copy = channel.fanout %first_read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %first_write, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %first_copy -> %first_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %next_i = index.add %i, %c1 : index
+  cfg.br ^first_header(%next_i: index, %first_keep: read<tile<16xi32>>)
+^between:
+  cfg.br ^second_header(%c0: index, %first_read: read<tile<16xi32>>)
+^second_header(%j: index, %second_read: read<tile<16xi32>>):
+  %more_second = index.cmp ult, %j, %limit : index
+  cfg.cond_br %more_second, ^second_body, ^done
+^second_body:
+  %second_keep, %second_copy = channel.fanout %second_read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %second_write, %second_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %second_copy -> %second_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %next_j = index.add %j, %c1 : index
+  cfg.br ^second_header(%next_j: index, %second_keep: read<tile<16xi32>>)
+^done:
+  channel.release %second_read : read<tile<16xi32>>
+  func.return
+}
+
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: buffer) {
+  %origin = index.constant 0 : offset
+  %source_capacity = index.constant 1 : index
+  %destination_capacity = index.constant 1 : index
+  %source_slots = buffer.view %source_storage[%origin] : buffer -> view<1x16xi32>
+  %source = channel.bind<fifo> %source_slots, %source_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
+  %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
+  }
+}
+
+// ----
+worker 0: transport=unproven execution_counts=exact batches=0 streams=0
+
+// ====
+// RUN: emit pipeline-transport @test
+
+// Successive ownership intervals remain separate after a one-iteration loop folds.
+
+func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
+  %a0 = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %b0 = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %keep_a0, %copy_a0 = channel.fanout %a0 : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %write_a0, %payload_a0 = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %copy_a0 -> %write_a0 : read<tile<16xi32>>, write<tile<16xi32>>
+  %keep_b0, %copy_b0 = channel.fanout %b0 : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %write_b0, %payload_b0 = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %copy_b0 -> %write_b0 : read<tile<16xi32>>, write<tile<16xi32>>
+  channel.release %keep_a0 : read<tile<16xi32>>
+  channel.release %keep_b0 : read<tile<16xi32>>
+  %a1 = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %b1 = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %keep_a1, %copy_a1 = channel.fanout %a1 : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %write_a1, %payload_a1 = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %copy_a1 -> %write_a1 : read<tile<16xi32>>, write<tile<16xi32>>
+  %keep_b1, %copy_b1 = channel.fanout %b1 : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %write_b1, %payload_b1 = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %copy_b1 -> %write_b1 : read<tile<16xi32>>, write<tile<16xi32>>
+  channel.release %keep_a1 : read<tile<16xi32>>
+  channel.release %keep_b1 : read<tile<16xi32>>
+  func.return
+}
+
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: buffer) {
+  %origin = index.constant 0 : offset
+  %source_capacity = index.constant 2 : index
+  %destination_capacity = index.constant 1 : index
+  %source_slots = buffer.view %source_storage[%origin] : buffer -> view<2x16xi32>
+  %source = channel.bind<fifo> %source_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
+  %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
+  }
+}
+
+// ----
+worker 0: transport=channel-copy execution_counts=exact batches=2 streams=0
+  batch 0: records=2 replays=1
+    record 0: admission=%a0 source=%source admissions=1 transfers=1 final_release=yes destinations=%left
+    record 1: admission=%b0 source=%source admissions=1 transfers=1 final_release=yes destinations=%left
+  batch 1: records=2 replays=1
+    record 0: admission=%a1 source=%source admissions=1 transfers=1 final_release=yes destinations=%left
+    record 1: admission=%b1 source=%source admissions=1 transfers=1 final_release=yes destinations=%left

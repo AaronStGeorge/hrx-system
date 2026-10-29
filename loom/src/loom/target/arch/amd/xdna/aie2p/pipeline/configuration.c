@@ -349,17 +349,22 @@ static iree_status_t loom_aie2p_native_config_transfers(
     for (const loom_aie2p_native_distribution_t* distribution =
              worker->distributions;
          distribution; distribution = distribution->next) {
-      IREE_RETURN_IF_ERROR(loom_aie2p_native_config_reset_distribution_endpoint(
-          config, &distribution->sender,
-          LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM));
+      if (distribution->path == distribution) {
+        IREE_RETURN_IF_ERROR(
+            loom_aie2p_native_config_reset_distribution_endpoint(
+                config, &distribution->sender,
+                LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM));
+      }
       IREE_RETURN_IF_ERROR(loom_aie2p_native_config_descriptors(
           config, distribution->sender.tile, &distribution->sender.sequence,
           0));
       for (iree_host_size_t j = 0; j < distribution->receiver_count; ++j) {
-        IREE_RETURN_IF_ERROR(
-            loom_aie2p_native_config_reset_distribution_endpoint(
-                config, &distribution->receivers[j],
-                LOOM_XDNA_DMA_DIRECTION_STREAM_TO_MEMORY));
+        if (distribution->path == distribution) {
+          IREE_RETURN_IF_ERROR(
+              loom_aie2p_native_config_reset_distribution_endpoint(
+                  config, &distribution->receivers[j],
+                  LOOM_XDNA_DMA_DIRECTION_STREAM_TO_MEMORY));
+        }
         IREE_RETURN_IF_ERROR(loom_aie2p_native_config_descriptors(
             config, distribution->receivers[j].tile,
             &distribution->receivers[j].sequence, 0));
@@ -653,6 +658,9 @@ static iree_status_t loom_aie2p_native_config_communicate(
     const loom_pipeline_transport_step_t* step = &source->transport.steps[i];
     switch (step->kind) {
       case LOOM_PIPELINE_TRANSPORT_STEP_TRANSFER: {
+        if (!issue || issue->source != step->source.transfer) {
+          break;
+        }
         if (issue == issue->task->last_transfer) {
           for (const loom_aie2p_native_transfer_t* transfer =
                    issue->task->first_transfer;
@@ -717,6 +725,26 @@ static iree_status_t loom_aie2p_native_config_communicate(
           IREE_RETURN_IF_ERROR(loom_aie2p_native_config_register(
               config, tile, lock_value, &action->lock, action->expected,
               AIE2P_CONFIGURATION_DESCRIPTOR_REF_CONFIGURATION_WAIT_MASK32));
+        }
+        const loom_aie2p_native_distribution_phase_t* phase =
+            action->distribution_phase;
+        if (phase) {
+          if (phase->previous) {
+            const loom_aie2p_native_distribution_t* previous =
+                phase->previous->distribution;
+            IREE_RETURN_IF_ERROR(
+                loom_aie2p_native_config_wait_distribution_endpoint(
+                    config, &previous->sender,
+                    LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM));
+            for (iree_host_size_t j = 0; j < previous->receiver_count; ++j) {
+              IREE_RETURN_IF_ERROR(
+                  loom_aie2p_native_config_wait_distribution_endpoint(
+                      config, &previous->receivers[j],
+                      LOOM_XDNA_DMA_DIRECTION_STREAM_TO_MEMORY));
+            }
+          }
+          IREE_RETURN_IF_ERROR(loom_aie2p_native_config_submit_distribution(
+              config, phase->distribution));
         }
         IREE_RETURN_IF_ERROR(loom_aie2p_native_config_set_lock(
             config, tile, action->lock, action->value));
@@ -913,7 +941,8 @@ iree_status_t loom_aie2p_native_emit_configuration(
   }
   for (iree_host_size_t i = 0; i < realization->resources.strand_count; ++i) {
     const loom_aie2p_native_worker_t* worker = &context->workers[i];
-    if (worker->execution == LOOM_AIE2P_NATIVE_EXECUTION_DISTRIBUTION) {
+    if (worker->execution == LOOM_AIE2P_NATIVE_EXECUTION_DISTRIBUTION &&
+        !worker->distribution_phases) {
       for (const loom_aie2p_native_distribution_t* distribution =
                worker->distributions;
            distribution; distribution = distribution->next) {
@@ -949,6 +978,9 @@ iree_status_t loom_aie2p_native_emit_configuration(
     for (const loom_aie2p_native_distribution_t* distribution =
              worker->distributions;
          distribution; distribution = distribution->next) {
+      if (distribution->path != distribution) {
+        continue;
+      }
       IREE_RETURN_IF_ERROR(loom_aie2p_native_config_wait_distribution_endpoint(
           &config, &distribution->sender,
           LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM));

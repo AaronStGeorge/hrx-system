@@ -21,6 +21,9 @@ typedef struct loom_aie2p_native_cursor_t {
   uint32_t worker;
   // Retained invocation admission bound, independent of physical slot count.
   uint32_t maximum_admissions;
+  // Last claiming transport batch; each phase owns this cursor at most once.
+  // Unused for instruction-executing cursor owners.
+  uint32_t transport_batch;
   // Multiple admissions can select different physical slots.
   bool advances;
 } loom_aie2p_native_cursor_t;
@@ -209,6 +212,8 @@ typedef struct loom_aie2p_native_transfer_t {
   loom_aie2p_native_dma_descriptor_t* shim_descriptor;
   // Caller buffer ordinal supplying the external base.
   uint32_t binding;
+  // Authored copies of adjacent records represented by this physical transfer.
+  uint32_t source_count;
   // Worker-local address pair when the descriptor patches its external address.
   // Unused when invocation binding patches one shared fixed address directly.
   uint64_t base_storage_offset;
@@ -278,6 +283,8 @@ typedef struct loom_aie2p_native_distribution_endpoint_t {
 typedef struct loom_aie2p_native_distribution_t {
   // Next distribution owned by the same transport strand.
   struct loom_aie2p_native_distribution_t* next;
+  // First geometry owning this physical engine/route path; self when unshared.
+  const struct loom_aie2p_native_distribution_t* path;
   // Memory-to-stream endpoint reclaiming source records after transmission.
   loom_aie2p_native_distribution_endpoint_t sender;
   // Arena-owned stream-to-memory endpoints in source fanout order.
@@ -287,6 +294,19 @@ typedef struct loom_aie2p_native_distribution_t {
   // Exact number of records transferred by every endpoint.
   uint32_t repetitions;
 } loom_aie2p_native_distribution_t;
+
+// One ordered use of an immutable distribution geometry. The controller's
+// full-batch publication supplies the existing source readiness boundary.
+typedef struct loom_aie2p_native_distribution_phase_t {
+  // Next authored batch in this transport worker's execution order.
+  struct loom_aie2p_native_distribution_phase_t* next;
+  // Preceding phase whose endpoints retire before this phase is queued.
+  const struct loom_aie2p_native_distribution_phase_t* previous;
+  // Canonical source batch retaining its admission and replay contract.
+  const loom_pipeline_transport_batch_t* source;
+  // Shared immutable sender/receiver geometry for this phase.
+  const loom_aie2p_native_distribution_t* distribution;
+} loom_aie2p_native_distribution_phase_t;
 
 typedef enum loom_aie2p_native_execution_e {
   LOOM_AIE2P_NATIVE_EXECUTION_CORE,
@@ -307,6 +327,8 @@ typedef struct loom_aie2p_native_configuration_action_t {
   int16_t expected;
   // Value to publish; -1 means this source action has no physical update.
   int16_t value;
+  // Ordered distribution submitted before this complete-batch publication.
+  const loom_aie2p_native_distribution_phase_t* distribution_phase;
 } loom_aie2p_native_configuration_action_t;
 
 typedef struct loom_aie2p_native_worker_t {
@@ -315,7 +337,7 @@ typedef struct loom_aie2p_native_worker_t {
   // Engine implementing the strand; only CORE occupies instruction memory.
   loom_aie2p_native_execution_t execution;
   // Configuration channel turns indexed by the source channel action table.
-  const loom_aie2p_native_configuration_action_t* configuration_actions;
+  loom_aie2p_native_configuration_action_t* configuration_actions;
   // Fixed record byte offsets indexed by the source's owned-value domain.
   const uint32_t* configuration_records;
   // Autonomous descriptor iteration for a regular ingress worker.
@@ -359,6 +381,8 @@ typedef struct loom_aie2p_native_worker_t {
   loom_aie2p_native_dma_completion_t* dma_completions;
   // First selected on-die channel distribution.
   loom_aie2p_native_distribution_t* distributions;
+  // Ordered uses driven by controller publications; NULL for autonomous paths.
+  loom_aie2p_native_distribution_phase_t* distribution_phases;
   // Ordered DMA paths owned exclusively by this worker.
   loom_aie2p_native_dma_path_t* paths;
 } loom_aie2p_native_worker_t;

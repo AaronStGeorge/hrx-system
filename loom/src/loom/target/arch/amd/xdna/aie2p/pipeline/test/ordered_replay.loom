@@ -1,0 +1,249 @@
+// Five retained batches share one multicast path. The first two batches use
+// the same geometry once each; later batches replay and change geometry.
+// The controller joins both consumers before refilling shared SRAM from their
+// mutable state.
+// The phase count exceeds the four-entry DMA queue, and the final phase reuses
+// the first geometry. Fresh trials and guards cover restart and full retirement.
+aie2p.target<array> @device
+
+func.def inline @fill(%input: buffer, %count: index, %incoming: channel<tile<16xi32>>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %bytes = index.constant 64 : offset
+  scf.for %record = [%c0 to %count step %c1] unroll {
+    %offset = index.scale %record, %bytes : index, offset -> offset
+    %external = buffer.view %input[%offset] : buffer -> view<16xi32>
+    %write, %payload = channel.reserve %incoming : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+    %copy = kernel.async.copy %external to %payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+    channel.publish %write : write<tile<16xi32>>
+  }
+  func.return
+}
+
+func.def inline @forward(%read: read<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) -> (read<tile<16xi32>>) {
+  %retained, %left_read, %right_read = channel.fanout %read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>, read<tile<16xi32>>)
+  %left_write, %left_payload = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %left_read -> %left_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %right_write, %right_payload = channel.reserve %right : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %right_read -> %right_write : read<tile<16xi32>>, write<tile<16xi32>>
+  func.return %retained : read<tile<16xi32>>
+}
+
+func.def inline @replay_two(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %first, %first_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+  %second, %second_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+  %last_first, %last_second = scf.for %replay = [%c0 to %c1 step %c1](%a = %first : read<tile<16xi32>>, %b = %second : read<tile<16xi32>>) -> (read<tile<16xi32>>, read<tile<16xi32>>) {
+    %next_a = func.call @forward(%a, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+    %next_b = func.call @forward(%b, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+    scf.yield %next_a, %next_b : read<tile<16xi32>>, read<tile<16xi32>>
+  }
+  channel.release %last_first : read<tile<16xi32>>
+  channel.release %last_second : read<tile<16xi32>>
+  func.return
+}
+
+func.def inline @replay_three(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %first, %first_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+  %second, %second_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+  %third, %third_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+  %last_first, %last_second, %last_third = scf.for %replay = [%c0 to %c2 step %c1](%a = %first : read<tile<16xi32>>, %b = %second : read<tile<16xi32>>, %c = %third : read<tile<16xi32>>) -> (read<tile<16xi32>>, read<tile<16xi32>>, read<tile<16xi32>>) {
+    %next_a = func.call @forward(%a, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+    %next_b = func.call @forward(%b, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+    %next_c = func.call @forward(%c, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+    scf.yield %next_a, %next_b, %next_c : read<tile<16xi32>>, read<tile<16xi32>>, read<tile<16xi32>>
+  }
+  channel.release %last_first : read<tile<16xi32>>
+  channel.release %last_second : read<tile<16xi32>>
+  channel.release %last_third : read<tile<16xi32>>
+  func.return
+}
+
+func.def inline @consume(%save_state: i1, %records: channel<tile<16xi32>>, %ready: channel<tile<16xi32>>, %state: buffer, %output: buffer) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c4 = index.constant 4 : index
+  %c5 = index.constant 5 : index
+  %c6 = index.constant 6 : index
+  %origin = index.constant 0 : offset
+  %bytes = index.constant 64 : offset
+  %end = scf.for %phase = [%c0 to %c5 step %c1](%base = %origin : offset) -> (offset) unroll {
+    %pair = index.div %phase, %c2 : index
+    %three_records = index.cmp eq, %pair, %c1 : index
+    %count = scf.select %three_records, %c6, %c2 : index
+    %last = index.sub %count, %c1 : index
+    scf.for %record = [%c0 to %count step %c1] {
+      %read, %payload = channel.acquire %records : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %relative = index.scale %record, %bytes : index, offset -> offset
+      %offset = index.add %base, %relative : offset
+      %external = buffer.view %output[%offset] : buffer -> view<16xi32>
+      %copy = kernel.async.copy %payload to %external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
+      %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+      kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+      scf.if %save_state {
+        %reverse = index.sub %last, %record : index
+        %state_offset = index.scale %reverse, %bytes : index, offset -> offset
+        %destination = buffer.view %state[%state_offset] : buffer -> view<16xi32>
+        %state_copy = kernel.async.copy %payload to %destination {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
+        %state_group = kernel.async.group %state_copy : kernel.async.token -> kernel.async.group
+        kernel.async.wait %state_group {newer_groups = 0} : kernel.async.group
+      }
+      channel.release %read : read<tile<16xi32>>
+    }
+    %has_next = index.cmp ult, %phase, %c4 : index
+    scf.if %has_next {
+      %write, %unused = channel.reserve %ready : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+      channel.publish %write : write<tile<16xi32>>
+    }
+    %length = index.scale %count, %bytes : index, offset -> offset
+    %next = index.add %base, %length : offset
+    scf.yield %next : offset
+  }
+  func.return
+}
+
+pipeline.def<kernel> public retain target(@device) @ordered_replay() run(%input_argument: buffer, %state_argument: buffer, %left_argument: buffer, %right_argument: buffer) {
+  %input_unique, %state_unique, %left_unique, %right_unique = buffer.assume.noalias %input_argument, %state_argument, %left_argument, %right_argument : buffer, buffer, buffer, buffer
+  %input, %state, %left_output, %right_output = buffer.assume.alignment %input_unique, %state_unique, %left_unique, %right_unique {minimum_alignment = 64} : buffer, buffer, buffer, buffer
+  %origin = index.constant 0 : offset
+  %bytes = index.constant 64 : offset
+  %batch_bytes = index.constant 192 : offset
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %c5 = index.constant 5 : index
+  %yes = scalar.constant true : i1
+  %no = scalar.constant false : i1
+  %memory = pipeline.memory<workgroup>[0, 1] : pool
+  %left_core = pipeline.memory<workgroup>[0, 2] : pool
+  %right_core = pipeline.memory<workgroup>[0, 3] : pool
+  %storage = buffer.alloca<workgroup> pool(%memory) align(64) %batch_bytes : buffer
+  %two_slots = buffer.view %storage[%origin] : buffer -> view<2x16xi32>
+  %batch_two = channel.bind<fifo> %two_slots, %c2 : view<2x16xi32>, index -> channel<tile<16xi32>>
+  %three_slots = buffer.view %storage[%origin] : buffer -> view<3x16xi32>
+  %batch_three = channel.bind<fifo> %three_slots, %c3 : view<3x16xi32>, index -> channel<tile<16xi32>>
+  %left_storage = buffer.alloca<workgroup> pool(%left_core) align(64) %bytes : buffer
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
+  %left = channel.bind<fifo> %left_slots, %c1 : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %right_storage = buffer.alloca<workgroup> pool(%right_core) align(64) %bytes : buffer
+  %right_slots = buffer.view %right_storage[%origin] : buffer -> view<1x16xi32>
+  %right = channel.bind<fifo> %right_slots, %c1 : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %left_ready_storage = buffer.alloca<workgroup> pool(%left_core) align(64) %bytes : buffer
+  %left_ready_slots = buffer.view %left_ready_storage[%origin] : buffer -> view<1x16xi32>
+  %left_ready = channel.bind<fifo> %left_ready_slots, %c1 : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %right_ready_storage = buffer.alloca<workgroup> pool(%right_core) align(64) %bytes : buffer
+  %right_ready_slots = buffer.view %right_ready_storage[%origin] : buffer -> view<1x16xi32>
+  %right_ready = channel.bind<fifo> %right_ready_slots, %c1 : view<1x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    func.call @fill(%input, %c2, %batch_two) : (buffer, index, channel<tile<16xi32>>)
+    scf.for %phase = [%c1 to %c5 step %c1] unroll {
+      %left_read, %unused_left = channel.acquire %left_ready : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %right_read, %unused_right = channel.acquire %right_ready : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %pair = index.div %phase, %c2 : index
+      %three_records = index.cmp eq, %pair, %c1 : index
+      scf.if %three_records {
+        func.call @fill(%state, %c3, %batch_three) : (buffer, index, channel<tile<16xi32>>)
+      } else {
+        func.call @fill(%state, %c2, %batch_two) : (buffer, index, channel<tile<16xi32>>)
+      }
+      channel.release %left_read : read<tile<16xi32>>
+      channel.release %right_read : read<tile<16xi32>>
+    }
+  }
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    scf.for %phase = [%c0 to %c5 step %c1] unroll {
+      %pair = index.div %phase, %c2 : index
+      %three_records = index.cmp eq, %pair, %c1 : index
+      scf.if %three_records {
+        func.call @replay_three(%batch_three, %left, %right) : (channel<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>)
+      } else {
+        func.call @replay_two(%batch_two, %left, %right) : (channel<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>)
+      }
+    }
+  }
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    func.call @consume(%yes, %left, %left_ready, %state, %left_output) : (i1, channel<tile<16xi32>>, channel<tile<16xi32>>, buffer, buffer)
+  }
+  pipeline.strand workers([0, 3], [1, 1], [1, 1]) {
+    func.call @consume(%no, %right, %right_ready, %state, %right_output) : (i1, channel<tile<16xi32>>, channel<tile<16xi32>>, buffer, buffer)
+  }
+}
+
+func.def @reference(%input: buffer, %state: buffer, %left: buffer, %right: buffer) {
+  %origin = index.constant 0 : offset
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %c5 = index.constant 5 : index
+  %words = index.constant 16 : index
+  %source = buffer.view %input[%origin] : buffer -> view<2x16xi32>
+  %intermediate = buffer.view %state[%origin] : buffer -> view<6x16xi32>
+  %left_values = buffer.view %left[%origin] : buffer -> view<24x16xi32>
+  %right_values = buffer.view %right[%origin] : buffer -> view<24x16xi32>
+  %snapshot_bytes = index.constant 192 : offset
+  %snapshot_storage = buffer.alloca<private> align(64) %snapshot_bytes : buffer
+  %snapshot = buffer.view %snapshot_storage[%origin] : buffer -> view<3x16xi32>
+  %end = scf.for %phase = [%c0 to %c5 step %c1](%base = %c0 : index) -> (index) unroll {
+    %pair = index.div %phase, %c2 : index
+    %three_records = index.cmp eq, %pair, %c1 : index
+    %period = scf.select %three_records, %c3, %c2 : index
+    %replays = scf.select %three_records, %c2, %c1 : index
+    %count = index.mul %period, %replays : index
+    %last = index.sub %count, %c1 : index
+    %initial = index.cmp eq, %phase, %c0 : index
+    scf.for %record = [%c0 to %period step %c1] {
+      scf.for %word = [%c0 to %words step %c1] {
+        %value = scf.if %initial -> (i32) {
+          %input_value = view.load %source[%record, %word] : view<2x16xi32> -> i32
+          scf.yield %input_value : i32
+        } else {
+          %state_value = view.load %intermediate[%record, %word] : view<6x16xi32> -> i32
+          scf.yield %state_value : i32
+        }
+        view.store %value, %snapshot[%record, %word] : i32, view<3x16xi32>
+      }
+    }
+    scf.for %record = [%c0 to %count step %c1] {
+      %member = index.rem %record, %period : index
+      %output_index = index.add %base, %record : index
+      %reverse = index.sub %last, %record : index
+      scf.for %word = [%c0 to %words step %c1] {
+        %value = view.load %snapshot[%member, %word] : view<3x16xi32> -> i32
+        view.store %value, %left_values[%output_index, %word] : i32, view<24x16xi32>
+        view.store %value, %right_values[%output_index, %word] : i32, view<24x16xi32>
+        view.store %value, %intermediate[%reverse, %word] : i32, view<6x16xi32>
+      }
+    }
+    %next_base = index.add %base, %count : index
+    scf.yield %next_base : index
+  }
+  func.return
+}
+
+check.scenario public @ordered_mutable_replay {
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input_storage = check.generate.random.uniform seed(%seed) range(-1000000 to 1000000) : tensor<64xi32>
+    %input = check.tensor.view %input_storage offset(64) : tensor<64xi32> -> tensor<32xi32>
+    %state_storage = check.generate.fill value(-7777) : tensor<128xi32>
+    %state = check.tensor.view %state_storage offset(64) : tensor<128xi32> -> tensor<96xi32>
+    %output_storage = check.generate.fill value(-9999) : tensor<832xi32>
+    %left = check.tensor.view %output_storage offset(64) : tensor<832xi32> -> tensor<384xi32>
+    %right = check.tensor.view %output_storage offset(1728) : tensor<832xi32> -> tensor<384xi32>
+    check.compare<@ordered_replay, @reference>(%input, %state, %left, %right) : (tensor<32xi32>, tensor<96xi32>, tensor<384xi32>, tensor<384xi32>) -> () {
+      check.expect.equal actual(%input_storage) expected(%input_storage) : tensor<64xi32>
+      check.expect.equal actual(%state_storage) expected(%state_storage) : tensor<128xi32>
+      check.expect.equal actual(%output_storage) expected(%output_storage) : tensor<832xi32>
+    }
+  }
+  check.return
+}

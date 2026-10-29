@@ -105,10 +105,14 @@ static iree_status_t loom_pipeline_transport_cohorts(
                                                  sizeof(*cohort_indices),
                                                  (void**)&cohort_indices));
   iree_host_size_t cohort_count = 0;
+  uint32_t admission_sequence = 0;
+  bool consumed_since_admission = false;
   for (iree_host_size_t i = 0; i < step_count; ++i) {
     const loom_channel_plan_action_t* action = steps[i].source.channel;
     const loom_op_t* op = action->op;
     if (loom_channel_acquire_isa(op) || loom_channel_accept_isa(op)) {
+      admission_sequence += consumed_since_admission;
+      consumed_since_admission = false;
       if (loom_channel_acquire_isa(op) &&
           !loom_value_has_no_uses(
               loom_module_value(module, loom_channel_acquire_view(op)))) {
@@ -125,19 +129,24 @@ static iree_status_t loom_pipeline_transport_cohorts(
         return iree_ok_status();
       }
       cohorts[cohort_count++] = (loom_pipeline_transport_cohort_t){
-          .admission = action, .admissions = admissions};
+          .admission = action,
+          .admissions = admissions,
+          .admission_scope = loom_cfg_loop_nest_innermost(
+              &structure->loops, op->parent_block->region_index),
+          .copy_scope = LOOM_CFG_LOOP_NEST_NONE,
+          .admission_sequence = admission_sequence};
     } else if (loom_channel_reserve_isa(op)) {
       if (!loom_value_has_no_uses(
               loom_module_value(module, loom_channel_reserve_view(op)))) {
         return iree_ok_status();
       }
-    } else if (!loom_channel_fanout_isa(op) && !loom_channel_copy_isa(op) &&
-               !loom_channel_release_isa(op)) {
+    } else if (loom_channel_copy_isa(op) || loom_channel_release_isa(op)) {
+      consumed_since_admission = true;
+    } else if (!loom_channel_fanout_isa(op)) {
       return iree_ok_status();
     }
   }
   uint32_t previous_copy = 0;
-  uint16_t copy_loop = LOOM_CFG_LOOP_NEST_NONE;
   bool has_copy = false;
   // Membership owns forwarding through CFG arguments and nested fanouts.
   // A common source site alone does not establish one dynamic record: copies
@@ -158,11 +167,8 @@ static iree_status_t loom_pipeline_transport_cohorts(
     const uint32_t index = cohort_indices[loom_local_value_domain_ordinal(
         plan->value_domain, source_admission)];
     loom_pipeline_transport_cohort_t* cohort = &cohorts[index];
-    const uint16_t admission_block =
-        cohort->admission->op->parent_block->region_index;
     const uint16_t block = op->parent_block->region_index;
-    const uint16_t admission_loop =
-        loom_cfg_loop_nest_innermost(&structure->loops, admission_block);
+    const uint16_t admission_loop = cohort->admission_scope;
     const uint16_t operation_loop =
         loom_cfg_loop_nest_innermost(&structure->loops, block);
     const uint64_t executions = worker->block_execution_counts
@@ -180,7 +186,8 @@ static iree_status_t loom_pipeline_transport_cohorts(
         (admission_loop != LOOM_CFG_LOOP_NEST_NONE &&
          !loom_cfg_loop_nest_contains(&structure->loops, admission_loop,
                                       block)) ||
-        (cohort->transfers && cohort->transfers != executions)) {
+        (cohort->destination_count && (cohort->transfers != executions ||
+                                       cohort->copy_scope != operation_loop))) {
       return iree_ok_status();
     }
     const loom_value_id_t destination_admission =
@@ -195,13 +202,13 @@ static iree_status_t loom_pipeline_transport_cohorts(
         operation_loop) {
       return iree_ok_status();
     }
-    if (has_copy && (index < previous_copy || operation_loop != copy_loop)) {
+    if (has_copy && index < previous_copy) {
       return iree_ok_status();
     }
     previous_copy = index;
-    copy_loop = operation_loop;
     has_copy = true;
     cohort->transfers = executions;
+    cohort->copy_scope = operation_loop;
     ++cohort->destination_count;
   }
   iree_host_size_t destination_count = 0;
@@ -264,6 +271,9 @@ static iree_status_t loom_pipeline_transport_batches(
       append = first->admission->channel == record->admission->channel &&
                first->admissions == record->admissions &&
                first->transfers == record->transfers &&
+               first->admission_scope == record->admission_scope &&
+               first->copy_scope == record->copy_scope &&
+               first->admission_sequence == record->admission_sequence &&
                (first->release != NULL) == (record->release != NULL) &&
                first->destination_count == record->destination_count;
       for (iree_host_size_t j = 0; append && j < first->destination_count;
@@ -328,9 +338,18 @@ static iree_status_t loom_pipeline_worker_transport(
       arena, capacity, sizeof(*steps), (void**)&steps));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, graph->block_count, sizeof(*streams), (void**)&streams));
+  const uint16_t* order = graph->reverse_postorder.values;
+  if (graph->has_cycles) {
+    uint16_t* loop_order;
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(arena, graph->reverse_postorder.count,
+                                  sizeof(*loop_order), (void**)&loop_order));
+    loom_cfg_loop_nest_order_blocks(&structure->loops, loop_order);
+    order = loop_order;
+  }
   iree_host_size_t count = 0, stream_count = 0;
   for (iree_host_size_t b = 0; b < graph->reverse_postorder.count; ++b) {
-    const uint16_t block_index = graph->reverse_postorder.values[b];
+    const uint16_t block_index = order[b];
     const loom_pipeline_transport_block_t* block = &blocks[block_index];
     const loom_kernel_async_stream_t* stream = block->stream;
     if (stream) {

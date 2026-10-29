@@ -393,11 +393,46 @@ bool loom_cfg_loop_nest_calculate_block_execution_counts(
       continue;
     }
     const uint16_t loop_index = loom_cfg_loop_nest_innermost(nest, (uint16_t)i);
-    if (loop_index == LOOM_CFG_LOOP_NEST_NONE ||
+    if (graph->blocks[i].successor_count != 2 ||
+        loop_index == LOOM_CFG_LOOP_NEST_NONE ||
         nest->loops[loop_index].header_index != i) {
       return false;
     }
   }
   return loom_cfg_loop_nest_calculate_block_multipliers(nest, trip_counts,
                                                         out_block_counts);
+}
+
+void loom_cfg_loop_nest_order_blocks(const loom_cfg_loop_nest_t* nest,
+                                     uint16_t* out_blocks) {
+  const loom_cfg_graph_t* graph = nest->graph;
+  uint16_t block = 0;
+  for (iree_host_size_t i = 0; i < graph->reverse_postorder.count; ++i) {
+    out_blocks[i] = block;
+    const loom_cfg_edge_index_span_t successors =
+        loom_cfg_graph_successor_edges(graph, block);
+    if (!successors.count) {
+      break;
+    }
+    const uint16_t loop_index = loom_cfg_loop_nest_innermost(nest, block);
+    const loom_cfg_natural_loop_t* loop =
+        loop_index == LOOM_CFG_LOOP_NEST_NONE ? NULL : &nest->loops[loop_index];
+    loom_cfg_edge_index_t edge =
+        loop && loop->header_index == block
+            ? successors
+                  .values[successors.values[0] == loop->exits.unique_index]
+            : successors.values[0];
+    // A backedge closes this one structural visit, including a loop whose
+    // header is also its latch. An inner exit may itself be an outer backedge;
+    // each closed loop contributes its retained exit edge exactly once.
+    for (;;) {
+      block = graph->edges[edge].target_block_index;
+      const uint16_t target_loop = loom_cfg_loop_nest_innermost(nest, block);
+      if (target_loop == LOOM_CFG_LOOP_NEST_NONE ||
+          edge != nest->loops[target_loop].backedges.unique_index) {
+        break;
+      }
+      edge = nest->loops[target_loop].exits.unique_index;
+    }
+  }
 }

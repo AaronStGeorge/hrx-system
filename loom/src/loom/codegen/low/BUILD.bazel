@@ -45,7 +45,7 @@ _LOW_FORMAT_CODEC_VISIBILITY = [
 
 _LOW_REPRESENTATION_BINDING_VISIBILITY = [
     "//loom/src/loom/codegen/low:__subpackages__",
-    "//loom/src/loom/target/arch/amd/xdna/aie2p:__pkg__",
+    "//loom/src/loom/target/arch/amd/xdna/aie2p:implementation",
     "//loom/src/loom/target/arch/amdgpu/hal:__pkg__",
     "//loom/src/loom/target/arch/cmd/lower:__pkg__",
     "//loom/src/loom/target/arch/wasm:__pkg__",

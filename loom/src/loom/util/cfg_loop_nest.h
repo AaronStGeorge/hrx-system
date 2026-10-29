@@ -110,6 +110,16 @@ bool loom_cfg_loop_nest_calculate_block_execution_counts(
     const loom_cfg_loop_nest_t* nest, const uint64_t* trip_counts,
     uint64_t* out_block_counts);
 
+// Orders each reachable block once, visiting a loop body before its
+// continuation. Requires the single-path, header-tested structure admitted by
+// calculate_block_execution_counts. The output has
+// graph->reverse_postorder.count entries and is independent of block layout and
+// conditional successor order. This is one structural traversal, not an
+// expansion of repeated execution; consumers retain loop scopes/counts when
+// interpreting repeated effects.
+void loom_cfg_loop_nest_order_blocks(const loom_cfg_loop_nest_t* nest,
+                                     uint16_t* out_blocks);
+
 // Expands exact loop trip counts into the execution multiplier contributed by
 // enclosing loops for each block. Unlike exact execution counts, multipliers
 // remain useful in a CFG with data-dependent alternatives: a separate control

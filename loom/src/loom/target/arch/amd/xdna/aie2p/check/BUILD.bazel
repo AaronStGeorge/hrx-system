@@ -1,0 +1,106 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_config_compatible_with")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+_XDNA_ARTIFACT_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:aie2p_elf",
+])
+
+loom_cc_library(
+    name = "provider",
+    srcs = [
+        "array_plan.c",
+        "leaf.c",
+        "provider.c",
+    ],
+    hdrs = [
+        "array_plan.h",
+        "leaf.h",
+        "provider.h",
+    ],
+    visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
+    deps = [
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:function_requirements",
+        "//loom/src/loom/codegen/low:storage_layout",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:plan",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:program",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:resident",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/emit:leaf_compile",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/machine",
+        "//loom/src/loom/target/reporting:report",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//loom/src/loom/tools/loom-check:provider",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "artifact",
+    srcs = ["artifact.c"],
+    hdrs = ["artifact.h"],
+    target_compatible_with = _XDNA_ARTIFACT_COMPATIBLE_WITH,
+    visibility = ["//loom/src/loom/target/emit/native/aie2p:__pkg__"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/emit:bundle_encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/machine",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/schemas:xdna_executable",
+    ],
+)
+
+loom_cc_library(
+    name = "test_provider",
+    testonly = True,
+    srcs = [
+        "configuration.c",
+        "test_provider.c",
+    ],
+    hdrs = [
+        "configuration.h",
+        "test_provider.h",
+    ],
+    visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
+    deps = [
+        ":provider",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:parameter",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/pass:report",
+        "//loom/src/loom/target:pass_environment",
+        "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/emit:artifact",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/emit:leaf_compile",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/emit:program_compile",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//loom/src/loom/tools/loom-check:provider",
+        "//runtime/src/iree/base",
+    ],
+)

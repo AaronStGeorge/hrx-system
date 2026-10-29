@@ -1,0 +1,172 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+loom_cc_library(
+    name = "worker",
+    srcs = ["worker.c"],
+    hdrs = ["worker.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:symbol_map",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/transforms/pipeline:realization",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "pass",
+    srcs = [
+        "configuration_entry.c",
+        "kernel_realization.c",
+        "pass.c",
+    ],
+    hdrs = [
+        "configuration_entry.h",
+        "kernel_realization.h",
+        "pass.h",
+    ],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        ":native",
+        "//loom/src/loom/analysis:storage_access",
+        "//loom/src/loom/analysis:symbolic_expr",
+        "//loom/src/loom/analysis:view_regions",
+        "//loom/src/loom/codegen/low:launch_config_program",
+        "//loom/src/loom/error:parameter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:type_builders",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/channel",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/pipeline",
+        "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:types",
+        "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/target:function_version",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna:device_profile",
+        "//loom/src/loom/target/arch/amd/xdna:error_defs",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:abi_layout",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "dma_plan",
+    srcs = ["dma_plan.c"],
+    hdrs = ["dma_plan.h"],
+    deps = [
+        "//loom/src/loom/analysis:storage_geometry",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna:array_registers",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:plan",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "native",
+    srcs = [
+        "channels.c",
+        "configuration.c",
+        "dma.c",
+        "native.c",
+        "switch.c",
+        "transport.c",
+    ],
+    hdrs = [
+        "native.h",
+        "switch.h",
+    ],
+    deps = [
+        ":dma_plan",
+        ":worker",
+        "//loom/src/loom/analysis:source_storage_packing",
+        "//loom/src/loom/analysis:storage_geometry",
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/codegen/low:launch_config_program",
+        "//loom/src/loom/error:parameter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:type_registry",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/channel",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/pipeline",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/target:facts_builder",
+        "//loom/src/loom/target:function_version",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna:array_registers",
+        "//loom/src/loom/target/arch/amd/xdna:error_defs",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:abi_layout",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:plan",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:configuration",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/ops",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/records:target_records",
+        "//loom/src/loom/transforms/pipeline:channel_materialization",
+        "//loom/src/loom/transforms/pipeline:realization",
+        "//loom/src/loom/transforms/view:offset_expression",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "dma_plan_test",
+    srcs = ["dma_plan_test.cc"],
+    deps = [
+        ":dma_plan",
+        "//loom/src/loom/analysis:storage_geometry",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna:array_registers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "switch_test",
+    srcs = ["switch_test.cc"],
+    deps = [
+        ":native",
+        "//loom/src/loom/pass:types",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna:array_registers",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:plan",
+        "//loom/src/loom/testing:diagnostic_matchers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

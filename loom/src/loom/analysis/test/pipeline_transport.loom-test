@@ -1,150 +1,71 @@
-// RUN: with-checks pass-report pipeline=source-low
-
-// One complete contiguous report slice checks record and destination order.
-// Other pass invocations and value-fact statistics are outside this assertion.
+// RUN: emit pipeline-transport @retained_batch
 
 // A complete two-record batch stays resident across three ordered replays.
-// Each helper retains one source obligation while copying another; nested
-// fanouts and loop-carried reads must preserve the same admitted records.
-aie2p.target<array> @array_target {device_profile = "amd.xdna.strix_halo.17f0_11"}
+// Nested fanouts and loop-carried reads preserve each admitted record.
 
-func.def inline @ingress(%input: buffer, %incoming: channel<tile<16xi32>>) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %c4 = index.constant 4 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %c4 step %c1] {
-    %offset = index.scale %record, %bytes : index, offset -> offset
-    %external = buffer.view %input[%offset] : buffer -> view<16xi32>
-    %write, %payload = channel.reserve %incoming : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-    %copy = kernel.async.copy %external to %payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.publish %write : write<tile<16xi32>>
-  }
-  func.return
-}
-
-func.def inline @copy_retained(%read: read<tile<16xi32>>, %destination: channel<tile<16xi32>>) -> (read<tile<16xi32>>) {
-  %retained, %outgoing = channel.fanout %read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
-  %write, %payload = channel.reserve %destination : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-  channel.copy %outgoing -> %write : read<tile<16xi32>>, write<tile<16xi32>>
-  func.return %retained : read<tile<16xi32>>
-}
-
-func.def inline @distribute(%incoming: channel<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) {
+func.def @distribute(%incoming: channel<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) {
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
   %c2 = index.constant 2 : index
   %c3 = index.constant 3 : index
-  scf.for %batch = [%c0 to %c2 step %c1] {
-    %first, %first_payload = channel.acquire %incoming : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-    %second, %second_payload = channel.acquire %incoming : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-    %last_first, %last_second = scf.for %replay = [%c0 to %c3 step %c1](%a = %first : read<tile<16xi32>>, %b = %second : read<tile<16xi32>>) -> (read<tile<16xi32>>, read<tile<16xi32>>) {
-      %a_left = func.call @copy_retained(%a, %left) : (read<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
-      %a_right = func.call @copy_retained(%a_left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
-      %b_left = func.call @copy_retained(%b, %left) : (read<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
-      %b_right = func.call @copy_retained(%b_left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
-      scf.yield %a_right, %b_right : read<tile<16xi32>>, read<tile<16xi32>>
-    }
-    channel.release %last_first : read<tile<16xi32>>
-    channel.release %last_second : read<tile<16xi32>>
-  }
+  cfg.br ^batch_header(%c0: index)
+^batch_header(%batch: index):
+  %more_batches = index.cmp ult, %batch, %c2 : index
+  cfg.cond_br %more_batches, ^admit, ^done
+^admit:
+  %first = channel.accept %incoming : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %second = channel.accept %incoming : channel<tile<16xi32>> -> read<tile<16xi32>>
+  cfg.br ^replay_header(%c0: index, %first: read<tile<16xi32>>, %second: read<tile<16xi32>>)
+^replay_header(%replay: index, %a: read<tile<16xi32>>, %b: read<tile<16xi32>>):
+  %more_replays = index.cmp ult, %replay, %c3 : index
+  cfg.cond_br %more_replays, ^copy, ^release
+^copy:
+  %a_left, %a_copy_left = channel.fanout %a : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %a_right, %a_copy_right = channel.fanout %a_left : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %b_left, %b_copy_left = channel.fanout %b : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %b_right, %b_copy_right = channel.fanout %b_left : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %a_left_write, %a_left_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %a_copy_left -> %a_left_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %a_right_write, %a_right_view = channel.reserve %right : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %a_copy_right -> %a_right_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %b_left_write, %b_left_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %b_copy_left -> %b_left_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %b_right_write, %b_right_view = channel.reserve %right : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %b_copy_right -> %b_right_write : read<tile<16xi32>>, write<tile<16xi32>>
+  %next_replay = index.add %replay, %c1 : index
+  cfg.br ^replay_header(%next_replay: index, %a_right: read<tile<16xi32>>, %b_right: read<tile<16xi32>>)
+^release:
+  channel.release %a : read<tile<16xi32>>
+  channel.release %b : read<tile<16xi32>>
+  %next_batch = index.add %batch, %c1 : index
+  cfg.br ^batch_header(%next_batch: index)
+^done:
   func.return
 }
 
-func.def inline @egress(%source: channel<tile<16xi32>>, %output: buffer, %base: offset) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %count = index.constant 12 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %count step %c1] {
-    %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-    %relative = index.scale %record, %bytes : index, offset -> offset
-    %offset = index.add %base, %relative : offset
-    %external = buffer.view %output[%offset] : buffer -> view<16xi32>
-    %copy = kernel.async.copy %payload to %external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.release %read : read<tile<16xi32>>
-  }
-  func.return
-}
-
-pipeline.def<kernel> public retain target(@array_target) @retained_batch() run(%input_arg: buffer, %output_arg: buffer) {
-  %input_unique, %output_unique = buffer.assume.noalias %input_arg, %output_arg : buffer, buffer
-  %input, %output = buffer.assume.alignment %input_unique, %output_unique {minimum_alignment = 64} : buffer, buffer
+pipeline.def<kernel> public @retained_batch() run(%batch_storage: buffer, %left_storage: buffer, %right_storage: buffer) {
   %c0 = index.constant 0 : offset
-  %bytes = index.constant 64 : offset
-  %batch_bytes = index.constant 128 : offset
-  %right_offset = index.constant 768 : offset
   %c1 = index.constant 1 : index
   %c2 = index.constant 2 : index
-  %sram = pipeline.memory<workgroup>[0, 1] : pool
-  %first_core = pipeline.memory<workgroup>[0, 2] : pool
-  %second_core = pipeline.memory<workgroup>[0, 3] : pool
-  %batch_storage = buffer.alloca<workgroup> pool(%sram) align(64) %batch_bytes : buffer
   %batch_slots = buffer.view %batch_storage[%c0] : buffer -> view<2x16xi32>
   %batch = channel.bind<fifo> %batch_slots, %c2 : view<2x16xi32>, index -> channel<tile<16xi32>>
-  %left_storage = buffer.alloca<workgroup> pool(%first_core) align(64) %bytes : buffer
   %left_slots = buffer.view %left_storage[%c0] : buffer -> view<1x16xi32>
   %left = channel.bind<fifo> %left_slots, %c1 : view<1x16xi32>, index -> channel<tile<16xi32>>
-  %right_storage = buffer.alloca<workgroup> pool(%second_core) align(64) %bytes : buffer
   %right_slots = buffer.view %right_storage[%c0] : buffer -> view<1x16xi32>
   %right = channel.bind<fifo> %right_slots, %c1 : view<1x16xi32>, index -> channel<tile<16xi32>>
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @ingress(%input, %batch) : (buffer, channel<tile<16xi32>>)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+  pipeline.strand workers([0], [1], [1]) {
     func.call @distribute(%batch, %left, %right) : (channel<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @egress(%left, %output, %c0) : (channel<tile<16xi32>>, buffer, offset)
-  }
-  pipeline.strand workers([0, 3], [1, 1], [1, 1]) {
-    func.call @egress(%right, %output, %right_offset) : (channel<tile<16xi32>>, buffer, offset)
   }
 }
 
 // ----
-CHECK: *"details":[{"category":"pipeline-transport","worker":0,"eligibility":"borrowed-movement","execution_counts":"exact","batches":0,"streams":1},{"category":"pipeline-transport","worker":1,"eligibility":"channel-copy","execution_counts":"exact","batches":1,"streams":0},{"category":"pipeline-transport-record","worker":1,"batch":0,"record":0,"admission":"first","source":"batch","batch_records":2,"admissions":2,"transfers":6,"replays":3,"final_release":true,"destinations":2},{"category":"pipeline-transport-destination","worker":1,"batch":0,"record":0,"destination":0,"channel":"left"},{"category":"pipeline-transport-destination","worker":1,"batch":0,"record":0,"destination":1,"channel":"right"},{"category":"pipeline-transport-record","worker":1,"batch":0,"record":1,"admission":"second","source":"batch","batch_records":2,"admissions":2,"transfers":6,"replays":3,"final_release":true,"destinations":2},{"category":"pipeline-transport-destination","worker":1,"batch":0,"record":1,"destination":0,"channel":"left"},{"category":"pipeline-transport-destination","worker":1,"batch":0,"record":1,"destination":1,"channel":"right"},{"category":"pipeline-transport","worker":2,"eligibility":"borrowed-movement","execution_counts":"exact","batches":0,"streams":1},{"category":"pipeline-transport","worker":3,"eligibility":"borrowed-movement","execution_counts":"exact","batches":0,"streams":1},{"category":"value-facts"*
+worker 0: transport=channel-copy execution_counts=exact batches=1 streams=0
+  batch 0: records=2 replays=3
+    record 0: admission=%first source=%batch admissions=2 transfers=6 final_release=yes destinations=%left,%right
+    record 1: admission=%second source=%batch admissions=2 transfers=6 final_release=yes destinations=%left,%right
 
 // ====
-// RUN: with-checks pass-report pipeline=source-low
-aie2p.target<array> @array_target {device_profile = "amd.xdna.strix_halo.17f0_11"}
-
-func.def inline @ingress(%input: buffer, %incoming: channel<tile<16xi32>>, %count: index) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %count step %c1] {
-    %offset = index.scale %record, %bytes : index, offset -> offset
-    %external = buffer.view %input[%offset] : buffer -> view<16xi32>
-    %write, %payload = channel.reserve %incoming : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-    %copy = kernel.async.copy %external to %payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.publish %write : write<tile<16xi32>>
-  }
-  func.return
-}
-
-func.def inline @egress(%source: channel<tile<16xi32>>, %output: buffer, %base: offset, %count: index) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %count step %c1] {
-    %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-    %relative = index.scale %record, %bytes : index, offset -> offset
-    %offset = index.add %base, %relative : offset
-    %external = buffer.view %output[%offset] : buffer -> view<16xi32>
-    %copy = kernel.async.copy %payload to %external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.release %read : read<tile<16xi32>>
-  }
-  func.return
-}
+// RUN: emit pipeline-transport @test
 
 // Copies consume one-shot records without requiring a separate final release.
 func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
@@ -157,75 +78,27 @@ func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
   func.return
 }
 
-pipeline.def<kernel> public retain target(@array_target) @test() run(%input_arg: buffer, %output_arg: buffer) {
-  %input_unique, %output_unique = buffer.assume.noalias %input_arg, %output_arg : buffer, buffer
-  %input, %output = buffer.assume.alignment %input_unique, %output_unique {minimum_alignment = 64} : buffer, buffer
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: buffer) {
   %origin = index.constant 0 : offset
-  %slot_bytes = index.constant 64 : offset
-  %source_bytes = index.constant 128 : offset
   %source_capacity = index.constant 2 : index
   %destination_capacity = index.constant 1 : index
-  %sram = pipeline.memory<workgroup>[0, 1] : pool
-  %left_memory = pipeline.memory<workgroup>[0, 2] : pool
-  %source_storage = buffer.alloca<workgroup> pool(%sram) align(64) %source_bytes : buffer
   %source_slots = buffer.view %source_storage[%origin] : buffer -> view<2x16xi32>
   %source = channel.bind<fifo> %source_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
-  %left_storage = buffer.alloca<workgroup> pool(%left_memory) align(64) %slot_bytes : buffer
   %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
   %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
-  %source_count = index.constant 2 : index
-  %left_count = index.constant 2 : index
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @ingress(%input, %source, %source_count) : (buffer, channel<tile<16xi32>>, index)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+  pipeline.strand workers([0], [1], [1]) {
     func.call @worker(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @egress(%left, %output, %origin, %left_count) : (channel<tile<16xi32>>, buffer, offset, index)
   }
 }
 
 // ----
-CHECK: *{"category":"pipeline-transport-record","worker":1,"batch":0,"record":0,"admission":"a","source":"source","batch_records":2,"admissions":1,"transfers":1,"replays":1,"final_release":false,"destinations":1}*
-CHECK: *{"category":"pipeline-transport-record","worker":1,"batch":0,"record":1,"admission":"b","source":"source","batch_records":2,"admissions":1,"transfers":1,"replays":1,"final_release":false,"destinations":1}*
+worker 0: transport=channel-copy execution_counts=exact batches=1 streams=0
+  batch 0: records=2 replays=1
+    record 0: admission=%a source=%source admissions=1 transfers=1 final_release=no destinations=%left
+    record 1: admission=%b source=%source admissions=1 transfers=1 final_release=no destinations=%left
 
 // ====
-// RUN: with-checks pass-report pipeline=source-low
-aie2p.target<array> @array_target {device_profile = "amd.xdna.strix_halo.17f0_11"}
-
-func.def inline @ingress(%input: buffer, %incoming: channel<tile<16xi32>>, %count: index) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %count step %c1] {
-    %offset = index.scale %record, %bytes : index, offset -> offset
-    %external = buffer.view %input[%offset] : buffer -> view<16xi32>
-    %write, %payload = channel.reserve %incoming : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-    %copy = kernel.async.copy %external to %payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.publish %write : write<tile<16xi32>>
-  }
-  func.return
-}
-
-func.def inline @egress(%source: channel<tile<16xi32>>, %output: buffer, %base: offset, %count: index) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %count step %c1] {
-    %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-    %relative = index.scale %record, %bytes : index, offset -> offset
-    %offset = index.add %base, %relative : offset
-    %external = buffer.view %output[%offset] : buffer -> view<16xi32>
-    %copy = kernel.async.copy %payload to %external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.release %read : read<tile<16xi32>>
-  }
-  func.return
-}
+// RUN: emit pipeline-transport @test
 
 // Equal payloads and destinations do not merge different source channels.
 func.def @worker(%source: channel<tile<16xi32>>, %other: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
@@ -233,92 +106,39 @@ func.def @worker(%source: channel<tile<16xi32>>, %other: channel<tile<16xi32>>, 
   %b = channel.accept %other : channel<tile<16xi32>> -> read<tile<16xi32>>
   %first, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
   channel.copy %a -> %first : read<tile<16xi32>>, write<tile<16xi32>>
-  // ERROR@+1: XDNA/051 {requirement="one ordered transport stream per FIFO read or write cursor"}
   %second, %second_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
   channel.copy %b -> %second : read<tile<16xi32>>, write<tile<16xi32>>
   func.return
 }
 
-pipeline.def<kernel> public retain target(@array_target) @test() run(%input_arg: buffer, %output_arg: buffer) {
-  %input_unique, %output_unique = buffer.assume.noalias %input_arg, %output_arg : buffer, buffer
-  %input, %output = buffer.assume.alignment %input_unique, %output_unique {minimum_alignment = 64} : buffer, buffer
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %other_storage: buffer, %left_storage: buffer) {
   %origin = index.constant 0 : offset
-  %slot_bytes = index.constant 64 : offset
-  %source_bytes = index.constant 128 : offset
   %source_capacity = index.constant 2 : index
   %destination_capacity = index.constant 1 : index
-  %sram = pipeline.memory<workgroup>[0, 1] : pool
-  %left_memory = pipeline.memory<workgroup>[0, 2] : pool
-  %source_storage = buffer.alloca<workgroup> pool(%sram) align(64) %source_bytes : buffer
   %source_slots = buffer.view %source_storage[%origin] : buffer -> view<2x16xi32>
   %source = channel.bind<fifo> %source_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
-  %other_storage = buffer.alloca<workgroup> pool(%sram) align(64) %source_bytes : buffer
   %other_slots = buffer.view %other_storage[%origin] : buffer -> view<2x16xi32>
   %other = channel.bind<fifo> %other_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
-  %left_storage = buffer.alloca<workgroup> pool(%left_memory) align(64) %slot_bytes : buffer
   %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
   %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
-  %source_count = index.constant 1 : index
-  %left_count = index.constant 2 : index
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @ingress(%input, %source, %source_count) : (buffer, channel<tile<16xi32>>, index)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @ingress(%input, %other, %source_count) : (buffer, channel<tile<16xi32>>, index)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+  pipeline.strand workers([0], [1], [1]) {
     func.call @worker(%source, %other, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @egress(%left, %output, %origin, %left_count) : (channel<tile<16xi32>>, buffer, offset, index)
   }
 }
 
 // ----
-CHECK: *{"category":"pipeline-transport-record","worker":2,"batch":0,"record":0,"admission":"a","source":"source","batch_records":1,"admissions":1,"transfers":1,"replays":1,"final_release":false,"destinations":1}*
-CHECK: *{"category":"pipeline-transport-record","worker":2,"batch":1,"record":0,"admission":"b","source":"other","batch_records":1,"admissions":1,"transfers":1,"replays":1,"final_release":false,"destinations":1}*
+worker 0: transport=channel-copy execution_counts=exact batches=2 streams=0
+  batch 0: records=1 replays=1
+    record 0: admission=%a source=%source admissions=1 transfers=1 final_release=no destinations=%left
+  batch 1: records=1 replays=1
+    record 0: admission=%b source=%other admissions=1 transfers=1 final_release=no destinations=%left
 
 // ====
-// RUN: with-checks pass-report pipeline=source-low
-aie2p.target<array> @array_target {device_profile = "amd.xdna.strix_halo.17f0_11"}
-
-func.def inline @ingress(%input: buffer, %incoming: channel<tile<16xi32>>, %count: index) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %count step %c1] {
-    %offset = index.scale %record, %bytes : index, offset -> offset
-    %external = buffer.view %input[%offset] : buffer -> view<16xi32>
-    %write, %payload = channel.reserve %incoming : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-    %copy = kernel.async.copy %external to %payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.publish %write : write<tile<16xi32>>
-  }
-  func.return
-}
-
-func.def inline @egress(%source: channel<tile<16xi32>>, %output: buffer, %base: offset, %count: index) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %count step %c1] {
-    %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-    %relative = index.scale %record, %bytes : index, offset -> offset
-    %offset = index.add %base, %relative : offset
-    %external = buffer.view %output[%offset] : buffer -> view<16xi32>
-    %copy = kernel.async.copy %payload to %external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.release %read : read<tile<16xi32>>
-  }
-  func.return
-}
+// RUN: emit pipeline-transport @test
 
 // The same destinations in a different order require separate batches.
 func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) {
   %a = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
-  // ERROR@+1: XDNA/051 {requirement="one ordered transport stream per FIFO read or write cursor"}
   %b = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
   %al, %ar = channel.fanout %a : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
   %first_left, %first_left_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
@@ -333,44 +153,94 @@ func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>, %
   func.return
 }
 
-pipeline.def<kernel> public retain target(@array_target) @test() run(%input_arg: buffer, %output_arg: buffer) {
-  %input_unique, %output_unique = buffer.assume.noalias %input_arg, %output_arg : buffer, buffer
-  %input, %output = buffer.assume.alignment %input_unique, %output_unique {minimum_alignment = 64} : buffer, buffer
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: buffer, %right_storage: buffer) {
   %origin = index.constant 0 : offset
-  %slot_bytes = index.constant 64 : offset
-  %source_bytes = index.constant 128 : offset
   %source_capacity = index.constant 2 : index
   %destination_capacity = index.constant 1 : index
-  %right_offset = index.constant 768 : offset
-  %sram = pipeline.memory<workgroup>[0, 1] : pool
-  %left_memory = pipeline.memory<workgroup>[0, 2] : pool
-  %right_memory = pipeline.memory<workgroup>[0, 3] : pool
-  %source_storage = buffer.alloca<workgroup> pool(%sram) align(64) %source_bytes : buffer
   %source_slots = buffer.view %source_storage[%origin] : buffer -> view<2x16xi32>
   %source = channel.bind<fifo> %source_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
-  %left_storage = buffer.alloca<workgroup> pool(%left_memory) align(64) %slot_bytes : buffer
   %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
   %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
-  %right_storage = buffer.alloca<workgroup> pool(%right_memory) align(64) %slot_bytes : buffer
   %right_slots = buffer.view %right_storage[%origin] : buffer -> view<1x16xi32>
   %right = channel.bind<fifo> %right_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
-  %source_count = index.constant 2 : index
-  %left_count = index.constant 2 : index
-  %right_count = index.constant 2 : index
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @ingress(%input, %source, %source_count) : (buffer, channel<tile<16xi32>>, index)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+  pipeline.strand workers([0], [1], [1]) {
     func.call @worker(%source, %left, %right) : (channel<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @egress(%left, %output, %origin, %left_count) : (channel<tile<16xi32>>, buffer, offset, index)
-  }
-  pipeline.strand workers([0, 3], [1, 1], [1, 1]) {
-    func.call @egress(%right, %output, %right_offset, %right_count) : (channel<tile<16xi32>>, buffer, offset, index)
   }
 }
 
 // ----
-CHECK: *{"category":"pipeline-transport-record","worker":1,"batch":0,"record":0,"admission":"a","source":"source","batch_records":1,"admissions":1,"transfers":1,"replays":1,"final_release":false,"destinations":2},{"category":"pipeline-transport-destination","worker":1,"batch":0,"record":0,"destination":0,"channel":"left"},{"category":"pipeline-transport-destination","worker":1,"batch":0,"record":0,"destination":1,"channel":"right"}*
-CHECK: *{"category":"pipeline-transport-record","worker":1,"batch":1,"record":0,"admission":"b","source":"source","batch_records":1,"admissions":1,"transfers":1,"replays":1,"final_release":false,"destinations":2},{"category":"pipeline-transport-destination","worker":1,"batch":1,"record":0,"destination":0,"channel":"right"},{"category":"pipeline-transport-destination","worker":1,"batch":1,"record":0,"destination":1,"channel":"left"}*
+worker 0: transport=channel-copy execution_counts=exact batches=2 streams=0
+  batch 0: records=1 replays=1
+    record 0: admission=%a source=%source admissions=1 transfers=1 final_release=no destinations=%left,%right
+  batch 1: records=1 replays=1
+    record 0: admission=%b source=%source admissions=1 transfers=1 final_release=no destinations=%right,%left
+
+// ====
+// RUN: emit pipeline-transport @test
+
+// Distinct channel bindings retain distinct protocol identities even when
+// they use the same backing buffer. This proves no physical admission.
+func.def @worker(%source: channel<tile<16xi32>>, %other: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
+  %a = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %b = channel.accept %other : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %first, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %a -> %first : read<tile<16xi32>>, write<tile<16xi32>>
+  %second, %second_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %b -> %second : read<tile<16xi32>>, write<tile<16xi32>>
+  func.return
+}
+
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: buffer) {
+  %origin = index.constant 0 : offset
+  %source_capacity = index.constant 2 : index
+  %destination_capacity = index.constant 1 : index
+  %source_slots = buffer.view %source_storage[%origin] : buffer -> view<2x16xi32>
+  %source = channel.bind<fifo> %source_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
+  %other_slots = buffer.view %source_storage[%origin] : buffer -> view<2x16xi32>
+  %other = channel.bind<fifo> %other_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
+  %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %other, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>)
+  }
+}
+
+// ----
+worker 0: transport=channel-copy execution_counts=exact batches=2 streams=0
+  batch 0: records=1 replays=1
+    record 0: admission=%a source=%source admissions=1 transfers=1 final_release=no destinations=%left
+  batch 1: records=1 replays=1
+    record 0: admission=%b source=%other admissions=1 transfers=1 final_release=no destinations=%left
+
+// ====
+// RUN: emit pipeline-transport @test
+
+// Passing the same channel to two formals preserves one protocol identity.
+func.def @worker(%source: channel<tile<16xi32>>, %other: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
+  %a = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %b = channel.accept %other : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %first, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %a -> %first : read<tile<16xi32>>, write<tile<16xi32>>
+  %second, %second_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %b -> %second : read<tile<16xi32>>, write<tile<16xi32>>
+  func.return
+}
+
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: buffer) {
+  %origin = index.constant 0 : offset
+  %source_capacity = index.constant 2 : index
+  %destination_capacity = index.constant 1 : index
+  %source_slots = buffer.view %source_storage[%origin] : buffer -> view<2x16xi32>
+  %source = channel.bind<fifo> %source_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
+  %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>)
+  }
+}
+
+// ----
+worker 0: transport=channel-copy execution_counts=exact batches=1 streams=0
+  batch 0: records=2 replays=1
+    record 0: admission=%a source=%source admissions=1 transfers=1 final_release=no destinations=%left
+    record 1: admission=%b source=%source admissions=1 transfers=1 final_release=no destinations=%left

@@ -1,0 +1,106 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test", "loom_generated_source_family")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+loom_generated_source_family(
+    name = "tables_gen",
+    generator = "//loom/py/loom/gen/target/arch/amd/xdna/aie2p:encoding_tables",
+    output_flags = [
+        "--array-descriptor-source-output",
+        "--array-descriptor-header-output",
+        "--configuration-descriptor-source-output",
+        "--configuration-descriptor-header-output",
+        "--descriptor-source-output",
+        "--descriptor-header-output",
+        "--register-output",
+    ],
+    outputs = [
+        "array_descriptors.c",
+        "array_descriptors.h",
+        "configuration_descriptors.c",
+        "configuration_descriptors.h",
+        "core_descriptors.c",
+        "core_descriptors.h",
+        "register_tables.inl",
+    ],
+)
+
+loom_cc_library(
+    name = "array",
+    srcs = [":array_descriptors.c"],
+    hdrs = [":array_descriptors.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_cc_library(
+    name = "configuration",
+    srcs = [":configuration_descriptors.c"],
+    hdrs = [":configuration_descriptors.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_cc_library(
+    name = "core",
+    srcs = [":core_descriptors.c"],
+    hdrs = [":core_descriptors.h"],
+    visibility = ["//visibility:public"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_cc_library(
+    name = "encoding",
+    srcs = ["encoding.c"],
+    hdrs = ["encoding.h"],
+    textual_hdrs = [":register_tables.inl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low/allocation:assignment",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/machine",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+    ],
+)
+
+loom_cc_library(
+    name = "registry",
+    srcs = ["low_registry.c"],
+    hdrs = ["low_registry.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        ":array",
+        ":configuration",
+        ":core",
+        "//loom/src/loom/codegen/low/schedule",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "encoding_test",
+    srcs = ["encoding_test.cc"],
+    deps = [
+        ":core",
+        ":encoding",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/machine",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
