@@ -30,7 +30,10 @@ def _iree_c_embed_data_sources_impl(ctx):
         "--output_header=%s" % ctx.outputs.h_file.path,
     ]
     if ctx.attr.strip_prefix:
-        command_args.append("--strip_prefix=%s" % ctx.attr.strip_prefix)
+        strip_prefix = ctx.attr.strip_prefix
+        if ctx.label.workspace_root:
+            strip_prefix = ctx.label.workspace_root + "/" + strip_prefix
+        command_args.append("--strip_prefix=%s" % strip_prefix)
     if ctx.attr.flatten:
         command_args.append("--flatten")
 
@@ -87,7 +90,7 @@ _iree_c_embed_data_sources = rule(
             doc = "Data files to embed, in table-of-contents order.",
         ),
         "strip_prefix": attr.string(
-            doc = "Verbatim path prefix stripped from table-of-contents names before flattening.",
+            doc = "Repository-relative path prefix stripped from table-of-contents names before flattening.",
         ),
     },
     doc = "Generates C source and header files containing embedded data.",
@@ -131,8 +134,8 @@ def iree_c_embed_data(
       c_file_output: Generated C implementation filename.
       h_file_output: Generated C header filename.
       testonly: Whether generated targets are test-only.
-      strip_prefix: Verbatim path prefix stripped from table-of-contents names
-        before optional flattening.
+      strip_prefix: Repository-relative path prefix stripped from
+        table-of-contents names before optional flattening.
       flatten: Whether table-of-contents names should drop directory components.
       identifier: C identifier prefix. Defaults to `name`.
       generator: Executable embed-data generator.

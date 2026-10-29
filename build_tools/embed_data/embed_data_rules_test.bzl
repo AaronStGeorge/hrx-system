@@ -22,6 +22,10 @@ def _expect_arg_with_suffix(env, args, suffix):
             return
     env.fail("expected argument ending with %r in %r" % (suffix, args))
 
+def _expect_arg(env, args, expected):
+    if expected not in args:
+        env.fail("expected argument %r in %r" % (expected, args))
+
 def _test_embed_data_action_contract(name, **kwargs):
     analysis_test(
         name = name,
@@ -54,10 +58,34 @@ def _test_embed_data_action_contract_impl(env, target):
     _expect_basename(env, action.inputs.to_list(), "first.txt")
     _expect_basename(env, action.inputs.to_list(), "second.txt")
 
+def _test_embed_data_strip_prefix_contract(name, **kwargs):
+    analysis_test(
+        name = name,
+        attr_values = {
+            "timeout": "short",
+        },
+        impl = _test_embed_data_strip_prefix_contract_impl,
+        target = ":path_embed_generate",
+        **kwargs
+    )
+
+def _test_embed_data_strip_prefix_contract_impl(env, target):
+    info = target[IreeCEmbedDataInfo]
+    expected_prefix = "build_tools/embed_data/testdata/"
+    if target.label.workspace_root:
+        expected_prefix = target.label.workspace_root + "/" + expected_prefix
+    expected_arg = "--strip_prefix=" + expected_prefix
+    _expect_arg(env, info.args, expected_arg)
+
+    actions = target[TestingAspectInfo].actions
+    env.expect.that_int(len(actions)).equals(1)
+    _expect_arg(env, actions[0].argv, expected_arg)
+
 def embed_data_rules_test_suite(name):
     test_suite(
         name = name,
         tests = [
             _test_embed_data_action_contract,
+            _test_embed_data_strip_prefix_contract,
         ],
     )
