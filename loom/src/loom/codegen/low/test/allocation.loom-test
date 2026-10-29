@@ -555,6 +555,25 @@ copy %condition -> %fixed: materialized
 
 // ====
 
+// RUN: emit low-allocation-query @explicit_blocker_recolors_around_state_clobber values=%short,%long
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @explicit_blocker_recolors_around_state_clobber(%state: reg<test.i32>) asm {
+  %short = test.recolor.create
+  %long = test.recolor.create
+  test.recolor.consume %short
+  test.fixed.state.assign.i32 %state
+  test.recolor.consume %long
+  return
+}
+
+// ----
+value %short: test.recolor32 -> physical_register[9:1]
+value %long: test.recolor32 -> physical_register[10:1]
+
+// ====
+
 // RUN: emit low-allocation-query @overlapping_singleton_physical_values failure
 
 test.target<low_core> @test_target

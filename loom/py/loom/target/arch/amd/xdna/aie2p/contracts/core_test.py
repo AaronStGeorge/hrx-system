@@ -25,10 +25,12 @@ from loom.target.arch.amd.xdna.aie2p.contracts.data_path import (
     F32_ACCUMULATOR_ADD_CONTROL,
 )
 from loom.target.arch.amd.xdna.aie2p.contracts.floating import (
-    _BF16_DOT2_DEINTERLEAVE_CONTROLS,
     _BF16_ELEMENTWISE_MULTIPLY_CONTROL,
     _BF16_OUTER_PRODUCT_MULTIPLY_CONTROL,
     _BF16_OUTER_PRODUCT_SHUFFLE_CONTROLS,
+)
+from loom.target.arch.amd.xdna.aie2p.contracts.floating_dot import (
+    _BF16_DOT2_DEINTERLEAVE_CONTROLS,
 )
 from loom.target.arch.amd.xdna.aie2p.contracts.memory import (
     AIE2P_VIEW_ELEMENT_TYPES,
@@ -993,7 +995,9 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
     bf16_dot2_rules = [
         rule
         for rule in rules
-        if rule.source_op is vector.vector_dot2f and not rule.source_nodes
+        if rule.source_op is vector.vector_dot2f
+        and not rule.source_nodes
+        and rule.report_key in ("bf16_dot2", "bf16_dot2_zero")
     ]
     assert len(bf16_dot2_rules) == 8
     rules_by_representation = {
