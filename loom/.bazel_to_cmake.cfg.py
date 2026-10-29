@@ -826,13 +826,9 @@ class LoomBuildFileFunctions(
 
     def loom_cc_library(self, deps=[], **kwargs):
         kwargs = self._apply_loom_cmake_policy(kwargs)
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_library",
-            "loom_cc_library",
-            lambda: self.cc_library(
-                deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
-                **kwargs,
-            ),
+        self.cc_library(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            **kwargs,
         )
 
     def loom_cc_library_group(self, **kwargs):
@@ -844,19 +840,15 @@ class LoomBuildFileFunctions(
 
     def loom_cc_binary(self, deps=[], **kwargs):
         kwargs = self._apply_loom_cmake_policy(kwargs)
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_binary",
-            "loom_cc_binary",
-            lambda: self.cc_binary(
-                deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
-                **kwargs,
-            ),
+        self.cc_binary(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            **kwargs,
         )
 
     def loomc_cc_binary(self, runtime_only=False, **kwargs):
         body_start = len(self._converter.body)
         self._emit_rewritten_cmake_rule(
-            "loom_cc_binary", "loomc_cc_binary", lambda: self.loom_cc_binary(**kwargs)
+            "iree_cc_binary", "loomc_cc_binary", lambda: self.loom_cc_binary(**kwargs)
         )
         if runtime_only:
             emitted_body = self._converter.body[body_start:]
@@ -897,14 +889,10 @@ class LoomBuildFileFunctions(
             include_run_requirements=True,
         )
         resource_group = kwargs.pop("resource_group", None)
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_test",
-            "loom_cc_test",
-            lambda: self.cc_test(
-                deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
-                resource_group=resource_group,
-                **kwargs,
-            ),
+        self.cc_test(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            resource_group=resource_group,
+            **kwargs,
         )
 
     def loom_cc_benchmark(self, deps=[], **kwargs):
@@ -912,28 +900,16 @@ class LoomBuildFileFunctions(
             kwargs,
             include_run_requirements=True,
         )
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_binary_benchmark",
-            "loom_cc_benchmark",
-            lambda: self.cc_binary_benchmark(
-                deps=deps
-                + [
-                    "//runtime/src:defines",
-                    "//loom/src:defines",
-                ],
-                **kwargs,
-            ),
+        self.cc_binary_benchmark(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            **kwargs,
         )
 
     def loom_cc_fuzz(self, deps=[], **kwargs):
         kwargs = self._apply_loom_cmake_policy(kwargs)
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_fuzz",
-            "loom_cc_fuzz",
-            lambda: self.iree_cc_fuzz(
-                deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
-                **kwargs,
-            ),
+        self.iree_cc_fuzz(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            **kwargs,
         )
 
     def _cmake_identifier(self, name):
@@ -1336,7 +1312,7 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
     package_prefixes=["loom"],
     build_file_functions=LoomBuildFileFunctions,
     target_mappings={
-        "//loom/src:defines": [],
+        "//loom/src:defines": ["loom_defs"],
     },
     condition_mappings=_LOOM_CONFIG_CMAKE_OPTIONS,
     convert_unmatched_target=convert_unmatched_target,
