@@ -240,23 +240,36 @@ low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @memory_repla
 
 // ====
 
-// RUN: emit amdgpu-assembly @copy_cycle_preserves_dead_mask strategy=source fixed=%mask:physical_register:0:2 fixed=%left:physical_register:2:1 fixed=%right:physical_register:3:1 fixed=%joined_left:physical_register:3:1 fixed=%joined_right:physical_register:2:1
+// The mask is dead before the sorting loop, but its retained physical read
+// still excludes that pair from the backedge's cycle scratch.
+// RUN: emit amdgpu-assembly @loop_swap_preserves_dead_mask strategy=source
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
-low.func.def target<amdgpu.rdna3_5.core>(@target) @copy_cycle_preserves_dead_mask(%mask: reg<amdgpu.sgpr x2>, %left: reg<amdgpu.sgpr>, %right: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm {
+low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @loop_swap_preserves_dead_mask(%mask: reg<amdgpu.sgpr x2>, %left: reg<amdgpu.sgpr>, %right: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm {
   %selected = v_cndmask_b32 %lhs, %rhs, %mask
-  low.br ^join(%left: reg<amdgpu.sgpr>, %right: reg<amdgpu.sgpr>)
-^join(%joined_left: reg<amdgpu.sgpr>, %joined_right: reg<amdgpu.sgpr>):
-  return %selected, %joined_left, %joined_right
+  low.br ^loop(%left: reg<amdgpu.sgpr>, %right: reg<amdgpu.sgpr>)
+^loop(%current_left: reg<amdgpu.sgpr>, %current_right: reg<amdgpu.sgpr>):
+  %unsorted = s_cmp_lt_u32 %current_left, %current_right
+  low.cond_br %unsorted, ^swap, ^exit : reg<amdgpu.scc>
+^swap:
+  low.br ^loop(%current_right: reg<amdgpu.sgpr>, %current_left: reg<amdgpu.sgpr>)
+^exit:
+  return %selected, %current_left, %current_right
 }
 
 // ----
   v_cndmask_b32 v0, v0, v1, s[0:1]
-  s_mov_b32 s4, s2
-  s_mov_b32 s2, s3
-  s_mov_b32 s3, s4
 .Lbb1:
+  s_cmp_lt_u32 s2, s3
+  s_delay_alu instid0(SALU_CYCLE_1)
+  s_cbranch_scc0 .Lbb3
+.Lbb2:
+  s_mov_b32 s4, s3
+  s_mov_b32 s3, s2
+  s_mov_b32 s2, s4
+  s_branch .Lbb1
+.Lbb3:
   s_endpgm
 
 // ====
@@ -293,34 +306,48 @@ low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @copy_cycle_a
 
 // ====
 
-// A scalar read resets the old snapshot, but a later predicate establishes a
-// new protected range before copy-cycle scratch selection.
-// RUN: emit amdgpu-assembly @copy_cycle_after_mask_reset_and_retain strategy=source fixed=%old_mask:physical_register:4:2 fixed=%new_mask:physical_register:0:2 fixed=%scalar:physical_register:6:1 fixed=%left:physical_register:2:1 fixed=%right:physical_register:3:1 fixed=%joined_left:physical_register:3:1 fixed=%joined_right:physical_register:2:1
+// A scalar read releases the old mask pair for cycle scratch. The next
+// predicate retains a different pair before the sorting loop begins.
+// RUN: emit amdgpu-assembly @loop_swap_after_mask_reset_and_retain strategy=source
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
-low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @copy_cycle_after_mask_reset_and_retain(%old_mask: reg<amdgpu.sgpr x2>, %new_mask: reg<amdgpu.sgpr x2>, %scalar: reg<amdgpu.sgpr>, %left: reg<amdgpu.sgpr>, %right: reg<amdgpu.sgpr>, %value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm {
+low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @loop_swap_after_mask_reset_and_retain(%new_mask: reg<amdgpu.sgpr x2>, %left: reg<amdgpu.sgpr>, %right: reg<amdgpu.sgpr>, %value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm {
+  %old_mask = v_cmp_eq_i32 %value, %value
   %selected = v_cndmask_b32 %value, %value, %old_mask
   %first = v_add_f32 %selected, %value
+  %scalar = slice %new_mask[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %broadcast = v_mov_b32_copy %scalar
   %reselected = v_cndmask_b32 %first, %broadcast, %new_mask
   %second = v_add_f32 %reselected, %value
-  low.br ^join(%left: reg<amdgpu.sgpr>, %right: reg<amdgpu.sgpr>)
-^join(%joined_left: reg<amdgpu.sgpr>, %joined_right: reg<amdgpu.sgpr>):
-  return %second, %joined_left, %joined_right
+  low.br ^loop(%left: reg<amdgpu.sgpr>, %right: reg<amdgpu.sgpr>)
+^loop(%current_left: reg<amdgpu.sgpr>, %current_right: reg<amdgpu.sgpr>):
+  %unsorted = s_cmp_lt_u32 %current_left, %current_right
+  low.cond_br %unsorted, ^swap, ^exit : reg<amdgpu.scc>
+^swap:
+  low.br ^loop(%current_right: reg<amdgpu.sgpr>, %current_left: reg<amdgpu.sgpr>)
+^exit:
+  return %second, %current_left, %current_right
 }
 
 // ----
+  v_cmp_eq_i32 s[4:5], v0, v0
+  s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
   v_cndmask_b32 v1, v0, v0, s[4:5]
-  s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v1, v1, v0
-  v_mov_b32 v2, s6
+  v_mov_b32 v2, s0
   s_delay_alu instid0(VALU_DEP_1) | instid1(VALU_DEP_2)
   v_cndmask_b32 v1, v1, v2, s[0:1]
   s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v0, v1, v0
-  s_mov_b32 s4, s2
-  s_mov_b32 s2, s3
-  s_mov_b32 s3, s4
 .Lbb1:
+  s_cmp_lt_u32 s2, s3
+  s_delay_alu instid0(SALU_CYCLE_1)
+  s_cbranch_scc0 .Lbb3
+.Lbb2:
+  s_mov_b32 s4, s3
+  s_mov_b32 s3, s2
+  s_mov_b32 s2, s4
+  s_branch .Lbb1
+.Lbb3:
   s_endpgm
