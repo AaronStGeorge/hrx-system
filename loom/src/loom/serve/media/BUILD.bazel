@@ -228,9 +228,13 @@ loom_py_test(
     srcs = ["image_fuzz_test.py"],
     args = [
         "$(rootpath :image_fuzz)",
-        "$(rootpath testdata/image_fuzz/png.txt)",
+        "$(rootpath //loom/src/loom/serve/media/testdata/image_fuzz:png)",
     ],
-    data = [":image_fuzz"] + glob(["testdata/image_fuzz/*.txt"]),
+    data = [
+        ":image_fuzz",
+        "//loom/src/loom/serve/media/testdata/image_fuzz:fixtures",
+        "//loom/src/loom/serve/media/testdata/image_fuzz:png",
+    ],
     tags = [
         "manual",
         "skip-bazel_to_cmake",
@@ -322,8 +326,11 @@ loom_cc_test(
 loom_cc_test(
     name = "audio_decoder_test",
     srcs = ["audio_decoder_test.cc"],
-    args = ["--audio_fixture=$(rootpath testdata/audio/sample.flac)"],
-    data = glob(["testdata/audio/*"]),
+    args = ["--audio_fixture=$(rootpath //loom/src/loom/serve/media/testdata/audio:sample.flac)"],
+    data = [
+        "//loom/src/loom/serve/media/testdata/audio:fixtures",
+        "//loom/src/loom/serve/media/testdata/audio:sample.flac",
+    ],
     defines = iree_select({
         "//loom/config/serve:wav": ["LOOM_TEST_AUDIO_WAV=1"],
         "//conditions:default": ["LOOM_TEST_AUDIO_WAV=0"],
@@ -342,12 +349,4 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest_main",
         "//runtime/src/iree/vm:test_support",
     ],
-)
-
-exports_files(
-    [
-        "testdata/audio/sample.flac",
-        "testdata/audio/sample.mp3",
-    ],
-    visibility = ["//loom/src/loom/serve:implementation"],
 )

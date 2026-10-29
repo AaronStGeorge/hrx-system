@@ -14,7 +14,7 @@ load("//loom/src/loom/serve/fixture/projector:sources.bzl", PROJECTOR_SOURCES = 
 load("//loom/src/loom/serve/fixture/recognition:sources.bzl", RECOGNITION_SOURCES = "SOURCES")
 load("//loom/src/loom/serve/fixture/speech:sources.bzl", SPEECH_SOURCES = "SOURCES", SPEECH_VARIANT_SOURCES = "VARIANT_SOURCES")
 load("//loom/src/loom/serve/fixture/text:sources.bzl", TEXT_SOURCES = "SOURCES")
-load("//loom/src/loom/serve/service/finite:testdata/component/sources.bzl", COMPONENT_SOURCES = "SOURCES")
+load("//loom/src/loom/serve/service/finite/testdata/component:sources.bzl", COMPONENT_SOURCES = "SOURCES")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -874,7 +874,7 @@ loom_cc_test(
     name = "finite_component_test",
     data = COMPONENT_SOURCES,
     env = {
-        "LOOM_SERVE_TEST_COMPONENT_SOURCE": "$(rootpath //loom/src/loom/serve/service/finite:testdata/component/prepare.loom)",
+        "LOOM_SERVE_TEST_COMPONENT_SOURCE": "$(rootpath //loom/src/loom/serve/service/finite/testdata/component:prepare.loom)",
     },
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/execute:x86_task_hal",
@@ -915,7 +915,7 @@ loom_py_test(
     args = [
         "$(rootpath :loom-serve-test-tool)",
         "$(rootpath //loom/src/loom/serve/fixture/recognition:prepare.loom)",
-        "$(rootpath //loom/src/loom/serve/media:testdata/audio/sample.flac)",
+        "$(rootpath //loom/src/loom/serve/media/testdata/audio:sample.flac)",
     ] + iree_select({
         "//loom/config/serve:wav": ["--wav"],
         "//conditions:default": [],
@@ -928,8 +928,8 @@ loom_py_test(
     }),
     data = RECOGNITION_SOURCES + [
         ":loom-serve-test-tool",
-        "//loom/src/loom/serve/media:testdata/audio/sample.flac",
-        "//loom/src/loom/serve/media:testdata/audio/sample.mp3",
+        "//loom/src/loom/serve/media/testdata/audio:sample.flac",
+        "//loom/src/loom/serve/media/testdata/audio:sample.mp3",
     ],
     main = "client_test.py",
     target_compatible_with = loom_config_compatible_with([
@@ -1528,18 +1528,18 @@ loom_cc_test(
         "//loom/src/loom/serve/service:executables_test.cc",
     ],
     args = [
-        "--weight_sources=$(rootpath //loom/src/loom/serve/runtime/parameter:testdata/weights/stages.loom)",
+        "--weight_sources=$(rootpath //loom/src/loom/serve/runtime/parameter/testdata/weights:stages.loom)",
         "--gtest_filter=Streaming/*:Backing/WeightPackingTest.InvocationWorkingSet*",
-        "--executable_sources=$(rootpath //loom/src/loom/serve/service:testdata/executables/prepare.loom)",
+        "--executable_sources=$(rootpath //loom/src/loom/serve/service/testdata/executables:prepare.loom)",
     ],
     data = [
-        "//loom/src/loom/serve/runtime/parameter:testdata/weights/boundaries.loom",
-        "//loom/src/loom/serve/runtime/parameter:testdata/weights/packing.loom",
-        "//loom/src/loom/serve/runtime/parameter:testdata/weights/packing_policy.loom",
-        "//loom/src/loom/serve/runtime/parameter:testdata/weights/policy.loom",
-        "//loom/src/loom/serve/runtime/parameter:testdata/weights/stages.loom",
-        "//loom/src/loom/serve/runtime/parameter:testdata/weights/streaming_policy.loom",
-        "//loom/src/loom/serve/service:testdata/executables/prepare.loom",
+        "//loom/src/loom/serve/runtime/parameter/testdata/weights:boundaries.loom",
+        "//loom/src/loom/serve/runtime/parameter/testdata/weights:packing.loom",
+        "//loom/src/loom/serve/runtime/parameter/testdata/weights:packing_policy.loom",
+        "//loom/src/loom/serve/runtime/parameter/testdata/weights:policy.loom",
+        "//loom/src/loom/serve/runtime/parameter/testdata/weights:stages.loom",
+        "//loom/src/loom/serve/runtime/parameter/testdata/weights:streaming_policy.loom",
+        "//loom/src/loom/serve/service/testdata/executables:prepare.loom",
     ],
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/execute:x86_task_hal",

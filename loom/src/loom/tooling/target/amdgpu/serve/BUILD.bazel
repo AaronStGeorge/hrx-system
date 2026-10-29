@@ -14,7 +14,7 @@ load("//loom/src/loom/serve/fixture/projector:sources.bzl", PROJECTOR_SOURCES = 
 load("//loom/src/loom/serve/fixture/recognition:sources.bzl", RECOGNITION_SOURCES = "SOURCES")
 load("//loom/src/loom/serve/fixture/speech:sources.bzl", SPEECH_SOURCES = "SOURCES", SPEECH_VARIANT_SOURCES = "VARIANT_SOURCES")
 load("//loom/src/loom/serve/fixture/text:sources.bzl", TEXT_SOURCES = "SOURCES")
-load("//loom/src/loom/serve/service/finite:testdata/component/sources.bzl", COMPONENT_SOURCES = "SOURCES")
+load("//loom/src/loom/serve/service/finite/testdata/component:sources.bzl", COMPONENT_SOURCES = "SOURCES")
 
 package(
     default_visibility = ["//loom/src/loom/serve:implementation"],
@@ -161,7 +161,7 @@ _SERVING_DEVICES = [
         name = prefix + "finite_component_test",
         data = COMPONENT_SOURCES,
         env = {
-            "LOOM_SERVE_TEST_COMPONENT_SOURCE": "$(rootpath //loom/src/loom/serve/service/finite:testdata/component/prepare.loom)",
+            "LOOM_SERVE_TEST_COMPONENT_SOURCE": "$(rootpath //loom/src/loom/serve/service/finite/testdata/component:prepare.loom)",
         },
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
         tags = runtime_tags,
@@ -1088,23 +1088,23 @@ loom_cc_binary(
             "//loom/src/loom/serve/service/image:parameter_test.cc",
         ],
         args = [
-            "--weight_sources=$(rootpath //loom/src/loom/serve/runtime/parameter:testdata/weights/stages.loom)",
+            "--weight_sources=$(rootpath //loom/src/loom/serve/runtime/parameter/testdata/weights:stages.loom)",
             "--weight_device_uri=" + device_uri + ":?feedback",
-            "--executable_sources=$(rootpath //loom/src/loom/serve/service:testdata/executables/prepare.loom)",
-            "--parameter_image_source=$(rootpath //loom/src/loom/serve/service/image:testdata/parameters.loom)",
+            "--executable_sources=$(rootpath //loom/src/loom/serve/service/testdata/executables:prepare.loom)",
+            "--parameter_image_source=$(rootpath //loom/src/loom/serve/service/image/testdata:parameters.loom)",
             "--parameter_image_tokenizer=$(rootpath //loom/src/loom/serve/fixture/image:tokenizer.json)",
         ],
         data = [
             "//loom/src/loom/serve/fixture/image:tokenizer.json",
-            "//loom/src/loom/serve/runtime/parameter:testdata/weights/boundaries.loom",
-            "//loom/src/loom/serve/runtime/parameter:testdata/weights/packing.loom",
-            "//loom/src/loom/serve/runtime/parameter:testdata/weights/packing_policy.loom",
-            "//loom/src/loom/serve/runtime/parameter:testdata/weights/policy.loom",
-            "//loom/src/loom/serve/runtime/parameter:testdata/weights/stages.loom",
-            "//loom/src/loom/serve/runtime/parameter:testdata/weights/streaming_policy.loom",
-            "//loom/src/loom/serve/service:testdata/executables/prepare.loom",
-            "//loom/src/loom/serve/service/image:testdata/parameters.json",
-            "//loom/src/loom/serve/service/image:testdata/parameters.loom",
+            "//loom/src/loom/serve/runtime/parameter/testdata/weights:boundaries.loom",
+            "//loom/src/loom/serve/runtime/parameter/testdata/weights:packing.loom",
+            "//loom/src/loom/serve/runtime/parameter/testdata/weights:packing_policy.loom",
+            "//loom/src/loom/serve/runtime/parameter/testdata/weights:policy.loom",
+            "//loom/src/loom/serve/runtime/parameter/testdata/weights:stages.loom",
+            "//loom/src/loom/serve/runtime/parameter/testdata/weights:streaming_policy.loom",
+            "//loom/src/loom/serve/service/image/testdata:parameters.json",
+            "//loom/src/loom/serve/service/image/testdata:parameters.loom",
+            "//loom/src/loom/serve/service/testdata/executables:prepare.loom",
         ],
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
         tags = runtime_tags,

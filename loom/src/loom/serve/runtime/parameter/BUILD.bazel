@@ -15,12 +15,6 @@ package(
 exports_files(
     [
         "bank_test.cc",
-        "testdata/weights/boundaries.loom",
-        "testdata/weights/policy.loom",
-        "testdata/weights/packing.loom",
-        "testdata/weights/packing_policy.loom",
-        "testdata/weights/stages.loom",
-        "testdata/weights/streaming_policy.loom",
         "weights_test.cc",
         "weights_test_base.h",
         "weights_packing_test.cc",
@@ -223,8 +217,8 @@ loom_cc_library(
 loom_cc_test(
     name = "inputs_test",
     srcs = ["inputs_test.cc"],
-    args = ["--input_policy=$(rootpath testdata/weights/inputs.loom)"],
-    data = ["testdata/weights/inputs.loom"],
+    args = ["--input_policy=$(rootpath //loom/src/loom/serve/runtime/parameter/testdata/weights:inputs.loom)"],
+    data = ["//loom/src/loom/serve/runtime/parameter/testdata/weights:inputs.loom"],
     deps = [
         ":inputs",
         ":sources",

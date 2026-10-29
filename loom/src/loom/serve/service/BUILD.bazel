@@ -13,10 +13,7 @@ package(
 )
 
 exports_files(
-    [
-        "executables_test.cc",
-        "testdata/executables/prepare.loom",
-    ],
+    ["executables_test.cc"],
     visibility = ["//loom/src/loom/serve:implementation"],
 )
 
