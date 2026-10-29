@@ -653,9 +653,7 @@ class PresubmitTest(unittest.TestCase):
                 contextlib.redirect_stdout(output),
             ):
                 self.assertTrue(
-                    presubmit.run_hygiene(
-                        input_scope(["README.md"]), fix=False, verbose=False
-                    )
+                    presubmit.run_hygiene(["README.md"], fix=False, verbose=False)
                 )
                 fragment.write_text(
                     declaration.replace(
@@ -665,48 +663,14 @@ class PresubmitTest(unittest.TestCase):
                 )
                 for fix in (False, True):
                     self.assertFalse(
-                        presubmit.run_hygiene(
-                            input_scope(["README.md"]), fix=fix, verbose=False
-                        )
+                        presubmit.run_hygiene(["README.md"], fix=fix, verbose=False)
                     )
                     self.assertEqual(lock.read_bytes(), original_lock)
                 subprocess.run(command, cwd=root, check=True, capture_output=True)
                 self.assertTrue(
-                    presubmit.run_hygiene(
-                        input_scope(["README.md"]), fix=False, verbose=False
-                    )
+                    presubmit.run_hygiene(["README.md"], fix=False, verbose=False)
                 )
             self.assertIn("MODULE.cmake.lock is stale", output.getvalue())
-
-    def test_package_boundary_check_uses_changed_file_scope(self):
-        inputs = input_scope(["project/source.cc"], mode="staged")
-        with mock.patch.object(
-            presubmit.package_boundary,
-            "check_touched_packages",
-            return_value=True,
-        ) as check:
-            self.assertTrue(presubmit.run_package_boundary_check(inputs, verbose=False))
-
-        check.assert_called_once_with(
-            presubmit.REPO_ROOT,
-            ["project/source.cc"],
-            verbose=False,
-        )
-
-    def test_package_boundary_check_skips_unscoped_full_tree_validation(self):
-        inputs = input_scope(["project/source.cc"], mode="all")
-        output = io.StringIO()
-        with (
-            mock.patch.object(
-                presubmit.package_boundary,
-                "check_touched_packages",
-            ) as check,
-            contextlib.redirect_stdout(output),
-        ):
-            self.assertTrue(presubmit.run_package_boundary_check(inputs, verbose=False))
-
-        check.assert_not_called()
-        self.assertIn("legacy packages are repaired", output.getvalue())
 
     def test_clang_tidy_candidates_require_configured_prefix_and_extension(self):
         with (
