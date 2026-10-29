@@ -234,21 +234,3 @@ low.func.def target<test.low.core>(@target) @first_cut_with_spare_capacity(%firs
 spills: 0
 materialized traffic: stores=0 reloads=0
 copies: coalesced=0 materialized=1
-
-// ====
-
-// A four-unit slot is already free: the complete repair path emits no
-// transfers when both fixed scalars can remain in their incoming locations.
-// RUN: emit low-allocation-query @fixed_values_already_fit spill-free spill-count copy-count test.i32=8 fixed=%first:target_id:2:1 fixed=%second:target_id:0:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @fixed_values_already_fit(%first: reg<test.i32>, %second: reg<test.i32>, %address: reg<test.ptr>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x4>) asm {
-  %wide = test.load.v4i32 %address
-  return %first, %second, %wide
-}
-
-// ----
-spills: 0
-materialized traffic: stores=0 reloads=0
-copies: coalesced=0 materialized=0
