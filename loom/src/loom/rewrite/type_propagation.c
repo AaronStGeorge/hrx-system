@@ -1380,6 +1380,63 @@ static iree_status_t loom_type_propagator_process_region_forwarding(
     return iree_ok_status();
   }
 
+  if (loom_loop_like_isa(loop)) {
+    loom_region_t* condition_region = loom_loop_like_condition_region(loop);
+    loom_region_t* body_region = loom_loop_like_body(loop);
+    IREE_ASSERT(condition_region);
+    IREE_ASSERT(body_region);
+    loom_block_t* condition_entry = loom_region_entry_block(condition_region);
+    loom_block_t* body_entry = loom_region_entry_block(body_region);
+    const loom_value_slice_t initial = loom_loop_like_iter_args(loop);
+    const loom_op_t* condition = loom_block_const_last_op(condition_entry);
+    const loom_op_t* yield = loom_block_const_last_op(body_entry);
+
+    IREE_ASSERT(condition);
+    IREE_ASSERT(yield);
+    IREE_ASSERT_EQ(initial.count, condition_entry->arg_count);
+    IREE_ASSERT_EQ(yield->operand_count, condition_entry->arg_count);
+    IREE_ASSERT_GT(condition->operand_count, 0);
+    IREE_ASSERT_EQ((uint16_t)(condition->operand_count - 1), op->result_count);
+    IREE_ASSERT_EQ(body_entry->arg_count, op->result_count);
+
+    // Condition-controlled loops have independent header and result tuples.
+    // Close both cycles in one transaction so an attachment or dependent type
+    // reference cannot refine on only one edge of either cycle.
+    IREE_RETURN_IF_ERROR(loom_type_propagator_seed_value_span_facts(
+        propagator, rewriter, condition_entry->arg_ids,
+        condition_entry->arg_count));
+    if (propagator->conflict) {
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(loom_type_propagator_seed_value_span_facts(
+        propagator, rewriter, body_entry->arg_ids, body_entry->arg_count));
+    if (propagator->conflict) {
+      return iree_ok_status();
+    }
+
+    const loom_value_id_t* header_sources[] = {
+        initial.values,
+        loom_op_const_operands(yield),
+    };
+    for (iree_host_size_t i = 0;
+         i < IREE_ARRAYSIZE(header_sources) && !propagator->conflict; ++i) {
+      IREE_RETURN_IF_ERROR(loom_type_propagator_forward_source_tuple(
+          propagator, condition_entry->arg_ids, header_sources[i],
+          condition_entry->arg_count));
+    }
+
+    const loom_value_id_t* result_sources[] = {
+        loom_op_const_operands(condition) + 1,
+        body_entry->arg_ids,
+    };
+    for (iree_host_size_t i = 0;
+         i < IREE_ARRAYSIZE(result_sources) && !propagator->conflict; ++i) {
+      IREE_RETURN_IF_ERROR(loom_type_propagator_forward_source_tuple(
+          propagator, results, result_sources[i], op->result_count));
+    }
+    return iree_ok_status();
+  }
+
   for (uint8_t region_index = 0; region_index < op->region_count;
        ++region_index) {
     const loom_op_t* terminator = loom_region_branch_region_terminator(
@@ -1442,13 +1499,26 @@ static iree_status_t loom_type_propagator_schedule_region_forwarding(
   const loom_region_branch_t branch =
       loom_region_branch_cast(propagator->module, op);
   const loom_loop_like_t loop = loom_loop_like_cast(propagator->module, op);
-  if ((!loom_region_branch_isa(branch) &&
-       !loom_loop_like_has_counted_range(loop)) ||
-      op->result_count == 0) {
+  if (!loom_region_branch_isa(branch) && !loom_loop_like_isa(loop)) {
     return iree_ok_status();
   }
-  return loom_type_propagator_enqueue_forwarding(propagator,
-                                                 loom_op_const_results(op)[0]);
+  if (op->result_count > 0) {
+    return loom_type_propagator_enqueue_forwarding(
+        propagator, loom_op_const_results(op)[0]);
+  }
+
+  loom_region_t* condition_region = loom_loop_like_condition_region(loop);
+  if (!condition_region) {
+    return iree_ok_status();
+  }
+  loom_block_t* condition_entry = loom_region_entry_block(condition_region);
+  if (condition_entry->arg_count == 0) {
+    return iree_ok_status();
+  }
+  const loom_value_id_t key_value_id = condition_entry->arg_ids[0];
+  IREE_RETURN_IF_ERROR(
+      loom_type_propagator_note_owner(propagator, key_value_id, op));
+  return loom_type_propagator_enqueue_forwarding(propagator, key_value_id);
 }
 
 static iree_status_t loom_type_propagator_schedule_cfg_forwarding(
@@ -1557,7 +1627,7 @@ static iree_status_t loom_type_propagator_process_use_constraints(
       op->parent_op &&
       (loom_region_branch_isa(
            loom_region_branch_cast(propagator->module, op->parent_op)) ||
-       loom_loop_like_has_counted_range(
+       loom_loop_like_isa(
            loom_loop_like_cast(propagator->module, op->parent_op)));
   if ((is_cfg_forwarding || is_region_forwarding) && !has_type_constraints &&
       !has_type_transfer && op->region_count == 0) {
@@ -1571,8 +1641,7 @@ static iree_status_t loom_type_propagator_process_def_constraints(
     loom_type_propagator_t* propagator, const loom_rewriter_t* rewriter,
     loom_op_t* def_op, const loom_op_vtable_t* vtable) {
   const loom_loop_like_t loop = loom_loop_like_cast(propagator->module, def_op);
-  return (vtable && vtable->region_branch) ||
-                 loom_loop_like_has_counted_range(loop)
+  return (vtable && vtable->region_branch) || loom_loop_like_isa(loop)
              ? loom_type_propagator_schedule_region_forwarding(propagator,
                                                                def_op)
              : loom_type_propagator_process_op_constraints(propagator, rewriter,
@@ -1786,8 +1855,15 @@ iree_status_t loom_type_propagator_apply_op(loom_type_propagator_t* propagator,
     loom_value_t* key_value =
         loom_module_value(propagator->module, key_value_id);
     if (loom_value_is_block_arg(key_value)) {
-      IREE_RETURN_IF_ERROR(loom_type_propagator_process_cfg_forwarding(
-          propagator, rewriter, loom_value_def_block(key_value)));
+      loom_op_t* owner = propagator->owner_ops[key_ordinal];
+      if (owner &&
+          loom_loop_like_isa(loom_loop_like_cast(propagator->module, owner))) {
+        IREE_RETURN_IF_ERROR(loom_type_propagator_process_region_forwarding(
+            propagator, rewriter, owner));
+      } else {
+        IREE_RETURN_IF_ERROR(loom_type_propagator_process_cfg_forwarding(
+            propagator, rewriter, loom_value_def_block(key_value)));
+      }
     } else {
       IREE_RETURN_IF_ERROR(loom_type_propagator_process_region_forwarding(
           propagator, rewriter, loom_value_def_op(key_value)));

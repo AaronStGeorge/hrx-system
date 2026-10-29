@@ -119,3 +119,71 @@ func.def @wrong_yield_dependency(%input: buffer, %base: offset, %count: index, %
   }
   func.return
 }
+
+// ====
+
+// RUN: pass canonicalize
+
+// Encoding refinement closes over both independently typed state cycles of a
+// condition loop. Dynamic dimensions remain bound to the corresponding tuple
+// member as the explicit dense layout attachment folds away.
+func.def @condition_loop_refines_both_state_schemes(%input: buffer, %base: offset, %initial_rows: index, %keep_going: i1) {
+  %step = index.constant 1 : index
+  %initial_layout = encoding.layout.dense : encoding<layout>
+  %initial = buffer.view %input[%base] : buffer -> view<[%initial_rows]xi32, %initial_layout>
+  %rows, %layout, %view = scf.while(%before_rows = %initial_rows : index, %before_layout = %initial_layout : encoding<layout>, %before_view = %initial : view<[%before_rows]xi32, %before_layout>) -> (index, encoding<layout>, view<[%rows]xi32, %layout>) {
+    scf.condition %keep_going, %before_rows, %before_layout, %before_view : i1, index, encoding<layout>, view<[%before_rows]xi32, %before_layout>
+  } do(%body_rows: index, %body_layout: encoding<layout>, %body_view: view<[%body_rows]xi32, %body_layout>) {
+    %next_rows = index.sub %body_rows, %step : index
+    %next_view = view.subview %body_view[1] : view<[%body_rows]xi32, %body_layout> -> view<[%next_rows]xi32, %body_layout>
+    scf.yield %next_rows, %body_layout, %next_view : index, encoding<layout>, view<[%next_rows]xi32, %body_layout>
+  }
+  test.use %rows, %view : index, view<[%rows]xi32, %layout>
+  func.return
+}
+
+// ----
+func.def @condition_loop_refines_both_state_schemes(%input: buffer, %base: offset, %initial_rows: index, %keep_going: i1) {
+  %step = index.constant 1 : index
+  %initial_layout = encoding.layout.dense : encoding<layout>
+  %initial = buffer.view %input[%base] : buffer -> view<[%initial_rows]xi32>
+  %rows, %layout, %view = scf.while(%before_rows = %initial_rows : index, %before_layout = %initial_layout : encoding<layout>, %before_view = %initial : view<[%before_rows]xi32>) -> (index, encoding<layout>, view<[%rows]xi32>) {
+    scf.condition %keep_going, %before_rows, %before_layout, %before_view : i1, index, encoding<layout>, view<[%before_rows]xi32>
+  } do(%body_rows: index, %body_layout: encoding<layout>, %body_view: view<[%body_rows]xi32>) {
+    %next_rows = index.sub %body_rows, %step : index
+    %next_view = view.subview %body_view[1] : view<[%body_rows]xi32> -> view<[%next_rows]xi32>
+    scf.yield %next_rows, %body_layout, %next_view : index, encoding<layout>, view<[%next_rows]xi32>
+  }
+  test.use %rows, %view : index, view<[%rows]xi32>
+  func.return
+}
+
+// ====
+
+// RUN: pass canonicalize
+
+// A condition loop may carry header state without exposing any body arguments
+// or results. Its header tuple still participates in collective refinement.
+func.def @condition_loop_refines_header_only_state(%input: buffer, %base: offset, %initial_rows: index, %keep_going: i1) {
+  %initial_layout = encoding.layout.dense : encoding<layout>
+  %initial = buffer.view %input[%base] : buffer -> view<[%initial_rows]xi32, %initial_layout>
+  scf.while(%before_rows = %initial_rows : index, %before_view = %initial : view<[%before_rows]xi32, %initial_layout>) {
+    test.use %before_view : view<[%before_rows]xi32, %initial_layout>
+    scf.condition %keep_going : i1
+  } do {
+    scf.yield %initial_rows, %initial : index, view<[%initial_rows]xi32, %initial_layout>
+  }
+  func.return
+}
+
+// ----
+func.def @condition_loop_refines_header_only_state(%input: buffer, %base: offset, %initial_rows: index, %keep_going: i1) {
+  %initial = buffer.view %input[%base] : buffer -> view<[%initial_rows]xi32>
+  scf.while(%before_rows = %initial_rows : index, %before_view = %initial : view<[%before_rows]xi32>) {
+    test.use %before_view : view<[%before_rows]xi32>
+    scf.condition %keep_going : i1
+  } do {
+    scf.yield %initial_rows, %initial : index, view<[%initial_rows]xi32>
+  }
+  func.return
+}
