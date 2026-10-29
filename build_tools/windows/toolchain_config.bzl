@@ -22,7 +22,7 @@ def _crt_feature(linkage):
     library = "msvcrt" if dynamic else "libcmt"
     flag_sets = []
     for actions, release, debug in [
-        ([ACTION_NAMES.c_compile, ACTION_NAMES.cpp_compile], compile_flag, compile_flag + "d"),
+        ([ACTION_NAMES.c_compile, ACTION_NAMES.cpp_compile, ACTION_NAMES.linkstamp_compile], compile_flag, compile_flag + "d"),
         (all_link_actions, "/DEFAULTLIB:" + library + ".lib", "/DEFAULTLIB:" + library + "d.lib"),
     ]:
         flag_sets.extend([

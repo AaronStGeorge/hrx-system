@@ -23,6 +23,8 @@ _CommandInfo = provider("Expanded commands and enabled cross-toolchain capabilit
     "explicit_exports": "Automatic exports disabled.",
     # Fully expanded shared-library link arguments from the same configuration.
     "link_arguments": "Link arguments.",
+    # Fully expanded linkstamp compile arguments from the same configuration.
+    "linkstamp_arguments": "Linkstamp compile arguments.",
     # Whether the ELF-style ThinLTO indexing/backend graph is enabled.
     "split_lto": "ELF ThinLTO enabled.",
 })
@@ -58,6 +60,11 @@ def _command_impl(ctx):
             feature_configuration = configuration,
             action_name = ACTION_NAMES.cpp_link_dynamic_library,
             variables = link_variables,
+        ),
+        linkstamp_arguments = cc_common.get_memory_inefficient_command_line(
+            feature_configuration = configuration,
+            action_name = ACTION_NAMES.linkstamp_compile,
+            variables = variables,
         ),
         explicit_exports = cc_common.is_enabled(feature_configuration = configuration, feature_name = "no_windows_export_all_symbols"),
         split_lto = cc_common.is_enabled(feature_configuration = configuration, feature_name = "thin_lto"),
@@ -118,6 +125,7 @@ def _test_forced_includes_impl(env, targets):
     for kind in ["cross", "native"]:
         command = getattr(targets, kind)[_CommandInfo]
         env.expect.that_collection(command.arguments).contains("/FIbuild-info.h")
+        env.expect.that_collection(command.linkstamp_arguments).contains("/FIbuild-info.h")
 
 _CRT_CASES = {
     "dynamic_debug": (["dbg"], "/MDd", "msvcrtd"),
@@ -148,9 +156,10 @@ def _test_crt_commands_impl(env, targets):
             key = kind + "_" + case
             command = getattr(targets, key)[_CommandInfo]
             compile_flags = [flag for flag in command.arguments if flag in ["/MD", "/MDd", "/MT", "/MTd"]]
+            linkstamp_flags = [flag for flag in command.linkstamp_arguments if flag in ["/MD", "/MDd", "/MT", "/MTd"]]
             link_flags = [flag for flag in command.link_arguments if flag in ["/DEFAULTLIB:" + name + ".lib" for name in ["msvcrt", "msvcrtd", "libcmt", "libcmtd"]]]
-            if compile_flags != [compile_flag] or link_flags != ["/DEFAULTLIB:" + library + ".lib"]:
-                env.fail("%s: inconsistent CRT selection: compile=%s link=%s" % (key, compile_flags, link_flags))
+            if compile_flags != [compile_flag] or linkstamp_flags != [compile_flag] or link_flags != ["/DEFAULTLIB:" + library + ".lib"]:
+                env.fail("%s: inconsistent CRT selection: compile=%s linkstamp=%s link=%s" % (key, compile_flags, linkstamp_flags, link_flags))
             if "dbg" in profile:
                 for flag in ["/Od", "/Z7"]:
                     env.expect.that_collection(command.arguments).contains(flag)
