@@ -9,10 +9,6 @@ load(
     "loom_cc_library",
     "loom_cc_test",
 )
-load(
-    "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_test_suite",
-)
 
 package(
     default_visibility = ["//visibility:private"],
@@ -119,19 +115,5 @@ loom_cc_library(
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/cmd/descriptors:low_registry",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_check_test_suite(
-    name = "loom_check_file_test",
-    srcs = [
-        "test/bytecode.loom-test",
-        "test/diagnostics.loom-test",
-        "test/low.loom-test",
-        "test/planning.loom-test",
-        "test/roundtrip.loom-test",
-        "test/scheduling.loom-test",
-        "test/storage.loom-test",
-        "test/template_composition.loom-test",
     ],
 )

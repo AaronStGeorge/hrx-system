@@ -14,7 +14,7 @@ load("//loom/src/loom/serve/fixture/projector:sources.bzl", PROJECTOR_SOURCES = 
 load("//loom/src/loom/serve/fixture/recognition:sources.bzl", RECOGNITION_SOURCES = "SOURCES")
 load("//loom/src/loom/serve/fixture/speech:sources.bzl", SPEECH_SOURCES = "SOURCES", SPEECH_VARIANT_SOURCES = "VARIANT_SOURCES")
 load("//loom/src/loom/serve/fixture/text:sources.bzl", TEXT_SOURCES = "SOURCES")
-load("//loom/src/loom/serve/service/finite:testdata/component/sources.bzl", COMPONENT_SOURCES = "SOURCES")
+load("//loom/src/loom/serve/service/finite/testdata/component:sources.bzl", COMPONENT_SOURCES = "SOURCES")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -143,7 +143,7 @@ loom_cc_test(
     name = "finite_component_test",
     data = COMPONENT_SOURCES,
     env = {
-        "LOOM_SERVE_TEST_COMPONENT_SOURCE": "$(rootpath //loom/src/loom/serve/service/finite:testdata/component/prepare.loom)",
+        "LOOM_SERVE_TEST_COMPONENT_SOURCE": "$(rootpath //loom/src/loom/serve/service/finite/testdata/component:prepare.loom)",
     },
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = ["iree-run-requirement=vulkan.resource.device"],

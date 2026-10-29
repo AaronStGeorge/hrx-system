@@ -7,14 +7,14 @@
 """Source closures for resident and demand-read finite-component fixtures."""
 
 SOURCE_FILES = [
-    "testdata/component/control.loom",
-    "testdata/component/copy.loom",
-    "testdata/component/demand_control.loom",
-    "testdata/component/demand_kernels.loom",
-    "testdata/component/demand_prepare.loom",
-    "testdata/component/kernels.loom",
-    "testdata/component/policy.loom",
-    "testdata/component/prepare.loom",
+    "control.loom",
+    "copy.loom",
+    "demand_control.loom",
+    "demand_kernels.loom",
+    "demand_prepare.loom",
+    "kernels.loom",
+    "policy.loom",
+    "prepare.loom",
 ]
 
-SOURCES = ["//loom/src/loom/serve/service/finite:" + path for path in SOURCE_FILES]
+SOURCES = ["//loom/src/loom/serve/service/finite/testdata/component:" + path for path in SOURCE_FILES]

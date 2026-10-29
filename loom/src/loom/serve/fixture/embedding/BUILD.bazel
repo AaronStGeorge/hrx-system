@@ -5,12 +5,12 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//loom/build_tools/bazel:loom_model.bzl", "loom_model")
-load(":sources.bzl", "SOURCE_FILES", "VARIANT_FILES")
+load(":sources.bzl", "SOURCE_FILES")
 
 package(default_visibility = ["//visibility:private"])
 
 exports_files(
-    SOURCE_FILES + VARIANT_FILES,
+    SOURCE_FILES,
     visibility = ["//visibility:public"],
 )
 

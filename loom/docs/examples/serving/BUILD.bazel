@@ -6,10 +6,16 @@
 
 # bazel-to-cmake: skip
 
+load("//build_tools/bazel:package_boundary.bzl", "iree_package_boundary")
 load("//build_tools/bazel:python.bzl", "iree_py_binary")
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_generated_file")
 
 package(default_visibility = ["//visibility:private"])
+
+iree_package_boundary(
+    allowed_descendant_paths = ["model-publication/**"],
+    reason = "The generated archive preserves this standalone catalog and model repository layout as one publication unit.",
+)
 
 iree_py_binary(
     name = "package",

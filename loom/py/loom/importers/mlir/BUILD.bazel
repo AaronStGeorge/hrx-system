@@ -99,13 +99,6 @@ iree_py_test(
     deps = [":mlir"],
 )
 
-filegroup(
-    name = "mlir_import_tests",
-    srcs = [
-        "testdata/vector_reduce_amdgpu.mlir",
-    ],
-)
-
 iree_py_test(
     name = "mlir_import_test",
     srcs = ["//loom/py/loom/importers/check:import_test.py"],
@@ -113,10 +106,10 @@ iree_py_test(
         "mlir",
         "--fail-on-skip",
         "--loom-opt=$(location //loom/src/loom/tools/loom-opt:loom-opt)",
-        "$(locations :mlir_import_tests)",
+        "$(location //loom/py/loom/importers/mlir/testdata:vector_reduce_amdgpu.mlir)",
     ],
     data = [
-        ":mlir_import_tests",
+        "//loom/py/loom/importers/mlir/testdata:vector_reduce_amdgpu.mlir",
         "//loom/src/loom/tools/loom-opt",
     ],
     main = "import_test.py",

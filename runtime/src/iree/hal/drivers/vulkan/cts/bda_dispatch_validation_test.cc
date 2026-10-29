@@ -11,7 +11,7 @@
 #include <cstring>
 
 #include "iree/hal/cts/util/test_base.h"
-#include "iree/hal/drivers/vulkan/cts/bda_spirv_test_spv.h"
+#include "iree/hal/drivers/vulkan/cts/testdata/bda_spirv_test_spv.h"
 
 namespace iree::hal::cts {
 

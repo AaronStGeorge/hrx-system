@@ -55,8 +55,8 @@ iree_runtime_cc_library(
 iree_runtime_hal_cts_testdata(
     name = "testdata_fixture",
     srcs = [
-        "testdata/first.txt",
-        "testdata/second.txt",
+        "//runtime/src/iree/hal/cts/util/testdata:first.txt",
+        "//runtime/src/iree/hal/cts/util/testdata:second.txt",
     ],
     backend_names = [
         "fixture_primary",

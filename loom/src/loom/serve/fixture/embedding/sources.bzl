@@ -16,12 +16,12 @@ SOURCE_FILES = [
 ]
 
 VARIANT_FILES = [
-    "variants/direct.loom",
-    "variants/fused.loom",
-    "variants/policy.loom",
-    "variants/specialize.loom",
-    "variants/weights.loom",
+    "direct.loom",
+    "fused.loom",
+    "policy.loom",
+    "specialize.loom",
+    "weights.loom",
 ]
 
 SOURCES = ["//loom/src/loom/serve/fixture/embedding:" + path for path in SOURCE_FILES]
-VARIANT_SOURCES = ["//loom/src/loom/serve/fixture/embedding:" + path for path in VARIANT_FILES]
+VARIANT_SOURCES = ["//loom/src/loom/serve/fixture/embedding/variants:" + path for path in VARIANT_FILES]

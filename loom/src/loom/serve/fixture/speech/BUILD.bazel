@@ -6,19 +6,19 @@
 
 load("//loom/build_tools/bazel:loom_library.bzl", "loom_library")
 load("//loom/build_tools/bazel:loom_model.bzl", "loom_model")
-load(":sources.bzl", "SOURCE_FILES", "VARIANT_FILES")
+load(":sources.bzl", "SOURCE_FILES")
 
 package(default_visibility = ["//visibility:private"])
 
 exports_files(
-    SOURCE_FILES + VARIANT_FILES,
+    SOURCE_FILES,
     visibility = ["//visibility:public"],
 )
 
 [
     loom_model(
         name = "card_model_" + encoding,
-        assets = {"variants/tokenizer.json": "vocabulary.data"},
+        assets = {"//loom/src/loom/serve/fixture/speech/variants:tokenizer.json": "vocabulary.data"},
         card = "card.json",
         encoding = encoding,
         files = {
