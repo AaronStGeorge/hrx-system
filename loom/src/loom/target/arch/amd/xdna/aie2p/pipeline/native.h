@@ -297,13 +297,18 @@ typedef struct loom_aie2p_native_distribution_t {
   const loom_pipeline_transport_batch_t* source;
   // Memory-to-stream endpoint reclaiming source records after transmission.
   loom_aie2p_native_distribution_endpoint_t sender;
-  // Arena-owned stream-to-memory endpoints in source fanout order.
+  // Arena-owned stream-to-memory endpoints in the physical path's fanout order.
   loom_aie2p_native_distribution_endpoint_t* receivers;
   // Number of independently publishing receiver rings.
   iree_host_size_t receiver_count;
-  // Packet classes in first-use order; NULL for a uniform circuit stream.
+  // Channel-indexed receiver ordinals owned by the first packet geometry.
+  // UINT32_MAX marks channels outside this path's receiver set.
+  uint32_t* receiver_ordinals;
+  // Packet classes across all phases, owned by the first packet geometry.
   loom_aie2p_native_distribution_packet_t* packets;
-  // Number of packet identities used by the finite source program.
+  // Physical routing identity shared by all packet classes on this path.
+  uint32_t source_route;
+  // Number of packet identities in the physical path's class table.
   uint8_t packet_count;
   // Source transmissions in a uniform circuit stream; zero for packet programs.
   uint32_t repetitions;
