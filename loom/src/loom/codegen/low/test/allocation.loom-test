@@ -389,22 +389,6 @@ value %next1: test.i32 -> target_id[6:1]
 
 // ====
 
-// RUN: emit low-allocation-query @structural_physical_span_rebased_at_capacity values=%wide,%tail,%packed fixed=%wide:physical_register:20:12 fixed=%tail:physical_register:0:1
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @structural_physical_span_rebased_at_capacity(%wide: reg<test.phys x12>, %tail: reg<test.phys>) -> (reg<test.phys x13>) asm {
-  %packed = concat(%wide, %tail) : (reg<test.phys x12>, reg<test.phys>) -> reg<test.phys x13>
-  return %packed
-}
-
-// ----
-value %wide: test.phys -> physical_register[20:12]
-value %tail: test.phys -> physical_register[0:1]
-value %packed: test.phys -> physical_register[0:13]
-
-// ====
-
 // RUN: emit low-allocation-query @explicit_physical_aggregate_views values=%wide,%low,%high,%packed
 
 test.target<low_core> @test_target

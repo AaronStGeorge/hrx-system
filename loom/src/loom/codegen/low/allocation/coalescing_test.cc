@@ -276,10 +276,27 @@ TEST_F(LowAllocationCoalescingTest, ConcatRequiresCompatibleSourceStorage) {
     }
     return iree_ok_status();
   };
-  for (uint32_t second_base : {2u, 3u, 4u}) {
-    SCOPED_TRACE(second_base);
-    source_assignments[1].location_base = second_base;
-    assigned_high_water[0] = second_base + 2;
+  struct SourceLayout {
+    // Physical base of the first two-unit source.
+    uint32_t first_base;
+    // Physical base of the second two-unit source.
+    uint32_t second_base;
+    // Whether either source placement admits the complete four-unit result.
+    bool can_coalesce;
+  };
+  const SourceLayout layouts[] = {
+      {0, 2, true}, {0, 3, false}, {0, 4, true},
+      {4, 0, true}, {5, 0, false}, {6, 0, false},
+  };
+  // The final layouts distinguish a result ending at capacity from valid
+  // sources whose implied result would extend beyond the register class.
+  for (const auto& layout : layouts) {
+    SCOPED_TRACE(layout.first_base);
+    SCOPED_TRACE(layout.second_base);
+    source_assignments[0].location_base = layout.first_base;
+    source_assignments[1].location_base = layout.second_base;
+    assigned_high_water[0] =
+        iree_max(layout.first_base, layout.second_base) + 2;
     loom_low_allocation_active_set_t active_set = {};
     IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
         &descriptor_set, &unit_liveness, IREE_ARRAYSIZE(source_assignments), 7,
@@ -295,17 +312,19 @@ TEST_F(LowAllocationCoalescingTest, ConcatRequiresCompatibleSourceStorage) {
     bool assigned = false;
     IREE_ASSERT_OK(loom_low_allocation_coalescing_assign_structural_interval(
         &context, &intervals[2], &assigned));
-    EXPECT_EQ(assigned, second_base != 3);
-    if (second_base == 3) {
+    EXPECT_EQ(assigned, layout.can_coalesce);
+    if (!layout.can_coalesce) {
       EXPECT_EQ(publication.assignment.value_id, LOOM_VALUE_ID_INVALID);
       EXPECT_EQ(publication.shared_count, 0u);
     } else {
       EXPECT_EQ(publication.assignment.value_id, value_ids[2]);
-      EXPECT_EQ(publication.assignment.location_base, 0u);
+      EXPECT_EQ(publication.assignment.location_base, layout.first_base);
       EXPECT_EQ(publication.assignment.location_count, 4u);
-      EXPECT_EQ(publication.shared_count, second_base == 2 ? 2u : 1u);
+      const bool both_sources_match =
+          layout.second_base == layout.first_base + 2;
+      EXPECT_EQ(publication.shared_count, both_sources_match ? 2u : 1u);
       EXPECT_EQ(publication.shared_values[0], value_ids[0]);
-      if (second_base == 2) {
+      if (both_sources_match) {
         EXPECT_EQ(publication.shared_values[1], value_ids[1]);
       }
     }
