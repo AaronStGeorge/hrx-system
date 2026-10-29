@@ -25,11 +25,11 @@ py_test(
         "$(rlocationpath :check)",
         "$(rlocationpath //loom/src/loom/tools/loom-format:loom-format)",
         "$(rlocationpath //loom/py/loom/tools:loom-lint)",
-        "$(rlocationpath //loom/build_tools:loom_source_lint)",
+        "$(rlocationpath //loom/build_tools/linters:loom_source_lint)",
     ],
     data = [
         ":check",
-        "//loom/build_tools:loom_source_lint",
+        "//loom/build_tools/linters:loom_source_lint",
         "//loom/py/loom/tools:loom-lint",
         "//loom/src/loom/tools/loom-format",
     ],
