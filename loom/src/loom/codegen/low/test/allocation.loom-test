@@ -1074,11 +1074,11 @@ value %second_next: test.pressure.alias32 -> physical_register[5:1]
 
 // ====
 
-// RUN: emit low-allocation-query @loop_relocation_requires_augmenting_path spill-count values=%state0,%state1,%short,%long fixed=%condition:target_id:2:1 fixed=%lhs:target_id:3:1 fixed=%rhs:target_id:4:1 fixed=%state1_used:target_id:7:1 fixed=%short_used:target_id:8:1 fixed=%blocker:target_id:1:1 fixed=%long_used:target_id:9:1 fixed=%state0_used:target_id:10:1 fixed=%next0:target_id:5:1 fixed=%next1:target_id:6:1 fixed=%sink:target_id:11:1
+// RUN: emit low-allocation-query @loop_relocation_requires_augmenting_path spill-count values=%state0,%state1,%short,%long
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @loop_relocation_requires_augmenting_path(%condition: reg<test.i32>, %seed0: reg<test.i32>, %seed1: reg<test.i32>, %lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+low.func.def target<test.low.core>(@test_target) @loop_relocation_requires_augmenting_path(%condition: reg<test.i32>, %seed0: reg<test.i32>, %seed1: reg<test.i32>, %lhs: reg<test.i32>, %rhs: reg<test.i32>, %backedge_input: reg<test.f32 x7>) -> (reg<test.i32>, reg<test.i32>) asm {
   low.br ^loop(%seed0: reg<test.i32>, %seed1: reg<test.i32>)
 ^loop(%state0: reg<test.i32>, %state1: reg<test.i32>):
   low.cond_br %condition, ^body, ^exit : reg<test.i32>
@@ -1087,20 +1087,21 @@ low.func.def target<test.low.core>(@test_target) @loop_relocation_requires_augme
   %long = test.mul.i32 %lhs, %rhs
   %state1_used = test.add.i32 %state1, %rhs
   %short_used = test.add.i32 %short, %rhs
-  %blocker = test.add.i32 %state1_used, %short_used
-  %long_used = test.add.i32 %long, %blocker
+  %blocker = test.add_mul.i32 %state1, %state1_used, %short
+  %long_used = test.add_mul.i32 %long, %blocker, %short_used
   %state0_used = test.add.i32 %state0, %long_used
-  %next0 = test.mul.i32 %lhs, %rhs
-  %next1 = test.add.i32 %lhs, %rhs
+  %tuple = copy %backedge_input : reg<test.f32 x7> -> reg<test.i32 x7>
+  %next0 = slice %tuple[5] : reg<test.i32 x7> -> reg<test.i32>
+  %next1 = slice %tuple[6] : reg<test.i32 x7> -> reg<test.i32>
   %sink = test.mul.i32 %state0_used, %rhs
   low.br ^loop(%next0: reg<test.i32>, %next1: reg<test.i32>)
 ^exit:
   return %state0, %state1
 }
 
-// The first eviction color can use either vacated header location. The second
-// overlaps %blocker at location 1 and can use only location 0, so retaining
-// both header moves requires an augmenting path that rematches the first color.
+// Both headers can adopt their backedge slots only if %short moves to location
+// 1 and %long moves to 0. The blocker overlaps %long but not %short at location
+// 1, so initially choosing 0 for %short requires rematching that first choice.
 
 // ----
 spills: 0
