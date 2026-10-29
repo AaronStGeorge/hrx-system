@@ -4,19 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/amdgpu:target_config.bzl", "LOOM_AMDGPU_SUPPORTED_TARGETS")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_instance_library",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_config_compatible_with",
     "loom_generated_cc_library",
-)
-load(
-    "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_test",
-    "loom_check_test_suite",
 )
 
 package(
@@ -44,10 +37,6 @@ _AMDGPU_OPS_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/ops:__pkg__"]
 _AMDGPU_PLANNING_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/planning:__pkg__"]
 
 _AMDGPU_RECORDS_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/records:__pkg__"]
-
-_AMDGPU_ELF_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/emit:amdgpu_elf",
-])
 
 _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 
@@ -600,191 +589,6 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu/hal:binding_materialization_pass",
         "//runtime/src/iree/base",
     ],
-)
-
-_AMDGPU_ARTIFACT_CHECK_TESTS = [
-    "test/source_low/low_alias_pressure.loom-test",
-    "test/source_low/low_allocation.loom-test",
-    "test/source_low/low_allocation_fixed_identity_splitting.loom-test",
-    "test/source_low/low_allocation_rematerialization.loom-test",
-    "test/source_low/low_atomic_coherence_cdna.loom-test",
-    "test/source_low/low_atomic_replay.loom-test",
-    "test/source_low/low_buffer_scalar_capture.loom-test",
-    "test/source_low/low_cluster_gfx1250.loom-test",
-    "test/source_low/low_completion_schedule.loom-test",
-    "test/source_low/low_conversion_gfx1200.loom-test",
-    "test/source_low/low_conversion_gfx1250.loom-test",
-    "test/source_low/low_conversion_gfx950.loom-test",
-    "test/source_low/low_copy_sources.loom-test",
-    "test/source_low/low_descriptor_assembly.loom-test",
-    "test/source_low/low_destination_selection_wait.loom-test",
-    "test/source_low/low_dpp_legacy.loom-test",
-    "test/source_low/low_edge_copy_wait.loom-test",
-    "test/source_low/low_exec_mask_encoding.loom-test",
-    "test/source_low/low_f64_native_assembly_gfx942.loom-test",
-    "test/source_low/low_lds_pair_gfx1250.loom-test",
-    "test/source_low/low_loop_vector_relocation.loom-test",
-    "test/source_low/low_mask_allocation.loom-test",
-    "test/source_low/low_mask_control_flow.loom-test",
-    "test/source_low/low_mask_modes.loom-test",
-    "test/source_low/low_mask_write_encoding.loom-test",
-    "test/source_low/low_mask_write_reset.loom-test",
-    "test/source_low/low_mask_write_wait.loom-test",
-    "test/source_low/low_matrix_coexecution.loom-test",
-    "test/source_low/low_memory_observations.loom-test",
-    "test/source_low/low_memory_scalar_capture.loom-test",
-    "test/source_low/low_message_clock.loom-test",
-    "test/source_low/low_mfma_execution_passes.loom-test",
-    "test/source_low/low_mfma_formats_gfx950.loom-test",
-    "test/source_low/low_mfma_result_dependencies.loom-test",
-    "test/source_low/low_mfma_schedule.loom-test",
-    "test/source_low/low_packed_float_add_signs.loom-test",
-    "test/source_low/low_partial_tuple_liveness.loom-test",
-    "test/source_low/low_preserved_readiness.loom-test",
-    "test/source_low/low_pressure_resource_schedule.loom-test",
-    "test/source_low/low_rdna35_dpp16.loom-test",
-    "test/source_low/low_rdna35_dpp8.loom-test",
-    "test/source_low/low_rdna35_dpp_integer_compare.loom-test",
-    "test/source_low/low_register_debt.loom-test",
-    "test/source_low/low_scalar_read_lifetimes.loom-test",
-    "test/source_low/low_scalar_shift_operands.loom-test",
-    "test/source_low/low_schedule_scopes.loom-test",
-    "test/source_low/low_state_rematerialization.loom-test",
-    "test/source_low/low_storage_continuation.loom-test",
-    "test/source_low/low_storage_continuation_order.loom-test",
-    "test/source_low/low_storage_identity.loom-test",
-    "test/source_low/low_storage_observations.loom-test",
-    "test/source_low/low_store_data_wait.loom-test",
-    "test/source_low/low_system_scope_store_wait.loom-test",
-    "test/source_low/low_tensor_gfx1250.loom-test",
-    "test/source_low/low_tuple_alignment.loom-test",
-    "test/source_low/low_tuple_capture.loom-test",
-    "test/source_low/low_valu_schedule.loom-test",
-    "test/source_low/low_valu_sgpr_timing.loom-test",
-    "test/source_low/low_vcc_dpp.loom-test",
-    "test/source_low/low_vinterp.loom-test",
-    "test/source_low/low_vmem_result_order.loom-test",
-    "test/source_low/low_volatile_completion.loom-test",
-    "test/source_low/low_vopd_schedule.loom-test",
-    "test/source_low/low_wait_completed_result.loom-test",
-    "test/source_low/low_wait_completion.loom-test",
-    "test/source_low/low_wait_continuous_pipeline.loom-test",
-    "test/source_low/low_wait_counter_limits.loom-test",
-    "test/source_low/low_wait_incoming_completion.loom-test",
-    "test/source_low/low_wait_incoming_suffix.loom-test",
-    "test/source_low/low_wait_loop_frontier.loom-test",
-    "test/source_low/low_wait_packet_transfers.loom-test",
-    "test/source_low/low_wait_plan.loom-test",
-    "test/source_low/low_wait_retained_order.loom-test",
-    "test/source_low/low_wait_storage_reuse.loom-test",
-    "test/source_low/low_wmma_schedule.loom-test",
-    "test/source_low/low_workgroup_cmpxchg.loom-test",
-    "test/source_low/low_xcnt_gfx1250.loom-test",
-    "test/source_low/source_low_control_flow.loom-test",
-]
-
-loom_check_test(
-    name = "memory_stability",
-    src = "test/source_low/memory_stability.loom-test",
-    compile_targets = [
-        "//loom/target/amdgpu:gfx1151",
-        "//loom/target/amdgpu:gfx1200",
-    ],
-)
-
-loom_check_test_suite(
-    name = "loom_check_file_test",
-    srcs = glob(
-        ["test/source_low/*.loom-test"],
-        exclude = _AMDGPU_ARTIFACT_CHECK_TESTS + [
-            "test/source_low/memory_stability.loom-test",
-        ],
-    ),
-    compile_targets = {
-        "test/source_low/address_cast_banks.loom-test": [
-            "//loom/target/amdgpu:gfx942",
-            "//loom/target/amdgpu:gfx1100",
-            "//loom/target/amdgpu:gfx1151",
-            "//loom/target/amdgpu:gfx1200",
-            "//loom/target/amdgpu:gfx1250",
-        ],
-        "test/source_low/cluster_query_carriers.loom-test": [
-            "//loom/target/amdgpu:gfx1250",
-        ],
-        "test/source_low/float64_narrow.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/immutable_storage.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/memory_float64_carrier.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/memory_mixed_wide_offsets.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/memory_scalar_packets.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/memory_strided_packed_packets.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/narrow_float_arguments.loom-test": [
-            "//loom/target/amdgpu:gfx942",
-            "//loom/target/amdgpu:gfx950",
-            "//loom/target/amdgpu:gfx1100",
-            "//loom/target/amdgpu:gfx1151",
-            "//loom/target/amdgpu:gfx1170",
-            "//loom/target/amdgpu:gfx1200",
-            "//loom/target/amdgpu:gfx1250",
-        ],
-        "test/source_low/narrow_kernel_arguments.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/predicate_truncation.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/query_carriers.loom-test": [
-            "//loom/target/amdgpu:gfx942",
-            "//loom/target/amdgpu:gfx1100",
-            "//loom/target/amdgpu:gfx1151",
-            "//loom/target/amdgpu:gfx1200",
-            "//loom/target/amdgpu:gfx1250",
-        ],
-        "test/source_low/source_low_system_scope_store_wait.loom-test": [
-            "//loom/target/amdgpu:gfx1200",
-            "//loom/target/amdgpu:gfx1201",
-            "//loom/target/amdgpu:gfx12-generic",
-        ],
-        "test/source_low/source_low_uniform_vector_extract.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/trigonometry.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-        "test/source_low/uniform_packed_memory.loom-test": [
-            "//loom/target/amdgpu:" + target
-            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
-        ],
-    },
-    test_name_prefix_to_strip = "test/source_low/",
-)
-
-loom_check_test_suite(
-    name = "artifact_loom_check_file_test",
-    srcs = _AMDGPU_ARTIFACT_CHECK_TESTS,
-    target_compatible_with = _AMDGPU_ELF_COMPATIBLE_WITH,
-    test_name_prefix_to_strip = "test/source_low/",
 )
 
 #===------------------------------------------------------------------------===#

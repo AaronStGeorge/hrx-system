@@ -102,8 +102,9 @@ tool output are useful.
 ## Profiles
 
 `default` runs repository hygiene: buildifier, Ruff, clang-format,
-the CMake dependency lock, generated AMDGPU target metadata,
-watchwords, merge-conflict markers, and basic text hygiene.
+changed-package Bazel boundary checks, the CMake dependency lock, generated
+AMDGPU target metadata, watchwords, merge-conflict markers, and basic text
+hygiene.
 
 Every hygiene run checks `MODULE.cmake.lock` against the Bazel dependency graph
 with `build_tools/bazel_to_cmake/deps.py --check`, including narrow commits and
@@ -302,6 +303,34 @@ JSON mode returns exit status `0` even when `.success` is false. Consumers use
 that field to decide whether lint passed. Hooks use text output and its failure
 exit status. The dispatcher explicitly selects `-warnings=all`; the JSON config
 format's `warningsList` accepts category names, not the CLI shorthand `all`.
+
+### Bazel Package Boundaries
+
+Changed-file hygiene maps every selected path to its nearest `BUILD.bazel`,
+queries those packages as expanded Bazel XML, and rejects source labels that
+contain a descendant directory. A directory contributing build inputs is a
+package ownership boundary: give it a `BUILD.bazel` and reference its targets
+instead of reaching through the parent package.
+
+Some source trees are intentionally one ownership unit even though their
+installed or embedded layout contains directories. Those packages declare the
+exception locally, next to the rules that consume it:
+
+```starlark
+load("//build_tools/bazel:package_boundary.bzl", "iree_package_boundary")
+
+iree_package_boundary(
+    allowed_descendant_paths = ["include/example/**"],
+    reason = "Installed public headers preserve their SDK-relative layout.",
+)
+```
+
+An allowed path is an exact descendant file, a directory prefix ending in
+`/**`, or `**` when an entire package is genuinely an indivisible source
+bundle. The check rejects empty reasons, malformed or overlapping patterns,
+and patterns that no longer match a source. Narrow prefixes keep a legitimate
+installed-header tree from exempting unrelated implementation or test trees in
+the same package.
 
 ## Static Analysis
 
