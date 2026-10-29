@@ -97,6 +97,7 @@ function(iree_cc_binary)
   set_target_properties(${_NAME} PROPERTIES OUTPUT_NAME "${_RULE_NAME}")
   if(_RULE_SRCS)
     iree_resolve_source_files(_RULE_SRCS ${_RULE_SRCS})
+    iree_set_source_object_names(${_RULE_SRCS})
     target_sources(${_NAME}
       PRIVATE
         ${_RULE_SRCS}

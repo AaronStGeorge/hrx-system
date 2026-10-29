@@ -74,6 +74,7 @@ wrapper commands remember that tree. New trees default to Ninja and a Release
 build. Existing trees retain their configuration, and explicit `-G`,
 `CMAKE_GENERATOR`, and preset selections are honored. System-tool builds need
 CMake 3.26 or newer; [shared Loom tools](#shared-loom-tool-bundles) need 3.27.
+Windows builds require CMake 4.2 or newer for short native object names.
 
 ### Tool environment
 

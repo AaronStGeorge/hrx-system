@@ -365,6 +365,7 @@ function(iree_wasm_cc_binary)
 
   # Create the wasm executable.
   iree_resolve_source_files(_RULE_SRCS ${_RULE_SRCS})
+  iree_set_source_object_names(${_RULE_SRCS})
   add_executable(${_WASM_NAME} ${_RULE_SRCS})
   if(_RULE_COPTS)
     target_compile_options(${_WASM_NAME} PRIVATE ${_RULE_COPTS})

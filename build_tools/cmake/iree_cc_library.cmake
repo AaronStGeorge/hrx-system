@@ -129,6 +129,7 @@ function(iree_cc_library)
   set(_CC_SRCS "${_RULE_SRC_TARGET_SRCS}")
   list(FILTER _CC_SRCS EXCLUDE REGEX
     "\\.(h|hh|h[+][+]|hm|hpp|hxx|H|HPP|in|txx|inc|inl)$")
+  iree_set_source_object_names(${_CC_SRCS})
   if("${_CC_SRCS}" STREQUAL "")
     set(_RULE_IS_INTERFACE 1)
   else()

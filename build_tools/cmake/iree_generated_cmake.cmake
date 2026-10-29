@@ -7,6 +7,10 @@
 # CMake owns generation so direct configure, dev.py, and native regeneration
 # consume the same declarations. Each HRX binary tree owns its package tree.
 function(iree_generate_cmake)
+  if(CMAKE_HOST_WIN32 AND CMAKE_VERSION VERSION_LESS 4.2)
+    message(FATAL_ERROR
+      "Windows HRX builds require CMake 4.2 or newer for short object names.")
+  endif()
   if(NOT Python3_EXECUTABLE)
     message(FATAL_ERROR "Configuring HRX requires a Python interpreter.")
   endif()

@@ -29,7 +29,12 @@ class CMakeGeneratedPackagesTest(unittest.TestCase):
             prefix="cmake generated packages "
         ) as temporary:
             root = Path(temporary)
-            source, build = root / "source", root / "build"
+            source = root / "source"
+            # Deep build roots and qualified target names exercise Windows
+            # object-path limits encountered by embedded builds in CI.
+            build = (
+                root / "nested build directory matching a deeply embedded CI workspace"
+            )
             shutil.copytree(FIXTURE, source)
             for template in source.rglob("BUILD.bazel.in"):
                 template.rename(template.with_suffix(""))

@@ -424,6 +424,36 @@ function(iree_resolve_source_files OUTPUT_VARIABLE)
   set(${OUTPUT_VARIABLE} "${_FILES}" PARENT_SCOPE)
 endfunction()
 
+# Generated declaration directories are separate from their authored sources.
+# Native relative source paths can overflow MSVC's object-path limit even after
+# CMake hashes the directory portion. Name package files relative to their
+# original source or output directory, retaining native target directories.
+function(iree_set_source_object_names)
+  if(NOT CMAKE_HOST_WIN32)
+    return()
+  endif()
+  iree_package_source_dir(_SOURCE_DIR)
+  iree_package_binary_dir(_BINARY_DIR)
+  foreach(_SOURCE IN LISTS ARGN)
+    if(_SOURCE MATCHES "^\\$<")
+      continue()
+    endif()
+    file(RELATIVE_PATH _RELATIVE_SOURCE "${_SOURCE_DIR}" "${_SOURCE}")
+    file(RELATIVE_PATH _RELATIVE_OUTPUT "${_BINARY_DIR}" "${_SOURCE}")
+    if(NOT IS_ABSOLUTE "${_RELATIVE_SOURCE}" AND
+       NOT _RELATIVE_SOURCE MATCHES "^\\.\\./")
+      set(_OBJECT_NAME "source/${_RELATIVE_SOURCE}")
+    elseif(NOT IS_ABSOLUTE "${_RELATIVE_OUTPUT}" AND
+           NOT _RELATIVE_OUTPUT MATCHES "^\\.\\./")
+      set(_OBJECT_NAME "generated/${_RELATIVE_OUTPUT}")
+    else()
+      string(MD5 _OBJECT_NAME "${_SOURCE}")
+    endif()
+    set_source_files_properties("${_SOURCE}" PROPERTIES
+      OBJECT_NAME "${_OBJECT_NAME}")
+  endforeach()
+endfunction()
+
 # Sets ${PACKAGE_NS} to the package name in C++ namespace format (::), relative
 # to the enclosing package root and its optional namespace prefix.
 function(iree_package_ns PACKAGE_NS)
@@ -814,6 +844,7 @@ function(iree_link_js_library)
     set(_DUMMY_C_NAME "${CMAKE_BINARY_DIR}/${_DUMMY_JS_TARGET}_tracker.c")
 
     # Create a new static library target that with a single dummy .c file.
+    iree_set_source_object_names("${_DUMMY_C_NAME}")
     add_library(${_DUMMY_LIB_NAME} STATIC ${_DUMMY_C_NAME})
     # Make the dummy .c file depend on the .js file we are linking, so that if
     # the .js file is edited, the dummy .c file, and hence the static library

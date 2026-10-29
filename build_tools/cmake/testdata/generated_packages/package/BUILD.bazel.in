@@ -26,7 +26,7 @@ iree_py_generated_files(NAME header GENERATOR ::generator
 )
 
 cc_library(
-    name = "value",
+    name = "library_with_generated_inputs_and_package_identity",
     srcs = glob(["value*.c"]),
     hdrs = ["generated.h"],
     defines = OPTIONS + ["ADJUSTMENT=0"],
@@ -36,5 +36,5 @@ cc_library(
 cc_binary(
     name = "probe",
     srcs = ["main.c"],
-    deps = [":value"],
+    deps = [":library_with_generated_inputs_and_package_identity"],
 )
