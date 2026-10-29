@@ -224,6 +224,18 @@ static loom_target_math_op_t loom_math_legalize_op_kind(const loom_op_t* op) {
     case LOOM_OP_SCALAR_LOG2F:
     case LOOM_OP_VECTOR_LOG2F:
       return LOOM_TARGET_MATH_OP_LOG2F;
+    case LOOM_OP_SCALAR_ASINF:
+    case LOOM_OP_VECTOR_ASINF:
+      return LOOM_TARGET_MATH_OP_ASINF;
+    case LOOM_OP_SCALAR_ACOSF:
+    case LOOM_OP_VECTOR_ACOSF:
+      return LOOM_TARGET_MATH_OP_ACOSF;
+    case LOOM_OP_SCALAR_ATANF:
+    case LOOM_OP_VECTOR_ATANF:
+      return LOOM_TARGET_MATH_OP_ATANF;
+    case LOOM_OP_SCALAR_ATAN2F:
+    case LOOM_OP_VECTOR_ATAN2F:
+      return LOOM_TARGET_MATH_OP_ATAN2F;
     case LOOM_OP_SCALAR_SINHF:
     case LOOM_OP_VECTOR_SINHF:
       return LOOM_TARGET_MATH_OP_SINHF;

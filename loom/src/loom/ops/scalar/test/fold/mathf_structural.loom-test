@@ -292,3 +292,27 @@ func.def @scalar_hyperbolic_boundaries() -> (f32, f64, f64, f16, bf16, f64) {
   %atanh_result = scalar.constant 4.9406564584124654e-324 : f64
   func.return %tanh_result, %sinh_result, %cosh_result, %asinh_result, %acosh_result, %atanh_result : f32, f64, f64, f16, bf16, f64
 }
+
+// ====
+
+func.def @scalar_inverse_trigonometry() -> (f32, f64, bf16, f8E5M2) {
+  %asin_input = scalar.constant 0.99999994039535522 : f32
+  %asin_result = scalar.asinf %asin_input : f32
+  %acos_input = scalar.constant 0.99999999999999989 : f64
+  %acos_result = scalar.acosf %acos_input : f64
+  %atan_input = scalar.constant -1.0 : bf16
+  %atan_result = scalar.atanf %atan_input : bf16
+  %atan2_input = scalar.constant 0.5 : f8E5M2
+  %negative_x = scalar.constant -0.5 : f8E5M2
+  %atan2_result = scalar.atan2f %atan2_input, %negative_x : f8E5M2
+  func.return %asin_result, %acos_result, %atan_result, %atan2_result : f32, f64, bf16, f8E5M2
+}
+
+// ----
+func.def @scalar_inverse_trigonometry() -> (f32, f64, bf16, f8E5M2) {
+  %asin_result = scalar.constant 1.570451021194458 : f32
+  %acos_result = scalar.constant 1.4901161193847656e-08 : f64
+  %atan_result = scalar.constant -0.78515625 : bf16
+  %atan2_result = scalar.constant 2.5 : f8E5M2
+  func.return %asin_result, %acos_result, %atan_result, %atan2_result : f32, f64, bf16, f8E5M2
+}

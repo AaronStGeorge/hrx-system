@@ -175,6 +175,7 @@ loom_corpus_test(
             "numeric/float/exponential.loom",
             "numeric/float/logarithm.loom",
             "numeric/float/hyperbolic.loom",
+            "numeric/float/inverse_trigonometry.loom",
             "numeric/float/roots.loom",
             "numeric/float/reciprocal.loom",
             "numeric/float/inverse_hyperbolic.loom",

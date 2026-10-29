@@ -11,6 +11,7 @@
 
 #include "iree/math/exponential.h"
 #include "iree/math/hyperbolic.h"
+#include "iree/math/inverse_trigonometry.h"
 #include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
 #include "iree/math/trigonometry.h"
@@ -96,6 +97,15 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits) {
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_ATANH:
       result = iree_math_atanh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ASIN:
+      result = iree_math_asin_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ACOS:
+      result = iree_math_acos_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ATAN:
+      result = iree_math_atan_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXPM1:
       result = iree_math_expm1_f32(source);
@@ -193,6 +203,15 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_ATANH:
       result = iree_math_atanh_f64(source);
       break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ASIN:
+      result = iree_math_asin_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ACOS:
+      result = iree_math_acos_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ATAN:
+      result = iree_math_atan_f64(source);
+      break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXPM1:
       result = iree_math_expm1_f64(source);
       break;
@@ -239,6 +258,9 @@ IREE_ATTRIBUTE_NOINLINE uint32_t iree_vm_bytecode_float_math_binary_f32(
     case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_POW:
       result = iree_math_pow_f32(left, right);
       break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_ATAN2:
+      result = iree_math_atan2_f32(left, right);
+      break;
     default:
       IREE_ASSERT_UNREACHABLE("binary math selector was not verified");
       return 0;
@@ -254,6 +276,9 @@ IREE_ATTRIBUTE_NOINLINE uint64_t iree_vm_bytecode_float_math_binary_f64(
   switch (selector) {
     case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_POW:
       result = iree_math_pow_f64(left, right);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_ATAN2:
+      result = iree_math_atan2_f64(left, right);
       break;
     default:
       IREE_ASSERT_UNREACHABLE("binary math selector was not verified");

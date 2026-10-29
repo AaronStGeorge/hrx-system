@@ -14,7 +14,7 @@
           },
           "stdout": {
             "contains": [
-              "\"case_count\":4",
+              "\"case_count\":6",
               "\"failed_sample_count\":0"
             ]
           }
@@ -30,6 +30,8 @@
               "--root=@ordinary_f64",
               "--root=@ordinary_hyperbolic_f32",
               "--root=@ordinary_hyperbolic_f64",
+              "--root=@ordinary_inverse_trigonometry_f32",
+              "--root=@ordinary_inverse_trigonometry_f64",
               "--to=bc",
               "--output={tmp}/elementary.loombc"
             ]
@@ -45,7 +47,7 @@
           },
           "stdout": {
             "contains": [
-              "\"case_count\":4",
+              "\"case_count\":6",
               "\"failed_sample_count\":0"
             ]
           }

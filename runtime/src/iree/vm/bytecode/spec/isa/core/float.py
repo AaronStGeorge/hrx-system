@@ -298,6 +298,33 @@ _FLOAT_MATH_ORDINARY_UNARY_VALUES = (
         "from correct rounding. Every NaN becomes the canonical positive "
         "quiet NaN. Signed zero is preserved; +/-1 return signed infinity; inputs outside [-1,1] return canonical NaN.",
     ),
+    (
+        "asin",
+        28,
+        "Returns the stable iree/math asin mapping in radians with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Every NaN becomes the canonical "
+        "positive quiet NaN. Signed zero is preserved; inputs outside [-1,1] "
+        "return canonical NaN.",
+    ),
+    (
+        "acos",
+        29,
+        "Returns the stable iree/math acos mapping in radians with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Every NaN becomes the canonical "
+        "positive quiet NaN. One returns positive zero and negative one returns "
+        "pi; inputs outside [-1,1] return canonical NaN.",
+    ),
+    (
+        "atan",
+        30,
+        "Returns the stable iree/math atan mapping in radians with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Every NaN becomes the canonical "
+        "positive quiet NaN. Signed zero is preserved and infinities return "
+        "signed pi/2.",
+    ),
 )
 
 FLOAT_MATH_F32_SELECTOR = _selector(
@@ -500,6 +527,17 @@ FLOAT_MATH_BINARY_SELECTOR = _selector(
             "negative result only for odd integer exponents. Infinite exponents "
             "follow the limit determined by the base magnitude relative to one; "
             "a base of -1 returns one for either infinite exponent.",
+        ),
+        (
+            "atan2",
+            1,
+            "Returns the stable iree/math atan2(left, right) mapping in radians "
+            "in [-pi,pi], with fixed unfused rounding points, gradual underflow, "
+            "and at most one adjacent value of error from correct rounding. "
+            "Left is y and right is x. The sign of y is retained on the axes "
+            "and branch cut, including signed zero. Signed zero x selects its "
+            "sign's quadrant; infinite operands select the corresponding axis "
+            "or diagonal angle. Every NaN returns canonical positive quiet NaN.",
         ),
     ),
 )

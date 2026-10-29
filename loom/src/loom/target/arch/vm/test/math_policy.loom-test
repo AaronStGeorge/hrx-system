@@ -428,3 +428,78 @@ low.func.def target<vm.core>(@vm) abi(vm_function) @ordinary_narrow_hyperbolic(%
   %result = conversion.float.truncate %3, "f32.to.bf16" : reg<vm.value : bf16>
   return %result
 }
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @inverse_trigonometry_f32(%y: f32, %x: f32) -> (f32, f32, f32, f32) {
+  %asin = scalar.asinf %y : f32
+  %acos = scalar.acosf %y : f32
+  %atan = scalar.atanf %y : f32
+  %atan2 = scalar.atan2f %y, %x : f32
+  func.return %asin, %acos, %atan, %atan2 : f32, f32, f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @inverse_trigonometry_f32(%y: reg<vm.value : f32>, %x: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %asin = float.math.unary.f32 %y, "asin"
+  %acos = float.math.unary.f32 %y, "acos"
+  %atan = float.math.unary.f32 %y, "atan"
+  %atan2 = float.math.binary.f32 %y, %x, "atan2"
+  return %asin, %acos, %atan, %atan2
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @inverse_trigonometry_f64(%y: f64, %x: f64) -> (f64, f64, f64, f64) {
+  %asin = scalar.asinf %y : f64
+  %acos = scalar.acosf %y : f64
+  %atan = scalar.atanf %y : f64
+  %atan2 = scalar.atan2f %y, %x : f64
+  func.return %asin, %acos, %atan, %atan2 : f64, f64, f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @inverse_trigonometry_f64(%y: reg<vm.value : f64>, %x: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %asin = float.math.unary.f64 %y, "asin"
+  %acos = float.math.unary.f64 %y, "acos"
+  %atan = float.math.unary.f64 %y, "atan"
+  %atan2 = float.math.binary.f64 %y, %x, "atan2"
+  return %asin, %acos, %atan, %atan2
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @inverse_trigonometry_f16(%y: f16, %x: f16) -> (f16, f16, f16, f16) {
+  %asin = scalar.asinf %y : f16
+  %acos = scalar.acosf %y : f16
+  %atan = scalar.atanf %y : f16
+  %atan2 = scalar.atan2f %y, %x : f16
+  func.return %asin, %acos, %atan, %atan2 : f16, f16, f16, f16
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @inverse_trigonometry_f16(%y: reg<vm.value : f16>, %x: reg<vm.value : f16>) -> (reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>) asm {
+  %6 = conversion.float.extend %y, "f16.to.f32" : reg<vm.value : f32>
+  %7 = float.math.unary.f32 %6, "asin"
+  %asin = conversion.float.truncate %7, "f32.to.f16" : reg<vm.value : f16>
+  %9 = float.math.unary.f32 %6, "acos"
+  %acos = conversion.float.truncate %9, "f32.to.f16" : reg<vm.value : f16>
+  %11 = float.math.unary.f32 %6, "atan"
+  %atan = conversion.float.truncate %11, "f32.to.f16" : reg<vm.value : f16>
+  %13 = conversion.float.extend %x, "f16.to.f32" : reg<vm.value : f32>
+  %14 = float.math.binary.f32 %6, %13, "atan2"
+  %atan2 = conversion.float.truncate %14, "f32.to.f16" : reg<vm.value : f16>
+  return %asin, %acos, %atan, %atan2
+}

@@ -163,3 +163,49 @@ check.case public @ordinary_hyperbolic_f64 {
   check.expect.approximate actual(%atanh) expected(%atanh_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
   check.return
 }
+
+func.def @inverse_trigonometry_f32(%y: f32, %x: f32) -> (f32, f32, f32, f32) {
+  %asin = scalar.asinf %y : f32
+  %acos = scalar.acosf %y : f32
+  %atan = scalar.atanf %y : f32
+  %atan2 = scalar.atan2f %y, %x : f32
+  func.return %asin, %acos, %atan, %atan2 : f32, f32, f32, f32
+}
+
+check.case public @ordinary_inverse_trigonometry_f32 {
+  %y = check.literal value(0.5) : f32
+  %x = check.literal value(-0.75) : f32
+  %asin, %acos, %atan, %atan2 = func.call @inverse_trigonometry_f32(%y, %x) : (f32, f32) -> (f32, f32, f32, f32)
+  %asin_reference = check.literal value(0.52359879016876221) : f32
+  check.expect.approximate actual(%asin) expected(%asin_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %acos_reference = check.literal value(1.0471975803375244) : f32
+  check.expect.approximate actual(%acos) expected(%acos_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %atan_reference = check.literal value(0.46364760398864746) : f32
+  check.expect.approximate actual(%atan) expected(%atan_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %atan2_reference = check.literal value(2.5535900592803955) : f32
+  check.expect.approximate actual(%atan2) expected(%atan2_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  check.return
+}
+
+func.def @inverse_trigonometry_f64(%y: f64, %x: f64) -> (f64, f64, f64, f64) {
+  %asin = scalar.asinf %y : f64
+  %acos = scalar.acosf %y : f64
+  %atan = scalar.atanf %y : f64
+  %atan2 = scalar.atan2f %y, %x : f64
+  func.return %asin, %acos, %atan, %atan2 : f64, f64, f64, f64
+}
+
+check.case public @ordinary_inverse_trigonometry_f64 {
+  %y = check.literal value(0.5) : f64
+  %x = check.literal value(-0.75) : f64
+  %asin, %acos, %atan, %atan2 = func.call @inverse_trigonometry_f64(%y, %x) : (f64, f64) -> (f64, f64, f64, f64)
+  %asin_reference = check.literal value(0.52359877559829893) : f64
+  check.expect.approximate actual(%asin) expected(%asin_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %acos_reference = check.literal value(1.0471975511965979) : f64
+  check.expect.approximate actual(%acos) expected(%acos_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %atan_reference = check.literal value(0.46364760900080609) : f64
+  check.expect.approximate actual(%atan) expected(%atan_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %atan2_reference = check.literal value(2.5535900500422257) : f64
+  check.expect.approximate actual(%atan2) expected(%atan2_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  check.return
+}

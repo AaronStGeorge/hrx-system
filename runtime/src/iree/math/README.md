@@ -6,7 +6,8 @@ public function names one stable operation, format, and numerical contract so
 constant evaluation and dynamic execution can agree across hosts.
 
 Ordinary F32/F64 square root, reciprocal square root, cube root, exponentials,
-logarithms, real powers, and hyperbolic functions preserve gradual underflow.
+logarithms, real powers, hyperbolic functions, and inverse trigonometry preserve
+gradual underflow.
 Both scalar and vector constant folding and the Core VM call these same typed
 functions:
 
@@ -50,6 +51,11 @@ Cancellation-safe interval formulas preserve small sinh/asinh/atanh results and
 acosh near one. Scaled exponential reconstruction retains finite sinh/cosh
 results even when exp would overflow. Compact rational tanh approximations
 avoid cancellation without adding another exponential table.
+
+Inverse trigonometry shares rational asin/acos corrections and compensated
+root reconstruction near the endpoints. atan reduces into four polynomial
+intervals; atan2 reuses it after guarding the ratio exponent and retains signed
+axes and quadrants explicitly. These are ordinary radian-valued mappings.
 
 Fused multiply-add rounds the exact product and addend once. F32/F64 use a
 native instruction when enabled by the build ISA, with an owned software
@@ -101,6 +107,7 @@ Operations are grouped by algorithm family and provenance:
 - `exponential.h` owns natural/base-two exponentials, `expm1`, and real powers.
 - `logarithm.h` owns natural/base-two/base-ten logarithms and `log1p`.
 - `hyperbolic.h` owns sinh/cosh/tanh and their inverses.
+- `inverse_trigonometry.h` owns asin/acos/atan/atan2.
 - `fma.h` owns fused arithmetic and narrow-format intermediate evaluation.
 - `roots.h` owns reciprocal, reciprocal square root, square root, and cube root.
 - `trigonometry.h` owns turns-based sine and cosine.

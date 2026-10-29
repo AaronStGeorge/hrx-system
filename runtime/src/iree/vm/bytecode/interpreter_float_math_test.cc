@@ -304,6 +304,54 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, HyperbolicSelectorDomains) {
             UINT64_C(0x8000000000000000));
 }
 
+TEST_F(VMBytecodeInterpreterFloatMathTest, InverseTrigonometrySelectors) {
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ASIN,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x80000000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ACOS,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x3FC90FDB));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ATAN,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x80000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ASIN,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x8000000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ACOS,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x3FF921FB54442D18));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ATAN,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x8000000000000000));
+}
+
+TEST_F(VMBytecodeInterpreterFloatMathTest, Atan2OrderAndAliasing) {
+  // Deliberately unequal inputs distinguish y/x from x/y. Aliasing either
+  // input must retain both coordinates, and F32 clears dirty high cell bits.
+  for (uint8_t destination : {0, 1, 2}) {
+    uint64_t values32[] = {UINT64_C(0xDEADBEEF80000000),
+                           UINT64_C(0xBAADF00DC0000000), UINT64_MAX};
+    const iree_vm_bytecode_float_math_binary_f32_t record32 = {
+        .destination_v8 = destination,
+        .left_v8 = 0,
+        .right_v8 = 1,
+        .selector_u8 = IREE_VM_BYTECODE_FLOAT_MATH_BINARY_ATAN2,
+    };
+    iree_vm_bytecode_execute_float_math_binary_f32(&record32, values32);
+    EXPECT_EQ(values32[destination], UINT32_C(0xC0490FDB));
+    uint64_t values64[] = {UINT64_C(0x8000000000000000),
+                           UINT64_C(0xC000000000000000), UINT64_MAX};
+    const iree_vm_bytecode_float_math_binary_f64_t record64 = {
+        .destination_v8 = destination,
+        .left_v8 = 0,
+        .right_v8 = 1,
+        .selector_u8 = IREE_VM_BYTECODE_FLOAT_MATH_BINARY_ATAN2,
+    };
+    iree_vm_bytecode_execute_float_math_binary_f64(&record64, values64);
+    EXPECT_EQ(values64[destination], UINT64_C(0xC00921FB54442D18));
+  }
+}
+
 TEST_F(VMBytecodeInterpreterFloatMathTest, FmaRoundsOnce) {
   EXPECT_EQ(ExecuteFma<iree_vm_bytecode_float_fma_f32_t>(
                 iree_vm_bytecode_execute_float_fma_f32, UINT32_C(0x3F800001),

@@ -22,6 +22,7 @@
 #include "iree/math/exponential.h"
 #include "iree/math/fma.h"
 #include "iree/math/hyperbolic.h"
+#include "iree/math/inverse_trigonometry.h"
 #include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
 #include "loom/ir/attribute.h"
@@ -3933,10 +3934,14 @@ iree_status_t loom_vector_costurnsf_facts(
 }
 
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_tanf_facts, tanf, tan)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_asinf_facts, asinf, asin)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_acosf_facts, acosf, acos)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_atanf_facts, atanf, atan)
-LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_atan2f_facts, atan2f, atan2)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_asinf_facts, iree_math_asin_f32,
+                              iree_math_asin_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_acosf_facts, iree_math_acos_f32,
+                              iree_math_acos_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_atanf_facts, iree_math_atan_f32,
+                              iree_math_atan_f64)
+LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_atan2f_facts, iree_math_atan2_f32,
+                               iree_math_atan2_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sinhf_facts, iree_math_sinh_f32,
                               iree_math_sinh_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_coshf_facts, iree_math_cosh_f32,

@@ -120,7 +120,7 @@ class SpecificationTest(unittest.TestCase):
                 len(NUMERIC_TABLES),
                 sum(len(table.values) for table in NUMERIC_TABLES),
             ),
-            (12, 184, 21, 224, tuple(range(1, 14)), 59, 9, 30),
+            (12, 184, 21, 231, tuple(range(1, 14)), 59, 9, 30),
         )
 
     def test_layout_rejects_implicit_alignment_padding(self) -> None:
@@ -162,7 +162,7 @@ class SpecificationTest(unittest.TestCase):
             tuple(
                 (value.name, value.value) for value in FLOAT_MATH_BINARY_SELECTOR.values
             ),
-            (("pow", 0),),
+            (("pow", 0), ("atan2", 1)),
         )
         for width, opcode in ((32, 0x9C), (64, 0x9D)):
             instruction = _instruction(f"float.math.binary.f{width}")
@@ -193,6 +193,9 @@ class SpecificationTest(unittest.TestCase):
             ("asinh", 25),
             ("acosh", 26),
             ("atanh", 27),
+            ("asin", 28),
+            ("acos", 29),
+            ("atan", 30),
         )
         self.assertEqual(
             tuple(

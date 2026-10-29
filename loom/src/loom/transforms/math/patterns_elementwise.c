@@ -853,6 +853,10 @@ static void loom_math_legalize_binary_source_initialize(
       out_source->binary_build =
           is_scalar ? loom_scalar_divf_build : loom_vector_divf_build;
       return;
+    case LOOM_TARGET_MATH_OP_ATAN2F:
+      out_source->binary_build =
+          is_scalar ? loom_scalar_atan2f_build : loom_vector_atan2f_build;
+      return;
     case LOOM_TARGET_MATH_OP_POWF:
       out_source->binary_build =
           is_scalar ? loom_scalar_powf_build : loom_vector_powf_build;
@@ -900,6 +904,18 @@ static void loom_math_legalize_unary_source_initialize(
     case LOOM_TARGET_MATH_OP_ATANHF:
       out_source->unary_build =
           is_scalar ? loom_scalar_atanhf_build : loom_vector_atanhf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_ASINF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_asinf_build : loom_vector_asinf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_ACOSF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_acosf_build : loom_vector_acosf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_ATANF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_atanf_build : loom_vector_atanf_build;
       return;
     case LOOM_TARGET_MATH_OP_EXPM1F:
       out_source->unary_build =
@@ -1090,6 +1106,7 @@ static iree_status_t loom_math_legalize_build_widen_f32_round(
     case LOOM_TARGET_MATH_OP_MULF:
     case LOOM_TARGET_MATH_OP_DIVF:
     case LOOM_TARGET_MATH_OP_POWF:
+    case LOOM_TARGET_MATH_OP_ATAN2F:
       return loom_math_legalize_build_widen_f32_round_binary(builder, context,
                                                              op, out_value);
     case LOOM_TARGET_MATH_OP_EXPF:
@@ -1099,6 +1116,9 @@ static iree_status_t loom_math_legalize_build_widen_f32_round(
     case LOOM_TARGET_MATH_OP_ASINHF:
     case LOOM_TARGET_MATH_OP_ACOSHF:
     case LOOM_TARGET_MATH_OP_ATANHF:
+    case LOOM_TARGET_MATH_OP_ASINF:
+    case LOOM_TARGET_MATH_OP_ACOSF:
+    case LOOM_TARGET_MATH_OP_ATANF:
     case LOOM_TARGET_MATH_OP_EXPM1F:
     case LOOM_TARGET_MATH_OP_EXP2F:
     case LOOM_TARGET_MATH_OP_SQRTF:

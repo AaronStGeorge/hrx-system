@@ -120,3 +120,27 @@ func.def @vector_hyperbolic_boundaries() -> (vector<2xf32>, vector<2xf64>, vecto
   %atanh_result = vector.constant 4.9406564584124654e-324 : vector<2xf64>
   func.return %tanh_result, %sinh_result, %cosh_result, %asinh_result, %acosh_result, %atanh_result : vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf16>, vector<2xbf16>, vector<2xf64>
 }
+
+// ====
+
+func.def @vector_inverse_trigonometry() -> (vector<2xf32>, vector<2xf64>, vector<2xbf16>, vector<2xf8E5M2>) {
+  %asin_input = vector.constant 0.99999994039535522 : vector<2xf32>
+  %asin_result = vector.asinf %asin_input : vector<2xf32>
+  %acos_input = vector.constant 0.99999999999999989 : vector<2xf64>
+  %acos_result = vector.acosf %acos_input : vector<2xf64>
+  %atan_input = vector.constant -1.0 : vector<2xbf16>
+  %atan_result = vector.atanf %atan_input : vector<2xbf16>
+  %atan2_input = vector.constant 0.5 : vector<2xf8E5M2>
+  %negative_x = vector.constant -0.5 : vector<2xf8E5M2>
+  %atan2_result = vector.atan2f %atan2_input, %negative_x : vector<2xf8E5M2>
+  func.return %asin_result, %acos_result, %atan_result, %atan2_result : vector<2xf32>, vector<2xf64>, vector<2xbf16>, vector<2xf8E5M2>
+}
+
+// ----
+func.def @vector_inverse_trigonometry() -> (vector<2xf32>, vector<2xf64>, vector<2xbf16>, vector<2xf8E5M2>) {
+  %asin_result = vector.constant 1.570451021194458 : vector<2xf32>
+  %acos_result = vector.constant 1.4901161193847656e-08 : vector<2xf64>
+  %atan_result = vector.constant -0.78515625 : vector<2xbf16>
+  %atan2_result = vector.constant 2.5 : vector<2xf8E5M2>
+  func.return %asin_result, %acos_result, %atan_result, %atan2_result : vector<2xf32>, vector<2xf64>, vector<2xbf16>, vector<2xf8E5M2>
+}
