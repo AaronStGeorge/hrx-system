@@ -42,6 +42,35 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertIn('  SRCS\n    "identity.c"\n', converter.body)
 
+    def test_compile_options_preserve_language_and_platform(self):
+        for rule in ("cc_library", "cc_binary", "cc_test", "iree_cc_fuzz"):
+            with self.subTest(rule=rule):
+                output = bazel_to_cmake_converter.convert_build_file(
+                    f"""
+{rule}(
+    name = "mixed",
+    srcs = ["first.c", "second.cc"],
+    copts = ["-Wall"],
+    conlyopts = ["-std=c11"],
+    cxxopts = select({{
+        "@platforms//os:windows": ["/EHsc"],
+        "//conditions:default": ["-fexceptions"],
+    }}),
+)
+""",
+                    SimpleNamespace(),
+                    "/repo/pkg",
+                    repo_root="/repo",
+                )
+                self.assertIn('if(CMAKE_SYSTEM_NAME STREQUAL "Windows")', output)
+                self.assertIn('"$<$<COMPILE_LANGUAGE:CXX>:/EHsc>"', output)
+                self.assertIn('"$<$<COMPILE_LANGUAGE:CXX>:-fexceptions>"', output)
+                self.assertIn(
+                    '  COPTS\n    "-Wall"\n    "$<$<COMPILE_LANGUAGE:C>:-std=c11>"\n'
+                    "    ${_mixed_CXX_platform_copts}\n",
+                    output,
+                )
+
     def test_cc_library_group_preserves_interface_dependencies(self):
         converter = SimpleNamespace(body="")
         functions = bazel_to_cmake_converter.BuildFileFunctions(

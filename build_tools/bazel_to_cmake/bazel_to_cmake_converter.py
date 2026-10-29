@@ -446,6 +446,36 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
 
         return deps_block, var_block
 
+    def _convert_compile_options(self, name, copts, conlyopts, cxxopts):
+        def for_language(values, language):
+            if isinstance(values, ConditionSelect):
+                return ConditionSelect(
+                    {
+                        condition: for_language(options, language)
+                        for condition, options in values.conditions.items()
+                    }
+                )
+            if isinstance(values, MixedDeps):
+                return MixedDeps(
+                    for_language(values.unconditional, language),
+                    [for_language(select, language) for select in values.selects],
+                )
+            return [f"$<$<COMPILE_LANGUAGE:{language}>:{value}>" for value in values]
+
+        options, declarations = "", ""
+        for language, values in ((None, copts), ("C", conlyopts), ("CXX", cxxopts)):
+            if values is None:
+                continue
+            option_name = name if language is None else f"{name}_{language}"
+            if language:
+                values = for_language(values, language)
+            block, variables = self._convert_platform_select_strings(
+                option_name, "COPTS", values, sort=False
+            )
+            options += block.removeprefix("  COPTS\n")
+            declarations += variables
+        return ("  COPTS\n" + options if options else ""), declarations
+
     def _convert_platform_select_strings(
         self, name, block_name, values, quote=True, sort=False, expand_locations=False
     ):
@@ -1768,6 +1798,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         srcs=None,
         linkstamp=None,
         copts=None,
+        conlyopts=None,
+        cxxopts=None,
         cxx_standard=None,
         cxx_features=None,
         defines=None,
@@ -1803,8 +1835,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
                 raise ValueError("linkstamp cannot be combined with configurable srcs")
             srcs = list(srcs or []) + [linkstamp]
         srcs_block, platform_srcs_block = self._convert_platform_select_srcs(name, srcs)
-        copts_block, platform_copts_block = self._convert_platform_select_strings(
-            name, "COPTS", copts, sort=False
+        copts_block, platform_copts_block = self._convert_compile_options(
+            name, copts, conlyopts, cxxopts
         )
         defines_block, platform_defines_block = self._convert_platform_select_strings(
             name, "DEFINES", defines
@@ -1886,6 +1918,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         hdrs=None,
         srcs=None,
         copts=None,
+        conlyopts=None,
+        cxxopts=None,
         cxx_standard=None,
         cxx_features=None,
         defines=None,
@@ -1923,8 +1957,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         )
         hdrs_block = self._convert_srcs_block(hdrs, block_name="HDRS")
         srcs_block, platform_srcs_block = self._convert_platform_select_srcs(name, srcs)
-        copts_block, platform_copts_block = self._convert_platform_select_strings(
-            name, "COPTS", copts, sort=False
+        copts_block, platform_copts_block = self._convert_compile_options(
+            name, copts, conlyopts, cxxopts
         )
         defines_block, platform_defines_block = self._convert_platform_select_strings(
             name, "DEFINES", defines
@@ -2000,6 +2034,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         data=None,
         deps=None,
         copts=None,
+        conlyopts=None,
+        cxxopts=None,
         defines=None,
         linkopts=None,
         linkshared=None,
@@ -2012,8 +2048,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
             return
         self._target_file_labels.add(self._current_target_label(name))
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        copts_block, platform_copts_block = self._convert_platform_select_strings(
-            name, "COPTS", copts, sort=False
+        copts_block, platform_copts_block = self._convert_compile_options(
+            name, copts, conlyopts, cxxopts
         )
         defines_block, platform_defines_block = self._convert_platform_select_strings(
             name, "DEFINES", defines
@@ -2080,6 +2116,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         data=None,
         deps=None,
         copts=None,
+        conlyopts=None,
+        cxxopts=None,
         defines=None,
         linkopts=None,
         tags=None,
@@ -2092,8 +2130,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         srcs_block, platform_srcs_block = self._convert_platform_select_srcs(name, srcs)
         data_block = self._convert_target_list_block("DATA", data)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
-        copts_block, platform_copts_block = self._convert_platform_select_strings(
-            name, "COPTS", copts, sort=False
+        copts_block, platform_copts_block = self._convert_compile_options(
+            name, copts, conlyopts, cxxopts
         )
         defines_block, platform_defines_block = self._convert_platform_select_strings(
             name, "DEFINES", defines

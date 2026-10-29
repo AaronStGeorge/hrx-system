@@ -329,6 +329,12 @@ mimalloc configuration composes with ASAN, MSAN, TSAN, and UBSAN. Sanitizer
 instrumentation owns the process allocation boundary in those builds, so the
 effective shared default remains libc and global C++ allocation is not replaced.
 
+`--//runtime/config/base:allocator_system=custom` in Bazel or
+`-DIREE_ALLOCATOR_SYSTEM=custom` in CMake selects an application-owned allocator.
+Applications must supply `IREE_ALLOCATOR_SYSTEM_CTL` and, optionally,
+`IREE_ALLOCATOR_SYSTEM_SELF` through their compile configuration and link their
+allocator implementation. The build then includes neither builtin allocator.
+
 ## Platform Builds and Cross-Compilation
 
 ### Destination and compiler selection

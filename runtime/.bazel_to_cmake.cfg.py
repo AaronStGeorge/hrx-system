@@ -226,6 +226,8 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
         "//runtime/src/iree/math:msvc_x86_32": (
             '(CMAKE_C_COMPILER_ID STREQUAL "MSVC") AND (IREE_ARCH STREQUAL "x86_32")'
         ),
+        "//runtime/config/base:allocator_system_custom": 'IREE_ALLOCATOR_SYSTEM STREQUAL "custom"',
+        "//runtime/config/base:allocator_system_mimalloc": 'IREE_ALLOCATOR_SYSTEM STREQUAL "mimalloc"',
     },
     convert_unmatched_target=convert_unmatched_target,
 )

@@ -42,7 +42,13 @@ if(IREE_NET_RDMA AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 set(IREE_ALLOCATOR_SYSTEM "libc" CACHE STRING
-  "Default named iree_allocator_t library and function base name.")
+  "System allocator implementation: libc, mimalloc, or custom.")
+set_property(CACHE IREE_ALLOCATOR_SYSTEM PROPERTY STRINGS libc mimalloc custom)
+if(NOT IREE_ALLOCATOR_SYSTEM MATCHES "^(libc|mimalloc|custom)$")
+  message(FATAL_ERROR
+    "Unknown IREE_ALLOCATOR_SYSTEM='${IREE_ALLOCATOR_SYSTEM}'. "
+    "Expected libc, mimalloc, or custom.")
+endif()
 set(IREE_RUNTIME_OPTIMIZATION_PROFILE "" CACHE STRING
   "Runtime optimization profile to apply. One of '', 'lto', 'size'.")
 set(IREE_LTO_MODE "full" CACHE STRING
