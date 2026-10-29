@@ -125,29 +125,6 @@ value %wide: test.i32 -> target_id[1:4]
 
 // ====
 
-// Ordinary aligned-first coloring places %left at [4, 8), leaving no
-// four-unit span for %right. The repair coloring must use legal dense bases so
-// that the exact nine-unit live set fits without spilling.
-// RUN: emit low-allocation-query @dense_aggregate_repair spill-count values=%condition,%left,%right,%sum test.i32=9 fixed=%condition:target_id:0:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @dense_aggregate_repair(%pointer: reg<test.ptr>, %condition: reg<test.i32>) -> (reg<test.i32>, reg<test.i32 x4>) asm {
-  %left = test.load.v4i32 %pointer
-  %right = test.load.v4i32 %pointer
-  %sum = test.add.v4i32 %left, %right
-  return %condition, %sum
-}
-
-// ----
-spills: 0
-value %condition: test.i32 -> target_id[0:1]
-value %left: test.i32 -> target_id[1:4]
-value %right: test.i32 -> target_id[5:4]
-value %sum: test.i32 -> target_id[1:4]
-
-// ====
-
 // Reserving a future four-unit concat at its optional aligned base strands the
 // other four-unit value. The repair coloring must also make prospective
 // aggregate reservations dense, not just ordinary interval searches.

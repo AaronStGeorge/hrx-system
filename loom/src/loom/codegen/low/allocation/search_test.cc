@@ -935,6 +935,19 @@ TEST_F(LowAllocationSearchTest,
   EXPECT_FALSE(loom_low_allocation_search_find_free_location(
       &context, &intervals[0], Capacity(/*max_units=*/8), &location_base));
 
+  // Repair fills the legal aggregate gap instead of repeating the ordinary
+  // aligned-first choice. A reserved scalar makes the two orders distinct.
+  reserved_range.location_count = 1;
+  auto ordinary_context = context;
+  ordinary_context.scalar_packing = {};
+  EXPECT_TRUE(loom_low_allocation_search_find_free_location(
+      &ordinary_context, &intervals[1], Capacity(/*max_units=*/8),
+      &location_base));
+  EXPECT_EQ(location_base, 4u);
+  EXPECT_TRUE(loom_low_allocation_search_find_free_location(
+      &context, &intervals[1], Capacity(/*max_units=*/8), &location_base));
+  EXPECT_EQ(location_base, 1u);
+
   // The preferred descending range intersects an active tuple. Keep the
   // first-fit packing order when active conflicts and reserved gaps alternate.
   assignments[0] = Assignment(wide_value, /*start=*/0, /*end=*/7, value_class,
