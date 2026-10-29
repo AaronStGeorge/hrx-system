@@ -183,3 +183,20 @@ loom_cc_library(
         "//runtime/src/iree/base",
     ],
 )
+
+loom_cc_test(
+    name = "math_policy_test",
+    srcs = [
+        "math_policy.c",
+        "math_policy.h",
+        "math_policy_test.cc",
+    ],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/target:math_policy",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

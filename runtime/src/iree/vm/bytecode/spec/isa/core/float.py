@@ -17,8 +17,9 @@ from iree.vm.bytecode.spec.isa import (
     Instruction,
     InstructionFamily,
     InstructionField,
+    RecordRule,
 )
-from iree.vm.bytecode.spec.isa.core.rules import FieldRule
+from iree.vm.bytecode.spec.isa.core.rules import FieldRule, RecordRuleKind
 from iree.vm.bytecode.spec.schema import (
     U8,
     U16,
@@ -74,9 +75,20 @@ class FloatFmaSemantics(NamedTuple):
     bit_width: int
 
 
+class FloatDecomposeSemantics(NamedTuple):
+    # IEEE width of the source and fraction; the exponent is always i32.
+    bit_width: int
+
+
+class FloatScaleSemantics(NamedTuple):
+    # IEEE width of the source and result; the exponent is always i32.
+    bit_width: int
+
+
 class FloatMathSemantics(NamedTuple):
     # The instruction's selector defines the exact mapping at this width.
     bit_width: int
+    operand_count: int
 
 
 def _selector(
@@ -162,6 +174,257 @@ _FLOAT_MATH_EXACT_UNARY_VALUES = (
         "negative nonzero values, including -infinity, become -1; positive nonzero "
         "values, including +infinity, become +1.",
     ),
+    (
+        "round_away",
+        43,
+        "Returns the nearest integral value with halfway cases away from zero, "
+        "preserving signed zero and signed infinity.",
+    ),
+)
+
+_FLOAT_MATH_ORDINARY_UNARY_VALUES = (
+    (
+        "sqrt",
+        12,
+        "Returns the correctly rounded square root with gradual underflow. "
+        "Signed zero and positive infinity are preserved; negative nonzero "
+        "values and every NaN become the canonical positive quiet NaN.",
+    ),
+    (
+        "rsqrt",
+        13,
+        "Returns 1/sqrt(x) with separate same-width rounding after square root "
+        "and division, preserving gradual underflow. Signed zero becomes signed "
+        "infinity; positive infinity becomes +0; negative nonzero values and "
+        "every NaN become the canonical positive quiet NaN.",
+    ),
+    (
+        "exp",
+        14,
+        "Returns the stable iree/math e^x mapping with gradual underflow and "
+        "fixed unfused rounding points. Finite results are within one adjacent "
+        "value of correct rounding. Either zero becomes one; infinities map "
+        "to their limits; every NaN becomes the canonical positive quiet NaN.",
+    ),
+    (
+        "exp2",
+        15,
+        "Returns the stable iree/math 2^x mapping with gradual underflow and "
+        "fixed unfused rounding points. Finite results are within one adjacent "
+        "value of correct rounding. Either zero becomes one; infinities map "
+        "to their limits; every NaN becomes the canonical positive quiet NaN.",
+    ),
+    (
+        "cbrt",
+        16,
+        "Returns the stable iree/math real cube-root mapping with fixed unfused "
+        "refinement and at most one adjacent value of error from correct "
+        "rounding. Signed zero and infinity are preserved, subnormal inputs "
+        "are not flushed, and every NaN becomes the canonical positive quiet NaN.",
+    ),
+    (
+        "log",
+        17,
+        "Returns the stable iree/math log mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Either zero returns negative infinity; negative "
+        "inputs and every NaN become the canonical positive quiet NaN; positive "
+        "infinity is preserved.",
+    ),
+    (
+        "log2",
+        18,
+        "Returns the stable iree/math log2 mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Either zero returns negative infinity; negative "
+        "inputs and every NaN become the canonical positive quiet NaN; positive "
+        "infinity is preserved.",
+    ),
+    (
+        "log10",
+        19,
+        "Returns the stable iree/math log10 mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Either zero returns negative infinity; negative "
+        "inputs and every NaN become the canonical positive quiet NaN; positive "
+        "infinity is preserved.",
+    ),
+    (
+        "log1p",
+        20,
+        "Returns the stable iree/math log1p mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Signed zero and positive infinity are "
+        "preserved; -1 returns negative infinity; inputs below -1 and every NaN "
+        "become the canonical positive quiet NaN.",
+    ),
+    (
+        "expm1",
+        21,
+        "Returns the stable iree/math exp(x)-1 mapping without cancellation "
+        "near zero, with fixed unfused rounding points and at most one "
+        "adjacent value of error from correct rounding. Signed zero and "
+        "positive infinity are preserved; negative infinity returns -1; "
+        "every NaN becomes the canonical positive quiet NaN.",
+    ),
+    (
+        "sinh",
+        22,
+        "Returns the stable iree/math sinh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Signed zero and infinity are preserved; finite overflow returns signed infinity.",
+    ),
+    (
+        "cosh",
+        23,
+        "Returns the stable iree/math cosh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Either zero returns one, and either infinity or finite overflow returns positive infinity.",
+    ),
+    (
+        "tanh",
+        24,
+        "Returns the stable iree/math tanh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Signed zero is preserved; saturation and infinities return signed one.",
+    ),
+    (
+        "asinh",
+        25,
+        "Returns the stable iree/math asinh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Signed zero and infinity are preserved; intermediate squares do not overflow.",
+    ),
+    (
+        "acosh",
+        26,
+        "Returns the stable iree/math acosh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. One returns positive zero, positive infinity is preserved, and inputs below one return canonical NaN.",
+    ),
+    (
+        "atanh",
+        27,
+        "Returns the stable iree/math atanh mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN becomes the canonical positive "
+        "quiet NaN. Signed zero is preserved; +/-1 return signed infinity; inputs outside [-1,1] return canonical NaN.",
+    ),
+    (
+        "asin",
+        28,
+        "Returns the stable iree/math asin mapping in radians with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Every NaN becomes the canonical "
+        "positive quiet NaN. Signed zero is preserved; inputs outside [-1,1] "
+        "return canonical NaN.",
+    ),
+    (
+        "acos",
+        29,
+        "Returns the stable iree/math acos mapping in radians with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Every NaN becomes the canonical "
+        "positive quiet NaN. One returns positive zero and negative one returns "
+        "pi; inputs outside [-1,1] return canonical NaN.",
+    ),
+    (
+        "atan",
+        30,
+        "Returns the stable iree/math atan mapping in radians with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Every NaN becomes the canonical "
+        "positive quiet NaN. Signed zero is preserved and infinities return "
+        "signed pi/2.",
+    ),
+    (
+        "sin",
+        31,
+        "Returns the stable iree/math sin mapping for a radian input with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Signed zero is preserved. "
+        "Every nonfinite input returns canonical positive quiet NaN.",
+    ),
+    (
+        "cos",
+        32,
+        "Returns the stable iree/math cos mapping for a radian input with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Cosine returns one at either zero. "
+        "Every nonfinite input returns canonical positive quiet NaN.",
+    ),
+    (
+        "tan",
+        33,
+        "Returns the stable iree/math tan mapping for a radian input with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Signed zero is preserved. "
+        "Every nonfinite input returns canonical positive quiet NaN.",
+    ),
+    (
+        "erf",
+        36,
+        "Returns the stable iree/math erf mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN returns canonical positive quiet "
+        "NaN. Signed zero is preserved; infinities return signed one.",
+    ),
+    (
+        "erfc",
+        37,
+        "Returns the stable iree/math erfc mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN returns canonical positive quiet "
+        "NaN. Either zero returns one; positive infinity returns positive zero; "
+        "negative infinity returns two. The small positive tail is retained "
+        "without subtracting rounded erf from one.",
+    ),
+    (
+        "logistic",
+        38,
+        "Returns the stable iree/math logistic sigmoid 1/(1+exp(-x)), retaining "
+        "its small negative tail. Either zero returns 1/2; negative and positive "
+        "infinity return zero and one. Every NaN returns canonical positive quiet "
+        "NaN.",
+    ),
+    (
+        "silu",
+        39,
+        "Returns the stable iree/math SiLU x/(1+exp(-x)), applying the scale "
+        "before negative-tail underflow. Signed zero is preserved; negative "
+        "infinity returns -0 and positive infinity returns +infinity. Every NaN "
+        "returns canonical positive quiet NaN.",
+    ),
+    (
+        "softplus",
+        40,
+        "Returns the stable iree/math softplus log(1+exp(x)) without positive "
+        "overflow or negative cancellation. Negative infinity returns +0 and "
+        "positive infinity returns +infinity. Every NaN returns canonical "
+        "positive quiet NaN.",
+    ),
+    (
+        "gelu.erf",
+        41,
+        "Returns the stable iree/math erf-GELU x/2*(1+erf(x/sqrt(2))) through "
+        "direct complementary-tail reconstruction. Signed zero is preserved; "
+        "negative infinity returns -0 and positive infinity returns +infinity. "
+        "Every NaN returns canonical positive quiet NaN.",
+    ),
+    (
+        "gelu.tanh",
+        42,
+        "Returns the stable iree/math tanh-GELU "
+        "x/2*(1+tanh(sqrt(2/pi)*(x+0.044715*x^3))), retaining its negative tail. "
+        "This formula remains distinct from erf GELU. Signed zero is preserved; "
+        "negative infinity returns -0 and positive infinity returns +infinity. "
+        "Every NaN returns canonical positive quiet NaN.",
+    ),
 )
 
 FLOAT_MATH_F32_SELECTOR = _selector(
@@ -230,16 +493,38 @@ FLOAT_MATH_F32_SELECTOR = _selector(
             "payload. Cardinal results are structural and every nonfinite input "
             "becomes the canonical positive quiet NaN.",
         ),
-    ),
+    )
+    + _FLOAT_MATH_ORDINARY_UNARY_VALUES,
 )
 
 FLOAT_MATH_F64_SELECTOR = _selector(
     "float.math.f64",
     (
-        "Selects one exact unary f64 mapping. Version zero has no f64 approximate "
-        "machine leaves."
+        "Selects one frozen unary f64 mapping. Ordinary elementary functions "
+        "use the shared iree/math implementation and preserve gradual underflow."
     ),
-    _FLOAT_MATH_EXACT_UNARY_VALUES,
+    _FLOAT_MATH_EXACT_UNARY_VALUES
+    + _FLOAT_MATH_ORDINARY_UNARY_VALUES
+    + (
+        (
+            "sin_turns",
+            34,
+            "Returns the stable iree/math sin(2*pi*x) mapping with fixed unfused "
+            "rounding points, gradual underflow, and at most one adjacent value "
+            "of error from correct rounding. Half-integer turns return zero "
+            "with the input sign and odd quarter-turns return exact signed one. "
+            "Every nonfinite input returns canonical positive quiet NaN.",
+        ),
+        (
+            "cos_turns",
+            35,
+            "Returns the stable iree/math cos(2*pi*x) mapping with fixed unfused "
+            "rounding points, gradual underflow, and at most one adjacent value "
+            "of error from correct rounding. Odd quarter-turns return positive "
+            "zero and other cardinals return exact signed one. Every nonfinite "
+            "input returns canonical positive quiet NaN.",
+        ),
+    ),
 )
 
 FLOAT_COMPARE_SELECTOR = _selector(
@@ -347,10 +632,53 @@ FLOAT_CLAMP_SELECTOR = _selector(
     ),
 )
 
+FLOAT_MATH_BINARY_SELECTOR = _selector(
+    "float.math.binary",
+    "Selects a stable binary math mapping at the instruction's width.",
+    (
+        (
+            "pow",
+            0,
+            "Returns the stable iree/math left^right mapping with fixed unfused "
+            "rounding, gradual underflow, and at most one adjacent result of "
+            "error from correct rounding. Either zero exponent or positive-one "
+            "base returns one, including NaNs. Otherwise every NaN and a negative "
+            "finite base with a finite nonintegral exponent return the canonical "
+            "positive quiet NaN. A negative base, zero, or infinity contributes a "
+            "negative result only for odd integer exponents. Infinite exponents "
+            "follow the limit determined by the base magnitude relative to one; "
+            "a base of -1 returns one for either infinite exponent.",
+        ),
+        (
+            "atan2",
+            1,
+            "Returns the stable iree/math atan2(left, right) mapping in radians "
+            "in [-pi,pi], with fixed unfused rounding points, gradual underflow, "
+            "and at most one adjacent value of error from correct rounding. "
+            "Left is y and right is x. The sign of y is retained on the axes "
+            "and branch cut, including signed zero. Signed zero x selects its "
+            "sign's quadrant; infinite operands select the corresponding axis "
+            "or diagonal angle. Every NaN returns canonical positive quiet NaN.",
+        ),
+        (
+            "gelu.logistic",
+            2,
+            "Returns the stable iree/math left/(1+exp(-right*left)) mapping, "
+            "with left as x and right as its selected-width scale. Negative, "
+            "zero, and infinite scales are valid. Negative tails retain scale "
+            "before final underflow. NaNs and zero-infinity products return "
+            "canonical positive quiet NaN. Otherwise infinite arguments return "
+            "signed zero when right*left is negative, or left when positive.",
+        ),
+    ),
+)
+
+
 FLOAT_SELECTORS = (
     FLOAT_MINMAX_SELECTOR,
     FLOAT_MATH_F32_SELECTOR,
     FLOAT_MATH_F64_SELECTOR,
+    FLOAT_MATH_BINARY_SELECTOR,
     FLOAT_COMPARE_SELECTOR,
     FLOAT_CLASSIFY_SELECTOR,
     FLOAT_CLAMP_SELECTOR,
@@ -393,8 +721,10 @@ FLOAT_FAMILY = InstructionFamily(
         "host libm. The selector suffix is part of the operation identity; it does not "
         "permit any result inside an error interval. Exact integral rounding and fma "
         "have one selected-width mapping. No instruction carries an ambient fast-math "
-        "or approximation mode. Compound functions and strict library roots are "
-        "ordinary compiler recipes or callable libraries, not Core selectors.\n\n"
+        "or approximation mode. Ordinary elementary selectors use the same owned "
+        "iree/math implementations as compiler constant evaluation. Their "
+        "specified arithmetic profile and rounding points freeze the result "
+        "mapping independently of host libm or optional FMA contraction.\n\n"
         "All operations read inputs before destination publication, are infallible "
         "after verification, access no refs, and never suspend."
     ),
@@ -556,19 +886,19 @@ _BINARY_DEFINITIONS = (
         0x88,
         FloatBinaryOperation.REM,
         32,
-        "Computes width-matched f32 fmod. A numeric result has the dividend's sign, "
+        "Computes the exact f32 remainder with a quotient truncated toward zero. A numeric result has the dividend's sign, "
         "including zero; a zero divisor or infinite dividend produces an arithmetic "
         "NaN, while an infinite divisor returns a finite dividend unchanged.",
-        "host_math(fmod, left, right, 32)",
+        "iree_math_fmod_f32(left, right)",
     ),
     _BinaryDefinition(
         0x89,
         FloatBinaryOperation.REM,
         64,
-        "Computes width-matched f64 fmod. A numeric result has the dividend's sign, "
+        "Computes the exact f64 remainder with a quotient truncated toward zero. A numeric result has the dividend's sign, "
         "including zero; a zero divisor or infinite dividend produces an arithmetic "
         "NaN, while an infinite divisor returns a finite dividend unchanged.",
-        "host_math(fmod, left, right, 64)",
+        "iree_math_fmod_f64(left, right)",
     ),
     _BinaryDefinition(
         0x96,
@@ -880,46 +1210,159 @@ def _clamp(opcode: int, width: int) -> Instruction:
     )
 
 
-def _math_unary(opcode: int, width: int) -> Instruction:
-    mnemonic = f"float.math.unary.f{width}"
-    selector = FLOAT_MATH_F32_SELECTOR if width == 32 else FLOAT_MATH_F64_SELECTOR
+def _frexp(opcode: int, width: int) -> Instruction:
+    mnemonic = f"float.frexp.f{width}"
     return Instruction(
         opcode=opcode,
         mnemonic=mnemonic,
         since=CORE_0,
         family=FLOAT_FAMILY,
-        summary=f"Evaluates one closed unary f{width} math operation.",
+        summary=f"Decomposes an f{width} value into its fraction and i32 exponent.",
+        fields=(
+            _value("fraction_v8", FieldRole.RESULT, "Fraction result register."),
+            _value(
+                "exponent_v8", FieldRole.RESULT, "Signed i32 exponent result register."
+            ),
+            _value("source_v8", FieldRole.OPERAND, "Source floating value register."),
+        ),
+        semantics=FloatDecomposeSemantics(width),
+        behavior=(
+            "Reads the source before publishing either result. Finite nonzero values "
+            "decompose exactly into a signed fraction of magnitude [0.5, 1) and an "
+            "i32 exponent such that source = fraction * 2^exponent, including "
+            "subnormal sources. Signed zero and infinity retain their floating "
+            "value with exponent zero. NaNs produce canonical positive quiet NaN "
+            "and exponent zero. Either destination may alias the source."
+        ),
+        success=(
+            f"fraction_v8 receives the f{width} fraction"
+            + (" and clears its high cell half." if width == 32 else "."),
+            "exponent_v8 receives the low 32 exponent bits and clears its high half.",
+        ),
+        assembly=f"%v<fraction>, %v<exponent> = {mnemonic} %v<source>",
+        pseudocode=(
+            f"source = read_float(source_v8, {width});\n"
+            "(fraction, exponent) = decompose_binary_exponent(source);\n"
+            f"write_float(fraction_v8, fraction, {width});\n"
+            "write_integer(exponent_v8, exponent, 32);\n"
+            "pc = pc + 4;"
+        ),
+        rules=(
+            RecordRule(
+                RecordRuleKind.FIELDS_DISTINCT,
+                ("fraction_v8", "exponent_v8"),
+                summary="The fraction and exponent result registers must differ.",
+            ),
+        ),
+    )
+
+
+def _ldexp(opcode: int, width: int) -> Instruction:
+    mnemonic = f"float.ldexp.f{width}"
+    return Instruction(
+        opcode=opcode,
+        mnemonic=mnemonic,
+        since=CORE_0,
+        family=FLOAT_FAMILY,
+        summary=f"Scales an f{width} value by a signed i32 power of two.",
+        fields=(
+            _value("destination_v8", FieldRole.RESULT, "Floating result register."),
+            _value("source_v8", FieldRole.OPERAND, "Source floating value register."),
+            _value(
+                "exponent_v8",
+                FieldRole.OPERAND,
+                "Signed i32 scaling exponent register.",
+            ),
+        ),
+        semantics=FloatScaleSemantics(width),
+        behavior=(
+            "Reads both operands before computing source * 2^exponent with one "
+            "nearest-even rounding at the selected width. Every signed i32 exponent "
+            "is valid, including extremes. Subnormal inputs/results use gradual "
+            "underflow; overflow produces signed infinity. Signed zero and infinity "
+            "are preserved and NaNs become canonical positive quiet NaN."
+        ),
+        success=(_result(width),),
+        assembly=f"%v<destination> = {mnemonic} %v<source>, %v<exponent>",
+        pseudocode=(
+            f"source = read_float(source_v8, {width});\n"
+            "exponent = read_signed_integer(exponent_v8, 32);\n"
+            f"result = scale_binary_exponent(source, exponent, {width});\n"
+            f"write_float(destination_v8, result, {width});\n"
+            "pc = pc + 4;"
+        ),
+    )
+
+
+def _math(opcode: int, width: int, *, binary: bool = False) -> Instruction:
+    arity = "binary" if binary else "unary"
+    sources = ("left", "right") if binary else ("source",)
+    mnemonic = f"float.math.{arity}.f{width}"
+    selector = (
+        FLOAT_MATH_BINARY_SELECTOR
+        if binary
+        else FLOAT_MATH_F32_SELECTOR
+        if width == 32
+        else FLOAT_MATH_F64_SELECTOR
+    )
+    return Instruction(
+        opcode=opcode,
+        mnemonic=mnemonic,
+        since=CORE_0,
+        family=FLOAT_FAMILY,
+        summary=f"Evaluates one closed {arity} f{width} math operation.",
         fields=(
             _value(
                 "destination_v8",
                 FieldRole.RESULT,
                 "Value-register ordinal receiving the result.",
             ),
-            _value("source_v8", FieldRole.OPERAND, "Source value-register ordinal."),
+            *(
+                _value(
+                    f"{source}_v8",
+                    FieldRole.OPERAND,
+                    f"{source.capitalize()} value-register ordinal.",
+                )
+                for source in sources
+            ),
             _selected_value(
                 "selector_u8",
                 FieldRole.IMMEDIATE,
                 f"Closed {selector.name} operation selector.",
                 selector,
             ),
+            *((_padding(element_count=3),) if binary else ()),
         ),
-        semantics=FloatMathSemantics(width),
+        semantics=FloatMathSemantics(width, len(sources)),
         behavior=(
             "Evaluates the selector's frozen mapping under the family floating "
-            "profile. Approximate f32 leaves have selector-specific denormal and NaN "
-            "behavior. Structural sign uses raw bits."
+            "profile."
+            + (
+                " Approximate f32 leaves have selector-specific denormal and NaN "
+                "behavior. Structural sign uses raw bits."
+                if not binary
+                else " Both operands are read before writing the destination."
+            )
         ),
         success=(
             "destination_v8 receives the selector-defined exact result payload"
             + (" and clears the high cell half." if width == 32 else "."),
         ),
-        assembly=f"%v<destination> = {mnemonic} %v<source> {{selector}}",
+        assembly=(
+            f"%v<destination> = {mnemonic} "
+            + ", ".join(f"%v<{source}>" for source in sources)
+            + " {selector}"
+        ),
         pseudocode=(
-            f"source_bits = read_float_bits(source_v8, {width});\n"
-            "result_bits = evaluate_float_math_unary(\n"
-            f"    selector_u8, source_bits, {width});\n"
-            f"write_float_bits(destination_v8, result_bits, {width});\n"
-            "pc = pc + 4;"
+            "".join(
+                f"{source}_bits = read_float_bits({source}_v8, {width});\n"
+                for source in sources
+            )
+            + f"result_bits = evaluate_float_math_{arity}(\n    selector_u8, "
+            + ", ".join(f"{source}_bits" for source in sources)
+            + f", {width});\n"
+            + f"write_float_bits(destination_v8, result_bits, {width});\n"
+            + f"pc = pc + {8 if binary else 4};"
         ),
     )
 
@@ -963,22 +1406,30 @@ def _fma(opcode: int, width: int) -> Instruction:
     )
 
 
-_INSTRUCTIONS_BY_OPCODE = {
-    instruction.opcode: instruction
-    for instruction in (
-        *(_binary(definition) for definition in _BINARY_DEFINITIONS),
-        *(_sign_unary(definition) for definition in _SIGN_DEFINITIONS),
-        *(_selected_binary(definition) for definition in _SELECTED_BINARY_DEFINITIONS),
-        _classify(0x92, 32),
-        _classify(0x93, 64),
-        _clamp(0x94, 32),
-        _clamp(0x95, 64),
-        _math_unary(0x98, 32),
-        _math_unary(0x99, 64),
-        _fma(0x9A, 32),
-        _fma(0x9B, 64),
-    )
-}
 FLOAT_INSTRUCTIONS = tuple(
-    _INSTRUCTIONS_BY_OPCODE[opcode] for opcode in sorted(_INSTRUCTIONS_BY_OPCODE)
+    sorted(
+        (
+            *(_binary(definition) for definition in _BINARY_DEFINITIONS),
+            *(_sign_unary(definition) for definition in _SIGN_DEFINITIONS),
+            *(
+                _selected_binary(definition)
+                for definition in _SELECTED_BINARY_DEFINITIONS
+            ),
+            _classify(0x92, 32),
+            _classify(0x93, 64),
+            _clamp(0x94, 32),
+            _clamp(0x95, 64),
+            _frexp(0xA6, 32),
+            _frexp(0xA7, 64),
+            _math(0x98, 32),
+            _math(0x99, 64),
+            _fma(0x9A, 32),
+            _fma(0x9B, 64),
+            _math(0x9C, 32, binary=True),
+            _math(0x9D, 64, binary=True),
+            _ldexp(0x9E, 32),
+            _ldexp(0x9F, 64),
+        ),
+        key=lambda instruction: instruction.opcode,
+    )
 )

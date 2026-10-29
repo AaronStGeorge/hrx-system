@@ -15,6 +15,16 @@
 #include <math.h>
 
 #include "iree/base/internal/math.h"
+#include "iree/math/activation.h"
+#include "iree/math/error_functions.h"
+#include "iree/math/exponential.h"
+#include "iree/math/hyperbolic.h"
+#include "iree/math/inverse_trigonometry.h"
+#include "iree/math/logarithm.h"
+#include "iree/math/remainder.h"
+#include "iree/math/roots.h"
+#include "iree/math/rounding.h"
+#include "iree/math/trigonometry.h"
 #include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
@@ -120,41 +130,6 @@ static float mul_f32(float a, float b) { return a * b; }
 static double mul_f64(double a, double b) { return a * b; }
 static float div_f32(float a, float b) { return a / b; }
 static double div_f64(double a, double b) { return a / b; }
-static float rsqrt_f32(float x) { return 1.0f / sqrtf(x); }
-static double rsqrt_f64(double x) { return 1.0 / sqrt(x); }
-static float roundeven_f32(float x) { return nearbyintf(x); }
-static double roundeven_f64(double x) { return nearbyint(x); }
-static float silu_f32(float x) { return x * loom_float_logistic_f32(x); }
-static double silu_f64(double x) { return x * loom_float_logistic_f64(x); }
-static float softplus_f32(float x) {
-  return log1pf(expf(-fabsf(x))) + fmaxf(x, 0.0f);
-}
-static double softplus_f64(double x) {
-  return log1p(exp(-fabs(x))) + fmax(x, 0.0);
-}
-static float gelu_erf_f32(float x) {
-  const float inverse_sqrt2 = 0.70710678118654752440f;
-  return 0.5f * x * (1.0f + erff(x * inverse_sqrt2));
-}
-static double gelu_erf_f64(double x) {
-  const double inverse_sqrt2 = 0.70710678118654752440;
-  return 0.5 * x * (1.0 + erf(x * inverse_sqrt2));
-}
-static float gelu_tanh_f32(float x) {
-  const float sqrt_2_over_pi = 0.79788456080286535588f;
-  return 0.5f * x *
-         (1.0f + tanhf(sqrt_2_over_pi * (x + 0.044715f * x * x * x)));
-}
-static double gelu_tanh_f64(double x) {
-  const double sqrt_2_over_pi = 0.79788456080286535588;
-  return 0.5 * x * (1.0 + tanh(sqrt_2_over_pi * (x + 0.044715 * x * x * x)));
-}
-static float gelu_logistic_f32(float x, float scale) {
-  return x * loom_float_logistic_f32(scale * x);
-}
-static double gelu_logistic_f64(double x, double scale) {
-  return x * loom_float_logistic_f64(scale * x);
-}
 
 //===----------------------------------------------------------------------===//
 // scalar.constant
@@ -240,7 +215,8 @@ FLOAT_BINARY_FACTS(loom_scalar_addf_facts, add_f32, add_f64)
 FLOAT_BINARY_FACTS(loom_scalar_subf_facts, sub_f32, sub_f64)
 FLOAT_BINARY_FACTS(loom_scalar_mulf_facts, mul_f32, mul_f64)
 FLOAT_BINARY_FACTS(loom_scalar_divf_facts, div_f32, div_f64)
-FLOAT_BINARY_FACTS(loom_scalar_remf_facts, fmodf, fmod)
+FLOAT_BINARY_FACTS(loom_scalar_remf_facts, iree_math_fmod_f32,
+                   iree_math_fmod_f64)
 
 iree_status_t loom_scalar_negf_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,
@@ -324,19 +300,27 @@ iree_status_t loom_scalar_clampf_facts(loom_fact_context_t* context,
 // Math functions
 //===----------------------------------------------------------------------===//
 
-FLOAT_UNARY_FACTS(loom_scalar_expf_facts, expf, exp)
-FLOAT_UNARY_FACTS(loom_scalar_exp2f_facts, exp2f, exp2)
-FLOAT_UNARY_FACTS(loom_scalar_expm1f_facts, expm1f, expm1)
-FLOAT_UNARY_FACTS(loom_scalar_logf_facts, logf, log)
-FLOAT_UNARY_FACTS(loom_scalar_log2f_facts, log2f, log2)
-FLOAT_UNARY_FACTS(loom_scalar_log10f_facts, log10f, log10)
-FLOAT_UNARY_FACTS(loom_scalar_log1pf_facts, log1pf, log1p)
-FLOAT_BINARY_FACTS(loom_scalar_powf_facts, powf, pow)
-FLOAT_UNARY_FACTS(loom_scalar_sqrtf_facts, sqrtf, sqrt)
-FLOAT_UNARY_FACTS(loom_scalar_rsqrtf_facts, rsqrt_f32, rsqrt_f64)
-FLOAT_UNARY_FACTS(loom_scalar_cbrtf_facts, cbrtf, cbrt)
-FLOAT_UNARY_FACTS(loom_scalar_sinf_facts, sinf, sin)
-FLOAT_UNARY_FACTS(loom_scalar_cosf_facts, cosf, cos)
+FLOAT_UNARY_FACTS(loom_scalar_expf_facts, iree_math_exp_f32, iree_math_exp_f64)
+FLOAT_UNARY_FACTS(loom_scalar_exp2f_facts, iree_math_exp2_f32,
+                  iree_math_exp2_f64)
+FLOAT_UNARY_FACTS(loom_scalar_expm1f_facts, iree_math_expm1_f32,
+                  iree_math_expm1_f64)
+FLOAT_UNARY_FACTS(loom_scalar_logf_facts, iree_math_log_f32, iree_math_log_f64)
+FLOAT_UNARY_FACTS(loom_scalar_log2f_facts, iree_math_log2_f32,
+                  iree_math_log2_f64)
+FLOAT_UNARY_FACTS(loom_scalar_log10f_facts, iree_math_log10_f32,
+                  iree_math_log10_f64)
+FLOAT_UNARY_FACTS(loom_scalar_log1pf_facts, iree_math_log1p_f32,
+                  iree_math_log1p_f64)
+FLOAT_BINARY_FACTS(loom_scalar_powf_facts, iree_math_pow_f32, iree_math_pow_f64)
+FLOAT_UNARY_FACTS(loom_scalar_sqrtf_facts, iree_math_sqrt_f32,
+                  iree_math_sqrt_f64)
+FLOAT_UNARY_FACTS(loom_scalar_rsqrtf_facts, iree_math_rsqrt_f32,
+                  iree_math_rsqrt_f64)
+FLOAT_UNARY_FACTS(loom_scalar_cbrtf_facts, iree_math_cbrt_f32,
+                  iree_math_cbrt_f64)
+FLOAT_UNARY_FACTS(loom_scalar_sinf_facts, iree_math_sin_f32, iree_math_sin_f64)
+FLOAT_UNARY_FACTS(loom_scalar_cosf_facts, iree_math_cos_f32, iree_math_cos_f64)
 
 static iree_status_t loom_scalar_turnsf_facts(
     const loom_module_t* module, const loom_op_t* op,
@@ -364,23 +348,36 @@ iree_status_t loom_scalar_costurnsf_facts(
                                   LOOM_FLOAT_TURNS_COS);
 }
 
-FLOAT_UNARY_FACTS(loom_scalar_tanf_facts, tanf, tan)
-FLOAT_UNARY_FACTS(loom_scalar_asinf_facts, asinf, asin)
-FLOAT_UNARY_FACTS(loom_scalar_acosf_facts, acosf, acos)
-FLOAT_UNARY_FACTS(loom_scalar_atanf_facts, atanf, atan)
-FLOAT_BINARY_FACTS(loom_scalar_atan2f_facts, atan2f, atan2)
-FLOAT_UNARY_FACTS(loom_scalar_sinhf_facts, sinhf, sinh)
-FLOAT_UNARY_FACTS(loom_scalar_coshf_facts, coshf, cosh)
-FLOAT_UNARY_FACTS(loom_scalar_tanhf_facts, tanhf, tanh)
-FLOAT_UNARY_FACTS(loom_scalar_asinhf_facts, asinhf, asinh)
-FLOAT_UNARY_FACTS(loom_scalar_acoshf_facts, acoshf, acosh)
-FLOAT_UNARY_FACTS(loom_scalar_atanhf_facts, atanhf, atanh)
-FLOAT_UNARY_FACTS(loom_scalar_erff_facts, erff, erf)
-FLOAT_UNARY_FACTS(loom_scalar_erfcf_facts, erfcf, erfc)
-FLOAT_UNARY_FACTS(loom_scalar_logisticf_facts, loom_float_logistic_f32,
-                  loom_float_logistic_f64)
-FLOAT_UNARY_FACTS(loom_scalar_siluf_facts, silu_f32, silu_f64)
-FLOAT_UNARY_FACTS(loom_scalar_softplusf_facts, softplus_f32, softplus_f64)
+FLOAT_UNARY_FACTS(loom_scalar_tanf_facts, iree_math_tan_f32, iree_math_tan_f64)
+FLOAT_UNARY_FACTS(loom_scalar_asinf_facts, iree_math_asin_f32,
+                  iree_math_asin_f64)
+FLOAT_UNARY_FACTS(loom_scalar_acosf_facts, iree_math_acos_f32,
+                  iree_math_acos_f64)
+FLOAT_UNARY_FACTS(loom_scalar_atanf_facts, iree_math_atan_f32,
+                  iree_math_atan_f64)
+FLOAT_BINARY_FACTS(loom_scalar_atan2f_facts, iree_math_atan2_f32,
+                   iree_math_atan2_f64)
+FLOAT_UNARY_FACTS(loom_scalar_sinhf_facts, iree_math_sinh_f32,
+                  iree_math_sinh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_coshf_facts, iree_math_cosh_f32,
+                  iree_math_cosh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_tanhf_facts, iree_math_tanh_f32,
+                  iree_math_tanh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_asinhf_facts, iree_math_asinh_f32,
+                  iree_math_asinh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_acoshf_facts, iree_math_acosh_f32,
+                  iree_math_acosh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_atanhf_facts, iree_math_atanh_f32,
+                  iree_math_atanh_f64)
+FLOAT_UNARY_FACTS(loom_scalar_erff_facts, iree_math_erf_f32, iree_math_erf_f64)
+FLOAT_UNARY_FACTS(loom_scalar_erfcf_facts, iree_math_erfc_f32,
+                  iree_math_erfc_f64)
+FLOAT_UNARY_FACTS(loom_scalar_logisticf_facts, iree_math_logistic_f32,
+                  iree_math_logistic_f64)
+FLOAT_UNARY_FACTS(loom_scalar_siluf_facts, iree_math_silu_f32,
+                  iree_math_silu_f64)
+FLOAT_UNARY_FACTS(loom_scalar_softplusf_facts, iree_math_softplus_f32,
+                  iree_math_softplus_f64)
 
 iree_status_t loom_scalar_geluf_facts(loom_fact_context_t* context,
                                       const loom_module_t* module,
@@ -390,14 +387,14 @@ iree_status_t loom_scalar_geluf_facts(loom_fact_context_t* context,
   loom_scalar_type_t scalar_type = loom_scalar_result_element_type(module, op);
   switch (loom_scalar_geluf_variant(op)) {
     case LOOM_SCALAR_GELUF_VARIANT_ERF:
-      loom_value_facts_eval_float_unary(scalar_type, &operand_facts[0],
-                                        gelu_erf_f32, gelu_erf_f64,
-                                        &result_facts[0]);
+      loom_value_facts_eval_float_unary(
+          scalar_type, &operand_facts[0], iree_math_gelu_erf_f32,
+          iree_math_gelu_erf_f64, &result_facts[0]);
       break;
     case LOOM_SCALAR_GELUF_VARIANT_TANH:
-      loom_value_facts_eval_float_unary(scalar_type, &operand_facts[0],
-                                        gelu_tanh_f32, gelu_tanh_f64,
-                                        &result_facts[0]);
+      loom_value_facts_eval_float_unary(
+          scalar_type, &operand_facts[0], iree_math_gelu_tanh_f32,
+          iree_math_gelu_tanh_f64, &result_facts[0]);
       break;
     case LOOM_SCALAR_GELUF_VARIANT_LOGISTIC: {
       if (!loom_scalar_geluf_has_scale(op)) {
@@ -411,10 +408,11 @@ iree_status_t loom_scalar_geluf_facts(loom_fact_context_t* context,
         result_facts[0] = loom_value_facts_unknown();
       } else if (scalar_type == LOOM_SCALAR_TYPE_F64) {
         result_facts[0] = loom_value_facts_exact_float(
-            scalar_type, gelu_logistic_f64(input, scale));
+            scalar_type, iree_math_gelu_logistic_f64(input, scale));
       } else {
         result_facts[0] = loom_value_facts_exact_float(
-            scalar_type, gelu_logistic_f32((float)input, (float)scale));
+            scalar_type,
+            iree_math_gelu_logistic_f32((float)input, (float)scale));
       }
       loom_value_facts_propagate_unary_distribution(operand_facts[0],
                                                     &result_facts[0]);
@@ -425,6 +423,28 @@ iree_status_t loom_scalar_geluf_facts(loom_fact_context_t* context,
       break;
   }
   loom_scalar_assume_fast_math_facts(op, &result_facts[0]);
+  return iree_ok_status();
+}
+
+iree_status_t loom_scalar_frexpf_facts(loom_fact_context_t* context,
+                                       const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       const loom_value_facts_t* operand_facts,
+                                       loom_value_facts_t* result_facts) {
+  loom_value_facts_eval_float_frexp(loom_scalar_result_element_type(module, op),
+                                    &operand_facts[0], &result_facts[0],
+                                    &result_facts[1]);
+  return iree_ok_status();
+}
+
+iree_status_t loom_scalar_ldexpf_facts(loom_fact_context_t* context,
+                                       const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       const loom_value_facts_t* operand_facts,
+                                       loom_value_facts_t* result_facts) {
+  loom_value_facts_eval_float_ldexp(loom_scalar_result_element_type(module, op),
+                                    &operand_facts[0], &operand_facts[1],
+                                    &result_facts[0]);
   return iree_ok_status();
 }
 
@@ -441,11 +461,16 @@ iree_status_t loom_scalar_fmaf_facts(loom_fact_context_t* context,
   return iree_ok_status();
 }
 
-FLOAT_UNARY_FACTS(loom_scalar_ceilf_facts, ceilf, ceil)
-FLOAT_UNARY_FACTS(loom_scalar_floorf_facts, floorf, floor)
-FLOAT_UNARY_FACTS(loom_scalar_roundf_facts, roundf, round)
-FLOAT_UNARY_FACTS(loom_scalar_roundevenf_facts, roundeven_f32, roundeven_f64)
-FLOAT_UNARY_FACTS(loom_scalar_truncf_facts, truncf, trunc)
+FLOAT_UNARY_FACTS(loom_scalar_ceilf_facts, iree_math_ceil_f32,
+                  iree_math_ceil_f64)
+FLOAT_UNARY_FACTS(loom_scalar_floorf_facts, iree_math_floor_f32,
+                  iree_math_floor_f64)
+FLOAT_UNARY_FACTS(loom_scalar_roundf_facts, iree_math_round_away_f32,
+                  iree_math_round_away_f64)
+FLOAT_UNARY_FACTS(loom_scalar_roundevenf_facts, iree_math_round_even_f32,
+                  iree_math_round_even_f64)
+FLOAT_UNARY_FACTS(loom_scalar_truncf_facts, iree_math_trunc_f32,
+                  iree_math_trunc_f64)
 
 //===----------------------------------------------------------------------===//
 // Bitwise

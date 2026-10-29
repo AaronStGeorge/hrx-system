@@ -1,0 +1,106 @@
+// RUN: pass canonicalize
+func.def @scaling_f8E4M3() -> (f8E4M3, i32, f8E4M3) {
+  %input = scalar.constant -1.5 : f8E4M3
+  %power = scalar.constant -2 : i32
+  %fraction, %exponent = scalar.frexpf %input : f8E4M3, i32
+  %scaled = scalar.ldexpf %input, %power : f8E4M3, i32
+  func.return %fraction, %exponent, %scaled : f8E4M3, i32, f8E4M3
+}
+
+// ----
+func.def @scaling_f8E4M3() -> (f8E4M3, i32, f8E4M3) {
+  %fraction = scalar.constant -0.75 : f8E4M3
+  %exponent = scalar.constant 1 : i32
+  %scaled = scalar.constant -0.375 : f8E4M3
+  func.return %fraction, %exponent, %scaled : f8E4M3, i32, f8E4M3
+}
+
+// ====
+
+func.def @scaling_f8E5M2() -> (f8E5M2, i32, f8E5M2) {
+  %input = scalar.constant -1.5 : f8E5M2
+  %power = scalar.constant -2 : i32
+  %fraction, %exponent = scalar.frexpf %input : f8E5M2, i32
+  %scaled = scalar.ldexpf %input, %power : f8E5M2, i32
+  func.return %fraction, %exponent, %scaled : f8E5M2, i32, f8E5M2
+}
+
+// ----
+func.def @scaling_f8E5M2() -> (f8E5M2, i32, f8E5M2) {
+  %fraction = scalar.constant -0.75 : f8E5M2
+  %exponent = scalar.constant 1 : i32
+  %scaled = scalar.constant -0.375 : f8E5M2
+  func.return %fraction, %exponent, %scaled : f8E5M2, i32, f8E5M2
+}
+
+// ====
+
+func.def @scaling_f16() -> (f16, i32, f16) {
+  %input = scalar.constant -1.5 : f16
+  %power = scalar.constant -2 : i32
+  %fraction, %exponent = scalar.frexpf %input : f16, i32
+  %scaled = scalar.ldexpf %input, %power : f16, i32
+  func.return %fraction, %exponent, %scaled : f16, i32, f16
+}
+
+// ----
+func.def @scaling_f16() -> (f16, i32, f16) {
+  %fraction = scalar.constant -0.75 : f16
+  %exponent = scalar.constant 1 : i32
+  %scaled = scalar.constant -0.375 : f16
+  func.return %fraction, %exponent, %scaled : f16, i32, f16
+}
+
+// ====
+
+func.def @scaling_bf16() -> (bf16, i32, bf16) {
+  %input = scalar.constant -1.5 : bf16
+  %power = scalar.constant -2 : i32
+  %fraction, %exponent = scalar.frexpf %input : bf16, i32
+  %scaled = scalar.ldexpf %input, %power : bf16, i32
+  func.return %fraction, %exponent, %scaled : bf16, i32, bf16
+}
+
+// ----
+func.def @scaling_bf16() -> (bf16, i32, bf16) {
+  %fraction = scalar.constant -0.75 : bf16
+  %exponent = scalar.constant 1 : i32
+  %scaled = scalar.constant -0.375 : bf16
+  func.return %fraction, %exponent, %scaled : bf16, i32, bf16
+}
+
+// ====
+
+func.def @scaling_f32() -> (f32, i32, f32) {
+  %input = scalar.constant -1.5 : f32
+  %power = scalar.constant -2 : i32
+  %fraction, %exponent = scalar.frexpf %input : f32, i32
+  %scaled = scalar.ldexpf %input, %power : f32, i32
+  func.return %fraction, %exponent, %scaled : f32, i32, f32
+}
+
+// ----
+func.def @scaling_f32() -> (f32, i32, f32) {
+  %fraction = scalar.constant -0.75 : f32
+  %exponent = scalar.constant 1 : i32
+  %scaled = scalar.constant -0.375 : f32
+  func.return %fraction, %exponent, %scaled : f32, i32, f32
+}
+
+// ====
+
+func.def @scaling_f64() -> (f64, i32, f64) {
+  %input = scalar.constant -1.5 : f64
+  %power = scalar.constant -2 : i32
+  %fraction, %exponent = scalar.frexpf %input : f64, i32
+  %scaled = scalar.ldexpf %input, %power : f64, i32
+  func.return %fraction, %exponent, %scaled : f64, i32, f64
+}
+
+// ----
+func.def @scaling_f64() -> (f64, i32, f64) {
+  %fraction = scalar.constant -0.75 : f64
+  %exponent = scalar.constant 1 : i32
+  %scaled = scalar.constant -0.375 : f64
+  func.return %fraction, %exponent, %scaled : f64, i32, f64
+}

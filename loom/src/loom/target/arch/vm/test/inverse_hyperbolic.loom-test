@@ -212,8 +212,7 @@ func.def target(@math_target) @inverse(%input: bf16) -> (bf16) {
 
 vm.target<core> @math_target
 
-func.def target(@math_target) @inverse_requires_evaluation_contract(%input: f32) -> (f32) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.asinhf", math_op="asinhf", lane_domain="scalar", element_type="f32", constraint_key="math.inverse_hyperbolic.afn"}
+func.def target(@math_target) @ordinary_inverse(%input: f32) -> (f32) {
   %result = scalar.asinhf %input : f32
   func.return %result : f32
 }
@@ -222,8 +221,7 @@ func.def target(@math_target) @inverse_requires_evaluation_contract(%input: f32)
 
 vm.target<core> @math_target
 
-func.def target(@math_target) @inverse_requires_evaluation_contract(%input: vector<3xf64>) -> (vector<3xf64>) {
-  // ERROR@+1: LOWERING/036 {op_name="vector.asinhf", math_op="asinhf", lane_domain="vector", element_type="f64", constraint_key="math.inverse_hyperbolic.f32_evaluation"}
+func.def target(@math_target) @wide_inverse(%input: vector<3xf64>) -> (vector<3xf64>) {
   %result = vector.asinhf<afn> %input : vector<3xf64>
   func.return %result : vector<3xf64>
 }

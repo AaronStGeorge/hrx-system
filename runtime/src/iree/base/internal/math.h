@@ -13,12 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "iree/base/api.h"
-
-// Haswell or later, gcc compile time option: -mlzcnt
-#if defined(__LZCNT__)
-#include <x86intrin.h>
-#endif
+#include "iree/base/alignment.h"
+#include "iree/base/checked_math.h"
 
 // Clang on Windows has __builtin_clzll; otherwise we need to use the Windows
 // intrinsic functions. Include <intrin.h> for all MSVC-compatible frontends so
@@ -181,15 +177,6 @@ static inline int iree_math_count_leading_zeros_u32(const uint32_t n) {
   }
   return 32;
 #elif defined(IREE_COMPILER_GCC_COMPAT)
-#if defined(__LCZNT__)
-  // NOTE: LZCNT is a risky instruction; it is not supported on architectures
-  // before Haswell, yet it is encoded as 'rep bsr', which typically ignores
-  // invalid rep prefixes, and interprets it as the 'bsr' instruction, which
-  // returns the index of the value rather than the count, resulting in
-  // incorrect code.
-  return (int)__lzcnt32(n);
-#endif  // defined(__LCZNT__)
-
   // Handle 0 as a special case because __builtin_clz(0) is undefined.
   if (n == 0) {
     return 32;
@@ -224,17 +211,6 @@ static inline int iree_math_count_leading_zeros_u64(uint64_t n) {
   }
   return 64;
 #elif defined(IREE_COMPILER_GCC_COMPAT)
-#if defined(__LCZNT__)
-  // NOTE: LZCNT is a risky instruction; it is not supported on architectures
-  // before Haswell, yet it is encoded as 'rep bsr', which typically ignores
-  // invalid rep prefixes, and interprets it as the 'bsr' instruction, which
-  // returns the index of the value rather than the count, resulting in
-  // incorrect code.
-  return __lzcnt64(n);
-#elif defined(__aarch64__) || defined(__powerpc64__)
-  // Empirically verified that __builtin_clzll(0) works as expected.
-  return (int)__builtin_clzll(n);
-#endif
   // Handle 0 as a special case because __builtin_clzll(0) is undefined.
   if (!n) {
     return 64;
@@ -475,6 +451,16 @@ static inline uint64_t iree_math_round_up_to_pow2_u64(uint64_t n) {
 static inline void iree_math_mul_u64_to_u128(uint64_t lhs, uint64_t rhs,
                                              uint64_t* out_high,
                                              uint64_t* out_low) {
+#if defined(IREE_COMPILER_MSVC_COMPAT) && defined(IREE_ARCH_X86_64)
+  *out_low = _umul128(lhs, rhs, out_high);
+#elif defined(IREE_COMPILER_MSVC_COMPAT) && defined(IREE_ARCH_ARM_64)
+  *out_high = __umulh(lhs, rhs);
+  *out_low = lhs * rhs;
+#elif defined(__SIZEOF_INT128__) && !defined(IREE_COMPILER_MSVC_COMPAT)
+  const __uint128_t product = (__uint128_t)lhs * (__uint128_t)rhs;
+  *out_high = (uint64_t)(product >> 64);
+  *out_low = (uint64_t)product;
+#else
   const uint64_t lhs_low = (uint32_t)lhs;
   const uint64_t lhs_high = lhs >> 32;
   const uint64_t rhs_low = (uint32_t)rhs;
@@ -498,6 +484,7 @@ static inline void iree_math_mul_u64_to_u128(uint64_t lhs, uint64_t rhs,
 
   *out_high = high;
   *out_low = low;
+#endif
 }
 
 // Divides a 128-bit unsigned integer by a 64-bit unsigned integer. Returns
@@ -1088,9 +1075,8 @@ IREE_MATH_MAKE_FLOAT_TYPE_HELPERS(f4e2m1fn, uint8_t, 2, 1,
                                   /*bias_tweak=*/0,
                                   /*nan_as_neg_zero=*/false)
 
-// The scale type E8M0FNU is unique in multiple ways: no mantissa, no sign, and
-// no zero. Retrofitting it into the above shared conversion code would be
-// tricky and not worth it, so here are stand-alone conversion routines:
+// E8M0FNU encodes unsigned powers of two without a fraction or a zero value.
+// The lowest encoding represents 2^-127; 0xFF represents NaN.
 static inline uint32_t iree_math_f8e8m0fnu_to_f32_bits(uint8_t src) {
   if (src == 0xFF) {
     return UINT32_C(0x7FC00000);
@@ -1109,23 +1095,27 @@ static inline float iree_math_f8e8m0fnu_to_f32(uint8_t src) {
 static inline double iree_math_f8e8m0fnu_to_f64(uint8_t src) {
   return iree_math_make_f64_from_f32_bits(iree_math_f8e8m0fnu_to_f32_bits(src));
 }
+// Rounds positive values to the nearest power of two, with midpoint ties
+// rounding upward. Finite nonpositive values clamp to the minimum encoding;
+// nonfinite values and overflow map to NaN. Integer encoding keeps the result
+// independent of the caller's rounding and denormal modes.
 static inline uint8_t iree_math_f32_to_f8e8m0fnu(float value) {
-  if (!isfinite(value)) {
+  uint32_t bits;
+  memcpy(&bits, &value, sizeof(bits));
+  if ((bits & UINT32_C(0x7FFFFFFF)) >= UINT32_C(0x7F800000)) {
     return 0xFF;
   }
-  if (value <= 0.f) {
+  if (bits & UINT32_C(0x80000000)) {
     return 0;
   }
-  int exp = 0;
-  // Normalized is in the interval [0.5, 1.0).
-  float normalized = frexpf(value, &exp);
-  // If the normalized value is closer to 0.5 than to 1.0, decrement the
-  // exponent.
-  int rounded = exp - (normalized < 0.75f);
-  int biased = rounded + 127;
-  // The clamping below is to 0xFF, mapping to NaN any value that is larger than
-  // the max finite value.
-  return biased < 0 ? 0 : biased > 0xFF ? 0xFF : biased;
+  if (bits < UINT32_C(0x00800000)) {
+    // The only subnormal midpoint is 1.5 * 2^-127. Smaller values clamp to
+    // encoding zero, including positive zero and values below 2^-127.
+    return bits >= UINT32_C(0x00600000);
+  }
+  // F32 and E8M0 share the exponent bias. The highest fraction bit selects
+  // the upper power of two, including overflow from exponent 254 to NaN.
+  return (uint8_t)((bits >> 23) + ((bits >> 22) & 1));
 }
 
 #endif  // IREE_BASE_INTERNAL_MATH_H_

@@ -1,0 +1,9 @@
+func.decl @missing_implementation(%value: f32) -> (f32)
+
+check.case @missing_implementation_case {
+  %input = check.literal value(0.0) : f32
+  %actual = func.call @missing_implementation(%input) : (f32) -> (f32)
+  %expected = check.literal value(0.0) : f32
+  check.expect.equal actual(%actual) expected(%expected) : f32
+  check.return
+}

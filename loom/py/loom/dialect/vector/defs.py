@@ -3328,6 +3328,9 @@ vector_ldexpf = Op(
     ],
     examples=["%scaled = vector.ldexpf %input, %exponent : vector<4xf64>, vector<4xi32>"],
     eager_execution_cost=0,
+    facts="loom_vector_ldexpf_facts",
+    facts_from_operands=True,
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_frexpf = Op(
@@ -3353,6 +3356,9 @@ vector_frexpf = Op(
     ],
     examples=["%fraction, %exponent = vector.frexpf %input : vector<4xf64>, vector<4xi32>"],
     eager_execution_cost=0,
+    facts="loom_vector_frexpf_facts",
+    facts_from_operands=True,
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_exp2f = _lanewise_unary(

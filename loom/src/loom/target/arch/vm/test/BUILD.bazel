@@ -15,13 +15,17 @@ package(
 loom_check_test_suite(
     name = "test",
     srcs = [
+        "activation.loom-test",
         "assembly.loom-test",
         "atomic_policy.loom-test",
         "effects.loom-test",
         "inverse_hyperbolic.loom-test",
         "math_contraction.loom-test",
         "math_policy.loom-test",
+        "remainder.loom-test",
+        "rounding.loom-test",
         "scalar.loom-test",
+        "scaling.loom-test",
     ],
     target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
 )

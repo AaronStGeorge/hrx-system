@@ -207,6 +207,12 @@ TEST(RoundingTest, MulU64ToU128) {
   ExpectMulU64ToU128(UINT64_C(1) << 32, UINT64_C(1) << 32, 1, 0);
   ExpectMulU64ToU128(UINT64_MAX, 2, 1, UINT64_MAX - 1ull);
   ExpectMulU64ToU128(UINT64_MAX, UINT64_MAX, UINT64_MAX - 1ull, 1);
+  ExpectMulU64ToU128(UINT64_C(0x001FFFFFFFFFFFFF), UINT64_C(0xA2F9836E4E441529),
+                     UINT64_C(0x00145F306DC9C882),
+                     UINT64_C(0x02267C91B1BBEAD7));
+  ExpectMulU64ToU128(UINT64_C(0xFFFFFFFF00000001), UINT64_C(0x00000001FFFFFFFF),
+                     UINT64_C(0x00000001FFFFFFFD),
+                     UINT64_C(0x00000002FFFFFFFF));
 }
 
 static void ExpectDivU128ByU64ToU64(uint64_t high, uint64_t low,
@@ -1556,21 +1562,48 @@ TEST(F4E2M1FNConversionTest, F4E2M1FNToF32) {
 // Paragraph 5.4.1.
 
 TEST(F8E8M0FNUConversionTest, F32ToF8E8M0FNU) {
-  EXPECT_EQ(0xFF, iree_math_f32_to_f8e8m0fnu(NAN));
-  for (int exp = -127; exp <= 127; ++exp) {
-    EXPECT_EQ(127 + exp, iree_math_f32_to_f8e8m0fnu(ldexpf(1.0f, exp)));
-    // 1.5 Should get rounded to the next exponent value or to NaN if that
-    // overflows.
-    EXPECT_EQ(128 + exp, iree_math_f32_to_f8e8m0fnu(ldexpf(1.5f, exp)));
+  struct Boundary {
+    // Raw F32 input, including subnormals and signed exceptional values.
+    uint32_t input;
+    // Nearest power-of-two encoding; midpoint ties round upward.
+    uint8_t expected;
+  };
+  const Boundary boundaries[] = {
+      {0x00000000u, 0x00}, {0x80000000u, 0x00}, {0x00000001u, 0x00},
+      {0x003fffffu, 0x00}, {0x00400000u, 0x00}, {0x005fffffu, 0x00},
+      {0x00600000u, 0x01}, {0x00600001u, 0x01}, {0x007fffffu, 0x01},
+      {0x80000001u, 0x00}, {0x80800000u, 0x00}, {0xbf800000u, 0x00},
+      {0xff7fffffu, 0x00}, {0x7f800000u, 0xff}, {0xff800000u, 0xff},
+      {0x7f800001u, 0xff}, {0xff800001u, 0xff}, {0x7fc00000u, 0xff},
+      {0xffc00000u, 0xff},
+  };
+  auto from_bits = [](uint32_t bits) {
+    float value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+  };
+  for (bool flush : {false, true}) {
+    SCOPED_TRACE(flush);
+    const iree_fpu_state_t saved = iree_fpu_state_push(
+        flush ? IREE_FPU_STATE_FLAG_FLUSH_DENORMALS_TO_ZERO : 0);
+    for (const auto& boundary : boundaries) {
+      EXPECT_EQ(boundary.expected,
+                iree_math_f32_to_f8e8m0fnu(from_bits(boundary.input)))
+          << std::hex << boundary.input;
+    }
+    // Lowest/highest normal exponents and both sides of the unit exponent
+    // exercise biasing, midpoint rounding, and overflow to the NaN encoding.
+    for (uint32_t exponent : {1u, 2u, 126u, 127u, 128u, 253u, 254u}) {
+      for (uint32_t fraction :
+           {0u, 0x003fffffu, 0x00400000u, 0x00400001u, 0x007fffffu}) {
+        const uint32_t input = (exponent << 23) | fraction;
+        EXPECT_EQ(exponent + (fraction >= 0x00400000u),
+                  iree_math_f32_to_f8e8m0fnu(from_bits(input)))
+            << std::hex << input;
+      }
+    }
+    iree_fpu_state_pop(saved);
   }
-  EXPECT_EQ(0xFF, iree_math_f32_to_f8e8m0fnu(NAN));
-  EXPECT_EQ(0xFF, iree_math_f32_to_f8e8m0fnu(+INFINITY));
-  EXPECT_EQ(0xFF, iree_math_f32_to_f8e8m0fnu(-INFINITY));
-  EXPECT_EQ(0x00, iree_math_f32_to_f8e8m0fnu(-1.0f));
-  EXPECT_EQ(0x00, iree_math_f32_to_f8e8m0fnu(0.0f));
-  EXPECT_EQ(0x01, iree_math_f32_to_f8e8m0fnu(FLT_MIN));
-  // Overflow to NaN
-  EXPECT_EQ(0xFF, iree_math_f32_to_f8e8m0fnu(FLT_MAX));
 }
 
 TEST(F8E8M0FNUConversionTest, F8E8M0FNUToF32) {

@@ -10,6 +10,9 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
+#include "iree/math/fma.h"
+#include "iree/math/rounding.h"
+#include "iree/math/scaling.h"
 #include "iree/math/trigonometry.h"
 
 static bool loom_float_type_uses_f32_arithmetic(
@@ -441,8 +444,8 @@ bool loom_value_facts_as_exact_power_of_two_float(
       !isfinite(value) || value == 0.0) {
     return false;
   }
-  int exponent = 0;
-  const double fraction = frexp(fabs(value), &exponent);
+  int32_t exponent = 0;
+  const double fraction = iree_math_frexp_f64(fabs(value), &exponent);
   if (fraction != 0.5) {
     return false;
   }
@@ -494,24 +497,6 @@ void loom_value_facts_assume_float_class(loom_value_facts_t* facts,
       loom_value_facts_is_not_inf(*facts)) {
     facts->flags |= LOOM_VALUE_FACT_FINITE;
   }
-}
-
-float loom_float_logistic_f32(float input) {
-  if (input >= 0.0f) {
-    const float exponent = expf(-input);
-    return 1.0f / (1.0f + exponent);
-  }
-  const float exponent = expf(input);
-  return exponent / (1.0f + exponent);
-}
-
-double loom_float_logistic_f64(double input) {
-  if (input >= 0.0) {
-    const double exponent = exp(-input);
-    return 1.0 / (1.0 + exponent);
-  }
-  const double exponent = exp(input);
-  return exponent / (1.0 + exponent);
 }
 
 void loom_value_facts_eval_float_unary(loom_scalar_type_t scalar_type,
@@ -570,39 +555,51 @@ void loom_value_facts_eval_float_binary(loom_scalar_type_t scalar_type,
   loom_value_facts_propagate_binary_distribution(*lhs, *rhs, out_facts);
 }
 
-// Produces an F32 value that rounds to the exact narrow FMA result. For finite
-// F8/F16/BF16 operands, the product has at most 22 significant bits and fits
-// exactly in F64. A rounded F64 sum alone can still lose a tiny addend that
-// changes the side of a narrow rounding midpoint.
-static float loom_float_fma_narrow(double a, double b, double c) {
-  const double product = a * b;
-  const double sum = product + c;
-  float rounded = (float)sum;
-  uint32_t bits = 0;
-  memcpy(&bits, &rounded, sizeof(bits));
+void loom_value_facts_eval_float_frexp(loom_scalar_type_t scalar_type,
+                                       const loom_value_facts_t* input,
+                                       loom_value_facts_t* out_fraction,
+                                       loom_value_facts_t* out_exponent) {
+  double value = 0.0;
+  *out_fraction = loom_value_facts_unknown();
+  *out_exponent = loom_value_facts_unknown();
+  if (loom_value_facts_is_nan(*input)) {
+    *out_fraction = loom_value_facts_known_nan();
+    *out_exponent = loom_value_facts_exact_i64(0);
+  } else if (loom_value_facts_as_exact_float(scalar_type, *input, &value)) {
+    int32_t exponent = 0;
+    const double fraction =
+        loom_float_type_uses_f32_arithmetic(scalar_type)
+            ? (double)iree_math_frexp_f32((float)value, &exponent)
+            : iree_math_frexp_f64(value, &exponent);
+    *out_fraction = loom_value_facts_exact_float(scalar_type, fraction);
+    *out_exponent = loom_value_facts_exact_i64(exponent);
+  }
+  loom_value_facts_propagate_unary_distribution(*input, out_fraction);
+  loom_value_facts_propagate_unary_distribution(*input, out_exponent);
+}
 
-  // F16 has the widest narrow significand. Every narrow rounding midpoint,
-  // including subnormal and overflow boundaries, has twelve zero low F32 bits.
-  if ((bits & UINT32_C(0xFFF)) != 0 || !isfinite(rounded)) {
-    return rounded;
+void loom_value_facts_eval_float_ldexp(loom_scalar_type_t scalar_type,
+                                       const loom_value_facts_t* input,
+                                       const loom_value_facts_t* exponent,
+                                       loom_value_facts_t* out_facts) {
+  double value = 0.0;
+  int64_t power = 0;
+  if (loom_value_facts_is_nan(*input)) {
+    *out_facts = loom_value_facts_known_nan();
+  } else if (!loom_value_facts_as_exact_float(scalar_type, *input, &value) ||
+             !loom_value_facts_as_exact_i64(*exponent, &power)) {
+    *out_facts = loom_value_facts_unknown();
+  } else {
+    // Scaling a narrow significand in F32 is exact until the destination's
+    // rounding boundary. A tiny F32 intermediate cannot straddle a narrow
+    // rounding midpoint because it carries only the source significand bits.
+    const double result =
+        loom_float_type_uses_f32_arithmetic(scalar_type)
+            ? (double)iree_math_ldexp_f32((float)value, (int32_t)power)
+            : iree_math_ldexp_f64(value, (int32_t)power);
+    *out_facts = loom_value_facts_exact_float(scalar_type, result);
   }
-
-  double error = sum - (double)rounded;
-  if (error == 0.0) {
-    // FastTwoSum recovers the exact residual even when the addend is too small
-    // to survive the F64 addition. Neither its product nor residual can exceed
-    // F64's exponent range for the supported narrow operand formats.
-    error =
-        fabs(product) >= fabs(c) ? c - (sum - product) : product - (sum - c);
-  }
-  if (error != 0.0) {
-    // Nudge a midpoint toward the exact result before narrowing. The filter
-    // also admits non-midpoints, where one F32 ULP cannot change narrow
-    // rounding.
-    bits += ((error > 0.0) != ((bits >> 31) != 0)) ? 1u : UINT32_MAX;
-    memcpy(&rounded, &bits, sizeof(rounded));
-  }
-  return rounded;
+  loom_value_facts_propagate_binary_distribution(*input, *exponent, out_facts);
 }
 
 void loom_value_facts_eval_float_fma(loom_scalar_type_t scalar_type,
@@ -619,31 +616,16 @@ void loom_value_facts_eval_float_fma(loom_scalar_type_t scalar_type,
     *out_facts = loom_value_facts_unknown();
   } else if (scalar_type == LOOM_SCALAR_TYPE_F32) {
     *out_facts = loom_value_facts_exact_float(
-        scalar_type,
-        (double)fmaf((float)a_value, (float)b_value, (float)c_value));
+        scalar_type, (double)iree_math_fma_f32((float)a_value, (float)b_value,
+                                               (float)c_value));
   } else if (scalar_type == LOOM_SCALAR_TYPE_F64) {
-    *out_facts = loom_value_facts_exact_float(scalar_type,
-                                              fma(a_value, b_value, c_value));
+    *out_facts = loom_value_facts_exact_float(
+        scalar_type, iree_math_fma_f64(a_value, b_value, c_value));
   } else {
     *out_facts = loom_value_facts_exact_float(
-        scalar_type, (double)loom_float_fma_narrow(a_value, b_value, c_value));
+        scalar_type, (double)iree_math_fma_narrow(a_value, b_value, c_value));
   }
   loom_value_facts_propagate_ternary_distribution(*a, *b, *c, out_facts);
-}
-
-// Reduces |input| to an angle in [-pi/4, pi/4] and returns its quadrant.
-// The quarter-turn divisor is exactly representable, so remquo preserves the
-// periodic position of every finite input while providing the low quotient
-// bits needed to recover the quadrant.
-static double loom_float_reduce_turns_f64(double input, int* out_quadrant) {
-  int quotient = 0;
-  const double residual = remquo(input, 0.25, &quotient);
-  int quadrant = quotient % 4;
-  if (quadrant < 0) {
-    quadrant += 4;
-  }
-  *out_quadrant = quadrant;
-  return residual * 6.2831853071795864769252867665590057683943387987502;
 }
 
 static float loom_float_eval_turns_f32(float input, const void* user_data) {
@@ -656,48 +638,8 @@ static float loom_float_eval_turns_f32(float input, const void* user_data) {
 static double loom_float_eval_turns_f64(double input, const void* user_data) {
   const loom_float_turns_kind_t kind =
       *(const loom_float_turns_kind_t*)user_data;
-  int quadrant = 0;
-  const double angle = loom_float_reduce_turns_f64(input, &quadrant);
-  if (angle == 0.0) {
-    if (kind == LOOM_FLOAT_TURNS_SIN) {
-      if (quadrant == 1) {
-        return 1.0;
-      }
-      if (quadrant == 3) {
-        return -1.0;
-      }
-      return copysign(0.0, input);
-    }
-    if (quadrant == 0) {
-      return 1.0;
-    }
-    if (quadrant == 2) {
-      return -1.0;
-    }
-    return 0.0;
-  }
-  if (kind == LOOM_FLOAT_TURNS_SIN) {
-    switch (quadrant) {
-      case 0:
-        return sin(angle);
-      case 1:
-        return cos(angle);
-      case 2:
-        return -sin(angle);
-      default:
-        return -cos(angle);
-    }
-  }
-  switch (quadrant) {
-    case 0:
-      return cos(angle);
-    case 1:
-      return -sin(angle);
-    case 2:
-      return -cos(angle);
-    default:
-      return sin(angle);
-  }
+  return kind == LOOM_FLOAT_TURNS_SIN ? iree_math_sin_turns_f64(input)
+                                      : iree_math_cos_turns_f64(input);
 }
 
 void loom_value_facts_eval_float_turns(loom_scalar_type_t scalar_type,
@@ -945,7 +887,7 @@ void loom_value_facts_eval_float_to_integer(
     return;
   }
 
-  const double truncated_value = trunc(source_value);
+  const double truncated_value = iree_math_trunc_f64(source_value);
   switch (kind) {
     case LOOM_FLOAT_INTEGER_CONVERSION_SIGNED: {
       const double upper_exclusive =
@@ -958,7 +900,7 @@ void loom_value_facts_eval_float_to_integer(
       break;
     }
     case LOOM_FLOAT_INTEGER_CONVERSION_UNSIGNED: {
-      const double upper_exclusive = ldexp(1.0, result_bit_count);
+      const double upper_exclusive = iree_math_ldexp_f64(1.0, result_bit_count);
       if (truncated_value >= 0.0 && truncated_value < upper_exclusive) {
         const uint64_t result_bits = (uint64_t)truncated_value;
         *out_result_facts =

@@ -180,6 +180,13 @@ selects.config_setting_group(
     ],
 )
 
+config_setting(
+    name = "undefined_sanitizer_target",
+    values = {
+        "cc_output_directory_tag": "ubsan",
+    },
+)
+
 py_test(
     name = "compile_commands_merge_test",
     srcs = [
@@ -230,6 +237,22 @@ selects.config_setting_group(
     match_all = [
         ":address_sanitizer_target",
         ":cc_compiler_gcc",
+    ],
+)
+
+selects.config_setting_group(
+    name = "undefined_sanitizer_cc_compiler_clang",
+    match_all = [
+        ":undefined_sanitizer_target",
+        ":cc_compiler_clang",
+    ],
+)
+
+selects.config_setting_group(
+    name = "undefined_sanitizer_cc_compiler_clang_cl",
+    match_all = [
+        ":undefined_sanitizer_target",
+        ":cc_compiler_clang_cl",
     ],
 )
 

@@ -41,10 +41,12 @@ if(IREE_ENABLE_RUNTIME_COVERAGE)
 endif(IREE_ENABLE_RUNTIME_COVERAGE)
 
 if(IREE_ENABLE_UBSAN)
-  # Disable UBSan warnings about calls through function pointer of incompatible
-  # type. We rely on these for dynamic dispatch in the runtime code.
+  # Type-erased dispatch uses compatible calling conventions without exact
+  # function-type identity. Only Clang implements the function sanitizer;
+  # other compilers must not receive its unsupported suppression option.
   add_compile_options(
-    "-fno-sanitize=function"
+    "$<$<COMPILE_LANG_AND_ID:C,Clang,AppleClang>:-fno-sanitize=function>"
+    "$<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-fno-sanitize=function>"
   )
 endif(IREE_ENABLE_UBSAN)
 

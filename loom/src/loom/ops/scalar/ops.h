@@ -796,6 +796,11 @@ iree_status_t loom_scalar_ldexpf_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_scalar_ldexpf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_SCALAR_FREXPF: Decompose input exactly into a fraction and a signed i32 exponent such that input = fraction * 2^exponent. For finite nonzero inputs, the fraction has the input's sign and magnitude in [0.5, 1). Signed zero, infinity, and NaN inputs retain their floating-point value with exponent zero. Subnormal inputs are normalized.
 // %fraction, %exponent = scalar.frexpf %input : f64, i32
@@ -809,6 +814,11 @@ iree_status_t loom_scalar_frexpf_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_scalar_frexpf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_SCALAR_EXPF: Exponential: e^x.
 // %result = scalar.expf %input : f32

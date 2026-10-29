@@ -392,6 +392,9 @@ enum loom_low_lower_attr_copy_kind_e {
   // Emits one when the source op has the single instance flag selected by
   // literal_i64, or zero when it does not.
   LOOM_LOW_LOWER_ATTR_COPY_SOURCE_OP_INSTANCE_FLAG = 51,
+  // Rounds an F64 source attribute to source_element_bit_width (32 or 64),
+  // then emits zero-extended F32 or signed F64 bits as an integer attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_FLOAT_BITS = 52,
   // Maximum attribute-copy kind plus one.
   LOOM_LOW_LOWER_ATTR_COPY_COUNT_,
 };
@@ -446,9 +449,9 @@ typedef struct loom_low_lower_attr_copy_t {
     // Number of literal-data bytes retained by this projection.
     uint8_t literal_data_length;
   };
-  // Bit width of each packed or read-only source element, enum-remap value, or
-  // source byte segment length for SHUFFLE_MASK_CHUNK and
-  // READ_ONLY_BYTE_SEGMENT rows.
+  // Bit width of a floating attribute projection, packed/read-only source
+  // element, or enum-remap value; source byte segment length for
+  // SHUFFLE_MASK_CHUNK and READ_ONLY_BYTE_SEGMENT rows.
   uint8_t source_element_bit_width;
   // Low bit position of the projected or packed value in the emitted i64.
   uint8_t target_bit_offset;

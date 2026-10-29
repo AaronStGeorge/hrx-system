@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@bazel_skylib//lib:selects.bzl", "selects")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
@@ -14,58 +15,150 @@ package(
     licenses = ["notice"],  # Apache 2.0 with LLVM Exceptions and MIT
 )
 
+# Source-width arithmetic requires SSE2 on both x86 ABIs. The caller's floating
+# evaluation mode may differ, so these options belong only to the math library.
+selects.config_setting_group(
+    name = "x86",
+    match_any = [
+        "@platforms//cpu:x86_32",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+selects.config_setting_group(
+    name = "gnu_driver",
+    match_any = [
+        "//build_tools/bazel:cc_compiler_clang",
+        "//build_tools/bazel:cc_compiler_gcc",
+    ],
+)
+
+selects.config_setting_group(
+    name = "gnu_x86",
+    match_all = [
+        ":gnu_driver",
+        ":x86",
+    ],
+)
+
+selects.config_setting_group(
+    name = "clang_cl_x86",
+    match_all = [
+        "//build_tools/bazel:cc_compiler_clang_cl",
+        ":x86",
+    ],
+)
+
+selects.config_setting_group(
+    name = "msvc_x86_32",
+    match_all = [
+        "//build_tools/bazel:cc_compiler_msvc",
+        "@platforms//cpu:x86_32",
+    ],
+)
+
 iree_runtime_cc_library(
     name = "math",
     srcs = [
+        "activation.c",
+        "erfc_tail.h",
+        "error_functions.c",
         "exponential.c",
+        "exponential_reduction.h",
         "float_bits.h",
+        "fma.c",
+        "fma_software.c",
+        "fma_software.h",
+        "hyperbolic.c",
+        "inverse_trigonometry.c",
+        "logarithm.c",
+        "logarithm_reduction.h",
+        "remainder.c",
         "roots.c",
+        "roots_integer.h",
+        "rounding.c",
+        "scaling.c",
         "trigonometry.c",
     ],
     hdrs = [
+        "activation.h",
+        "error_functions.h",
         "exponential.h",
+        "fma.h",
+        "hyperbolic.h",
+        "inverse_trigonometry.h",
+        "logarithm.h",
+        "remainder.h",
         "roots.h",
+        "rounding.h",
+        "scaling.h",
         "trigonometry.h",
     ],
     # Each exported operation freezes one exact result mapping. Prevent an
-    # embedding application's fast-math flags from changing that mapping while
-    # still permitting contraction proven bit-invariant by exhaustive tests.
+    # embedding application's fast-math flags from changing that mapping and
+    # preserve explicitly separate rounding points in the ordinary mappings.
     copts = select({
         "//build_tools/bazel:cc_compiler_clang": [
             "-fno-fast-math",
             "-fno-math-errno",
-            "-ffp-contract=fast",
+            "-ffp-contract=off",
+            "-ffp-eval-method=source",
         ],
         "//build_tools/bazel:cc_compiler_clang_cl": [
-            "/fp:precise",
-            "/fp:contract",
+            "/clang:-fno-fast-math",
+            "/clang:-fno-math-errno",
+            "/clang:-ffp-contract=off",
+            "/clang:-ffp-eval-method=source",
         ],
         "//build_tools/bazel:cc_compiler_gcc": [
             "-fno-fast-math",
             "-fno-math-errno",
-            "-ffp-contract=fast",
+            "-ffp-contract=off",
         ],
         "//build_tools/bazel:cc_compiler_msvc": [
             "/fp:precise",
-            "/fp:contract",
         ],
+        "//conditions:default": [],
+    }) + select({
+        "//runtime/src/iree/math:clang_cl_x86": [
+            "/clang:-msse2",
+            "/clang:-mfpmath=sse",
+        ],
+        "//runtime/src/iree/math:gnu_x86": [
+            "-msse2",
+            "-mfpmath=sse",
+        ],
+        "//runtime/src/iree/math:msvc_x86_32": ["/arch:SSE2"],
         "//conditions:default": [],
     }),
     deps = [
         "//runtime/src/iree/base:core_headers",
+        "//runtime/src/iree/base/internal",
     ],
 )
 
 iree_runtime_cc_test(
     name = "math_test",
     srcs = [
+        "activation_test.cc",
         "elementary_test_util.h",
+        "error_functions_test.cc",
         "exponential_test.cc",
+        "fma_software.h",
+        "fma_test.cc",
+        "hyperbolic_test.cc",
+        "inverse_trigonometry_test.cc",
+        "logarithm_test.cc",
+        "remainder_test.cc",
+        "roots_integer.h",
         "roots_test.cc",
+        "rounding_test.cc",
+        "scaling_test.cc",
         "trigonometry_test.cc",
     ],
     deps = [
         ":math",
+        "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:fpu_state",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

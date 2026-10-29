@@ -1,0 +1,91 @@
+// RUN: emit source-low
+
+vm.target<core> @vm
+
+func.def target(@vm) @rounding_single(%input: f32) -> (f32, f32, f32, f32, f32) {
+  %ceil = scalar.ceilf %input : f32
+  %floor = scalar.floorf %input : f32
+  %trunc = scalar.truncf %input : f32
+  %roundeven = scalar.roundevenf %input : f32
+  %round = scalar.roundf %input : f32
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f32, f32, f32, f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @rounding_single(%input: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %ceil = float.math.unary.f32 %input, "ceil"
+  %floor = float.math.unary.f32 %input, "floor"
+  %trunc = float.math.unary.f32 %input, "trunc"
+  %roundeven = float.math.unary.f32 %input, "round_even"
+  %round = float.math.unary.f32 %input, "round_away"
+  return %ceil, %floor, %trunc, %roundeven, %round
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @rounding_double(%input: f64) -> (f64, f64, f64, f64, f64) {
+  %ceil = scalar.ceilf %input : f64
+  %floor = scalar.floorf %input : f64
+  %trunc = scalar.truncf %input : f64
+  %roundeven = scalar.roundevenf %input : f64
+  %round = scalar.roundf %input : f64
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f64, f64, f64, f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @rounding_double(%input: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %ceil = float.math.unary.f64 %input, "ceil"
+  %floor = float.math.unary.f64 %input, "floor"
+  %trunc = float.math.unary.f64 %input, "trunc"
+  %roundeven = float.math.unary.f64 %input, "round_even"
+  %round = float.math.unary.f64 %input, "round_away"
+  return %ceil, %floor, %trunc, %roundeven, %round
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @rounding_narrow_vector(%input: vector<2xf16>) -> (vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16>) {
+  %ceil = vector.ceilf %input : vector<2xf16>
+  %floor = vector.floorf %input : vector<2xf16>
+  %trunc = vector.truncf %input : vector<2xf16>
+  %roundeven = vector.roundevenf %input : vector<2xf16>
+  %round = vector.roundf %input : vector<2xf16>
+  func.return %ceil, %floor, %trunc, %roundeven, %round : vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @rounding_narrow_vector(%0: reg<vm.value : f16>, %1: reg<vm.value : f16>) -> (reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>) asm {
+  %12 = conversion.float.extend %0, "f16.to.f32" : reg<vm.value : f32>
+  %13 = float.math.unary.f32 %12, "ceil"
+  %14 = conversion.float.truncate %13, "f32.to.f16" : reg<vm.value : f16>
+  %15 = conversion.float.extend %1, "f16.to.f32" : reg<vm.value : f32>
+  %16 = float.math.unary.f32 %15, "ceil"
+  %17 = conversion.float.truncate %16, "f32.to.f16" : reg<vm.value : f16>
+  %18 = float.math.unary.f32 %12, "floor"
+  %19 = conversion.float.truncate %18, "f32.to.f16" : reg<vm.value : f16>
+  %20 = float.math.unary.f32 %15, "floor"
+  %21 = conversion.float.truncate %20, "f32.to.f16" : reg<vm.value : f16>
+  %22 = float.math.unary.f32 %12, "trunc"
+  %23 = conversion.float.truncate %22, "f32.to.f16" : reg<vm.value : f16>
+  %24 = float.math.unary.f32 %15, "trunc"
+  %25 = conversion.float.truncate %24, "f32.to.f16" : reg<vm.value : f16>
+  %26 = float.math.unary.f32 %12, "round_even"
+  %27 = conversion.float.truncate %26, "f32.to.f16" : reg<vm.value : f16>
+  %28 = float.math.unary.f32 %15, "round_even"
+  %29 = conversion.float.truncate %28, "f32.to.f16" : reg<vm.value : f16>
+  %30 = float.math.unary.f32 %12, "round_away"
+  %31 = conversion.float.truncate %30, "f32.to.f16" : reg<vm.value : f16>
+  %32 = float.math.unary.f32 %15, "round_away"
+  %33 = conversion.float.truncate %32, "f32.to.f16" : reg<vm.value : f16>
+  return %14, %17, %19, %21, %23, %25, %27, %29, %31, %33
+}

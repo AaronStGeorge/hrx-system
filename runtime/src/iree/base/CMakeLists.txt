@@ -13,6 +13,7 @@ iree_cc_library(
     "alignment.h"
     "assert.h"
     "attributes.h"
+    "checked_math.h"
     "config.h"
     "target_platform.h"
     "time.h"
@@ -119,6 +120,17 @@ if(IREE_ALLOCATOR_SYSTEM STREQUAL "mimalloc")
       iree::third_party::mimalloc
   )
 endif()
+
+iree_cc_test(
+  NAME
+    checked_math_test
+  SRCS
+    "checked_math_test.cc"
+  DEPS
+    ::core_headers
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
 
 iree_cc_test(
   NAME

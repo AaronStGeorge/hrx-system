@@ -141,3 +141,394 @@ func.def @turn_trig_frozen_f32_mapping() -> (i32) {
   %result_bits = scalar.constant 1031482228 : i32
   func.return %result_bits : i32
 }
+
+// ====
+
+// The F64 input distinguishes the fixed unfused exponential from contraction.
+// Ordinary roots and exp2 preserve subnormals instead of using the approximate
+// leaf's flush-to-zero profile.
+func.def @ordinary_math_mapping() -> (i64, f32, f64, f32) {
+  %input = scalar.constant -2.7638700436113073 : f64
+  %result = scalar.expf %input : f64
+  %bits = scalar.bitcast %result : f64 to i64
+  %minimum = scalar.constant 1.4012984643248171e-45 : f32
+  %root = scalar.sqrtf %minimum : f32
+  %exponent = scalar.constant -1074.0 : f64
+  %subnormal = scalar.exp2f %exponent : f64
+  %value = scalar.constant 7.9228181403112027e+28 : f32
+  %inverse = scalar.rsqrtf %value : f32
+  func.return %bits, %root, %subnormal, %inverse : i64, f32, f64, f32
+}
+
+// ----
+func.def @ordinary_math_mapping() -> (i64, f32, f64, f32) {
+  %bits = scalar.constant 4589207457398273482 : i64
+  %root = scalar.constant 3.7433920665092162e-23 : f32
+  %subnormal = scalar.constant 4.9406564584124654e-324 : f64
+  %inverse = scalar.constant 3.5527132552840273e-15 : f32
+  func.return %bits, %root, %subnormal, %inverse : i64, f32, f64, f32
+}
+
+// ====
+
+func.def @cube_roots() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %input0 = scalar.constant 2.0 : f8E4M3
+  %root0 = scalar.cbrtf %input0 : f8E4M3
+  %input1 = scalar.constant 2.0 : f8E5M2
+  %root1 = scalar.cbrtf %input1 : f8E5M2
+  %input2 = scalar.constant 2.0 : f16
+  %root2 = scalar.cbrtf %input2 : f16
+  %input3 = scalar.constant 2.0 : bf16
+  %root3 = scalar.cbrtf %input3 : bf16
+  %input4 = scalar.constant 2.0 : f32
+  %root4 = scalar.cbrtf %input4 : f32
+  %input5 = scalar.constant 2.0 : f64
+  %root5 = scalar.cbrtf %input5 : f64
+  func.return %root0, %root1, %root2, %root3, %root4, %root5 : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}
+
+// ----
+func.def @cube_roots() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %root0 = scalar.constant 1.25 : f8E4M3
+  %root1 = scalar.constant 1.25 : f8E5M2
+  %root2 = scalar.constant 1.259765625 : f16
+  %root3 = scalar.constant 1.2578125 : bf16
+  %root4 = scalar.constant 1.2599210739135742 : f32
+  %root5 = scalar.constant 1.2599210498948732 : f64
+  func.return %root0, %root1, %root2, %root3, %root4, %root5 : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}
+
+// ====
+// Logarithms share numerical mappings across narrow and native carriers.
+func.def @ordinary_logarithms() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %a = scalar.constant 2.0 : f8E4M3
+  %b = scalar.constant 0.5 : f8E5M2
+  %c = scalar.constant 10.0 : f16
+  %d = scalar.constant 0.00390625 : bf16
+  %minimum = scalar.constant 1.4012984643248171e-45 : f32
+  %tiny = scalar.constant 4.9406564584124654e-324 : f64
+  %natural = scalar.logf %a : f8E4M3
+  %base_two = scalar.log2f %b : f8E5M2
+  %base_ten = scalar.log10f %c : f16
+  %increment = scalar.log1pf %d : bf16
+  %subnormal = scalar.log2f %minimum : f32
+  %cancellation = scalar.log1pf %tiny : f64
+  func.return %natural, %base_two, %base_ten, %increment, %subnormal, %cancellation : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}
+
+// ----
+func.def @ordinary_logarithms() -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %natural = scalar.constant 0.6875 : f8E4M3
+  %base_two = scalar.constant -1.0 : f8E5M2
+  %base_ten = scalar.constant 1.0 : f16
+  %increment = scalar.constant 0.00390625 : bf16
+  %subnormal = scalar.constant -149.0 : f32
+  %cancellation = scalar.constant 4.9406564584124654e-324 : f64
+  func.return %natural, %base_two, %base_ten, %increment, %subnormal, %cancellation : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}
+
+// ====
+func.def @exponential_difference() -> (f32, f64) {
+  %tiny = scalar.constant 1.4012984643248171e-45 : f32
+  %small = scalar.constant -0.00390625 : f64
+  %single = scalar.expm1f %tiny : f32
+  %wide = scalar.expm1f %small : f64
+  func.return %single, %wide : f32, f64
+}
+
+// ----
+func.def @exponential_difference() -> (f32, f64) {
+  %single = scalar.constant 1.4012984643248171e-45 : f32
+  %wide = scalar.constant -0.00389863052988251 : f64
+  func.return %single, %wide : f32, f64
+}
+
+// ====
+
+// A fractional power retains the full input exponent range and uses the
+// shared mapping, including the selected one-step rounding at this boundary.
+func.def @power_full_precision() -> (f32, f64) {
+  %base32 = scalar.constant 1.0000325441360474 : f32
+  %exponent32 = scalar.constant -2220941.75 : f32
+  %base64 = scalar.constant 2.2250738585072009e-308 : f64
+  %exponent64 = scalar.constant -0.5 : f64
+  %single = scalar.powf %base32, %exponent32 : f32
+  %wide = scalar.powf %base64, %exponent64 : f64
+  func.return %single, %wide : f32, f64
+}
+
+// ----
+func.def @power_full_precision() -> (f32, f64) {
+  %single = scalar.constant 4.0766217554913857e-32 : f32
+  %wide = scalar.constant 6.7039039649712985e+153 : f64
+  func.return %single, %wide : f32, f64
+}
+
+// ====
+
+func.def @scalar_hyperbolic_boundaries() -> (f32, f64, f64, f16, bf16, f64) {
+  %tanh_input = scalar.constant 0.40029323101043701 : f32
+  %tanh_result = scalar.tanhf %tanh_input : f32
+  %sinh_input = scalar.constant 710.0 : f64
+  %sinh_result = scalar.sinhf %sinh_input : f64
+  %cosh_input = scalar.constant 710.0 : f64
+  %cosh_result = scalar.coshf %cosh_input : f64
+  %asinh_input = scalar.constant 6.103515625e-05 : f16
+  %asinh_result = scalar.asinhf %asinh_input : f16
+  %acosh_input = scalar.constant 1.0078125 : bf16
+  %acosh_result = scalar.acoshf %acosh_input : bf16
+  %atanh_input = scalar.constant 4.9406564584124654e-324 : f64
+  %atanh_result = scalar.atanhf %atanh_input : f64
+  func.return %tanh_result, %sinh_result, %cosh_result, %asinh_result, %acosh_result, %atanh_result : f32, f64, f64, f16, bf16, f64
+}
+
+// ----
+func.def @scalar_hyperbolic_boundaries() -> (f32, f64, f64, f16, bf16, f64) {
+  %tanh_result = scalar.constant 0.38019981980323792 : f32
+  %sinh_result = scalar.constant 1.1169973830808557e+308 : f64
+  %cosh_result = scalar.constant 1.1169973830808557e+308 : f64
+  %asinh_result = scalar.constant 6.103515625e-05 : f16
+  %acosh_result = scalar.constant 0.125 : bf16
+  %atanh_result = scalar.constant 4.9406564584124654e-324 : f64
+  func.return %tanh_result, %sinh_result, %cosh_result, %asinh_result, %acosh_result, %atanh_result : f32, f64, f64, f16, bf16, f64
+}
+
+// ====
+
+func.def @scalar_inverse_trigonometry() -> (f32, f64, bf16, f8E5M2) {
+  %asin_input = scalar.constant 0.99999994039535522 : f32
+  %asin_result = scalar.asinf %asin_input : f32
+  %acos_input = scalar.constant 0.99999999999999989 : f64
+  %acos_result = scalar.acosf %acos_input : f64
+  %atan_input = scalar.constant -1.0 : bf16
+  %atan_result = scalar.atanf %atan_input : bf16
+  %atan2_input = scalar.constant 0.5 : f8E5M2
+  %negative_x = scalar.constant -0.5 : f8E5M2
+  %atan2_result = scalar.atan2f %atan2_input, %negative_x : f8E5M2
+  func.return %asin_result, %acos_result, %atan_result, %atan2_result : f32, f64, bf16, f8E5M2
+}
+
+// ----
+func.def @scalar_inverse_trigonometry() -> (f32, f64, bf16, f8E5M2) {
+  %asin_result = scalar.constant 1.570451021194458 : f32
+  %acos_result = scalar.constant 1.4901161193847656e-08 : f64
+  %atan_result = scalar.constant -0.78515625 : bf16
+  %atan2_result = scalar.constant 2.5 : f8E5M2
+  func.return %asin_result, %acos_result, %atan_result, %atan2_result : f32, f64, bf16, f8E5M2
+}
+
+// ====
+
+func.def @scalar_trigonometry() -> (f64, f32, f64, f8E4M3, f64, f64) {
+  %large_input = scalar.constant 1.0715086071862673e+301 : f64
+  %large = scalar.sinf %large_input : f64
+  %small_input = scalar.constant 0.5 : f32
+  %small = scalar.cosf %small_input : f32
+  %pole_input = scalar.constant 1.5707963267948966 : f64
+  %pole = scalar.tanf %pole_input : f64
+  %narrow_input = scalar.constant 0.5 : f8E4M3
+  %narrow = scalar.sinf %narrow_input : f8E4M3
+  %turns_input = scalar.constant 4.9406564584124654e-324 : f64
+  %turns = scalar.sinturnsf %turns_input : f64
+  %cardinal_input = scalar.constant 4503599627370496.0 : f64
+  %cardinal = scalar.costurnsf %cardinal_input : f64
+  func.return %large, %small, %pole, %narrow, %turns, %cardinal : f64, f32, f64, f8E4M3, f64, f64
+}
+
+// ----
+func.def @scalar_trigonometry() -> (f64, f32, f64, f8E4M3, f64, f64) {
+  %large = scalar.constant -0.15920170308624243 : f64
+  %small = scalar.constant 0.87758255004882812 : f32
+  %pole = scalar.constant 16331239353195370.0 : f64
+  %narrow = scalar.constant 0.46875 : f8E4M3
+  %turns = scalar.constant 2.9643938750474793e-323 : f64
+  %cardinal = scalar.constant 1.0 : f64
+  func.return %large, %small, %pole, %narrow, %turns, %cardinal : f64, f32, f64, f8E4M3, f64, f64
+}
+
+// ====
+
+func.def @error_functions() -> (f32, f32, f64, f64, f16, f16) {
+  %input0 = scalar.constant 9.5 : f32
+  %erf0 = scalar.erff %input0 : f32
+  %erfc0 = scalar.erfcf %input0 : f32
+  %input1 = scalar.constant 9.5 : f64
+  %erf1 = scalar.erff %input1 : f64
+  %erfc1 = scalar.erfcf %input1 : f64
+  %input2 = scalar.constant 0.75 : f16
+  %erf2 = scalar.erff %input2 : f16
+  %erfc2 = scalar.erfcf %input2 : f16
+  func.return %erf0, %erfc0, %erf1, %erfc1, %erf2, %erfc2 : f32, f32, f64, f64, f16, f16
+}
+
+// ----
+func.def @error_functions() -> (f32, f32, f64, f64, f16, f16) {
+  %erf0 = scalar.constant 1.0 : f32
+  %erfc0 = scalar.constant 3.769212609340893e-41 : f32
+  %erf1 = scalar.constant 1.0 : f64
+  %erfc1 = scalar.constant 3.7692144856548802e-41 : f64
+  %erf2 = scalar.constant 0.7109375 : f16
+  %erfc2 = scalar.constant 0.288818359375 : f16
+  func.return %erf0, %erfc0, %erf1, %erfc1, %erf2, %erfc2 : f32, f32, f64, f64, f16, f16
+}
+
+// ====
+
+func.def @scalar_activation_tails_and_scale() -> (f32, f32, f64, f64, f32, f16) {
+  %logistic_input = scalar.constant -100.0 : f32
+  %logistic = scalar.logisticf %logistic_input : f32
+  %silu_input = scalar.constant -104.0 : f32
+  %silu = scalar.siluf %silu_input : f32
+  %softplus_input = scalar.constant -744.0 : f64
+  %softplus = scalar.softplusf %softplus_input : f64
+  %gelu_erf_input = scalar.constant -38.0 : f64
+  %gelu_erf = scalar.geluf<erf> %gelu_erf_input : f64
+  %gelu_tanh_input = scalar.constant -8.0 : f32
+  %gelu_tanh = scalar.geluf<tanh> %gelu_tanh_input : f32
+  %gelu_logistic_input = scalar.constant -5.0 : f16
+  %gelu_logistic = scalar.geluf<logistic> %gelu_logistic_input {scale = 1.702} : f16
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : f32, f32, f64, f64, f32, f16
+}
+
+// ----
+func.def @scalar_activation_tails_and_scale() -> (f32, f32, f64, f64, f32, f16) {
+  %logistic = scalar.constant 3.7835058536770061e-44 : f32
+  %silu = scalar.constant -7.1466221680565671e-44 : f32
+  %softplus = scalar.constant 9.8813129168249309e-324 : f64
+  %gelu_erf = scalar.constant -1.096462776839966e-314 : f64
+  %gelu_tanh = scalar.constant -3.1077797614663798e-21 : f32
+  %gelu_logistic = scalar.constant -0.001007080078125 : f16
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : f32, f32, f64, f64, f32, f16
+}
+
+// ====
+
+func.def @rounding_f32() -> (f32, f32, f32, f32, f32) {
+  %input = scalar.constant -2.5 : f32
+  %ceil = scalar.ceilf %input : f32
+  %floor = scalar.floorf %input : f32
+  %trunc = scalar.truncf %input : f32
+  %roundeven = scalar.roundevenf %input : f32
+  %round = scalar.roundf %input : f32
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f32, f32, f32, f32, f32
+}
+
+// ----
+func.def @rounding_f32() -> (f32, f32, f32, f32, f32) {
+  %ceil = scalar.constant -2.0 : f32
+  %floor = scalar.constant -3.0 : f32
+  %trunc = scalar.constant -2.0 : f32
+  %roundeven = scalar.constant -2.0 : f32
+  %round = scalar.constant -3.0 : f32
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f32, f32, f32, f32, f32
+}
+
+// ====
+
+func.def @rounding_f64() -> (f64, f64, f64, f64, f64) {
+  %input = scalar.constant -2.5 : f64
+  %ceil = scalar.ceilf %input : f64
+  %floor = scalar.floorf %input : f64
+  %trunc = scalar.truncf %input : f64
+  %roundeven = scalar.roundevenf %input : f64
+  %round = scalar.roundf %input : f64
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f64, f64, f64, f64, f64
+}
+
+// ----
+func.def @rounding_f64() -> (f64, f64, f64, f64, f64) {
+  %ceil = scalar.constant -2.0 : f64
+  %floor = scalar.constant -3.0 : f64
+  %trunc = scalar.constant -2.0 : f64
+  %roundeven = scalar.constant -2.0 : f64
+  %round = scalar.constant -3.0 : f64
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f64, f64, f64, f64, f64
+}
+
+// ====
+
+func.def @rounding_f16() -> (f16, f16, f16, f16, f16) {
+  %input = scalar.constant -2.5 : f16
+  %ceil = scalar.ceilf %input : f16
+  %floor = scalar.floorf %input : f16
+  %trunc = scalar.truncf %input : f16
+  %roundeven = scalar.roundevenf %input : f16
+  %round = scalar.roundf %input : f16
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f16, f16, f16, f16, f16
+}
+
+// ----
+func.def @rounding_f16() -> (f16, f16, f16, f16, f16) {
+  %ceil = scalar.constant -2.0 : f16
+  %floor = scalar.constant -3.0 : f16
+  %trunc = scalar.constant -2.0 : f16
+  %roundeven = scalar.constant -2.0 : f16
+  %round = scalar.constant -3.0 : f16
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f16, f16, f16, f16, f16
+}
+
+// ====
+
+func.def @rounding_bf16() -> (bf16, bf16, bf16, bf16, bf16) {
+  %input = scalar.constant -2.5 : bf16
+  %ceil = scalar.ceilf %input : bf16
+  %floor = scalar.floorf %input : bf16
+  %trunc = scalar.truncf %input : bf16
+  %roundeven = scalar.roundevenf %input : bf16
+  %round = scalar.roundf %input : bf16
+  func.return %ceil, %floor, %trunc, %roundeven, %round : bf16, bf16, bf16, bf16, bf16
+}
+
+// ----
+func.def @rounding_bf16() -> (bf16, bf16, bf16, bf16, bf16) {
+  %ceil = scalar.constant -2.0 : bf16
+  %floor = scalar.constant -3.0 : bf16
+  %trunc = scalar.constant -2.0 : bf16
+  %roundeven = scalar.constant -2.0 : bf16
+  %round = scalar.constant -3.0 : bf16
+  func.return %ceil, %floor, %trunc, %roundeven, %round : bf16, bf16, bf16, bf16, bf16
+}
+
+// ====
+
+func.def @rounding_f8E4M3() -> (f8E4M3, f8E4M3, f8E4M3, f8E4M3, f8E4M3) {
+  %input = scalar.constant -2.5 : f8E4M3
+  %ceil = scalar.ceilf %input : f8E4M3
+  %floor = scalar.floorf %input : f8E4M3
+  %trunc = scalar.truncf %input : f8E4M3
+  %roundeven = scalar.roundevenf %input : f8E4M3
+  %round = scalar.roundf %input : f8E4M3
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f8E4M3, f8E4M3, f8E4M3, f8E4M3, f8E4M3
+}
+
+// ----
+func.def @rounding_f8E4M3() -> (f8E4M3, f8E4M3, f8E4M3, f8E4M3, f8E4M3) {
+  %ceil = scalar.constant -2.0 : f8E4M3
+  %floor = scalar.constant -3.0 : f8E4M3
+  %trunc = scalar.constant -2.0 : f8E4M3
+  %roundeven = scalar.constant -2.0 : f8E4M3
+  %round = scalar.constant -3.0 : f8E4M3
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f8E4M3, f8E4M3, f8E4M3, f8E4M3, f8E4M3
+}
+
+// ====
+
+func.def @rounding_f8E5M2() -> (f8E5M2, f8E5M2, f8E5M2, f8E5M2, f8E5M2) {
+  %input = scalar.constant -2.5 : f8E5M2
+  %ceil = scalar.ceilf %input : f8E5M2
+  %floor = scalar.floorf %input : f8E5M2
+  %trunc = scalar.truncf %input : f8E5M2
+  %roundeven = scalar.roundevenf %input : f8E5M2
+  %round = scalar.roundf %input : f8E5M2
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f8E5M2, f8E5M2, f8E5M2, f8E5M2, f8E5M2
+}
+
+// ----
+func.def @rounding_f8E5M2() -> (f8E5M2, f8E5M2, f8E5M2, f8E5M2, f8E5M2) {
+  %ceil = scalar.constant -2.0 : f8E5M2
+  %floor = scalar.constant -3.0 : f8E5M2
+  %trunc = scalar.constant -2.0 : f8E5M2
+  %roundeven = scalar.constant -2.0 : f8E5M2
+  %round = scalar.constant -3.0 : f8E5M2
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f8E5M2, f8E5M2, f8E5M2, f8E5M2, f8E5M2
+}

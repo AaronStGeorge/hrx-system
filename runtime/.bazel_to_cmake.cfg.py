@@ -214,5 +214,18 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
     target_mappings={
         "//runtime/src:defines": ["iree_defs"],
     },
+    condition_mappings={
+        "//runtime/src/iree/math:gnu_x86": (
+            '(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU" AND NOT MSVC) AND '
+            '(IREE_ARCH STREQUAL "x86_32" OR IREE_ARCH STREQUAL "x86_64")'
+        ),
+        "//runtime/src/iree/math:clang_cl_x86": (
+            '(CMAKE_C_COMPILER_ID MATCHES "Clang" AND MSVC) AND '
+            '(IREE_ARCH STREQUAL "x86_32" OR IREE_ARCH STREQUAL "x86_64")'
+        ),
+        "//runtime/src/iree/math:msvc_x86_32": (
+            '(CMAKE_C_COMPILER_ID STREQUAL "MSVC") AND (IREE_ARCH STREQUAL "x86_32")'
+        ),
+    },
     convert_unmatched_target=convert_unmatched_target,
 )

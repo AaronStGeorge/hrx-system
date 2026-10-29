@@ -102,6 +102,7 @@ loom_generated_cc_library(
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:predicate_facts",
         "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/math",
     ],
 )
 

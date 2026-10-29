@@ -3,9 +3,16 @@
 vm.target<core> @vm
 
 func.def target(@vm) @exact_sine(%value: f32) -> (f32) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.sinf", phase_name="legalize-math", policy_name="vm-math", math_op="sinf", lane_domain="scalar", element_type="f32", constraint_key="math.recipe.afn_f32"}
   %result = scalar.sinf %value : f32
   func.return %result : f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @exact_sine(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>) asm {
+  %result = float.math.unary.f32 %value, "sin"
+  return %result
 }
 
 // ====
@@ -13,9 +20,16 @@ func.def target(@vm) @exact_sine(%value: f32) -> (f32) {
 vm.target<core> @vm
 
 func.def target(@vm) @exact_cosine(%value: f32) -> (f32) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.cosf", phase_name="legalize-math", policy_name="vm-math", math_op="cosf", lane_domain="scalar", element_type="f32", constraint_key="math.recipe.afn_f32"}
   %result = scalar.cosf %value : f32
   func.return %result : f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @exact_cosine(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>) asm {
+  %result = float.math.unary.f32 %value, "cos"
+  return %result
 }
 
 // ====
@@ -23,101 +37,16 @@ func.def target(@vm) @exact_cosine(%value: f32) -> (f32) {
 vm.target<core> @vm
 
 func.def target(@vm) @wide_cosine(%value: f64) -> (f64) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.cosf", phase_name="legalize-math", policy_name="vm-math", math_op="cosf", lane_domain="scalar", element_type="f64", constraint_key="math.recipe.afn_f32"}
   %result = scalar.cosf<afn> %value : f64
   func.return %result : f64
-}
-
-// ====
-
-vm.target<core> @vm
-
-func.def target(@vm) @exact_exponential(%value: f32) -> (f32) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.expf", phase_name="legalize-math", policy_name="vm-math", math_op="expf", lane_domain="scalar", element_type="f32", constraint_key="math.recipe.afn_f32"}
-  %result = scalar.expf %value : f32
-  func.return %result : f32
-}
-
-// ====
-
-vm.target<core> @vm
-
-func.def target(@vm) @wide_exponential(%value: f64) -> (f64) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.expf", phase_name="legalize-math", policy_name="vm-math", math_op="expf", lane_domain="scalar", element_type="f64", constraint_key="math.recipe.afn_f32"}
-  %result = scalar.expf<afn> %value : f64
-  func.return %result : f64
-}
-
-// ====
-
-vm.target<core> @vm
-
-func.def target(@vm) @exact_exp2(%value: f32) -> (f32) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.exp2f", phase_name="legalize-math", policy_name="vm-math", math_op="exp2f", lane_domain="scalar", element_type="f32", constraint_key="math.exp2.afn_f32"}
-  %result = scalar.exp2f %value : f32
-  func.return %result : f32
-}
-
-// ====
-
-vm.target<core> @vm
-
-func.def target(@vm) @wide_exp2(%value: f64) -> (f64) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.exp2f", phase_name="legalize-math", policy_name="vm-math", math_op="exp2f", lane_domain="scalar", element_type="f64", constraint_key="math.exp2.afn_f32"}
-  %result = scalar.exp2f<afn> %value : f64
-  func.return %result : f64
-}
-
-// ====
-
-vm.target<core> @vm
-
-func.def target(@vm) @wide_sqrt(%value: f64) -> (f64) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.sqrtf", phase_name="legalize-math", policy_name="vm-math", math_op="sqrtf", lane_domain="scalar", element_type="f64", constraint_key="math.root.f32"}
-  %result = scalar.sqrtf %value : f64
-  func.return %result : f64
-}
-
-// ====
-
-vm.target<core> @vm
-
-func.def target(@vm) @wide_rsqrt(%value: f64) -> (f64) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.rsqrtf", phase_name="legalize-math", policy_name="vm-math", math_op="rsqrtf", lane_domain="scalar", element_type="f64", constraint_key="math.root.f32"}
-  %result = scalar.rsqrtf %value : f64
-  func.return %result : f64
-}
-
-// ====
-
-vm.target<core> @vm
-
-func.def target(@vm) @f32_roots(%value: f32) -> (f32, f32) {
-  %sqrt = scalar.sqrtf %value : f32
-  %rsqrt = scalar.rsqrtf %value : f32
-  func.return %sqrt, %rsqrt : f32, f32
 }
 
 // ----
 vm.target<core> @vm
 
-low.func.def target<vm.core>(@vm) abi(vm_function) @f32_roots(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>) asm {
-  %3 = constant.i32 8388608 : reg<vm.value : f32>
-  %4 = constant.i32 1266679808 : reg<vm.value : f32>
-  %5 = constant.i32 964689920 : reg<vm.value : f32>
-  %6 = constant.i32 1065353216 : reg<vm.value : f32>
-  %7 = float.abs.f32 %value
-  %8 = float.compare.f32 %7, %3, "olt"
-  %9 = value.select %8, %4, %6 : reg<vm.value : f32>
-  %10 = value.select %8, %5, %6 : reg<vm.value : f32>
-  %11 = float.mul.f32 %value, %9
-  %12 = float.math.unary.f32 %11, "sqrt.approx"
-  %sqrt = float.mul.f32 %12, %10
-  %14 = constant.i32 1166016512 : reg<vm.value : f32>
-  %15 = value.select %8, %14, %6 : reg<vm.value : f32>
-  %16 = float.math.unary.f32 %11, "rsqrt.approx"
-  %rsqrt = float.mul.f32 %16, %15
-  return %sqrt, %rsqrt
+low.func.def target<vm.core>(@vm) abi(vm_function) @wide_cosine(%value: reg<vm.value : f64>) -> (reg<vm.value : f64>) asm {
+  %result = float.math.unary.f64 %value, "cos"
+  return %result
 }
 
 // ====
@@ -125,9 +54,16 @@ low.func.def target<vm.core>(@vm) abi(vm_function) @f32_roots(%value: reg<vm.val
 vm.target<core> @vm
 
 func.def target(@vm) @exact_log2(%value: f32) -> (f32) {
-  // ERROR@+1: TARGET/003 {target_key="vm", export_name="exact_log2", config_key="vm", function_name="exact_log2", op_name="scalar.log2f", subject_role="flags", subject_name="fastmath", constraint_key="has_all.afn"}
   %result = scalar.log2f %value : f32
   func.return %result : f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @exact_log2(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>) asm {
+  %result = float.math.unary.f32 %value, "log2"
+  return %result
 }
 
 // ====
@@ -135,9 +71,16 @@ func.def target(@vm) @exact_log2(%value: f32) -> (f32) {
 vm.target<core> @vm
 
 func.def target(@vm) @wide_log2(%value: f64) -> (f64) {
-  // ERROR@+1: TARGET/002 {target_key="vm", export_name="wide_log2", config_key="vm", function_name="wide_log2", op_name="scalar.log2f", field_name="input", actual_type="f64", expected_type="f32"}
   %result = scalar.log2f<afn> %value : f64
   func.return %result : f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @wide_log2(%value: reg<vm.value : f64>) -> (reg<vm.value : f64>) asm {
+  %result = float.math.unary.f64 %value, "log2"
+  return %result
 }
 
 // ====
@@ -145,9 +88,16 @@ func.def target(@vm) @wide_log2(%value: f64) -> (f64) {
 vm.target<core> @vm
 
 func.def target(@vm) @exact_log(%value: f32) -> (f32) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.logf", phase_name="legalize-math", policy_name="vm-math", math_op="logf", lane_domain="scalar", element_type="f32", constraint_key="math.recipe.afn_f32"}
   %result = scalar.logf %value : f32
   func.return %result : f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @exact_log(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>) asm {
+  %result = float.math.unary.f32 %value, "log"
+  return %result
 }
 
 // ====
@@ -155,9 +105,16 @@ func.def target(@vm) @exact_log(%value: f32) -> (f32) {
 vm.target<core> @vm
 
 func.def target(@vm) @wide_log(%value: f64) -> (f64) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.logf", phase_name="legalize-math", policy_name="vm-math", math_op="logf", lane_domain="scalar", element_type="f64", constraint_key="math.recipe.afn_f32"}
   %result = scalar.logf<afn> %value : f64
   func.return %result : f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @wide_log(%value: reg<vm.value : f64>) -> (reg<vm.value : f64>) asm {
+  %result = float.math.unary.f64 %value, "log"
+  return %result
 }
 
 // ====
@@ -195,4 +152,565 @@ low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_arithmetic(%a: reg<vm
   %24 = float.mul.f32 %18, %19
   %products = conversion.float.truncate %24, "f32.to.f8e5m2" : reg<vm.value : f8E5M2>
   return %sum, %difference, %product, %sums, %differences, %products
+}
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @elementary_f32(%value: f32) -> (f32, f32, f32, f32) {
+  %root = scalar.sqrtf %value : f32
+  %inverse = scalar.rsqrtf %value : f32
+  %natural = scalar.expf %value : f32
+  %base_two = scalar.exp2f %value : f32
+  func.return %root, %inverse, %natural, %base_two : f32, f32, f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @elementary_f32(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %root = float.math.unary.f32 %value, "sqrt"
+  %inverse = float.math.unary.f32 %value, "rsqrt"
+  %natural = float.math.unary.f32 %value, "exp"
+  %base_two = float.math.unary.f32 %value, "exp2"
+  return %root, %inverse, %natural, %base_two
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @elementary_f64(%value: f64) -> (f64, f64, f64, f64) {
+  %root = scalar.sqrtf %value : f64
+  %inverse = scalar.rsqrtf %value : f64
+  %natural = scalar.expf %value : f64
+  %base_two = scalar.exp2f %value : f64
+  func.return %root, %inverse, %natural, %base_two : f64, f64, f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @elementary_f64(%value: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %root = float.math.unary.f64 %value, "sqrt"
+  %inverse = float.math.unary.f64 %value, "rsqrt"
+  %natural = float.math.unary.f64 %value, "exp"
+  %base_two = float.math.unary.f64 %value, "exp2"
+  return %root, %inverse, %natural, %base_two
+}
+
+// ====
+
+// Narrow inputs evaluate at F32 and round once to the authored format. Both
+// FP8 encodings and both 16-bit formats share the elementary operation policy.
+vm.target<core> @vm
+
+func.def target(@vm) @narrow_elementary(%e4m3: f8E4M3, %e5m2: f8E5M2, %half: f16, %brain: bf16) -> (f8E4M3, f8E5M2, f16, bf16) {
+  %root = scalar.sqrtf %e4m3 : f8E4M3
+  %inverse = scalar.rsqrtf %e5m2 : f8E5M2
+  %natural = scalar.expf %half : f16
+  %base_two = scalar.exp2f %brain : bf16
+  func.return %root, %inverse, %natural, %base_two : f8E4M3, f8E5M2, f16, bf16
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_elementary(%e4m3: reg<vm.value : f8E4M3>, %e5m2: reg<vm.value : f8E5M2>, %half: reg<vm.value : f16>, %brain: reg<vm.value : bf16>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f16>, reg<vm.value : bf16>) asm {
+  %8 = conversion.float.extend %e4m3, "f8e4m3.to.f32" : reg<vm.value : f32>
+  %9 = float.math.unary.f32 %8, "sqrt"
+  %root = conversion.float.truncate %9, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %11 = conversion.float.extend %e5m2, "f8e5m2.to.f32" : reg<vm.value : f32>
+  %12 = float.math.unary.f32 %11, "rsqrt"
+  %inverse = conversion.float.truncate %12, "f32.to.f8e5m2" : reg<vm.value : f8E5M2>
+  %14 = conversion.float.extend %half, "f16.to.f32" : reg<vm.value : f32>
+  %15 = float.math.unary.f32 %14, "exp"
+  %natural = conversion.float.truncate %15, "f32.to.f16" : reg<vm.value : f16>
+  %17 = conversion.float.extend %brain, "bf16.to.f32" : reg<vm.value : f32>
+  %18 = float.math.unary.f32 %17, "exp2"
+  %base_two = conversion.float.truncate %18, "f32.to.bf16" : reg<vm.value : bf16>
+  return %root, %inverse, %natural, %base_two
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @cube_roots(%input0: f8E4M3, %input1: f8E5M2, %input2: f16, %input3: bf16, %input4: f32, %input5: f64) -> (f8E4M3, f8E5M2, f16, bf16, f32, f64) {
+  %root0 = scalar.cbrtf %input0 : f8E4M3
+  %root1 = scalar.cbrtf %input1 : f8E5M2
+  %root2 = scalar.cbrtf %input2 : f16
+  %root3 = scalar.cbrtf %input3 : bf16
+  %root4 = scalar.cbrtf %input4 : f32
+  %root5 = scalar.cbrtf %input5 : f64
+  func.return %root0, %root1, %root2, %root3, %root4, %root5 : f8E4M3, f8E5M2, f16, bf16, f32, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @cube_roots(%input0: reg<vm.value : f8E4M3>, %input1: reg<vm.value : f8E5M2>, %input2: reg<vm.value : f16>, %input3: reg<vm.value : bf16>, %input4: reg<vm.value : f32>, %input5: reg<vm.value : f64>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f16>, reg<vm.value : bf16>, reg<vm.value : f32>, reg<vm.value : f64>) asm {
+  %12 = conversion.float.extend %input0, "f8e4m3.to.f32" : reg<vm.value : f32>
+  %13 = float.math.unary.f32 %12, "cbrt"
+  %root0 = conversion.float.truncate %13, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %15 = conversion.float.extend %input1, "f8e5m2.to.f32" : reg<vm.value : f32>
+  %16 = float.math.unary.f32 %15, "cbrt"
+  %root1 = conversion.float.truncate %16, "f32.to.f8e5m2" : reg<vm.value : f8E5M2>
+  %18 = conversion.float.extend %input2, "f16.to.f32" : reg<vm.value : f32>
+  %19 = float.math.unary.f32 %18, "cbrt"
+  %root2 = conversion.float.truncate %19, "f32.to.f16" : reg<vm.value : f16>
+  %21 = conversion.float.extend %input3, "bf16.to.f32" : reg<vm.value : f32>
+  %22 = float.math.unary.f32 %21, "cbrt"
+  %root3 = conversion.float.truncate %22, "f32.to.bf16" : reg<vm.value : bf16>
+  %root4 = float.math.unary.f32 %input4, "cbrt"
+  %root5 = float.math.unary.f64 %input5, "cbrt"
+  return %root0, %root1, %root2, %root3, %root4, %root5
+}
+
+// ====
+// Every narrow carrier uses the same F32 evaluation and final format rounding.
+vm.target<core> @vm
+
+func.def target(@vm) @narrow_logarithms(%a: f8E4M3, %b: f8E5M2, %c: f16, %d: bf16) -> (f8E4M3, f8E5M2, f16, bf16) {
+  %natural = scalar.logf %a : f8E4M3
+  %base_two = scalar.log2f %b : f8E5M2
+  %base_ten = scalar.log10f %c : f16
+  %increment = scalar.log1pf %d : bf16
+  func.return %natural, %base_two, %base_ten, %increment : f8E4M3, f8E5M2, f16, bf16
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_logarithms(%a: reg<vm.value : f8E4M3>, %b: reg<vm.value : f8E5M2>, %c: reg<vm.value : f16>, %d: reg<vm.value : bf16>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E5M2>, reg<vm.value : f16>, reg<vm.value : bf16>) asm {
+  %8 = conversion.float.extend %a, "f8e4m3.to.f32" : reg<vm.value : f32>
+  %9 = float.math.unary.f32 %8, "log"
+  %natural = conversion.float.truncate %9, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %11 = conversion.float.extend %b, "f8e5m2.to.f32" : reg<vm.value : f32>
+  %12 = float.math.unary.f32 %11, "log2"
+  %base_two = conversion.float.truncate %12, "f32.to.f8e5m2" : reg<vm.value : f8E5M2>
+  %14 = conversion.float.extend %c, "f16.to.f32" : reg<vm.value : f32>
+  %15 = float.math.unary.f32 %14, "log10"
+  %base_ten = conversion.float.truncate %15, "f32.to.f16" : reg<vm.value : f16>
+  %17 = conversion.float.extend %d, "bf16.to.f32" : reg<vm.value : f32>
+  %18 = float.math.unary.f32 %17, "log1p"
+  %increment = conversion.float.truncate %18, "f32.to.bf16" : reg<vm.value : bf16>
+  return %natural, %base_two, %base_ten, %increment
+}
+
+// ====
+vm.target<core> @vm
+
+func.def target(@vm) @wide_logarithms(%values: vector<2xf64>) -> (vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>) {
+  %natural = vector.logf %values : vector<2xf64>
+  %base_two = vector.log2f %values : vector<2xf64>
+  %base_ten = vector.log10f %values : vector<2xf64>
+  %increment = vector.log1pf %values : vector<2xf64>
+  func.return %natural, %base_two, %base_ten, %increment : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @wide_logarithms(%0: reg<vm.value : f64>, %1: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %10 = float.math.unary.f64 %0, "log"
+  %11 = float.math.unary.f64 %1, "log"
+  %12 = float.math.unary.f64 %0, "log2"
+  %13 = float.math.unary.f64 %1, "log2"
+  %14 = float.math.unary.f64 %0, "log10"
+  %15 = float.math.unary.f64 %1, "log10"
+  %16 = float.math.unary.f64 %0, "log1p"
+  %17 = float.math.unary.f64 %1, "log1p"
+  return %10, %11, %12, %13, %14, %15, %16, %17
+}
+
+// ====
+vm.target<core> @vm
+
+func.def target(@vm) @exponential_difference(%small: vector<2xbf16>, %single: f32, %wide: f64) -> (vector<2xbf16>, f32, f64) {
+  %narrow = vector.expm1f %small : vector<2xbf16>
+  %native = scalar.expm1f %single : f32
+  %double_width = scalar.expm1f %wide : f64
+  func.return %narrow, %native, %double_width : vector<2xbf16>, f32, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @exponential_difference(%0: reg<vm.value : bf16>, %1: reg<vm.value : bf16>, %single: reg<vm.value : f32>, %wide: reg<vm.value : f64>) -> (reg<vm.value : bf16>, reg<vm.value : bf16>, reg<vm.value : f32>, reg<vm.value : f64>) asm {
+  %native = float.math.unary.f32 %single, "expm1"
+  %double_width = float.math.unary.f64 %wide, "expm1"
+  %10 = conversion.float.extend %0, "bf16.to.f32" : reg<vm.value : f32>
+  %11 = float.math.unary.f32 %10, "expm1"
+  %12 = conversion.float.truncate %11, "f32.to.bf16" : reg<vm.value : bf16>
+  %13 = conversion.float.extend %1, "bf16.to.f32" : reg<vm.value : f32>
+  %14 = float.math.unary.f32 %13, "expm1"
+  %15 = conversion.float.truncate %14, "f32.to.bf16" : reg<vm.value : bf16>
+  return %12, %15, %native, %double_width
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @real_powers(%bases: vector<2xf16>, %exponents: vector<2xf16>, %single: f32, %wide: f64) -> (vector<2xf16>, f32, f64) {
+  %narrow = vector.powf %bases, %exponents : vector<2xf16>
+  %native = scalar.powf %single, %single : f32
+  %double_width = scalar.powf %wide, %wide : f64
+  func.return %narrow, %native, %double_width : vector<2xf16>, f32, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @real_powers(%0: reg<vm.value : f16>, %1: reg<vm.value : f16>, %2: reg<vm.value : f16>, %3: reg<vm.value : f16>, %single: reg<vm.value : f32>, %wide: reg<vm.value : f64>) -> (reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f32>, reg<vm.value : f64>) asm {
+  %native = float.math.binary.f32 %single, %single, "pow"
+  %double_width = float.math.binary.f64 %wide, %wide, "pow"
+  %12 = conversion.float.extend %0, "f16.to.f32" : reg<vm.value : f32>
+  %13 = conversion.float.extend %2, "f16.to.f32" : reg<vm.value : f32>
+  %14 = float.math.binary.f32 %12, %13, "pow"
+  %15 = conversion.float.truncate %14, "f32.to.f16" : reg<vm.value : f16>
+  %16 = conversion.float.extend %1, "f16.to.f32" : reg<vm.value : f32>
+  %17 = conversion.float.extend %3, "f16.to.f32" : reg<vm.value : f32>
+  %18 = float.math.binary.f32 %16, %17, "pow"
+  %19 = conversion.float.truncate %18, "f32.to.f16" : reg<vm.value : f16>
+  return %15, %19, %native, %double_width
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @hyperbolic_f32(%value: f32) -> (f32, f32, f32, f32, f32, f32) {
+  %sinh = scalar.sinhf %value : f32
+  %cosh = scalar.coshf %value : f32
+  %tanh = scalar.tanhf %value : f32
+  %asinh = scalar.asinhf %value : f32
+  %acosh = scalar.acoshf %value : f32
+  %atanh = scalar.atanhf %value : f32
+  func.return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh : f32, f32, f32, f32, f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @hyperbolic_f32(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %sinh = float.math.unary.f32 %value, "sinh"
+  %cosh = float.math.unary.f32 %value, "cosh"
+  %tanh = float.math.unary.f32 %value, "tanh"
+  %asinh = float.math.unary.f32 %value, "asinh"
+  %acosh = float.math.unary.f32 %value, "acosh"
+  %atanh = float.math.unary.f32 %value, "atanh"
+  return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @hyperbolic_f64(%value: f64) -> (f64, f64, f64, f64, f64, f64) {
+  %sinh = scalar.sinhf %value : f64
+  %cosh = scalar.coshf %value : f64
+  %tanh = scalar.tanhf %value : f64
+  %asinh = scalar.asinhf %value : f64
+  %acosh = scalar.acoshf %value : f64
+  %atanh = scalar.atanhf %value : f64
+  func.return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh : f64, f64, f64, f64, f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @hyperbolic_f64(%value: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %sinh = float.math.unary.f64 %value, "sinh"
+  %cosh = float.math.unary.f64 %value, "cosh"
+  %tanh = float.math.unary.f64 %value, "tanh"
+  %asinh = float.math.unary.f64 %value, "asinh"
+  %acosh = float.math.unary.f64 %value, "acosh"
+  %atanh = float.math.unary.f64 %value, "atanh"
+  return %sinh, %cosh, %tanh, %asinh, %acosh, %atanh
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @ordinary_narrow_hyperbolic(%value: bf16) -> (bf16) {
+  %result = scalar.tanhf %value : bf16
+  func.return %result : bf16
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @ordinary_narrow_hyperbolic(%value: reg<vm.value : bf16>) -> (reg<vm.value : bf16>) asm {
+  %2 = conversion.float.extend %value, "bf16.to.f32" : reg<vm.value : f32>
+  %3 = float.math.unary.f32 %2, "tanh"
+  %result = conversion.float.truncate %3, "f32.to.bf16" : reg<vm.value : bf16>
+  return %result
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @inverse_trigonometry_f32(%y: f32, %x: f32) -> (f32, f32, f32, f32) {
+  %asin = scalar.asinf %y : f32
+  %acos = scalar.acosf %y : f32
+  %atan = scalar.atanf %y : f32
+  %atan2 = scalar.atan2f %y, %x : f32
+  func.return %asin, %acos, %atan, %atan2 : f32, f32, f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @inverse_trigonometry_f32(%y: reg<vm.value : f32>, %x: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %asin = float.math.unary.f32 %y, "asin"
+  %acos = float.math.unary.f32 %y, "acos"
+  %atan = float.math.unary.f32 %y, "atan"
+  %atan2 = float.math.binary.f32 %y, %x, "atan2"
+  return %asin, %acos, %atan, %atan2
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @inverse_trigonometry_f64(%y: f64, %x: f64) -> (f64, f64, f64, f64) {
+  %asin = scalar.asinf %y : f64
+  %acos = scalar.acosf %y : f64
+  %atan = scalar.atanf %y : f64
+  %atan2 = scalar.atan2f %y, %x : f64
+  func.return %asin, %acos, %atan, %atan2 : f64, f64, f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @inverse_trigonometry_f64(%y: reg<vm.value : f64>, %x: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %asin = float.math.unary.f64 %y, "asin"
+  %acos = float.math.unary.f64 %y, "acos"
+  %atan = float.math.unary.f64 %y, "atan"
+  %atan2 = float.math.binary.f64 %y, %x, "atan2"
+  return %asin, %acos, %atan, %atan2
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @inverse_trigonometry_f16(%y: f16, %x: f16) -> (f16, f16, f16, f16) {
+  %asin = scalar.asinf %y : f16
+  %acos = scalar.acosf %y : f16
+  %atan = scalar.atanf %y : f16
+  %atan2 = scalar.atan2f %y, %x : f16
+  func.return %asin, %acos, %atan, %atan2 : f16, f16, f16, f16
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @inverse_trigonometry_f16(%y: reg<vm.value : f16>, %x: reg<vm.value : f16>) -> (reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>) asm {
+  %6 = conversion.float.extend %y, "f16.to.f32" : reg<vm.value : f32>
+  %7 = float.math.unary.f32 %6, "asin"
+  %asin = conversion.float.truncate %7, "f32.to.f16" : reg<vm.value : f16>
+  %9 = float.math.unary.f32 %6, "acos"
+  %acos = conversion.float.truncate %9, "f32.to.f16" : reg<vm.value : f16>
+  %11 = float.math.unary.f32 %6, "atan"
+  %atan = conversion.float.truncate %11, "f32.to.f16" : reg<vm.value : f16>
+  %13 = conversion.float.extend %x, "f16.to.f32" : reg<vm.value : f32>
+  %14 = float.math.binary.f32 %6, %13, "atan2"
+  %atan2 = conversion.float.truncate %14, "f32.to.f16" : reg<vm.value : f16>
+  return %asin, %acos, %atan, %atan2
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @trigonometry_f32(%input: f32) -> (f32, f32, f32, f32, f32) {
+  %sin = scalar.sinf %input : f32
+  %cos = scalar.cosf %input : f32
+  %tan = scalar.tanf %input : f32
+  %sinturns = scalar.sinturnsf %input : f32
+  %costurns = scalar.costurnsf %input : f32
+  func.return %sin, %cos, %tan, %sinturns, %costurns : f32, f32, f32, f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @trigonometry_f32(%input: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %sin = float.math.unary.f32 %input, "sin"
+  %cos = float.math.unary.f32 %input, "cos"
+  %tan = float.math.unary.f32 %input, "tan"
+  %sinturns = float.math.unary.f32 %input, "sin_turns.approx"
+  %costurns = float.math.unary.f32 %input, "cos_turns.approx"
+  return %sin, %cos, %tan, %sinturns, %costurns
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @trigonometry_f64(%input: f64) -> (f64, f64, f64, f64, f64) {
+  %sin = scalar.sinf %input : f64
+  %cos = scalar.cosf %input : f64
+  %tan = scalar.tanf %input : f64
+  %sinturns = scalar.sinturnsf %input : f64
+  %costurns = scalar.costurnsf %input : f64
+  func.return %sin, %cos, %tan, %sinturns, %costurns : f64, f64, f64, f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @trigonometry_f64(%input: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %sin = float.math.unary.f64 %input, "sin"
+  %cos = float.math.unary.f64 %input, "cos"
+  %tan = float.math.unary.f64 %input, "tan"
+  %sinturns = float.math.unary.f64 %input, "sin_turns"
+  %costurns = float.math.unary.f64 %input, "cos_turns"
+  return %sin, %cos, %tan, %sinturns, %costurns
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @trigonometry_f16(%input: f16) -> (f16, f16, f16, f16, f16) {
+  %sin = scalar.sinf %input : f16
+  %cos = scalar.cosf %input : f16
+  %tan = scalar.tanf %input : f16
+  %sinturns = scalar.sinturnsf %input : f16
+  %costurns = scalar.costurnsf %input : f16
+  func.return %sin, %cos, %tan, %sinturns, %costurns : f16, f16, f16, f16, f16
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @trigonometry_f16(%input: reg<vm.value : f16>) -> (reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>) asm {
+  %6 = conversion.float.extend %input, "f16.to.f32" : reg<vm.value : f32>
+  %7 = float.math.unary.f32 %6, "sin"
+  %sin = conversion.float.truncate %7, "f32.to.f16" : reg<vm.value : f16>
+  %9 = float.math.unary.f32 %6, "cos"
+  %cos = conversion.float.truncate %9, "f32.to.f16" : reg<vm.value : f16>
+  %11 = float.math.unary.f32 %6, "tan"
+  %tan = conversion.float.truncate %11, "f32.to.f16" : reg<vm.value : f16>
+  %13 = float.math.unary.f32 %6, "sin_turns.approx"
+  %sinturns = conversion.float.truncate %13, "f32.to.f16" : reg<vm.value : f16>
+  %15 = float.math.unary.f32 %6, "cos_turns.approx"
+  %costurns = conversion.float.truncate %15, "f32.to.f16" : reg<vm.value : f16>
+  return %sin, %cos, %tan, %sinturns, %costurns
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @narrow_vector_tangent(%input: vector<2xbf16>) -> (vector<2xbf16>) {
+  %result = vector.tanf %input : vector<2xbf16>
+  func.return %result : vector<2xbf16>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_vector_tangent(%0: reg<vm.value : bf16>, %1: reg<vm.value : bf16>) -> (reg<vm.value : bf16>, reg<vm.value : bf16>) asm {
+  %4 = conversion.float.extend %0, "bf16.to.f32" : reg<vm.value : f32>
+  %5 = float.math.unary.f32 %4, "tan"
+  %6 = conversion.float.truncate %5, "f32.to.bf16" : reg<vm.value : bf16>
+  %7 = conversion.float.extend %1, "bf16.to.f32" : reg<vm.value : f32>
+  %8 = float.math.unary.f32 %7, "tan"
+  %9 = conversion.float.truncate %8, "f32.to.bf16" : reg<vm.value : bf16>
+  return %6, %9
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @error_functions_f32(%input: f32) -> (f32, f32) {
+  %erf = scalar.erff %input : f32
+  %erfc = scalar.erfcf %input : f32
+  func.return %erf, %erfc : f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @error_functions_f32(%input: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %erf = float.math.unary.f32 %input, "erf"
+  %erfc = float.math.unary.f32 %input, "erfc"
+  return %erf, %erfc
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @error_functions_f64(%input: f64) -> (f64, f64) {
+  %erf = scalar.erff %input : f64
+  %erfc = scalar.erfcf %input : f64
+  func.return %erf, %erfc : f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @error_functions_f64(%input: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %erf = float.math.unary.f64 %input, "erf"
+  %erfc = float.math.unary.f64 %input, "erfc"
+  return %erf, %erfc
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @error_functions_narrow(%input: f8E4M3) -> (f8E4M3, f8E4M3) {
+  %erf = scalar.erff %input : f8E4M3
+  %erfc = scalar.erfcf %input : f8E4M3
+  func.return %erf, %erfc : f8E4M3, f8E4M3
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @error_functions_narrow(%input: reg<vm.value : f8E4M3>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E4M3>) asm {
+  %3 = conversion.float.extend %input, "f8e4m3.to.f32" : reg<vm.value : f32>
+  %4 = float.math.unary.f32 %3, "erf"
+  %erf = conversion.float.truncate %4, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %6 = float.math.unary.f32 %3, "erfc"
+  %erfc = conversion.float.truncate %6, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  return %erf, %erfc
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @error_functions_vector(%input: vector<2xbf16>) -> (vector<2xbf16>, vector<2xbf16>) {
+  %erf = vector.erff %input : vector<2xbf16>
+  %erfc = vector.erfcf %input : vector<2xbf16>
+  func.return %erf, %erfc : vector<2xbf16>, vector<2xbf16>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @error_functions_vector(%0: reg<vm.value : bf16>, %1: reg<vm.value : bf16>) -> (reg<vm.value : bf16>, reg<vm.value : bf16>, reg<vm.value : bf16>, reg<vm.value : bf16>) asm {
+  %6 = conversion.float.extend %0, "bf16.to.f32" : reg<vm.value : f32>
+  %7 = float.math.unary.f32 %6, "erf"
+  %8 = conversion.float.truncate %7, "f32.to.bf16" : reg<vm.value : bf16>
+  %9 = conversion.float.extend %1, "bf16.to.f32" : reg<vm.value : f32>
+  %10 = float.math.unary.f32 %9, "erf"
+  %11 = conversion.float.truncate %10, "f32.to.bf16" : reg<vm.value : bf16>
+  %12 = float.math.unary.f32 %6, "erfc"
+  %13 = conversion.float.truncate %12, "f32.to.bf16" : reg<vm.value : bf16>
+  %14 = float.math.unary.f32 %9, "erfc"
+  %15 = conversion.float.truncate %14, "f32.to.bf16" : reg<vm.value : bf16>
+  return %8, %11, %13, %15
 }

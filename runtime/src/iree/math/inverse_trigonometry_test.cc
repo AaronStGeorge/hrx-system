@@ -1,0 +1,400 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "iree/math/inverse_trigonometry.h"
+
+#include "iree/math/elementary_test_util.h"
+
+namespace iree::math::testing {
+namespace {
+
+template <typename Bits>
+void ExpectInverseResult(Bits actual, Bits expected) {
+  constexpr Bits sign = Bits{1} << (sizeof(Bits) * 8 - 1);
+  constexpr Bits infinity = sizeof(Bits) == 4 ? 0x7F800000 : 0x7FF0000000000000;
+  const Bits magnitude = expected & (sign - 1);
+  if (magnitude == 0 || magnitude >= infinity) {
+    EXPECT_EQ(actual, expected);
+  } else {
+    EXPECT_LE(actual > expected ? actual - expected : expected - actual,
+              Bits{1});
+  }
+}
+
+// MPFR 4.2.2 directed intervals, independently rounded to F32.
+// Adjacent inputs straddle reduction intervals, tiny-input shortcuts, domain
+// endpoints, and saturation. Both signs have independent expected results.
+TEST_F(ElementaryTest, InverseTrigonometryF32Boundaries) {
+  const F32Function functions[] = {iree_math_asin_f32, iree_math_acos_f32,
+                                   iree_math_atan_f32};
+  const struct {
+    // Index into the unary function family above.
+    uint8_t operation;
+    // Magnitude of the input encoding.
+    uint32_t input;
+    // Correctly rounded result for the positive input.
+    uint32_t positive;
+    // Correctly rounded result for the negative input.
+    uint32_t negative;
+  } cases[] = {
+      {0, 0x00000000, 0x00000000, 0x80000000},
+      {0, 0x00000001, 0x00000001, 0x80000001},
+      {0, 0x007FFFFF, 0x007FFFFF, 0x807FFFFF},
+      {0, 0x00800000, 0x00800000, 0x80800000},
+      {0, 0x7F7FFFFF, 0x7FC00000, 0x7FC00000},
+      {0, 0x7F800000, 0x7FC00000, 0x7FC00000},
+      {0, 0x7F800001, 0x7FC00000, 0x7FC00000},
+      {0, 0x7FC00011, 0x7FC00000, 0x7FC00000},
+      {0, 0x397FFFFF, 0x397FFFFF, 0xB97FFFFF},
+      {0, 0x39800000, 0x39800000, 0xB9800000},
+      {0, 0x39800001, 0x39800001, 0xB9800001},
+      {0, 0x3EFFFFFF, 0x3F060A91, 0xBF060A91},
+      {0, 0x3F000000, 0x3F060A92, 0xBF060A92},
+      {0, 0x3F000001, 0x3F060A93, 0xBF060A93},
+      {0, 0x3F7FFFFF, 0x3FC9048A, 0xBFC9048A},
+      {0, 0x3F800000, 0x3FC90FDB, 0xBFC90FDB},
+      {0, 0x3F800001, 0x7FC00000, 0x7FC00000},
+      {1, 0x00000000, 0x3FC90FDB, 0x3FC90FDB},
+      {1, 0x00000001, 0x3FC90FDB, 0x3FC90FDB},
+      {1, 0x007FFFFF, 0x3FC90FDB, 0x3FC90FDB},
+      {1, 0x00800000, 0x3FC90FDB, 0x3FC90FDB},
+      {1, 0x7F7FFFFF, 0x7FC00000, 0x7FC00000},
+      {1, 0x7F800000, 0x7FC00000, 0x7FC00000},
+      {1, 0x7F800001, 0x7FC00000, 0x7FC00000},
+      {1, 0x7FC00011, 0x7FC00000, 0x7FC00000},
+      {1, 0x32800000, 0x3FC90FDB, 0x3FC90FDB},
+      {1, 0x32800001, 0x3FC90FDB, 0x3FC90FDB},
+      {1, 0x32800002, 0x3FC90FDB, 0x3FC90FDB},
+      {1, 0x3EFFFFFF, 0x3F860A92, 0x40060A92},
+      {1, 0x3F000000, 0x3F860A92, 0x40060A92},
+      {1, 0x3F000001, 0x3F860A91, 0x40060A92},
+      {1, 0x3F7FFFFF, 0x39B504F3, 0x40490A32},
+      {1, 0x3F800000, 0x00000000, 0x40490FDB},
+      {1, 0x3F800001, 0x7FC00000, 0x7FC00000},
+      {2, 0x00000000, 0x00000000, 0x80000000},
+      {2, 0x00000001, 0x00000001, 0x80000001},
+      {2, 0x007FFFFF, 0x007FFFFF, 0x807FFFFF},
+      {2, 0x00800000, 0x00800000, 0x80800000},
+      {2, 0x7F7FFFFF, 0x3FC90FDB, 0xBFC90FDB},
+      {2, 0x7F800000, 0x3FC90FDB, 0xBFC90FDB},
+      {2, 0x7F800001, 0x7FC00000, 0x7FC00000},
+      {2, 0x7FC00011, 0x7FC00000, 0x7FC00000},
+      {2, 0x397FFFFF, 0x397FFFFF, 0xB97FFFFF},
+      {2, 0x39800000, 0x39800000, 0xB9800000},
+      {2, 0x39800001, 0x39800001, 0xB9800001},
+      {2, 0x3EDFFFFF, 0x3ED32775, 0xBED32775},
+      {2, 0x3EE00000, 0x3ED32776, 0xBED32776},
+      {2, 0x3EE00001, 0x3ED32777, 0xBED32777},
+      {2, 0x3F2FFFFF, 0x3F1A2F80, 0xBF1A2F80},
+      {2, 0x3F300000, 0x3F1A2F81, 0xBF1A2F81},
+      {2, 0x3F300001, 0x3F1A2F82, 0xBF1A2F82},
+      {2, 0x3F97FFFF, 0x3F5EF387, 0xBF5EF387},
+      {2, 0x3F980000, 0x3F5EF387, 0xBF5EF387},
+      {2, 0x3F980001, 0x3F5EF388, 0xBF5EF388},
+      {2, 0x401BFFFF, 0x3F973AB9, 0xBF973AB9},
+      {2, 0x401C0000, 0x3F973AB9, 0xBF973AB9},
+      {2, 0x401C0001, 0x3F973ABA, 0xBF973ABA},
+      {2, 0x4C7FFFFF, 0x3FC90FDB, 0xBFC90FDB},
+      {2, 0x4C800000, 0x3FC90FDB, 0xBFC90FDB},
+      {2, 0x4C800001, 0x3FC90FDB, 0xBFC90FDB},
+  };
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.operation);
+    SCOPED_TRACE(::testing::Message()
+                 << "magnitude=" << std::hex << test.input);
+    ExpectInverseResult(
+        F32ToBits(functions[test.operation](F32FromBits(test.input))),
+        test.positive);
+    ExpectInverseResult(F32ToBits(functions[test.operation](
+                            F32FromBits(test.input | UINT32_C(0x80000000)))),
+                        test.negative);
+  }
+}
+
+// Axes, infinities, NaNs, the x=1 shortcut, and exact encoded ratio-guard
+// boundaries. The loop exercises all four quadrants, including signed zeros.
+TEST_F(ElementaryTest, Atan2F32Quadrants) {
+  const struct {
+    // Magnitude of the imaginary coordinate's encoding.
+    uint32_t y;
+    // Magnitude of the real coordinate's encoding.
+    uint32_t x;
+    // Correctly rounded angle for positive x and positive y.
+    uint32_t positive_x;
+    // Correctly rounded angle for negative x and positive y.
+    uint32_t negative_x;
+  } cases[] = {
+      {0x00000000, 0x00000000, 0x00000000, 0x40490FDB},
+      {0x00000000, 0x40000000, 0x00000000, 0x40490FDB},
+      {0x00000000, 0x7F800000, 0x00000000, 0x40490FDB},
+      {0x00000000, 0x7F800001, 0x7FC00000, 0x7FC00000},
+      {0x00000000, 0x7FC00011, 0x7FC00000, 0x7FC00000},
+      {0x40000000, 0x00000000, 0x3FC90FDB, 0x3FC90FDB},
+      {0x40000000, 0x40000000, 0x3F490FDB, 0x4016CBE4},
+      {0x40000000, 0x7F800000, 0x00000000, 0x40490FDB},
+      {0x40000000, 0x7F800001, 0x7FC00000, 0x7FC00000},
+      {0x40000000, 0x7FC00011, 0x7FC00000, 0x7FC00000},
+      {0x7F800000, 0x00000000, 0x3FC90FDB, 0x3FC90FDB},
+      {0x7F800000, 0x40000000, 0x3FC90FDB, 0x3FC90FDB},
+      {0x7F800000, 0x7F800000, 0x3F490FDB, 0x4016CBE4},
+      {0x7F800000, 0x7F800001, 0x7FC00000, 0x7FC00000},
+      {0x7F800000, 0x7FC00011, 0x7FC00000, 0x7FC00000},
+      {0x7F800001, 0x00000000, 0x7FC00000, 0x7FC00000},
+      {0x7F800001, 0x40000000, 0x7FC00000, 0x7FC00000},
+      {0x7F800001, 0x7F800000, 0x7FC00000, 0x7FC00000},
+      {0x7F800001, 0x7F800001, 0x7FC00000, 0x7FC00000},
+      {0x7F800001, 0x7FC00011, 0x7FC00000, 0x7FC00000},
+      {0x7FC00011, 0x00000000, 0x7FC00000, 0x7FC00000},
+      {0x7FC00011, 0x40000000, 0x7FC00000, 0x7FC00000},
+      {0x7FC00011, 0x7F800000, 0x7FC00000, 0x7FC00000},
+      {0x7FC00011, 0x7F800001, 0x7FC00000, 0x7FC00000},
+      {0x7FC00011, 0x7FC00011, 0x7FC00000, 0x7FC00000},
+      {0x00000001, 0x3F800000, 0x00000001, 0x40490FDB},
+      {0x3F000000, 0x3F800000, 0x3EED6338, 0x402B6374},
+      {0x40000000, 0x3F800000, 0x3F8DB70D, 0x40023454},
+      {0x7F800000, 0x3F800000, 0x3FC90FDB, 0x3FC90FDB},
+      {0x32BFFFFF, 0x3FC00000, 0x327FFFFF, 0x40490FDB},
+      {0x32C00000, 0x3FC00000, 0x32800000, 0x40490FDB},
+      {0x32C00001, 0x3FC00000, 0x32800001, 0x40490FDB},
+      {0x4D3FFFFF, 0x3FC00000, 0x3FC90FDB, 0x3FC90FDB},
+      {0x4D400000, 0x3FC00000, 0x3FC90FDB, 0x3FC90FDB},
+      {0x4D400001, 0x3FC00000, 0x3FC90FDB, 0x3FC90FDB},
+      {0x00000001, 0x7F7FFFFF, 0x00000000, 0x40490FDB},
+      {0x7F7FFFFF, 0x00000001, 0x3FC90FDB, 0x3FC90FDB},
+      {0x00000001, 0x00000001, 0x3F490FDB, 0x4016CBE4},
+      {0x7F7FFFFF, 0x7F7FFFFF, 0x3F490FDB, 0x4016CBE4},
+      {0x007FFFFF, 0x00800000, 0x3F490FDA, 0x4016CBE4},
+      {0x00800000, 0x007FFFFF, 0x3F490FDC, 0x4016CBE4},
+  };
+  for (const auto& test : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "y=" << std::hex << test.y << " x=" << test.x);
+    for (bool negative_x : {false, true}) {
+      for (bool negative_y : {false, true}) {
+        uint32_t expected = negative_x ? test.negative_x : test.positive_x;
+        if (negative_y && expected != UINT32_C(0x7FC00000)) {
+          expected |= UINT32_C(0x80000000);
+        }
+        const auto y = test.y | (negative_y ? UINT32_C(0x80000000) : 0);
+        const auto x = test.x | (negative_x ? UINT32_C(0x80000000) : 0);
+        ExpectInverseResult(
+            F32ToBits(iree_math_atan2_f32(F32FromBits(y), F32FromBits(x))),
+            expected);
+      }
+    }
+  }
+}
+
+// MPFR 4.2.2 directed intervals, independently rounded to F64.
+// Adjacent inputs straddle reduction intervals, tiny-input shortcuts, domain
+// endpoints, and saturation. Both signs have independent expected results.
+TEST_F(ElementaryTest, InverseTrigonometryF64Boundaries) {
+  const F64Function functions[] = {iree_math_asin_f64, iree_math_acos_f64,
+                                   iree_math_atan_f64};
+  const struct {
+    // Index into the unary function family above.
+    uint8_t operation;
+    // Magnitude of the input encoding.
+    uint64_t input;
+    // Correctly rounded result for the positive input.
+    uint64_t positive;
+    // Correctly rounded result for the negative input.
+    uint64_t negative;
+  } cases[] = {
+      {0, 0x0000000000000000, 0x0000000000000000, 0x8000000000000000},
+      {0, 0x0000000000000001, 0x0000000000000001, 0x8000000000000001},
+      {0, 0x000FFFFFFFFFFFFF, 0x000FFFFFFFFFFFFF, 0x800FFFFFFFFFFFFF},
+      {0, 0x0010000000000000, 0x0010000000000000, 0x8010000000000000},
+      {0, 0x7FEFFFFFFFFFFFFF, 0x7FF8000000000000, 0x7FF8000000000000},
+      {0, 0x7FF0000000000000, 0x7FF8000000000000, 0x7FF8000000000000},
+      {0, 0x7FF0000000000001, 0x7FF8000000000000, 0x7FF8000000000000},
+      {0, 0x7FF8000000000011, 0x7FF8000000000000, 0x7FF8000000000000},
+      {0, 0x3E4FFFFFFFFFFFFF, 0x3E4FFFFFFFFFFFFF, 0xBE4FFFFFFFFFFFFF},
+      {0, 0x3E50000000000000, 0x3E50000000000000, 0xBE50000000000000},
+      {0, 0x3E50000000000001, 0x3E50000000000001, 0xBE50000000000001},
+      {0, 0x3FDFFFFFFFFFFFFF, 0x3FE0C152382D7365, 0xBFE0C152382D7365},
+      {0, 0x3FE0000000000000, 0x3FE0C152382D7366, 0xBFE0C152382D7366},
+      {0, 0x3FE0000000000001, 0x3FE0C152382D7367, 0xBFE0C152382D7367},
+      {0, 0x3FEF3332FFFFFFFF, 0x3FF58C2AE9AB49E7, 0xBFF58C2AE9AB49E7},
+      {0, 0x3FEF333300000000, 0x3FF58C2AE9AB49EA, 0xBFF58C2AE9AB49EA},
+      {0, 0x3FEF333300000001, 0x3FF58C2AE9AB49EC, 0xBFF58C2AE9AB49EC},
+      {0, 0x3FEFFFFFFFFFFFFF, 0x3FF921FB50442D18, 0xBFF921FB50442D18},
+      {0, 0x3FF0000000000000, 0x3FF921FB54442D18, 0xBFF921FB54442D18},
+      {0, 0x3FF0000000000001, 0x7FF8000000000000, 0x7FF8000000000000},
+      {1, 0x0000000000000000, 0x3FF921FB54442D18, 0x3FF921FB54442D18},
+      {1, 0x0000000000000001, 0x3FF921FB54442D18, 0x3FF921FB54442D18},
+      {1, 0x000FFFFFFFFFFFFF, 0x3FF921FB54442D18, 0x3FF921FB54442D18},
+      {1, 0x0010000000000000, 0x3FF921FB54442D18, 0x3FF921FB54442D18},
+      {1, 0x7FEFFFFFFFFFFFFF, 0x7FF8000000000000, 0x7FF8000000000000},
+      {1, 0x7FF0000000000000, 0x7FF8000000000000, 0x7FF8000000000000},
+      {1, 0x7FF0000000000001, 0x7FF8000000000000, 0x7FF8000000000000},
+      {1, 0x7FF8000000000011, 0x7FF8000000000000, 0x7FF8000000000000},
+      {1, 0x3C600000FFFFFFFF, 0x3FF921FB54442D18, 0x3FF921FB54442D18},
+      {1, 0x3C60000100000000, 0x3FF921FB54442D18, 0x3FF921FB54442D18},
+      {1, 0x3C60000100000001, 0x3FF921FB54442D18, 0x3FF921FB54442D18},
+      {1, 0x3FDFFFFFFFFFFFFF, 0x3FF0C152382D7366, 0x4000C152382D7365},
+      {1, 0x3FE0000000000000, 0x3FF0C152382D7366, 0x4000C152382D7366},
+      {1, 0x3FE0000000000001, 0x3FF0C152382D7365, 0x4000C152382D7366},
+      {1, 0x3FEFFFFFFFFFFFFF, 0x3E50000000000000, 0x400921FB52442D18},
+      {1, 0x3FF0000000000000, 0x0000000000000000, 0x400921FB54442D18},
+      {1, 0x3FF0000000000001, 0x7FF8000000000000, 0x7FF8000000000000},
+      {2, 0x0000000000000000, 0x0000000000000000, 0x8000000000000000},
+      {2, 0x0000000000000001, 0x0000000000000001, 0x8000000000000001},
+      {2, 0x000FFFFFFFFFFFFF, 0x000FFFFFFFFFFFFF, 0x800FFFFFFFFFFFFF},
+      {2, 0x0010000000000000, 0x0010000000000000, 0x8010000000000000},
+      {2, 0x7FEFFFFFFFFFFFFF, 0x3FF921FB54442D18, 0xBFF921FB54442D18},
+      {2, 0x7FF0000000000000, 0x3FF921FB54442D18, 0xBFF921FB54442D18},
+      {2, 0x7FF0000000000001, 0x7FF8000000000000, 0x7FF8000000000000},
+      {2, 0x7FF8000000000011, 0x7FF8000000000000, 0x7FF8000000000000},
+      {2, 0x3E3FFFFFFFFFFFFF, 0x3E3FFFFFFFFFFFFF, 0xBE3FFFFFFFFFFFFF},
+      {2, 0x3E40000000000000, 0x3E40000000000000, 0xBE40000000000000},
+      {2, 0x3E40000000000001, 0x3E40000000000001, 0xBE40000000000001},
+      {2, 0x3FDBFFFFFFFFFFFF, 0x3FDA64EEC3CC23FC, 0xBFDA64EEC3CC23FC},
+      {2, 0x3FDC000000000000, 0x3FDA64EEC3CC23FD, 0xBFDA64EEC3CC23FD},
+      {2, 0x3FDC000000000001, 0x3FDA64EEC3CC23FE, 0xBFDA64EEC3CC23FE},
+      {2, 0x3FE5FFFFFFFFFFFF, 0x3FE345F01CCE37BB, 0xBFE345F01CCE37BB},
+      {2, 0x3FE6000000000000, 0x3FE345F01CCE37BB, 0xBFE345F01CCE37BB},
+      {2, 0x3FE6000000000001, 0x3FE345F01CCE37BC, 0xBFE345F01CCE37BC},
+      {2, 0x3FF2FFFFFFFFFFFF, 0x3FEBDE70ED439FE6, 0xBFEBDE70ED439FE6},
+      {2, 0x3FF3000000000000, 0x3FEBDE70ED439FE7, 0xBFEBDE70ED439FE7},
+      {2, 0x3FF3000000000001, 0x3FEBDE70ED439FE8, 0xBFEBDE70ED439FE8},
+      {2, 0x40037FFFFFFFFFFF, 0x3FF2E75728833A54, 0xBFF2E75728833A54},
+      {2, 0x4003800000000000, 0x3FF2E75728833A54, 0xBFF2E75728833A54},
+      {2, 0x4003800000000001, 0x3FF2E75728833A54, 0xBFF2E75728833A54},
+      {2, 0x440FFFFFFFFFFFFF, 0x3FF921FB54442D18, 0xBFF921FB54442D18},
+      {2, 0x4410000000000000, 0x3FF921FB54442D18, 0xBFF921FB54442D18},
+      {2, 0x4410000000000001, 0x3FF921FB54442D18, 0xBFF921FB54442D18},
+  };
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.operation);
+    SCOPED_TRACE(::testing::Message()
+                 << "magnitude=" << std::hex << test.input);
+    ExpectInverseResult(
+        F64ToBits(functions[test.operation](F64FromBits(test.input))),
+        test.positive);
+    ExpectInverseResult(F64ToBits(functions[test.operation](F64FromBits(
+                            test.input | UINT64_C(0x8000000000000000)))),
+                        test.negative);
+  }
+}
+
+// Axes, infinities, NaNs, the x=1 shortcut, and exact encoded ratio-guard
+// boundaries. The loop exercises all four quadrants, including signed zeros.
+TEST_F(ElementaryTest, Atan2F64Quadrants) {
+  const struct {
+    // Magnitude of the imaginary coordinate's encoding.
+    uint64_t y;
+    // Magnitude of the real coordinate's encoding.
+    uint64_t x;
+    // Correctly rounded angle for positive x and positive y.
+    uint64_t positive_x;
+    // Correctly rounded angle for negative x and positive y.
+    uint64_t negative_x;
+  } cases[] = {
+      {0x0000000000000000, 0x0000000000000000, 0x0000000000000000,
+       0x400921FB54442D18},
+      {0x0000000000000000, 0x4000000000000000, 0x0000000000000000,
+       0x400921FB54442D18},
+      {0x0000000000000000, 0x7FF0000000000000, 0x0000000000000000,
+       0x400921FB54442D18},
+      {0x0000000000000000, 0x7FF0000000000001, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x0000000000000000, 0x7FF8000000000011, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x4000000000000000, 0x0000000000000000, 0x3FF921FB54442D18,
+       0x3FF921FB54442D18},
+      {0x4000000000000000, 0x4000000000000000, 0x3FE921FB54442D18,
+       0x4002D97C7F3321D2},
+      {0x4000000000000000, 0x7FF0000000000000, 0x0000000000000000,
+       0x400921FB54442D18},
+      {0x4000000000000000, 0x7FF0000000000001, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x4000000000000000, 0x7FF8000000000011, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF0000000000000, 0x0000000000000000, 0x3FF921FB54442D18,
+       0x3FF921FB54442D18},
+      {0x7FF0000000000000, 0x4000000000000000, 0x3FF921FB54442D18,
+       0x3FF921FB54442D18},
+      {0x7FF0000000000000, 0x7FF0000000000000, 0x3FE921FB54442D18,
+       0x4002D97C7F3321D2},
+      {0x7FF0000000000000, 0x7FF0000000000001, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF0000000000000, 0x7FF8000000000011, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF0000000000001, 0x0000000000000000, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF0000000000001, 0x4000000000000000, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF0000000000001, 0x7FF0000000000000, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF0000000000001, 0x7FF0000000000001, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF0000000000001, 0x7FF8000000000011, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF8000000000011, 0x0000000000000000, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF8000000000011, 0x4000000000000000, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF8000000000011, 0x7FF0000000000000, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF8000000000011, 0x7FF0000000000001, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x7FF8000000000011, 0x7FF8000000000011, 0x7FF8000000000000,
+       0x7FF8000000000000},
+      {0x0000000000000001, 0x3FF0000000000000, 0x0000000000000001,
+       0x400921FB54442D18},
+      {0x3FE0000000000000, 0x3FF0000000000000, 0x3FDDAC670561BB4F,
+       0x40056C6E7397F5AE},
+      {0x4000000000000000, 0x3FF0000000000000, 0x3FF1B6E192EBBE44,
+       0x4000468A8ACE4DF6},
+      {0x7FF0000000000000, 0x3FF0000000000000, 0x3FF921FB54442D18,
+       0x3FF921FB54442D18},
+      {0x3C37FFFFFFFFFFFF, 0x3FF8000000000000, 0x3C2FFFFFFFFFFFFF,
+       0x400921FB54442D18},
+      {0x3C38000000000000, 0x3FF8000000000000, 0x3C30000000000000,
+       0x400921FB54442D18},
+      {0x3C38000000000001, 0x3FF8000000000000, 0x3C30000000000001,
+       0x400921FB54442D18},
+      {0x43C7FFFFFFFFFFFF, 0x3FF8000000000000, 0x3FF921FB54442D18,
+       0x3FF921FB54442D18},
+      {0x43C8000000000000, 0x3FF8000000000000, 0x3FF921FB54442D18,
+       0x3FF921FB54442D18},
+      {0x43C8000000000001, 0x3FF8000000000000, 0x3FF921FB54442D18,
+       0x3FF921FB54442D18},
+      {0x0000000000000001, 0x7FEFFFFFFFFFFFFF, 0x0000000000000000,
+       0x400921FB54442D18},
+      {0x7FEFFFFFFFFFFFFF, 0x0000000000000001, 0x3FF921FB54442D18,
+       0x3FF921FB54442D18},
+      {0x0000000000000001, 0x0000000000000001, 0x3FE921FB54442D18,
+       0x4002D97C7F3321D2},
+      {0x7FEFFFFFFFFFFFFF, 0x7FEFFFFFFFFFFFFF, 0x3FE921FB54442D18,
+       0x4002D97C7F3321D2},
+      {0x000FFFFFFFFFFFFF, 0x0010000000000000, 0x3FE921FB54442D17,
+       0x4002D97C7F3321D2},
+      {0x0010000000000000, 0x000FFFFFFFFFFFFF, 0x3FE921FB54442D19,
+       0x4002D97C7F3321D2},
+  };
+  for (const auto& test : cases) {
+    SCOPED_TRACE(::testing::Message()
+                 << "y=" << std::hex << test.y << " x=" << test.x);
+    for (bool negative_x : {false, true}) {
+      for (bool negative_y : {false, true}) {
+        uint64_t expected = negative_x ? test.negative_x : test.positive_x;
+        if (negative_y && expected != UINT64_C(0x7FF8000000000000)) {
+          expected |= UINT64_C(0x8000000000000000);
+        }
+        const auto y = test.y | (negative_y ? UINT64_C(0x8000000000000000) : 0);
+        const auto x = test.x | (negative_x ? UINT64_C(0x8000000000000000) : 0);
+        ExpectInverseResult(
+            F64ToBits(iree_math_atan2_f64(F64FromBits(y), F64FromBits(x))),
+            expected);
+      }
+    }
+  }
+}
+
+}  // namespace
+}  // namespace iree::math::testing

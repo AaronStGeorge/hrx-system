@@ -15,6 +15,7 @@ from iree.vm.bytecode.spec.isa.core import BUFFER_INSTRUCTIONS, INTEGER_INSTRUCT
 from iree.vm.bytecode.spec.isa.core import rules as isa_rules
 from iree.vm.bytecode.spec.isa.core.control import BranchCondition
 from iree.vm.bytecode.spec.isa.core.float import (
+    FLOAT_MATH_BINARY_SELECTOR,
     FLOAT_MATH_F32_SELECTOR,
     FLOAT_MATH_F64_SELECTOR,
 )
@@ -119,7 +120,7 @@ class SpecificationTest(unittest.TestCase):
                 len(NUMERIC_TABLES),
                 sum(len(table.values) for table in NUMERIC_TABLES),
             ),
-            (12, 182, 20, 191, tuple(range(1, 14)), 59, 9, 30),
+            (12, 188, 21, 256, tuple(range(1, 14)), 59, 9, 30),
         )
 
     def test_layout_rejects_implicit_alignment_padding(self) -> None:
@@ -156,19 +157,75 @@ class SpecificationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate opcode"):
             _specification(instructions=(INTEGER_INSTRUCTIONS[0], duplicate))
 
+    def test_exponent_record_abi(self) -> None:
+        for mnemonic, opcode in (
+            ("float.frexp.f32", 0xA6),
+            ("float.frexp.f64", 0xA7),
+            ("float.ldexp.f32", 0x9E),
+            ("float.ldexp.f64", 0x9F),
+        ):
+            instruction = _instruction(mnemonic)
+            self.assertEqual(instruction.opcode, opcode)
+            self.assertEqual(instruction.byte_length, 4)
+        for width, opcode in ((32, 0x96), (64, 0x97)):
+            self.assertEqual(_instruction(f"float.copysign.f{width}").opcode, opcode)
+
     def test_float_math_selector_abi_is_frozen(self) -> None:
+        self.assertEqual(
+            tuple(
+                (value.name, value.value) for value in FLOAT_MATH_BINARY_SELECTOR.values
+            ),
+            (("pow", 0), ("atan2", 1), ("gelu.logistic", 2)),
+        )
+        for width, opcode in ((32, 0x9C), (64, 0x9D)):
+            instruction = _instruction(f"float.math.binary.f{width}")
+            self.assertEqual(instruction.opcode, opcode)
+            self.assertEqual(instruction.byte_length, 8)
+            self.assertEqual(instruction.semantics.operand_count, 2)
         common_values = (
             ("ceil", 0),
             ("floor", 1),
             ("round_even", 2),
             ("trunc", 3),
             ("sign", 4),
+            ("round_away", 43),
+        )
+        ordinary_values = (
+            ("sqrt", 12),
+            ("rsqrt", 13),
+            ("exp", 14),
+            ("exp2", 15),
+            ("cbrt", 16),
+            ("log", 17),
+            ("log2", 18),
+            ("log10", 19),
+            ("log1p", 20),
+            ("expm1", 21),
+            ("sinh", 22),
+            ("cosh", 23),
+            ("tanh", 24),
+            ("asinh", 25),
+            ("acosh", 26),
+            ("atanh", 27),
+            ("asin", 28),
+            ("acos", 29),
+            ("atan", 30),
+            ("sin", 31),
+            ("cos", 32),
+            ("tan", 33),
+            ("erf", 36),
+            ("erfc", 37),
+            ("logistic", 38),
+            ("silu", 39),
+            ("softplus", 40),
+            ("gelu.erf", 41),
+            ("gelu.tanh", 42),
         )
         self.assertEqual(
             tuple(
                 (value.name, value.value) for value in FLOAT_MATH_F64_SELECTOR.values
             ),
-            common_values,
+            common_values + ordinary_values + (("sin_turns", 34), ("cos_turns", 35)),
         )
         self.assertEqual(
             tuple(
@@ -183,7 +240,8 @@ class SpecificationTest(unittest.TestCase):
                 ("sqrt.approx", 9),
                 ("sin_turns.approx", 10),
                 ("cos_turns.approx", 11),
-            ),
+            )
+            + ordinary_values,
         )
 
     def test_control_contracts_reject_inconsistent_declarations(self) -> None:

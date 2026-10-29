@@ -1,0 +1,22 @@
+// RUN: pass canonicalize
+
+func.def @remainder() -> (f8E5M2, f32, f64) {
+  %left = scalar.constant -1.75 : f8E5M2
+  %right = scalar.constant 0.75 : f8E5M2
+  %small = scalar.remf %left, %right : f8E5M2
+  %maximum = scalar.constant 3.4028234663852886e+38 : f32
+  %divisor = scalar.constant 3.0 : f32
+  %wide_ratio = scalar.remf %maximum, %divisor : f32
+  %normal = scalar.constant 2.2250738585072014e-308 : f64
+  %neighbor = scalar.constant 2.2250738585072019e-308 : f64
+  %subnormal = scalar.remf %neighbor, %normal : f64
+  func.return %small, %wide_ratio, %subnormal : f8E5M2, f32, f64
+}
+
+// ----
+func.def @remainder() -> (f8E5M2, f32, f64) {
+  %small = scalar.constant -0.25 : f8E5M2
+  %wide_ratio = scalar.constant 0.0 : f32
+  %subnormal = scalar.constant 4.9406564584124654e-324 : f64
+  func.return %small, %wide_ratio, %subnormal : f8E5M2, f32, f64
+}

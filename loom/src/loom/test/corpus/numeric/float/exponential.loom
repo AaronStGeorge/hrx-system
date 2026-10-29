@@ -140,3 +140,136 @@ check.scenario @exponential_values {
   }
   check.return
 }
+
+// Differences near one must survive evaluation and final format rounding.
+func.def @exponential_difference_observations(%ordinal: index, %output: buffer) {
+  %first_trial = index.constant 0 : index
+  %positive = index.cmp eq, %ordinal, %first_trial : index
+  %positive_input = scalar.constant 0.00390625 : f32
+  %negative_input = scalar.constant -0.00390625 : f32
+  %input = scf.select %positive, %positive_input, %negative_input : f32
+  %e4_input = scalar.fptrunc %input : f32 to f8E4M3
+  %e5_input = scalar.fptrunc %input : f32 to f8E5M2
+  %half_input = scalar.fptrunc %input : f32 to f16
+  %brain_input = scalar.fptrunc %input : f32 to bf16
+  %wide_input = scalar.extf %input : f32 to f64
+  %e4_result = scalar.expm1f %e4_input : f8E4M3
+  %e5_result = scalar.expm1f %e5_input : f8E5M2
+  %half_result = scalar.expm1f %half_input : f16
+  %brain_result = scalar.expm1f %brain_input : bf16
+  %single_result = scalar.expm1f %input : f32
+  %wide_result = scalar.expm1f %wide_input : f64
+  %e4 = scalar.extf %e4_result : f8E4M3 to f64
+  %e5 = scalar.extf %e5_result : f8E5M2 to f64
+  %half = scalar.extf %half_result : f16 to f64
+  %brain = scalar.extf %brain_result : bf16 to f64
+  %single = scalar.extf %single_result : f32 to f64
+  %values = vector.from_elements %e4, %e5, %half, %brain, %single, %wide_result : vector<6xf64>
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<6xf64>
+  vector.store %values, %results[0] : vector<6xf64>, view<6xf64>
+  func.return
+}
+
+func.def @exponential_difference_oracle(%ordinal: index, %output: buffer) {
+  %first_trial = index.constant 0 : index
+  %positive = index.cmp eq, %ordinal, %first_trial : index
+  // Independently rounded expm1(+/-1/256), from directed MPFR intervals.
+  %positive_result = scalar.constant 0.0039138893383475733 : f64
+  %negative_result = scalar.constant -0.00389863052988251 : f64
+  %wide_result = scf.select %positive, %positive_result, %negative_result : f64
+  %single_result = scalar.fptrunc %wide_result : f64 to f32
+  %e4_result = scalar.fptrunc %single_result : f32 to f8E4M3
+  %e5_result = scalar.fptrunc %single_result : f32 to f8E5M2
+  %half_result = scalar.fptrunc %single_result : f32 to f16
+  %brain_result = scalar.fptrunc %single_result : f32 to bf16
+  %e4 = scalar.extf %e4_result : f8E4M3 to f64
+  %e5 = scalar.extf %e5_result : f8E5M2 to f64
+  %half = scalar.extf %half_result : f16 to f64
+  %brain = scalar.extf %brain_result : bf16 to f64
+  %single = scalar.extf %single_result : f32 to f64
+  %values = vector.from_elements %e4, %e5, %half, %brain, %single, %wide_result : vector<6xf64>
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<6xf64>
+  vector.store %values, %results[0] : vector<6xf64>, view<6xf64>
+  func.return
+}
+
+check.scenario @exponential_difference_values {
+  check.trial[2](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(-1.0) : tensor<6xf64>
+    check.compare<@exponential_difference_observations, @exponential_difference_oracle>(%trial, %output) : (index, tensor<6xf64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<6xf64>
+    }
+  }
+  check.return
+}
+
+// Positive and negative integer powers exercise both operands across every
+// source format. The cube and reciprocal oracle uses exact dyadic arithmetic.
+func.def @power_observations(%base: f32, %exponent: f32, %output: buffer) {
+  %negative_exponent = scalar.negf %exponent : f32
+  %bases = vector.splat %base : vector<2xf32>
+  %exponents = vector.from_elements %exponent, %negative_exponent : vector<2xf32>
+  %e4_bases = vector.fptrunc %bases : vector<2xf32> to vector<2xf8E4M3>
+  %e4_exponents = vector.fptrunc %exponents : vector<2xf32> to vector<2xf8E4M3>
+  %e5_bases = vector.fptrunc %bases : vector<2xf32> to vector<2xf8E5M2>
+  %e5_exponents = vector.fptrunc %exponents : vector<2xf32> to vector<2xf8E5M2>
+  %half_bases = vector.fptrunc %bases : vector<2xf32> to vector<2xf16>
+  %half_exponents = vector.fptrunc %exponents : vector<2xf32> to vector<2xf16>
+  %brain_bases = vector.fptrunc %bases : vector<2xf32> to vector<2xbf16>
+  %brain_exponents = vector.fptrunc %exponents : vector<2xf32> to vector<2xbf16>
+  %wide_bases = vector.extf %bases : vector<2xf32> to vector<2xf64>
+  %wide_exponents = vector.extf %exponents : vector<2xf32> to vector<2xf64>
+  %e4_result = vector.powf %e4_bases, %e4_exponents : vector<2xf8E4M3>
+  %e5_result = vector.powf %e5_bases, %e5_exponents : vector<2xf8E5M2>
+  %half_result = vector.powf %half_bases, %half_exponents : vector<2xf16>
+  %brain_result = vector.powf %brain_bases, %brain_exponents : vector<2xbf16>
+  %single_result = vector.powf %bases, %exponents : vector<2xf32>
+  %wide_result = vector.powf %wide_bases, %wide_exponents : vector<2xf64>
+  %e4 = vector.extf %e4_result : vector<2xf8E4M3> to vector<2xf64>
+  %e5 = vector.extf %e5_result : vector<2xf8E5M2> to vector<2xf64>
+  %half = vector.extf %half_result : vector<2xf16> to vector<2xf64>
+  %brain = vector.extf %brain_result : vector<2xbf16> to vector<2xf64>
+  %single = vector.extf %single_result : vector<2xf32> to vector<2xf64>
+  %values = vector.concat<0> %e4, %e5, %half, %brain, %single, %wide_result : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64> -> vector<12xf64>
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<12xf64>
+  vector.store %values, %results[0] : vector<12xf64>, view<12xf64>
+  func.return
+}
+
+func.def @power_cube_oracle(%base: f32, %exponent: f32, %output: buffer) {
+  %wide = scalar.extf %base : f32 to f64
+  %square = scalar.mulf %wide, %wide : f64
+  %cube = scalar.mulf %square, %wide : f64
+  %unit_numerator = scalar.constant 1.0 : f64
+  %inverse = scalar.divf %unit_numerator, %cube : f64
+  %pair = vector.from_elements %cube, %inverse : vector<2xf64>
+  %values = vector.concat<0> %pair, %pair, %pair, %pair, %pair, %pair : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64> -> vector<12xf64>
+  %origin = index.constant 0 : offset
+  %results = buffer.view %output[%origin] : buffer -> view<12xf64>
+  vector.store %values, %results[0] : vector<12xf64>, view<12xf64>
+  func.return
+}
+
+func.def @power_inputs(%ordinal: index) -> (f32, f32) {
+  %first = index.constant 0 : index
+  %positive = index.cmp eq, %ordinal, %first : index
+  %positive_base = scalar.constant 4.0 : f32
+  %negative_base = scalar.constant -2.0 : f32
+  %base = scf.select %positive, %positive_base, %negative_base : f32
+  %exponent = scalar.constant 3.0 : f32
+  func.return %base, %exponent : f32, f32
+}
+
+check.scenario @power_values {
+  check.trial[2](%trial: index, %entropy: check.entropy) {
+    %base, %exponent = check.generate<@power_inputs>(%trial) : (index) -> (f32, f32)
+    %output = check.generate.fill value(-1.0) : tensor<12xf64>
+    check.compare<@power_observations, @power_cube_oracle>(%base, %exponent, %output) : (f32, f32, tensor<12xf64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<12xf64>
+    }
+  }
+  check.return
+}

@@ -136,9 +136,8 @@ check.scenario @root_values {
   check.return
 }
 
-// VM core does not implement f64 square root, so the oracle selects
-// independently specified IEEE-754 result encodings instead of re-executing the
-// operation.
+// The independent oracle selects specified IEEE-754 result encodings, so this
+// scenario also qualifies execution on the reference VM itself.
 func.def inline @root_f64_result_bits(%value: f64) -> (i64) {
   %bits = scalar.bitcast %value : f64 to i64
   %is_nan = scalar.isnanf %value : f64
@@ -286,6 +285,107 @@ check.scenario @root_f64_values {
     %output = check.generate.fill value(-1) : tensor<1xi64>
     check.compare<@root_f64_boundary_observations, @root_f64_boundary_oracle>(%trial, %output) : (index, tensor<1xi64>) -> () {
       check.expect.bitwise actual(%output) expected(%output) : tensor<1xi64>
+    }
+  }
+  check.return
+}
+
+// Integer cubes from -8 through 8 are exactly representable in every source
+// format. The independent oracle supplies their roots without evaluating cbrt.
+// Opposite vector lanes also retain both signs of zero through narrow widening.
+func.def @cube_root_observations(%ordinal: index, %output: buffer) {
+  %trial = index.cast %ordinal : index to i32
+  %c2 = scalar.constant 2 : i32
+  %root = scalar.subi %trial, %c2 : i32
+  %square = scalar.muli %root, %root : i32
+  %cube = scalar.muli %square, %root : i32
+  %origin = index.constant 0 : offset
+  %output_view = buffer.view %output[%origin] : buffer -> view<18xf64>
+  %f8e4m3_input = scalar.sitofp %cube : i32 to f8E4M3
+  %f8e4m3_negative = scalar.negf %f8e4m3_input : f8E4M3
+  %f8e4m3_root = scalar.cbrtf %f8e4m3_input : f8E4M3
+  %f8e4m3_inputs = vector.from_elements %f8e4m3_input, %f8e4m3_negative : vector<2xf8E4M3>
+  %f8e4m3_roots = vector.cbrtf %f8e4m3_inputs : vector<2xf8E4M3>
+  %f8e4m3_first = vector.extract %f8e4m3_roots[0] : vector<2xf8E4M3> -> f8E4M3
+  %f8e4m3_second = vector.extract %f8e4m3_roots[1] : vector<2xf8E4M3> -> f8E4M3
+  %f8e4m3_results = vector.from_elements %f8e4m3_root, %f8e4m3_first, %f8e4m3_second : vector<3xf8E4M3>
+  %f8e4m3_observed = vector.extf %f8e4m3_results : vector<3xf8E4M3> to vector<3xf64>
+  vector.store %f8e4m3_observed, %output_view[0] : vector<3xf64>, view<18xf64>
+  %f8e5m2_input = scalar.sitofp %cube : i32 to f8E5M2
+  %f8e5m2_negative = scalar.negf %f8e5m2_input : f8E5M2
+  %f8e5m2_root = scalar.cbrtf %f8e5m2_input : f8E5M2
+  %f8e5m2_inputs = vector.from_elements %f8e5m2_input, %f8e5m2_negative : vector<2xf8E5M2>
+  %f8e5m2_roots = vector.cbrtf %f8e5m2_inputs : vector<2xf8E5M2>
+  %f8e5m2_first = vector.extract %f8e5m2_roots[0] : vector<2xf8E5M2> -> f8E5M2
+  %f8e5m2_second = vector.extract %f8e5m2_roots[1] : vector<2xf8E5M2> -> f8E5M2
+  %f8e5m2_results = vector.from_elements %f8e5m2_root, %f8e5m2_first, %f8e5m2_second : vector<3xf8E5M2>
+  %f8e5m2_observed = vector.extf %f8e5m2_results : vector<3xf8E5M2> to vector<3xf64>
+  vector.store %f8e5m2_observed, %output_view[3] : vector<3xf64>, view<18xf64>
+  %f16_input = scalar.sitofp %cube : i32 to f16
+  %f16_negative = scalar.negf %f16_input : f16
+  %f16_root = scalar.cbrtf %f16_input : f16
+  %f16_inputs = vector.from_elements %f16_input, %f16_negative : vector<2xf16>
+  %f16_roots = vector.cbrtf %f16_inputs : vector<2xf16>
+  %f16_first = vector.extract %f16_roots[0] : vector<2xf16> -> f16
+  %f16_second = vector.extract %f16_roots[1] : vector<2xf16> -> f16
+  %f16_results = vector.from_elements %f16_root, %f16_first, %f16_second : vector<3xf16>
+  %f16_observed = vector.extf %f16_results : vector<3xf16> to vector<3xf64>
+  vector.store %f16_observed, %output_view[6] : vector<3xf64>, view<18xf64>
+  %bf16_input = scalar.sitofp %cube : i32 to bf16
+  %bf16_negative = scalar.negf %bf16_input : bf16
+  %bf16_root = scalar.cbrtf %bf16_input : bf16
+  %bf16_inputs = vector.from_elements %bf16_input, %bf16_negative : vector<2xbf16>
+  %bf16_roots = vector.cbrtf %bf16_inputs : vector<2xbf16>
+  %bf16_first = vector.extract %bf16_roots[0] : vector<2xbf16> -> bf16
+  %bf16_second = vector.extract %bf16_roots[1] : vector<2xbf16> -> bf16
+  %bf16_results = vector.from_elements %bf16_root, %bf16_first, %bf16_second : vector<3xbf16>
+  %bf16_observed = vector.extf %bf16_results : vector<3xbf16> to vector<3xf64>
+  vector.store %bf16_observed, %output_view[9] : vector<3xf64>, view<18xf64>
+  %f32_input = scalar.sitofp %cube : i32 to f32
+  %f32_negative = scalar.negf %f32_input : f32
+  %f32_root = scalar.cbrtf %f32_input : f32
+  %f32_inputs = vector.from_elements %f32_input, %f32_negative : vector<2xf32>
+  %f32_roots = vector.cbrtf %f32_inputs : vector<2xf32>
+  %f32_first = vector.extract %f32_roots[0] : vector<2xf32> -> f32
+  %f32_second = vector.extract %f32_roots[1] : vector<2xf32> -> f32
+  %f32_results = vector.from_elements %f32_root, %f32_first, %f32_second : vector<3xf32>
+  %f32_observed = vector.extf %f32_results : vector<3xf32> to vector<3xf64>
+  vector.store %f32_observed, %output_view[12] : vector<3xf64>, view<18xf64>
+  %f64_input = scalar.sitofp %cube : i32 to f64
+  %f64_negative = scalar.negf %f64_input : f64
+  %f64_root = scalar.cbrtf %f64_input : f64
+  %f64_inputs = vector.from_elements %f64_input, %f64_negative : vector<2xf64>
+  %f64_roots = vector.cbrtf %f64_inputs : vector<2xf64>
+  %f64_first = vector.extract %f64_roots[0] : vector<2xf64> -> f64
+  %f64_second = vector.extract %f64_roots[1] : vector<2xf64> -> f64
+  %f64_results = vector.from_elements %f64_root, %f64_first, %f64_second : vector<3xf64>
+  vector.store %f64_results, %output_view[15] : vector<3xf64>, view<18xf64>
+  func.return
+}
+
+func.def @cube_root_oracle(%ordinal: index, %output: buffer) {
+  %trial = index.cast %ordinal : index to i32
+  %c2 = scalar.constant 2 : i32
+  %integer = scalar.subi %trial, %c2 : i32
+  %root = scalar.sitofp %integer : i32 to f64
+  %negative = scalar.negf %root : f64
+  %expected = vector.from_elements %root, %root, %negative : vector<3xf64>
+  %origin = index.constant 0 : offset
+  %output_view = buffer.view %output[%origin] : buffer -> view<18xf64>
+  vector.store %expected, %output_view[0] : vector<3xf64>, view<18xf64>
+  vector.store %expected, %output_view[3] : vector<3xf64>, view<18xf64>
+  vector.store %expected, %output_view[6] : vector<3xf64>, view<18xf64>
+  vector.store %expected, %output_view[9] : vector<3xf64>, view<18xf64>
+  vector.store %expected, %output_view[12] : vector<3xf64>, view<18xf64>
+  vector.store %expected, %output_view[15] : vector<3xf64>, view<18xf64>
+  func.return
+}
+
+check.scenario @cube_root_values {
+  check.trial[5](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0.0) : tensor<18xf64>
+    check.compare<@cube_root_observations, @cube_root_oracle>(%trial, %output) : (index, tensor<18xf64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<18xf64>
     }
   }
   check.return

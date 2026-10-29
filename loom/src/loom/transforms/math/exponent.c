@@ -387,6 +387,17 @@ iree_status_t loom_math_legalize_exponent(
       loom_module_value_type(context->module, loom_op_results(op)[0]);
   const loom_scalar_type_t element = loom_type_element_type(source_type);
   const bool is_vector = loom_type_is_vector(source_type);
+  // A scalar-only packet policy consumes the semantic lane program directly.
+  // Expanding it into vector integer arithmetic here would prevent later lane
+  // lowering from selecting the target's scalar exponent instructions.
+  const loom_target_vector_packet_policy_t* packet_policy =
+      context->vector_packet_policy;
+  if (is_vector && packet_policy &&
+      packet_policy->native_bit_count_count == 0 &&
+      packet_policy->native_lane_count_count == 0) {
+    out_result->action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT;
+    return iree_ok_status();
+  }
   const bool is_scale =
       loom_scalar_ldexpf_isa(op) || loom_vector_ldexpf_isa(op);
   const loom_type_t exponent_type =

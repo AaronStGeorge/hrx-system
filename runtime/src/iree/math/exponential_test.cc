@@ -6,6 +6,8 @@
 
 #include "iree/math/exponential.h"
 
+#include <limits>
+
 #include "iree/math/elementary_test_util.h"
 
 namespace iree::math::testing {
@@ -46,54 +48,686 @@ TEST_F(ElementaryTest, Exp2F32ApproxFrozenFiniteMapping) {
                    UINT32_C(0x3E7F3D4D));
 }
 
-TEST_F(ElementaryTest, Log2F32ApproxExceptionalAndFlushBoundaries) {
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x00000000),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x80000000),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x00000001),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x807FFFFF),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0xBF800000),
-                   UINT32_C(0x7FC00000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0xFF800000),
-                   UINT32_C(0x7FC00000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x7F800000),
-                   UINT32_C(0x7F800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x7F800001),
-                   UINT32_C(0x7FC00000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0xFFC01234),
-                   UINT32_C(0x7FC00000));
-}
-
-TEST_F(ElementaryTest, Log2F32ApproxFrozenFiniteMapping) {
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x00800000),
-                   UINT32_C(0xC2FC0000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x3F000000),
-                   UINT32_C(0xBF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x3F800000),
-                   UINT32_C(0x00000000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x40000000),
-                   UINT32_C(0x3F800000));
-  // These inputs distinguish the selected mapping from correct rounding and
-  // direct AMDGPU primitives, respectively.
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x70006067),
-                   UINT32_C(0x42C2022B));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x3F7FFFFF),
-                   UINT32_C(0xB3B8AA3B));
-}
-
-TEST_F(ElementaryTest, ApproxMappingsIgnoreHostDenormalFlush) {
+TEST_F(ElementaryTest, ExponentialApproxMappingsIgnoreHostDenormalFlush) {
   EnableFlushDenormalsToZero();
   ExpectF32Mapping(iree_math_exp2_f32_approx, UINT32_C(0x00000001),
                    UINT32_C(0x3F800000));
   ExpectF32Mapping(iree_math_exp2_f32_approx, UINT32_C(0xC2FC0000),
                    UINT32_C(0x00800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x00000001),
-                   UINT32_C(0xFF800000));
-  ExpectF32Mapping(iree_math_log2_f32_approx, UINT32_C(0x70006067),
-                   UINT32_C(0x42C2022B));
+}
+
+// MPFR 4.2.2, directed 256-bit intervals whose endpoints round to the same
+// binary32 payload. Covers domain, subnormal, overflow, and rounding
+// boundaries.
+TEST_F(ElementaryTest, ExpF32OrdinaryBoundaries) {
+  const struct {
+    // Exact input payload.
+    uint32_t input;
+    // Independently correctly rounded result (NaNs canonicalized).
+    uint32_t expected;
+  } cases[] = {
+      {UINT32_C(0x00000000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x80000000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x00000001), UINT32_C(0x3F800000)},
+      {UINT32_C(0x007FFFFF), UINT32_C(0x3F800000)},
+      {UINT32_C(0x00800000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x3F7FFFFF), UINT32_C(0x402DF854)},
+      {UINT32_C(0x3F800000), UINT32_C(0x402DF854)},
+      {UINT32_C(0x3F800001), UINT32_C(0x402DF856)},
+      {UINT32_C(0xBF800000), UINT32_C(0x3EBC5AB2)},
+      {UINT32_C(0x7F800000), UINT32_C(0x7F800000)},
+      {UINT32_C(0xFF800000), UINT32_C(0x00000000)},
+      {UINT32_C(0x7FC00000), UINT32_C(0x7FC00000)},
+      {UINT32_C(0x42B17217), UINT32_C(0x7F7FFF84)},
+      {UINT32_C(0x42B17218), UINT32_C(0x7F800000)},
+      {UINT32_C(0x42B17219), UINT32_C(0x7F800000)},
+      {UINT32_C(0xC2CFF1B4), UINT32_C(0x00000001)},
+      {UINT32_C(0x33800000), UINT32_C(0x3F800001)},
+      {UINT32_C(0xB3800000), UINT32_C(0x3F7FFFFF)},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(::testing::Message() << "input_bits=" << std::hex << c.input);
+    const uint32_t actual = F32ToBits(iree_math_exp_f32(F32FromBits(c.input)));
+    if (c.expected == 0 || c.expected >= UINT32_C(0x7F800000)) {
+      EXPECT_EQ(actual, c.expected);
+    } else {
+      EXPECT_LE(actual > c.expected ? actual - c.expected : c.expected - actual,
+                UINT32_C(1));
+    }
+  }
+}
+
+// MPFR 4.2.2, directed 256-bit intervals whose endpoints round to the same
+// binary32 payload. Covers domain, subnormal, overflow, and rounding
+// boundaries.
+TEST_F(ElementaryTest, Exp2F32OrdinaryBoundaries) {
+  const struct {
+    // Exact input payload.
+    uint32_t input;
+    // Independently correctly rounded result (NaNs canonicalized).
+    uint32_t expected;
+  } cases[] = {
+      {UINT32_C(0x00000000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x80000000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x00000001), UINT32_C(0x3F800000)},
+      {UINT32_C(0x007FFFFF), UINT32_C(0x3F800000)},
+      {UINT32_C(0x00800000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x3F7FFFFF), UINT32_C(0x3FFFFFFF)},
+      {UINT32_C(0x3F800000), UINT32_C(0x40000000)},
+      {UINT32_C(0x3F800001), UINT32_C(0x40000001)},
+      {UINT32_C(0xBF800000), UINT32_C(0x3F000000)},
+      {UINT32_C(0x7F800000), UINT32_C(0x7F800000)},
+      {UINT32_C(0xFF800000), UINT32_C(0x00000000)},
+      {UINT32_C(0x7FC00000), UINT32_C(0x7FC00000)},
+      {UINT32_C(0x42FE0000), UINT32_C(0x7F000000)},
+      {UINT32_C(0x43000000), UINT32_C(0x7F800000)},
+      {UINT32_C(0xC3150000), UINT32_C(0x00000001)},
+      {UINT32_C(0xC3160000), UINT32_C(0x00000000)},
+      {UINT32_C(0x33800000), UINT32_C(0x3F800000)},
+      {UINT32_C(0xB3800000), UINT32_C(0x3F7FFFFF)},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(::testing::Message() << "input_bits=" << std::hex << c.input);
+    const uint32_t actual = F32ToBits(iree_math_exp2_f32(F32FromBits(c.input)));
+    if (c.expected == 0 || c.expected >= UINT32_C(0x7F800000)) {
+      EXPECT_EQ(actual, c.expected);
+    } else {
+      EXPECT_LE(actual > c.expected ? actual - c.expected : c.expected - actual,
+                UINT32_C(1));
+    }
+  }
+}
+
+// MPFR 4.2.2, directed 256-bit intervals whose endpoints round to the same
+// binary64 payload. Covers domain, subnormal, overflow, and rounding
+// boundaries.
+TEST_F(ElementaryTest, ExpF64OrdinaryBoundaries) {
+  const struct {
+    // Exact input payload.
+    uint64_t input;
+    // Independently correctly rounded result (NaNs canonicalized).
+    uint64_t expected;
+  } cases[] = {
+      {UINT64_C(0x0000000000000000), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x8000000000000000), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x0000000000000001), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x000FFFFFFFFFFFFF), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x0010000000000000), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FEFFFFFFFFFFFFF), UINT64_C(0x4005BF0A8B145769)},
+      {UINT64_C(0x3FF0000000000000), UINT64_C(0x4005BF0A8B145769)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x4005BF0A8B14576B)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0x3FD78B56362CEF38)},
+      {UINT64_C(0x7FF0000000000000), UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0xFFF0000000000000), UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x7FF8000000000000), UINT64_C(0x7FF8000000000000)},
+      {UINT64_C(0x40862E42FEFA39EE), UINT64_C(0x7FEFFFFFFFFFFB2A)},
+      {UINT64_C(0x40862E42FEFA39EF), UINT64_C(0x7FEFFFFFFFFFFF2A)},
+      {UINT64_C(0x40862E42FEFA39F0), UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0xC0874910D52D3051), UINT64_C(0x0000000000000001)},
+      {UINT64_C(0x3CA0000000000000), UINT64_C(0x3FF0000000000001)},
+      {UINT64_C(0xBCA0000000000000), UINT64_C(0x3FEFFFFFFFFFFFFF)},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(::testing::Message() << "input_bits=" << std::hex << c.input);
+    const uint64_t actual = F64ToBits(iree_math_exp_f64(F64FromBits(c.input)));
+    if (c.expected == 0 || c.expected >= UINT64_C(0x7FF0000000000000)) {
+      EXPECT_EQ(actual, c.expected);
+    } else {
+      EXPECT_LE(actual > c.expected ? actual - c.expected : c.expected - actual,
+                UINT64_C(1));
+    }
+  }
+}
+
+// MPFR 4.2.2, directed 256-bit intervals whose endpoints round to the same
+// binary64 payload. Covers domain, subnormal, overflow, and rounding
+// boundaries.
+TEST_F(ElementaryTest, Exp2F64OrdinaryBoundaries) {
+  const struct {
+    // Exact input payload.
+    uint64_t input;
+    // Independently correctly rounded result (NaNs canonicalized).
+    uint64_t expected;
+  } cases[] = {
+      {UINT64_C(0x0000000000000000), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x8000000000000000), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x0000000000000001), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x000FFFFFFFFFFFFF), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x0010000000000000), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FEFFFFFFFFFFFFF), UINT64_C(0x3FFFFFFFFFFFFFFF)},
+      {UINT64_C(0x3FF0000000000000), UINT64_C(0x4000000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x4000000000000001)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0x3FE0000000000000)},
+      {UINT64_C(0x7FF0000000000000), UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0xFFF0000000000000), UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x7FF8000000000000), UINT64_C(0x7FF8000000000000)},
+      {UINT64_C(0x408FF80000000000), UINT64_C(0x7FE0000000000000)},
+      {UINT64_C(0x4090000000000000), UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0xC090C80000000000), UINT64_C(0x0000000000000001)},
+      {UINT64_C(0xC090CC0000000000), UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x3CA0000000000000), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0xBCA0000000000000), UINT64_C(0x3FEFFFFFFFFFFFFF)},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(::testing::Message() << "input_bits=" << std::hex << c.input);
+    const uint64_t actual = F64ToBits(iree_math_exp2_f64(F64FromBits(c.input)));
+    if (c.expected == 0 || c.expected >= UINT64_C(0x7FF0000000000000)) {
+      EXPECT_EQ(actual, c.expected);
+    } else {
+      EXPECT_LE(actual > c.expected ? actual - c.expected : c.expected - actual,
+                UINT64_C(1));
+    }
+  }
+}
+
+// MPFR 4.2.2 directed 256-bit intervals, independently rounded to F32.
+// Covers cancellation, reduction/reconstruction boundaries, saturation, and
+// overflow.
+TEST_F(ElementaryTest, Expm1F32Boundaries) {
+  const struct {
+    // Exact input payload.
+    uint32_t input;
+    // Independently correctly rounded result (NaNs canonicalized).
+    uint32_t expected;
+  } cases[] = {
+      {UINT32_C(0x00000000), UINT32_C(0x00000000)},
+      {UINT32_C(0x80000000), UINT32_C(0x80000000)},
+      {UINT32_C(0x00000001), UINT32_C(0x00000001)},
+      {UINT32_C(0x80000001), UINT32_C(0x80000001)},
+      {UINT32_C(0x007FFFFF), UINT32_C(0x007FFFFF)},
+      {UINT32_C(0x00800000), UINT32_C(0x00800000)},
+      {UINT32_C(0x00800001), UINT32_C(0x00800001)},
+      {UINT32_C(0x7F7FFFFF), UINT32_C(0x7F800000)},
+      {UINT32_C(0xFF7FFFFF), UINT32_C(0xBF800000)},
+      {UINT32_C(0x7F800000), UINT32_C(0x7F800000)},
+      {UINT32_C(0xFF800000), UINT32_C(0xBF800000)},
+      {UINT32_C(0x7F800001), UINT32_C(0x7FC00000)},
+      {UINT32_C(0x7FC00011), UINT32_C(0x7FC00000)},
+      {UINT32_C(0xFF800001), UINT32_C(0x7FC00000)},
+      {UINT32_C(0x32FFFFFF), UINT32_C(0x32FFFFFF)},
+      {UINT32_C(0x33000000), UINT32_C(0x33000000)},
+      {UINT32_C(0x33000001), UINT32_C(0x33000001)},
+      {UINT32_C(0xB2FFFFFF), UINT32_C(0xB2FFFFFF)},
+      {UINT32_C(0xB3000000), UINT32_C(0xB3000000)},
+      {UINT32_C(0xB3000001), UINT32_C(0xB3000001)},
+      {UINT32_C(0x3EB17217), UINT32_C(0x3ED413CB)},
+      {UINT32_C(0x3EB17218), UINT32_C(0x3ED413CD)},
+      {UINT32_C(0x3EB17219), UINT32_C(0x3ED413CE)},
+      {UINT32_C(0xBEB17217), UINT32_C(0xBE95F619)},
+      {UINT32_C(0xBEB17218), UINT32_C(0xBE95F61A)},
+      {UINT32_C(0xBEB17219), UINT32_C(0xBE95F61A)},
+      {UINT32_C(0x3F851591), UINT32_C(0x3FEA09E4)},
+      {UINT32_C(0x3F851592), UINT32_C(0x3FEA09E6)},
+      {UINT32_C(0x3F851593), UINT32_C(0x3FEA09E9)},
+      {UINT32_C(0xBF851591), UINT32_C(0xBF257D86)},
+      {UINT32_C(0xBF851592), UINT32_C(0xBF257D86)},
+      {UINT32_C(0xBF851593), UINT32_C(0xBF257D87)},
+      {UINT32_C(0x4195B843), UINT32_C(0x4CFFFFD9)},
+      {UINT32_C(0x4195B844), UINT32_C(0x4CFFFFF9)},
+      {UINT32_C(0x4195B845), UINT32_C(0x4D00000C)},
+      {UINT32_C(0xC195B843), UINT32_C(0xBF800000)},
+      {UINT32_C(0xC195B844), UINT32_C(0xBF800000)},
+      {UINT32_C(0xC195B845), UINT32_C(0xBF800000)},
+      {UINT32_C(0x42B17217), UINT32_C(0x7F7FFF84)},
+      {UINT32_C(0x42B17218), UINT32_C(0x7F800000)},
+      {UINT32_C(0x42B17219), UINT32_C(0x7F800000)},
+      {UINT32_C(0xC2B17217), UINT32_C(0xBF800000)},
+      {UINT32_C(0xC2B17218), UINT32_C(0xBF800000)},
+      {UINT32_C(0xC2B17219), UINT32_C(0xBF800000)},
+      {UINT32_C(0xBFB17218), UINT32_C(0xBF400000)},
+      {UINT32_C(0xBF317218), UINT32_C(0xBF000000)},
+      {UINT32_C(0x3F317218), UINT32_C(0x3F800000)},
+      {UINT32_C(0x4152B77C), UINT32_C(0x48FFFFD9)},
+      {UINT32_C(0x415DCE9E), UINT32_C(0x497FFFF1)},
+      {UINT32_C(0x4173FCE1), UINT32_C(0x4A7FFFFD)},
+      {UINT32_C(0x417F1402), UINT32_C(0x4AFFFFF7)},
+      {UINT32_C(0x421B43D5), UINT32_C(0x5B800001)},
+      {UINT32_C(0x421E099D), UINT32_C(0x5BFFFFEA)},
+      {UINT32_C(0x42B00F34), UINT32_C(0x7F00000E)},
+      {UINT32_C(0xC18AA122), UINT32_C(0xBF7FFFFF)},
+      {UINT32_C(0xC18AA123), UINT32_C(0xBF800000)},
+      {UINT32_C(0xC18AA124), UINT32_C(0xBF800000)},
+      {UINT32_C(0x3EE2E42F), UINT32_C(0x3F0EBEF9)},
+      {UINT32_C(0x3EE2E430), UINT32_C(0x3F0EBEFA)},
+      {UINT32_C(0x3EE2E431), UINT32_C(0x3F0EBEFB)},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(::testing::Message() << "input_bits=" << std::hex << c.input);
+    const uint32_t actual =
+        F32ToBits(iree_math_expm1_f32(F32FromBits(c.input)));
+    const uint32_t magnitude = c.expected & UINT32_C(0x7FFFFFFF);
+    if (magnitude == 0 || magnitude >= UINT32_C(0x7F800000)) {
+      EXPECT_EQ(actual, c.expected);
+    } else {
+      EXPECT_LE(actual > c.expected ? actual - c.expected : c.expected - actual,
+                UINT32_C(1));
+    }
+  }
+}
+
+// MPFR 4.2.2 directed 256-bit intervals, independently rounded to F64.
+// Covers cancellation, reduction/reconstruction boundaries, saturation, and
+// overflow.
+TEST_F(ElementaryTest, Expm1F64Boundaries) {
+  const struct {
+    // Exact input payload.
+    uint64_t input;
+    // Independently correctly rounded result (NaNs canonicalized).
+    uint64_t expected;
+  } cases[] = {
+      {UINT64_C(0x0000000000000000), UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x8000000000000000), UINT64_C(0x8000000000000000)},
+      {UINT64_C(0x0000000000000001), UINT64_C(0x0000000000000001)},
+      {UINT64_C(0x8000000000000001), UINT64_C(0x8000000000000001)},
+      {UINT64_C(0x000FFFFFFFFFFFFF), UINT64_C(0x000FFFFFFFFFFFFF)},
+      {UINT64_C(0x0010000000000000), UINT64_C(0x0010000000000000)},
+      {UINT64_C(0x0010000000000001), UINT64_C(0x0010000000000001)},
+      {UINT64_C(0x7FEFFFFFFFFFFFFF), UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0xFFEFFFFFFFFFFFFF), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0x7FF0000000000000), UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0xFFF0000000000000), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0x7FF0000000000001), UINT64_C(0x7FF8000000000000)},
+      {UINT64_C(0x7FF8000000000011), UINT64_C(0x7FF8000000000000)},
+      {UINT64_C(0xFFF0000000000001), UINT64_C(0x7FF8000000000000)},
+      {UINT64_C(0x3C8FFFFFFFFFFFFF), UINT64_C(0x3C8FFFFFFFFFFFFF)},
+      {UINT64_C(0x3C90000000000000), UINT64_C(0x3C90000000000000)},
+      {UINT64_C(0x3C90000000000001), UINT64_C(0x3C90000000000001)},
+      {UINT64_C(0xBC8FFFFFFFFFFFFF), UINT64_C(0xBC8FFFFFFFFFFFFF)},
+      {UINT64_C(0xBC90000000000000), UINT64_C(0xBC90000000000000)},
+      {UINT64_C(0xBC90000000000001), UINT64_C(0xBC90000000000001)},
+      {UINT64_C(0x3FD62E42FFFFFFFF), UINT64_C(0x3FDA82799B6F2364)},
+      {UINT64_C(0x3FD62E4300000000), UINT64_C(0x3FDA82799B6F2366)},
+      {UINT64_C(0x3FD62E4300000001), UINT64_C(0x3FDA82799B6F2367)},
+      {UINT64_C(0xBFD62E42FFFFFFFF), UINT64_C(0xBFD2BEC333BAA280)},
+      {UINT64_C(0xBFD62E4300000000), UINT64_C(0xBFD2BEC333BAA281)},
+      {UINT64_C(0xBFD62E4300000001), UINT64_C(0xBFD2BEC333BAA281)},
+      {UINT64_C(0x3FF0A2B1FFFFFFFF), UINT64_C(0x3FFD413C1A24D411)},
+      {UINT64_C(0x3FF0A2B200000000), UINT64_C(0x3FFD413C1A24D414)},
+      {UINT64_C(0x3FF0A2B200000001), UINT64_C(0x3FFD413C1A24D416)},
+      {UINT64_C(0xBFF0A2B1FFFFFFFF), UINT64_C(0xBFE4AFB0A009F887)},
+      {UINT64_C(0xBFF0A2B200000000), UINT64_C(0xBFE4AFB0A009F888)},
+      {UINT64_C(0xBFF0A2B200000001), UINT64_C(0xBFE4AFB0A009F888)},
+      {UINT64_C(0x40436879FFFFFFFF), UINT64_C(0x436FFFD8395C0C01)},
+      {UINT64_C(0x4043687A00000000), UINT64_C(0x436FFFD8395C0C41)},
+      {UINT64_C(0x4043687A00000001), UINT64_C(0x436FFFD8395C0C81)},
+      {UINT64_C(0xC0436879FFFFFFFF), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xC043687A00000000), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xC043687A00000001), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0x40862E42FEFA39EE), UINT64_C(0x7FEFFFFFFFFFFB2A)},
+      {UINT64_C(0x40862E42FEFA39EF), UINT64_C(0x7FEFFFFFFFFFFF2A)},
+      {UINT64_C(0x40862E42FEFA39F0), UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0xC0862E42FEFA39EE), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xC0862E42FEFA39EF), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xC0862E42FEFA39F0), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xBFF62E42FEFA39EF), UINT64_C(0xBFE8000000000000)},
+      {UINT64_C(0xBFE62E42FEFA39EF), UINT64_C(0xBFE0000000000000)},
+      {UINT64_C(0x3FE62E42FEFA39EF), UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x402A56EF8EC924CC), UINT64_C(0x411FFFFBFFFFFFFF)},
+      {UINT64_C(0x402BB9D3BEB8C86B), UINT64_C(0x412FFFFE00000000)},
+      {UINT64_C(0x402E7F9C1E980FA9), UINT64_C(0x414FFFFF80000001)},
+      {UINT64_C(0x402FE2804E87B348), UINT64_C(0x415FFFFFC0000002)},
+      {UINT64_C(0x4043687A9F1AF2B1), UINT64_C(0x436FFFFFFFFFFFEC)},
+      {UINT64_C(0x4043C133AB16DB99), UINT64_C(0x437FFFFFFFFFFFFD)},
+      {UINT64_C(0x408628B76E3A7B61), UINT64_C(0x7FE000000000008D)},
+      {UINT64_C(0xC042B708872320E1), UINT64_C(0xBFEFFFFFFFFFFFFF)},
+      {UINT64_C(0xC042B708872320E2), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xC042B708872320E3), UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0x3FDC5C85FDF473DD), UINT64_C(0x3FE1D7DF3D590415)},
+      {UINT64_C(0x3FDC5C85FDF473DE), UINT64_C(0x3FE1D7DF3D590415)},
+      {UINT64_C(0x3FDC5C85FDF473DF), UINT64_C(0x3FE1D7DF3D590416)},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(::testing::Message() << "input_bits=" << std::hex << c.input);
+    const uint64_t actual =
+        F64ToBits(iree_math_expm1_f64(F64FromBits(c.input)));
+    const uint64_t magnitude = c.expected & UINT64_C(0x7FFFFFFFFFFFFFFF);
+    if (magnitude == 0 || magnitude >= UINT64_C(0x7FF0000000000000)) {
+      EXPECT_EQ(actual, c.expected);
+    } else {
+      EXPECT_LE(actual > c.expected ? actual - c.expected : c.expected - actual,
+                UINT64_C(1));
+    }
+  }
+}
+
+TEST_F(ElementaryTest, Expm1FrozenFiniteMapping) {
+  // These reduction-boundary results distinguish the selected mapping from
+  // correctly rounded expm1 while remaining within one adjacent value.
+  ExpectF32Mapping(iree_math_expm1_f32, UINT32_C(0x3EB17217),
+                   UINT32_C(0x3ED413CC));
+  ExpectF64Mapping(iree_math_expm1_f64, UINT64_C(0xBFD62E4300000000),
+                   UINT64_C(0xBFD2BEC333BAA280));
+}
+
+// MPFR 4.2.2 directed 256-bit intervals, independently rounded to F32.
+// Covers negative-base parity, normalization, compensated log multiplication
+// near one, and signed subnormal/overflow reconstruction.
+TEST_F(ElementaryTest, PowerF32Boundaries) {
+  const struct {
+    // Exact base payload.
+    uint32_t base;
+    // Exact exponent payload.
+    uint32_t exponent;
+    // Independently correctly rounded result (NaNs canonicalized).
+    uint32_t expected;
+  } cases[] = {
+      {UINT32_C(0xBF800000), UINT32_C(0xC0400000), UINT32_C(0xBF800000)},
+      {UINT32_C(0xBF800000), UINT32_C(0xC0000000), UINT32_C(0x3F800000)},
+      {UINT32_C(0xBF800000), UINT32_C(0xBF000000), UINT32_C(0x7FC00000)},
+      {UINT32_C(0xBF800000), UINT32_C(0x3F000000), UINT32_C(0x7FC00000)},
+      {UINT32_C(0xBF800000), UINT32_C(0x40000000), UINT32_C(0x3F800000)},
+      {UINT32_C(0xBF800000), UINT32_C(0x40400000), UINT32_C(0xBF800000)},
+      {UINT32_C(0xBF800000), UINT32_C(0x4AFFFFFF), UINT32_C(0x7FC00000)},
+      {UINT32_C(0xBF800000), UINT32_C(0x4B000001), UINT32_C(0xBF800000)},
+      {UINT32_C(0xBF800000), UINT32_C(0x4B800000), UINT32_C(0x3F800000)},
+      {UINT32_C(0xBF800000), UINT32_C(0xCB000001), UINT32_C(0xBF800000)},
+      {UINT32_C(0xC0000000), UINT32_C(0x40400000), UINT32_C(0xC1000000)},
+      {UINT32_C(0xC0000000), UINT32_C(0x40800000), UINT32_C(0x41800000)},
+      {UINT32_C(0xC0000000), UINT32_C(0xC0400000), UINT32_C(0xBE000000)},
+      {UINT32_C(0xC0000000), UINT32_C(0xC0800000), UINT32_C(0x3D800000)},
+      {UINT32_C(0x3F000000), UINT32_C(0x3F000000), UINT32_C(0x3F3504F3)},
+      {UINT32_C(0x40000000), UINT32_C(0x3F000000), UINT32_C(0x3FB504F3)},
+      {UINT32_C(0x40400000), UINT32_C(0xBE800000), UINT32_C(0x3F428497)},
+      {UINT32_C(0x3F7FFFFF), UINT32_C(0x4B000000), UINT32_C(0x3F1B4598)},
+      {UINT32_C(0x3F7FFFFF), UINT32_C(0xCB000000), UINT32_C(0x3FD3094D)},
+      {UINT32_C(0x3F7FFFFF), UINT32_C(0x50000000), UINT32_C(0x00000000)},
+      {UINT32_C(0x3F7FFFFF), UINT32_C(0xD0000000), UINT32_C(0x7F800000)},
+      {UINT32_C(0x3F800001), UINT32_C(0x4B000000), UINT32_C(0x402DF854)},
+      {UINT32_C(0x3F800001), UINT32_C(0xCB000000), UINT32_C(0x3EBC5AB2)},
+      {UINT32_C(0x3F800001), UINT32_C(0x50000000), UINT32_C(0x7F800000)},
+      {UINT32_C(0x3F800001), UINT32_C(0xD0000000), UINT32_C(0x00000000)},
+      {UINT32_C(0x00000001), UINT32_C(0x3F000000), UINT32_C(0x1A3504F3)},
+      {UINT32_C(0x00000001), UINT32_C(0xBF000000), UINT32_C(0x64B504F3)},
+      {UINT32_C(0x007FFFFF), UINT32_C(0x3F000000), UINT32_C(0x1FFFFFFF)},
+      {UINT32_C(0x007FFFFF), UINT32_C(0xBF000000), UINT32_C(0x5F000001)},
+      {UINT32_C(0x00800000), UINT32_C(0x3F000000), UINT32_C(0x20000000)},
+      {UINT32_C(0x00800000), UINT32_C(0xBF000000), UINT32_C(0x5F000000)},
+      {UINT32_C(0x00800001), UINT32_C(0x3F000000), UINT32_C(0x20000000)},
+      {UINT32_C(0x00800001), UINT32_C(0xBF000000), UINT32_C(0x5EFFFFFF)},
+      {UINT32_C(0x7F7FFFFF), UINT32_C(0x3F000000), UINT32_C(0x5F7FFFFF)},
+      {UINT32_C(0x7F7FFFFF), UINT32_C(0xBF000000), UINT32_C(0x1F800000)},
+      {UINT32_C(0x40000000), UINT32_C(0xC315FFFF), UINT32_C(0x00000001)},
+      {UINT32_C(0x40000000), UINT32_C(0xC3160000), UINT32_C(0x00000000)},
+      {UINT32_C(0x40000000), UINT32_C(0xC3160001), UINT32_C(0x00000000)},
+      {UINT32_C(0x40000000), UINT32_C(0xC314FFFF), UINT32_C(0x00000001)},
+      {UINT32_C(0x40000000), UINT32_C(0xC3150000), UINT32_C(0x00000001)},
+      {UINT32_C(0x40000000), UINT32_C(0xC3150001), UINT32_C(0x00000001)},
+      {UINT32_C(0x40000000), UINT32_C(0xC2FBFFFF), UINT32_C(0x0080002C)},
+      {UINT32_C(0x40000000), UINT32_C(0xC2FC0000), UINT32_C(0x00800000)},
+      {UINT32_C(0x40000000), UINT32_C(0xC2FC0001), UINT32_C(0x007FFFD4)},
+      {UINT32_C(0x40000000), UINT32_C(0x42FFFFFF), UINT32_C(0x7F7FFFA7)},
+      {UINT32_C(0x40000000), UINT32_C(0x43000000), UINT32_C(0x7F800000)},
+      {UINT32_C(0x40000000), UINT32_C(0x43000001), UINT32_C(0x7F800000)},
+      {UINT32_C(0xC0000000), UINT32_C(0xC3160000), UINT32_C(0x00000000)},
+      {UINT32_C(0xC0000000), UINT32_C(0xC3150000), UINT32_C(0x80000001)},
+      {UINT32_C(0xC0000000), UINT32_C(0xC3140000), UINT32_C(0x00000002)},
+      {UINT32_C(0xC0000000), UINT32_C(0xC2FE0000), UINT32_C(0x80400000)},
+      {UINT32_C(0xC0000000), UINT32_C(0x42FE0000), UINT32_C(0xFF000000)},
+      {UINT32_C(0xC0000000), UINT32_C(0x43010000), UINT32_C(0xFF800000)},
+      {UINT32_C(0x40000000), UINT32_C(0x42FBFFFF), UINT32_C(0x7E7FFFA7)},
+      {UINT32_C(0x40000000), UINT32_C(0x42FC0000), UINT32_C(0x7E800000)},
+      {UINT32_C(0x00000000), UINT32_C(0x00000000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x80000000), UINT32_C(0xC0400000), UINT32_C(0xFF800000)},
+      {UINT32_C(0x80000000), UINT32_C(0x40400000), UINT32_C(0x80000000)},
+      {UINT32_C(0x7F800000), UINT32_C(0xBF800000), UINT32_C(0x00000000)},
+      {UINT32_C(0xFF800000), UINT32_C(0x40400000), UINT32_C(0xFF800000)},
+      {UINT32_C(0x7FC00000), UINT32_C(0x00000000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x3F800000), UINT32_C(0x7FC00000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x7F800001), UINT32_C(0x40000000), UINT32_C(0x7FC00000)},
+      {UINT32_C(0xBF800000), UINT32_C(0x7F800000), UINT32_C(0x3F800000)},
+      {UINT32_C(0x3F000000), UINT32_C(0x7F800000), UINT32_C(0x00000000)},
+      {UINT32_C(0x40000000), UINT32_C(0xFF800000), UINT32_C(0x00000000)},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(::testing::Message() << "base_bits=" << std::hex << c.base
+                                      << " exponent_bits=" << c.exponent);
+    const uint32_t actual = F32ToBits(
+        iree_math_pow_f32(F32FromBits(c.base), F32FromBits(c.exponent)));
+    const uint32_t magnitude = c.expected & UINT32_C(0x7FFFFFFF);
+    if (magnitude == 0 || magnitude >= UINT32_C(0x7F800000)) {
+      EXPECT_EQ(actual, c.expected);
+    } else {
+      EXPECT_LE(actual > c.expected ? actual - c.expected : c.expected - actual,
+                UINT32_C(1));
+    }
+  }
+}
+
+// MPFR 4.2.2 directed 256-bit intervals, independently rounded to F64.
+// Covers negative-base parity, normalization, compensated log multiplication
+// near one, and signed subnormal/overflow reconstruction.
+TEST_F(ElementaryTest, PowerF64Boundaries) {
+  const struct {
+    // Exact base payload.
+    uint64_t base;
+    // Exact exponent payload.
+    uint64_t exponent;
+    // Independently correctly rounded result (NaNs canonicalized).
+    uint64_t expected;
+  } cases[] = {
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0xC008000000000000),
+       UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0xC000000000000000),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0xBFE0000000000000),
+       UINT64_C(0x7FF8000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0x3FE0000000000000),
+       UINT64_C(0x7FF8000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0x4000000000000000),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0x4008000000000000),
+       UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0x432FFFFFFFFFFFFF),
+       UINT64_C(0x7FF8000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0x4330000000000001),
+       UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0x4340000000000000),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0xC330000000000001),
+       UINT64_C(0xBFF0000000000000)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0x4008000000000000),
+       UINT64_C(0xC020000000000000)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0x4010000000000000),
+       UINT64_C(0x4030000000000000)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0xC008000000000000),
+       UINT64_C(0xBFC0000000000000)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0xC010000000000000),
+       UINT64_C(0x3FB0000000000000)},
+      {UINT64_C(0x3FE0000000000000), UINT64_C(0x3FE0000000000000),
+       UINT64_C(0x3FE6A09E667F3BCD)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0x3FE0000000000000),
+       UINT64_C(0x3FF6A09E667F3BCD)},
+      {UINT64_C(0x4008000000000000), UINT64_C(0xBFD0000000000000),
+       UINT64_C(0x3FE85092ED86A26B)},
+      {UINT64_C(0x3FEFFFFFFFFFFFFF), UINT64_C(0x4330000000000000),
+       UINT64_C(0x3FE368B2FC6F960A)},
+      {UINT64_C(0x3FEFFFFFFFFFFFFF), UINT64_C(0xC330000000000000),
+       UINT64_C(0x3FFA61298E1E069C)},
+      {UINT64_C(0x3FEFFFFFFFFFFFFF), UINT64_C(0x43D0000000000000),
+       UINT64_C(0x11C44109EDB2088F)},
+      {UINT64_C(0x3FEFFFFFFFFFFFFF), UINT64_C(0xC3D0000000000000),
+       UINT64_C(0x6E19476504BA85F9)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x4330000000000000),
+       UINT64_C(0x4005BF0A8B145769)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0xC330000000000000),
+       UINT64_C(0x3FD78B56362CEF39)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x43D0000000000000),
+       UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0xC3D0000000000000),
+       UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x0000000000000001), UINT64_C(0x3FE0000000000000),
+       UINT64_C(0x1E60000000000000)},
+      {UINT64_C(0x0000000000000001), UINT64_C(0xBFE0000000000000),
+       UINT64_C(0x6180000000000000)},
+      {UINT64_C(0x000FFFFFFFFFFFFF), UINT64_C(0x3FE0000000000000),
+       UINT64_C(0x1FFFFFFFFFFFFFFF)},
+      {UINT64_C(0x000FFFFFFFFFFFFF), UINT64_C(0xBFE0000000000000),
+       UINT64_C(0x5FE0000000000001)},
+      {UINT64_C(0x0010000000000000), UINT64_C(0x3FE0000000000000),
+       UINT64_C(0x2000000000000000)},
+      {UINT64_C(0x0010000000000000), UINT64_C(0xBFE0000000000000),
+       UINT64_C(0x5FE0000000000000)},
+      {UINT64_C(0x0010000000000001), UINT64_C(0x3FE0000000000000),
+       UINT64_C(0x2000000000000000)},
+      {UINT64_C(0x0010000000000001), UINT64_C(0xBFE0000000000000),
+       UINT64_C(0x5FDFFFFFFFFFFFFF)},
+      {UINT64_C(0x7FEFFFFFFFFFFFFF), UINT64_C(0x3FE0000000000000),
+       UINT64_C(0x5FEFFFFFFFFFFFFF)},
+      {UINT64_C(0x7FEFFFFFFFFFFFFF), UINT64_C(0xBFE0000000000000),
+       UINT64_C(0x1FF0000000000000)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC090CBFFFFFFFFFF),
+       UINT64_C(0x0000000000000001)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC090CC0000000000),
+       UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC090CC0000000001),
+       UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC090C7FFFFFFFFFF),
+       UINT64_C(0x0000000000000001)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC090C80000000000),
+       UINT64_C(0x0000000000000001)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC090C80000000001),
+       UINT64_C(0x0000000000000001)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC08FEFFFFFFFFFFF),
+       UINT64_C(0x0010000000000163)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC08FF00000000000),
+       UINT64_C(0x0010000000000000)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC08FF00000000001),
+       UINT64_C(0x000FFFFFFFFFFE9D)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0x408FFFFFFFFFFFFF),
+       UINT64_C(0x7FEFFFFFFFFFFD3A)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0x4090000000000000),
+       UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0x4090000000000001),
+       UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0xC090CC0000000000),
+       UINT64_C(0x8000000000000000)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0xC090C80000000000),
+       UINT64_C(0x0000000000000001)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0xC090C40000000000),
+       UINT64_C(0x8000000000000002)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0xC08FF80000000000),
+       UINT64_C(0x8008000000000000)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0x408FF80000000000),
+       UINT64_C(0xFFE0000000000000)},
+      {UINT64_C(0xC000000000000000), UINT64_C(0x4090040000000000),
+       UINT64_C(0xFFF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x3BDFFFFFFFFFFFFF),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x3BE0000000000000),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x3BE0000000000001),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0xBBDFFFFFFFFFFFFF),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0xBBE0000000000000),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0xBBE0000000000001),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x43DFFFFFFFFFFFFF),
+       UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x43E0000000000000),
+       UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0x43E0000000000001),
+       UINT64_C(0x7FF0000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0xC3DFFFFFFFFFFFFF),
+       UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0xC3E0000000000000),
+       UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x3FF0000000000001), UINT64_C(0xC3E0000000000001),
+       UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0x4087140000000000),
+       UINT64_C(0x6E16A09E667F3BCD)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0x4087180000000000),
+       UINT64_C(0x6E20000000000000)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC087140000000000),
+       UINT64_C(0x11C6A09E667F3BCD)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xC087180000000000),
+       UINT64_C(0x11C0000000000000)},
+      {UINT64_C(0x0000000000000000), UINT64_C(0x0000000000000000),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x8000000000000000), UINT64_C(0xC008000000000000),
+       UINT64_C(0xFFF0000000000000)},
+      {UINT64_C(0x8000000000000000), UINT64_C(0x4008000000000000),
+       UINT64_C(0x8000000000000000)},
+      {UINT64_C(0x7FF0000000000000), UINT64_C(0xBFF0000000000000),
+       UINT64_C(0x0000000000000000)},
+      {UINT64_C(0xFFF0000000000000), UINT64_C(0x4008000000000000),
+       UINT64_C(0xFFF0000000000000)},
+      {UINT64_C(0x7FF8000000000000), UINT64_C(0x0000000000000000),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FF0000000000000), UINT64_C(0x7FF8000000000000),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x7FF0000000000001), UINT64_C(0x4000000000000000),
+       UINT64_C(0x7FF8000000000000)},
+      {UINT64_C(0xBFF0000000000000), UINT64_C(0x7FF0000000000000),
+       UINT64_C(0x3FF0000000000000)},
+      {UINT64_C(0x3FE0000000000000), UINT64_C(0x7FF0000000000000),
+       UINT64_C(0x0000000000000000)},
+      {UINT64_C(0x4000000000000000), UINT64_C(0xFFF0000000000000),
+       UINT64_C(0x0000000000000000)},
+  };
+  for (const auto& c : cases) {
+    SCOPED_TRACE(::testing::Message() << "base_bits=" << std::hex << c.base
+                                      << " exponent_bits=" << c.exponent);
+    const uint64_t actual = F64ToBits(
+        iree_math_pow_f64(F64FromBits(c.base), F64FromBits(c.exponent)));
+    const uint64_t magnitude = c.expected & UINT64_C(0x7FFFFFFFFFFFFFFF);
+    if (magnitude == 0 || magnitude >= UINT64_C(0x7FF0000000000000)) {
+      EXPECT_EQ(actual, c.expected);
+    } else {
+      EXPECT_LE(actual > c.expected ? actual - c.expected : c.expected - actual,
+                UINT64_C(1));
+    }
+  }
+}
+
+// Identity precedence is independent of a NaN's sign, payload, or quiet bit.
+// The signed-zero/infinity rows exercise sign parity without floating equality
+// hiding a wrong zero sign.
+template <typename Float, typename Bits>
+void VerifyPowerLimits(Float (*power)(Float, Float), Float (*from_bits)(Bits),
+                       Bits (*to_bits)(Float)) {
+  constexpr Bits sign = Bits{1} << (sizeof(Bits) * 8 - 1);
+  const Bits infinity = to_bits(std::numeric_limits<Float>::infinity());
+  const Bits quiet_nan =
+      infinity | (Bits{1} << (std::numeric_limits<Float>::digits - 2));
+  for (Bits nan : {Bits(infinity | 1), Bits(quiet_nan | 17),
+                   Bits(sign | infinity | 1), Bits(sign | quiet_nan | 17)}) {
+    EXPECT_EQ(to_bits(power(from_bits(nan), Float{0})), to_bits(Float{1}));
+    EXPECT_EQ(to_bits(power(from_bits(nan), from_bits(sign))),
+              to_bits(Float{1}));
+    EXPECT_EQ(to_bits(power(Float{1}, from_bits(nan))), to_bits(Float{1}));
+    EXPECT_EQ(to_bits(power(from_bits(nan), Float{3})), quiet_nan);
+    EXPECT_EQ(to_bits(power(Float{-1}, from_bits(nan))), quiet_nan);
+  }
+  for (Bits negative : {Bits{0}, sign}) {
+    const Float zero = from_bits(negative);
+    const Float infinite = from_bits(negative | infinity);
+    EXPECT_EQ(to_bits(power(zero, Float{3})), negative);
+    EXPECT_EQ(to_bits(power(zero, Float{-3})), negative | infinity);
+    EXPECT_EQ(to_bits(power(infinite, Float{3})), negative | infinity);
+    EXPECT_EQ(to_bits(power(infinite, Float{-3})), negative);
+    for (Float even_or_fractional : {Float{2}, Float{0.5}}) {
+      EXPECT_EQ(to_bits(power(zero, even_or_fractional)), Bits{0});
+      EXPECT_EQ(to_bits(power(zero, -even_or_fractional)), infinity);
+      EXPECT_EQ(to_bits(power(infinite, even_or_fractional)), infinity);
+      EXPECT_EQ(to_bits(power(infinite, -even_or_fractional)), Bits{0});
+    }
+  }
+}
+
+TEST_F(ElementaryTest, PowerIdentitiesAndSignedLimits) {
+  VerifyPowerLimits(iree_math_pow_f32, F32FromBits, F32ToBits);
+  VerifyPowerLimits(iree_math_pow_f64, F64FromBits, F64ToBits);
+}
+
+TEST_F(ElementaryTest, PowerFrozenFiniteMappings) {
+  EXPECT_EQ(F32ToBits(iree_math_pow_f32(F32FromBits(UINT32_C(0x3F800111)),
+                                        F32FromBits(UINT32_C(0xCA078E37)))),
+            UINT32_C(0x0B53AB99));
+  EXPECT_EQ(F64ToBits(iree_math_pow_f64(
+                F64FromBits(UINT64_C(0x000FFFFFFFFFFFFF)), -0.5)),
+            UINT64_C(0x5FE0000000000000));
 }
 
 }  // namespace

@@ -241,11 +241,43 @@ static inline IREE_ATTRIBUTE_ALWAYS_INLINE void IREE_VM_BYTECODE_FLOAT_EXECUTE(
 }
 
 static inline IREE_ATTRIBUTE_ALWAYS_INLINE void IREE_VM_BYTECODE_FLOAT_EXECUTE(
+    frexp)(const IREE_VM_BYTECODE_FLOAT_RECORD(frexp) * record,
+           uint64_t* values) {
+  const IREE_VM_BYTECODE_FLOAT_TYPE source = IREE_VM_BYTECODE_FLOAT_PRIVATE(
+      from_bits)((IREE_VM_BYTECODE_FLOAT_BITS_TYPE)values[record->source_v8]);
+  int32_t exponent = 0;
+  const IREE_VM_BYTECODE_FLOAT_TYPE fraction =
+      IREE_VM_BYTECODE_FLOAT_FREXP(source, &exponent);
+  values[record->fraction_v8] =
+      IREE_VM_BYTECODE_FLOAT_PRIVATE(to_bits)(fraction);
+  values[record->exponent_v8] = (uint32_t)exponent;
+}
+
+static inline IREE_ATTRIBUTE_ALWAYS_INLINE void IREE_VM_BYTECODE_FLOAT_EXECUTE(
+    ldexp)(const IREE_VM_BYTECODE_FLOAT_RECORD(ldexp) * record,
+           uint64_t* values) {
+  const IREE_VM_BYTECODE_FLOAT_TYPE source = IREE_VM_BYTECODE_FLOAT_PRIVATE(
+      from_bits)((IREE_VM_BYTECODE_FLOAT_BITS_TYPE)values[record->source_v8]);
+  const int32_t exponent = (int32_t)(uint32_t)values[record->exponent_v8];
+  values[record->destination_v8] = IREE_VM_BYTECODE_FLOAT_PRIVATE(to_bits)(
+      IREE_VM_BYTECODE_FLOAT_LDEXP(source, exponent));
+}
+
+static inline IREE_ATTRIBUTE_ALWAYS_INLINE void IREE_VM_BYTECODE_FLOAT_EXECUTE(
     math_unary)(const IREE_VM_BYTECODE_FLOAT_RECORD(math_unary) * record,
                 uint64_t* values) {
   values[record->destination_v8] = IREE_VM_BYTECODE_FLOAT_MATH(unary)(
       record->selector_u8,
       (IREE_VM_BYTECODE_FLOAT_BITS_TYPE)values[record->source_v8]);
+}
+
+static inline IREE_ATTRIBUTE_ALWAYS_INLINE void IREE_VM_BYTECODE_FLOAT_EXECUTE(
+    math_binary)(const IREE_VM_BYTECODE_FLOAT_RECORD(math_binary) * record,
+                 uint64_t* values) {
+  values[record->destination_v8] = IREE_VM_BYTECODE_FLOAT_MATH(binary)(
+      record->selector_u8,
+      (IREE_VM_BYTECODE_FLOAT_BITS_TYPE)values[record->left_v8],
+      (IREE_VM_BYTECODE_FLOAT_BITS_TYPE)values[record->right_v8]);
 }
 
 static inline IREE_ATTRIBUTE_ALWAYS_INLINE void IREE_VM_BYTECODE_FLOAT_EXECUTE(

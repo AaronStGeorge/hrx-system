@@ -13,6 +13,7 @@
 
 #include "iree/base/internal/fpu_state.h"
 #include "iree/base/internal/math.h"
+#include "iree/math/remainder.h"
 #include "iree/testing/gtest.h"
 
 namespace loom {
@@ -117,6 +118,105 @@ static double EvaluateTurns(loom_scalar_type_t scalar_type,
       scalar_type,
       EvaluateTurnsFacts(scalar_type, kind,
                          loom_value_facts_exact_float(scalar_type, input)));
+}
+
+TEST(FloatFacts, BinaryExponentFamily) {
+  const iree_fpu_state_t saved =
+      iree_fpu_state_push(IREE_FPU_STATE_FLAG_MASK_EXCEPTIONS |
+                          IREE_FPU_STATE_FLAG_ROUND_TO_NEAREST);
+  struct Format {
+    // Source and result floating representation.
+    loom_scalar_type_t type;
+    // Smallest positive subnormal, expressed exactly in F64.
+    double minimum;
+    // Base-two exponent of the smallest subnormal.
+    int32_t power;
+  };
+  const Format formats[] = {
+      {LOOM_SCALAR_TYPE_F8E4M3, 0x1p-9, -9},
+      {LOOM_SCALAR_TYPE_F8E5M2, 0x1p-16, -16},
+      {LOOM_SCALAR_TYPE_F16, 0x1p-24, -24},
+      {LOOM_SCALAR_TYPE_BF16, 0x1p-133, -133},
+      {LOOM_SCALAR_TYPE_F32, 0x1p-149, -149},
+      {LOOM_SCALAR_TYPE_F64, 0x1p-1074, -1074},
+  };
+  for (const auto& format : formats) {
+    SCOPED_TRACE(loom_scalar_type_name(format.type));
+    for (double sign : {-1.0, 1.0}) {
+      auto input =
+          loom_value_facts_exact_float(format.type, sign * format.minimum);
+      loom_value_facts_mark_subgroup_uniform(&input);
+      loom_value_facts_t fraction = {}, exponent = {}, scaled = {};
+      loom_value_facts_eval_float_frexp(format.type, &input, &fraction,
+                                        &exponent);
+      EXPECT_EQ(sign * 0.5, ExactFloatValue(format.type, fraction));
+      EXPECT_EQ(format.power + 1, exponent.range_lo);
+      EXPECT_TRUE(loom_value_facts_is_exact(exponent));
+      EXPECT_TRUE(loom_value_facts_is_subgroup_uniform(fraction));
+      EXPECT_TRUE(loom_value_facts_is_subgroup_uniform(exponent));
+      loom_value_facts_eval_float_ldexp(format.type, &fraction, &exponent,
+                                        &scaled);
+      EXPECT_EQ(sign * format.minimum, ExactFloatValue(format.type, scaled));
+      for (double multiplier : {1.5, 2.5}) {
+        input = loom_value_facts_exact_float(format.type, sign * multiplier);
+        exponent = loom_value_facts_exact_i64(format.power);
+        loom_value_facts_eval_float_ldexp(format.type, &input, &exponent,
+                                          &scaled);
+        EXPECT_EQ(sign * 2 * format.minimum,
+                  ExactFloatValue(format.type, scaled));
+      }
+      input = loom_value_facts_exact_float(format.type, sign * 0.0);
+      loom_value_facts_eval_float_frexp(format.type, &input, &fraction,
+                                        &exponent);
+      EXPECT_EQ(DoubleBits(sign * 0.0),
+                DoubleBits(ExactFloatValue(format.type, fraction)));
+      EXPECT_EQ(0, exponent.range_lo);
+    }
+    auto input = loom_value_facts_known_nan();
+    loom_value_facts_t fraction = {}, exponent = {};
+    loom_value_facts_eval_float_frexp(format.type, &input, &fraction,
+                                      &exponent);
+    EXPECT_TRUE(loom_value_facts_is_nan(fraction));
+    EXPECT_TRUE(loom_value_facts_is_exact(exponent));
+    EXPECT_EQ(0, exponent.range_lo);
+    input = loom_value_facts_unknown();
+    loom_value_facts_eval_float_frexp(format.type, &input, &fraction,
+                                      &exponent);
+    EXPECT_FALSE(loom_value_facts_is_exact(fraction));
+    EXPECT_FALSE(loom_value_facts_is_exact(exponent));
+  }
+  iree_fpu_state_pop(saved);
+}
+
+TEST(FloatFacts, RemainderPreservesEachFormatsBinaryGrid) {
+  const iree_fpu_state_t saved =
+      iree_fpu_state_push(IREE_FPU_STATE_FLAG_MASK_EXCEPTIONS |
+                          IREE_FPU_STATE_FLAG_ROUND_TO_NEAREST);
+  const double minimums[] = {0x1p-9,   0x1p-16,  0x1p-24,
+                             0x1p-133, 0x1p-149, 0x1p-1074};
+  for (loom_scalar_type_t type = LOOM_SCALAR_TYPE_F8E4M3;
+       type <= LOOM_SCALAR_TYPE_F64; ++type) {
+    SCOPED_TRACE(loom_scalar_type_name(type));
+    for (double unit : {0.25, minimums[type - LOOM_SCALAR_TYPE_F8E4M3]}) {
+      for (double numerator_sign : {-1.0, 1.0}) {
+        for (double denominator_sign : {-1.0, 1.0}) {
+          for (int numerator : {0, 1, 6, 7}) {
+            const auto left = loom_value_facts_exact_float(
+                type, numerator_sign * numerator * unit);
+            const auto right =
+                loom_value_facts_exact_float(type, denominator_sign * 3 * unit);
+            loom_value_facts_t result = {};
+            loom_value_facts_eval_float_binary(type, &left, &right,
+                                               iree_math_fmod_f32,
+                                               iree_math_fmod_f64, &result);
+            EXPECT_EQ(DoubleBits(numerator_sign * (numerator % 3) * unit),
+                      DoubleBits(ExactFloatValue(type, result)));
+          }
+        }
+      }
+    }
+  }
+  iree_fpu_state_pop(saved);
 }
 
 TEST(FloatFacts, IndependentFloatClassPromises) {
@@ -1005,52 +1105,6 @@ TEST(FloatFacts, PreservesF64InstructionPrecision) {
   EXPECT_DOUBLE_EQ(ExactFloatValue(LOOM_SCALAR_TYPE_F64, result), 1.0);
 }
 
-TEST(FloatFacts, LogisticPreservesSelectedWidthNegativeTails) {
-  const float f32_result = loom_float_logistic_f32(-100.0f);
-  EXPECT_GT(f32_result, 0.0f);
-  EXPECT_EQ(std::fpclassify(f32_result), FP_SUBNORMAL);
-
-  const double f64_result = loom_float_logistic_f64(-710.0);
-  EXPECT_GT(f64_result, 0.0);
-  EXPECT_EQ(std::fpclassify(f64_result), FP_SUBNORMAL);
-}
-
-TEST(FloatFacts, LogisticHandlesFiniteAndExceptionalValues) {
-  const float f32_negative_infinity =
-      loom_float_logistic_f32(-std::numeric_limits<float>::infinity());
-  EXPECT_EQ(f32_negative_infinity, 0.0f);
-  EXPECT_FALSE(std::signbit(f32_negative_infinity));
-  EXPECT_EQ(loom_float_logistic_f32(-0.0f), 0.5f);
-  EXPECT_EQ(loom_float_logistic_f32(0.0f), 0.5f);
-  EXPECT_EQ(loom_float_logistic_f32(std::numeric_limits<float>::infinity()),
-            1.0f);
-  EXPECT_TRUE(std::isnan(
-      loom_float_logistic_f32(std::numeric_limits<float>::quiet_NaN())));
-  const float f32_negative = loom_float_logistic_f32(-1.0f);
-  EXPECT_GT(f32_negative, 0.0f);
-  EXPECT_LT(f32_negative, 1.0f);
-  const float f32_positive = loom_float_logistic_f32(1.0f);
-  EXPECT_GT(f32_positive, 0.0f);
-  EXPECT_LT(f32_positive, 1.0f);
-
-  const double f64_negative_infinity =
-      loom_float_logistic_f64(-std::numeric_limits<double>::infinity());
-  EXPECT_EQ(f64_negative_infinity, 0.0);
-  EXPECT_FALSE(std::signbit(f64_negative_infinity));
-  EXPECT_EQ(loom_float_logistic_f64(-0.0), 0.5);
-  EXPECT_EQ(loom_float_logistic_f64(0.0), 0.5);
-  EXPECT_EQ(loom_float_logistic_f64(std::numeric_limits<double>::infinity()),
-            1.0);
-  EXPECT_TRUE(std::isnan(
-      loom_float_logistic_f64(std::numeric_limits<double>::quiet_NaN())));
-  const double f64_negative = loom_float_logistic_f64(-1.0);
-  EXPECT_GT(f64_negative, 0.0);
-  EXPECT_LT(f64_negative, 1.0);
-  const double f64_positive = loom_float_logistic_f64(1.0);
-  EXPECT_GT(f64_positive, 0.0);
-  EXPECT_LT(f64_positive, 1.0);
-}
-
 TEST(FloatFacts, TurnsPreserveCardinalsAtEveryDeclaredWidth) {
   constexpr loom_scalar_type_t kScalarTypes[] = {
       LOOM_SCALAR_TYPE_F8E4M3, LOOM_SCALAR_TYPE_F8E5M2, LOOM_SCALAR_TYPE_F16,
@@ -1356,47 +1410,6 @@ static void ExpectFloatFma(loom_scalar_type_t scalar_type, double a, double b,
   }
 }
 
-TEST(FloatFacts, NarrowFmaRoundsOnceAtMidpoints) {
-  // 129/128 * 3/2 is halfway between two BF16 values. A tiny signed addend
-  // selects the side even when it disappears in both F32 and F64 arithmetic.
-  for (const double sign : {1.0, -1.0}) {
-    ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, sign * 0x1.02p0, 1.5, -sign * 0x1p-30,
-                   sign * 0x1.82p0);
-    ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, sign * 0x1.02p0, 1.5,
-                   -sign * 0x1p-133, sign * 0x1.82p0);
-    ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, sign * 0x1.06p0, 1.5, sign * 0x1p-133,
-                   sign * 0x1.8ap0);
-    ExpectFloatFma(LOOM_SCALAR_TYPE_F16, sign * 0x1.004p0, 1.5, -sign * 0x1p-24,
-                   sign * 0x1.804p0);
-    ExpectFloatFma(LOOM_SCALAR_TYPE_F8E5M2, -sign * 0x1.4p7, 0x1.8p6,
-                   sign * 0x1.4p-14, -sign * 0x1.cp13);
-  }
-  // Exact midpoints retain ties-to-even rather than always rounding away.
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1.02p0, 1.5, 0.0, 0x1.84p0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1.06p0, 1.5, 0.0, 0x1.88p0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 1.125, 1.5, 0.0, 1.75);
-}
-
-TEST(FloatFacts, NarrowFmaPreservesSubnormalAndOverflowBoundaries) {
-  // Products may exceed the narrow range before cancellation by the addend.
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1.fep127, 2.0, -0x1.fep127,
-                 0x1.fep127);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F16, 65504.0, 2.0, -65504.0, 65504.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E5M2, 57344.0, 2.0, -57344.0, 57344.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 448.0, 2.0, -448.0, 448.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 448.0, 2.0, 0.0, 448.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F16, 65504.0, 2.0, 0.0, INFINITY);
-
-  // Subnormal result rounding, including a tie to zero and a tie to two units.
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1p-133, 0.5, 0.0, 0.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, -0x1p-133, 0.5, -0.0, -0.0);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1p-133, 0.5, 0x1p-133, 0x1p-132);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F16, 0x1p-24, 0.5, 0x1p-24, 0x1p-23);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E5M2, 0x1p-16, 0.5, 0x1p-16, 0x1p-15);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 0x1p-9, 0.5, 0x1p-9, 0x1p-8);
-  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1p-133, 0x1p-133, 1.0, 1.0);
-}
-
 TEST(FloatFacts, FmaPreservesSpecialValuesAndDynamicOperands) {
   for (const auto scalar_type :
        {LOOM_SCALAR_TYPE_F8E4M3, LOOM_SCALAR_TYPE_F8E5M2, LOOM_SCALAR_TYPE_F16,
@@ -1421,6 +1434,14 @@ TEST(FloatFacts, FmaPreservesSpecialValuesAndDynamicOperands) {
       EXPECT_TRUE(loom_value_facts_is_unknown(result));
     }
   }
+  // Each narrow format retains its own final rounding after shared evaluation.
+  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E4M3, 1.125, 1.5, 0.0, 1.75);
+  ExpectFloatFma(LOOM_SCALAR_TYPE_F8E5M2, 0x1p-16, 0.5, 0x1p-16, 0x1p-15);
+  ExpectFloatFma(LOOM_SCALAR_TYPE_F16, 0x1.004p0, 1.5, -0x1p-24, 0x1.804p0);
+  ExpectFloatFma(LOOM_SCALAR_TYPE_BF16, 0x1.02p0, 1.5, -0x1p-133, 0x1.82p0);
+  // An F64 intermediate alone rounds this subnormal F32 result twice.
+  ExpectFloatFma(LOOM_SCALAR_TYPE_F32, 0x20201p-92, 0x1fe01p-92, 0x1p-130,
+                 0x1.00002p-130);
   // The binary64 path keeps true fused arithmetic instead of staging a product.
   ExpectFloatFma(LOOM_SCALAR_TYPE_F64, 0x1.0000002p0, 0x1.ffffffcp-1, -1.0,
                  -0x1p-54);

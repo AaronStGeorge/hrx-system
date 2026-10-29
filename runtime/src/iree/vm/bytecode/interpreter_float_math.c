@@ -6,11 +6,16 @@
 
 #include "iree/vm/bytecode/interpreter_float_math.h"
 
-#include <math.h>
 #include <string.h>
 
+#include "iree/math/activation.h"
+#include "iree/math/error_functions.h"
 #include "iree/math/exponential.h"
+#include "iree/math/hyperbolic.h"
+#include "iree/math/inverse_trigonometry.h"
+#include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
+#include "iree/math/rounding.h"
 #include "iree/math/trigonometry.h"
 #include "iree/vm/bytecode/wire/core.h"
 
@@ -65,17 +70,107 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits) {
   const float source = iree_vm_bytecode_float_math_f32_from_bits(source_bits);
   float result = 0.0f;
   switch (selector) {
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SQRT:
+      result = iree_math_sqrt_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_RSQRT:
+      result = iree_math_rsqrt_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP:
+      result = iree_math_exp_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP2:
+      result = iree_math_exp2_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SINH:
+      result = iree_math_sinh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_COSH:
+      result = iree_math_cosh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_TANH:
+      result = iree_math_tanh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ASINH:
+      result = iree_math_asinh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ACOSH:
+      result = iree_math_acosh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ATANH:
+      result = iree_math_atanh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SIN:
+      result = iree_math_sin_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_COS:
+      result = iree_math_cos_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_TAN:
+      result = iree_math_tan_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ASIN:
+      result = iree_math_asin_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ACOS:
+      result = iree_math_acos_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ATAN:
+      result = iree_math_atan_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_LOGISTIC:
+      result = iree_math_logistic_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SILU:
+      result = iree_math_silu_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SOFTPLUS:
+      result = iree_math_softplus_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_GELU_ERF:
+      result = iree_math_gelu_erf_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_GELU_TANH:
+      result = iree_math_gelu_tanh_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ERF:
+      result = iree_math_erf_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ERFC:
+      result = iree_math_erfc_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXPM1:
+      result = iree_math_expm1_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_LOG:
+      result = iree_math_log_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_LOG2:
+      result = iree_math_log2_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_LOG10:
+      result = iree_math_log10_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_LOG1P:
+      result = iree_math_log1p_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_CBRT:
+      result = iree_math_cbrt_f32(source);
+      break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_CEIL:
-      result = ceilf(source);
+      result = iree_math_ceil_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_FLOOR:
-      result = floorf(source);
+      result = iree_math_floor_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_ROUND_EVEN:
-      result = nearbyintf(source);
+      result = iree_math_round_even_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ROUND_AWAY:
+      result = iree_math_round_away_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_TRUNC:
-      result = truncf(source);
+      result = iree_math_trunc_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP2_APPROX:
       result = iree_math_exp2_f32_approx(source);
@@ -113,20 +208,160 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
   const double source = iree_vm_bytecode_float_math_f64_from_bits(source_bits);
   double result = 0.0;
   switch (selector) {
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SQRT:
+      result = iree_math_sqrt_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_RSQRT:
+      result = iree_math_rsqrt_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXP:
+      result = iree_math_exp_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXP2:
+      result = iree_math_exp2_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SINH:
+      result = iree_math_sinh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_COSH:
+      result = iree_math_cosh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_TANH:
+      result = iree_math_tanh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ASINH:
+      result = iree_math_asinh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ACOSH:
+      result = iree_math_acosh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ATANH:
+      result = iree_math_atanh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SIN:
+      result = iree_math_sin_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_COS:
+      result = iree_math_cos_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_TAN:
+      result = iree_math_tan_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SIN_TURNS:
+      result = iree_math_sin_turns_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_COS_TURNS:
+      result = iree_math_cos_turns_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ASIN:
+      result = iree_math_asin_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ACOS:
+      result = iree_math_acos_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ATAN:
+      result = iree_math_atan_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_LOGISTIC:
+      result = iree_math_logistic_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SILU:
+      result = iree_math_silu_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SOFTPLUS:
+      result = iree_math_softplus_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_GELU_ERF:
+      result = iree_math_gelu_erf_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_GELU_TANH:
+      result = iree_math_gelu_tanh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ERF:
+      result = iree_math_erf_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ERFC:
+      result = iree_math_erfc_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXPM1:
+      result = iree_math_expm1_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_LOG:
+      result = iree_math_log_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_LOG2:
+      result = iree_math_log2_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_LOG10:
+      result = iree_math_log10_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_LOG1P:
+      result = iree_math_log1p_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_CBRT:
+      result = iree_math_cbrt_f64(source);
+      break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_CEIL:
-      result = ceil(source);
+      result = iree_math_ceil_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_FLOOR:
-      result = floor(source);
+      result = iree_math_floor_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_ROUND_EVEN:
-      result = nearbyint(source);
+      result = iree_math_round_even_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ROUND_AWAY:
+      result = iree_math_round_away_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_TRUNC:
-      result = trunc(source);
+      result = iree_math_trunc_f64(source);
       break;
     default:
       IREE_ASSERT_UNREACHABLE("float.math.f64 selector was not verified");
+      return 0;
+  }
+  return iree_vm_bytecode_float_math_f64_to_bits(result);
+}
+
+IREE_ATTRIBUTE_NOINLINE uint32_t iree_vm_bytecode_float_math_binary_f32(
+    uint8_t selector, uint32_t left_bits, uint32_t right_bits) {
+  const float left = iree_vm_bytecode_float_math_f32_from_bits(left_bits);
+  const float right = iree_vm_bytecode_float_math_f32_from_bits(right_bits);
+  float result;
+  switch (selector) {
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_POW:
+      result = iree_math_pow_f32(left, right);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_ATAN2:
+      result = iree_math_atan2_f32(left, right);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_GELU_LOGISTIC:
+      result = iree_math_gelu_logistic_f32(left, right);
+      break;
+    default:
+      IREE_ASSERT_UNREACHABLE("binary math selector was not verified");
+      return 0;
+  }
+  return iree_vm_bytecode_float_math_f32_to_bits(result);
+}
+
+IREE_ATTRIBUTE_NOINLINE uint64_t iree_vm_bytecode_float_math_binary_f64(
+    uint8_t selector, uint64_t left_bits, uint64_t right_bits) {
+  const double left = iree_vm_bytecode_float_math_f64_from_bits(left_bits);
+  const double right = iree_vm_bytecode_float_math_f64_from_bits(right_bits);
+  double result;
+  switch (selector) {
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_POW:
+      result = iree_math_pow_f64(left, right);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_ATAN2:
+      result = iree_math_atan2_f64(left, right);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_GELU_LOGISTIC:
+      result = iree_math_gelu_logistic_f64(left, right);
+      break;
+    default:
+      IREE_ASSERT_UNREACHABLE("binary math selector was not verified");
       return 0;
   }
   return iree_vm_bytecode_float_math_f64_to_bits(result);

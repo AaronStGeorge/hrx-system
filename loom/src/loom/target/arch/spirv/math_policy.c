@@ -152,6 +152,13 @@ static const loom_target_math_policy_direct_rule_t
             LOOM_TARGET_MATH_RECIPE_UNKNOWN, LOOM_SPIRV_MATH_EVALUATION_NONE,
             LOOM_SPIRV_MATH_CONSTRAINT_OP_NATIVE_ARITHMETIC,
             LOOM_SPIRV_MATH_CONSTRAINT_NONE),
+        [LOOM_TARGET_MATH_OP_REMF] = LOOM_SPIRV_MATH_DIRECT_RULE(
+            LOOM_SCALAR_TYPE_SET_F16 | LOOM_SCALAR_TYPE_SET_F32 |
+                LOOM_SCALAR_TYPE_SET_F64,
+            LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
+            LOOM_TARGET_MATH_RECIPE_UNKNOWN, LOOM_SPIRV_MATH_EVALUATION_NONE,
+            LOOM_SPIRV_MATH_CONSTRAINT_OP_NATIVE_ARITHMETIC,
+            LOOM_SPIRV_MATH_CONSTRAINT_NONE),
 #define LOOM_SPIRV_MATH_TRIGONOMETRIC_RULE(op_)                            \
   [LOOM_TARGET_MATH_OP_##op_] = LOOM_SPIRV_MATH_DIRECT_RULE(               \
       LOOM_SCALAR_TYPE_SET_F16 | LOOM_SCALAR_TYPE_SET_F32,                 \
@@ -255,7 +262,7 @@ static const loom_target_math_policy_direct_rule_t
 
 enum loom_spirv_math_rule_e {
   LOOM_SPIRV_MATH_RULE_ARITHMETIC_BF16 = 0,
-  LOOM_SPIRV_MATH_RULE_DIV_NARROW,
+  LOOM_SPIRV_MATH_RULE_QUOTIENT_NARROW,
   LOOM_SPIRV_MATH_RULE_INVERSE_NARROW,
   LOOM_SPIRV_MATH_RULE_TRIGONOMETRIC_NARROW,
 #define LOOM_SPIRV_MATH_ACTIVATION_RULE_ENUM(op_, recipe_, required_fastmath_, \
@@ -277,7 +284,7 @@ static const loom_target_math_policy_rule_t
                 .decision_constraint =
                     LOOM_SPIRV_MATH_CONSTRAINT_RECIPE_WIDEN_F32_ROUND,
             },
-        [LOOM_SPIRV_MATH_RULE_DIV_NARROW] =
+        [LOOM_SPIRV_MATH_RULE_QUOTIENT_NARROW] =
             {
                 .match =
                     LOOM_SPIRV_MATH_MATCH(LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
@@ -352,7 +359,10 @@ static const loom_target_math_policy_rule_span_t
             LOOM_SPIRV_MATH_RULE_ARITHMETIC_BF16, 1,
             LOOM_SPIRV_MATH_CONSTRAINT_ELEMENT_F16_F32_F64),
         [LOOM_TARGET_MATH_OP_DIVF] = LOOM_SPIRV_MATH_SPAN(
-            LOOM_SPIRV_MATH_RULE_DIV_NARROW, 1,
+            LOOM_SPIRV_MATH_RULE_QUOTIENT_NARROW, 1,
+            LOOM_SPIRV_MATH_CONSTRAINT_ELEMENT_F16_F32_F64),
+        [LOOM_TARGET_MATH_OP_REMF] = LOOM_SPIRV_MATH_SPAN(
+            LOOM_SPIRV_MATH_RULE_QUOTIENT_NARROW, 1,
             LOOM_SPIRV_MATH_CONSTRAINT_ELEMENT_F16_F32_F64),
 #define LOOM_SPIRV_MATH_FALLBACK(op_, constraint_) \
   [LOOM_TARGET_MATH_OP_##op_] =                    \

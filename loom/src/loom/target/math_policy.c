@@ -387,7 +387,20 @@ bool loom_target_math_policy_prefers_fma(
   _(ASINHF, op_asinhf, "asinhf")                         \
   _(ACOSHF, op_acoshf, "acoshf")                         \
   _(ATANHF, op_atanhf, "atanhf")                         \
-  _(DIVF, op_divf, "divf")
+  _(DIVF, op_divf, "divf")                               \
+  _(CBRTF, op_cbrtf, "cbrtf")                            \
+  _(LOG10F, op_log10f, "log10f")                         \
+  _(LOG1PF, op_log1pf, "log1pf")                         \
+  _(EXPM1F, op_expm1f, "expm1f")                         \
+  _(SINHF, op_sinhf, "sinhf")                            \
+  _(COSHF, op_coshf, "coshf")                            \
+  _(ASINF, op_asinf, "asinf")                            \
+  _(ACOSF, op_acosf, "acosf")                            \
+  _(ATANF, op_atanf, "atanf")                            \
+  _(ATAN2F, op_atan2f, "atan2f")                         \
+  _(TANF, op_tanf, "tanf")                               \
+  _(ERFCF, op_erfcf, "erfcf")                            \
+  _(REMF, op_remf, "remf")
 
 #define LOOM_TARGET_MATH_LANE_DOMAIN_NAMES(_) \
   _(UNKNOWN, lane_unknown, "unknown")         \

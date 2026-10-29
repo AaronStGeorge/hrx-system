@@ -26,6 +26,12 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits);
 IREE_ATTRIBUTE_NOINLINE uint64_t
 iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits);
 
+// Evaluates a verified binary math selector over raw IEEE payloads.
+IREE_ATTRIBUTE_NOINLINE uint32_t iree_vm_bytecode_float_math_binary_f32(
+    uint8_t selector, uint32_t left_bits, uint32_t right_bits);
+IREE_ATTRIBUTE_NOINLINE uint64_t iree_vm_bytecode_float_math_binary_f64(
+    uint8_t selector, uint64_t left_bits, uint64_t right_bits);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

@@ -6,6 +6,7 @@
 
 from itertools import product
 
+import pytest
 from iree.vm.bytecode.spec.isa import ControlFlow, FieldRole, Suspension
 from iree.vm.bytecode.spec.isa.core.buffer import BUFFER_RODATA_LOAD
 from iree.vm.bytecode.spec.isa.core.constant import CONSTANT_I32, CONSTANT_I64
@@ -14,9 +15,11 @@ from iree.vm.bytecode.spec.isa.core.float import (
     FloatClampSemantics,
     FloatClassifySemantics,
     FloatCompareSemantics,
+    FloatDecomposeSemantics,
     FloatFmaSemantics,
     FloatMathSemantics,
     FloatMinmaxSemantics,
+    FloatScaleSemantics,
     FloatUnarySemantics,
 )
 from iree.vm.bytecode.spec.isa.core.integer import (
@@ -29,7 +32,7 @@ from iree.vm.bytecode.spec.isa.core.rules import FieldRule, RecordRuleKind, Stat
 from iree.vm.bytecode.spec.isa.core.stack import MEMORY_FORMAT_SELECTOR
 from iree.vm.bytecode.spec.specification import SPECIFICATION
 
-from loom.dialect.scalar import conversion
+from loom.dialect.scalar import conversion, math
 from loom.ir import ScalarType, ScalarTypeKind
 from loom.target.arch.vm.contracts import (
     VM_CORE_CONTRACT_DIALECT_OPS,
@@ -38,6 +41,7 @@ from loom.target.arch.vm.contracts import (
 from loom.target.arch.vm.descriptors import VM_CORE_DESCRIPTOR_SET
 from loom.target.contracts import (
     LOWER_EMIT_FLAG_RECORD_SOURCE_MEMORY,
+    AttrProject,
     DescriptorRule,
     compile_lower_rule_set,
 )
@@ -73,6 +77,8 @@ def test_scalar_packets_preserve_spec_encoding_and_semantic_types():
                 FloatClassifySemantics,
                 FloatClampSemantics,
                 FloatFmaSemantics,
+                FloatDecomposeSemantics,
+                FloatScaleSemantics,
                 FloatMathSemantics,
             ),
         )
@@ -96,6 +102,8 @@ def test_scalar_packets_preserve_spec_encoding_and_semantic_types():
                     FloatMinmaxSemantics,
                     FloatClampSemantics,
                     FloatFmaSemantics,
+                    FloatDecomposeSemantics,
+                    FloatScaleSemantics,
                     FloatMathSemantics,
                 ),
             )
@@ -114,6 +122,14 @@ def test_scalar_packets_preserve_spec_encoding_and_semantic_types():
             else scalar_types[instruction.semantics.bit_width]
         )
         assert result_type.element_type is expected_type
+        if isinstance(instruction.semantics, FloatDecomposeSemantics):
+            assert len(descriptor.asm_forms[0].result_value_types) == 2
+            assert (
+                descriptor.asm_forms[0].result_value_types[1].element_type
+                is ScalarTypeKind.I32
+            )
+        else:
+            assert len(descriptor.asm_forms[0].result_value_types) == 1
 
 
 def test_register_fields_preserve_the_wire_bank_and_position():
@@ -363,6 +379,32 @@ def test_constant_immediates_preserve_the_wire_bits_and_alignment():
                     )
                     == (value >> (relative_offset * 8)) & 0xFFFFFFFF
                 )
+
+
+def test_float_attribute_projection_matches_the_constant_carrier():
+    constants = {
+        descriptor.immediates[0].bit_width: descriptor
+        for descriptor in VM_CORE_DESCRIPTOR_SET.descriptors
+        if descriptor.op_kind is DescriptorOpKind.CONST
+    }
+    for width, descriptor in constants.items():
+        projection = AttrProject.float_bits("scale", width)
+        projection.validate(
+            math.scalar_geluf, VM_CORE_DESCRIPTOR_SET, descriptor, "bits"
+        )
+        with pytest.raises(ValueError, match="matching the projection width"):
+            projection.validate(
+                math.scalar_geluf,
+                VM_CORE_DESCRIPTOR_SET,
+                constants[96 - width],
+                "bits",
+            )
+        with pytest.raises(ValueError, match="requires an F64 attr"):
+            AttrProject.float_bits("variant", width).validate(
+                math.scalar_geluf, VM_CORE_DESCRIPTOR_SET, descriptor, "bits"
+            )
+    with pytest.raises(ValueError, match="requires width 32 or 64"):
+        AttrProject.float_bits("scale", 16)
 
 
 def test_numeric_conversions_cover_the_source_type_relations():
