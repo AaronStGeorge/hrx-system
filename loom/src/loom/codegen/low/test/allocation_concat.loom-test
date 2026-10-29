@@ -403,15 +403,16 @@ copy %seed -> %upper: materialized
 
 // ====
 
-// RUN: emit low-allocation-query @loop_live_source_reserves_concat spill-count values=%source,%blocker,%high,%low,%pair fixed=%blocker:physical_register:1:1
+// RUN: emit low-allocation-query @loop_live_source_reserves_concat spill-count values=%guard,%blocker,%source,%high,%low,%pair
 
 test.target<low_core> @target
 
-// The loop-live source cannot alias the future pair, but its unique producer
-// path reserves l0 before ordinary source placement. The source takes r3 while
-// the fixed blocker occupies r1, leaving r0 and r2 for the pair. Without the
-// early reservation, the source claims r0 and neither pair remains available.
-low.func.def schedule(locked) target<test.low.core>(@target) @loop_live_source_reserves_concat(%condition: reg<test.i32>, %source: reg<test.explicit32>, %blocker: reg<test.explicit32>) -> (reg<test.explicit32>) asm {
+// Saving the guard releases l0 after the blocker has taken r1. The loop-live
+// constant reserves that pair before choosing its own storage in r3. Without
+// early reservation, it claims r0 and neither declared pair remains available.
+low.func.def schedule(locked) target<test.low.core>(@target) @loop_live_source_reserves_concat(%condition: reg<test.i32>, %guard: reg<test.explicit32 x2>, %blocker: reg<test.explicit32>) -> (reg<test.explicit32>, reg<test.i32 x2>) asm {
+  %saved_guard = copy %guard : reg<test.explicit32 x2> -> reg<test.i32 x2>
+  %source = test.const.explicit32 23
   low.br ^loop
 ^loop:
   low.cond_br %condition, ^body, ^exit : reg<test.i32>
@@ -421,13 +422,14 @@ low.func.def schedule(locked) target<test.low.core>(@target) @loop_live_source_r
   %pair = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
   low.br ^loop
 ^exit:
-  return %blocker
+  return %blocker, %saved_guard
 }
 
 // ----
 spills: 0
-value %source: test.explicit32 -> physical_register[3:1]
+value %guard: test.explicit32 -> physical_register[4:2]
 value %blocker: test.explicit32 -> physical_register[1:1]
+value %source: test.explicit32 -> physical_register[3:1]
 value %high: test.explicit32 -> physical_register[2:1]
 value %low: test.explicit32 -> physical_register[0:1]
 value %pair: test.explicit32 -> physical_register[4:2]
