@@ -241,7 +241,7 @@ value %values: test.phys -> physical_register[0:4]
 
 // ====
 
-// RUN: emit low-allocation-query @nested_concat_backedge spill-count values=%state,%lane0,%lane1,%low,%lane2,%lane3,%high,%tuple fixed=%state:physical_register:0:4 fixed=%seed:physical_register:8:1
+// RUN: emit low-allocation-query @nested_concat_backedge spill-count values=%state,%lane0,%lane1,%low,%lane2,%lane3,%high,%tuple
 
 test.target<low_core> @target
 
@@ -278,7 +278,7 @@ value %tuple: test.phys -> physical_register[0:4]
 
 // ====
 
-// RUN: emit low-allocation-query @nested_concat_preserves_blocker spill-count values=%state,%blocker,%lane0,%lane1,%low,%lane2,%lane3,%high,%tuple fixed=%state:physical_register:0:4 fixed=%seed:physical_register:8:1
+// RUN: emit low-allocation-query @nested_concat_preserves_blocker spill-count values=%state,%blocker,%lane0,%lane1,%low,%lane2,%lane3,%high,%tuple
 
 test.target<low_core> @target
 
@@ -310,9 +310,9 @@ value %blocker: test.phys -> physical_register[0:1]
 value %lane0: test.phys -> physical_register[2:1]
 value %lane1: test.phys -> physical_register[3:1]
 value %low: test.phys -> physical_register[2:2]
-value %lane2: test.phys -> physical_register[4:1]
-value %lane3: test.phys -> physical_register[5:1]
-value %high: test.phys -> physical_register[4:2]
+value %lane2: test.phys -> physical_register[6:1]
+value %lane3: test.phys -> physical_register[7:1]
+value %high: test.phys -> physical_register[6:2]
 value %tuple: test.phys -> physical_register[0:4]
 
 // ====
