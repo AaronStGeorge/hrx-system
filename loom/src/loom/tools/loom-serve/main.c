@@ -216,8 +216,9 @@ static int loom_serve_main_agents_markdown(void) {
 
 static int loom_serve_main_version(
     const loom_serve_build_identity_t* build_identity) {
-  return fprintf(stdout, "loom-serve %s (commit %s)\n", build_identity->version,
-                 build_identity->commit) < 0
+  return fprintf(stdout, "loom-serve %.*s (commit %.*s)\n",
+                 (int)build_identity->version_length, build_identity->version,
+                 (int)build_identity->commit_length, build_identity->commit) < 0
              ? EXIT_FAILURE
              : EXIT_SUCCESS;
 }
@@ -227,7 +228,7 @@ int loom_serve_main(int argc, char** argv,
   static char usage[4096];
   const int usage_length = snprintf(
       usage, sizeof(usage),
-      "loom-serve %s (commit %s)\n"
+      "loom-serve %.*s (commit %.*s)\n"
       "\n"
       "Serves source-defined models over HTTP with shared devices and "
       "workers.\n"
@@ -249,7 +250,9 @@ int loom_serve_main(int argc, char** argv,
       "Repeated --listen bindings share one server. /v1/status reports model\n"
       "readiness; /v1/models lists prepared deployments and capabilities.\n"
       "HTTP and model loading assume trusted clients and source packages.\n",
+      (int)configuration->build_identity.version_length,
       configuration->build_identity.version,
+      (int)configuration->build_identity.commit_length,
       configuration->build_identity.commit);
   if (usage_length < 0 || (iree_host_size_t)usage_length >= sizeof(usage)) {
     fprintf(stderr, "loom-serve build identity exceeds help capacity.\n");

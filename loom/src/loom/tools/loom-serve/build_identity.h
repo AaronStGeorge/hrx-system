@@ -7,6 +7,8 @@
 #ifndef LOOM_TOOLS_LOOM_SERVE_BUILD_IDENTITY_H_
 #define LOOM_TOOLS_LOOM_SERVE_BUILD_IDENTITY_H_
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -15,8 +17,12 @@ extern "C" {
 typedef struct loom_serve_build_identity_t {
   // Loom package version, or "development" for an unstamped build.
   const char* version;
+  // Byte length of |version|, which need not end at its NUL terminator.
+  size_t version_length;
   // Source commit hash, or "unknown" for an unstamped build.
   const char* commit;
+  // Byte length of |commit|, which need not end at its NUL terminator.
+  size_t commit_length;
 } loom_serve_build_identity_t;
 
 // Returns the identity embedded by the final executable link.
