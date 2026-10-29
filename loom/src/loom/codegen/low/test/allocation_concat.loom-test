@@ -203,12 +203,12 @@ copy %tuple -> %copy: coalesced
 
 // ====
 
-// RUN: emit low-allocation-query @partial_concat_preserves_tied_source spill-count values=%low,%high,%tuple,%result fixed=%low:target_id:0:2 fixed=%high:target_id:4:2
+// RUN: emit low-allocation-query @concat_preserves_source_across_destructive_write spill-count values=%low,%high,%tuple,%result
 
 test.target<low_core> @target
 
 // A destructive consumer cannot overwrite a source retained after the tuple.
-low.func.def target<test.low.core>(@target) @partial_concat_preserves_tied_source(%low: reg<test.i32 x2>, %high: reg<test.i32 x2>) -> (reg<test.i32 x4>, reg<test.i32 x2>) asm {
+low.func.def target<test.low.core>(@target) @concat_preserves_source_across_destructive_write(%low: reg<test.i32 x2>, %high: reg<test.i32 x2>) -> (reg<test.i32 x4>, reg<test.i32 x2>) asm {
   %tuple = concat(%low, %high) : (reg<test.i32 x2>, reg<test.i32 x2>) -> reg<test.i32 x4>
   %result = test.early_tied.v4i32 %tuple
   return %result, %low
@@ -216,10 +216,10 @@ low.func.def target<test.low.core>(@target) @partial_concat_preserves_tied_sourc
 
 // ----
 spills: 0
-value %low: test.i32 -> target_id[0:2]
-value %high: test.i32 -> target_id[4:2]
-value %tuple: test.i32 -> target_id[2:4]
-value %result: test.i32 -> target_id[2:4]
+value %low: test.i32 -> target_id[4:2]
+value %high: test.i32 -> target_id[2:2]
+value %tuple: test.i32 -> target_id[0:4]
+value %result: test.i32 -> target_id[0:4]
 
 // ====
 
