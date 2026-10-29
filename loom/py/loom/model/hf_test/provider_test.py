@@ -176,6 +176,7 @@ def test_gate_refreshes_credentials_and_preserves_selected_revision(tmp_path):
             assert delay == 5
             assert not cancelled.is_set()
             hub.credentials.write_text("fixture-second")
+            hub.valid_tokens = {"fixture-second"}
             hub.approved = True
 
         provider = HuggingFace(

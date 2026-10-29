@@ -187,7 +187,6 @@ iree_py_test(
     ],
     args = ["loom.model.fetch_transfer_test"],
     main = "pytest_style_runner.py",
-    pyc_collection = "include_pyc",
     deps = [
         ":fetch_source",
         ":fetch_transfer",

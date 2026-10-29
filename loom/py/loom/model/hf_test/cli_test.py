@@ -7,13 +7,12 @@
 import io
 import json
 import os
-import selectors
 import signal
 import subprocess
 import sys
 import threading
 import unittest
-from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 
@@ -75,17 +74,16 @@ def test_live_progress_precedes_transfer_completion(tmp_path, interrupt):
         _publish(hub)
         hub.approved = True
         hub.held_file = "code.loom"
-        output = tmp_path / "output"
+        output = tmp_path / "fixture/access"
         with subprocess.Popen(
             [
                 sys.executable,
                 "-m",
                 "loom.model.fetch_main",
-                *_arguments(
-                    hub, "--no-lock", "--json", "--no-input", "--output=" + str(output)
-                ),
+                *_arguments(hub, "--no-lock", "--json", "--no-input"),
             ],
             env=hub.environment(),
+            cwd=tmp_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -220,75 +218,55 @@ def test_offline_does_not_enter_an_explicit_access_wait(tmp_path):
         assert hub.requests == []
 
 
-@contextmanager
-def _terminal(hub, *arguments):
+def test_terminal_approval_refreshes_login_and_resumes_exact_selection(tmp_path):
     if os.name == "nt":
         raise unittest.SkipTest("this case exercises POSIX PTY mode restoration")
     import pty
     import termios
 
-    master, slave = pty.openpty()
-    original = termios.tcgetattr(slave)
-    try:
-        with subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "loom.model.fetch_main",
-                *_arguments(hub, *arguments),
-            ],
-            env=hub.environment(),
-            cwd=hub.cache_dir.parent,
-            stdin=slave,
-            stderr=slave,
-            stdout=subprocess.PIPE,
-        ) as process:
-            try:
-                yield process, master, slave
-            finally:
-                if process.poll() is None:
-                    process.kill()
-                process.wait()
-            assert termios.tcgetattr(slave) == original
-    finally:
-        os.close(master)
-        os.close(slave)
-
-
-def _await_controls(process, master):
-    content = b""
-    with selectors.DefaultSelector() as selector:
-        selector.register(master, selectors.EVENT_READ, "terminal")
-        selector.register(process.stdout, selectors.EVENT_READ, "result")
-        while b"[q / Ctrl-C] Cancel" not in content:
-            for key, _ in selector.select():
-                data = os.read(key.fd, 4096)
-                if key.data == "result" or not data:
-                    raise AssertionError(
-                        f"CLI exited before controls: {content!r} {data!r}"
-                    )
-                content += data
-    return content.decode()
-
-
-def test_terminal_approval_refreshes_login_and_resumes_exact_selection(tmp_path):
     with running_hub(tmp_path) as hub:
         _publish(hub)
-        output = tmp_path / "fixture/access"
-        with _terminal(hub, "--no-lock") as (
-            process,
-            master,
-            _,
-        ):
-            panel = _await_controls(process, master)
-            assert "Effective account: first" in panel
-            assert hub.endpoint + "/fixture/model" in panel
-            assert not output.exists()
-            hub.credentials.write_text("fixture-second")
-            hub.approved = True
-            os.write(master, b"\r")
-            result, _ = process.communicate()
-            assert process.returncode == 0, result
+        output = tmp_path / "output"
+        master, slave = pty.openpty()
+        original = termios.tcgetattr(slave)
+        try:
+            with (
+                os.fdopen(os.dup(slave), "r") as input,
+                os.fdopen(os.dup(slave), "w") as terminal,
+                patch("sys.stdin", input),
+            ):
+
+                class ApproveLogin(io.StringIO):
+                    def isatty(self):
+                        return terminal.isatty()
+
+                    def write(self, content):
+                        terminal.write(content)
+                        count = super().write(content)
+                        if "[q / Ctrl-C] Cancel" in content:
+                            assert self.getvalue().count("[q / Ctrl-C] Cancel") == 1
+                            assert "Effective account: first" in self.getvalue()
+                            assert hub.endpoint + "/fixture/model" in self.getvalue()
+                            assert not output.exists()
+                            hub.credentials.write_text("fixture-second")
+                            hub.valid_tokens = {"fixture-second"}
+                            hub.approved = True
+                            os.write(master, b"\r")
+                        return count
+
+                    def flush(self):
+                        terminal.flush()
+
+                result = invoke(
+                    hub,
+                    _arguments(hub, "--no-lock", "--output=" + str(output)),
+                    error=ApproveLogin(),
+                )
+            assert result.returncode == 0, result.stderr
             assert (output / "code.loom").read_bytes() == b"code"
             assert (output / "model.json").is_file()
             assert not (output / "model.json.lock").exists()
+            assert termios.tcgetattr(slave) == original
+        finally:
+            os.close(master)
+            os.close(slave)

@@ -49,6 +49,8 @@ class Hub:
         self.snapshots = {}
         # Publisher approval is changed explicitly by each test's user action.
         self.approved = False
+        # Credentials accepted by the service; tests can revoke an old login.
+        self.valid_tokens = {"fixture-first", "fixture-second"}
         # Denial response, retaining the provider's explicit gate error code.
         self.denial = (403, "GatedRepo")
         # Optional synchronization of concurrent denied shard requests.
@@ -184,7 +186,10 @@ def running_hub(root, files=None):
                     state.request_observer("HEAD" if head else "GET", self.path)
                 path = urlsplit(self.path).path
                 token = self.headers.get("Authorization", "")
-                valid = token in ("Bearer fixture-first", "Bearer fixture-second")
+                valid = (
+                    token.startswith("Bearer ")
+                    and token.removeprefix("Bearer ") in state.valid_tokens
+                )
                 if path == "/api/whoami-v2":
                     if not valid:
                         self.response(401, b'{"error":"invalid credentials"}')
