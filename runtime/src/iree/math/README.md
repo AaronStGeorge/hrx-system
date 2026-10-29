@@ -7,8 +7,8 @@ constant evaluation and dynamic execution can agree across hosts.
 
 Ordinary F32/F64 square root, reciprocal square root, cube root, exponentials,
 logarithms, real powers, hyperbolic functions, trigonometry, error functions,
-activations, integral rounding, and binary exponent operations preserve gradual
-underflow.
+activations, integral rounding, binary exponent operations, and floating
+remainder preserve gradual underflow.
 Both scalar and vector constant folding and the Core VM call these same typed
 functions:
 
@@ -28,6 +28,12 @@ depending on the caller's rounding direction or platform libm.
 subnormal inputs. `ldexp` accepts every signed i32 exponent and uses bounded
 power-of-two multiplications with a single final rounding. Software FMA shares
 that scaling implementation.
+
+Floating remainder reduces integer significands without rounding the quotient
+or intermediate product. Short exponent gaps use direct integer division;
+larger gaps share a reciprocal chunk reducer. Both widths preserve the
+dividend's sign, including zero, and handle subnormals independently of the
+caller's rounding direction and flush mode.
 
 Square root is correctly rounded and uses hardware instructions when available.
 An integer restoring algorithm supplies the same payloads on hardware without
@@ -137,6 +143,7 @@ Operations are grouped by algorithm family and provenance:
 - `fma.h` owns fused arithmetic and narrow-format intermediate evaluation.
 - `rounding.h` owns the five integral rounding directions.
 - `scaling.h` owns binary exponent decomposition and scaling.
+- `remainder.h` owns exact floating remainder.
 - `roots.h` owns reciprocal, reciprocal square root, square root, and cube root.
 - `trigonometry.h` owns radian sine/cosine/tangent and turns-based sine/cosine.
 
