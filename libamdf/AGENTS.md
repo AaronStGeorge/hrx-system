@@ -59,9 +59,9 @@ Runtime-only consumers outside `libamdf/` retain their own subsystem prefix.
 
 ## Build structure
 
-- Bazel `BUILD.bazel` files are the source of truth for in-tree package
-  declarations. Regenerate `CMakeLists.txt` files with
-  `python build_tools/bazel_to_cmake/bazel_to_cmake.py --recursive_dir libamdf`.
+- Bazel `BUILD.bazel` files are the source of truth for package declarations.
+  CMake generates its package files under `<build>/.iree/cmake/` during
+  configuration and regenerates them when their inputs change.
 - Project-specific build rules live under `build_tools/bazel/` and
   `build_tools/cmake/`. Do not add build logic to the repository root or to a
   handwritten package `CMakeLists.txt`.

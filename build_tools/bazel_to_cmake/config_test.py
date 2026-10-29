@@ -646,7 +646,7 @@ cc_library(
         # a ${PROJECT_SOURCE_DIR} path relative to the repo root.
         self.assertNotIn("$(location", converter.body)
         self.assertIn(
-            "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/amdhip64.map",
+            "-Wl,--version-script=${_IREE_PACKAGE_SOURCE_DIR}/amdhip64.map",
             converter.body,
         )
 
@@ -1267,7 +1267,7 @@ iree_execution_test_suite(
 
         self.assertIn("file(GLOB _GLOB_X_TXT LIST_DIRECTORIES false", cmake)
         self.assertIn(
-            'list(TRANSFORM _GLOB_X_TXT PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/"'
+            'list(TRANSFORM _GLOB_X_TXT PREPEND "${_IREE_PACKAGE_SOURCE_DIR}/"'
             " OUTPUT_VARIABLE _GLOB_X_TXT_ABSOLUTE)",
             cmake,
         )
@@ -1294,7 +1294,7 @@ iree_execution_test_suite(
         )
         exclusion = converter.body.index(f"list(REMOVE_ITEM {variable} ")
         conversion = converter.body.index(
-            f'list(TRANSFORM {variable} PREPEND "${{CMAKE_CURRENT_SOURCE_DIR}}/"'
+            f'list(TRANSFORM {variable} PREPEND "${{_IREE_PACKAGE_SOURCE_DIR}}/"'
             f" OUTPUT_VARIABLE {variable}_ABSOLUTE)"
         )
         self.assertLess(exclusion, conversion)
@@ -1347,7 +1347,7 @@ iree_execution_test_suite(
         self.assertIn('"-Wl,--wrap=open"', converter.body)
         self.assertIn('CMAKE_SYSTEM_NAME STREQUAL "Linux"', converter.body)
         self.assertIn(
-            "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports.map",
+            "-Wl,--version-script=${_IREE_PACKAGE_SOURCE_DIR}/exports.map",
             converter.body,
         )
         self.assertNotIn("$(location", converter.body)

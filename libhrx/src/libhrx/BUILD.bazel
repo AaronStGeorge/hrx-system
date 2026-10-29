@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//build_tools/bazel:select.bzl", "iree_select")
 load(
     "//libhrx/build_tools/bazel:cc.bzl",
@@ -240,4 +241,11 @@ hrx_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
+)
+
+iree_cmake_extra_content(
+    content = """
+include("${_IREE_PACKAGE_SOURCE_DIR}/hrx.cmake")
+""",
+    inline = True,
 )

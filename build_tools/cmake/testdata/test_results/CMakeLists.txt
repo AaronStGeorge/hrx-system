@@ -10,6 +10,7 @@ set(HRX_INSTALL_TESTS ON)
 set(HRX_INSTALL_TESTS_DIR share/tests)
 set(HRX_INSTALL_TESTS_COMPONENT FixtureTests)
 set(CMAKE_INSTALL_LIBDIR lib)
+include("${IREE_REPO_ROOT}/build_tools/cmake/iree_macros.cmake")
 include("${IREE_REPO_ROOT}/build_tools/cmake/iree_configure_testing.cmake")
 include("${IREE_REPO_ROOT}/libhrx/build_tools/cmake/hrx_installed_tests.cmake")
 

@@ -34,10 +34,7 @@ python dev.py cmake fix
 ```
 
 `fix` applies staged hygiene repairs and stages files owned by those fixers.
-Bazel-to-CMake may stage same-directory generated output for selected BUILD/CMake
-inputs. Changed Starlark files and converter-wide inputs trigger a repository-wide
-read-only check: their loaded data and rules can affect other packages. Loom
-artifact maintenance updates only families whose owned outputs
+Loom artifact maintenance updates only families whose owned outputs
 were selected; the read-only retry detects source changes that require an
 explicit regeneration. `precommit` checks the current local change set, with
 autofix enabled for staged and explicit-path test-bearing runs. `presubmit` is
@@ -105,7 +102,7 @@ tool output are useful.
 ## Profiles
 
 `default` runs repository hygiene: buildifier, Ruff, clang-format,
-bazel-to-cmake, the CMake dependency lock, generated AMDGPU target metadata,
+the CMake dependency lock, generated AMDGPU target metadata,
 watchwords, merge-conflict markers, and basic text hygiene.
 
 Every hygiene run checks `MODULE.cmake.lock` against the Bazel dependency graph

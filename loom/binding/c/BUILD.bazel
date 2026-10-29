@@ -21,7 +21,7 @@ package(
 
 iree_cmake_extra_content(
     content = """
-set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(IREE_PACKAGE_ROOT_DIR "${_IREE_PACKAGE_SOURCE_DIR}")
 set(IREE_PACKAGE_ROOT_PREFIX "loom/binding/c")
 """,
 )
@@ -541,4 +541,11 @@ loomc_shared_libraries(
         "//runtime/src/iree/vm/bytecode:module",
         "//runtime/src/iree/vm/bytecode:wire",
     ],
+)
+
+iree_cmake_extra_content(
+    content = """
+include("${_IREE_PACKAGE_SOURCE_DIR}/cmake/loomc_package.cmake")
+""",
+    inline = True,
 )

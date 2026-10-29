@@ -84,6 +84,7 @@ function(_loom_generated_files)
       list(APPEND _OUTPUT_ARGS "${_FLAG}" "${_PATH}")
     endif()
   endforeach()
+  iree_resolve_source_files(_RULE_INPUTS ${_RULE_INPUTS})
   add_custom_command(
     OUTPUT ${_OUTPUTS}
     COMMAND "$<TARGET_FILE:${_GENERATOR_TARGET}>" ${_RULE_ARGS} ${_OUTPUT_ARGS}

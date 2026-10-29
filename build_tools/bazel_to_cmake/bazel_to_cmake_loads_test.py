@@ -55,6 +55,14 @@ PROFILE = with_options("configured")
             exported, {"name": "configured", "options": ["shared", "configured"]}
         )
         self.assertIs(exported, direct)
+        self.assertEqual(
+            self.loader.inputs,
+            {
+                self.root / "settings/defaults.bzl",
+                self.root / "settings/profiles.bzl",
+                self.root / "consumer/exports.bzl",
+            },
+        )
 
     def test_repository_root_imports_resolve_in_the_checkout(self):
         self.write_module("defaults.bzl", 'VALUE = ["root"]\n')

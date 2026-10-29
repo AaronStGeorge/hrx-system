@@ -72,6 +72,7 @@ function(loom_finalize_module_libraries)
 endfunction()
 
 function(_loom_link_input_paths OUTPUT_PATHS OUTPUT_TARGETS)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   set(_PATHS)
   set(_TARGETS)
   foreach(_INPUT IN LISTS ARGN)
@@ -82,7 +83,7 @@ function(_loom_link_input_paths OUTPUT_PATHS OUTPUT_TARGETS)
     elseif(IS_ABSOLUTE "${_INPUT}" OR "${_INPUT}" MATCHES "^\\$<")
       list(APPEND _PATHS "${_INPUT}")
     else()
-      list(APPEND _PATHS "${CMAKE_CURRENT_SOURCE_DIR}/${_INPUT}")
+      list(APPEND _PATHS "${_IREE_PACKAGE_SOURCE_DIR}/${_INPUT}")
     endif()
   endforeach()
   set(${OUTPUT_PATHS} ${_PATHS} PARENT_SCOPE)
@@ -90,6 +91,7 @@ function(_loom_link_input_paths OUTPUT_PATHS OUTPUT_TARGETS)
 endfunction()
 
 function(loom_module)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
   # Tools, sources, and direct/transitive libraries are explicit inputs. Avoid
   # importing every consuming target's dependency closure into these actions.
   set(CMAKE_ADD_CUSTOM_COMMAND_DEPENDS_EXPLICIT_ONLY ON)
@@ -149,7 +151,7 @@ function(loom_module)
   iree_package_name(_PACKAGE_NAME)
   set(_TARGET "${_PACKAGE_NAME}_${_RULE_NAME}")
   set(_TRANSITIVE_LIBRARIES "$<TARGET_GENEX_EVAL:${_TARGET},$<TARGET_PROPERTY:${_TARGET},LOOM_MODULE_TRANSITIVE_LIBRARIES>>")
-  set(_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_OUTPUT}")
+  set(_OUTPUT "${_IREE_PACKAGE_BINARY_DIR}/${_RULE_OUTPUT}")
   set(_ARGS
     "--mode=${_RULE_MODE}"
     "--to=${_RULE_OUTPUT_FORMAT}"

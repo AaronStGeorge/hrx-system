@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 sys.dont_write_bytecode = True
@@ -19,43 +20,114 @@ import bazel_to_cmake
 
 
 class BazelToCMakeTest(unittest.TestCase):
-    def test_rewrites_generated_cmake_with_lf_line_endings(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            build_dir = root / "pkg"
-            build_dir.mkdir()
-            (build_dir / "BUILD.bazel").write_text(
-                "package()\n", encoding="utf-8", newline="\n"
+    def test_build_tree_tracks_inputs_and_retires_only_generated_outputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            package = source / "package"
+            package.mkdir(parents=True)
+            declaration = package / "BUILD.bazel"
+            declaration.write_text(
+                'load(":settings.bzl", "OPTIONS")\n'
+                'cc_library(name="value", defines=OPTIONS)\n',
+                encoding="utf-8",
             )
-
+            settings = package / "settings.bzl"
+            settings.write_text('OPTIONS = ["VALUE=1"]\n', encoding="utf-8")
+            output = root / "build/.iree/cmake"
             with (
-                mock.patch.object(bazel_to_cmake, "repo_root", str(root)),
-                mock.patch.object(bazel_to_cmake, "repo_cfg", object()),
-                mock.patch.object(
-                    bazel_to_cmake.bazel_to_cmake_converter,
-                    "convert_build_file",
-                    return_value="\nconverted_rule()\n",
-                ),
+                mock.patch.object(bazel_to_cmake, "repo_root", str(source)),
+                mock.patch.object(bazel_to_cmake, "repo_cfg", SimpleNamespace()),
             ):
-                first_status = bazel_to_cmake.convert_directory(
-                    str(build_dir),
-                    write_files=True,
-                    print_generated_content=False,
-                    verbosity=0,
-                )
-                cmake_path = build_dir / "CMakeLists.txt"
-                lf_content = cmake_path.read_bytes()
-                cmake_path.write_bytes(lf_content.replace(b"\n", b"\r\n"))
-                second_status = bazel_to_cmake.convert_directory(
-                    str(build_dir),
-                    write_files=True,
-                    print_generated_content=False,
-                    verbosity=0,
-                )
 
-            self.assertEqual(first_status, bazel_to_cmake.Status.UPDATED)
-            self.assertEqual(second_status, bazel_to_cmake.Status.UPDATED)
-            self.assertNotIn(b"\r\n", cmake_path.read_bytes())
+                def generate():
+                    bazel_to_cmake.generate_build_tree(output, ["package"])
+
+                generate()
+                generated = output / "package/CMakeLists.txt"
+                self.assertFalse((package / "CMakeLists.txt").exists())
+                self.assertIn("VALUE=1", generated.read_text())
+                manifest = output / "inputs.cmake"
+                self.assertIn(settings.as_posix(), manifest.read_text())
+                self.assertIn(declaration.as_posix(), manifest.read_text())
+                timestamps = (generated.stat().st_mtime_ns, manifest.stat().st_mtime_ns)
+                generate()
+                self.assertEqual(
+                    (generated.stat().st_mtime_ns, manifest.stat().st_mtime_ns),
+                    timestamps,
+                )
+                settings.write_text('OPTIONS = ["VALUE=2"]\n', encoding="utf-8")
+                generate()
+                self.assertIn("VALUE=2", generated.read_text())
+                generated.unlink()
+                generate()
+                self.assertTrue(generated.exists())
+                declaration.unlink()
+                generate()
+                self.assertFalse(generated.exists())
+                # The generator owns its output, never the authored input.
+                self.assertTrue(settings.exists())
+
+    def test_authored_packages_and_skips_are_preserved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output = root / "source", root / "build/.iree/cmake"
+            source.mkdir()
+            (source / "BUILD.bazel").write_text("package()\n")
+            with (
+                mock.patch.object(bazel_to_cmake, "repo_root", str(source)),
+                mock.patch.object(bazel_to_cmake, "repo_cfg", SimpleNamespace()),
+            ):
+                bazel_to_cmake.generate_build_tree(output, ["."])
+                generated = output / "CMakeLists.txt"
+                generated.write_bytes(generated.read_bytes().replace(b"\n", b"\r\n"))
+                bazel_to_cmake.generate_build_tree(output, ["."])
+                self.assertNotIn(b"\r\n", generated.read_bytes())
+                authored = source / "CMakeLists.txt"
+                authored.write_text("# Authored package.\n")
+                bazel_to_cmake.generate_build_tree(output, ["."])
+                self.assertFalse(generated.exists())
+                self.assertEqual(authored.read_text(), "# Authored package.\n")
+                authored.unlink()
+                (source / "BUILD.bazel").write_text("# bazel-to-cmake: skip\n")
+                bazel_to_cmake.generate_build_tree(output, ["."])
+                self.assertFalse(generated.exists())
+
+    def test_output_cannot_overwrite_source_or_an_unowned_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            (source / "BUILD.bazel").write_text("package()\n")
+            unowned = root / "unowned"
+            unowned.mkdir()
+            authored = unowned / "CMakeLists.txt"
+            authored.write_text("# Authored package.\n")
+            with mock.patch.object(bazel_to_cmake, "repo_root", str(source)):
+                for output in (root, source, unowned):
+                    with self.subTest(output=output), self.assertRaises(ValueError):
+                        bazel_to_cmake.generate_build_tree(output, ["."])
+            self.assertEqual(authored.read_text(), "# Authored package.\n")
+
+    def test_failed_first_conversion_can_be_repaired(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output = root / "source", root / "build/.iree/cmake"
+            child = source / "child"
+            child.mkdir(parents=True)
+            (source / "BUILD.bazel").write_text("package()\n")
+            declaration = child / "BUILD.bazel"
+            declaration.write_text("unknown_rule()\n")
+            with (
+                mock.patch.object(bazel_to_cmake, "repo_root", str(source)),
+                mock.patch.object(bazel_to_cmake, "repo_cfg", SimpleNamespace()),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "unknown_rule"):
+                    bazel_to_cmake.generate_build_tree(output, ["."])
+                self.assertTrue((output / "CMakeLists.txt").exists())
+                declaration.write_text("package()\n")
+                bazel_to_cmake.generate_build_tree(output, ["."])
+                self.assertTrue((output / "child/CMakeLists.txt").exists())
 
 
 if __name__ == "__main__":

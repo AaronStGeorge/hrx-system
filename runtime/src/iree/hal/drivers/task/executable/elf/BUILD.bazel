@@ -149,3 +149,10 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base/internal:memory",
     ],
 )
+
+iree_cmake_extra_content(
+    content = """
+include("${_IREE_PACKAGE_SOURCE_DIR}/msvc_masm.cmake")
+""",
+    inline = True,
+)

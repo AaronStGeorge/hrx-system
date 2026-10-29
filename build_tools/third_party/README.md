@@ -260,7 +260,8 @@ or AMDGPU support prevents those dependencies from being discovered or fetched.
 8. Run focused Bazel and CMake builds that prove the consumed targets work.
 
 When a dependency changes source, version, hash, or repo-local target contract,
-regenerate the lock and generated CMake metadata in the same commit.
+regenerate the lock in the same commit. CMake regenerates its build-local
+package declarations during configuration.
 
 ## Target Contracts
 

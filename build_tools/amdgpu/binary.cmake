@@ -96,7 +96,8 @@ function(_iree_amdgpu_resolve_bitcode_deps out_paths out_targets)
       string(SUBSTRING "${_DEP_NS}" 0 "${_DEP_TARGET_OFFSET}" _DEP_PACKAGE_NS)
       string(SUBSTRING "${_DEP_NS}" "${_DEP_NAME_OFFSET}" -1 _DEP_NAME)
       string(REPLACE "::" "/" _DEP_PACKAGE_PATH "${_DEP_PACKAGE_NS}")
-      if(NOT EXISTS "${IREE_SOURCE_DIR}/${_DEP_PACKAGE_PATH}/CMakeLists.txt")
+      if(NOT EXISTS "${IREE_SOURCE_DIR}/${_DEP_PACKAGE_PATH}/CMakeLists.txt" AND
+         NOT EXISTS "${IREE_GENERATED_CMAKE_DIR}/${_DEP_PACKAGE_PATH}/CMakeLists.txt")
         message(FATAL_ERROR
           "iree_amdgpu_binary DEPS target '${_DEP_REF}' references unknown "
           "package '${_DEP_PACKAGE_PATH}'")
@@ -190,9 +191,10 @@ function(iree_amdgpu_library)
     ${_RULE_COPTS}
   )
 
+  iree_resolve_source_files(_RULE_INTERNAL_HDRS ${_RULE_INTERNAL_HDRS})
   set(_BITCODE_FILES)
   foreach(_SRC ${_RULE_SRCS})
-    get_filename_component(_BITCODE_SRC_PATH "${_SRC}" REALPATH)
+    iree_resolve_source_files(_BITCODE_SRC_PATH "${_SRC}")
     set(_BITCODE_SRC_FRAGMENT "${_SRC}")
     string(REPLACE "\\" "_" _BITCODE_SRC_FRAGMENT "${_BITCODE_SRC_FRAGMENT}")
     string(REPLACE "/" "_" _BITCODE_SRC_FRAGMENT "${_BITCODE_SRC_FRAGMENT}")
@@ -321,9 +323,10 @@ function(iree_amdgpu_binary)
     ${_RULE_COPTS}
   )
 
+  iree_resolve_source_files(_RULE_INTERNAL_HDRS ${_RULE_INTERNAL_HDRS})
   set(_BITCODE_FILES)
   foreach(_SRC ${_RULE_SRCS})
-    get_filename_component(_BITCODE_SRC_PATH "${_SRC}" REALPATH)
+    iree_resolve_source_files(_BITCODE_SRC_PATH "${_SRC}")
     set(_BITCODE_SRC_FRAGMENT "${_SRC}")
     string(REPLACE "\\" "_" _BITCODE_SRC_FRAGMENT "${_BITCODE_SRC_FRAGMENT}")
     string(REPLACE "/" "_" _BITCODE_SRC_FRAGMENT "${_BITCODE_SRC_FRAGMENT}")
@@ -640,7 +643,7 @@ function(_iree_amdgpu_hip_binary)
   else()
     set(_OUT "${_RULE_NAME}.so")
   endif()
-  get_filename_component(_SOURCE_PATH "${_RULE_SRCS}" REALPATH)
+  iree_resolve_source_files(_SOURCE_PATH "${_RULE_SRCS}")
   set(_OFFLOAD_BUNDLE "${_RULE_NAME}.offload_bundle")
   file(GLOB _DEVICE_LIBRARIES CONFIGURE_DEPENDS
     "${IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_RESOLVED_ROCM_DEVICE_LIB_PATH}/*.bc")

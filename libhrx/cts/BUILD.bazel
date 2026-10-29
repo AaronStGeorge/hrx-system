@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/amdgpu:binary.bzl", "iree_amdgpu_binary_variants_embed_data")
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//build_tools/bazel:test_resources.bzl", "GPU_DEVICE_RESOURCE_GROUP")
 load(
     "//build_tools/sanitizer:suppressions.bzl",
@@ -462,4 +463,15 @@ hrx_cts_test(
     deps = [
         "//libhrx/src/libhrx:hrx_static",
     ],
+)
+
+iree_cmake_extra_content(
+    content = """
+# The CTS catches loader failures and therefore opts back into C++ exceptions.
+# MSVC and clang-cl inherit /EHsc from the first-party compiler policy.
+if(NOT MSVC)
+  target_compile_options(libhrx_cts_core PRIVATE "-fexceptions")
+endif()
+""",
+    inline = True,
 )

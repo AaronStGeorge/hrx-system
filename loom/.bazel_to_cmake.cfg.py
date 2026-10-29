@@ -1737,7 +1737,7 @@ class LoomBuildFileFunctions(
         args_block = self._convert_string_list_block(
             "ARGS",
             self._convert_test_location_args(args or [])
-            + ["{{${CMAKE_CURRENT_SOURCE_DIR}/%s}}" % src],
+            + ["{{${_IREE_PACKAGE_SOURCE_DIR}/%s}}" % src],
             sort=False,
         )
         data_block = self._convert_data_list_block(data)

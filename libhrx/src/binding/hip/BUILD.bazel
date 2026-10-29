@@ -920,3 +920,10 @@ hrx_cc_test(
         "//runtime/src/iree/testing:gtest_main",
     ],
 )
+
+iree_cmake_extra_content(
+    content = """
+include("${_IREE_PACKAGE_SOURCE_DIR}/hip.cmake")
+""",
+    inline = True,
+)

@@ -184,6 +184,8 @@ endfunction()
 # Producers and consumers may be declared in either order because CMake
 # subdirectory traversal does not encode the Bazel package dependency graph.
 function(iree_generated_output_add_consumer INPUT_PATH CONSUMER_TARGET)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   if(NOT TARGET "${CONSUMER_TARGET}")
     message(FATAL_ERROR
       "Generated output consumer ${CONSUMER_TARGET} was not found")
@@ -193,13 +195,13 @@ function(iree_generated_output_add_consumer INPUT_PATH CONSUMER_TARGET)
   endif()
   # Resolve relative inputs with CMake's source-before-binary precedence.
   if(NOT IS_ABSOLUTE "${INPUT_PATH}")
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${INPUT_PATH}")
-      set(INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${INPUT_PATH}")
+    if(EXISTS "${_IREE_PACKAGE_SOURCE_DIR}/${INPUT_PATH}")
+      set(INPUT_PATH "${_IREE_PACKAGE_SOURCE_DIR}/${INPUT_PATH}")
     endif()
   endif()
 
   get_filename_component(_INPUT_PATH "${INPUT_PATH}" ABSOLUTE
-    BASE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    BASE_DIR "${_IREE_PACKAGE_BINARY_DIR}")
   cmake_path(NORMAL_PATH _INPUT_PATH)
 
   # Existing files may still have a producer, including outside the build tree.
@@ -219,6 +221,7 @@ endfunction()
 
 # Registers the paths a target generates for cross-target dependency edges.
 function(iree_register_generated_output_producer TARGET_NAME)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
   cmake_parse_arguments(_RULE "" "" "OUTPUTS" ${ARGN})
   if(NOT TARGET "${TARGET_NAME}")
     message(FATAL_ERROR
@@ -226,7 +229,7 @@ function(iree_register_generated_output_producer TARGET_NAME)
   endif()
   foreach(_OUTPUT IN LISTS _RULE_OUTPUTS)
     get_filename_component(_OUTPUT_PATH "${_OUTPUT}" ABSOLUTE
-      BASE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+      BASE_DIR "${_IREE_PACKAGE_BINARY_DIR}")
     cmake_path(NORMAL_PATH _OUTPUT_PATH)
     string(SHA256 _OUTPUT_KEY "${_OUTPUT_PATH}")
     get_property(_EXISTING_PRODUCER_TARGET GLOBAL
@@ -260,6 +263,7 @@ endfunction()
 # sources therefore need a stable aggregate target that prepares the filesystem
 # view before external analysis starts.
 function(iree_register_generated_compile_input TARGET_NAME)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
   cmake_parse_arguments(_RULE "" "" "OUTPUTS" ${ARGN})
   if(NOT TARGET "${TARGET_NAME}")
     message(FATAL_ERROR
@@ -324,6 +328,7 @@ endfunction()
 # See runtime/src/CMakeLists.txt for typical usage in a directory tree that
 # installs static dev libraries.
 function(iree_setup_c_src_root)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     ""
@@ -333,12 +338,12 @@ function(iree_setup_c_src_root)
   )
 
   # Make C++ library package names start here unless if told not to.
-  set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" PARENT_SCOPE)
+  set(IREE_PACKAGE_ROOT_DIR "${_IREE_PACKAGE_SOURCE_DIR}" PARENT_SCOPE)
   set(IREE_PACKAGE_ROOT_PREFIX "${_RULE_PACKAGE_ROOT_PREFIX}" PARENT_SCOPE)
 
   # Instruct install support that headers are installable from this root
   # directory.
-  set(IREE_HDRS_ROOT_PATH "${CMAKE_CURRENT_SOURCE_DIR}" PARENT_SCOPE)
+  set(IREE_HDRS_ROOT_PATH "${_IREE_PACKAGE_SOURCE_DIR}" PARENT_SCOPE)
 
   # Export and install by default.
   if(_RULE_DEFAULT_EXPORT_SET)
@@ -357,7 +362,7 @@ function(iree_setup_c_src_root)
     add_library(${_RULE_IMPLICIT_DEFS_TARGET} INTERFACE)
     target_include_directories(${_RULE_IMPLICIT_DEFS_TARGET}
       INTERFACE
-      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR};${CMAKE_CURRENT_BINARY_DIR}>"
+      "$<BUILD_INTERFACE:${_IREE_PACKAGE_SOURCE_DIR};${CMAKE_CURRENT_BINARY_DIR}>"
     )
     if(NOT _RULE_IMPLICIT_DEFS_INSTALL_COMPONENT)
       set(_RULE_IMPLICIT_DEFS_INSTALL_COMPONENT ${_RULE_DEFAULT_INSTALL_COMPONENT})
@@ -376,18 +381,93 @@ function(iree_setup_c_src_root)
   endif()
 endfunction()
 
-# Sets ${PACKAGE_NS} to the IREE-root relative package name in C++ namespace
-# format (::).
-#
-# Examples:
-#   runtime/src/iree/base/CMakeLists.txt -> iree::base
-#   libhrx/src/libhrx/CMakeLists.txt -> libhrx::src::libhrx
-#   tests/e2e/CMakeLists.txt -> iree::tests::e2e
+# Authored CMake directories use their native source directory. Generated
+# package directories carry the original source explicitly; this property is
+# deliberately not inherited by authored children.
+function(iree_package_source_dir OUTPUT_VARIABLE)
+  if(DEFINED IREE_PACKAGE_SOURCE_DIR)
+    set(_SOURCE_DIR "${IREE_PACKAGE_SOURCE_DIR}")
+  else()
+    get_property(_SOURCE_DIR DIRECTORY PROPERTY IREE_PACKAGE_SOURCE_DIR)
+    if(NOT _SOURCE_DIR)
+      set(_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
+  endif()
+  set(${OUTPUT_VARIABLE} "${_SOURCE_DIR}" PARENT_SCOPE)
+endfunction()
+
+# Deferred declarations retain the owning package's binary directory without
+# modifying CMake's native directory variables.
+function(iree_package_binary_dir OUTPUT_VARIABLE)
+  if(DEFINED IREE_PACKAGE_BINARY_DIR)
+    set(${OUTPUT_VARIABLE} "${IREE_PACKAGE_BINARY_DIR}" PARENT_SCOPE)
+  else()
+    set(${OUTPUT_VARIABLE} "${CMAKE_CURRENT_BINARY_DIR}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+# Resolves package-relative authored files and native generated outputs without
+# using the generated CMake list directory as a source search path.
+function(iree_resolve_source_files OUTPUT_VARIABLE)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
+  iree_package_source_dir(_SOURCE_DIR)
+  set(_FILES)
+  foreach(_FILE IN LISTS ARGN)
+    if(IS_ABSOLUTE "${_FILE}" OR "${_FILE}" MATCHES "^\\$<")
+      list(APPEND _FILES "${_FILE}")
+    elseif(EXISTS "${_SOURCE_DIR}/${_FILE}")
+      list(APPEND _FILES "${_SOURCE_DIR}/${_FILE}")
+    else()
+      list(APPEND _FILES "${_IREE_PACKAGE_BINARY_DIR}/${_FILE}")
+    endif()
+  endforeach()
+  set(${OUTPUT_VARIABLE} "${_FILES}" PARENT_SCOPE)
+endfunction()
+
+# Generated declaration directories are separate from their authored sources.
+# Native relative source paths can overflow MSVC's object-path limit even after
+# CMake hashes the directory portion. Name package files relative to their
+# original source or output directory, retaining native target directories.
+# Hash names longer than the digest so generated filenames cannot consume the
+# remaining path budget. Short package-relative names stay readable.
+function(iree_set_source_object_names)
+  if(NOT CMAKE_HOST_WIN32)
+    return()
+  endif()
+  iree_package_source_dir(_SOURCE_DIR)
+  iree_package_binary_dir(_BINARY_DIR)
+  foreach(_SOURCE IN LISTS ARGN)
+    if(_SOURCE MATCHES "^\\$<")
+      continue()
+    endif()
+    file(RELATIVE_PATH _RELATIVE_SOURCE "${_SOURCE_DIR}" "${_SOURCE}")
+    file(RELATIVE_PATH _RELATIVE_OUTPUT "${_BINARY_DIR}" "${_SOURCE}")
+    if(NOT IS_ABSOLUTE "${_RELATIVE_SOURCE}" AND
+       NOT _RELATIVE_SOURCE MATCHES "^\\.\\./")
+      set(_OBJECT_NAME "source/${_RELATIVE_SOURCE}")
+    elseif(NOT IS_ABSOLUTE "${_RELATIVE_OUTPUT}" AND
+           NOT _RELATIVE_OUTPUT MATCHES "^\\.\\./")
+      set(_OBJECT_NAME "generated/${_RELATIVE_OUTPUT}")
+    else()
+      string(MD5 _OBJECT_NAME "${_SOURCE}")
+    endif()
+    string(LENGTH "${_OBJECT_NAME}" _OBJECT_NAME_LENGTH)
+    if(_OBJECT_NAME_LENGTH GREATER 32)
+      string(MD5 _OBJECT_NAME "${_OBJECT_NAME}")
+    endif()
+    set_source_files_properties("${_SOURCE}" PROPERTIES
+      OBJECT_NAME "${_OBJECT_NAME}")
+  endforeach()
+endfunction()
+
+# Sets ${PACKAGE_NS} to the package name in C++ namespace format (::), relative
+# to the enclosing package root and its optional namespace prefix.
 function(iree_package_ns PACKAGE_NS)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   if(DEFINED IREE_PACKAGE_ROOT_DIR)
     # If an enclosing package root dir is set, then the package is just the
     # relative part after that.
-    cmake_path(RELATIVE_PATH CMAKE_CURRENT_LIST_DIR
+    cmake_path(RELATIVE_PATH _IREE_PACKAGE_SOURCE_DIR
       BASE_DIRECTORY "${IREE_PACKAGE_ROOT_DIR}"
       OUTPUT_VARIABLE _PACKAGE)
     if(_PACKAGE STREQUAL ".")
@@ -402,13 +482,13 @@ function(iree_package_ns PACKAGE_NS)
     endif()
   else()
     # Get the relative path of the current dir (i.e. runtime/src/iree/hal).
-    string(REPLACE ${IREE_ROOT_DIR} "" _IREE_RELATIVE_PATH ${CMAKE_CURRENT_LIST_DIR})
+    string(REPLACE ${IREE_ROOT_DIR} "" _IREE_RELATIVE_PATH ${_IREE_PACKAGE_SOURCE_DIR})
     string(SUBSTRING ${_IREE_RELATIVE_PATH} 1 -1 _IREE_RELATIVE_PATH)
 
-    if(NOT ${CMAKE_CURRENT_LIST_DIR} MATCHES "^${IREE_ROOT_DIR}/.*")
+    if(NOT ${_IREE_PACKAGE_SOURCE_DIR} MATCHES "^${IREE_ROOT_DIR}/.*")
       # Function is being called from outside IREE. Use the source-relative path.
       # Please check the README.md to see the potential risk.
-      string(REPLACE ${PROJECT_SOURCE_DIR} "" _SOURCE_RELATIVE_PATH ${CMAKE_CURRENT_LIST_DIR})
+      string(REPLACE ${PROJECT_SOURCE_DIR} "" _SOURCE_RELATIVE_PATH ${_IREE_PACKAGE_SOURCE_DIR})
       string(SUBSTRING ${_SOURCE_RELATIVE_PATH} 1 -1 _SOURCE_RELATIVE_PATH)
       set(_PACKAGE "${_SOURCE_RELATIVE_PATH}")
 
@@ -417,7 +497,7 @@ function(iree_package_ns PACKAGE_NS)
     #   build_tools/bazel_to_cmake/bazel_to_cmake_targets.py
     # Some sub-trees form their own roots for package purposes. Rewrite them.
     else()
-      message(SEND_ERROR "iree_package_ns(): Could not determine package for ${CMAKE_CURRENT_LIST_DIR}")
+      message(SEND_ERROR "iree_package_ns(): Could not determine package for ${_IREE_PACKAGE_SOURCE_DIR}")
       set(_PACKAGE "iree/unknown")
     endif()
   endif()
@@ -425,7 +505,7 @@ function(iree_package_ns PACKAGE_NS)
   string(REPLACE "/" "::" _PACKAGE_NS "${_PACKAGE}")
 
   if(_DEBUG_IREE_PACKAGE_NAME)
-    message(STATUS "iree_package_ns(): map ${CMAKE_CURRENT_LIST_DIR} -> ${_PACKAGE_NS}")
+    message(STATUS "iree_package_ns(): map ${_IREE_PACKAGE_SOURCE_DIR} -> ${_PACKAGE_NS}")
   endif()
 
   set(${PACKAGE_NS} ${_PACKAGE_NS} PARENT_SCOPE)
@@ -572,6 +652,7 @@ endfunction()
 # OUT_TARGET_DATA: Optional output variable receiving target-shaped DATA
 #     entries as CMake target names.
 function(iree_add_data_dependencies)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
   cmake_parse_arguments(
     _RULE
     ""
@@ -642,7 +723,7 @@ function(iree_add_data_dependencies)
       endif()
     endforeach()
     if(_DATA_GENERATED_TARGET)
-      list(APPEND _FILE_DATA "${CMAKE_CURRENT_BINARY_DIR}/${_DATA_LABEL}")
+      list(APPEND _FILE_DATA "${_IREE_PACKAGE_BINARY_DIR}/${_DATA_LABEL}")
       iree_register_target_dependency(
         TARGET "${_RULE_NAME}"
         DEPENDENCY "${_DATA_GENERATED_TARGET}"
@@ -755,6 +836,7 @@ function(iree_link_js_library)
   string(REGEX REPLACE "^::" "${_PACKAGE_NS}::" _RULE_TARGET ${_RULE_TARGET})
   string(REPLACE "::" "_" _RULE_TARGET ${_RULE_TARGET})
 
+  iree_resolve_source_files(_RULE_SRCS ${_RULE_SRCS})
   foreach(_SRC_FILE ${_RULE_SRCS})
     # If the JS file is changed, we want to relink dependent binaries, but
     # unfortunately it is not possible to make a link step depend directly on a
@@ -768,6 +850,7 @@ function(iree_link_js_library)
     set(_DUMMY_C_NAME "${CMAKE_BINARY_DIR}/${_DUMMY_JS_TARGET}_tracker.c")
 
     # Create a new static library target that with a single dummy .c file.
+    iree_set_source_object_names("${_DUMMY_C_NAME}")
     add_library(${_DUMMY_LIB_NAME} STATIC ${_DUMMY_C_NAME})
     # Make the dummy .c file depend on the .js file we are linking, so that if
     # the .js file is edited, the dummy .c file, and hence the static library
@@ -793,10 +876,9 @@ function(iree_link_js_library)
     # linker command line as it is. The advantage of doing it this way is
     # that the js-library will also be automatically linked to targets that
     # depend on this target.
-    get_filename_component(_SRC_ABSOLUTE_PATH "${_SRC_FILE}" ABSOLUTE)
     target_link_libraries(${_RULE_TARGET}
       PUBLIC
-        "--js-library \"${_SRC_ABSOLUTE_PATH}\""
+        "--js-library \"${_SRC_FILE}\""
     )
 
     math(EXPR _LINK_JS_COUNTER "${_LINK_JS_COUNTER} + 1")

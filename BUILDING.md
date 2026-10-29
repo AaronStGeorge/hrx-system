@@ -40,8 +40,8 @@ python dev.py bazel build //loom/src/loom/tools/loom-compile
 python dev.py bazel test //runtime/src/iree/base/... --config=asan
 ```
 
-Bazel does not require CMake. Generated CMake files are checked in, so neither
-build requires a manual Bazel-to-CMake conversion.
+Bazel does not require CMake. Neither build requires a manual Bazel-to-CMake
+conversion.
 
 ### CMake
 
@@ -51,6 +51,18 @@ python dev.py cmake configure -DLIBHRX_BUILD=OFF
 python dev.py cmake build loom-compile
 python dev.py cmake test -R '^iree/base/'
 ```
+
+CMake converts the Bazel package declarations during configuration, writing
+generated CMake under `<build>/.iree/cmake/`. Native builds regenerate when
+BUILD files, loaded Starlark data, converter code, or source globs change.
+This also applies to direct CMake invocations and embedding with
+`add_subdirectory`; each build tree owns its generated files.
+
+Edit `BUILD.bazel` for package declarations. CMake-specific additions use
+`iree_cmake_extra_content`, which can include an authored `.cmake` file for
+larger install or packaging logic. Authored `CMakeLists.txt` files retain their
+native directory scope. Generated declarations and build artifacts stay out of
+the source packages.
 
 `LIBHRX_BUILD=OFF` selects a runtime/compiler build. Building the HRX GPU
 runtime instead uses `LIBHRX_BUILD=ON` and its AMDGPU dependencies; see
@@ -62,6 +74,7 @@ wrapper commands remember that tree. New trees default to Ninja and a Release
 build. Existing trees retain their configuration, and explicit `-G`,
 `CMAKE_GENERATOR`, and preset selections are honored. System-tool builds need
 CMake 3.26 or newer; [shared Loom tools](#shared-loom-tool-bundles) need 3.27.
+Windows builds require CMake 4.2 or newer for short native object names.
 
 ### Tool environment
 
