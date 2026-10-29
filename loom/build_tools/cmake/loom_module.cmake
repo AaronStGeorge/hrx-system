@@ -216,7 +216,9 @@ function(loom_module)
     PROPERTIES GENERATED TRUE
   )
 
-  add_custom_target("${_TARGET}" DEPENDS "${_OUTPUT}")
+  # Attach the producer directly; a DEPENDS-only wrapper adds a second custom
+  # command that repeats the host tool's transitive dependency closure.
+  add_custom_target("${_TARGET}" SOURCES "${_OUTPUT}")
   set_property(TARGET "${_TARGET}" PROPERTY LOOM_MODULE_FILE "${_OUTPUT}")
   set_property(TARGET "${_TARGET}" PROPERTY LOOM_MODULE_DIRECT_LIBRARIES "${_LIBRARIES}")
   set_property(TARGET "${_TARGET}" PROPERTY LOOM_MODULE_LIBRARY_TARGETS "${_LIBRARY_TARGETS}")

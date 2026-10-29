@@ -140,7 +140,7 @@ function(loom_kernel_binary)
     VERBATIM
   )
 
-  add_custom_target("${_TARGET}" DEPENDS "${_OUTPUT}" "${_COMPILE_REPORT}")
+  add_custom_target("${_TARGET}" SOURCES "${_OUTPUT}" "${_COMPILE_REPORT}")
   set_property(TARGET "${_TARGET}" PROPERTY LOOM_MODULE_DIRECT_LIBRARIES "${_LIBRARIES}")
   set_property(TARGET "${_TARGET}" PROPERTY LOOM_MODULE_LIBRARY_TARGETS "${_LIBRARY_TARGETS}")
   set_property(GLOBAL APPEND PROPERTY LOOM_MODULE_TARGETS "${_TARGET}")
