@@ -13,53 +13,68 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-PASSTHROUGH_INCLUDES = [
-    "..",
+_PASSTHROUGH_LIBRARIES = [
+    (
+        "hip_intercept",
+        "hip_intercept.c",
+        [
+            "//build_tools/bazel:dl",
+            "//build_tools/bazel:pthreads",
+        ],
+    ),
+    (
+        "hip_logging",
+        "hip_logging.c",
+        ["//build_tools/bazel:pthreads"],
+    ),
+    ("hip_noop", "interceptors/passthrough_interceptor.c", []),
+    (
+        "hip_buffer_tracer",
+        "hip_buffer_tracer.c",
+        ["//build_tools/bazel:pthreads"],
+    ),
 ]
 
-_LINUX_COMPATIBILITY = ["@platforms//os:linux"]
+[
+    hrx_cc_shared_library(
+        name = name,
+        srcs = [source],
+        hdrs = ["hip_function_table.h"],
+        additional_linker_inputs = ["passthrough_full.map"] if name == "hip_intercept" else [],
+        copts = ["-fvisibility=default"],
+        includes = [".."],
+        linkopts = [
+            "-Wl,--undefined-version",
+            "-Wl,--version-script=$(location :passthrough_full.map)",
+        ] if name == "hip_intercept" else [],
+        target_compatible_with = ["@platforms//os:linux"],
+        deps = deps,
+    )
+    for name, source, deps in _PASSTHROUGH_LIBRARIES
+]
 
-hrx_cc_shared_library(
-    name = "hip_intercept",
-    srcs = ["hip_intercept.c"],
-    hdrs = ["hip_function_table.h"],
-    includes = PASSTHROUGH_INCLUDES,
-    target_compatible_with = _LINUX_COMPATIBILITY,
-    deps = [
-        "//build_tools/bazel:dl",
-        "//build_tools/bazel:pthreads",
-    ],
-)
+[
+    iree_cmake_extra_content(
+        content = "set_target_properties(libhrx_src_passthrough_" + name + " PROPERTIES OUTPUT_NAME " + name + " VERSION 1.0.0 SOVERSION 1)",
+        inline = True,
+    )
+    for name, _, _ in _PASSTHROUGH_LIBRARIES
+]
 
-hrx_cc_shared_library(
-    name = "hip_logging",
-    srcs = ["hip_logging.c"],
-    hdrs = ["hip_function_table.h"],
-    includes = PASSTHROUGH_INCLUDES,
-    target_compatible_with = _LINUX_COMPATIBILITY,
-    deps = ["//build_tools/bazel:pthreads"],
-)
-
-hrx_cc_shared_library(
-    name = "hip_noop",
-    srcs = ["interceptors/passthrough_interceptor.c"],
-    hdrs = ["hip_function_table.h"],
-    includes = PASSTHROUGH_INCLUDES,
-    target_compatible_with = _LINUX_COMPATIBILITY,
-)
-
-hrx_cc_shared_library(
-    name = "hip_buffer_tracer",
-    srcs = ["hip_buffer_tracer.c"],
-    hdrs = ["hip_function_table.h"],
-    includes = PASSTHROUGH_INCLUDES,
-    target_compatible_with = _LINUX_COMPATIBILITY,
-    deps = ["//build_tools/bazel:pthreads"],
+iree_cmake_extra_content(
+    content = """
+install(FILES "${_IREE_PACKAGE_SOURCE_DIR}/hip_function_table.h"
+  DESTINATION include/passthrough
+  COMPONENT HrxPassthroughDist)
+""",
+    inline = True,
 )
 
 iree_cmake_extra_content(
     content = """
-include("${_IREE_PACKAGE_SOURCE_DIR}/passthrough.cmake")
+if(NOT LIBHRX_BUILD_PASSTHROUGH)
+  return()
+endif()
 """,
-    inline = True,
+    inline = False,
 )

@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:cc.bzl", "iree_cc_library")
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -24,4 +25,18 @@ iree_cc_library(
 alias(
     name = "hrx",
     actual = "//libhrx/src/libhrx:hrx",
+)
+
+iree_cmake_extra_content(
+    content = """
+include("${IREE_SOURCE_DIR}/libhrx/build_tools/cmake/hrx_source_root.cmake")
+""",
+    inline = False,
+)
+
+iree_cmake_extra_content(
+    content = """
+include("${IREE_SOURCE_DIR}/libhrx/build_tools/cmake/hrx_package.cmake")
+""",
+    inline = True,
 )
