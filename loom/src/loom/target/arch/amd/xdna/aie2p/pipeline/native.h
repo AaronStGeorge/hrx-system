@@ -55,13 +55,13 @@ typedef struct loom_aie2p_native_channel_t {
     loom_aie2p_native_cursor_t writer;
   } cursor;
   // Nonzero only when a complete FIFO is retained across ordered replays.
-  // Its producer admits the complete batch and exchanges one credit per
-  // replay; ordinary channels continue exchanging one credit per record.
+  // Its producer admits the complete batch. A finite lifetime needs one
+  // ownership credit; an autonomous stream can exchange credits per replay.
   struct {
     // Number of adjacent logical records in the retained batch.
     uint32_t record_count;
-    // Number of complete replays before the producer may replace the batch.
-    uint32_t count;
+    // Ready/free credits exchanged at each complete batch boundary.
+    uint32_t credits;
   } replay;
 } loom_aie2p_native_channel_t;
 

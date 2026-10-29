@@ -919,7 +919,7 @@ static iree_status_t loom_aie2p_native_select_worker_transfers(
       }
       if (autonomous) {
         const int32_t credits = local_channel->replay.record_count
-                                    ? (int32_t)local_channel->replay.count
+                                    ? (int32_t)local_channel->replay.credits
                                     : 1;
         selected->local_words[layout->lock_word] |=
             loom_xdna_register_field_encode(
@@ -1007,6 +1007,7 @@ static iree_status_t loom_aie2p_native_select_distribution_endpoint(
     loom_aie2p_native_context_t* context,
     const loom_aie2p_native_channel_t* channel,
     loom_xdna_dma_direction_t direction, uint32_t repetitions,
+    uint32_t credit_interval,
     const loom_aie2p_native_distribution_endpoint_t* shared,
     loom_aie2p_native_distribution_endpoint_t* out_endpoint,
     iree_string_view_t* out_reason, bool* out_valid) {
@@ -1018,7 +1019,8 @@ static iree_status_t loom_aie2p_native_select_distribution_endpoint(
   const uint32_t batch_records = sender ? channel->replay.record_count : 0;
   // Receiver lengths delimit their records independently of the sender's
   // packet boundary. A retained contiguous batch therefore needs one complete
-  // transfer per replay, with one admission/reclamation credit for that turn.
+  // transfer per replay. A single retained lifetime brackets the whole finite
+  // sequence; autonomous repeated lifetimes use one credit per replay.
   const uint64_t transfer_bytes = (uint64_t)channel->record_byte_length *
                                   (batch_records ? batch_records : 1);
   if (!channel->record_dense ||
@@ -1088,7 +1090,7 @@ static iree_status_t loom_aie2p_native_select_distribution_endpoint(
       context, tile, out_endpoint->engine, direction,
       batch_records ? repetitions / batch_records : repetitions,
       batch_records ? 1 : channel->source->capacity, channel->byte_offset,
-      batch_records ? 0 : channel->byte_stride, 1, words,
+      batch_records ? 0 : channel->byte_stride, credit_interval, words,
       &out_endpoint->sequence, out_reason, out_valid);
 }
 
@@ -1199,8 +1201,9 @@ static iree_status_t loom_aie2p_native_select_worker_distributions(
       bool valid = false;
       IREE_RETURN_IF_ERROR(loom_aie2p_native_select_distribution_endpoint(
           context, source_channel, LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM,
-          distribution->repetitions, path ? &path->sender : NULL,
-          &distribution->sender, &reason, &valid));
+          distribution->repetitions,
+          (uint32_t)(cohort->admissions == 1 ? batch->replays : 1),
+          path ? &path->sender : NULL, &distribution->sender, &reason, &valid));
       if (!valid) {
         return loom_aie2p_native_reject(context, cohort->admission->op, reason);
       }
@@ -1223,7 +1226,7 @@ static iree_status_t loom_aie2p_native_select_worker_distributions(
         IREE_RETURN_IF_ERROR(loom_aie2p_native_select_distribution_endpoint(
             context, destination_channel,
             LOOM_XDNA_DMA_DIRECTION_STREAM_TO_MEMORY, distribution->repetitions,
-            path ? &path->receivers[j] : NULL, &distribution->receivers[j],
+            1, path ? &path->receivers[j] : NULL, &distribution->receivers[j],
             &reason, &valid));
         if (!valid) {
           return loom_aie2p_native_reject(context, destination->copy, reason);

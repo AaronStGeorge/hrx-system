@@ -902,7 +902,7 @@ iree_status_t loom_aie2p_native_emit_configuration(
         !channel->replay.record_count;
     IREE_RETURN_IF_ERROR(loom_aie2p_native_config_set_lock(
         &config, tile, channel->free_lock,
-        (channel->replay.record_count ? channel->replay.count
+        (channel->replay.record_count ? channel->replay.credits
                                       : channel->source->capacity) -
             reserve_initial));
     IREE_RETURN_IF_ERROR(loom_aie2p_native_config_set_lock(

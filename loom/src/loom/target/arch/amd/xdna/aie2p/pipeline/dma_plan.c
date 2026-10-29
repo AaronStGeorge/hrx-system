@@ -305,6 +305,85 @@ bool loom_aie2p_native_encode_ingress(const loom_xdna_array_family_t* family,
   return true;
 }
 
+// Separate tasks delimit the ownership lifetime without repeating its lock
+// actions. Whole first/last ring turns leave every address iterator at its
+// origin, so the intervening lock-free program needs no cursor repair.
+static iree_status_t loom_aie2p_native_build_lifetime(
+    const loom_xdna_dma_facts_t* dma,
+    const loom_aie2p_native_memory_layout_t* layout, uint16_t first_descriptor,
+    uint16_t available_descriptors, loom_xdna_dma_direction_t direction,
+    uint32_t repetitions, uint32_t capacity, uint32_t byte_offset,
+    uint32_t byte_stride, const uint32_t template_words[8],
+    loom_aie2p_native_dma_sequence_t* out_sequence,
+    iree_string_view_t* out_reason, bool* out_valid,
+    iree_arena_allocator_t* arena) {
+  const uint32_t middle_repetitions = repetitions - 2 * capacity;
+  if (available_descriptors < 2 * capacity + (middle_repetitions != 0)) {
+    *out_reason =
+        IREE_SV("descriptor space for the first and last retained ring turns");
+    return iree_ok_status();
+  }
+  const uint32_t acquire_mask =
+      loom_xdna_register_field_encode(layout->locks.acquire_enable, 1);
+  const uint32_t release_mask =
+      loom_xdna_register_field_encode(layout->locks.release_value, -1);
+  uint32_t words[8];
+  memcpy(words, template_words, sizeof(words));
+  words[layout->lock_word] &= ~release_mask;
+  loom_aie2p_native_dma_sequence_t parts[3] = {0};
+  bool valid = false;
+  // Each boundary is one ring turn in an exactly sized descriptor range.
+  IREE_RETURN_IF_ERROR(loom_aie2p_native_build_sequence(
+      dma, layout, first_descriptor, capacity, direction, capacity, capacity,
+      byte_offset, byte_stride, capacity, words, &parts[0], out_reason, &valid,
+      arena));
+  if (middle_repetitions) {
+    loom_xdna_dma_facts_t middle_dma = *dma;
+    middle_dma.task_queue_depth -= 2;
+    words[layout->lock_word] &= ~acquire_mask;
+    IREE_RETURN_IF_ERROR(loom_aie2p_native_build_sequence(
+        &middle_dma, layout, first_descriptor + capacity,
+        available_descriptors - 2 * capacity, direction, middle_repetitions,
+        capacity, byte_offset, byte_stride, 1, words, &parts[1], out_reason,
+        &valid, arena));
+    if (!valid) {
+      return iree_ok_status();
+    }
+  }
+  memcpy(words, template_words, sizeof(words));
+  words[layout->lock_word] &= ~acquire_mask;
+  IREE_RETURN_IF_ERROR(loom_aie2p_native_build_sequence(
+      dma, layout, first_descriptor + capacity + parts[1].descriptor_count,
+      capacity, direction, capacity, capacity, byte_offset, byte_stride,
+      capacity, words, &parts[2], out_reason, &valid, arena));
+  *out_sequence = (loom_aie2p_native_dma_sequence_t){
+      .descriptor = first_descriptor,
+      .descriptor_count = (uint16_t)(2 * capacity + parts[1].descriptor_count),
+      .task_count = (uint8_t)(2 + parts[1].task_count),
+  };
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(
+      arena,
+      out_sequence->descriptor_count * sizeof(*out_sequence->words) +
+          out_sequence->task_count * sizeof(*out_sequence->tasks),
+      (void**)&out_sequence->words));
+  out_sequence->tasks =
+      (uint32_t*)(out_sequence->words + out_sequence->descriptor_count);
+  uint32_t descriptor_offset = 0, task_offset = 0;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(parts); ++i) {
+    if (!parts[i].descriptor_count) {
+      continue;
+    }
+    memcpy(out_sequence->words + descriptor_offset, parts[i].words,
+           parts[i].descriptor_count * sizeof(*out_sequence->words));
+    memcpy(out_sequence->tasks + task_offset, parts[i].tasks,
+           parts[i].task_count * sizeof(*out_sequence->tasks));
+    descriptor_offset += parts[i].descriptor_count;
+    task_offset += parts[i].task_count;
+  }
+  *out_valid = true;
+  return iree_ok_status();
+}
+
 // A finite DMA sequence fits all its tasks in the hardware queue before any
 // completion wait. Fixed-slot chains cover whole ring rotations. Queued tasks
 // can repeat the complete chain or an aligned suffix; a separate final prefix
@@ -320,6 +399,12 @@ iree_status_t loom_aie2p_native_build_sequence(
     iree_string_view_t* out_reason, bool* out_valid,
     iree_arena_allocator_t* arena) {
   *out_valid = false;
+  if (credit_interval == repetitions && credit_interval > capacity) {
+    return loom_aie2p_native_build_lifetime(
+        dma, layout, first_descriptor, available_descriptors, direction,
+        repetitions, capacity, byte_offset, byte_stride, template_words,
+        out_sequence, out_reason, out_valid, arena);
+  }
   if (!available_descriptors) {
     *out_reason = IREE_SV("an available descriptor in the DMA channel's bank");
     return iree_ok_status();
