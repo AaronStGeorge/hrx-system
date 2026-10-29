@@ -38,10 +38,11 @@ IREE_FLAG(string, state_slab_bytes, "",
           "for fixed backing. Accepts byte counts or size strings such as "
           "64mib.");
 IREE_FLAG(string, memory_bytes, "",
-          "Shared physical parameter/state/workspace budget; a nonzero limit "
+          "Shared elastic physical-backing budget; a nonzero limit "
           "requires elastic backing. Single-device shortcut; use --devices "
-          "for named shared pools. Zero imposes no serving "
-          "limit. Host snapshots and driver overhead are outside this budget. "
+          "for named shared pools. Zero leaves elastic backing unbounded by "
+          "serving policy. Ordinary native buffers, host snapshots, other host "
+          "allocations, and driver overhead are outside this budget. "
           "Accepts byte counts or size strings such as 64gib.");
 IREE_FLAG(string, workspace_idle_ms, "",
           "Single-device workspace idle expiry in milliseconds; default zero "

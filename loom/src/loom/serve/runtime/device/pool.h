@@ -61,7 +61,8 @@ typedef struct loom_serve_pool_options_t {
   iree_device_size_t weight_slab_size;
   // Preferred sparse-state slab extent, in bytes.
   iree_device_size_t state_slab_size;
-  // Serving-managed physical allowance; zero leaves it unbounded.
+  // Elastic physical-backing allowance in bytes; zero leaves it unbounded.
+  // Ordinary native storage is accounted separately and remains outside it.
   uint64_t memory_limit;
   // Fixed workspace sanitizer policy, qualified by the HAL child allocator.
   iree_hal_asan_pool_options_t asan;
@@ -132,7 +133,7 @@ typedef struct loom_serve_pool_idle_policy_t {
   iree_duration_t parameter_timeout;
 } loom_serve_pool_idle_policy_t;
 
-// Schedules expired backing releases without waiting for native maintenance.
+// Schedules expired backing releases without waiting for native deallocation.
 // Returns pending while enabled resources await retirement or idle expiry;
 // native releases already scheduled use the ordinary capacity observer.
 // Live invocation pins and explicit parameter pins prevent deactivation.

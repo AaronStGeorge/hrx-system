@@ -53,7 +53,7 @@ above remain the ordinary entry point on every platform.
 | `--pool_backing=elastic\|fixed` | `elastic` | Shared demand-committed parameter/state/workspace slabs or eagerly backed retained storage. |
 | `--weight_slab_bytes=N` | `1073741824` | Reusable elastic parameter and shared-workspace slab size in bytes (1 GiB); loading uses independent bounded read windows. `0` uses the allocator recommendation. Ignored for fixed backing. |
 | `--state_slab_bytes=N` | `67108864` | Elastic mutable-state commitment/reclamation size in bytes (64 MiB); `0` uses the allocator recommendation. Ignored for fixed backing. |
-| `--memory_bytes=N` | `0` | Shared serving-managed physical parameter/state/workspace limit; `0` imposes no serving limit. |
+| `--memory_bytes=N` | `0` | Shared elastic physical-backing limit; `0` leaves elastic backing unbounded by serving policy. |
 
 The backing, slab, memory, and idle flags apply only to the `--device` shortcut.
 With `--devices`, those settings belong to each pool entry; mixing the file with
@@ -68,10 +68,11 @@ numbers, with no spaces, signs, or fractional units. Overflow is rejected.
 Model, connection and body capacities must be positive. Holding credit must
 remain below connection capacity. Heartbeat/idle intervals, slab sizes and memory
 limits are nonnegative. A nonzero memory limit requires elastic backing.
-Invocation input/output storage and command workspace share this limit with
-parameters and mutable model state. Host snapshots, other host allocations and
-driver overhead remain outside it; it is not a whole-process or whole-device
-memory cap.
+Elastic backing for parameters, mutable model state, invocation input/output,
+and command workspace shares this limit. Ordinary native buffers use separately
+reported storage and remain outside it, even in an elastic pool. Host snapshots,
+other host allocations, and driver overhead also remain outside it; it is not a
+whole-process or whole-device memory cap.
 
 `--help` shows serving options; `--help=all` also shows linked runtime options.
 `--agents_md` prints compact integration guidance without initializing devices.
@@ -129,14 +130,20 @@ fields, duplicate keys or pool members, unknown devices, empty keys, and malform
 Keys use nonempty visible ASCII; numeric device selectors are rejected.
 The file describes one group, not another set of servers or model lifecycles.
 
-An optional `placement` object selects the backing domain independently of the
-`devices` access list:
+An optional pool `placement` object selects the backing domain independently of
+the `devices` access list. This configuration requires a GPU-local allocation
+domain supporting elastic backing:
 
 ```json
-"weights": {
-  "devices": ["gpu"],
-  "placement": {"device": "gpu"},
-  "pool_backing": "elastic"
+{
+  "devices": {"gpu": {"uri": "amdgpu://0"}},
+  "pools": {
+    "weights": {
+      "devices": ["gpu"],
+      "placement": {"device": "gpu"},
+      "pool_backing": "elastic"
+    }
+  }
 }
 ```
 
@@ -151,11 +158,19 @@ be declared in the group. Device selectors require a single physical owner;
 host NUMA placement requires the backend to support the requested OS node.
 
 Placement selects the native allocation domain, not permanent physical
-residency against OS eviction. On Linux APUs, reserved GPU memory is available
-only when KFD admits that allocation route. CPU mapping, cache transitions,
-atomic access, and sharing remain separate contracts qualified for the complete
-consumer set. In particular, host-visible GPU memory does not imply CPU-cached
-memory or direct file-I/O support.
+residency against OS eviction. For AMD GPUs, `placement.device` requires the
+device's LOCAL domain. On Linux APUs, this means reserved GPU memory and succeeds
+only when KFD admits that route. Shared SYSTEM memory allocated through the GPU
+can satisfy automatic placement but does not satisfy this explicit LOCAL request.
+CPU mapping, cache transitions, atomic access, and sharing remain separate
+contracts qualified for the complete consumer set. In particular, host-visible
+GPU memory does not imply CPU-cached memory or direct file-I/O support.
+
+Required host-NUMA placement also depends on the backing mode. KFD can register
+host-owned pages at fixed GPU addresses under process lifetime. Elastic GPU
+aliases need a foreign DMA-BUF import route that discovery excludes because it
+charges the same payload twice against the native memory budget. That elastic
+combination fails pool creation; it does not substitute GPU-owned SYSTEM memory.
 
 One pool can list several devices, such as `"devices": ["gpu", "npu"]`. The HAL
 qualifies storage access for the complete consumer set during startup; an
