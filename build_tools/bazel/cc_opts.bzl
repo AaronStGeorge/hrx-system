@@ -139,6 +139,15 @@ _SANITIZER_FRAME_POINTER_COPTS = select({
     "//conditions:default": [],
 })
 
+# IREE's type-erased dispatch uses compatible calling conventions without exact
+# function-type identity. Clang's function sanitizer rejects that contract;
+# GCC has no such check and rejects the Clang-specific option.
+_UNDEFINED_SANITIZER_COPTS = select({
+    "//build_tools/bazel:undefined_sanitizer_cc_compiler_clang": ["-fno-sanitize=function"],
+    "//build_tools/bazel:undefined_sanitizer_cc_compiler_clang_cl": ["/clang:-fno-sanitize=function"],
+    "//conditions:default": [],
+})
+
 # Unix links AddressSanitizer through the compiler driver. Clang's C driver
 # also needs the C++ runtime to intercept new/delete in C++ dependencies.
 # Windows runtime dependencies come from the selected C/C++ runtimes toolchain.
@@ -233,7 +242,7 @@ def _iree_code_compiler_options(
                 _GCC_COPTS,
                 _CLANG_CL_COPTS,
                 _MSVC_COPTS + _MSVC_ONLY_COPTS,
-            ) + _SANITIZER_FRAME_POINTER_COPTS,
+            ) + _SANITIZER_FRAME_POINTER_COPTS + _UNDEFINED_SANITIZER_COPTS,
             copts,
         ),
         conlyopts = _append(
