@@ -46,6 +46,38 @@ func.def inline @fill_pair(%input0: buffer, %incoming0: channel<tile<16xi32>>, %
   func.return
 }
 
+// The first read can overlap an older write to the second input record.
+// The second read must stay after that write completes; coalescing both reads
+// at the first issue would cross the explicit async completion boundary.
+func.def inline @fill_after_pending_write(%input: buffer, %seed: buffer, %scratch: channel<tile<16xi32>>, %incoming: channel<tile<16xi32>>) {
+  %origin = index.constant 0 : offset
+  %next = index.constant 64 : offset
+  %seed_view = buffer.view %seed[%origin] : buffer -> view<16xi32>
+  %scratch_write, %scratch_payload = channel.reserve %scratch : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  %initialize = kernel.async.copy %seed_view to %scratch_payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+  %initialize_group = kernel.async.group %initialize : kernel.async.token -> kernel.async.group
+  kernel.async.wait %initialize_group {newer_groups = 0} : kernel.async.group
+  channel.publish %scratch_write : write<tile<16xi32>>
+  %scratch_read, %scratch_source = channel.acquire %scratch : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+  %second_external = buffer.view %input[%next] : buffer -> view<16xi32>
+  %pending = kernel.async.copy %scratch_source to %second_external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
+  %pending_group = kernel.async.group %pending : kernel.async.token -> kernel.async.group
+  %first_external = buffer.view %input[%origin] : buffer -> view<16xi32>
+  %first_write, %first_payload = channel.reserve %incoming : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  %first = kernel.async.copy %first_external to %first_payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+  %first_group = kernel.async.group %first : kernel.async.token -> kernel.async.group
+  kernel.async.wait %pending_group {newer_groups = 1} : kernel.async.group
+  kernel.async.wait %first_group {newer_groups = 0} : kernel.async.group
+  channel.publish %first_write : write<tile<16xi32>>
+  %second_write, %second_payload = channel.reserve %incoming : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  %second = kernel.async.copy %second_external to %second_payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+  %second_group = kernel.async.group %second : kernel.async.token -> kernel.async.group
+  kernel.async.wait %second_group {newer_groups = 0} : kernel.async.group
+  channel.publish %second_write : write<tile<16xi32>>
+  channel.release %scratch_read : read<tile<16xi32>>
+  func.return
+}
+
 func.def inline @forward(%read: read<tile<16xi32>>, %destination: channel<tile<16xi32>>) -> (read<tile<16xi32>>) {
   %retained, %outgoing = channel.fanout %read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
   %write, %payload = channel.reserve %destination : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
@@ -141,8 +173,11 @@ pipeline.def<kernel> public retain target(@device) @retained_handoff() run(%inpu
   %ready_storage1 = buffer.alloca<workgroup> pool(%core1) align(64) %bytes : buffer
   %ready_slots1 = buffer.view %ready_storage1[%origin] : buffer -> view<1x16xi32>
   %ready1 = channel.bind<fifo> %ready_slots1, %c1 : view<1x16xi32>, index -> channel<tile<16xi32>>
+  %scratch_storage = buffer.alloca<workgroup> pool(%memory1) align(64) %bytes : buffer
+  %scratch_slots = buffer.view %scratch_storage[%origin] : buffer -> view<1x16xi32>
+  %scratch = channel.bind<fifo> %scratch_slots, %c1 : view<1x16xi32>, index -> channel<tile<16xi32>>
   pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @fill(%input0, %batch0) : (buffer, channel<tile<16xi32>>)
+    func.call @fill_after_pending_write(%input0, %input1, %scratch, %batch0) : (buffer, buffer, channel<tile<16xi32>>, channel<tile<16xi32>>)
     func.call @fill(%input1, %batch1) : (buffer, channel<tile<16xi32>>)
     scf.for %phase = [%c0 to %c2 step %c1] unroll {
       %read0, %unused0 = channel.acquire %ready0 : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
@@ -194,6 +229,17 @@ func.def inline @reference_column(%input: buffer, %state: buffer, %output: buffe
 }
 
 func.def @reference(%input0: buffer, %state0: buffer, %output0: buffer, %input1: buffer, %state1: buffer, %output1: buffer) {
+  %origin = index.constant 0 : offset
+  %next = index.constant 64 : offset
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %words = index.constant 16 : index
+  %seed = buffer.view %input1[%origin] : buffer -> view<16xi32>
+  %replacement = buffer.view %input0[%next] : buffer -> view<16xi32>
+  scf.for %word = [%c0 to %words step %c1] {
+    %value = view.load %seed[%word] : view<16xi32> -> i32
+    view.store %value, %replacement[%word] : i32, view<16xi32>
+  }
   func.call @reference_column(%input0, %state0, %output0) : (buffer, buffer, buffer)
   func.call @reference_column(%input1, %state1, %output1) : (buffer, buffer, buffer)
   func.return
