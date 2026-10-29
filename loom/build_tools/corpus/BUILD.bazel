@@ -56,10 +56,7 @@ loom_cc_test(
 
 iree_execution_test_suite(
     name = "compile_xfails_execution_test",
-    data = [
-        "testdata/all_roots_xfail.loom",
-        "testdata/diagnostic_xfails.loom",
-    ],
+    data = ["//loom/build_tools/corpus/testdata:sources"],
     manifests = ["compile_xfails.test.json"],
     tags = ["hostonly"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/emit:vm_binary"]),

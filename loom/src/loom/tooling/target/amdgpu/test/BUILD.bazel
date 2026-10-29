@@ -457,7 +457,7 @@ loom_test(
 
 loom_test(
     name = "tsan_fragment_test",
-    srcs = ["//loom/src/loom/tooling/target/amdgpu/test/corpus:gfx11/fragment_repack_bf16.loom"],
+    srcs = ["//loom/src/loom/tooling/target/amdgpu/test/corpus/gfx11:fragment_repack_bf16.loom"],
     execution_profiles = [
         AMDGPU_TSAN_PROFILE,
         AMD_GPU_TSAN_PROFILE,

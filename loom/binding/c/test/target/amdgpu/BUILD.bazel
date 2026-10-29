@@ -96,7 +96,7 @@ loom_cc_test(
 iree_c_embed_data(
     name = "command_profile_testdata",
     testonly = True,
-    srcs = glob(["testdata/command_profile/*.loom"]),
+    srcs = ["//loom/binding/c/test/target/amdgpu/testdata/command_profile:sources"],
     c_file_output = "command_profile_testdata.c",
     flatten = True,
     h_file_output = "command_profile_testdata.h",
