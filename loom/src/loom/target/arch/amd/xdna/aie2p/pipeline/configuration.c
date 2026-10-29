@@ -665,6 +665,27 @@ static iree_status_t loom_aie2p_native_config_communicate(
           for (const loom_aie2p_native_transfer_t* transfer =
                    issue->task->first_transfer;
                transfer; transfer = transfer->task_next) {
+            if (transfer->local_descriptor->address_dynamic) {
+              const loom_aie2p_native_dma_descriptor_t* descriptor =
+                  transfer->local_descriptor;
+              const loom_aie2p_native_tile_t* tile = descriptor->path->local;
+              const loom_aie2p_native_memory_layout_t* layout =
+                  tile->memory_layout;
+              const uint16_t index = descriptor->sequence.descriptor +
+                                     (uint16_t)transfer->descriptor_ordinal;
+              // The template retains chain links; the transfer retains its
+              // fixed slot and projection address before those links exist.
+              const uint32_t word =
+                  descriptor->sequence.words[transfer->descriptor_ordinal]
+                                            [layout->address_word] |
+                  transfer->local_words[layout->address_word];
+              IREE_RETURN_IF_ERROR(loom_aie2p_native_config_write(
+                  config,
+                  loom_xdna_register_field_address(context->family,
+                                                   layout->address,
+                                                   tile->coordinate, &index),
+                  word));
+            }
             if (transfer->shim_descriptor->address_dynamic) {
               IREE_RETURN_IF_ERROR(loom_aie2p_native_config_bind_transfer(
                   config, worker, transfer));

@@ -38,8 +38,10 @@ static iree_status_t loom_aie2p_native_dma_local_word(
   loom_builder_set_before(builder, transfer->source->request.op);
   loom_op_t *base, *address;
   IREE_RETURN_IF_ERROR(loom_index_constant_build(
-      builder, loom_attr_i64(transfer->local_channel->byte_offset), offset_type,
-      location, &base));
+      builder,
+      loom_attr_i64(layout->local_address_base +
+                    transfer->local_channel->byte_offset),
+      offset_type, location, &base));
   IREE_RETURN_IF_ERROR(
       loom_index_add_build(builder, loom_index_constant_result(base),
                            projection, offset_type, location, &address));

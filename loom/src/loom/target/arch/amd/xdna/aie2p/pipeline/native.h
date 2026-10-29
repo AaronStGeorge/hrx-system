@@ -185,8 +185,8 @@ typedef struct loom_aie2p_native_dma_descriptor_t {
   loom_aie2p_native_dma_completion_t* completion;
   // True for the external shim endpoint, false for the local memory endpoint.
   bool shim;
-  // Each issue patches this endpoint's address. A shared shim also patches
-  // fixed offsets when its copies address different caller storage.
+  // Each issue patches this endpoint's address. Shared descriptors also patch
+  // fixed offsets when their copies address different storage or record slots.
   bool address_dynamic;
 } loom_aie2p_native_dma_descriptor_t;
 

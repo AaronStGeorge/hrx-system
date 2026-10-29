@@ -145,7 +145,9 @@ static void loom_aie2p_native_task_descriptor_words(
 
 static bool loom_aie2p_native_task_descriptor_matches(
     const loom_aie2p_native_transfer_task_t* task,
-    const loom_aie2p_native_dma_descriptor_t* descriptor) {
+    const loom_aie2p_native_dma_descriptor_t* descriptor, uint32_t address_mask,
+    bool* out_address_differs) {
+  *out_address_differs = false;
   if (descriptor->sequence.descriptor_count != task->transfer_count) {
     return false;
   }
@@ -153,8 +155,15 @@ static bool loom_aie2p_native_task_descriptor_matches(
        transfer; transfer = transfer->task_next) {
     uint32_t words[8];
     loom_aie2p_native_task_descriptor_words(task, descriptor, transfer, words);
-    if (memcmp(descriptor->sequence.words[transfer->descriptor_ordinal], words,
-               sizeof(words)) != 0) {
+    const uint32_t* previous =
+        descriptor->sequence.words[transfer->descriptor_ordinal];
+    if (address_mask) {
+      const uint8_t word = task->path->local->memory_layout->address_word;
+      const uint32_t difference = (words[word] ^ previous[word]) & address_mask;
+      *out_address_differs |= difference != 0;
+      words[word] ^= difference;
+    }
+    if (memcmp(previous, words, sizeof(words)) != 0) {
       return false;
     }
   }
@@ -188,23 +197,39 @@ loom_aie2p_native_reusable_descriptor(
     return NULL;
   }
   const loom_op_t* issue = task->first_transfer->source->request.op;
+  uint32_t address_mask = 0;
+  if (!shim) {
+    const loom_xdna_register_field_info_t address =
+        loom_xdna_register_field_info(
+            task->path->local->memory_layout->address);
+    address_mask = (UINT32_MAX >> (32 - address.bit_width))
+                   << address.least_significant_bit;
+  }
   for (loom_aie2p_native_dma_descriptor_t* candidate = worker->descriptors;
        candidate; candidate = candidate->next) {
     const loom_aie2p_native_transfer_t* previous = candidate->last_transfer;
+    bool address_differs;
     if (candidate->shim != shim || candidate->path != task->path ||
         !loom_aie2p_native_transfer_retired(previous, issue) ||
         (candidate->completion &&
          !loom_aie2p_native_transfer_retired(
              candidate->completion->last_transfer, issue)) ||
-        !loom_aie2p_native_task_descriptor_matches(task, candidate)) {
+        !loom_aie2p_native_task_descriptor_matches(
+            task, candidate, address_mask, &address_differs)) {
       continue;
     }
     if (shim) {
       candidate->address_dynamic |=
           task->shim_address_dynamic ||
           loom_aie2p_native_task_external_address_differs(task, previous);
-    } else if (candidate->address_dynamic != task->local_address_dynamic) {
-      continue;
+    } else if (task->local_address_dynamic || address_differs) {
+      candidate->address_dynamic = true;
+      // All users patch their own address after the preceding task retires.
+      // Keep length, dimensions, and chain links in the shared template.
+      const uint8_t word = task->path->local->memory_layout->address_word;
+      for (uint16_t i = 0; i < candidate->sequence.descriptor_count; ++i) {
+        candidate->sequence.words[i][word] &= ~address_mask;
+      }
     }
     return candidate;
   }
