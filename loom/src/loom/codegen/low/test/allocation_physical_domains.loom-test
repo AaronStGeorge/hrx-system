@@ -287,21 +287,6 @@ copy %source -> %result: materialized
 
 // ====
 
-// RUN: emit low-allocation-query @fixed_binding_overrides_preference values=%persistent,%restricted fixed=%persistent:physical_register:0:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @fixed_binding_overrides_preference(%persistent: reg<test.explicit32>) -> (reg<test.explicit32>, reg<test.packed.narrow>) asm {
-  %restricted = test.const.packed.narrow 7
-  return %persistent, %restricted
-}
-
-// ----
-value %persistent: test.explicit32 -> physical_register[0:1]
-value %restricted: test.packed.narrow -> physical_register[1:1]
-
-// ====
-
 // RUN: emit low-allocation-query @rotating_versions_remain_distinct values=%first,%second,%left,%right,%restricted
 
 test.target<low_core> @target

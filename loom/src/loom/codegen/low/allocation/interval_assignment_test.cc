@@ -1069,18 +1069,22 @@ struct EntryPlacementCase {
   // Assignment policy whose incoming-location behavior is under test.
   loom_low_allocation_search_strategy_t strategy =
       LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FIRST_FIT;
+  // Mandatory location of the first argument, or UINT32_MAX when unconstrained.
+  uint32_t fixed_base = UINT32_MAX;
 };
 
 class LowEntryPlacementTest : public LowAllocationIntervalAssignmentTest {
  protected:
   void CheckPlacement(const loom_low_descriptor_set_t* descriptors,
-                      const uint16_t* class_ids, uint16_t location_kind,
+                      const uint16_t* class_ids,
+                      loom_low_allocation_location_kind_t location_kind,
                       const EntryPlacementCase& test_case);
 };
 
 void LowEntryPlacementTest::CheckPlacement(
     const loom_low_descriptor_set_t* descriptors, const uint16_t* class_ids,
-    uint16_t location_kind, const EntryPlacementCase& test_case) {
+    loom_low_allocation_location_kind_t location_kind,
+    const EntryPlacementCase& test_case) {
   SCOPED_TRACE(test_case.name);
   loom_region_t* body = loom_low_func_def_body(function_op_);
   loom_block_t* block = loom_region_entry_block(body);
@@ -1182,7 +1186,7 @@ void LowEntryPlacementTest::CheckPlacement(
   loom_low_allocation_abi_location_t incoming[2] = {};
   for (uint32_t i = 0; i < test_case.incoming_count; ++i) {
     incoming[i] = {
-        .location_kind = location_kind,
+        .location_kind = static_cast<uint16_t>(location_kind),
         .descriptor_reg_class_id = class_ids[i],
         .location_base = test_case.incoming[i],
     };
@@ -1192,6 +1196,16 @@ void LowEntryPlacementTest::CheckPlacement(
   loom_local_value_domain_t domain = {};
   IREE_ASSERT_OK(loom_local_value_domain_acquire_for_region(module_, body,
                                                             &arena_, &domain));
+  if (test_case.fixed_base != UINT32_MAX) {
+    const loom_low_allocation_fixed_value_t fixed = {
+        values[0], location_kind, test_case.fixed_base, test_case.widths[0]};
+    IREE_ASSERT_OK(
+        loom_low_allocation_target_constraints_resolve_fixed_locations(
+            &constraints, &liveness, &domain, nullptr, nullptr, &fixed, 1,
+            &arena_));
+    IREE_ASSERT_OK(loom_low_allocation_target_constraints_finalize_fixed_values(
+        &constraints, &liveness, &unit_liveness, &arena_));
+  }
   loom_low_allocation_storage_lease_state_t leases = {};
   const loom_low_allocation_interval_assignment_context_t context = {
       .module = module_,
@@ -1263,6 +1277,15 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(
             EntryPlacementCase{"outside_budget", 2, 1, {1}, {7}, 1, {0}},
             EntryPlacementCase{"preserve_input", 8, 1, {1}, {7}, 1, {7}},
+            EntryPlacementCase{"fixed_overrides_incoming",
+                               8,
+                               1,
+                               {1},
+                               {7},
+                               1,
+                               {2},
+                               LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FIRST_FIT,
+                               2},
             EntryPlacementCase{
                 "lower_slot", 6, 3, {1, 1, 4}, {2, 0}, 2, {5, 0, 1}},
             EntryPlacementCase{
@@ -1322,7 +1345,29 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(
             "test.explicit32", "test.fixed.r0",
             EntryPlacementCase{
-                "scalar_blocks_narrow", 4, 2, {1, 1}, {0}, 1, {2, 0}})));
+                "scalar_blocks_narrow", 4, 2, {1, 1}, {0}, 1, {2, 0}}),
+        std::make_tuple("test.explicit32", "test.packed.narrow",
+                        EntryPlacementCase{
+                            "fixed_overrides_domain",
+                            4,
+                            2,
+                            {1, 1},
+                            {},
+                            0,
+                            {0, 1},
+                            LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FIRST_FIT,
+                            0}),
+        std::make_tuple("test.explicit32", "test.packed.narrow",
+                        EntryPlacementCase{
+                            "fixed_overrides_incoming_and_domain",
+                            4,
+                            2,
+                            {1, 1},
+                            {3},
+                            1,
+                            {0, 1},
+                            LOOM_LOW_ALLOCATION_SEARCH_STRATEGY_FIRST_FIT,
+                            0})));
 
 }  // namespace
 }  // namespace loom
