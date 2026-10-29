@@ -42,6 +42,8 @@ endfunction()
 
 # RUNNER_ARGS reaches every selected runner; ARGS is correctness-only.
 function(loom_execution_test)
+  iree_package_source_dir(IREE_PACKAGE_SOURCE_DIR)
+  iree_package_binary_dir(IREE_PACKAGE_BINARY_DIR)
   if(NOT IREE_BUILD_TESTS)
     return()
   endif()
@@ -53,7 +55,7 @@ function(loom_execution_test)
   iree_package_path(_PACKAGE_PATH)
   set_property(GLOBAL PROPERTY "${_ID}_PACKAGE_PATH" "${_PACKAGE_PATH}")
   foreach(_VARIABLE
-      CMAKE_CURRENT_LIST_DIR CMAKE_CURRENT_SOURCE_DIR CMAKE_CURRENT_BINARY_DIR
+      IREE_PACKAGE_SOURCE_DIR IREE_PACKAGE_BINARY_DIR
       IREE_IDE_FOLDER)
     set_property(GLOBAL PROPERTY "${_ID}_${_VARIABLE}" "${${_VARIABLE}}")
   endforeach()
@@ -65,11 +67,11 @@ endfunction()
 # even when the module is owned by a later package.
 function(_loom_declare_execution_test ID)
   foreach(_VARIABLE
-      CMAKE_CURRENT_LIST_DIR CMAKE_CURRENT_SOURCE_DIR CMAKE_CURRENT_BINARY_DIR
+      IREE_PACKAGE_SOURCE_DIR IREE_PACKAGE_BINARY_DIR
       IREE_IDE_FOLDER)
     get_property("${_VARIABLE}" GLOBAL PROPERTY "${ID}_${_VARIABLE}")
   endforeach()
-  set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}")
+  set(IREE_PACKAGE_ROOT_DIR "${IREE_PACKAGE_SOURCE_DIR}")
   get_property(IREE_PACKAGE_ROOT_PREFIX GLOBAL PROPERTY "${ID}_PACKAGE_PATH")
   get_property(_ARGUMENTS GLOBAL PROPERTY "${ID}_ARGUMENTS")
   cmake_parse_arguments(

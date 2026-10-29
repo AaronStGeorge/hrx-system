@@ -131,7 +131,7 @@ The [host product tests](kernel_test.cc) compare every variant's generated
 argument offsets, lengths and kinds with that layout and check compiler
 alignment and launch requirements.
 
-The [build declarations](BUILD.bazel) and [CMake equivalent](CMakeLists.txt)
+The [build declarations](BUILD.bazel), also consumed by CMake,
 produce each ordinary kernel for the exact physical targets and encoding
 overlays supported by the descriptor sets linked into Loom. The default build
 includes the full target catalog; a target-limited compiler builds the matching

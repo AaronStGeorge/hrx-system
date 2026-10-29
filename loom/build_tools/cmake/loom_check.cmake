@@ -82,6 +82,7 @@ function(_loom_check_test_name OUTPUT_TEST_NAME SRC TEST_NAME_PREFIX_TO_STRIP)
 endfunction()
 
 function(loom_check_test_suite)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   if(NOT IREE_BUILD_TESTS)
     return()
   endif()
@@ -130,7 +131,7 @@ function(loom_check_test_suite)
   endif()
 
   foreach(_SRC IN LISTS _RULE_SRCS)
-    set(_ABS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${_SRC}")
+    set(_ABS_SRC "${_IREE_PACKAGE_SOURCE_DIR}/${_SRC}")
     cmake_path(RELATIVE_PATH _ABS_SRC
       BASE_DIRECTORY "${IREE_ROOT_DIR}"
       OUTPUT_VARIABLE _LOGICAL_SRC)

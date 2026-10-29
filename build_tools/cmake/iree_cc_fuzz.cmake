@@ -60,6 +60,7 @@ function(iree_cc_fuzz)
   iree_add_alias_executable(${_PACKAGE_NS}::${_RULE_NAME} ${_NAME})
 
   set_target_properties(${_NAME} PROPERTIES OUTPUT_NAME "${_RULE_NAME}")
+  iree_resolve_source_files(_RULE_SRCS ${_RULE_SRCS})
   target_sources(${_NAME}
     PRIVATE
       ${_RULE_SRCS}

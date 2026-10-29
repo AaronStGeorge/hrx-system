@@ -97,12 +97,14 @@ function(_iree_register_windows_python_source SOURCE_PATH DESTINATION_PATH)
 endfunction()
 
 function(_iree_py_library_source_target OUTPUT_TARGET SOURCE_FILE)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   iree_package_name(_PACKAGE_NAME)
   string(REGEX REPLACE "[^A-Za-z0-9_]" "_" _SOURCE_TARGET_SUFFIX "${SOURCE_FILE}")
   set(_SOURCE_TARGET "${_PACKAGE_NAME}_${_SOURCE_TARGET_SUFFIX}_py_source")
   if(NOT TARGET "${_SOURCE_TARGET}")
-    set(_SOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE_FILE}")
-    set(_SOURCE_BIN_PATH "${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_FILE}")
+    set(_SOURCE_PATH "${_IREE_PACKAGE_SOURCE_DIR}/${SOURCE_FILE}")
+    set(_SOURCE_BIN_PATH "${_IREE_PACKAGE_BINARY_DIR}/${SOURCE_FILE}")
     get_filename_component(_SOURCE_BIN_DIR "${_SOURCE_BIN_PATH}" DIRECTORY)
     if(WIN32)
       # Windows file symlinks require Developer Mode or elevated privileges.
@@ -149,6 +151,8 @@ endfunction()
 # DEPS: List of other targets the test python libraries require
 # PYEXT_DEPS: List of deps of extensions built with iree_pyext_module
 function(iree_py_library)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     ""
@@ -172,7 +176,7 @@ function(iree_py_library)
       list(APPEND _SOURCE_FILES "${_SRC_FILE}")
       list(APPEND _SOURCE_TARGETS "${_SRC_FILE}")
     else()
-      list(APPEND _SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${_SRC_FILE}")
+      list(APPEND _SOURCE_FILES "${_IREE_PACKAGE_SOURCE_DIR}/${_SRC_FILE}")
       _iree_py_library_source_target(_SOURCE_TARGET "${_SRC_FILE}")
       list(APPEND _SOURCE_TARGETS "${_SOURCE_TARGET}")
     endif()
@@ -181,10 +185,10 @@ function(iree_py_library)
   set(_IMPORT_DIRS)
   foreach(_IMPORT ${_RULE_IMPORTS})
     get_filename_component(
-      _SOURCE_IMPORT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/${_IMPORT}" ABSOLUTE
+      _SOURCE_IMPORT_DIR "${_IREE_PACKAGE_SOURCE_DIR}/${_IMPORT}" ABSOLUTE
     )
     get_filename_component(
-      _BINARY_IMPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/${_IMPORT}" ABSOLUTE
+      _BINARY_IMPORT_DIR "${_IREE_PACKAGE_BINARY_DIR}/${_IMPORT}" ABSOLUTE
     )
     list(APPEND _IMPORT_DIRS "${_SOURCE_IMPORT_DIR}" "${_BINARY_IMPORT_DIR}")
   endforeach()
@@ -206,7 +210,7 @@ function(iree_py_library)
     if(IS_ABSOLUTE "${_RULE_MAIN}")
       set(_MAIN "${_RULE_MAIN}")
     else()
-      set(_MAIN "${CMAKE_CURRENT_SOURCE_DIR}/${_RULE_MAIN}")
+      set(_MAIN "${_IREE_PACKAGE_SOURCE_DIR}/${_RULE_MAIN}")
     endif()
     set_target_properties(${_NAME} PROPERTIES
       IREE_PY_ENTRYPOINT_ARGUMENTS "${_MAIN}"
@@ -347,6 +351,7 @@ endfunction()
 # INPUTS: additional non-Python generator inputs.
 # COMMENT: optional build progress message.
 function(iree_py_generated_files)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
   cmake_parse_arguments(
     _RULE
     ""
@@ -377,7 +382,7 @@ function(iree_py_generated_files)
   foreach(_INDEX RANGE 0 ${_OUTPUT_LAST})
     list(GET _RULE_OUTPUTS ${_INDEX} _OUTPUT)
     list(GET _RULE_OUTPUT_FLAGS ${_INDEX} _OUTPUT_FLAG)
-    set(_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/${_OUTPUT}")
+    set(_OUTPUT_PATH "${_IREE_PACKAGE_BINARY_DIR}/${_OUTPUT}")
     list(APPEND _OUTPUTS "${_OUTPUT_PATH}")
     list(APPEND _OUTPUT_ARGS "${_OUTPUT_FLAG}=${_OUTPUT_PATH}")
   endforeach()
@@ -400,7 +405,8 @@ function(iree_py_generated_files)
   iree_package_name(_PACKAGE_NAME)
   set(_GEN_TARGET "${_PACKAGE_NAME}_${_RULE_NAME}")
   set(_GEN_STAMP
-    "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${_GEN_TARGET}.stamp")
+    "${_IREE_PACKAGE_BINARY_DIR}/CMakeFiles/${_GEN_TARGET}.stamp")
+  iree_resolve_source_files(_RULE_INPUTS ${_RULE_INPUTS})
   add_custom_command(
     OUTPUT
       "${_GEN_STAMP}"
@@ -458,6 +464,8 @@ endfunction()
 #   generated in CMAKE_CURRENT_BINARY_DIR.
 # PACKAGE_DIRS: Python package paths to be added to PYTHONPATH.
 function(iree_local_py_test)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   if(NOT IREE_BUILD_TESTS OR ANDROID OR EMSCRIPTEN)
     return()
   endif()
@@ -471,9 +479,9 @@ function(iree_local_py_test)
   )
 
   # Switch between source and generated tests.
-  set(_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+  set(_SRC_DIR "${_IREE_PACKAGE_SOURCE_DIR}")
   if(_RULE_GENERATED_IN_BINARY_DIR)
-    set(_SRC_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    set(_SRC_DIR "${_IREE_PACKAGE_BINARY_DIR}")
   endif()
 
   set(_SOURCE_FILES)
@@ -608,6 +616,8 @@ endfunction()
 # GENERATED_IN_BINARY_DIR: If present, indicates that the srcs have been
 #   generated in CMAKE_CURRENT_BINARY_DIR.
 function(iree_py_test)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     "GENERATED_IN_BINARY_DIR"
@@ -633,10 +643,10 @@ function(iree_py_test)
 
   foreach(_IMPORT ${_RULE_IMPORTS})
     get_filename_component(
-      _SOURCE_IMPORT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/${_IMPORT}" ABSOLUTE
+      _SOURCE_IMPORT_DIR "${_IREE_PACKAGE_SOURCE_DIR}/${_IMPORT}" ABSOLUTE
     )
     get_filename_component(
-      _BINARY_IMPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/${_IMPORT}" ABSOLUTE
+      _BINARY_IMPORT_DIR "${_IREE_PACKAGE_BINARY_DIR}/${_IMPORT}" ABSOLUTE
     )
     list(APPEND _RULE_PACKAGE_DIRS "${_SOURCE_IMPORT_DIR}" "${_BINARY_IMPORT_DIR}")
   endforeach()

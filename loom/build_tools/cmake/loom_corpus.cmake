@@ -13,6 +13,7 @@ endfunction()
 
 # Owns one reusable test module for each semantic corpus source.
 function(loom_corpus_sources)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(_RULE "" "NAME;MANIFEST" "SRCS" ${ARGN})
   if(NOT _RULE_NAME)
     message(FATAL_ERROR "loom_corpus_sources requires NAME")
@@ -27,8 +28,8 @@ function(loom_corpus_sources)
   endif()
   file(GLOB_RECURSE _INVENTORY
     CONFIGURE_DEPENDS
-    RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.loom"
+    RELATIVE "${_IREE_PACKAGE_SOURCE_DIR}"
+    "${_IREE_PACKAGE_SOURCE_DIR}/*.loom"
   )
   set(_DECLARED_SRCS ${_RULE_SRCS})
   list(SORT _INVENTORY)
@@ -51,7 +52,7 @@ function(loom_corpus_sources)
   foreach(_SOURCE IN LISTS _RULE_SRCS)
     set(_SOURCE_ID "${_RULE_MANIFEST}/${_SOURCE}")
     list(APPEND _SOURCE_IDS "${_SOURCE_ID}")
-    list(APPEND _SOURCE_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/${_SOURCE}")
+    list(APPEND _SOURCE_PATHS "${_IREE_PACKAGE_SOURCE_DIR}/${_SOURCE}")
     _loom_corpus_program_stem(_PROGRAM_STEM "${_SOURCE_ID}")
     loom_test_module(
       NAME "${_PROGRAM_STEM}"
@@ -105,6 +106,8 @@ endfunction()
 
 # Registers target-owned corpus declarations until every target profile exists.
 function(loom_corpus_build)
+  iree_package_source_dir(IREE_PACKAGE_SOURCE_DIR)
+  iree_package_binary_dir(IREE_PACKAGE_BINARY_DIR)
   cmake_parse_arguments(_RULE "" "NAME" "" ${ARGN})
   if(NOT _RULE_NAME)
     message(FATAL_ERROR "loom_corpus_build requires NAME")
@@ -116,7 +119,7 @@ function(loom_corpus_build)
   iree_package_path(_PACKAGE_PATH)
   set_property(GLOBAL PROPERTY "${_ID}_PACKAGE_PATH" "${_PACKAGE_PATH}")
   foreach(_VARIABLE
-      CMAKE_CURRENT_LIST_DIR CMAKE_CURRENT_SOURCE_DIR CMAKE_CURRENT_BINARY_DIR
+      IREE_PACKAGE_SOURCE_DIR IREE_PACKAGE_BINARY_DIR
       IREE_IDE_FOLDER)
     set_property(GLOBAL PROPERTY "${_ID}_${_VARIABLE}" "${${_VARIABLE}}")
   endforeach()
@@ -124,6 +127,8 @@ endfunction()
 
 # Registers target-owned correctness declarations until all sources exist.
 function(loom_corpus_test)
+  iree_package_source_dir(IREE_PACKAGE_SOURCE_DIR)
+  iree_package_binary_dir(IREE_PACKAGE_BINARY_DIR)
   if(NOT IREE_BUILD_TESTS)
     return()
   endif()
@@ -154,7 +159,7 @@ function(loom_corpus_test)
   iree_package_path(_PACKAGE_PATH)
   set_property(GLOBAL PROPERTY "${_ID}_PACKAGE_PATH" "${_PACKAGE_PATH}")
   foreach(_VARIABLE
-      CMAKE_CURRENT_LIST_DIR CMAKE_CURRENT_SOURCE_DIR CMAKE_CURRENT_BINARY_DIR
+      IREE_PACKAGE_SOURCE_DIR IREE_PACKAGE_BINARY_DIR
       IREE_IDE_FOLDER)
     set_property(GLOBAL PROPERTY "${_ID}_${_VARIABLE}" "${${_VARIABLE}}")
   endforeach()
@@ -165,11 +170,11 @@ function(_loom_declare_corpus_build ID)
   # Compilation and xfail probes declare their tools and subject module inputs.
   set(CMAKE_ADD_CUSTOM_COMMAND_DEPENDS_EXPLICIT_ONLY ON)
   foreach(_VARIABLE
-      CMAKE_CURRENT_LIST_DIR CMAKE_CURRENT_SOURCE_DIR CMAKE_CURRENT_BINARY_DIR
+      IREE_PACKAGE_SOURCE_DIR IREE_PACKAGE_BINARY_DIR
       IREE_IDE_FOLDER)
     get_property("${_VARIABLE}" GLOBAL PROPERTY "${ID}_${_VARIABLE}")
   endforeach()
-  set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}")
+  set(IREE_PACKAGE_ROOT_DIR "${IREE_PACKAGE_SOURCE_DIR}")
   get_property(IREE_PACKAGE_ROOT_PREFIX GLOBAL PROPERTY "${ID}_PACKAGE_PATH")
   get_property(_ARGUMENTS GLOBAL PROPERTY "${ID}_ARGUMENTS")
   cmake_parse_arguments(
@@ -444,7 +449,7 @@ function(_loom_declare_corpus_build ID)
     set(_PROGRAM_ARTIFACTS)
     set(_PROGRAM_REPORTS)
     set(_PROGRAM_XFAIL_RESULTS)
-    set(_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/${_PROGRAM_STEM}")
+    set(_OUTPUT_DIR "${IREE_PACKAGE_BINARY_DIR}/${_PROGRAM_STEM}")
 
     set(_ACTIVE_PROFILES)
     foreach(_PROFILE IN LISTS _PROFILES)
@@ -599,11 +604,11 @@ endfunction()
 # Declares one registered correctness profile after semantic sources exist.
 function(_loom_declare_corpus_test ID)
   foreach(_VARIABLE
-      CMAKE_CURRENT_LIST_DIR CMAKE_CURRENT_SOURCE_DIR CMAKE_CURRENT_BINARY_DIR
+      IREE_PACKAGE_SOURCE_DIR IREE_PACKAGE_BINARY_DIR
       IREE_IDE_FOLDER)
     get_property("${_VARIABLE}" GLOBAL PROPERTY "${ID}_${_VARIABLE}")
   endforeach()
-  set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}")
+  set(IREE_PACKAGE_ROOT_DIR "${IREE_PACKAGE_SOURCE_DIR}")
   get_property(IREE_PACKAGE_ROOT_PREFIX GLOBAL PROPERTY "${ID}_PACKAGE_PATH")
   get_property(_ARGUMENTS GLOBAL PROPERTY "${ID}_ARGUMENTS")
   cmake_parse_arguments(

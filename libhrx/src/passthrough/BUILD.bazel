@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_shared_library")
 
 package(
@@ -54,4 +55,11 @@ hrx_cc_shared_library(
     includes = PASSTHROUGH_INCLUDES,
     target_compatible_with = _LINUX_COMPATIBILITY,
     deps = ["//build_tools/bazel:pthreads"],
+)
+
+iree_cmake_extra_content(
+    content = """
+include("${_IREE_PACKAGE_SOURCE_DIR}/passthrough.cmake")
+""",
+    inline = True,
 )

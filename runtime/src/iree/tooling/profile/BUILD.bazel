@@ -349,7 +349,7 @@ iree_local_py_test(
   SRC
     "render_test.py"
   PACKAGE_DIRS
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${_IREE_PACKAGE_SOURCE_DIR}"
 )
 
 iree_local_py_test(
@@ -366,7 +366,7 @@ iree_local_py_test(
   LABELS
     "noriscv"
   PACKAGE_DIRS
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${_IREE_PACKAGE_SOURCE_DIR}"
 )
 """,
     inline = True,

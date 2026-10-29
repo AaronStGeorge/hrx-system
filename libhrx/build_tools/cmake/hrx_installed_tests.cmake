@@ -322,6 +322,7 @@ function(hrx_installed_tests_python_source_relative_path
 endfunction()
 
 function(hrx_installed_tests_install_python_sources)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     ""
@@ -339,7 +340,7 @@ function(hrx_installed_tests_install_python_sources)
     set(_PACKAGE_ROOT_DEFINED OFF)
   endif()
   string(JOIN "|" _CONTEXT
-    "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_LIST_DIR}"
+    "${_IREE_PACKAGE_SOURCE_DIR}" "${CMAKE_CURRENT_LIST_DIR}"
     "${PROJECT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}" "${IREE_ROOT_DIR}"
     "${_PACKAGE_ROOT_DEFINED}" "${IREE_PACKAGE_ROOT_DIR}"
     "${IREE_PACKAGE_ROOT_PREFIX}" "${_RULE_PACKAGE_DIRS}")
@@ -364,17 +365,19 @@ function(hrx_installed_tests_install_python_sources)
 endfunction()
 
 function(hrx_installed_tests_resolve_data DATA OUT_SOURCE_PATH OUT_REL_PATH)
+  iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   if(IS_ABSOLUTE "${DATA}")
     set(_SOURCE_PATH "${DATA}")
     hrx_installed_tests_source_relative_path("${_SOURCE_PATH}" _REL_PATH)
   elseif(EXISTS "${PROJECT_SOURCE_DIR}/${DATA}")
     set(_SOURCE_PATH "${PROJECT_SOURCE_DIR}/${DATA}")
     set(_REL_PATH "${DATA}")
-  elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${DATA}")
-    set(_SOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${DATA}")
+  elseif(EXISTS "${_IREE_PACKAGE_SOURCE_DIR}/${DATA}")
+    set(_SOURCE_PATH "${_IREE_PACKAGE_SOURCE_DIR}/${DATA}")
     hrx_installed_tests_source_relative_path("${_SOURCE_PATH}" _REL_PATH)
   else()
-    set(_SOURCE_PATH "${CMAKE_CURRENT_BINARY_DIR}/${DATA}")
+    set(_SOURCE_PATH "${_IREE_PACKAGE_BINARY_DIR}/${DATA}")
     cmake_path(RELATIVE_PATH _SOURCE_PATH
       BASE_DIRECTORY "${CMAKE_BINARY_DIR}"
       OUTPUT_VARIABLE _REL_PATH)
@@ -615,6 +618,7 @@ function(hrx_register_installed_test)
 endfunction()
 
 function(hrx_register_installed_python_test)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   hrx_installed_tests_is_enabled(_ENABLED)
   if(NOT _ENABLED OR HRX_SKIP_INSTALLED_TEST_REGISTRATION)
     return()
@@ -629,7 +633,7 @@ function(hrx_register_installed_python_test)
   )
 
   if(NOT IS_ABSOLUTE "${_RULE_SRC}")
-    set(_SOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${_RULE_SRC}")
+    set(_SOURCE_PATH "${_IREE_PACKAGE_SOURCE_DIR}/${_RULE_SRC}")
   else()
     set(_SOURCE_PATH "${_RULE_SRC}")
   endif()
@@ -642,7 +646,7 @@ function(hrx_register_installed_python_test)
   set(_INSTALLED_PACKAGE_DIRS)
   foreach(_PACKAGE_DIR IN LISTS _RULE_PACKAGE_DIRS)
     if(NOT IS_ABSOLUTE "${_PACKAGE_DIR}")
-      set(_PACKAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/${_PACKAGE_DIR}")
+      set(_PACKAGE_DIR "${_IREE_PACKAGE_SOURCE_DIR}/${_PACKAGE_DIR}")
     endif()
     hrx_installed_tests_python_package_relative_path(
       "${_PACKAGE_DIR}" _PACKAGE_REL_PATH)
@@ -659,7 +663,7 @@ function(hrx_register_installed_python_test)
   set(_ABS_SOURCES)
   foreach(_SOURCE IN LISTS _RULE_SOURCES)
     if(NOT IS_ABSOLUTE "${_SOURCE}")
-      set(_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${_SOURCE}")
+      set(_SOURCE "${_IREE_PACKAGE_SOURCE_DIR}/${_SOURCE}")
     endif()
     list(APPEND _ABS_SOURCES "${_SOURCE}")
   endforeach()

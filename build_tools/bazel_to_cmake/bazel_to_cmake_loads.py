@@ -61,6 +61,8 @@ class ModuleLoader:
         self._modules = {}
         self._failures = {}
         self._loading = []
+        # Files actually read while evaluating declarative imports.
+        self.inputs = set()
 
     def symbol(self, label, name, package_dir):
         if name in self._bindings:
@@ -114,6 +116,7 @@ class ModuleLoader:
         self._loading.append(path)
         try:
             source = path.read_text(encoding="utf-8")
+            self.inputs.add(path)
             exec(compile(source, str(path), "exec"), namespace)
         except _LoadCycleError:
             raise

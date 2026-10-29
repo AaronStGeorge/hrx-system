@@ -11,6 +11,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/loom_module.cmake")
 # target-owned kernel emission. Libraries retain their independently declared
 # transitive closure until loom_finalize_module_libraries resolves the graph.
 function(loom_kernel_binary)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   # Each stage declares its tool and complete module inputs. Consumer dependency
   # closures add redundant order-only edges to every generated artifact.
   set(CMAKE_ADD_CUSTOM_COMMAND_DEPENDS_EXPLICIT_ONLY ON)
@@ -38,7 +39,7 @@ function(loom_kernel_binary)
     set(_RULE_OUTPUT "${_RULE_NAME}")
   endif()
   if(NOT _RULE_COMPONENT)
-    file(RELATIVE_PATH _PACKAGE_PATH "${PROJECT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
+    file(RELATIVE_PATH _PACKAGE_PATH "${PROJECT_SOURCE_DIR}" "${_IREE_PACKAGE_SOURCE_DIR}")
     set(_RULE_COMPONENT "//${_PACKAGE_PATH}:${_RULE_NAME}")
   endif()
 

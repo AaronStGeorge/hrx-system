@@ -9,6 +9,7 @@ include(GNUInstallDirs)
 # Declares public headers independently of native provider availability. Offline
 # consumers and source components may reference them before package traversal.
 function(amdf_declare_headers)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     ""
@@ -25,7 +26,7 @@ function(amdf_declare_headers)
   add_library(amdf::headers ALIAS ${_HEADERS_TARGET})
   target_include_directories(${_HEADERS_TARGET}
     INTERFACE
-      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+      "$<BUILD_INTERFACE:${_IREE_PACKAGE_SOURCE_DIR}/include>"
       "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
   )
   set_target_properties(${_HEADERS_TARGET} PROPERTIES EXPORT_NAME headers)
@@ -72,6 +73,7 @@ endfunction()
 # their object files are folded into the public artifacts so installed targets
 # never expose the source-tree package graph.
 function(amdf_library)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     ""
@@ -195,7 +197,7 @@ function(amdf_library)
   )
   target_include_directories(${_RULE_NAME}
     PUBLIC
-      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+      "$<BUILD_INTERFACE:${_IREE_PACKAGE_SOURCE_DIR}/include>"
       "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
   )
   target_compile_definitions(${_RULE_NAME}
@@ -234,7 +236,7 @@ function(amdf_library)
   )
   target_include_directories(${_STATIC_TARGET}
     PUBLIC
-      "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+      "$<BUILD_INTERFACE:${_IREE_PACKAGE_SOURCE_DIR}/include>"
       "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
   )
   set_target_properties(${_STATIC_TARGET} PROPERTIES
@@ -256,7 +258,7 @@ function(amdf_library)
     COMPONENT AMDF
   )
   install(
-    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/amdf"
+    DIRECTORY "${_IREE_PACKAGE_SOURCE_DIR}/include/amdf"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
     COMPONENT AMDF
     FILES_MATCHING PATTERN "*.h"

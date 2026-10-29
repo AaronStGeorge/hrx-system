@@ -1,0 +1,35 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
+load(":settings.bzl", "OPTIONS")
+
+iree_cmake_extra_content(
+    content = """
+iree_py_library(NAME generator MAIN generator.py SRCS generator.py)
+iree_py_generated_files(NAME header GENERATOR ::generator
+  INPUTS generated.h.in
+  ARGS "--input=${_IREE_PACKAGE_SOURCE_DIR}/generated.h.in"
+  OUTPUTS generated.h OUTPUT_FLAGS --output)
+""",
+    inline = True,
+)
+
+cc_library(
+    name = "value",
+    srcs = glob(["value*.c"]),
+    hdrs = ["generated.h"],
+    defines = OPTIONS + ["ADJUSTMENT=0"],
+    includes = ["."],
+)
+
+cc_binary(
+    name = "probe",
+    srcs = ["main.c"],
+    deps = [":value"],
+)

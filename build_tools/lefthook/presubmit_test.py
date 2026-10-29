@@ -623,27 +623,6 @@ class PresubmitTest(unittest.TestCase):
             self.assertIn("source.py", output.getvalue())
             self.assertIn("stops before tests", output.getvalue())
 
-    def test_bazel_to_cmake_fix_receives_only_selected_build_files(self):
-        selected_paths = ["runtime/src/iree/base/BUILD.bazel"]
-        with (
-            mock.patch.object(presubmit, "existing_files", return_value=selected_paths),
-            mock.patch.object(
-                presubmit, "run_command", return_value=True
-            ) as run_command,
-        ):
-            self.assertTrue(
-                presubmit.run_bazel_to_cmake(
-                    [*selected_paths, "runtime/src/iree/base/status.c"],
-                    fix=True,
-                    verbose=False,
-                )
-            )
-
-        command = run_command.call_args.args[0]
-        self.assertIn("--stage-updates", command)
-        self.assertEqual(command[-1], selected_paths[0])
-        self.assertNotIn("runtime/src/iree/base/status.c", command)
-
     def test_hygiene_rejects_stale_dependency_patches_without_rewriting_lock(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir)
@@ -692,82 +671,6 @@ class PresubmitTest(unittest.TestCase):
                     presubmit.run_hygiene(["README.md"], fix=False, verbose=False)
                 )
             self.assertIn("MODULE.cmake.lock is stale", output.getvalue())
-
-    def test_bazel_to_cmake_global_fix_is_read_only(self):
-        with mock.patch.object(
-            presubmit, "run_command", return_value=True
-        ) as run_command:
-            self.assertTrue(
-                presubmit.run_bazel_to_cmake(
-                    ["build_tools/bazel_to_cmake/bazel_to_cmake.py"],
-                    fix=True,
-                    verbose=False,
-                )
-            )
-
-        command = run_command.call_args.args[0]
-        self.assertIn("--check", command)
-        self.assertNotIn("--stage-updates", command)
-
-        self.assertTrue(
-            presubmit.is_bazel_to_cmake_global_trigger(
-                "runtime/requirements/package_policy.bzl"
-            )
-        )
-        self.assertTrue(
-            presubmit.is_bazel_to_cmake_global_trigger(
-                "loom/build_tools/amdgpu/target_config.bzl"
-            )
-        )
-        self.assertTrue(
-            presubmit.is_bazel_to_cmake_global_trigger(
-                "loom/build_tools/bazel_to_cmake/loom_corpus.py"
-            )
-        )
-
-    def test_bazel_to_cmake_skips_unrelated_paths(self):
-        with (
-            mock.patch.object(presubmit, "existing_files", return_value=[]),
-            mock.patch.object(presubmit, "skip_step", return_value=True) as skip_step,
-            mock.patch.object(presubmit, "run_command") as run_command,
-        ):
-            self.assertTrue(
-                presubmit.run_bazel_to_cmake(
-                    ["build_tools/lefthook/presubmit.py"],
-                    fix=True,
-                    verbose=False,
-                )
-            )
-
-        skip_step.assert_called_once_with(
-            "Bazel-to-CMake", "no selected Bazel/CMake files"
-        )
-        run_command.assert_not_called()
-
-    def test_starlark_changes_check_cmake_without_rewriting_dependents(self):
-        for path in (
-            "loom/src/loom/test/corpus/numeric/manifest.bzl",
-            "runtime/src/iree/hal/driver_rules.bzl",
-        ):
-            for fix in (False, True):
-                with (
-                    self.subTest(path=path, fix=fix),
-                    mock.patch.object(
-                        presubmit, "run_command", return_value=False
-                    ) as run_command,
-                ):
-                    self.assertFalse(
-                        presubmit.run_bazel_to_cmake([path], fix=fix, verbose=False)
-                    )
-                    run_command.assert_called_once_with(
-                        [
-                            sys.executable,
-                            "build_tools/bazel_to_cmake/bazel_to_cmake.py",
-                            "--check",
-                        ],
-                        "Bazel-to-CMake",
-                        False,
-                    )
 
     def test_clang_tidy_candidates_require_configured_prefix_and_extension(self):
         with (

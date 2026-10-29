@@ -23,6 +23,7 @@
 #              conversion to CMake, this expands to just x, as the binary dir is
 #              the default working dir for custom commands anyway.
 function(iree_genrule)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     ""
@@ -42,7 +43,7 @@ function(iree_genrule)
   string(REGEX REPLACE "\\$\\(rootpath //([^)]+)\\)" "${IREE_ROOT_DIR}/\\1" _CMD "${_CMD}")
 
   # Replace Bazel syntax $(rootpath x) with the path into the source dir.
-  string(REGEX REPLACE "\\$\\(rootpath ([^)]+)\\)" "${CMAKE_CURRENT_SOURCE_DIR}/\\1" _CMD "${_CMD}")
+  string(REGEX REPLACE "\\$\\(rootpath ([^)]+)\\)" "${_IREE_PACKAGE_SOURCE_DIR}/\\1" _CMD "${_CMD}")
 
   # Replace Bazel syntax $(execpath //package:file) with the path into the
   # binary tree from the repository root.
@@ -73,6 +74,7 @@ function(iree_genrule)
   # by semicolon here. Careful to avoid replacing backslash-escaped spaces.
   string(REGEX REPLACE "([^\\]) " "\\1;" _CMD "${_CMD}")
 
+  iree_resolve_source_files(_RULE_SRCS ${_RULE_SRCS})
   add_custom_command(
     OUTPUT
       ${_RULE_OUTS}

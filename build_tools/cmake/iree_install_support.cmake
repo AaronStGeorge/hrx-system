@@ -108,6 +108,7 @@ function(iree_add_alias_executable to_target from_target)
 endfunction()
 
 function(iree_install_targets)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     ""
@@ -159,12 +160,12 @@ function(iree_install_targets)
   # root path is truthy.
   if(_RULE_HDRS AND IREE_HDRS_ROOT_PATH)
     foreach(_hdr_file ${_RULE_HDRS})
-      set(_hdr_abs_path "${CMAKE_CURRENT_SOURCE_DIR}/${_hdr_file}")
+      set(_hdr_abs_path "${_IREE_PACKAGE_SOURCE_DIR}/${_hdr_file}")
       if(NOT EXISTS "${_hdr_abs_path}")
         # Assume it is generated in the binary dir.
         set(_hdr_abs_path "${CMAKE_CURRENT_BINARY_DIR}/${_hdr_file}")
       endif()
-      set(_hdr_base_relative "${CMAKE_CURRENT_SOURCE_DIR}/${_hdr_file}")
+      set(_hdr_base_relative "${_IREE_PACKAGE_SOURCE_DIR}/${_hdr_file}")
       cmake_path(
         RELATIVE_PATH _hdr_base_relative
         BASE_DIRECTORY "${IREE_HDRS_ROOT_PATH}")

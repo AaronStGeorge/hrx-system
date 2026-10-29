@@ -24,7 +24,7 @@ loom_target_set(
 
 iree_cmake_extra_content(
     content = """
-set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(IREE_PACKAGE_ROOT_DIR "${_IREE_PACKAGE_SOURCE_DIR}")
 set(IREE_PACKAGE_ROOT_PREFIX "loom/target")
 """,
 )

@@ -26,6 +26,7 @@
 # TODO(scotttodd): Support passing KWARGS down into iree_cc_library?
 #
 function(iree_c_embed_data)
+  iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(
     _RULE
     "PUBLIC;TESTONLY;FLATTEN"
@@ -64,9 +65,9 @@ function(iree_c_embed_data)
     elseif(_SRC MATCHES "^[$]<")
       # _SRC is a CMake generator expression (starts with `$<`).
       list(APPEND _RESOLVED_SRCS "${_SRC}")
-    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_SRC}")
+    elseif(EXISTS "${_IREE_PACKAGE_SOURCE_DIR}/${_SRC}")
       # _SRC path exists relatively to current source dir.
-      list(APPEND _RESOLVED_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/${_SRC}")
+      list(APPEND _RESOLVED_SRCS "${_IREE_PACKAGE_SOURCE_DIR}/${_SRC}")
     elseif(EXISTS "${IREE_SOURCE_DIR}/${_SRC}")
       # _SRC path exists relatively to root source dir.
       list(APPEND _RESOLVED_SRCS "${IREE_SOURCE_DIR}/${_SRC}")

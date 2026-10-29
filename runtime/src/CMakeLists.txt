@@ -48,4 +48,4 @@ if(IREE_ENABLE_UBSAN)
   )
 endif(IREE_ENABLE_UBSAN)
 
-add_subdirectory(iree)
+iree_add_subdirectory(iree)

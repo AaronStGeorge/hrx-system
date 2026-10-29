@@ -17,6 +17,7 @@ endif()
 
 function(_iree_hal_amdgpu_read_device_bitcode_sources out_var)
   set(_source_list_path "${CMAKE_CURRENT_SOURCE_DIR}/../device_bitcode_sources.bzl")
+  cmake_path(NORMAL_PATH _source_list_path)
   set_property(DIRECTORY APPEND PROPERTY
     CMAKE_CONFIGURE_DEPENDS "${_source_list_path}")
   file(READ "${_source_list_path}" _source_list)

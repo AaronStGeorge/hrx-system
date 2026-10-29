@@ -455,7 +455,7 @@ class BuildFileFunctions(object):
         When expand_locations is set, $(location ...) make-variables in each
         string are expanded so flags such as
         -Wl,--version-script=$(location :foo.map) resolve under CMake. A
-        same-package source file resolves to ${CMAKE_CURRENT_SOURCE_DIR}/<name>,
+        same-package source file resolves to ${_IREE_PACKAGE_SOURCE_DIR}/<name>,
         which is correct even when the target lives in a CMake sub-project whose
         PROJECT_SOURCE_DIR is not the repo root.
         """
@@ -666,7 +666,7 @@ class BuildFileFunctions(object):
     def _convert_linkopt_location_arg(self, arg):
         # Linkopts such as -Wl,--version-script=$(location :foo.map) must resolve
         # to a path the linker can open at link time. A same-package source file
-        # maps to ${CMAKE_CURRENT_SOURCE_DIR}/<name>, which is correct regardless
+        # maps to ${_IREE_PACKAGE_SOURCE_DIR}/<name>, which is correct regardless
         # of the enclosing CMake project root -- unlike ${PROJECT_SOURCE_DIR},
         # which is the repo root only for the top-level project and not for
         # sub-projects such as libhrx.
@@ -674,7 +674,7 @@ class BuildFileFunctions(object):
             label = match.group(2)
             package, name = self._split_location_label(label)
             if package == self._current_package():
-                return f"${{CMAKE_CURRENT_SOURCE_DIR}}/{name}"
+                return f"${{_IREE_PACKAGE_SOURCE_DIR}}/{name}"
             return " ".join(self._cmake_location_paths(label))
 
         return [_LOCATION_PATTERN.sub(replace_location, arg)]
@@ -789,7 +789,7 @@ class BuildFileFunctions(object):
             # DATA locations need full paths; preserve the relative list for
             # consumers such as embedded sources and golden test names.
             self._converter.body += (
-                f'list(TRANSFORM {var} PREPEND "${{CMAKE_CURRENT_SOURCE_DIR}}/"'
+                f'list(TRANSFORM {var} PREPEND "${{_IREE_PACKAGE_SOURCE_DIR}}/"'
                 f" OUTPUT_VARIABLE {absolute_var})\n"
             )
             return self._expand_cmake_var(absolute_var)
@@ -1169,7 +1169,7 @@ class BuildFileFunctions(object):
         dirs = []
         for include in includes:
             dirs.append(
-                "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/%s>" % (include,)
+                "$<BUILD_INTERFACE:${_IREE_PACKAGE_SOURCE_DIR}/%s>" % (include,)
             )
             dirs.append(
                 "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/%s>" % (include,)
@@ -1696,8 +1696,8 @@ class BuildFileFunctions(object):
             self._source_glob_vars[self._expand_cmake_var(var)] = var
             self._converter.body += (
                 f"file(GLOB {var} LIST_DIRECTORIES false"
-                f" RELATIVE {self._expand_cmake_var('CMAKE_CURRENT_SOURCE_DIR')}"
-                f" CONFIGURE_DEPENDS {pattern})\n"
+                f" RELATIVE {self._expand_cmake_var('_IREE_PACKAGE_SOURCE_DIR')}"
+                f' CONFIGURE_DEPENDS "${{_IREE_PACKAGE_SOURCE_DIR}}/{pattern}")\n'
             )
         for pattern in exclude:
             if "**" in pattern:
@@ -1707,8 +1707,8 @@ class BuildFileFunctions(object):
             )
             self._converter.body += (
                 f"file(GLOB {exclude_var} LIST_DIRECTORIES false"
-                f" RELATIVE {self._expand_cmake_var('CMAKE_CURRENT_SOURCE_DIR')}"
-                f" CONFIGURE_DEPENDS {pattern})\n"
+                f" RELATIVE {self._expand_cmake_var('_IREE_PACKAGE_SOURCE_DIR')}"
+                f' CONFIGURE_DEPENDS "${{_IREE_PACKAGE_SOURCE_DIR}}/{pattern}")\n'
             )
             for glob_var in glob_vars:
                 self._converter.body += f"list(REMOVE_ITEM {glob_var} {self._expand_cmake_var(exclude_var)})\n"
@@ -2999,13 +2999,16 @@ class Converter(object):
     """Conversion state tracking and full file template substitution."""
 
     def __init__(self):
-        # Header appears after the license block but before `iree_add_all_subdirs`.
+        # Header appears before package traversal with `iree_add_all_subdirs`.
         self.header = ""
         # Body appears after `iree_add_all_subdirs`.
         self.body = ""
 
     def convert(self):
-        converted_content = f"{self.header}\n\niree_add_all_subdirs()\n\n{self.body}"
+        converted_content = (
+            "\niree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)\n"
+            f"{self.header}\n\niree_add_all_subdirs()\n\n{self.body}"
+        )
 
         # Cleanup newline characters. This is more convenient than ensuring all
         # conversions are careful with where they insert newlines.
@@ -3028,6 +3031,7 @@ def convert_build_file(
     repo_cfg,
     build_dir,
     repo_root="",
+    input_files=None,
 ):
     converter = Converter()
     # Allow overrides of TargetConverter and BuildFileFunctions from repo cfg.
@@ -3055,4 +3059,6 @@ def convert_build_file(
     build_file_functions._load_handlers = dict(exec_namespace)
     build_file_functions._exec_namespace = exec_namespace
     exec(build_file_code, exec_namespace)
+    if input_files is not None:
+        input_files.update(build_file_functions._loaded_modules.inputs)
     return converter.convert()

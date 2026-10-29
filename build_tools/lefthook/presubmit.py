@@ -1540,45 +1540,6 @@ def run_build_filename_check(paths: list[str]) -> bool:
     return ok
 
 
-def is_bazel_to_cmake_global_trigger(path: str) -> bool:
-    input_path = Path(path)
-    return (
-        input_path.name == ".bazel_to_cmake.cfg.py"
-        or input_path.suffix == ".bzl"
-        or path.startswith(
-            (
-                "build_tools/bazel_to_cmake/",
-                "loom/build_tools/bazel_to_cmake/",
-                "loom/requirements/",
-                "runtime/requirements/",
-            )
-        )
-    )
-
-
-def bazel_to_cmake_input_paths(paths: list[str]) -> list[str]:
-    return existing_files(
-        [
-            path
-            for path in paths
-            if Path(path).name in {"BUILD", "BUILD.bazel", "CMakeLists.txt"}
-        ]
-    )
-
-
-def run_bazel_to_cmake(paths: list[str], fix: bool, verbose: bool) -> bool:
-    command = [sys.executable, "build_tools/bazel_to_cmake/bazel_to_cmake.py"]
-    if any(is_bazel_to_cmake_global_trigger(path) for path in paths):
-        command.append("--check")
-        return run_command(command, "Bazel-to-CMake", verbose)
-
-    input_paths = bazel_to_cmake_input_paths(paths)
-    if not input_paths:
-        return skip_step("Bazel-to-CMake", "no selected Bazel/CMake files")
-    command += ["--stage-updates" if fix else "--check", *input_paths]
-    return run_command(command, "Bazel-to-CMake", verbose)
-
-
 def run_amdgpu_target_map(paths: list[str], fix: bool, verbose: bool) -> bool:
     relevant_prefixes = (
         "build_tools/amdgpu/elf_machine_map.inl",
@@ -1636,7 +1597,6 @@ def run_hygiene(paths: list[str], fix: bool, verbose: bool) -> bool:
     ok = run_buildifier(paths, fix=fix, verbose=verbose) and ok
     ok = run_ruff(paths, fix=fix, verbose=verbose) and ok
     ok = run_clang_format(paths, fix=fix, verbose=verbose) and ok
-    ok = run_bazel_to_cmake(paths, fix=fix, verbose=verbose) and ok
     ok = run_amdgpu_target_map(paths, fix=fix, verbose=verbose) and ok
     return ok
 
