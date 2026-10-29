@@ -195,15 +195,18 @@ def evaluate_packages(root_dirs, input_files):
     """Establishes generated-file ownership before any consumer is emitted."""
     generated_files = {}
     packages = {}
+    authored_directories = set()
     for root_dir in root_dirs:
         root_path = Path(repo_root) / root_dir
         if not root_path.is_dir():
             raise FileNotFoundError(f"Cannot find package root {root_path}")
         for directory, _, _ in os.walk(root_path):
+            if (Path(directory) / "CMakeLists.txt").is_file():
+                authored_directories.add(Path(directory).relative_to(repo_root))
             package = evaluate_directory(directory, input_files, generated_files)
             if package is not None:
                 packages[package.directory] = package
-    return packages
+    return packages, authored_directories
 
 
 def write_if_changed(path, content):
@@ -233,9 +236,36 @@ def generate_build_tree(output_dir, root_dirs):
                 )
     input_files = set()
     output_files = set()
-    for package in evaluate_packages(root_dirs, input_files).values():
+    packages, authored_directories = evaluate_packages(root_dirs, input_files)
+    for package in packages.values():
         path = output_dir / package.directory / "CMakeLists.txt"
         write_if_changed(path, package.convert())
+        output_files.add(path)
+
+    # Native directory traversal must reach every declared package, including
+    # leaves beneath directories that have no declarations of their own.
+    # Authored CMake retains control of its children and directory scope.
+    entries = packages.keys() | authored_directories
+    traversal_directories = set()
+    for directory in entries:
+        for parent in directory.parents:
+            if (
+                parent == Path(".")
+                or parent in entries
+                or parent in traversal_directories
+                or (source_root / parent / "CMakeLists.txt").is_file()
+            ):
+                break
+            traversal_directories.add(parent)
+    for directory in sorted(traversal_directories):
+        path = output_dir / directory / "CMakeLists.txt"
+        write_if_changed(
+            path,
+            "# Generated from descendant package declarations.\n"
+            "set_property(DIRECTORY PROPERTY IREE_PACKAGE_SOURCE_DIR "
+            f'"${{IREE_SOURCE_DIR}}/{directory.as_posix()}")\n'
+            "iree_add_all_subdirs()\n",
+        )
         output_files.add(path)
 
     # Include configuration and handler modules actually imported by conversion.
@@ -280,7 +310,7 @@ def main(args):
             path = path.parent
         if not path.is_dir():
             raise FileNotFoundError(f"Cannot find package {path}")
-        packages = evaluate_packages(repo_cfg.DEFAULT_ROOT_DIRS, set())
+        packages, _ = evaluate_packages(repo_cfg.DEFAULT_ROOT_DIRS, set())
         package = packages.get(path.relative_to(repo_root))
         if package is None:
             raise ValueError(f"{path} has no generated CMake package")
