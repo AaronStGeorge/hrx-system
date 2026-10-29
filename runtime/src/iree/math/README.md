@@ -7,7 +7,7 @@ constant evaluation and dynamic execution can agree across hosts.
 
 Ordinary F32/F64 square root, reciprocal square root, cube root, exponentials,
 logarithms, real powers, hyperbolic functions, trigonometry, error functions,
-and activations preserve gradual underflow.
+activations, and integral rounding preserve gradual underflow.
 Both scalar and vector constant folding and the Core VM call these same typed
 functions:
 
@@ -17,6 +17,11 @@ double weight = iree_math_exp_f64(score);
 double power = iree_math_exp2_f64(exponent);
 double correction = iree_math_log1p_f64(delta);
 ```
+
+Integral rounding provides ceil, floor, truncation, nearest-even, and
+nearest-away at both widths. Fixed-direction native instructions or integer
+exponent/mantissa rounding preserve signed zero and canonicalize NaNs without
+depending on the caller's rounding direction or platform libm.
 
 Square root is correctly rounded and uses hardware instructions when available.
 An integer restoring algorithm supplies the same payloads on hardware without

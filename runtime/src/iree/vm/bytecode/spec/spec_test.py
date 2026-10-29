@@ -120,7 +120,7 @@ class SpecificationTest(unittest.TestCase):
                 len(NUMERIC_TABLES),
                 sum(len(table.values) for table in NUMERIC_TABLES),
             ),
-            (12, 184, 21, 254, tuple(range(1, 14)), 59, 9, 30),
+            (12, 184, 21, 256, tuple(range(1, 14)), 59, 9, 30),
         )
 
     def test_layout_rejects_implicit_alignment_padding(self) -> None:
@@ -175,6 +175,7 @@ class SpecificationTest(unittest.TestCase):
             ("round_even", 2),
             ("trunc", 3),
             ("sign", 4),
+            ("round_away", 43),
         )
         ordinary_values = (
             ("sqrt", 12),

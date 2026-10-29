@@ -27,6 +27,7 @@
 #include "iree/math/inverse_trigonometry.h"
 #include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
+#include "iree/math/rounding.h"
 #include "iree/math/trigonometry.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/float_facts.h"
@@ -1674,13 +1675,6 @@ static bool loom_vector_dot4f8_apply(uint8_t kind, uint32_t lhs_raw,
     *accumulator = iree_math_fma_f32(lhs, rhs, *accumulator);
   }
   return true;
-}
-
-static float loom_vector_roundeven_f32(float input) {
-  return nearbyintf(input);
-}
-static double loom_vector_roundeven_f64(double input) {
-  return nearbyint(input);
 }
 
 static void loom_vector_float_negate_transfer(loom_scalar_type_t scalar_type,
@@ -3927,13 +3921,18 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_siluf_facts, iree_math_silu_f32,
                               iree_math_silu_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_softplusf_facts,
                               iree_math_softplus_f32, iree_math_softplus_f64)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_ceilf_facts, ceilf, ceil)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_floorf_facts, floorf, floor)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_roundf_facts, roundf, round)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_ceilf_facts, iree_math_ceil_f32,
+                              iree_math_ceil_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_floorf_facts, iree_math_floor_f32,
+                              iree_math_floor_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_roundf_facts,
+                              iree_math_round_away_f32,
+                              iree_math_round_away_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_roundevenf_facts,
-                              loom_vector_roundeven_f32,
-                              loom_vector_roundeven_f64)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_truncf_facts, truncf, trunc)
+                              iree_math_round_even_f32,
+                              iree_math_round_even_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_truncf_facts, iree_math_trunc_f32,
+                              iree_math_trunc_f64)
 LOOM_VECTOR_INTEGER_UNARY_FACTS(loom_vector_signi_facts,
                                 loom_vector_signi_transfer)
 

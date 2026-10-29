@@ -66,6 +66,9 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, EvaluatesExactF32Selectors) {
   EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ROUND_EVEN,
                             UINT32_C(0x40200000)),
             UINT32_C(0x40000000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ROUND_AWAY,
+                            UINT32_C(0x40200000)),
+            UINT32_C(0x40400000));
   EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_TRUNC,
                             UINT32_C(0xBFE00000)),
             UINT32_C(0xBF800000));
@@ -74,6 +77,7 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, EvaluatesExactF32Selectors) {
       IREE_VM_BYTECODE_FLOAT_MATH_F32_CEIL,
       IREE_VM_BYTECODE_FLOAT_MATH_F32_FLOOR,
       IREE_VM_BYTECODE_FLOAT_MATH_F32_ROUND_EVEN,
+      IREE_VM_BYTECODE_FLOAT_MATH_F32_ROUND_AWAY,
       IREE_VM_BYTECODE_FLOAT_MATH_F32_TRUNC,
   };
   for (uint8_t selector : rounding_selectors) {
@@ -140,6 +144,9 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, EvaluatesExactF64Selectors) {
   EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ROUND_EVEN,
                             UINT64_C(0x4004000000000000)),
             UINT64_C(0x4000000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ROUND_AWAY,
+                            UINT64_C(0x4004000000000000)),
+            UINT64_C(0x4008000000000000));
   EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_TRUNC,
                             UINT64_C(0xBFFC000000000000)),
             UINT64_C(0xBFF0000000000000));
@@ -148,6 +155,7 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, EvaluatesExactF64Selectors) {
       IREE_VM_BYTECODE_FLOAT_MATH_F64_CEIL,
       IREE_VM_BYTECODE_FLOAT_MATH_F64_FLOOR,
       IREE_VM_BYTECODE_FLOAT_MATH_F64_ROUND_EVEN,
+      IREE_VM_BYTECODE_FLOAT_MATH_F64_ROUND_AWAY,
       IREE_VM_BYTECODE_FLOAT_MATH_F64_TRUNC,
   };
   for (uint8_t selector : rounding_selectors) {

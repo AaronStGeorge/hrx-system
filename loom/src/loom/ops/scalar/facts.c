@@ -22,6 +22,7 @@
 #include "iree/math/inverse_trigonometry.h"
 #include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
+#include "iree/math/rounding.h"
 #include "iree/math/trigonometry.h"
 #include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
@@ -128,8 +129,6 @@ static float mul_f32(float a, float b) { return a * b; }
 static double mul_f64(double a, double b) { return a * b; }
 static float div_f32(float a, float b) { return a / b; }
 static double div_f64(double a, double b) { return a / b; }
-static float roundeven_f32(float x) { return nearbyintf(x); }
-static double roundeven_f64(double x) { return nearbyint(x); }
 
 //===----------------------------------------------------------------------===//
 // scalar.constant
@@ -438,11 +437,16 @@ iree_status_t loom_scalar_fmaf_facts(loom_fact_context_t* context,
   return iree_ok_status();
 }
 
-FLOAT_UNARY_FACTS(loom_scalar_ceilf_facts, ceilf, ceil)
-FLOAT_UNARY_FACTS(loom_scalar_floorf_facts, floorf, floor)
-FLOAT_UNARY_FACTS(loom_scalar_roundf_facts, roundf, round)
-FLOAT_UNARY_FACTS(loom_scalar_roundevenf_facts, roundeven_f32, roundeven_f64)
-FLOAT_UNARY_FACTS(loom_scalar_truncf_facts, truncf, trunc)
+FLOAT_UNARY_FACTS(loom_scalar_ceilf_facts, iree_math_ceil_f32,
+                  iree_math_ceil_f64)
+FLOAT_UNARY_FACTS(loom_scalar_floorf_facts, iree_math_floor_f32,
+                  iree_math_floor_f64)
+FLOAT_UNARY_FACTS(loom_scalar_roundf_facts, iree_math_round_away_f32,
+                  iree_math_round_away_f64)
+FLOAT_UNARY_FACTS(loom_scalar_roundevenf_facts, iree_math_round_even_f32,
+                  iree_math_round_even_f64)
+FLOAT_UNARY_FACTS(loom_scalar_truncf_facts, iree_math_trunc_f32,
+                  iree_math_trunc_f64)
 
 //===----------------------------------------------------------------------===//
 // Bitwise

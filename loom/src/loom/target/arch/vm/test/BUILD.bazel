@@ -22,6 +22,7 @@ loom_check_test_suite(
         "inverse_hyperbolic.loom-test",
         "math_contraction.loom-test",
         "math_policy.loom-test",
+        "rounding.loom-test",
         "scalar.loom-test",
     ],
     target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),

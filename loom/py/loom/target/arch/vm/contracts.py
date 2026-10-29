@@ -220,6 +220,7 @@ _MATH_SOURCE_OPS = {
     "ceil": math.scalar_ceilf,
     "floor": math.scalar_floorf,
     "round_even": math.scalar_roundevenf,
+    "round_away": math.scalar_roundf,
     "trunc": math.scalar_truncf,
     "sign": comparison.scalar_signf,
     # Despite the ISA spelling, these are frozen correctly rounded f32

@@ -32,6 +32,7 @@ iree_runtime_cc_library(
         "logarithm_reduction.h",
         "roots.c",
         "roots_integer.h",
+        "rounding.c",
         "trigonometry.c",
     ],
     hdrs = [
@@ -43,6 +44,7 @@ iree_runtime_cc_library(
         "inverse_trigonometry.h",
         "logarithm.h",
         "roots.h",
+        "rounding.h",
         "trigonometry.h",
     ],
     # Each exported operation freezes one exact result mapping. Prevent an
@@ -91,6 +93,7 @@ iree_runtime_cc_test(
         "logarithm_test.cc",
         "roots_integer.h",
         "roots_test.cc",
+        "rounding_test.cc",
         "trigonometry_test.cc",
     ],
     deps = [

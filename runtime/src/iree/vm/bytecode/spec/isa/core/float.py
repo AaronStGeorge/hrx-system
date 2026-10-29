@@ -163,6 +163,12 @@ _FLOAT_MATH_EXACT_UNARY_VALUES = (
         "negative nonzero values, including -infinity, become -1; positive nonzero "
         "values, including +infinity, become +1.",
     ),
+    (
+        "round_away",
+        43,
+        "Returns the nearest integral value with halfway cases away from zero, "
+        "preserving signed zero and signed infinity.",
+    ),
 )
 
 _FLOAT_MATH_ORDINARY_UNARY_VALUES = (

@@ -228,3 +228,47 @@ func.def @vector_activation_tails_and_scale() -> (vector<2xf32>, vector<2xf32>, 
   %gelu_logistic = vector.constant -0.001007080078125 : vector<2xf16>
   func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf32>, vector<2xf16>
 }
+
+// ====
+
+func.def @rounding_vector_4xf16() -> (vector<4xf16>, vector<4xf16>, vector<4xf16>, vector<4xf16>, vector<4xf16>) {
+  %input = vector.constant -0.5 : vector<4xf16>
+  %ceil = vector.ceilf %input : vector<4xf16>
+  %floor = vector.floorf %input : vector<4xf16>
+  %trunc = vector.truncf %input : vector<4xf16>
+  %roundeven = vector.roundevenf %input : vector<4xf16>
+  %round = vector.roundf %input : vector<4xf16>
+  func.return %ceil, %floor, %trunc, %roundeven, %round : vector<4xf16>, vector<4xf16>, vector<4xf16>, vector<4xf16>, vector<4xf16>
+}
+
+// ----
+func.def @rounding_vector_4xf16() -> (vector<4xf16>, vector<4xf16>, vector<4xf16>, vector<4xf16>, vector<4xf16>) {
+  %ceil = vector.constant -0.0 : vector<4xf16>
+  %floor = vector.constant -1.0 : vector<4xf16>
+  %trunc = vector.constant -0.0 : vector<4xf16>
+  %roundeven = vector.constant -0.0 : vector<4xf16>
+  %round = vector.constant -1.0 : vector<4xf16>
+  func.return %ceil, %floor, %trunc, %roundeven, %round : vector<4xf16>, vector<4xf16>, vector<4xf16>, vector<4xf16>, vector<4xf16>
+}
+
+// ====
+
+func.def @rounding_vector_2xf64() -> (vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>) {
+  %input = vector.constant -0.5 : vector<2xf64>
+  %ceil = vector.ceilf %input : vector<2xf64>
+  %floor = vector.floorf %input : vector<2xf64>
+  %trunc = vector.truncf %input : vector<2xf64>
+  %roundeven = vector.roundevenf %input : vector<2xf64>
+  %round = vector.roundf %input : vector<2xf64>
+  func.return %ceil, %floor, %trunc, %roundeven, %round : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>
+}
+
+// ----
+func.def @rounding_vector_2xf64() -> (vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>) {
+  %ceil = vector.constant -0.0 : vector<2xf64>
+  %floor = vector.constant -1.0 : vector<2xf64>
+  %trunc = vector.constant -0.0 : vector<2xf64>
+  %roundeven = vector.constant -0.0 : vector<2xf64>
+  %round = vector.constant -1.0 : vector<2xf64>
+  func.return %ceil, %floor, %trunc, %roundeven, %round : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>
+}

@@ -11,6 +11,7 @@
 
 #include "iree/base/internal/math.h"
 #include "iree/math/fma.h"
+#include "iree/math/rounding.h"
 #include "iree/math/trigonometry.h"
 
 static bool loom_float_type_uses_f32_arithmetic(
@@ -838,7 +839,7 @@ void loom_value_facts_eval_float_to_integer(
     return;
   }
 
-  const double truncated_value = trunc(source_value);
+  const double truncated_value = iree_math_trunc_f64(source_value);
   switch (kind) {
     case LOOM_FLOAT_INTEGER_CONVERSION_SIGNED: {
       const double upper_exclusive =

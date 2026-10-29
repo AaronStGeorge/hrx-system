@@ -400,3 +400,135 @@ func.def @scalar_activation_tails_and_scale() -> (f32, f32, f64, f64, f32, f16) 
   %gelu_logistic = scalar.constant -0.001007080078125 : f16
   func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : f32, f32, f64, f64, f32, f16
 }
+
+// ====
+
+func.def @rounding_f32() -> (f32, f32, f32, f32, f32) {
+  %input = scalar.constant -2.5 : f32
+  %ceil = scalar.ceilf %input : f32
+  %floor = scalar.floorf %input : f32
+  %trunc = scalar.truncf %input : f32
+  %roundeven = scalar.roundevenf %input : f32
+  %round = scalar.roundf %input : f32
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f32, f32, f32, f32, f32
+}
+
+// ----
+func.def @rounding_f32() -> (f32, f32, f32, f32, f32) {
+  %ceil = scalar.constant -2.0 : f32
+  %floor = scalar.constant -3.0 : f32
+  %trunc = scalar.constant -2.0 : f32
+  %roundeven = scalar.constant -2.0 : f32
+  %round = scalar.constant -3.0 : f32
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f32, f32, f32, f32, f32
+}
+
+// ====
+
+func.def @rounding_f64() -> (f64, f64, f64, f64, f64) {
+  %input = scalar.constant -2.5 : f64
+  %ceil = scalar.ceilf %input : f64
+  %floor = scalar.floorf %input : f64
+  %trunc = scalar.truncf %input : f64
+  %roundeven = scalar.roundevenf %input : f64
+  %round = scalar.roundf %input : f64
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f64, f64, f64, f64, f64
+}
+
+// ----
+func.def @rounding_f64() -> (f64, f64, f64, f64, f64) {
+  %ceil = scalar.constant -2.0 : f64
+  %floor = scalar.constant -3.0 : f64
+  %trunc = scalar.constant -2.0 : f64
+  %roundeven = scalar.constant -2.0 : f64
+  %round = scalar.constant -3.0 : f64
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f64, f64, f64, f64, f64
+}
+
+// ====
+
+func.def @rounding_f16() -> (f16, f16, f16, f16, f16) {
+  %input = scalar.constant -2.5 : f16
+  %ceil = scalar.ceilf %input : f16
+  %floor = scalar.floorf %input : f16
+  %trunc = scalar.truncf %input : f16
+  %roundeven = scalar.roundevenf %input : f16
+  %round = scalar.roundf %input : f16
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f16, f16, f16, f16, f16
+}
+
+// ----
+func.def @rounding_f16() -> (f16, f16, f16, f16, f16) {
+  %ceil = scalar.constant -2.0 : f16
+  %floor = scalar.constant -3.0 : f16
+  %trunc = scalar.constant -2.0 : f16
+  %roundeven = scalar.constant -2.0 : f16
+  %round = scalar.constant -3.0 : f16
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f16, f16, f16, f16, f16
+}
+
+// ====
+
+func.def @rounding_bf16() -> (bf16, bf16, bf16, bf16, bf16) {
+  %input = scalar.constant -2.5 : bf16
+  %ceil = scalar.ceilf %input : bf16
+  %floor = scalar.floorf %input : bf16
+  %trunc = scalar.truncf %input : bf16
+  %roundeven = scalar.roundevenf %input : bf16
+  %round = scalar.roundf %input : bf16
+  func.return %ceil, %floor, %trunc, %roundeven, %round : bf16, bf16, bf16, bf16, bf16
+}
+
+// ----
+func.def @rounding_bf16() -> (bf16, bf16, bf16, bf16, bf16) {
+  %ceil = scalar.constant -2.0 : bf16
+  %floor = scalar.constant -3.0 : bf16
+  %trunc = scalar.constant -2.0 : bf16
+  %roundeven = scalar.constant -2.0 : bf16
+  %round = scalar.constant -3.0 : bf16
+  func.return %ceil, %floor, %trunc, %roundeven, %round : bf16, bf16, bf16, bf16, bf16
+}
+
+// ====
+
+func.def @rounding_f8E4M3() -> (f8E4M3, f8E4M3, f8E4M3, f8E4M3, f8E4M3) {
+  %input = scalar.constant -2.5 : f8E4M3
+  %ceil = scalar.ceilf %input : f8E4M3
+  %floor = scalar.floorf %input : f8E4M3
+  %trunc = scalar.truncf %input : f8E4M3
+  %roundeven = scalar.roundevenf %input : f8E4M3
+  %round = scalar.roundf %input : f8E4M3
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f8E4M3, f8E4M3, f8E4M3, f8E4M3, f8E4M3
+}
+
+// ----
+func.def @rounding_f8E4M3() -> (f8E4M3, f8E4M3, f8E4M3, f8E4M3, f8E4M3) {
+  %ceil = scalar.constant -2.0 : f8E4M3
+  %floor = scalar.constant -3.0 : f8E4M3
+  %trunc = scalar.constant -2.0 : f8E4M3
+  %roundeven = scalar.constant -2.0 : f8E4M3
+  %round = scalar.constant -3.0 : f8E4M3
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f8E4M3, f8E4M3, f8E4M3, f8E4M3, f8E4M3
+}
+
+// ====
+
+func.def @rounding_f8E5M2() -> (f8E5M2, f8E5M2, f8E5M2, f8E5M2, f8E5M2) {
+  %input = scalar.constant -2.5 : f8E5M2
+  %ceil = scalar.ceilf %input : f8E5M2
+  %floor = scalar.floorf %input : f8E5M2
+  %trunc = scalar.truncf %input : f8E5M2
+  %roundeven = scalar.roundevenf %input : f8E5M2
+  %round = scalar.roundf %input : f8E5M2
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f8E5M2, f8E5M2, f8E5M2, f8E5M2, f8E5M2
+}
+
+// ----
+func.def @rounding_f8E5M2() -> (f8E5M2, f8E5M2, f8E5M2, f8E5M2, f8E5M2) {
+  %ceil = scalar.constant -2.0 : f8E5M2
+  %floor = scalar.constant -3.0 : f8E5M2
+  %trunc = scalar.constant -2.0 : f8E5M2
+  %roundeven = scalar.constant -2.0 : f8E5M2
+  %round = scalar.constant -3.0 : f8E5M2
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f8E5M2, f8E5M2, f8E5M2, f8E5M2, f8E5M2
+}

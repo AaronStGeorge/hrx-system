@@ -361,3 +361,47 @@ check.case public @ordinary_activations_narrow {
   check.expect.equal actual(%result) expected(%expected) : f16
   check.return
 }
+
+func.def @rounding_f32(%input: f32) -> (f32, f32, f32, f32, f32) {
+  %ceil = scalar.ceilf %input : f32
+  %floor = scalar.floorf %input : f32
+  %trunc = scalar.truncf %input : f32
+  %roundeven = scalar.roundevenf %input : f32
+  %round = scalar.roundf %input : f32
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f32, f32, f32, f32, f32
+}
+
+check.case public @ordinary_rounding_f32 {
+  %input = check.literal value(-2.5) : f32
+  %ceil, %floor, %trunc, %roundeven, %round = func.call @rounding_f32(%input) : (f32) -> (f32, f32, f32, f32, f32)
+  %toward_zero = check.literal value(-2.0) : f32
+  %away = check.literal value(-3.0) : f32
+  check.expect.bitwise actual(%ceil) expected(%toward_zero) : f32
+  check.expect.bitwise actual(%floor) expected(%away) : f32
+  check.expect.bitwise actual(%trunc) expected(%toward_zero) : f32
+  check.expect.bitwise actual(%roundeven) expected(%toward_zero) : f32
+  check.expect.bitwise actual(%round) expected(%away) : f32
+  check.return
+}
+
+func.def @rounding_f64(%input: f64) -> (f64, f64, f64, f64, f64) {
+  %ceil = scalar.ceilf %input : f64
+  %floor = scalar.floorf %input : f64
+  %trunc = scalar.truncf %input : f64
+  %roundeven = scalar.roundevenf %input : f64
+  %round = scalar.roundf %input : f64
+  func.return %ceil, %floor, %trunc, %roundeven, %round : f64, f64, f64, f64, f64
+}
+
+check.case public @ordinary_rounding_f64 {
+  %input = check.literal value(-2.5) : f64
+  %ceil, %floor, %trunc, %roundeven, %round = func.call @rounding_f64(%input) : (f64) -> (f64, f64, f64, f64, f64)
+  %toward_zero = check.literal value(-2.0) : f64
+  %away = check.literal value(-3.0) : f64
+  check.expect.bitwise actual(%ceil) expected(%toward_zero) : f64
+  check.expect.bitwise actual(%floor) expected(%away) : f64
+  check.expect.bitwise actual(%trunc) expected(%toward_zero) : f64
+  check.expect.bitwise actual(%roundeven) expected(%toward_zero) : f64
+  check.expect.bitwise actual(%round) expected(%away) : f64
+  check.return
+}

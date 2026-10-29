@@ -6,7 +6,6 @@
 
 #include "iree/vm/bytecode/interpreter_float_math.h"
 
-#include <math.h>
 #include <string.h>
 
 #include "iree/math/activation.h"
@@ -16,6 +15,7 @@
 #include "iree/math/inverse_trigonometry.h"
 #include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
+#include "iree/math/rounding.h"
 #include "iree/math/trigonometry.h"
 #include "iree/vm/bytecode/wire/core.h"
 
@@ -158,16 +158,19 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits) {
       result = iree_math_cbrt_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_CEIL:
-      result = ceilf(source);
+      result = iree_math_ceil_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_FLOOR:
-      result = floorf(source);
+      result = iree_math_floor_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_ROUND_EVEN:
-      result = nearbyintf(source);
+      result = iree_math_round_even_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ROUND_AWAY:
+      result = iree_math_round_away_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_TRUNC:
-      result = truncf(source);
+      result = iree_math_trunc_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXP2_APPROX:
       result = iree_math_exp2_f32_approx(source);
@@ -299,16 +302,19 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
       result = iree_math_cbrt_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_CEIL:
-      result = ceil(source);
+      result = iree_math_ceil_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_FLOOR:
-      result = floor(source);
+      result = iree_math_floor_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_ROUND_EVEN:
-      result = nearbyint(source);
+      result = iree_math_round_even_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ROUND_AWAY:
+      result = iree_math_round_away_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_TRUNC:
-      result = trunc(source);
+      result = iree_math_trunc_f64(source);
       break;
     default:
       IREE_ASSERT_UNREACHABLE("float.math.f64 selector was not verified");
