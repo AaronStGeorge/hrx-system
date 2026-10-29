@@ -156,57 +156,60 @@ value %current: test.i32 -> target_id[3:1]
 
 // ====
 
-// A reload already materializes its storage. Pressure from later arithmetic
-// must spill an ordinary value instead of recursively spilling the reload.
-// RUN: emit low-allocation-query @reload_across_pressure values=%loaded,%left,%right,%sum,%result spill-count test.i32=2
+// A reload already materializes its storage. Two scalar transfers compete for
+// the remaining physical unit and must spill an ordinary value, not the reload.
+// RUN: emit low-allocation-query @reload_across_pressure values=%loaded,%left,%right,%sum,%result spill-count
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @reload_across_pressure(%input: reg<test.i32>) -> (reg<test.i32>) asm {
-  %storage = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  low.spill %input, %storage : reg<test.i32>, low.storage<private>
-  %loaded = low.reload %storage : low.storage<private> -> reg<test.i32>
-  %left = test.const.i32 7
-  %right = test.const.i32 11
-  %sum = test.add.i32 %left, %right
-  %result = test.add.i32 %sum, %loaded
-  return %result
+low.func.def target<test.low.core>(@target) @reload_across_pressure(%input: reg<test.pressure.alias32 x7>, %seed0: reg<test.i32>, %seed1: reg<test.i32>) -> (reg<test.i32>, reg<test.i32 x7>) asm {
+  %storage = storage {byte_alignment = 4, byte_length = 28} : low.storage<stack>
+  low.spill %input, %storage : reg<test.pressure.alias32 x7>, low.storage<stack>
+  %loaded = low.reload %storage : low.storage<stack> -> reg<test.pressure.alias32 x7>
+  %left = copy %seed0 : reg<test.i32> -> reg<test.pressure.alias32>
+  %right = copy %seed1 : reg<test.i32> -> reg<test.pressure.alias32>
+  %left_value = copy %left : reg<test.pressure.alias32> -> reg<test.i32>
+  %right_value = copy %right : reg<test.pressure.alias32> -> reg<test.i32>
+  %sum = test.add.i32 %left_value, %right_value
+  %result = copy %loaded : reg<test.pressure.alias32 x7> -> reg<test.i32 x7>
+  return %sum, %result
 }
 
 // ----
 spills: 1
-value %loaded: test.i32 -> target_id[0:1]
-value %left: test.i32 -> target_id[1:1]
-value %right: test.i32 -> spill_slot[0:1]
-value %sum: test.i32 -> target_id[1:1]
-value %result: test.i32 -> target_id[0:1]
+value %loaded: test.pressure.alias32 -> physical_register[0:7]
+value %left: test.pressure.alias32 -> physical_register[7:1]
+value %right: test.pressure.alias32 -> spill_slot[0:1]
+value %sum: test.i32 -> target_id[0:1]
+value %result: test.i32 -> target_id[1:7]
 
 // ====
 
 // A required alias inherits its source's reservation. Its later spill use
 // still requires registers when victim search considers the tied assignment.
-// RUN: emit low-allocation-query @tied_spill_source_across_pressure values=%source,%alias,%left,%right,%sum spill-count test.i32=2
+// RUN: emit low-allocation-query @tied_spill_source_across_pressure values=%source,%alias,%left,%right,%sum spill-count
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @tied_spill_source_across_pressure() -> (reg<test.i32>) asm {
-  %storage = storage {byte_alignment = 4, byte_length = 4} : low.storage<private>
-  %source = test.const.i32 13
-  %alias = low.assume %source [] : reg<test.i32>
-  %left = test.const.i32 7
-  %right = test.const.i32 11
-  %sum = test.add.i32 %left, %right
-  low.spill %alias, %storage : reg<test.i32>, low.storage<private>
+low.func.def target<test.low.core>(@target) @tied_spill_source_across_pressure(%source: reg<test.pressure.alias32 x7>, %seed0: reg<test.i32>, %seed1: reg<test.i32>) -> (reg<test.i32>) asm {
+  %storage = storage {byte_alignment = 4, byte_length = 28} : low.storage<stack>
+  %alias = low.assume %source [] : reg<test.pressure.alias32 x7>
+  %left = copy %seed0 : reg<test.i32> -> reg<test.pressure.alias32>
+  %right = copy %seed1 : reg<test.i32> -> reg<test.pressure.alias32>
+  %left_value = copy %left : reg<test.pressure.alias32> -> reg<test.i32>
+  %right_value = copy %right : reg<test.pressure.alias32> -> reg<test.i32>
+  %sum = test.add.i32 %left_value, %right_value
+  low.spill %alias, %storage : reg<test.pressure.alias32 x7>, low.storage<stack>
   return %sum
 }
 
 // ----
 spills: 1
-value %source: test.i32 -> target_id[0:1]
-value %alias: test.i32 -> target_id[0:1]
-value %left: test.i32 -> target_id[1:1]
-value %right: test.i32 -> spill_slot[0:1]
-value %sum: test.i32 -> target_id[1:1]
+value %source: test.pressure.alias32 -> physical_register[0:7]
+value %alias: test.pressure.alias32 -> physical_register[0:7]
+value %left: test.pressure.alias32 -> physical_register[7:1]
+value %right: test.pressure.alias32 -> spill_slot[0:1]
+value %sum: test.i32 -> target_id[0:1]
 
 // ====
 
