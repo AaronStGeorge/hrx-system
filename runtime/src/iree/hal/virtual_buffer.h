@@ -36,8 +36,8 @@ typedef uint32_t iree_hal_memory_mapping_operations_t;
 #define IREE_HAL_MEMORY_MAPPING_OPERATIONS_ALL UINT32_C(0xF)
 
 // Source pools describing backing admitted for the reservation's entire life.
-// Construction borrows this array and its pools; it retains neither. Each
-// source covers the complete consumer scope. Order conveys no preference.
+// Query and construction borrow this array and its pools; neither retains them.
+// Each source covers the complete consumer scope. Order conveys no preference.
 typedef struct iree_hal_virtual_buffer_sources_t {
   // Nonzero number of prepared mapping-source pools in the same sealed group.
   iree_host_size_t pool_count;
@@ -65,16 +65,17 @@ typedef struct iree_hal_virtual_buffer_capabilities_t {
 } iree_hal_virtual_buffer_capabilities_t;
 
 // Queries geometry before acquiring addresses or physical backing. The same
-// complete-scope qualification is used by creation. Unsupported combinations
-// return OK with zeroed capabilities; invalid scope, native query, and metadata
-// allocation failures propagate. The allocator is used only for temporary
-// construction metadata. This is a cold planning operation.
+// scope and source qualification is used by creation. Unsupported combinations
+// return OK with zeroed capabilities; invalid scope or source declarations,
+// native query failures, and metadata allocation failures propagate. The
+// allocator is used only for temporary construction metadata. This is a cold
+// planning operation.
 IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_query_capabilities(
     iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
     iree_hal_virtual_buffer_sources_t sources, iree_allocator_t host_allocator,
     iree_hal_virtual_buffer_capabilities_t* out_capabilities);
 
-// Geometry of an address reservation, independent of physical storage pools.
+// Reservation geometry constrained by the complete scope and declared sources.
 // Zero alignment/granularity selects the backend's minimum. The achieved
 // granularity is queried after creation. Mapping offsets and interior lengths
 // are multiples of that unit; only the root reservation's final unit may be
@@ -97,7 +98,7 @@ typedef struct iree_hal_virtual_buffer_options_t {
 // last users. Accessing an unbound range is invalid. The sealed group outlives
 // its buffers. Failure returns NULL and transfers no cleanup obligation.
 // The immutable contract combines source alias cache obligations and intersects
-// atomic guarantees independently at each site. Later backing must preserve
+// host properties and per-site atomic guarantees. Later backing must preserve
 // that contract, regardless of whether it comes from an originally named pool.
 IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_create(
     iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
@@ -106,8 +107,9 @@ IREE_API_EXPORT iree_status_t iree_hal_virtual_buffer_create(
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer);
 
 // Tests a pool's immutable mapping contract against the virtual buffer's fixed
-// guarantees. No allocation, native call, or installed-mapping lookup occurs.
-// Ordinary views use the native root's complete contract. False means ordinary
+// guarantees by comparing immutable site and producer/consumer pair facts.
+// No allocation, native call, or installed-mapping lookup occurs. Ordinary
+// views use the native root's complete contract. False means ordinary
 // incompatibility or no committed virtual target. Exact ranges must separately
 // satisfy source and target geometry when mapped. Allocation prerequisites must
 // have completed before querying a transient view.
