@@ -24,6 +24,7 @@ from loom.format.cxx.translation_unit import render_preamble
 from loom.format.cxx.types import KERNEL_COORDINATE_CPP_TYPE
 from loom.ir import (
     Block,
+    DynamicDim,
     DynamicEncoding,
     Module,
     Operation,
@@ -59,6 +60,66 @@ def _buffer_payload_literal(contents: bytes | Utf8Attr) -> str:
 
 
 class CxxRenderer(CxxExpressionRenderer):
+    def _view_shape_arguments(
+        self, operation: Operation, view_type: ShapedType
+    ) -> tuple[str, str]:
+        """Projects a view shape into C++ template and runtime arguments."""
+
+        extents: list[str] = []
+        dimensions: list[str] = []
+        for dimension in view_type.dims:
+            if isinstance(dimension, StaticDim):
+                extents.append(str(dimension.size))
+                continue
+            if not isinstance(dimension, DynamicDim) or dimension.value_id is None:
+                raise CxxRenderError(
+                    operation, "unbound dynamic view dimension has no C++ projection"
+                )
+            extents.append("loom::type::dynamic")
+            dimensions.append(self._address_operand(dimension.value_id))
+        runtime_dimensions = (
+            "{}"
+            if not dimensions
+            else f"loom::type::indices{{{', '.join(dimensions)}}}"
+        )
+        return ", ".join(extents), runtime_dimensions
+
+    def _compatible_cxx_carrier(self, lhs: int, rhs: int) -> bool:
+        """Returns whether one mutable C++ carrier preserves both IR types."""
+
+        lhs_type = self.module.values[lhs].type
+        rhs_type = self.module.values[rhs].type
+        if repr(lhs_type) == repr(rhs_type):
+            return True
+        if not (
+            isinstance(lhs_type, ShapedType)
+            and lhs_type.type_kind == TypeKind.VIEW
+            and isinstance(rhs_type, ShapedType)
+            and rhs_type.type_kind == TypeKind.VIEW
+        ):
+            return False
+
+        def dimension_key(dimension: StaticDim | DynamicDim) -> tuple[str, int]:
+            if isinstance(dimension, StaticDim):
+                return ("static", dimension.size)
+            return ("dynamic", 0)
+
+        def encoding_key(encoding: object) -> tuple[str, str]:
+            if isinstance(encoding, DynamicEncoding):
+                return (
+                    "dynamic",
+                    repr(self.module.values[encoding.value_id].type),
+                )
+            return ("value", repr(encoding))
+
+        return (
+            lhs_type.element_type == rhs_type.element_type
+            and tuple(dimension_key(dimension) for dimension in lhs_type.dims)
+            == tuple(dimension_key(dimension) for dimension in rhs_type.dims)
+            and encoding_key(lhs_type.encoding) == encoding_key(rhs_type.encoding)
+            and lhs_type.alignment == rhs_type.alignment
+        )
+
     def _buffer_pointer_expression(
         self, buffer_id: int, byte_offset_id: int, element_type: str, is_const: bool
     ) -> str:
@@ -258,11 +319,7 @@ class CxxRenderer(CxxExpressionRenderer):
                 raise CxxRenderError(
                     operation, "buffer.view result is not a shaped view"
                 )
-            if not result_type.is_all_static:
-                raise CxxRenderError(
-                    operation,
-                    "dynamic view requires explicit runtime-dimension projection",
-                )
+            extents, dimensions = self._view_shape_arguments(operation, result_type)
             if isinstance(result_type.encoding, DynamicEncoding):
                 encoding_id = result_type.encoding.value_id
                 definition = self.definitions.get(encoding_id)
@@ -295,34 +352,32 @@ class CxxRenderer(CxxExpressionRenderer):
             pointer = self._buffer_pointer_expression(
                 buffer_id, offset_id, element, is_const
             )
-            extents = ", ".join(
-                str(dimension.size)
-                for dimension in result_type.dims
-                if isinstance(dimension, StaticDim)
+            expression = (
+                f"loom::buffer::view<{extents}>({pointer}, {dimensions}, {encoding})"
             )
-            expression = f"loom::buffer::view<{extents}>({pointer}, {{}}, {encoding})"
             self._declare(result, expression)
             return ()
         if name == "view.subview":
             resolved = self._resolved(operation)
             result = resolved.value_id("result")
             result_type = self.module.values[result].type
-            if not isinstance(result_type, ShapedType) or not result_type.is_all_static:
+            if (
+                not isinstance(result_type, ShapedType)
+                or result_type.type_kind != TypeKind.VIEW
+            ):
                 raise CxxRenderError(
-                    operation, "dependent subview result is not yet projected"
+                    operation, "view.subview result is not a shaped view"
                 )
-            extents = ", ".join(
-                str(dimension.size)
-                for dimension in result_type.dims
-                if isinstance(dimension, StaticDim)
-            )
+            extents, dimensions = self._view_shape_arguments(operation, result_type)
             origin = self._mixed_index_record(
                 resolved,
                 dynamic_field="offsets",
                 static_field="static_offsets",
             )
             source = self.expression(resolved.value_id("source"))
-            expression = f"loom::view::subview<{extents}>({source}, {origin}, {{}})"
+            expression = (
+                f"loom::view::subview<{extents}>({source}, {origin}, {dimensions})"
+            )
             self._declare(result, expression)
             return ("static_offsets",)
         if name == "view.load":
@@ -668,7 +723,7 @@ class CxxRenderer(CxxExpressionRenderer):
     def _while_result_initializer(self, result: int, initial: list[int]) -> str:
         result_type = repr(self.module.values[result].type)
         for source in initial:
-            if repr(self.module.values[source].type) == result_type:
+            if self._compatible_cxx_carrier(result, source):
                 return self._loop_initializer(source)
         value_type = self.module.values[result].type
         if isinstance(value_type, ScalarType):
@@ -685,11 +740,13 @@ class CxxRenderer(CxxExpressionRenderer):
             f"while result type {value_type!r} has no initializable C++ carrier",
         )
 
-    def _assign_values(self, targets: list[int], sources: list[int]) -> None:
+    def _assign_values(
+        self, targets: Sequence[int | None], sources: Sequence[int]
+    ) -> None:
         assignments = [
             (self.expression(target), self.expression(source))
             for target, source in zip(targets, sources, strict=True)
-            if self.expression(target) != self.expression(source)
+            if target is not None and self.expression(target) != self.expression(source)
         ]
         if len(assignments) == 1:
             target, source = assignments[0]
@@ -704,6 +761,90 @@ class CxxRenderer(CxxExpressionRenderer):
             temporaries.append((target, temporary))
         for target, temporary in temporaries:
             self.writer.line(f"{target} = {temporary};")
+
+    def _while_forward_only_carriers(
+        self, before: Block, after: Block, results: Sequence[int]
+    ) -> set[int]:
+        """Finds loop columns represented only by structured forwarding."""
+
+        if not before.ops or not after.ops:
+            return set()
+        condition = before.ops[-1]
+        yield_operation = after.ops[-1]
+        if condition.name != "scf.condition" or yield_operation.name != "scf.yield":
+            return set()
+        if len(self._resolved(condition).value_ids("forwarded")) != len(results) or len(
+            yield_operation.operands
+        ) != len(results):
+            return set()
+        forward_only: set[int] = set()
+        carriers = zip(before.arg_ids, after.arg_ids, results, strict=True)
+        for index, (before_argument, after_argument, result) in enumerate(carriers):
+            if (
+                self.use_counts[result] != 0
+                or self.view_construction_type_users[result]
+            ):
+                continue
+            allowed_uses = {
+                (id(condition), index + 1),
+                (id(yield_operation), index),
+            }
+            before_closure = self._forwarding_closure(
+                before_argument, allowed_uses, set()
+            )
+            after_closure = self._forwarding_closure(
+                after_argument, allowed_uses, set()
+            )
+            if before_closure is None or after_closure is None:
+                continue
+            self.suppressed_forwarding_values.update(before_closure)
+            self.suppressed_forwarding_values.update(after_closure)
+            self.suppressed_forwarding_values.add(result)
+            forward_only.add(index)
+        return forward_only
+
+    def _while_identity_condition(self, before: Block) -> int | None:
+        """Returns an identity-header loop's condition block argument."""
+
+        if len(before.ops) != 1 or before.ops[0].name != "scf.condition":
+            return None
+        condition = before.ops[0]
+        resolved = self._resolved(condition)
+        if resolved.value_ids("forwarded") != before.arg_ids:
+            return None
+        condition_id = resolved.value_id("condition")
+        return condition_id if condition_id in before.arg_ids else None
+
+    def _forwarding_closure(
+        self,
+        value_id: int,
+        allowed_uses: set[tuple[int, int]],
+        active: set[int],
+    ) -> set[int] | None:
+        """Returns values that only forward into the selected loop edge."""
+
+        if self.view_construction_type_users[value_id] or value_id in active:
+            return None
+        nested_active = {*active, value_id}
+        closure = {value_id}
+        for user, operand_index in self.uses[value_id]:
+            if (id(user), operand_index) in allowed_uses:
+                continue
+            parent = self.parent_operations.get(id(user))
+            if (
+                user.name != "scf.yield"
+                or parent is None
+                or parent.name != "scf.if"
+                or operand_index >= len(parent.results)
+            ):
+                return None
+            forwarded = self._forwarding_closure(
+                parent.results[operand_index], allowed_uses, nested_active
+            )
+            if forwarded is None:
+                return None
+            closure.update(forwarded)
+        return closure
 
     def _render_while(self, operation: Operation) -> None:
         resolved = self._resolved(operation)
@@ -730,29 +871,68 @@ class CxxRenderer(CxxExpressionRenderer):
                 operation, "scf.while after argument arity is inconsistent"
             )
 
+        claimed_names = set(self.expressions.values())
+        for result in results:
+            preferred_name = loop_carrier_stem(self.names[result])
+            if (
+                preferred_name != self.names[result]
+                and preferred_name not in claimed_names
+            ):
+                self.names[result] = preferred_name
+            claimed_names.add(self.names[result])
+
+        forward_only = self._while_forward_only_carriers(before, after, results)
         shared_carriers = len(initial) == len(results) and all(
-            repr(self.module.values[argument].type)
-            == repr(self.module.values[result].type)
-            for argument, result in zip(before.arg_ids, results, strict=True)
+            index in forward_only or self._compatible_cxx_carrier(argument, result)
+            for index, (argument, result) in enumerate(
+                zip(before.arg_ids, results, strict=True)
+            )
         )
         if shared_carriers:
-            for argument, result, source in zip(
-                before.arg_ids, results, initial, strict=True
+            for index, (argument, result, source) in enumerate(
+                zip(before.arg_ids, results, initial, strict=True)
             ):
+                if index in forward_only:
+                    continue
                 self._declare(result, self._loop_initializer(source))
                 self.expressions[argument] = self.expression(result)
                 self.expression_types[argument] = self.expression_type(result)
-            header_targets = results
+            header_targets: list[int | None] = [
+                None if index in forward_only else result
+                for index, result in enumerate(results)
+            ]
         else:
-            for argument, source in zip(before.arg_ids, initial, strict=True):
+            for index, (argument, source) in enumerate(
+                zip(before.arg_ids, initial, strict=True)
+            ):
+                if index in forward_only:
+                    continue
                 self._declare(argument, self._loop_initializer(source))
-            for result in results:
+            for index, result in enumerate(results):
+                if index in forward_only:
+                    continue
                 self._declare(result, self._while_result_initializer(result, initial))
-            header_targets = before.arg_ids
+            header_targets = [
+                None if index in forward_only else argument
+                for index, argument in enumerate(before.arg_ids)
+            ]
 
-        for argument, result in zip(after.arg_ids, results, strict=True):
+        for index, (argument, result) in enumerate(
+            zip(after.arg_ids, results, strict=True)
+        ):
+            if index in forward_only:
+                continue
             self.expressions[argument] = self.expression(result)
             self.expression_types[argument] = self.expression_type(result)
+
+        identity_condition = self._while_identity_condition(before)
+        if shared_carriers and identity_condition is not None:
+            self._validate_projected_attributes(before.ops[0], ())
+            condition = _strip_outer_parentheses(self.expression(identity_condition))
+            self.writer.open(f"while ({condition})")
+            self._render_block(after, yield_targets=header_targets)
+            self.writer.close()
+            return
 
         continuation = self._temporary_name("loop_continues")
         self.writer.line(f"bool {continuation} = true;")
@@ -760,7 +940,10 @@ class CxxRenderer(CxxExpressionRenderer):
         self._render_block(
             before,
             condition_target=continuation,
-            condition_forward_targets=results,
+            condition_forward_targets=[
+                None if index in forward_only else result
+                for index, result in enumerate(results)
+            ],
         )
         self.writer.open(f"if ({continuation})")
         self._render_block(after, yield_targets=header_targets)
@@ -771,13 +954,17 @@ class CxxRenderer(CxxExpressionRenderer):
         resolved = self._resolved(operation)
         results = resolved.value_ids("results")
         for result in results:
-            assignment_target = self.assignment_targets.get(result)
-            if assignment_target is not None:
+            if result in self.suppressed_forwarding_values:
+                continue
+            assignment_target_id = self.assignment_targets.get(result)
+            if assignment_target_id is not None:
                 # A surrounding structured operation already owns the mutable
                 # carrier. Each branch assigns or preserves that value; a
                 # default assignment here would destroy its incoming state.
-                self.expressions[result] = assignment_target
-                self.expression_types[result] = self.cpp_type(result)
+                self.expressions[result] = self.expression(assignment_target_id)
+                self.expression_types[result] = self.expression_type(
+                    assignment_target_id
+                )
             else:
                 self._declare(result, f"{self.cpp_type(result)}{{}}")
         then_region = resolved.region("then_region")
@@ -787,8 +974,12 @@ class CxxRenderer(CxxExpressionRenderer):
         condition = _strip_outer_parentheses(
             self.expression(resolved.value_id("condition"))
         )
+        yield_targets: list[int | None] = [
+            None if result in self.suppressed_forwarding_values else result
+            for result in results
+        ]
         self.writer.open(f"if ({condition})")
-        self._render_block(then_region.blocks[0], yield_targets=results)
+        self._render_block(then_region.blocks[0], yield_targets=yield_targets)
         if else_region is None:
             self.writer.close()
             return
@@ -799,20 +990,20 @@ class CxxRenderer(CxxExpressionRenderer):
             yield_operation = else_block.ops[0]
             self._validate_projected_attributes(yield_operation, ())
             if len(yield_operation.operands) == len(results) and all(
-                self.expression(source) == self.expression(result)
-                for source, result in zip(
-                    yield_operation.operands, results, strict=True
+                target is None or self.expression(source) == self.expression(target)
+                for source, target in zip(
+                    yield_operation.operands, yield_targets, strict=True
                 )
             ):
                 self.writer.close()
                 return
         self.writer.continue_block("else")
-        self._render_block(else_block, yield_targets=results)
+        self._render_block(else_block, yield_targets=yield_targets)
         self.writer.close()
 
     def _direct_yield_assignments(
-        self, block: Block, yield_targets: list[int] | None
-    ) -> dict[int, str]:
+        self, block: Block, yield_targets: Sequence[int | None] | None
+    ) -> dict[int, int]:
         if yield_targets is None or not block.ops:
             return {}
         yield_operation = block.ops[-1]
@@ -821,8 +1012,10 @@ class CxxRenderer(CxxExpressionRenderer):
         ):
             return {}
         positions = {id(operation): index for index, operation in enumerate(block.ops)}
-        assignments: dict[int, str] = {}
+        assignments: dict[int, int] = {}
         for source, target in zip(yield_operation.operands, yield_targets, strict=True):
+            if target is None:
+                continue
             definition = self.definitions.get(source)
             target_expression = self.expression(target)
             if (
@@ -843,16 +1036,16 @@ class CxxRenderer(CxxExpressionRenderer):
                 for operation in block.ops[definition_position + 1 : -1]
             ):
                 continue
-            assignments[source] = target_expression
+            assignments[source] = target
         return assignments
 
     def _render_block(
         self,
         block: Block,
         *,
-        yield_targets: list[int] | None = None,
+        yield_targets: Sequence[int | None] | None = None,
         condition_target: str | None = None,
-        condition_forward_targets: list[int] | None = None,
+        condition_forward_targets: Sequence[int | None] | None = None,
     ) -> None:
         direct_assignments = self._direct_yield_assignments(block, yield_targets)
         previous_assignments = self.assignment_targets

@@ -1027,7 +1027,12 @@ class CxxExpressionRenderer(CxxRenderContext):
 
         result = resolved.value_id("result")
         source = self.expression(resolved.value_id("dest"))
-        assignment_target = self.assignment_targets.get(result)
+        assignment_target_id = self.assignment_targets.get(result)
+        assignment_target = (
+            None
+            if assignment_target_id is None
+            else self.expression(assignment_target_id)
+        )
         if assignment_target is None:
             self._declare(result, source)
             mutation_target = self.expression(result)
@@ -1042,11 +1047,12 @@ class CxxExpressionRenderer(CxxRenderContext):
             f"{mutation_target}[{indices[0]}] = "
             f"{self.expression(resolved.value_id('value'))};"
         )
-        if assignment_target is not None:
-            if mutation_target != assignment_target:
-                self.writer.line(f"{assignment_target} = {mutation_target};")
-            self.expressions[result] = assignment_target
-            self.expression_types[result] = self.cpp_type(result)
+        if assignment_target_id is not None:
+            target_expression = self.expression(assignment_target_id)
+            if mutation_target != target_expression:
+                self.writer.line(f"{target_expression} = {mutation_target};")
+            self.expressions[result] = target_expression
+            self.expression_types[result] = self.expression_type(assignment_target_id)
         return ("static_indices",)
 
     def _render_scalar_conversion(self, operation: Operation) -> tuple[str, ...] | None:
