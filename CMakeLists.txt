@@ -122,7 +122,7 @@ list(APPEND CMAKE_MODULE_PATH
 
 include("${CMAKE_CURRENT_LIST_DIR}/MODULE.cmake.lock")
 
-include("${CMAKE_CURRENT_LIST_DIR}/runtime/project.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/runtime/build_tools/cmake/iree_runtime_project.cmake")
 if(NOT DEFINED AMDF_BUILD_DEFAULT)
   set(AMDF_BUILD_DEFAULT OFF)
   if(IREE_HAL_DRIVER_AMD_GPU OR IREE_HAL_DRIVER_AMD_XDNA)
@@ -130,8 +130,8 @@ if(NOT DEFINED AMDF_BUILD_DEFAULT)
   endif()
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/libamdf/build_tools/cmake/amdf_project.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/libhrx/project.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/loom/project.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/libhrx/build_tools/cmake/hrx_project.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/loom/build_tools/cmake/loom_project.cmake")
 
 # Shared repository CMake primitives.
 include(iree_macros)
@@ -263,7 +263,7 @@ iree_add_subdirectory(runtime/src)
 iree_add_subdirectory(experimental EXCLUDE_FROM_ALL)
 
 if(LOOM_BUILD)
-  include("${PROJECT_SOURCE_DIR}/loom/binding/c/cmake/loomc_shared.cmake")
+  include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loomc_shared.cmake")
   include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_module.cmake")
   include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_test.cmake")
   include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_corpus.cmake")

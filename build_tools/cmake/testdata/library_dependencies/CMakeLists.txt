@@ -78,7 +78,7 @@ iree_cc_library(NAME test_main SRCS main.c DEPS ::library)
 iree_cc_binary(NAME probe DEPS ::test_main)
 iree_cc_unified_library(NAME unified ROOT ::library)
 iree_cc_binary(NAME unified_probe SRCS main.c DEPS ::unified)
-include("${IREE_REPO_ROOT}/loom/binding/c/cmake/loomc_shared.cmake")
+include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loomc_shared.cmake")
 _loomc_collect(iree_fixture_leaf runtime
   _OBJECTS _LIBRARIES _runtime_owned _OPTIONS)
 add_library(loomc_runtime SHARED ${_OBJECTS})

@@ -19,8 +19,7 @@ with AMD's GPU, NPU, and CPU products.
   scripts, sanitizer wiring, and common build overlays.
 
 Project-specific build support lives with the project it serves. Runtime CMake
-bootstrap and dependencies are under `runtime/project.cmake` and
-`runtime/build_tools/`, while libhrx owns `libhrx/project.cmake` and
+bootstrap and dependencies are under `runtime/build_tools/`, while libhrx owns
 `libhrx/build_tools/`. Shared generator and build-system mechanics stay under
 root `build_tools/`, with shared third-party CMake configuration beside the
 matching Bazel overlays in `build_tools/third_party/`.

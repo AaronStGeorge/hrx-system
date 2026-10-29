@@ -29,7 +29,7 @@ if(APPLE)
     INSTALL_RPATH "@loader_path"
     C_VISIBILITY_PRESET hidden
   )
-  set(_hrx_export_file "${LIBHRX_SOURCE_DIR}/cmake/hrx_exports_macos.txt")
+  set(_hrx_export_file "${LIBHRX_SOURCE_DIR}/exports/hrx_exports_macos.txt")
   target_link_options(libhrx_src_libhrx_hrx PRIVATE
     "-Wl,-exported_symbols_list,${_hrx_export_file}"
   )
@@ -42,7 +42,7 @@ elseif(UNIX)
     INSTALL_RPATH "$ORIGIN"
     C_VISIBILITY_PRESET hidden
   )
-  set(_hrx_export_file "${LIBHRX_SOURCE_DIR}/cmake/hrx_exports.lds")
+  set(_hrx_export_file "${LIBHRX_SOURCE_DIR}/exports/hrx_exports.lds")
   target_link_options(libhrx_src_libhrx_hrx PRIVATE
     "-Wl,--version-script=${_hrx_export_file}"
   )

@@ -5,8 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 list(APPEND CMAKE_MODULE_PATH
-  "${CMAKE_CURRENT_LIST_DIR}/build_tools/amdgpu"
-  "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
+  "${CMAKE_CURRENT_LIST_DIR}/../amdgpu"
+  "${CMAKE_CURRENT_LIST_DIR}"
 )
 
 include(loom_amdgpu_selectors)

@@ -88,7 +88,7 @@ def render_cmake() -> str:
     family_keys = tuple(key for key in preset_keys if key != "DEFAULT")
     lines = [
         *line_comment_header("#", generator=_GENERATOR, regenerate=REGENERATE_COMMAND),
-        "# Data only: loom/project.cmake owns preset resolution.",
+        "# Data only: loom_project.cmake owns preset resolution.",
         "",
         *_cmake_list("_LOOM_CAPABILITY_ARCHITECTURES", target_presets.ARCHITECTURES),
         *_cmake_list(
@@ -125,7 +125,7 @@ def checked_in_file_set() -> GeneratedFileSet:
         {
             "loom/config/capabilities.bzl": render_capabilities_bzl(),
             "loom/config/target_presets.bazelrc": render_bazelrc(),
-            "loom/config/target_presets.cmake": render_cmake(),
+            "loom/build_tools/cmake/target_presets.cmake": render_cmake(),
         }
     )
 

@@ -207,12 +207,12 @@ function(loomc_configure_shared_tools)
   elseif(APPLE)
     set_target_properties(loomc_runtime PROPERTIES
       BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
-    set(_exports "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/iree_exports.macos")
+    set(_exports "${IREE_SOURCE_DIR}/loom/binding/c/exports/iree_exports.macos")
     target_link_options(loomc_runtime PRIVATE "-Wl,-exported_symbols_list,${_exports}")
   elseif(UNIX)
     set_target_properties(loomc_runtime PROPERTIES
       BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
-    set(_exports "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/iree_exports.lds")
+    set(_exports "${IREE_SOURCE_DIR}/loom/binding/c/exports/iree_exports.lds")
     target_link_options(loomc_runtime PRIVATE "-Wl,--version-script=${_exports}")
     # Exact-build companions own their function implementations. Data symbols
     # and undefined external hooks retain ordinary ELF resolution.

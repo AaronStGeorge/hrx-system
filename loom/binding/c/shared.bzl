@@ -155,7 +155,7 @@ def loomc_shared_libraries(name, components, runtime_deps, tool_components = [])
             prefixes = ["iree_", "___tracy_", "mi_"] if library_name == "iree" else ["loomc_"],
             target_compatible_with = compatible_with,
         )
-        export_file = "cmake/" + library_name + "_exports.lds"
+        export_file = "exports/" + library_name + "_exports.lds"
         iree_cc_shared_library(
             name = target_name,
             deps = deps,
@@ -172,12 +172,12 @@ def loomc_shared_libraries(name, components, runtime_deps, tool_components = [])
                 "//conditions:default": "shared/lib" + library_name + ".so",
             }),
             additional_linker_inputs = select({
-                "@platforms//os:macos": ["cmake/" + library_name + "_exports.macos"],
+                "@platforms//os:macos": ["exports/" + library_name + "_exports.macos"],
                 "@platforms//os:windows": [],
                 "//conditions:default": [export_file],
             }),
             user_link_flags = cc_opts.iree_code_link_options() + select({
-                "@platforms//os:macos": ["-Wl,-exported_symbols_list,$(location cmake/" + library_name + "_exports.macos)"],
+                "@platforms//os:macos": ["-Wl,-exported_symbols_list,$(location exports/" + library_name + "_exports.macos)"],
                 "@platforms//os:windows": [],
                 # These exact-build companions own their implementations. Bind
                 # internal function references without binding data symbols or

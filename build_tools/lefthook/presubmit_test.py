@@ -276,9 +276,34 @@ class PresubmitTest(unittest.TestCase):
 
         self.assertEqual({project.name for project in projects}, {"runtime", "loom"})
         with mock.patch.object(presubmit, "existing_files", return_value=[]):
-            self.assertTrue(
-                presubmit.run_build_filename_check(["runtime/deleted/BUILD"])
-            )
+            self.assertTrue(presubmit.run_build_file_check(["runtime/deleted/BUILD"]))
+
+    def test_cmake_product_ownership(self):
+        cases = {
+            "CMakeLists.txt": True,
+            "build_tools/cmake/iree_cc_library.cmake": True,
+            "runtime/build_tools/cmake/project.cmake": True,
+            "loom/build_tools/cmake/package_smoke/CMakeLists.txt": True,
+            ".github/smoke/CMakeLists.txt": True,
+            "third_party/vendor/CMakeLists.txt": True,
+            "runtime/src/iree/base/CMakeLists.txt": False,
+            "loom/config/target_presets.cmake": False,
+            "libhrx/include/hrx-config.cmake.in": False,
+            "experimental/new_product/CMakeLists.txt": False,
+            "new_product/CMakeLists.txt": False,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path, allowed in cases.items():
+                source = root / path
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.write_text("")
+                with (
+                    self.subTest(path=path),
+                    mock.patch.object(presubmit, "REPO_ROOT", root),
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    self.assertEqual(presubmit.run_build_file_check([path]), allowed)
 
     def test_project_selection_uses_product_ownership(self):
         cases = (

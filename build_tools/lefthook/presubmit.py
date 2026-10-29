@@ -1531,11 +1531,26 @@ def run_watchwords(paths: list[str]) -> bool:
     return ok
 
 
-def run_build_filename_check(paths: list[str]) -> bool:
+def run_build_file_check(paths: list[str]) -> bool:
     ok = True
     for path in existing_files(paths):
-        if Path(path).name == "BUILD":
+        source_path = Path(path)
+        if source_path.name == "BUILD":
             print(f"{path}: use BUILD.bazel instead of BUILD")
+            ok = False
+        is_cmake = source_path.name == "CMakeLists.txt" or source_path.name.endswith(
+            (".cmake", ".cmake.in")
+        )
+        if (
+            is_cmake
+            and len(source_path.parts) > 1
+            and "build_tools" not in source_path.parts[:-1]
+            and source_path.parts[0] not in (".github", "third_party")
+        ):
+            print(
+                f"{path}: product declarations belong in BUILD.bazel; "
+                "native CMake integration belongs under build_tools/"
+            )
             ok = False
     return ok
 
@@ -1581,7 +1596,7 @@ def run_hygiene(paths: list[str], fix: bool, verbose: bool) -> bool:
     )
     ok = (
         run_inline_check(
-            "BUILD filename policy", lambda: run_build_filename_check(paths), verbose
+            "Build file ownership", lambda: run_build_file_check(paths), verbose
         )
         and ok
     )

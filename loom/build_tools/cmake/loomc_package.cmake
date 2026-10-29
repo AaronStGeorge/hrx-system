@@ -134,7 +134,7 @@ elseif(UNIX)
     BUILD_RPATH "$ORIGIN"
     INSTALL_RPATH "$ORIGIN")
   set(_loomc_export_file
-    "${_IREE_PACKAGE_SOURCE_DIR}/cmake/loomc_exports.lds")
+    "${_IREE_PACKAGE_SOURCE_DIR}/exports/loomc_exports.lds")
   target_link_options(loomc_shared PRIVATE
     "-Wl,--version-script=${_loomc_export_file}")
   set_property(TARGET loomc_shared APPEND PROPERTY
@@ -168,7 +168,7 @@ install(EXPORT loomc-targets
   COMPONENT "${HRX_PUBLIC_DIST_COMPONENT}")
 
 configure_package_config_file(
-  "${_IREE_PACKAGE_SOURCE_DIR}/cmake/loomc-config.cmake.in"
+  "${CMAKE_CURRENT_LIST_DIR}/loomc-config.cmake.in"
   "${_loomc_build_package_dir}/loomc-config.cmake"
   INSTALL_DESTINATION "${_loomc_cmake_package_dir}")
 write_basic_package_version_file(
