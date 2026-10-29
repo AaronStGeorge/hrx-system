@@ -33,6 +33,7 @@ int main(int argc, char** argv) {
     }
   }
   const loom_serve_configuration_t configuration = {
+      .build_identity = {.version = "test", .commit = "unknown"},
       .compiler_options = &compiler_options,
       .driver_registry = driver_registry,
   };

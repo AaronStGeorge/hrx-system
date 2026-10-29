@@ -27,6 +27,21 @@ class _PythonBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
 
 
 class ConfigTest(unittest.TestCase):
+    def test_cc_library_compiles_linkstamp_as_a_native_source(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+        functions.cc_library(
+            name="identity",
+            hdrs=["identity.h"],
+            linkstamp="identity.c",
+        )
+        self.assertIn('  SRCS\n    "identity.c"\n', converter.body)
+
     def test_cc_library_group_preserves_interface_dependencies(self):
         converter = SimpleNamespace(body="")
         functions = bazel_to_cmake_converter.BuildFileFunctions(

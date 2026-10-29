@@ -97,6 +97,7 @@ loom_cc_library(
     srcs = ["main.c"],
     hdrs = ["main.h"],
     deps = [
+        ":build_identity",
         ":options",
         ":signals",
         "//loom/src/loom/serve/runtime/device",
@@ -114,6 +115,12 @@ loom_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
     ],
+)
+
+loom_cc_library(
+    name = "build_identity",
+    hdrs = ["build_identity.h"],
+    linkstamp = "build_identity.cc",
 )
 
 loomc_cc_binary(
@@ -134,6 +141,7 @@ loomc_cc_binary(
     }),
     visibility = ["//visibility:public"],
     deps = [
+        ":build_identity",
         ":main",
         "//loom/binding/c/target/configured",
         "//runtime/src/iree/base",

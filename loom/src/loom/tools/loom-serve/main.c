@@ -214,10 +214,21 @@ static int loom_serve_main_agents_markdown(void) {
              : EXIT_SUCCESS;
 }
 
+static int loom_serve_main_version(
+    const loom_serve_build_identity_t* build_identity) {
+  return fprintf(stdout, "loom-serve %s (commit %s)\n", build_identity->version,
+                 build_identity->commit) < 0
+             ? EXIT_FAILURE
+             : EXIT_SUCCESS;
+}
+
 int loom_serve_main(int argc, char** argv,
                     const loom_serve_configuration_t* configuration) {
-  iree_flags_set_usage(
-      "loom-serve",
+  static char usage[4096];
+  const int usage_length = snprintf(
+      usage, sizeof(usage),
+      "loom-serve %s (commit %s)\n"
+      "\n"
       "Serves source-defined models over HTTP with shared devices and "
       "workers.\n"
       "\n"
@@ -227,6 +238,7 @@ int loom_serve_main(int argc, char** argv,
       "  loom-serve --device=task --pool_backing=fixed "
       "--listen=127.0.0.1:8080\n"
       "  loom-serve --flagfile=serve.flags\n"
+      "  loom-serve --version\n"
       "  loom-serve --agents_md\n"
       "\n"
       "Use one --device URI or --devices JSON containing named devices and "
@@ -236,10 +248,21 @@ int loom_serve_main(int argc, char** argv,
       "programs are loaded at runtime. No model implementation is built in.\n"
       "Repeated --listen bindings share one server. /v1/status reports model\n"
       "readiness; /v1/models lists prepared deployments and capabilities.\n"
-      "HTTP and model loading assume trusted clients and source packages.\n");
+      "HTTP and model loading assume trusted clients and source packages.\n",
+      configuration->build_identity.version,
+      configuration->build_identity.commit);
+  if (usage_length < 0 || (iree_host_size_t)usage_length >= sizeof(usage)) {
+    fprintf(stderr, "loom-serve build identity exceeds help capacity.\n");
+    return EXIT_FAILURE;
+  }
+  iree_flags_set_usage("loom-serve", usage);
   for (int i = 1; i < argc; ++i) {
     if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
       return loom_serve_main_agents_markdown();
+    }
+    if (iree_string_view_equal(iree_make_cstring_view(argv[i]),
+                               IREE_SV("--version"))) {
+      return loom_serve_main_version(&configuration->build_identity);
     }
   }
   loom_tooling_cli_set_default_help_filter();
