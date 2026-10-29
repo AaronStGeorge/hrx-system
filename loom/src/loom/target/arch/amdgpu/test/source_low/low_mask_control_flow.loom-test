@@ -1,5 +1,5 @@
 // Reassembling the same mask preserves its bits without copies or dependencies.
-// RUN: emit amdgpu-assembly @mask_identity strategy=source fixed=%seed:physical_register:0:2 fixed=%current:physical_register:0:2
+// RUN: emit amdgpu-assembly @mask_identity strategy=source
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
@@ -47,7 +47,7 @@ low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @before_read(
 
 // ====
 
-// RUN: emit amdgpu-assembly @loop_before_read strategy=source fixed=%seed:physical_register:0:2 fixed=%current:physical_register:0:2
+// RUN: emit amdgpu-assembly @loop_before_read strategy=source
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
@@ -74,7 +74,7 @@ low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @loop_before_
 
 // ====
 
-// RUN: emit amdgpu-assembly @loop_identity strategy=source fixed=%seed:physical_register:0:2 fixed=%current:physical_register:0:2
+// RUN: emit amdgpu-assembly @loop_identity strategy=source
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
 
