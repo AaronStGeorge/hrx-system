@@ -252,43 +252,6 @@ value %state: test.i32 -> target_id[0:2]
 
 // ====
 
-// RUN: emit low-allocation-query @fixed_explicit_concat_sources spill-count values=%low,%high,%pair fixed=%low:physical_register:2:1 fixed=%high:physical_register:0:1
-
-test.target<low_core> @target
-
-// The fixed sources reverse l0's declared r0,r2 order. The prospective
-// reservation must reject l0 and use the disjoint l1 view instead.
-low.func.def target<test.low.core>(@target) @fixed_explicit_concat_sources(%low: reg<test.explicit32>, %high: reg<test.explicit32>) -> (reg<test.explicit32 x2>, reg<test.explicit32>, reg<test.explicit32>) asm {
-  %pair = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
-  return %pair, %low, %high
-}
-
-// ----
-spills: 0
-value %low: test.explicit32 -> physical_register[2:1]
-value %high: test.explicit32 -> physical_register[0:1]
-value %pair: test.explicit32 -> physical_register[5:2]
-
-// ====
-
-// RUN: emit low-allocation-query @matching_fixed_explicit_concat_sources spill-count values=%low,%high,%pair fixed=%low:physical_register:0:1 fixed=%high:physical_register:2:1
-
-test.target<low_core> @target
-
-// Fixed sources matching a declared view still assemble directly in l0.
-low.func.def target<test.low.core>(@target) @matching_fixed_explicit_concat_sources(%low: reg<test.explicit32>, %high: reg<test.explicit32>) -> (reg<test.explicit32 x2>, reg<test.explicit32>, reg<test.explicit32>) asm {
-  %pair = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
-  return %pair, %low, %high
-}
-
-// ----
-spills: 0
-value %low: test.explicit32 -> physical_register[0:1]
-value %high: test.explicit32 -> physical_register[2:1]
-value %pair: test.explicit32 -> physical_register[4:2]
-
-// ====
-
 // RUN: emit low-allocation-query @compact_concat_lane3_last strategy=resource-stall spill-count values=%temporary0,%temporary1,%temporary2,%temporary3,%lane0,%lane1,%lane2,%lane3,%values fixed=%seed:physical_register:2:1 fixed=%values:physical_register:0:4 fixed=%lane3:physical_register:3:1
 
 test.target<low_core> @target

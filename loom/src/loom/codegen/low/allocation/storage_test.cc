@@ -380,6 +380,27 @@ TEST(LowAllocationStorageTest, ResolvesExplicitAggregateRegisterViews) {
   EXPECT_FALSE(loom_low_allocation_storage_assignment_subranges_overlap(
       descriptor_set, &pair, 0, &second, 0, /*unit_count=*/1));
 
+  // A fixed scalar can anchor an aggregate only at its declared logical
+  // position. Occupying some other unit of the same view is not sufficient.
+  const loom_low_allocation_assignment_t* sources[] = {&first, &second};
+  for (uint32_t source_unit = 0; source_unit < 2; ++source_unit) {
+    for (uint32_t result_unit = 0; result_unit < 2; ++result_unit) {
+      SCOPED_TRACE(::testing::Message() << "source unit=" << source_unit
+                                        << " result unit=" << result_unit);
+      uint32_t result_location = UINT32_MAX;
+      EXPECT_EQ(
+          loom_low_allocation_storage_find_corresponding_subrange_location(
+              descriptor_set, reg_class_id,
+              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+              /*candidate_location_count=*/2, result_unit, sources[source_unit],
+              /*reference_unit_start=*/0,
+              /*unit_count=*/1, &result_location),
+          source_unit == result_unit);
+      EXPECT_EQ(result_location,
+                source_unit == result_unit ? pair_register_id : UINT32_MAX);
+    }
+  }
+
   uint32_t quad_register_id = UINT32_MAX;
   ASSERT_TRUE(FindExplicitPhysicalRegisterView(
       descriptor_set, reg_class_id, /*unit_count=*/4,
