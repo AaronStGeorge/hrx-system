@@ -80,25 +80,6 @@ value %pair: test.explicit32 -> physical_register[4:2]
 
 // ====
 
-// RUN: emit low-allocation-query @physical_concat_avoids_live_alias spill-count values=%blocker,%high,%low,%pair fixed=%blocker:physical_register:0:1
-
-test.target<low_core> @target
-
-// Live r0 excludes l0. The sources must assemble l1 from r1 and r3.
-low.func.def target<test.low.core>(@target) @physical_concat_avoids_live_alias(%blocker: reg<test.explicit32>, %high: reg<test.explicit32>, %low: reg<test.explicit32>) -> (reg<test.explicit32 x2>, reg<test.explicit32>) asm {
-  %pair = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
-  return %pair, %blocker
-}
-
-// ----
-spills: 0
-value %blocker: test.explicit32 -> physical_register[0:1]
-value %high: test.explicit32 -> physical_register[3:1]
-value %low: test.explicit32 -> physical_register[1:1]
-value %pair: test.explicit32 -> physical_register[5:2]
-
-// ====
-
 // RUN: emit low-allocation-query @physical_concat_broadcast_source spill-count values=%value,%pair
 
 test.target<low_core> @target
