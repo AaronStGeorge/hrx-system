@@ -51,7 +51,11 @@ low.kernel.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) workgroup_s
   // Both original workgroup units need transport. Reuse the reversed mask's
   // components for the join instead of retaining the original inputs.
   %mask = concat(%right, %left) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %selected = v_cndmask_b32_src0_inline %lane, %mask {false_value = 0}
+  // The retained read belongs to the shared storage, not the last SSA alias.
+  %first_alias = low.assume %mask [range(%mask, 0, 1024)] : reg<amdgpu.sgpr x2>
+  %second_alias = low.assume %first_alias [range(%first_alias, 0, 1024)] : reg<amdgpu.sgpr x2>
+  %alias = low.assume %second_alias [range(%second_alias, 0, 1024)] : reg<amdgpu.sgpr x2>
+  %selected = v_cndmask_b32_src0_inline %lane, %alias {false_value = 0}
   ds_write_b32 %address, %selected
   %pair = concat(%left, %right) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
   low.br ^join(%pair: reg<amdgpu.sgpr x2>)
