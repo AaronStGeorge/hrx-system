@@ -401,6 +401,13 @@ if(NOT IREE_ARCH STREQUAL "wasm_32")
   )
 endif()
 
+iree_select_compiler_opts(IREE_DEFAULT_LINKOPTS
+  MSVC_OR_CLANG_CL
+    # link.exe can reuse stale archive members after rapid library rebuilds.
+    # Full links keep the executable synchronized with the current objects.
+    "/INCREMENTAL:NO"
+)
+
 if(EMSCRIPTEN AND IREE_HAL_DRIVER_WEBGPU)
   iree_select_compiler_opts(IREE_DEFAULT_LINKOPTS
     ALL

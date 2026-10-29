@@ -17,5 +17,9 @@ iree_add_external_c_library(fixture
 )
 add_executable(probe main.c)
 target_link_libraries(probe PRIVATE fixture)
+if(MSVC)
+  # Match the native rules' full-link policy for this standalone consumer.
+  target_link_options(probe PRIVATE "/INCREMENTAL:NO")
+endif()
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/program-$<CONFIG>.txt"
   CONTENT "$<TARGET_FILE:probe>\n")
