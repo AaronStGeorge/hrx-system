@@ -149,8 +149,7 @@ TEST(LinuxGpuMemoryProfileTest,
   EXPECT_EQ(local.supported_flags & AMDF_MEMORY_FLAG_HOST_FILE_IO, 0u);
 }
 
-TEST(LinuxGpuMemoryProfileTest,
-     OwnedHostImportsDoNotAdvertiseForeignOwnership) {
+TEST(LinuxGpuMemoryProfileTest, HostImportsCannotConsumeGttCapacityTwice) {
   for (auto lifetime :
        {AMDF_NATIVE_LIFETIME_PROCESS, AMDF_NATIVE_LIFETIME_INSTANCE}) {
     for (bool local_memory : {false, true}) {
@@ -160,31 +159,35 @@ TEST(LinuxGpuMemoryProfileTest,
       };
       device.topology.virtual_address.begin = UINT64_C(0x10000);
       device.topology.virtual_address.end = UINT64_C(1) << 48;
-      device.topology.sdma.engine_count = 1;
       if (local_memory) {
         device.topology.memory_features = AMDF_GPU_DEVICE_FEATURE_LOCAL_MEMORY;
       }
-      const auto profile = QueryProfile(
-          &device, AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_COUNT +
-                       uint32_t{local_memory} +
-                       uint32_t{lifetime == AMDF_NATIVE_LIFETIME_PROCESS});
-      EXPECT_EQ(profile.roles, AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT);
-      EXPECT_EQ(profile.guaranteed_flags, AMDF_MEMORY_FLAG_MAPPING_SOURCE);
-      EXPECT_EQ(profile.supported_flags, AMDF_MEMORY_FLAG_MAPPING_SOURCE |
-                                             AMDF_MEMORY_FLAG_DEVICE_ADDRESS);
-      EXPECT_EQ(profile.guaranteed_device_access, 0u);
-      EXPECT_EQ(profile.supported_device_access,
-                AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE |
-                    AMDF_MEMORY_ACCESS_EXECUTE);
-      EXPECT_EQ(profile.import.byte_length_granularity, 4096u);
-      EXPECT_EQ(profile.external_memory_support_count, 1u);
-      EXPECT_EQ(profile.external_memory_support[0].type,
-                AMDF_EXTERNAL_MEMORY_TYPE_DMA_BUF_FD);
-      EXPECT_EQ(profile.external_memory_support[0].flags,
-                AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_IMPORT);
-      EXPECT_EQ(profile.atomic_operations_32, 0u);
-      EXPECT_EQ(profile.atomic_operations_64, 0u);
-      EXPECT_EQ(profile.construction.query_access, nullptr);
+      const uint32_t profile_count =
+          AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_COUNT + uint32_t{local_memory} +
+          uint32_t{lifetime == AMDF_NATIVE_LIFETIME_PROCESS};
+      for (uint32_t engine_count : {0u, 1u, 2u}) {
+        device.topology.sdma.engine_count = engine_count;
+        for (uint32_t ordinal = 0; ordinal < profile_count; ++ordinal) {
+          const auto profile = QueryProfile(&device, ordinal);
+          EXPECT_EQ(profile.roles & AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT,
+                    0u);
+          if (ordinal < AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_COUNT) {
+            EXPECT_NE(profile.roles & AMDF_MEMORY_PROFILE_ROLE_CREATE, 0u);
+            EXPECT_NE(profile.supported_flags & AMDF_MEMORY_FLAG_MAPPING_SOURCE,
+                      0u);
+          }
+        }
+        if (lifetime == AMDF_NATIVE_LIFETIME_PROCESS) {
+          EXPECT_NE(QueryProfile(&device, profile_count - 1).roles &
+                        AMDF_MEMORY_PROFILE_ROLE_REGISTER,
+                    0u);
+        }
+        amdf_memory_native_profile_t unavailable = {.ordinal = UINT32_MAX};
+        EXPECT_EQ(amdf_status_code(amdf_gpu_umd_device_query_memory_profile(
+                      &device, profile_count, &unavailable)),
+                  AMDF_STATUS_CODE_OUT_OF_RANGE);
+        EXPECT_EQ(unavailable.ordinal, UINT32_MAX);
+      }
     }
   }
 }

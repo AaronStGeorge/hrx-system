@@ -426,14 +426,13 @@ class KfdBufferNativeTest : public ::testing::Test {
   amdf_status_t PrepareOwnedImport(amdf_gpu_umd_memory_t** memory,
                                    amdf_gpu_umd_memory_result_t* result) {
     device_.native_lifetime = AMDF_NATIVE_LIFETIME_INSTANCE;
-    device_.topology.sdma.engine_count = 1;
     native_.import_descriptor = device_.render_descriptor;
-    amdf_memory_native_profile_t profile;
-    const auto status =
-        amdf_gpu_umd_device_query_memory_profile(&device_, 2, &profile);
-    if (!amdf_status_is_ok(status)) {
-      return status;
-    }
+    // Exercise retained native import ownership independently of acquisition
+    // discovery, which excludes the double-accounted foreign backing route.
+    const amdf_memory_native_profile_t profile = {
+        .roles = AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT,
+        .guaranteed_flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE,
+    };
     const amdf_memory_native_import_info_t import = {
         .device_access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
         .required_flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE,
