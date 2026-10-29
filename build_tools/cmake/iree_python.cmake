@@ -340,8 +340,7 @@ endfunction()
 # Runs one Python generator action to produce one or more declared build-tree
 # files. The generator must preserve output timestamps when contents are
 # unchanged. A private freshness stamp tracks generator inputs independently of
-# output contents so an authority-only edit can rerun generation without
-# forcing every C/C++ consumer to rebuild.
+# output contents; Ninja restat then avoids rebuilding unchanged consumers.
 #
 # Parameters:
 # NAME: name of the generated-file target.

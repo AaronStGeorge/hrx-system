@@ -6,8 +6,8 @@
 
 # A generator action with resolved output paths and command arguments. Python
 # entry points retain their declared module closure; native tools retain their
-# executable dependency. Both use a freshness stamp so content-stable outputs
-# do not force their consumers to rebuild after an authority-only change.
+# executable dependency. A freshness stamp records successful generation even
+# when output contents and timestamps remain unchanged.
 function(iree_generated_files)
   cmake_parse_arguments(_RULE "USE_PARAM_FILE" "NAME;GENERATOR;COMMENT"
     "OUTPUTS;ARGS;INPUTS" ${ARGN})
@@ -52,15 +52,18 @@ function(iree_generated_files)
   endif()
   iree_resolve_source_files(_RULE_INPUTS ${_RULE_INPUTS})
   add_custom_command(
-    OUTPUT "${_GEN_STAMP}"
-    BYPRODUCTS ${_RULE_OUTPUTS}
+    # Makefile generators need output rules to repair missing files. Ninja
+    # restat preserves content-stable outputs without rebuilding consumers.
+    OUTPUT "${_GEN_STAMP}" ${_RULE_OUTPUTS}
     COMMAND ${_COMMAND} ${_ARGS}
     COMMAND "${CMAKE_COMMAND}" -E touch "${_GEN_STAMP}"
     DEPENDS ${_GENERATOR_INPUTS} ${_RULE_INPUTS}
     COMMENT "${_RULE_COMMENT}"
     VERBATIM
   )
-  set_source_files_properties(${_RULE_OUTPUTS} PROPERTIES GENERATED TRUE)
   add_custom_target("${_GEN_TARGET}" DEPENDS "${_GEN_STAMP}")
+  foreach(_INPUT IN LISTS _RULE_INPUTS)
+    iree_generated_output_add_consumer("${_INPUT}" "${_GEN_TARGET}")
+  endforeach()
   iree_register_generated_compile_input("${_GEN_TARGET}" OUTPUTS ${_RULE_OUTPUTS})
 endfunction()

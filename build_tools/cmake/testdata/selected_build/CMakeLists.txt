@@ -33,6 +33,10 @@ add_dependencies(shared shared_visit)
 foreach(_NAME left right)
   add_executable(${_NAME} main.c)
   target_link_libraries(${_NAME} PRIVATE shared)
+  if(MSVC)
+    # Match the native rules' full-link policy for these standalone consumers.
+    target_link_options(${_NAME} PRIVATE "/INCREMENTAL:NO")
+  endif()
 endforeach()
 
 add_subdirectory("nested package")

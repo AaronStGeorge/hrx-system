@@ -55,5 +55,11 @@ int main(int argc, char** argv) {
   if (fclose(marker) != 0) {
     return 2;
   }
-  return fixture_value() == expected_value ? 0 : 1;
+  int actual_value = fixture_value();
+  if (actual_value != expected_value) {
+    fprintf(stderr, "Expected compiled value %d, got %d\n", expected_value,
+            actual_value);
+    return 1;
+  }
+  return 0;
 }

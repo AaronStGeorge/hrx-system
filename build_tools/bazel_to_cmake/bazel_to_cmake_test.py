@@ -109,6 +109,34 @@ class BazelToCMakeTest(unittest.TestCase):
                         bazel_to_cmake.generate_build_tree(output, ["."])
             self.assertEqual(authored.read_text(), "# Authored package.\n")
 
+    def test_traversal_reaches_authored_packages_without_replacing_them(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output = root / "source", root / "build/.iree/cmake"
+            authored = source / "group/nested/authored/CMakeLists.txt"
+            authored.parent.mkdir(parents=True)
+            authored.write_text("project(authored)\n")
+            with (
+                mock.patch.object(bazel_to_cmake, "repo_root", str(source)),
+                mock.patch.object(bazel_to_cmake, "repo_cfg", SimpleNamespace()),
+            ):
+                bazel_to_cmake.generate_build_tree(output, ["group"])
+                self.assertEqual(
+                    {
+                        path.relative_to(output)
+                        for path in output.rglob("CMakeLists.txt")
+                    },
+                    {Path("group/CMakeLists.txt"), Path("group/nested/CMakeLists.txt")},
+                )
+                self.assertEqual(authored.read_text(), "project(authored)\n")
+                # A new authored parent takes over traversal and retires the
+                # generated entry; its contents are never replaced.
+                parent = source / "group/nested/CMakeLists.txt"
+                parent.write_text("add_subdirectory(authored)\n")
+                bazel_to_cmake.generate_build_tree(output, ["group"])
+                self.assertFalse((output / "group/nested/CMakeLists.txt").exists())
+                self.assertEqual(parent.read_text(), "add_subdirectory(authored)\n")
+
     def test_failed_first_conversion_can_be_repaired(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -30,9 +30,9 @@ class CMakeGeneratedPackagesTest(unittest.TestCase):
         ) as temporary:
             root = Path(temporary)
             source = root / "source"
-            # Deep build roots and qualified target names exercise Windows
-            # object-path limits encountered by embedded builds in CI.
-            build = root / "nested build directory matching an embedded CI workspace"
+            # Stress Windows object paths while leaving room for the generator's
+            # configuration directory and a complete object-name digest.
+            build = root / "build directory for an embedded CI workspace"
             shutil.copytree(FIXTURE, source)
             for template in source.rglob("BUILD.bazel.in"):
                 template.rename(template.with_suffix(""))
@@ -72,6 +72,16 @@ class CMakeGeneratedPackagesTest(unittest.TestCase):
             configure_project(host, build)
             check(7)
             self.assertEqual([path.stat().st_mtime_ns for path in paths], timestamps)
+            generator = source / "package/generator.py"
+            generator.write_text(generator.read_text() + "\n")
+            check(7)
+            timestamps = [path.stat().st_mtime_ns for path in paths]
+            check(7)
+            self.assertEqual([path.stat().st_mtime_ns for path in paths], timestamps)
+            # Cleaning build outputs preserves configure_file outputs, which
+            # have no build-time producer that could recreate them.
+            build_project(build, "clean")
+            check(7)
 
             settings = source / "package/settings.bzl"
             settings.write_text(
@@ -99,18 +109,39 @@ class CMakeGeneratedPackagesTest(unittest.TestCase):
                 extra.as_posix(), {Path(row["file"]).as_posix() for row in commands}
             )
 
-            added = source / "package/added"
-            added.mkdir()
+            # A leaf package needs no BUILD or CMake boilerplate in its parents.
+            added = source / "package/group/nested/added"
+            added.mkdir(parents=True)
             (added / "BUILD.bazel").write_text(
                 'cc_binary(name="probe", srcs=["main.c"])\n'
+                'iree_cmake_extra_content(content="""\n'
+                'file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/path-$<CONFIG>.txt"\n'
+                '  CONTENT "$<TARGET_FILE:fixture_package_group_nested_added_probe>")\n'
+                '""", inline=True)\n'
             )
-            (added / "main.c").write_text("int main(void) { return 0; }\n")
+            (added / "main.c").write_text(
+                '#include <stdio.h>\nint main(void) { puts("37"); return 0; }\n'
+            )
             check(15)
-            added_output = owned / ".iree/cmake/package/added/CMakeLists.txt"
-            self.assertTrue(added_output.is_file())
+            added_program = Path(
+                (
+                    owned / f"package/group/nested/added/path-{CONFIGURATION}.txt"
+                ).read_text()
+            )
+            self.assertEqual(run_command(str(added_program)), "37\n")
+            added_outputs = [
+                owned / ".iree/cmake/package" / directory / "CMakeLists.txt"
+                for directory in ("group", "group/nested", "group/nested/added")
+            ]
+            for path in added_outputs:
+                self.assertTrue(path.is_file())
+            added_outputs[0].unlink()
+            check(15)
+            self.assertTrue(added_outputs[0].is_file())
             (added / "BUILD.bazel").unlink()
             check(15)
-            self.assertFalse(added_output.exists())
+            for path in added_outputs:
+                self.assertFalse(path.exists())
 
             # Native regeneration repairs missing generated lists; it must not
             # require a separate dev.py or source updater invocation.
