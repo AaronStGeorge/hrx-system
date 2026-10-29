@@ -52,7 +52,7 @@ static iree_status_t iree_hal_vulkan_driver_factory_enumerate(
   static const iree_hal_driver_info_t default_driver_info = {
       .driver_id = 0,
       .driver_name = IREE_SVL("vulkan"),
-      .full_name = IREE_SVL("Vulkan HAL Rewrite Scaffold"),
+      .full_name = IREE_SVL("Vulkan execution using the system loader"),
   };
   *out_driver_info_count = 1;
   *out_driver_infos = &default_driver_info;
