@@ -86,7 +86,7 @@ def test_writes_an_output_file(tmp_path: Path) -> None:
     assert "void copy_one(" in output_path.read_text()
 
 
-def test_selects_repeated_kernel_roots_from_a_mixed_module() -> None:
+def test_selects_repeated_callable_roots_from_a_mixed_module() -> None:
     source = (
         "func.def @helper() {\n  func.return\n}\n\n"
         + SOURCE_MODULE
@@ -113,7 +113,7 @@ def test_selects_repeated_kernel_roots_from_a_mixed_module() -> None:
     assert stderr.getvalue() == ""
 
 
-def test_reports_missing_kernel_root_without_a_traceback() -> None:
+def test_reports_missing_callable_root_without_a_traceback() -> None:
     stderr = io.StringIO()
 
     exit_code = run(
@@ -128,7 +128,7 @@ def test_reports_missing_kernel_root_without_a_traceback() -> None:
     assert exit_code == 2
     assert stderr.getvalue() == (
         "loom-export-cxx: error: cannot project module: "
-        "kernel root '@missing' was not found\n"
+        "callable root '@missing' was not found\n"
     )
 
 

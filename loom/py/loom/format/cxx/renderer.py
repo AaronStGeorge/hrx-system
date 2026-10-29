@@ -24,6 +24,7 @@ from loom.format.cxx.translation_unit import render_preamble
 from loom.format.cxx.types import KERNEL_COORDINATE_CPP_TYPE
 from loom.ir import (
     Block,
+    BufferType,
     DynamicDim,
     DynamicEncoding,
     Module,
@@ -1052,6 +1053,24 @@ class CxxRenderer(CxxExpressionRenderer):
         self.assignment_targets = {**previous_assignments, **direct_assignments}
         try:
             for operation in block.ops:
+                if operation.name == "func.return":
+                    self._validate_projected_attributes(operation, ())
+                    if not operation.operands:
+                        self.writer.line("return;")
+                    elif len(operation.operands) == 1:
+                        self.writer.line(
+                            f"return {self.expression(operation.operands[0])};"
+                        )
+                    else:
+                        values = ", ".join(
+                            self.expression(value) for value in operation.operands
+                        )
+                        self.writer.line(f"return {{{values}}};")
+                    continue
+                if operation.name == "func.call":
+                    projected = self._render_function_call(operation)
+                    self._validate_projected_attributes(operation, projected)
+                    continue
                 if operation.name == "scf.yield":
                     self._validate_projected_attributes(operation, ())
                     if yield_targets is None:
@@ -1247,19 +1266,155 @@ class CxxRenderer(CxxExpressionRenderer):
         self._render_block(entry)
         self.writer.close()
 
-    def _plan_target_names(self, kernels: list[Operation]) -> None:
+    def _function_result_type(self, function: Operation) -> str:
+        results = function.results
+        if not results:
+            return "void"
+        if len(results) == 1:
+            return self.cpp_type(results[0])
+        symbol = str(self._resolved(function).attr("callee"))
+        fields = tuple(
+            (f"value{index}", self.cpp_type(result))
+            for index, result in enumerate(results)
+        )
+        return self._record_type(
+            clean_identifier(symbol, "function") + "_result", fields
+        )
+
+    def _render_function_call(self, operation: Operation) -> tuple[str, ...]:
+        resolved = self._resolved(operation)
+        symbol = str(resolved.attr("callee"))
+        callee = self.function_names.get(symbol)
+        if callee is None:
+            raise CxxRenderError(
+                operation, f"called function {symbol!r} is not present in the module"
+            )
+        arguments = ", ".join(
+            self.expression(operand) for operand in operation.operands
+        )
+        call = f"{callee}({arguments})"
+        if not operation.results:
+            self.writer.line(f"{call};")
+        elif len(operation.results) == 1:
+            self._declare(operation.results[0], call)
+        else:
+            fields = tuple(
+                (f"value{index}", self.cpp_type(result))
+                for index, result in enumerate(operation.results)
+            )
+            record_type = self._record_type(
+                clean_identifier(symbol, "function") + "_result", fields
+            )
+            record_name = self._temporary_name("call_result")
+            self.writer.line(f"{record_type} {record_name} = {call};")
+            for index, result in enumerate(operation.results):
+                self._declare(result, f"{record_name}.value{index}")
+        projected_attributes = ["callee"]
+        effect_contract = resolved.attr("effect_contract")
+        if effect_contract == "pure":
+            # A C++ call carries purity from the callable definition. The
+            # importer reconstructs the explicit func.call contract after the
+            # emitted definition is parsed and analyzed.
+            projected_attributes.append("effect_contract")
+        elif effect_contract is not None:
+            raise CxxRenderError(
+                operation,
+                "function call effect contract "
+                f"{effect_contract!r} has no C++ projection",
+            )
+        return tuple(projected_attributes)
+
+    def _function_attributes(self, function: Operation) -> list[str]:
+        resolved = self._resolved(function)
+        symbol = str(resolved.attr("callee"))
+        attributes = [f'loom::symbol("{symbol}")']
+        inline_policy = resolved.attr("inline_policy")
+        if inline_policy == "inline":
+            attributes.append("loom::force_inline")
+        elif inline_policy is not None:
+            raise CxxRenderError(
+                function,
+                f"function inline policy {inline_policy!r} has no C++ projection",
+            )
+        return attributes
+
+    def _function_signature(self, function: Operation, *, bind_parameters: bool) -> str:
+        resolved = self._resolved(function)
+        body = resolved.region("body")
+        if body is None or len(body.blocks) != 1:
+            raise CxxRenderError(
+                function, "function body must have one structured entry block"
+            )
+        entry = body.blocks[0]
+        parameters: list[str] = []
+        for argument in entry.arg_ids:
+            value_type = self.module.values[argument].type
+            if isinstance(value_type, BufferType):
+                element = self._parameter_element(argument)
+                type_name = f"loom::type::buffer<{element}>"
+            else:
+                type_name = self.cpp_type(argument)
+            name = self.names[argument]
+            parameters.append(f"{type_name} {name}")
+            if bind_parameters:
+                self.expressions[argument] = name
+                self.expression_types[argument] = type_name
+
+        symbol = str(resolved.attr("callee"))
+        visibility = resolved.attr("visibility")
+        storage = "" if visibility == "public" else "static "
+        return (
+            f"{storage}{self._function_result_type(function)} "
+            f"{self.function_names[symbol]}(" + ", ".join(parameters) + ")"
+        )
+
+    def _render_function_declaration(self, function: Operation) -> None:
+        self._analyze_buffers(function)
+        self.writer.attributes(self._function_attributes(function))
+        self.writer.line(
+            self._function_signature(function, bind_parameters=False) + ";"
+        )
+
+    def _render_function(self, function: Operation) -> None:
+        scope = self.operation_scopes[id(function)]
+        self.temporary_names = set(self.scope_names[scope])
+        self.rendered_assumptions_by_block.clear()
+        self._validate_projected_attributes(
+            function, ("callee", "visibility", "inline_policy")
+        )
+        self._analyze_buffers(function)
+        body = self._resolved(function).region("body")
+        assert body is not None
+        self.writer.attributes(self._function_attributes(function))
+        self.writer.open(self._function_signature(function, bind_parameters=True))
+        entry = body.blocks[0]
+        self._render_block(entry)
+        self.writer.close()
+
+    def _plan_callable_names(
+        self, kernels: list[Operation], functions: list[Operation]
+    ) -> None:
+        used_names = {str(self._resolved(kernel).attr("callee")) for kernel in kernels}
+        for function in functions:
+            symbol = str(self._resolved(function).attr("callee"))
+            base = clean_identifier(symbol, "function")
+            name = base
+            ordinal = 2
+            while name in used_names:
+                name = f"{base}_{ordinal}"
+                ordinal += 1
+            used_names.add(name)
+            self.function_names[symbol] = name
+
         target_symbols: list[str] = []
-        function_names: set[str] = set()
         for kernel in kernels:
             resolved = self._resolved(kernel)
-            function_names.add(str(resolved.attr("callee")))
             target_symbol = resolved.attr("target")
             if target_symbol is not None:
                 symbol = str(target_symbol)
                 if symbol and symbol not in target_symbols:
                     target_symbols.append(symbol)
 
-        used_names = set(function_names)
         for symbol in target_symbols:
             base = (
                 "rendered_target"
@@ -1280,23 +1435,40 @@ class CxxRenderer(CxxExpressionRenderer):
             for operation in self.module.body.ops
             if operation.name == "kernel.def"
         ]
-        if not kernels:
+        functions = [
+            operation
+            for operation in self.module.body.ops
+            if operation.name == "func.def"
+        ]
+        if not kernels and not functions:
             raise CxxRenderError(
                 None,
-                "module contains no kernel definitions",
+                "module contains no callable definitions",
             )
         for operation in self.module.body.ops:
-            if operation.name == "kernel.def" or operation.name.endswith(".target"):
+            if operation.name in {"kernel.def", "func.def"} or operation.name.endswith(
+                ".target"
+            ):
                 continue
             raise CxxRenderError(
                 operation,
                 "a top-level definition would be omitted from the C++ projection",
             )
-        self._plan_target_names(kernels)
-        for index, kernel in enumerate(kernels):
+        self._plan_callable_names(kernels, functions)
+        for index, function in enumerate(functions):
             if index:
                 self.writer.line()
-            self._render_kernel(kernel)
+            self._render_function_declaration(function)
+        if functions:
+            self.writer.line()
+        callables = [*functions, *kernels]
+        for index, callable_operation in enumerate(callables):
+            if index:
+                self.writer.line()
+            if callable_operation.name == "func.def":
+                self._render_function(callable_operation)
+            else:
+                self._render_kernel(callable_operation)
 
         operation_names = {
             operation.name for operation in walk_operations(self.module.body)
@@ -1311,6 +1483,15 @@ class CxxRenderer(CxxExpressionRenderer):
         preamble = render_preamble(
             operation_names=operation_names,
             scalar_names=scalar_names,
+            has_kernels=bool(kernels),
+            uses_buffers=any(
+                isinstance(value.type, BufferType) for value in self.module.values
+            ),
+            uses_views=any(
+                isinstance(value.type, ShapedType)
+                and value.type.type_kind == TypeKind.VIEW
+                for value in self.module.values
+            ),
             vector_aliases=self.types.vector_aliases,
             record_declarations=self.record_declarations,
             table_lookup_declarations=self.table_lookup_declarations,
@@ -1324,36 +1505,48 @@ class CxxRenderer(CxxExpressionRenderer):
         return "\n".join((*preamble, *self.writer.lines)) + "\n"
 
 
-def _select_kernel_roots(module: Module, roots: Sequence[str]) -> Module:
-    """Returns an immutable presentation of selected kernels and their targets."""
+def _select_callable_roots(module: Module, roots: Sequence[str]) -> Module:
+    """Returns selected callables, their helper closure, and kernel targets."""
 
     normalized_roots: list[str] = []
     seen_roots: set[str] = set()
     for root in roots:
         name = root.removeprefix("@")
         if not name:
-            raise CxxRenderError(None, "kernel root name is empty")
+            raise CxxRenderError(None, "callable root name is empty")
         if name in seen_roots:
-            raise CxxRenderError(None, f"kernel root '@{name}' is repeated")
+            raise CxxRenderError(None, f"callable root '@{name}' is repeated")
         seen_roots.add(name)
         normalized_roots.append(name)
 
     symbols = {symbol.name: symbol for symbol in module.symbols}
     selected_operation_ids: set[int] = set()
     target_names: set[str] = set()
-    for name in normalized_roots:
+    pending = list(normalized_roots)
+    while pending:
+        name = pending.pop()
         symbol = symbols.get(name)
         if symbol is None or symbol.op is None:
-            raise CxxRenderError(None, f"kernel root '@{name}' was not found")
-        if symbol.op.name != "kernel.def":
+            raise CxxRenderError(None, f"callable root '@{name}' was not found")
+        if symbol.op.name not in {"kernel.def", "func.def"}:
             raise CxxRenderError(
                 symbol.op,
-                f"root '@{name}' is not a kernel definition",
+                f"root '@{name}' is not a callable definition",
             )
+        if id(symbol.op) in selected_operation_ids:
+            continue
         selected_operation_ids.add(id(symbol.op))
         target = symbol.op.attributes.get("target")
         if isinstance(target, str):
             target_names.add(target)
+        for region in symbol.op.regions:
+            for block in region.blocks:
+                for operation in walk_operations(block):
+                    if operation.name != "func.call":
+                        continue
+                    callee = operation.attributes.get("callee")
+                    if isinstance(callee, str):
+                        pending.append(callee)
 
     selected_operations = [
         operation
@@ -1368,6 +1561,6 @@ def _select_kernel_roots(module: Module, roots: Sequence[str]) -> Module:
 
 
 def render_module(module: Module, *, roots: Sequence[str] = ()) -> str:
-    """Renders supported High IR kernel roots as standalone Loom C++."""
-    projected_module = _select_kernel_roots(module, roots) if roots else module
+    """Renders supported High IR callable roots as standalone Loom C++."""
+    projected_module = _select_callable_roots(module, roots) if roots else module
     return CxxRenderer(projected_module).render()

@@ -203,6 +203,7 @@ class CxxRenderContext:
         self.assignment_targets: dict[int, int] = {}
         self.suppressed_forwarding_values: set[int] = set()
         self.target_names: dict[str, str] = {}
+        self.function_names: dict[str, str] = {}
 
     def _collect_value_scopes(self) -> tuple[dict[int, int], dict[int, int]]:
         """Maps top-level operations and their values to C++ local scopes."""
@@ -605,24 +606,38 @@ class CxxRenderContext:
                     old = self.buffer_info[root].alignment or 1
                     self.buffer_info[root].alignment = max(old, alignment)
 
-    def _analyze_buffers(self, kernel: Operation) -> None:
-        fields = self._resolved(kernel)
+    def _analyze_buffers(self, callable_operation: Operation) -> None:
+        fields = self._resolved(callable_operation)
         body = fields.region("body")
         if body is None or len(body.blocks) != 1:
             raise CxxRenderError(
-                kernel, "kernel body must have one structured entry block"
+                callable_operation,
+                "callable body must have one structured entry block",
             )
         entry = body.blocks[0]
         direct_operations = {id(operation) for operation in entry.ops}
         for argument in entry.arg_ids:
-            if not isinstance(self.module.values[argument].type, BufferType):
+            argument_type = self.module.values[argument].type
+            if isinstance(argument_type, BufferType):
+                self.buffer_roots[argument] = argument
+                self.buffer_info[argument] = BufferInfo(
+                    root=argument,
+                    name=self.names[argument],
+                    is_parameter=True,
+                )
                 continue
-            self.buffer_roots[argument] = argument
-            self.buffer_info[argument] = BufferInfo(
-                root=argument,
-                name=self.names[argument],
-                is_parameter=True,
-            )
+            if (
+                isinstance(argument_type, ShapedType)
+                and argument_type.type_kind == TypeKind.VIEW
+            ):
+                self.view_roots[argument] = argument
+                self.buffer_info[argument] = BufferInfo(
+                    root=argument,
+                    name=self.names[argument],
+                    mutable=True,
+                    is_parameter=True,
+                    element_types={repr(argument_type.element_type)},
+                )
 
         for operation in walk_operations(entry):
             if operation.name in {
