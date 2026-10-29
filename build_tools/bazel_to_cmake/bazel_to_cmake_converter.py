@@ -22,6 +22,7 @@ import bazel_to_cmake_config
 import bazel_to_cmake_loads
 import bazel_to_cmake_requirements
 import bazel_to_cmake_targets
+from bazel_to_cmake_generated import GeneratedFileBuildFileFunctions
 
 _LOCATION_PATTERN = re.compile(
     r"\$\((location|locations|rootpath|rootpaths|execpath|execpaths) ([^)]+)\)"
@@ -181,7 +182,7 @@ class _SelectsModule:
         pass
 
 
-class BuildFileFunctions(object):
+class BuildFileFunctions(GeneratedFileBuildFileFunctions):
     """Object passed to `exec` that has handlers for BUILD file functions."""
 
     def __init__(
@@ -192,6 +193,7 @@ class BuildFileFunctions(object):
         build_dir: str,
         repo_root: str = "",
         condition_mappings=None,
+        generated_files=None,
     ):
         self._converter = converter
         self._targets = targets
@@ -206,7 +208,7 @@ class BuildFileFunctions(object):
         self._source_glob_vars = {}
         self._target_file_labels = set()
         # Producers own fully qualified CMake paths for generated file labels.
-        self._target_file_paths = {}
+        self._target_file_paths = generated_files if generated_files is not None else {}
         self.selects = _SelectsModule()
         self._custom_initialize()
         self._loaded_modules = bazel_to_cmake_loads.ModuleLoader(
@@ -222,6 +224,8 @@ class BuildFileFunctions(object):
         return {
             "build_requirement": bazel_to_cmake_requirements.build_requirement,
             "run_requirement": bazel_to_cmake_requirements.run_requirement,
+            "iree_generated_files": self.iree_generated_files,
+            "iree_generated_sources": self.iree_generated_files,
         }
 
     # ------------------------------------------------------------------------- #
@@ -643,6 +647,17 @@ class BuildFileFunctions(object):
             return f"//{package}:{name}"
         return f":{name}"
 
+    def _register_target_files(self, name, paths):
+        # Output paths belong to the producer's package, including when another
+        # package consumes them before its native directory is entered.
+        binary_dir = "${IREE_BINARY_DIR}"
+        package = self._current_package()
+        if package and package != ".":
+            binary_dir += "/" + package
+        self._target_file_paths[self._current_target_label(name)] = [
+            path.replace("${CMAKE_CURRENT_BINARY_DIR}", binary_dir) for path in paths
+        ]
+
     def _should_emit_python_target(self):
         return False
 
@@ -754,7 +769,7 @@ class BuildFileFunctions(object):
             ]
         canonical_label = self._canonical_location_label(label)
         if canonical_label in self._target_file_paths:
-            return [self._target_file_paths[canonical_label]]
+            return self._target_file_paths[canonical_label]
         source_path = self._cmake_source_location_path(label)
         if self._repo_root:
             concrete_source_path = os.path.join(self._repo_root, package, name)
@@ -785,14 +800,7 @@ class BuildFileFunctions(object):
     def _cmake_source_location_path(self, label):
         if label in self._source_glob_vars:
             var = self._source_glob_vars[label]
-            absolute_var = var + "_ABSOLUTE"
-            # DATA locations need full paths; preserve the relative list for
-            # consumers such as embedded sources and golden test names.
-            self._converter.body += (
-                f'list(TRANSFORM {var} PREPEND "${{_IREE_PACKAGE_SOURCE_DIR}}/"'
-                f" OUTPUT_VARIABLE {absolute_var})\n"
-            )
-            return self._expand_cmake_var(absolute_var)
+            return self._expand_cmake_var(var + "_ABSOLUTE")
         if label.startswith("${"):
             return label
         package, name = self._split_location_label(label)
@@ -1163,6 +1171,17 @@ class BuildFileFunctions(object):
         if did_emit_guard:
             self._converter.body += "endif()\n\n"
 
+    def _convert_generated_args(self, args):
+        return self._map_configurable_list(args, self._convert_location_args)
+
+    def _convert_generated_inputs(self, inputs):
+        return self._map_configurable_list(
+            inputs,
+            lambda values: [
+                path for value in values for path in self._cmake_location_paths(value)
+            ],
+        )
+
     def _convert_includes_block(self, includes):
         if not includes:
             return ""
@@ -1233,15 +1252,6 @@ class BuildFileFunctions(object):
 
     def iree_build_test(self, **kwargs):
         pass
-
-    def iree_generated_files(self, tags=None, **kwargs):
-        if self._should_skip_target(tags=tags):
-            return
-        raise NotImplementedError(
-            "iree_generated_files requires an explicit CMake projection"
-        )
-
-    iree_generated_sources = iree_generated_files
 
     def objc_library(self, tags=None, **kwargs):
         if self._should_skip_target(tags=tags):
@@ -1713,6 +1723,13 @@ class BuildFileFunctions(object):
             )
             for glob_var in glob_vars:
                 self._converter.body += f"list(REMOVE_ITEM {glob_var} {self._expand_cmake_var(exclude_var)})\n"
+        # File locations need absolute paths; source and golden-name lists need
+        # package-relative paths. Retain both at their declaration site.
+        for var in glob_vars:
+            self._converter.body += (
+                f'list(TRANSFORM {var} PREPEND "${{_IREE_PACKAGE_SOURCE_DIR}}/"'
+                f" OUTPUT_VARIABLE {var}_ABSOLUTE)\n"
+            )
         return [self._expand_cmake_var(var) for var in glob_vars]
 
     # TODO(gcmn) implement these types of functions in a less hard-coded way
@@ -2578,9 +2595,7 @@ class BuildFileFunctions(object):
         if target_compatible_with is None:
             target_compatible_with = _SPIRV_TOOL_TARGET_COMPATIBLE_WITH
         out_file = out or ("%s.spv" % name)
-        self._target_file_paths[self._current_target_label(name)] = (
-            f"${{CMAKE_CURRENT_BINARY_DIR}}/{out_file}"
-        )
+        self._register_target_files(name, [f"${{CMAKE_CURRENT_BINARY_DIR}}/{out_file}"])
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         src_block = self._convert_string_arg_block("SRC", src)
         out_block = self._convert_string_arg_block("OUT", out)
@@ -3004,11 +3019,25 @@ class Converter(object):
         self.header = ""
         # Body appears after `iree_add_all_subdirs`.
         self.body = ""
+        # Deferred fragments resolve cross-package inputs after all declarations
+        # have been evaluated, without changing their native lexical scope.
+        self._fragments = []
+
+    def defer(self, render):
+        self._fragments.extend([self.body, render])
+        self.body = ""
 
     def convert(self):
+        body = (
+            "".join(
+                fragment() if callable(fragment) else fragment
+                for fragment in self._fragments
+            )
+            + self.body
+        )
         converted_content = (
             "\niree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)\n"
-            f"{self.header}\n\niree_add_all_subdirs()\n\n{self.body}"
+            f"{self.header}\n\niree_add_all_subdirs()\n\n{body}"
         )
 
         # Cleanup newline characters. This is more convenient than ensuring all
@@ -3027,13 +3056,15 @@ def GetDict(obj):
     return ret
 
 
-def convert_build_file(
+def evaluate_build_file(
     build_file_code,
     repo_cfg,
     build_dir,
     repo_root="",
     input_files=None,
+    generated_files=None,
 ):
+    """Collects declarations; conversion follows repository-wide evaluation."""
     converter = Converter()
     # Allow overrides of TargetConverter and BuildFileFunctions from repo cfg.
     repo_map = getattr(repo_cfg, "REPO_MAP", {})
@@ -3054,6 +3085,7 @@ def convert_build_file(
         build_dir=build_dir,
         repo_root=repo_root,
         condition_mappings=bazel_to_cmake_config.collect_condition_mappings(repo_cfg),
+        generated_files=generated_files,
     )
 
     exec_namespace = GetDict(build_file_functions)
@@ -3062,4 +3094,13 @@ def convert_build_file(
     exec(build_file_code, exec_namespace)
     if input_files is not None:
         input_files.update(build_file_functions._loaded_modules.inputs)
-    return converter.convert()
+    return converter
+
+
+def convert_build_file(
+    build_file_code, repo_cfg, build_dir, repo_root="", input_files=None
+):
+    """Converts an isolated package whose producers are all declared locally."""
+    return evaluate_build_file(
+        build_file_code, repo_cfg, build_dir, repo_root, input_files
+    ).convert()

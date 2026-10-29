@@ -7,20 +7,21 @@
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
+load("//build_tools/bazel:generate.bzl", "iree_generated_sources")
 load(":settings.bzl", "OPTIONS")
 
-filegroup(
-    name = "header_inputs",
-    srcs = ["generated.h.in"],
+iree_generated_sources(
+    name = "header",
+    tool = "//package/producer:generator",
+    srcs = ["//package/producer:value.h"],
+    args = ["--input=$(location //package/producer:value.h)"],
+    outs = ["generated.h"],
+    output_args = {"generated.h": "--output={path}"},
+    use_param_file = True,
 )
 
 iree_cmake_extra_content(
     content = """
-iree_py_library(NAME generator MAIN generator.py SRCS generator.py)
-iree_py_generated_files(NAME header GENERATOR ::generator
-  INPUTS header_inputs.stamp
-  ARGS "--input=${_IREE_PACKAGE_SOURCE_DIR}/generated.h.in"
-  OUTPUTS generated.h OUTPUT_FLAGS --output)
 iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
 configure_file("${_IREE_PACKAGE_SOURCE_DIR}/value.c"
   "${_IREE_PACKAGE_BINARY_DIR}/value_from_generated_input_with_long_output_name.c"

@@ -4,15 +4,20 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Resolves declarative exports from Python-compatible repository .bzl files.
+"""Evaluates declarations and macros in Python-compatible repository .bzl files.
 
-Converters supply implementations of the constructors whose values they consume.
-Other Starlark APIs remain unsupported; this is not a Bazel rule evaluator.
+Converters supply implementations of the constructors and leaf build rules they
+consume. Macros expand through those bindings; Bazel rule implementations and
+their analysis-time APIs are not evaluated.
 Unrepresented imports may reach ignored rules, but consuming them fails with the
 original module/import context. Failed evaluation never publishes partial exports.
 """
 
 from pathlib import Path
+
+
+def _fail(message):
+    raise ValueError(message)
 
 
 class _LoadCycleError(NotImplementedError):
@@ -47,9 +52,9 @@ class OpaqueLoadedSymbol:
 
 
 class ModuleLoader:
-    """Loads module exports once per set of converter-owned constructors.
+    """Loads module exports once per set of converter-owned bindings.
 
-    Bindings name known declarative constructors, not BUILD rule handlers. Loaded
+    Bindings name supported constructors and leaf build rules. Loaded
     modules have separate namespaces and resolve relative imports from their own
     package. Repository aliases mapped to the local repository share one cache.
     """
@@ -104,7 +109,7 @@ class ModuleLoader:
             cycle = " -> ".join(str(entry) for entry in [*self._loading, path])
             raise _LoadCycleError(f"cyclic .bzl load: {cycle}")
 
-        namespace = {"Label": str, **self._bindings}
+        namespace = {"Label": str, "fail": _fail, **self._bindings}
 
         def load(label, *names, **aliases):
             imports = {name: name for name in names}

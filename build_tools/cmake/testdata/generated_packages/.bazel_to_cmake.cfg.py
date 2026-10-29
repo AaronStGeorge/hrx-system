@@ -12,4 +12,11 @@ DEFAULT_ROOT_DIRS = ["package"]
 
 class CustomTargetConverter(TargetConverter):
     def _initialize(self):
-        self._update_target_mappings({"//external:usage": ["authored_usage"]})
+        self._update_target_mappings(
+            {
+                "//external:usage": ["authored_usage"],
+                "//package/producer:generator": [
+                    "fixture::package::producer::generator"
+                ],
+            }
+        )

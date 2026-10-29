@@ -886,7 +886,7 @@ cc_library(
             data=[":generated_data"],
         )
         self.assertIn(
-            'DATA\n    "${CMAKE_CURRENT_BINARY_DIR}/generated_data.spv"', converter.body
+            'DATA\n    "${IREE_BINARY_DIR}/pkg/generated_data.spv"', converter.body
         )
 
     def test_py_test_preserves_configured_generated_arguments_and_data(self):
@@ -918,7 +918,7 @@ cc_library(
         self.assertIn(
             'if(CMAKE_SYSTEM_NAME STREQUAL "Linux")\n'
             "  list(APPEND _configured_data_test_platform_args "
-            '"--input={{${CMAKE_CURRENT_BINARY_DIR}/generated_data.spv}}")\n'
+            '"--input={{${IREE_BINARY_DIR}/pkg/generated_data.spv}}")\n'
             "else()\n"
             '  list(APPEND _configured_data_test_platform_args "--no-input")\n'
             "endif()",
@@ -927,7 +927,7 @@ cc_library(
         self.assertIn(
             'if(CMAKE_SYSTEM_NAME STREQUAL "Linux")\n'
             "  list(APPEND _configured_data_test_platform_data "
-            '"${CMAKE_CURRENT_BINARY_DIR}/generated_data.spv")\n'
+            '"${IREE_BINARY_DIR}/pkg/generated_data.spv")\n'
             "endif()",
             converter.body,
         )
@@ -956,29 +956,53 @@ cc_library(
 
         self.assertEqual(converter.body, "")
 
-    def test_generated_files_requires_explicit_cmake_projection(self):
+    def test_generated_files_resolve_output_arguments_and_locations(self):
+        converter = bazel_to_cmake_converter.Converter()
         functions = bazel_to_cmake_converter.BuildFileFunctions(
-            converter=SimpleNamespace(body=""),
-            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
-            build_dir="runtime/src/iree/vm/bytecode/tooling",
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
         )
-
         functions.iree_generated_files(
             name="tables_gen",
-            tags=["skip-bazel_to_cmake"],
+            tool=":generator",
+            outs=["tables/values.h", "tables/values.c"],
+            output_args={"values.h": "--header={path}", "tables/values.c": "--source"},
+            use_param_file=True,
         )
-        functions.iree_generated_sources(
-            name="source_tables_gen",
-            tags=["skip-bazel_to_cmake"],
+        content = converter.convert()
+        self.assertIn('"--header=${CMAKE_CURRENT_BINARY_DIR}/tables/values.h"', content)
+        self.assertIn(
+            '"--source"\n    "${CMAKE_CURRENT_BINARY_DIR}/tables/values.c"',
+            content,
         )
-        with self.assertRaisesRegex(
-            NotImplementedError, "requires an explicit CMake projection"
+        self.assertEqual(
+            functions._cmake_location_paths(":tables_gen"),
+            [
+                "${IREE_BINARY_DIR}/pkg/tables/values.h",
+                "${IREE_BINARY_DIR}/pkg/tables/values.c",
+            ],
+        )
+        self.assertEqual(
+            functions._cmake_location_paths(":tables/values.h"),
+            ["${IREE_BINARY_DIR}/pkg/tables/values.h"],
+        )
+
+        for outputs, arguments in (
+            (["values.h"], {"missing.h": "--header"}),
+            (["a/values.h", "b/values.h"], {"values.h": "--header"}),
+            (["a/values.h"], {"a/values.h": "--header", "values.h": "--duplicate"}),
+            (["values.c", "values.h"], {"values.h": "--header"}),
         ):
-            functions.iree_generated_files(name="tables_gen")
-        with self.assertRaisesRegex(
-            NotImplementedError, "requires an explicit CMake projection"
-        ):
-            functions.iree_generated_sources(name="source_tables_gen")
+            with self.subTest(outputs=outputs, arguments=arguments):
+                with self.assertRaisesRegex(ValueError, "output_args"):
+                    functions.iree_generated_files(
+                        name="invalid",
+                        tool=":generator",
+                        outs=outputs,
+                        output_args=arguments,
+                    )
 
     def test_build_file_loads_cross_project_requirement_alias(self):
         with tempfile.TemporaryDirectory() as temp_dir:
