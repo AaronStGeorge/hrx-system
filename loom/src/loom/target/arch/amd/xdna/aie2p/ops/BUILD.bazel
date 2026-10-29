@@ -20,7 +20,7 @@ loom_cc_library(
     deps = [
         "//loom/src/loom/ops:headers",
         "//loom/src/loom/target:types",
-        "//loom/src/loom/target/arch/amd/xdna/aie2p:record_defs",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/records:record_defs",
     ],
 )
 
@@ -34,7 +34,7 @@ loom_cc_instance_library(
         "//loom/src/loom/ir:builders",
         "//loom/src/loom/ops:builders",
         "//loom/src/loom/target:types",
-        "//loom/src/loom/target/arch/amd/xdna/aie2p:record_defs",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/records:record_defs",
     ],
 )
 
@@ -79,7 +79,7 @@ loom_generated_cc_library(
     ],
     generator = "//loom/py/loom/gen/ops:c_tables_aie2p_generator",
     textual_hdrs = ["ops.inc"],
-    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:__pkg__"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
     deps = [
         ":builders",
         "//loom/src/loom/error:emitter",
@@ -95,7 +95,7 @@ loom_generated_cc_library(
         "//loom/src/loom/target/arch/amd/xdna:device_profile",
         "//loom/src/loom/target/arch/amd/xdna:error_defs",
         "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
-        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_records",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/records:target_records",
         "//runtime/src/iree/base",
     ],
 )

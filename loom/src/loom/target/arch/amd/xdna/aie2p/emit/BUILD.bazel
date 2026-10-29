@@ -1,0 +1,490 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//libamdf/requirements:defs.bzl", "LIBAMDF")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+_XDNA_TARGET_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/arch:aie2p",
+])
+
+_XDNA_ARTIFACT_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:aie2p_elf",
+])
+
+_XDNA_IMAGE_COMPATIBLE_WITH = _XDNA_ARTIFACT_COMPATIBLE_WITH + loom_config_compatible_with([
+    LIBAMDF.enabled_by,
+])
+
+loom_check_test_suite(
+    name = "loom_check_test",
+    srcs = [
+        "configuration.loom-test",
+    ],
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)
+
+loom_cc_library(
+    name = "leaf_program",
+    hdrs = ["leaf_program.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/machine",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "leaf_plan_metadata",
+    srcs = ["leaf_plan_metadata.c"],
+    hdrs = ["leaf_plan_metadata.h"],
+    deps = [
+        ":leaf_program",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:function_requirements",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low:storage_layout",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "bundle_analysis",
+    srcs = ["bundle_analysis.c"],
+    hdrs = ["bundle_analysis.h"],
+    deps = [
+        ":leaf_program",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:loop_execution",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low:storage_layout",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:type_builders",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amd/xdna:error_defs",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:core_structure",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "bundle_alignment",
+    srcs = ["bundle_alignment.c"],
+    hdrs = ["bundle_alignment.h"],
+    deps = [
+        ":bundle_encoding",
+        ":leaf_program",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "bundle_encoding",
+    srcs = ["bundle_encoding.c"],
+    hdrs = ["bundle_encoding.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:function_requirements",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:encoding",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+    ],
+)
+
+loom_cc_library(
+    name = "bundle_plan",
+    srcs = ["bundle_plan.c"],
+    hdrs = ["bundle_plan.h"],
+    deps = [
+        ":bundle_alignment",
+        ":bundle_analysis",
+        ":bundle_encoding",
+        ":leaf_plan_metadata",
+        ":leaf_program",
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low/schedule:physical_issue",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:core_structure",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/machine",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "relocation",
+    srcs = ["relocation.c"],
+    hdrs = ["relocation.h"],
+    deps = [
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/machine",
+        "//loom/src/loom/target/emit/native:contribution",
+        "//loom/src/loom/target/emit/native:object",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "leaf_object",
+    srcs = ["leaf_object.c"],
+    hdrs = ["leaf_object.h"],
+    deps = [
+        ":leaf_program",
+        ":relocation",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/machine",
+        "//loom/src/loom/target/emit/native:object",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "program_capacity",
+    srcs = ["program_capacity.c"],
+    hdrs = ["program_capacity.h"],
+    deps = [
+        ":leaf_program",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/target/arch/amd/xdna:error_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "leaf_compile",
+    srcs = ["leaf_compile.c"],
+    hdrs = ["leaf_compile.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        ":bundle_plan",
+        ":leaf_object",
+        ":program_capacity",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low/allocation:diagnostics",
+        "//loom/src/loom/codegen/low/allocation:target_constraints",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:registry",
+        "//loom/src/loom/target/reporting:low",
+        "//loom/src/loom/target/reporting:report",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "program_object",
+    srcs = ["program_object.c"],
+    hdrs = ["program_object.h"],
+    deps = [
+        ":leaf_object",
+        ":relocation",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "program_compile",
+    srcs = ["program_compile.c"],
+    hdrs = ["program_compile.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        ":leaf_compile",
+        ":program_capacity",
+        ":program_object",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:call_abi",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "tile_link",
+    srcs = ["tile_link.c"],
+    hdrs = ["tile_link.h"],
+    deps = [
+        ":leaf_object",
+        ":relocation",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/emit/native:contribution",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "program",
+    hdrs = ["program.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "xdna_product",
+    srcs = ["xdna_product.c"],
+    hdrs = ["xdna_product.h"],
+    deps = [
+        ":program",
+        ":tile_link",
+        "//loom/src/loom/target/arch/amd/xdna:device_profile",
+        "//loom/src/loom/target/emit/native:elf",
+        "//loom/src/loom/target/emit/native:elf_sections",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/schemas:xdna_executable",
+    ],
+)
+
+loom_cc_library(
+    name = "configuration_storage",
+    srcs = ["configuration_storage.c"],
+    hdrs = ["configuration_storage.h"],
+    deps = [
+        ":leaf_object",
+        ":tile_link",
+        "//loom/src/loom/analysis:source_storage_packing",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/emit/native:contribution",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "artifact",
+    srcs = [
+        "array_report.c",
+        "array_report.h",
+        "artifact.c",
+        "configuration.c",
+        "configuration_report.c",
+        "configuration_report.h",
+    ],
+    hdrs = [
+        "artifact.h",
+        "configuration.h",
+    ],
+    visibility = [
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:implementation",
+        "//loom/src/loom/target/emit/native/aie2p:__pkg__",
+    ],
+    deps = [
+        ":configuration_storage",
+        ":leaf_compile",
+        ":program_compile",
+        ":tile_link",
+        ":xdna_product",
+        "//loom/src/loom/analysis:source_storage_packing",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:function_model",
+        "//loom/src/loom/codegen/low:function_requirements",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/codegen/low/schedule",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:function_version",
+        "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/amd/xdna:device_profile",
+        "//loom/src/loom/target/arch/amd/xdna:error_defs",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:provider",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_profile",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:abi_layout",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:plan",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:program",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/array:resident",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:configuration",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/records:target_records",
+        "//loom/src/loom/target/reporting:low",
+        "//loom/src/loom/target/reporting:report",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/schemas:xdna_executable",
+    ],
+)
+
+loom_cc_test(
+    name = "xdna_product_test",
+    srcs = ["xdna_product_test.cc"],
+    deps = [
+        ":program",
+        ":xdna_product",
+        "//loom/src/loom/target/arch/amd/xdna:device_profile",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/schemas:xdna_executable",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "artifact_test",
+    srcs = ["artifact_test.cc"],
+    tags = ["iree-build-requirement=%s" % LIBAMDF.id],
+    target_compatible_with = _XDNA_IMAGE_COMPATIBLE_WITH,
+    deps = [
+        ":artifact",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target/arch/amd/xdna:error_defs",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:provider",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:registry",
+        "//loom/src/loom/target/reporting:report",
+        "//loom/src/loom/testing:diagnostic_matchers",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amd/xdna/image",
+        "//runtime/src/iree/hal/drivers/amd/xdna/image/aie2p:npu2",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "bundle_alignment_test",
+    srcs = ["bundle_alignment_test.cc"],
+    deps = [
+        ":bundle_alignment",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "leaf_object_test",
+    srcs = ["leaf_object_test.cc"],
+    deps = [
+        ":leaf_object",
+        ":relocation",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "program_compile_test",
+    srcs = ["program_compile_test.cc"],
+    deps = [
+        ":bundle_plan",
+        ":program_compile",
+        ":relocation",
+        ":tile_link",
+        "//loom/src/loom/codegen/low:function_requirements",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:provider",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:registry",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/machine",
+        "//loom/src/loom/target/emit/native:object",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "program_object_test",
+    srcs = ["program_object_test.cc"],
+    deps = [
+        ":program_object",
+        ":relocation",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "tile_link_test",
+    srcs = ["tile_link_test.cc"],
+    deps = [
+        ":relocation",
+        ":tile_link",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/encoding",
+        "//loom/src/loom/target/emit/native:object",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

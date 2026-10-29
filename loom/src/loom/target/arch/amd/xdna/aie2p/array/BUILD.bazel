@@ -1,0 +1,159 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+loom_cc_library(
+    name = "abi_layout",
+    srcs = ["abi_layout.c"],
+    hdrs = ["abi_layout.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/schemas:xdna_executable",
+    ],
+)
+
+loom_cc_library(
+    name = "local_memory",
+    srcs = ["local_memory.c"],
+    hdrs = ["local_memory.h"],
+    deps = [
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "plan",
+    srcs = [
+        "binding.c",
+        "channel_resources.c",
+        "plan.c",
+        "route.c",
+        "topology.c",
+        "topology.h",
+    ],
+    hdrs = [
+        "binding.h",
+        "channel_resources.h",
+        "plan.h",
+        "route.h",
+    ],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        ":abi_layout",
+        ":local_memory",
+        "//loom/src/loom/analysis:scc",
+        "//loom/src/loom/analysis:storage_geometry",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:function_requirements",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low:representation_binding",
+        "//loom/src/loom/codegen/low:storage_layout",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:parameter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ops:combining",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna:error_defs",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:array",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "program",
+    srcs = ["program.c"],
+    hdrs = ["program.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        ":plan",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna:array_registers",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/emit:program",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "resident",
+    srcs = ["resident.c"],
+    hdrs = ["resident.h"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        ":plan",
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/codegen/low:function",
+        "//loom/src/loom/codegen/low:loop_execution",
+        "//loom/src/loom/codegen/low:memory_access",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/rewrite:materialize",
+        "//loom/src/loom/rewrite:remap",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/transforms/cfg:block_fusion",
+        "//loom/src/loom/util:cfg_graph",
+        "//loom/src/loom/util:dominance",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "program_test",
+    srcs = ["program_test.cc"],
+    deps = [
+        ":program",
+        "//loom/src/loom/codegen/low:function_requirements",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "local_memory_test",
+    srcs = ["local_memory_test.cc"],
+    deps = [
+        ":local_memory",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "channel_resources_test",
+    srcs = ["channel_resources_test.cc"],
+    deps = [
+        ":plan",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

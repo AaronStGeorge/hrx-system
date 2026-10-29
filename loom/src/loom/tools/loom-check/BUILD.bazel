@@ -21,7 +21,7 @@ _ARCH_AIE2P_CHECK_COPTS = iree_select({
 
 _ARCH_AIE2P_CHECK_DEPS = iree_select({
     "//loom/config/arch:aie2p": [
-        "//loom/src/loom/target/arch/amd/xdna/aie2p:check_provider",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/check:provider",
     ],
     "//conditions:default": [],
 })
@@ -136,7 +136,7 @@ _ARTIFACT_X86_ELF_CHECK_DEPS = iree_select({
 
 _ARCH_AIE2P_CHECK_TEST_DEPS = iree_select({
     "//loom/config/arch:aie2p": [
-        "//loom/src/loom/target/arch/amd/xdna/aie2p:check_test_provider",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/check:test_provider",
     ],
     "//conditions:default": [],
 })

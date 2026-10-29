@@ -1,0 +1,74 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+loom_cc_library(
+    name = "lower",
+    srcs = [
+        "f32_representation.c",
+        "fifo_state.c",
+        "gather.c",
+        "interleave.c",
+        "matrix.c",
+        "registry.c",
+        "rodata.c",
+        "shuffle.c",
+        "transpose.c",
+        "vector_construct.c",
+        "vector_load.c",
+        "vector_packet.c",
+    ],
+    hdrs = [
+        "f32_representation.h",
+        "fifo_state.h",
+        "gather.h",
+        "interleave.h",
+        "lower.h",
+        "matrix.h",
+        "rodata.h",
+        "shuffle.h",
+        "transpose.h",
+        "vector_construct.h",
+        "vector_load.h",
+        "vector_packet.h",
+    ],
+    textual_hdrs = ["//loom/src/loom/target/arch/amd/xdna/aie2p/contracts:core_index.inl"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
+    deps = [
+        "//loom/src/loom/analysis:contract_vector",
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/codegen/low:source_memory_plan",
+        "//loom/src/loom/codegen/low/lower",
+        "//loom/src/loom/codegen/low/lower:representation_observer",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target:contract",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/arch/amd/xdna:error_defs",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:gather",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:vector_carrier",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/contracts:core",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/contracts:core_lower_rules",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/ops",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+    ],
+)

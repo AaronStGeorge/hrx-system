@@ -34,5 +34,5 @@ loom_target_contract_table_cc_libraries(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
     ],
-    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:__pkg__"],
+    visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
 )

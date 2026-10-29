@@ -196,7 +196,7 @@ class BazelTest(unittest.TestCase):
         self.assertEqual(labels, ["//pkg:reader"])
 
     def test_try_dependency_finds_private_source_header_owner(self):
-        owner = "//loom/src/loom/target/arch/amd/xdna/aie2p:array_plan"
+        owner = "//loom/src/loom/target/arch/amd/xdna/aie2p/array:plan"
         with mock.patch.object(
             bazel_dev,
             "run_captured",
@@ -207,14 +207,14 @@ class BazelTest(unittest.TestCase):
         ) as query:
             labels = bazel_dev.query_rules_with_header(
                 "bazel",
-                header_label="//loom/src/loom/target/arch/amd/xdna/aie2p:array/route.h",
-                target_pattern="//loom/src/loom/target/arch/amd/xdna/aie2p:*",
+                header_label="//loom/src/loom/target/arch/amd/xdna/aie2p/array:route.h",
+                target_pattern="//loom/src/loom/target/arch/amd/xdna/aie2p/array:*",
                 env=None,
             )
         self.assertEqual(labels, [owner])
         self.assertEqual(query.call_count, 2)
         self.assertIn(
-            r'attr("srcs", "(\[|, )//loom/src/loom/target/arch/amd/xdna/aie2p:array/route\.h(,|\])",',
+            r'attr("srcs", "(\[|, )//loom/src/loom/target/arch/amd/xdna/aie2p/array:route\.h(,|\])",',
             query.call_args.args[0][2],
         )
 

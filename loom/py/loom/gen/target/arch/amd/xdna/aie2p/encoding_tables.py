@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Generates one coherent family of AIE2P target tables."""
+"""Generates package-owned AIE2P encoding, machine, and descriptor tables."""
 
 from __future__ import annotations
 
@@ -727,37 +727,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if args.check and any(path is not None for path in output_paths):
         parser.error("--check cannot be combined with output paths")
-    if not args.check and any(path is None for path in output_paths):
-        parser.error("all AIE2P target output paths are required")
+    if not args.check and all(path is None for path in output_paths):
+        parser.error("at least one AIE2P target output path is required")
 
-    encoding_contents = _emit_encoding_tables()
-    machine_contents = machine_tables.emit_tables(
-        CORE_MACHINE_TABLE,
-        CORE_ENCODING_TABLE,
-    )
-    generated_descriptors = generate_descriptor_set(
-        AIE2P_CORE_DESCRIPTOR_SET,
-        required_schedule_class_names=AIE2P_NATIVE_MOVE_SCHEDULE_CLASS_NAMES,
-    )
-    generated_array_descriptors = generate_descriptor_set(AIE2P_ARRAY_DESCRIPTOR_SET)
-    generated_configuration_descriptors = generate_descriptor_set(AIE2P_CONFIGURATION_DESCRIPTOR_SET)
-    register_contents = _emit_register_tables()
-    if args.encoding_output is not None:
-        write_text_file(args.encoding_output, encoding_contents)
-        write_text_file(args.machine_output, machine_contents)
-        write_text_file(args.register_output, register_contents)
-        write_text_file(args.descriptor_header_output, generated_descriptors.header)
-        write_text_file(args.descriptor_source_output, generated_descriptors.source)
-        write_text_file(
-            args.array_descriptor_header_output,
-            generated_array_descriptors.header,
-        )
-        write_text_file(
-            args.array_descriptor_source_output,
-            generated_array_descriptors.source,
-        )
-        write_text_file(args.configuration_descriptor_header_output, generated_configuration_descriptors.header)
-        write_text_file(args.configuration_descriptor_source_output, generated_configuration_descriptors.source)
+    for path, generate in (
+        (args.encoding_output, _emit_encoding_tables),
+        (args.machine_output, lambda: machine_tables.emit_tables(CORE_MACHINE_TABLE, CORE_ENCODING_TABLE)),
+        (args.register_output, _emit_register_tables),
+    ):
+        if args.check or path is not None:
+            contents = generate()
+            if path is not None:
+                write_text_file(path, contents)
+
+    for descriptor_set, header_path, source_path, schedule_classes in (
+        (AIE2P_CORE_DESCRIPTOR_SET, args.descriptor_header_output, args.descriptor_source_output, AIE2P_NATIVE_MOVE_SCHEDULE_CLASS_NAMES),
+        (AIE2P_ARRAY_DESCRIPTOR_SET, args.array_descriptor_header_output, args.array_descriptor_source_output, ()),
+        (AIE2P_CONFIGURATION_DESCRIPTOR_SET, args.configuration_descriptor_header_output, args.configuration_descriptor_source_output, ()),
+    ):
+        if args.check or header_path is not None or source_path is not None:
+            generated = generate_descriptor_set(descriptor_set, required_schedule_class_names=schedule_classes)
+            if header_path is not None:
+                write_text_file(header_path, generated.header)
+            if source_path is not None:
+                write_text_file(source_path, generated.source)
     return 0
 
 

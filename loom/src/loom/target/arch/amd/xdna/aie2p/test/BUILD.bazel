@@ -1,0 +1,218 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:python.bzl", "iree_py_test")
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
+load("//libamdf/requirements:defs.bzl", "LIBAMDF")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:defs.bzl", "loom_test")
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+load("//loom/target/amd/xdna:execution_profiles.bzl", "XDNA_HARDWARE_PROFILE")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+_XDNA_TARGET_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/arch:aie2p",
+])
+
+_XDNA_ARTIFACT_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/emit:aie2p_elf",
+])
+
+_XDNA_IMAGE_COMPATIBLE_WITH = _XDNA_ARTIFACT_COMPATIBLE_WITH + loom_config_compatible_with([
+    LIBAMDF.enabled_by,
+])
+
+iree_py_test(
+    name = "vector_construct_family_test",
+    size = "small",
+    srcs = ["vector_construct_family_test.py"],
+    args = ["$(location //loom/src/loom/tools/loom-check:loom-check-test)"],
+    data = ["//loom/src/loom/tools/loom-check:loom-check-test"],
+    main = "vector_construct_family_test.py",
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)
+
+iree_py_test(
+    name = "vector_construct_family_exhaustive_test",
+    size = "small",
+    srcs = ["vector_construct_family_test.py"],
+    args = [
+        "$(location //loom/src/loom/tools/loom-check:loom-check-test)",
+        "--exhaustive",
+    ],
+    data = ["//loom/src/loom/tools/loom-check:loom-check-test"],
+    main = "vector_construct_family_test.py",
+    tags = [
+        "manual",
+        "stress",
+    ],
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)
+
+iree_py_test(
+    name = "interleave_family_test",
+    size = "small",
+    srcs = ["interleave_family_test.py"],
+    args = ["$(location //loom/src/loom/tools/loom-check:loom-check-test)"],
+    data = ["//loom/src/loom/tools/loom-check:loom-check-test"],
+    main = "interleave_family_test.py",
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)
+
+iree_py_test(
+    name = "interleave_family_exhaustive_test",
+    size = "small",
+    srcs = ["interleave_family_test.py"],
+    args = [
+        "$(location //loom/src/loom/tools/loom-check:loom-check-test)",
+        "--exhaustive",
+    ],
+    data = ["//loom/src/loom/tools/loom-check:loom-check-test"],
+    main = "interleave_family_test.py",
+    tags = [
+        "manual",
+        "stress",
+    ],
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)
+
+iree_py_test(
+    name = "transpose_family_test",
+    size = "small",
+    srcs = ["transpose_family_test.py"],
+    args = ["$(location //loom/src/loom/tools/loom-check:loom-check-test)"],
+    data = ["//loom/src/loom/tools/loom-check:loom-check-test"],
+    main = "transpose_family_test.py",
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)
+
+iree_py_test(
+    name = "transpose_family_exhaustive_test",
+    size = "medium",
+    srcs = ["transpose_family_test.py"],
+    args = [
+        "$(location //loom/src/loom/tools/loom-check:loom-check-test)",
+        "--exhaustive",
+    ],
+    data = ["//loom/src/loom/tools/loom-check:loom-check-test"],
+    main = "transpose_family_test.py",
+    tags = [
+        "manual",
+        "stress",
+    ],
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)
+
+iree_execution_test_suite(
+    name = "native_allocation_report_test",
+    size = "small",
+    data = ["native_allocation_report.loom"],
+    manifests = ["native_allocation_report.test.json"],
+    tags = ["hostonly"],
+    target_compatible_with = _XDNA_IMAGE_COMPATIBLE_WITH,
+    tools = {
+        "loom-compile": "//loom/src/loom/tools/loom-compile",
+    },
+)
+
+iree_execution_test_suite(
+    name = "failed_helper_report_test",
+    size = "small",
+    data = ["failed_helper_report.loom"],
+    manifests = ["failed_helper_report.test.json"],
+    tags = ["hostonly"],
+    target_compatible_with = _XDNA_IMAGE_COMPATIBLE_WITH,
+    tools = {
+        "loom-compile": "//loom/src/loom/tools/loom-compile",
+        "loom-compile-report": "//loom/py/loom/tools:loom-compile-report",
+    },
+)
+
+iree_execution_test_suite(
+    name = "native_program_capacity_test",
+    size = "small",
+    data = ["native_program_capacity.loom"],
+    manifests = ["native_program_capacity.test.json"],
+    tags = ["hostonly"],
+    target_compatible_with = _XDNA_IMAGE_COMPATIBLE_WITH,
+    tools = {
+        "loom-compile": "//loom/src/loom/tools/loom-compile",
+    },
+)
+
+loom_check_test_suite(
+    name = "loom_check_test",
+    srcs = [
+        "configuration_calls.loom-test",
+        "configuration_contracts.loom-test",
+        "configuration_entry.loom-test",
+        "configuration_measurement.loom-test",
+        "core_admission.loom-test",
+        "expansion_report.loom-test",
+        "kernel_realization.loom-test",
+        "leaf_alignment.loom-test",
+        "leaf_allocation.loom-test",
+        "leaf_expansion_timing.loom-test",
+        "leaf_immediates.loom-test",
+        "leaf_interfaces.loom-test",
+        "leaf_schedule.loom-test",
+        "leaf_state_read_timing.loom-test",
+        "low_calls.loom-test",
+        "math_contraction.loom-test",
+        "math_policy_activations.loom-test",
+        "module_contracts.loom-test",
+        "move_routes.loom-test",
+        "native_bindings.loom-test",
+        "native_completion.loom-test",
+        "native_dma_completions.loom-test",
+        "native_dma_descriptors.loom-test",
+        "native_local_buffers.loom-test",
+        "native_stream_routes.loom-test",
+        "operand_ties.loom-test",
+        "strand_targets.loom-test",
+        "target_legalize_report.loom-test",
+        "vector_extract_shape.loom-test",
+        "vector_float_extrema.loom-test",
+        "vector_insert_packetization.loom-test",
+        "vector_memory_packetization.loom-test",
+        "vector_reduce_axes.loom-test",
+    ],
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)
+
+loom_check_test_suite(
+    name = "artifact_test",
+    srcs = [
+        "configuration.loom-test",
+        "configuration_data.loom-test",
+        "configuration_limits.loom-test",
+        "configuration_report.loom-test",
+        "hardware_loops.loom-test",
+        "leaf_rematerialization.loom-test",
+        "native_admission.loom-test",
+        "native_calls.loom-test",
+        "native_distribution.loom-test",
+        "native_endpoint_addresses.loom-test",
+        "native_helper_effects.loom-test",
+        "native_program_capacity.loom-test",
+        "native_repetition.loom-test",
+        "native_strands.loom-test",
+    ],
+    target_compatible_with = _XDNA_ARTIFACT_COMPATIBLE_WITH,
+)
+
+loom_test(
+    name = "numeric_wide_remainder_test",
+    srcs = ["//loom/src/loom/test/corpus/numeric:integer/division.loom"],
+    benchmark_smoke = False,
+    case = "dynamic_wide_remainder_buffer_values",
+    execution_profiles = [XDNA_HARDWARE_PROFILE],
+)

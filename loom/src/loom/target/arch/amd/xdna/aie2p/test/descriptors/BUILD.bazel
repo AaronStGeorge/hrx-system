@@ -1,0 +1,46 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+_XDNA_TARGET_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/arch:aie2p",
+])
+
+loom_check_test_suite(
+    name = "loom_check_test",
+    srcs = [
+        "bf16_comparison.loom-test",
+        "bfp_move.loom-test",
+        "cascade.loom-test",
+        "core_observation.loom-test",
+        "dimensions.loom-test",
+        "fifo.loom-test",
+        "floating_matrix.loom-test",
+        "fused_vector_memory.loom-test",
+        "implicit_clobbers.loom-test",
+        "integer_comparison.loom-test",
+        "integer_matrix.loom-test",
+        "integer_narrowing.loom-test",
+        "integer_reduction.loom-test",
+        "lookup_memory.loom-test",
+        "memory_immediates.loom-test",
+        "postincrement.loom-test",
+        "scalar_carry.loom-test",
+        "scalar_immediates.loom-test",
+        "scalar_nonlinear.loom-test",
+        "scalar_stream.loom-test",
+        "vector_push.loom-test",
+    ],
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)

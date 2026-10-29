@@ -1,0 +1,62 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],
+)
+
+_XDNA_TARGET_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/arch:aie2p",
+])
+
+loom_check_test_suite(
+    name = "loom_check_test",
+    srcs = [
+        "bank_spans.loom-test",
+        "binding_abi.loom-test",
+        "binding_view_admission.loom-test",
+        "channel_connection_admission.loom-test",
+        "channel_shape_admission.loom-test",
+        "composed_folds.loom-test",
+        "dma_loopback.loom-test",
+        "dma_record_limits.loom-test",
+        "dma_service.loom-test",
+        "endpoint_activity.loom-test",
+        "endpoint_storage.loom-test",
+        "entry_admission.loom-test",
+        "mixed_transport_fan_in.loom-test",
+        "multicast.loom-test",
+        "multicast_ownership.loom-test",
+        "multicast_prefix.loom-test",
+        "non_error_diagnostics.loom-test",
+        "packed_record.loom-test",
+        "pipeline_record_shapes.loom-test",
+        "pipeline_views.loom-test",
+        "private_atomics.loom-test",
+        "read_only_data.loom-test",
+        "record_contracts.loom-test",
+        "ring_wrap.loom-test",
+        "route_capacity.loom-test",
+        "schedule_contracts.loom-test",
+        "shim_resource_admission.loom-test",
+        "strided_records.loom-test",
+        "strided_transfer.loom-test",
+        "temporal_fold.loom-test",
+        "topology_admission.loom-test",
+        "unused_worker_inputs.loom-test",
+        "wide_fold.loom-test",
+        "worker_cycles.loom-test",
+        "worker_interface_admission.loom-test",
+        "worker_rate_admission.loom-test",
+        "worker_storage_admission.loom-test",
+    ],
+    target_compatible_with = _XDNA_TARGET_COMPATIBLE_WITH,
+)

@@ -25,9 +25,9 @@ loom_cc_library(
     ],
     deps = [
         "//loom/src/loom/target:provider",
-        "//loom/src/loom/target/arch/amd/xdna/aie2p:artifact",
         "//loom/src/loom/target/arch/amd/xdna/aie2p:provider",
         "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/emit:artifact",
     ],
 )
 
@@ -37,7 +37,7 @@ loom_cc_library(
     hdrs = ["check_provider.h"],
     visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
     deps = [
-        "//loom/src/loom/target/arch/amd/xdna/aie2p:artifact_check",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p/check:artifact",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],

@@ -21,7 +21,7 @@ _NATIVE_AMDGPU_VISIBILITY = ["//loom/src/loom/target/emit/native/amdgpu:__pkg__"
 
 _NATIVE_XDNA_VISIBILITY = ["//loom/src/loom/target/arch/amd/xdna:__subpackages__"]
 
-_NATIVE_AIE2P_VISIBILITY = ["//loom/src/loom/target/arch/amd/xdna/aie2p:__pkg__"]
+_NATIVE_AIE2P_VISIBILITY = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"]
 
 _NATIVE_X86_VISIBILITY = ["//loom/src/loom/target/emit/native/x86:__pkg__"]
 
