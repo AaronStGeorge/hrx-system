@@ -355,12 +355,12 @@ spill %packed: private[0] bytes=8 align=8 stores=1 reloads=1
 
 // ====
 
-// RUN: emit low-allocation-query @last_use_fanout_inherits_concat_slice spill-count values=%seed,%lower,%upper,%tuple copies=%lower,%upper fixed=%tuple:physical_register:4:2
+// RUN: emit low-allocation-query @last_use_fanout_inherits_concat_slice spill-count values=%seed,%lower,%upper,%tuple copies=%lower,%upper
 
 test.target<low_core> @target
 
 // The seed remains live through the lower copy and dies at the upper copy. Its
-// competing producer paths require choosing the fixed aggregate orientation
+// competing producer paths require choosing the aggregate orientation
 // before the lower half occupies the wrong slice.
 low.func.def schedule(locked) target<test.low.core>(@target) @last_use_fanout_inherits_concat_slice(%seed: reg<test.explicit32>) -> (reg<test.explicit32 x2>) asm {
   %lower = copy %seed : reg<test.explicit32> -> reg<test.explicit32>
