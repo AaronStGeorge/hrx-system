@@ -251,7 +251,7 @@ Intrinsics::Binding Intrinsics::resolve(cxx::FunctionSymbol* function,
   if (auto conversion = NumericConversionIntrinsic::admit(unit_, diagnostics_,
                                                           attribute, owner)) {
     return NumericConversionIntrinsic::resolve(*conversion, unit_, diagnostics_,
-                                               types_, signature, owner);
+                                               types_, function, owner);
   }
   if (auto shaped =
           ShapedIntrinsic::admit(unit_, diagnostics_, attribute, owner)) {
@@ -444,7 +444,7 @@ Intrinsics::Binding* Intrinsics::concrete_binding(cxx::FunctionSymbol* function,
         } else if constexpr (std::is_same_v<
                                  T, NumericConversionIntrinsic::Operation>) {
           return NumericConversionIntrinsic::resolve(
-              operation, unit_, diagnostics_, types_, signature, owner);
+              operation, unit_, diagnostics_, types_, function, owner);
         } else if constexpr (std::is_same_v<T, ShapedIntrinsic::Operation>) {
           return ShapedIntrinsic::resolve(operation, unit_, diagnostics_,
                                           types_, signature, owner);

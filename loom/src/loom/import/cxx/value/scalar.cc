@@ -66,7 +66,7 @@ const cxx::ConstValue& address_constant_payload(cxx::TranslationUnit& unit,
 loom_value_id_t Scalars::convert(loom_value_id_t value,
                                  const cxx::Type* input_type,
                                  const cxx::Type* output_type, cxx::AST* owner,
-                                 uint8_t fastmath) {
+                                 uint8_t fastmath, uint8_t subnormal) {
   auto input = types_.get(input_type, owner);
   auto output = types_.get(output_type, owner);
   if (loom_type_kind(input) != LOOM_TYPE_SCALAR ||
@@ -103,17 +103,20 @@ loom_value_id_t Scalars::convert(loom_value_id_t value,
     // Distinct narrow formats can have equal storage widths. F32 represents
     // each exactly, so only the final cast rounds.
     auto widened = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-    check(loom_scalar_extf_build(&builder_, 0, value, input, widened,
-                                 locations_.get(owner), &op));
+    check(loom_scalar_extf_build(
+        &builder_, subnormal & LOOM_SCALAR_FLOATCONVERSIONFLAGS_DAZ, value,
+        input, widened, locations_.get(owner), &op));
     value = loom_op_results(op)[0];
-    check(loom_scalar_fptrunc_build(&builder_, 0, value, widened, output,
-                                    locations_.get(owner), &op));
+    check(loom_scalar_fptrunc_build(
+        &builder_, subnormal & LOOM_SCALAR_FLOATCONVERSIONFLAGS_FTZ, value,
+        widened, output, locations_.get(owner), &op));
     return loom_op_results(op)[0];
   }
   bool narrows = layout->sizeOf(input_type) > layout->sizeOf(output_type);
   if (types_.is_float(input_type) && types_.is_float(output_type)) {
     check((narrows ? loom_scalar_fptrunc_build : loom_scalar_extf_build)(
-        &builder_, 0, value, input, output, locations_.get(owner), &op));
+        &builder_, subnormal, value, input, output, locations_.get(owner),
+        &op));
     return loom_op_results(op)[0];
   }
   auto build =

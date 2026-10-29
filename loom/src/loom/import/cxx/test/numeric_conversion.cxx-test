@@ -188,3 +188,36 @@ func.def public @change_format(%value: vector<2x8xf8E4M3>) -> (vector<2x8xf8E5M2
   %8 = vector.fptrunc %7 : vector<2x8xf32> to vector<2x8xf8E5M2>
   func.return %8 : vector<2x8xf8E5M2>
 }
+
+
+// ====
+// Floating conversions retain their exact source and result subnormal policy.
+#include <loomcxx/numeric.h>
+using Half4 = _Float16 __attribute__((ext_vector_type(4)));
+using Float4 = float __attribute__((ext_vector_type(4)));
+
+Float4 extend_daz(Half4 value) {
+  return loom::convert<Float4, loom::conversion::subnormal::daz>(value);
+}
+Half4 truncate_ftz(Float4 value) {
+  return loom::convert<Half4, loom::conversion::subnormal::ftz>(value);
+}
+Half4 truncate_daz_ftz(Float4 value) {
+  return loom::convert<Half4, loom::conversion::subnormal::daz_ftz>(value);
+}
+
+// ----
+func.def public @extend_daz(%value: vector<4xf16>) -> (vector<4xf32>) {
+  %2 = vector.extf<daz> %value : vector<4xf16> to vector<4xf32>
+  func.return %2 : vector<4xf32>
+}
+
+func.def public @truncate_ftz(%value: vector<4xf32>) -> (vector<4xf16>) {
+  %5 = vector.fptrunc<ftz> %value : vector<4xf32> to vector<4xf16>
+  func.return %5 : vector<4xf16>
+}
+
+func.def public @truncate_daz_ftz(%value: vector<4xf32>) -> (vector<4xf16>) {
+  %8 = vector.fptrunc<daz|ftz> %value : vector<4xf32> to vector<4xf16>
+  func.return %8 : vector<4xf16>
+}

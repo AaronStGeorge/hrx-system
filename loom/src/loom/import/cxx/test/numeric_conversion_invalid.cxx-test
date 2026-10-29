@@ -41,3 +41,17 @@ int entry(Source value) {
   // ERROR@+1: LOWERING/059 "numeric conversion requires two scalars or two vectors"
   return loom::convert<int>(value);
 }
+
+// ====
+#include <loomcxx/numeric.h>
+long long invalid(int value) {
+  // ERROR@+1: LOWERING/059 "subnormal permissions require a floating-point format conversion"
+  return loom::convert<long long, loom::conversion::subnormal::daz>(value);
+}
+
+// ====
+#include <loomcxx/numeric.h>
+float invalid(double value) {
+  // ERROR@+1: LOWERING/059 "numeric conversion has an invalid subnormal policy"
+  return loom::convert<float, static_cast<loom::conversion::subnormal>(4)>(value);
+}

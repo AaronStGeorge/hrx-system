@@ -17,9 +17,24 @@ using float8_e5m2_t = __float8_e5m2;
 
 namespace loom {
 
+namespace conversion {
+
+// Floating-point conversion permissions matching scalar/vector extf and
+// fptrunc. DAZ applies to the source; FTZ applies to the rounded result.
+enum class subnormal : unsigned char {
+  preserve = 0,
+  daz = 1,
+  ftz = 2,
+  daz_ftz = 3,
+};
+
+}  // namespace conversion
+
 // Converts one scalar or each element of a native or semantic vector. Scalar
 // and native-vector specializations may be used in constant expressions.
-template <class To, class From>
+template <class To,
+          conversion::subnormal Subnormal = conversion::subnormal::preserve,
+          class From>
 [[loom::op("numeric.convert")]] constexpr To convert(From value);
 
 }  // namespace loom

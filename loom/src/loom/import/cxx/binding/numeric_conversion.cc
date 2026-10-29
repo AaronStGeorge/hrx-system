@@ -42,6 +42,34 @@ bool same_shape(const VectorPartition& lhs, const VectorPartition& rhs) {
   return true;
 }
 
+uint8_t subnormal_flags(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
+                        cxx::FunctionSymbol* function, cxx::AST* owner) {
+  auto arguments =
+      cxx::expand_template_arguments(function->templateArguments());
+  if (arguments.size() < 2) {
+    diagnostics.reject(unit, owner,
+                       "numeric conversion lacks a subnormal policy");
+  }
+  auto value = cxx::template_argument_value(arguments[1]);
+  auto* number = value ? std::get_if<cxx::ConstInt>(&*value) : nullptr;
+  if (!number || number->isNegative() || number->toUWide() > 3) {
+    diagnostics.reject(unit, owner,
+                       "numeric conversion has an invalid subnormal policy");
+  }
+  return static_cast<uint8_t>(number->toUIntMax());
+}
+
+bool permits_subnormal_replacement(cxx::FunctionSymbol* function) {
+  auto arguments =
+      cxx::expand_template_arguments(function->templateArguments());
+  if (arguments.size() < 2) {
+    return false;
+  }
+  auto value = cxx::template_argument_value(arguments[1]);
+  auto* number = value ? std::get_if<cxx::ConstInt>(&*value) : nullptr;
+  return number && !number->isNegative() && number->toUWide() != 0;
+}
+
 }  // namespace
 
 std::optional<cxx::ConstValue> NumericConversionConstantEvaluator::evaluate(
@@ -50,7 +78,7 @@ std::optional<cxx::ConstValue> NumericConversionConstantEvaluator::evaluate(
   const auto* operation = annotation(function, "op");
   if (!operation || operation->arguments.size() != 1 ||
       operation->arguments[0]->name() != "numeric.convert" ||
-      arguments.size() != 1) {
+      arguments.size() != 1 || permits_subnormal_replacement(function)) {
     return std::nullopt;
   }
 
@@ -112,14 +140,16 @@ NumericConversionIntrinsic::admit(cxx::TranslationUnit& unit,
 
 NumericConversionIntrinsic NumericConversionIntrinsic::resolve(
     Operation operation, cxx::TranslationUnit& unit, Diagnostics& diagnostics,
-    Types& types, const cxx::FunctionType* signature, cxx::AST* owner) {
+    Types& types, cxx::FunctionSymbol* function, cxx::AST* owner) {
   (void)operation;
+  auto* signature = cxx::type_cast<cxx::FunctionType>(function->type());
   if (signature->isVariadic() || signature->parameterTypes().size() != 1) {
     diagnostics.reject(unit, owner,
                        "numeric conversion requires exactly one operand");
   }
   const auto* input = types.unqualified(signature->parameterTypes()[0]);
   const auto* output = types.unqualified(signature->returnType());
+  const uint8_t subnormal = subnormal_flags(unit, diagnostics, function, owner);
   const auto& input_partition = types.partition(input, owner);
   const auto& output_partition = types.partition(output, owner);
 
@@ -146,8 +176,16 @@ NumericConversionIntrinsic NumericConversionIntrinsic::resolve(
           unit, owner,
           "numeric conversion requires integer or floating-point elements");
     }
+    if (subnormal != 0 &&
+        (!types.is_float(input_vector.element_type) ||
+         !types.is_float(output_vector.element_type) || input == output)) {
+      diagnostics.reject(
+          unit, owner,
+          "subnormal permissions require a floating-point format conversion");
+    }
     return NumericConversionIntrinsic(Representation::SemanticVector, input,
-                                      output, &input_vector, &output_vector);
+                                      output, &input_vector, &output_vector,
+                                      subnormal);
   }
 
   const auto* input_vector = types.native_vector(input);
@@ -165,8 +203,15 @@ NumericConversionIntrinsic NumericConversionIntrinsic::resolve(
           unit, owner,
           "numeric conversion requires integer or floating-point elements");
     }
+    if (subnormal != 0 &&
+        (!types.is_float(input_vector->elementType()) ||
+         !types.is_float(output_vector->elementType()) || input == output)) {
+      diagnostics.reject(
+          unit, owner,
+          "subnormal permissions require a floating-point format conversion");
+    }
     return NumericConversionIntrinsic(Representation::NativeVector, input,
-                                      output);
+                                      output, nullptr, nullptr, subnormal);
   }
 
   if (input_partition.kind != ValueKind::SSA ||
@@ -176,7 +221,14 @@ NumericConversionIntrinsic NumericConversionIntrinsic::resolve(
         unit, owner,
         "numeric conversion requires integer or floating-point scalars");
   }
-  return NumericConversionIntrinsic(Representation::Scalar, input, output);
+  if (subnormal != 0 &&
+      (!types.is_float(input) || !types.is_float(output) || input == output)) {
+    diagnostics.reject(
+        unit, owner,
+        "subnormal permissions require a floating-point format conversion");
+  }
+  return NumericConversionIntrinsic(Representation::Scalar, input, output,
+                                    nullptr, nullptr, subnormal);
 }
 
 Value NumericConversionIntrinsic::call(std::span<const Value> arguments,
@@ -187,13 +239,15 @@ Value NumericConversionIntrinsic::call(std::span<const Value> arguments,
   switch (representation_) {
     case Representation::Scalar:
       return Value(scalars.convert(arguments[0].ssa(), input_type_,
-                                   output_type_, owner));
+                                   output_type_, owner, 0, subnormal_flags_));
     case Representation::NativeVector:
       return Value(vectors.convert_elements(arguments[0].ssa(), input_type_,
-                                            output_type_, owner));
+                                            output_type_, owner,
+                                            subnormal_flags_));
     case Representation::SemanticVector:
       return vectors.convert_elements(arguments[0], *input_vector_,
-                                      *output_vector_, arena, owner);
+                                      *output_vector_, arena, owner,
+                                      subnormal_flags_);
   }
   IREE_ASSERT_UNREACHABLE("unknown numeric conversion representation");
   IREE_BUILTIN_UNREACHABLE();
