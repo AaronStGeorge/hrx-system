@@ -226,3 +226,33 @@ func.def public @increment_root(%data: buffer) {
   view.store %8, %values[%10] : i32, view<4xi32, %values_layout>
   func.return
 }
+
+
+// ====
+// Plain typed buffers preserve byte origins and can change their source element
+// interpretation before constructing and bitcasting equal-sized views.
+#include <loomcxx/view.h>
+using Words = loom::type::view<loom::type::shape<4>, unsigned>;
+using Bytes = loom::type::view<loom::type::shape<16>, unsigned char>;
+
+static Words words(loom::type::buffer<unsigned> data,
+                   loom::type::offset byte_offset) {
+  return loom::buffer::view<4>(data, byte_offset, {});
+}
+Bytes bytes(loom::type::buffer<unsigned char> data,
+            loom::type::offset byte_offset) {
+  Words source = words(loom::buffer::cast<unsigned>(data), byte_offset);
+  return loom::view::bitcast<Bytes>(source);
+}
+
+// ----
+func.def public @bytes(%data: buffer, %byte_offset: offset) -> (view<16xi8>) {
+  %source = func.call pure @words(%data, %byte_offset) : (buffer, offset) -> (view<4xi32>)
+  %4 = view.bitcast %source : view<4xi32> -> view<16xi8>
+  func.return %4 : view<16xi8>
+}
+
+func.def @words(%data: buffer, %byte_offset: offset) -> (view<4xi32>) {
+  %8 = buffer.view %data[%byte_offset] : buffer -> view<4xi32>
+  func.return %8 : view<4xi32>
+}

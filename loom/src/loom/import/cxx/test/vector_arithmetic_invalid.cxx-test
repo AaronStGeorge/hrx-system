@@ -14,7 +14,7 @@ using Unsigned = loomt::vector<loomt::shape<4>, unsigned>;
 #include <loomcxx/vector.h>
 namespace loomt = loom::type;
 using Bool = loomt::vector<loomt::shape<4>, bool>;
-// ERROR@+1: LOWERING/059 "vector arithmetic requires floating-point or non-boolean integer elements"
+// ERROR@+1: LOWERING/059 "vector arithmetic requires floating-point or integer elements; boolean vectors support bitwise operations only"
 [[loom::op("vector.add")]] Bool boolean_arithmetic(Bool, Bool);
 
 // ====

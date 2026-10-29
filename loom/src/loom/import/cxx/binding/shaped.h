@@ -14,6 +14,7 @@
 #include <optional>
 #include <span>
 #include <variant>
+#include <vector>
 
 #include "loom/import/cxx/value/representation.h"
 #include "loom/import/cxx/value/types.h"
@@ -36,6 +37,48 @@ class ShapedIntrinsic {
     bool has_dimensions = false;
     bool operator==(const Slice&) const = default;
   };
+  struct Iota {
+    bool operator==(const Iota&) const = default;
+  };
+  struct Concat {
+    // Source axis selected by the concrete function specialization.
+    int64_t axis = 0;
+    bool operator==(const Concat&) const = default;
+  };
+  struct Transpose {
+    // Result-axis to source-axis permutation selected by the specialization.
+    std::vector<int64_t> permutation;
+    bool operator==(const Transpose&) const = default;
+  };
+  struct Interleave {
+    // Source axis selected by the concrete function specialization.
+    int64_t axis = 0;
+    bool operator==(const Interleave&) const = default;
+  };
+  struct Bitcast {
+    bool operator==(const Bitcast&) const = default;
+  };
+  struct Extract {
+    // Compile-time leading indices. An empty list selects runtime operands.
+    std::vector<int64_t> static_indices;
+    // Unsigned integer interpretations of runtime index operands.
+    uint16_t index_unsigned_mask = 0;
+    bool operator==(const Extract&) const = default;
+  };
+  struct Select {
+    bool operator==(const Select&) const = default;
+  };
+  struct Comparison {
+    enum class Kind { Integer, Float };
+
+    // Predicate ordinal in the corresponding vector.cmpi/cmpf enum.
+    uint8_t predicate;
+    // Integer or floating-point comparison semantics.
+    Kind kind;
+    // Explicit source permissions; integer comparisons have none.
+    uint8_t flags;
+    bool operator==(const Comparison&) const = default;
+  };
   struct TableLookup {
     bool operator==(const TableLookup&) const = default;
   };
@@ -56,6 +99,12 @@ class ShapedIntrinsic {
     // Explicit source permissions.
     uint8_t flags;
     bool operator==(const FloatExtremum&) const = default;
+  };
+  struct IntegerExtremum {
+    enum class Kind { MinSigned, MaxSigned, MinUnsigned, MaxUnsigned };
+
+    Kind kind;
+    bool operator==(const IntegerExtremum&) const = default;
   };
   struct Dot4i {
     // Explicit interpretation of each input's byte lanes. An absent kind is
@@ -79,8 +128,11 @@ class ShapedIntrinsic {
     uint8_t flags;
     bool operator==(const Reduction&) const = default;
   };
-  using Operation = std::variant<Splat, Slice, TableLookup, Absolute,
-                                 FloatExtremum, Dot4i, Dot2f, Dotf, Reduction>;
+  using Operation =
+      std::variant<Splat, Slice, Iota, Concat, Transpose, Interleave, Bitcast,
+                   Extract, Select, Comparison, TableLookup, Absolute,
+                   FloatExtremum, Dot4i, IntegerExtremum, Dot2f, Dotf,
+                   Reduction>;
 
   // Admits a string-only loom::op attribute independently of source types.
   // Unknown names return nullopt; recognized names with invalid declarations
@@ -96,7 +148,7 @@ class ShapedIntrinsic {
   static ShapedIntrinsic resolve(Operation operation,
                                  cxx::TranslationUnit& unit,
                                  Diagnostics& diagnostics, Types& types,
-                                 const cxx::FunctionType* signature,
+                                 cxx::FunctionSymbol* function,
                                  cxx::AST* owner);
 
   // Emits the admitted operation using already-converted source arguments.
@@ -110,11 +162,13 @@ class ShapedIntrinsic {
  private:
   ShapedIntrinsic(Operation operation, loom_type_t result_type,
                   const VectorPartition* result_vector = nullptr,
-                  std::array<const VectorPartition*, 3> semantic_operands = {})
+                  std::array<const VectorPartition*, 3> semantic_operands = {},
+                  loom_type_t input_type = {})
       : operation_(operation),
         result_type_(result_type),
         result_vector_(result_vector),
-        semantic_operands_(semantic_operands) {}
+        semantic_operands_(semantic_operands),
+        input_type_(input_type) {}
 
   // Operation family admitted from the source declaration.
   Operation operation_;
@@ -124,6 +178,8 @@ class ShapedIntrinsic {
   const VectorPartition* result_vector_;
   // Semantic vector operands by source position; null denotes a native vector.
   std::array<const VectorPartition*, 3> semantic_operands_;
+  // Exact source type for operations such as vector.bitcast.
+  loom_type_t input_type_;
 };
 
 }  // namespace loom::cxx_import

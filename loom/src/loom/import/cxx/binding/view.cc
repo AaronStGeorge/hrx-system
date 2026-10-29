@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include "iree/base/api.h"
@@ -120,6 +121,33 @@ bool subview_preserves_dense_suffix(
   return true;
 }
 
+uint64_t static_view_bit_count(cxx::TranslationUnit& unit,
+                               Diagnostics& diagnostics,
+                               const ViewPartition& view, std::string_view role,
+                               cxx::AST* owner) {
+  const int32_t element_bits = loom_scalar_type_bitwidth(view.element);
+  if (element_bits < 8 || element_bits % 8 != 0) {
+    diagnostics.reject(
+        unit, owner,
+        std::string(role) + " requires a byte-addressable scalar element");
+  }
+  uint64_t count = 1;
+  for (int64_t extent : view.extents) {
+    if (extent <= 0 || count > UINT64_MAX / static_cast<uint64_t>(extent)) {
+      diagnostics.reject(
+          unit, owner,
+          std::string(role) + " requires an all-static representable shape");
+    }
+    count *= static_cast<uint64_t>(extent);
+  }
+  if (count > UINT64_MAX / static_cast<uint64_t>(element_bits)) {
+    diagnostics.reject(
+        unit, owner,
+        std::string(role) + " has an unrepresentable total bit count");
+  }
+  return count * static_cast<uint64_t>(element_bits);
+}
+
 }  // namespace
 
 bool ViewIntrinsic::supports(std::string_view name) {
@@ -139,6 +167,9 @@ std::optional<ViewIntrinsic::Operation> ViewIntrinsic::parse_operation(
   }
   if (name == "view.subview") {
     return Operation::Subview;
+  }
+  if (name == "view.bitcast") {
+    return Operation::Bitcast;
   }
   if (name == "view.load") {
     return Operation::Load;
@@ -205,7 +236,6 @@ std::optional<ViewIntrinsic> ViewIntrinsic::resolve(
       return result;
     }
     case Operation::BufferView: {
-      require_count(3);
       result.result_view_ = &require_view(unit, diagnostics, types,
                                           signature->returnType(), owner);
       auto* pointer =
@@ -226,15 +256,31 @@ std::optional<ViewIntrinsic> ViewIntrinsic::resolve(
             "buffer.view source element type must match its result view");
       }
       result.source_buffer_ = buffer;
-      result.unsigned_dimension_mask_ = require_index_record(
-          unit, diagnostics, types, parameters[1],
-          dynamic_extent_count(*result.result_view_), owner, "view dimensions");
-      const auto& layout =
-          require_encoding(unit, diagnostics, types, parameters[2], owner);
-      if (result.result_view_->encoding != &layout) {
+      const size_t encoding_count = result.result_view_->encoding ? 1 : 0;
+      const size_t base_count = 2 + encoding_count;
+      if (parameters.size() != base_count &&
+          (!buffer || parameters.size() != base_count + 1)) {
         diagnostics.reject(unit, owner,
-                           "buffer.view encoding type must match its result "
-                           "view");
+                           "buffer.view has the wrong operand count");
+      }
+      result.has_buffer_byte_offset_ = parameters.size() == base_count + 1;
+      if (result.has_buffer_byte_offset_ &&
+          !types.is_offset(parameters[1], owner)) {
+        diagnostics.reject(
+            unit, owner, "buffer.view byte offset must use the offset domain");
+      }
+      const size_t dimensions_index = result.has_buffer_byte_offset_ ? 2 : 1;
+      result.unsigned_dimension_mask_ = require_index_record(
+          unit, diagnostics, types, parameters[dimensions_index],
+          dynamic_extent_count(*result.result_view_), owner, "view dimensions");
+      if (result.result_view_->encoding) {
+        const auto& layout = require_encoding(
+            unit, diagnostics, types, parameters[dimensions_index + 1], owner);
+        if (result.result_view_->encoding != &layout) {
+          diagnostics.reject(unit, owner,
+                             "buffer.view encoding type must match its result "
+                             "view");
+        }
       }
       result.result_source_type_ = signature->returnType();
       return result;
@@ -272,6 +318,34 @@ std::optional<ViewIntrinsic> ViewIntrinsic::resolve(
           require_index_record(unit, diagnostics, types, parameters[2],
                                dynamic_extent_count(*result.result_view_),
                                owner, "subview dimensions");
+      result.result_source_type_ = signature->returnType();
+      return result;
+    }
+    case Operation::Bitcast: {
+      require_count(1);
+      result.source_view_ =
+          &require_view(unit, diagnostics, types, parameters[0], owner);
+      result.result_view_ = &require_view(unit, diagnostics, types,
+                                          signature->returnType(), owner);
+      if (result.source_view_->encoding || result.result_view_->encoding) {
+        diagnostics.reject(unit, owner,
+                           "view.bitcast requires plain unencoded views");
+      }
+      if (result.source_view_->access_flags !=
+          result.result_view_->access_flags) {
+        diagnostics.reject(unit, owner,
+                           "view.bitcast must preserve source access rights");
+      }
+      const uint64_t source_bits =
+          static_view_bit_count(unit, diagnostics, *result.source_view_,
+                                "view.bitcast source", owner);
+      const uint64_t result_bits =
+          static_view_bit_count(unit, diagnostics, *result.result_view_,
+                                "view.bitcast result", owner);
+      if (source_bits != result_bits) {
+        diagnostics.reject(unit, owner,
+                           "view.bitcast requires equal total bit counts");
+      }
       result.result_source_type_ = signature->returnType();
       return result;
     }
@@ -366,8 +440,10 @@ std::optional<Value> ViewIntrinsic::call(std::span<const Value> arguments,
       std::array<loom_value_id_t, LOOM_TYPE_MAX_RANK + 2> components;
       std::array<loom_value_id_t, LOOM_TYPE_MAX_RANK> offsets;
       size_t component_count = 0;
-      auto dimensions =
-          arguments[operation_ == Operation::BufferView ? 1 : 2].components();
+      auto dimensions = arguments[operation_ == Operation::BufferView
+                                      ? (has_buffer_byte_offset_ ? 2 : 1)
+                                      : 2]
+                            .components();
       for (size_t index = 0; index < dimensions.size(); ++index) {
         components[component_count++] =
             cast_index(Value(dimensions[index]),
@@ -387,7 +463,9 @@ std::optional<Value> ViewIntrinsic::call(std::span<const Value> arguments,
       std::optional<Pointer> pointer;
       if (operation_ == Operation::BufferView) {
         pointer = source_buffer_
-                      ? storage.root(arguments[0].ssa(), owner)
+                      ? has_buffer_byte_offset_
+                            ? Pointer{arguments[0].ssa(), arguments[1].ssa()}
+                            : storage.root(arguments[0].ssa(), owner)
                       : storage.constrain_origin(arguments[0].pointer(), owner);
       }
 
@@ -406,7 +484,7 @@ std::optional<Value> ViewIntrinsic::call(std::span<const Value> arguments,
         components[component_count++] =
             capture_physical_encoding ? result_ids[1]
             : operation_ == Operation::BufferView
-                ? arguments[2].components()[0]
+                ? arguments[has_buffer_byte_offset_ ? 3 : 2].components()[0]
                 : encoding_component(arguments[0], *source_view_);
       }
       components[component_count++] = result_ids[0];
@@ -434,6 +512,13 @@ std::optional<Value> ViewIntrinsic::call(std::span<const Value> arguments,
             result_count, location, &op));
       }
       return arena.capture(*result_view_, {components.data(), component_count});
+    }
+    case Operation::Bitcast: {
+      std::vector<loom_type_t> result_types;
+      types.append(result_source_type_, owner, result_types);
+      check(loom_view_bitcast_build(builder, view_component(arguments[0]),
+                                    result_types.back(), location, &op));
+      return arena.capture(*result_view_, {loom_op_results(op), 1});
     }
     case Operation::Load: {
       std::array<loom_value_id_t, LOOM_TYPE_MAX_RANK> indices;
@@ -480,6 +565,7 @@ bool ViewIntrinsic::equivalent(const ViewIntrinsic& other) const {
          result_source_type_ == other.result_source_type_ &&
          result_encoding_ == other.result_encoding_ &&
          source_buffer_ == other.source_buffer_ &&
+         has_buffer_byte_offset_ == other.has_buffer_byte_offset_ &&
          source_view_ == other.source_view_ &&
          result_view_ == other.result_view_ &&
          unsigned_argument_mask_ == other.unsigned_argument_mask_ &&

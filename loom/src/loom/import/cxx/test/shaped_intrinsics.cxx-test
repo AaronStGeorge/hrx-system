@@ -130,3 +130,130 @@ func.def public @make_block(%value: f32) -> (vector<2x4xf32>) {
   %26 = vector.splat %value : vector<2x4xf32>
   func.return %26 : vector<2x4xf32>
 }
+
+// ====
+// Static vector geometry and every exact comparison predicate survive C++
+// export and reimport without collapsing i1 masks into native integer masks.
+#include <loomcxx/vector.h>
+
+using UInt2 = unsigned __attribute__((ext_vector_type(2)));
+using UInt4 = unsigned __attribute__((ext_vector_type(4)));
+using UInt8 = unsigned __attribute__((ext_vector_type(8)));
+using Int4 = int __attribute__((ext_vector_type(4)));
+using Float4 = float __attribute__((ext_vector_type(4)));
+using Matrix = loom::type::vector<loom::type::shape<2, 2>, unsigned>;
+using Mask4 = loom::type::vector<loom::type::shape<4>, bool>;
+
+UInt8 geometry(UInt4 lhs, UInt4 rhs, unsigned row) {
+  Matrix matrix = loom::vector::bitcast<Matrix>(lhs);
+  Matrix transposed = loom::vector::transpose<Matrix, 1, 0>(matrix);
+  UInt2 first = loom::vector::extract<UInt2, 0>(transposed);
+  UInt2 selected = loom::vector::extract<UInt2>(transposed, row);
+  UInt4 interleaved = loom::vector::interleave<0, UInt4>(first, selected);
+  UInt4 lanes = loom::vector::iota<UInt4>(0u, 1u);
+  UInt4 lower = loom::vector::maxui(interleaved, lanes);
+  UInt4 upper = loom::vector::minui(lower, rhs);
+  Mask4 mask = loom::vector::cmpi::uge<Mask4>(upper, lhs);
+  UInt4 chosen = loom::vector::select(mask, upper, lhs);
+  return loom::vector::concat<0, UInt8>(chosen, rhs);
+}
+
+Mask4 comparisons(Int4 signed_lhs, Int4 signed_rhs,
+                  UInt4 unsigned_lhs, UInt4 unsigned_rhs,
+                  Float4 float_lhs, Float4 float_rhs) {
+  Mask4 result = loom::vector::cmpi::eq<Mask4>(unsigned_lhs, unsigned_rhs);
+  result = result | loom::vector::cmpi::ne<Mask4>(unsigned_lhs, unsigned_rhs);
+  result = result | loom::vector::cmpi::slt<Mask4>(signed_lhs, signed_rhs);
+  result = result | loom::vector::cmpi::sle<Mask4>(signed_lhs, signed_rhs);
+  result = result | loom::vector::cmpi::sgt<Mask4>(signed_lhs, signed_rhs);
+  result = result | loom::vector::cmpi::sge<Mask4>(signed_lhs, signed_rhs);
+  result = result | loom::vector::cmpi::ult<Mask4>(unsigned_lhs, unsigned_rhs);
+  result = result | loom::vector::cmpi::ule<Mask4>(unsigned_lhs, unsigned_rhs);
+  result = result | loom::vector::cmpi::ugt<Mask4>(unsigned_lhs, unsigned_rhs);
+  result = result | loom::vector::cmpi::uge<Mask4>(unsigned_lhs, unsigned_rhs);
+  result = result | loom::vector::cmpf::oeq<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::ogt<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::oge<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::olt<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::ole<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::one<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::ord<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::ueq<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::ugt<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::uge<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::ult<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::ule<Mask4>(float_lhs, float_rhs);
+  result = result | loom::vector::cmpf::une<Mask4>(float_lhs, float_rhs);
+  return result | loom::vector::cmpf::uno<Mask4>(float_lhs, float_rhs);
+}
+
+// ----
+func.def public @geometry(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %row: i32) -> (vector<8xi32>) {
+  %matrix = vector.bitcast %lhs : vector<4xi32> to vector<2x2xi32>
+  %transposed = vector.transpose<[1, 0]> %matrix : vector<2x2xi32> -> vector<2x2xi32>
+  %first = vector.extract %transposed[0] : vector<2x2xi32> -> vector<2xi32>
+  %7 = scalar.extui %row : i32 to i64
+  %8 = index.cast %7 : i64 to index
+  %selected = vector.extract %transposed[%8] : vector<2x2xi32> -> vector<2xi32>
+  %interleaved = vector.interleave<0> %first, %selected : vector<2xi32>, vector<2xi32> -> vector<4xi32>
+  %11 = scalar.constant 0 : i32
+  %12 = scalar.constant 1 : i32
+  %lanes = vector.iota %11 step %12 : vector<4xi32>
+  %lower = vector.maxui %interleaved, %lanes : vector<4xi32>
+  %upper = vector.minui %lower, %rhs : vector<4xi32>
+  %mask = vector.cmpi uge, %upper, %lhs : vector<4xi32> -> vector<4xi1>
+  %chosen = vector.select %mask, %upper, %lhs : vector<4xi32>
+  %18 = vector.concat<0> %chosen, %rhs : vector<4xi32>, vector<4xi32> -> vector<8xi32>
+  func.return %18 : vector<8xi32>
+}
+
+func.def public @comparisons(%signed_lhs: vector<4xi32>, %signed_rhs: vector<4xi32>, %unsigned_lhs: vector<4xi32>, %unsigned_rhs: vector<4xi32>, %float_lhs: vector<4xf32>, %float_rhs: vector<4xf32>) -> (vector<4xi1>) {
+  %result$26 = vector.cmpi eq, %unsigned_lhs, %unsigned_rhs : vector<4xi32> -> vector<4xi1>
+  %27 = vector.cmpi ne, %unsigned_lhs, %unsigned_rhs : vector<4xi32> -> vector<4xi1>
+  %result$28 = vector.ori %result$26, %27 : vector<4xi1>
+  %29 = vector.cmpi slt, %signed_lhs, %signed_rhs : vector<4xi32> -> vector<4xi1>
+  %result$30 = vector.ori %result$28, %29 : vector<4xi1>
+  %31 = vector.cmpi sle, %signed_lhs, %signed_rhs : vector<4xi32> -> vector<4xi1>
+  %result$32 = vector.ori %result$30, %31 : vector<4xi1>
+  %33 = vector.cmpi sgt, %signed_lhs, %signed_rhs : vector<4xi32> -> vector<4xi1>
+  %result$34 = vector.ori %result$32, %33 : vector<4xi1>
+  %35 = vector.cmpi sge, %signed_lhs, %signed_rhs : vector<4xi32> -> vector<4xi1>
+  %result$36 = vector.ori %result$34, %35 : vector<4xi1>
+  %37 = vector.cmpi ult, %unsigned_lhs, %unsigned_rhs : vector<4xi32> -> vector<4xi1>
+  %result$38 = vector.ori %result$36, %37 : vector<4xi1>
+  %39 = vector.cmpi ule, %unsigned_lhs, %unsigned_rhs : vector<4xi32> -> vector<4xi1>
+  %result$40 = vector.ori %result$38, %39 : vector<4xi1>
+  %41 = vector.cmpi ugt, %unsigned_lhs, %unsigned_rhs : vector<4xi32> -> vector<4xi1>
+  %result$42 = vector.ori %result$40, %41 : vector<4xi1>
+  %43 = vector.cmpi uge, %unsigned_lhs, %unsigned_rhs : vector<4xi32> -> vector<4xi1>
+  %result$44 = vector.ori %result$42, %43 : vector<4xi1>
+  %45 = vector.cmpf oeq, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$46 = vector.ori %result$44, %45 : vector<4xi1>
+  %47 = vector.cmpf ogt, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$48 = vector.ori %result$46, %47 : vector<4xi1>
+  %49 = vector.cmpf oge, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$50 = vector.ori %result$48, %49 : vector<4xi1>
+  %51 = vector.cmpf olt, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$52 = vector.ori %result$50, %51 : vector<4xi1>
+  %53 = vector.cmpf ole, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$54 = vector.ori %result$52, %53 : vector<4xi1>
+  %55 = vector.cmpf one, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$56 = vector.ori %result$54, %55 : vector<4xi1>
+  %57 = vector.cmpf ord, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$58 = vector.ori %result$56, %57 : vector<4xi1>
+  %59 = vector.cmpf ueq, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$60 = vector.ori %result$58, %59 : vector<4xi1>
+  %61 = vector.cmpf ugt, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$62 = vector.ori %result$60, %61 : vector<4xi1>
+  %63 = vector.cmpf uge, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$64 = vector.ori %result$62, %63 : vector<4xi1>
+  %65 = vector.cmpf ult, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$66 = vector.ori %result$64, %65 : vector<4xi1>
+  %67 = vector.cmpf ule, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$68 = vector.ori %result$66, %67 : vector<4xi1>
+  %69 = vector.cmpf une, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %result$70 = vector.ori %result$68, %69 : vector<4xi1>
+  %71 = vector.cmpf uno, %float_lhs, %float_rhs : vector<4xf32> -> vector<4xi1>
+  %72 = vector.ori %result$70, %71 : vector<4xi1>
+  func.return %72 : vector<4xi1>
+}

@@ -61,6 +61,7 @@ class BufferIntrinsic {
     AssumeAlignment,
     AssumeMemorySpace,
     AssumeNoalias,
+    Cast,
   };
 
   BufferIntrinsic(Operation operation,
@@ -95,6 +96,8 @@ class BufferIntrinsic {
       : operation_(Operation::AssumeMemorySpace),
         element_type_(element_type),
         memory_space_(memory_space) {}
+  explicit BufferIntrinsic(const BufferPartition* result_buffer)
+      : operation_(Operation::Cast), result_buffer_(result_buffer) {}
 
   // Buffer operation selected by the source declaration.
   Operation operation_;
@@ -105,6 +108,8 @@ class BufferIntrinsic {
   const cxx::Type* element_type_ = nullptr;
   // Source size or native index type accepted by the runtime operand.
   const cxx::Type* element_count_type_ = nullptr;
+  // Source-only element interpretation produced by buffer.cast.
+  const BufferPartition* result_buffer_ = nullptr;
   // High storage domain selected for allocation or refinement.
   loom_value_fact_memory_space_t memory_space_ =
       LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;

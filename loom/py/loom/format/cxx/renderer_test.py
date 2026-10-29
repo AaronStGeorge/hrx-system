@@ -34,12 +34,12 @@ def test_projects_dynamic_subview_with_index_identity() -> None:
 
 [[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
 void copy_one(const float* input, float* output) {
-  auto input_view = loom::buffer::view<4>(input, {}, loom::encoding::layout::dense<1>());
+  auto input_view = loom::buffer::view<4>(input, {});
   unsigned workitem = static_cast<unsigned>(loom::kernel::workitem::id.x);
   loom::type::index v43 = loom::index::cast(workitem);
   auto slice = loom::view::subview<1>(input_view, loom::type::indices{v43}, {});
   float value = loom::view::load(slice, 0);
-  auto output_view = loom::buffer::view<4>(output, {}, loom::encoding::layout::dense<1>());
+  auto output_view = loom::buffer::view<4>(output, {});
   loom::view::store(value, output_view, v43);
 }
 """
@@ -390,7 +390,7 @@ kernel.def @crop() {
 
 [[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
 void crop(const unsigned* input, loom::type::index rows, loom::type::offset iterations) {
-  auto source = loom::buffer::view<loom::type::dynamic, 4>(input, loom::type::indices{rows}, loom::encoding::layout::dense<2>());
+  auto source = loom::buffer::view<loom::type::dynamic, 4>(input, loom::type::indices{rows});
   loom::type::index final_rows = rows;
   auto final = source;
   for (loom::type::offset i = loom::type::offset{0}; i < iterations; i = i + loom::type::offset{1}) {
@@ -916,7 +916,7 @@ kernel.def @topology_identity() {
 
 [[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
 void topology_identity(unsigned* output) {
-  auto output_view = loom::buffer::view<64>(output, {}, loom::encoding::layout::dense<1>());
+  auto output_view = loom::buffer::view<64>(output, {});
   auto coordinate = loom::kernel::workitem::id.x;
   loom::assume(loom::predicate::range(coordinate, 0, 62));
   loom::type::index shifted = static_cast<loom::type::index>(coordinate) + loom::type::index{1};
@@ -1348,6 +1348,23 @@ func.def inline @math.pair(%input: i32) -> (i32, i32) {
     assert "static math_pair_result math_pair(unsigned input);" in result
     assert "math_pair_result call_result = math_pair(input);" in result
     assert "return {input, next};" in result
+
+
+def test_projects_nonfinite_float_constants_as_exact_bit_patterns() -> None:
+    source = """\
+func.def public @math.nonfinite() -> (f32, f64, vector<2x2xf32>) {
+  %positive_infinity = scalar.constant inf : f32
+  %not_a_number = scalar.constant nan : f64
+  %negative_infinity = vector.constant -inf : vector<2x2xf32>
+  func.return %positive_infinity, %not_a_number, %negative_infinity : f32, f64, vector<2x2xf32>
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "__builtin_bit_cast(float, 0x7f800000u)" in result
+    assert "__builtin_bit_cast(double, 0x7ff8000000000000ull)" in result
+    assert "__builtin_bit_cast(float, 0xff800000u)" in result
 
 
 @pytest.mark.parametrize(

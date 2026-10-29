@@ -334,7 +334,7 @@ class CxxRenderer(CxxExpressionRenderer):
                 else:
                     encoding = self.expression(encoding_id)
             elif result_type.encoding is None:
-                encoding = f"loom::encoding::layout::dense<{result_type.rank}>()"
+                encoding = None
             else:
                 raise CxxRenderError(
                     operation,
@@ -350,12 +350,26 @@ class CxxRenderer(CxxExpressionRenderer):
             element = self.types.scalar(
                 result_type.element_type, result in self.view_signed
             )
-            pointer = self._buffer_pointer_expression(
-                buffer_id, offset_id, element, is_const
-            )
-            expression = (
-                f"loom::buffer::view<{extents}>({pointer}, {dimensions}, {encoding})"
-            )
+            source_type = self.expression_type(buffer_id)
+            arguments: list[str]
+            if source_type.startswith("loom::type::buffer<"):
+                target_type = f"loom::type::buffer<{element}>"
+                source = self.expression(buffer_id)
+                if source_type != target_type:
+                    source = f"loom::buffer::cast<{element}>({source})"
+                arguments = [source]
+                if self._constant_integer(offset_id) != 0:
+                    arguments.append(self._address_operand(offset_id))
+            else:
+                arguments = [
+                    self._buffer_pointer_expression(
+                        buffer_id, offset_id, element, is_const
+                    )
+                ]
+            arguments.append(dimensions)
+            if encoding is not None:
+                arguments.append(encoding)
+            expression = f"loom::buffer::view<{extents}>(" + ", ".join(arguments) + ")"
             self._declare(result, expression)
             return ()
         if name == "view.subview":
@@ -381,6 +395,16 @@ class CxxRenderer(CxxExpressionRenderer):
             )
             self._declare(result, expression)
             return ("static_offsets",)
+        if name == "view.bitcast":
+            resolved = self._resolved(operation)
+            result = resolved.value_id("result")
+            source = self.expression(resolved.value_id("source"))
+            self._declare(
+                result,
+                f"loom::view::bitcast<{self.cpp_type(result)}>({source})",
+                inlineable=True,
+            )
+            return ()
         if name == "view.load":
             resolved = self._resolved(operation)
             view_id = resolved.value_id("view")
@@ -436,6 +460,23 @@ class CxxRenderer(CxxExpressionRenderer):
             view = self.expression(resolved.value_id("view"))
             self.writer.line(f"loom::vector::store({value}, {view}, {origin});")
             return ("static_indices",)
+        if name == "vector.fragment.store":
+            resolved = self._resolved(operation)
+            role = resolved.attr("role")
+            shape = self._fragment_shape(operation, resolved)
+            origin = self._mixed_index_record(
+                resolved,
+                dynamic_field="indices",
+                static_field="static_indices",
+            )
+            value = self.expression(resolved.value_id("value"))
+            view = self.expression(resolved.value_id("view"))
+            self.writer.line(
+                "loom::vector::fragment::store<"
+                f"loom::vector::fragment::role::{role}>("
+                f"{value}, {view}, {origin}, {shape});"
+            )
+            return ("role", "static_indices")
         return None
 
     def _render_kernel_op(self, operation: Operation) -> tuple[str, ...] | None:
@@ -1289,9 +1330,21 @@ class CxxRenderer(CxxExpressionRenderer):
             raise CxxRenderError(
                 operation, f"called function {symbol!r} is not present in the module"
             )
-        arguments = ", ".join(
-            self.expression(operand) for operand in operation.operands
-        )
+        expected_buffers = self.function_buffer_elements.get(symbol)
+        arguments_list: list[str] = []
+        for index, operand in enumerate(operation.operands):
+            expression = self.expression(operand)
+            expected_element = (
+                expected_buffers[index]
+                if expected_buffers is not None and index < len(expected_buffers)
+                else None
+            )
+            if expected_element is not None:
+                expected_type = f"loom::type::buffer<{expected_element}>"
+                if self.expression_type(operand) != expected_type:
+                    expression = f"loom::buffer::cast<{expected_element}>({expression})"
+            arguments_list.append(expression)
+        arguments = ", ".join(arguments_list)
         call = f"{callee}({arguments})"
         if not operation.results:
             self.writer.line(f"{call};")
@@ -1347,13 +1400,16 @@ class CxxRenderer(CxxExpressionRenderer):
             )
         entry = body.blocks[0]
         parameters: list[str] = []
+        buffer_elements: list[str | None] = []
         for argument in entry.arg_ids:
             value_type = self.module.values[argument].type
             if isinstance(value_type, BufferType):
                 element = self._parameter_element(argument)
                 type_name = f"loom::type::buffer<{element}>"
+                buffer_elements.append(element)
             else:
                 type_name = self.cpp_type(argument)
+                buffer_elements.append(None)
             name = self.names[argument]
             parameters.append(f"{type_name} {name}")
             if bind_parameters:
@@ -1361,6 +1417,7 @@ class CxxRenderer(CxxExpressionRenderer):
                 self.expression_types[argument] = type_name
 
         symbol = str(resolved.attr("callee"))
+        self.function_buffer_elements[symbol] = tuple(buffer_elements)
         visibility = resolved.attr("visibility")
         storage = "" if visibility == "public" else "static "
         return (

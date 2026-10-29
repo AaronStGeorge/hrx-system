@@ -63,20 +63,34 @@ def render_preamble(
             "kernel.subgroup.reduce",
             "vector.absf",
             "vector.absi",
+            "vector.bitcast",
+            "vector.concat",
+            "vector.cmpf",
+            "vector.cmpi",
             "vector.minimumf",
             "vector.maximumf",
+            "vector.minsi",
+            "vector.maxsi",
+            "vector.minui",
+            "vector.maxui",
             "vector.minnumf",
             "vector.maxnumf",
             "vector.dot2f",
             "vector.dotf",
             "vector.decode",
             "vector.fragment",
+            "vector.fragment.store",
+            "vector.interleave",
+            "vector.iota",
             "vector.load",
             "vector.mma",
             "vector.reduce",
+            "vector.select",
             "vector.slice",
             "vector.store",
             "vector.table.lookup",
+            "vector.transpose",
+            "vector.extract",
         }
     )
     if uses_vector_header:
@@ -109,9 +123,12 @@ def render_preamble(
                 "i64": "unsigned long long",
                 "i1": "bool",
             }[element]
-        preamble.append(
-            f"using {alias} = {base} __attribute__((ext_vector_type({dims[0]})));"
-        )
+        if len(dims) == 1 and element != "i1":
+            definition = f"{base} __attribute__((ext_vector_type({dims[0]})))"
+        else:
+            dimensions = ", ".join(str(dimension) for dimension in dims)
+            definition = f"loom::type::vector<loom::type::shape<{dimensions}>, {base}>"
+        preamble.append(f"using {alias} = {definition};")
     if vector_aliases:
         preamble.append("")
 

@@ -56,6 +56,7 @@ class ViewIntrinsic {
     LayoutStrided,
     BufferView,
     Subview,
+    Bitcast,
     Load,
     Store,
   };
@@ -72,6 +73,8 @@ class ViewIntrinsic {
   const EncodingPartition* result_encoding_ = nullptr;
   // Typed zero-origin buffer source for buffer.view, null for C++ pointers.
   const BufferPartition* source_buffer_ = nullptr;
+  // Whether a typed buffer.view carries an explicit physical byte offset.
+  bool has_buffer_byte_offset_ = false;
   // Admitted source view for subview/load/store.
   const ViewPartition* source_view_ = nullptr;
   // Admitted dependent result view for buffer.view/subview.

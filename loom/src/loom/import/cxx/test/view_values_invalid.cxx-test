@@ -110,3 +110,33 @@ using View = loom::type::view<loom::type::shape<4>, float,
                                   loom::encoding::role::transform, 0>>;
 // ERROR@+1: LOWERING/059 "view encoding must be a layout or physical storage encoding with the same rank"
 [[loom::op("view.load")]] float invalid(View, loom::type::size_type);
+
+// ====
+// A view bitcast preserves the complete storage footprint.
+#include <loomcxx/view.h>
+using Source = loom::type::view<loom::type::shape<4>, unsigned>;
+using Result = loom::type::view<loom::type::shape<15>, unsigned char>;
+Result invalid(Source source) {
+  // ERROR@+1: LOWERING/059 "view.bitcast requires equal total bit counts"
+  return loom::view::bitcast<Result>(source);
+}
+
+// ====
+// Layout-bearing views require an explicit relayout rather than a bitcast.
+#include <loomcxx/view.h>
+using Layout = loom::type::encoding<loom::encoding::role::layout, 1>;
+using Source = loom::type::view<loom::type::shape<4>, unsigned, Layout>;
+using Result = loom::type::view<loom::type::shape<16>, unsigned char>;
+Result invalid(Source source) {
+  // ERROR@+1: LOWERING/059 "view.bitcast requires plain unencoded views"
+  return loom::view::bitcast<Result>(source);
+}
+
+// ====
+// Source-only reinterpretation cannot weaken typed-buffer access qualifiers.
+#include <loomcxx/buffer.h>
+using ReadOnly = loom::type::buffer<const unsigned>;
+loom::type::buffer<unsigned> invalid(ReadOnly source) {
+  // ERROR@+1: LOWERING/059 "buffer.cast cannot discard element qualifiers"
+  return loom::buffer::cast<unsigned>(source);
+}

@@ -80,6 +80,18 @@ loom::type::encoding<role::layout, sizeof...(Strides)> strided(
 
 namespace loom::buffer {
 
+// Forms an ordinary unencoded view over pointer storage.
+template <loom::type::size_type... Extents, class T>
+[[loom::op("buffer.view")]]
+loom::type::view<loom::type::shape<Extents...>, T> view(
+    T* data, loom::detail::view_dimensions<Extents...> dimensions);
+
+template <loom::type::size_type... Extents, class T>
+  requires((Extents == loom::type::dynamic) || ...)
+[[loom::op("buffer.view")]]
+loom::type::view<loom::type::shape<Extents...>, T> view(
+    T* data, loom::detail::view_index_dimensions<Extents...> dimensions);
+
 // Forms a borrowed view over data. Dimensions supplies one runtime extent for
 // each dynamic axis and encoding captures its address or storage mapping.
 template <loom::type::size_type... Extents, class T, loom::encoding::role Role>
@@ -115,6 +127,52 @@ template <loom::type::size_type... Extents, class T, loom::encoding::role Role>
 loom::type::view<loom::type::shape<Extents...>, T,
                  loom::type::encoding<Role, sizeof...(Extents)>>
 view(loom::type::buffer<T> data,
+     loom::detail::view_index_dimensions<Extents...> dimensions,
+     loom::type::encoding<Role, sizeof...(Extents)> encoding);
+
+// Forms an ordinary unencoded view at a typed buffer root.
+template <loom::type::size_type... Extents, class T>
+[[loom::op("buffer.view")]]
+loom::type::view<loom::type::shape<Extents...>, T> view(
+    loom::type::buffer<T> data,
+    loom::detail::view_dimensions<Extents...> dimensions);
+
+template <loom::type::size_type... Extents, class T>
+  requires((Extents == loom::type::dynamic) || ...)
+[[loom::op("buffer.view")]]
+loom::type::view<loom::type::shape<Extents...>, T> view(
+    loom::type::buffer<T> data,
+    loom::detail::view_index_dimensions<Extents...> dimensions);
+
+// Forms a view at a byte offset within a typed buffer. The offset remains in
+// Loom's physical address domain and does not become pointer arithmetic.
+template <loom::type::size_type... Extents, class T>
+[[loom::op("buffer.view")]]
+loom::type::view<loom::type::shape<Extents...>, T> view(
+    loom::type::buffer<T> data, loom::type::offset byte_offset,
+    loom::detail::view_dimensions<Extents...> dimensions);
+
+template <loom::type::size_type... Extents, class T>
+  requires((Extents == loom::type::dynamic) || ...)
+[[loom::op("buffer.view")]]
+loom::type::view<loom::type::shape<Extents...>, T> view(
+    loom::type::buffer<T> data, loom::type::offset byte_offset,
+    loom::detail::view_index_dimensions<Extents...> dimensions);
+
+template <loom::type::size_type... Extents, class T, loom::encoding::role Role>
+[[loom::op("buffer.view")]]
+loom::type::view<loom::type::shape<Extents...>, T,
+                 loom::type::encoding<Role, sizeof...(Extents)>>
+view(loom::type::buffer<T> data, loom::type::offset byte_offset,
+     loom::detail::view_dimensions<Extents...> dimensions,
+     loom::type::encoding<Role, sizeof...(Extents)> encoding);
+
+template <loom::type::size_type... Extents, class T, loom::encoding::role Role>
+  requires((Extents == loom::type::dynamic) || ...)
+[[loom::op("buffer.view")]]
+loom::type::view<loom::type::shape<Extents...>, T,
+                 loom::type::encoding<Role, sizeof...(Extents)>>
+view(loom::type::buffer<T> data, loom::type::offset byte_offset,
      loom::detail::view_index_dimensions<Extents...> dimensions,
      loom::type::encoding<Role, sizeof...(Extents)> encoding);
 
@@ -157,6 +215,12 @@ template <class T, loom::type::size_type... Extents, class Encoding,
 loom::type::view<loom::type::shape<Extents...>, T, Encoding> subview(
     loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, loom::detail::view_index_dimensions<Extents...> dimensions);
+
+// Reinterprets one all-static plain view as another equal-sized dense shape.
+// Storage, byte origin, access rights, and borrowed lifetime are preserved.
+template <class Result, class Shape, class T, class Encoding>
+[[loom::op("view.bitcast")]] Result bitcast(
+    loom::type::view<Shape, T, Encoding> source);
 
 // Loads one scalar at a logical coordinate.
 template <class Shape, class T, class Encoding, class... Indices>

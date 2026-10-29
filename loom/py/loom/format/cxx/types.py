@@ -80,10 +80,6 @@ class CxxTypes:
             for dimension in value_type.dims
             if isinstance(dimension, StaticDim)
         )
-        if len(dims) != 1:
-            raise CxxRenderError(
-                None, f"native C++ vector requires rank one, got {value_type!r}"
-            )
         element = repr(value_type.element_type)
         key = (element, dims, signed)
         alias = self.vector_aliases.get(key)
@@ -106,7 +102,7 @@ class CxxTypes:
             raise CxxRenderError(
                 None, f"vector element type {element} has no C++ spelling"
             )
-        alias = f"{prefix}x{dims[0]}"
+        alias = prefix + "x" + "x".join(str(dimension) for dimension in dims)
         self.vector_aliases[key] = alias
         return alias
 

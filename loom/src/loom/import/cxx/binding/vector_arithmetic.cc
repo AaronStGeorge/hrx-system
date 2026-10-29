@@ -209,10 +209,14 @@ VectorArithmeticIntrinsic VectorArithmeticIntrinsic::resolve(
                                      operation.flags, &result);
   }
   if (!unit.typeTraits().is_integral(element) ||
-      element->kind() == cxx::TypeKind::kBool) {
+      (element->kind() == cxx::TypeKind::kBool &&
+       operation.family != Family::And && operation.family != Family::Or &&
+       operation.family != Family::Xor &&
+       operation.family != Family::Complement)) {
     diagnostics.reject(unit, owner,
                        "vector arithmetic requires floating-point or "
-                       "non-boolean integer elements");
+                       "integer elements; boolean vectors support bitwise "
+                       "operations only");
   }
   if (operation.flags) {
     diagnostics.reject(unit, owner,
