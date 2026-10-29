@@ -1238,34 +1238,38 @@ value %final: test.i32 -> target_id[0:1]
 
 // ====
 
-// The selected middle payload aliases its destination physically. Neighboring
-// payloads remain ordinary edge transfers.
-// RUN: emit low-allocation-query @branch_identity_range edge-moves values=%prefix,%retained,%suffix,%prefix_result,%retained_result,%suffix_result fixed=%prefix:target_id:0:1 fixed=%retained:target_id:1:1 fixed=%suffix:target_id:2:1 fixed=%prefix_result:target_id:3:1 fixed=%suffix_result:target_id:4:1 test.i32=5
+// The middle payload retains its storage. Its neighbors must enter the
+// instruction's low-register window after the wide input releases that window.
+// RUN: emit low-allocation-query @branch_identity_range spill-count edge-moves values=%prefix,%retained,%suffix,%prefix_result,%retained_result,%suffix_result
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @branch_identity_range(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+low.func.def target<test.low.core>(@test_target) @branch_identity_range(%wide: reg<test.i32 x4>, %prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.pressure.alias32 x4>) asm {
+  %saved_wide = copy %wide : reg<test.i32 x4> -> reg<test.pressure.alias32 x4>
   low.br.identity(1, 1) ^exit(%prefix: reg<test.i32>, %retained: reg<test.i32>, %suffix: reg<test.i32>)
 ^exit(%prefix_result: reg<test.i32>, %retained_result: reg<test.i32>, %suffix_result: reg<test.i32>):
-  return %prefix_result, %retained_result, %suffix_result
+  %prefix_use = test.add.low4.i32 %prefix_result, %suffix_result
+  %sum = test.add.low4.i32 %suffix_result, %prefix_use
+  return %sum, %retained_result, %saved_wide
 }
 
 // ----
+spills: 0
 edge moves: 2
-move test.i32:target_id[3] <- test.i32:target_id[0]
-move test.i32:target_id[4] <- test.i32:target_id[2]
-value %prefix: test.i32 -> target_id[0:1]
-value %retained: test.i32 -> target_id[1:1]
-value %suffix: test.i32 -> target_id[2:1]
-value %prefix_result: test.i32 -> target_id[3:1]
-value %retained_result: test.i32 -> target_id[1:1]
-value %suffix_result: test.i32 -> target_id[4:1]
+move test.i32:target_id[0] <- test.i32:target_id[4]
+move test.i32:target_id[1] <- test.i32:target_id[6]
+value %prefix: test.i32 -> target_id[4:1]
+value %retained: test.i32 -> target_id[5:1]
+value %suffix: test.i32 -> target_id[6:1]
+value %prefix_result: test.i32 -> target_id[0:1]
+value %retained_result: test.i32 -> target_id[5:1]
+value %suffix_result: test.i32 -> target_id[1:1]
 
 // ====
 
 // A carrier remains live along the loop continuation after one dynamic path
-// captures it. The explicit branch identity still requires the resume argument
-// to inherit its storage when optional edge coalescing rejects the overlap.
+// captures it. The resume argument shares that carrier's storage while the
+// continuing path can still read the original value.
 // RUN: emit low-allocation-query @loop_branch_identity values=%source,%result
 
 test.target<low_core> @test_target
