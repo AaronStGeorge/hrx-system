@@ -182,25 +182,32 @@ value %restricted: test.packed.narrow -> physical_register[0:1]
 
 // ====
 
-// RUN: emit low-allocation-query @loop_relocation_observes_atomic_alias values=%seed,%state,%next,%blocker_source,%blocker,%peer fixed=%seed:physical_register:2:1 fixed=%next:physical_register:0:1 fixed=%peer:physical_register:8:1
+// RUN: emit low-allocation-query @loop_relocation_observes_atomic_alias values=%seed,%state,%next,%blocker_source,%blocker,%peer
 
 test.target<low_core> @target
 
 // test.r0 and test.a0 have distinct physical-register IDs but own the same
 // atomic storage unit. The exit-only alias can share with the backedge source,
 // but it blocks relocating the loop header onto that source location. %peer
-// occupies the other alias candidate without fixing the blocker itself.
-low.func.def target<test.low.core>(@target) @loop_relocation_observes_atomic_alias(%condition: reg<test.i32>, %seed: reg<test.explicit32>, %peer: reg<test.alias.narrow>) -> (reg<test.explicit32>, reg<test.alias.narrow>, reg<test.alias.narrow>) asm {
+// occupies the other alias candidate while %guard is live. The seed and
+// backedge use different units of the declared pair, keeping their locations
+// distinct even though their scalar register classes match.
+low.func.def target<test.low.core>(@target) @loop_relocation_observes_atomic_alias(%condition: reg<test.i32>, %initial: reg<test.explicit32 x2>, %peer_input: reg<test.i32>, %backedge_input: reg<test.f32 x2>) -> (reg<test.explicit32>, reg<test.alias.narrow>, reg<test.alias.narrow>, reg<test.i32>) asm {
+  %guard = slice %initial[0] : reg<test.explicit32 x2> -> reg<test.explicit32>
+  %seed = slice %initial[1] : reg<test.explicit32 x2> -> reg<test.explicit32>
+  %peer = copy %peer_input : reg<test.i32> -> reg<test.alias.narrow>
+  %released = copy %guard : reg<test.explicit32> -> reg<test.i32>
   low.br ^loop(%seed: reg<test.explicit32>)
 ^loop(%state: reg<test.explicit32>):
   low.cond_br %condition, ^body, ^exit : reg<test.i32>
 ^body:
-  %next = test.const.explicit32 1
+  %tuple = copy %backedge_input : reg<test.f32 x2> -> reg<test.explicit32 x2>
+  %next = slice %tuple[0] : reg<test.explicit32 x2> -> reg<test.explicit32>
   low.br ^loop(%next: reg<test.explicit32>)
 ^exit:
   %blocker_source = test.const.explicit32 2
   %blocker = copy %blocker_source : reg<test.explicit32> -> reg<test.alias.narrow>
-  return %state, %blocker, %peer
+  return %state, %blocker, %peer, %released
 }
 
 // ----
