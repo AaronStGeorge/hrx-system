@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/bazel:package_boundary.bzl", "iree_package_boundary")
 load("//build_tools/bazel:query.bzl", "iree_assert_dependency_boundary")
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test", "loom_config_compatible_with")
 load(":build_defs.bzl", "CXX_COMPILER_OPTIONS")
@@ -12,6 +13,11 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],
+)
+
+iree_package_boundary(
+    allowed_descendant_paths = ["include/**"],
+    reason = "Embedded headers preserve their source-language include paths.",
 )
 
 exports_files([
