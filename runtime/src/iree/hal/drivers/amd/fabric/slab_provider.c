@@ -575,7 +575,7 @@ static void iree_hal_amd_fabric_slab_initialize(
               .granularity = memory->info.native_allocation_granularity,
           },
       .maintenance_range = memory->maintenance_range,
-      .host_cacheability = memory->host_cacheability,
+      .host_properties = memory->host_properties,
       .physical_backing_id = {{memory->info.physical_backing_id.words[0],
                                memory->info.physical_backing_id.words[1]}},
       .allocation_alignment = memory->info.alignment,
@@ -749,6 +749,10 @@ static bool iree_hal_amd_fabric_slab_provider_query_import_requirements(
       .base_alignment =
           registered ? capabilities->registered_host_pointer_alignment : 1,
       .byte_length_granularity = capabilities->byte_length_granularity,
+      .host_properties = registered
+                             ? iree_hal_amd_fabric_memory_host_properties(
+                                   capabilities->registered_host_properties)
+                             : 0,
   };
   return true;
 }

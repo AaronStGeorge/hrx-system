@@ -118,11 +118,11 @@ bool iree_hal_amd_fabric_memory_constrain_profile(
     capabilities = &profile->registration;
   } else if (source_class.type != IREE_HAL_EXTERNAL_STORAGE_TYPE_NONE) {
     capabilities = &profile->import;
-    if (!iree_hal_amd_fabric_memory_constrain_extent(
-            iree_hal_amd_fabric_memory_external_support(
-                profile, source_class,
-                AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_IMPORT),
-            capabilities)) {
+    const amdf_external_memory_support_t* support =
+        iree_hal_amd_fabric_memory_external_support(
+            profile, source_class, AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_IMPORT);
+    profile->host_mapping.properties |= support->host_properties;
+    if (!iree_hal_amd_fabric_memory_constrain_extent(support, capabilities)) {
       return false;
     }
   }
@@ -330,20 +330,8 @@ static iree_status_t iree_hal_amd_fabric_memory_prepare(
     return iree_make_status(IREE_STATUS_PERMISSION_DENIED,
                             "native host mapping cannot supply pool atomics");
   }
-  switch (mapping_info.cacheability) {
-    case AMDF_HOST_CACHEABILITY_WRITE_BACK:
-      memory->host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
-      break;
-    case AMDF_HOST_CACHEABILITY_WRITE_COMBINED:
-      memory->host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_COMBINED;
-      break;
-    case AMDF_HOST_CACHEABILITY_UNCACHED:
-      memory->host_cacheability = IREE_HAL_HOST_CACHEABILITY_UNCACHED;
-      break;
-    default:
-      memory->host_cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN;
-      break;
-  }
+  memory->host_properties =
+      iree_hal_amd_fabric_memory_host_properties(mapping_info.properties);
   IREE_TRACE_ZONE_END(z0);
   return iree_ok_status();
 }
@@ -440,25 +428,12 @@ iree_status_t iree_hal_amd_fabric_memory_register(
         IREE_STATUS_OUT_OF_RANGE,
         "host storage extent violates the import/export contract");
   }
-  amdf_host_cacheability_t cacheability = AMDF_HOST_CACHEABILITY_UNKNOWN;
-  switch (storage->host_cacheability) {
-    case IREE_HAL_HOST_CACHEABILITY_WRITE_BACK:
-      cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
-      break;
-    case IREE_HAL_HOST_CACHEABILITY_WRITE_COMBINED:
-      cacheability = AMDF_HOST_CACHEABILITY_WRITE_COMBINED;
-      break;
-    case IREE_HAL_HOST_CACHEABILITY_UNCACHED:
-      cacheability = AMDF_HOST_CACHEABILITY_UNCACHED;
-      break;
-    default:
-      break;
-  }
-  if (cacheability == AMDF_HOST_CACHEABILITY_UNKNOWN ||
-      cacheability !=
-          options->profile.registration.registered_host_cacheability) {
+  const amdf_host_memory_properties_t properties = storage->host_properties;
+  if (!iree_all_bits_set(
+          properties,
+          options->profile.registration.registered_host_properties)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "host storage cacheability does not match the "
+                            "host storage properties do not satisfy the "
                             "qualified AMD registration profile");
   }
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -473,7 +448,7 @@ iree_status_t iree_hal_amd_fabric_memory_register(
       .minimum_alignment = options->profile.registration.minimum_alignment,
       .registered_host_pointer = storage->payload.host_pointer,
       .accesses = options->accesses,
-      .registered_host_cacheability = cacheability,
+      .registered_host_properties = properties,
   };
   iree_hal_amd_fabric_memory_t memory = {0};
   amdf_memory_release_info_t release_info = {0};
@@ -489,7 +464,7 @@ iree_status_t iree_hal_amd_fabric_memory_register(
     status = iree_hal_amd_fabric_memory_prepare(api, options, &memory);
   }
   if (iree_status_is_ok(status)) {
-    memory.host_cacheability = storage->host_cacheability;
+    memory.host_properties = storage->host_properties;
     memory.maintenance_range = storage->maintenance_range;
     if (memory.maintenance_range.byte_length == IREE_HAL_WHOLE_BUFFER) {
       memory.maintenance_range.byte_length =

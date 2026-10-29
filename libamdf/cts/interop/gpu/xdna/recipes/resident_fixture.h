@@ -462,8 +462,7 @@ class ResidentGpuXdnaTest : public GpuXdnaDeviceFixture {
       create.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
       create.minimum_alignment = geometry.minimum_alignment;
       if (role == AMDF_MEMORY_PROFILE_ROLE_REGISTER) {
-        create.registered_host_cacheability =
-            geometry.registered_host_cacheability;
+        create.registered_host_properties = geometry.registered_host_properties;
       }
       ASSERT_NO_FATAL_FAILURE(
           QueryProfilePairs(create, 1, kGpuXdnaJointEdges, profile_pairs));
@@ -500,8 +499,8 @@ class ResidentGpuXdnaTest : public GpuXdnaDeviceFixture {
           };
           ASSERT_NO_FATAL_FAILURE(
               buffer.registration.Create(api_, system_scope_, host_create));
-          ASSERT_EQ(buffer.registration.host.cacheability,
-                    create.registered_host_cacheability);
+          ASSERT_EQ(buffer.registration.host.properties,
+                    create.registered_host_properties);
           create.registered_host_pointer = buffer.registration.host.pointer;
         }
         ASSERT_NO_FATAL_FAILURE(
@@ -798,7 +797,9 @@ class ResidentGpuXdnaTest : public GpuXdnaDeviceFixture {
         completion_address, release, AMDF_MEMORY_FLAG_QUEUE_STORAGE));
     ASSERT_EQ(completion_address % 64, 0u);
     ASSERT_EQ(reinterpret_cast<uintptr_t>(completion_.host.pointer) % 64, 0u);
-    ASSERT_EQ(completion_.host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    ASSERT_EQ(completion_.host.properties,
+              (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+               AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     ASSERT_LE(completion_.host.cache_line_size, 64u);
     std::fill(completion_.bytes().begin(), completion_.bytes().end(), 0);
     if (capture_timing) {

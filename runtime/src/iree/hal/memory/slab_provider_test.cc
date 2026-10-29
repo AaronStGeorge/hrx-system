@@ -79,7 +79,9 @@ TEST(SlabProviderTest, CPUAlignmentMatchesActualStorage) {
       EXPECT_EQ(slab.native_allocation.granularity, 1u);
       EXPECT_EQ(slab.allocation_alignment,
                 iree_max(requested_alignment, properties.allocation_alignment));
-      EXPECT_EQ(slab.host_cacheability, IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+      EXPECT_EQ(slab.host_properties,
+                (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                 IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
       memset(slab.base_ptr, 0x6B, 127);
       for (iree_host_size_t i = 0; i < 127; ++i) {
         EXPECT_EQ(slab.base_ptr[i], 0x6B);
@@ -102,7 +104,8 @@ TEST(SlabProviderTest, CPUImportPreservesSourceFactsWithoutInventingGeometry) {
     };
     storage.payload.host_pointer = bytes + 64;
     storage.byte_length = 128;
-    storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     storage.maintenance_range =
         iree_hal_make_buffer_range(32, maintenance_length);
     storage.physical_backing_id = {{0xC, 0x1234}};
@@ -114,8 +117,9 @@ TEST(SlabProviderTest, CPUImportPreservesSourceFactsWithoutInventingGeometry) {
     EXPECT_EQ(imported.slab.native_allocation.byte_offset, 0u);
     EXPECT_EQ(imported.slab.native_allocation.granularity, 0u);
     EXPECT_EQ(imported.slab.allocation_alignment, 64u);
-    EXPECT_EQ(imported.slab.host_cacheability,
-              IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(imported.slab.host_properties,
+              (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK));
     EXPECT_EQ(imported.slab.maintenance_range.byte_offset, 32u);
     EXPECT_EQ(imported.slab.maintenance_range.byte_length, maintenance_length);
     EXPECT_EQ(imported.slab.physical_backing_id.words[0], 0xCu);

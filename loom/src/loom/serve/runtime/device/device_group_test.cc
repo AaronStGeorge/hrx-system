@@ -35,6 +35,9 @@ class DeviceGroupTest : public ::testing::Test {
       }
       loom_serve_execution_release(execution);
     }
+    for (auto* buffer : fixed_buffers_) {
+      iree_hal_buffer_release(buffer);
+    }
     for (auto* reservation : reservations_) {
       IREE_EXPECT_OK(loom_serve_virtual_buffer_free(reservation));
     }
@@ -51,6 +54,9 @@ class DeviceGroupTest : public ::testing::Test {
   loom_serve_device_group_t* group_ = nullptr;
   // Independent model-like timelines, one per device record.
   std::array<loom_serve_execution_t*, 2> executions_ = {};
+  // Fixed storage retained through accepted transfers, including assertion
+  // exits.
+  std::array<iree_hal_buffer_t*, 2> fixed_buffers_ = {};
   // Independent sparse roots that prevent premature group destruction.
   std::array<loom_serve_virtual_buffer_t*, 2> reservations_ = {};
   // Accounting borrowed through each reservation's final destruction.
@@ -149,6 +155,126 @@ TEST_F(DeviceGroupTest, IndependentSlabSizesPreserveShortTails) {
   EXPECT_EQ(statistics_[0].reserved_bytes, slab_size + weights.minimum_size);
   EXPECT_EQ(statistics_[1].reserved_bytes, state.minimum_size);
   EXPECT_EQ(statistics_[0].committed_bytes, 0u);
+}
+
+TEST_F(DeviceGroupTest, ExplicitPlacementPreservesNativeDomainThroughReuse) {
+  const loom_serve_device_options_t device_options = {
+      .driver = driver_,
+      .uri = loom_serve_test_device()->device_uri,
+  };
+  IREE_ASSERT_OK(loom_serve_device_group_allocate(
+      host_, 1, &device_options, iree_allocator_system(), &group_));
+  auto* device = loom_serve_device_group_at(group_, 0);
+  const auto* topology =
+      iree_hal_device_group_topology(loom_serve_device_group(device));
+  uint32_t node = IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID;
+  for (uint32_t i = 0; i < iree_hal_topology_node_count(topology); ++i) {
+    const auto* candidate = iree_hal_topology_node_at(topology, i);
+    if (candidate->kind == IREE_HAL_TOPOLOGY_NODE_KIND_PHYSICAL_DEVICE &&
+        candidate->device_ordinal == 0) {
+      ASSERT_EQ(node, IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID);
+      node = candidate->ordinal;
+    }
+  }
+  if (node == IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID) {
+    GTEST_SKIP() << "device has no physical allocation domain";
+  }
+  // Preferred placement qualifies the domain without allocating payload.
+  // Automatic placement can favor shared memory even when LOCAL is available.
+  const iree_hal_pool_family_access_t family = {
+      .family = iree_hal_queue_family(loom_serve_device_transfer_queue(device)),
+      .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
+  };
+  const iree_hal_slab_pool_options_t qualification_options = {
+      .placement = {IREE_HAL_POOL_PLACEMENT_PREFERRED, node},
+  };
+  iree_hal_pool_t* qualified = nullptr;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(
+      loom_serve_device_group(device), {1, &family}, &qualification_options,
+      iree_allocator_system(), &qualified));
+  iree_hal_pool_capabilities_t capabilities;
+  iree_hal_pool_query_capabilities(qualified, &capabilities);
+  iree_hal_pool_release(qualified);
+  if (capabilities.placement.mode != IREE_HAL_POOL_PLACEMENT_REQUIRED ||
+      capabilities.placement.node != node) {
+    GTEST_SKIP() << "native allocator cannot enforce physical-device placement";
+  }
+  loom_serve_pool_options_t options = {
+      .weight_slab_size = kSlabBytes,
+      .state_slab_size = kSlabBytes,
+      .placement = {LOOM_SERVE_POOL_PLACEMENT_DEVICE, 0},
+  };
+  for (uint32_t i = 0; i < 2; ++i) {
+    options.elastic = i != 0;
+    loom_serve_pool_t* pool = nullptr;
+    IREE_ASSERT_OK(loom_serve_device_group_create_pool(
+        group_, {i ? IREE_SV("elastic") : IREE_SV("fixed"), 1}, &options,
+        &pool));
+    iree_hal_pool_query_capabilities(loom_serve_pool_storage(pool),
+                                     &capabilities);
+    EXPECT_EQ(capabilities.placement.mode, IREE_HAL_POOL_PLACEMENT_REQUIRED);
+    EXPECT_EQ(capabilities.placement.node, node);
+    IREE_ASSERT_OK(
+        loom_serve_device_create_execution(device, pool, &executions_[i]));
+    if (options.elastic) {
+      IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+          loom_serve_pool_memory(pool), loom_serve_pool_state_geometry(pool),
+          sizeof(uint32_t), 256, &statistics_[i], &reservations_[i]));
+    }
+    for (uint32_t cycle = 0; cycle < 2; ++cycle) {
+      iree_hal_buffer_t* buffer = nullptr;
+      if (options.elastic) {
+        IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(reservations_[i], 0,
+                                                        sizeof(uint32_t)));
+        buffer = loom_serve_virtual_buffer_handle(reservations_[i]);
+      } else {
+        IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+            loom_serve_pool_storage(pool),
+            iree_hal_make_pool_reservation_request(4096, 0),
+            iree_infinite_timeout(), &fixed_buffers_[i]));
+        buffer = fixed_buffers_[i];
+      }
+      const uint32_t pattern = 0x12345678u + cycle;
+      const iree_hal_transfer_operation_t operations[] = {
+          {
+              .type = IREE_HAL_TRANSFER_OPERATION_TYPE_FILL,
+              .fill =
+                  {
+                      .target_buffer = buffer,
+                      .length = sizeof(pattern),
+                      .pattern = &pattern,
+                      .pattern_length = sizeof(pattern),
+                  },
+          },
+          {
+              .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+              .download =
+                  {
+                      .source_buffer = buffer,
+                      .target = &output_[i],
+                      .length = sizeof(output_[i]),
+                  },
+          },
+      };
+      uint64_t value = 0;
+      // Transfer siblings are unordered. Chain the readback after the fill
+      // through the execution timeline without an intermediate host wait.
+      for (const auto& operation : operations) {
+        IREE_ASSERT_OK(loom_serve_execution_transfer(executions_[i], 1,
+                                                     &operation, &value));
+      }
+      IREE_ASSERT_OK(loom_serve_execution_drain(executions_[i]));
+      EXPECT_EQ(output_[i], pattern);
+      if (options.elastic) {
+        loom_serve_virtual_buffer_begin_trim(reservations_[i]);
+        IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(reservations_[i]));
+      } else {
+        iree_hal_buffer_release(fixed_buffers_[i]);
+        fixed_buffers_[i] = nullptr;
+      }
+      IREE_ASSERT_OK(loom_serve_test_pool_trim_and_drain(pool, 0));
+    }
+  }
 }
 
 TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {

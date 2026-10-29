@@ -31,6 +31,7 @@ typedef struct iree_hal_memory_backend_t {
   iree_status_t(IREE_API_PTR* query_virtual_buffer)(
       const struct iree_hal_memory_backend_t* backend,
       iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
+      iree_hal_virtual_buffer_sources_t sources,
       iree_allocator_t host_allocator,
       iree_hal_virtual_buffer_capabilities_t* out_capabilities);
   // Qualifies the entire address scope and creates a reservation. Unsupported
@@ -39,6 +40,7 @@ typedef struct iree_hal_memory_backend_t {
   iree_status_t(IREE_API_PTR* create_virtual_buffer)(
       const struct iree_hal_memory_backend_t* backend,
       iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
+      iree_hal_virtual_buffer_sources_t sources,
       const iree_hal_virtual_buffer_options_t* options,
       iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer);
 } iree_hal_memory_backend_t;

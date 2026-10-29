@@ -226,6 +226,8 @@ class CpuXdnaNativeTest : public ::testing::TestWithParam<CpuHandoffMode> {
     };
     scope.host.access = host_access;
     scope.host.modes = host_access ? IREE_HAL_MAPPING_MODE_SCOPED : 0u;
+    scope.host.properties =
+        host_access ? IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED : 0u;
     iree_hal_slab_pool_options_t options;
     iree_hal_slab_pool_options_initialize(&options);
     const iree_hal_external_storage_class_t storage_class = {
@@ -336,7 +338,8 @@ class CpuXdnaNativeTest : public ::testing::TestWithParam<CpuHandoffMode> {
     storage.byte_length = registered_storage_.size;
     storage.maintenance_range =
         iree_hal_make_buffer_range(0, registered_storage_.size);
-    storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     storage.release = +[](void* user_data, iree_hal_external_storage_class_t,
                           iree_hal_external_storage_payload_t) {
       ++*static_cast<int*>(user_data);

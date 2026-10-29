@@ -370,7 +370,7 @@ struct NativeProvider {
     info->pointer = memory->contents.data();
     info->byte_length = memory->contents.size();
     info->flags = AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
-    info->cacheability = AMDF_HOST_CACHEABILITY_UNCACHED;
+    info->properties = AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED;
     return AMDF_STATUS_OK;
   }
   static amdf_status_t AMDF_CALL CacheControl(
@@ -1088,8 +1088,9 @@ class QueueHarness {
                            AMDF_MEMORY_FLAG_HOST_COHERENT)) {
         memory_type |= IREE_HAL_MEMORY_TYPE_HOST_COHERENT;
       }
-      if (storage->memory.storage.host_cacheability ==
-          IREE_HAL_HOST_CACHEABILITY_WRITE_BACK) {
+      if (storage->memory.storage.host_properties ==
+          (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+           IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK)) {
         memory_type |= IREE_HAL_MEMORY_TYPE_HOST_CACHED;
       }
       status = iree_hal_amd_fabric_buffer_wrap(

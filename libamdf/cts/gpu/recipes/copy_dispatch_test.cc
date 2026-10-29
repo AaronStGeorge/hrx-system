@@ -192,7 +192,7 @@ class CopyDispatchRecipeTest : public AqlDispatchTest {
         .access_count = creation.access_count,
         .required_flags = creation.required_flags,
         .accesses = creation.accesses,
-        .registered_host_cacheability = creation.registered_host_cacheability,
+        .registered_host_properties = creation.registered_host_properties,
         .producer = producer,
         .consumer = consumer,
     };

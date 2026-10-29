@@ -14,6 +14,36 @@
 
 namespace {
 
+TEST(HostMemoryPropertiesTest, ValidatesIndependentRequests) {
+  const uint32_t valid_requests[] = {
+      IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED,
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED,
+      IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+      IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED,
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED,
+  };
+  // Include every combination of defined properties and an undefined bit.
+  for (uint32_t properties = 0; properties < 32; ++properties) {
+    bool expected = false;
+    for (uint32_t valid : valid_requests) {
+      expected |= properties == valid;
+    }
+    const iree_hal_pool_host_access_t host = {
+        .access = IREE_HAL_MEMORY_ACCESS_ALL,
+        .modes = IREE_HAL_MAPPING_MODE_SCOPED,
+        .properties = properties,
+    };
+    SCOPED_TRACE(properties);
+    iree_status_t status = iree_hal_pool_host_access_validate(host);
+    EXPECT_EQ(iree_status_is_ok(status), expected);
+    iree_status_ignore(status);
+  }
+}
+
 class MemoryScopeTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -182,6 +212,42 @@ TEST(MemoryScopeAtomicTest, FiltersExecutionSitesIndependently) {
   EXPECT_TRUE(iree_hal_atomic_operation_capabilities_is_empty(
       iree_hal_memory_site_filter_atomic_operations(
           {IREE_HAL_MEMORY_SITE_PROGRAM, &family}, backing)));
+}
+
+TEST(MemoryTransitionRecipeTest, JoinsDistinctHostProtocolsThroughMappingApi) {
+  const iree_hal_memory_transition_recipe_info_t first = {
+      .kind = IREE_HAL_MEMORY_TRANSITION_KIND_RANGE,
+      .executor = IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_DIRECT,
+      .operation = IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH,
+      .range_granularity = 64,
+      .host = {.instruction = IREE_HAL_HOST_CACHE_INSTRUCTION_X86_CLFLUSH},
+  };
+  auto combined = first;
+  ASSERT_TRUE(iree_hal_memory_transition_recipe_join(&combined, &first));
+  EXPECT_EQ(combined.executor, IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_DIRECT);
+  EXPECT_EQ(combined.range_granularity, 64u);
+
+  // Direct execution strides by the recipe's cache-line size. A different
+  // size must use the mapping's own protocol instead of skipping cache lines.
+  auto second = first;
+  second.range_granularity = 128;
+  ASSERT_TRUE(iree_hal_memory_transition_recipe_join(&combined, &second));
+  EXPECT_EQ(combined.executor, IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API);
+  EXPECT_EQ(combined.host.instruction, IREE_HAL_HOST_CACHE_INSTRUCTION_NONE);
+  EXPECT_EQ(combined.range_granularity, 128u);
+
+  const iree_hal_memory_transition_recipe_info_t coherent = {
+      .kind = IREE_HAL_MEMORY_TRANSITION_KIND_NONE,
+  };
+  for (bool coherent_first : {false, true}) {
+    combined = coherent_first ? coherent : first;
+    const auto value = coherent_first ? first : coherent;
+    ASSERT_TRUE(iree_hal_memory_transition_recipe_join(&combined, &value));
+    EXPECT_EQ(combined.kind, IREE_HAL_MEMORY_TRANSITION_KIND_RANGE);
+    EXPECT_EQ(combined.executor, IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API);
+    EXPECT_EQ(combined.operation,
+              IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH);
+  }
 }
 
 TEST(MemoryTransitionRecipeTest, ValidatesEffectsAndQueueOperationShape) {
@@ -363,6 +429,65 @@ TEST_F(MemoryScopeTest, UnknownIsNotCoherent) {
   EXPECT_EQ(sizeof(iree_hal_memory_transition_t), 8u);
   EXPECT_EQ(sizeof(iree_hal_memory_transition_pair_t), 4u);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(contract_->transitions) % 8, 0u);
+}
+
+TEST_F(MemoryScopeTest, CapturesMappingAliasesWithoutChangingSourceViews) {
+  IREE_ASSERT_OK(iree_hal_memory_contract_initialize_transitions(
+      contract_, CoherentPair, nullptr));
+  for (uint32_t id : {1u, 2u, 3u}) {
+    contract_->scopes[id].interfaces |=
+        1u << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+    iree_hal_memory_scope_access_set_atomic_operations(
+        &contract_->scopes[id],
+        {.system_scope_32 = IREE_HAL_ATOMIC_OPERATION_FLAG_STORE});
+  }
+  contract_->host.properties = IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED;
+  IREE_ASSERT_OK(iree_hal_memory_contract_initialize_mapping_transitions(
+      contract_, IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+      +[](void* user_data, uint32_t producer, uint32_t consumer,
+          iree_hal_memory_pair_info_t* info) {
+        IREE_RETURN_IF_ERROR(CoherentPair(user_data, producer, consumer, info));
+        if (producer == 1) {
+          info->release = {
+              .kind = IREE_HAL_MEMORY_TRANSITION_KIND_RANGE,
+              .executor = IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API,
+              .operation = IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH,
+              .range_granularity = 64,
+          };
+        }
+        return iree_ok_status();
+      },
+      nullptr));
+  const auto* alias = iree_hal_memory_contract_mapping_alias(contract_);
+  ASSERT_NE(alias, contract_);
+  EXPECT_EQ(alias->host.properties, IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
+  EXPECT_EQ(contract_->host.properties,
+            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED);
+  EXPECT_EQ(alias->scopes[2].atomic_operations,
+            contract_->scopes[2].atomic_operations);
+  EXPECT_EQ(alias->scopes[4].interfaces, 0u);
+  EXPECT_EQ(alias->scopes[5].interfaces, 0u);
+  iree_hal_memory_transition_pair_t pair;
+  IREE_ASSERT_OK(iree_hal_memory_transition_prepare_pair(
+      {alias}, scope(1), scope(2), IREE_HAL_MEMORY_TRANSITION_RELEASE, &pair));
+  EXPECT_EQ(iree_hal_memory_transition_query({alias}, pair).release.bits,
+            IREE_HAL_MEMORY_EFFECT_HOST_FLUSH);
+  EXPECT_EQ(Query(1, 2, IREE_HAL_MEMORY_TRANSITION_RELEASE).release.bits, 0u);
+}
+
+TEST_F(MemoryScopeTest, FailedAliasCapturePublishesNoPartialContract) {
+  contract_->scopes[2].interfaces |=
+      1u << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      iree_hal_memory_contract_initialize_mapping_transitions(
+          contract_, IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
+          +[](void*, uint32_t, uint32_t, iree_hal_memory_pair_info_t*) {
+            return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED);
+          },
+          nullptr));
+  EXPECT_EQ(contract_->mapping_source.alias_contract, nullptr);
+  EXPECT_EQ(iree_hal_memory_contract_mapping_alias(contract_), contract_);
 }
 
 TEST_F(MemoryScopeTest, PublicPreparationChecksDomainRoleAndLocalSide) {

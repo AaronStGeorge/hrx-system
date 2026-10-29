@@ -52,7 +52,7 @@ void GpuMemory::Initialize(const amdf_api_t* api, amdf_memory_scope_t* scope,
   ASSERT_EQ(api->host_mapping_query_info(mapping, &host), AMDF_STATUS_OK);
   ASSERT_NE(host.pointer, nullptr);
   ASSERT_EQ(host.byte_length, creation.byte_length);
-  // CPU cacheability and GPU coherence are independent properties. Each
+  // CPU properties and GPU coherence are independent properties. Each
   // witness uses the returned host policy instead of inferring it from flags.
   // Initialization performs no cache maintenance. Each witness supplies its
   // own publication and visibility operations, including qualified no-ops.

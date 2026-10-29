@@ -48,7 +48,8 @@ iree_status_t iree_hal_amd_gpu_frontier_request_await(
 iree_status_t iree_hal_amd_gpu_backing_query_address(
     const iree_hal_amd_gpu_context_t* context,
     const iree_hal_amd_fabric_memory_t* memory, uint64_t* out_address) {
-  if (memory->host_cacheability != IREE_HAL_HOST_CACHEABILITY_WRITE_BACK) {
+  if (!iree_all_bits_set(memory->host_properties,
+                         IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK)) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "GPU backing requires a coherent write-back mapping");

@@ -797,12 +797,13 @@ static iree_status_t iree_hal_replay_wrap_device_group_create_slab_pool(
 static iree_status_t iree_hal_replay_wrap_device_group_create_virtual_buffer(
     void* self, iree_hal_virtual_buffer_create_callback_t next,
     iree_hal_device_group_t* request_group, const iree_hal_pool_scope_t* scope,
+    const iree_hal_virtual_buffer_sources_t* sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
   iree_hal_replay_wrap_device_group_context_t* context = self;
   return iree_hal_replay_recorder_create_virtual_buffer(
-      context->recorder, next, request_group, scope, options, host_allocator,
-      out_buffer);
+      context->recorder, next, request_group, scope, sources, options,
+      host_allocator, out_buffer);
 }
 
 static const iree_hal_device_group_wrapper_vtable_t

@@ -17,6 +17,269 @@
 
 namespace iree::hal::amd::fabric {
 
+class VirtualBufferContractTest : public MemoryBackendTest {
+ protected:
+  void SetUp() override {
+    MemoryBackendTest::SetUp();
+    if (HasFatalFailure()) {
+      return;
+    }
+    native_.mapping_enabled = true;
+    native_.host_reservation_enabled = true;
+    native_.host_source_enabled = true;
+    native_.host_alias_coherent = true;
+    native_.host_mapping_features |= AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS;
+    native_.required_flags |= AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
+    native_.atomics[0] = {
+        AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE |
+            AMDF_ATOMIC_OPERATION_ADD,
+        AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE};
+    native_.atomic_reach[0] = {AMDF_ATOMIC_SCOPE_SYSTEM,
+                               AMDF_ATOMIC_SCOPE_SYSTEM};
+    binding_descriptions_[0] = {IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS,
+                                AMDF_MEMORY_ADDRESS_GPU};
+    native_.address_kinds[0] = UINT64_C(1) << AMDF_MEMORY_ADDRESS_GPU;
+    native_families_[0].host_usage = 0;
+    accesses_[0].family = families_[0];
+    accesses_[1].family = families_[1];
+    accesses_[2].family = iree_hal_device_queue_family(cpu_device_, 0);
+    for (auto& access : accesses_) {
+      access.usage = IREE_HAL_BUFFER_USAGE_STORAGE;
+    }
+  }
+
+  iree_hal_pool_scope_t Scope() {
+    return {accesses_.size(),
+            accesses_.data(),
+            {IREE_HAL_MEMORY_ACCESS_ALL, IREE_HAL_MAPPING_MODE_PERSISTENT}};
+  }
+
+  iree_status_t CreateSource(iree_hal_pool_t** out_pool) {
+    const uint64_t mapping = UINT64_C(1)
+                             << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+    return CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, out_pool, mapping,
+                      IREE_HAL_MEMORY_ACCESS_ALL, IREE_HAL_BUFFER_USAGE_STORAGE,
+                      {}, mapping);
+  }
+
+  // CPU, GPU, and NPU consumers of each replaceable physical extent.
+  std::array<iree_hal_pool_family_access_t, 3> accesses_ = {};
+};
+
+TEST_F(VirtualBufferContractTest, AtomicsIntersectSourcesAtEachExecutionSite) {
+  std::array<iree_hal_pool_t*, 2> sources = {};
+  IREE_ASSERT_OK(CreateSource(&sources[0]));
+  native_.atomics[0][0] &= ~AMDF_ATOMIC_OPERATION_ADD;
+  IREE_ASSERT_OK(CreateSource(&sources[1]));
+  const iree_hal_virtual_buffer_sources_t declaration = {sources.size(),
+                                                         sources.data()};
+  const iree_hal_virtual_buffer_options_t options = {.byte_length = 4096};
+  iree_hal_buffer_t* target = nullptr;
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, Scope(), declaration,
+                                                &options, allocator_, &target));
+  const auto gpu = ResolveScope(IREE_HAL_MEMORY_SITE_QUEUE, families_[0]);
+  const auto npu = ResolveScope(IREE_HAL_MEMORY_SITE_QUEUE, families_[1]);
+  const auto cpu =
+      ResolveScope(IREE_HAL_MEMORY_SITE_PROGRAM, accesses_[2].family);
+  const auto host = ResolveScope(IREE_HAL_MEMORY_SITE_HOST);
+  const auto gpu_operations =
+      iree_hal_buffer_query_atomic_operations(target, gpu);
+  EXPECT_EQ(gpu_operations.system_scope_32,
+            IREE_HAL_ATOMIC_OPERATION_FLAG_WAIT |
+                IREE_HAL_ATOMIC_OPERATION_FLAG_STORE);
+  EXPECT_TRUE(iree_hal_atomic_operation_capabilities_is_empty(
+      iree_hal_buffer_query_atomic_operations(target, npu)));
+  for (auto site : {cpu, host}) {
+    EXPECT_EQ(
+        iree_hal_buffer_query_atomic_operations(target, site).system_scope_32,
+        IREE_HAL_ATOMIC_OPERATION_FLAGS_ALL);
+  }
+  for (auto* source : sources) {
+    EXPECT_TRUE(
+        iree_hal_virtual_buffer_query_pool_compatibility(target, source));
+    iree_hal_pool_release(source);
+  }
+  // The declaration borrows pools. A later pool with the same guarantees is
+  // compatible after both original pool identities have been destroyed.
+  iree_hal_pool_t* replacement = nullptr;
+  IREE_ASSERT_OK(CreateSource(&replacement));
+  EXPECT_TRUE(
+      iree_hal_virtual_buffer_query_pool_compatibility(target, replacement));
+  EXPECT_EQ(
+      iree_hal_buffer_query_atomic_operations(target, gpu).system_scope_32,
+      gpu_operations.system_scope_32);
+  EXPECT_EQ(native_.create_count, 0);
+  iree_hal_pool_release(replacement);
+  iree_hal_buffer_release(target);
+}
+
+TEST_F(VirtualBufferContractTest, HostCoherencePreservesDeviceSideBarrier) {
+  native_.api.memory_scope_query_pair_info =
+      [](amdf_memory_scope_t* scope,
+         const amdf_memory_profile_pair_query_t* query,
+         amdf_memory_pair_info_t* info) -> amdf_status_t {
+    const amdf_status_t status =
+        FakeNative::MemoryScopeQueryPairInfo(scope, query, info);
+    if (amdf_status_is_ok(status) &&
+        query->producer.kind == AMDF_MEMORY_SITE_KIND_HOST &&
+        query->consumer.kind == AMDF_MEMORY_SITE_KIND_DEVICE) {
+      info->acquire.kind = AMDF_CACHE_TRANSITION_KIND_GLOBAL;
+      info->acquire.executor = AMDF_CACHE_TRANSITION_EXECUTOR_QUEUE;
+      info->acquire.operation = AMDF_CACHE_OPERATION_ACQUIRE_FROM_SYSTEM;
+    }
+    return status;
+  };
+  iree_hal_pool_t* source = nullptr;
+  IREE_ASSERT_OK(CreateSource(&source));
+  accesses_[0].requirements = IREE_HAL_POOL_ACCESS_REQUIRE_COHERENT_WITH_HOST;
+  const iree_hal_virtual_buffer_options_t options = {.byte_length = 4096};
+  iree_hal_buffer_t* target = nullptr;
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, Scope(), {1, &source},
+                                                &options, allocator_, &target));
+  const auto host = ResolveScope(IREE_HAL_MEMORY_SITE_HOST);
+  const auto gpu = ResolveScope(IREE_HAL_MEMORY_SITE_QUEUE, families_[0]);
+  const auto transition = iree_hal_buffer_query_transition(target, host, gpu);
+  EXPECT_TRUE(iree_hal_memory_effects_is_empty(transition.release));
+  EXPECT_EQ(transition.acquire.bits,
+            IREE_HAL_MEMORY_EFFECT_GLOBAL_ACQUIRE_FROM_SYSTEM);
+  iree_hal_buffer_release(target);
+  iree_hal_pool_release(source);
+}
+
+TEST_F(VirtualBufferContractTest, MissingRequiredAtomicRejectsBeforeAddresses) {
+  native_.atomics[0][0] &= ~AMDF_ATOMIC_OPERATION_ADD;
+  iree_hal_pool_t* source = nullptr;
+  IREE_ASSERT_OK(CreateSource(&source));
+  accesses_[0].atomics.queue.system_scope_32 =
+      IREE_HAL_ATOMIC_OPERATION_FLAG_RMW_ADD;
+  iree_hal_virtual_buffer_capabilities_t capabilities;
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
+      group_, Scope(), {1, &source}, allocator_, &capabilities));
+  EXPECT_EQ(capabilities.max_byte_length, 0u);
+  const iree_hal_virtual_buffer_options_t options = {.byte_length = 4096};
+  iree_hal_buffer_t* target = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      iree_hal_virtual_buffer_create(group_, Scope(), {1, &source}, &options,
+                                     allocator_, &target));
+  EXPECT_EQ(target, nullptr);
+  EXPECT_EQ(native_.reservation_count, 0);
+  EXPECT_EQ(native_.create_count, 0);
+  iree_hal_pool_release(source);
+}
+
+TEST_F(VirtualBufferContractTest,
+       NewCacheObligationRejectsBeforeNativeMutation) {
+  iree_hal_pool_t* coherent = nullptr;
+  IREE_ASSERT_OK(CreateSource(&coherent));
+  const iree_hal_virtual_buffer_options_t options = {.byte_length = 4096};
+  iree_hal_buffer_t* target = nullptr;
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, Scope(), {1, &coherent},
+                                                &options, allocator_, &target));
+  iree_hal_pool_release(coherent);
+  const auto host = ResolveScope(IREE_HAL_MEMORY_SITE_HOST);
+  const auto gpu = ResolveScope(IREE_HAL_MEMORY_SITE_QUEUE, families_[0]);
+  const auto before = iree_hal_buffer_query_transition(target, host, gpu);
+  EXPECT_TRUE(iree_hal_memory_effects_is_empty(before.release));
+  native_.host_alias_coherent = false;
+  iree_hal_pool_t* noncoherent = nullptr;
+  IREE_ASSERT_OK(CreateSource(&noncoherent));
+  EXPECT_FALSE(
+      iree_hal_virtual_buffer_query_pool_compatibility(target, noncoherent));
+  iree_hal_buffer_t* backing = nullptr;
+  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+      noncoherent, iree_hal_make_pool_reservation_request(4096, 4096),
+      iree_infinite_timeout(), &backing));
+  const iree_hal_memory_mapping_t mapping = {
+      .target = target,
+      .scope = gpu,
+      .target_range = {0, 4096},
+      .source = backing,
+      .access = IREE_HAL_MEMORY_ACCESS_ALL,
+  };
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      iree_hal_queue_map(iree_hal_device_queue(cpu_device_, 0, 0), {}, {}, 1,
+                         &mapping, 0));
+  EXPECT_EQ(native_.update_count, 0);
+  const auto after = iree_hal_buffer_query_transition(target, host, gpu);
+  EXPECT_EQ(after.release.bits, before.release.bits);
+  EXPECT_EQ(after.acquire.bits, before.acquire.bits);
+  iree_hal_buffer_release(backing);
+  iree_hal_pool_release(noncoherent);
+  iree_hal_buffer_release(target);
+}
+
+TEST_F(VirtualBufferContractTest, DeclaredCacheObligationsCoverEverySource) {
+  std::array<iree_hal_pool_t*, 2> sources = {};
+  IREE_ASSERT_OK(CreateSource(&sources[0]));
+  native_.host_alias_coherent = false;
+  IREE_ASSERT_OK(CreateSource(&sources[1]));
+  const auto host = ResolveScope(IREE_HAL_MEMORY_SITE_HOST);
+  const auto gpu = ResolveScope(IREE_HAL_MEMORY_SITE_QUEUE, families_[0]);
+  const iree_hal_virtual_buffer_options_t options = {.byte_length = 4096};
+  for (int order = 0; order < 2; ++order) {
+    iree_hal_buffer_t* target = nullptr;
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+        group_, Scope(), {sources.size(), sources.data()}, &options, allocator_,
+        &target));
+    iree_hal_memory_transition_pair_t pair;
+    IREE_ASSERT_OK(iree_hal_memory_transition_prepare_pair(
+        {target->memory.contract}, host, gpu,
+        IREE_HAL_MEMORY_TRANSITION_RELEASE, &pair));
+    const auto info =
+        iree_hal_memory_transition_query_info({target->memory.contract}, pair);
+    EXPECT_EQ(info.release.operation,
+              IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH);
+    EXPECT_EQ(info.release.executor,
+              IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API);
+    for (auto* source : sources) {
+      EXPECT_TRUE(
+          iree_hal_virtual_buffer_query_pool_compatibility(target, source));
+    }
+    iree_hal_buffer_release(target);
+    std::swap(sources[0], sources[1]);
+  }
+  EXPECT_EQ(native_.create_count, 0);
+  for (auto* source : sources) {
+    iree_hal_pool_release(source);
+  }
+}
+
+TEST_F(MemoryBackendTest, SourceCapturesReservationAliasProtocolBeforePayload) {
+  native_.mapping_enabled = true;
+  native_.host_reservation_enabled = true;
+  native_.host_source_enabled = true;
+  native_.host_alias_coherent = true;
+  native_.required_flags |= AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
+  const uint64_t mapping_source = UINT64_C(1)
+                                  << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  iree_hal_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, &pool,
+                            mapping_source, IREE_HAL_MEMORY_ACCESS_ALL,
+                            IREE_HAL_BUFFER_USAGE_STORAGE, {}, mapping_source));
+  const auto* alias =
+      iree_hal_memory_contract_mapping_alias(pool->memory_contract);
+  ASSERT_NE(alias, pool->memory_contract);
+  const auto gpu = ResolveScope(IREE_HAL_MEMORY_SITE_QUEUE, families_[0]);
+  const auto host = ResolveScope(IREE_HAL_MEMORY_SITE_HOST);
+  const auto cpu = ResolveScope(IREE_HAL_MEMORY_SITE_QUEUE,
+                                iree_hal_device_queue_family(cpu_device_, 0));
+  const int query_count = native_.pair_query_count;
+  for (auto producer : {host, cpu}) {
+    iree_hal_memory_transition_pair_t pair;
+    IREE_ASSERT_OK(iree_hal_memory_transition_prepare_pair(
+        {alias}, producer, gpu, IREE_HAL_MEMORY_TRANSITION_RELEASE, &pair));
+    EXPECT_EQ(iree_hal_memory_transition_query({alias}, pair).release.bits, 0u);
+    EXPECT_NE(iree_hal_pool_query_transition(pool, producer, gpu).release.bits,
+              0u);
+  }
+  EXPECT_EQ(native_.pair_query_count, query_count);
+  EXPECT_EQ(native_.create_count, 0);
+  EXPECT_EQ(native_.reservation_count, 0);
+  iree_hal_pool_release(pool);
+}
+
 TEST_F(MemoryBackendTest, RejectsUnavailableNativeNpuReservations) {
   const iree_hal_pool_family_access_t access = {
       .family = families_[0],
@@ -24,17 +287,21 @@ TEST_F(MemoryBackendTest, RejectsUnavailableNativeNpuReservations) {
       .interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_XDNA_SHIM_DMA,
   };
   const iree_hal_pool_scope_t scope = {1, &access, {}};
+  iree_hal_pool_t* source_pool = nullptr;
+  IREE_ASSERT_OK(CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, &source_pool));
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, allocator_, &capabilities));
+      group_, scope, {1, &source_pool}, allocator_, &capabilities));
   EXPECT_EQ(capabilities.max_byte_length, 0u);
   const iree_hal_virtual_buffer_options_t options = {.byte_length = 4096};
   iree_hal_buffer_t* buffer = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
-                        iree_hal_virtual_buffer_create(group_, scope, &options,
-                                                       allocator_, &buffer));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      iree_hal_virtual_buffer_create(group_, scope, {1, &source_pool}, &options,
+                                     allocator_, &buffer));
   EXPECT_EQ(buffer, nullptr);
   EXPECT_EQ(native_.reservation_count, 0);
+  iree_hal_pool_release(source_pool);
 }
 
 TEST_F(MemoryBackendTest, QueriesReservationGeometryBeforeAcquiringAddresses) {
@@ -45,13 +312,26 @@ TEST_F(MemoryBackendTest, QueriesReservationGeometryBeforeAcquiringAddresses) {
     binding_descriptions_[i] = {IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS,
                                 AMDF_MEMORY_ADDRESS_GPU};
     native_families_[i].host_usage = 0;
+    native_.address_kinds[i] = UINT64_C(1) << AMDF_MEMORY_ADDRESS_GPU;
     accesses[i].family = families_[i];
     accesses[i].usage = IREE_HAL_BUFFER_USAGE_STORAGE;
+  }
+  native_.required_flags = 0;
+  for (auto& access : accesses) {
+    access.interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+  }
+  const iree_hal_pool_scope_t source_scope = {
+      accesses.size(), accesses.data(), {}};
+  iree_hal_pool_t* source_pool = nullptr;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(group_, source_scope, &pool_options_,
+                                           allocator_, &source_pool));
+  for (auto& access : accesses) {
+    access.interfaces = 0;
   }
   iree_hal_pool_scope_t scope = {accesses.size(), accesses.data(), {}};
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, allocator_, &capabilities));
+      group_, scope, {1, &source_pool}, allocator_, &capabilities));
   EXPECT_EQ(capabilities.reservation_granularity, 65536u);
   EXPECT_EQ(capabilities.mapping_granularity, 65536u);
   EXPECT_EQ(capabilities.max_byte_length, UINT64_C(1) << 40);
@@ -61,15 +341,16 @@ TEST_F(MemoryBackendTest, QueriesReservationGeometryBeforeAcquiringAddresses) {
 
   iree_hal_virtual_buffer_options_t options = {.byte_length = 4096};
   iree_hal_buffer_t* reservation = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
-                        iree_hal_virtual_buffer_create(
-                            group_, scope, &options, allocator_, &reservation));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      iree_hal_virtual_buffer_create(group_, scope, {1, &source_pool}, &options,
+                                     allocator_, &reservation));
   EXPECT_EQ(reservation, nullptr);
   EXPECT_EQ(native_.reservation_count, 0);
   options.byte_length = capabilities.reservation_granularity;
   options.mapping_granularity = 4 * capabilities.mapping_granularity;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, scope, &options,
-                                                allocator_, &reservation));
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+      group_, scope, {1, &source_pool}, &options, allocator_, &reservation));
   iree_hal_virtual_buffer_info_t info;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_info(reservation, &info));
   EXPECT_EQ(info.mapping_granularity, options.mapping_granularity);
@@ -82,12 +363,13 @@ TEST_F(MemoryBackendTest, QueriesReservationGeometryBeforeAcquiringAddresses) {
   scope.host.access = IREE_HAL_MEMORY_ACCESS_READ;
   scope.host.modes = IREE_HAL_MAPPING_MODE_PERSISTENT;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, allocator_, &capabilities));
+      group_, scope, {1, &source_pool}, allocator_, &capabilities));
   EXPECT_EQ(capabilities.max_byte_length, 0u);
   EXPECT_EQ(capabilities.reservation_granularity, 0u);
   EXPECT_EQ(capabilities.mapping_granularity, 0u);
   EXPECT_EQ(capabilities.max_alignment, 0u);
   EXPECT_EQ(native_.reservation_count, 0);
+  iree_hal_pool_release(source_pool);
 }
 
 class ReservationBackendTest : public MemoryBackendTest,
@@ -117,6 +399,11 @@ TEST_F(MemoryBackendTest, SharedTranslationsDoNotGrantSourceConsumerAccess) {
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       pool, iree_hal_make_pool_reservation_request(4096, 4096),
       iree_infinite_timeout(), &backing));
+  iree_hal_pool_t* complete_source = nullptr;
+  const iree_hal_pool_scope_t complete_scope = {
+      families.size(), families.data(), {}};
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(
+      group_, complete_scope, &pool_options_, allocator_, &complete_source));
   for (auto& family : families) {
     family.interfaces = 0;
   }
@@ -124,10 +411,10 @@ TEST_F(MemoryBackendTest, SharedTranslationsDoNotGrantSourceConsumerAccess) {
       families.size(), families.data(), {}};
   const iree_hal_virtual_buffer_options_t options = {.byte_length = 4096};
   iree_hal_buffer_t* target = nullptr;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, target_scope, &options,
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, target_scope,
+                                                {1, &complete_source}, &options,
                                                 allocator_, &target));
   const auto first = ResolveScope(IREE_HAL_MEMORY_SITE_PROGRAM, families_[0]);
-  const auto second = ResolveScope(IREE_HAL_MEMORY_SITE_PROGRAM, families_[1]);
   const iree_hal_memory_mapping_t mapping = {
       .target = target,
       .scope = first,
@@ -139,18 +426,15 @@ TEST_F(MemoryBackendTest, SharedTranslationsDoNotGrantSourceConsumerAccess) {
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       cpu_device_, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0, 0, &done));
   uint64_t value = 1;
-  IREE_ASSERT_OK(iree_hal_queue_map(iree_hal_device_queue(cpu_device_, 0, 0),
-                                    {}, {1, &done, &value}, 1, &mapping, 0));
-  IREE_ASSERT_OK(
-      iree_hal_semaphore_wait(done, value, iree_infinite_timeout(), 0));
-  iree_hal_amd_fabric_virtual_mapping_t source;
-  const auto view = iree_hal_buffer_virtual_view(target);
-  IREE_ASSERT_OK(iree_hal_amd_fabric_virtual_buffer_query_source(
-      view, first.id, 0, 4096, &source));
-  EXPECT_EQ(source.source->access_count, 1u);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_PERMISSION_DENIED,
-                        iree_hal_amd_fabric_virtual_buffer_query_source(
-                            view, second.id, 0, 4096, &source));
+  EXPECT_FALSE(iree_hal_virtual_buffer_query_pool_compatibility(target, pool));
+  EXPECT_TRUE(iree_hal_virtual_buffer_query_pool_compatibility(
+      target, complete_source));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      iree_hal_queue_map(iree_hal_device_queue(cpu_device_, 0, 0), {},
+                         {1, &done, &value}, 1, &mapping, 0));
+  EXPECT_EQ(native_.update_count, 0);
+  iree_hal_pool_release(complete_source);
   iree_hal_semaphore_release(done);
   iree_hal_buffer_release(target);
   iree_hal_buffer_release(backing);
@@ -177,7 +461,8 @@ TEST_F(MemoryBackendTest, FileTransfersQualifySourcesAfterDeviceOnlyPrefix) {
       pool, iree_hal_make_pool_reservation_request(16384, 4096),
       iree_infinite_timeout(), &backing));
   iree_hal_buffer_t* target = nullptr;
-  IREE_ASSERT_OK(CreateReservation(&target));
+  IREE_ASSERT_OK(
+      CreateReservation(&target, pool, IREE_HAL_BUFFER_USAGE_TRANSFER));
   iree_hal_semaphore_t* done = nullptr;
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       cpu_device_, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0, 0, &done));
@@ -313,8 +598,8 @@ TEST_P(ReservationBackendTest, MapsExactConsumersThroughNativeProjections) {
   };
   std::array<iree_hal_buffer_t*, 2> reservations = {};
   for (auto& reservation : reservations) {
-    IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, scope, &options,
-                                                  allocator_, &reservation));
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+        group_, scope, {1, &pool}, &options, allocator_, &reservation));
   }
   const auto first = ResolveScope(IREE_HAL_MEMORY_SITE_PROGRAM, families_[0]);
   const auto second = ResolveScope(IREE_HAL_MEMORY_SITE_PROGRAM, families_[1]);
@@ -674,10 +959,13 @@ TEST_F(MemoryBackendTest,
   const iree_hal_virtual_buffer_options_t options = {
       .byte_length = 16384,
   };
+  iree_hal_pool_t* ordinary = nullptr;
+  IREE_ASSERT_OK(CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, &ordinary));
   iree_hal_buffer_t* reservation = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
-                        iree_hal_virtual_buffer_create(
-                            group_, scope, &options, allocator_, &reservation));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNAVAILABLE,
+      iree_hal_virtual_buffer_create(group_, scope, {1, &ordinary}, &options,
+                                     allocator_, &reservation));
   EXPECT_EQ(reservation, nullptr);
   EXPECT_EQ(native_.reservation_count, 0);
   EXPECT_EQ(native_.create_count, 0);
@@ -687,6 +975,7 @@ TEST_F(MemoryBackendTest,
       CreatePool(IREE_HAL_BUFFER_USAGE_STORAGE, &pool,
                  UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE));
   EXPECT_EQ(pool, nullptr);
+  iree_hal_pool_release(ordinary);
 }
 
 enum class NativeBatchKind { kAcquire, kRelease, kRollback };

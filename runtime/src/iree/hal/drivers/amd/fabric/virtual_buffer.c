@@ -454,17 +454,18 @@ typedef struct iree_hal_amd_fabric_reservation_plan_t {
 
 static iree_status_t iree_hal_amd_fabric_virtual_buffer_prepare(
     const iree_hal_memory_backend_t* base, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope, iree_allocator_t host_allocator,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
+    iree_allocator_t host_allocator,
     iree_hal_amd_fabric_reservation_plan_t* out_plan) {
   *out_plan = (iree_hal_amd_fabric_reservation_plan_t){0};
   const iree_hal_amd_fabric_memory_backend_t* owner =
       (const iree_hal_amd_fabric_memory_backend_t*)base;
-  if (!iree_hal_atomic_operation_capabilities_is_empty(scope.host.atomics) ||
-      !owner->native.instance ||
+  if (!owner->native.instance ||
       scope.family_count >= IREE_HAL_BUFFER_NATIVE_BINDING_INDEX_NONE - 1 ||
       (scope.host.access &&
-       scope.host.cacheability != IREE_HAL_HOST_CACHEABILITY_UNKNOWN &&
-       scope.host.cacheability != IREE_HAL_HOST_CACHEABILITY_WRITE_BACK)) {
+       !iree_all_bits_set(IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                              IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+                          scope.host.properties))) {
     return iree_ok_status();
   }
   const uint32_t access_capacity = (uint32_t)scope.family_count + 1;
@@ -547,11 +548,9 @@ static iree_status_t iree_hal_amd_fabric_virtual_buffer_prepare(
       const iree_hal_memory_backend_t* participant =
           iree_hal_device_memory_backend(
               iree_hal_queue_family_device(requested->family));
-      if (!participant || requested->requirements ||
-          !iree_hal_atomic_operation_capabilities_is_empty(
-              requested->atomics.queue) ||
-          !iree_hal_atomic_operation_capabilities_is_empty(
-              requested->atomics.program)) {
+      if (!participant ||
+          iree_any_bit_set(requested->requirements,
+                           IREE_HAL_POOL_ACCESS_REQUIRE_UNCACHED)) {
         supported = false;
         break;
       }
@@ -711,7 +710,8 @@ static iree_status_t iree_hal_amd_fabric_virtual_buffer_prepare(
   if (contract && iree_status_is_ok(status)) {
     contract->host = scope.host;
     if (scope.host.access) {
-      contract->host.cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+      contract->host.properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                   IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
       if (iree_any_bit_set(scope.host.modes, IREE_HAL_MAPPING_MODE_SCOPED)) {
         usage |= IREE_HAL_BUFFER_USAGE_MAPPING_SCOPED;
       }
@@ -723,6 +723,28 @@ static iree_status_t iree_hal_amd_fabric_virtual_buffer_prepare(
     contract->allowed_usage = usage;
     contract->allowed_access =
         iree_hal_buffer_usage_access(usage) | scope.host.access;
+    for (uint32_t id = 1; id < contract->scope_count; ++id) {
+      const uint32_t a = reservation->scope_accesses[id];
+      if (a == IREE_HAL_MEMORY_SCOPE_INVALID) {
+        continue;
+      }
+      const uint16_t type = contract->binding_layout.types[a];
+      contract->scopes[id].interfaces = 1u << type;
+      contract->scopes[id].bindings[type] = (uint16_t)a;
+      // Alias qualification is supplied by each prepared source, including
+      // the exact native execution site's atomic limits.
+      contract->scopes[id].atomic_operations = UINT32_MAX;
+    }
+    for (iree_host_size_t i = 0; i < scope.family_count; ++i) {
+      const uint32_t id = scope.families[i].family->memory.queue_scope_id;
+      contract->scopes[id].usage = scope.families[i].usage;
+      contract->scopes[id + 1].usage = scope.families[i].usage;
+    }
+    status = iree_hal_virtual_buffer_initialize_contract(
+        scope, sources, IREE_HAL_MEMORY_BACKEND_AMDF, 0, contract,
+        &capabilities);
+  }
+  if (contract && capabilities.max_byte_length && iree_status_is_ok(status)) {
     *out_plan = (iree_hal_amd_fabric_reservation_plan_t){
         .reservation = reservation,
         .contract = contract,
@@ -738,11 +760,12 @@ static iree_status_t iree_hal_amd_fabric_virtual_buffer_prepare(
 
 iree_status_t iree_hal_amd_fabric_virtual_buffer_query_capabilities(
     const iree_hal_memory_backend_t* backend, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope, iree_allocator_t host_allocator,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
+    iree_allocator_t host_allocator,
     iree_hal_virtual_buffer_capabilities_t* out_capabilities) {
   iree_hal_amd_fabric_reservation_plan_t plan;
   IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_virtual_buffer_prepare(
-      backend, group, scope, host_allocator, &plan));
+      backend, group, scope, sources, host_allocator, &plan));
   *out_capabilities = plan.capabilities;
   iree_hal_memory_contract_release(plan.contract);
   iree_allocator_free(host_allocator, plan.reservation);
@@ -751,14 +774,14 @@ iree_status_t iree_hal_amd_fabric_virtual_buffer_query_capabilities(
 
 iree_status_t iree_hal_amd_fabric_virtual_buffer_create(
     const iree_hal_memory_backend_t* base, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
   const iree_hal_amd_fabric_memory_backend_t* owner =
       (const iree_hal_amd_fabric_memory_backend_t*)base;
   iree_hal_amd_fabric_reservation_plan_t plan;
   IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_virtual_buffer_prepare(
-      base, group, scope, host_allocator, &plan));
+      base, group, scope, sources, host_allocator, &plan));
   if (!plan.reservation) {
     return iree_ok_status();
   }
@@ -858,18 +881,9 @@ iree_status_t iree_hal_amd_fabric_virtual_buffer_create(
   if (reservation->native && iree_status_is_ok(status)) {
     for (uint32_t id = 1; id < contract->scope_count; ++id) {
       const uint32_t a = reservation->scope_accesses[id];
-      if (a == IREE_HAL_MEMORY_SCOPE_INVALID) {
-        continue;
+      if (a != IREE_HAL_MEMORY_SCOPE_INVALID) {
+        reservation->projections[id] = reservation->accesses[a].projection;
       }
-      const uint16_t type = contract->binding_layout.types[a];
-      contract->scopes[id].interfaces = 1u << type;
-      contract->scopes[id].bindings[type] = (uint16_t)a;
-      reservation->projections[id] = reservation->accesses[a].projection;
-    }
-    for (iree_host_size_t i = 0; i < scope.family_count; ++i) {
-      const uint32_t id = scope.families[i].family->memory.queue_scope_id;
-      contract->scopes[id].usage = scope.families[i].usage;
-      contract->scopes[id + 1].usage = scope.families[i].usage;
     }
     reservation->backing = (iree_hal_buffer_backing_facts_t){
         .notification = owner->notification,

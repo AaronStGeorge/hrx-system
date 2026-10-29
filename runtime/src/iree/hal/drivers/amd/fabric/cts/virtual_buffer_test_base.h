@@ -181,7 +181,12 @@ class FabricVirtualBufferTest
 
     IREE_ASSERT_OK(context_.Initialize(allocator_));
     iree_task_topology_t topology;
-    iree_task_topology_initialize_from_group_count(1, &topology);
+    // A real worker affinity gives the sealed group a host memory node for
+    // explicit placement without inventing topology facts for the native GPU.
+    IREE_ASSERT_OK(iree_task_topology_initialize_from_physical_cores(
+        IREE_TASK_TOPOLOGY_NODE_ID_ANY,
+        IREE_TASK_TOPOLOGY_PERFORMANCE_LEVEL_ANY,
+        IREE_TASK_TOPOLOGY_DISTRIBUTION_COMPACT, 1, &topology));
     iree_task_executor_options_t executor_options;
     iree_task_executor_options_initialize(&executor_options);
     auto status = iree_task_executor_create(executor_options, &topology,
@@ -269,17 +274,6 @@ class FabricVirtualBufferTest
     IREE_ASSERT_OK(status);
     access_.family = iree_hal_device_queue_family(device_, 0);
     access_.usage = IREE_HAL_BUFFER_USAGE_TRANSFER;
-    iree_hal_virtual_buffer_capabilities_t reservation_capabilities;
-    IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-        group_, {1, &access_, {}}, allocator_, &reservation_capabilities));
-    ASSERT_EQ(reservation_capabilities.mapping_granularity,
-              capabilities.mapping_granularity);
-    ASSERT_EQ(reservation_capabilities.reservation_granularity, granularity_);
-    ASSERT_EQ(reservation_capabilities.max_byte_length,
-              capabilities.maximum_byte_length);
-    ASSERT_EQ(reservation_capabilities.max_alignment,
-              capabilities.maximum_alignment);
-    granularity_ = reservation_capabilities.reservation_granularity;
     access_.interfaces = UINT64_C(1)
                          << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
     access_.requirements = IREE_HAL_POOL_ACCESS_REQUIRE_COHERENT_WITH_HOST;
@@ -290,6 +284,21 @@ class FabricVirtualBufferTest
     iree_hal_slab_pool_options_initialize(&pool_options);
     IREE_ASSERT_OK(iree_hal_slab_pool_create(group_, scope, &pool_options,
                                              allocator_, &pool_));
+    access_.interfaces = UINT64_C(1)
+                         << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
+    access_.requirements = 0;
+    iree_hal_virtual_buffer_capabilities_t reservation_capabilities;
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
+        group_, {1, &access_, {}}, {1, &pool_}, allocator_,
+        &reservation_capabilities));
+    ASSERT_EQ(reservation_capabilities.mapping_granularity,
+              capabilities.mapping_granularity);
+    ASSERT_EQ(reservation_capabilities.reservation_granularity, granularity_);
+    ASSERT_EQ(reservation_capabilities.max_byte_length,
+              capabilities.maximum_byte_length);
+    ASSERT_EQ(reservation_capabilities.max_alignment,
+              capabilities.maximum_alignment);
+    granularity_ = reservation_capabilities.reservation_granularity;
     const auto source_requirements =
         iree_hal_pool_query_mapping_requirements(pool_);
     ASSERT_EQ(source_requirements.minimum_granularity,
@@ -316,7 +325,8 @@ class FabricVirtualBufferTest
                                      .backing->native_allocation.byte_length;
     for (size_t i = 0; i < reservations_.size(); ++i) {
       IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-          group_, scope, &reservation_options, allocator_, &reservations_[i]));
+          group_, scope, {1, &pool_}, &reservation_options, allocator_,
+          &reservations_[i]));
       iree_hal_tlsf_pool_options_t child_options = {};
       child_options.tlsf_options.alignment = 256;
       IREE_ASSERT_OK(iree_hal_tlsf_pool_create_from_buffer(

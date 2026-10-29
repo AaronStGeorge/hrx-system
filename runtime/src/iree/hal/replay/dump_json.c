@@ -328,17 +328,28 @@ static iree_status_t iree_hal_replay_dump_append_json_payload(
           ",\"payload\":{\"buffer_id\":%" PRIu64 ",\"byte_length\":%" PRIu64
           ",\"min_alignment\":%" PRIu64 ",\"mapping_granularity\":%" PRIu64
           ",\"family_count\":%" PRIu64 ",\"host_access\":%" PRIu32
-          ",\"host_mapping_modes\":%" PRIu32 ",\"host_cacheability\":%" PRIu32,
+          ",\"host_mapping_modes\":%" PRIu32 ",\"host_properties\":%" PRIu32,
           record->header.related_object_id, payload.byte_length,
           payload.min_alignment, payload.mapping_granularity,
           payload.family_count, payload.host_access, payload.host_mapping_modes,
-          payload.host_cacheability));
+          payload.host_properties));
       iree_hal_replay_file_range_t range =
           iree_hal_replay_dump_payload_subrange(payload_range, sizeof(payload),
                                                 families_size);
       IREE_RETURN_IF_ERROR(iree_hal_replay_dump_append_json_file_range(
           builder, "family_range", &range));
-      return iree_string_builder_append_cstring(builder, "}");
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+          builder, ",\"source_pool_ids\":["));
+      for (iree_host_size_t i = 0; i < payload.source_pool_count; ++i) {
+        iree_hal_replay_object_id_t id;
+        memcpy(&id,
+               record->payload.data + sizeof(payload) + families_size +
+                   i * sizeof(id),
+               sizeof(id));
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+            builder, "%s%" PRIu64, i ? "," : "", id));
+      }
+      return iree_string_builder_append_cstring(builder, "]}");
     }
     case IREE_HAL_REPLAY_PAYLOAD_TYPE_QUEUE_MAP: {
       if (record->payload.data_length <
@@ -399,17 +410,16 @@ static iree_status_t iree_hal_replay_dump_append_json_payload(
           ",\"import_export_count\":%" PRIu64 ",\"placement_mode\":%" PRIu32
           ",\"placement_node\":%" PRIu32 ",\"owned_mode\":%" PRIu32
           ",\"host_access\":%" PRIu32 ",\"host_mapping_modes\":%" PRIu32
-          ",\"host_cacheability\":%" PRIu32
-          ",\"preferred_host_access\":%" PRIu32
+          ",\"host_properties\":%" PRIu32 ",\"preferred_host_access\":%" PRIu32
           ",\"preferred_host_mapping_modes\":%" PRIu32
-          ",\"preferred_host_cacheability\":%" PRIu32,
+          ",\"preferred_host_properties\":%" PRIu32,
           payload.family_count, payload.owned_export_count,
           payload.import_count, payload.import_export_count,
           payload.placement_mode, payload.placement_node, payload.owned_mode,
           payload.host_access, payload.host_mapping_modes,
-          payload.host_cacheability, payload.preferred_host_access,
+          payload.host_properties, payload.preferred_host_access,
           payload.preferred_host_mapping_modes,
-          payload.preferred_host_cacheability));
+          payload.preferred_host_properties));
       iree_hal_replay_file_range_t range =
           iree_hal_replay_dump_payload_subrange(
               payload_range, layout.families_offset, layout.families_size);
@@ -484,13 +494,13 @@ static iree_status_t iree_hal_replay_dump_append_json_payload(
           ",\"logical_length\":%" PRIu64 ",\"maintenance_offset\":%" PRIu64
           ",\"maintenance_length\":%" PRIu64
           ",\"physical_backing_id\":[%" PRIu64 ",%" PRIu64
-          "],\"host_cacheability\":%" PRIu32,
+          "],\"host_properties\":%" PRIu32,
           payload.storage_class.type, payload.storage_class.provenance[0],
           payload.storage_class.provenance[1], payload.byte_length,
           payload.logical_offset, payload.logical_length,
           payload.maintenance_offset, payload.maintenance_length,
           payload.physical_backing_id[0], payload.physical_backing_id[1],
-          payload.host_cacheability));
+          payload.host_properties));
       const iree_hal_replay_file_range_t data_range =
           iree_hal_replay_dump_payload_subrange(
               payload_range, data_offset,

@@ -70,7 +70,8 @@ TEST_P(Pm4RetirementTest, PublishesShaderResultsBeforeReusingCompletionSlots) {
   ASSERT_EQ(arguments->device_address % kernel.arguments.alignment, 0u);
   ASSERT_EQ(kArgumentStride % kernel.arguments.alignment, 0u);
   ASSERT_LE(kernel.arguments.byte_length, kArgumentStride);
-  ASSERT_EQ(control->host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  ASSERT_EQ(control->host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
 
   Pm4ComputeProgram program = {
       0,
@@ -294,7 +295,8 @@ TEST_P(Pm4RetirementReuseTest,
   ASSERT_NO_FATAL_FAILURE(
       CreateMemory(AMDF_MEMORY_ACCESS_READ, 4096, &arguments));
   ASSERT_NO_FATAL_FAILURE(CreateMemory(kReadWrite, 4096, &control));
-  ASSERT_EQ(control->host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  ASSERT_EQ(control->host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   ASSERT_LE(kernel->arguments.byte_length, kArgumentStride);
   ASSERT_EQ(arguments->device_address % kernel->arguments.alignment, 0u);
   ASSERT_EQ(kArgumentStride % kernel->arguments.alignment, 0u);

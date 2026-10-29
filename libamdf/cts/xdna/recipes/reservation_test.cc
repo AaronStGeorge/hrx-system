@@ -72,6 +72,7 @@ class XdnaReservationTest
       }
       ASSERT_EQ(query_status, AMDF_STATUS_OK);
       found =
+          amdf_status_is_ok(profile_.availability) &&
           (profile_.roles & role_) != 0 &&
           (profile_.supported_flags & capabilities_.required_source_flags) ==
               capabilities_.required_source_flags;
@@ -145,7 +146,7 @@ class XdnaReservationTest
         };
         ASSERT_NO_FATAL_FAILURE(storage_[i].Create(api_, system_scope_, host));
         create.registered_host_pointer = storage_[i].host.pointer;
-        create.registered_host_cacheability = storage_[i].host.cacheability;
+        create.registered_host_properties = storage_[i].host.properties;
       }
       ASSERT_NO_FATAL_FAILURE(sources_[i].Create(api_, system_scope_, create));
       expected_[i].resize(create.byte_length);

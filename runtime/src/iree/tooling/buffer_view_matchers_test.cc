@@ -217,7 +217,8 @@ class BufferViewMatchersTest : public ::testing::Test {
     const iree_hal_pool_host_access_t host_access = {
         .access = IREE_HAL_MEMORY_ACCESS_ALL,
         .modes = IREE_HAL_MAPPING_MODE_SCOPED,
-        .cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+        .properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                       IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
     };
     IREE_CHECK_OK(iree_hal_heap_pool_create(
         host_access, iree_allocator_system(), iree_allocator_system(), &pool_));

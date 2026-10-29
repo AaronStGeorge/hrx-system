@@ -484,8 +484,9 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
       family.interfaces = 0;
     }
     iree_hal_virtual_buffer_capabilities_t capabilities;
+    iree_hal_pool_t* declared_source = deferred_backing_;
     IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-        group, scope, host_allocator_, &capabilities));
+        group, scope, {1, &declared_source}, host_allocator_, &capabilities));
     loom_serve_memory_geometry_t geometry;
     IREE_ASSERT_OK(loom_serve_memory_pool_query_geometry(
         &capabilities, deferred_backing_, kSlabBytes, &geometry));

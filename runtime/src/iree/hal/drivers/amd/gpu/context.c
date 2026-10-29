@@ -262,14 +262,22 @@ static iree_status_t iree_hal_amd_gpu_context_open(
       context->api->endpoint_open(context->fabric->instance, endpoint_id,
                                   &context->endpoint),
       "endpoint_open"));
+  amdf_endpoint_host_locality_t locality = {
+      .type = AMDF_STRUCTURE_TYPE_ENDPOINT_HOST_LOCALITY,
+      .structure_size = sizeof(locality),
+      .numa_node = UINT32_MAX,
+  };
   context->endpoint_info = (amdf_endpoint_info_t){
       .type = AMDF_STRUCTURE_TYPE_ENDPOINT_INFO,
       .structure_size = sizeof(context->endpoint_info),
+      .next = &locality,
   };
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
       context->api->endpoint_query_info(context->endpoint,
                                         &context->endpoint_info),
       "endpoint_query_info"));
+  context->endpoint_info.next = NULL;
+  context->host_numa_node = locality.numa_node;
   context->target_info = (amdf_gpu_endpoint_info_t){
       .type = AMDF_STRUCTURE_TYPE_GPU_ENDPOINT_INFO,
       .structure_size = sizeof(context->target_info),

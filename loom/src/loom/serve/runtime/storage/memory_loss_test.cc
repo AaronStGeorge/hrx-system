@@ -233,7 +233,7 @@ class MemoryLossTest : public ::testing::Test {
     family.interfaces = 0;
     iree_hal_virtual_buffer_capabilities_t capabilities;
     IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-        group, scope, iree_allocator_system(), &capabilities));
+        group, scope, {1, &source_}, iree_allocator_system(), &capabilities));
     IREE_ASSERT_OK(loom_serve_memory_pool_query_geometry(
         &capabilities, source_, kSlabSize, &geometry_));
     const loom_serve_memory_geometry_t geometries[] = {geometry_, geometry_};

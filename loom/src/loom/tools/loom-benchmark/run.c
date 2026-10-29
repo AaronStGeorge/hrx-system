@@ -517,7 +517,8 @@ iree_status_t loom_benchmark_run_file(
           .access = IREE_HAL_MEMORY_ACCESS_READ | IREE_HAL_MEMORY_ACCESS_WRITE,
           .modes =
               IREE_HAL_MAPPING_MODE_SCOPED | IREE_HAL_MAPPING_MODE_PERSISTENT,
-          .cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+          .properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                         IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       };
       status = iree_hal_heap_pool_create(host_access, allocator, allocator,
                                          &host_pool);

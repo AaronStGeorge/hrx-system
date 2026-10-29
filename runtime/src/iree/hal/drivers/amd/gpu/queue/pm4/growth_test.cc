@@ -95,7 +95,8 @@ class GrowthTest : public ::testing::Test {
       auto* memory = reinterpret_cast<Memory*>(handle);
       info->pointer = memory->bytes.data();
       info->byte_length = memory->bytes.size();
-      info->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      info->properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
       return AMDF_STATUS_OK;
     };
     api_.host_mapping_destroy = [](amdf_host_mapping_t*) {

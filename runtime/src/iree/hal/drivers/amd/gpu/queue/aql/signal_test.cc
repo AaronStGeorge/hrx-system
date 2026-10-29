@@ -149,7 +149,8 @@ TEST(AqlSignalTest, AttachesAcquiredBackingWithExactDescriptorOperands) {
           {
               .handle = reinterpret_cast<amdf_memory_t*>(native.data()),
               .contents = iree_make_byte_span(native.data(), sizeof(native)),
-              .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+              .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                  IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
           },
       .capacity = 2,
       .queue_count = 2,

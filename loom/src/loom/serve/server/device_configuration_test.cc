@@ -99,7 +99,55 @@ TEST_F(DeviceConfigurationTest, UriConvenienceCreatesOneExplicitPool) {
   EXPECT_EQ(actual.weight_slab_size, UINT64_C(1) << 30);
   EXPECT_EQ(actual.state_slab_size, UINT64_C(64) << 20);
   EXPECT_EQ(actual.memory_limit, 0u);
+  EXPECT_EQ(actual.placement.kind, LOOM_SERVE_POOL_PLACEMENT_AUTOMATIC);
   loom_serve_device_configuration_deinitialize(&convenience);
+}
+
+TEST_F(DeviceConfigurationTest, PlacementIsIndependentOfConsumerMembership) {
+  IREE_ASSERT_OK(Parse(R"({
+    "devices":{"cpu":{"uri":"task"},"gpu":{"uri":"amdgpu://0"}},
+    "pools":{
+      "remote":{"devices":["cpu"],"placement":{"device":"g\u0070u"}},
+      "shared":{"devices":["cpu","gpu"],"placement":{"host_numa":3}},
+      "automatic":{"devices":["gpu"]}}
+  })"));
+  ASSERT_EQ(configuration_.pool_count, 3u);
+  EXPECT_EQ(configuration_.pools[0].binding.device_mask, 1u);
+  EXPECT_EQ(configuration_.pools[0].options.placement.kind,
+            LOOM_SERVE_POOL_PLACEMENT_DEVICE);
+  EXPECT_EQ(configuration_.pools[0].options.placement.ordinal, 1u);
+  EXPECT_EQ(configuration_.pools[1].binding.device_mask, 3u);
+  EXPECT_EQ(configuration_.pools[1].options.placement.kind,
+            LOOM_SERVE_POOL_PLACEMENT_HOST_NUMA);
+  EXPECT_EQ(configuration_.pools[1].options.placement.ordinal, 3u);
+  EXPECT_EQ(configuration_.pools[2].options.placement.kind,
+            LOOM_SERVE_POOL_PLACEMENT_AUTOMATIC);
+}
+
+TEST_F(DeviceConfigurationTest, RejectsInvalidOrAmbiguousPlacement) {
+  for (const char* placement :
+       {R"({})", R"(null)", R"([])", R"("gpu")", R"(0)", R"({"device":0})",
+        R"({"device":"missing"})", R"({"device":""})",
+        R"({"device":"gpu","host_numa":0})",
+        R"({"device":"gpu","device":"gpu"})",
+        R"({"host_numa":0,"host_numa":0})", R"({"unknown":0})",
+        R"({"host_numa":"0"})", R"({"host_numa":-1})", R"({"host_numa":1.5})",
+        R"({"host_numa":1e3})"}) {
+    SCOPED_TRACE(placement);
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        ParsePool(std::string(R"("devices":["gpu"],"placement":)") +
+                  placement));
+    ExpectEmpty();
+  }
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      ParsePool(R"("devices":["gpu"],"placement":{"device":"gpu"},
+                   "placement":{"device":"gpu"})"));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      ParsePool(R"("devices":["gpu"],"placement":{"host_numa":4294967296})"));
+  ExpectEmpty();
 }
 
 TEST_F(DeviceConfigurationTest, ByteSizeStringsDecodeToExactCounts) {

@@ -128,7 +128,8 @@ class HostQueueHostMemoryTest : public ::testing::Test {
         .storage_class = iree_hal_make_external_storage_class(
             IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER),
         .byte_length = data->size(),
-        .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+        .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
         .maintenance_range = iree_hal_make_buffer_range(0, data->size()),
     };
     external_buffer.payload.host_pointer = data->data();

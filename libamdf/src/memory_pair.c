@@ -11,9 +11,9 @@
 // can also publish an allocation to the native device driver.
 static amdf_cache_transition_t amdf_memory_host_transition(
     const amdf_cache_transition_t* available,
-    amdf_host_cacheability_t cacheability, bool coherent) {
+    amdf_host_memory_properties_t properties, bool coherent) {
   if (available->kind != AMDF_CACHE_TRANSITION_KIND_UNKNOWN && coherent &&
-      cacheability == AMDF_HOST_CACHEABILITY_WRITE_BACK &&
+      (properties & AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK) != 0 &&
       available->executor != AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API) {
     return (amdf_cache_transition_t){.kind = AMDF_CACHE_TRANSITION_KIND_NONE};
   }
@@ -31,16 +31,16 @@ amdf_memory_site_description_t amdf_memory_describe_host_site(
     description.capabilities |= AMDF_MEMORY_SITE_CAPABILITY_WRITE;
   }
   description.release =
-      amdf_memory_host_transition(&host->flush, host->cacheability, coherent);
-  description.acquire = amdf_memory_host_transition(
-      &host->invalidate, host->cacheability, coherent);
+      amdf_memory_host_transition(&host->flush, host->properties, coherent);
+  description.acquire = amdf_memory_host_transition(&host->invalidate,
+                                                    host->properties, coherent);
   if (description.release.kind == AMDF_CACHE_TRANSITION_KIND_NONE) {
     description.capabilities |= AMDF_MEMORY_SITE_CAPABILITY_RELEASE_COST_KNOWN;
   }
   if (description.acquire.kind == AMDF_CACHE_TRANSITION_KIND_NONE) {
     description.capabilities |= AMDF_MEMORY_SITE_CAPABILITY_ACQUIRE_COST_KNOWN;
   }
-  if (host->cacheability == AMDF_HOST_CACHEABILITY_WRITE_BACK &&
+  if ((host->properties & AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK) != 0 &&
       device_peer != NULL &&
       amdf_memory_compatibility_domain_is_valid(&device_peer->atomic_domain)) {
     if (device_peer->atomic_reach.scope_32 == AMDF_ATOMIC_SCOPE_SYSTEM) {

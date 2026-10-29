@@ -279,11 +279,15 @@ static iree_status_t iree_hal_amd_gpu_device_build_spec(
     iree_hal_amd_gpu_device_t* device, iree_string_view_t display_name,
     uint32_t family_ordinal, uint32_t queue_count,
     const iree_hal_amd_fabric_asan_options_t* asan_options) {
-  const iree_hal_physical_device_spec_t physical = {
+  iree_hal_physical_device_spec_t physical = {
       .identity = {.display_name = display_name, .vendor_id = 0x1002},
       .partition_count = 1,
       .physical_device_affinity = 1,
   };
+  if (device->context->host_numa_node != UINT32_MAX) {
+    physical.identity.numa.node_id = device->context->host_numa_node;
+    physical.identity.flags |= IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_NUMA_NODE;
+  }
   const iree_hal_device_identity_spec_t identity = {
       .logical_device_id = iree_hal_amd_gpu_device_id((void*)device),
       .display_name = display_name,
@@ -524,20 +528,21 @@ static void iree_hal_amd_gpu_device_initialize_memory(
       .bindings = bindings,
   };
   const iree_hal_amd_gpu_context_t* context = device->context;
+  // Equal-ranked routes keep SYSTEM first. A unified device can expose both
+  // cached SYSTEM and reserved LOCAL memory without changing its default.
+  device->memory.storage[0] = (iree_hal_amd_fabric_memory_storage_t){
+      .scope = context->fabric->system_scope,
+      .memory_type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL,
+      .minimum_access = device->memory.capabilities.minimum_access,
+  };
   for (uint32_t i = 0; i < context->memory_scope_count; ++i) {
-    device->memory.storage[i] = (iree_hal_amd_fabric_memory_storage_t){
+    device->memory.storage[i + 1] = (iree_hal_amd_fabric_memory_storage_t){
         .scope = context->memory_scopes[i],
         .physical_device_affinity = 1,
         .memory_type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
         .minimum_access = device->memory.capabilities.minimum_access,
     };
   }
-  device->memory.storage[context->memory_scope_count] =
-      (iree_hal_amd_fabric_memory_storage_t){
-          .scope = context->fabric->system_scope,
-          .memory_type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL,
-          .minimum_access = device->memory.capabilities.minimum_access,
-      };
   const iree_hal_amd_fabric_memory_backend_options_t options = {
       .api = context->api,
       .instance = context->fabric->instance,

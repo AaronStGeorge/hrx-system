@@ -70,14 +70,15 @@ class FabricXdnaVirtualBufferTest : public FabricVirtualBufferTest {
     FabricVirtualBufferTest::TearDown();
   }
 
-  void RunReplacement(HostProjection host_projection);
+  void RunReplacement(HostProjection host_projection,
+                      iree_hal_pool_placement_t placement = {});
 
   // Real HAL execution device sharing the GPU's native instance.
   iree_hal_device_t* npu_ = nullptr;
 };
 
 void FabricXdnaVirtualBufferTest::RunReplacement(
-    HostProjection host_projection) {
+    HostProjection host_projection, iree_hal_pool_placement_t placement) {
   using iree::hal::cts::Ref;
   const bool host_alias = host_projection == HostProjection::kStableReservation;
   const auto* npu_family = iree_hal_device_queue_family(npu_, 0);
@@ -109,18 +110,26 @@ void FabricXdnaVirtualBufferTest::RunReplacement(
       host_alias ? families.size() : families.size() - 1,
       families.data(),
       {IREE_HAL_MEMORY_ACCESS_ALL, IREE_HAL_MAPPING_MODE_PERSISTENT,
-       IREE_HAL_HOST_CACHEABILITY_UNKNOWN}};
+       IREE_HAL_HOST_MEMORY_PROPERTY_NONE}};
   iree_hal_slab_pool_options_t pool_options;
   iree_hal_slab_pool_options_initialize(&pool_options);
+  pool_options.placement = placement;
   Ref<iree_hal_pool_t> pool;
   auto pool_status = iree_hal_slab_pool_create(group_, scope, &pool_options,
                                                allocator_, pool.out());
   if (iree_status_is_unavailable(pool_status)) {
+    const iree::Status unavailable(std::move(pool_status));
     GTEST_SKIP()
         << "no backing profile satisfies the requested mapping sources: "
-        << iree::Status(std::move(pool_status)).ToString();
+        << iree::StatusCodeToString(unavailable.code());
   }
   IREE_ASSERT_OK(pool_status);
+  if (placement.mode == IREE_HAL_POOL_PLACEMENT_REQUIRED) {
+    iree_hal_pool_capabilities_t pool_capabilities;
+    iree_hal_pool_query_capabilities(pool, &pool_capabilities);
+    EXPECT_EQ(pool_capabilities.placement.mode, placement.mode);
+    EXPECT_EQ(pool_capabilities.placement.node, placement.node);
+  }
   const auto source_requirements =
       iree_hal_pool_query_mapping_requirements(pool);
   families[0].interfaces = UINT64_C(1)
@@ -133,11 +142,12 @@ void FabricXdnaVirtualBufferTest::RunReplacement(
       host_alias
           ? iree_hal_pool_host_access_t{IREE_HAL_MEMORY_ACCESS_READ,
                                         IREE_HAL_MAPPING_MODE_PERSISTENT,
-                                        IREE_HAL_HOST_CACHEABILITY_UNKNOWN}
+                                        IREE_HAL_HOST_MEMORY_PROPERTY_NONE}
           : iree_hal_pool_host_access_t{};
+  iree_hal_pool_t* source_pool = pool.get();
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, allocator_, &capabilities));
+      group_, scope, {1, &source_pool}, allocator_, &capabilities));
   ASSERT_NE(capabilities.max_byte_length, 0u);
   const auto unit = std::max(capabilities.reservation_granularity,
                              capabilities.mapping_granularity);
@@ -162,8 +172,8 @@ void FabricXdnaVirtualBufferTest::RunReplacement(
       .mapping_granularity = unit,
   };
   Ref<iree_hal_buffer_t> root;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(group_, scope, &options,
-                                                allocator_, root.out()));
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+      group_, scope, {1, &source_pool}, &options, allocator_, root.out()));
   EXPECT_EQ(root.get()->memory.contract->host.access,
             host_alias ? IREE_HAL_MEMORY_ACCESS_READ : 0u);
   iree_hal_memory_scope_t cpu_scope, npu_scope, host_scope;
@@ -368,6 +378,20 @@ void FabricXdnaVirtualBufferTest::RunReplacement(
 
 TEST_P(FabricXdnaVirtualBufferTest, CpuGpuNpuExecuteAcrossBackingReplacement) {
   RunReplacement(HostProjection::kStableReservation);
+}
+
+TEST_P(FabricXdnaVirtualBufferTest, CpuGpuNpuExecuteWithRequiredHostPlacement) {
+  const auto* topology = iree_hal_device_group_topology(group_);
+  for (iree_host_size_t i = 0; i < iree_hal_topology_node_count(topology);
+       ++i) {
+    const auto* node = iree_hal_topology_node_at(topology, i);
+    if (node->kind == IREE_HAL_TOPOLOGY_NODE_KIND_HOST_NUMA) {
+      RunReplacement(HostProjection::kStableReservation,
+                     {IREE_HAL_POOL_PLACEMENT_REQUIRED, node->ordinal});
+      return;
+    }
+  }
+  GTEST_SKIP() << "no host NUMA allocation domain in the device group";
 }
 
 TEST_P(FabricXdnaVirtualBufferTest,

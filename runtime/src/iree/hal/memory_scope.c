@@ -15,15 +15,15 @@ iree_hal_pool_host_access_validate(iree_hal_pool_host_access_t host) {
   if (iree_any_bit_set(host.access, ~IREE_HAL_MEMORY_ACCESS_ALL) ||
       iree_any_bit_set(host.modes, ~(IREE_HAL_MAPPING_MODE_SCOPED |
                                      IREE_HAL_MAPPING_MODE_PERSISTENT)) ||
-      (uint32_t)host.cacheability > IREE_HAL_HOST_CACHEABILITY_UNCACHED ||
+      !iree_hal_host_memory_properties_is_valid(host.properties) ||
       !iree_hal_atomic_operation_capabilities_are_valid(host.atomics)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid host access, mapping mode, cacheability, "
+                            "invalid host access, mapping mode, properties, "
                             "or atomic operations");
   }
   if ((!host.access != !host.modes) ||
       (!host.access &&
-       (host.cacheability != IREE_HAL_HOST_CACHEABILITY_UNKNOWN ||
+       (host.properties != IREE_HAL_HOST_MEMORY_PROPERTY_NONE ||
         !iree_hal_atomic_operation_capabilities_is_empty(host.atomics)))) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -205,6 +205,7 @@ IREE_API_EXPORT void iree_hal_memory_contract_retain(
 IREE_API_EXPORT void iree_hal_memory_contract_release(
     iree_hal_memory_contract_t* contract) {
   if (contract && iree_atomic_ref_count_dec(&contract->ref_count) == 1) {
+    iree_hal_memory_contract_release(contract->mapping_source.alias_contract);
     iree_allocator_free(contract->host_allocator, contract->transition_details);
     iree_allocator_free_aligned(contract->host_allocator, contract);
   }
@@ -561,6 +562,57 @@ iree_hal_memory_transition_recipe(iree_hal_memory_transition_table_t table,
         &details->records[details->indices[pair.cell_index]].recipes[action];
   }
   return recipe->operation_count ? recipe : NULL;
+}
+
+IREE_API_EXPORT bool iree_hal_memory_transition_recipe_join(
+    iree_hal_memory_transition_recipe_info_t* result,
+    const iree_hal_memory_transition_recipe_info_t* value) {
+  if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_UNKNOWN ||
+      value->kind == IREE_HAL_MEMORY_TRANSITION_KIND_UNKNOWN) {
+    return false;
+  }
+  if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE ||
+      value->kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE) {
+    if (result->kind == IREE_HAL_MEMORY_TRANSITION_KIND_NONE) {
+      *result = *value;
+    }
+    // A no-op route may have a different host cache class. Execute through
+    // each mapping instead of applying another route's direct instructions.
+    if (result->operation == IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH ||
+        result->operation ==
+            IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_INVALIDATE) {
+      result->executor = IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API;
+      memset(&result->host, 0, sizeof(result->host));
+    }
+    return true;
+  }
+  if (result->operation != value->operation) {
+    return false;
+  }
+  const bool host =
+      result->operation == IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_FLUSH ||
+      result->operation == IREE_HAL_MEMORY_TRANSITION_OPERATION_HOST_INVALIDATE;
+  if (host) {
+    // A contract with both ranged and global native routes promises the
+    // requested range. The selected mapping may perform broader maintenance.
+    if (result->kind != value->kind) {
+      result->kind = IREE_HAL_MEMORY_TRANSITION_KIND_RANGE;
+    }
+    if (result->executor != value->executor ||
+        result->range_granularity != value->range_granularity ||
+        result->host.instruction != value->host.instruction ||
+        result->host.fence_before != value->host.fence_before ||
+        result->host.fence_after != value->host.fence_after) {
+      result->executor = IREE_HAL_MEMORY_TRANSITION_EXECUTOR_HOST_API;
+      memset(&result->host, 0, sizeof(result->host));
+    }
+  } else if (result->kind != value->kind ||
+             result->executor != value->executor) {
+    return false;
+  }
+  result->range_granularity =
+      iree_max(result->range_granularity, value->range_granularity);
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -995,10 +1047,47 @@ IREE_API_EXPORT iree_status_t iree_hal_memory_contract_initialize_transitions(
               captured_operations + (wildcards[i].operations - operations),
       };
     }
+    iree_allocator_free(contract->host_allocator, contract->transition_details);
     contract->transition_details = details;
     memcpy(contract->transitions, cells, cell_count * sizeof(*cells));
   }
   iree_allocator_free(contract->host_allocator, scratch);
+  return status;
+}
+
+//===----------------------------------------------------------------------===//
+// Mapping-source alias qualification
+//===----------------------------------------------------------------------===//
+
+IREE_API_EXPORT iree_status_t
+iree_hal_memory_contract_initialize_mapping_transitions(
+    iree_hal_memory_contract_t* contract,
+    iree_hal_host_memory_properties_t host_properties,
+    iree_hal_memory_pair_query_fn_t query, void* user_data) {
+  iree_hal_memory_contract_t* alias = NULL;
+  IREE_RETURN_IF_ERROR(iree_hal_memory_contract_create(
+      contract->domain, contract->scope_count, &contract->binding_layout,
+      contract->host_allocator, &alias));
+  alias->allowed_access = contract->allowed_access;
+  alias->allowed_usage = contract->allowed_usage;
+  for (uint32_t id = 1; id < contract->scope_count; ++id) {
+    if (iree_any_bit_set(contract->scopes[id].interfaces,
+                         1u << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE)) {
+      alias->scopes[id] = contract->scopes[id];
+    }
+  }
+  if (alias->scopes[1].interfaces) {
+    alias->host = contract->host;
+    alias->host.properties = host_properties;
+  }
+  iree_hal_memory_contract_finalize_atomic_operations(alias);
+  iree_status_t status =
+      iree_hal_memory_contract_initialize_transitions(alias, query, user_data);
+  if (iree_status_is_ok(status)) {
+    contract->mapping_source.alias_contract = alias;
+  } else {
+    iree_hal_memory_contract_release(alias);
+  }
   return status;
 }
 

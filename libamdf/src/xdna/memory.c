@@ -104,7 +104,7 @@ static amdf_status_t amdf_xdna_memory_map(
     mapping->base.info.type = AMDF_STRUCTURE_TYPE_HOST_MAPPING_INFO;
     mapping->base.info.structure_size = sizeof(mapping->base.info);
     mapping->base.info.flags = result.flags;
-    mapping->base.info.cacheability = result.visibility.cacheability;
+    mapping->base.info.properties = result.visibility.properties;
     mapping->base.info.pointer = result.pointer;
     mapping->base.info.memory_byte_offset = map_info->byte_offset;
     mapping->base.info.byte_length = result.byte_length;

@@ -48,14 +48,14 @@ static iree_status_t loom_serve_device_configuration_string(
 typedef struct loom_serve_device_configuration_fields_t {
   // Decoder owning storage for string values in one device or pool entry.
   loom_serve_device_configuration_parser_t* parser;
-  // Decoded strings or raw JSON numbers; null data marks omission.
-  iree_string_view_t values[7];
+  // Decoded strings or raw JSON values; null data marks omission.
+  iree_string_view_t values[8];
 } loom_serve_device_configuration_fields_t;
 
 static const char* const loom_serve_device_configuration_field_names[] = {
-    "devices",          "pool_backing", "weight_slab_bytes",
-    "state_slab_bytes", "memory_bytes", "workspace_idle_ms",
-    "parameter_idle_ms"};
+    "devices",           "pool_backing", "weight_slab_bytes",
+    "state_slab_bytes",  "memory_bytes", "workspace_idle_ms",
+    "parameter_idle_ms", "placement"};
 
 static iree_status_t loom_serve_device_configuration_field(
     void* self, iree_string_view_t key, iree_json_value_type_t type,
@@ -76,7 +76,8 @@ static iree_status_t loom_serve_device_configuration_field(
   const bool type_allowed =
       (type == IREE_JSON_VALUE_TYPE_ARRAY && i == 0) ||
       (type == IREE_JSON_VALUE_TYPE_STRING && i > 0 && i < 5) ||
-      (type == IREE_JSON_VALUE_TYPE_NUMBER && i >= 2);
+      (type == IREE_JSON_VALUE_TYPE_NUMBER && i >= 2 && i < 7) ||
+      (type == IREE_JSON_VALUE_TYPE_OBJECT && i == 7);
   if (fields->values[i].data || !type_allowed) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "duplicate or wrongly typed pool field '%s'",
@@ -165,6 +166,20 @@ typedef struct loom_serve_device_configuration_members_t {
   uint64_t mask;
 } loom_serve_device_configuration_members_t;
 
+static iree_status_t loom_serve_device_configuration_find_device(
+    const loom_serve_device_configuration_t* configuration,
+    iree_string_view_t name, uint32_t* out_ordinal) {
+  for (iree_host_size_t i = 0; i < configuration->count; ++i) {
+    if (iree_string_view_equal(configuration->options[i].name, name)) {
+      *out_ordinal = (uint32_t)i;
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown pool device '%.*s'", (int)name.size,
+                          name.data);
+}
+
 static iree_status_t loom_serve_device_configuration_member(
     void* self, iree_host_size_t index, iree_json_value_type_t type,
     iree_string_view_t value) {
@@ -176,24 +191,58 @@ static iree_status_t loom_serve_device_configuration_member(
   iree_string_view_t name;
   IREE_RETURN_IF_ERROR(
       loom_serve_device_configuration_string(members->parser, value, &name));
-  const loom_serve_device_configuration_t* configuration =
-      members->parser->configuration;
-  for (iree_host_size_t i = 0; i < configuration->count; ++i) {
-    if (!iree_string_view_equal(configuration->options[i].name, name)) {
-      continue;
-    }
-    const uint64_t bit = UINT64_C(1) << i;
-    if (members->mask & bit) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "duplicate pool device '%.*s'", (int)name.size,
-                              name.data);
-    }
-    members->mask |= bit;
-    return iree_ok_status();
+  uint32_t ordinal = 0;
+  IREE_RETURN_IF_ERROR(loom_serve_device_configuration_find_device(
+      members->parser->configuration, name, &ordinal));
+  const uint64_t bit = UINT64_C(1) << ordinal;
+  if (members->mask & bit) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "duplicate pool device '%.*s'", (int)name.size,
+                            name.data);
   }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unknown pool device '%.*s'", (int)name.size,
-                          name.data);
+  members->mask |= bit;
+  return iree_ok_status();
+}
+
+typedef struct loom_serve_device_configuration_placement_t {
+  // Decoded device inventory and string storage owned by configuration parsing.
+  loom_serve_device_configuration_parser_t* parser;
+  // Single explicit selector; AUTOMATIC marks an empty object during parsing.
+  loom_serve_pool_placement_t value;
+} loom_serve_device_configuration_placement_t;
+
+static iree_status_t loom_serve_device_configuration_placement(
+    void* self, iree_string_view_t key, iree_json_value_type_t type,
+    iree_string_view_t value) {
+  loom_serve_device_configuration_placement_t* placement = self;
+  if (placement->value.kind != LOOM_SERVE_POOL_PLACEMENT_AUTOMATIC) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "placement requires exactly one selector");
+  }
+  if (iree_string_view_equal(key, IREE_SV("device")) &&
+      type == IREE_JSON_VALUE_TYPE_STRING) {
+    iree_string_view_t name;
+    IREE_RETURN_IF_ERROR(loom_serve_device_configuration_string(
+        placement->parser, value, &name));
+    IREE_RETURN_IF_ERROR(loom_serve_device_configuration_find_device(
+        placement->parser->configuration, name, &placement->value.ordinal));
+    placement->value.kind = LOOM_SERVE_POOL_PLACEMENT_DEVICE;
+  } else if (iree_string_view_equal(key, IREE_SV("host_numa")) &&
+             type == IREE_JSON_VALUE_TYPE_NUMBER) {
+    uint64_t ordinal = 0;
+    IREE_RETURN_IF_ERROR(iree_json_parse_uint64(value, &ordinal));
+    if (ordinal > UINT32_MAX) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "host NUMA node exceeds the OS node namespace");
+    }
+    placement->value.kind = LOOM_SERVE_POOL_PLACEMENT_HOST_NUMA;
+    placement->value.ordinal = (uint32_t)ordinal;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "placement requires a 'device' string or 'host_numa' integer");
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_serve_device_configuration_pool(
@@ -235,6 +284,20 @@ static iree_status_t loom_serve_device_configuration_pool(
   }
   pool.binding.device_mask = members.mask;
   loom_serve_pool_options_t* options = &pool.options;
+  if (fields.values[7].data) {
+    loom_serve_device_configuration_placement_t placement = {.parser = parser};
+    IREE_RETURN_IF_ERROR(
+        iree_json_enumerate_object_typed(
+            fields.values[7], loom_serve_device_configuration_placement,
+            &placement),
+        "pool '%.*s' placement", (int)pool.binding.name.size,
+        pool.binding.name.data);
+    if (placement.value.kind == LOOM_SERVE_POOL_PLACEMENT_AUTOMATIC) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "pool placement requires one selector");
+    }
+    options->placement = placement.value;
+  }
   if (fields.values[1].data) {
     if (iree_string_view_equal(fields.values[1], IREE_SV("fixed"))) {
       options->elastic = false;

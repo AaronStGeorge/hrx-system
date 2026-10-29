@@ -321,7 +321,7 @@ class MemoryTest : public ::testing::Test {
     }
     iree_hal_virtual_buffer_capabilities_t capabilities;
     auto status = iree_hal_virtual_buffer_query_capabilities(
-        hal_group, scope, host_allocator, &capabilities);
+        hal_group, scope, {1, &backing}, host_allocator, &capabilities);
     loom_serve_memory_geometry_t geometries[2] = {};
     if (iree_status_is_ok(status)) {
       status = loom_serve_memory_pool_query_geometry(&capabilities, backing,

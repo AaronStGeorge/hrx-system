@@ -384,8 +384,14 @@ class GpuNativeFileTest : public GpuNativeTest,
       host_visible_ = facts->memory->mapping != nullptr;
       file_io_capable_ = iree_any_bit_set(facts->memory->host_features,
                                           AMDF_HOST_MAPPING_FEATURE_FILE_IO);
+      buffered_file_io_capable_ =
+          iree_any_bit_set(facts->memory->host_features,
+                           AMDF_HOST_MAPPING_FEATURE_FILE_IO |
+                               AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO);
       RecordProperty("physical_sources_host_visible", host_visible_);
       RecordProperty("physical_sources_file_io_capable", file_io_capable_);
+      RecordProperty("physical_sources_buffered_file_io_capable",
+                     buffered_file_io_capable_);
       if (backing_kind() == FileBacking::kPhysicalPrivate ||
           backing_kind() == FileBacking::kNestedPrivate) {
         EXPECT_EQ(memory.contract->host.access, 0u);
@@ -404,9 +410,12 @@ class GpuNativeFileTest : public GpuNativeTest,
         .usage = IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_STORAGE,
     };
     const iree_hal_pool_scope_t scope = {1, &family, {}};
+    iree_hal_pool_t* source_pools[] = {pool_.get(), device_pool_.get()};
+    const iree_hal_virtual_buffer_sources_t sources = {is_mixed() ? 2u : 1u,
+                                                       source_pools};
     iree_hal_virtual_buffer_capabilities_t capabilities;
     IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-        group_, scope, iree_allocator_system(), &capabilities));
+        group_, scope, sources, iree_allocator_system(), &capabilities));
     ASSERT_NE(capabilities.max_byte_length, 0u);
     const auto source = iree_hal_pool_query_mapping_requirements(pool_);
     uint64_t unit = iree_max(source.minimum_granularity,
@@ -424,7 +433,7 @@ class GpuNativeFileTest : public GpuNativeTest,
     };
     Ref<iree_hal_buffer_t> root;
     IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-        group_, scope, &options, iree_allocator_system(), root.out()));
+        group_, scope, sources, &options, iree_allocator_system(), root.out()));
     IREE_ASSERT_OK(iree_hal_buffer_subspan(
         root, unit, mapped_length, iree_allocator_system(), out_buffer));
     EXPECT_EQ((*out_buffer)->host_binding_index,
@@ -456,6 +465,10 @@ class GpuNativeFileTest : public GpuNativeTest,
       file_io_capable_ &=
           iree_any_bit_set(native_source->storage->host_features,
                            AMDF_HOST_MAPPING_FEATURE_FILE_IO);
+      buffered_file_io_capable_ &=
+          iree_any_bit_set(native_source->storage->host_features,
+                           AMDF_HOST_MAPPING_FEATURE_FILE_IO |
+                               AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO);
       mappings_.push_back({
           .target = *out_buffer,
           .scope = program_scope,
@@ -476,6 +489,8 @@ class GpuNativeFileTest : public GpuNativeTest,
         iree_hal_semaphore_wait(mapped, value, iree_infinite_timeout(), 0));
     RecordProperty("physical_sources_host_visible", host_visible_);
     RecordProperty("physical_sources_file_io_capable", file_io_capable_);
+    RecordProperty("physical_sources_buffered_file_io_capable",
+                   buffered_file_io_capable_);
   }
 
   void ReleaseSources() {
@@ -597,6 +612,8 @@ class GpuNativeFileTest : public GpuNativeTest,
   // Every physical source exposes a native file-capable view, independent of
   // retained registration and public host-mapping permission.
   bool file_io_capable_ = true;
+  // Every physical source supports buffered I/O through its prepared host view.
+  bool buffered_file_io_capable_ = true;
   // Public operation timeline, independent of private native handoff points.
   Ref<iree_hal_semaphore_t> timeline_;
   // Real shader that leaves dirty lines before file access.
@@ -917,9 +934,8 @@ void GpuNativeFileAccessTest::RoundTrip(bool direct) {
   const size_t buffer_offset = kAlignment - (is_nested() ? 256 : 0);
   Ref<iree_hal_buffer_t> buffer;
   ASSERT_NO_FATAL_FAILURE(Allocate(kBytes + 2 * kAlignment, buffer.out()));
-  const bool direct_io_available =
-      file_io_capable_ || direct_staging_available_;
-  RecordProperty("direct_io_available", direct_io_available);
+  const bool file_io_available = file_io_capable_ || direct_staging_available_;
+  RecordProperty("file_io_available", file_io_available);
   std::vector<uint32_t> expected(kBytes / 4 + 2 * kAlignment / 4);
   for (size_t i = 0; i < expected.size(); ++i) {
     expected[i] = uint32_t(i * 37 + 3);
@@ -941,7 +957,7 @@ void GpuNativeFileAccessTest::RoundTrip(bool direct) {
   IREE_ASSERT_OK(iree_hal_queue_read(
       queues_[0], {1, &semaphore, &one}, {1, &semaphore, &two}, file,
       kAlignment, buffer, buffer_offset, kBytes, &barriers_, 0));
-  if (!direct_io_available) {
+  if (!file_io_available) {
     EXPECT_EQ(iree::Status(iree_hal_semaphore_wait(timeline_, two,
                                                    iree_infinite_timeout(), 0))
                   .code(),
@@ -1030,7 +1046,7 @@ TEST_P(GpuNativeFileProgressTest,
   ASSERT_NO_FATAL_FAILURE(
       Allocate(kBufferOffset + kSmall + kLarge, buffer.out()));
   if (file_io_capable_) {
-    GTEST_SKIP() << "This backing uses direct file I/O and needs no staging";
+    GTEST_SKIP() << "This backing uses direct file access and needs no staging";
   }
   std::vector<uint32_t> expected((kLarge + kSmall) / 4);
   for (size_t i = 0; i < expected.size(); ++i) {

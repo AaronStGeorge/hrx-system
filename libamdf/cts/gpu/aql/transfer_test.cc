@@ -171,10 +171,10 @@ class AqlTransferTest
                    commands->access_info.access);
     RecordProperty("aql_transfer_completion_device_access",
                    completion->access_info.access);
-    RecordProperty("aql_transfer_source_host_cacheability",
-                   source->host.cacheability);
-    RecordProperty("aql_transfer_target_host_cacheability",
-                   target->host.cacheability);
+    RecordProperty("aql_transfer_source_host_properties",
+                   source->host.properties);
+    RecordProperty("aql_transfer_target_host_properties",
+                   target->host.properties);
     RecordProperty("aql_transfer_source_host_access", source->host.flags);
     RecordProperty("aql_transfer_target_host_access", target->host.flags);
   }

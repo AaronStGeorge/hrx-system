@@ -16,6 +16,28 @@
 extern "C" {
 #endif
 
+// The two property vocabularies are bit-compatible; retain only named facts.
+IREE_STATIC_ASSERT_ENUM_EQ(AMDF_HOST_MEMORY_PROPERTY_READ_CACHED,
+                           IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED,
+                           "host memory property encodings must agree");
+IREE_STATIC_ASSERT_ENUM_EQ(AMDF_HOST_MEMORY_PROPERTY_READ_UNCACHED,
+                           IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED,
+                           "host memory property encodings must agree");
+IREE_STATIC_ASSERT_ENUM_EQ(AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK,
+                           IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+                           "host memory property encodings must agree");
+IREE_STATIC_ASSERT_ENUM_EQ(AMDF_HOST_MEMORY_PROPERTY_WRITE_COMBINED,
+                           IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED,
+                           "host memory property encodings must agree");
+static inline iree_hal_host_memory_properties_t
+iree_hal_amd_fabric_memory_host_properties(
+    amdf_host_memory_properties_t properties) {
+  return properties & (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                       IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+                       IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK |
+                       IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED);
+}
+
 // One native backing with an optional persistent host view. Borrowed scopes,
 // native devices, and the API table outlive this owner and every device use.
 // Addresses belong to prepared binding tables, not to the backing itself.
@@ -30,8 +52,8 @@ typedef struct iree_hal_amd_fabric_memory_t {
   amdf_memory_map_flags_t host_access;
   // Native capabilities of the prepared host view, independent of I/O pins.
   amdf_host_mapping_features_t host_features;
-  // Cache class of the native or registered host view, when established.
-  iree_hal_host_cacheability_t host_cacheability;
+  // CPU mapping guarantees of the native or registered host view.
+  iree_hal_host_memory_properties_t host_properties;
   // Achieved attachment geometry and physical identity, captured once.
   amdf_memory_info_t info;
   // Storage-relative envelope available for host cache maintenance.

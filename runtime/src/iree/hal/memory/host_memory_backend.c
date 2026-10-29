@@ -77,8 +77,9 @@ static const iree_hal_slab_pool_plan_vtable_t
 
 static bool iree_hal_host_memory_access_is_supported(
     iree_hal_pool_host_access_t access) {
-  return access.cacheability == IREE_HAL_HOST_CACHEABILITY_UNKNOWN ||
-         access.cacheability == IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  return iree_all_bits_set(IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                               IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+                           access.properties);
 }
 
 static bool iree_hal_host_external_storage_class_is_supported(
@@ -225,7 +226,8 @@ static iree_status_t iree_hal_host_slab_pool_query(
     host.modes |= options->preferences.host.modes;
   }
   if (host.access) {
-    host.cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    host.properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                       IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   }
 
   iree_hal_host_slab_pool_plan_t* plan = NULL;
@@ -354,9 +356,10 @@ static iree_status_t iree_hal_host_virtual_buffer_query_plan(
                                        callback, host_allocator);
 }
 
-static iree_status_t iree_hal_host_reservation_query_from_plan(
-    void* user_data, iree_hal_slab_pool_plan_t* plan) {
-  iree_hal_virtual_buffer_capabilities_t* capabilities = user_data;
+static iree_status_t iree_hal_host_virtual_buffer_qualify(
+    iree_hal_host_slab_pool_plan_t* plan, iree_hal_pool_scope_t scope,
+    iree_hal_virtual_buffer_sources_t sources,
+    iree_hal_virtual_buffer_capabilities_t* capabilities) {
   const iree_device_size_t page_size =
       iree_memory_query_info().normal_page_size;
   *capabilities = (iree_hal_virtual_buffer_capabilities_t){
@@ -366,23 +369,49 @@ static iree_status_t iree_hal_host_reservation_query_from_plan(
       .max_alignment = (IREE_HOST_SIZE_MAX >> 1) + 1,
       .operations = IREE_HAL_MEMORY_MAPPING_OPERATIONS_ALL,
   };
-  iree_hal_slab_pool_plan_destroy(plan);
-  return iree_ok_status();
+  return iree_hal_virtual_buffer_initialize_contract(
+      scope, sources, IREE_HAL_MEMORY_BACKEND_HOST, 0, plan->contract,
+      capabilities);
+}
+
+typedef struct iree_hal_host_virtual_buffer_query_state_t {
+  // Complete scope borrowed for synchronous qualification.
+  iree_hal_pool_scope_t scope;
+  // Prepared source contracts borrowed for synchronous qualification.
+  iree_hal_virtual_buffer_sources_t sources;
+  // Caller-owned geometry output.
+  iree_hal_virtual_buffer_capabilities_t* capabilities;
+} iree_hal_host_virtual_buffer_query_state_t;
+
+static iree_status_t iree_hal_host_reservation_query_from_plan(
+    void* user_data, iree_hal_slab_pool_plan_t* base_plan) {
+  iree_hal_host_virtual_buffer_query_state_t* state = user_data;
+  iree_status_t status = iree_hal_host_virtual_buffer_qualify(
+      (iree_hal_host_slab_pool_plan_t*)base_plan, state->scope, state->sources,
+      state->capabilities);
+  iree_hal_slab_pool_plan_destroy(base_plan);
+  return status;
 }
 
 static iree_status_t iree_hal_host_memory_backend_query_virtual_buffer(
     const iree_hal_memory_backend_t* backend, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope, iree_allocator_t host_allocator,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
+    iree_allocator_t host_allocator,
     iree_hal_virtual_buffer_capabilities_t* out_capabilities) {
+  iree_hal_host_virtual_buffer_query_state_t state = {scope, sources,
+                                                      out_capabilities};
   return iree_hal_host_virtual_buffer_query_plan(
       group, scope,
       (iree_hal_slab_pool_plan_callback_t){
-          .fn = iree_hal_host_reservation_query_from_plan,
-          .user_data = out_capabilities},
+          .fn = iree_hal_host_reservation_query_from_plan, .user_data = &state},
       host_allocator);
 }
 
 typedef struct iree_hal_host_virtual_buffer_create_state_t {
+  // Complete consumer scope borrowed during qualification.
+  iree_hal_pool_scope_t scope;
+  // Source contracts borrowed during qualification.
+  iree_hal_virtual_buffer_sources_t sources;
   // Borrowed reservation geometry during synchronous qualification.
   const iree_hal_virtual_buffer_options_t* options;
   // Allocator for the created reservation metadata.
@@ -396,19 +425,29 @@ static iree_status_t iree_hal_host_virtual_buffer_create_from_plan(
   iree_hal_host_virtual_buffer_create_state_t* state = user_data;
   iree_hal_host_slab_pool_plan_t* plan =
       (iree_hal_host_slab_pool_plan_t*)base_plan;
-  iree_status_t status = iree_hal_host_virtual_buffer_create(
-      plan->backend, plan->frontier_tracker, plan->contract, state->options,
-      state->host_allocator, state->out_buffer);
+  iree_hal_virtual_buffer_capabilities_t capabilities;
+  iree_status_t status = iree_hal_host_virtual_buffer_qualify(
+      plan, state->scope, state->sources, &capabilities);
+  if (iree_status_is_ok(status) && capabilities.max_byte_length) {
+    iree_hal_virtual_buffer_options_t options = *state->options;
+    options.mapping_granularity =
+        iree_max(options.mapping_granularity, capabilities.mapping_granularity);
+    status = iree_hal_host_virtual_buffer_create(
+        plan->backend, plan->frontier_tracker, plan->contract, &options,
+        state->host_allocator, state->out_buffer);
+  }
   iree_hal_slab_pool_plan_destroy(base_plan);
   return status;
 }
 
 static iree_status_t iree_hal_host_memory_backend_create_virtual_buffer(
     const iree_hal_memory_backend_t* backend, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
   iree_hal_host_virtual_buffer_create_state_t state = {
+      .scope = scope,
+      .sources = sources,
       .options = options,
       .host_allocator = host_allocator,
       .out_buffer = out_buffer,

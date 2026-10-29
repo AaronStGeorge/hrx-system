@@ -155,7 +155,8 @@ void GpuFileIoResources::CreateRegisteredPages(size_t byte_length,
   creation.byte_length = byte_length;
   creation.minimum_alignment = page_byte_length_;
   creation.registered_host_pointer = pointer;
-  creation.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  creation.registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   auto& memory = memories_.emplace_back();
   ASSERT_NO_FATAL_FAILURE(memory.Initialize(gpu_.api, gpu_.scope, creation));
   *out_memory = &memory;

@@ -59,7 +59,8 @@ typedef uint64_t iree_hal_buffer_interfaces_t;
 
 typedef uint32_t iree_hal_pool_access_requirements_t;
 enum iree_hal_pool_access_requirement_bits_e {
-  // This family's access is coherent with the requested public host mapping.
+  // This family's access requires no cache maintenance on the public host
+  // mapping. Device-side transitions may still be required.
   IREE_HAL_POOL_ACCESS_REQUIRE_COHERENT_WITH_HOST = 1u << 0,
   // This family uses an uncached native device access path.
   IREE_HAL_POOL_ACCESS_REQUIRE_UNCACHED = 1u << 1,
@@ -73,7 +74,9 @@ typedef enum iree_hal_pool_placement_mode_e {
 
 typedef struct iree_hal_pool_placement_t {
   // Requested placement policy. In an achieved result, REQUIRED means the
-  // native allocator enforces the node; AUTOMATIC makes no node guarantee.
+  // native allocator selects the node's allocation domain; AUTOMATIC makes no
+  // node guarantee. Native eviction can change physical residency without
+  // changing the pool's access or host-mapping contract.
   iree_hal_pool_placement_mode_t mode;
   // Group topology node; ignored for AUTOMATIC.
   uint32_t node;
@@ -103,8 +106,10 @@ typedef struct iree_hal_pool_host_access_t {
   iree_hal_memory_access_t access;
   // Required mapping modes; zero with access zero disables public maps.
   iree_hal_mapping_mode_t modes;
-  // Required mapping class; UNKNOWN permits the backend to choose.
-  iree_hal_host_cacheability_t cacheability;
+  // Required CPU mapping guarantees on input; common guaranteed properties
+  // across every admitted allocation/import route on pool queries. Zero on
+  // input adds no requirement; absent output bits make no promise.
+  iree_hal_host_memory_properties_t properties;
   // Required atomic operations through the public application host mapping.
   iree_hal_atomic_operation_capabilities_t atomics;
 } iree_hal_pool_host_access_t;
@@ -120,7 +125,7 @@ typedef struct iree_hal_pool_scope_t {
   iree_hal_pool_host_access_t host;
 } iree_hal_pool_scope_t;
 
-// Validates public host permissions and their mapping/cacheability contract.
+// Validates public host permissions and their mapping/properties contract.
 IREE_API_EXPORT iree_status_t
 iree_hal_pool_host_access_validate(iree_hal_pool_host_access_t host);
 
@@ -258,6 +263,14 @@ typedef struct iree_hal_memory_contract_t {
     iree_hal_memory_backend_type_t type;
     // Captured geometry independent of payload allocation or installed aliases.
     iree_hal_pool_mapping_requirements_t requirements;
+    // Backend-defined allocation classes that may back this source. A target
+    // of the same native schema must accept every set bit. Zero means the
+    // backend has no additional allocation-class distinctions.
+    uint64_t native_type_mask;
+    // Owned qualification of reservation aliases when it differs from the
+    // ordinary source views. NULL reuses this contract's own qualification.
+    // This metadata retains neither physical backing nor its allocation owner.
+    struct iree_hal_memory_contract_t* alias_contract;
   } mapping_source;
   // Immutable site facts in this allocation, indexed by memory scope ID.
   iree_hal_memory_scope_access_t* scopes;
@@ -496,6 +509,14 @@ typedef struct iree_hal_memory_transition_recipe_info_t {
   } host;
 } iree_hal_memory_transition_recipe_info_t;
 
+// Joins qualified actions across possible backing routes. Host mappings may
+// dispatch their own protocol through HOST_API; device operations must agree
+// on executor and granularity kind. Returns false when no common qualified
+// recipe exists. Only used while constructing an unpublished contract.
+IREE_API_EXPORT bool iree_hal_memory_transition_recipe_join(
+    iree_hal_memory_transition_recipe_info_t* result,
+    const iree_hal_memory_transition_recipe_info_t* value);
+
 typedef uint32_t iree_hal_memory_pair_flags_t;
 enum iree_hal_memory_pair_flag_bits_e {
   IREE_HAL_MEMORY_PAIR_SHARED_BACKING_REACHABLE = 1u << 0,
@@ -625,6 +646,27 @@ typedef iree_status_t(IREE_API_PTR* iree_hal_memory_pair_query_fn_t)(
 IREE_API_EXPORT iree_status_t iree_hal_memory_contract_initialize_transitions(
     iree_hal_memory_contract_t* contract, iree_hal_memory_pair_query_fn_t query,
     void* user_data);
+
+// Captures the cache protocol of independently mapped aliases of a prepared
+// source. Only sites with MAPPING_SOURCE participate. Atomic promises remain
+// bounded by the source qualification. The alias host properties are qualified
+// for the reservation view, independently of the ordinary source mapping.
+// Called during source construction; failure leaves no partial alias contract.
+IREE_API_EXPORT iree_status_t
+iree_hal_memory_contract_initialize_mapping_transitions(
+    iree_hal_memory_contract_t* contract,
+    iree_hal_host_memory_properties_t host_properties,
+    iree_hal_memory_pair_query_fn_t query, void* user_data);
+
+// Borrows immutable alias facts from a prepared mapping source. This is cold
+// construction/admission metadata, never an installed-mapping lookup.
+static inline const iree_hal_memory_contract_t*
+iree_hal_memory_contract_mapping_alias(
+    const iree_hal_memory_contract_t* contract) {
+  return contract->mapping_source.alias_contract
+             ? contract->mapping_source.alias_contract
+             : contract;
+}
 
 #ifdef __cplusplus
 }  // extern "C"

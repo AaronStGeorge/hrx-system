@@ -49,13 +49,14 @@ void iree_hal_vulkan_memory_backend_initialize(
 // Qualifies a complete Vulkan address scope without acquiring native resources.
 iree_status_t iree_hal_vulkan_virtual_buffer_query_capabilities(
     const iree_hal_memory_backend_t* backend, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope, iree_allocator_t host_allocator,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
+    iree_allocator_t host_allocator,
     iree_hal_virtual_buffer_capabilities_t* out_capabilities);
 
 // Creates an ordinary virtual HAL buffer owning one sparse VkBuffer.
 iree_status_t iree_hal_vulkan_virtual_buffer_create(
     const iree_hal_memory_backend_t* backend, iree_hal_device_group_t* group,
-    iree_hal_pool_scope_t scope,
+    iree_hal_pool_scope_t scope, iree_hal_virtual_buffer_sources_t sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer);
 

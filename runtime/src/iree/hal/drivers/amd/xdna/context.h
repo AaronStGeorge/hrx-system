@@ -55,6 +55,9 @@ typedef struct iree_hal_amd_xdna_context_t {
   amdf_xdna_context_t* handle;
   // Exact passive compiler identity.
   amdf_xdna_endpoint_info_t endpoint_info;
+  // Cached endpoint attachment node, or UINT32_MAX when not reported.
+  // Independent of the application-selected placement of host workers.
+  uint32_t host_numa_node;
   // Activated instruction and geometry limits.
   amdf_xdna_device_info_t device_info;
   // Admitted immutable image contract.

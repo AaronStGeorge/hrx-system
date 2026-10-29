@@ -47,6 +47,8 @@ typedef struct iree_hal_device_group_t iree_hal_device_group_t;
 typedef struct iree_hal_pool_t iree_hal_pool_t;
 typedef struct iree_hal_pool_scope_t iree_hal_pool_scope_t;
 typedef struct iree_hal_slab_pool_options_t iree_hal_slab_pool_options_t;
+typedef struct iree_hal_virtual_buffer_sources_t
+    iree_hal_virtual_buffer_sources_t;
 typedef struct iree_hal_virtual_buffer_options_t
     iree_hal_virtual_buffer_options_t;
 
@@ -74,6 +76,7 @@ typedef struct iree_hal_virtual_buffer_create_callback_t {
   iree_status_t(IREE_API_PTR* fn)(
       void* user_data, iree_hal_device_group_t* request_group,
       const iree_hal_pool_scope_t* scope,
+      const iree_hal_virtual_buffer_sources_t* sources,
       const iree_hal_virtual_buffer_options_t* options,
       iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer);
   // Opaque synchronous continuation state.
@@ -116,6 +119,7 @@ typedef struct iree_hal_device_group_wrapper_vtable_t {
       void* self, iree_hal_virtual_buffer_create_callback_t next,
       iree_hal_device_group_t* request_group,
       const iree_hal_pool_scope_t* scope,
+      const iree_hal_virtual_buffer_sources_t* sources,
       const iree_hal_virtual_buffer_options_t* options,
       iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer);
 } iree_hal_device_group_wrapper_vtable_t;
@@ -148,6 +152,7 @@ IREE_API_EXPORT iree_status_t iree_hal_device_group_create_slab_pool(
 // public API. The supplied continuation is invoked synchronously.
 IREE_API_EXPORT iree_status_t iree_hal_device_group_create_virtual_buffer(
     iree_hal_device_group_t* group, const iree_hal_pool_scope_t* scope,
+    const iree_hal_virtual_buffer_sources_t* sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_hal_virtual_buffer_create_callback_t leaf,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer);

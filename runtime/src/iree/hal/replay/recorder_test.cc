@@ -128,7 +128,7 @@ static iree_status_t CreateTestPool(
           {
               .access = host_access,
               .modes = host_mapping_modes,
-              .cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+              .properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
           },
   };
   iree_hal_slab_pool_options_t options;
@@ -910,7 +910,7 @@ TEST(ReplayRecorderTest, WrappedImportsAndExportsPreserveNativeBufferViews) {
           {
               .access = IREE_HAL_MEMORY_ACCESS_ALL,
               .modes = IREE_HAL_MAPPING_MODE_PERSISTENT,
-              .cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+              .properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
           },
   };
   iree_hal_slab_pool_options_t pool_options;
@@ -929,7 +929,8 @@ TEST(ReplayRecorderTest, WrappedImportsAndExportsPreserveNativeBufferViews) {
       .byte_length = sizeof(imported_storage),
   };
   external_buffer.payload.host_pointer = imported_storage;
-  external_buffer.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  external_buffer.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   external_buffer.maintenance_range =
       iree_hal_make_buffer_range(0, sizeof(imported_storage));
   iree_hal_buffer_t* imported_buffer = nullptr;

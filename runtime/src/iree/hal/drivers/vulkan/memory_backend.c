@@ -90,22 +90,23 @@ static const iree_hal_slab_pool_plan_vtable_t
         .create = iree_hal_vulkan_slab_pool_plan_create,
 };
 
-// Vulkan does not distinguish write-combined from strongly uncached host
-// mappings. Neither class can be promised solely from !HOST_CACHED.
-static iree_hal_host_cacheability_t iree_hal_vulkan_memory_host_cacheability(
+// Vulkan specifies CPU read caching independently of host coherence, but
+// does not guarantee write-back or write-combining behavior.
+static iree_hal_host_memory_properties_t iree_hal_vulkan_memory_host_properties(
     VkMemoryPropertyFlags flags) {
-  return iree_any_bit_set(flags, VK_MEMORY_PROPERTY_HOST_CACHED_BIT)
-             ? IREE_HAL_HOST_CACHEABILITY_WRITE_BACK
-             : IREE_HAL_HOST_CACHEABILITY_UNKNOWN;
+  return !iree_any_bit_set(flags, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+             ? IREE_HAL_HOST_MEMORY_PROPERTY_NONE
+         : iree_any_bit_set(flags, VK_MEMORY_PROPERTY_HOST_CACHED_BIT)
+             ? IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED
+             : IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED;
 }
 
 static bool iree_hal_vulkan_memory_supports_host_access(
-    VkMemoryPropertyFlags flags, iree_hal_pool_host_access_t host) {
+    VkMemoryPropertyFlags flags, iree_hal_host_memory_properties_t properties,
+    iree_hal_pool_host_access_t host) {
   return !host.access ||
          (iree_any_bit_set(flags, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
-          (host.cacheability == IREE_HAL_HOST_CACHEABILITY_UNKNOWN ||
-           host.cacheability ==
-               iree_hal_vulkan_memory_host_cacheability(flags)));
+          iree_all_bits_set(properties, host.properties));
 }
 
 static iree_hal_buffer_usage_t iree_hal_vulkan_memory_mapping_usage(
@@ -221,12 +222,14 @@ static iree_hal_pool_placement_t iree_hal_vulkan_memory_placement(
 }
 
 static uint32_t iree_hal_vulkan_memory_preference(
-    VkMemoryPropertyFlags flags, iree_hal_memory_type_t memory_type,
-    iree_host_size_t family_count, iree_hal_pool_host_access_t host,
+    VkMemoryPropertyFlags flags,
+    iree_hal_host_memory_properties_t host_properties,
+    iree_hal_memory_type_t memory_type, iree_host_size_t family_count,
+    iree_hal_pool_host_access_t host,
     iree_hal_pool_host_access_t preferred_host) {
   uint32_t preference = 0;
-  if (preferred_host.access &&
-      iree_hal_vulkan_memory_supports_host_access(flags, preferred_host)) {
+  if (preferred_host.access && iree_hal_vulkan_memory_supports_host_access(
+                                   flags, host_properties, preferred_host)) {
     preference += 1024;
   }
   if (family_count &&
@@ -424,11 +427,22 @@ static iree_status_t iree_hal_vulkan_slab_pool_query_owner(
   for (uint32_t i = 0; i < memory->memoryTypeCount && iree_status_is_ok(status);
        ++i) {
     const VkMemoryPropertyFlags flags = memory->memoryTypes[i].propertyFlags;
+    const iree_hal_host_memory_properties_t imported_host_properties =
+        IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+        IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK;
+    iree_hal_host_memory_properties_t host_properties =
+        options->owned.mode == IREE_HAL_SLAB_POOL_IMPORT_ONLY
+            ? imported_host_properties
+            : iree_hal_vulkan_memory_host_properties(flags);
+    if (options->imports.class_count) {
+      host_properties &= imported_host_properties;
+    }
     if (!(requirements.memoryRequirements.memoryTypeBits & (1u << i)) ||
         !iree_hal_vulkan_memory_properties_support_slab_storage(flags) ||
         (options->imports.class_count &&
          !iree_any_bit_set(flags, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) ||
-        !iree_hal_vulkan_memory_supports_host_access(flags, scope.host)) {
+        !iree_hal_vulkan_memory_supports_host_access(flags, host_properties,
+                                                     scope.host)) {
       continue;
     }
     const iree_hal_atomic_operation_capabilities_t host_atomics =
@@ -470,12 +484,12 @@ static iree_status_t iree_hal_vulkan_slab_pool_query_owner(
     }
     iree_hal_pool_host_access_t host = scope.host;
     if (iree_hal_vulkan_memory_supports_host_access(
-            flags, options->preferences.host)) {
+            flags, host_properties, options->preferences.host)) {
       host.access |= options->preferences.host.access;
       host.modes |= options->preferences.host.modes;
     }
     if (host.access) {
-      host.cacheability = iree_hal_vulkan_memory_host_cacheability(flags);
+      host.properties = host_properties;
     }
     const iree_hal_buffer_usage_t mapping_usage =
         iree_hal_vulkan_memory_mapping_usage(host);
@@ -490,7 +504,7 @@ static iree_status_t iree_hal_vulkan_slab_pool_query_owner(
     plan->base.info = (iree_hal_slab_pool_plan_info_t){
         .placement = placement,
         .preference = iree_hal_vulkan_memory_preference(
-            flags, memory_type, scope.family_count, host,
+            flags, host_properties, memory_type, scope.family_count, host,
             options->preferences.host),
         .host = host,
     };
@@ -533,6 +547,11 @@ static iree_status_t iree_hal_vulkan_slab_pool_query_owner(
       contract->allowed_usage = usage | mapping_usage;
       if (mapping_source) {
         contract->mapping_source.type = IREE_HAL_MEMORY_BACKEND_VULKAN;
+        contract->mapping_source.native_type_mask =
+            (options->owned.mode == IREE_HAL_SLAB_POOL_OWNED_ENABLED
+                 ? UINT64_C(1) << i
+                 : 0) |
+            import_memory_type_bits;
         contract->mapping_source.requirements =
             (iree_hal_pool_mapping_requirements_t){
                 .minimum_granularity = mapping_granularity,

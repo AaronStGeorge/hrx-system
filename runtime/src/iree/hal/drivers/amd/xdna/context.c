@@ -136,13 +136,20 @@ static iree_status_t iree_hal_amd_xdna_context_open(
       "xdna.device_query_info"));
   context->target.instruction_alignment =
       context->device_info.instruction.address_alignment;
+  amdf_endpoint_host_locality_t locality = {
+      .type = AMDF_STRUCTURE_TYPE_ENDPOINT_HOST_LOCALITY,
+      .structure_size = sizeof(locality),
+      .numa_node = UINT32_MAX,
+  };
   amdf_endpoint_info_t endpoint_info = {
       .type = AMDF_STRUCTURE_TYPE_ENDPOINT_INFO,
       .structure_size = sizeof(endpoint_info),
+      .next = &locality,
   };
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
       context->api->endpoint_query_info(context->endpoint, &endpoint_info),
       "endpoint_query_info"));
+  context->host_numa_node = locality.numa_node;
   context->queue_family_ordinal = UINT32_MAX;
   for (uint32_t i = 0; i < endpoint_info.queue_family_count; ++i) {
     amdf_queue_family_info_t family = {

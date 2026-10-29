@@ -19,9 +19,9 @@ extern "C" {
 // Magic header bytes for IREE HAL replay files: "IRRP".
 #define IREE_HAL_REPLAY_FILE_MAGIC 0x50525249u
 
-// Major version of the IREE HAL replay file format. Version 15 preserves
-// required command-storage placement in dynamic queue acquisition.
-#define IREE_HAL_REPLAY_FILE_VERSION_MAJOR 15u
+// Major version of the IREE HAL replay file format. Version 17 records the
+// source pool contracts admitted by each virtual buffer.
+#define IREE_HAL_REPLAY_FILE_VERSION_MAJOR 17u
 
 // Minor version of the IREE HAL replay file format. Scoped host mappings have
 // independent identities in related_object_id: map creates the identity,
@@ -328,14 +328,14 @@ typedef struct iree_hal_replay_pool_create_slab_payload_t {
   uint32_t host_access;
   // Required public host mapping modes.
   uint32_t host_mapping_modes;
-  // Required public host cacheability.
-  uint32_t host_cacheability;
+  // Required public host properties.
+  uint32_t host_properties;
   // Preferred additional host memory access bits.
   uint32_t preferred_host_access;
   // Preferred additional host mapping modes.
   uint32_t preferred_host_mapping_modes;
-  // Preferred host cacheability.
-  uint32_t preferred_host_cacheability;
+  // Preferred host properties.
+  uint32_t preferred_host_properties;
   // Required host device scope 32 operations.
   uint32_t host_atomic_device_scope_32;
   // Required host device scope 64 operations.
@@ -356,7 +356,8 @@ typedef struct iree_hal_replay_pool_create_slab_payload_t {
 static_assert(sizeof(iree_hal_replay_pool_create_slab_payload_t) == 112,
               "slab pool replay header must be 112 bytes");
 
-// Virtual-buffer construction followed by family_count family access rows.
+// Virtual-buffer construction followed by family_count family access rows
+// and source_pool_count source pool object IDs.
 // The operation's related object is the ordinary buffer being created.
 typedef struct iree_hal_replay_virtual_buffer_create_payload_t {
   // Requested stable virtual buffer length in bytes.
@@ -371,8 +372,8 @@ typedef struct iree_hal_replay_virtual_buffer_create_payload_t {
   uint32_t host_access;
   // Required host mapping modes.
   uint32_t host_mapping_modes;
-  // Required host cacheability.
-  uint32_t host_cacheability;
+  // Required host properties.
+  uint32_t host_properties;
   // Reserved for future construction policy; must be zero.
   uint32_t reserved0;
   // Required host device scope 32 operations.
@@ -383,9 +384,11 @@ typedef struct iree_hal_replay_virtual_buffer_create_payload_t {
   uint32_t host_atomic_system_scope_32;
   // Required host system scope 64 operations.
   uint32_t host_atomic_system_scope_64;
+  // Number of admitted source pool IDs after the family access rows.
+  uint64_t source_pool_count;
 } iree_hal_replay_virtual_buffer_create_payload_t;
-static_assert(sizeof(iree_hal_replay_virtual_buffer_create_payload_t) == 64,
-              "virtual buffer replay header must be 64 bytes");
+static_assert(sizeof(iree_hal_replay_virtual_buffer_create_payload_t) == 72,
+              "virtual buffer replay header must be 72 bytes");
 
 // Checked full removal for the buffer named by the operation's object ID.
 typedef struct iree_hal_replay_virtual_buffer_detach_payload_t {
@@ -498,8 +501,8 @@ typedef struct iree_hal_replay_pool_import_buffer_payload_t {
   uint64_t physical_backing_id[2];
   // Number of captured data bytes following this header.
   uint64_t data_length;
-  // Source-established host mapping class.
-  uint32_t host_cacheability;
+  // Source-established CPU mapping guarantees.
+  uint32_t host_properties;
   // Reserved for future import metadata; must be zero.
   uint32_t reserved0;
 } iree_hal_replay_pool_import_buffer_payload_t;

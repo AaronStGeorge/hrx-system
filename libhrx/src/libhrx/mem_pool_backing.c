@@ -160,7 +160,7 @@ static iree_status_t hrx_mem_pool_backing_create_source(
   const iree_hal_pool_host_access_t host = {
       .access = IREE_HAL_MEMORY_ACCESS_ALL,
       .modes = IREE_HAL_MAPPING_MODE_SCOPED | IREE_HAL_MAPPING_MODE_PERSISTENT,
-      .cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+      .properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
   };
   iree_hal_pool_scope_t scope = {
       .family_count = family_count,

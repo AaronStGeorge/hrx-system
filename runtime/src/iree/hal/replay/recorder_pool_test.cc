@@ -121,7 +121,7 @@ class ReplayRecorderPoolTest : public ::testing::Test {
             {
                 .access = IREE_HAL_MEMORY_ACCESS_ALL,
                 .modes = IREE_HAL_MAPPING_MODE_SCOPED,
-                .cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN,
+                .properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE,
             },
     };
     iree_hal_slab_pool_options_t options;
@@ -154,7 +154,9 @@ class ReplayRecorderPoolTest : public ::testing::Test {
         .byte_length = sizeof(storage_),
     };
     external_storage.payload.host_pointer = storage_;
-    external_storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    external_storage.host_properties =
+        (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+         IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     external_storage.maintenance_range =
         iree_hal_make_buffer_range(0, sizeof(storage_));
     external_storage.release =

@@ -505,15 +505,22 @@ iree_status_t iree_hal_replay_dump_virtual_buffer_layout(
     const iree_hal_replay_virtual_buffer_create_payload_t* payload,
     iree_host_size_t* out_families_size) {
   iree_host_size_t total_size = 0;
-  if (IREE_UNLIKELY(payload->reserved0 ||
-                    payload->family_count > IREE_HOST_SIZE_MAX ||
-                    !iree_host_size_checked_mul(
-                        (iree_host_size_t)payload->family_count,
-                        sizeof(iree_hal_replay_pool_family_access_payload_t),
-                        out_families_size) ||
-                    !iree_host_size_checked_add(
-                        sizeof(*payload), *out_families_size, &total_size) ||
-                    total_size != record->payload.data_length)) {
+  iree_host_size_t sources_size = 0;
+  if (IREE_UNLIKELY(
+          payload->reserved0 || !payload->source_pool_count ||
+          payload->source_pool_count > IREE_HOST_SIZE_MAX ||
+          !iree_host_size_checked_mul(
+              (iree_host_size_t)payload->source_pool_count,
+              sizeof(iree_hal_replay_object_id_t), &sources_size) ||
+          payload->family_count > IREE_HOST_SIZE_MAX ||
+          !iree_host_size_checked_mul(
+              (iree_host_size_t)payload->family_count,
+              sizeof(iree_hal_replay_pool_family_access_payload_t),
+              out_families_size) ||
+          !iree_host_size_checked_add(sizeof(*payload), *out_families_size,
+                                      &total_size) ||
+          !iree_host_size_checked_add(total_size, sources_size, &total_size) ||
+          total_size != record->payload.data_length)) {
     return iree_make_status(IREE_STATUS_DATA_LOSS,
                             "replay reservation payload is invalid");
   }

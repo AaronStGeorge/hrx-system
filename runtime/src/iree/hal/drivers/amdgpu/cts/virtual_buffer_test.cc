@@ -29,18 +29,25 @@ class AmdgpuVirtualBufferTest : public CtsTestBase<> {
     scope_ = {1, &access_, {}};
     any_ = {iree_hal_device_group_memory_domain(device_group_),
             IREE_HAL_MEMORY_SCOPE_ANY};
-    IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-        device_group_, scope_, iree_allocator_system(), &capabilities_));
-    if (!capabilities_.max_byte_length) {
-      GTEST_SKIP() << "ROCr does not expose native virtual memory";
-    }
     auto source_access = access_;
     source_access.interfaces = UINT64_C(1)
                                << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
     iree_hal_slab_pool_options_t options = {};
-    IREE_ASSERT_OK(iree_hal_slab_pool_create(
+    iree_status_t source_status = iree_hal_slab_pool_create(
         device_group_, {1, &source_access, {}}, &options,
-        iree_allocator_system(), pool_.out()));
+        iree_allocator_system(), pool_.out());
+    if (iree_status_is_unavailable(source_status)) {
+      iree_status_ignore(source_status);
+      GTEST_SKIP() << "ROCr virtual mapping sources are unavailable";
+    }
+    IREE_ASSERT_OK(source_status);
+    iree_hal_pool_t* source_pool = pool_.get();
+    IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
+        device_group_, scope_, {1, &source_pool}, iree_allocator_system(),
+        &capabilities_));
+    if (!capabilities_.max_byte_length) {
+      GTEST_SKIP() << "ROCr does not expose native virtual memory";
+    }
     const auto requirements = iree_hal_pool_query_mapping_requirements(pool_);
     EXPECT_EQ(requirements.flags, IREE_HAL_POOL_MAPPING_FLAG_WHOLE_ALLOCATION);
     ASSERT_NE(requirements.minimum_granularity, 0u);
@@ -59,7 +66,9 @@ class AmdgpuVirtualBufferTest : public CtsTestBase<> {
         .byte_length = count * granularity_,
         .mapping_granularity = granularity_,
     };
-    return iree_hal_virtual_buffer_create(device_group_, scope_, &options,
+    iree_hal_pool_t* source_pool = pool_.get();
+    return iree_hal_virtual_buffer_create(device_group_, scope_,
+                                          {1, &source_pool}, &options,
                                           iree_allocator_system(), out_buffer);
   }
 
@@ -272,9 +281,11 @@ TEST_P(AmdgpuVirtualBufferTest, PartialBatchFailureCanDetachEveryTarget) {
       .byte_length = 2 * granularity_,
       .mapping_granularity = granularity_,
   };
+  iree_hal_pool_t* source_pool = pool.get();
   for (auto& target : targets) {
     IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-        group, scope, &options, iree_allocator_system(), target.out()));
+        group, scope, {1, &source_pool}, &options, iree_allocator_system(),
+        target.out()));
   }
   // The common batch sorts by native root. Put a complete valid mapping first,
   // then a logical source slice unsupported by ROCr's whole-handle rule.
@@ -350,8 +361,10 @@ TEST_P(AmdgpuVirtualBufferTest, EntireReservationCanBeShorterThanMappingUnit) {
       .mapping_granularity = 2 * granularity_,
   };
   Ref<iree_hal_buffer_t> target;
+  iree_hal_pool_t* source_pool = pool_.get();
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      device_group_, scope_, &options, iree_allocator_system(), target.out()));
+      device_group_, scope_, {1, &source_pool}, &options,
+      iree_allocator_system(), target.out()));
   Ref<iree_hal_buffer_t> source;
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       pool_, iree_hal_make_pool_reservation_request(granularity_, 1),
@@ -387,9 +400,11 @@ TEST_P(AmdgpuVirtualBufferTest, NativeCapabilitiesRejectUnrepresentableScopes) {
   auto scope = scope_;
   scope.host.access = IREE_HAL_MEMORY_ACCESS_READ;
   scope.host.modes = IREE_HAL_MAPPING_MODE_SCOPED;
+  iree_hal_pool_t* source_pool = pool_.get();
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      device_group_, scope, iree_allocator_system(), &capabilities));
+      device_group_, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
   EXPECT_EQ(capabilities.max_byte_length, 0u);
 }
 

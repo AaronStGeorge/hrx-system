@@ -279,8 +279,8 @@ static iree_status_t iree_hal_replay_executor_pool_create_slab(
             {
                 .access = (iree_hal_memory_access_t)payload.host_access,
                 .modes = (iree_hal_mapping_mode_t)payload.host_mapping_modes,
-                .cacheability =
-                    (iree_hal_host_cacheability_t)payload.host_cacheability,
+                .properties =
+                    (iree_hal_host_memory_properties_t)payload.host_properties,
                 .atomics =
                     {
                         .device_scope_32 = payload.host_atomic_device_scope_32,
@@ -306,8 +306,8 @@ static iree_status_t iree_hal_replay_executor_pool_create_slab(
     options.preferences.host = (iree_hal_pool_host_access_t){
         .access = (iree_hal_memory_access_t)payload.preferred_host_access,
         .modes = (iree_hal_mapping_mode_t)payload.preferred_host_mapping_modes,
-        .cacheability =
-            (iree_hal_host_cacheability_t)payload.preferred_host_cacheability,
+        .properties = (iree_hal_host_memory_properties_t)
+                          payload.preferred_host_properties,
         .atomics =
             {
                 .device_scope_32 =
@@ -428,7 +428,7 @@ static iree_status_t iree_hal_replay_executor_pool_import_buffer(
   if (IREE_UNLIKELY(
           payload.reserved0 != 0 || payload.byte_length > IREE_HOST_SIZE_MAX ||
           payload.data_length != payload.byte_length ||
-          payload.host_cacheability > IREE_HAL_HOST_CACHEABILITY_UNCACHED ||
+          !iree_hal_host_memory_properties_is_valid(payload.host_properties) ||
           !has_valid_payload_length ||
           payload.logical_offset > payload.byte_length ||
           payload.logical_length >
@@ -464,6 +464,19 @@ static iree_status_t iree_hal_replay_executor_pool_import_buffer(
                             "replay pool import alignment is too large");
   }
 
+  // Replay owns ordinary host bytes. Captured properties cannot relabel the
+  // replacement allocation or establish a different CPU mapping policy.
+  const iree_hal_host_memory_properties_t host_properties =
+      IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+      IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK;
+  if (!iree_all_bits_set(
+          host_properties,
+          payload.host_properties | import_requirements.host_properties)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "replay host allocation cannot reproduce the required CPU properties");
+  }
+
   iree_host_size_t allocation_size = 0;
   if (IREE_UNLIKELY(!iree_host_size_checked_add(
           sizeof(iree_hal_replay_import_allocation_t),
@@ -485,8 +498,7 @@ static iree_status_t iree_hal_replay_executor_pool_import_buffer(
       .storage_class = storage_class,
       .payload.host_pointer = allocation->data,
       .byte_length = payload.byte_length,
-      .host_cacheability =
-          (iree_hal_host_cacheability_t)payload.host_cacheability,
+      .host_properties = host_properties,
       .maintenance_range =
           {
               .byte_offset = payload.maintenance_offset,

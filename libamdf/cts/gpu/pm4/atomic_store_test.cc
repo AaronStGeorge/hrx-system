@@ -129,7 +129,7 @@ class Pm4AtomicStoreTest : public Pm4CommandTest,
           .access_count = creation.access_count,
           .required_flags = creation.required_flags,
           .accesses = creation.accesses,
-          .registered_host_cacheability = creation.registered_host_cacheability,
+          .registered_host_properties = creation.registered_host_properties,
       };
       amdf_memory_profile_site_t host = {.kind = AMDF_MEMORY_SITE_KIND_HOST};
       host.value.host_access = direction == 0 ? AMDF_MEMORY_MAP_FLAG_WRITE

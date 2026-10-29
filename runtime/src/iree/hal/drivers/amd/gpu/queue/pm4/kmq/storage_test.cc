@@ -160,7 +160,8 @@ struct NativeQueue {
                                              amdf_host_mapping_info_t* info) {
     auto* self = reinterpret_cast<NativeQueue*>(mapping);
     info->pointer = self->words.data();
-    info->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    info->properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     return AMDF_STATUS_OK;
   }
   static amdf_status_t AMDF_CALL Unmap(amdf_host_mapping_t* mapping) {

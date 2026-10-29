@@ -66,7 +66,8 @@ TEST_P(AqlTimestampTest, ConfirmedClockSamplesAreVisibleBeforeReuse) {
     ASSERT_EQ(memory->info.memory_class, AMDF_MEMORY_CLASS_SYSTEM);
     ASSERT_NE(memory->info.flags & AMDF_MEMORY_FLAG_HOST_VISIBLE, 0u);
     ASSERT_NE(memory->access_info.flags & AMDF_MEMORY_FLAG_HOST_COHERENT, 0u);
-    ASSERT_EQ(memory->host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    ASSERT_EQ(memory->host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                        AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     constexpr amdf_memory_map_flags_t kHostAccess =
         AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
     ASSERT_EQ(memory->host.flags & kHostAccess, kHostAccess);
@@ -79,7 +80,7 @@ TEST_P(AqlTimestampTest, ConfirmedClockSamplesAreVisibleBeforeReuse) {
     RecordProperty(prefix + "_device_access", memory->access_info.access);
     RecordProperty(prefix + "_access_flags",
                    std::to_string(memory->access_info.flags));
-    RecordProperty(prefix + "_host_cacheability", memory->host.cacheability);
+    RecordProperty(prefix + "_host_properties", memory->host.properties);
     RecordProperty(prefix + "_host_access", memory->host.flags);
   }
   ASSERT_EQ(output->device_address % sizeof(uint64_t), 0u);

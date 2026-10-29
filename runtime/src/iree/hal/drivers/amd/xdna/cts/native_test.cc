@@ -424,9 +424,11 @@ TEST_F(XdnaNativeTest, ReplacesDeviceMappingsOverRetainedBacking) {
       .interfaces = UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_XDNA_SHIM_DMA,
   };
   const iree_hal_pool_scope_t scope = {1, &family, {}};
+  iree_hal_pool_t* source_pool = memory_pool_;
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      device_group_, scope, iree_allocator_system(), &capabilities));
+      device_group_, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
   ASSERT_NE(capabilities.max_byte_length, 0u);
   const auto unit = std::max(capabilities.reservation_granularity,
                              capabilities.mapping_granularity);
@@ -448,9 +450,9 @@ TEST_F(XdnaNativeTest, ReplacesDeviceMappingsOverRetainedBacking) {
       .mapping_granularity = unit,
   };
   Ref<iree_hal_buffer_t> reservation;
-  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(device_group_, scope, &options,
-                                                iree_allocator_system(),
-                                                reservation.out()));
+  IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
+      device_group_, scope, {1, &source_pool}, &options,
+      iree_allocator_system(), reservation.out()));
   iree_hal_memory_scope_t program_scope;
   IREE_ASSERT_OK(iree_hal_device_group_resolve_memory_scope(
       device_group_, {IREE_HAL_MEMORY_SITE_PROGRAM, family.family},
@@ -769,7 +771,8 @@ TEST_P(XdnaFirstWriterTest, NativeConstructionPreparesFirstDeviceWrite) {
         .storage_class = import_class.storage_class,
         .payload = {.host_pointer = registered_storage_},
         .byte_length = allocation_length,
-        .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+        .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
         .maintenance_range = {guard_length, registration_length},
     };
     IREE_ASSERT_OK(iree_hal_pool_import_buffer(

@@ -203,7 +203,9 @@ class Pm4QueuedMappingTest : public Pm4DispatchTest,
             (reinterpret_cast<uintptr_t>(storage) + kBackingLength - 1) &
             ~(kBackingLength - 1);
         source.registered_host_pointer = reinterpret_cast<void*>(address);
-        source.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+        source.registered_host_properties =
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
         storage_[i] = storage;
         ASSERT_NO_FATAL_FAILURE(backing_[i].Initialize(api_, scope, source));
       } else {

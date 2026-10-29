@@ -27,7 +27,7 @@ using iree::hal::cts::Ref;
 
 class FileTransferRangesTest
     : public MemoryBackendTest,
-      public ::testing::WithParamInterface<std::tuple<uint32_t, bool>> {};
+      public ::testing::WithParamInterface<std::tuple<uint32_t, bool, bool>> {};
 
 TEST_P(FileTransferRangesTest, PreservesEveryPhysicalRouteAndCoordinate) {
   static_assert(sizeof(iree_hal_amd_fabric_file_range_t) <= 64);
@@ -37,11 +37,15 @@ TEST_P(FileTransferRangesTest, PreservesEveryPhysicalRouteAndCoordinate) {
   constexpr uint64_t kBufferOffset = 128;
   constexpr uint64_t kFileOffset = 64;
   constexpr uint64_t kLength = 3 * kUnit - 256;
-  const auto [routes, write] = GetParam();
-  // Each physical source is private, CPU-accessible, or file-capable. CPU
-  // accessibility alone does not permit native file I/O through that view.
-  const std::array<uint32_t, 3> source_routes = {routes % 3, (routes / 3) % 3,
-                                                 routes / 9};
+  const auto [routes, write, direct] = GetParam();
+  // Each physical source is private, CPU-only, pinnable for file I/O, or
+  // buffered-only. The default route stages unpinnable views even when they
+  // support native buffered access.
+  const std::array<uint32_t, 3> source_routes = {routes % 4, (routes / 4) % 4,
+                                                 routes / 16};
+  constexpr std::array<amdf_host_mapping_features_t, 4> kFeatures = {
+      0, 0, AMDF_HOST_MAPPING_FEATURE_FILE_IO,
+      AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO};
   native_.required_flags = 0;
   native_.mapping_enabled = true;
   native_.api.memory_query_pair_info =
@@ -69,12 +73,11 @@ TEST_P(FileTransferRangesTest, PreservesEveryPhysicalRouteAndCoordinate) {
     native_.address_kinds[i] = UINT64_C(1) << AMDF_MEMORY_ADDRESS_GPU;
     native_families_[i].host_usage = 0;
   }
-  std::array<Ref<iree_hal_pool_t>, 3> pools;
+  std::array<Ref<iree_hal_pool_t>, 4> pools;
   for (uint32_t i = 0; i < pools.size(); ++i) {
     native_.host_mappable = i != 0;
     native_.host_visibility_guaranteed = i != 0;
-    native_.host_mapping_features =
-        i == 2 ? AMDF_HOST_MAPPING_FEATURE_FILE_IO : 0;
+    native_.host_mapping_features = kFeatures[i];
     IREE_ASSERT_OK(CreatePool(
         IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_STORAGE,
         pools[i].out(), UINT64_C(1) << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE,
@@ -87,8 +90,7 @@ TEST_P(FileTransferRangesTest, PreservesEveryPhysicalRouteAndCoordinate) {
   IREE_ASSERT_OK(CreateReservation(target.out()));
   const auto scope = ResolveScope(IREE_HAL_MEMORY_SITE_PROGRAM, families_[0]);
   for (uint32_t i = 0; i < sources.size(); ++i) {
-    native_.host_mapping_features =
-        source_routes[i] == 2 ? AMDF_HOST_MAPPING_FEATURE_FILE_IO : 0;
+    native_.host_mapping_features = kFeatures[source_routes[i]];
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
         pools[source_routes[i]],
         iree_hal_make_pool_reservation_request(2 * kUnit, kUnit),
@@ -156,6 +158,11 @@ TEST_P(FileTransferRangesTest, PreservesEveryPhysicalRouteAndCoordinate) {
       kFileOffset, target, kBufferOffset, kLength, allocator_, &transfer));
   target.reset();
   file.reset();
+  // This test resolves routes without issuing I/O. Model the imported file's
+  // direct-I/O requirement independently of the temporary filesystem's mode.
+  if (direct) {
+    transfer.async.file->flags |= IREE_ASYNC_FILE_FLAG_DIRECT;
+  }
   iree_hal_memory_effects_t before = {}, after = {};
   IREE_ASSERT_OK(iree_hal_amd_fabric_file_transfer_prepare_ranges(
       &transfer, &native_.api, families_[0],
@@ -184,7 +191,7 @@ TEST_P(FileTransferRangesTest, PreservesEveryPhysicalRouteAndCoordinate) {
     transfer.async.request.offset = range.offset;
     EXPECT_EQ(iree_hal_amd_fabric_file_transfer_current_range(&transfer),
               &range);
-    if (host) {
+    if (host && !direct) {
       IREE_ASSERT_OK(
           iree_hal_amd_fabric_file_transfer_prepare_range(&transfer, &range));
       EXPECT_EQ(transfer.async.request.span.length, end - start);
@@ -215,7 +222,8 @@ TEST_P(FileTransferRangesTest, PreservesEveryPhysicalRouteAndCoordinate) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Routes, FileTransferRangesTest,
-                         ::testing::Combine(::testing::Range(0u, 27u),
+                         ::testing::Combine(::testing::Range(0u, 64u),
+                                            ::testing::Bool(),
                                             ::testing::Bool()));
 
 }  // namespace

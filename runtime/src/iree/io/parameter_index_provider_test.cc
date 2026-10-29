@@ -204,7 +204,8 @@ static iree_status_t CreateTransferPool(iree_hal_device_group_t* device_group,
           {
               .access = IREE_HAL_MEMORY_ACCESS_ALL,
               .modes = IREE_HAL_MAPPING_MODE_SCOPED,
-              .cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+              .properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
           },
   };
   const iree_hal_external_storage_class_t host_pointer_class =

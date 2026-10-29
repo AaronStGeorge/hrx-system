@@ -96,8 +96,9 @@ static iree_status_t iree_hal_heap_pool_validate_host_access(
         IREE_STATUS_INVALID_ARGUMENT,
         "heap pool requires explicit host access and mapping modes");
   }
-  if (host_access.cacheability != IREE_HAL_HOST_CACHEABILITY_UNKNOWN &&
-      host_access.cacheability != IREE_HAL_HOST_CACHEABILITY_WRITE_BACK) {
+  if (!iree_all_bits_set(IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK,
+                         host_access.properties)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "heap pool storage only supports write-back host caching");
@@ -450,7 +451,8 @@ IREE_API_EXPORT iree_status_t iree_hal_heap_pool_create(
     return iree_make_status(IREE_STATUS_UNAVAILABLE,
                             "host atomic operations are not lock-free");
   }
-  host_access.cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  host_access.properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
 
   iree_hal_heap_pool_t* pool = NULL;
   IREE_RETURN_IF_ERROR(

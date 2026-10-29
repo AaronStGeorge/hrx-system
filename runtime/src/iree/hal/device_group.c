@@ -204,13 +204,14 @@ typedef struct iree_hal_device_group_virtual_buffer_dispatch_t {
 static iree_status_t iree_hal_device_group_dispatch_virtual_buffer_create(
     void* user_data, iree_hal_device_group_t* request_group,
     const iree_hal_pool_scope_t* scope,
+    const iree_hal_virtual_buffer_sources_t* sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
   iree_hal_device_group_virtual_buffer_dispatch_t* dispatch = user_data;
   iree_hal_device_group_t* group = dispatch->dispatch_group;
   if (!group) {
     return dispatch->leaf.fn(dispatch->leaf.user_data, request_group, scope,
-                             options, host_allocator, out_buffer);
+                             sources, options, host_allocator, out_buffer);
   }
   iree_hal_device_group_virtual_buffer_dispatch_t next_dispatch = {
       .dispatch_group = group->source_group,
@@ -222,15 +223,16 @@ static iree_status_t iree_hal_device_group_dispatch_virtual_buffer_create(
   };
   if (group->wrapper.vtable && group->wrapper.vtable->create_virtual_buffer) {
     return group->wrapper.vtable->create_virtual_buffer(
-        group->wrapper.self, next, request_group, scope, options,
+        group->wrapper.self, next, request_group, scope, sources, options,
         host_allocator, out_buffer);
   }
-  return next.fn(next.user_data, request_group, scope, options, host_allocator,
-                 out_buffer);
+  return next.fn(next.user_data, request_group, scope, sources, options,
+                 host_allocator, out_buffer);
 }
 
 IREE_API_EXPORT iree_status_t iree_hal_device_group_create_virtual_buffer(
     iree_hal_device_group_t* group, const iree_hal_pool_scope_t* scope,
+    const iree_hal_virtual_buffer_sources_t* sources,
     const iree_hal_virtual_buffer_options_t* options,
     iree_hal_virtual_buffer_create_callback_t leaf,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer) {
@@ -239,7 +241,7 @@ IREE_API_EXPORT iree_status_t iree_hal_device_group_create_virtual_buffer(
       .leaf = leaf,
   };
   return iree_hal_device_group_dispatch_virtual_buffer_create(
-      &dispatch, group, scope, options, host_allocator, out_buffer);
+      &dispatch, group, scope, sources, options, host_allocator, out_buffer);
 }
 
 // All fallible device assignment has completed. These canonical cells become

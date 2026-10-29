@@ -201,7 +201,8 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
       .maximum_byte_length = maximum_byte_length,
       .byte_length_granularity = 1,
       .registered_host_pointer_alignment = 1,
-      .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .minimum_alignment = 1,
       .maximum_alignment = maximum_alignment,
       .native_byte_length_granularity = page_size,
@@ -215,6 +216,8 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
       .minimum_alignment = page_size,
   };
   const amdf_host_mapping_capabilities_t host_mapping = {
+      .properties = AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                    AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK,
       .maximum_byte_length = maximum_byte_length,
       .byte_offset_granularity = 1,
       .byte_length_granularity = 1,
@@ -254,7 +257,10 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.device_address = page_address;
     profile.allocation = allocation;
     profile.host_mapping = host_mapping;
-    profile.host_mapping.features |= AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS;
+    // Buffered I/O copies through the CPU mapping. GUP cannot pin these
+    // VM_IO/PFNMAP views, so direct I/O and registered buffers remain excluded.
+    profile.host_mapping.features |= AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS |
+                                     AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO;
     profile.external_memory_support_count = 2;
     profile.external_memory_support[0] = (amdf_external_memory_support_t){
         .type = AMDF_EXTERNAL_MEMORY_TYPE_DMA_BUF_FD,
@@ -317,9 +323,12 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.allocation = allocation;
     if ((profile.roles & AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) != 0) {
       profile.host_mapping = host_mapping;
-      if (topology->integrated) {
-        profile.host_mapping.features |=
-            AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS;
+      // TTM maps ordinary VRAM write-combined, but KFD can restore an evicted
+      // allocation in cached GTT. Only CPU-connected XGMI stays cached in both
+      // domains. Cache operations cover every admitted state independently of
+      // these lifetime guarantees.
+      if (!topology->vram.host_cached) {
+        profile.host_mapping.properties = AMDF_HOST_MEMORY_PROPERTY_NONE;
       }
     }
     if (amdf_gpu_kfd_supports_legacy_sdma_visibility(topology)) {
@@ -344,31 +353,10 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.registration = registration;
     profile.host_mapping = host_mapping;
     profile.host_mapping.features |= AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS;
-  } else if (memory_profile_ordinal == ordinal &&
-             topology->sdma.engine_count != 0) {
-    // Owned host pools provide a fresh DMA-BUF for each attachment. Public
-    // foreign import cannot promise independent PRIME/KFD teardown ownership.
-    profile.memory_class = AMDF_MEMORY_CLASS_SYSTEM;
-    profile.roles = AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT;
-    profile.construction.query_access = NULL;
-    profile.guaranteed_flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE;
-    profile.supported_flags =
-        profile.guaranteed_flags | AMDF_MEMORY_FLAG_DEVICE_ADDRESS;
-    profile.supported_device_access = AMDF_MEMORY_ACCESS_READ |
-                                      AMDF_MEMORY_ACCESS_WRITE |
-                                      AMDF_MEMORY_ACCESS_EXECUTE;
-    profile.device_address = page_address;
-    profile.import = allocation;
-    profile.import.byte_length_granularity = page_size;
-    profile.external_memory_support_count = 1;
-    profile.external_memory_support[0] = (amdf_external_memory_support_t){
-        .type = AMDF_EXTERNAL_MEMORY_TYPE_DMA_BUF_FD,
-        .flags = AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_IMPORT,
-        .byte_length_alignment = page_size,
-    };
-    profile.visibility.describe_site =
-        amdf_gpu_umd_memory_describe_system_store_site;
   } else {
+    // Foreign host DMA-BUF imports create separate KFD residency and render
+    // alias objects. Both charge the full payload against the GTT limit, so
+    // this acquisition cannot satisfy the single-charge backing contract.
     return amdf_make_api_status(AMDF_STATUS_CODE_OUT_OF_RANGE);
   }
   if (profile.memory_class == AMDF_MEMORY_CLASS_SYSTEM &&

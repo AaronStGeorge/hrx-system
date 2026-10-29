@@ -156,7 +156,8 @@ amdf_status_t AMDF_CALL NativeAllocator::QueryMapping(
     amdf_host_mapping_t* mapping, amdf_host_mapping_info_t* out_info) {
   auto* memory = reinterpret_cast<NativeMemory*>(mapping);
   out_info->pointer = memory->contents.data();
-  out_info->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  out_info->properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   return AMDF_STATUS_OK;
 }
 

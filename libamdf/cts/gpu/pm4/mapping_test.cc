@@ -475,7 +475,8 @@ class Pm4MappingTest : public Pm4MappingFixture {
           .minimum_alignment = alignment,
           .registered_host_pointer = reinterpret_cast<void*>(pointer),
           .accesses = &attachment,
-          .registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+          .registered_host_properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
       };
       source = &backing_.emplace_back();
       source->Initialize(api_, scope_, create);

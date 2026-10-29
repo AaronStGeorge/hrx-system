@@ -107,7 +107,9 @@ TEST_F(GpuMemoryTest, ValidatesPlacementRequirementsBeforeNativeAllocation) {
       AMDF_MEMORY_PROFILE_ROLE_REGISTER | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP,
       AMDF_MEMORY_FLAG_HOST_VISIBLE, memory_access_.requirements);
   create_info.byte_length = 4096;
-  create_info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  create_info.registered_host_properties =
+      (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   create_info.registered_host_pointer =
       reinterpret_cast<uint8_t*>(&create_info) + 1;
   EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
@@ -198,7 +200,8 @@ TEST_F(GpuMemoryTest, OwnsStableSystemAddressAndExplicitHostMapping) {
   EXPECT_EQ(reinterpret_cast<uintptr_t>(mapping_info.pointer) &
                 (memory_info.alignment - 1),
             0u);
-  EXPECT_EQ(mapping_info.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(mapping_info.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                      AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(mapping_info.byte_length, memory_info.byte_length);
   ASSERT_NE(mapping_info.cache_line_size, 0u);
   EXPECT_EQ(mapping_info.flush.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
@@ -342,7 +345,9 @@ TEST_F(GpuMemoryTest, RegistersCallerOwnedCoherentHostPages) {
   create_info.byte_length = kByteLength;
   create_info.minimum_alignment = kByteLength;
   create_info.registered_host_pointer = registered_host_pointer_;
-  create_info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  create_info.registered_host_properties =
+      (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   ASSERT_TRUE(amdf_status_is_ok(
       api_->memory_create(system_scope_, &create_info, &memory_, nullptr)));
 
@@ -363,7 +368,8 @@ TEST_F(GpuMemoryTest, RegistersCallerOwnedCoherentHostPages) {
   EXPECT_EQ(
       mapping_info.pointer,
       static_cast<uint8_t*>(registered_host_pointer_) + map_info.byte_offset);
-  EXPECT_EQ(mapping_info.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(mapping_info.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                      AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_NE(mapping_info.cache_line_size, 0u);
   EXPECT_EQ(mapping_info.flush.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
   EXPECT_EQ(mapping_info.flush.executor,

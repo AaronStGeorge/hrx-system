@@ -176,7 +176,8 @@ class HostReservationTest : public ::testing::TestWithParam<uint64_t> {
     ASSERT_EQ(info.memory_byte_offset, offset);
     ASSERT_EQ(reinterpret_cast<uintptr_t>(info.pointer),
               address_.address + offset);
-    EXPECT_EQ(info.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(info.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     *out_view = mapping;
     *out_pointer = static_cast<uint32_t*>(info.pointer);
   }
@@ -292,6 +293,65 @@ TEST_P(HostReservationTest, EntireReservationCanBeShorterThanOneUnit) {
   ASSERT_NO_FATAL_FAILURE(View(0, length, &view, &pointer));
   pointer[length / sizeof(uint32_t) - 1] = 53;
   EXPECT_EQ(source[length / sizeof(uint32_t) - 1], 53u);
+}
+
+TEST_P(HostReservationTest, QualifiesHostAliasesBeforeAllocatingBacking) {
+  amdf_memory_profile_pair_query_t query = {
+      .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE_PAIR_QUERY,
+      .structure_size = sizeof(query),
+      .memory_profile_ordinal = profile_.ordinal,
+      .required_flags = AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE,
+  };
+  query.producer.kind = AMDF_MEMORY_SITE_KIND_HOST;
+  query.producer.flags = AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION;
+  query.producer.value.host_access = AMDF_MEMORY_MAP_FLAG_WRITE;
+  query.consumer.kind = AMDF_MEMORY_SITE_KIND_HOST;
+  query.consumer.flags = AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION;
+  query.consumer.value.host_access = AMDF_MEMORY_MAP_FLAG_READ;
+  amdf_memory_pair_info_t prospective = {
+      .type = AMDF_STRUCTURE_TYPE_MEMORY_PAIR_INFO,
+      .structure_size = sizeof(prospective),
+  };
+  ASSERT_EQ(api_->memory_scope_query_pair_info(scope_, &query, &prospective),
+            AMDF_STATUS_OK);
+  ASSERT_EQ(prospective.release.kind, AMDF_CACHE_TRANSITION_KIND_NONE);
+  ASSERT_EQ(prospective.acquire.kind, AMDF_CACHE_TRANSITION_KIND_NONE);
+  ASSERT_NO_FATAL_FAILURE(Reserve(unit_));
+  amdf_host_mapping_t* view = nullptr;
+  uint32_t* pointer = nullptr;
+  ASSERT_NO_FATAL_FAILURE(View(0, unit_, &view, &pointer));
+  for (uint32_t value : {17u, 29u}) {
+    amdf_memory_t* memory = nullptr;
+    uint32_t* source = nullptr;
+    ASSERT_NO_FATAL_FAILURE(
+        Allocate(unit_, capabilities_.required_source_flags, &memory, &source));
+    const auto update = Bind(0, unit_, memory, 0);
+    ASSERT_EQ(api_->memory_reservation_update(reservation_, 0, 1, &update),
+              AMDF_STATUS_OK);
+    amdf_memory_site_t alias = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_SITE,
+        .structure_size = sizeof(alias),
+        .kind = AMDF_MEMORY_SITE_KIND_HOST,
+    };
+    alias.value.host = {view, memory};
+    amdf_memory_pair_info_t concrete = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_PAIR_INFO,
+        .structure_size = sizeof(concrete),
+    };
+    ASSERT_EQ(api_->memory_query_pair_info(&alias, &alias, &concrete),
+              AMDF_STATUS_OK);
+    EXPECT_EQ(concrete.flags, prospective.flags);
+    EXPECT_EQ(concrete.release.kind, prospective.release.kind);
+    EXPECT_EQ(concrete.acquire.kind, prospective.acquire.kind);
+    EXPECT_EQ(concrete.atomic_reach.scope_32,
+              prospective.atomic_reach.scope_32);
+    EXPECT_EQ(concrete.atomic_reach.scope_64,
+              prospective.atomic_reach.scope_64);
+    source[0] = value;
+    EXPECT_EQ(pointer[0], value);
+    pointer[1] = value + 1;
+    EXPECT_EQ(source[1], value + 1);
+  }
 }
 
 TEST_P(HostReservationTest, ReplacesBackingThroughAnUnchangedHostView) {

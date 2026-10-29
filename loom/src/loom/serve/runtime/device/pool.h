@@ -35,6 +35,25 @@ typedef struct loom_serve_pool_binding_t {
   uint64_t device_mask;
 } loom_serve_pool_binding_t;
 
+typedef enum loom_serve_pool_placement_kind_e {
+  // Let the HAL choose among routes satisfying the complete access scope.
+  LOOM_SERVE_POOL_PLACEMENT_AUTOMATIC = 0,
+  // Require the allocation domain of one group device's physical device.
+  LOOM_SERVE_POOL_PLACEMENT_DEVICE = 1,
+  // Require initial allocation on an operating-system host NUMA node.
+  LOOM_SERVE_POOL_PLACEMENT_HOST_NUMA = 2,
+} loom_serve_pool_placement_kind_t;
+
+// Application coordinate resolved once against the sealed HAL group. The
+// selected allocation domain is independent of the pool's consumer membership.
+typedef struct loom_serve_pool_placement_t {
+  // Domain selector; zero retains ordinary automatic placement.
+  loom_serve_pool_placement_kind_t kind;
+  // Group device index for DEVICE, OS node number for HOST_NUMA; ignored for
+  // AUTOMATIC. DEVICE requires an unambiguous physical device in that record.
+  uint32_t ordinal;
+} loom_serve_pool_placement_t;
+
 typedef struct loom_serve_pool_options_t {
   // Stable virtual roots with independently reclaimable physical backing.
   bool elastic;
@@ -42,10 +61,13 @@ typedef struct loom_serve_pool_options_t {
   iree_device_size_t weight_slab_size;
   // Preferred sparse-state slab extent, in bytes.
   iree_device_size_t state_slab_size;
-  // Serving-managed physical allowance; zero leaves it unbounded.
+  // Elastic physical-backing allowance in bytes; zero leaves it unbounded.
+  // Ordinary native storage is accounted separately and remains outside it.
   uint64_t memory_limit;
   // Fixed workspace sanitizer policy, qualified by the HAL child allocator.
   iree_hal_asan_pool_options_t asan;
+  // Required backing domain for both ordinary and elastic physical sources.
+  loom_serve_pool_placement_t placement;
 } loom_serve_pool_options_t;
 
 // Qualifies the complete simultaneous access scope before publishing an owner.
@@ -111,7 +133,7 @@ typedef struct loom_serve_pool_idle_policy_t {
   iree_duration_t parameter_timeout;
 } loom_serve_pool_idle_policy_t;
 
-// Schedules expired backing releases without waiting for native maintenance.
+// Schedules expired backing releases without waiting for native deallocation.
 // Returns pending while enabled resources await retirement or idle expiry;
 // native releases already scheduled use the ordinary capacity observer.
 // Live invocation pins and explicit parameter pins prevent deactivation.

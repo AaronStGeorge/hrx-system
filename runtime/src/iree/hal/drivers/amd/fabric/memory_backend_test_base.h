@@ -89,6 +89,7 @@ struct FakeNative {
         HostReservationCapabilities;
     api.memory_reservation_create = ReservationCreate;
     api.memory_reservation_query_access_info = ReservationInfo;
+    api.memory_reservation_map = ReservationMap;
     api.memory_reservation_update = ReservationUpdate;
     api.memory_reservation_detach = ReservationDetach;
     api.memory_reservation_destroy = ReservationDestroy;
@@ -179,6 +180,10 @@ struct FakeNative {
       out_capabilities[i].supported_flags =
           AMDF_MEMORY_FLAG_DEVICE_ADDRESS |
           self->access_flags[device->ordinal] |
+          (storage->memory_class == AMDF_MEMORY_CLASS_SYSTEM &&
+                   (self->system_local_devices & (1u << device->ordinal))
+               ? AMDF_MEMORY_FLAG_DEVICE_LOCAL
+               : 0) |
           (self->mapping_enabled ? AMDF_MEMORY_FLAG_MAPPING_SOURCE : 0);
       out_capabilities[i].address_kinds = self->address_kinds[device->ordinal];
       const auto& atomics = profile_ordinal == 1 && self->registration_enabled
@@ -220,6 +225,7 @@ struct FakeNative {
     out_profile->host_mapping.byte_offset_granularity = 1;
     out_profile->host_mapping.byte_length_granularity = 1;
     out_profile->host_mapping.features = self->host_mapping_features;
+    out_profile->host_mapping.properties = self->host_properties;
     out_profile->host_mapping.supported_access =
         !self->host_mappable ? 0
         : self->supports_private_mapping
@@ -230,11 +236,15 @@ struct FakeNative {
       out_profile->roles =
           AMDF_MEMORY_PROFILE_ROLE_REGISTER | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
       out_profile->allocation = {};
+      out_profile->host_mapping.properties =
+          AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+          AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK;
       out_profile->registration.maximum_byte_length = UINT64_C(1) << 30;
       out_profile->registration.byte_length_granularity = 1;
       out_profile->registration.registered_host_pointer_alignment = 1;
-      out_profile->registration.registered_host_cacheability =
-          AMDF_HOST_CACHEABILITY_WRITE_BACK;
+      out_profile->registration.registered_host_properties =
+          (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+           AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
       out_profile->registration.minimum_alignment = 1;
       out_profile->registration.maximum_alignment = 4096;
       out_profile->registration.native_byte_length_granularity = 4096;
@@ -279,9 +289,10 @@ struct FakeNative {
     const bool imported =
         query->memory_profile_ordinal == 1 && self->native_transport_enabled;
     EXPECT_LT(query->memory_profile_ordinal, self->ProfileCount(storage));
-    EXPECT_EQ(query->registered_host_cacheability,
-              registered ? AMDF_HOST_CACHEABILITY_WRITE_BACK
-                         : AMDF_HOST_CACHEABILITY_UNKNOWN);
+    EXPECT_EQ(query->registered_host_properties,
+              registered ? (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK)
+                         : AMDF_HOST_MEMORY_PROPERTY_NONE);
     CheckAccesses(storage, query->access_count, query->accesses);
     EXPECT_EQ(query->required_flags, self->required_flags);
     EXPECT_EQ(query->external_memory_type,
@@ -314,6 +325,11 @@ struct FakeNative {
     }
     out_info->release.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
     out_info->acquire.kind = AMDF_CACHE_TRANSITION_KIND_NONE;
+    if (self->host_alias_coherent &&
+        ((query->producer.flags | query->consumer.flags) &
+         AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION)) {
+      return AMDF_STATUS_OK;
+    }
     if (self->host_coherent && !registered &&
         (query->producer.kind == AMDF_MEMORY_SITE_KIND_HOST ||
          query->consumer.kind == AMDF_MEMORY_SITE_KIND_HOST)) {
@@ -561,7 +577,7 @@ struct FakeNative {
     auto* memory = reinterpret_cast<Memory*>(mapping);
     info->pointer = memory->data;
     info->byte_length = memory->byte_length;
-    info->cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    info->properties = memory->owner->host_properties;
     info->features = memory->owner->host_mapping_features;
     return AMDF_STATUS_OK;
   }
@@ -578,6 +594,8 @@ struct FakeNative {
     std::vector<amdf_memory_reservation_access_t> accesses;
     // Complete reserved extent.
     uint64_t byte_length;
+    // Descriptor for the reserved host alias; owns no physical bytes.
+    Memory host_view = {};
   };
 
   static amdf_status_t AMDF_CALL
@@ -633,6 +651,9 @@ struct FakeNative {
                         {info->accesses, info->accesses + info->access_count},
                         info->byte_length};
     ++self->reservation_count;
+    reservation->host_view.owner = self;
+    reservation->host_view.data = reinterpret_cast<void*>(UINT64_C(0x40000000));
+    reservation->host_view.byte_length = info->byte_length;
     *output = reinterpret_cast<amdf_memory_reservation_t*>(reservation);
     return AMDF_STATUS_OK;
   }
@@ -648,6 +669,17 @@ struct FakeNative {
     output->address = UINT64_C(0x40000000);
     output->byte_length = reservation->byte_length;
     output->mapping_granularity = 4096;
+    return AMDF_STATUS_OK;
+  }
+
+  static amdf_status_t AMDF_CALL ReservationMap(
+      amdf_memory_reservation_t* handle, uint32_t ordinal,
+      const amdf_memory_map_info_t* info, amdf_host_mapping_t** output) {
+    auto* reservation = reinterpret_cast<Reservation*>(handle);
+    EXPECT_EQ(reservation->accesses[ordinal].device, nullptr);
+    EXPECT_EQ(info->byte_length, reservation->byte_length);
+    ++reservation->owner->map_count;
+    *output = reinterpret_cast<amdf_host_mapping_t*>(&reservation->host_view);
     return AMDF_STATUS_OK;
   }
 
@@ -699,10 +731,16 @@ struct FakeNative {
   bool host_reservation_enabled = false;
   // Whether owned backing supports independently replaceable CPU aliases.
   bool host_source_enabled = false;
+  // Independent host aliases can have a different cache protocol than owners.
+  bool host_alias_coherent = false;
   // Whether the native profile admits ordinary host buffers for file I/O.
   bool file_io_enabled = false;
   // Exact capabilities reported by prepared host views.
   amdf_host_mapping_features_t host_mapping_features = 0;
+  // CPU mapping facts supplied by the native backing dependency.
+  amdf_host_memory_properties_t host_properties =
+      AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+      AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK;
   // Native address geometry per live consumer, before addresses are reserved.
   std::array<uint64_t, 2> reservation_granularities = {4096, 4096};
   // Whole-backing preparation required by each native address domain.
@@ -728,6 +766,8 @@ struct FakeNative {
 
   // Shared system scope offered by both engine descriptors.
   Scope system_scope = {this, AMDF_MEMORY_CLASS_SYSTEM, UINT32_MAX};
+  // Consumers for which the owned SYSTEM profile offers device-local backing.
+  uint32_t system_local_devices = 0;
   // Distinct physical storage scopes for the two participating devices.
   std::array<Scope, 2> local_scopes = {};
   // Scope actually used to acquire the last backing allocation.
@@ -1034,7 +1074,7 @@ class MemoryBackendTest : public ::testing::Test {
     scope.host.modes = host_access ? IREE_HAL_MAPPING_MODE_SCOPED |
                                          IREE_HAL_MAPPING_MODE_PERSISTENT
                                    : 0;
-    scope.host.cacheability = IREE_HAL_HOST_CACHEABILITY_UNKNOWN;
+    scope.host.properties = IREE_HAL_HOST_MEMORY_PROPERTY_NONE;
     return iree_hal_slab_pool_create(group_, scope, &pool_options_, allocator_,
                                      out_pool);
   }
@@ -1082,21 +1122,46 @@ class MemoryBackendTest : public ::testing::Test {
     return scope;
   }
 
-  iree_status_t CreateReservation(iree_hal_buffer_t** out_reservation) {
+  iree_status_t CreateReservation(
+      iree_hal_buffer_t** out_reservation,
+      iree_hal_pool_t* source_pool = nullptr,
+      iree_hal_buffer_usage_t usage = IREE_HAL_BUFFER_USAGE_STORAGE) {
     native_.mapping_enabled = true;
     binding_descriptions_[0] = {IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS,
                                 AMDF_MEMORY_ADDRESS_GPU};
     native_families_[0].host_usage = 0;
+    native_.address_kinds[0] = UINT64_C(1) << AMDF_MEMORY_ADDRESS_GPU;
     const iree_hal_pool_family_access_t family = {
         .family = families_[0],
-        .usage = IREE_HAL_BUFFER_USAGE_STORAGE,
+        .usage = usage,
     };
     const iree_hal_pool_scope_t scope = {1, &family, {}};
     const iree_hal_virtual_buffer_options_t options = {
         .byte_length = 16384,
     };
-    return iree_hal_virtual_buffer_create(group_, scope, &options, allocator_,
-                                          out_reservation);
+    iree_hal_pool_t* owned_source = nullptr;
+    iree_status_t status = iree_ok_status();
+    if (!source_pool) {
+      auto source_family = family;
+      source_family.interfaces = UINT64_C(1)
+                                 << IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE;
+      auto source_scope = scope;
+      source_scope.families = &source_family;
+      if (native_.required_flags & AMDF_MEMORY_FLAG_HOST_VISIBLE) {
+        source_scope.host.access = IREE_HAL_MEMORY_ACCESS_ALL;
+        source_scope.host.modes = IREE_HAL_MAPPING_MODE_SCOPED;
+      }
+      status = iree_hal_slab_pool_create(group_, source_scope, &pool_options_,
+                                         allocator_, &owned_source);
+      source_pool = owned_source;
+    }
+    if (iree_status_is_ok(status)) {
+      status =
+          iree_hal_virtual_buffer_create(group_, scope, {1, &source_pool},
+                                         &options, allocator_, out_reservation);
+    }
+    iree_hal_pool_release(owned_source);
+    return status;
   }
 
   // Native failures delivered through the production diagnostic sink.

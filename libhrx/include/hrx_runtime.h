@@ -866,7 +866,10 @@ HRX_API hrx_status_t hrx_device_query_memory_scope(
 
 // Complete simultaneous access to one address reservation. All families of
 // every listed device participate. Devices must belong to the same sealed
-// group; the arrays are borrowed only for query/construction.
+// group; the arrays are borrowed only for query/construction. The immutable
+// backing contract covers each device's normal remappable allocation class,
+// or its coherent host class when host_access is requested. Later mappings
+// must preserve those cache and atomic guarantees.
 typedef struct hrx_virtual_buffer_scope_t {
   // Nonzero number of distinct participating devices.
   size_t device_count;
@@ -901,8 +904,9 @@ typedef struct hrx_virtual_buffer_capabilities_t {
   uint32_t operations;
 } hrx_virtual_buffer_capabilities_t;
 
-// Cold query: acquires no addresses or physical payload. Unsupported scopes
-// return OK with zero capabilities; invalid scope and native failures
+// Cold query: prepares the allocation source metadata without acquiring
+// addresses or physical payload. Unsupported address geometry returns OK with
+// zero capabilities; source preparation, invalid scope, and native failures
 // propagate.
 HRX_API hrx_status_t hrx_virtual_buffer_query_capabilities(
     hrx_virtual_buffer_scope_t scope,

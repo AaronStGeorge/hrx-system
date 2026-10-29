@@ -21,7 +21,10 @@
 
 #include "gtest/gtest.h"
 #include "libamdf/src/allocator.h"
+#include "libamdf/src/gpu/umd/kfd/hdp.h"
+#include "libamdf/src/gpu/umd/kfd/topology.h"
 #include "libamdf/src/gpu/umd/memory.h"
+#include "libamdf/src/platform/linux/host_cache.h"
 
 namespace {
 
@@ -103,6 +106,14 @@ struct NativeBufferState {
   bool allocation_live = false;
   // Whether GPU access or its unmap synchronization remains live.
   bool access_live = false;
+  // Explicit CPU cache operations observed through the native memory owner.
+  uint32_t cache_transfer_count = 0;
+  // First byte of the most recent explicit cache operation.
+  void* cache_transfer_pointer = nullptr;
+  // Length of the most recent explicit cache operation in bytes.
+  uint64_t cache_transfer_length = 0;
+  // Host aperture publications after CPU cache maintenance.
+  uint32_t hdp_publication_count = 0;
 };
 
 // Other threads and calls outside a native fixture retain the real ioctl.
@@ -113,6 +124,32 @@ thread_local NativeBufferState* native_state = nullptr;
 extern "C" int __real_ioctl(int descriptor, unsigned long request, ...);
 extern "C" int __real_close(int descriptor);
 extern "C" int __real_munmap(void* address, size_t byte_length);
+extern "C" void __real_amdf_linux_host_cache_transfer(void*, uint64_t,
+                                                      uint32_t);
+extern "C" amdf_status_t __real_amdf_gpu_kfd_hdp_publish_host_writes(
+    amdf_gpu_kfd_hdp_t*);
+
+extern "C" void __wrap_amdf_linux_host_cache_transfer(void* pointer,
+                                                      uint64_t byte_length,
+                                                      uint32_t line_size) {
+  if (native_state != nullptr && byte_length != 0) {
+    ++native_state->cache_transfer_count;
+    native_state->cache_transfer_pointer = pointer;
+    native_state->cache_transfer_length = byte_length;
+    EXPECT_EQ(line_size, 64u);
+  }
+  __real_amdf_linux_host_cache_transfer(pointer, byte_length, line_size);
+}
+
+extern "C" amdf_status_t __wrap_amdf_gpu_kfd_hdp_publish_host_writes(
+    amdf_gpu_kfd_hdp_t* hdp) {
+  if (native_state == nullptr) {
+    return __real_amdf_gpu_kfd_hdp_publish_host_writes(hdp);
+  }
+  EXPECT_GT(native_state->cache_transfer_count, 0u);
+  ++native_state->hdp_publication_count;
+  return AMDF_STATUS_OK;
+}
 
 extern "C" int __wrap_close(int descriptor) {
   const int result = __real_close(descriptor);
@@ -389,14 +426,13 @@ class KfdBufferNativeTest : public ::testing::Test {
   amdf_status_t PrepareOwnedImport(amdf_gpu_umd_memory_t** memory,
                                    amdf_gpu_umd_memory_result_t* result) {
     device_.native_lifetime = AMDF_NATIVE_LIFETIME_INSTANCE;
-    device_.topology.sdma.engine_count = 1;
     native_.import_descriptor = device_.render_descriptor;
-    amdf_memory_native_profile_t profile;
-    const auto status =
-        amdf_gpu_umd_device_query_memory_profile(&device_, 2, &profile);
-    if (!amdf_status_is_ok(status)) {
-      return status;
-    }
+    // Exercise retained native import ownership independently of acquisition
+    // discovery, which excludes the double-accounted foreign backing route.
+    const amdf_memory_native_profile_t profile = {
+        .roles = AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT,
+        .guaranteed_flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE,
+    };
     const amdf_memory_native_import_info_t import = {
         .device_access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
         .required_flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE,
@@ -887,6 +923,94 @@ TEST_F(KfdBufferNativeTest, DestroyFailureRetainsCallerOwnedBuffer) {
   EXPECT_EQ(Destroy(), AMDF_STATUS_OK);
   EXPECT_EQ(native_.unmap_progress, (std::vector<uint32_t>{0}));
   EXPECT_EQ(native_.free_count, 2u);
+}
+
+TEST_F(KfdBufferNativeTest, LocalMappingMaintainsEveryAdmittedCacheType) {
+  expected_metadata_free_count_ = 0;
+  device_.cache_line_size = 64;
+  device_.topology.memory_features =
+      AMDF_GPU_DEVICE_FEATURE_LOCAL_MEMORY |
+      AMDF_GPU_DEVICE_FEATURE_HOST_VISIBLE_LOCAL_MEMORY;
+  device_.hdp = reinterpret_cast<amdf_gpu_kfd_hdp_t*>(uintptr_t{1});
+  for (bool host_cached : {false, true}) {
+    SCOPED_TRACE(host_cached);
+    device_.topology.vram.host_cached = host_cached;
+    amdf_memory_native_profile_t profile;
+    ASSERT_EQ(amdf_gpu_umd_device_query_memory_profile(&device_, 2, &profile),
+              AMDF_STATUS_OK);
+    const amdf_memory_native_create_info_t create_info = {
+        .device_access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+        .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE,
+        .byte_length = 4096,
+        .minimum_alignment = 4096,
+    };
+    amdf_gpu_umd_memory_t* memory = nullptr;
+    amdf_gpu_umd_memory_result_t result = {};
+    ASSERT_EQ(amdf_gpu_umd_memory_prepare(&device_, 0, nullptr, &profile,
+                                          &create_info, &memory, &result),
+              AMDF_STATUS_OK);
+    expected_metadata_free_count_ += 2;
+    EXPECT_NE(native_.allocation.flags & KFD_IOC_ALLOC_MEM_FLAGS_VRAM, 0u);
+    const amdf_memory_map_info_t map_info = {
+        .byte_offset = 128,
+        .byte_length = 256,
+        .flags = AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE,
+    };
+    amdf_gpu_umd_host_mapping_t* mapping = nullptr;
+    amdf_gpu_umd_host_mapping_result_t mapped = {};
+    ASSERT_EQ(amdf_gpu_umd_memory_map(memory, &profile.host_mapping, &map_info,
+                                      &mapping, &mapped),
+              AMDF_STATUS_OK);
+    EXPECT_EQ(mapped.visibility.properties, profile.host_mapping.properties);
+    std::memset(mapped.pointer, 0xA5, 256);
+    native_.cache_transfer_count = 0;
+    native_.hdp_publication_count = 0;
+    for (const auto operation : {AMDF_HOST_CACHE_OPERATION_FLUSH,
+                                 AMDF_HOST_CACHE_OPERATION_INVALIDATE}) {
+      ASSERT_EQ(
+          amdf_gpu_umd_host_mapping_cache_control(mapping, operation, 128, 256),
+          AMDF_STATUS_OK);
+      EXPECT_EQ(native_.cache_transfer_pointer, mapped.pointer);
+      EXPECT_EQ(native_.cache_transfer_length, 256u);
+    }
+    EXPECT_EQ(native_.cache_transfer_count, 2u);
+    EXPECT_EQ(native_.hdp_publication_count, host_cached ? 0u : 1u);
+    EXPECT_EQ(static_cast<const uint8_t*>(mapped.pointer)[255], 0xA5);
+    ASSERT_EQ(amdf_gpu_umd_host_mapping_cache_control(
+                  mapping, AMDF_HOST_CACHE_OPERATION_FLUSH, 128, 0),
+              AMDF_STATUS_OK);
+    EXPECT_EQ(native_.cache_transfer_count, 2u);
+    EXPECT_EQ(native_.hdp_publication_count, host_cached ? 0u : 1u);
+    amdf_gpu_umd_host_mapping_destroy(mapping);
+    ASSERT_EQ(amdf_gpu_umd_memory_destroy(memory), AMDF_STATUS_OK);
+  }
+}
+
+TEST_F(KfdBufferNativeTest, ReservedApuLocalUsesVramAllocation) {
+  device_.topology.integrated = true;
+  device_.topology.vram.total_byte_length = UINT64_C(96) << 30;
+  device_.topology.vram.visible_byte_length = UINT64_C(96) << 30;
+  device_.topology.gtt_byte_length = UINT64_C(16) << 30;
+  device_.topology.memory_features =
+      amdf_gpu_kfd_topology_memory_features(&device_.topology, true);
+  amdf_memory_native_profile_t profile;
+  ASSERT_EQ(amdf_gpu_umd_device_query_memory_profile(&device_, 2, &profile),
+            AMDF_STATUS_OK);
+  ASSERT_EQ(profile.memory_class, AMDF_MEMORY_CLASS_LOCAL);
+  const amdf_memory_native_create_info_t create_info = {
+      .device_access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+      .byte_length = 4096,
+      .minimum_alignment = 4096,
+  };
+  amdf_gpu_umd_memory_t* memory = nullptr;
+  amdf_gpu_umd_memory_result_t result = {};
+  ASSERT_EQ(amdf_gpu_umd_memory_prepare(&device_, 0, nullptr, &profile,
+                                        &create_info, &memory, &result),
+            AMDF_STATUS_OK);
+  expected_metadata_free_count_ = 2;
+  EXPECT_NE(native_.allocation.flags & KFD_IOC_ALLOC_MEM_FLAGS_VRAM, 0u);
+  EXPECT_EQ(native_.allocation.flags & KFD_IOC_ALLOC_MEM_FLAGS_GTT, 0u);
+  ASSERT_EQ(amdf_gpu_umd_memory_destroy(memory), AMDF_STATUS_OK);
 }
 
 TEST_F(KfdBufferNativeTest, MemoryOwnerRetainsPartialBufferPreparation) {

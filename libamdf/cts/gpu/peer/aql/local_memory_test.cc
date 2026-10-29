@@ -291,7 +291,9 @@ class PeerAqlMemoryTest : public GpuPeerDeviceFixture {
       memory->host.structure_size = sizeof(memory->host);
       ASSERT_EQ(api_->host_mapping_query_info(memory->mapping, &memory->host),
                 AMDF_STATUS_OK);
-      ASSERT_EQ(memory->host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+      ASSERT_EQ(memory->host.properties,
+                (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                 AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
       ASSERT_EQ(memory->host.byte_length, creation.byte_length);
     } else {
       ASSERT_EQ(memory->info.flags & AMDF_MEMORY_FLAG_HOST_VISIBLE, 0u);

@@ -859,7 +859,9 @@ iree_status_t iree_hal_streaming_memory_buffer_for_context(
   };
   if (import_host_allocation) {
     external_buffer.payload.host_pointer = buffer->host_ptr;
-    external_buffer.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    external_buffer.host_properties =
+        (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+         IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   } else {
     external_buffer.payload.device_address = buffer->device_ptr;
   }
@@ -2243,7 +2245,8 @@ iree_hal_streaming_memory_allocate_owned_host_import_with_context_mode(
             IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER),
         .payload.host_pointer = host_ptr,
         .byte_length = allocation_size,
-        .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+        .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
         .maintenance_range = iree_hal_make_buffer_range(0, allocation_size),
         .release = iree_hal_streaming_owned_host_allocation_release,
         .release_user_data = owned_allocation,
@@ -2521,7 +2524,8 @@ static iree_status_t iree_hal_streaming_memory_register_host_with_context_mode(
           IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER),
       .payload.host_pointer = ptr,
       .byte_length = (iree_device_size_t)size,
-      .host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK,
+      .host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                          IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .maintenance_range =
           iree_hal_make_buffer_range(0, (iree_device_size_t)size),
   };

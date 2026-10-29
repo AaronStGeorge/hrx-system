@@ -100,7 +100,8 @@ TEST_P(TaskBufferAccessTest, DirectionalStorageBindings) {
     external.storage_class.type = IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER;
     external.byte_length = sizeof(values[i]);
     external.payload.host_pointer = values[i].data();
-    external.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+    external.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
     IREE_ASSERT_OK(iree_hal_pool_import_buffer(
         i == 2 ? write_pool.get() : read_pool.get(), &external,
         iree_hal_make_buffer_range(0, IREE_HAL_WHOLE_BUFFER),
@@ -177,7 +178,8 @@ TEST_P(TaskBufferAccessTest, DirectionalStorageBindings) {
             IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER;
         external.byte_length = sizeof(values[2]);
         external.payload.host_pointer = values[2].data();
-        external.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+        external.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                    IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
         Ref<iree_hal_buffer_t> storage_read_only;
         IREE_ASSERT_OK(iree_hal_pool_import_buffer(
             read_pool.get(), &external,

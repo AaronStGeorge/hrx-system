@@ -20,7 +20,8 @@ amdf_status_t amdf_host_memory_query_description(
     return status;
   }
   *out_description = (amdf_memory_host_description_t){
-      .cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK,
+      .properties = (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                     AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK),
       .cache_line_size = (uint32_t)transition.range_granularity,
       .flush = transition,
       .invalidate = transition,
@@ -71,7 +72,7 @@ amdf_status_t amdf_host_memory_create_view(
       .type = AMDF_STRUCTURE_TYPE_HOST_MAPPING_INFO,
       .structure_size = sizeof(mapping->info),
       .flags = map_info->flags,
-      .cacheability = description.cacheability,
+      .properties = description.properties,
       .pointer = (uint8_t*)base_pointer + map_info->byte_offset,
       .memory_byte_offset = map_info->byte_offset,
       .byte_length = map_info->byte_length,

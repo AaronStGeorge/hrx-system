@@ -338,8 +338,8 @@ static amdf_status_t amdf_gpu_kfd_read_ip_version(
 static amdf_status_t amdf_gpu_kfd_read_memory(
     const amdf_platform_endpoint_t* endpoint,
     amdf_gpu_kfd_topology_t* topology) {
-  // These sysfs totals format the same cached real/visible VRAM sizes used by
-  // INFO_MEMORY, without issuing a native query or sampling allocation usage.
+  // These sysfs totals expose the same initialized heap capacities as
+  // INFO_MEMORY, without sampling current usage or allocating payload.
   char path[64];
   snprintf(path, sizeof(path), "dev/char/%u:%u/device",
            (uint32_t)(endpoint->info.id.words[0] >> 32),
@@ -351,11 +351,16 @@ static amdf_status_t amdf_gpu_kfd_read_memory(
   }
   uint64_t total_vram = 0;
   uint64_t visible_vram = 0;
+  uint64_t total_gtt = 0;
   amdf_status_t status =
       amdf_gpu_kfd_read_number64(directory, "mem_info_vram_total", &total_vram);
   if (amdf_status_is_ok(status)) {
     status = amdf_gpu_kfd_read_number64(directory, "mem_info_vis_vram_total",
                                         &visible_vram);
+  }
+  if (amdf_status_is_ok(status)) {
+    status =
+        amdf_gpu_kfd_read_number64(directory, "mem_info_gtt_total", &total_gtt);
   }
   uint64_t hive_id = 0;
   if (amdf_status_is_ok(status)) {
@@ -380,6 +385,7 @@ static amdf_status_t amdf_gpu_kfd_read_memory(
   }
   topology->vram.total_byte_length = total_vram;
   topology->vram.visible_byte_length = visible_vram;
+  topology->gtt_byte_length = total_gtt;
   topology->memory_peers.hive_id = hive_id;
   topology->memory_peers.hive_sharing_enabled = hive_sharing_enabled != 0;
   return AMDF_STATUS_OK;
@@ -481,12 +487,13 @@ static amdf_status_t amdf_gpu_kfd_read_memory_peers(
 
 // System allocations are not bound to a selected CPU NUMA node. Intersect
 // the widths of every reported CPU route instead of choosing the first link.
-static amdf_status_t amdf_gpu_kfd_read_host_atomics(
+static amdf_status_t amdf_gpu_kfd_read_host_access(
     int nodes, int node, uint32_t node_ordinal, uint32_t link_count,
     amdf_gpu_kfd_topology_t* topology) {
   uint32_t cpu_link_count = 0;
   bool supports_32 = true;
   bool supports_64 = true;
+  bool host_cached_vram = false;
   amdf_status_t status = AMDF_STATUS_OK;
   for (uint32_t i = 0; amdf_status_is_ok(status) && i < link_count; ++i) {
     amdf_gpu_kfd_link_t link = {0};
@@ -499,6 +506,8 @@ static amdf_status_t amdf_gpu_kfd_read_host_atomics(
     }
     if (amdf_status_is_ok(status) && gpu_id == 0) {
       ++cpu_link_count;
+      host_cached_vram |= link.type == HSA_IOLINK_TYPE_XGMI &&
+                          (link.flags & HSA_IOLINK_FLAGS_ENABLED) != 0;
       supports_32 &= (link.flags & (HSA_IOLINK_FLAGS_ENABLED |
                                     HSA_IOLINK_FLAGS_NO_ATOMICS_32_BIT)) ==
                      HSA_IOLINK_FLAGS_ENABLED;
@@ -510,6 +519,7 @@ static amdf_status_t amdf_gpu_kfd_read_host_atomics(
   if (amdf_status_is_ok(status)) {
     topology->host_atomics.supports_32 = cpu_link_count != 0 && supports_32;
     topology->host_atomics.supports_64 = cpu_link_count != 0 && supports_64;
+    topology->vram.host_cached = host_cached_vram;
   }
   return status;
 }
@@ -523,9 +533,13 @@ void amdf_gpu_kfd_topology_deinitialize(amdf_gpu_kfd_topology_t* topology,
 
 amdf_gpu_device_features_t amdf_gpu_kfd_topology_memory_features(
     const amdf_gpu_kfd_topology_t* topology, bool integrated) {
-  // APU VRAM requests may be redirected to GTT by KFD. System memory remains
-  // available there without promising a physical placement the kernel changes.
-  if (integrated || topology->vram.total_byte_length == 0) {
+  // The supported KFD allocator selects apu_prefer_gtt at initialization when
+  // an APU's real VRAM is smaller than its GTT manager. In that configuration
+  // VRAM requests are redirected before allocation, so no LOCAL route exists.
+  // Equal totals retain VRAM. Later eviction is independent of this admission.
+  if (topology->vram.total_byte_length == 0 ||
+      (integrated &&
+       topology->vram.total_byte_length < topology->gtt_byte_length)) {
     return 0;
   }
   amdf_gpu_device_features_t features = AMDF_GPU_DEVICE_FEATURE_LOCAL_MEMORY;
@@ -638,9 +652,9 @@ amdf_status_t amdf_gpu_kfd_topology_initialize(
                                                   (uint32_t)node_ordinal,
                                                   host_allocator, &topology);
           if (amdf_status_is_ok(status)) {
-            status = amdf_gpu_kfd_read_host_atomics(dirfd(directory), node,
-                                                    (uint32_t)node_ordinal,
-                                                    io_link_count, &topology);
+            status = amdf_gpu_kfd_read_host_access(dirfd(directory), node,
+                                                   (uint32_t)node_ordinal,
+                                                   io_link_count, &topology);
           }
         }
       }

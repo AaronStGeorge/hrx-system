@@ -493,15 +493,18 @@ TEST(ReplayDumpTest, EmitsReservationAndMappingBatchPayloads) {
       .min_alignment = 8192,
       .mapping_granularity = 4096,
       .family_count = 1,
+      .source_pool_count = 2,
   };
   const iree_hal_replay_pool_family_access_payload_t family = {
       .device_ordinal = 0,
       .family_ordinal = 1,
       .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
   };
+  const iree_hal_replay_object_id_t source_pool_ids[] = {11, 13};
   const iree_const_byte_span_t reservation_payloads[] = {
       iree_make_const_byte_span(&reservation, sizeof(reservation)),
       iree_make_const_byte_span(&family, sizeof(family)),
+      iree_make_const_byte_span(source_pool_ids, sizeof(source_pool_ids)),
   };
   const iree_hal_replay_file_record_metadata_t reservation_metadata = {
       .sequence_ordinal = 0,
@@ -572,6 +575,7 @@ TEST(ReplayDumpTest, EmitsReservationAndMappingBatchPayloads) {
     EXPECT_THAT(output, HasSubstr("buffer_id=17 byte_length=16384 "
                                   "min_alignment=8192 mapping_granularity=4096 "
                                   "family_count=1"));
+    EXPECT_THAT(output, HasSubstr("source_pool_ids=[11,13]"));
     EXPECT_THAT(output,
                 HasSubstr("wait_semaphores=[{semaphore_id=20 value=3}]"));
     EXPECT_THAT(output,
@@ -591,6 +595,7 @@ TEST(ReplayDumpTest, EmitsReservationAndMappingBatchPayloads) {
                 HasSubstr("\"buffer_id\":17,\"byte_length\":16384,"
                           "\"min_alignment\":8192,"
                           "\"mapping_granularity\":4096,\"family_count\":1"));
+    EXPECT_THAT(output, HasSubstr("\"source_pool_ids\":[11,13]"));
     EXPECT_THAT(
         output,
         HasSubstr("\"mappings\":[{\"target_buffer_id\":17,\"scope_id\":2,"

@@ -10,6 +10,7 @@
 #include <condition_variable>
 #include <cstring>
 #include <future>
+#include <initializer_list>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -789,53 +790,55 @@ TEST_P(VulkanSlabPoolTest, RequiredAndPreferredHostGrants) {
             IREE_HAL_MEMORY_ACCESS_READ);
 }
 
-TEST_P(VulkanSlabPoolTest, CachedHostAccessIsAnExactNativeClass) {
-  iree_hal_slab_pool_options_t options;
-  iree_hal_slab_pool_options_initialize(&options);
-  options.preferences.host.access = IREE_HAL_MEMORY_ACCESS_READ;
-  options.preferences.host.modes = IREE_HAL_MAPPING_MODE_SCOPED;
-  options.preferences.host.cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
-  Ref<iree_hal_pool_t> preferred;
-  IREE_ASSERT_OK(iree_hal_slab_pool_create(device_group_, Scope(), &options,
-                                           iree_allocator_system(),
-                                           preferred.out()));
-  const auto host = iree_hal_pool_query_host_access(preferred);
-  auto scope = Scope();
-  scope.host = options.preferences.host;
-  Ref<iree_hal_pool_t> required;
-  if (!host.access) {
-    // A native owner without cached host memory cannot promise that class.
-    IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
-                          CreateSource(scope, required.out()));
-    EXPECT_FALSE(required);
-    return;
+TEST_P(VulkanSlabPoolTest, ReadCachingGuaranteesMatchAllocatedViews) {
+  for (const auto properties : {IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED,
+                                IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED}) {
+    iree_hal_slab_pool_options_t options;
+    iree_hal_slab_pool_options_initialize(&options);
+    options.preferences.host.access = IREE_HAL_MEMORY_ACCESS_READ;
+    options.preferences.host.modes = IREE_HAL_MAPPING_MODE_SCOPED;
+    options.preferences.host.properties = properties;
+    Ref<iree_hal_pool_t> preferred;
+    IREE_ASSERT_OK(iree_hal_slab_pool_create(device_group_, Scope(), &options,
+                                             iree_allocator_system(),
+                                             preferred.out()));
+    const auto host = iree_hal_pool_query_host_access(preferred);
+    auto scope = Scope();
+    scope.host = options.preferences.host;
+    Ref<iree_hal_pool_t> required;
+    if (!host.access) {
+      // An absent native read-cache policy cannot satisfy the requirement.
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
+                            CreateSource(scope, required.out()));
+      EXPECT_FALSE(required);
+      continue;
+    }
+    EXPECT_EQ(host.properties, properties);
+    IREE_ASSERT_OK(CreateSource(scope, required.out()));
+    EXPECT_EQ(iree_hal_pool_query_host_access(required).properties, properties);
+    Ref<iree_hal_buffer_t> buffer;
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        required, iree_hal_make_pool_reservation_request(sizeof(uint32_t), 0),
+        iree_infinite_timeout(), buffer.out()));
+    const uint32_t value = 0xABCD1234;
+    SemaphoreList filled(device_, {0}, {1});
+    IREE_ASSERT_OK(
+        iree_hal_queue_fill(queues_[0], iree_hal_semaphore_list_empty(), filled,
+                            buffer, 0, sizeof(value), &value, sizeof(value),
+                            /*barriers=*/NULL, IREE_HAL_FILL_FLAG_NONE));
+    Wait(filled);
+    iree_hal_buffer_mapping_t mapping = {};
+    IREE_ASSERT_OK(iree_hal_buffer_map_range(
+        buffer, IREE_HAL_MAPPING_MODE_SCOPED, IREE_HAL_MEMORY_ACCESS_READ,
+        IREE_HAL_BUFFER_MAP_FLAG_NONE, 0, sizeof(value), &mapping));
+    IREE_ASSERT_OK(
+        iree_hal_buffer_mapping_invalidate_range(&mapping, 0, sizeof(value)));
+    uint32_t result = 0;
+    std::memcpy(&result, mapping.contents.data, sizeof(result));
+    EXPECT_EQ(result, value);
+    IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
+    buffer.reset();
   }
-  EXPECT_EQ(host.cacheability, IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
-  IREE_ASSERT_OK(CreateSource(scope, required.out()));
-  EXPECT_EQ(iree_hal_pool_query_host_access(required).cacheability,
-            IREE_HAL_HOST_CACHEABILITY_WRITE_BACK);
-  Ref<iree_hal_buffer_t> buffer;
-  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
-      required, iree_hal_make_pool_reservation_request(sizeof(uint32_t), 0),
-      iree_infinite_timeout(), buffer.out()));
-  const uint32_t value = 0xABCD1234;
-  SemaphoreList filled(device_, {0}, {1});
-  IREE_ASSERT_OK(
-      iree_hal_queue_fill(queues_[0], iree_hal_semaphore_list_empty(), filled,
-                          buffer, 0, sizeof(value), &value, sizeof(value),
-                          /*barriers=*/NULL, IREE_HAL_FILL_FLAG_NONE));
-  Wait(filled);
-  iree_hal_buffer_mapping_t mapping = {};
-  IREE_ASSERT_OK(iree_hal_buffer_map_range(
-      buffer, IREE_HAL_MAPPING_MODE_SCOPED, IREE_HAL_MEMORY_ACCESS_READ,
-      IREE_HAL_BUFFER_MAP_FLAG_NONE, 0, sizeof(value), &mapping));
-  IREE_ASSERT_OK(
-      iree_hal_buffer_mapping_invalidate_range(&mapping, 0, sizeof(value)));
-  uint32_t result = 0;
-  std::memcpy(&result, mapping.contents.data, sizeof(result));
-  EXPECT_EQ(result, value);
-  IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
-  buffer.reset();
 }
 
 TEST_P(VulkanSlabPoolTest, ImportsHostStorageThroughSelectedNativeRoute) {
@@ -851,6 +854,7 @@ TEST_P(VulkanSlabPoolTest, ImportsHostStorageThroughSelectedNativeRoute) {
   auto scope = Scope();
   scope.host.access = IREE_HAL_MEMORY_ACCESS_ALL;
   scope.host.modes = IREE_HAL_MAPPING_MODE_SCOPED;
+  scope.host.properties = IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK;
   Ref<iree_hal_pool_t> source;
   iree_status_t create_status = iree_hal_slab_pool_create(
       device_group_, scope, &options, iree_allocator_system(), source.out());
@@ -863,6 +867,11 @@ TEST_P(VulkanSlabPoolTest, ImportsHostStorageThroughSelectedNativeRoute) {
   iree_hal_pool_import_requirements_t requirements;
   ASSERT_TRUE(iree_hal_pool_query_import_requirements(
       source, import_class.storage_class, &requirements));
+  EXPECT_EQ(requirements.host_properties,
+            IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
+  EXPECT_EQ(iree_hal_pool_query_host_access(source).properties,
+            requirements.host_properties);
   const iree_device_size_t allocation_size = iree_device_align(
       std::max<iree_device_size_t>(requirements.min_byte_length, 4096),
       requirements.byte_length_granularity);
@@ -888,7 +897,8 @@ TEST_P(VulkanSlabPoolTest, ImportsHostStorageThroughSelectedNativeRoute) {
       .byte_length = storage_length,
   };
   storage.payload.host_pointer = host_pointer;
-  storage.host_cacheability = IREE_HAL_HOST_CACHEABILITY_WRITE_BACK;
+  storage.host_properties = (IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                             IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
   storage.maintenance_range =
       iree_hal_make_buffer_range(allocation_alignment, allocation_size);
   storage.release = ReleaseImportedHostAllocation;
@@ -1015,12 +1025,14 @@ TEST_P(VulkanSlabPoolTest, RejectsUnpreparedInterfacesAndNativeProperties) {
     EXPECT_FALSE(source);
   }
   families_[0].requirements = 0;
-  for (auto cacheability : {IREE_HAL_HOST_CACHEABILITY_WRITE_COMBINED,
-                            IREE_HAL_HOST_CACHEABILITY_UNCACHED}) {
+  for (auto properties : std::initializer_list<uint32_t>{
+           (IREE_HAL_HOST_MEMORY_PROPERTY_READ_UNCACHED |
+            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_COMBINED),
+           IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK}) {
     auto scope = Scope();
     scope.host.access = IREE_HAL_MEMORY_ACCESS_WRITE;
     scope.host.modes = IREE_HAL_MAPPING_MODE_SCOPED;
-    scope.host.cacheability = cacheability;
+    scope.host.properties = properties;
     Ref<iree_hal_pool_t> source;
     IREE_EXPECT_STATUS_IS(IREE_STATUS_UNAVAILABLE,
                           CreateSource(scope, source.out()));

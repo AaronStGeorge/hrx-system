@@ -258,14 +258,15 @@ TEST_F(WindowsXdnaMemoryTest, CompletesOnlyAfterMapAndOrdinaryResidency) {
   ASSERT_NE(mapping, nullptr);
   EXPECT_NE(map_result.pointer, nullptr);
   EXPECT_EQ(map_result.byte_length, map_info.byte_length);
-  EXPECT_EQ(map_result.visibility.cacheability,
-            AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(map_result.visibility.properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(map_result.visibility.cache_line_size, 64u);
   ASSERT_NE(profile_.visibility.describe_host, nullptr);
   const auto qualified = profile_.visibility.describe_host(
       profile_.visibility.data, AMDF_EXTERNAL_MEMORY_TYPE_NONE,
-      profile_.guaranteed_flags);
-  EXPECT_EQ(map_result.visibility.cacheability, qualified.cacheability);
+      profile_.guaranteed_flags, profile_.host_mapping.properties);
+  EXPECT_EQ(map_result.visibility.properties, qualified.properties);
   EXPECT_EQ(map_result.visibility.cache_line_size, qualified.cache_line_size);
   for (auto member : {&amdf_memory_host_description_t::flush,
                       &amdf_memory_host_description_t::invalidate}) {
@@ -405,8 +406,9 @@ TEST_F(WindowsXdnaMemoryTest, RegistersExactCallerPagesWithoutTakingOwnership) {
   EXPECT_EQ(profile_.allocation.maximum_byte_length, 0u);
   EXPECT_EQ(profile_.registration.byte_length_granularity, 65536u);
   EXPECT_EQ(profile_.registration.registered_host_pointer_alignment, 65536u);
-  EXPECT_EQ(profile_.registration.registered_host_cacheability,
-            AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(profile_.registration.registered_host_properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   EXPECT_EQ(profile_.registration.minimum_alignment, 4096u);
   EXPECT_EQ(profile_.registration.maximum_alignment, 4096u);
   EXPECT_TRUE(state_.operations.empty());

@@ -96,8 +96,9 @@ static iree_status_t iree_hal_amd_fabric_file_transfer_prepare_source(
     }
   } else {
     if (!(storage->host_features & AMDF_HOST_MAPPING_FEATURE_FILE_IO)) {
-      // CPU access alone does not establish native file access or page pins.
-      // Preserve the backing for an engine copy through file-capable staging.
+      // Unpinnable views retain the staging route even when native buffered
+      // access is supported. Host file spans use the FILE_IO publication
+      // contract; buffered capability alone does not select a direct route.
       return iree_ok_status();
     }
     const amdf_memory_map_flags_t required_access =

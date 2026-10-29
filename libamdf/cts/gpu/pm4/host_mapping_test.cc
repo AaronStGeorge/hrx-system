@@ -16,6 +16,32 @@ namespace {
 class Pm4HostMappingTest : public Pm4CommandTest,
                            public ::testing::WithParamInterface<uint64_t> {
  protected:
+  void ExpectPairEqual(const amdf_memory_pair_info_t& actual,
+                       const amdf_memory_pair_info_t& expected) {
+    EXPECT_EQ(actual.flags, expected.flags);
+    EXPECT_EQ(actual.atomic_reach.scope_32, expected.atomic_reach.scope_32);
+    EXPECT_EQ(actual.atomic_reach.scope_64, expected.atomic_reach.scope_64);
+    EXPECT_EQ(actual.estimated_fixed_cost_nanoseconds,
+              expected.estimated_fixed_cost_nanoseconds);
+    const amdf_cache_transition_t* actual_sides[] = {&actual.release,
+                                                     &actual.acquire};
+    const amdf_cache_transition_t* expected_sides[] = {&expected.release,
+                                                       &expected.acquire};
+    for (size_t i = 0; i < 2; ++i) {
+      SCOPED_TRACE(i);
+      const auto& a = *actual_sides[i];
+      const auto& b = *expected_sides[i];
+      EXPECT_EQ(a.kind, b.kind);
+      EXPECT_EQ(a.executor, b.executor);
+      EXPECT_EQ(a.operation, b.operation);
+      EXPECT_EQ(a.host_operation, b.host_operation);
+      EXPECT_EQ(a.host_instruction, b.host_instruction);
+      EXPECT_EQ(a.host_fence_before, b.host_fence_before);
+      EXPECT_EQ(a.host_fence_after, b.host_fence_after);
+      EXPECT_EQ(a.range_granularity, b.range_granularity);
+    }
+  }
+
   void TearDown() override {
     if (queue_ != nullptr) {
       ASSERT_TRUE(queue_->Release(api_));
@@ -99,6 +125,30 @@ TEST_P(Pm4HostMappingTest, ReplacesCpuAndGpuViewsBeforeImmediateUse) {
   }
   if (profile_ordinal == AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN) {
     GTEST_SKIP() << "GPU backing does not supply replaceable host aliases";
+  }
+  // Qualification precedes both the address reservation and payload creation.
+  // The same recipes must hold through every later source replacement.
+  amdf_memory_profile_pair_query_t query = {
+      .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE_PAIR_QUERY,
+      .structure_size = sizeof(query),
+      .memory_profile_ordinal = profile_ordinal,
+      .access_count = 1,
+      .required_flags = flags,
+      .accesses = &consumer,
+  };
+  query.producer.kind = AMDF_MEMORY_SITE_KIND_HOST;
+  query.producer.flags = AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION;
+  query.producer.value.host_access =
+      AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
+  query.consumer.kind = AMDF_MEMORY_SITE_KIND_DEVICE;
+  query.consumer.value.device.queue_family_ordinal = family_.ordinal;
+  std::array<amdf_memory_pair_info_t, 2> prospective = {};
+  for (auto& pair : prospective) {
+    pair.type = AMDF_STRUCTURE_TYPE_MEMORY_PAIR_INFO;
+    pair.structure_size = sizeof(pair);
+    ASSERT_EQ(api_->memory_scope_query_pair_info(system_scope_, &query, &pair),
+              AMDF_STATUS_OK);
+    std::swap(query.producer, query.consumer);
   }
   amdf_memory_reservation_capabilities_t capabilities = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_RESERVATION_CAPABILITIES,
@@ -220,6 +270,10 @@ TEST_P(Pm4HostMappingTest, ReplacesCpuAndGpuViewsBeforeImmediateUse) {
     };
     ASSERT_EQ(api_->memory_query_pair_info(&host_site, &device_site, &pair),
               AMDF_STATUS_OK);
+    ExpectPairEqual(pair, prospective[0]);
+    ASSERT_EQ(api_->memory_query_pair_info(&device_site, &host_site, &pair),
+              AMDF_STATUS_OK);
+    ExpectPairEqual(pair, prospective[1]);
     ASSERT_NE(pair.flags & AMDF_MEMORY_PAIR_FLAG_SHARED_BACKING_REACHABLE, 0u);
     for (size_t word = 0; word < words; ++word) {
       const uint32_t value =

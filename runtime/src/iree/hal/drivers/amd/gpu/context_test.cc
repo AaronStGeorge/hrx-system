@@ -29,6 +29,8 @@ struct NativeState {
   uint32_t scope_count = 2;
   // Number of native queue families, independently of memory availability.
   uint32_t family_count = 3;
+  // Cached host attachment identity, independent of target or queue protocol.
+  uint32_t host_numa_node = UINT32_MAX;
   // Target identity deliberately independent of its queue protocols.
   uint32_t gfx_major = 11;
   // Whether the dependency currently owns an endpoint.
@@ -81,6 +83,12 @@ amdf_status_t AMDF_CALL QueryEndpoint(amdf_endpoint_t* endpoint,
   }
   EXPECT_EQ(out_info->type, AMDF_STRUCTURE_TYPE_ENDPOINT_INFO);
   out_info->queue_family_count = state->family_count;
+  auto* locality = static_cast<amdf_endpoint_host_locality_t*>(out_info->next);
+  EXPECT_NE(locality, nullptr);
+  if (locality) {
+    EXPECT_EQ(locality->type, AMDF_STRUCTURE_TYPE_ENDPOINT_HOST_LOCALITY);
+    locality->numa_node = state->host_numa_node;
+  }
   return AMDF_STATUS_OK;
 }
 
@@ -390,6 +398,18 @@ TEST_F(ContextTest, CapturesFamiliesIndependentlyOfIsa) {
     EXPECT_EQ(native_.released,
               (std::vector<std::string>{"event", "device", "endpoint"}));
     native_.released.clear();
+  }
+}
+
+TEST_F(ContextTest, CapturesHostLocalityWithoutRetainingQueryStorage) {
+  for (uint32_t node : {0u, 7u, UINT32_MAX}) {
+    SCOPED_TRACE(node);
+    native_.host_numa_node = node;
+    iree_hal_amd_gpu_context_t* context = nullptr;
+    IREE_ASSERT_OK(Allocate(&context));
+    EXPECT_EQ(context->host_numa_node, node);
+    EXPECT_EQ(context->endpoint_info.next, nullptr);
+    iree_hal_amd_gpu_context_free(context);
   }
 }
 

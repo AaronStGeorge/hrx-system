@@ -15,7 +15,9 @@
 #include <cerrno>
 #include <climits>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <memory>
 #include <utility>
 
 #include "amdf/amdf.h"
@@ -224,50 +226,40 @@ class GpuLinuxMemoryTest : public GpuDeviceFixture {
                       AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE),
             AMDF_STATUS_OK);
         ASSERT_NE(mapping_infos_[0].pointer, nullptr);
-        EXPECT_EQ(mapping_infos_[0].cacheability,
-                  ((info.flags | access_info.flags) &
-                   AMDF_MEMORY_FLAG_HOST_COHERENT) != 0
-                      ? AMDF_HOST_CACHEABILITY_WRITE_BACK
-                      : AMDF_HOST_CACHEABILITY_WRITE_COMBINED);
-        if (((info.flags | access_info.flags) &
-             AMDF_MEMORY_FLAG_HOST_COHERENT) != 0) {
-          EXPECT_NE(mapping_infos_[0].cache_line_size, 0u);
+        EXPECT_EQ(mapping_infos_[0].properties,
+                  profile.host_mapping.properties);
+        EXPECT_NE(mapping_infos_[0].cache_line_size, 0u);
+        EXPECT_EQ(mapping_infos_[0].invalidate.kind,
+                  AMDF_CACHE_TRANSITION_KIND_RANGE);
+        EXPECT_EQ(mapping_infos_[0].invalidate.executor,
+                  AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
+        EXPECT_EQ(mapping_infos_[0].invalidate.host_operation,
+                  AMDF_HOST_CACHE_OPERATION_INVALIDATE);
+        EXPECT_EQ(mapping_infos_[0].invalidate.host_instruction,
+                  AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
+        EXPECT_EQ(mapping_infos_[0].invalidate.host_fence_after,
+                  AMDF_HOST_CACHE_FENCE_X86_MFENCE);
+        if ((profile.host_mapping.properties &
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK) != 0) {
           EXPECT_EQ(mapping_infos_[0].flush.kind,
                     AMDF_CACHE_TRANSITION_KIND_RANGE);
-          EXPECT_EQ(mapping_infos_[0].invalidate.kind,
-                    AMDF_CACHE_TRANSITION_KIND_RANGE);
+          EXPECT_EQ(mapping_infos_[0].flush.executor,
+                    AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
           EXPECT_EQ(mapping_infos_[0].flush.host_instruction,
                     AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
-          EXPECT_EQ(mapping_infos_[0].invalidate.host_instruction,
-                    AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
+        } else if (mapping_infos_[0].flush.kind ==
+                   AMDF_CACHE_TRANSITION_KIND_UNKNOWN) {
+          EXPECT_EQ(mapping_infos_[0].flush.executor,
+                    AMDF_CACHE_TRANSITION_EXECUTOR_NONE);
         } else {
-          EXPECT_EQ(mapping_infos_[0].cache_line_size, 0u);
-          if (mapping_infos_[0].flush.kind ==
-              AMDF_CACHE_TRANSITION_KIND_UNKNOWN) {
-            EXPECT_EQ(mapping_infos_[0].flush.executor,
-                      AMDF_CACHE_TRANSITION_EXECUTOR_NONE);
-          } else {
-            EXPECT_EQ(mapping_infos_[0].flush.kind,
-                      AMDF_CACHE_TRANSITION_KIND_GLOBAL);
-            EXPECT_EQ(mapping_infos_[0].flush.executor,
-                      AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API);
-            EXPECT_EQ(mapping_infos_[0].flush.host_operation,
-                      AMDF_HOST_CACHE_OPERATION_FLUSH);
-            EXPECT_EQ(mapping_infos_[0].flush.host_instruction,
-                      AMDF_HOST_CACHE_INSTRUCTION_NONE);
-            EXPECT_EQ(mapping_infos_[0].flush.host_fence_before,
-                      AMDF_HOST_CACHE_FENCE_NONE);
-            EXPECT_EQ(mapping_infos_[0].flush.host_fence_after,
-                      AMDF_HOST_CACHE_FENCE_NONE);
-          }
-          EXPECT_EQ(mapping_infos_[0].invalidate.kind,
-                    AMDF_CACHE_TRANSITION_KIND_GLOBAL);
-          EXPECT_EQ(mapping_infos_[0].invalidate.executor,
-                    AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT);
-          EXPECT_EQ(mapping_infos_[0].invalidate.host_operation,
-                    AMDF_HOST_CACHE_OPERATION_INVALIDATE);
-          EXPECT_EQ(mapping_infos_[0].invalidate.host_fence_after,
-                    AMDF_HOST_CACHE_FENCE_X86_MFENCE);
+          EXPECT_EQ(mapping_infos_[0].flush.kind,
+                    AMDF_CACHE_TRANSITION_KIND_RANGE);
+          EXPECT_EQ(mapping_infos_[0].flush.executor,
+                    AMDF_CACHE_TRANSITION_EXECUTOR_HOST_API);
+          EXPECT_EQ(mapping_infos_[0].flush.host_operation,
+                    AMDF_HOST_CACHE_OPERATION_FLUSH);
+          EXPECT_EQ(mapping_infos_[0].flush.range_granularity,
+                    mapping_infos_[0].cache_line_size);
         }
         const uint8_t value = static_cast<uint8_t>(0x41 + case_ordinal);
         std::memset(mapping_infos_[0].pointer, value,
@@ -388,8 +380,9 @@ class GpuLinuxMemoryTest : public GpuDeviceFixture {
     EXPECT_EQ(reinterpret_cast<uintptr_t>(mapping_infos_[0].pointer) &
                   (info.alignment - 1),
               0u);
-    EXPECT_EQ(mapping_infos_[0].cacheability,
-              AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(mapping_infos_[0].properties,
+              (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+               AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     EXPECT_NE(mapping_infos_[0].cache_line_size, 0u);
     EXPECT_EQ(mapping_infos_[0].flush.kind, AMDF_CACHE_TRANSITION_KIND_RANGE);
     EXPECT_EQ(mapping_infos_[0].invalidate.kind,
@@ -463,6 +456,44 @@ TEST_F(GpuLinuxMemoryTest, OwnsAlignedSystemMemoryAndBorrowedHostViews) {
   ASSERT_NO_FATAL_FAILURE(ExerciseSystemMemory());
 }
 
+TEST_F(GpuLinuxMemoryTest, BufferedFileIoUsesOwnedSystemMemory) {
+  const amdf_memory_create_info_t create = MakeSystemMemoryCreateInfo();
+  ASSERT_EQ(api_->memory_create(system_scope_, &create, &memories_[0], nullptr),
+            AMDF_STATUS_OK);
+  ASSERT_EQ(MapMemory(memories_[0], 0, 0, create.byte_length,
+                      AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE),
+            AMDF_STATUS_OK);
+  ASSERT_NE(
+      mapping_infos_[0].features & AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO,
+      0u);
+  EXPECT_EQ(mapping_infos_[0].features & AMDF_HOST_MAPPING_FEATURE_FILE_IO, 0u);
+
+  // An ordinary file descriptor copies directly to and from the native view;
+  // no stdio payload buffer or page registration mediates either operation.
+  std::unique_ptr<FILE, decltype(&std::fclose)> file(std::tmpfile(),
+                                                     &std::fclose);
+  ASSERT_NE(file, nullptr) << std::strerror(errno);
+  const int descriptor = fileno(file.get());
+  std::array<uint8_t, 4097> expected;
+  for (size_t i = 0; i < expected.size(); ++i) {
+    expected[i] = uint8_t(i * 7 + 3);
+  }
+  ASSERT_EQ(pwrite(descriptor, expected.data(), expected.size(), 13),
+            ssize_t(expected.size()));
+  auto* pointer = static_cast<uint8_t*>(mapping_infos_[0].pointer);
+  ASSERT_EQ(pread(descriptor, pointer, expected.size(), 13),
+            ssize_t(expected.size()));
+  EXPECT_EQ(std::memcmp(pointer, expected.data(), expected.size()), 0);
+  std::reverse(pointer, pointer + expected.size());
+  std::reverse(expected.begin(), expected.end());
+  ASSERT_EQ(pwrite(descriptor, pointer, expected.size(), 29),
+            ssize_t(expected.size()));
+  std::array<uint8_t, 4097> observed;
+  ASSERT_EQ(pread(descriptor, observed.data(), observed.size(), 29),
+            ssize_t(observed.size()));
+  EXPECT_EQ(observed, expected);
+}
+
 TEST_F(GpuLinuxMemoryTest, HonorsExactSystemDeviceAccess) {
   ASSERT_NO_FATAL_FAILURE(ExerciseExactSystemDeviceAccess());
 }
@@ -505,7 +536,9 @@ TEST_F(GpuLinuxMemoryTest, UnifiedExecutableStorageRetainsCachedHostAccess) {
   ASSERT_EQ(MapMemory(memories_[0], 0, 0, request.byte_length,
                       AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE),
             AMDF_STATUS_OK);
-  EXPECT_EQ(mapping_infos_[0].cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+  EXPECT_EQ(mapping_infos_[0].properties,
+            (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+             AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
   std::memset(mapping_infos_[0].pointer, 0x5A, request.byte_length);
   ASSERT_EQ(api_->host_mapping_cache_control(mappings_[0],
                                              AMDF_HOST_CACHE_OPERATION_FLUSH, 0,
@@ -549,6 +582,28 @@ TEST_F(GpuLinuxMemoryTest, HonorsSystemPlacementCapabilities) {
 
 TEST_F(GpuLinuxMemoryTest, HonorsLocalPlacementCapabilities) {
   ASSERT_NO_FATAL_FAILURE(ExerciseLocalPlacementCapabilities());
+}
+
+TEST_F(GpuLinuxMemoryTest, DoesNotOfferDoubleAccountedHostBacking) {
+  const amdf_memory_access_requirements_t requirements = {
+      .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+      .flags =
+          AMDF_MEMORY_FLAG_DEVICE_ADDRESS | AMDF_MEMORY_FLAG_MAPPING_SOURCE,
+  };
+  // File-capable owned host pages require foreign DMA-BUF import for aliases.
+  // Ordinary GPU-owned SYSTEM aliases and fixed USERPTR registration remain
+  // separate constructions; neither needs the duplicate native GTT charge.
+  EXPECT_EQ(
+      FindMemoryProfileOrdinal(
+          system_scope_,
+          AMDF_MEMORY_PROFILE_ROLE_CREATE | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP,
+          AMDF_MEMORY_FLAG_HOST_VISIBLE | AMDF_MEMORY_FLAG_HOST_FILE_IO,
+          requirements),
+      AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN);
+  EXPECT_NE(
+      FindMemoryProfileOrdinal(system_scope_, AMDF_MEMORY_PROFILE_ROLE_CREATE,
+                               AMDF_MEMORY_FLAG_HOST_VISIBLE, requirements),
+      AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN);
 }
 
 TEST_F(GpuLinuxMemoryTest, OmitsRegistrationWhenLifetimeDoesNotSupportIt) {
@@ -627,8 +682,9 @@ TEST_F(GpuLinuxMemoryTest, RegistersOverlappingCallerPagesWithExactAccess) {
     create_info.minimum_alignment = 1;
     create_info.registered_host_pointer =
         caller_pages_ + kCallerOffsets[case_ordinal];
-    create_info.registered_host_cacheability =
-        AMDF_HOST_CACHEABILITY_WRITE_BACK;
+    create_info.registered_host_properties =
+        (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
     ASSERT_EQ(api_->memory_create(system_scope_, &create_info,
                                   &memories_[case_ordinal], nullptr),
               AMDF_STATUS_OK)
@@ -682,8 +738,9 @@ TEST_F(GpuLinuxMemoryTest, RegistersOverlappingCallerPagesWithExactAccess) {
               create_info.registered_host_pointer);
     EXPECT_EQ(mapping_infos_[case_ordinal].memory_byte_offset, 0u);
     EXPECT_EQ(mapping_infos_[case_ordinal].byte_length, logical_byte_length);
-    EXPECT_EQ(mapping_infos_[case_ordinal].cacheability,
-              AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    EXPECT_EQ(mapping_infos_[case_ordinal].properties,
+              (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+               AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     EXPECT_EQ(api_->host_mapping_cache_control(mappings_[case_ordinal],
                                                AMDF_HOST_CACHE_OPERATION_FLUSH,
                                                0, logical_byte_length),
@@ -731,8 +788,9 @@ TEST_F(GpuLinuxMemoryTest, RegistersOverlappingCallerPagesWithExactAccess) {
   invalid_access.byte_length = 1;
   invalid_access.minimum_alignment = 1;
   invalid_access.registered_host_pointer = caller_pages_ + 67;
-  invalid_access.registered_host_cacheability =
-      AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  invalid_access.registered_host_properties =
+      (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+       AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   amdf_memory_t* invalid_output =
       reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   EXPECT_EQ(api_->memory_create(system_scope_, &invalid_access, &invalid_output,

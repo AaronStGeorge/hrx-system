@@ -384,6 +384,9 @@ TEST(LinuxXdnaMemoryProfileTest,
   EXPECT_EQ(profile.allocation.minimum_alignment, 4096u);
   EXPECT_EQ(profile.allocation.maximum_alignment, 4096u);
   EXPECT_EQ(profile.host_mapping.byte_offset_granularity, 1u);
+  EXPECT_EQ(profile.host_mapping.properties,
+            AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   ASSERT_EQ(profile.external_memory_support_count, 2u);
   EXPECT_EQ(profile.external_memory_support[0].type,
             AMDF_EXTERNAL_MEMORY_TYPE_DMA_BUF_FD);
@@ -406,7 +409,12 @@ TEST(LinuxXdnaMemoryProfileTest,
             AMDF_MEMORY_FLAG_HOST_VISIBLE | AMDF_MEMORY_FLAG_DEVICE_ADDRESS);
   EXPECT_EQ(imported_profile.import.minimum_alignment, 1u);
   EXPECT_EQ(imported_profile.import.maximum_alignment, 4096u);
+  EXPECT_EQ(imported_profile.host_mapping.properties, 0u);
   ASSERT_EQ(imported_profile.external_memory_support_count, 2u);
+  EXPECT_EQ(imported_profile.external_memory_support[0].host_properties, 0u);
+  EXPECT_EQ(imported_profile.external_memory_support[1].host_properties,
+            AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK);
   EXPECT_EQ(imported_profile.external_memory_support[0].flags,
             AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_IMPORT |
                 AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_SOURCE_OFFSET |
@@ -437,9 +445,36 @@ TEST(LinuxXdnaMemoryProfileTest,
   EXPECT_EQ(registered_profile.host_mapping.byte_offset_granularity, 1u);
   EXPECT_EQ(registered_profile.external_memory_support_count, 0u);
 
+  amdf_memory_native_profile_t host_import_profile = {};
+  ASSERT_EQ(amdf_xdna_umd_device_query_memory_profile(&device, 3,
+                                                      &host_import_profile),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(host_import_profile.ordinal, 3u);
+  EXPECT_EQ(host_import_profile.roles,
+            AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT |
+                AMDF_MEMORY_PROFILE_ROLE_HOST_MAP);
+  EXPECT_EQ(host_import_profile.host_mapping.properties, 0u);
+  EXPECT_EQ(host_import_profile.import.maximum_byte_length,
+            imported_profile.import.maximum_byte_length);
+  EXPECT_EQ(
+      host_import_profile.guaranteed_flags & AMDF_MEMORY_FLAG_MAPPING_SOURCE,
+      0u);
+
+  device.uses_sva = true;
+  for (uint32_t ordinal : {1u, 3u}) {
+    amdf_memory_native_profile_t alias_profile = {};
+    ASSERT_EQ(amdf_xdna_umd_device_query_memory_profile(&device, ordinal,
+                                                        &alias_profile),
+              AMDF_STATUS_OK);
+    EXPECT_NE(alias_profile.guaranteed_flags & AMDF_MEMORY_FLAG_MAPPING_SOURCE,
+              0u);
+    EXPECT_NE(alias_profile.supported_flags & AMDF_MEMORY_FLAG_MAPPING_SOURCE,
+              0u);
+  }
+
   profile.ordinal = UINT32_MAX;
   EXPECT_EQ(amdf_status_code(amdf_xdna_umd_device_query_memory_profile(
-                &device, 3, &profile)),
+                &device, 4, &profile)),
             AMDF_STATUS_CODE_OUT_OF_RANGE);
   EXPECT_EQ(profile.ordinal, UINT32_MAX);
 }

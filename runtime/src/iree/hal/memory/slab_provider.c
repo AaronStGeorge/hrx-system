@@ -213,7 +213,7 @@ iree_hal_external_storage_t iree_hal_slab_provider_registration_view(
                                 byte_offset
                           : NULL},
       .byte_length = byte_length,
-      .host_cacheability = storage->host_cacheability,
+      .host_properties = storage->host_properties,
       .maintenance_range = {0, byte_length},
       .physical_backing_id = storage->physical_backing_id,
   };
@@ -432,7 +432,7 @@ void iree_hal_slab_buffer_backing_initialize(
       .tracker = tracker,
       .advice = &out_backing->advice,
       .maintenance_range = slab->maintenance_range,
-      .host_cacheability = slab->host_cacheability,
+      .host_properties = slab->host_properties,
       .physical_backing_id = slab->physical_backing_id,
       .native_allocation = slab->native_allocation,
       .allocation_alignment = slab->allocation_alignment,

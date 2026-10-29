@@ -286,7 +286,7 @@ Process limits and model capacities constrain different resources:
 | Text `context_capacity` | Logical token ceiling of one context. |
 | Text `pool_capacity` | Shared logical KV capacity, independent of maximum context times row count. |
 | Text `variant_capacity` | Native choices, including the original, pending JITs and failed attempts. |
-| Pool `memory_bytes` / shortcut `--memory_bytes` | Shared physical parameter/state/workspace backing under the selected pool's elastic policy. |
+| Pool `memory_bytes` / shortcut `--memory_bytes` | Shared elastic physical backing for parameters, state, invocation I/O, and workspace. Ordinary native buffers are outside this allowance. |
 
 Holding capacity stays below connection capacity so held inference cannot
 consume every control connection. Live log streams and waiting variant-management
@@ -307,6 +307,9 @@ share the deployment's selected pool. Admission uses the model's prepared workin
 and outstanding work, rather than probing free HAL memory. Command scratch can
 be reused after its ordered release; an escaping output remains charged until
 both its producer and final consumer retire, even if its model is removed.
+Ordinary native buffers are reported separately and remain outside the elastic
+allowance. Host snapshots, other host allocations, and driver overhead also
+need headroom when sizing the pool; `memory_bytes` is not a whole-device cap.
 
 Elastic pressure first reclaims idle workspace, then idle unpinned weights and
 eligible idle text history across models sharing the same pool. Accepted

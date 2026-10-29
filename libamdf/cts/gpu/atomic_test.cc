@@ -118,7 +118,8 @@ class GpuAtomicAddTest : public GpuCommandTest,
               capabilities.atomic_operations_32);
     ASSERT_EQ(control->access_info.atomic_operations_64,
               capabilities.atomic_operations_64);
-    ASSERT_EQ(control->host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
+    ASSERT_EQ(control->host.properties, (AMDF_HOST_MEMORY_PROPERTY_READ_CACHED |
+                                         AMDF_HOST_MEMORY_PROPERTY_WRITE_BACK));
     for (uint32_t direction = 0; direction < 2; ++direction) {
       amdf_memory_profile_site_t host = {.kind = AMDF_MEMORY_SITE_KIND_HOST};
       host.value.host_access =

@@ -104,15 +104,149 @@ class GpuNativeAllocationTest : public GpuNativeTest {
     iree_hal_buffer_release(backing);
   }
 
+  void VerifyHostPoolCopy(iree_hal_pool_t* pool) {
+    using iree::hal::cts::Ref;
+    const auto properties = iree_hal_pool_query_host_access(pool).properties;
+    std::array<Ref<iree_hal_buffer_t>, 2> buffers;
+    std::array<iree_hal_buffer_mapping_t, 2> mappings = {};
+    for (size_t i = 0; i < buffers.size(); ++i) {
+      IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+          pool, iree_hal_make_pool_reservation_request(4096, 0),
+          iree_infinite_timeout(), buffers[i].out()));
+      EXPECT_EQ(
+          iree_hal_buffer_memory_view(buffers[i]).backing->host_properties,
+          properties);
+      IREE_ASSERT_OK(iree_hal_buffer_map_range(
+          buffers[i], IREE_HAL_MAPPING_MODE_PERSISTENT,
+          IREE_HAL_MEMORY_ACCESS_ALL, IREE_HAL_BUFFER_MAP_FLAG_NONE, 0, 4096,
+          &mappings[i]));
+    }
+    std::array<uint32_t, 1024> expected;
+    for (size_t i = 0; i < expected.size(); ++i) {
+      expected[i] = 0xFED00000u + i;
+    }
+    std::memcpy(mappings[0].contents.data, expected.data(), sizeof(expected));
+    IREE_ASSERT_OK(iree_hal_buffer_mapping_flush_range(&mappings[0], 0, 4096));
+    uint64_t one = 1;
+    IREE_ASSERT_OK(iree_hal_queue_copy(
+        queues_[0], {}, {1, &semaphores_[0], &one}, buffers[0], 0, buffers[1],
+        0, 4096, nullptr, IREE_HAL_COPY_FLAG_NONE));
+    Wait(semaphores_[0]);
+    IREE_ASSERT_OK(
+        iree_hal_buffer_mapping_invalidate_range(&mappings[1], 0, 4096));
+    EXPECT_EQ(std::memcmp(mappings[1].contents.data, expected.data(),
+                          sizeof(expected)),
+              0);
+    for (auto& mapping : mappings) {
+      IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
+    }
+  }
+
   // Explicit native storage owner, kept alive through all borrowed roots.
   iree_hal_pool_t* pool_ = nullptr;
-  // Exact native dependency domain transferred to the device at construction.
-  const void* native_domain_ = nullptr;
+  // Borrowed native dependency domain owned by the constructed device.
+  const iree_hal_amd_gpu_context_t* native_domain_ = nullptr;
   // Resolved once from the pool's immutable access contract.
   iree_hal_buffer_native_binding_slot_t slot_ = {};
   // Independent allocation, transfer, release, and host-gate timelines.
   std::array<iree_hal_semaphore_t*, 4> semaphores_ = {};
 };
+
+TEST_F(GpuNativeAllocationTest, NativeHostLocalityReachesGroupTopology) {
+  const auto* identity =
+      iree_hal_device_spec_identity(iree_hal_device_spec(device_));
+  ASSERT_EQ(identity->physical_device_count, 1u);
+  const auto& physical = identity->physical_devices[0].identity;
+  const bool has_locality = native_domain_->host_numa_node != UINT32_MAX;
+  EXPECT_EQ(iree_all_bits_set(physical.flags,
+                              IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_NUMA_NODE),
+            has_locality);
+  if (!has_locality) {
+    return;
+  }
+  EXPECT_EQ(physical.numa.node_id, native_domain_->host_numa_node);
+  const auto* topology = iree_hal_device_group_topology(group_);
+  uint32_t matching_nodes = 0;
+  for (uint32_t i = 0; i < iree_hal_topology_node_count(topology); ++i) {
+    const auto* node = iree_hal_topology_node_at(topology, i);
+    matching_nodes += node->kind == IREE_HAL_TOPOLOGY_NODE_KIND_HOST_NUMA &&
+                      node->local_ordinal == native_domain_->host_numa_node;
+  }
+  EXPECT_EQ(matching_nodes, 1u);
+}
+
+TEST_F(GpuNativeAllocationTest, CachedHostPoolRetainsGuaranteesThroughCopy) {
+  using iree::hal::cts::Ref;
+  const iree_hal_pool_family_access_t family = {
+      .family = iree_hal_queue_family(queues_[0]),
+      .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
+  };
+  const iree_hal_pool_scope_t scope = {
+      .family_count = 1,
+      .families = &family,
+      .host =
+          {
+              .access = IREE_HAL_MEMORY_ACCESS_ALL,
+              .modes = IREE_HAL_MAPPING_MODE_PERSISTENT,
+              .properties = IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED,
+          },
+  };
+  iree_hal_slab_pool_options_t options;
+  iree_hal_slab_pool_options_initialize(&options);
+  Ref<iree_hal_pool_t> pool;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(
+      group_, scope, &options, iree_allocator_system(), pool.out()));
+  const auto properties = iree_hal_pool_query_host_access(pool).properties;
+  EXPECT_EQ(properties, IREE_HAL_HOST_MEMORY_PROPERTY_READ_CACHED |
+                            IREE_HAL_HOST_MEMORY_PROPERTY_WRITE_BACK);
+  VerifyHostPoolCopy(pool);
+}
+
+TEST_F(GpuNativeAllocationTest,
+       RequiredLocalHostPoolCopiesThroughPublicMapping) {
+  if (!(native_domain_->device_info.features &
+        AMDF_GPU_DEVICE_FEATURE_HOST_VISIBLE_LOCAL_MEMORY)) {
+    GTEST_SKIP()
+        << "native endpoint has no host-visible LOCAL allocation domain";
+  }
+  using iree::hal::cts::Ref;
+  const iree_hal_pool_family_access_t family = {
+      .family = iree_hal_queue_family(queues_[0]),
+      .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
+  };
+  const iree_hal_pool_scope_t scope = {
+      .family_count = 1,
+      .families = &family,
+      .host =
+          {
+              .access = IREE_HAL_MEMORY_ACCESS_ALL,
+              .modes = IREE_HAL_MAPPING_MODE_PERSISTENT,
+          },
+  };
+  const auto* topology = iree_hal_device_group_topology(group_);
+  uint32_t physical_node = IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID;
+  for (iree_host_size_t i = 0; i < iree_hal_topology_node_count(topology);
+       ++i) {
+    const auto* node = iree_hal_topology_node_at(topology, i);
+    if (node->kind == IREE_HAL_TOPOLOGY_NODE_KIND_PHYSICAL_DEVICE &&
+        node->device_ordinal == 0) {
+      physical_node = node->ordinal;
+      break;
+    }
+  }
+  ASSERT_NE(physical_node, IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID);
+  const iree_hal_slab_pool_options_t options = {
+      .placement = {IREE_HAL_POOL_PLACEMENT_REQUIRED, physical_node},
+  };
+  Ref<iree_hal_pool_t> pool;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(
+      group_, scope, &options, iree_allocator_system(), pool.out()));
+  iree_hal_pool_capabilities_t capabilities;
+  iree_hal_pool_query_capabilities(pool, &capabilities);
+  EXPECT_EQ(capabilities.placement.mode, IREE_HAL_POOL_PLACEMENT_REQUIRED);
+  EXPECT_EQ(capabilities.placement.node, physical_node);
+  VerifyHostPoolCopy(pool);
+}
 
 class GpuNativeOrderedAllocationTest
     : public GpuNativeAllocationTest,
@@ -948,9 +1082,11 @@ TEST_F(GpuNativeMemoryProgressTest,
   target_access.interfaces = UINT64_C(1)
                              << IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS;
   const iree_hal_pool_scope_t scope = {1, &target_access, {}};
+  iree_hal_pool_t* source_pool = mapping_pool.get();
   iree_hal_virtual_buffer_capabilities_t capabilities;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_query_capabilities(
-      group_, scope, iree_allocator_system(), &capabilities));
+      group_, scope, {1, &source_pool}, iree_allocator_system(),
+      &capabilities));
   ASSERT_NE(capabilities.max_byte_length, 0u);
   const auto source = iree_hal_pool_query_mapping_requirements(mapping_pool);
   const uint64_t unit =
@@ -963,8 +1099,8 @@ TEST_F(GpuNativeMemoryProgressTest,
   };
   Ref<iree_hal_buffer_t> reservation, backing;
   IREE_ASSERT_OK(iree_hal_virtual_buffer_create(
-      group_, scope, &reservation_options, iree_allocator_system(),
-      reservation.out()));
+      group_, scope, {1, &source_pool}, &reservation_options,
+      iree_allocator_system(), reservation.out()));
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       mapping_pool, iree_hal_make_pool_reservation_request(unit, 0),
       iree_infinite_timeout(), backing.out()));
