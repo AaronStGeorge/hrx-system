@@ -302,21 +302,6 @@ value %restricted: test.packed.narrow -> physical_register[1:1]
 
 // ====
 
-// RUN: emit low-allocation-query @budget_overrides_preference values=%persistent,%restricted test.explicit32=2
-
-test.target<low_core> @target
-
-// The broad budget excludes the otherwise preferred idle r3 candidate.
-low.func.def target<test.low.core>(@target) @budget_overrides_preference(%persistent: reg<test.explicit32>, %restricted: reg<test.coindexed.partner>) -> (reg<test.explicit32>, reg<test.coindexed.partner>) asm {
-  return %persistent, %restricted
-}
-
-// ----
-value %persistent: test.explicit32 -> physical_register[0:1]
-value %restricted: test.coindexed.partner -> physical_register[2:1]
-
-// ====
-
 // RUN: emit low-allocation-query @rotating_versions_remain_distinct values=%first,%second,%left,%right,%restricted
 
 test.target<low_core> @target

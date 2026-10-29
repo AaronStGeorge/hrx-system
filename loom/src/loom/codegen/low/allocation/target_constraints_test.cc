@@ -273,6 +273,65 @@ TEST_F(LowAllocationTargetConstraintsTest,
 }
 
 TEST_F(LowAllocationTargetConstraintsTest,
+       LocationCapacityUsesCandidateExtent) {
+  const struct {
+    // Canonical target register representation being queried.
+    const char* class_name;
+    // Linear location, physical view ID, or candidate-range start.
+    uint32_t location_base;
+    // Number of allocation units in the location.
+    uint32_t location_count;
+    // Smallest budget containing every candidate used by this location.
+    uint32_t minimum_capacity;
+  } cases[] = {
+      {"test.i32", 0, 1, 1},
+      {"test.i32", 1, 2, 3},
+      {"test.phys", 0, 1, 1},
+      {"test.phys", 1, 2, 3},
+      {"test.explicit32", 0, 1, 1},
+      {"test.explicit32", 1, 1, 2},
+      {"test.explicit32", 2, 1, 3},
+      {"test.explicit32", 3, 1, 4},
+      // l0={r0,r2}, l1={r1,r3}, and q0={r0,r1,r2,r3}. View IDs
+      // are not candidate ordinals or the start of a linear range.
+      {"test.explicit32", 4, 2, 3},
+      {"test.explicit32", 5, 2, 4},
+      {"test.explicit32", 6, 4, 4},
+      // This class's locations are contiguous candidate ordinals, despite
+      // its physical register names being ordered r1,r0,r3,r2.
+      {"test.explicit_range32", 0, 2, 2},
+      {"test.explicit_range32", 1, 2, 3},
+      {"test.explicit_range32", 2, 2, 4},
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.class_name);
+    SCOPED_TRACE(test_case.location_base);
+    const auto class_name = iree_make_cstring_view(test_case.class_name);
+    for (uint32_t units = 0; units <= 5; ++units) {
+      SCOPED_TRACE(units);
+      // The last iteration uses the descriptor's natural capacity, including
+      // the unbounded virtual class; the others restrict it to zero-four.
+      const bool has_budget = units < 5;
+      const loom_low_allocation_budget_t budget = {class_name, units};
+      loom_low_allocation_target_constraints_t constraints = {};
+      IREE_ASSERT_OK(loom_low_allocation_target_constraints_initialize(
+          module_, function_op_, &target_, &budget, has_budget ? 1 : 0,
+          /*reserved_ranges=*/nullptr, /*reserved_range_count=*/0, {}, &arena_,
+          &constraints));
+      ASSERT_EQ(constraints.error_count, 0u);
+      loom_low_allocation_class_capacity_t capacity = {};
+      IREE_ASSERT_OK(loom_low_allocation_target_constraints_reg_class_capacity(
+          &constraints, RegisterClassId(class_name), &capacity));
+      EXPECT_EQ(
+          loom_low_allocation_target_constraints_location_range_fits_capacity(
+              target_.descriptor_set, &capacity, capacity.location_kind,
+              test_case.location_base, test_case.location_count),
+          !has_budget || units >= test_case.minimum_capacity);
+    }
+  }
+}
+
+TEST_F(LowAllocationTargetConstraintsTest,
        SchedulableCapacityExcludesReservedAliasRanges) {
   const loom_low_allocation_budget_t budget = {
       .register_class = IREE_SV("test.pressure.alias32"),

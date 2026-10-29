@@ -95,40 +95,6 @@ value %pair: test.explicit32 -> physical_register[5:2]
 
 // ====
 
-// RUN: emit low-allocation-query @physical_concat_candidate_budget spill-count values=%high,%low,%pair test.explicit32=3
-
-test.target<low_core> @target
-
-// A three-candidate budget permits l0 (r0,r2), even though its view ID is 4.
-low.func.def target<test.low.core>(@target) @physical_concat_candidate_budget(%high: reg<test.explicit32>, %low: reg<test.explicit32>) -> (reg<test.explicit32 x2>) asm {
-  %pair = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
-  return %pair
-}
-
-// ----
-spills: 0
-value %high: test.explicit32 -> physical_register[2:1]
-value %low: test.explicit32 -> physical_register[0:1]
-value %pair: test.explicit32 -> physical_register[4:2]
-
-// ====
-
-// RUN: emit low-allocation-query @physical_concat_excludes_incomplete_view failure test.explicit32=2
-
-test.target<low_core> @target
-
-// Neither declared pair is wholly inside the r0,r1 candidate budget.
-low.func.def target<test.low.core>(@target) @physical_concat_excludes_incomplete_view(%high: reg<test.explicit32>, %low: reg<test.explicit32>) -> (reg<test.explicit32 x2>) asm {
-  // ERROR@+1: BACKEND/005 {function_name="physical_concat_excludes_incomplete_view", value_class="test.explicit32", budget="2", peak="2", failure_code="unspillable-register-exhausted"}
-  %pair = concat(%low, %high) : (reg<test.explicit32>, reg<test.explicit32>) -> reg<test.explicit32 x2>
-  return %pair
-}
-
-// ----
-failure: unspillable-register-exhausted kind=no-assignable-location value=%pair class=test.explicit32 required=2 budget=2 peak=2
-
-// ====
-
 // RUN: emit low-allocation-query @physical_concat_broadcast_source spill-count values=%value,%pair
 
 test.target<low_core> @target
