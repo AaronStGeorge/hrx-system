@@ -14,6 +14,17 @@
 
 #include "iree/base/attributes.h"
 
+// Algorithm error bounds and frozen mappings depend on rounding each arithmetic
+// operation at its source width. Rounding only casts and assignments still
+// permits double rounding and invalidates compensated range reduction.
+static_assert(FLT_EVAL_METHOD == 0,
+              "iree/math requires source-width floating-point evaluation");
+#if (defined(__i386__) || defined(__x86_64__)) && !defined(__SSE2__)
+#error "iree/math requires SSE2 on x86"
+#elif defined(_M_IX86) && (!defined(_M_IX86_FP) || _M_IX86_FP < 2)
+#error "iree/math requires SSE2 on x86"
+#endif
+
 static_assert(FLT_RADIX == 2 && sizeof(float) == sizeof(uint32_t) &&
                   FLT_MANT_DIG == 24 && FLT_MIN_EXP == -125 &&
                   FLT_MAX_EXP == 128,

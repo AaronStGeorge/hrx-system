@@ -125,8 +125,12 @@ one host FPU transition instead of one transition per scalar operation.
 Package-owned compile options prevent an embedding application's unrestricted
 fast-math flags from changing the frozen mappings. Implicit contraction is
 disabled; fused arithmetic, where required by an algorithm, must be explicit.
-Clang evaluates intermediates at their declared source width, including when
-an embedding application requests wider expression evaluation globally.
+All implementations require source-width expression evaluation. On x86,
+including 32-bit x86, the library requires SSE2 and selects SSE arithmetic even
+when an embedding application uses x87. AVX remains optional. This is a
+compile-time contract: calls retain the platform ABI and add no floating-state
+transitions or software arithmetic. Clang additionally pins its evaluation
+method against an embedding application's wider expression-evaluation flags.
 The ordinary mappings require gradual underflow, while approximation leaves
 own their documented flush rules.
 

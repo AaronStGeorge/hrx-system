@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@bazel_skylib//lib:selects.bzl", "selects")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
@@ -12,6 +13,48 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0 with LLVM Exceptions and MIT
+)
+
+# Source-width arithmetic requires SSE2 on both x86 ABIs. The caller's floating
+# evaluation mode may differ, so these options belong only to the math library.
+selects.config_setting_group(
+    name = "x86",
+    match_any = [
+        "@platforms//cpu:x86_32",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+selects.config_setting_group(
+    name = "gnu_driver",
+    match_any = [
+        "//build_tools/bazel:cc_compiler_clang",
+        "//build_tools/bazel:cc_compiler_gcc",
+    ],
+)
+
+selects.config_setting_group(
+    name = "gnu_x86",
+    match_all = [
+        ":gnu_driver",
+        ":x86",
+    ],
+)
+
+selects.config_setting_group(
+    name = "clang_cl_x86",
+    match_all = [
+        "//build_tools/bazel:cc_compiler_clang_cl",
+        ":x86",
+    ],
+)
+
+selects.config_setting_group(
+    name = "msvc_x86_32",
+    match_all = [
+        "//build_tools/bazel:cc_compiler_msvc",
+        "@platforms//cpu:x86_32",
+    ],
 )
 
 iree_runtime_cc_library(
@@ -75,6 +118,17 @@ iree_runtime_cc_library(
         "//build_tools/bazel:cc_compiler_msvc": [
             "/fp:precise",
         ],
+        "//conditions:default": [],
+    }) + select({
+        "//runtime/src/iree/math:clang_cl_x86": [
+            "/clang:-msse2",
+            "/clang:-mfpmath=sse",
+        ],
+        "//runtime/src/iree/math:gnu_x86": [
+            "-msse2",
+            "-mfpmath=sse",
+        ],
+        "//runtime/src/iree/math:msvc_x86_32": ["/arch:SSE2"],
         "//conditions:default": [],
     }),
     deps = [
