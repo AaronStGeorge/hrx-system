@@ -1401,6 +1401,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         self._check_no_unhandled_kwargs("iree_py_binary", kwargs)
         if data and not self._has_only_external_targets(data):
             raise NotImplementedError(f"iree_py_binary data: {name}")
+        if not main and not main_module:
+            main = name + ".py"
         source_list = list(srcs or [])
         if main and main not in source_list:
             source_list.append(main)

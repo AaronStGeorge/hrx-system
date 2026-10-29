@@ -4,17 +4,17 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//build_tools/bazel:generate.bzl", "iree_generated_sources")
+load("//build_tools/bazel:python.bzl", "iree_py_binary")
 
 filegroup(
     name = "header_inputs",
     srcs = ["//package:generated.h.in"],
 )
 
-iree_cmake_extra_content(
-    content = "iree_py_library(NAME generator MAIN ../generator.py SRCS ../generator.py)",
-    inline = True,
+iree_py_binary(
+    name = "generator",
+    srcs = ["generator.py"],
 )
 
 iree_generated_sources(

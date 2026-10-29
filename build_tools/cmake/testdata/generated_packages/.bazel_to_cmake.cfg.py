@@ -4,10 +4,16 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from bazel_to_cmake_converter import BuildFileFunctions
 from bazel_to_cmake_targets import TargetConverter
 
 BAZEL_TO_CMAKE_REPO_ROOT = True
 DEFAULT_ROOT_DIRS = ["package"]
+
+
+class CustomBuildFileFunctions(BuildFileFunctions):
+    def _should_emit_python_target(self):
+        return True
 
 
 class CustomTargetConverter(TargetConverter):
