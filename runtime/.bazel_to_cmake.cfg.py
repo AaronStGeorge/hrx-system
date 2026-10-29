@@ -29,6 +29,9 @@ class RuntimeBuildFileFunctions(
     def _package_name(self):
         return os.path.relpath(self._build_dir, self._repo_root).replace("\\", "/")
 
+    def _should_emit_python_target(self):
+        return self._package_name() == "runtime/src/iree/vm/bytecode/spec"
+
     def _runtime_package_policy(self):
         return self._runtime_requirement_policy.collect(self._package_name())
 

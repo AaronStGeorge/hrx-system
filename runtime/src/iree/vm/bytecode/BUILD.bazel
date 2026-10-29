@@ -4,7 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//build_tools/bazel:generate.bzl", "iree_generated_sources")
 load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
@@ -40,7 +39,7 @@ iree_generated_sources(
         "wire/core.h": "--wire-core-header={path}",
         "wire/module.h": "--wire-module-header={path}",
     },
-    tags = ["skip-bazel_to_cmake"],
+    progress_message = "Generating shipping VM runtime projections",
     tool = "//runtime/src/iree/vm/bytecode/spec:generate_runtime",
 )
 
@@ -51,7 +50,7 @@ iree_generated_sources(
     output_args = {
         "interpreter_conversion_test_vectors.inl": "--conversion-test-vectors={path}",
     },
-    tags = ["skip-bazel_to_cmake"],
+    progress_message = "Generating VM conversion test vectors",
     tool = "//runtime/src/iree/vm/bytecode/spec:generate_conversion_tests",
 )
 
@@ -65,7 +64,7 @@ iree_generated_sources(
         "assembler_tables.inl": "--assembler-data={path}",
         "disassembler_tables.inl": "--disassembler-data={path}",
     },
-    tags = ["skip-bazel_to_cmake"],
+    progress_message = "Generating VM textual-tool projections",
     tool = "//runtime/src/iree/vm/bytecode/spec:generate_tooling",
 )
 
@@ -75,7 +74,7 @@ iree_generated_sources(
     output_args = {
         "docs/specification.md": "--documentation={path}",
     },
-    tags = ["skip-bazel_to_cmake"],
+    progress_message = "Generating VM specification documentation",
     tool = "//runtime/src/iree/vm/bytecode/spec:generate_documentation",
 )
 
@@ -587,78 +586,4 @@ test_suite(
         ":reflection_test",
         ":verifier_test",
     ],
-)
-
-iree_cmake_extra_content(
-    content = """
-iree_py_generated_files(
-  NAME
-    runtime_projections
-  GENERATOR
-    iree::vm::bytecode::spec::generate_runtime
-  OUTPUTS
-    "interpreter_tables.inl"
-    "layout_tables.inl"
-    "verifier_data.c"
-    "verifier_instruction_cases.inl"
-    "verifier_module_cases.inl"
-    "wire/assertions.c"
-    "wire/core.h"
-    "wire/module.h"
-  OUTPUT_FLAGS
-    "--interpreter-data"
-    "--layout-data"
-    "--verifier-source"
-    "--instruction-verifier-cases"
-    "--module-verifier-cases"
-    "--wire-assertions-source"
-    "--wire-core-header"
-    "--wire-module-header"
-  COMMENT
-    "Generating shipping VM runtime projections"
-)
-
-iree_py_generated_files(
-  NAME
-    conversion_test_projection
-  GENERATOR
-    iree::vm::bytecode::spec::generate_conversion_tests
-  OUTPUTS
-    "interpreter_conversion_test_vectors.inl"
-  OUTPUT_FLAGS
-    "--conversion-test-vectors"
-  COMMENT
-    "Generating VM conversion test vectors"
-)
-
-iree_py_generated_files(
-  NAME
-    tooling_projection
-  GENERATOR
-    iree::vm::bytecode::spec::generate_tooling
-  OUTPUTS
-    "assembler_tables.inl"
-    "disassembler_tables.inl"
-  OUTPUT_FLAGS
-    "--assembler-data"
-    "--disassembler-data"
-  COMMENT
-    "Generating VM textual-tool projections"
-)
-
-iree_py_generated_files(
-  NAME
-    documentation_projection
-  GENERATOR
-    iree::vm::bytecode::spec::generate_documentation
-  OUTPUTS
-    "docs/specification.md"
-  OUTPUT_FLAGS
-    "--documentation"
-  COMMENT
-    "Generating VM specification documentation"
-)
-
-""",
-    inline = True,
 )

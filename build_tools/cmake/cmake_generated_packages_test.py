@@ -72,7 +72,7 @@ class CMakeGeneratedPackagesTest(unittest.TestCase):
             configure_project(host, build)
             check(7)
             self.assertEqual([path.stat().st_mtime_ns for path in paths], timestamps)
-            generator = source / "package/generator.py"
+            generator = source / "package/producer/generator.py"
             generator.write_text(generator.read_text() + "\n")
             check(7)
             timestamps = [path.stat().st_mtime_ns for path in paths]
