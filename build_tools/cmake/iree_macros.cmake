@@ -428,6 +428,8 @@ endfunction()
 # Native relative source paths can overflow MSVC's object-path limit even after
 # CMake hashes the directory portion. Name package files relative to their
 # original source or output directory, retaining native target directories.
+# Hash names longer than the digest so generated filenames cannot consume the
+# remaining path budget. Short package-relative names stay readable.
 function(iree_set_source_object_names)
   if(NOT CMAKE_HOST_WIN32)
     return()
@@ -448,6 +450,10 @@ function(iree_set_source_object_names)
       set(_OBJECT_NAME "generated/${_RELATIVE_OUTPUT}")
     else()
       string(MD5 _OBJECT_NAME "${_SOURCE}")
+    endif()
+    string(LENGTH "${_OBJECT_NAME}" _OBJECT_NAME_LENGTH)
+    if(_OBJECT_NAME_LENGTH GREATER 32)
+      string(MD5 _OBJECT_NAME "${_OBJECT_NAME}")
     endif()
     set_source_files_properties("${_SOURCE}" PROPERTIES
       OBJECT_NAME "${_OBJECT_NAME}")

@@ -21,13 +21,19 @@ iree_py_generated_files(NAME header GENERATOR ::generator
   INPUTS header_inputs.stamp
   ARGS "--input=${_IREE_PACKAGE_SOURCE_DIR}/generated.h.in"
   OUTPUTS generated.h OUTPUT_FLAGS --output)
+iree_package_binary_dir(_IREE_PACKAGE_BINARY_DIR)
+configure_file("${_IREE_PACKAGE_SOURCE_DIR}/value.c"
+  "${_IREE_PACKAGE_BINARY_DIR}/value_from_generated_input_with_long_output_name.c"
+  COPYONLY)
 """,
     inline = True,
 )
 
 cc_library(
     name = "library_with_generated_inputs_and_package_identity",
-    srcs = glob(["value*.c"]),
+    srcs = glob(["value*.c"], exclude = ["value.c"]) + [
+        "value_from_generated_input_with_long_output_name.c",
+    ],
     hdrs = ["generated.h"],
     defines = OPTIONS + ["ADJUSTMENT=0"],
     includes = ["."],

@@ -32,9 +32,7 @@ class CMakeGeneratedPackagesTest(unittest.TestCase):
             source = root / "source"
             # Deep build roots and qualified target names exercise Windows
             # object-path limits encountered by embedded builds in CI.
-            build = (
-                root / "nested build directory matching a deeply embedded CI workspace"
-            )
+            build = root / "nested build directory matching an embedded CI workspace"
             shutil.copytree(FIXTURE, source)
             for template in source.rglob("BUILD.bazel.in"):
                 template.rename(template.with_suffix(""))
