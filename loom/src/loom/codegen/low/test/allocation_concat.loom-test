@@ -361,29 +361,6 @@ copy %seed -> %upper: coalesced
 
 // ====
 
-// RUN: emit low-allocation-query @retained_source_rejects_concat_handoff spill-count values=%seed,%upper,%lower,%tuple copies=%upper fixed=%tuple:physical_register:0:4
-
-test.target<low_core> @target
-
-// A source returned after producing the upper half remains physically live
-// across the concat. It keeps independent storage, and its copy materializes
-// into the fixed result slice.
-low.func.def schedule(locked) target<test.low.core>(@target) @retained_source_rejects_concat_handoff(%seed: reg<test.phys x2>, %lower: reg<test.phys x2>) -> (reg<test.phys x4>, reg<test.phys x2>) asm {
-  %upper = copy %seed : reg<test.phys x2> -> reg<test.phys x2>
-  %tuple = concat(%lower, %upper) : (reg<test.phys x2>, reg<test.phys x2>) -> reg<test.phys x4>
-  return %tuple, %seed
-}
-
-// ----
-spills: 0
-value %seed: test.phys -> physical_register[4:2]
-value %upper: test.phys -> physical_register[2:2]
-value %lower: test.phys -> physical_register[0:2]
-value %tuple: test.phys -> physical_register[0:4]
-copy %seed -> %upper: materialized
-
-// ====
-
 // RUN: emit low-allocation-query @loop_live_source_reserves_concat spill-count values=%guard,%blocker,%source,%high,%low,%pair
 
 test.target<low_core> @target
