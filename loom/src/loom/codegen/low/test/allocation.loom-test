@@ -706,14 +706,16 @@ low.func.def target<test.low.core>(@test_target) @placement_affinity_accepted(%s
 
 // ====
 
-// RUN: emit low-allocation-query @placement_affinity_rejected diagnostics=placement-decisions fixed=%state:target_id:0:1 fixed=%copy:target_id:1:1
+// RUN: emit low-allocation-query @placement_affinity_rejected diagnostics=placement-decisions
 
 test.target<low_core> @test_target
 
 low.func.def target<test.low.core>(@test_target) @placement_affinity_rejected(%state: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
   // REMARK@+1: BACKEND/043 {function_name="placement_affinity_rejected", op_name="low.copy", source_value_name="state", result_value_name="copy", value_class="test.i32", placement_cause="low.copy", decision="rejected", reason_key="assigned-locations-differ"}
   %copy = copy %state : reg<test.i32> -> reg<test.i32>
-  return %copy, %state
+  // REMARK@+1: BACKEND/043 {function_name="placement_affinity_rejected", op_name="low.op", source_value_name="state", result_value_name="changed", value_class="test.i32", placement_cause="tied-result", decision="accepted", reason_key="assigned-locations-match"}
+  %changed = test.tied.any %state
+  return %copy, %changed
 }
 
 // ----
