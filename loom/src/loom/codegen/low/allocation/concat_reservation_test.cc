@@ -205,6 +205,38 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
       &preferences, &arena, &workspace));
   context.preference_workspace = &workspace;
 
+  // The ordinary source fits before the future value, but its whole assembly
+  // does not. Repair reserves the first dense span instead of repeating the
+  // aligned-first choice. The four-unit aggregate and two-unit future value
+  // establish the retained six-unit pressure frontier.
+  future.location_base = 5;
+  future.start_point = intervals[3].start_point = 5;
+  intervals[3].end_point = 14;
+  high_water[0] = 7;
+  loom_low_allocation_active_set_t repair_active_set = {};
+  IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
+      &descriptors, &unit_liveness, 1, 16, 16, &arena, &repair_active_set));
+  loom_low_allocation_active_set_insert(&repair_active_set, &descriptors,
+                                        &future, 1, 0);
+  const uint32_t repair_frontiers[] = {6};
+  auto repair_context = context;
+  repair_context.active_set = &repair_active_set;
+  for (bool repair : {false, true}) {
+    SCOPED_TRACE(repair);
+    repair_context.scalar_packing.frontiers_by_reg_class =
+        repair ? repair_frontiers : nullptr;
+    loom_low_allocation_assignment_t reservation;
+    IREE_ASSERT_OK(loom_low_allocation_concat_reservation_find(
+        &repair_context, &intervals[0], &relations[0], &intervals[2],
+        &result_ranges[2], &reservation_sources,
+        /*source_has_unique_affinity_path=*/false, &reservation));
+    EXPECT_EQ(reservation.value_id, value_ids[2]);
+    EXPECT_EQ(reservation.location_base, repair ? 7u : 8u);
+    EXPECT_EQ(reservation.location_count, 4u);
+    EXPECT_EQ(assignments.assignment_count, 1u);
+  }
+  high_water[0] = 6;
+
   // Both two-unit sources fit at 2 and 4 before the future reservation starts.
   // Their four-unit result must also fit from point 4 through point 10. A
   // reservation starting at 10 is disjoint and must not force preferred

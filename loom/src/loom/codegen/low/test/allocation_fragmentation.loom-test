@@ -125,37 +125,6 @@ value %wide: test.i32 -> target_id[1:4]
 
 // ====
 
-// Reserving a future four-unit concat at its optional aligned base strands the
-// other four-unit value. The repair coloring must also make prospective
-// aggregate reservations dense, not just ordinary interval searches.
-// RUN: emit low-allocation-query @dense_concat_repair spill-count values=%condition,%lane0,%lane1,%lane2,%lane3,%tuple,%other,%sum test.i32=9 fixed=%condition:target_id:0:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @dense_concat_repair(%pointer: reg<test.ptr>, %condition: reg<test.i32>) -> (reg<test.i32>, reg<test.i32 x4>) asm {
-  %lane0 = test.add.i32 %condition, %condition
-  %lane1 = test.add.i32 %condition, %condition
-  %lane2 = test.add.i32 %condition, %condition
-  %lane3 = test.add.i32 %condition, %condition
-  %tuple = concat(%lane0, %lane1, %lane2, %lane3) : (reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>) -> reg<test.i32 x4>
-  %other = test.load.v4i32 %pointer
-  %sum = test.add.v4i32 %tuple, %other
-  return %condition, %sum
-}
-
-// ----
-spills: 0
-value %condition: test.i32 -> target_id[0:1]
-value %lane0: test.i32 -> target_id[1:1]
-value %lane1: test.i32 -> target_id[2:1]
-value %lane2: test.i32 -> target_id[3:1]
-value %lane3: test.i32 -> target_id[4:1]
-value %tuple: test.i32 -> target_id[1:4]
-value %other: test.i32 -> target_id[5:4]
-value %sum: test.i32 -> target_id[1:4]
-
-// ====
-
 // A victim with its own low4 use cannot be recolored above that window, even
 // with an available high register. The required %current value still takes
 // register 3, but %d must spill instead of receiving an out-of-range register
