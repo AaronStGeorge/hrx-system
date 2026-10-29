@@ -473,12 +473,15 @@ failure: unspillable-register-exhausted kind=location-constraint value=%lhs clas
 
 // ====
 
-// RUN: emit low-allocation-query @wide_concat_source_pressure_cliff values=%high_blocker,%early,%late,%packed fixed=%high_blocker:target_id:28:1
+// RUN: emit low-allocation-query @wide_concat_reuses_early_source values=%high_blocker,%early,%late,%packed
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @wide_concat_source_pressure_cliff(%lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>, %block0: reg<test.i32 x4>, %block1: reg<test.i32 x4>, %block2: reg<test.i32 x4>, %block3: reg<test.i32 x4>, %high_blocker: reg<test.i32>) -> (reg<test.i32 x8>) asm {
+// The sources are separated by independent work. The complete tuple keeps
+// the early source in place and transfers only the late source.
+low.func.def target<test.low.core>(@test_target) @wide_concat_reuses_early_source(%lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>, %block0: reg<test.i32 x4>, %block1: reg<test.i32 x4>, %block2: reg<test.i32 x4>, %block3: reg<test.i32 x4>) -> (reg<test.i32 x8>) asm {
   %early = test.add.v4i32 %lhs, %rhs
+  %high_blocker = test.const.i32 7
   %hold0 = test.add.v4i32 %lhs, %block0
   %hold1 = test.add.v4i32 %rhs, %block1
   %hold2 = test.add.v4i32 %block2, %block3
