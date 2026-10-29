@@ -40,6 +40,7 @@ def _command_impl(ctx):
         source_file = "probe.cc",
         output_file = "probe.obj",
         user_compile_flags = ctx.attr.copts,
+        variables_extension = {"includes": ctx.attr.includes} if ctx.attr.includes else {},
     )
     link_variables = cc_common.create_link_variables(
         cc_toolchain = compiler,
@@ -68,6 +69,7 @@ _command = rule(
     attrs = {
         "compiler": attr.label(default = ":compiler", providers = [cc_common.CcToolchainInfo]),
         "copts": attr.string_list(),
+        "includes": attr.string_list(),
         "profile": attr.string_list(),
     },
     fragments = ["cpp"],
@@ -99,6 +101,23 @@ def _test_sanitizer_impl(env, target):
     env.expect.that_collection(command.arguments).contains("/Z7")
     env.expect.that_collection(command.arguments).not_contains("/clang:-flto=thin")
     env.expect.that_collection(command.arguments).not_contains("/clang:-O3")
+
+def _test_forced_includes(name, **kwargs):
+    targets = {}
+    for kind, compiler in [("cross", ":compiler"), ("native", ":native_wrapped_compiler")]:
+        subject = name + "_" + kind
+        _command(
+            name = subject,
+            compiler = compiler,
+            includes = ["build-info.h"],
+        )
+        targets[kind] = subject
+    analysis_test(name = name, targets = targets, impl = _test_forced_includes_impl, **kwargs)
+
+def _test_forced_includes_impl(env, targets):
+    for kind in ["cross", "native"]:
+        command = getattr(targets, kind)[_CommandInfo]
+        env.expect.that_collection(command.arguments).contains("/FIbuild-info.h")
 
 _CRT_CASES = {
     "dynamic_debug": (["dbg"], "/MDd", "msvcrtd"),
@@ -189,7 +208,7 @@ def _test_native_linker_inputs_impl(env, target):
         env.expect.that_collection(link.argv).contains(builtins[0].path)
 
 def toolchain_config_test_suite(name):
-    tests = [_test_optimized, _test_sanitizer, _test_crt_commands, _test_native_configuration, _test_native_command, _test_native_compiler_mismatch]
+    tests = [_test_optimized, _test_sanitizer, _test_forced_includes, _test_crt_commands, _test_native_configuration, _test_native_command, _test_native_compiler_mismatch]
     if "@platforms//os:windows" in HOST_CONSTRAINTS:
         tests.append(_test_native_linker_inputs)
     test_suite(
