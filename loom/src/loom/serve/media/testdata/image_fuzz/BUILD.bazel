@@ -9,14 +9,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-filegroup(
-    name = "fixtures",
-    testonly = True,
-    srcs = glob(["*.txt"]),
-)
-
-filegroup(
-    name = "png",
-    testonly = True,
-    srcs = ["png.txt"],
+exports_files(
+    glob(["*.txt"]),
+    visibility = ["//loom/src/loom/serve/media:__pkg__"],
 )

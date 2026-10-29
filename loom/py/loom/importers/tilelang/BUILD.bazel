@@ -6,6 +6,7 @@
 
 load("//build_tools/bazel:python.bzl", "iree_py_library", "iree_py_test")
 load("//loom/build_tools/bazel:build_defs.bzl", "iree_cmake_extra_content", "iree_select")
+load("//loom/py/loom/importers/tilelang/testdata:sources.bzl", TILELANG_IMPORT_SOURCES = "IMPORT_SOURCES", TILELANG_UNIT_SOURCES = "UNIT_SOURCES")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -90,9 +91,7 @@ iree_py_test(
         "differential_test.py",
         "oracle_test.py",
         "types_test.py",
-        "//loom/py/loom/importers/tilelang/testdata:unit_sources",
-        "//loom/py/loom/tools:pytest_style_runner.py",
-    ],
+    ] + TILELANG_UNIT_SOURCES + ["//loom/py/loom/tools:pytest_style_runner.py"],
     args = [
         "loom.importers.tilelang.analysis_test",
         "loom.importers.tilelang.calls_test",
@@ -113,12 +112,6 @@ iree_py_test(
     ],
 )
 
-filegroup(
-    name = "tilelang_import_tests",
-    testonly = True,
-    srcs = ["//loom/py/loom/importers/tilelang/testdata:import_sources"],
-)
-
 iree_py_test(
     name = "tilelang_import_test",
     srcs = ["//loom/py/loom/importers/check:import_test.py"],
@@ -126,12 +119,8 @@ iree_py_test(
         "tilelang",
         "--fail-on-skip",
         "--loom-opt=$(location //loom/src/loom/tools/loom-opt:loom-opt)",
-        "$(locations :tilelang_import_tests)",
-    ],
-    data = [
-        ":tilelang_import_tests",
-        "//loom/src/loom/tools/loom-opt",
-    ],
+    ] + ["$(location %s)" % source for source in TILELANG_IMPORT_SOURCES],
+    data = TILELANG_IMPORT_SOURCES + ["//loom/src/loom/tools/loom-opt"],
     main = "import_test.py",
     target_compatible_with = _TILELANG_IMPORTER_COMPATIBLE,
     deps = [

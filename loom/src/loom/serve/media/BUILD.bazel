@@ -228,12 +228,17 @@ loom_py_test(
     srcs = ["image_fuzz_test.py"],
     args = [
         "$(rootpath :image_fuzz)",
-        "$(rootpath //loom/src/loom/serve/media/testdata/image_fuzz:png)",
+        "$(rootpath //loom/src/loom/serve/media/testdata/image_fuzz:png.txt)",
     ],
     data = [
         ":image_fuzz",
-        "//loom/src/loom/serve/media/testdata/image_fuzz:fixtures",
-        "//loom/src/loom/serve/media/testdata/image_fuzz:png",
+        "//loom/src/loom/serve/media/testdata/image_fuzz:gif.txt",
+        "//loom/src/loom/serve/media/testdata/image_fuzz:jpeg.txt",
+        "//loom/src/loom/serve/media/testdata/image_fuzz:pam_rgb.txt",
+        "//loom/src/loom/serve/media/testdata/image_fuzz:pam_rgba.txt",
+        "//loom/src/loom/serve/media/testdata/image_fuzz:pam_truncated.txt",
+        "//loom/src/loom/serve/media/testdata/image_fuzz:png.txt",
+        "//loom/src/loom/serve/media/testdata/image_fuzz:webp.txt",
     ],
     tags = [
         "manual",
@@ -328,8 +333,11 @@ loom_cc_test(
     srcs = ["audio_decoder_test.cc"],
     args = ["--audio_fixture=$(rootpath //loom/src/loom/serve/media/testdata/audio:sample.flac)"],
     data = [
-        "//loom/src/loom/serve/media/testdata/audio:fixtures",
+        "//loom/src/loom/serve/media/testdata/audio:README.txt",
+        "//loom/src/loom/serve/media/testdata/audio:flac.f32",
+        "//loom/src/loom/serve/media/testdata/audio:mp3.f32",
         "//loom/src/loom/serve/media/testdata/audio:sample.flac",
+        "//loom/src/loom/serve/media/testdata/audio:sample.mp3",
     ],
     defines = iree_select({
         "//loom/config/serve:wav": ["LOOM_TEST_AUDIO_WAV=1"],

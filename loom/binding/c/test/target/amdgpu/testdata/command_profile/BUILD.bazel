@@ -9,8 +9,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-filegroup(
-    name = "sources",
-    testonly = True,
-    srcs = glob(["*.loom"]),
+exports_files(
+    glob(["*.loom"]),
+    visibility = ["//loom/binding/c/test/target/amdgpu:__pkg__"],
 )

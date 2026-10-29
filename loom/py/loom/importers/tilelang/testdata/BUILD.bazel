@@ -9,36 +9,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-filegroup(
-    name = "unit_sources",
-    testonly = True,
-    srcs = [
-        "__init__.py",
-        "//loom/py/loom/importers/tilelang/testdata/tilekernels:unit_sources",
-    ],
-)
-
-filegroup(
-    name = "import_sources",
-    testonly = True,
-    # Import cases run in declaration order: scalar cases, kernel cases, then
-    # tile and vector cases.
-    srcs = [
-        "allocations.py",
-        "analysis.py",
-        "control_flow.py",
-        "diagnostics.py",
-        "fp8.py",
-        "lowered_metadata.py",
-        "memory_effects.py",
-        "scalar_calls.py",
-    ] + [
-        "//loom/py/loom/importers/tilelang/testdata/tilekernels:import_sources",
-    ] + [
-        "tileops.py",
-        "topology.py",
-        "vector_arithmetic.py",
-        "vector_casts.py",
-        "vector_memory.py",
-    ],
+exports_files(
+    glob(["*.py"]),
+    visibility = ["//loom/py/loom/importers/tilelang:__pkg__"],
 )

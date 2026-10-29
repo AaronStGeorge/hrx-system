@@ -96,7 +96,13 @@ loom_cc_test(
 iree_c_embed_data(
     name = "command_profile_testdata",
     testonly = True,
-    srcs = ["//loom/binding/c/test/target/amdgpu/testdata/command_profile:sources"],
+    srcs = [
+        "//loom/binding/c/test/target/amdgpu/testdata/command_profile:command_target_selection.loom",
+        "//loom/binding/c/test/target/amdgpu/testdata/command_profile:conditional_target.loom",
+        "//loom/binding/c/test/target/amdgpu/testdata/command_profile:empty_command.loom",
+        "//loom/binding/c/test/target/amdgpu/testdata/command_profile:kernel_profiles.loom",
+        "//loom/binding/c/test/target/amdgpu/testdata/command_profile:source_target.loom",
+    ],
     c_file_output = "command_profile_testdata.c",
     flatten = True,
     h_file_output = "command_profile_testdata.h",

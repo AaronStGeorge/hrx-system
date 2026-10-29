@@ -106,10 +106,10 @@ iree_py_test(
         "mlir",
         "--fail-on-skip",
         "--loom-opt=$(location //loom/src/loom/tools/loom-opt:loom-opt)",
-        "$(locations //loom/py/loom/importers/mlir/testdata:import_tests)",
+        "$(location //loom/py/loom/importers/mlir/testdata:vector_reduce_amdgpu.mlir)",
     ],
     data = [
-        "//loom/py/loom/importers/mlir/testdata:import_tests",
+        "//loom/py/loom/importers/mlir/testdata:vector_reduce_amdgpu.mlir",
         "//loom/src/loom/tools/loom-opt",
     ],
     main = "import_test.py",

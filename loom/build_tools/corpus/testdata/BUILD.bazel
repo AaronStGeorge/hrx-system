@@ -9,11 +9,10 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-filegroup(
-    name = "sources",
-    testonly = True,
-    srcs = [
+exports_files(
+    [
         "all_roots_xfail.loom",
         "diagnostic_xfails.loom",
     ],
+    visibility = ["//loom/build_tools/corpus:__pkg__"],
 )

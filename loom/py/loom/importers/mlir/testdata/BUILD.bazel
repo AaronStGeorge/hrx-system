@@ -9,8 +9,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-filegroup(
-    name = "import_tests",
-    testonly = True,
-    srcs = ["vector_reduce_amdgpu.mlir"],
+exports_files(
+    ["vector_reduce_amdgpu.mlir"],
+    visibility = ["//loom/py/loom/importers/mlir:__pkg__"],
 )

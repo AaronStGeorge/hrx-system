@@ -5,37 +5,11 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 package(
-    default_visibility = ["//loom/py/loom/importers/tilelang/testdata:__pkg__"],
+    default_visibility = ["//loom/py/loom/importers/tilelang:__pkg__"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-filegroup(
-    name = "unit_sources",
-    testonly = True,
-    srcs = [
-        "__init__.py",
-        "engram.py",
-        "moe_expand.py",
-        "moe_gate.py",
-        "moe_histogram.py",
-        "moe_normalize.py",
-        "moe_reduce.py",
-        "transpose.py",
-    ],
-)
-
-filegroup(
-    name = "import_sources",
-    testonly = True,
-    srcs = [
-        "engram.py",
-        "mhc.py",
-        "moe_expand.py",
-        "moe_gate.py",
-        "moe_histogram.py",
-        "moe_normalize.py",
-        "moe_reduce.py",
-        "moe_routing.py",
-        "transpose.py",
-    ],
+exports_files(
+    glob(["*.py"]),
+    visibility = ["//loom/py/loom/importers/tilelang:__pkg__"],
 )
