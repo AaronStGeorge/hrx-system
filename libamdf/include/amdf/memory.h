@@ -498,6 +498,14 @@ enum amdf_host_mapping_feature_bits_e {
   /// accept CPU atomic transactions. It does not establish atomicity with any
   /// device; exact pair reach and device operation support remain independent.
   AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS = UINT32_C(1) << 1,
+  /// Native buffered file reads and writes can access this host view without
+  /// pinning its pages. HOST pair queries describe the required visibility
+  /// operations around the completed I/O, just as for ordinary CPU accesses.
+  /// The caller retains the mapping and backing until every accepted I/O and
+  /// final reader has completed. This does not permit direct I/O or registered
+  /// buffers. FILE_IO also permits buffered I/O, with its FILE_IO pair
+  /// protocol.
+  AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO = UINT32_C(1) << 2,
 };
 
 /// Range and access capabilities of explicit host mappings.

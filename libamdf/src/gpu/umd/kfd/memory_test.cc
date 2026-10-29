@@ -120,6 +120,32 @@ TEST(LinuxGpuMemoryProfileTest, UnifiedCachedSystemStorageCanBeDeviceLocal) {
             0u);
 }
 
+TEST(LinuxGpuMemoryProfileTest, OwnedSystemPermitsBufferedIoWithoutPagePins) {
+  amdf_gpu_umd_device_t device = {.page_size = 4096};
+  device.topology.virtual_address.begin = UINT64_C(0x10000);
+  device.topology.virtual_address.end = UINT64_C(1) << 48;
+  for (const auto lifetime :
+       {AMDF_NATIVE_LIFETIME_PROCESS, AMDF_NATIVE_LIFETIME_INSTANCE}) {
+    device.native_lifetime = lifetime;
+    for (const bool integrated : {false, true}) {
+      device.topology.integrated = integrated;
+      for (uint32_t ordinal = 0;
+           ordinal < AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_COUNT; ++ordinal) {
+        const auto profile = QueryProfile(&device, ordinal);
+        EXPECT_NE(profile.host_mapping.features &
+                      AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO,
+                  0u);
+        EXPECT_EQ(
+            profile.host_mapping.features & AMDF_HOST_MAPPING_FEATURE_FILE_IO,
+            0u);
+        EXPECT_EQ(profile.supported_flags & AMDF_MEMORY_FLAG_HOST_FILE_IO, 0u);
+        EXPECT_EQ(profile.host_mapping.supported_access,
+                  AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE);
+      }
+    }
+  }
+}
+
 TEST(LinuxGpuMemoryProfileTest,
      ReservedApuLocalDoesNotInheritCachedSystemGuarantees) {
   amdf_gpu_umd_device_t device = {

@@ -257,7 +257,10 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.device_address = page_address;
     profile.allocation = allocation;
     profile.host_mapping = host_mapping;
-    profile.host_mapping.features |= AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS;
+    // Buffered I/O copies through the CPU mapping. GUP cannot pin these
+    // VM_IO/PFNMAP views, so direct I/O and registered buffers remain excluded.
+    profile.host_mapping.features |= AMDF_HOST_MAPPING_FEATURE_ATOMIC_ACCESS |
+                                     AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO;
     profile.external_memory_support_count = 2;
     profile.external_memory_support[0] = (amdf_external_memory_support_t){
         .type = AMDF_EXTERNAL_MEMORY_TYPE_DMA_BUF_FD,

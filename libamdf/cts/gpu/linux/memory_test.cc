@@ -15,7 +15,9 @@
 #include <cerrno>
 #include <climits>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <memory>
 #include <utility>
 
 #include "amdf/amdf.h"
@@ -452,6 +454,44 @@ class GpuLinuxMemoryTest : public GpuDeviceFixture {
 
 TEST_F(GpuLinuxMemoryTest, OwnsAlignedSystemMemoryAndBorrowedHostViews) {
   ASSERT_NO_FATAL_FAILURE(ExerciseSystemMemory());
+}
+
+TEST_F(GpuLinuxMemoryTest, BufferedFileIoUsesOwnedSystemMemory) {
+  const amdf_memory_create_info_t create = MakeSystemMemoryCreateInfo();
+  ASSERT_EQ(api_->memory_create(system_scope_, &create, &memories_[0], nullptr),
+            AMDF_STATUS_OK);
+  ASSERT_EQ(MapMemory(memories_[0], 0, 0, create.byte_length,
+                      AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE),
+            AMDF_STATUS_OK);
+  ASSERT_NE(
+      mapping_infos_[0].features & AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO,
+      0u);
+  EXPECT_EQ(mapping_infos_[0].features & AMDF_HOST_MAPPING_FEATURE_FILE_IO, 0u);
+
+  // An ordinary file descriptor copies directly to and from the native view;
+  // no stdio payload buffer or page registration mediates either operation.
+  std::unique_ptr<FILE, decltype(&std::fclose)> file(std::tmpfile(),
+                                                     &std::fclose);
+  ASSERT_NE(file, nullptr) << std::strerror(errno);
+  const int descriptor = fileno(file.get());
+  std::array<uint8_t, 4097> expected;
+  for (size_t i = 0; i < expected.size(); ++i) {
+    expected[i] = uint8_t(i * 7 + 3);
+  }
+  ASSERT_EQ(pwrite(descriptor, expected.data(), expected.size(), 13),
+            ssize_t(expected.size()));
+  auto* pointer = static_cast<uint8_t*>(mapping_infos_[0].pointer);
+  ASSERT_EQ(pread(descriptor, pointer, expected.size(), 13),
+            ssize_t(expected.size()));
+  EXPECT_EQ(std::memcmp(pointer, expected.data(), expected.size()), 0);
+  std::reverse(pointer, pointer + expected.size());
+  std::reverse(expected.begin(), expected.end());
+  ASSERT_EQ(pwrite(descriptor, pointer, expected.size(), 29),
+            ssize_t(expected.size()));
+  std::array<uint8_t, 4097> observed;
+  ASSERT_EQ(pread(descriptor, observed.data(), observed.size(), 29),
+            ssize_t(observed.size()));
+  EXPECT_EQ(observed, expected);
 }
 
 TEST_F(GpuLinuxMemoryTest, HonorsExactSystemDeviceAccess) {

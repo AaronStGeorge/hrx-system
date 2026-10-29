@@ -189,10 +189,14 @@ TEST_F(MemoryTest, FileSitesRequireTheViewFeatureAndPreserveDeviceTransitions) {
       .structure_size = sizeof(pair),
   };
   const auto original = pair;
-  EXPECT_EQ(amdf_status_code(amdf_memory_query_pair_info(&file, &gpu, &pair)),
-            AMDF_STATUS_CODE_UNSUPPORTED);
-  EXPECT_EQ(std::memcmp(&pair, &original, sizeof(pair)), 0);
-  EXPECT_EQ(native->site_description_count, 0u);
+  for (const auto features :
+       {0u, uint32_t{AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO}}) {
+    mapping.info.features = features;
+    EXPECT_EQ(amdf_status_code(amdf_memory_query_pair_info(&file, &gpu, &pair)),
+              AMDF_STATUS_CODE_UNSUPPORTED);
+    EXPECT_EQ(std::memcmp(&pair, &original, sizeof(pair)), 0);
+    EXPECT_EQ(native->site_description_count, 0u);
+  }
 
   mapping.info.features = AMDF_HOST_MAPPING_FEATURE_FILE_IO;
   ASSERT_EQ(amdf_memory_query_pair_info(&file, &gpu, &pair), AMDF_STATUS_OK);
