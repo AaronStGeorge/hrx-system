@@ -27,10 +27,16 @@ from build_tools.ci import github_api
 from loom.packaging.python import release
 
 GITHUB_RELEASE_BODY_MAXIMUM = 125_000
+GITHUB_ASSET_PAGE_SIZE = 100
 
 
 def github_release_body(identity: release.Identity) -> str:
     """Builds the bounded product description used for GitHub releases."""
+    server_archives = "".join(
+        f"- `{release.server_archive_name(identity, platform)}`\n"
+        for platform in release.PLATFORMS
+    )
+    linux_archive = release.server_archive_name(identity, release.LINUX_X86_64_PLATFORM)
     body = (
         f"Loom SDK {identity.version} contains the compiler, runtime, command-line "
         "tools, and Python APIs for Linux x86-64 and Windows x86-64.\n\n"
@@ -39,11 +45,12 @@ def github_release_body(identity: release.Identity) -> str:
         "```console\n"
         f"python -m pip install hrx-loom=={identity.version}\n"
         "```\n\n"
-        "For use outside Python, download the standalone archive for your platform. "
+        "For use outside Python, download the standalone archive for your platform:\n\n"
+        f"{server_archives}\n"
         "Each archive contains one `loom-serve` executable with the SDK target "
         "providers built in:\n\n"
         "```console\n"
-        f"unzip loom-serve-{identity.version}-manylinux_2_39_x86_64.zip\n"
+        f"unzip {linux_archive}\n"
         "./loom-serve --version\n"
         "```\n\n"
         "The attached wheels include Release, Tracy, Debug, and ASAN profiles. "
@@ -134,7 +141,9 @@ def publish_github(
     page = 1
     while True:
         records = github_api.get_json(
-            f"{api}/releases/{existing['id']}/assets?per_page=100&page={page}", token
+            f"{api}/releases/{existing['id']}/assets?"
+            f"per_page={GITHUB_ASSET_PAGE_SIZE}&page={page}",
+            token,
         )
         for record in records:
             name = record["name"]
@@ -152,7 +161,7 @@ def publish_github(
                 raise ValueError(
                     f"Incomplete GitHub asset: {name}; review the failed upload"
                 )
-        if len(records) < 100:
+        if len(records) < GITHUB_ASSET_PAGE_SIZE:
             break
         page += 1
 

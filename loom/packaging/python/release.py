@@ -21,7 +21,13 @@ _RELEASE = rf"{_NUMBER}\.{_NUMBER}\.{_NUMBER}(?:(?:a|b|rc){_NUMBER})?"
 _VERSION = re.compile(rf"{_RELEASE}(?:\.dev{_NUMBER})?")
 _CATALOG = re.compile(r"github:([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)@([^\s]+)")
 PROFILES = ("release", "tracy", "debug", "asan")
-PLATFORMS = ("manylinux_2_39_x86_64", "win_amd64")
+LINUX_X86_64_PLATFORM = "manylinux_2_39_x86_64"
+WINDOWS_X86_64_PLATFORM = "win_amd64"
+PLATFORMS = (LINUX_X86_64_PLATFORM, WINDOWS_X86_64_PLATFORM)
+SERVER_BINARIES = {
+    LINUX_X86_64_PLATFORM: "loom-serve",
+    WINDOWS_X86_64_PLATFORM: "loom-serve.exe",
+}
 
 
 @dataclass(frozen=True)
@@ -69,6 +75,12 @@ def parse_identity(document: object) -> Identity:
 
 def read_identity(path: Path) -> Identity:
     return parse_identity(json.loads(path.read_text(encoding="utf-8")))
+
+
+def server_archive_name(identity: Identity, platform: str) -> str:
+    if platform not in SERVER_BINARIES:
+        raise ValueError(f"Unsupported standalone server platform: {platform}")
+    return f"loom-serve-{identity.version}-{platform}.zip"
 
 
 @dataclass(frozen=True)
@@ -179,13 +191,12 @@ def release_wheels(
 
 def inspect_server_archive(path: Path, identity: Identity) -> ServerArchive:
     filenames = {
-        f"loom-serve-{identity.version}-{platform}.zip": platform
-        for platform in PLATFORMS
+        server_archive_name(identity, platform): platform for platform in PLATFORMS
     }
     if path.name not in filenames:
         raise ValueError(f"Unexpected standalone server release: {path.name}")
     platform = filenames[path.name]
-    binary_name = "loom-serve.exe" if platform == "win_amd64" else "loom-serve"
+    binary_name = SERVER_BINARIES[platform]
     with ZipFile(path) as archive:
         members = archive.infolist()
         if len(members) != 1 or members[0].filename != binary_name:

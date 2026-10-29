@@ -17,8 +17,10 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 from release import (
+    LINUX_X86_64_PLATFORM,
     PLATFORMS,
     PROFILES,
+    SERVER_BINARIES,
     checksum_document,
     inspect_server_archive,
     inspect_wheel,
@@ -27,6 +29,7 @@ from release import (
     read_identity,
     release_artifacts,
     release_servers,
+    server_archive_name,
     write_checksums,
 )
 
@@ -48,7 +51,9 @@ class ReleaseTest(unittest.TestCase):
         self.readme = self.root / "PYPI_README.md"
         self.readme.write_text(self.description)
 
-    def wheel(self, profile="release", platform=PLATFORMS[0], replacements=None):
+    def wheel(
+        self, profile="release", platform=LINUX_X86_64_PLATFORM, replacements=None
+    ):
         version = self.identity.version + (
             "" if profile == "release" else "+" + profile
         )
@@ -72,7 +77,7 @@ class ReleaseTest(unittest.TestCase):
 
     def server(
         self,
-        platform=PLATFORMS[0],
+        platform=LINUX_X86_64_PLATFORM,
         *,
         member_name=None,
         timestamp=(1980, 1, 1, 0, 0, 0),
@@ -84,8 +89,8 @@ class ReleaseTest(unittest.TestCase):
         archive_comment=b"",
         payload=b"native executable",
     ):
-        path = self.root / f"loom-serve-{self.identity.version}-{platform}.zip"
-        expected_name = "loom-serve.exe" if platform == "win_amd64" else "loom-serve"
+        path = self.root / server_archive_name(self.identity, platform)
+        expected_name = SERVER_BINARIES[platform]
         information = ZipInfo(member_name or expected_name, timestamp)
         information.create_system = create_system
         information.external_attr = mode << 16
@@ -188,7 +193,7 @@ class ReleaseTest(unittest.TestCase):
             ("METADATA", "text/markdown", "text/plain"),
             ("METADATA", ">=3.12", ">=3.9"),
             ("METADATA", "A standalone description.", "A stale description."),
-            ("WHEEL", "manylinux_2_39_x86_64", "linux_x86_64"),
+            ("WHEEL", LINUX_X86_64_PLATFORM, "linux_x86_64"),
             ("WHEEL", "false", "true"),
             ("loom.json", "fixture/library", "other/library"),
         )
@@ -225,7 +230,7 @@ class ReleaseTest(unittest.TestCase):
         for old, new in (
             ("1.2.3rc1", "1.2.4"),
             ("1.2.3rc1", "1.2.3rc1+tracy"),
-            (PLATFORMS[0], "linux_x86_64"),
+            (LINUX_X86_64_PLATFORM, "linux_x86_64"),
             ("py3-none", "cp312-cp312"),
         ):
             with self.subTest(new=new):
@@ -294,7 +299,10 @@ class ReleaseTest(unittest.TestCase):
         artifacts = release_artifacts(self.root, self.identity, self.description)
         checksum = self.root / "SHA256SUMS"
         original = checksum.read_bytes()
-        self.assertEqual(len(artifacts), len(PROFILES) * len(PLATFORMS) + 2)
+        self.assertEqual(
+            len(artifacts),
+            len(PROFILES) * len(PLATFORMS) + len(SERVER_BINARIES),
+        )
         self.assertEqual(original, checksum_document(artifacts).encode())
         write_checksums(self.root, artifacts)
         self.assertEqual(checksum.read_bytes(), original)

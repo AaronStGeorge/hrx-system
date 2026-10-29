@@ -60,8 +60,8 @@ class LoomReleaseTest(unittest.TestCase):
                         json.dumps({"catalog": self.identity.catalog}),
                     )
         for platform in release.PLATFORMS:
-            path = self.directory / f"loom-serve-{version}-{platform}.zip"
-            binary_name = "loom-serve.exe" if platform == "win_amd64" else "loom-serve"
+            path = self.directory / release.server_archive_name(self.identity, platform)
+            binary_name = release.SERVER_BINARIES[platform]
             information = ZipInfo(binary_name, (1980, 1, 1, 0, 0, 0))
             information.create_system = 3
             information.external_attr = (stat.S_IFREG | 0o755) << 16
@@ -76,6 +76,11 @@ class LoomReleaseTest(unittest.TestCase):
         self.artifacts = release.release_artifacts(
             self.directory, self.identity, self.description
         )
+        self.servers = [
+            artifact
+            for artifact in self.artifacts
+            if isinstance(artifact, release.ServerArchive)
+        ]
         release.write_checksums(self.directory, self.artifacts)
         self.assets = {artifact.path.name: artifact.path for artifact in self.artifacts}
         self.assets["SHA256SUMS"] = self.directory / "SHA256SUMS"
@@ -136,23 +141,32 @@ class LoomReleaseTest(unittest.TestCase):
                 self.assertEqual("--prerelease" in command, version.endswith("rc1"))
                 body = command[command.index("--notes") + 1]
                 self.assertIn(f"hrx-loom=={version}", body)
-                self.assertIn(f"loom-serve-{version}-manylinux_2_39_x86_64.zip", body)
+                for server in self.servers:
+                    self.assertIn(server.path.name, body)
                 self.assertIn("./loom-serve --version", body)
                 self.assertIn("Release, Tracy, Debug, and ASAN", body)
                 self.assertIn("SHA256SUMS", body)
                 self.assertLessEqual(
                     len(body), loom_release.GITHUB_RELEASE_BODY_MAXIMUM
                 )
-                for path in self.assets.values():
-                    self.assertIn(str(path), command)
+                asset_arguments = command[4 : command.index("--repo")]
+                self.assertCountEqual(
+                    asset_arguments, [str(path) for path in self.assets.values()]
+                )
+                self.assertEqual(len(asset_arguments), len(self.assets))
 
     def test_github_release_body_rejects_service_limit_overflow(self):
-        identity = release.Identity("1" * 125_000, self.identity.catalog)
-        with self.assertRaisesRegex(ValueError, "125000-character service limit"):
+        limit = loom_release.GITHUB_RELEASE_BODY_MAXIMUM
+        identity = release.Identity("1" * limit, self.identity.catalog)
+        with self.assertRaisesRegex(ValueError, f"{limit}-character service limit"):
             loom_release.github_release_body(identity)
 
     def test_partial_retry_checks_all_overlaps_before_upload(self):
-        present = list(self.assets)[:2] + ["SHA256SUMS"]
+        present = {
+            self.wheels[0].path.name,
+            self.servers[0].path.name,
+            "SHA256SUMS",
+        }
         events = []
 
         def gh(command, **kwargs):
@@ -167,46 +181,59 @@ class LoomReleaseTest(unittest.TestCase):
             patch.object(
                 github_api,
                 "get_json",
-                side_effect=[self.existing_release(), self.records(present)],
+                side_effect=[self.existing_release(), self.records(sorted(present))],
             ),
             patch("subprocess.run", side_effect=gh),
         ):
             self.publish()
-        self.assertEqual([event[2] for event in events], ["download"] * 3 + ["upload"])
-        for name, path in self.assets.items():
-            self.assertEqual(str(path) in events[-1], name not in present)
-        self.assertNotIn("--clobber", events[-1])
+        downloads = [
+            event[event.index("--pattern") + 1]
+            for event in events
+            if event[2] == "download"
+        ]
+        self.assertEqual(downloads, sorted(present))
+        upload = events[-1]
+        self.assertEqual(upload[2], "upload")
+        self.assertCountEqual(
+            upload[4 : upload.index("--repo")],
+            [str(path) for name, path in self.assets.items() if name not in present],
+        )
+        self.assertNotIn("--clobber", upload)
 
     def test_conflicting_overlap_prevents_all_uploads(self):
-        present = list(self.assets)[:2]
-        events = []
+        present = {self.wheels[0].path.name, self.servers[0].path.name}
+        conflicting_name = max(present)
+        downloads = []
 
         def gh(command, **kwargs):
-            events.append(command[2])
             self.assertEqual(command[2], "download")
             name = command[command.index("--pattern") + 1]
+            downloads.append(name)
             directory = Path(command[command.index("--dir") + 1])
-            content = (
-                self.assets[name].read_bytes() if len(events) == 1 else b"conflict"
-            )
+            content = b"conflict"
+            if name != conflicting_name:
+                content = self.assets[name].read_bytes()
             (directory / name).write_bytes(content)
 
         with (
             patch.object(
                 github_api,
                 "get_json",
-                side_effect=[self.existing_release(), self.records(present)],
+                side_effect=[self.existing_release(), self.records(sorted(present))],
             ),
             patch("subprocess.run", side_effect=gh),
         ):
             with self.assertRaisesRegex(ValueError, "Existing GitHub asset differs"):
                 self.publish()
-        self.assertEqual(events, ["download", "download"])
+        self.assertEqual(downloads, sorted(present))
 
-    def test_complete_retry_does_not_write(self):
+    def test_complete_retry_downloads_every_asset_once_and_does_not_write(self):
+        downloads = []
+
         def gh(command, **kwargs):
             self.assertEqual(command[2], "download")
             name = command[command.index("--pattern") + 1]
+            downloads.append(name)
             directory = Path(command[command.index("--dir") + 1])
             (directory / name).write_bytes(self.assets[name].read_bytes())
 
@@ -216,10 +243,10 @@ class LoomReleaseTest(unittest.TestCase):
                 "get_json",
                 side_effect=[self.existing_release(), self.records(self.assets)],
             ),
-            patch("subprocess.run", side_effect=gh) as run,
+            patch("subprocess.run", side_effect=gh),
         ):
             self.publish()
-        self.assertEqual(run.call_count, 11)
+        self.assertEqual(downloads, sorted(self.assets))
 
     def test_conflicting_release_metadata_stops_before_commands(self):
         for change in ({"draft": True}, {"prerelease": True}, {"tag_name": "v2.0.0"}):
@@ -235,10 +262,12 @@ class LoomReleaseTest(unittest.TestCase):
 
     def test_asset_inventory_is_complete_and_rejects_invalid_records(self):
         name = self.wheels[0].path.name
+        server = self.servers[0]
+        unexpected_server = server.path.name.replace(self.identity.version, "0.0.1", 1)
         for records in (
             self.records([name, name]),
             self.records(["unexpected.whl"]),
-            self.records(["loom-serve-0.0.1-win_amd64.zip"]),
+            self.records([unexpected_server]),
             [{"name": name, "state": "starter"}],
         ):
             with (
@@ -259,7 +288,12 @@ class LoomReleaseTest(unittest.TestCase):
                 "get_json",
                 side_effect=[
                     self.existing_release(),
-                    self.records([f"notes-{i}" for i in range(100)]),
+                    self.records(
+                        [
+                            f"notes-{i}"
+                            for i in range(loom_release.GITHUB_ASSET_PAGE_SIZE)
+                        ]
+                    ),
                     self.records(["unexpected.whl"]),
                 ],
             ) as get,
@@ -300,7 +334,7 @@ class LoomReleaseTest(unittest.TestCase):
 
     def test_pypi_only_stages_absent_normal_wheels(self):
         normal = self.pypi_records()
-        for count in (0, 1, 2):
+        for count in range(len(normal) + 1):
             output = self.output / str(count)
             with (
                 self.subTest(count=count),
@@ -312,7 +346,7 @@ class LoomReleaseTest(unittest.TestCase):
                 ),
             ):
                 pending = loom_release.stage_pypi(self.wheels, self.identity, output)
-            self.assertEqual(pending, count < 2)
+            self.assertEqual(pending, count < len(normal))
             self.assertEqual(
                 {path.name for path in output.iterdir()},
                 {record["filename"] for record in normal[count:]},
@@ -322,10 +356,13 @@ class LoomReleaseTest(unittest.TestCase):
 
     def test_pypi_conflicts_are_not_silently_skipped(self):
         record = self.pypi_records()[0]
+        instrumented = next(
+            wheel.path.name for wheel in self.wheels if wheel.profile != "release"
+        )
         for records in (
             [record | {"yanked": True}],
             [record | {"digests": {"sha256": "0" * 64}}],
-            [record | {"filename": "hrx_loom-1.2.3+tracy-py3-none-win_amd64.whl"}],
+            [record | {"filename": instrumented}],
             [record, record],
         ):
             with (
@@ -354,7 +391,9 @@ class LoomReleaseTest(unittest.TestCase):
                     self.assertTrue(
                         loom_release.stage_pypi(self.wheels, self.identity, self.output)
                     )
-                    self.assertEqual(len(list(self.output.iterdir())), 2)
+                    self.assertEqual(
+                        len(list(self.output.iterdir())), len(self.pypi_records())
+                    )
                 else:
                     with self.assertRaises(urllib.error.HTTPError):
                         loom_release.stage_pypi(self.wheels, self.identity, self.output)

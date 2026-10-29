@@ -18,6 +18,7 @@ from unittest import mock
 from zipfile import ZipFile
 
 from build_tools.ci import loom_server, loom_server_qualify
+from loom.packaging.python import release
 
 
 class LoomServerTest(unittest.TestCase):
@@ -65,7 +66,7 @@ class LoomServerTest(unittest.TestCase):
             path = loom_server.build_server(
                 self.root,
                 output,
-                "manylinux_2_39_x86_64",
+                release.LINUX_X86_64_PLATFORM,
                 self.commit,
                 "bazel",
                 self.llvm_bin,
@@ -97,7 +98,7 @@ class LoomServerTest(unittest.TestCase):
                 loom_server.build_server(
                     self.root,
                     output,
-                    "manylinux_2_39_x86_64",
+                    release.LINUX_X86_64_PLATFORM,
                     self.commit,
                     "bazel",
                     self.llvm_bin,
@@ -111,7 +112,7 @@ class LoomServerTest(unittest.TestCase):
                 loom_server.build_server(
                     self.root,
                     output,
-                    "manylinux_2_39_x86_64",
+                    release.LINUX_X86_64_PLATFORM,
                     self.commit,
                     "bazel",
                     self.llvm_bin,
@@ -165,14 +166,14 @@ class LoomServerTest(unittest.TestCase):
                 self.root,
                 inputs,
                 first,
-                "manylinux_2_39_x86_64",
+                release.LINUX_X86_64_PLATFORM,
                 self.commit,
             )
             two = loom_server.qualify_server(
                 self.root,
                 inputs,
                 second,
-                "manylinux_2_39_x86_64",
+                release.LINUX_X86_64_PLATFORM,
                 self.commit,
             )
         self.assertEqual(one.path.read_bytes(), two.path.read_bytes())
@@ -199,19 +200,21 @@ class LoomServerTest(unittest.TestCase):
                     self.root,
                     inputs,
                     output,
-                    "manylinux_2_39_x86_64",
+                    release.LINUX_X86_64_PLATFORM,
                     self.commit,
                 )
         self.assertFalse(output.exists())
         with mock.patch.object(
-            loom_server, "_native_platform", return_value="win_amd64"
+            loom_server,
+            "_native_platform",
+            return_value=release.WINDOWS_X86_64_PLATFORM,
         ):
             with self.assertRaisesRegex(ValueError, "native OS"):
                 loom_server.qualify_server(
                     self.root,
                     inputs,
                     output,
-                    "manylinux_2_39_x86_64",
+                    release.LINUX_X86_64_PLATFORM,
                     self.commit,
                 )
         self.assertFalse(output.exists())
@@ -224,7 +227,7 @@ class LoomServerTest(unittest.TestCase):
                 self.root,
                 inputs,
                 self.root / "published",
-                "manylinux_2_39_x86_64",
+                release.LINUX_X86_64_PLATFORM,
                 self.commit,
             )
 
@@ -276,7 +279,10 @@ class LoomServerQualifierTest(unittest.TestCase):
             )
             self.assertNotIn("LD_LIBRARY_PATH", commands[0][1]["env"])
             self.assertNotIn("PYTHONPATH", commands[0][1]["env"])
-            self.assertEqual(control.call_count, 2)
+            self.assertEqual(
+                [call.args[1:] for call in control.call_args_list],
+                [("GET", "/readyz", 200), ("GET", "/v1/status", 200)],
+            )
 
 
 if __name__ == "__main__":

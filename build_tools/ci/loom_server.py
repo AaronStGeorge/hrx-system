@@ -36,9 +36,11 @@ class ServerPlatform:
 
 
 PLATFORMS = {
-    "manylinux_2_39_x86_64": ServerPlatform("loom-serve", ()),
-    "win_amd64": ServerPlatform(
-        "loom-serve.exe",
+    release.LINUX_X86_64_PLATFORM: ServerPlatform(
+        release.SERVER_BINARIES[release.LINUX_X86_64_PLATFORM], ()
+    ),
+    release.WINDOWS_X86_64_PLATFORM: ServerPlatform(
+        release.SERVER_BINARIES[release.WINDOWS_X86_64_PLATFORM],
         ("--config=windows-x86_64", "--features=static_link_msvcrt_release"),
     ),
 }
@@ -208,7 +210,7 @@ def build_server(
         readobj = llvm_bin / "llvm-readobj"
         dependencies = (
             _windows_dependencies(readobj, candidate)
-            if platform_name == "win_amd64"
+            if platform_name == release.WINDOWS_X86_64_PLATFORM
             else _linux_dependencies(readobj, candidate)
         )
         output.mkdir(parents=True, exist_ok=False)
@@ -221,9 +223,9 @@ def build_server(
 
 def _native_platform() -> str | None:
     if os.name == "nt":
-        return "win_amd64"
+        return release.WINDOWS_X86_64_PLATFORM
     if sys.platform == "linux":
-        return "manylinux_2_39_x86_64"
+        return release.LINUX_X86_64_PLATFORM
     return None
 
 
@@ -258,7 +260,7 @@ def qualify_server(
             f"Standalone server inputs require only {platform.binary_name}; found {files}"
         )
     binary = (inputs / platform.binary_name).resolve()
-    if platform_name != "win_amd64":
+    if platform_name != release.WINDOWS_X86_64_PLATFORM:
         binary.chmod(0o755)
     identity = release.read_identity(root / "loom/packaging/python/version.json")
     environment = dict(os.environ)
@@ -281,7 +283,7 @@ def qualify_server(
         check=True,
     )
 
-    filename = f"loom-serve-{identity.version}-{platform_name}.zip"
+    filename = release.server_archive_name(identity, platform_name)
     with tempfile.TemporaryDirectory() as temporary:
         candidate = Path(temporary) / filename
         _write_archive(binary, candidate)
