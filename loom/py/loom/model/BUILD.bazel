@@ -368,6 +368,20 @@ iree_py_test(
 )
 
 iree_py_test(
+    name = "fetch_console_test",
+    srcs = [
+        "fetch_console_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.fetch_console_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":fetch_console",
+        ":fetch_hf",
+    ],
+)
+
+iree_py_test(
     name = "fetch_test",
     srcs = [
         "fetch_test.py",

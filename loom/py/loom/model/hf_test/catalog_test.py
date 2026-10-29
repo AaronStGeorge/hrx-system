@@ -8,8 +8,6 @@
 
 import hashlib
 import json
-import subprocess
-import sys
 
 import pytest
 
@@ -20,6 +18,7 @@ from loom.model.fetch_hf import HuggingFace
 from loom.model.fetch_publication import load_publication
 from loom.model.fetch_source import FetchError
 from loom.model.fetch_storage import ContentCache
+from loom.model.hf_test.cli import invoke
 from loom.model.hf_test.hub import running_hub
 from loom.model.lock import FileIdentity, ModelLock
 
@@ -148,31 +147,24 @@ def test_invalid_refresh_preserves_last_valid_offline_catalog(tmp_path):
 def test_cli_lists_acquires_and_reports_access_without_prompts(tmp_path):
     with running_hub(tmp_path) as hub:
         _publish(hub)
-        source = hub.endpoint + "/fixture/model/resolve/main/" + _CATALOG
+        source = "https://huggingface.co/fixture/model/resolve/main/" + _CATALOG
         command = [
-            sys.executable,
-            "-m",
-            "loom.model.fetch_main",
             "--catalog=" + source,
             "--cache=" + str(tmp_path / "cache"),
             "--json",
             "--no-input",
         ]
-        listed = subprocess.run(
-            [*command, "--list"], env=hub.environment(), capture_output=True, text=True
-        )
+        listed = invoke(hub, [*command, "--list"])
         assert listed.returncode == 0, listed.stderr
         assert set(json.loads(listed.stdout)["models"]) == {"example/tiny"}
         assert not any("/model/tiny/" in path for _, path in hub.requests)
-        result = subprocess.run(
+        result = invoke(
+            hub,
             [
                 *command,
                 "--model=example/tiny",
                 "--output=" + str(tmp_path / "installed"),
             ],
-            env=hub.environment(),
-            capture_output=True,
-            text=True,
         )
         assert result.returncode == 0, result.stderr
         result = json.loads(result.stdout)
@@ -182,9 +174,7 @@ def test_cli_lists_acquires_and_reports_access_without_prompts(tmp_path):
         assert (tmp_path / "installed/weights.data").read_bytes() == b"tiny checkpoint"
 
         hub.approved = False
-        denied = subprocess.run(
-            [*command, "--list"], env=hub.environment(), capture_output=True, text=True
-        )
+        denied = invoke(hub, [*command, "--list"])
         assert denied.returncode == 1, denied.stderr
         assert json.loads(denied.stdout)["kind"] == "action_required"
         assert "fixture-first" not in denied.stdout + denied.stderr
@@ -207,21 +197,16 @@ def _root_publication(hub, *, catalog):
 
 
 def _run(hub, source, *arguments):
-    return subprocess.run(
+    return invoke(
+        hub,
         [
-            sys.executable,
-            "-m",
-            "loom.model.fetch_main",
             source,
             "--cache=" + str(hub.cache_dir.parent / "cache"),
             "--json",
             "--no-input",
+            "--output=" + str(hub.cache_dir.parent / "example/tiny"),
             *arguments,
         ],
-        env=hub.environment(),
-        cwd=hub.cache_dir.parent,
-        capture_output=True,
-        text=True,
     )
 
 
@@ -233,7 +218,7 @@ def test_repository_cli_acquires_unique_choices_and_repeats_offline(
     with running_hub(tmp_path) as hub:
         _root_publication(hub, catalog=catalog)
         source = (
-            hub.endpoint + "/fixture/model"
+            "https://huggingface.co/fixture/model"
             if url
             else "huggingface:fixture/model:chat@main"
         )
@@ -260,7 +245,7 @@ def test_repository_cli_acquires_unique_choices_and_repeats_offline(
         alias = (
             "huggingface:fixture/model:chat"
             if url
-            else hub.endpoint + "/fixture/model/tree/main"
+            else "https://huggingface.co/fixture/model/tree/main"
         )
         repeated = _run(hub, alias, "--offline")
         assert repeated.returncode == 0, repeated.stderr

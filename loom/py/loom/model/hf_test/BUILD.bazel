@@ -16,6 +16,13 @@ package(default_visibility = ["//visibility:private"])
 
 exports_files(["requirements.lock.txt"])
 
+# Every case starts anonymous; individual credential tests own their changes.
+# Keeping the parent environment stable also preserves idle transfer workers.
+_ENVIRONMENT = {
+    "HF_TOKEN": "",
+    "HUGGING_FACE_HUB_TOKEN": "",
+}
+
 iree_py_test(
     name = "catalog_test",
     srcs = [
@@ -23,9 +30,11 @@ iree_py_test(
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = ["loom.model.hf_test.catalog_test"],
+    env = _ENVIRONMENT,
     main = "pytest_style_runner.py",
     pyc_collection = "include_pyc",
     deps = [
+        ":cli",
         ":fixture",
         "//loom/py/loom/model:catalog",
         "//loom/py/loom/model:fetch",
@@ -36,6 +45,17 @@ iree_py_test(
         "//loom/py/loom/model:fetch_storage",
         "//loom/py/loom/model:lock",
         "//loom/py/loom/model:manifest",
+    ],
+)
+
+iree_py_library(
+    name = "cli",
+    testonly = True,
+    srcs = ["cli.py"],
+    deps = [
+        "//loom/py/loom/model:fetch_cli",
+        "//loom/py/loom/model:fetch_hf",
+        "//loom/py/loom/model:fetch_storage",
     ],
 )
 
@@ -59,6 +79,7 @@ iree_py_test(
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = ["loom.model.hf_test.provider_test"],
+    env = _ENVIRONMENT,
     main = "pytest_style_runner.py",
     pyc_collection = "include_pyc",
     tags = ["skip-bazel_to_cmake"],
@@ -78,6 +99,7 @@ iree_py_test(
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = ["loom.model.hf_test.install_test"],
+    env = _ENVIRONMENT,
     main = "pytest_style_runner.py",
     pyc_collection = "include_pyc",
     tags = ["skip-bazel_to_cmake"],
@@ -100,9 +122,11 @@ iree_py_test(
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = ["loom.model.hf_test.cli_test"],
+    env = _ENVIRONMENT,
     main = "pytest_style_runner.py",
     pyc_collection = "include_pyc",
     deps = [
+        ":cli",
         ":fixture",
         "//loom/py/loom/model:fetch_cli",
     ],

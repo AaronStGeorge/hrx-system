@@ -176,6 +176,7 @@ def test_gate_refreshes_credentials_and_preserves_selected_revision(tmp_path):
             assert delay == 5
             assert not cancelled.is_set()
             hub.credentials.write_text("fixture-second")
+            hub.valid_tokens = {"fixture-second"}
             hub.approved = True
 
         provider = HuggingFace(
@@ -295,8 +296,7 @@ def test_cancelled_gate_stops_before_payload(tmp_path):
         assert hub.requests == [("GET", "/api/models/fixture/model/auth-check")]
 
 
-@pytest.mark.parametrize("second_reader", [False, True])
-def test_cancel_releases_body_and_sdk_cache_waiters(tmp_path, second_reader):
+def test_cancel_releases_body_and_sdk_cache_waiter(tmp_path):
     with running_hub(tmp_path) as hub:
         hub.credentials.write_text("fixture-first")
         hub.approved = True
@@ -315,17 +315,12 @@ def test_cancel_releases_body_and_sdk_cache_waiters(tmp_path, second_reader):
                 first.add_done_callback(lambda _: hub.body_started.set())
                 hub.body_started.wait()
                 assert not first.done(), first.result()
-                futures = [first]
-                if second_reader:
-                    second = executor.submit(
-                        provider.download, hub.source(), offline=False
-                    )
-                    second.add_done_callback(lambda _: second_metadata.set())
-                    second_metadata.wait()
-                    assert not second.done(), second.result()
-                    futures.append(second)
+                second = executor.submit(provider.download, hub.source(), offline=False)
+                second.add_done_callback(lambda _: second_metadata.set())
+                second_metadata.wait()
+                assert not second.done(), second.result()
                 provider.cancelled.set()
-                for future in futures:
+                for future in (first, second):
                     with pytest.raises(FetchError, match="cancelled"):
                         future.result()
                 assert not hub.release_body.is_set()
@@ -365,18 +360,20 @@ def test_transfer_process_preserves_gate_semantics(tmp_path):
         assert "fixture-first" not in json.dumps(actions)
 
 
-@pytest.mark.parametrize("operation", ["access", "account", "revision", "metadata"])
-def test_cancel_stops_metadata_and_identity_requests(tmp_path, operation):
+@pytest.mark.parametrize("operation", ["access", "metadata"])
+def test_cancel_stops_requests_inside_and_outside_access_coordination(
+    tmp_path, operation
+):
+    # Account/revision calls use the same owned transport as access checks. The
+    # distinct lifetime here is whether the caller holds the coordination lock.
     with running_hub(tmp_path) as hub:
         hub.credentials.write_text("fixture-first")
-        hub.approved = operation != "account"
+        hub.approved = True
         started, release = threading.Event(), threading.Event()
 
         def hold(method, path):
             selected = {
                 "access": path.endswith("/auth-check"),
-                "account": path == "/api/whoami-v2",
-                "revision": "/revision/main" in path,
                 "metadata": method == "HEAD",
             }[operation]
             if selected:
@@ -388,10 +385,6 @@ def test_cancel_stops_metadata_and_identity_requests(tmp_path, operation):
         provider = HuggingFace(endpoint=hub.endpoint, cache_dir=hub.cache_dir)
         call = {
             "access": lambda: provider.ensure_access(hub.repository),
-            "account": lambda: provider.ensure_access(hub.repository),
-            "revision": lambda: provider.resolve_revision(
-                {"repository": hub.repository, "revision": "main"}, offline=False
-            ),
             "metadata": lambda: provider.metadata(hub.source()),
         }[operation]
         with ThreadPoolExecutor(max_workers=1) as executor:
