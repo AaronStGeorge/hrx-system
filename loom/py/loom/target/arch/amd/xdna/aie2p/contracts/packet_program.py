@@ -359,14 +359,14 @@ _INTEGER_SHIFT_SHAPES = {
 }
 
 
-def _configure_integer_shift(program: PacketProgram) -> None:
+def _configure_integer_shift(program: PacketProgram, *, rounding_mode: int = 0) -> None:
     """Sets the instruction state shared by integer widen/narrow shifts."""
 
     _, mode = _INTEGER_SHIFT_SHAPES[program.element_bits]
     program.state("saturation", 0)
     program.state("ups-mode", mode)
     program.state("srs-mode", mode)
-    program.state("rounding", 0)
+    program.state("rounding", rounding_mode)
 
 
 def widen_integer_packet(
@@ -397,6 +397,7 @@ def narrow_integer_packet(
     source: ValueRef,
     shift: ValueRef,
     *,
+    rounding_mode: int = 0,
     signedness: IntegerSignedness = "unsigned",
 ) -> ValueRef:
     """Right-shifts and narrows one accumulator packet into integer lanes."""
@@ -407,7 +408,7 @@ def narrow_integer_packet(
     narrow_shape = f"{factor}.{result_carrier}-to-{source_carrier}"
     program.state("saturation", 0)
     program.state("srs-mode", mode)
-    program.state("rounding", 0)
+    program.state("rounding", rounding_mode)
     return program.operation(
         name,
         f"narrow.{narrow_shape}.{signedness}.configured",
@@ -454,6 +455,7 @@ def shift_integer_packet_fixed(
     source: ValueRef,
     amount: int,
     *,
+    rounding_mode: int = 0,
     signedness: IntegerSignedness = "unsigned",
 ) -> ValueRef:
     """Shifts one integer packet by a fixed signed amount."""
@@ -467,7 +469,7 @@ def shift_integer_packet_fixed(
     # materializing immediates and materialize each immediate immediately
     # before its consumer. Keep that stable as this helper generalizes beyond
     # i32 so unrelated exact lowerings do not churn.
-    _configure_integer_shift(program)
+    _configure_integer_shift(program, rounding_mode=rounding_mode)
     wide = widen_integer_packet(
         program,
         f"{name}_wide" if name is not None else "result_wide",
@@ -480,5 +482,6 @@ def shift_integer_packet_fixed(
         name,
         wide,
         program.shift(max(-amount, 0)),
+        rounding_mode=rounding_mode,
         signedness=signedness,
     )

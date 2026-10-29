@@ -1,0 +1,118 @@
+// RUN: emit source-low output=low
+
+aie2p.target<core> @target
+
+func.def target(@target) @dot_f16_native_packet(%lhs: vector<32xf16>, %rhs: vector<32xf16>, %initial: vector<16xf32>) -> (vector<16xf32>) {
+  %result = vector.dot2f %lhs, %rhs, %initial : vector<32xf16>, vector<32xf16>, vector<16xf32>
+  func.return %result : vector<16xf32>
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @dot_f16_native_packet(%lhs: reg<aie2p.vec256 x2>, %rhs: reg<aie2p.vec256 x2>, %initial: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>) asm {
+  %9 = vsub.16 %lhs, %lhs
+  %10 = mov.i32 32767
+  %11 = vbcst.16 %10
+  %12 = vband %lhs, %11
+  %13 = vsub.16 %lhs, %12
+  set.saturation 0
+  set.ups-mode 0
+  set.srs-mode 0
+  set.rounding 12
+  %14 = mov.shift 0
+  %15 = vups.2x.x-to-c.unsigned %12, %14
+  %16 = mov.shift 3
+  %17 = vsrs.2x.c-to-x.unsigned %15, %16
+  %18 = mov.i32 14336
+  %19 = vbcst.16 %18
+  %20 = vadd.16 %17, %19
+  %21 = mov.i32 1024
+  %22 = vbcst.16 %21
+  %23 = vlt.u16x32.el.low32 %12, %22
+  %24 = predicate.complete.zero.high32 %23, 0
+  %25 = vsel.16.mask64 %20, %9, %24
+  %26 = mov.i32 31744
+  %27 = vbcst.16 %26
+  %28 = vge.u16x32.el.low32 %12, %27
+  %29 = predicate.complete.zero.high32 %28, 0
+  %30 = vlt.u16x32.el.low32 %27, %12
+  %31 = predicate.complete.zero.high32 %30, 0
+  %32 = mov.i32 32640
+  %33 = vbcst.16 %32
+  %34 = mov.i32 32704
+  %35 = vbcst.16 %34
+  %36 = vsel.16.mask64 %33, %35, %31
+  %37 = vsel.16.mask64 %25, %36, %29
+  %38 = vbor %37, %13
+  %39 = vband %rhs, %11
+  %40 = vsub.16 %rhs, %39
+  %41 = vups.2x.x-to-c.unsigned %39, %14
+  %42 = vsrs.2x.c-to-x.unsigned %41, %16
+  %43 = vadd.16 %42, %19
+  %44 = vlt.u16x32.el.low32 %39, %22
+  %45 = predicate.complete.zero.high32 %44, 0
+  %46 = vsel.16.mask64 %43, %9, %45
+  %47 = vge.u16x32.el.low32 %39, %27
+  %48 = predicate.complete.zero.high32 %47, 0
+  %49 = vlt.u16x32.el.low32 %27, %39
+  %50 = predicate.complete.zero.high32 %49, 0
+  %51 = vsel.16.mask64 %33, %35, %50
+  %52 = vsel.16.mask64 %46, %51, %48
+  %53 = vbor %52, %40
+  %54 = mova.i32 2
+  %55 = mova.i32 3
+  %56 = vmov.vector512.to.accumulator512.low %initial
+  %57 = mova.i32 60
+  %58 = vshuffle %38, %38, %54
+  %59 = vshuffle %53, %53, %54
+  %60 = vmac.bf16x16 %56, %58, %59, %57
+  %61 = vshuffle %38, %38, %55
+  %62 = vshuffle %53, %53, %55
+  %63 = vmac.bf16x32 %60, %61, %62, %57
+  %64 = slice %63[0] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>
+  %result = vmov.accumulator512.to.vector512 %64
+  return %result
+}
+
+// ====
+// RUN: with-checks compile-report target=amd.xdna.aie2p:core source-to-low,low-dce
+
+func.def @dot_f16_minimum(%lhs: vector<2xf16>, %rhs: vector<2xf16>, %initial: vector<1xf32>) -> (vector<1xf32>) {
+  %result = vector.dot2f %lhs, %rhs, %initial : vector<2xf16>, vector<2xf16>, vector<1xf32>
+  func.return %result : vector<1xf32>
+}
+
+// ----
+CHECK: COMPILE-REPORT: source_low[*] function=dot_f16_minimum source_op=vector.dot2f selection=rule plan_key=f16_dot2_bf16_round_nearest * emitted_ops=61
+
+// ====
+// RUN: with-checks compile-report target=amd.xdna.aie2p:core source-to-low,low-dce
+
+func.def @dot_f16_eight(%lhs: vector<8xf16>, %rhs: vector<8xf16>, %initial: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.dot2f %lhs, %rhs, %initial : vector<8xf16>, vector<8xf16>, vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ----
+CHECK: COMPILE-REPORT: source_low[*] function=dot_f16_eight source_op=vector.dot2f selection=rule plan_key=f16_dot2_bf16_round_nearest * emitted_ops=61
+
+// ====
+// RUN: with-checks compile-report target=amd.xdna.aie2p:core source-to-low,low-dce
+
+func.def @dot_f16_sixteen(%lhs: vector<16xf16>, %rhs: vector<16xf16>, %initial: vector<8xf32>) -> (vector<8xf32>) {
+  %result = vector.dot2f %lhs, %rhs, %initial : vector<16xf16>, vector<16xf16>, vector<8xf32>
+  func.return %result : vector<8xf32>
+}
+
+// ----
+CHECK: COMPILE-REPORT: source_low[*] function=dot_f16_sixteen source_op=vector.dot2f selection=rule plan_key=f16_dot2_bf16_round_nearest * emitted_ops=61
+
+// ====
+// RUN: with-checks compile-report target=amd.xdna.aie2p:core source-to-low,low-dce
+
+func.def @dot_f16_rank_two(%lhs: vector<1x6xf16>, %rhs: vector<1x6xf16>, %initial: vector<1x3xf32>) -> (vector<1x3xf32>) {
+  %result = vector.dot2f %lhs, %rhs, %initial : vector<1x6xf16>, vector<1x6xf16>, vector<1x3xf32>
+  func.return %result : vector<1x3xf32>
+}
+
+// ----
+CHECK: COMPILE-REPORT: source_low[*] function=dot_f16_rank_two source_op=vector.dot2f selection=rule plan_key=f16_dot2_bf16_round_nearest * emitted_ops=61

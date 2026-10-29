@@ -227,6 +227,29 @@ iree_py_test(
 )
 
 iree_py_test(
+    name = "floating_dot_exhaustive_test",
+    size = "small",
+    srcs = [
+        "floating_dot_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = [
+        "--include-exhaustive",
+        "loom.target.arch.amd.xdna.aie2p.contracts.floating_dot_test",
+    ],
+    main = "pytest_style_runner.py",
+    tags = [
+        "manual",
+        "stress",
+    ],
+    deps = [
+        ":contracts",
+        "//loom/py/loom/dialect/vector",
+        "//loom/py/loom/target/contracts",
+    ],
+)
+
+iree_py_test(
     name = "power_of_two_scale_test",
     size = "small",
     srcs = [

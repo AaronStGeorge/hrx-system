@@ -995,7 +995,9 @@ def test_core_contract_closes_scalar_and_vector_families() -> None:
     bf16_dot2_rules = [
         rule
         for rule in rules
-        if rule.source_op is vector.vector_dot2f and not rule.source_nodes
+        if rule.source_op is vector.vector_dot2f
+        and not rule.source_nodes
+        and rule.report_key in ("bf16_dot2", "bf16_dot2_zero")
     ]
     assert len(bf16_dot2_rules) == 8
     rules_by_representation = {
