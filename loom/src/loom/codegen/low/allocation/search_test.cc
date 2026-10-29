@@ -944,6 +944,12 @@ TEST_F(LowAllocationSearchTest,
       &ordinary_context, &intervals[1], Capacity(/*max_units=*/8),
       &location_base));
   EXPECT_EQ(location_base, 4u);
+  // The ordinary search must also use the unaligned gap when its preferred
+  // aligned base would exceed capacity.
+  EXPECT_TRUE(loom_low_allocation_search_find_free_location(
+      &ordinary_context, &intervals[1], Capacity(/*max_units=*/5),
+      &location_base));
+  EXPECT_EQ(location_base, 1u);
   EXPECT_TRUE(loom_low_allocation_search_find_free_location(
       &context, &intervals[1], Capacity(/*max_units=*/8), &location_base));
   EXPECT_EQ(location_base, 1u);

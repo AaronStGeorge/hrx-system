@@ -109,22 +109,6 @@ low.func.def target<test.low.core>(@target) @required_tuple_shortage(%scalar: re
 
 // ====
 
-// RUN: emit low-allocation-query @required_tuple_uses_unaligned_gap values=%wide test.i32=5 fixed=%scalar:target_id:0:1
-
-test.target<low_core> @target
-
-low.func.def target<test.low.core>(@target) @required_tuple_uses_unaligned_gap(%scalar: reg<test.i32>, %wide: reg<test.i32 x4>) asm {
-  %storage = storage {byte_alignment = 16, byte_length = 32} : low.storage<private>
-  low.spill %scalar, %storage {offset = 16} : reg<test.i32>, low.storage<private>
-  low.spill %wide, %storage : reg<test.i32 x4>, low.storage<private>
-  return
-}
-
-// ----
-value %wide: test.i32 -> target_id[1:4]
-
-// ====
-
 // A victim with its own low4 use cannot be recolored above that window, even
 // with an available high register. The required %current value still takes
 // register 3, but %d must spill instead of receiving an out-of-range register
