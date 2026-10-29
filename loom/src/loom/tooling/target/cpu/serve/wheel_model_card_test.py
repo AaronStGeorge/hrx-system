@@ -25,7 +25,7 @@ from model_card_test import check_model, check_text
 from release import inspect_wheel, read_identity
 
 
-def pick_model(arguments, environment, output):
+def pick_model(arguments, environment, directory):
     """Drives the installed command through a real terminal and restores it."""
     import pty
     import termios
@@ -40,25 +40,19 @@ def pick_model(arguments, environment, output):
             stderr=slave,
             stdout=subprocess.PIPE,
             env=dict(environment, TERM="xterm-256color"),
+            cwd=directory,
         ) as process:
             try:
                 with selectors.DefaultSelector() as selector:
                     selector.register(master, selectors.EVENT_READ, "terminal")
                     selector.register(process.stdout, selectors.EVENT_READ, "result")
-                    for marker, response in (
-                        (b"Enter: select", b"\r"),
-                        (
-                            b"Install directory (Ctrl-C cancels): ",
-                            str(output).encode() + b"\n",
-                        ),
-                    ):
-                        content = b""
-                        while marker not in content:
-                            for key, _ in selector.select():
-                                data = os.read(key.fd, 65536)
-                                assert data and key.data == "terminal", (content, data)
-                                content += data
-                        os.write(master, response)
+                    content = b""
+                    while b"Enter: select" not in content:
+                        for key, _ in selector.select():
+                            data = os.read(key.fd, 65536)
+                            assert data and key.data == "terminal", (content, data)
+                            content += data
+                    os.write(master, b"\r")
                 result, _ = process.communicate()
                 assert process.returncode == 0, result
             finally:
@@ -374,24 +368,40 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
         listing = json.loads(run(fetch, "--catalog", catalog, "--list", "--json"))
         assert list(listing["models"]) == ["loom-fixture/text"]
         assert listing["snapshot"]["revision"] is None
-        catalog_installation = directory / "catalog-installed"
+        catalog_installation = directory / "loom-fixture/text"
         run(
             fetch,
             "--catalog",
             catalog,
-            "--model=loom-fixture/text",
             "--preset=check",
             "--offline",
             "--no-input",
             "--cache",
             directory / "cache",
-            "--output",
-            catalog_installation,
         )
         receipt = json.loads((catalog_installation / ".loom-fetch.json").read_text())
         assert receipt["catalog"] == listing["snapshot"]
         assert receipt["card"]["location"] == str(installed / "model.json")
         if os.name != "nt":
+            # A sole model selects automatically. Exercise the installed picker
+            # with two real cards sharing the already acquired program and assets.
+            other_card = installed / "other-model.json"
+            other = json.loads((installed / "model.json").read_text())
+            other["model"]["id"] = "loom-fixture/text-other"
+            other_card.write_text(json.dumps(other))
+            shutil.copyfile(
+                installed / "model.json.lock", installed / "other-model.json.lock"
+            )
+            run(
+                python,
+                "-I",
+                "-m",
+                "loom.model.catalog",
+                "--output",
+                catalog,
+                "--card=model.json=" + str(installed / "model.json"),
+                "--card=other-model.json=" + str(other_card),
+            )
             catalog_installation = directory / "picker-installed"
             pick_model(
                 [
@@ -402,9 +412,11 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
                     "--offline",
                     "--cache",
                     directory / "cache",
+                    "--output",
+                    catalog_installation,
                 ],
                 environment,
-                catalog_installation,
+                directory,
             )
             receipt = json.loads(
                 (catalog_installation / ".loom-fetch.json").read_text()

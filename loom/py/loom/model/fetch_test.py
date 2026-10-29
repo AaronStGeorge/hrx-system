@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import copy
 import errno
 import hashlib
 import http.server
@@ -57,7 +58,13 @@ def test_catalog_receipt_is_owned_verified_and_published_with_the_card(tmp_path)
     card = publication / "model.json"
     card.write_text(text)
     cache = ContentCache(tmp_path / "cache")
-    snapshot = {"source": "github:fixture/library@compatible", "revision": "a" * 40}
+    snapshot = {
+        "source": "github:fixture/library@compatible",
+        "location": "https://raw.githubusercontent.com/fixture/library/"
+        + "a" * 40
+        + "/catalog.json",
+        "revision": "a" * 40,
+    }
     plan = plan_fetch(
         cache.read_document(str(card), offline=True),
         ModelCard.parse(text).select(),
@@ -75,6 +82,28 @@ def test_catalog_receipt_is_owned_verified_and_published_with_the_card(tmp_path)
         "sha256": hashlib.sha256(text.encode()).hexdigest(),
     }
     check_output(plan, output)
+    aliased_plan = plan_fetch(
+        cache.read_document(str(card), offline=True),
+        ModelCard.parse(text).select(),
+        cache,
+        no_lock=True,
+        catalog={
+            **receipt["catalog"],
+            "source": "https://github.com/fixture/library/tree/compatible",
+        },
+    )
+    install(aliased_plan, cache, output)
+    assert json.loads((output / ".loom-fetch.json").read_text()) == receipt
+    for section, key, value in (
+        ("catalog", "location", "https://example.com/catalog.json"),
+        ("catalog", "revision", "b" * 40),
+        ("card", "sha256", "0" * 64),
+    ):
+        changed = copy.deepcopy(receipt)
+        changed[section][key] = value
+        (output / ".loom-fetch.json").write_text(json.dumps(changed))
+        with pytest.raises(FetchError, match="conflicting installation document"):
+            check_output(aliased_plan, output)
     (output / ".loom-fetch.json").write_text("{}")
     with pytest.raises(FetchError, match="conflicting installation document"):
         check_output(plan, output)

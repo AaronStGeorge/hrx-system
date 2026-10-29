@@ -129,6 +129,7 @@ class ConsoleProgress:
         self.last_time = now
         labels = {
             "discover": "Metadata",
+            "destination": "Output",
             "access": "Access",
             "acquire": "Fetch",
             "download": "Download",

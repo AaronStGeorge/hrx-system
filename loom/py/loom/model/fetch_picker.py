@@ -12,7 +12,6 @@ import os
 import threading
 import unicodedata
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TextIO
 
 from .fetch_console import TerminalInput, display_text, terminal_screen
@@ -208,13 +207,6 @@ class Picker:
                         query = new_query
                         visible = self._filter(choices, query)
                         position = 0
-
-    def directory(self) -> Path:
-        while True:
-            value = self._readline("Install directory (Ctrl-C cancels): ")
-            if value:
-                return Path(value).expanduser()
-            self._line("Enter a directory; nothing has been installed.")
 
     def model(self, catalog: dict) -> str:
         return self.choose(

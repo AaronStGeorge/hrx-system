@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -56,6 +57,38 @@ def _overrides(values: list[str]) -> dict[str, str]:
             raise ManifestError(f"duplicate --origin for {name!r}")
         result[name] = location
     return result
+
+
+def _default_output(model_id: str) -> Path:
+    # Model IDs are opaque identifiers in the card. Only this implicit CLI
+    # destination gives them filesystem semantics, portable across supported hosts.
+    for part in model_id.split("/"):
+        if (
+            part in ("", ".", "..")
+            or part.endswith((".", " "))
+            or any(
+                not character.isprintable() or character in '<>:"\\|?*'
+                for character in part
+            )
+            or re.fullmatch(
+                r"CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³]",
+                part.split(".", 1)[0].rstrip(" ").upper(),
+            )
+        ):
+            raise ManifestError(
+                f"model ID {model_id!r} is not a portable relative output path; "
+                "specify --output=DIR"
+            )
+    directory = Path(model_id)
+    if any(
+        path.is_symlink() or path.is_junction()
+        for path in (directory, *directory.parents)
+    ):
+        raise ManifestError(
+            "default output traverses a symbolic link or junction; "
+            "specify --output=DIR to select that storage explicitly"
+        )
+    return directory
 
 
 def _update_all_variants_lock(args, document, card, cache, snapshot):
@@ -150,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         "PROVIDER:OWNER/REPOSITORY[:PRESET][@REVISION] "
         "(providers: huggingface, github)",
     )
-    parser.add_argument("--model", help="model ID in the selected catalog")
+    parser.add_argument("--model", help="model ID to select from the publication")
     parser.add_argument(
         "--catalog",
         help="local catalog JSON, Hugging Face catalog URL, "
@@ -192,7 +225,9 @@ def main(argv: list[str] | None = None) -> int:
         metavar="NAME=ROOT",
         help="replace one source root with a local directory or HTTP(S) directory",
     )
-    parser.add_argument("--output", type=Path, help="installation directory")
+    parser.add_argument(
+        "--output", type=Path, help="installation directory (default: ./MODEL_ID)"
+    )
     parser.add_argument(
         "--cache",
         type=Path,
@@ -292,13 +327,6 @@ def main(argv: list[str] | None = None) -> int:
         and not interactive
     ):
         parser.error("select a card or --model=ID; --list shows the available catalog")
-    if (
-        not args.list
-        and not args.all_variants
-        and args.output is None
-        and not interactive
-    ):
-        parser.error("--output is required for acquisition or --dry-run")
     if args.no_lock and args.lockfile:
         parser.error("--no-lock cannot be combined with --lockfile")
     try:
@@ -355,7 +383,8 @@ def main(argv: list[str] | None = None) -> int:
             programs=args.programs,
         )
         if args.output is None:
-            args.output = picker.directory()
+            args.output = _default_output(selection.model_id)
+        cache.progress.emit("destination", path=str(args.output.absolute()))
         plan = plan_fetch(
             document,
             selection,

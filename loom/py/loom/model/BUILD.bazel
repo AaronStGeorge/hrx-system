@@ -326,6 +326,20 @@ iree_py_binary(
 )
 
 iree_py_test(
+    name = "fetch_main_test",
+    srcs = [
+        "fetch_main_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.fetch_main_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":fetch_cli",
+        ":manifest",
+    ],
+)
+
+iree_py_test(
     name = "picker_test",
     srcs = [
         "picker_test.py",

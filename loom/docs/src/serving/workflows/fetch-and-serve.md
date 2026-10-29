@@ -9,12 +9,58 @@ To share your own programs and model cards, the
 [Hugging Face publishing guide](../sharing/hugging-face.md) provides a small
 copyable repository, explicit metadata refresh, and an end-to-end smoke test.
 
-This walkthrough transcribes a short English recording with
+Start with [the SDK installed](../../getting-started/acquiring-loom.md), including
+the `hf` extra for Hugging Face repositories.
+
+## Fetch a published repository
+
+A publisher can share a repository URL, without a `model.json` suffix or an
+installation-directory flag:
+
+```sh
+loom-fetch https://huggingface.co/benvanik/hrx-loom-serve-example
+```
+
+This arithmetic text example installs into `./example/tiny-text`, matching its
+model ID. The equivalent provider-explicit command is:
+
+```sh
+loom-fetch huggingface:benvanik/hrx-loom-serve-example
+```
+
+Both providers use the same selectors:
+
+| Source | Selection |
+| --- | --- |
+| `huggingface:OWNER/REPO` | Hugging Face repository's default branch. |
+| `github:OWNER/REPO` | GitHub repository's default branch. |
+| `PROVIDER:OWNER/REPO:PRESET@REVISION` | A named model preset at a branch, tag, or commit. Both suffixes are optional. |
+| `https://github.com/OWNER/REPO` or `https://huggingface.co/OWNER/REPO` | Repository URL; append `/tree/REVISION` to select a revision. |
+
+`:PRESET` means exactly `--preset=PRESET`. It names a publisher-authored
+configuration, not a checkpoint filename or a special quantization convention.
+Bare `OWNER/REPO` remains a local path; it never implicitly selects a provider.
+
+Repository discovery reads root `model.json`, or root `catalog.json` when the
+card is absent. One catalog model and one preset select automatically. With
+multiple choices, use `--list`, `--model=ID`, and `--preset=NAME`, or the terminal
+picker. An access failure or malformed card stops discovery instead of hiding
+the error by trying another document. `--catalog=PROVIDER:OWNER/REPO` explicitly
+selects the catalog even when a root card is also present.
+
+Fetch pins the repository to one commit before reading relative cards, locks,
+and programs. A branch advancing during acquisition cannot mix revisions.
+The output defaults to `./<model.id>`, preserving namespaces. `--output=DIR`
+selects another location. An ID that is not a portable relative path requires
+this explicit override; a default path also cannot traverse symlinks or
+junctions. Fetch reports the destination before payload transfer and never
+silently overwrites a conflicting installation.
+
+The remaining walkthrough transcribes a short English recording with
 [Moonshine Streaming Tiny](https://huggingface.co/moonshine-ai/moonshine-streaming-tiny).
 It uses the original checkpoint and the Loom library's AMD GPU implementation.
-Start with [the SDK installed](../../getting-started/acquiring-loom.md), including
-the `hf` extra, and a supported AMD GPU. For a CPU-only example without learned
-weights, use the [arithmetic embedding walkthrough](serve-models.md).
+A supported AMD GPU is required to serve it. For a CPU-only example without
+learned weights, use the [arithmetic embedding walkthrough](serve-models.md).
 
 ## Inspect the available choices
 

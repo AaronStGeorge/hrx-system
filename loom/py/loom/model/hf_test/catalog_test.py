@@ -219,6 +219,7 @@ def _run(hub, source, *arguments):
             *arguments,
         ],
         env=hub.environment(),
+        cwd=hub.cache_dir.parent,
         capture_output=True,
         text=True,
     )
@@ -236,12 +237,19 @@ def test_repository_cli_acquires_unique_choices_and_repeats_offline(
             if url
             else "huggingface:fixture/model:chat@main"
         )
-        result = _run(hub, source, "--output=" + str(tmp_path / "first"))
+        result = _run(hub, source)
         assert result.returncode == 0, result.stderr
         summary = json.loads(result.stdout)
         assert summary["model"] == "example/tiny"
-        assert (tmp_path / "first/weights.data").read_bytes() == b"tiny checkpoint"
-        assert (tmp_path / "first/code.loom").read_bytes() == b"code"
+        assert summary["preset"] == "chat"
+        assert summary["output"] == str(tmp_path / "example/tiny")
+        assert (
+            tmp_path / "example/tiny/weights.data"
+        ).read_bytes() == b"tiny checkpoint"
+        assert (tmp_path / "example/tiny/code.loom").read_bytes() == b"code"
+        assert result.stderr.index("loom-fetch  Output") < result.stderr.index(
+            "loom-fetch  Fetch"
+        )
         if catalog:
             assert summary["catalog"]["revision"] == hub.revision
         reads = [path for _, path in hub.requests if "/resolve/" in path]
@@ -249,11 +257,16 @@ def test_repository_cli_acquires_unique_choices_and_repeats_offline(
         assert len([path for _, path in hub.requests if "/revision/" in path]) == 1
         requests = list(hub.requests)
         hub.approved = False
-        repeated = _run(
-            hub, source, "--output=" + str(tmp_path / "offline"), "--offline"
+        alias = (
+            "huggingface:fixture/model:chat"
+            if url
+            else hub.endpoint + "/fixture/model/tree/main"
         )
+        repeated = _run(hub, alias, "--offline")
         assert repeated.returncode == 0, repeated.stderr
-        assert (tmp_path / "offline/weights.data").read_bytes() == b"tiny checkpoint"
+        assert (
+            tmp_path / "example/tiny/weights.data"
+        ).read_bytes() == b"tiny checkpoint"
         assert hub.requests == requests
 
 
