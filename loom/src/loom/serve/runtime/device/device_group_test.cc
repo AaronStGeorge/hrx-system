@@ -165,26 +165,45 @@ TEST_F(DeviceGroupTest, ExplicitPlacementPreservesNativeDomainThroughReuse) {
   IREE_ASSERT_OK(loom_serve_device_group_allocate(
       host_, 1, &device_options, iree_allocator_system(), &group_));
   auto* device = loom_serve_device_group_at(group_, 0);
-  loom_serve_pool_options_t options = {};
-  loom_serve_pool_t* automatic = nullptr;
-  IREE_ASSERT_OK(loom_serve_device_group_create_pool(
-      group_, {IREE_SV("automatic"), 1}, &options, &automatic));
-  iree_hal_pool_capabilities_t capabilities;
-  iree_hal_pool_query_capabilities(loom_serve_pool_storage(automatic),
-                                   &capabilities);
-  if (capabilities.placement.mode != IREE_HAL_POOL_PLACEMENT_REQUIRED) {
-    GTEST_SKIP() << "ordinary backing has no enforced physical device domain";
-  }
-  const uint32_t node = capabilities.placement.node;
   const auto* topology =
       iree_hal_device_group_topology(loom_serve_device_group(device));
-  if (iree_hal_topology_node_at(topology, node)->kind !=
-      IREE_HAL_TOPOLOGY_NODE_KIND_PHYSICAL_DEVICE) {
-    GTEST_SKIP() << "ordinary backing is not a physical-device domain";
+  uint32_t node = IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID;
+  for (uint32_t i = 0; i < iree_hal_topology_node_count(topology); ++i) {
+    const auto* candidate = iree_hal_topology_node_at(topology, i);
+    if (candidate->kind == IREE_HAL_TOPOLOGY_NODE_KIND_PHYSICAL_DEVICE &&
+        candidate->device_ordinal == 0) {
+      ASSERT_EQ(node, IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID);
+      node = candidate->ordinal;
+    }
   }
-  options.placement = {LOOM_SERVE_POOL_PLACEMENT_DEVICE, 0};
-  options.weight_slab_size = kSlabBytes;
-  options.state_slab_size = kSlabBytes;
+  if (node == IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID) {
+    GTEST_SKIP() << "device has no physical allocation domain";
+  }
+  // Preferred placement qualifies the domain without allocating payload.
+  // Automatic placement can favor shared memory even when LOCAL is available.
+  const iree_hal_pool_family_access_t family = {
+      .family = iree_hal_queue_family(loom_serve_device_transfer_queue(device)),
+      .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
+  };
+  const iree_hal_slab_pool_options_t qualification_options = {
+      .placement = {IREE_HAL_POOL_PLACEMENT_PREFERRED, node},
+  };
+  iree_hal_pool_t* qualified = nullptr;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(
+      loom_serve_device_group(device), {1, &family}, &qualification_options,
+      iree_allocator_system(), &qualified));
+  iree_hal_pool_capabilities_t capabilities;
+  iree_hal_pool_query_capabilities(qualified, &capabilities);
+  iree_hal_pool_release(qualified);
+  if (capabilities.placement.mode != IREE_HAL_POOL_PLACEMENT_REQUIRED ||
+      capabilities.placement.node != node) {
+    GTEST_SKIP() << "native allocator cannot enforce physical-device placement";
+  }
+  loom_serve_pool_options_t options = {
+      .weight_slab_size = kSlabBytes,
+      .state_slab_size = kSlabBytes,
+      .placement = {LOOM_SERVE_POOL_PLACEMENT_DEVICE, 0},
+  };
   for (uint32_t i = 0; i < 2; ++i) {
     options.elastic = i != 0;
     loom_serve_pool_t* pool = nullptr;
