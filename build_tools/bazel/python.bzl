@@ -42,7 +42,7 @@ def iree_py_test(resource_group = None, **kwargs):
     if "python_version" not in kwargs:
         kwargs["python_version"] = "3.12"
     kwargs["deps"] = kwargs.get("deps", []) + [
-        Label("//build_tools/bazel:python_test_environment"),
+        Label("//build_tools/bazel/python_test_environment"),
     ]
     kwargs["tags"] = _with_resource_group_tags(
         kwargs.get("tags"),
