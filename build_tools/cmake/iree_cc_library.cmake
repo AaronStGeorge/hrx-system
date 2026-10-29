@@ -104,8 +104,9 @@ function(iree_cc_library)
 
   # Bazel srcs can name generated files. Point missing sources at the binary
   # tree so target_sources can attach the producer custom command edge.
+  # Producers mark their outputs GENERATED; a binary-tree path may instead be
+  # a configure_file output with no native build rule.
   set(_RULE_SRC_TARGET_SRCS)
-  set(_RULE_GENERATED_SRC_TARGET_SRCS)
   foreach(_SRC_FILE IN LISTS _RULE_SRCS)
     if(IS_ABSOLUTE "${_SRC_FILE}" OR "${_SRC_FILE}" MATCHES "^\\$<")
       list(APPEND _RULE_SRC_TARGET_SRCS "${_SRC_FILE}")
@@ -114,16 +115,8 @@ function(iree_cc_library)
     else()
       set(_SRC_BINARY_FILE "${CMAKE_CURRENT_BINARY_DIR}/${_SRC_FILE}")
       list(APPEND _RULE_SRC_TARGET_SRCS "${_SRC_BINARY_FILE}")
-      list(APPEND _RULE_GENERATED_SRC_TARGET_SRCS "${_SRC_BINARY_FILE}")
     endif()
   endforeach()
-  if(_RULE_GENERATED_SRC_TARGET_SRCS)
-    set_source_files_properties(${_RULE_GENERATED_SRC_TARGET_SRCS}
-      PROPERTIES
-        GENERATED TRUE
-    )
-  endif()
-
   # Header-only libraries have no native compilation target. Match complete
   # suffixes so a parent directory or filename stem cannot hide a source file.
   set(_CC_SRCS "${_RULE_SRC_TARGET_SRCS}")
@@ -139,7 +132,7 @@ function(iree_cc_library)
   # Bazel hdrs can name generated files. Point missing headers at the binary
   # tree so target_sources can attach the producer custom command edge.
   set(_RULE_HDR_TARGET_SRCS)
-  set(_RULE_GENERATED_HDR_FILES)
+  set(_RULE_BINARY_HDR_FILES)
   foreach(_HDR_FILE IN LISTS _RULE_HDRS _RULE_TEXTUAL_HDRS)
     if(IS_ABSOLUTE "${_HDR_FILE}" OR "${_HDR_FILE}" MATCHES "^\\$<")
       list(APPEND _RULE_HDR_TARGET_SRCS "${_HDR_FILE}")
@@ -148,15 +141,9 @@ function(iree_cc_library)
     else()
       set(_HDR_BINARY_FILE "${CMAKE_CURRENT_BINARY_DIR}/${_HDR_FILE}")
       list(APPEND _RULE_HDR_TARGET_SRCS "${_HDR_BINARY_FILE}")
-      list(APPEND _RULE_GENERATED_HDR_FILES "${_HDR_BINARY_FILE}")
+      list(APPEND _RULE_BINARY_HDR_FILES "${_HDR_BINARY_FILE}")
     endif()
   endforeach()
-  if(_RULE_GENERATED_HDR_FILES)
-    set_source_files_properties(${_RULE_GENERATED_HDR_FILES}
-      PROPERTIES
-        GENERATED TRUE
-    )
-  endif()
 
   # Implicit deps.
   if(IREE_IMPLICIT_DEFS_CC_DEPS)
@@ -379,14 +366,14 @@ function(iree_cc_library)
         ${IREE_DEFAULT_LINKOPTS}
         ${_RULE_LINKOPTS}
     )
-    # Keep generated headers on their declaring library. INTERFACE_SOURCES
+    # Keep build-tree headers on their declaring library. INTERFACE_SOURCES
     # would make every transitive consumer rediscover the same source rules.
     # An interface library with private sources owns their custom commands and
     # carries the build dependency without propagating the source list.
-    if(_RULE_GENERATED_HDR_FILES)
+    if(_RULE_BINARY_HDR_FILES)
       target_sources(${_NAME}
         PRIVATE
-          ${_RULE_GENERATED_HDR_FILES}
+          ${_RULE_BINARY_HDR_FILES}
       )
     endif()
     target_link_libraries(${_NAME}

@@ -30,9 +30,9 @@ class CMakeGeneratedPackagesTest(unittest.TestCase):
         ) as temporary:
             root = Path(temporary)
             source = root / "source"
-            # Deep build roots and qualified target names exercise Windows
-            # object-path limits encountered by embedded builds in CI.
-            build = root / "nested build directory matching an embedded CI workspace"
+            # Stress Windows object paths while leaving room for the generator's
+            # configuration directory and a complete object-name digest.
+            build = root / "build directory for an embedded CI workspace"
             shutil.copytree(FIXTURE, source)
             for template in source.rglob("BUILD.bazel.in"):
                 template.rename(template.with_suffix(""))
@@ -72,6 +72,16 @@ class CMakeGeneratedPackagesTest(unittest.TestCase):
             configure_project(host, build)
             check(7)
             self.assertEqual([path.stat().st_mtime_ns for path in paths], timestamps)
+            generator = source / "package/generator.py"
+            generator.write_text(generator.read_text() + "\n")
+            check(7)
+            timestamps = [path.stat().st_mtime_ns for path in paths]
+            check(7)
+            self.assertEqual([path.stat().st_mtime_ns for path in paths], timestamps)
+            # Cleaning build outputs preserves configure_file outputs, which
+            # have no build-time producer that could recreate them.
+            build_project(build, "clean")
+            check(7)
 
             settings = source / "package/settings.bzl"
             settings.write_text(
