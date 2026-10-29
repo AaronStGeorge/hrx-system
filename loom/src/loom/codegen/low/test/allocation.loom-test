@@ -1004,21 +1004,25 @@ low.func.def target<test.low.core>(@test_target) @provisional_spill_skips_packet
 
 // ====
 
-// RUN: emit low-allocation-query @active_and_direct_spill_slot_ranges spill-count values=%wide,%huge spill-plans=%wide,%huge test.i32=4
+// RUN: emit low-allocation-query @wide_spill_slot_ranges spill-count values=%wide,%huge spill-plans=%wide,%huge
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @active_and_direct_spill_slot_ranges(%wide: reg<test.i32 x4>, %scalar0: reg<test.i32>, %scalar1: reg<test.i32>, %huge: reg<test.i32 x5>) -> (reg<test.i32 x4>, reg<test.i32>, reg<test.i32 x5>) asm {
-  %use0 = test.add.i32 %scalar0, %scalar1
+// The short scalar inputs compete with a full-bank tuple, while the oversized
+// tuple cannot fit at all. Their spills need disjoint, full-width slot ranges.
+low.func.def target<test.low.core>(@test_target) @wide_spill_slot_ranges(%wide: reg<test.pressure.alias32 x8>, %scalar0: reg<test.pressure.alias32>, %scalar1: reg<test.pressure.alias32>, %huge: reg<test.pressure.alias32 x9>) -> (reg<test.pressure.alias32 x8>, reg<test.i32>, reg<test.pressure.alias32 x9>) asm {
+  %left = copy %scalar0 : reg<test.pressure.alias32> -> reg<test.i32>
+  %right = copy %scalar1 : reg<test.pressure.alias32> -> reg<test.i32>
+  %use0 = test.add.i32 %left, %right
   return %wide, %use0, %huge
 }
 
 // ----
 spills: 2
-value %wide: test.i32 -> spill_slot[0:4]
-value %huge: test.i32 -> spill_slot[4:5]
-spill %wide: private[0] bytes=16 align=16 stores=1 reloads=1
-spill %huge: private[4] bytes=20 align=16 stores=1 reloads=1
+value %wide: test.pressure.alias32 -> spill_slot[0:8]
+value %huge: test.pressure.alias32 -> spill_slot[8:9]
+spill %wide: stack[0] bytes=32 align=16 stores=1 reloads=1
+spill %huge: stack[8] bytes=36 align=16 stores=1 reloads=1
 
 // ====
 
