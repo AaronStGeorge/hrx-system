@@ -131,7 +131,6 @@ loom_corpus_build(
         "//loom/target/vm:all": [
             "memory/atomic/float64.loom",
             "numeric/conversion/float8_schema_conversion.loom",
-            "numeric/float/activations.loom",
             "numeric/matrix/nvfp4.loom",
         ],
     },
@@ -143,11 +142,6 @@ loom_corpus_build(
             "function/template/library.loom:@template_dead_library_observations": "LOWERING/045",
             "memory/atomic/float64.loom:@atomic_f64_values": "TARGET/003",
             "numeric/conversion/float8_schema_conversion.loom:@float8_schema_conversion": "TARGET/031",
-            "numeric/float/activations.loom:@activation_f32x8_observations": "LOWERING/036",
-            "numeric/float/activations.loom:@activation_observations": "LOWERING/036",
-            "numeric/float/activations.loom:@activation_portable_observations": "LOWERING/036",
-            "numeric/float/activations.loom:@softplus_fast_observations": "LOWERING/036",
-            "numeric/float/activations.loom:@softplus_observations": "LOWERING/036",
             "numeric/float/rounding.loom:@rounding_bf16_observations": "LOWERING/036",
             "numeric/float/rounding.loom:@rounding_f16_observations": "LOWERING/036",
             "numeric/float/rounding.loom:@rounding_f8e4m3_observations": "LOWERING/036",
@@ -164,6 +158,7 @@ loom_corpus_test(
     profile_sources = {
         VM_REFERENCE_PROFILE.name: [
             "memory/buffer/packing.loom",
+            "numeric/float/activations.loom",
             "numeric/float/exponent.loom",
             "numeric/float/exponential.loom",
             "numeric/float/logarithm.loom",

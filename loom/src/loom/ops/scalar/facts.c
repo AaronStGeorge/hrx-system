@@ -15,6 +15,7 @@
 #include <math.h>
 
 #include "iree/base/internal/math.h"
+#include "iree/math/activation.h"
 #include "iree/math/error_functions.h"
 #include "iree/math/exponential.h"
 #include "iree/math/hyperbolic.h"
@@ -129,37 +130,6 @@ static float div_f32(float a, float b) { return a / b; }
 static double div_f64(double a, double b) { return a / b; }
 static float roundeven_f32(float x) { return nearbyintf(x); }
 static double roundeven_f64(double x) { return nearbyint(x); }
-static float silu_f32(float x) { return x * loom_float_logistic_f32(x); }
-static double silu_f64(double x) { return x * loom_float_logistic_f64(x); }
-static float softplus_f32(float x) {
-  return log1pf(expf(-fabsf(x))) + fmaxf(x, 0.0f);
-}
-static double softplus_f64(double x) {
-  return log1p(exp(-fabs(x))) + fmax(x, 0.0);
-}
-static float gelu_erf_f32(float x) {
-  const float inverse_sqrt2 = 0.70710678118654752440f;
-  return 0.5f * x * (1.0f + erff(x * inverse_sqrt2));
-}
-static double gelu_erf_f64(double x) {
-  const double inverse_sqrt2 = 0.70710678118654752440;
-  return 0.5 * x * (1.0 + erf(x * inverse_sqrt2));
-}
-static float gelu_tanh_f32(float x) {
-  const float sqrt_2_over_pi = 0.79788456080286535588f;
-  return 0.5f * x *
-         (1.0f + tanhf(sqrt_2_over_pi * (x + 0.044715f * x * x * x)));
-}
-static double gelu_tanh_f64(double x) {
-  const double sqrt_2_over_pi = 0.79788456080286535588;
-  return 0.5 * x * (1.0 + tanh(sqrt_2_over_pi * (x + 0.044715 * x * x * x)));
-}
-static float gelu_logistic_f32(float x, float scale) {
-  return x * loom_float_logistic_f32(scale * x);
-}
-static double gelu_logistic_f64(double x, double scale) {
-  return x * loom_float_logistic_f64(scale * x);
-}
 
 //===----------------------------------------------------------------------===//
 // scalar.constant
@@ -401,10 +371,12 @@ FLOAT_UNARY_FACTS(loom_scalar_atanhf_facts, iree_math_atanh_f32,
 FLOAT_UNARY_FACTS(loom_scalar_erff_facts, iree_math_erf_f32, iree_math_erf_f64)
 FLOAT_UNARY_FACTS(loom_scalar_erfcf_facts, iree_math_erfc_f32,
                   iree_math_erfc_f64)
-FLOAT_UNARY_FACTS(loom_scalar_logisticf_facts, loom_float_logistic_f32,
-                  loom_float_logistic_f64)
-FLOAT_UNARY_FACTS(loom_scalar_siluf_facts, silu_f32, silu_f64)
-FLOAT_UNARY_FACTS(loom_scalar_softplusf_facts, softplus_f32, softplus_f64)
+FLOAT_UNARY_FACTS(loom_scalar_logisticf_facts, iree_math_logistic_f32,
+                  iree_math_logistic_f64)
+FLOAT_UNARY_FACTS(loom_scalar_siluf_facts, iree_math_silu_f32,
+                  iree_math_silu_f64)
+FLOAT_UNARY_FACTS(loom_scalar_softplusf_facts, iree_math_softplus_f32,
+                  iree_math_softplus_f64)
 
 iree_status_t loom_scalar_geluf_facts(loom_fact_context_t* context,
                                       const loom_module_t* module,
@@ -414,14 +386,14 @@ iree_status_t loom_scalar_geluf_facts(loom_fact_context_t* context,
   loom_scalar_type_t scalar_type = loom_scalar_result_element_type(module, op);
   switch (loom_scalar_geluf_variant(op)) {
     case LOOM_SCALAR_GELUF_VARIANT_ERF:
-      loom_value_facts_eval_float_unary(scalar_type, &operand_facts[0],
-                                        gelu_erf_f32, gelu_erf_f64,
-                                        &result_facts[0]);
+      loom_value_facts_eval_float_unary(
+          scalar_type, &operand_facts[0], iree_math_gelu_erf_f32,
+          iree_math_gelu_erf_f64, &result_facts[0]);
       break;
     case LOOM_SCALAR_GELUF_VARIANT_TANH:
-      loom_value_facts_eval_float_unary(scalar_type, &operand_facts[0],
-                                        gelu_tanh_f32, gelu_tanh_f64,
-                                        &result_facts[0]);
+      loom_value_facts_eval_float_unary(
+          scalar_type, &operand_facts[0], iree_math_gelu_tanh_f32,
+          iree_math_gelu_tanh_f64, &result_facts[0]);
       break;
     case LOOM_SCALAR_GELUF_VARIANT_LOGISTIC: {
       if (!loom_scalar_geluf_has_scale(op)) {
@@ -435,10 +407,11 @@ iree_status_t loom_scalar_geluf_facts(loom_fact_context_t* context,
         result_facts[0] = loom_value_facts_unknown();
       } else if (scalar_type == LOOM_SCALAR_TYPE_F64) {
         result_facts[0] = loom_value_facts_exact_float(
-            scalar_type, gelu_logistic_f64(input, scale));
+            scalar_type, iree_math_gelu_logistic_f64(input, scale));
       } else {
         result_facts[0] = loom_value_facts_exact_float(
-            scalar_type, gelu_logistic_f32((float)input, (float)scale));
+            scalar_type,
+            iree_math_gelu_logistic_f32((float)input, (float)scale));
       }
       loom_value_facts_propagate_unary_distribution(operand_facts[0],
                                                     &result_facts[0]);

@@ -367,6 +367,47 @@ _FLOAT_MATH_ORDINARY_UNARY_VALUES = (
         "negative infinity returns two. The small positive tail is retained "
         "without subtracting rounded erf from one.",
     ),
+    (
+        "logistic",
+        38,
+        "Returns the stable iree/math logistic sigmoid 1/(1+exp(-x)), retaining "
+        "its small negative tail. Either zero returns 1/2; negative and positive "
+        "infinity return zero and one. Every NaN returns canonical positive quiet "
+        "NaN.",
+    ),
+    (
+        "silu",
+        39,
+        "Returns the stable iree/math SiLU x/(1+exp(-x)), applying the scale "
+        "before negative-tail underflow. Signed zero is preserved; negative "
+        "infinity returns -0 and positive infinity returns +infinity. Every NaN "
+        "returns canonical positive quiet NaN.",
+    ),
+    (
+        "softplus",
+        40,
+        "Returns the stable iree/math softplus log(1+exp(x)) without positive "
+        "overflow or negative cancellation. Negative infinity returns +0 and "
+        "positive infinity returns +infinity. Every NaN returns canonical "
+        "positive quiet NaN.",
+    ),
+    (
+        "gelu.erf",
+        41,
+        "Returns the stable iree/math erf-GELU x/2*(1+erf(x/sqrt(2))) through "
+        "direct complementary-tail reconstruction. Signed zero is preserved; "
+        "negative infinity returns -0 and positive infinity returns +infinity. "
+        "Every NaN returns canonical positive quiet NaN.",
+    ),
+    (
+        "gelu.tanh",
+        42,
+        "Returns the stable iree/math tanh-GELU "
+        "x/2*(1+tanh(sqrt(2/pi)*(x+0.044715*x^3))), retaining its negative tail. "
+        "This formula remains distinct from erf GELU. Signed zero is preserved; "
+        "negative infinity returns -0 and positive infinity returns +infinity. "
+        "Every NaN returns canonical positive quiet NaN.",
+    ),
 )
 
 FLOAT_MATH_F32_SELECTOR = _selector(
@@ -601,6 +642,16 @@ FLOAT_MATH_BINARY_SELECTOR = _selector(
             "and branch cut, including signed zero. Signed zero x selects its "
             "sign's quadrant; infinite operands select the corresponding axis "
             "or diagonal angle. Every NaN returns canonical positive quiet NaN.",
+        ),
+        (
+            "gelu.logistic",
+            2,
+            "Returns the stable iree/math left/(1+exp(-right*left)) mapping, "
+            "with left as x and right as its selected-width scale. Negative, "
+            "zero, and infinite scales are valid. Negative tails retain scale "
+            "before final underflow. NaNs and zero-infinity products return "
+            "canonical positive quiet NaN. Otherwise infinite arguments return "
+            "signed zero when right*left is negative, or left when positive.",
         ),
     ),
 )

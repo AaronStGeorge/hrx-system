@@ -15,9 +15,11 @@ from typing import Self
 
 from loom.dsl import (
     ATTR_TYPE_ENUM,
+    ATTR_TYPE_F64,
     ATTR_TYPE_FLAGS,
     ATTR_TYPE_I64,
     ATTR_TYPE_I64_ARRAY,
+    AttrDef,
     EnumCase,
     Op,
 )
@@ -66,6 +68,7 @@ class AttrProjectKind(Enum):
     """Projection from source op attributes to descriptor immediates."""
 
     DIRECT = "direct"
+    FLOAT_BITS = "float_bits"
     ENUM_ORDINAL = "enum_ordinal"
     ENUM_REMAP = "enum_remap"
     I64_LOG2 = "i64_log2"
@@ -223,6 +226,15 @@ class AttrProject:
     @classmethod
     def direct(cls, source_attr: str) -> Self:
         return cls(kind=AttrProjectKind.DIRECT, source_attr=source_attr)
+
+    @classmethod
+    def float_bits(cls, source_attr: str, bit_width: int) -> Self:
+        """Rounds an F64 attribute to zero-extended F32 or signed F64 bits."""
+        return cls(
+            kind=AttrProjectKind.FLOAT_BITS,
+            source_attr=source_attr,
+            bit_width=bit_width,
+        )
 
     @classmethod
     def enum_ordinal(cls, source_attr: str) -> Self:
@@ -560,6 +572,8 @@ class AttrProject:
             raise ValueError(f"{self.kind.value} count must be positive")
         if self.bit_width is not None and self.bit_width <= 0:
             raise ValueError(f"{self.kind.value} bit width must be positive")
+        if self.kind == AttrProjectKind.FLOAT_BITS and self.bit_width not in (32, 64):
+            raise ValueError("float_bits projection requires width 32 or 64")
         if self.target_bit_offset < 0:
             raise ValueError(
                 f"{self.kind.value} target bit offset must be non-negative"
@@ -572,6 +586,7 @@ class AttrProject:
         if (
             self.kind
             in (
+                AttrProjectKind.FLOAT_BITS,
                 AttrProjectKind.I64_LOG2,
                 *mask_kinds,
                 AttrProjectKind.I64_ARRAY_ELEMENT_PLUS_LITERAL,
@@ -643,29 +658,14 @@ class AttrProject:
         subject = f"immediate projection {self.kind.value}"
         source_op = self._referenced_op(source_op, source_ops, subject)
         attr = _require_attr(source_op, self.source_attr, subject)
-        if self.kind == AttrProjectKind.DIRECT:
-            if bound_immediate_name is None:
-                raise ValueError(
-                    f"{source_op.name}: {subject} must bind one descriptor immediate"
-                )
-            _require_immediate(descriptor, bound_immediate_name, subject)
-            return
-        if self.kind == AttrProjectKind.ENUM_ORDINAL:
-            if bound_immediate_name is None:
-                raise ValueError(
-                    f"{source_op.name}: {subject} must bind one descriptor immediate"
-                )
-            immediate = _require_immediate(descriptor, bound_immediate_name, subject)
-            if attr.attr_type != ATTR_TYPE_ENUM:
-                raise ValueError(
-                    f"{source_op.name}: {subject} source attr "
-                    f"'{self.source_attr}' must be an enum attr"
-                )
-            if immediate.kind != ImmediateKind.ENUM:
-                raise ValueError(
-                    f"{source_op.name}: {subject} descriptor immediate "
-                    f"'{bound_immediate_name}' must be an enum immediate"
-                )
+        if self.kind in (
+            AttrProjectKind.DIRECT,
+            AttrProjectKind.FLOAT_BITS,
+            AttrProjectKind.ENUM_ORDINAL,
+        ):
+            self._validate_scalar_encoding(
+                source_op, attr, descriptor, bound_immediate_name, subject
+            )
             return
         if self.kind == AttrProjectKind.ENUM_REMAP:
             self._validate_enum_remap(
@@ -821,6 +821,44 @@ class AttrProject:
             )
         for name in self.target_names:
             _require_immediate(descriptor, name, subject)
+
+    def _validate_scalar_encoding(
+        self,
+        source_op: Op,
+        attr: AttrDef,
+        descriptor: Descriptor,
+        bound_immediate_name: str | None,
+        subject: str,
+    ) -> None:
+        if bound_immediate_name is None:
+            raise ValueError(
+                f"{source_op.name}: {subject} must bind one descriptor immediate"
+            )
+        immediate = _require_immediate(descriptor, bound_immediate_name, subject)
+        if self.kind == AttrProjectKind.DIRECT:
+            return
+        if self.kind == AttrProjectKind.FLOAT_BITS:
+            if attr.attr_type != ATTR_TYPE_F64:
+                raise ValueError(f"{source_op.name}: {subject} requires an F64 attr")
+            expected_kind = (
+                ImmediateKind.UNSIGNED if self.bit_width == 32 else ImmediateKind.SIGNED
+            )
+            if immediate.kind != expected_kind or immediate.bit_width != self.bit_width:
+                raise ValueError(
+                    f"{source_op.name}: {subject} requires an unsigned 32-bit or "
+                    "signed 64-bit immediate matching the projection width"
+                )
+            return
+        if attr.attr_type != ATTR_TYPE_ENUM:
+            raise ValueError(
+                f"{source_op.name}: {subject} source attr "
+                f"'{self.source_attr}' must be an enum attr"
+            )
+        if immediate.kind != ImmediateKind.ENUM:
+            raise ValueError(
+                f"{source_op.name}: {subject} descriptor immediate "
+                f"'{bound_immediate_name}' must be an enum immediate"
+            )
 
     def _validate_read_only_data(
         self,

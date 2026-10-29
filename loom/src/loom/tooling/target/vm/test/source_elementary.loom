@@ -291,3 +291,73 @@ check.case public @ordinary_error_functions_f64 {
   check.expect.approximate actual(%erfc) expected(%tail) atol(0.0) rtol(2.2999999999999999e-16) nan(different) : f64, f64
   check.return
 }
+
+func.def @activations_f32(%input: f32) -> (f32, f32, f32, f32, f32, f32) {
+  %logistic = scalar.logisticf %input : f32
+  %silu = scalar.siluf %input : f32
+  %softplus = scalar.softplusf %input : f32
+  %gelu_erf = scalar.geluf<erf> %input : f32
+  %gelu_tanh = scalar.geluf<tanh> %input : f32
+  %gelu_logistic = scalar.geluf<logistic> %input {scale = 1.702} : f32
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : f32, f32, f32, f32, f32, f32
+}
+
+check.case public @ordinary_activations_f32 {
+  %input = check.literal value(-0.5) : f32
+  %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic = func.call @activations_f32(%input) : (f32) -> (f32, f32, f32, f32, f32, f32)
+  %logistic_reference = check.literal value(0.37754067778587341) : f32
+  check.expect.approximate actual(%logistic) expected(%logistic_reference) atol(0.0) rtol(1.9999999999999999e-06) nan(different) : f32, f32
+  %silu_reference = check.literal value(-0.18877033889293671) : f32
+  check.expect.approximate actual(%silu) expected(%silu_reference) atol(0.0) rtol(1.9999999999999999e-06) nan(different) : f32, f32
+  %softplus_reference = check.literal value(0.47407698631286621) : f32
+  check.expect.approximate actual(%softplus) expected(%softplus_reference) atol(0.0) rtol(1.9999999999999999e-06) nan(different) : f32, f32
+  %gelu_erf_reference = check.literal value(-0.1542687714099884) : f32
+  check.expect.approximate actual(%gelu_erf) expected(%gelu_erf_reference) atol(0.0) rtol(1.9999999999999999e-06) nan(different) : f32, f32
+  %gelu_tanh_reference = check.literal value(-0.15428599715232849) : f32
+  check.expect.approximate actual(%gelu_tanh) expected(%gelu_tanh_reference) atol(0.0) rtol(1.9999999999999999e-06) nan(different) : f32, f32
+  %gelu_logistic_reference = check.literal value(-0.14961156249046326) : f32
+  check.expect.approximate actual(%gelu_logistic) expected(%gelu_logistic_reference) atol(0.0) rtol(1.9999999999999999e-06) nan(different) : f32, f32
+  check.return
+}
+
+func.def @activations_f64(%input: f64) -> (f64, f64, f64, f64, f64, f64) {
+  %logistic = scalar.logisticf %input : f64
+  %silu = scalar.siluf %input : f64
+  %softplus = scalar.softplusf %input : f64
+  %gelu_erf = scalar.geluf<erf> %input : f64
+  %gelu_tanh = scalar.geluf<tanh> %input : f64
+  %gelu_logistic = scalar.geluf<logistic> %input {scale = -0.125} : f64
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : f64, f64, f64, f64, f64, f64
+}
+
+check.case public @ordinary_activations_f64 {
+  %input = check.literal value(-0.5) : f64
+  %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic = func.call @activations_f64(%input) : (f64) -> (f64, f64, f64, f64, f64, f64)
+  %logistic_reference = check.literal value(0.37754066879814546) : f64
+  check.expect.approximate actual(%logistic) expected(%logistic_reference) atol(0.0) rtol(4.0000000000000003e-15) nan(different) : f64, f64
+  %silu_reference = check.literal value(-0.18877033439907273) : f64
+  check.expect.approximate actual(%silu) expected(%silu_reference) atol(0.0) rtol(4.0000000000000003e-15) nan(different) : f64, f64
+  %softplus_reference = check.literal value(0.47407698418010669) : f64
+  check.expect.approximate actual(%softplus) expected(%softplus_reference) atol(0.0) rtol(4.0000000000000003e-15) nan(different) : f64, f64
+  %gelu_erf_reference = check.literal value(-0.15426876936299344) : f64
+  check.expect.approximate actual(%gelu_erf) expected(%gelu_erf_reference) atol(0.0) rtol(4.0000000000000003e-15) nan(different) : f64, f64
+  %gelu_tanh_reference = check.literal value(-0.15428599017485609) : f64
+  check.expect.approximate actual(%gelu_tanh) expected(%gelu_tanh_reference) atol(0.0) rtol(4.0000000000000003e-15) nan(different) : f64, f64
+  %gelu_logistic_reference = check.literal value(-0.25780995786150779) : f64
+  check.expect.approximate actual(%gelu_logistic) expected(%gelu_logistic_reference) atol(0.0) rtol(4.0000000000000003e-15) nan(different) : f64, f64
+  check.return
+}
+
+// The scale is an F64 attribute rounded directly to F32, not through F16.
+func.def @narrow_scaled_gelu(%input: f16) -> (f16) {
+  %result = scalar.geluf<logistic> %input {scale = 1.702} : f16
+  func.return %result : f16
+}
+
+check.case public @ordinary_activations_narrow {
+  %input = check.literal value(-5.0) : f16
+  %result = func.call @narrow_scaled_gelu(%input) : (f16) -> (f16)
+  %expected = check.literal value(-0.001007080078125) : f16
+  check.expect.equal actual(%result) expected(%expected) : f16
+  check.return
+}

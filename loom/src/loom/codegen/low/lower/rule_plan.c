@@ -475,6 +475,20 @@ static iree_status_t loom_low_lower_rule_build_attrs(
                                        attr_copy->target_name_string_ref),
         &attrs[i].name_id));
     switch (attr_copy->kind) {
+      case LOOM_LOW_LOWER_ATTR_COPY_FLOAT_BITS: {
+        const double value = source_attrs[attr_copy->source_attr_index].f64;
+        uint64_t bits = 0;
+        if (attr_copy->source_element_bit_width == 32) {
+          const float narrowed = (float)value;
+          uint32_t narrowed_bits = 0;
+          memcpy(&narrowed_bits, &narrowed, sizeof(narrowed_bits));
+          bits = narrowed_bits;
+        } else {
+          memcpy(&bits, &value, sizeof(bits));
+        }
+        attrs[i].value = loom_attr_i64((int64_t)bits);
+        break;
+      }
       case LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_READ_ONLY_ELEMENTS:
       case LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_READ_ONLY_BYTE_SEGMENT:
       case LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_READ_ONLY_BYTE_WORDS:

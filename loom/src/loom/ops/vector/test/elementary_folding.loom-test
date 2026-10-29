@@ -199,3 +199,32 @@ func.def @error_functions() -> (vector<2xf32>, vector<2xf32>, vector<2xf64>, vec
   %erfc2 = vector.constant 0.3125 : vector<2xf8E5M2>
   func.return %erf0, %erfc0, %erf1, %erfc1, %erf2, %erfc2 : vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf8E5M2>, vector<2xf8E5M2>
 }
+
+// ====
+
+func.def @vector_activation_tails_and_scale() -> (vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf32>, vector<2xf16>) {
+  %logistic_input = vector.constant -100.0 : vector<2xf32>
+  %logistic = vector.logisticf %logistic_input : vector<2xf32>
+  %silu_input = vector.constant -104.0 : vector<2xf32>
+  %silu = vector.siluf %silu_input : vector<2xf32>
+  %softplus_input = vector.constant -744.0 : vector<2xf64>
+  %softplus = vector.softplusf %softplus_input : vector<2xf64>
+  %gelu_erf_input = vector.constant -38.0 : vector<2xf64>
+  %gelu_erf = vector.geluf<erf> %gelu_erf_input : vector<2xf64>
+  %gelu_tanh_input = vector.constant -8.0 : vector<2xf32>
+  %gelu_tanh = vector.geluf<tanh> %gelu_tanh_input : vector<2xf32>
+  %gelu_logistic_input = vector.constant -5.0 : vector<2xf16>
+  %gelu_logistic = vector.geluf<logistic> %gelu_logistic_input {scale = 1.702} : vector<2xf16>
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf32>, vector<2xf16>
+}
+
+// ----
+func.def @vector_activation_tails_and_scale() -> (vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf32>, vector<2xf16>) {
+  %logistic = vector.constant 3.7835058536770061e-44 : vector<2xf32>
+  %silu = vector.constant -7.1466221680565671e-44 : vector<2xf32>
+  %softplus = vector.constant 9.8813129168249309e-324 : vector<2xf64>
+  %gelu_erf = vector.constant -1.096462776839966e-314 : vector<2xf64>
+  %gelu_tanh = vector.constant -3.1077797614663798e-21 : vector<2xf32>
+  %gelu_logistic = vector.constant -0.001007080078125 : vector<2xf16>
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf32>, vector<2xf16>
+}

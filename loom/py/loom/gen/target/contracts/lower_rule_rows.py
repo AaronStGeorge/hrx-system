@@ -158,6 +158,7 @@ _ATTR_COPY_VALUE_REF_KINDS = frozenset(
 _ATTR_COPY_SOURCE_ATTR_KINDS = frozenset(
     (
         LowerAttrCopyKind.DIRECT,
+        LowerAttrCopyKind.FLOAT_BITS,
         LowerAttrCopyKind.ENUM_ORDINAL,
         LowerAttrCopyKind.ENUM_REMAP,
         LowerAttrCopyKind.I64_LOG2,
@@ -930,6 +931,7 @@ def attr_copy_row(
             always=True,
         )
     if row.kind in (
+        LowerAttrCopyKind.FLOAT_BITS,
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
         LowerAttrCopyKind.ATTRS_PACK_CONSECUTIVE,
         LowerAttrCopyKind.ENUM_REMAP,

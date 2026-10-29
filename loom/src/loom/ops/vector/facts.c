@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
+#include "iree/math/activation.h"
 #include "iree/math/error_functions.h"
 #include "iree/math/exponential.h"
 #include "iree/math/fma.h"
@@ -1680,49 +1681,6 @@ static float loom_vector_roundeven_f32(float input) {
 }
 static double loom_vector_roundeven_f64(double input) {
   return nearbyint(input);
-}
-
-static float loom_vector_silu_f32(float input) {
-  return input * loom_float_logistic_f32(input);
-}
-static double loom_vector_silu_f64(double input) {
-  return input * loom_float_logistic_f64(input);
-}
-
-static float loom_vector_softplus_f32(float input) {
-  return log1pf(expf(-fabsf(input))) + fmaxf(input, 0.0f);
-}
-static double loom_vector_softplus_f64(double input) {
-  return log1p(exp(-fabs(input))) + fmax(input, 0.0);
-}
-
-static float loom_vector_gelu_erf_f32(float input) {
-  const float inverse_sqrt2 = 0.70710678118654752440f;
-  return 0.5f * input * (1.0f + erff(input * inverse_sqrt2));
-}
-static double loom_vector_gelu_erf_f64(double input) {
-  const double inverse_sqrt2 = 0.70710678118654752440;
-  return 0.5 * input * (1.0 + erf(input * inverse_sqrt2));
-}
-
-static float loom_vector_gelu_tanh_f32(float input) {
-  const float sqrt_2_over_pi = 0.79788456080286535588f;
-  return 0.5f * input *
-         (1.0f +
-          tanhf(sqrt_2_over_pi * (input + 0.044715f * input * input * input)));
-}
-static double loom_vector_gelu_tanh_f64(double input) {
-  const double sqrt_2_over_pi = 0.79788456080286535588;
-  return 0.5 * input *
-         (1.0 +
-          tanh(sqrt_2_over_pi * (input + 0.044715 * input * input * input)));
-}
-
-static float loom_vector_gelu_logistic_f32(float input, float scale) {
-  return input * loom_float_logistic_f32(scale * input);
-}
-static double loom_vector_gelu_logistic_f64(double input, double scale) {
-  return input * loom_float_logistic_f64(scale * input);
 }
 
 static void loom_vector_float_negate_transfer(loom_scalar_type_t scalar_type,
@@ -3964,12 +3922,11 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_erff_facts, iree_math_erf_f32,
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_erfcf_facts, iree_math_erfc_f32,
                               iree_math_erfc_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_logisticf_facts,
-                              loom_float_logistic_f32, loom_float_logistic_f64)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_siluf_facts, loom_vector_silu_f32,
-                              loom_vector_silu_f64)
+                              iree_math_logistic_f32, iree_math_logistic_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_siluf_facts, iree_math_silu_f32,
+                              iree_math_silu_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_softplusf_facts,
-                              loom_vector_softplus_f32,
-                              loom_vector_softplus_f64)
+                              iree_math_softplus_f32, iree_math_softplus_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_ceilf_facts, ceilf, ceil)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_floorf_facts, floorf, floor)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_roundf_facts, roundf, round)
@@ -4265,11 +4222,11 @@ static float loom_vector_geluf_transfer_f32(float input,
   const loom_vector_geluf_transfer_t* transfer = user_data;
   switch (transfer->variant) {
     case LOOM_VECTOR_GELUF_VARIANT_ERF:
-      return loom_vector_gelu_erf_f32(input);
+      return iree_math_gelu_erf_f32(input);
     case LOOM_VECTOR_GELUF_VARIANT_TANH:
-      return loom_vector_gelu_tanh_f32(input);
+      return iree_math_gelu_tanh_f32(input);
     case LOOM_VECTOR_GELUF_VARIANT_LOGISTIC:
-      return loom_vector_gelu_logistic_f32(input, (float)transfer->scale);
+      return iree_math_gelu_logistic_f32(input, (float)transfer->scale);
     case LOOM_VECTOR_GELUF_VARIANT_COUNT_:
       return NAN;
   }
@@ -4281,11 +4238,11 @@ static double loom_vector_geluf_transfer_f64(double input,
   const loom_vector_geluf_transfer_t* transfer = user_data;
   switch (transfer->variant) {
     case LOOM_VECTOR_GELUF_VARIANT_ERF:
-      return loom_vector_gelu_erf_f64(input);
+      return iree_math_gelu_erf_f64(input);
     case LOOM_VECTOR_GELUF_VARIANT_TANH:
-      return loom_vector_gelu_tanh_f64(input);
+      return iree_math_gelu_tanh_f64(input);
     case LOOM_VECTOR_GELUF_VARIANT_LOGISTIC:
-      return loom_vector_gelu_logistic_f64(input, transfer->scale);
+      return iree_math_gelu_logistic_f64(input, transfer->scale);
     case LOOM_VECTOR_GELUF_VARIANT_COUNT_:
       return NAN;
   }

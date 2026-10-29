@@ -9,6 +9,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "iree/math/activation.h"
 #include "iree/math/error_functions.h"
 #include "iree/math/exponential.h"
 #include "iree/math/hyperbolic.h"
@@ -116,6 +117,21 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits) {
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_ATAN:
       result = iree_math_atan_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_LOGISTIC:
+      result = iree_math_logistic_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SILU:
+      result = iree_math_silu_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SOFTPLUS:
+      result = iree_math_softplus_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_GELU_ERF:
+      result = iree_math_gelu_erf_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_GELU_TANH:
+      result = iree_math_gelu_tanh_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_ERF:
       result = iree_math_erf_f32(source);
@@ -243,6 +259,21 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_ATAN:
       result = iree_math_atan_f64(source);
       break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_LOGISTIC:
+      result = iree_math_logistic_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SILU:
+      result = iree_math_silu_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SOFTPLUS:
+      result = iree_math_softplus_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_GELU_ERF:
+      result = iree_math_gelu_erf_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_GELU_TANH:
+      result = iree_math_gelu_tanh_f64(source);
+      break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_ERF:
       result = iree_math_erf_f64(source);
       break;
@@ -298,6 +329,9 @@ IREE_ATTRIBUTE_NOINLINE uint32_t iree_vm_bytecode_float_math_binary_f32(
     case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_ATAN2:
       result = iree_math_atan2_f32(left, right);
       break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_GELU_LOGISTIC:
+      result = iree_math_gelu_logistic_f32(left, right);
+      break;
     default:
       IREE_ASSERT_UNREACHABLE("binary math selector was not verified");
       return 0;
@@ -316,6 +350,9 @@ IREE_ATTRIBUTE_NOINLINE uint64_t iree_vm_bytecode_float_math_binary_f64(
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_ATAN2:
       result = iree_math_atan2_f64(left, right);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_GELU_LOGISTIC:
+      result = iree_math_gelu_logistic_f64(left, right);
       break;
     default:
       IREE_ASSERT_UNREACHABLE("binary math selector was not verified");

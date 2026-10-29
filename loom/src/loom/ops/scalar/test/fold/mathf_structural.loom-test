@@ -371,3 +371,32 @@ func.def @error_functions() -> (f32, f32, f64, f64, f16, f16) {
   %erfc2 = scalar.constant 0.288818359375 : f16
   func.return %erf0, %erfc0, %erf1, %erfc1, %erf2, %erfc2 : f32, f32, f64, f64, f16, f16
 }
+
+// ====
+
+func.def @scalar_activation_tails_and_scale() -> (f32, f32, f64, f64, f32, f16) {
+  %logistic_input = scalar.constant -100.0 : f32
+  %logistic = scalar.logisticf %logistic_input : f32
+  %silu_input = scalar.constant -104.0 : f32
+  %silu = scalar.siluf %silu_input : f32
+  %softplus_input = scalar.constant -744.0 : f64
+  %softplus = scalar.softplusf %softplus_input : f64
+  %gelu_erf_input = scalar.constant -38.0 : f64
+  %gelu_erf = scalar.geluf<erf> %gelu_erf_input : f64
+  %gelu_tanh_input = scalar.constant -8.0 : f32
+  %gelu_tanh = scalar.geluf<tanh> %gelu_tanh_input : f32
+  %gelu_logistic_input = scalar.constant -5.0 : f16
+  %gelu_logistic = scalar.geluf<logistic> %gelu_logistic_input {scale = 1.702} : f16
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : f32, f32, f64, f64, f32, f16
+}
+
+// ----
+func.def @scalar_activation_tails_and_scale() -> (f32, f32, f64, f64, f32, f16) {
+  %logistic = scalar.constant 3.7835058536770061e-44 : f32
+  %silu = scalar.constant -7.1466221680565671e-44 : f32
+  %softplus = scalar.constant 9.8813129168249309e-324 : f64
+  %gelu_erf = scalar.constant -1.096462776839966e-314 : f64
+  %gelu_tanh = scalar.constant -3.1077797614663798e-21 : f32
+  %gelu_logistic = scalar.constant -0.001007080078125 : f16
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : f32, f32, f64, f64, f32, f16
+}

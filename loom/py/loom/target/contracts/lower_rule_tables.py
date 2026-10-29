@@ -58,6 +58,7 @@ class LowerAttrCopyKind(Enum):
     """Interpreter attribute-copy operation used by a compiled emit row."""
 
     DIRECT = "direct"
+    FLOAT_BITS = "float_bits"
     ENUM_ORDINAL = "enum_ordinal"
     ENUM_REMAP = "enum_remap"
     I64_LOG2 = "i64_log2"

@@ -2442,6 +2442,13 @@ class _LowerRuleSetCompiler:
         project: AttrProject,
     ) -> LowerAttrCopy:
         source_attr_index = _source_attr_index(source_op, project.source_attr)
+        if project.kind == AttrProjectKind.FLOAT_BITS:
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.FLOAT_BITS,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+                source_element_bit_width=project.bit_width,
+            )
         if project.kind == AttrProjectKind.DIRECT:
             return LowerAttrCopy(
                 kind=LowerAttrCopyKind.DIRECT,

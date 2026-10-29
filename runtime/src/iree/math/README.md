@@ -6,8 +6,8 @@ public function names one stable operation, format, and numerical contract so
 constant evaluation and dynamic execution can agree across hosts.
 
 Ordinary F32/F64 square root, reciprocal square root, cube root, exponentials,
-logarithms, real powers, hyperbolic functions, trigonometry, and error functions
-preserve gradual underflow.
+logarithms, real powers, hyperbolic functions, trigonometry, error functions,
+and activations preserve gradual underflow.
 Both scalar and vector constant folding and the Core VM call these same typed
 functions:
 
@@ -63,6 +63,13 @@ A compact interval polynomial supplies the cancellation-sensitive F64 central
 region shared by `erf` and `erfc`; F32 uses its own shorter rational coefficients
 with widened intermediates where complement reconstruction requires them.
 
+Activations share those numerical leaves. Sign-split sigmoid and softplus
+avoid overflow and cancellation; SiLU and the three authored GELU variants
+retain their scaled negative tails before final underflow. Erf GELU reuses the
+complementary error-function tail, while tanh and scaled-logistic GELU retain
+their distinct formulas and scale semantics. These composed functions have
+condition-dependent error bounds documented in `activation.h`.
+
 Fused multiply-add rounds the exact product and addend once. F32/F64 use a
 native instruction when enabled by the build ISA, with an owned software
 implementation otherwise. Narrow formats share an intermediate that preserves
@@ -115,6 +122,7 @@ Operations are grouped by algorithm family and provenance:
 - `hyperbolic.h` owns sinh/cosh/tanh and their inverses.
 - `inverse_trigonometry.h` owns asin/acos/atan/atan2.
 - `error_functions.h` owns erf and erfc.
+- `activation.h` owns sigmoid, SiLU, softplus, and the three GELU variants.
 - `fma.h` owns fused arithmetic and narrow-format intermediate evaluation.
 - `roots.h` owns reciprocal, reciprocal square root, square root, and cube root.
 - `trigonometry.h` owns radian sine/cosine/tangent and turns-based sine/cosine.

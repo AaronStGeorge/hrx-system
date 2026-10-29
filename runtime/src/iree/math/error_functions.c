@@ -8,6 +8,7 @@
 
 #include <stdbool.h>
 
+#include "iree/math/erfc_tail.h"
 #include "iree/math/exponential.h"
 #include "iree/math/exponential_reduction.h"
 #include "iree/math/float_bits.h"
@@ -120,9 +121,17 @@ static double iree_math_erfc_tail_f32(double value) {
          value;
 }
 
-// Positive complementary tail for 1.25 <= value < the F64 zero threshold.
-// The two rational regions approximate log(value*erfc(value)) + value^2 + 9/16.
-static double iree_math_erfc_tail_f64(double value) {
+typedef struct iree_math_erfc_exponent_t {
+  // Exactly formed high part of log(value*erfc(value)).
+  double high;
+  // Square residual and rational tail correction.
+  double low;
+} iree_math_erfc_exponent_t;
+
+// The two rational regions approximate log(value*erfc(value)) + value^2 + 9/16
+// for value >= 1.25. Shared reduction keeps ordinary and scaled tails on the
+// same coefficients without rounding their exponential reconstruction early.
+static iree_math_erfc_exponent_t iree_math_erfc_tail_reduce_f64(double value) {
   const double reciprocal_square = 1.0 / (value * value);
   double numerator;
   double denominator;
@@ -165,8 +174,25 @@ static double iree_math_erfc_tail_f64(double value) {
   // residual and the rational correction survive exponential reduction.
   const double head = iree_math_f64_from_bits(iree_math_f64_to_bits(value) &
                                               UINT64_C(0xFFFFFFFF00000000));
-  const double low = (head - value) * (head + value) + numerator / denominator;
-  return iree_math_exp_f64_compensated(-head * head - 0.5625, low) / value;
+  return (iree_math_erfc_exponent_t){
+      .high = -head * head - 0.5625,
+      .low = (head - value) * (head + value) + numerator / denominator,
+  };
+}
+
+// Positive complementary tail below the F64 zero threshold.
+static double iree_math_erfc_tail_f64(double value) {
+  const iree_math_erfc_exponent_t exponent =
+      iree_math_erfc_tail_reduce_f64(value);
+  return iree_math_exp_f64_compensated(exponent.high, exponent.low) / value;
+}
+
+double iree_math_erfc_f64_scaled_tail(double value, double factor) {
+  const iree_math_erfc_exponent_t exponent =
+      iree_math_erfc_tail_reduce_f64(value);
+  const double half_exponential =
+      iree_math_exp_f64_compensated(0.5 * exponent.high, 0.5 * exponent.low);
+  return ((factor / value) * half_exponential) * half_exponential;
 }
 
 /* Interval coefficients adapted from CORE-MATH erf.c/erfc.c

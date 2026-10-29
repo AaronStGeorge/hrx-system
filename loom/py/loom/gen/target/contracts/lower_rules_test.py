@@ -2008,6 +2008,22 @@ def test_attr_copy_row_emits_attr_minus_literal_payload() -> None:
     assert ".literal_i64 = INT64_C(32)" in fields
 
 
+def test_attr_copy_row_retains_float_attribute_width() -> None:
+    for width in (32, 64):
+        fields = attr_copy_row(
+            LowerAttrCopy(
+                kind=LowerAttrCopyKind.FLOAT_BITS,
+                target_name="bits",
+                source_attr_index=2,
+                source_element_bit_width=width,
+            ),
+            target_name_string_ref="TEST_STRING_BITS",
+        )
+        assert ".kind = LOOM_LOW_LOWER_ATTR_COPY_FLOAT_BITS" in fields
+        assert ".source_attr_index = 2" in fields
+        assert f".source_element_bit_width = {width}" in fields
+
+
 def test_attr_copy_row_emits_exact_operand_segment_projection() -> None:
     fields = attr_copy_row(
         LowerAttrCopy(

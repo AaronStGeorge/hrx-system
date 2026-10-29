@@ -406,6 +406,32 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, Atan2OrderAndAliasing) {
   }
 }
 
+TEST_F(VMBytecodeInterpreterFloatMathTest, LogisticGeluScaleAndAliasing) {
+  // A zero scale gives x/2; swapping the operands would instead give zero.
+  // All destination choices must retain the original input and scale.
+  for (uint8_t destination : {0, 1, 2}) {
+    uint64_t values32[] = {UINT64_C(0xDEADBEEFC1000000),
+                           UINT64_C(0xBAADF00D00000000), UINT64_MAX};
+    const iree_vm_bytecode_float_math_binary_f32_t record32 = {
+        .destination_v8 = destination,
+        .left_v8 = 0,
+        .right_v8 = 1,
+        .selector_u8 = IREE_VM_BYTECODE_FLOAT_MATH_BINARY_GELU_LOGISTIC,
+    };
+    iree_vm_bytecode_execute_float_math_binary_f32(&record32, values32);
+    EXPECT_EQ(values32[destination], UINT32_C(0xC0800000));
+    uint64_t values64[] = {UINT64_C(0xC020000000000000), 0, UINT64_MAX};
+    const iree_vm_bytecode_float_math_binary_f64_t record64 = {
+        .destination_v8 = destination,
+        .left_v8 = 0,
+        .right_v8 = 1,
+        .selector_u8 = IREE_VM_BYTECODE_FLOAT_MATH_BINARY_GELU_LOGISTIC,
+    };
+    iree_vm_bytecode_execute_float_math_binary_f64(&record64, values64);
+    EXPECT_EQ(values64[destination], UINT64_C(0xC010000000000000));
+  }
+}
+
 TEST_F(VMBytecodeInterpreterFloatMathTest, FmaRoundsOnce) {
   EXPECT_EQ(ExecuteFma<iree_vm_bytecode_float_fma_f32_t>(
                 iree_vm_bytecode_execute_float_fma_f32, UINT32_C(0x3F800001),

@@ -194,6 +194,9 @@ _MATH_SOURCE_OPS = {
     "expm1": math.scalar_expm1f,
     "erf": math.scalar_erff,
     "erfc": math.scalar_erfcf,
+    "logistic": math.scalar_logisticf,
+    "silu": math.scalar_siluf,
+    "softplus": math.scalar_softplusf,
     "asin": math.scalar_asinf,
     "acos": math.scalar_acosf,
     "atan": math.scalar_atanf,
@@ -380,7 +383,7 @@ def _constant_cases():
 
 
 def _scalar_rule(
-    descriptor, source_op, source_type, selector=None, *, result_type=None
+    descriptor, source_op, source_type, selector=None, *, result_type=None, guards=()
 ):
     result_type = result_type or (
         Scalar("i1")
@@ -411,6 +414,7 @@ def _scalar_rule(
                 for operand in source_op.operands
             ),
             Guard.value_type("result", result_type),
+            *guards,
         ),
         emit=(
             EmitDescriptorOp(
@@ -588,6 +592,52 @@ def _conversion_cases():
         yield _conversion_rule(source_op, path, steps)
 
 
+def _gelu_math_rule(descriptor, selector, bit_width):
+    source_type = Scalar(f"f{bit_width}")
+    variant = selector.name.removeprefix("gelu.")
+    variant_guard = Guard.enum_attr_equals("variant", variant)
+    if variant != "logistic":
+        return _scalar_rule(
+            descriptor,
+            math.scalar_geluf,
+            source_type,
+            selector.value,
+            guards=(variant_guard,),
+        )
+
+    constant = next(
+        item
+        for item in VM_CORE_DESCRIPTOR_SET.descriptors
+        if item.op_kind is DescriptorOpKind.CONST
+        and item.immediates[0].bit_width == bit_width
+    )
+    scale = ValueRef.temporary("scale")
+    return DescriptorRule(
+        source_op=math.scalar_geluf,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("input", source_type),
+            Guard.value_type("result", source_type),
+            variant_guard,
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=constant,
+                results={"destination_v8": scale},
+                result_types={"destination_v8": source_type},
+                immediates={"bits": AttrProject.float_bits("scale", bit_width)},
+                form=DescriptorEmitForm.CONST,
+            ),
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"left_v8": ValueRef.operand("input"), "right_v8": scale},
+                results={"destination_v8": ValueRef.result("result")},
+                immediates={"selector_u8": selector.value},
+            ),
+        ),
+    )
+
+
 def _math_cases():
     remaining = set(_MATH_SOURCE_OPS)
     for descriptor in VM_CORE_DESCRIPTOR_SET.descriptors:
@@ -600,6 +650,10 @@ def _math_cases():
             if field.rule.kind is FieldRule.SELECTOR
         )
         for value in selector.values:
+            if value.name.startswith("gelu."):
+                yield _gelu_math_rule(
+                    descriptor, value, instruction.semantics.bit_width
+                )
             # Machine selectors with different denormal contracts require
             # separate source policies; a matching spelling is insufficient.
             if source_op := _MATH_SOURCE_OPS.get(value.name):

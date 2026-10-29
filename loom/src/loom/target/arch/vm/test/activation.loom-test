@@ -1,0 +1,83 @@
+// RUN: emit source-low
+
+vm.target<core> @vm
+
+func.def target(@vm) @single_activations(%input: f32) -> (f32, f32, f32, f32, f32, f32) {
+  %logistic = scalar.logisticf %input : f32
+  %silu = scalar.siluf %input : f32
+  %softplus = scalar.softplusf %input : f32
+  %erf = scalar.geluf<erf> %input : f32
+  %tanh = scalar.geluf<tanh> %input : f32
+  %scaled = scalar.geluf<logistic> %input {scale = -1.702} : f32
+  func.return %logistic, %silu, %softplus, %erf, %tanh, %scaled : f32, f32, f32, f32, f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @single_activations(%input: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %logistic = float.math.unary.f32 %input, "logistic"
+  %silu = float.math.unary.f32 %input, "silu"
+  %softplus = float.math.unary.f32 %input, "softplus"
+  %erf = float.math.unary.f32 %input, "gelu.erf"
+  %tanh = float.math.unary.f32 %input, "gelu.tanh"
+  %12 = constant.i32 3218725667 : reg<vm.value : f32>
+  %scaled = float.math.binary.f32 %input, %12, "gelu.logistic"
+  return %logistic, %silu, %softplus, %erf, %tanh, %scaled
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @wide_activations(%input: f64) -> (f64, f64, f64, f64, f64, f64) {
+  %logistic = scalar.logisticf %input : f64
+  %silu = scalar.siluf %input : f64
+  %softplus = scalar.softplusf %input : f64
+  %erf = scalar.geluf<erf> %input : f64
+  %tanh = scalar.geluf<tanh> %input : f64
+  %scaled = scalar.geluf<logistic> %input {scale = -0.125} : f64
+  func.return %logistic, %silu, %softplus, %erf, %tanh, %scaled : f64, f64, f64, f64, f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @wide_activations(%input: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %logistic = float.math.unary.f64 %input, "logistic"
+  %silu = float.math.unary.f64 %input, "silu"
+  %softplus = float.math.unary.f64 %input, "softplus"
+  %erf = float.math.unary.f64 %input, "gelu.erf"
+  %tanh = float.math.unary.f64 %input, "gelu.tanh"
+  %12 = constant.i64 -4629700416936869888 : reg<vm.value : f64>
+  %scaled = float.math.binary.f64 %input, %12, "gelu.logistic"
+  return %logistic, %silu, %softplus, %erf, %tanh, %scaled
+}
+
+// ====
+
+// Widening preserves the variant and authored scale. The scale is rounded to
+// F32 directly; rounding it to F16 first would change the activation.
+vm.target<core> @vm
+
+func.def target(@vm) @narrow_scaled_gelu(%input: vector<3xf16>) -> (vector<3xf16>) {
+  %result = vector.geluf<logistic> %input {scale = 1.702} : vector<3xf16>
+  func.return %result : vector<3xf16>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_scaled_gelu(%0: reg<vm.value : f16>, %1: reg<vm.value : f16>, %2: reg<vm.value : f16>) -> (reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>) asm {
+  %6 = conversion.float.extend %0, "f16.to.f32" : reg<vm.value : f32>
+  %7 = constant.i32 1071242019 : reg<vm.value : f32>
+  %8 = float.math.binary.f32 %6, %7, "gelu.logistic"
+  %9 = conversion.float.truncate %8, "f32.to.f16" : reg<vm.value : f16>
+  %10 = conversion.float.extend %1, "f16.to.f32" : reg<vm.value : f32>
+  %11 = float.math.binary.f32 %10, %7, "gelu.logistic"
+  %12 = conversion.float.truncate %11, "f32.to.f16" : reg<vm.value : f16>
+  %13 = conversion.float.extend %2, "f16.to.f32" : reg<vm.value : f32>
+  %14 = float.math.binary.f32 %13, %7, "gelu.logistic"
+  %15 = conversion.float.truncate %14, "f32.to.f16" : reg<vm.value : f16>
+  return %9, %12, %15
+}

@@ -17,6 +17,8 @@ package(
 iree_runtime_cc_library(
     name = "math",
     srcs = [
+        "activation.c",
+        "erfc_tail.h",
         "error_functions.c",
         "exponential.c",
         "exponential_reduction.h",
@@ -33,6 +35,7 @@ iree_runtime_cc_library(
         "trigonometry.c",
     ],
     hdrs = [
+        "activation.h",
         "error_functions.h",
         "exponential.h",
         "fma.h",
@@ -77,6 +80,7 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "math_test",
     srcs = [
+        "activation_test.cc",
         "elementary_test_util.h",
         "error_functions_test.cc",
         "exponential_test.cc",
