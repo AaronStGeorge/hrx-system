@@ -1268,6 +1268,9 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
     def iree_assert_dependency_boundary(self, **kwargs):
         pass
 
+    def iree_package_boundary(self, **kwargs):
+        pass
+
     def test_suite(self, **kwargs):
         pass
 
