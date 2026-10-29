@@ -500,6 +500,7 @@ loom_cc_library(
     deps = [
         ":execute",
         ":provider",
+        "//loom/src/loom/tools/loom-check/test/analysis:providers",
         "//loom/src/loom/tools/loom-check/test/config:providers",
         "//loom/src/loom/tools/loom-check/test/low:providers",
         "//runtime/src/iree/base",
