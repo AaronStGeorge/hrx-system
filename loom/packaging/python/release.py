@@ -11,16 +11,23 @@ import email.parser
 import hashlib
 import json
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
-from zipfile import BadZipFile, ZipFile
+from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
 _NUMBER = r"(?:0|[1-9][0-9]*)"
 _RELEASE = rf"{_NUMBER}\.{_NUMBER}\.{_NUMBER}(?:(?:a|b|rc){_NUMBER})?"
 _VERSION = re.compile(rf"{_RELEASE}(?:\.dev{_NUMBER})?")
 _CATALOG = re.compile(r"github:([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)@([^\s]+)")
 PROFILES = ("release", "tracy", "debug", "asan")
-PLATFORMS = ("manylinux_2_39_x86_64", "win_amd64")
+LINUX_X86_64_PLATFORM = "manylinux_2_39_x86_64"
+WINDOWS_X86_64_PLATFORM = "win_amd64"
+PLATFORMS = (LINUX_X86_64_PLATFORM, WINDOWS_X86_64_PLATFORM)
+SERVER_BINARIES = {
+    LINUX_X86_64_PLATFORM: "loom-serve",
+    WINDOWS_X86_64_PLATFORM: "loom-serve.exe",
+}
 
 
 @dataclass(frozen=True)
@@ -70,6 +77,12 @@ def read_identity(path: Path) -> Identity:
     return parse_identity(json.loads(path.read_text(encoding="utf-8")))
 
 
+def server_archive_name(identity: Identity, platform: str) -> str:
+    if platform not in SERVER_BINARIES:
+        raise ValueError(f"Unsupported standalone server platform: {platform}")
+    return f"loom-serve-{identity.version}-{platform}.zip"
+
+
 @dataclass(frozen=True)
 class Wheel:
     # Exact artifact inspected; publishers retain these bytes instead of rebuilding.
@@ -80,6 +93,19 @@ class Wheel:
     platform: str
     # SHA-256 of the complete wheel archive, including its metadata.
     digest: str
+
+
+@dataclass(frozen=True)
+class ServerArchive:
+    # Exact standalone archive inspected; publishers retain these bytes.
+    path: Path
+    # Audited Linux or native Windows platform tag.
+    platform: str
+    # SHA-256 of the complete ZIP archive.
+    digest: str
+
+
+ReleaseArtifact = Wheel | ServerArchive
 
 
 def inspect_wheel(path: Path, identity: Identity, description: str) -> Wheel:
@@ -163,16 +189,74 @@ def release_wheels(
     return wheels
 
 
-def checksum_document(wheels: list[Wheel]) -> str:
+def inspect_server_archive(path: Path, identity: Identity) -> ServerArchive:
+    filenames = {
+        server_archive_name(identity, platform): platform for platform in PLATFORMS
+    }
+    if path.name not in filenames:
+        raise ValueError(f"Unexpected standalone server release: {path.name}")
+    platform = filenames[path.name]
+    binary_name = SERVER_BINARIES[platform]
+    with ZipFile(path) as archive:
+        members = archive.infolist()
+        if len(members) != 1 or members[0].filename != binary_name:
+            raise ValueError(
+                f"Standalone server archive {path.name} must contain only {binary_name}"
+            )
+        member = members[0]
+        if (
+            member.date_time != (1980, 1, 1, 0, 0, 0)
+            or member.create_system != 3
+            or member.external_attr >> 16 != (stat.S_IFREG | 0o755)
+            or member.compress_type != ZIP_DEFLATED
+            or member.extra
+            or member.comment
+            or archive.comment
+        ):
+            raise ValueError(
+                f"Standalone server archive {path.name} has noncanonical ZIP metadata"
+            )
+        if not archive.read(member):
+            raise ValueError(f"Standalone server archive {path.name} is empty")
+    with path.open("rb") as stream:
+        digest = hashlib.file_digest(stream, "sha256").hexdigest()
+    return ServerArchive(path, platform, digest)
+
+
+def release_servers(directory: Path, identity: Identity) -> list[ServerArchive]:
+    servers = [
+        inspect_server_archive(path, identity)
+        for path in sorted(directory.glob("loom-serve-*.zip"))
+    ]
+    actual = {server.platform for server in servers}
+    missing = set(PLATFORMS) - actual
+    if missing:
+        raise ValueError(
+            "Release requires one standalone server per platform; "
+            f"missing={sorted(missing)}"
+        )
+    return servers
+
+
+def release_artifacts(
+    directory: Path, identity: Identity, description: str
+) -> list[ReleaseArtifact]:
+    return [
+        *release_wheels(directory, identity, description),
+        *release_servers(directory, identity),
+    ]
+
+
+def checksum_document(artifacts: list[ReleaseArtifact]) -> str:
     return "".join(
-        f"{wheel.digest}  {wheel.path.name}\n"
-        for wheel in sorted(wheels, key=lambda wheel: wheel.path.name)
+        f"{artifact.digest}  {artifact.path.name}\n"
+        for artifact in sorted(artifacts, key=lambda artifact: artifact.path.name)
     )
 
 
-def write_checksums(directory: Path, wheels: list[Wheel]) -> None:
+def write_checksums(directory: Path, artifacts: list[ReleaseArtifact]) -> None:
     path = directory / "SHA256SUMS"
-    document = checksum_document(wheels)
+    document = checksum_document(artifacts)
     if path.exists():
         if path.read_bytes() != document.encode("utf-8"):
             raise ValueError("SHA256SUMS differs from the verified release artifacts")
@@ -234,9 +318,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{wheel.digest}  {wheel.path.name}")
             else:
                 identity.check_tag(args.tag)
-                wheels = release_wheels(args.directory, identity, description)
-                write_checksums(args.directory, wheels)
-                print(checksum_document(wheels), end="")
+                artifacts = release_artifacts(args.directory, identity, description)
+                write_checksums(args.directory, artifacts)
+                print(checksum_document(artifacts), end="")
     except (ValueError, OSError, BadZipFile) as error:
         parser.exit(1, f"SDK release check failed: {error}\n")
     return 0

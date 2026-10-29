@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   identity:
-    name: Validate release identity
+    name: Validate / Release identity
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -32,7 +32,7 @@ jobs:
           python3 loom/packaging/python/release.py check-tag "$GITHUB_REF_NAME"
 
   build_release:
-    name: SDK / Release
+    name: Release
     needs: identity
     uses: ./.github/workflows/build_loom_sdk.yml
     with:
@@ -42,7 +42,7 @@ jobs:
       contents: read
 
   build_tracy:
-    name: SDK / Tracy
+    name: Tracy
     needs: identity
     uses: ./.github/workflows/build_loom_sdk.yml
     with:
@@ -52,7 +52,7 @@ jobs:
       contents: read
 
   build_debug:
-    name: SDK / Debug
+    name: Debug
     needs: identity
     uses: ./.github/workflows/build_loom_sdk.yml
     with:
@@ -62,7 +62,7 @@ jobs:
       contents: read
 
   build_asan:
-    name: SDK / ASAN
+    name: ASAN
     needs: identity
     uses: ./.github/workflows/build_loom_sdk.yml
     with:
@@ -72,7 +72,7 @@ jobs:
       contents: read
 
   bundle:
-    name: Verify complete artifact set
+    name: Bundle / Verify artifact set
     needs: [build_release, build_tracy, build_debug, build_asan]
     runs-on: ubuntu-24.04
     permissions:
@@ -87,7 +87,12 @@ jobs:
           pattern: loom-sdk-wheel-*
           merge-multiple: true
           path: release-assets
-      - name: Verify wheel identities and record exact bytes
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: loom-server-archive-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify release identities and record exact bytes
         run: |
           python3 loom/packaging/python/release.py bundle release-assets --tag="$GITHUB_REF_NAME"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -99,7 +104,7 @@ jobs:
           overwrite: true
 
   github:
-    name: Publish GitHub assets
+    name: Publish / GitHub assets
     needs: bundle
     runs-on: ubuntu-24.04
     permissions:
@@ -116,6 +121,11 @@ jobs:
           path: release-assets
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
+          pattern: loom-server-archive-*
+          merge-multiple: true
+          path: release-assets
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
           name: loom-sdk-checksums
           path: release-assets
       - name: Upload only absent matching release assets
@@ -125,7 +135,7 @@ jobs:
           python3 -m build_tools.ci.loom_release github --tag="$GITHUB_REF_NAME"
 
   pypi:
-    name: Publish normal wheels to PyPI
+    name: Publish / PyPI wheels
     needs: github
     runs-on: ubuntu-24.04
     environment:
@@ -142,6 +152,11 @@ jobs:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           pattern: loom-sdk-wheel-*
+          merge-multiple: true
+          path: release-assets
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: loom-server-archive-*
           merge-multiple: true
           path: release-assets
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0

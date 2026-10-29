@@ -27,10 +27,16 @@ from build_tools.ci import github_api
 from loom.packaging.python import release
 
 GITHUB_RELEASE_BODY_MAXIMUM = 125_000
+GITHUB_ASSET_PAGE_SIZE = 100
 
 
 def github_release_body(identity: release.Identity) -> str:
     """Builds the bounded product description used for GitHub releases."""
+    server_archives = "".join(
+        f"- `{release.server_archive_name(identity, platform)}`\n"
+        for platform in release.PLATFORMS
+    )
+    linux_archive = release.server_archive_name(identity, release.LINUX_X86_64_PLATFORM)
     body = (
         f"Loom SDK {identity.version} contains the compiler, runtime, command-line "
         "tools, and Python APIs for Linux x86-64 and Windows x86-64.\n\n"
@@ -39,8 +45,16 @@ def github_release_body(identity: release.Identity) -> str:
         "```console\n"
         f"python -m pip install hrx-loom=={identity.version}\n"
         "```\n\n"
+        "For use outside Python, download the standalone archive for your platform:\n\n"
+        f"{server_archives}\n"
+        "Each archive contains one `loom-serve` executable with the SDK target "
+        "providers built in:\n\n"
+        "```console\n"
+        f"unzip {linux_archive}\n"
+        "./loom-serve --version\n"
+        "```\n\n"
         "The attached wheels include Release, Tracy, Debug, and ASAN profiles. "
-        "`SHA256SUMS` records the exact qualified artifacts."
+        "`SHA256SUMS` records the exact qualified wheels and server archives."
     )
     if len(body) > GITHUB_RELEASE_BODY_MAXIMUM:
         raise ValueError(
@@ -51,13 +65,13 @@ def github_release_body(identity: release.Identity) -> str:
 
 def verified_release(
     directory: Path, identity: release.Identity, description: str, tag: str
-) -> list[release.Wheel]:
+) -> list[release.ReleaseArtifact]:
     identity.check_tag(tag)
-    wheels = release.release_wheels(directory, identity, description)
-    expected = release.checksum_document(wheels).encode("utf-8")
+    artifacts = release.release_artifacts(directory, identity, description)
+    expected = release.checksum_document(artifacts).encode("utf-8")
     if (directory / "SHA256SUMS").read_bytes() != expected:
         raise ValueError("SHA256SUMS differs from the verified release artifacts")
-    return wheels
+    return artifacts
 
 
 def _digest(path: Path) -> str:
@@ -73,7 +87,7 @@ def publish_github(
     repository: str,
     tag: str,
     identity: release.Identity,
-    wheels: list[release.Wheel],
+    artifacts: list[release.ReleaseArtifact],
     checksums: Path,
 ) -> None:
     """Uploads absent assets after every existing counterpart matches."""
@@ -92,7 +106,9 @@ def publish_github(
             raise
         existing = None
 
-    assets = {wheel.path.name: (wheel.path, wheel.digest) for wheel in wheels}
+    assets = {
+        artifact.path.name: (artifact.path, artifact.digest) for artifact in artifacts
+    }
     assets[checksums.name] = (checksums, _digest(checksums))
     prerelease = re.fullmatch(r"\d+\.\d+\.\d+", identity.version) is None
     if existing is None:
@@ -125,20 +141,27 @@ def publish_github(
     page = 1
     while True:
         records = github_api.get_json(
-            f"{api}/releases/{existing['id']}/assets?per_page=100&page={page}", token
+            f"{api}/releases/{existing['id']}/assets?"
+            f"per_page={GITHUB_ASSET_PAGE_SIZE}&page={page}",
+            token,
         )
         for record in records:
             name = record["name"]
             if name in names:
                 raise ValueError(f"Duplicate GitHub release asset: {name}")
             names.add(name)
-            if name.endswith(".whl") and name not in assets:
-                raise ValueError(f"Unexpected GitHub wheel: {name}; use a new version")
+            if (
+                name.endswith(".whl")
+                or (name.startswith("loom-serve-") and name.endswith(".zip"))
+            ) and name not in assets:
+                raise ValueError(
+                    f"Unexpected GitHub release artifact: {name}; use a new version"
+                )
             if name in assets and record["state"] != "uploaded":
                 raise ValueError(
                     f"Incomplete GitHub asset: {name}; review the failed upload"
                 )
-        if len(records) < 100:
+        if len(records) < GITHUB_ASSET_PAGE_SIZE:
             break
         page += 1
 
@@ -224,18 +247,21 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("pypi-stage requires --output")
     try:
         identity = release.read_identity(args.identity)
-        wheels = verified_release(
+        artifacts = verified_release(
             args.directory,
             identity,
             args.description.read_text(encoding="utf-8"),
             args.tag,
         )
+        wheels = [
+            artifact for artifact in artifacts if isinstance(artifact, release.Wheel)
+        ]
         if args.operation == "github":
             publish_github(
                 args.repository,
                 args.tag,
                 identity,
-                wheels,
+                artifacts,
                 args.directory / "SHA256SUMS",
             )
         elif args.operation == "pypi-stage":
@@ -248,7 +274,7 @@ def main(argv: list[str] | None = None) -> int:
                 ) as stream:
                     stream.write(result)
         else:
-            print(release.checksum_document(wheels), end="")
+            print(release.checksum_document(artifacts), end="")
     except (ValueError, OSError, BadZipFile, subprocess.CalledProcessError) as error:
         parser.exit(1, f"SDK publication failed: {error}\n")
     return 0

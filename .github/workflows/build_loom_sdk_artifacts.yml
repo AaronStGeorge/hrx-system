@@ -94,11 +94,30 @@ jobs:
           # installed-product test clears to verify the wheel's own linkage.
           /usr/bin/python3 -m build_tools.ci.loom_wheel test \
             --inputs=build/loom-sdk/linux --output=wheel-artifact
+      - name: Build and qualify standalone Linux server
+        if: inputs.profile == 'Release'
+        run: |
+          /usr/bin/python3 -m build_tools.ci.loom_server build \
+            --platform=manylinux_2_39_x86_64 --commit="$GITHUB_SHA" \
+            --output=build/loom-sdk/server/linux --llvm-bin="$LLVM_ROOT/bin" \
+            --bazel=bazel -- \
+            --cxxopt=--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/13 \
+            --linkopt=--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/13
+          /usr/bin/python3 -m build_tools.ci.loom_server qualify \
+            --platform=manylinux_2_39_x86_64 --commit="$GITHUB_SHA" \
+            --inputs=build/loom-sdk/server/linux --output=server-artifact
       - name: Cross-build Windows SDK
         run: |
           /usr/bin/python3 -m build_tools.ci.loom_wheel build \
             --profile="${PROFILE,,}" --output="build/loom-sdk/windows/$PROFILE" --bazel=bazel -- \
             --config=windows-x86_64
+      - name: Cross-build standalone Windows server
+        if: inputs.profile == 'Release'
+        run: |
+          /usr/bin/python3 -m build_tools.ci.loom_server build \
+            --platform=win_amd64 --commit="$GITHUB_SHA" \
+            --output=build/loom-sdk/server/windows --llvm-bin="$LLVM_ROOT/bin" \
+            --bazel=bazel
       - name: Measure release artifacts
         if: inputs.profile == 'Release'
         env:
@@ -140,11 +159,31 @@ jobs:
           compression-level: 0
           retention-days: 14
           overwrite: true
+      - name: Upload qualified standalone Linux server
+        if: inputs.profile == 'Release'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: loom-server-archive-linux-${{ inputs.profile }}
+          path: server-artifact/*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+          overwrite: true
       - name: Hand Windows artifacts to native qualification
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: loom-sdk-inputs-windows-${{ inputs.profile }}
           path: build/loom-sdk/windows/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+          overwrite: true
+      - name: Hand standalone Windows server to native qualification
+        if: inputs.profile == 'Release'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: loom-server-inputs-windows-${{ inputs.profile }}
+          path: build/loom-sdk/server/windows/
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

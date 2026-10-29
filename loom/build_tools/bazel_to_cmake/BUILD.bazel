@@ -16,10 +16,10 @@ py_test(
     srcs = ["config_test.py"],
     data = [
         "loom_corpus.py",
-        "//:loom/.bazel_to_cmake.cfg.py",
         "//build_tools/bazel:package_policy.bzl",
         "//build_tools/bazel:requirements.bzl",
         "//build_tools/vulkan/requirements:defs.bzl",
+        "//loom:.bazel_to_cmake.cfg.py",
         "//loom/build_tools/amdgpu:target_config.bzl",
         "//loom/build_tools/bazel:build_defs.bzl",
         "//loom/requirements:defs.bzl",

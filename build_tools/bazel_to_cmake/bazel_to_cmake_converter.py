@@ -1766,6 +1766,7 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         hdrs=None,
         textual_hdrs=None,
         srcs=None,
+        linkstamp=None,
         copts=None,
         cxx_standard=None,
         cxx_features=None,
@@ -1797,6 +1798,10 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         textual_hdrs_block = self._convert_srcs_block(
             textual_hdrs, block_name="TEXTUAL_HDRS"
         )
+        if linkstamp:
+            if isinstance(srcs, ConditionSelect):
+                raise ValueError("linkstamp cannot be combined with configurable srcs")
+            srcs = list(srcs or []) + [linkstamp]
         srcs_block, platform_srcs_block = self._convert_platform_select_srcs(name, srcs)
         copts_block, platform_copts_block = self._convert_platform_select_strings(
             name, "COPTS", copts, sort=False

@@ -23,6 +23,8 @@ _CommandInfo = provider("Expanded commands and enabled cross-toolchain capabilit
     "explicit_exports": "Automatic exports disabled.",
     # Fully expanded shared-library link arguments from the same configuration.
     "link_arguments": "Link arguments.",
+    # Fully expanded linkstamp compile arguments from the same configuration.
+    "linkstamp_arguments": "Linkstamp compile arguments.",
     # Whether the ELF-style ThinLTO indexing/backend graph is enabled.
     "split_lto": "ELF ThinLTO enabled.",
 })
@@ -40,6 +42,7 @@ def _command_impl(ctx):
         source_file = "probe.cc",
         output_file = "probe.obj",
         user_compile_flags = ctx.attr.copts,
+        variables_extension = {"includes": ctx.attr.includes} if ctx.attr.includes else {},
     )
     link_variables = cc_common.create_link_variables(
         cc_toolchain = compiler,
@@ -58,6 +61,11 @@ def _command_impl(ctx):
             action_name = ACTION_NAMES.cpp_link_dynamic_library,
             variables = link_variables,
         ),
+        linkstamp_arguments = cc_common.get_memory_inefficient_command_line(
+            feature_configuration = configuration,
+            action_name = ACTION_NAMES.linkstamp_compile,
+            variables = variables,
+        ),
         explicit_exports = cc_common.is_enabled(feature_configuration = configuration, feature_name = "no_windows_export_all_symbols"),
         split_lto = cc_common.is_enabled(feature_configuration = configuration, feature_name = "thin_lto"),
         compiler = cc_common.get_tool_for_action(feature_configuration = configuration, action_name = ACTION_NAMES.cpp_compile),
@@ -68,6 +76,7 @@ _command = rule(
     attrs = {
         "compiler": attr.label(default = ":compiler", providers = [cc_common.CcToolchainInfo]),
         "copts": attr.string_list(),
+        "includes": attr.string_list(),
         "profile": attr.string_list(),
     },
     fragments = ["cpp"],
@@ -100,6 +109,24 @@ def _test_sanitizer_impl(env, target):
     env.expect.that_collection(command.arguments).not_contains("/clang:-flto=thin")
     env.expect.that_collection(command.arguments).not_contains("/clang:-O3")
 
+def _test_forced_includes(name, **kwargs):
+    targets = {}
+    for kind, compiler in [("cross", ":compiler"), ("native", ":native_wrapped_compiler")]:
+        subject = name + "_" + kind
+        _command(
+            name = subject,
+            compiler = compiler,
+            includes = ["build-info.h"],
+        )
+        targets[kind] = subject
+    analysis_test(name = name, targets = targets, impl = _test_forced_includes_impl, **kwargs)
+
+def _test_forced_includes_impl(env, targets):
+    for kind in ["cross", "native"]:
+        command = getattr(targets, kind)[_CommandInfo]
+        env.expect.that_collection(command.arguments).contains("/FIbuild-info.h")
+        env.expect.that_collection(command.linkstamp_arguments).contains("/FIbuild-info.h")
+
 _CRT_CASES = {
     "dynamic_debug": (["dbg"], "/MDd", "msvcrtd"),
     "dynamic_debug_release_crt": (["dbg", "dynamic_link_msvcrt_release"], "/MD", "msvcrt"),
@@ -129,9 +156,10 @@ def _test_crt_commands_impl(env, targets):
             key = kind + "_" + case
             command = getattr(targets, key)[_CommandInfo]
             compile_flags = [flag for flag in command.arguments if flag in ["/MD", "/MDd", "/MT", "/MTd"]]
+            linkstamp_flags = [flag for flag in command.linkstamp_arguments if flag in ["/MD", "/MDd", "/MT", "/MTd"]]
             link_flags = [flag for flag in command.link_arguments if flag in ["/DEFAULTLIB:" + name + ".lib" for name in ["msvcrt", "msvcrtd", "libcmt", "libcmtd"]]]
-            if compile_flags != [compile_flag] or link_flags != ["/DEFAULTLIB:" + library + ".lib"]:
-                env.fail("%s: inconsistent CRT selection: compile=%s link=%s" % (key, compile_flags, link_flags))
+            if compile_flags != [compile_flag] or linkstamp_flags != [compile_flag] or link_flags != ["/DEFAULTLIB:" + library + ".lib"]:
+                env.fail("%s: inconsistent CRT selection: compile=%s linkstamp=%s link=%s" % (key, compile_flags, linkstamp_flags, link_flags))
             if "dbg" in profile:
                 for flag in ["/Od", "/Z7"]:
                     env.expect.that_collection(command.arguments).contains(flag)
@@ -189,7 +217,7 @@ def _test_native_linker_inputs_impl(env, target):
         env.expect.that_collection(link.argv).contains(builtins[0].path)
 
 def toolchain_config_test_suite(name):
-    tests = [_test_optimized, _test_sanitizer, _test_crt_commands, _test_native_configuration, _test_native_command, _test_native_compiler_mismatch]
+    tests = [_test_optimized, _test_sanitizer, _test_forced_includes, _test_crt_commands, _test_native_configuration, _test_native_command, _test_native_compiler_mismatch]
     if "@platforms//os:windows" in HOST_CONSTRAINTS:
         tests.append(_test_native_linker_inputs)
     test_suite(

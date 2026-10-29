@@ -5,7 +5,6 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_binary", "loom_cc_library", "loom_cc_test")
-load("//loom/build_tools/bazel:python.bzl", "loom_py_binary", "loom_py_library", "loom_py_test")
 
 package(
     default_visibility = ["//visibility:private"],
@@ -243,14 +242,6 @@ loom_cc_library(
     deps = ["//runtime/src/iree/testing:gtest"],
 )
 
-loom_py_library(
-    name = "chat",
-    testonly = True,
-    srcs = ["loom_serve_testing/chat.py"],
-    imports = ["."],
-    visibility = ["//visibility:public"],
-)
-
 loom_cc_library(
     name = "text_policy",
     testonly = True,
@@ -293,95 +284,4 @@ loom_cc_binary(
         "//runtime/src/iree/io:file_handle",
         "//runtime/src/iree/vm",
     ],
-)
-
-loom_py_test(
-    name = "chat_test",
-    size = "small",
-    srcs = ["loom_serve_testing/chat_test.py"],
-    deps = [":chat"],
-)
-
-loom_py_library(
-    name = "workload",
-    testonly = True,
-    srcs = ["loom_serve_testing/workload.py"],
-    imports = ["."],
-    visibility = ["//visibility:public"],
-    deps = [":chat"],
-)
-
-loom_py_binary(
-    name = "replay",
-    testonly = True,
-    srcs = ["loom_serve_testing/replay.py"],
-    main = "loom_serve_testing/replay.py",
-    deps = [":workload"],
-)
-
-loom_py_test(
-    name = "workload_test",
-    size = "small",
-    srcs = [
-        "loom_serve_testing/replay.py",
-        "loom_serve_testing/workload_test.py",
-    ],
-    main = "loom_serve_testing/workload_test.py",
-    deps = [":workload"],
-)
-
-loom_py_library(
-    name = "logs",
-    testonly = True,
-    srcs = ["loom_serve_testing/logs.py"],
-    imports = ["."],
-    visibility = ["//visibility:public"],
-)
-
-loom_py_test(
-    name = "logs_test",
-    size = "small",
-    srcs = ["loom_serve_testing/logs_test.py"],
-    deps = [":logs"],
-)
-
-loom_py_library(
-    name = "http",
-    testonly = True,
-    srcs = [
-        "loom_serve_testing/http_harness.py",
-        "loom_serve_testing/process.py",
-    ],
-    imports = ["."],
-    visibility = ["//visibility:public"],
-    deps = [":logs"],
-)
-
-loom_py_library(
-    name = "model_staging",
-    testonly = True,
-    srcs = ["loom_serve_testing/model_staging.py"],
-    imports = ["."],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//loom/py/loom/model:fetch_filesystem",
-        "//loom/py/loom/model:manifest",
-    ],
-)
-
-loom_py_test(
-    name = "http_test",
-    size = "small",
-    srcs = ["loom_serve_testing/http_test.py"],
-    deps = [
-        ":http",
-        ":logs",
-    ],
-)
-
-loom_py_test(
-    name = "process_test",
-    size = "small",
-    srcs = ["loom_serve_testing/process_test.py"],
-    deps = [":http"],
 )

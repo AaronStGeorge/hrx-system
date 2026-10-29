@@ -1,0 +1,111 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:python.bzl", "loom_py_binary", "loom_py_library", "loom_py_test")
+
+package(
+    default_visibility = ["//visibility:private"],
+    licenses = ["notice"],
+)
+
+loom_py_library(
+    name = "chat",
+    testonly = True,
+    srcs = ["chat.py"],
+    imports = [".."],
+    visibility = ["//visibility:public"],
+)
+
+loom_py_test(
+    name = "chat_test",
+    size = "small",
+    srcs = ["chat_test.py"],
+    deps = [":chat"],
+)
+
+loom_py_library(
+    name = "workload",
+    testonly = True,
+    srcs = ["workload.py"],
+    imports = [".."],
+    visibility = ["//visibility:public"],
+    deps = [":chat"],
+)
+
+loom_py_binary(
+    name = "replay",
+    testonly = True,
+    srcs = ["replay.py"],
+    main = "replay.py",
+    deps = [":workload"],
+)
+
+loom_py_test(
+    name = "workload_test",
+    size = "small",
+    srcs = [
+        "replay.py",
+        "workload_test.py",
+    ],
+    main = "workload_test.py",
+    deps = [":workload"],
+)
+
+loom_py_library(
+    name = "logs",
+    testonly = True,
+    srcs = ["logs.py"],
+    imports = [".."],
+    visibility = ["//visibility:public"],
+)
+
+loom_py_test(
+    name = "logs_test",
+    size = "small",
+    srcs = ["logs_test.py"],
+    deps = [":logs"],
+)
+
+loom_py_library(
+    name = "http",
+    testonly = True,
+    srcs = [
+        "http_harness.py",
+        "process.py",
+    ],
+    imports = [".."],
+    visibility = ["//visibility:public"],
+    deps = [":logs"],
+)
+
+loom_py_library(
+    name = "model_staging",
+    testonly = True,
+    srcs = ["model_staging.py"],
+    imports = [".."],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//loom/py/loom/model:fetch_filesystem",
+        "//loom/py/loom/model:manifest",
+    ],
+)
+
+loom_py_test(
+    name = "http_test",
+    size = "small",
+    srcs = ["http_test.py"],
+    deps = [
+        ":http",
+        ":logs",
+    ],
+)
+
+loom_py_test(
+    name = "process_test",
+    size = "small",
+    srcs = ["process_test.py"],
+    deps = [":http"],
+)

@@ -90,6 +90,7 @@ def _iree_cc_library_impl(
         system_includes,
         linkopts,
         linkstatic,
+        linkstamp,
         alwayslink,
         sanitizer_suppressions,
         **kwargs):
@@ -112,6 +113,7 @@ def _iree_cc_library_impl(
     )
     target_attrs = cc_attrs.merge_dicts(kwargs, target_attrs)
     cc_attrs.add_if_not_none(target_attrs, "alwayslink", alwayslink)
+    cc_attrs.add_if_not_none(target_attrs, "linkstamp", linkstamp)
     cc_library(
         name = name,
         visibility = visibility,
@@ -135,6 +137,10 @@ iree_cc_library = macro(
         {
             "alwayslink": attr.bool(
                 doc = "Whether to force this library into binaries that depend on it.",
+            ),
+            "linkstamp": attr.label(
+                allow_single_file = True,
+                doc = "Source compiled at each final binary or shared-library link.",
             ),
             "sanitizer_suppressions": attr.string_dict(
                 configurable = False,

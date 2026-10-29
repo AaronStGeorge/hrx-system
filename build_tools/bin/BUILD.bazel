@@ -1,0 +1,16 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# bazel-to-cmake: skip
+
+filegroup(
+    name = "devtools_wrappers",
+    srcs = glob([
+        "iree-bazel-*",
+        "iree-cmake-*",
+    ]),
+    visibility = ["//build_tools/devtools:__pkg__"],
+)

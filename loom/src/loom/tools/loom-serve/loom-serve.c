@@ -6,6 +6,7 @@
 
 #include "iree/base/tracing.h"
 #include "iree/tooling/device_util.h"
+#include "loom/tools/loom-serve/build_identity.h"
 #include "loom/tools/loom-serve/main.h"
 #include "loomc/target/configured.h"
 
@@ -65,6 +66,7 @@ int main(int argc, char** argv) {
   compiler_options = &configured_compiler_options;
 #endif  // LOOM_SERVE_CONFIG_HAVE_ANY_TARGET
   const loom_serve_configuration_t configuration = {
+      .build_identity = loom_serve_build_identity(),
       .compiler_options = compiler_options,
       .driver_registry = iree_hal_available_driver_registry(),
   };

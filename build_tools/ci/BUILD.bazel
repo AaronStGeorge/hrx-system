@@ -23,6 +23,29 @@ py_test(
 )
 
 py_library(
+    name = "loom_server",
+    srcs = ["loom_server.py"],
+    deps = ["//loom/packaging/python:release_lib"],
+)
+
+py_library(
+    name = "loom_server_qualify",
+    testonly = True,
+    srcs = ["loom_server_qualify.py"],
+    deps = ["//loom/src/loom/serve/testing/loom_serve_testing:http"],
+)
+
+py_test(
+    name = "loom_server_test",
+    size = "small",
+    srcs = ["loom_server_test.py"],
+    deps = [
+        ":loom_server",
+        ":loom_server_qualify",
+    ],
+)
+
+py_library(
     name = "github_api",
     srcs = ["github_api.py"],
 )
@@ -228,6 +251,7 @@ test_suite(
         ":github_api_test",
         ":loom_binary_size_test",
         ":loom_release_test",
+        ":loom_server_test",
         ":loom_wheel_test",
         ":rocm_environment_test",
         ":vulkan_environment_test",

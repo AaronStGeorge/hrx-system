@@ -6,6 +6,7 @@
       "run": {"tool": "loom-serve", "args": ["--help"]},
       "stdout": {
         "contains": [
+          "loom-serve development (commit unknown)",
           "loom-serve --device=URI",
           "--devices=devices.json",
           ".loombc",
@@ -21,6 +22,12 @@
         ]
       },
       "stderr": {"not_contains": ["\"event\":\"ready\""]}
+    },
+    {
+      "name": "unstamped development identity is explicit",
+      "run": {"tool": "loom-serve", "args": ["--version"]},
+      "stdout": {"contains": ["loom-serve development (commit unknown)"]},
+      "stderr": {"empty": true}
     },
     {
       "name": "explicit physical slab size overrides the serving default",

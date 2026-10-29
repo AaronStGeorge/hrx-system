@@ -9,7 +9,7 @@ load("@rules_cc//cc:cc_toolchain_config_lib.bzl", "action_config", "feature", "f
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 
 # buildifier: disable=bzl-visibility
-load("@rules_cc//cc/private/toolchain:windows_cc_toolchain_config.bzl", "all_compile_actions", "all_link_actions", _cc_toolchain_config = "cc_toolchain_config")
+load("@rules_cc//cc/private/toolchain:windows_cc_toolchain_config.bzl", "all_compile_actions", "all_link_actions", "preprocessor_compile_actions", _cc_toolchain_config = "cc_toolchain_config")
 load("@rules_cc//cc/toolchains:cc_toolchain_config_info.bzl", "CcToolchainConfigInfo")
 load(":native_runtime.bzl", "NativeWindowsRuntimeInfo")
 
@@ -22,7 +22,7 @@ def _crt_feature(linkage):
     library = "msvcrt" if dynamic else "libcmt"
     flag_sets = []
     for actions, release, debug in [
-        ([ACTION_NAMES.c_compile, ACTION_NAMES.cpp_compile], compile_flag, compile_flag + "d"),
+        ([ACTION_NAMES.c_compile, ACTION_NAMES.cpp_compile, ACTION_NAMES.linkstamp_compile], compile_flag, compile_flag + "d"),
         (all_link_actions, "/DEFAULTLIB:" + library + ".lib", "/DEFAULTLIB:" + library + "d.lib"),
     ]:
         flag_sets.extend([
@@ -62,6 +62,21 @@ def _configuration_impl(ctx):
             flag_sets = [flag_set(
                 actions = all_compile_actions,
                 flag_groups = [flag_group(flags = ["/clang:-O3"] if base.compiler == "clang-cl" else ["/O2"])],
+            )],
+        ),
+        # Linkstamp compilation supplies translated build-info headers through
+        # the standard `includes` variable. rules_cc's Windows configuration
+        # declares those files as inputs but otherwise leaves them unused.
+        feature(
+            name = "includes",
+            enabled = True,
+            flag_sets = [flag_set(
+                actions = preprocessor_compile_actions,
+                flag_groups = [flag_group(
+                    flags = ["/FI%{includes}"],
+                    iterate_over = "includes",
+                    expand_if_available = "includes",
+                )],
             )],
         ),
     ]

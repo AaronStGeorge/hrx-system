@@ -306,9 +306,9 @@ loom_py_test(
     }),
     deps = [
         "//loom/src/loom/serve/server:catalog_test_util",
-        "//loom/src/loom/serve/testing:http",
-        "//loom/src/loom/serve/testing:logs",
-        "//loom/src/loom/serve/testing:workload",
+        "//loom/src/loom/serve/testing/loom_serve_testing:http",
+        "//loom/src/loom/serve/testing/loom_serve_testing:logs",
+        "//loom/src/loom/serve/testing/loom_serve_testing:workload",
     ],
 )
 
@@ -341,9 +341,9 @@ loom_py_test(
     }),
     deps = [
         "//loom/src/loom/serve/server:catalog_test_util",
-        "//loom/src/loom/serve/testing:http",
-        "//loom/src/loom/serve/testing:logs",
-        "//loom/src/loom/serve/testing:workload",
+        "//loom/src/loom/serve/testing/loom_serve_testing:http",
+        "//loom/src/loom/serve/testing/loom_serve_testing:logs",
+        "//loom/src/loom/serve/testing/loom_serve_testing:workload",
     ],
 )
 
@@ -382,9 +382,9 @@ loom_py_test(
     }),
     deps = [
         "//loom/src/loom/serve/server:catalog_test_util",
-        "//loom/src/loom/serve/testing:http",
-        "//loom/src/loom/serve/testing:logs",
-        "//loom/src/loom/serve/testing:workload",
+        "//loom/src/loom/serve/testing/loom_serve_testing:http",
+        "//loom/src/loom/serve/testing/loom_serve_testing:logs",
+        "//loom/src/loom/serve/testing/loom_serve_testing:workload",
     ],
 )
 
@@ -410,7 +410,7 @@ loom_py_test(
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
-    deps = ["//loom/src/loom/serve/testing:http"],
+    deps = ["//loom/src/loom/serve/testing/loom_serve_testing:http"],
 )
 
 loom_py_test(
@@ -441,7 +441,7 @@ loom_py_test(
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
-    deps = ["//loom/src/loom/serve/testing:http"],
+    deps = ["//loom/src/loom/serve/testing/loom_serve_testing:http"],
 )
 
 loom_cc_test(

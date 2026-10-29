@@ -29,7 +29,7 @@ jobs:
       profile: ${{ inputs.profile }}
 
   windows:
-    name: Windows x86-64 / Installed SDK
+    name: Qualify / Windows x86-64
     needs: build
     runs-on: windows-2025
     timeout-minutes: 10
@@ -44,6 +44,11 @@ jobs:
         with:
           name: loom-sdk-inputs-windows-${{ inputs.profile }}
           path: wheel-inputs
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        if: inputs.profile == 'Release'
+        with:
+          name: loom-server-inputs-windows-${{ inputs.profile }}
+          path: server-inputs
       - name: Qualify the cross-built wheel
         shell: pwsh
         env:
@@ -52,11 +57,29 @@ jobs:
           python -m build_tools.ci.loom_wheel test `
             --inputs "wheel-inputs/$env:PROFILE" --output wheel-artifact
           exit $LASTEXITCODE
+      - name: Qualify the cross-built standalone server
+        if: inputs.profile == 'Release'
+        shell: pwsh
+        run: |
+          python -m build_tools.ci.loom_server qualify `
+            --platform=win_amd64 --commit="$env:GITHUB_SHA" `
+            --inputs=server-inputs --output=server-artifact
+          exit $LASTEXITCODE
       - name: Upload qualified Windows wheel
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: loom-sdk-wheel-windows-${{ inputs.profile }}
           path: wheel-artifact/*.whl
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+          overwrite: true
+      - name: Upload qualified standalone Windows server
+        if: inputs.profile == 'Release'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: loom-server-archive-windows-${{ inputs.profile }}
+          path: server-artifact/*.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
