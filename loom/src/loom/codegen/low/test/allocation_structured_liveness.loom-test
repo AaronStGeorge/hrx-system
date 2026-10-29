@@ -298,7 +298,7 @@ classes:
 
 // ====
 // The lower bound is read only on entry, so its state alias remains legal.
-// RUN: emit low-allocation @for_entry_releases_lower_bound fixed=%lo:target_id:0:1 fixed=%state:target_id:0:1
+// RUN: emit low-allocation-query @for_entry_releases_lower_bound spill-count values=%lo,%state,%iv,%result
 
 test.target<low_core> @target
 
@@ -311,16 +311,11 @@ low.func.def target<test.low.core>(@target) @for_entry_releases_lower_bound(%lo:
 }
 
 // ----
-low-allocation @for_entry_releases_lower_bound
-target: target
-descriptor_set: test.low.core
-mode: virtual
-assignments: 7
-remarks: 0
 spills: 0
-copies: coalesced=0 materialized=0
-classes:
-  test.i32: assignments=7 units=7 target_ids=4 physical=0 spill_slots=0 unassigned=0
+value %lo: test.i32 -> target_id[0:1]
+value %state: test.i32 -> target_id[0:1]
+value %iv: test.i32 -> target_id[3:1]
+value %result: test.i32 -> target_id[0:1]
 
 // ====
 // The while backedge cannot overwrite the initial value captured by its body.
