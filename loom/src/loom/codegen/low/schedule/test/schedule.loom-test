@@ -1,3 +1,68 @@
+// Resource occupancy constrains every scheduling policy, including source order.
+// RUN: emit low-schedule-query @serial_resource_capacity strategy=source issue=0,1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @serial_resource_capacity(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %first = test.resource.serial.i32 %lhs, %rhs
+  %second = test.resource.serial.i32 %lhs, %rhs
+  return %first, %second
+}
+
+// ----
+node 0 issue-cycle: 0
+node 1 issue-cycle: 4
+
+// ====
+
+// RUN: emit low-schedule-query @serial_resource_capacity strategy=pressure issue=0,1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @serial_resource_capacity(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %first = test.resource.serial.i32 %lhs, %rhs
+  %second = test.resource.serial.i32 %lhs, %rhs
+  return %first, %second
+}
+
+// ----
+node 0 issue-cycle: 0
+node 1 issue-cycle: 4
+
+// ====
+
+// RUN: emit low-schedule-query @serial_resource_capacity strategy=latency-hiding issue=0,1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @serial_resource_capacity(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %first = test.resource.serial.i32 %lhs, %rhs
+  %second = test.resource.serial.i32 %lhs, %rhs
+  return %first, %second
+}
+
+// ----
+node 0 issue-cycle: 0
+node 1 issue-cycle: 4
+
+// ====
+
+// RUN: emit low-schedule-query @serial_resource_capacity strategy=resource-stall issue=0,1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @serial_resource_capacity(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
+  %first = test.resource.serial.i32 %lhs, %rhs
+  %second = test.resource.serial.i32 %lhs, %rhs
+  return %first, %second
+}
+
+// ----
+node 0 issue-cycle: 0
+node 1 issue-cycle: 4
+
+// ====
+
 // RUN: emit low-schedule-query @event_schedule_class_fallback kind=ssa strategy=resource-stall timing=0:1
 
 test.target<low_core> @test_target

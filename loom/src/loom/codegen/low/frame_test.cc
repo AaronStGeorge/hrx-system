@@ -628,31 +628,6 @@ TEST_F(LowEmissionFrameTest, StorageLeaseFrameRetainsValueProducers) {
       static_cast<uint32_t>(load_node - frame.schedule.nodes));
 }
 
-TEST_F(LowEmissionFrameTest, EveryStrategyEnforcesIssueResourceCapacity) {
-  constexpr loom_low_schedule_strategy_t kStrategies[] = {
-      LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
-      LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE,
-      LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING,
-      LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
-  };
-  for (const loom_low_schedule_strategy_t strategy : kStrategies) {
-    ModulePtr module = ParseModule(R"(
-low.func.def target<test.low.core> @resource_capacity(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
-  %first = test.resource.serial.i32 %lhs, %rhs
-  %second = test.resource.serial.i32 %lhs, %rhs
-  return %first, %second
-}
-)");
-    loom_low_emission_frame_t frame = {};
-    IREE_ASSERT_OK(BuildFrame(module.get(), {}, &frame, strategy));
-    // Emission consumers retain the frame after scheduler scratch is freed.
-    iree_arena_block_pool_trim(&block_pool_);
-    ASSERT_GE(frame.schedule.node_count, 2u);
-    EXPECT_EQ(frame.schedule.nodes[0].issue_cycle, 0u);
-    EXPECT_EQ(frame.schedule.nodes[1].issue_cycle, 4u);
-  }
-}
-
 TEST_F(LowEmissionFrameTest, MaterializationPreservesReadyDescriptorPair) {
   constexpr loom_low_schedule_strategy_t kScheduleStrategies[] = {
       LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
