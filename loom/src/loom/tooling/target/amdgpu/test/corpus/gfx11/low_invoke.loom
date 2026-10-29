@@ -1,6 +1,7 @@
 // A target-Low schedule fragment invoked from an otherwise High kernel. The
 // helper is authored once against the gfx11 family contract; AMDGPU policy
 // flattens its Low call before scheduling and register allocation.
+
 amdgpu.target<gfx11-generic> @low_invoke_target
 
 low.func.def schedule(locked) target<amdgpu.gfx11.generic.core>(@low_invoke_target) @low_invoke_pack_pair(%even: reg<amdgpu.vgpr x2>, %odd: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x4>) asm {

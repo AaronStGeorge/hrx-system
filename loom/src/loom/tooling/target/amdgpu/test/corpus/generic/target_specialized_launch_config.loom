@@ -4,6 +4,7 @@
 // fallback uses eight. Every path must cover the same 128-item workload. The
 // kernel remains targetless so the same source executes on every
 // Loom-supported AMDGPU device.
+
 amdgpu.target<gfx1151> @gfx1151
 
 template.decl @test.items_per_workgroup() -> (index)

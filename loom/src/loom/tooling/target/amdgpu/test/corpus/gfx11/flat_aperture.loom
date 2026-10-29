@@ -2,6 +2,7 @@
 // a 32-bit move from the same inline source cannot construct a flat LDS pointer.
 // Each lane roundtrips its own LDS word through a generic flat pointer. The
 // compiler supplies completion for both possible memory paths.
+
 amdgpu.target<gfx11-generic> @flat_aperture_target
 
 low.func.def schedule(locked) target<amdgpu.gfx11.generic.core>(@flat_aperture_target) @flat_aperture_roundtrip(%local_base: reg<amdgpu.vgpr>, %byte_offset: reg<amdgpu.vgpr>, %value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm {

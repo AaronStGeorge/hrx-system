@@ -1,5 +1,6 @@
 // A WG64/wave64 workgroup needs LDS ordering but has no second wave with
 // which to rendezvous.
+
 amdgpu.target<gfx11-generic> @wave64_target {subgroup_size = 64}
 
 kernel.def target(@wave64_target) @single_subgroup_exchange() {

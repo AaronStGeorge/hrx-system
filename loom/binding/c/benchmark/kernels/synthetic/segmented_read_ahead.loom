@@ -1,6 +1,7 @@
 // The benchmark expands the outer loop during setup. Each segment then owns a
 // live runtime loop, so loop_count scales compiler input rather than GPU work
 // alone. These config values are benchmark sweep controls.
+
 config.decl @benchmark.loop_count : %value: index where [range(%value, 1, 512)]
 
 config.decl @benchmark.pipeline_depth : %value: index where [range(%value, 1, 4)]

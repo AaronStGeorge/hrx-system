@@ -1,5 +1,6 @@
 // Deliberately mismatched products exercise the benchmark's correctness gate.
 // This is runner test data, not a numerical correctness corpus.
+
 kernel.def @write_wrong() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index

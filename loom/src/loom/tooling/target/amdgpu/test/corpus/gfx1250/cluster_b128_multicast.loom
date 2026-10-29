@@ -7,6 +7,7 @@
 // transfer to both recipient-owned LDS allocations. The input is an iota, so
 // every lane and every word is nonuniform. Each recipient validates its own
 // LDS contents independently and writes one boolean result per lane.
+
 amdgpu.target<gfx1250> @gfx1250
 
 kernel.def target(@gfx1250) @cluster_b128_multicast() {

@@ -1,5 +1,6 @@
 // Every physical wrap field is exercised at its largest nonzero value.
 // Separate gather and scatter slots keep each transfer's input independent.
+
 aie2p.target<array> @npu
 
 pipeline.def<kernel> @local_wrap_dimension0(%row: index, %wrap: index) run(%input_arg: buffer, %gather_arg: buffer, %scatter_arg: buffer) {

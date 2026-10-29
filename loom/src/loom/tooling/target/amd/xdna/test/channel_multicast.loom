@@ -1,4 +1,5 @@
 // Independent receiver credits survive skew across eight columns and two rows.
+
 aie2p.target<array> @array_target
 
 func.def inline @make_ring(%memory: pool, %capacity: index) -> (channel<tile<16xi32>>) {

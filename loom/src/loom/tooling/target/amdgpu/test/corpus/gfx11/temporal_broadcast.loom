@@ -1,5 +1,6 @@
 // A broadcast is uniform within one dynamic execution. Lanes leaving on
 // different iterations retain different results: here each lane retains its ID.
+
 amdgpu.target<gfx11-generic> @temporal_broadcast_gfx11_wave64 {subgroup_size = 64}
 
 kernel.def target(@temporal_broadcast_gfx11_wave64) @temporal_broadcast() {

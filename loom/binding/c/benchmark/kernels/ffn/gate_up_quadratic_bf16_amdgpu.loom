@@ -1,6 +1,7 @@
 // One BF16 gate/up output with F32 dot accumulation and quadratic gating.
 // Gate and up are rounded to BF16 before gate * (0.5 + 0.25 * gate) * up;
 // every epilogue operation rounds to BF16. The F32 output carries that value.
+
 config.decl @ffn_gate_up.input_size : %value: index where [range(%value, 512, 4096), multiple_of(%value, 32)]
 
 func.def inline @bf16_product(%lhs: vector<16xbf16>, %rhs: vector<16xbf16>) -> (vector<16xbf16>) {

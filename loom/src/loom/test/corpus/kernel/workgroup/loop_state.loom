@@ -5,6 +5,7 @@
 // fixed outer bounds let the pipeline retain its producer and consumer parts.
 // The subgroup reduction uses 16-lane clusters so its oracle is independent
 // of the target subgroup width. The workgroup reduction communicates across waves.
+
 template.decl @collective_rows(%input: buffer, %cluster_output: buffer, %group_output: buffer, %limit_input: index, %repeat_input: index, %end: index, %depth: index, %factor: index)
 
 template.def<@collective_rows> @collective_rows_impl(%input: buffer, %cluster_output: buffer, %group_output: buffer, %limit_input: index, %repeat_input: index, %end: index, %depth: index, %factor: index) {

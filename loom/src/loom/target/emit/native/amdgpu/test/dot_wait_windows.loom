@@ -1,5 +1,6 @@
 // Locked native sequences exercise opcode-dependent DOT forwarding and reads
 // across empty block edges without scheduling away their dependency windows.
+
 amdgpu.target<gfx90a> @target
 
 low.func.def schedule(locked) target<amdgpu.cdna2.core>(@target) @integer_windows(%lane: reg<amdgpu.vgpr>, %output: reg<amdgpu.sgpr x2>) asm {

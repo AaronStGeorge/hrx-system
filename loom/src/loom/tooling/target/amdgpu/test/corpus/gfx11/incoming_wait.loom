@@ -1,5 +1,6 @@
 // The newer load crosses the older result's first use on the issue path.
 // The skip path still completes the old result without issuing the new load.
+
 amdgpu.target<gfx11-generic> @incoming_wait_target
 
 low.func.def schedule(locked) target<amdgpu.gfx11.generic.core>(@incoming_wait_target) @incoming_wait_overlap(%address: reg<amdgpu.vgpr>, %old_base: reg<amdgpu.sgpr x2>, %future_base: reg<amdgpu.sgpr x2>, %flag: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) asm {

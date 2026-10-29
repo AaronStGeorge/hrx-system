@@ -1,6 +1,7 @@
 // A long single-block loop exercises native LC/LS/LE execution, including the
 // induction and loop-carried copies feeding the next iteration and the final
 // loop-carried value consumed after fallthrough.
+
 aie2p.target<array> @array_target
 
 pipeline.def<kernel> public retain target(@array_target) @hardware_loop_i32() run(%lhs: buffer, %rhs: buffer, %output: buffer) {

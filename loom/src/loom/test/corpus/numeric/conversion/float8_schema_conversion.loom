@@ -1,6 +1,7 @@
 // The target path uses schema-directed vector conversions. The scalar oracle
 // reconstructs each format from its bit layout and selects the nearest finite
 // value independently of the target lowering.
+
 func.def inline @float8_decode_f32(%payload: i32, %mantissa_bits: i32, %exponent_bias: i32, %special_policy: i32) -> (f32) {
   %c0 = scalar.constant 0 : i32
   %c1 = scalar.constant 1 : i32

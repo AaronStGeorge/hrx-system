@@ -3,6 +3,7 @@
 // stored element type; the kernel keeps that as ordinary Loom IR by narrowing
 // the 64-bit pattern at the use site instead of baking the ABI detail into a
 // target-specific source generator.
+
 config.decl @memset_i8.element_capacity : %value: index where [range(%value, 1, 4294967295)]
 
 kernel.def @memset_i8(%element_length: index) {

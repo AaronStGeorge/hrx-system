@@ -1,5 +1,6 @@
 // Scalar loads observe vector publication only after scalar invalidation has
 // completed. The first load primes the cache and supplies the value to publish.
+
 amdgpu.target<gfx11-generic> @cache_completion_target
 
 low.func.def schedule(locked) target<amdgpu.gfx11.generic.core>(@cache_completion_target) @cache_completion_reload(%base: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm {

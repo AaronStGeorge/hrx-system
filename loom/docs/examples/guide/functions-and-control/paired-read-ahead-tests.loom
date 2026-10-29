@@ -2,6 +2,7 @@
 // left: N * (10 + 16 * L + 256 * (N - 1));
 // right: N * (-5 + 8 * L + 128 * (N - 1)).
 // Distinct inputs, counts, and output sentinels expose crossed instance state.
+
 kernel.decl @sum_paired_rows() launch(%left_count: index, %right_count: index, %left_input: buffer, %right_input: buffer, %left_output: buffer, %right_output: buffer)
 
 check.case public @paired_rows_0_0 {

@@ -1,6 +1,7 @@
 // A complete two-record batch stays resident across three ordered replays.
 // Each helper retains one source obligation while copying another; nested
 // fanouts and loop-carried reads must preserve the same admitted records.
+
 aie2p.target<array> @array_target
 
 func.def inline @ingress(%input: buffer, %incoming: channel<tile<16xi32>>) {

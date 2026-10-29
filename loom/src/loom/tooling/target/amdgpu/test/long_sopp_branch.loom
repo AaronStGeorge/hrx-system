@@ -1,6 +1,7 @@
 // Exercises native SOPP branch relaxation after access-sanitizer expansion.
 // The outer loop remains rolled while the inner reduction is statically
 // expanded into independently observable global loads.
+
 amdgpu.target<gfx11-generic> @long_sopp_branch_target {subgroup_size = 32}
 
 kernel.def target(@long_sopp_branch_target) @long_sopp_branch() {

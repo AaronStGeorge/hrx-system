@@ -4,6 +4,7 @@
 // 64 KV rows. The eighth subgroup stages the separate BF16 RoPE rows. All
 // eight subgroups then consume the same 64x512 BF16 LDS tile through MFMA.
 // This bounded slice publishes exact QK scores; it is not a benchmark.
+
 amdgpu.target<gfx950> @v4_gfx950
 
 kernel.def @pack_v4_latent_kv_tile() {

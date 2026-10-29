@@ -1,4 +1,5 @@
 // Scales one runtime-table U4 lookup across packed byte result registers.
+
 config.def @benchmark.lookup_lane_count = 16 : index
 
 kernel.def @packed_table_lookup_u4() {

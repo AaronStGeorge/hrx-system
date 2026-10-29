@@ -1,5 +1,6 @@
 // Wave64 masks are replaced with wide scalar offsets across a block boundary.
 // Check both the lane selection and the high word of the address arithmetic.
+
 amdgpu.target<gfx11-generic> @target {subgroup_size = 64}
 
 low.func.def schedule(locked) target<amdgpu.gfx11.generic.core>(@target) @reuse(%value: reg<amdgpu.vgpr>, %origin: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) asm {

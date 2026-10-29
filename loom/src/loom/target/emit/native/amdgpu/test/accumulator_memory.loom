@@ -1,5 +1,6 @@
 // Accumulator payloads cross global, private and descriptor-backed memory without
 // staging through VGPRs. Distinct lane data detects indexing or bank aliasing.
+
 amdgpu.target<gfx90a> @target
 
 low.func.def schedule(locked) target<amdgpu.cdna2.core>(@target) @memory_roundtrip(%lane: reg<amdgpu.vgpr>, %input: reg<amdgpu.sgpr x2>, %output: reg<amdgpu.sgpr x2>) asm {

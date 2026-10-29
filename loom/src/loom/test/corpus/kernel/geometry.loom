@@ -1,6 +1,7 @@
 // Query-derived coordinates must cover every invocation once. The subject uses
 // workgroup and subgroup coordinates; the oracle doubles the input serially.
 // Providers share one mathematical contract and select on normalized facts.
+
 template.decl @geometry.double(%value: i32) -> (i32)
 
 template.def<@geometry.double> requires [#target.subgroup.size<32>] priority(1) @geometry.double32(%value: i32) -> (i32) {

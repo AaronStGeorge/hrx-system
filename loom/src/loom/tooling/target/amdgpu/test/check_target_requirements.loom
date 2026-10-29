@@ -1,6 +1,7 @@
 // Each supported physical device belongs to exactly one of these target
 // compatibility classes. Exactly one case must execute; the others must skip.
 // The gfx11 kernel also proves admission precedes incompatible compilation.
+
 amdgpu.target<gfx11-generic> @gfx11_target
 
 kernel.def target(@gfx11_target) @gfx11_store() {

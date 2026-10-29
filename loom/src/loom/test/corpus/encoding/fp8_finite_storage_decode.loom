@@ -4,6 +4,7 @@
 // encode that contract in the physical storage schema. The element type still
 // names the logical payload type, while the storage schema tells the compiler
 // that loads from the view cannot produce NaN or infinity payloads.
+
 config.decl @finite_storage_decode.row_capacity : %value: index where [range(%value, 1, 4294967295)]
 
 config.decl @finite_storage_decode.input_capacity : %value: index where [range(%value, 16, 65536), multiple_of(%value, 16)]

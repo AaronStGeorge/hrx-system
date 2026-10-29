@@ -2,6 +2,7 @@
 // first-active exchange. Packed tails cross scalar memory so padding is not
 // part of the observable payload. Each 32-lane cluster reuses one input block,
 // allowing the same exact native oracle for wave32 and wave64.
+
 kernel.def @subgroup_transport_i64_1() {
   %unit = index.constant 1 : index
   %items = index.constant 96 : index

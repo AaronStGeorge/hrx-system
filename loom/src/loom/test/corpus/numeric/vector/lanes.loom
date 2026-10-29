@@ -1,6 +1,7 @@
 // Lane movement preserves every payload bit, even when the source type is a
 // floating format. Both choices use runtime values; the oracle uses scalar
 // integer addressing instead of vector construction or permutation.
+
 func.def @byte_lane_values(%ordinal: index, %input: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %begin = index.constant 0 : index

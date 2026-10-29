@@ -1,5 +1,6 @@
 // Uniform and packed payloads retain their logical signedness at every width.
 // The oracle derives extensions from masks and shifts instead of extending.
+
 kernel.def @integer_conversion_shapes() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index

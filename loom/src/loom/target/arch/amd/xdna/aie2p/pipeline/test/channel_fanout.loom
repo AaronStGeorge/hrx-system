@@ -1,6 +1,7 @@
 // One multicast receiver is a compute tile; the other forwards through SRAM.
 // Configured record and ring sizes cross DMA task and descriptor boundaries.
 // Every case changes all inputs and output buffers on invocation replay.
+
 aie2p.target<array> @array_target
 
 pipeline.def<kernel> @finite_fanout(%record_count: index, %capacity: index) run(%input_arg: buffer, %left_output_arg: buffer, %right_output_arg: buffer) {

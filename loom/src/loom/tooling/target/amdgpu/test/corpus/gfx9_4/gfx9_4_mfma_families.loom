@@ -3,6 +3,7 @@
 // Dense floating-point and integer rows multiply constant one matrices. Sparse
 // rows use two stored nonzero values in every group of four, so their expected
 // results distinguish the compact sparse payload from a dense interpretation.
+
 amdgpu.target<gfx9-4-generic> @gfx9_4_generic
 
 kernel.def target(@gfx9_4_generic) @gfx9_4_mfma_families() {

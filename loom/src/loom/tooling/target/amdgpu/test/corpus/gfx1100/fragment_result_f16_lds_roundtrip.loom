@@ -3,6 +3,7 @@
 //
 // The fragment carries lane-dependent values so a row-block permutation cannot
 // hide behind uniform data.
+
 amdgpu.target<gfx1100> @fragment_result_lds_gfx1100_wave64 {subgroup_size = 64}
 
 kernel.def target(@fragment_result_lds_gfx1100_wave64) @fragment_result_f16_lds_roundtrip() {

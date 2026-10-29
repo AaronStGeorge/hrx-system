@@ -1,6 +1,7 @@
 // Every encoding is loaded after compilation so target legalization cannot
 // specialize the sign operations to constants. The integer oracle is exact:
 // all non-sign fields, including every NaN payload, must remain unchanged.
+
 func.def @float8_sign_bits(%input: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %begin = index.constant 0 : index

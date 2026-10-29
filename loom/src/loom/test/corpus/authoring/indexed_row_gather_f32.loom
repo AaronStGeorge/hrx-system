@@ -4,6 +4,7 @@
 // keeps row and column coordinates in `index`, lets kernel ABI buffers publish
 // their global memory-space facts, states only aliasing explicitly, and guards
 // an i32 row id before casting it to an index.
+
 config.decl @indexed_row_gather_f32.row_capacity : %value: index where [range(%value, 1, 65535)]
 
 config.decl @indexed_row_gather_f32.column_capacity : %value: index where [range(%value, 1, 65535)]

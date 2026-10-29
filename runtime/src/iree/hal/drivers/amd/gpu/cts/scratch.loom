@@ -6,6 +6,7 @@
 
 // Dynamic reads after a complete initialization retain real per-workitem
 // private storage. Both entry points use the same permutation and oracle.
+
 func.def inline @roundtrip(%scratch: buffer, %output: buffer, %count: index, %seed: i32, %rotation: i32) {
   %group = kernel.workgroup.id<x> : index
   %lane = kernel.workitem.id<x> : index

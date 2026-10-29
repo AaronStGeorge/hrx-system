@@ -1,6 +1,7 @@
 // Native SIMD functions use the platform pointer ABI. Vector values stay
 // inside the function while loads, arithmetic, and stores use descriptor-owned
 // VEX facts.
+
 global.rodata.def @addends = align(16) bytes("01000000fbffffff6400000000000080")
 
 global.rodata.def @reverse_lanes = align(32) bytes("0f0e0d0c0b0a090807060504030201000f0e0d0c0b0a09080706050403020100")

@@ -1,5 +1,6 @@
 // A loop with a lane-varying bound must preserve each lane's final carried
 // value while inactive lanes wait for the remaining lanes to finish.
+
 amdgpu.target<gfx11-generic> @divergent_loop_carry_gfx11_wave64 {subgroup_size = 64}
 
 kernel.def target(@divergent_loop_carry_gfx11_wave64) @divergent_loop_carry() {

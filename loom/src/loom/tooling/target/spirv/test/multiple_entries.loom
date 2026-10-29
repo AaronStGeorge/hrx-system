@@ -1,5 +1,6 @@
 // One module contains three distinct dispatch signatures, a private helper,
 // and checks. The artifact test loads all entries together.
+
 spirv.target<vulkan1_3> @target {abi = hal_kernel}
 
 func.def device inline @twice(%value: i32) -> (i32) {

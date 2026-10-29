@@ -1,5 +1,6 @@
 // Immutable external sequences feed credited SRAM and compute rings. Native
 // task boundaries and final tails preserve record order across replay.
+
 aie2p.target<array> @array_target
 
 pipeline.def<kernel> @finite_ingress(%record_count: index, %capacity: index, %record_stride: index) run(%input_arg: buffer, %output_arg: buffer) {

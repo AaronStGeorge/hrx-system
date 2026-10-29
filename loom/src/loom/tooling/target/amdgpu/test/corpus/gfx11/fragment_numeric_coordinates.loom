@@ -1,6 +1,7 @@
 // Raw lane/element payloads have canonical matrix coordinates. Converting the
 // payload or storing it through a transposed layout must preserve that ownership,
 // including across a BF16 workgroup-memory round trip.
+
 amdgpu.target<gfx11-generic> @fragment_numeric_coordinates_gfx11 {subgroup_size = 32}
 
 kernel.def target(@fragment_numeric_coordinates_gfx11) @fragment_numeric_coordinates() {
