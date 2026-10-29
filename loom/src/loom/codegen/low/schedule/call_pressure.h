@@ -9,6 +9,7 @@
 #ifndef LOOM_CODEGEN_LOW_SCHEDULE_CALL_PRESSURE_H_
 #define LOOM_CODEGEN_LOW_SCHEDULE_CALL_PRESSURE_H_
 
+#include "loom/codegen/low/allocation/call.h"
 #include "loom/codegen/low/schedule/pressure.h"
 
 #ifdef __cplusplus
@@ -29,6 +30,16 @@ typedef struct loom_low_schedule_call_pressure_limit_t {
   // Whether exceeding this capacity cannot be repaired by spilling.
   bool requires_hard_capacity;
 } loom_low_schedule_call_pressure_limit_t;
+
+// Builds the capacities reduced by one call from the state's resolved target,
+// allocation constraints, and ordinary pressure limits. No IR or provider
+// lookup is performed. Returns the number of rows; a NULL |limits| counts the
+// storage required by the subsequent fill call.
+iree_host_size_t loom_low_schedule_call_pressure_build_limits(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_call_contract_t* contract,
+    loom_low_call_clobber_list_t common_clobbers,
+    loom_low_schedule_call_pressure_limit_t* limits);
 
 // Validates retained call contracts and builds sparse boundary capacities.
 iree_status_t loom_low_schedule_call_pressure_initialize(

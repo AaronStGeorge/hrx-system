@@ -7,6 +7,7 @@
 #include "loom/codegen/low/schedule/call_pressure.h"
 
 #include "iree/testing/gtest.h"
+#include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/codegen/low/schedule/target_pressure.h"
 
 namespace loom {
@@ -107,11 +108,11 @@ TEST_F(CallPressureTest, AliasedWidthsUseOneSharedBank) {
             LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE);
 }
 
-TEST_F(CallPressureTest, PackingRoundsSurvivorsBeforeChargingDebt) {
+TEST_F(CallPressureTest, CallClobbersReduceSharedPackingCapacity) {
   loom_low_register_packing_resource_t resource = {
       .capacity = 8,
       .member_count = 2,
-      .capacity_member_index = 1,
+      .capacity_member_index = 0,
   };
   const loom_low_register_packing_resource_member_t members[] = {
       {.reg_class_id = 0, .register_unit_count = 2, .resource_unit_count = 1},
@@ -121,6 +122,27 @@ TEST_F(CallPressureTest, PackingRoundsSurvivorsBeforeChargingDebt) {
   descriptors_.register_packing_resource_count = 1;
   descriptors_.register_packing_resource_members = members;
   descriptors_.register_packing_resource_member_count = IREE_ARRAYSIZE(members);
+  loom_low_schedule_build_state_t state = {};
+  state.target.descriptor_set = &descriptors_;
+  const loom_low_allocation_target_constraints_t constraints = {
+      .target = &state.target,
+  };
+  state.allocation_constraints = &constraints;
+  uint32_t class_limits[] = {8, 8};
+  uint32_t packing_limits[] = {4};
+  state.pressure_limits.by_reg_class = class_limits;
+  state.pressure_limits.register_packing_resource_capacities = packing_limits;
+  const loom_low_call_clobber_t clobber = {
+      .register_class = 0,
+      .location = 4,
+      .count = 4,
+  };
+  loom_low_call_contract_t contract = {};
+  loom_low_schedule_call_pressure_limit_t limits[2] = {};
+  EXPECT_EQ(loom_low_schedule_call_pressure_build_limits(&state, &contract, {},
+                                                         limits),
+            0u);
+  contract.clobbers = {&clobber, 1};
   uint64_t packed_units[] = {3};
   pressure_.current_register_packing_units = packed_units;
   live_[1] = 1;
@@ -128,12 +150,21 @@ TEST_F(CallPressureTest, PackingRoundsSurvivorsBeforeChargingDebt) {
   for (bool hard_capacity : {false, true}) {
     resource.flags =
         hard_capacity ? LOOM_LOW_REGISTER_PACKING_RESOURCE_FLAG_UNSPILLABLE : 0;
-    const loom_low_schedule_call_pressure_limit_t limit = {
-        .preserved_unit_capacity = 2,
-        .source_kind =
-            LOOM_LOW_SCHEDULE_PRESSURE_SOURCE_REGISTER_PACKING_RESOURCE,
-        .requires_hard_capacity = hard_capacity,
-    };
+    ASSERT_EQ(loom_low_schedule_call_pressure_build_limits(&state, &contract,
+                                                           {}, nullptr),
+              IREE_ARRAYSIZE(limits));
+    ASSERT_EQ(loom_low_schedule_call_pressure_build_limits(&state, &contract,
+                                                           {}, limits),
+              IREE_ARRAYSIZE(limits));
+    EXPECT_EQ(limits[0].source_kind,
+              LOOM_LOW_SCHEDULE_PRESSURE_SOURCE_REGISTER_CLASS);
+    EXPECT_EQ(limits[0].source_id, 0u);
+    EXPECT_EQ(limits[0].preserved_unit_capacity, 4u);
+    EXPECT_EQ(limits[1].source_kind,
+              LOOM_LOW_SCHEDULE_PRESSURE_SOURCE_REGISTER_PACKING_RESOURCE);
+    EXPECT_EQ(limits[1].source_id, 0u);
+    EXPECT_EQ(limits[1].preserved_unit_capacity, 2u);
+    EXPECT_EQ(limits[1].requires_hard_capacity, hard_capacity);
     for (uint64_t live_units : {3u, 4u}) {
       SCOPED_TRACE(::testing::Message()
                    << "live=" << live_units << ", hard=" << hard_capacity);
@@ -142,8 +173,8 @@ TEST_F(CallPressureTest, PackingRoundsSurvivorsBeforeChargingDebt) {
           .pressure_cliff_units = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE,
           .units_until_pressure_cliff = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE,
       };
-      loom_low_schedule_call_pressure_score_limits(&descriptors_, &pressure_,
-                                                   &limit, 1, &score);
+      loom_low_schedule_call_pressure_score_limits(
+          &descriptors_, &pressure_, limits, IREE_ARRAYSIZE(limits), &score);
       // Killing one of three narrow units frees a pair; killing one of four
       // leaves both pairs occupied. The other class retains one whole unit.
       const uint32_t debt = live_units == 4 ? 1 : 0;

@@ -66,7 +66,7 @@ static bool loom_low_schedule_call_pressure_class_limit(
   return *out_limit != UINT32_MAX;
 }
 
-static iree_host_size_t loom_low_schedule_call_pressure_build_limits(
+iree_host_size_t loom_low_schedule_call_pressure_build_limits(
     const loom_low_schedule_build_state_t* state,
     const loom_low_call_contract_t* contract,
     loom_low_call_clobber_list_t common_clobbers,

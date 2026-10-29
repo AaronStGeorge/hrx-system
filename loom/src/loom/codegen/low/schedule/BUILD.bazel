@@ -295,6 +295,8 @@ loom_cc_test(
         "//loom/src/loom/codegen/low:representation_binding",
         "//loom/src/loom/codegen/low:storage_relation",
         "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/codegen/low/allocation:call",
+        "//loom/src/loom/codegen/low/allocation:target_constraints",
         "//loom/src/loom/ir",
         "//loom/src/loom/target:residency",
         "//loom/src/loom/util:cfg_graph",
