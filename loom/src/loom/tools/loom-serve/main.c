@@ -62,8 +62,15 @@ static iree_status_t loom_serve_main_ready(loom_serve_http_listener_t* listener,
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
       &stream, "{\"event\":\"ready\",\"address\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, address));
-  return loom_output_stream_write_format(&stream, ",\"models\":%zu}\n",
-                                         model_count);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"models\":%zu}\n", model_count));
+  // This record is a parent-process readiness handshake. Publish it before the
+  // router enters its blocking run loop, including when stderr is a pipe.
+  if (fflush(stderr) != 0) {
+    return iree_make_status(IREE_STATUS_DATA_LOSS,
+                            "failed to flush server readiness record");
+  }
+  return iree_ok_status();
 }
 
 static void loom_serve_main_shutdown_requested(void* user_data,
