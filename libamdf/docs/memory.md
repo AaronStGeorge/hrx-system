@@ -190,6 +190,14 @@ export or Linux INSTANCE-policy caller-page registration. Windows NUMA allocatio
 APIs permit placement fallback, so Windows profiles do not advertise this
 required-placement guarantee.
 
+KFD's owned-host registration route provides fixed GPU addresses under PROCESS
+lifetime. Host-owned storage requiring replaceable GPU aliases would need the
+foreign DMA-BUF route, which KFD profile discovery excludes because it charges
+the same backing twice against the native GTT budget. Required host placement
+with those GPU mapping-source requirements is therefore unsupported. Ordinary
+GPU-owned SYSTEM storage remains an independent, single-charge mapping source;
+it is not substituted for a required host placement.
+
 ### Construction and access
 
 For example, a HAL creates its selected GPU and NPU, then queries their joint
@@ -263,8 +271,10 @@ Host mapping properties describe independent guarantees. `READ_CACHED` and
 `READ_UNCACHED` describe CPU reads; `WRITE_BACK` and `WRITE_COMBINED` refine CPU
 write behavior. An absent bit does not imply its opposite. Prospective profiles
 report guarantees before allocation, and live mappings report guarantees for
-their actual backing. Import transport entries may refine the profile-wide
-guarantees when the exact transport and provenance establish additional facts.
+their lifetime, including permitted native migration. These bits are not a
+sample of the mapping's current cache mode. Import transport entries may refine
+the profile-wide guarantees when the exact transport and provenance establish
+additional facts.
 These properties do not replace visibility recipes or synchronization.
 
 Windows GPU/XDNA sharing uses the same REGISTER request with both devices in
@@ -941,12 +951,20 @@ native operations, including Windows allocation-cache publication.
 `memory_scope_query_pair_info` qualifies those recipes before any backing or
 host view exists. Its `amdf_memory_profile_pair_query_t` fixes the scope-local
 profile, backing requirements, complete caller-ordered device/access set and
-registration host properties. A prospective DEVICE site names an access ordinal and
-exact queue family; a HOST site declares view permissions and requires
-`HOST_VISIBLE`. Successful constructions with those same inputs can reuse the
-answer across sizes and addresses. The query shares native selection and policy
+registration host properties. A prospective DEVICE site names an access
+ordinal and exact queue family; an ordinary HOST site declares view permissions
+and requires `HOST_VISIBLE`. Successful constructions with those same inputs can
+reuse the answer across sizes and addresses. The query shares native selection and policy
 with construction and actual mapping descriptions, without retaining a plan,
 reserving resources or performing native allocation, mapping or synchronization.
+
+For a host view created through `memory_reservation_map`, a prospective HOST
+site sets `AMDF_MEMORY_PROFILE_SITE_FLAG_HOST_RESERVATION` and the source
+construction requires `HOST_MAPPING_SOURCE`. This qualifies the reservation
+alias's CPU protocol, which can differ from the source's ordinary `memory_map`
+view. The answer applies while the corresponding source bytes are installed;
+the query does not inspect bindings or retain backing. FILE_IO sites always
+describe the source's ordinary host view.
 
 A pool can therefore query its producer/consumer matrix once, record visibility
 operations before individual buffers exist, and replay using each allocation's
@@ -990,29 +1008,51 @@ remain separate requirements of the selected memory transport.
 
 ### Native file buffers
 
-`AMDF_MEMORY_FLAG_HOST_FILE_IO` requires backing whose ordinary `memory_map`
-view is eligible for native file I/O, including operations that pin the buffer's
-pages. Selection uses that requirement together with the GPU access, mapping
-source, alignment, and size requirements. The actual view reports
-`AMDF_HOST_MAPPING_FEATURE_FILE_IO`; host visibility or coherence alone does
-not establish this property. A reservation view does not inherit eligibility
+The ordinary `memory_map` view reports its qualified file operations through
+`amdf_host_mapping_info_t.features`. Host visibility or coherence alone does
+not establish file eligibility. A reservation view does not inherit eligibility
 from a source that happened to be bound there.
 
+| View feature | Qualified access | Visibility protocol |
+| --- | --- | --- |
+| `FILE_IO` | Buffered file operations and operations that pin pages, including direct and registered I/O. | FILE_IO pair queries, with native I/O completion. |
+| `BUFFERED_FILE_IO` | Buffered reads and writes through the CPU mapping, without promising page pins or registered-buffer access. | HOST pair queries around the completed I/O. |
+
+`FILE_IO` includes buffered access; it need not also set `BUFFERED_FILE_IO`.
+`AMDF_MEMORY_FLAG_HOST_FILE_IO` requests the stronger `FILE_IO` contract during
+construction. Selection combines that requirement with the complete device
+access, mapping-source, alignment, and size requirements. Either feature
+describes valid access, not a performance preference or a change of placement.
+
+Linux GPU-owned SYSTEM mappings report `BUFFERED_FILE_IO`. Their CPU views
+support buffered copies, but cannot supply the page pins required by direct or
+registered file I/O. A caller using the buffered feature resolves the device's
+release and HOST acquire before I/O, then HOST release and device acquire
+before the next device use, as appropriate for the producer and consumer.
+File reads produce memory and file writes consume it. Both paths retain the
+mapping and backing until accepted I/O and final readers have completed.
+
 Owned Windows system allocations and platform-owned host allocations establish
-the property from their native page construction. Linux can attach GPUs to
-platform-owned, length-sealed pages through the optional udmabuf service. The
-original ordinary CPU mapping remains the file buffer; GPU reservations project
-those same pages into independently selected device addresses. Borrowing a
-registered pointer or importing an arbitrary external handle cannot establish the same
-fact from its address or properties. A caller with independent knowledge of
-its registered pages can use the native file API, but the generic registration
-contract does not advertise that additional guarantee.
+`FILE_IO` from their native page construction. Linux platform-owned,
+length-sealed pages can be exported through the optional udmabuf service for
+consumers whose profiles admit that transport. KFD GPU consumers are excluded:
+their residency and render imports charge the same payload twice against the
+GTT budget. Installing the service or changing its permissions does not enable
+that KFD construction. PROCESS-lifetime fixed-address registration remains
+available independently, without udmabuf or replaceable GPU aliases.
+
+Borrowing a registered pointer or importing an arbitrary external handle cannot
+establish file eligibility from its address or CPU properties. A caller with
+independent knowledge of its registered pages can use the native file API,
+but the generic registration contract does not advertise that guarantee.
 
 #### Pool construction and availability
 
-A pool that only uses explicit GPU aliases requests a mapping source without
-an implicit device address. The full consumer array participates in profile
-selection before allocation:
+On a provider that admits both `FILE_IO` and GPU mapping sources, a pool using
+only explicit GPU aliases requests a mapping source without an implicit device
+address. The full consumer array participates in profile selection before
+allocation. This combination is unavailable through KFD's excluded foreign
+host-import route:
 
 ```c
 const amdf_memory_device_access_t access = {
@@ -1049,15 +1089,11 @@ The slab length satisfies the profile's granularity and maximum length. Adding
 address with the requested permissions. Explicit reservations retain the same
 mapping and final-reader requirements as other sources.
 
-Each independent Linux attachment to this aliasable file backing receives a
-fresh DMA-BUF export of the same owned pages. Its KFD residency and GEM alias
-source have independent native lifetimes, including when logical consumers
-share a native driver connection.
-The exports have separate implicit-fence state: explicit queue dependencies and
-the caller's final-reader ordering establish cross-consumer synchronization.
-Public foreign KFD imports are unsupported; this construction path does not
-make arbitrary external DMA-BUF ownership safe to duplicate. Allocation and
-attachment happen once per slab, with no export, import, or allocation per I/O.
+For admitted Linux exporter-backed consumers, independent attachments receive
+fresh DMA-BUF exports of the same owned pages. Those exports have separate
+implicit-fence state: explicit queue dependencies and the caller's final-reader
+ordering establish cross-consumer synchronization. Allocation and attachment
+happen once per slab, with no export, import, or allocation per I/O.
 
 #### File and device visibility
 
@@ -1115,8 +1151,9 @@ program-side protocol.
 
 | Platform | Native requirements | Resource admission |
 | --- | --- | --- |
-| Linux KFD, aliasable file backing | Writable page population (`MADV_POPULATE_WRITE`, Linux 5.14 or newer), kernel udmabuf support (`CONFIG_UDMABUF`), a loaded service, read/write access to `/dev/udmabuf`, readable `/sys/module/udmabuf/parameters/size_limit_mb`, and the ordinary KFD/render-node access. The AMDGPU driver must accept these exports and the selected exact GPU alias contract. | The profile intersects the export size limit with all consumer limits. Backing pages remain pinned for the allocation lifetime; each attachment also consumes native import and page-table resources. File-buffer registration has its own admission, including the process's locked-memory limit for registered io_uring buffers. |
+| Linux KFD, GPU-owned SYSTEM backing | Ordinary KFD/render-node access and a view reporting `BUFFERED_FILE_IO`. No udmabuf service is involved. | Buffered I/O uses the CPU mapping and HOST visibility protocol. That view cannot provide direct or registered I/O; page-pinnable transfers require a separate eligible file buffer. |
 | Linux KFD, fixed-address file staging | Process native lifetime and an available owned-host profile that registers its pages with KFD. Staging requests a default `DEVICE_ADDRESS`; its GPU access does not require `MAPPING_SOURCE`. This route needs no udmabuf exporter. | GPU page registration and native file-buffer registration admit the bounded pool independently. KFD owns the GPU registration until device uses retire; native file registrations must retire before backing destruction. |
+| Linux platform-owned aliasable file backing | An admitted complete consumer set, writable page population (`MADV_POPULATE_WRITE`, Linux 5.14 or newer), kernel udmabuf support (`CONFIG_UDMABUF`), a loaded service, read/write access to `/dev/udmabuf`, and readable `/sys/module/udmabuf/parameters/size_limit_mb`. KFD GPU consumers are excluded. | The profile intersects the export size limit with all admitted consumer limits. Backing remains pinned for the allocation lifetime. File-buffer registration has separate admission, including the process's locked-memory limit for registered io_uring buffers. |
 | Windows WDDM | The native GPU provider's owned system-page allocation and mapping services. No udmabuf service is involved. | Native allocation and page-lock admission can fail independently of file creation. Buffered/unbuffered file alignment and transfer constraints come from the file API. |
 
 Optional Linux exporter discovery runs once at instance creation. A profile
@@ -1162,9 +1199,11 @@ The [native exporter implementation](https://github.com/torvalds/linux/blob/8d3a
 defines its sealing, size, and page-pin requirements.
 
 Linux native residency admission is separate from the slab-size limit and
-physical payload size. KFD imports each owned export for residency tracking;
-the acquired render file imports it for GEM virtual-address mappings. For a
-foreign exporter such as udmabuf, these are separate AMDGPU objects. KFD
+physical payload size. KFD profile discovery excludes foreign owned-host
+imports because the retained native import implementation creates two charges:
+KFD imports the export for residency tracking, and the acquired render file
+imports it for GEM virtual-address mappings. For a foreign exporter such as
+udmabuf, these are separate AMDGPU objects. KFD
 validates its object on import, and publishing a GPU alias validates the render
 object. Both then consume the payload's full size in the native GTT budget,
 in addition to page-table and other native resources. The physical pages remain
@@ -1214,20 +1253,25 @@ queue on staging, then the transfer queue and compute queue or `HOST` on the
 ordinary destination. The copy joins those two backing lifetimes; a pair query
 does not describe a transfer between distinct physical allocations. Reported
 `NONE` cache operations still require the corresponding completion dependencies.
-Host accessibility alone does not qualify a view for native file I/O; the exact
-view's `FILE_IO` feature establishes that contract for buffered and direct file
-operations alike.
+Host accessibility alone does not qualify a view for native file I/O. The
+exact view's `FILE_IO` feature permits the file-side protocol described here;
+`BUFFERED_FILE_IO` instead permits buffered access with HOST transitions.
+Using the CPU view directly for buffered I/O can avoid staging traffic but also
+pays the CPU mapping and native user-buffer copy costs. Capability alone does
+not establish which route is faster for a workload.
 
 Fixed staging addresses permit a narrower construction than the destination's
 arbitrary aliases. Staging requests `DEVICE_ADDRESS` and uses the returned
 FILE_IO/queue transitions; neither `MAPPING_SOURCE` nor `HOST_COHERENT` is
 required for that native-file edge. For Linux process lifetime, the owned-host
 registration profile supplies file-capable pages and the default GPU address
-without importing a foreign DMA-BUF. Other lifetimes can use an available
-exporter-backed profile. CPU inspection or modification of staging queries its
-separate HOST edge. The backing's file eligibility alone does not establish
-GPU access, and an unavailable staging profile leaves ordinary device and
-memory services usable.
+without importing a foreign DMA-BUF. KFD INSTANCE lifetime supplies neither
+caller-page registration nor the excluded foreign-host import route, so this
+page-pinnable staging construction is unavailable there. Other providers use
+their advertised file-buffer profiles. CPU inspection or modification of staging
+queries its separate HOST edge. The backing's file eligibility alone does not
+establish GPU access, and an unavailable staging profile leaves ordinary device
+and memory services usable.
 
 ## Atomic operations and participant reach
 

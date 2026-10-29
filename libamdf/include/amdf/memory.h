@@ -334,8 +334,10 @@ enum amdf_external_memory_support_flag_bits_e {
 
 /// Independent guarantees about CPU access to a host mapping. Requests name
 /// required guarantees; query results name established guarantees. An absent
-/// bit makes no promise about that property, including its opposite. Device
-/// coherence and release/acquire operations are separate contracts.
+/// bit makes no promise about that property, including its opposite. Reported
+/// guarantees hold for the mapping lifetime, including permitted native
+/// migration. Device coherence and release/acquire operations are separate
+/// contracts.
 typedef uint32_t amdf_host_memory_properties_t;
 enum amdf_host_memory_properties_e {
   /// No additional CPU caching guarantees required or established.
@@ -503,8 +505,8 @@ enum amdf_host_mapping_feature_bits_e {
   /// operations around the completed I/O, just as for ordinary CPU accesses.
   /// The caller retains the mapping and backing until every accepted I/O and
   /// final reader has completed. This does not permit direct I/O or registered
-  /// buffers. FILE_IO also permits buffered I/O, with its FILE_IO pair
-  /// protocol.
+  /// buffers. FILE_IO also permits buffered I/O with its FILE_IO pair protocol,
+  /// even when this bit is absent. Neither feature selects a transfer policy.
   AMDF_HOST_MAPPING_FEATURE_BUFFERED_FILE_IO = UINT32_C(1) << 2,
 };
 
@@ -963,7 +965,8 @@ enum amdf_memory_site_kind_e {
   /// view must report FILE_IO. A file read is a memory producer; a file write
   /// is a memory consumer. The caller supplies I/O completion and excludes
   /// conflicting access. This site owns no file, queue, or I/O request and
-  /// does not describe raw-controller DMA or mutual atomic access.
+  /// does not describe raw-controller DMA or mutual atomic access. Views
+  /// reporting only BUFFERED_FILE_IO use HOST sites instead.
   AMDF_MEMORY_SITE_KIND_FILE_IO = 2,
 };
 
