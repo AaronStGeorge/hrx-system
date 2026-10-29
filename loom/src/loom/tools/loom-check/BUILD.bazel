@@ -101,7 +101,7 @@ _ARTIFACT_VM_BINARY_CHECK_COPTS = iree_select({
 
 _ARTIFACT_VM_BINARY_CHECK_DEPS = iree_select({
     "//loom/config/emit:vm_binary": [
-        "//loom/src/loom/tooling/target/vm:check_provider",
+        "//loom/src/loom/tooling/target/vm/check:provider",
     ],
     "//conditions:default": [],
 })

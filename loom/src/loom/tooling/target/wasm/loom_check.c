@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/target/wasm/check/loom_check.h"
+#include "loom/tooling/target/wasm/loom_check.h"
 
 #include "loom/target/tool/wasm.h"
 #include "loom/tools/loom-check/compile.h"

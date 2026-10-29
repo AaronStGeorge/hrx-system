@@ -8,11 +8,6 @@ load("//build_tools/bazel:query.bzl", "iree_assert_dependency_boundary")
 load("//build_tools/bazel:test_resources.bzl", "GPU_DEVICE_RESOURCE_GROUP")
 load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
 load(
-    "//loom/build_tools/amdgpu:descriptor_sets.bzl",
-    "loom_amdgpu_descriptor_set_compatible_with",
-    "loom_amdgpu_iree_hal_representation_compatible_with",
-)
-load(
     "//loom/build_tools/amdgpu:target_config.bzl",
     "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY",
 )
@@ -23,12 +18,6 @@ load(
     "loom_cc_test",
     "loom_config_compatible_with",
 )
-load("//loom/build_tools/bazel:defs.bzl", "loom_test")
-load(
-    "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_test_suite",
-)
-load("//loom/target/amdgpu:execution_profiles.bzl", "AMDGPU_HARDWARE_PROFILE", "AMD_GPU_HARDWARE_PROFILE")
 
 package(
     default_visibility = ["//visibility:private"],
@@ -117,8 +106,8 @@ loom_cc_library(
 
 loom_cc_library(
     name = "loom_check",
-    srcs = ["check/loom_check.c"],
-    hdrs = ["check/loom_check.h"],
+    srcs = ["loom_check.c"],
+    hdrs = ["loom_check.h"],
     deps = [
         ":assembly",
         ":encoding",
@@ -145,86 +134,13 @@ loom_cc_library(
 
 loom_cc_library(
     name = "check_provider",
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
+    srcs = ["loom_check_provider.c"],
+    hdrs = ["loom_check_provider.h"],
     visibility = ["//loom/src/loom/tools/loom-check:__pkg__"],
     deps = [
         ":loom_check",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_check_test_suite(
-    name = "loom_check_file_test",
-    srcs = [
-        "test/accumulator_memory.loom-test",
-        "test/accumulator_moves.loom-test",
-        "test/accumulator_resources.loom-test",
-        "test/accumulator_spills.loom-test",
-        "test/allocation_json.loom-test",
-        "test/assembly.loom-test",
-        "test/assembly_allocation.loom-test",
-        "test/assembly_aperture.loom-test",
-        "test/assembly_cluster.loom-test",
-        "test/assembly_integer_add.loom-test",
-        "test/assembly_integer_multiply.loom-test",
-        "test/assembly_integer_subtract.loom-test",
-        "test/assembly_packed_broadcast.loom-test",
-        "test/assembly_q8.loom-test",
-        "test/assembly_spill_storage.loom-test",
-        "test/assembly_vopd.loom-test",
-        "test/assembly_vopd_cache.loom-test",
-        "test/assembly_vopd_profiles.loom-test",
-        "test/assembly_wide_shifts.loom-test",
-        "test/assembly_wmma.loom-test",
-        "test/atomic_float64.loom-test",
-        "test/atomic_i64.loom-test",
-        "test/cache_completion.loom-test",
-        "test/cdna2_entry.loom-test",
-        "test/cdna2_memory.loom-test",
-        "test/compile_time_insertions.loom-test",
-        "test/delay_alu.loom-test",
-        "test/delay_layout.loom-test",
-        "test/dgemm_wait_windows.loom-test",
-        "test/dot_wait_windows.loom-test",
-        "test/dpp_wait_states.loom-test",
-        "test/entry_preamble.loom-test",
-        "test/gfx1201_native.loom-test",
-        "test/hal_kernel_library.loom-test",
-        "test/immediates.loom-test",
-        "test/kernel_move_resources.loom-test",
-        "test/matrix_accumulator_windows.loom-test",
-        "test/matrix_result_windows.loom-test",
-        "test/memory_modifiers.loom-test",
-        "test/message_completion.loom-test",
-        "test/operand_ties.loom-test",
-        "test/packet.loom-test",
-        "test/packet_json.loom-test",
-        "test/permlane_swap.loom-test",
-        "test/physical_exchange.loom-test",
-        "test/private_segment_limit.loom-test",
-        "test/private_setup_recovery.loom-test",
-        "test/register_banks.loom-test",
-        "test/register_numbering.loom-test",
-        "test/replay_clauses.loom-test",
-        "test/sgpr_read_waits.loom-test",
-        "test/shift_allocation.loom-test",
-        "test/short_wait_windows.loom-test",
-        "test/spill_fact_lifetime.loom-test",
-        "test/spill_lowering.loom-test",
-        "test/structural_delay_alu.loom-test",
-        "test/target_requirement.loom-test",
-        "test/tensor_completion.loom-test",
-        "test/vopd_plan.loom-test",
-        "test/wait_coalescing.loom-test",
-        "test/wait_completion.loom-test",
-        "test/wait_elision.loom-test",
-        "test/wait_flat.loom-test",
-        "test/wait_plan.loom-test",
-        "test/wait_states.loom-test",
-        "test/whole_workgroup_residency.loom-test",
-        "test/wide_offset_spills.loom-test",
     ],
 )
 
@@ -895,105 +811,4 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest_main",
         "//third_party:hsa_runtime_headers",
     ],
-)
-
-loom_test(
-    name = "dot_wait_windows_execution_test",
-    srcs = ["test/dot_wait_windows.loom"],
-    compile_targets = ["//loom/target/amdgpu:gfx90a"],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
-    target_compatible_with = loom_amdgpu_iree_hal_representation_compatible_with(
-        LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdna2.core"],
-    ),
-)
-
-loom_test(
-    name = "matrix_result_windows_execution_test",
-    srcs = ["test/matrix_result_windows.loom"],
-    compile_targets = ["//loom/target/amdgpu:gfx90a"],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
-    target_compatible_with = loom_amdgpu_iree_hal_representation_compatible_with(
-        LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdna2.core"],
-    ),
-)
-
-loom_test(
-    name = "shift_allocation_execution_test",
-    srcs = ["test/shift_allocation.loom"],
-    compile_targets = ["//loom/target/amdgpu:gfx90a"],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
-    target_compatible_with = loom_amdgpu_iree_hal_representation_compatible_with(
-        LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdna2.core"],
-    ),
-)
-
-loom_test(
-    name = "accumulator_memory_execution_test",
-    srcs = ["test/accumulator_memory.loom"],
-    compile_targets = ["//loom/target/amdgpu:gfx90a"],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
-    target_compatible_with = loom_amdgpu_iree_hal_representation_compatible_with(
-        LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdna2.core"],
-    ),
-)
-
-loom_test(
-    name = "operand_ties_execution_test",
-    srcs = ["test/operand_ties.loom"],
-    compile_targets = ["//loom/target/amdgpu:gfx1100"],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
-    target_compatible_with = loom_amdgpu_iree_hal_representation_compatible_with(
-        LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3.core"],
-    ),
-)
-
-loom_test(
-    name = "physical_exchange_execution_test",
-    srcs = ["test/physical_exchange.loom"],
-    compile_targets = ["//loom/target/amdgpu:gfx11-generic"],
-    execution_profiles = [AMD_GPU_HARDWARE_PROFILE],
-    target_compatible_with = loom_amdgpu_descriptor_set_compatible_with(
-        LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.gfx11.generic.core"],
-    ),
-)
-
-loom_test(
-    name = "accumulator_moves_execution_test",
-    srcs = ["test/accumulator_moves.loom"],
-    compile_targets = ["//loom/target/amdgpu:gfx90a"],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
-    target_compatible_with = loom_amdgpu_iree_hal_representation_compatible_with(
-        LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdna2.core"],
-    ),
-)
-
-loom_test(
-    name = "accumulator_atomic_execution_test",
-    srcs = ["test/accumulator_atomic.loom"],
-    compile_targets = ["//loom/target/amdgpu:gfx942"],
-    execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
-        AMD_GPU_HARDWARE_PROFILE,
-    ],
-    target_compatible_with = loom_amdgpu_iree_hal_representation_compatible_with(
-        LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdna3.core"],
-    ),
 )

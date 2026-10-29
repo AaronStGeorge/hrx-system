@@ -72,19 +72,19 @@
 #include "loom/target/emit/native/aie2p/check_provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_AIE2P_ELF
 #if LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
-#include "loom/target/emit/native/amdgpu/check/provider.h"
+#include "loom/target/emit/native/amdgpu/loom_check_provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_AMDGPU_ELF
 #if LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
-#include "loom/tooling/target/spirv/check/provider.h"
+#include "loom/tooling/target/spirv/loom_check_provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_SPIRV_BINARY
 #if LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
 #include "loom/tooling/target/vm/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_VM_BINARY
 #if LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
-#include "loom/tooling/target/wasm/check/provider.h"
+#include "loom/tooling/target/wasm/loom_check_provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_WASM_BINARY
 #if LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
-#include "loom/target/emit/native/x86/check/provider.h"
+#include "loom/target/emit/native/x86/loom_check_provider.h"
 #endif  // LOOM_CHECK_HAVE_ARTIFACT_X86_ELF
 static const loom_check_provider_t* const kLoomCheckProviders[] = {
     &loom_cxx_export_check_provider,
