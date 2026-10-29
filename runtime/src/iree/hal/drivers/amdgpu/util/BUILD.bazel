@@ -906,7 +906,7 @@ iree_runtime_cc_test(
 
 iree_cmake_extra_content(
     content = """
-include("${_IREE_PACKAGE_SOURCE_DIR}/libhsa.cmake")
+include("${IREE_SOURCE_DIR}/runtime/build_tools/cmake/iree_runtime_libhsa.cmake")
 """,
     inline = True,
 )

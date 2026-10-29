@@ -2638,12 +2638,6 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         )
         self._emit_platform_guard_end(target_compatible_with)
 
-    def _iree_hal_amdgpu_source_device_binaries(self):
-        self._converter.body += (
-            "# Source-built AMDGPU device binary targets are wired manually by\n"
-            "# runtime/src/iree/hal/drivers/amdgpu/device/binaries/CMakeLists.txt.\n\n"
-        )
-
     def iree_bytecode_module(
         self,
         name,

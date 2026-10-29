@@ -26,7 +26,7 @@ add_library(iree::hal::cts::util::registry ALIAS registry)
 if(CTS_COMPILED_CORPUS)
   include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loom_target_profile.cmake")
   include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loom_kernel_binary.cmake")
-  include("${IREE_REPO_ROOT}/runtime/src/iree/hal/drivers/amd/gpu/cts/testdata.cmake")
+  include("${IREE_REPO_ROOT}/runtime/build_tools/cmake/iree_runtime_amd_gpu_cts.cmake")
   # Only the compiler dependency is substituted. All source, product, embedding,
   # registration, and transitive linkage rules are the real build implementation.
   add_executable(compiler "${IREE_REPO_ROOT}/build_tools/cmake/testdata/loom_binary/tool.c")
