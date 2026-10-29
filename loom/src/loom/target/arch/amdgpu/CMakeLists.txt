@@ -493,6 +493,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::lower::kinds
     loom::target::arch::amdgpu::ops
     loom::target::provider
+    loom::transforms::scalar::wide_remainder_legalization
   PUBLIC
 )
 endif()

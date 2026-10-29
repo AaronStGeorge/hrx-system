@@ -84,4 +84,24 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    wide_remainder_legalization
+  HDRS
+    "wide_remainder_legalization.h"
+  SRCS
+    "wide_remainder_legalization.c"
+  DEPS
+    iree::base
+    iree::base::internal
+    loom::ir
+    loom::ops::index
+    loom::ops::scalar
+    loom::ops::scf
+    loom::rewrite::rewriter
+    loom::target::legalization
+    loom::util::fact_table
+  PUBLIC
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

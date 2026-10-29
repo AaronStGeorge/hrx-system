@@ -74,3 +74,20 @@ loom_cc_library(
         "//runtime/src/iree/base",
     ],
 )
+
+loom_cc_library(
+    name = "wide_remainder_legalization",
+    srcs = ["wide_remainder_legalization.c"],
+    hdrs = ["wide_remainder_legalization.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/target:legalization",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+    ],
+)
