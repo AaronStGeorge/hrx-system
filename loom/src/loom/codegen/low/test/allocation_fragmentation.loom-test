@@ -113,7 +113,7 @@ low.func.def target<test.low.core>(@target) @required_tuple_shortage(%scalar: re
 // with an available high register. The required %current value still takes
 // register 3, but %d must spill instead of receiving an out-of-range register
 // assignment.
-// RUN: emit low-allocation-query @bounded_victim_spill values=%a,%b,%c,%d,%e,%f,%g,%history,%current spill-count test.i32=9
+// RUN: emit low-allocation-query @bounded_victim_spill values=%a,%b,%c,%d,%e,%f,%g,%history,%current spill-count
 
 test.target<low_core> @target
 
