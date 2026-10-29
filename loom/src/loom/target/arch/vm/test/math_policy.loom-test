@@ -327,3 +327,31 @@ low.func.def target<vm.core>(@vm) abi(vm_function) @exponential_difference(%0: r
   %15 = conversion.float.truncate %14, "f32.to.bf16" : reg<vm.value : bf16>
   return %12, %15, %native, %double_width
 }
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @real_powers(%bases: vector<2xf16>, %exponents: vector<2xf16>, %single: f32, %wide: f64) -> (vector<2xf16>, f32, f64) {
+  %narrow = vector.powf %bases, %exponents : vector<2xf16>
+  %native = scalar.powf %single, %single : f32
+  %double_width = scalar.powf %wide, %wide : f64
+  func.return %narrow, %native, %double_width : vector<2xf16>, f32, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @real_powers(%0: reg<vm.value : f16>, %1: reg<vm.value : f16>, %2: reg<vm.value : f16>, %3: reg<vm.value : f16>, %single: reg<vm.value : f32>, %wide: reg<vm.value : f64>) -> (reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f32>, reg<vm.value : f64>) asm {
+  %native = float.math.binary.f32 %single, %single, "pow"
+  %double_width = float.math.binary.f64 %wide, %wide, "pow"
+  %12 = conversion.float.extend %0, "f16.to.f32" : reg<vm.value : f32>
+  %13 = conversion.float.extend %2, "f16.to.f32" : reg<vm.value : f32>
+  %14 = float.math.binary.f32 %12, %13, "pow"
+  %15 = conversion.float.truncate %14, "f32.to.f16" : reg<vm.value : f16>
+  %16 = conversion.float.extend %1, "f16.to.f32" : reg<vm.value : f32>
+  %17 = conversion.float.extend %3, "f16.to.f32" : reg<vm.value : f32>
+  %18 = float.math.binary.f32 %16, %17, "pow"
+  %19 = conversion.float.truncate %18, "f32.to.f16" : reg<vm.value : f16>
+  return %15, %19, %native, %double_width
+}

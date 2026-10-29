@@ -15,6 +15,7 @@ from iree.vm.bytecode.spec.isa.core import BUFFER_INSTRUCTIONS, INTEGER_INSTRUCT
 from iree.vm.bytecode.spec.isa.core import rules as isa_rules
 from iree.vm.bytecode.spec.isa.core.control import BranchCondition
 from iree.vm.bytecode.spec.isa.core.float import (
+    FLOAT_MATH_BINARY_SELECTOR,
     FLOAT_MATH_F32_SELECTOR,
     FLOAT_MATH_F64_SELECTOR,
 )
@@ -119,7 +120,7 @@ class SpecificationTest(unittest.TestCase):
                 len(NUMERIC_TABLES),
                 sum(len(table.values) for table in NUMERIC_TABLES),
             ),
-            (12, 182, 20, 211, tuple(range(1, 14)), 59, 9, 30),
+            (12, 184, 21, 212, tuple(range(1, 14)), 59, 9, 30),
         )
 
     def test_layout_rejects_implicit_alignment_padding(self) -> None:
@@ -157,6 +158,17 @@ class SpecificationTest(unittest.TestCase):
             _specification(instructions=(INTEGER_INSTRUCTIONS[0], duplicate))
 
     def test_float_math_selector_abi_is_frozen(self) -> None:
+        self.assertEqual(
+            tuple(
+                (value.name, value.value) for value in FLOAT_MATH_BINARY_SELECTOR.values
+            ),
+            (("pow", 0),),
+        )
+        for width, opcode in ((32, 0x9C), (64, 0x9D)):
+            instruction = _instruction(f"float.math.binary.f{width}")
+            self.assertEqual(instruction.opcode, opcode)
+            self.assertEqual(instruction.byte_length, 8)
+            self.assertEqual(instruction.semantics.operand_count, 2)
         common_values = (
             ("ceil", 0),
             ("floor", 1),

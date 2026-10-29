@@ -23,6 +23,7 @@ iree_runtime_cc_library(
         "fma_software.c",
         "fma_software.h",
         "logarithm.c",
+        "logarithm_reduction.h",
         "roots.c",
         "roots_integer.h",
         "trigonometry.c",

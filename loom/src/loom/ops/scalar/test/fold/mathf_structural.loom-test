@@ -242,3 +242,24 @@ func.def @exponential_difference() -> (f32, f64) {
   %wide = scalar.constant -0.00389863052988251 : f64
   func.return %single, %wide : f32, f64
 }
+
+// ====
+
+// A fractional power retains the full input exponent range and uses the
+// shared mapping, including the selected one-step rounding at this boundary.
+func.def @power_full_precision() -> (f32, f64) {
+  %base32 = scalar.constant 1.0000325441360474 : f32
+  %exponent32 = scalar.constant -2220941.75 : f32
+  %base64 = scalar.constant 2.2250738585072009e-308 : f64
+  %exponent64 = scalar.constant -0.5 : f64
+  %single = scalar.powf %base32, %exponent32 : f32
+  %wide = scalar.powf %base64, %exponent64 : f64
+  func.return %single, %wide : f32, f64
+}
+
+// ----
+func.def @power_full_precision() -> (f32, f64) {
+  %single = scalar.constant 4.0766217554913857e-32 : f32
+  %wide = scalar.constant 6.7039039649712985e+153 : f64
+  func.return %single, %wide : f32, f64
+}

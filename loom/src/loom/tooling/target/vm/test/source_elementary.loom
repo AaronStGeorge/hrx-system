@@ -1,5 +1,15 @@
 // Ordinary source operations compile into direct VM math selectors. The same
 // cases run before and after linking to Loom bytecode, without native imports.
+func.def @power_f32(%base: f32, %exponent: f32) -> (f32) {
+  %result = scalar.powf %base, %exponent : f32
+  func.return %result : f32
+}
+
+func.def @power_f64(%base: f64, %exponent: f64) -> (f64) {
+  %result = scalar.powf %base, %exponent : f64
+  func.return %result : f64
+}
+
 func.def @exponential_difference_f64(%input: f64) -> (f64) {
   %result = scalar.expm1f %input : f64
   func.return %result : f64
@@ -44,8 +54,10 @@ func.def @logarithms_f64(%value: f64) -> (f64, f64, f64, f64) {
 
 check.case public @ordinary_f32 {
   %input = check.literal value(0.5) : f32
+  %power = func.call @power_f32(%input, %input) : (f32, f32) -> (f32)
   %root, %inverse, %natural, %base_two = func.call @elementary_f32(%input) : (f32) -> (f32, f32, f32, f32)
   %sqrt_half = check.literal value(0.70710676908493042) : f32
+  check.expect.approximate actual(%power) expected(%sqrt_half) atol(5.9604644775390625e-08) rtol(0.0) nan(different) : f32, f32
   %sqrt_two = check.literal value(1.4142135381698608) : f32
   %exp_half = check.literal value(1.6487212181091309) : f32
   check.expect.equal actual(%root) expected(%sqrt_half) : f32
@@ -69,8 +81,10 @@ check.case public @ordinary_f32 {
 
 check.case public @ordinary_f64 {
   %input = check.literal value(0.5) : f64
+  %power = func.call @power_f64(%input, %input) : (f64, f64) -> (f64)
   %root, %inverse, %natural, %base_two = func.call @elementary_f64(%input) : (f64) -> (f64, f64, f64, f64)
   %sqrt_half = check.literal value(0.70710678118654757) : f64
+  check.expect.approximate actual(%power) expected(%sqrt_half) atol(1.1102230246251565e-16) rtol(0.0) nan(different) : f64, f64
   %sqrt_two = check.literal value(1.4142135623730951) : f64
   %exp_half = check.literal value(1.6487212707001282) : f64
   check.expect.equal actual(%root) expected(%sqrt_half) : f64

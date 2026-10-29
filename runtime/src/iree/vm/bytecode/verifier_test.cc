@@ -362,6 +362,35 @@ TEST_F(ModuleVerificationTest, RejectsF32MathSelectorInF64Instruction) {
   ExpectInstructionsRejected(std::move(bytes));
 }
 
+TEST_F(ModuleVerificationTest, RejectsInvalidBinaryMathSelector) {
+  std::vector<uint8_t> bytes = CopyImage();
+  const uint8_t* original =
+      FindInstruction(IREE_VM_BYTECODE_OPCODE_FLOAT_MATH_BINARY_F32);
+  ASSERT_NE(original, nullptr);
+  auto* math = MutableRecord(
+      &bytes, contents_,
+      reinterpret_cast<const iree_vm_bytecode_float_math_binary_f32_t*>(
+          original));
+  math->selector_u8 = 0xFF;
+  ExpectInstructionsRejected(std::move(bytes));
+}
+
+TEST_F(ModuleVerificationTest, RejectsNonzeroBinaryMathPadding) {
+  const uint8_t* original =
+      FindInstruction(IREE_VM_BYTECODE_OPCODE_FLOAT_MATH_BINARY_F64);
+  ASSERT_NE(original, nullptr);
+  for (uint32_t index = 0; index < 3; ++index) {
+    SCOPED_TRACE(index);
+    std::vector<uint8_t> bytes = CopyImage();
+    auto* math = MutableRecord(
+        &bytes, contents_,
+        reinterpret_cast<const iree_vm_bytecode_float_math_binary_f64_t*>(
+            original));
+    math->zero_padding_u8[index] = 1;
+    ExpectInstructionsRejected(std::move(bytes));
+  }
+}
+
 TEST_F(ModuleVerificationTest, RejectsInvalidRegister) {
   std::vector<uint8_t> bytes = CopyImage();
   const uint8_t* original = FindInstruction(IREE_VM_BYTECODE_OPCODE_VALUE_COPY);

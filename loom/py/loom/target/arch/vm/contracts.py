@@ -48,7 +48,7 @@ from iree.vm.bytecode.spec.isa.core.integer import (
     IntegerUnarySemantics,
 )
 from iree.vm.bytecode.spec.isa.core.ref import REF_SELECT
-from iree.vm.bytecode.spec.isa.core.rules import RecordRuleKind
+from iree.vm.bytecode.spec.isa.core.rules import FieldRule, RecordRuleKind
 from iree.vm.bytecode.spec.isa.core.stack import MEMORY_FORMAT_SELECTOR
 from iree.vm.bytecode.spec.isa.core.value import VALUE_COPY, VALUE_SELECT
 from iree.vm.bytecode.spec.specification import SPECIFICATION
@@ -186,6 +186,7 @@ _SELECTED_SOURCE_OPS = {
     },
 }
 _MATH_SOURCE_OPS = {
+    "pow": math.scalar_powf,
     "sqrt": math.scalar_sqrtf,
     "rsqrt": math.scalar_rsqrtf,
     "exp": math.scalar_expf,
@@ -576,11 +577,16 @@ def _math_cases():
         instruction = _INSTRUCTIONS[descriptor.encoding_id]
         if not isinstance(instruction.semantics, FloatMathSemantics):
             continue
-        selector = instruction.fields[-1].rule.data
+        (selector,) = (
+            field.rule.data
+            for field in instruction.fields
+            if field.rule.kind is FieldRule.SELECTOR
+        )
         for value in selector.values:
             # Machine selectors with different denormal contracts require
             # separate source policies; a matching spelling is insufficient.
             if source_op := _MATH_SOURCE_OPS.get(value.name):
+                assert len(source_op.operands) == instruction.semantics.operand_count
                 remaining.discard(value.name)
                 yield _scalar_rule(
                     descriptor,

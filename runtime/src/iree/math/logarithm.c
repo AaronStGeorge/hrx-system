@@ -10,6 +10,7 @@
 #include <stdbool.h>
 
 #include "iree/math/float_bits.h"
+#include "iree/math/logarithm_reduction.h"
 
 // The table-and-polynomial kernels derive from Arm Optimized Routines
 // 2ee4b0d45680a9880412c1d186224b08652c35f6 with fixed unfused evaluation.
@@ -19,14 +20,7 @@
 // Base-two logarithm
 //===----------------------------------------------------------------------===//
 
-typedef struct iree_math_log2_f32_table_entry_t {
-  // Reciprocal of the subinterval center used to form a small residual.
-  double inverse_center;
-  // Base-two logarithm of the subinterval center.
-  double log2_center;
-} iree_math_log2_f32_table_entry_t;
-
-static const iree_math_log2_f32_table_entry_t iree_math_log2_f32_table[16] = {
+const iree_math_log2_f32_table_entry_t iree_math_log2_f32_table[16] = {
     {0x1.661ec79f8f3bep+0, -0x1.efec65b963019p-2},
     {0x1.571ed4aaf883dp+0, -0x1.b0b6832d4fca4p-2},
     {0x1.49539f0f010bp+0, -0x1.7418b0a1fb77bp-2},

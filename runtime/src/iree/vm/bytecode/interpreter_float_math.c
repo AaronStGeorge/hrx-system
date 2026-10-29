@@ -192,3 +192,35 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
   }
   return iree_vm_bytecode_float_math_f64_to_bits(result);
 }
+
+IREE_ATTRIBUTE_NOINLINE uint32_t iree_vm_bytecode_float_math_binary_f32(
+    uint8_t selector, uint32_t left_bits, uint32_t right_bits) {
+  const float left = iree_vm_bytecode_float_math_f32_from_bits(left_bits);
+  const float right = iree_vm_bytecode_float_math_f32_from_bits(right_bits);
+  float result;
+  switch (selector) {
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_POW:
+      result = iree_math_pow_f32(left, right);
+      break;
+    default:
+      IREE_ASSERT_UNREACHABLE("binary math selector was not verified");
+      return 0;
+  }
+  return iree_vm_bytecode_float_math_f32_to_bits(result);
+}
+
+IREE_ATTRIBUTE_NOINLINE uint64_t iree_vm_bytecode_float_math_binary_f64(
+    uint8_t selector, uint64_t left_bits, uint64_t right_bits) {
+  const double left = iree_vm_bytecode_float_math_f64_from_bits(left_bits);
+  const double right = iree_vm_bytecode_float_math_f64_from_bits(right_bits);
+  double result;
+  switch (selector) {
+    case IREE_VM_BYTECODE_FLOAT_MATH_BINARY_POW:
+      result = iree_math_pow_f64(left, right);
+      break;
+    default:
+      IREE_ASSERT_UNREACHABLE("binary math selector was not verified");
+      return 0;
+  }
+  return iree_vm_bytecode_float_math_f64_to_bits(result);
+}

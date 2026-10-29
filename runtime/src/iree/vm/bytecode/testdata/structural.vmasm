@@ -189,6 +189,8 @@ vm.module core(0.0) {
       %v0 = float.math.unary.f64 %v0 {selector = ceil}
       %v0 = float.fma.f32 %v0, %v0, %v0
       %v0 = float.fma.f64 %v0, %v0, %v0
+      %v0 = float.math.binary.f32 %v0, %v0 {selector = pow}
+      %v0 = float.math.binary.f64 %v0, %v0 {selector = pow}
       %v0 = conversion.integer %v0 {selector = s1.to.i8}
       %v0 = conversion.float.extend %v0 {selector = f8e4m3.to.f32}
       %v0 = conversion.float.truncate %v0 {selector = f32.to.f8e4m3}

@@ -72,3 +72,22 @@ func.def @vector_exponential_difference() -> (vector<2xf16>, vector<2xf64>) {
   %wide = vector.constant 4.9406564584124654e-324 : vector<2xf64>
   func.return %narrow, %wide : vector<2xf16>, vector<2xf64>
 }
+
+// ====
+
+func.def @vector_real_powers() -> (vector<2xbf16>, vector<2xf64>) {
+  %narrow_base = vector.constant -2.0 : vector<2xbf16>
+  %narrow_exponent = vector.constant -3.0 : vector<2xbf16>
+  %wide_base = vector.constant 2.2250738585072009e-308 : vector<2xf64>
+  %wide_exponent = vector.constant -0.5 : vector<2xf64>
+  %narrow = vector.powf %narrow_base, %narrow_exponent : vector<2xbf16>
+  %wide = vector.powf %wide_base, %wide_exponent : vector<2xf64>
+  func.return %narrow, %wide : vector<2xbf16>, vector<2xf64>
+}
+
+// ----
+func.def @vector_real_powers() -> (vector<2xbf16>, vector<2xf64>) {
+  %narrow = vector.constant -0.125 : vector<2xbf16>
+  %wide = vector.constant 6.7039039649712985e+153 : vector<2xf64>
+  func.return %narrow, %wide : vector<2xbf16>, vector<2xf64>
+}

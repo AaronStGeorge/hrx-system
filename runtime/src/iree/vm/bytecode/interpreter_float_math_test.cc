@@ -101,6 +101,35 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, EvaluatesExactF32Selectors) {
             UINT32_C(0x3F800000));
 }
 
+TEST_F(VMBytecodeInterpreterFloatMathTest, BinaryMathAliasingAndNarrowCells) {
+  // Alias each operand and a distinct destination. Both inputs carry dirty
+  // upper F32 bits; the result must clear them regardless of aliasing.
+  for (uint8_t destination : {0, 1, 2}) {
+    uint64_t narrow_values[] = {UINT64_C(0xDEADBEEFC0000000),
+                                UINT64_C(0xBAADF00D40400000), UINT64_MAX};
+    const iree_vm_bytecode_float_math_binary_f32_t narrow_record = {
+        .destination_v8 = destination,
+        .left_v8 = 0,
+        .right_v8 = 1,
+        .selector_u8 = IREE_VM_BYTECODE_FLOAT_MATH_BINARY_POW,
+    };
+    iree_vm_bytecode_execute_float_math_binary_f32(&narrow_record,
+                                                   narrow_values);
+    EXPECT_EQ(narrow_values[destination], UINT32_C(0xC1000000));
+
+    uint64_t wide_values[] = {UINT64_C(0xC000000000000000),
+                              UINT64_C(0xC090CC0000000000), UINT64_MAX};
+    const iree_vm_bytecode_float_math_binary_f64_t wide_record = {
+        .destination_v8 = destination,
+        .left_v8 = 0,
+        .right_v8 = 1,
+        .selector_u8 = IREE_VM_BYTECODE_FLOAT_MATH_BINARY_POW,
+    };
+    iree_vm_bytecode_execute_float_math_binary_f64(&wide_record, wide_values);
+    EXPECT_EQ(wide_values[destination], UINT64_C(0x8000000000000000));
+  }
+}
+
 TEST_F(VMBytecodeInterpreterFloatMathTest, EvaluatesExactF64Selectors) {
   EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_CEIL,
                             UINT64_C(0x3FF4000000000000)),

@@ -30,6 +30,7 @@ TEST(MathPolicyTest, OrdinaryElementaryFamily) {
       LOOM_TARGET_MATH_OP_CBRTF,  LOOM_TARGET_MATH_OP_LOGF,
       LOOM_TARGET_MATH_OP_LOG2F,  LOOM_TARGET_MATH_OP_LOG10F,
       LOOM_TARGET_MATH_OP_LOG1PF, LOOM_TARGET_MATH_OP_EXPM1F,
+      LOOM_TARGET_MATH_OP_POWF,
   };
   for (auto operation : operations) {
     SCOPED_TRACE(operation);

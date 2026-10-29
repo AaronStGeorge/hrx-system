@@ -6,8 +6,8 @@ public function names one stable operation, format, and numerical contract so
 constant evaluation and dynamic execution can agree across hosts.
 
 Ordinary F32/F64 square root, reciprocal square root, cube root, exponentials,
-and logarithms preserve gradual underflow. Both scalar and vector constant
-folding and the Core VM call these same typed functions:
+logarithms, and real powers preserve gradual underflow. Both scalar and vector
+constant folding and the Core VM call these same typed functions:
 
 ```c
 float root = iree_math_sqrt_f32(x);
@@ -37,6 +37,12 @@ The F32 natural and base-ten functions share a F64 kernel until the final
 rounding. F64 logarithms retain split reduction centers to bound rounding error
 without depending on FMA availability. `log1p` preserves the correction lost
 when forming `1+x`, including inputs so small that the sum rounds to one.
+
+Real powers retain extra logarithm precision through exponent multiplication:
+F32 evaluates its logarithm in F64, and F64 carries a high part and tail. They
+share exponential reconstruction, including signed subnormal results, while
+handling negative bases and exponent parity explicitly. Composing ordinary
+rounded `log` and `exp` calls would discard the precision needed by `pow`.
 
 Fused multiply-add rounds the exact product and addend once. F32/F64 use a
 native instruction when enabled by the build ISA, with an owned software
@@ -85,7 +91,7 @@ own their documented flush rules.
 
 Operations are grouped by algorithm family and provenance:
 
-- `exponential.h` owns natural/base-two exponentials and `expm1`.
+- `exponential.h` owns natural/base-two exponentials, `expm1`, and real powers.
 - `logarithm.h` owns natural/base-two/base-ten logarithms and `log1p`.
 - `fma.h` owns fused arithmetic and narrow-format intermediate evaluation.
 - `roots.h` owns reciprocal, reciprocal square root, square root, and cube root.

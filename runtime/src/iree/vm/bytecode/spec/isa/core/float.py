@@ -77,6 +77,7 @@ class FloatFmaSemantics(NamedTuple):
 class FloatMathSemantics(NamedTuple):
     # The instruction's selector defines the exact mapping at this width.
     bit_width: int
+    operand_count: int
 
 
 def _selector(
@@ -435,10 +436,32 @@ FLOAT_CLAMP_SELECTOR = _selector(
     ),
 )
 
+FLOAT_MATH_BINARY_SELECTOR = _selector(
+    "float.math.binary",
+    "Selects a stable binary math mapping at the instruction's width.",
+    (
+        (
+            "pow",
+            0,
+            "Returns the stable iree/math left^right mapping with fixed unfused "
+            "rounding, gradual underflow, and at most one adjacent result of "
+            "error from correct rounding. Either zero exponent or positive-one "
+            "base returns one, including NaNs. Otherwise every NaN and a negative "
+            "finite base with a finite nonintegral exponent return the canonical "
+            "positive quiet NaN. A negative base, zero, or infinity contributes a "
+            "negative result only for odd integer exponents. Infinite exponents "
+            "follow the limit determined by the base magnitude relative to one; "
+            "a base of -1 returns one for either infinite exponent.",
+        ),
+    ),
+)
+
+
 FLOAT_SELECTORS = (
     FLOAT_MINMAX_SELECTOR,
     FLOAT_MATH_F32_SELECTOR,
     FLOAT_MATH_F64_SELECTOR,
+    FLOAT_MATH_BINARY_SELECTOR,
     FLOAT_COMPARE_SELECTOR,
     FLOAT_CLASSIFY_SELECTOR,
     FLOAT_CLAMP_SELECTOR,
@@ -970,46 +993,75 @@ def _clamp(opcode: int, width: int) -> Instruction:
     )
 
 
-def _math_unary(opcode: int, width: int) -> Instruction:
-    mnemonic = f"float.math.unary.f{width}"
-    selector = FLOAT_MATH_F32_SELECTOR if width == 32 else FLOAT_MATH_F64_SELECTOR
+def _math(opcode: int, width: int, *, binary: bool = False) -> Instruction:
+    arity = "binary" if binary else "unary"
+    sources = ("left", "right") if binary else ("source",)
+    mnemonic = f"float.math.{arity}.f{width}"
+    selector = (
+        FLOAT_MATH_BINARY_SELECTOR
+        if binary
+        else FLOAT_MATH_F32_SELECTOR
+        if width == 32
+        else FLOAT_MATH_F64_SELECTOR
+    )
     return Instruction(
         opcode=opcode,
         mnemonic=mnemonic,
         since=CORE_0,
         family=FLOAT_FAMILY,
-        summary=f"Evaluates one closed unary f{width} math operation.",
+        summary=f"Evaluates one closed {arity} f{width} math operation.",
         fields=(
             _value(
                 "destination_v8",
                 FieldRole.RESULT,
                 "Value-register ordinal receiving the result.",
             ),
-            _value("source_v8", FieldRole.OPERAND, "Source value-register ordinal."),
+            *(
+                _value(
+                    f"{source}_v8",
+                    FieldRole.OPERAND,
+                    f"{source.capitalize()} value-register ordinal.",
+                )
+                for source in sources
+            ),
             _selected_value(
                 "selector_u8",
                 FieldRole.IMMEDIATE,
                 f"Closed {selector.name} operation selector.",
                 selector,
             ),
+            *((_padding(element_count=3),) if binary else ()),
         ),
-        semantics=FloatMathSemantics(width),
+        semantics=FloatMathSemantics(width, len(sources)),
         behavior=(
             "Evaluates the selector's frozen mapping under the family floating "
-            "profile. Approximate f32 leaves have selector-specific denormal and NaN "
-            "behavior. Structural sign uses raw bits."
+            "profile."
+            + (
+                " Approximate f32 leaves have selector-specific denormal and NaN "
+                "behavior. Structural sign uses raw bits."
+                if not binary
+                else " Both operands are read before writing the destination."
+            )
         ),
         success=(
             "destination_v8 receives the selector-defined exact result payload"
             + (" and clears the high cell half." if width == 32 else "."),
         ),
-        assembly=f"%v<destination> = {mnemonic} %v<source> {{selector}}",
+        assembly=(
+            f"%v<destination> = {mnemonic} "
+            + ", ".join(f"%v<{source}>" for source in sources)
+            + " {selector}"
+        ),
         pseudocode=(
-            f"source_bits = read_float_bits(source_v8, {width});\n"
-            "result_bits = evaluate_float_math_unary(\n"
-            f"    selector_u8, source_bits, {width});\n"
-            f"write_float_bits(destination_v8, result_bits, {width});\n"
-            "pc = pc + 4;"
+            "".join(
+                f"{source}_bits = read_float_bits({source}_v8, {width});\n"
+                for source in sources
+            )
+            + f"result_bits = evaluate_float_math_{arity}(\n    selector_u8, "
+            + ", ".join(f"{source}_bits" for source in sources)
+            + f", {width});\n"
+            + f"write_float_bits(destination_v8, result_bits, {width});\n"
+            + f"pc = pc + {8 if binary else 4};"
         ),
     )
 
@@ -1063,10 +1115,12 @@ _INSTRUCTIONS_BY_OPCODE = {
         _classify(0x93, 64),
         _clamp(0x94, 32),
         _clamp(0x95, 64),
-        _math_unary(0x98, 32),
-        _math_unary(0x99, 64),
+        _math(0x98, 32),
+        _math(0x99, 64),
         _fma(0x9A, 32),
         _fma(0x9B, 64),
+        _math(0x9C, 32, binary=True),
+        _math(0x9D, 64, binary=True),
     )
 }
 FLOAT_INSTRUCTIONS = tuple(

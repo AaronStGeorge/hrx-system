@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2025, Arm Limited.
+// Copyright (c) 2017-2026, Arm Limited.
 // Copyright 2026 The IREE Authors
 //
 // Licensed under the Apache License v2.0 with LLVM Exceptions.
@@ -10,6 +10,7 @@
 #include <stdbool.h>
 
 #include "iree/math/float_bits.h"
+#include "iree/math/logarithm_reduction.h"
 
 //===----------------------------------------------------------------------===//
 // Cancellation-preserving natural exponential
@@ -498,15 +499,45 @@ static double iree_math_exp_f64_scale(double correction, uint64_t scale_bits,
   scale_bits += UINT64_C(1022) << 52;
   const double scale = iree_math_f64_from_bits(scale_bits);
   double result = scale + scale * correction;
-  if (result < 1.0) {
+  if ((iree_math_f64_to_bits(result) & IREE_MATH_F64_MAGNITUDE_MASK) <
+      UINT64_C(0x3FF0000000000000)) {
     // Round at the final subnormal precision before scaling, avoiding a second
     // rounding at the normal/subnormal boundary. Keep these additions unfused.
     double low = scale - result + scale * correction;
-    const double high = 1.0 + result;
-    low = 1.0 - high + result + low;
-    result = (high + low) - 1.0;
+    const double one = iree_math_f64_from_bits(
+        (scale_bits & IREE_MATH_F64_SIGN_BIT) | UINT64_C(0x3FF0000000000000));
+    const double high = one + result;
+    low = one - high + result + low;
+    result = (high + low) - one;
+    if (result == 0.0) {
+      result = iree_math_f64_from_bits(scale_bits & IREE_MATH_F64_SIGN_BIT);
+    }
   }
   return 0x1p-1022 * result;
+}
+
+// Ordinary exp and power retain different reduction precision, then share
+// the same polynomial and table reconstruction. Sign is encoded separately
+// from the reduction integer so the overflow direction remains available.
+static double iree_math_exp_f64_reconstruct(double residual,
+                                            uint64_t encoded_rounded,
+                                            uint64_t sign,
+                                            bool extended_scale) {
+  const iree_math_exp_f64_table_entry_t entry =
+      iree_math_exp_f64_table[encoded_rounded & UINT64_C(127)];
+  const uint64_t scale_bits = entry.scale_bits + (encoded_rounded << 45) + sign;
+  const double tail = iree_math_f64_from_bits(entry.tail_bits);
+  const double squared = residual * residual;
+  const double correction =
+      tail + residual +
+      squared * (0x1.ffffffffffdbdp-2 + residual * 0x1.555555555543cp-3) +
+      squared * squared *
+          (0x1.55555cf172b91p-5 + residual * 0x1.1111167a4d017p-7);
+  if (IREE_UNLIKELY(extended_scale)) {
+    return iree_math_exp_f64_scale(correction, scale_bits, encoded_rounded);
+  }
+  const double scale = iree_math_f64_from_bits(scale_bits);
+  return scale + scale * correction;
 }
 
 IREE_API_EXPORT double iree_math_exp_f64(double value) {
@@ -532,21 +563,8 @@ IREE_API_EXPORT double iree_math_exp_f64(double value) {
   rounded -= 0x1.8p52;
   const double residual = value + rounded * -0x1.62e42fefa0000p-8 +
                           rounded * -0x1.cf79abc9e3b3ap-47;
-  const iree_math_exp_f64_table_entry_t entry =
-      iree_math_exp_f64_table[encoded_rounded & UINT64_C(127)];
-  const uint64_t scale_bits = entry.scale_bits + (encoded_rounded << 45);
-  const double tail = iree_math_f64_from_bits(entry.tail_bits);
-  const double squared = residual * residual;
-  const double correction =
-      tail + residual +
-      squared * (0x1.ffffffffffdbdp-2 + residual * 0x1.555555555543cp-3) +
-      squared * squared *
-          (0x1.55555cf172b91p-5 + residual * 0x1.1111167a4d017p-7);
-  if (IREE_UNLIKELY(exponent >= UINT32_C(0x408))) {
-    return iree_math_exp_f64_scale(correction, scale_bits, encoded_rounded);
-  }
-  const double scale = iree_math_f64_from_bits(scale_bits);
-  return scale + scale * correction;
+  return iree_math_exp_f64_reconstruct(residual, encoded_rounded, 0,
+                                       exponent >= UINT32_C(0x408));
 }
 
 IREE_API_EXPORT double iree_math_exp2_f64(double value) {
@@ -585,4 +603,412 @@ IREE_API_EXPORT double iree_math_exp2_f64(double value) {
   }
   const double scale = iree_math_f64_from_bits(scale_bits);
   return scale + scale * correction;
+}
+
+//===----------------------------------------------------------------------===//
+// General real powers
+//===----------------------------------------------------------------------===//
+
+// Arm Optimized Routines 2ee4b0d45680a9880412c1d186224b08652c35f6,
+// powf/pow with unfused evaluation. F32 keeps the logarithm in F64 until
+// exponential reconstruction; F64 retains a compensated high part and tail.
+// The upstream error bounds are 0.82 ulp and 0.54 ulp, respectively.
+
+typedef enum iree_math_pow_integer_class_e {
+  IREE_MATH_POW_FRACTIONAL = 0,
+  IREE_MATH_POW_ODD = 1,
+  IREE_MATH_POW_EVEN = 2,
+} iree_math_pow_integer_class_t;
+
+// Classifies a finite nonzero exponent from its magnitude bits. The cold
+// exceptional path uses this to determine negative-base validity and sign.
+static iree_math_pow_integer_class_t iree_math_pow_integer_class(
+    uint64_t magnitude, uint32_t fraction_bits, uint32_t bias) {
+  const uint32_t exponent = (uint32_t)(magnitude >> fraction_bits);
+  if (exponent < bias) {
+    return IREE_MATH_POW_FRACTIONAL;
+  }
+  if (exponent > bias + fraction_bits) {
+    return IREE_MATH_POW_EVEN;
+  }
+  const uint32_t shift = bias + fraction_bits - exponent;
+  const uint64_t integer_bit = UINT64_C(1) << shift;
+  if (magnitude & (integer_bit - 1)) {
+    return IREE_MATH_POW_FRACTIONAL;
+  }
+  return magnitude & integer_bit ? IREE_MATH_POW_ODD : IREE_MATH_POW_EVEN;
+}
+
+static double iree_math_pow_f32_log2(uint32_t bits) {
+  const uint32_t adjusted = bits - UINT32_C(0x3F330000);
+  const uint32_t index = (adjusted >> 19) & UINT32_C(15);
+  const uint32_t exponent_code = adjusted >> 23;
+  const int32_t exponent = exponent_code >= UINT32_C(256)
+                               ? (int32_t)exponent_code - 512
+                               : (int32_t)exponent_code;
+  const uint32_t normalized_bits = bits - (adjusted & UINT32_C(0xFF800000));
+  const double normalized = (double)iree_math_f32_from_bits(normalized_bits);
+  const iree_math_log2_f32_table_entry_t entry =
+      iree_math_log2_f32_table[index];
+  const double residual = normalized * entry.inverse_center - 1.0;
+  const double logarithm = entry.log2_center + (double)exponent;
+  const double squared = residual * residual;
+  const double fourth = squared * squared;
+  const double upper = 0x1.27616c9496e0bp-2 * residual - 0x1.71969a075c67ap-2;
+  const double middle = 0x1.ec70a6ca7baddp-2 * residual - 0x1.7154748bef6c8p-1;
+  const double lower = 0x1.71547652ab82bp0 * residual + logarithm;
+  return upper * fourth + (middle * squared + lower);
+}
+
+IREE_API_EXPORT float iree_math_pow_f32(float base, float exponent) {
+  uint32_t base_bits = iree_math_f32_to_bits(base);
+  const uint32_t exponent_bits = iree_math_f32_to_bits(exponent);
+  const uint32_t exponent_magnitude =
+      exponent_bits & IREE_MATH_F32_MAGNITUDE_MASK;
+  uint32_t sign = 0;
+  if (IREE_UNLIKELY(base_bits - IREE_MATH_F32_MIN_NORMAL >=
+                        IREE_MATH_F32_INFINITY - IREE_MATH_F32_MIN_NORMAL ||
+                    exponent_magnitude == 0 ||
+                    exponent_magnitude >= IREE_MATH_F32_INFINITY)) {
+    const uint32_t magnitude = base_bits & IREE_MATH_F32_MAGNITUDE_MASK;
+    if (exponent_magnitude == 0 || base_bits == UINT32_C(0x3F800000)) {
+      return 1.0f;
+    }
+    if (magnitude > IREE_MATH_F32_INFINITY ||
+        exponent_magnitude > IREE_MATH_F32_INFINITY) {
+      return iree_math_f32_canonical_nan();
+    }
+    if (exponent_magnitude == IREE_MATH_F32_INFINITY) {
+      if (magnitude == UINT32_C(0x3F800000)) {
+        return 1.0f;
+      }
+      return (magnitude < UINT32_C(0x3F800000)) ==
+                     !(exponent_bits & IREE_MATH_F32_SIGN_BIT)
+                 ? 0.0f
+                 : iree_math_f32_from_bits(IREE_MATH_F32_INFINITY);
+    }
+    const iree_math_pow_integer_class_t integer_class =
+        iree_math_pow_integer_class(exponent_magnitude, 23, 127);
+    if (base_bits & IREE_MATH_F32_SIGN_BIT) {
+      if (integer_class == IREE_MATH_POW_ODD) {
+        sign = IREE_MATH_F32_SIGN_BIT;
+      }
+      base_bits = magnitude;
+    }
+    if (magnitude == 0 || magnitude == IREE_MATH_F32_INFINITY) {
+      const bool infinite = (magnitude == IREE_MATH_F32_INFINITY) !=
+                            ((exponent_bits & IREE_MATH_F32_SIGN_BIT) != 0);
+      return iree_math_f32_from_bits(sign |
+                                     (infinite ? IREE_MATH_F32_INFINITY : 0));
+    }
+    if ((iree_math_f32_to_bits(base) & IREE_MATH_F32_SIGN_BIT) &&
+        integer_class == IREE_MATH_POW_FRACTIONAL) {
+      return iree_math_f32_canonical_nan();
+    }
+    if (base_bits < IREE_MATH_F32_MIN_NORMAL) {
+      base_bits =
+          iree_math_f32_to_bits(base * 0x1p23f) & IREE_MATH_F32_MAGNITUDE_MASK;
+      base_bits -= UINT32_C(23) << 23;
+    }
+  }
+  const double product = (double)exponent * iree_math_pow_f32_log2(base_bits);
+  if (IREE_UNLIKELY((iree_math_f64_to_bits(product) >> 47 & UINT64_C(0xFFFF)) >=
+                    (UINT64_C(0x405F800000000000) >> 47))) {
+    if (product <= -150.0) {
+      return iree_math_f32_from_bits(sign);
+    }
+    if (product > 0x1.fffffffd1d571p6) {
+      return iree_math_f32_from_bits(sign | IREE_MATH_F32_INFINITY);
+    }
+  }
+  double rounded = product + 0x1.8p47;
+  uint64_t encoded_rounded = iree_math_f64_to_bits(rounded);
+  rounded -= 0x1.8p47;
+  // This bias becomes the F64 sign bit during the shared scale reconstruction.
+  encoded_rounded += (uint64_t)sign >> 15;
+  return iree_math_exp2_f32_reconstruct(product - rounded, encoded_rounded);
+}
+
+typedef struct iree_math_pow_log_f64_entry_t {
+  // Quantized reciprocal of the reduction center, with at most nine bits.
+  double inverse_center;
+  // Center logarithm rounded to a multiple of 2^-43.
+  double logarithm;
+  // Remainder of the center logarithm after rounding the high part.
+  double tail;
+} iree_math_pow_log_f64_entry_t;
+
+// Quantized centers make the split residual exact without FMA. Keeping the
+// logarithm tail retains about fifteen bits beyond ordinary F64 precision.
+static const iree_math_pow_log_f64_entry_t iree_math_pow_log_f64_table[128] = {
+    {0x1.6a00000000000p+0, -0x1.62c82f2b9c800p-2, 0x1.ab42428375680p-48},
+    {0x1.6800000000000p+0, -0x1.5d1bdbf580800p-2, -0x1.ca508d8e0f720p-46},
+    {0x1.6600000000000p+0, -0x1.5767717455800p-2, -0x1.362a4d5b6506dp-45},
+    {0x1.6400000000000p+0, -0x1.51aad872df800p-2, -0x1.684e49eb067d5p-49},
+    {0x1.6200000000000p+0, -0x1.4be5f95777800p-2, -0x1.41b6993293ee0p-47},
+    {0x1.6000000000000p+0, -0x1.4618bc21c6000p-2, 0x1.3d82f484c84ccp-46},
+    {0x1.5e00000000000p+0, -0x1.404308686a800p-2, 0x1.c42f3ed820b3ap-50},
+    {0x1.5c00000000000p+0, -0x1.3a64c55694800p-2, 0x1.0b1c686519460p-45},
+    {0x1.5a00000000000p+0, -0x1.347dd9a988000p-2, 0x1.5594dd4c58092p-45},
+    {0x1.5800000000000p+0, -0x1.2e8e2bae12000p-2, 0x1.67b1e99b72bd8p-45},
+    {0x1.5600000000000p+0, -0x1.2895a13de8800p-2, 0x1.5ca14b6cfb03fp-46},
+    {0x1.5600000000000p+0, -0x1.2895a13de8800p-2, 0x1.5ca14b6cfb03fp-46},
+    {0x1.5400000000000p+0, -0x1.22941fbcf7800p-2, -0x1.65a242853da76p-46},
+    {0x1.5200000000000p+0, -0x1.1c898c1699800p-2, -0x1.fafbc68e75404p-46},
+    {0x1.5000000000000p+0, -0x1.1675cababa800p-2, 0x1.f1fc63382a8f0p-46},
+    {0x1.4e00000000000p+0, -0x1.1058bf9ae4800p-2, -0x1.6a8c4fd055a66p-45},
+    {0x1.4c00000000000p+0, -0x1.0a324e2739000p-2, -0x1.c6bee7ef4030ep-47},
+    {0x1.4a00000000000p+0, -0x1.0402594b4d000p-2, -0x1.036b89ef42d7fp-48},
+    {0x1.4a00000000000p+0, -0x1.0402594b4d000p-2, -0x1.036b89ef42d7fp-48},
+    {0x1.4800000000000p+0, -0x1.fb9186d5e4000p-3, 0x1.d572aab993c87p-47},
+    {0x1.4600000000000p+0, -0x1.ef0adcbdc6000p-3, 0x1.b26b79c86af24p-45},
+    {0x1.4400000000000p+0, -0x1.e27076e2af000p-3, -0x1.72f4f543fff10p-46},
+    {0x1.4200000000000p+0, -0x1.d5c216b4fc000p-3, 0x1.1ba91bbca681bp-45},
+    {0x1.4000000000000p+0, -0x1.c8ff7c79aa000p-3, 0x1.7794f689f8434p-45},
+    {0x1.4000000000000p+0, -0x1.c8ff7c79aa000p-3, 0x1.7794f689f8434p-45},
+    {0x1.3e00000000000p+0, -0x1.bc286742d9000p-3, 0x1.94eb0318bb78fp-46},
+    {0x1.3c00000000000p+0, -0x1.af3c94e80c000p-3, 0x1.a4e633fcd9066p-52},
+    {0x1.3a00000000000p+0, -0x1.a23bc1fe2b000p-3, -0x1.58c64dc46c1eap-45},
+    {0x1.3a00000000000p+0, -0x1.a23bc1fe2b000p-3, -0x1.58c64dc46c1eap-45},
+    {0x1.3800000000000p+0, -0x1.9525a9cf45000p-3, -0x1.ad1d904c1d4e3p-45},
+    {0x1.3600000000000p+0, -0x1.87fa06520d000p-3, 0x1.bbdbf7fdbfa09p-45},
+    {0x1.3400000000000p+0, -0x1.7ab890210e000p-3, 0x1.bdb9072534a58p-45},
+    {0x1.3400000000000p+0, -0x1.7ab890210e000p-3, 0x1.bdb9072534a58p-45},
+    {0x1.3200000000000p+0, -0x1.6d60fe719d000p-3, -0x1.0e46aa3b2e266p-46},
+    {0x1.3000000000000p+0, -0x1.5ff3070a79000p-3, -0x1.e9e439f105039p-46},
+    {0x1.3000000000000p+0, -0x1.5ff3070a79000p-3, -0x1.e9e439f105039p-46},
+    {0x1.2e00000000000p+0, -0x1.526e5e3a1b000p-3, -0x1.0de8b90075b8fp-45},
+    {0x1.2c00000000000p+0, -0x1.44d2b6ccb8000p-3, 0x1.70cc16135783cp-46},
+    {0x1.2c00000000000p+0, -0x1.44d2b6ccb8000p-3, 0x1.70cc16135783cp-46},
+    {0x1.2a00000000000p+0, -0x1.371fc201e9000p-3, 0x1.178864d27543ap-48},
+    {0x1.2800000000000p+0, -0x1.29552f81ff000p-3, -0x1.48d301771c408p-45},
+    {0x1.2600000000000p+0, -0x1.1b72ad52f6000p-3, -0x1.e80a41811a396p-45},
+    {0x1.2600000000000p+0, -0x1.1b72ad52f6000p-3, -0x1.e80a41811a396p-45},
+    {0x1.2400000000000p+0, -0x1.0d77e7cd09000p-3, 0x1.a699688e85bf4p-47},
+    {0x1.2400000000000p+0, -0x1.0d77e7cd09000p-3, 0x1.a699688e85bf4p-47},
+    {0x1.2200000000000p+0, -0x1.fec9131dbe000p-4, -0x1.575545ca333f2p-45},
+    {0x1.2000000000000p+0, -0x1.e27076e2b0000p-4, 0x1.a342c2af0003cp-45},
+    {0x1.2000000000000p+0, -0x1.e27076e2b0000p-4, 0x1.a342c2af0003cp-45},
+    {0x1.1e00000000000p+0, -0x1.c5e548f5bc000p-4, -0x1.d0c57585fbe06p-46},
+    {0x1.1c00000000000p+0, -0x1.a926d3a4ae000p-4, 0x1.53935e85baac8p-45},
+    {0x1.1c00000000000p+0, -0x1.a926d3a4ae000p-4, 0x1.53935e85baac8p-45},
+    {0x1.1a00000000000p+0, -0x1.8c345d631a000p-4, 0x1.37c294d2f5668p-46},
+    {0x1.1a00000000000p+0, -0x1.8c345d631a000p-4, 0x1.37c294d2f5668p-46},
+    {0x1.1800000000000p+0, -0x1.6f0d28ae56000p-4, -0x1.69737c93373dap-45},
+    {0x1.1600000000000p+0, -0x1.51b073f062000p-4, 0x1.f025b61c65e57p-46},
+    {0x1.1600000000000p+0, -0x1.51b073f062000p-4, 0x1.f025b61c65e57p-46},
+    {0x1.1400000000000p+0, -0x1.341d7961be000p-4, 0x1.c5edaccf913dfp-45},
+    {0x1.1400000000000p+0, -0x1.341d7961be000p-4, 0x1.c5edaccf913dfp-45},
+    {0x1.1200000000000p+0, -0x1.16536eea38000p-4, 0x1.47c5e768fa309p-46},
+    {0x1.1000000000000p+0, -0x1.f0a30c0118000p-5, 0x1.d599e83368e91p-45},
+    {0x1.1000000000000p+0, -0x1.f0a30c0118000p-5, 0x1.d599e83368e91p-45},
+    {0x1.0e00000000000p+0, -0x1.b42dd71198000p-5, 0x1.c827ae5d6704cp-46},
+    {0x1.0e00000000000p+0, -0x1.b42dd71198000p-5, 0x1.c827ae5d6704cp-46},
+    {0x1.0c00000000000p+0, -0x1.77458f632c000p-5, -0x1.cfc4634f2a1eep-45},
+    {0x1.0c00000000000p+0, -0x1.77458f632c000p-5, -0x1.cfc4634f2a1eep-45},
+    {0x1.0a00000000000p+0, -0x1.39e87b9fec000p-5, 0x1.502b7f526feaap-48},
+    {0x1.0a00000000000p+0, -0x1.39e87b9fec000p-5, 0x1.502b7f526feaap-48},
+    {0x1.0800000000000p+0, -0x1.f829b0e780000p-6, -0x1.980267c7e09e4p-45},
+    {0x1.0800000000000p+0, -0x1.f829b0e780000p-6, -0x1.980267c7e09e4p-45},
+    {0x1.0600000000000p+0, -0x1.7b91b07d58000p-6, -0x1.88d5493faa639p-45},
+    {0x1.0400000000000p+0, -0x1.fc0a8b0fc0000p-7, -0x1.f1e7cf6d3a69cp-50},
+    {0x1.0400000000000p+0, -0x1.fc0a8b0fc0000p-7, -0x1.f1e7cf6d3a69cp-50},
+    {0x1.0200000000000p+0, -0x1.fe02a6b100000p-8, -0x1.9e23f0dda40e4p-46},
+    {0x1.0200000000000p+0, -0x1.fe02a6b100000p-8, -0x1.9e23f0dda40e4p-46},
+    {0x1.0000000000000p+0, 0x0.0000000000000p+0, 0x0.0000000000000p+0},
+    {0x1.0000000000000p+0, 0x0.0000000000000p+0, 0x0.0000000000000p+0},
+    {0x1.fc00000000000p-1, 0x1.0101575890000p-7, -0x1.0c76b999d2be8p-46},
+    {0x1.f800000000000p-1, 0x1.0205658938000p-6, -0x1.3dc5b06e2f7d2p-45},
+    {0x1.f400000000000p-1, 0x1.8492528c90000p-6, -0x1.aa0ba325a0c34p-45},
+    {0x1.f000000000000p-1, 0x1.0415d89e74000p-5, 0x1.111c05cf1d753p-47},
+    {0x1.ec00000000000p-1, 0x1.466aed42e0000p-5, -0x1.c167375bdfd28p-45},
+    {0x1.e800000000000p-1, 0x1.894aa149fc000p-5, -0x1.97995d05a267dp-46},
+    {0x1.e400000000000p-1, 0x1.ccb73cdddc000p-5, -0x1.a68f247d82807p-46},
+    {0x1.e200000000000p-1, 0x1.eea31c006c000p-5, -0x1.e113e4fc93b7bp-47},
+    {0x1.de00000000000p-1, 0x1.1973bd1466000p-4, -0x1.5325d560d9e9bp-45},
+    {0x1.da00000000000p-1, 0x1.3bdf5a7d1e000p-4, 0x1.cc85ea5db4ed7p-45},
+    {0x1.d600000000000p-1, 0x1.5e95a4d97a000p-4, -0x1.c69063c5d1d1ep-45},
+    {0x1.d400000000000p-1, 0x1.700d30aeac000p-4, 0x1.c1e8da99ded32p-49},
+    {0x1.d000000000000p-1, 0x1.9335e5d594000p-4, 0x1.3115c3abd47dap-45},
+    {0x1.cc00000000000p-1, 0x1.b6ac88dad6000p-4, -0x1.390802bf768e5p-46},
+    {0x1.ca00000000000p-1, 0x1.c885801bc4000p-4, 0x1.646d1c65aacd3p-45},
+    {0x1.c600000000000p-1, 0x1.ec739830a2000p-4, -0x1.dc068afe645e0p-45},
+    {0x1.c400000000000p-1, 0x1.fe89139dbe000p-4, -0x1.534d64fa10afdp-45},
+    {0x1.c000000000000p-1, 0x1.1178e8227e000p-3, 0x1.1ef78ce2d07f2p-45},
+    {0x1.be00000000000p-1, 0x1.1aa2b7e23f000p-3, 0x1.ca78e44389934p-45},
+    {0x1.ba00000000000p-1, 0x1.2d1610c868000p-3, 0x1.39d6ccb81b4a1p-47},
+    {0x1.b800000000000p-1, 0x1.365fcb0159000p-3, 0x1.62fa8234b7289p-51},
+    {0x1.b400000000000p-1, 0x1.4913d8333b000p-3, 0x1.5837954fdb678p-45},
+    {0x1.b200000000000p-1, 0x1.527e5e4a1b000p-3, 0x1.633e8e5697dc7p-45},
+    {0x1.ae00000000000p-1, 0x1.6574ebe8c1000p-3, 0x1.9cf8b2c3c2e78p-46},
+    {0x1.ac00000000000p-1, 0x1.6f0128b757000p-3, -0x1.5118de59c21e1p-45},
+    {0x1.aa00000000000p-1, 0x1.7898d85445000p-3, -0x1.c661070914305p-46},
+    {0x1.a600000000000p-1, 0x1.8beafeb390000p-3, -0x1.73d54aae92cd1p-47},
+    {0x1.a400000000000p-1, 0x1.95a5adcf70000p-3, 0x1.7f22858a0ff6fp-47},
+    {0x1.a000000000000p-1, 0x1.a93ed3c8ae000p-3, -0x1.8724350562169p-45},
+    {0x1.9e00000000000p-1, 0x1.b31d8575bd000p-3, -0x1.c358d4eace1aap-47},
+    {0x1.9c00000000000p-1, 0x1.bd087383be000p-3, -0x1.d4bc4595412b6p-45},
+    {0x1.9a00000000000p-1, 0x1.c6ffbc6f01000p-3, -0x1.1ec72c5962bd2p-48},
+    {0x1.9600000000000p-1, 0x1.db13db0d49000p-3, -0x1.aff2af715b035p-45},
+    {0x1.9400000000000p-1, 0x1.e530effe71000p-3, 0x1.212276041f430p-51},
+    {0x1.9200000000000p-1, 0x1.ef5ade4dd0000p-3, -0x1.a211565bb8e11p-51},
+    {0x1.9000000000000p-1, 0x1.f991c6cb3b000p-3, 0x1.bcbecca0cdf30p-46},
+    {0x1.8c00000000000p-1, 0x1.07138604d5800p-2, 0x1.89cdb16ed4e91p-48},
+    {0x1.8a00000000000p-1, 0x1.0c42d67616000p-2, 0x1.7188b163ceae9p-45},
+    {0x1.8800000000000p-1, 0x1.1178e8227e800p-2, -0x1.c210e63a5f01cp-45},
+    {0x1.8600000000000p-1, 0x1.16b5ccbacf800p-2, 0x1.b9acdf7a51681p-45},
+    {0x1.8400000000000p-1, 0x1.1bf99635a6800p-2, 0x1.ca6ed5147bdb7p-45},
+    {0x1.8200000000000p-1, 0x1.214456d0eb800p-2, 0x1.a87deba46baeap-47},
+    {0x1.7e00000000000p-1, 0x1.2bef07cdc9000p-2, 0x1.a9cfa4a5004f4p-45},
+    {0x1.7c00000000000p-1, 0x1.314f1e1d36000p-2, -0x1.8e27ad3213cb8p-45},
+    {0x1.7a00000000000p-1, 0x1.36b6776be1000p-2, 0x1.16ecdb0f177c8p-46},
+    {0x1.7800000000000p-1, 0x1.3c25277333000p-2, 0x1.83b54b606bd5cp-46},
+    {0x1.7600000000000p-1, 0x1.419b423d5e800p-2, 0x1.8e436ec90e09dp-47},
+    {0x1.7400000000000p-1, 0x1.4718dc271c800p-2, -0x1.f27ce0967d675p-45},
+    {0x1.7200000000000p-1, 0x1.4c9e09e173000p-2, -0x1.e20891b0ad8a4p-45},
+    {0x1.7000000000000p-1, 0x1.522ae0738a000p-2, 0x1.ebe708164c759p-45},
+    {0x1.6e00000000000p-1, 0x1.57bf753c8d000p-2, 0x1.fadedee5d40efp-46},
+    {0x1.6c00000000000p-1, 0x1.5d5bddf596000p-2, -0x1.a0b2a08a465dcp-47},
+};
+
+static double iree_math_pow_f64_log(uint64_t bits, double* out_tail) {
+  const uint64_t adjusted = bits - UINT64_C(0x3FE6955500000000);
+  const uint32_t index = (uint32_t)(adjusted >> 45) & UINT32_C(127);
+  const uint32_t exponent_code = (uint32_t)(adjusted >> 52);
+  const int32_t exponent = exponent_code >= UINT32_C(2048)
+                               ? (int32_t)exponent_code - 4096
+                               : (int32_t)exponent_code;
+  const uint64_t normalized_bits =
+      bits - (adjusted & UINT64_C(0xFFF0000000000000));
+  const double normalized = iree_math_f64_from_bits(normalized_bits);
+  const iree_math_pow_log_f64_entry_t entry =
+      iree_math_pow_log_f64_table[index];
+  const double high_normalized = iree_math_f64_from_bits(
+      (normalized_bits + UINT64_C(0x80000000)) & UINT64_C(0xFFFFFFFF00000000));
+  const double low_normalized = normalized - high_normalized;
+  const double high_residual = high_normalized * entry.inverse_center - 1.0;
+  const double low_residual = low_normalized * entry.inverse_center;
+  const double residual = high_residual + low_residual;
+  const double logarithm =
+      (double)exponent * 0x1.62e42fefa3800p-1 + entry.logarithm;
+  const double linear = logarithm + residual;
+  const double low_logarithm =
+      (double)exponent * 0x1.ef35793c76730p-45 + entry.tail;
+  const double low_linear = logarithm - linear + residual;
+  const double negative_half = -0.5 * residual;
+  const double quadratic = residual * negative_half;
+  const double cubic = residual * quadratic;
+  const double high_half = -0.5 * high_residual;
+  const double high_quadratic = high_residual * high_half;
+  const double high = linear + high_quadratic;
+  const double low_quadratic = low_residual * (negative_half + high_half);
+  const double low_high = linear - high + high_quadratic;
+  const double polynomial =
+      cubic *
+      ((-2.0 * 0x1.555555555556p-2) +
+       residual * (-2.0 * -0x1.0000000000006p-2) +
+       quadratic * ((4.0 * 0x1.999999959554ep-3) +
+                    residual * (4.0 * -0x1.555555529a47ap-3) +
+                    quadratic * ((-8.0 * 0x1.2495b9b4845e9p-3) +
+                                 residual * (-8.0 * -0x1.0002b8b263fc3p-3))));
+  const double low =
+      low_logarithm + low_linear + low_quadratic + low_high + polynomial;
+  const double result = high + low;
+  *out_tail = high - result + low;
+  return result;
+}
+
+IREE_API_EXPORT double iree_math_pow_f64(double base, double exponent) {
+  uint64_t base_bits = iree_math_f64_to_bits(base);
+  const uint64_t exponent_bits = iree_math_f64_to_bits(exponent);
+  const uint64_t exponent_magnitude =
+      exponent_bits & IREE_MATH_F64_MAGNITUDE_MASK;
+  uint32_t base_top = (uint32_t)(base_bits >> 52);
+  const uint32_t exponent_top = (uint32_t)(exponent_magnitude >> 52);
+  uint64_t sign = 0;
+  if (IREE_UNLIKELY(base_top - UINT32_C(1) >= UINT32_C(0x7FE) ||
+                    exponent_top - UINT32_C(0x3BE) >=
+                        UINT32_C(0x43E) - UINT32_C(0x3BE))) {
+    const uint64_t magnitude = base_bits & IREE_MATH_F64_MAGNITUDE_MASK;
+    if (exponent_magnitude == 0 || base_bits == UINT64_C(0x3FF0000000000000)) {
+      return 1.0;
+    }
+    if (magnitude > IREE_MATH_F64_INFINITY ||
+        exponent_magnitude > IREE_MATH_F64_INFINITY) {
+      return iree_math_f64_canonical_nan();
+    }
+    if (exponent_magnitude == IREE_MATH_F64_INFINITY) {
+      if (magnitude == UINT64_C(0x3FF0000000000000)) {
+        return 1.0;
+      }
+      return (magnitude < UINT64_C(0x3FF0000000000000)) ==
+                     !(exponent_bits & IREE_MATH_F64_SIGN_BIT)
+                 ? 0.0
+                 : iree_math_f64_from_bits(IREE_MATH_F64_INFINITY);
+    }
+    const iree_math_pow_integer_class_t integer_class =
+        iree_math_pow_integer_class(exponent_magnitude, 52, 1023);
+    if (base_bits & IREE_MATH_F64_SIGN_BIT) {
+      if (integer_class == IREE_MATH_POW_ODD) {
+        sign = IREE_MATH_F64_SIGN_BIT;
+      }
+      base_bits = magnitude;
+      base_top &= UINT32_C(0x7FF);
+    }
+    if (magnitude == 0 || magnitude == IREE_MATH_F64_INFINITY) {
+      const bool infinite = (magnitude == IREE_MATH_F64_INFINITY) !=
+                            ((exponent_bits & IREE_MATH_F64_SIGN_BIT) != 0);
+      return iree_math_f64_from_bits(sign |
+                                     (infinite ? IREE_MATH_F64_INFINITY : 0));
+    }
+    if ((iree_math_f64_to_bits(base) & IREE_MATH_F64_SIGN_BIT) &&
+        integer_class == IREE_MATH_POW_FRACTIONAL) {
+      return iree_math_f64_canonical_nan();
+    }
+    if (exponent_top - UINT32_C(0x3BE) >= UINT32_C(0x43E) - UINT32_C(0x3BE)) {
+      if (magnitude == UINT64_C(0x3FF0000000000000) ||
+          exponent_top < UINT32_C(0x3BE)) {
+        return 1.0;
+      }
+      return (magnitude > UINT64_C(0x3FF0000000000000)) ==
+                     !(exponent_bits & IREE_MATH_F64_SIGN_BIT)
+                 ? iree_math_f64_from_bits(IREE_MATH_F64_INFINITY)
+                 : 0.0;
+    }
+    if (base_top == 0) {
+      base_bits =
+          iree_math_f64_to_bits(base * 0x1p52) & IREE_MATH_F64_MAGNITUDE_MASK;
+      base_bits -= UINT64_C(52) << 52;
+    }
+  }
+  double logarithm_tail;
+  const double logarithm = iree_math_pow_f64_log(base_bits, &logarithm_tail);
+  // Each high part has 27 low bits cleared, so their product is exact. The
+  // remaining products retain the low part before exponential reconstruction.
+  const double high_exponent =
+      iree_math_f64_from_bits(exponent_bits & UINT64_C(0xFFFFFFFFF8000000));
+  const double low_exponent = exponent - high_exponent;
+  const double high_logarithm = iree_math_f64_from_bits(
+      iree_math_f64_to_bits(logarithm) & UINT64_C(0xFFFFFFFFF8000000));
+  const double low_logarithm = logarithm - high_logarithm + logarithm_tail;
+  const double high = high_exponent * high_logarithm;
+  const double low = low_exponent * high_logarithm + exponent * low_logarithm;
+  const uint64_t high_bits = iree_math_f64_to_bits(high);
+  const uint32_t high_top = (uint32_t)(high_bits >> 52) & UINT32_C(0x7FF);
+  if (IREE_UNLIKELY(high_top < UINT32_C(0x3C9))) {
+    return iree_math_f64_from_bits(sign | UINT64_C(0x3FF0000000000000));
+  }
+  if (IREE_UNLIKELY(high_top >= UINT32_C(0x409))) {
+    return iree_math_f64_from_bits(
+        sign |
+        ((high_bits & IREE_MATH_F64_SIGN_BIT) ? 0 : IREE_MATH_F64_INFINITY));
+  }
+  const double reduced = (0x1.71547652b82fep0 * 128.0) * high;
+  double rounded = reduced + 0x1.8p52;
+  const uint64_t encoded_rounded = iree_math_f64_to_bits(rounded);
+  rounded -= 0x1.8p52;
+  const double residual = high + rounded * -0x1.62e42fefa0000p-8 +
+                          rounded * -0x1.cf79abc9e3b3ap-47 + low;
+  return iree_math_exp_f64_reconstruct(residual, encoded_rounded, sign,
+                                       high_top >= UINT32_C(0x408));
 }

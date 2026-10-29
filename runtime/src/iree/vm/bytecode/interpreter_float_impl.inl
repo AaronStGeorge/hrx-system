@@ -249,6 +249,15 @@ static inline IREE_ATTRIBUTE_ALWAYS_INLINE void IREE_VM_BYTECODE_FLOAT_EXECUTE(
 }
 
 static inline IREE_ATTRIBUTE_ALWAYS_INLINE void IREE_VM_BYTECODE_FLOAT_EXECUTE(
+    math_binary)(const IREE_VM_BYTECODE_FLOAT_RECORD(math_binary) * record,
+                 uint64_t* values) {
+  values[record->destination_v8] = IREE_VM_BYTECODE_FLOAT_MATH(binary)(
+      record->selector_u8,
+      (IREE_VM_BYTECODE_FLOAT_BITS_TYPE)values[record->left_v8],
+      (IREE_VM_BYTECODE_FLOAT_BITS_TYPE)values[record->right_v8]);
+}
+
+static inline IREE_ATTRIBUTE_ALWAYS_INLINE void IREE_VM_BYTECODE_FLOAT_EXECUTE(
     fma)(const IREE_VM_BYTECODE_FLOAT_RECORD(fma) * record, uint64_t* values) {
   const IREE_VM_BYTECODE_FLOAT_TYPE a = IREE_VM_BYTECODE_FLOAT_PRIVATE(
       from_bits)((IREE_VM_BYTECODE_FLOAT_BITS_TYPE)values[record->a_v8]);

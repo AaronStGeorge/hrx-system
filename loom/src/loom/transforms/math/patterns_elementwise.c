@@ -853,6 +853,10 @@ static void loom_math_legalize_binary_source_initialize(
       out_source->binary_build =
           is_scalar ? loom_scalar_divf_build : loom_vector_divf_build;
       return;
+    case LOOM_TARGET_MATH_OP_POWF:
+      out_source->binary_build =
+          is_scalar ? loom_scalar_powf_build : loom_vector_powf_build;
+      return;
     default:
       break;
   }
@@ -1061,6 +1065,7 @@ static iree_status_t loom_math_legalize_build_widen_f32_round(
     case LOOM_TARGET_MATH_OP_SUBF:
     case LOOM_TARGET_MATH_OP_MULF:
     case LOOM_TARGET_MATH_OP_DIVF:
+    case LOOM_TARGET_MATH_OP_POWF:
       return loom_math_legalize_build_widen_f32_round_binary(builder, context,
                                                              op, out_value);
     case LOOM_TARGET_MATH_OP_EXPF:
