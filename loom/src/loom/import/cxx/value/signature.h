@@ -35,6 +35,31 @@ struct BoundSignature {
   BoundTypeStorage type_storage;
 };
 
+// Independently bound header and result schemes for one condition-controlled
+// loop. The generated scf.while builder consumes reserved header identities
+// before result identities, so |identities| must remain alive through that
+// builder call.
+struct BoundConditionLoopSignatures {
+  BoundConditionLoopSignatures() = default;
+  BoundConditionLoopSignatures(const BoundConditionLoopSignatures&) = delete;
+  BoundConditionLoopSignatures& operator=(const BoundConditionLoopSignatures&) =
+      delete;
+  BoundConditionLoopSignatures(BoundConditionLoopSignatures&&) = default;
+  BoundConditionLoopSignatures& operator=(BoundConditionLoopSignatures&&) =
+      default;
+
+  // Storage backing the builder's pending reservation.
+  std::vector<loom_value_id_t> identities;
+  // Before-region recurring state, including any independent suffix types.
+  std::vector<loom_type_t> header_types;
+  // Overflow dimension payloads retained through the loop builder call.
+  BoundTypeStorage header_type_storage;
+  // After-region and operation-result recurring state.
+  std::vector<loom_type_t> result_types;
+  // Overflow dimension payloads retained through the loop builder call.
+  BoundTypeStorage result_type_storage;
+};
+
 // Controls whether a static signature needs its destination identities before
 // its owning operation is built. Dependent types always require identities;
 // callable predicates additionally reference otherwise static arguments and
@@ -61,6 +86,18 @@ BoundSignature bind_signature_to(Types& types,
                                  std::span<const cxx::Type* const> sources,
                                  cxx::AST* owner,
                                  std::span<const loom_value_id_t> identities);
+
+// Binds the independent header and result schemes required by scf.while when
+// any source component has a dependent type. |header_suffix_types| describes
+// independent synthetic state, such as the active bit used for structured
+// break. Static state leaves both schemes empty unless
+// |require_result_types| is true, which supports different header/result
+// arities without changing the ordinary inferred path.
+BoundConditionLoopSignatures bind_condition_loop_signatures(
+    Types& types, std::span<const cxx::Type* const> sources, cxx::AST* owner,
+    loom_builder_t* builder,
+    std::span<const loom_type_t> header_suffix_types = {},
+    bool require_result_types = false);
 
 }  // namespace loom::cxx_import
 

@@ -11,7 +11,7 @@ import pytest
 from loom.format.cxx.registry import load_module
 from loom.format.cxx.renderer import CxxRenderError, render_module
 from loom.format.cxx.test_support import LOOP_MODULE, SOURCE_MODULE
-from loom.ir import Module
+from loom.ir import DynamicDim, Module, ShapedType
 
 
 def _module_with_float_comparison(predicate: str) -> Module:
@@ -361,6 +361,103 @@ kernel.def @replace_lane() {
     assert "result = next_next;" in result
 
 
+def test_projects_dependent_view_loop_carriers() -> None:
+    source = """\
+kernel.def @crop() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: buffer, %rows: index, %iterations: offset) {
+  %zero_offset = index.constant 0 : offset
+  %source = buffer.view %input[%zero_offset] : buffer -> view<[%rows]x4xi32>
+  %step = index.constant 1 : offset
+  %final_rows, %final = scf.for %i = [%zero_offset to %iterations step %step](%body_rows = %rows : index, %body = %source : view<[%rows]x4xi32>) -> (index, view<[%final_rows]x4xi32>) {
+    %one = index.constant 1 : index
+    %zero = index.constant 0 : index
+    %next_rows = index.sub %body_rows, %one : index
+    %next = view.subview %body[%one, %zero] : view<[%body_rows]x4xi32> -> view<[%next_rows]x4xi32>
+    scf.yield %next_rows, %next : index, view<[%next_rows]x4xi32>
+  }
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert (
+        result
+        == """\
+#include <loomcxx/kernel.h>
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void crop(const unsigned* input, loom::type::index rows, loom::type::offset iterations) {
+  auto source = loom::buffer::view<loom::type::dynamic, 4>(input, loom::type::indices{rows}, loom::encoding::layout::dense<2>());
+  loom::type::index final_rows = rows;
+  auto final = source;
+  for (loom::type::offset i = loom::type::offset{0}; i < iterations; i = i + loom::type::offset{1}) {
+    final_rows = final_rows - loom::type::index{1};
+    final = loom::view::subview<loom::type::dynamic, 4>(final, loom::type::indices{loom::type::index{1}, loom::type::index{0}}, loom::type::indices{final_rows});
+  }
+}
+"""
+    )
+
+
+def test_rejects_unbound_dynamic_view_dimensions() -> None:
+    source = """\
+kernel.def @unbound() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: buffer, %extent: index) {
+  %zero = index.constant 0 : offset
+  %view = buffer.view %input[%zero] : buffer -> view<[%extent]xi32>
+  kernel.return
+}
+"""
+    module = load_module(source.encode())
+    view = next(value for value in module.values if value.name == "view")
+    assert isinstance(view.type, ShapedType)
+    view.type = ShapedType(
+        type_kind=view.type.type_kind,
+        element_type=view.type.element_type,
+        dims=(DynamicDim(),),
+        encoding=view.type.encoding,
+        alignment=view.type.alignment,
+    )
+
+    with pytest.raises(
+        CxxRenderError,
+        match="unbound dynamic view dimension has no C\\+\\+ projection",
+    ):
+        render_module(module)
+
+
+def test_rejects_incompatible_dependent_view_loop_carriers() -> None:
+    source = """\
+kernel.def @incompatible_view_carrier() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %small = buffer.view %input[%zero] : buffer -> view<4xi32>
+  %large = buffer.view %input[%zero] : buffer -> view<8xi32>
+  %result = scf.while(%before = %small : view<4xi32>) -> (view<8xi32>) {
+    %true = scalar.constant 1 : i1
+    scf.condition %true, %large : i1, view<8xi32>
+  } do(%after: view<8xi32>) {
+    scf.yield %small : view<4xi32>
+  }
+  test.use %result : view<8xi32>
+  kernel.return
+}
+"""
+
+    with pytest.raises(
+        CxxRenderError,
+        match=r"while result type view<8xi32> has no initializable C\+\+ carrier",
+    ):
+        render_module(load_module(source.encode()))
+
+
 def test_projects_while_regions_as_guarded_cxx_state() -> None:
     source = """\
 kernel.def @bounded_loop() {
@@ -390,6 +487,35 @@ kernel.def @bounded_loop() {
     assert "loop_continues = more;" in result
     assert "if (loop_continues) {" in result
     assert "terminal = terminal + loom::type::index{1};" in result
+
+
+def test_projects_identity_header_while_without_a_synthetic_guard() -> None:
+    source = """\
+kernel.def @identity_header_loop() {
+  %count = index.constant 1 : index
+  kernel.launch.config workgroups(%count, %count, %count) workgroup_size(%count, %count, %count) : index
+} launch() {
+  %initial_active = scalar.constant 1 : i1
+  %initial_position = index.constant 0 : index
+  %limit = index.constant 4 : index
+  %step = index.constant 1 : index
+  %active, %position = scf.while(%before_active = %initial_active : i1, %before_position = %initial_position : index) -> (i1, index) {
+    scf.condition %before_active, %before_active, %before_position : i1, i1, index
+  } do(%body_active: i1, %body_position: index) {
+    %next_position = index.add %body_position, %step : index
+    %next_active = index.cmp ult, %next_position, %limit : index
+    scf.yield %next_active, %next_position : i1, index
+  }
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert result.count("while (") == 1
+    assert "bool active = 1;" in result
+    assert "while (active) {" in result
+    assert "loop_continues" not in result
 
 
 def test_projects_vector_absolute_value_as_typed_intrinsic() -> None:

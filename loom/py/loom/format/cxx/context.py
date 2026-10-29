@@ -26,6 +26,8 @@ from loom.ir import (
     Block,
     BufferType,
     DialectType,
+    DynamicDim,
+    DynamicEncoding,
     Module,
     Operation,
     Predicate,
@@ -49,13 +51,13 @@ def walk_operations(block: Block) -> Iterable[Operation]:
 
 
 def _walk_operations_with_blocks(
-    block: Block,
-) -> Iterable[tuple[Operation, Block]]:
+    block: Block, parent: Operation | None = None
+) -> Iterable[tuple[Operation, Block, Operation | None]]:
     for operation in block.ops:
-        yield operation, block
+        yield operation, block, parent
         for region in operation.regions:
             for child in region.blocks:
-                yield from _walk_operations_with_blocks(child)
+                yield from _walk_operations_with_blocks(child, operation)
 
 
 def _is_integer_scalar(value_type: Any) -> bool:
@@ -127,15 +129,47 @@ class CxxRenderContext:
         self.definition_blocks: dict[int, Block] = {}
         self.use_blocks: dict[int, list[Block]] = collections.defaultdict(list)
         self.users: dict[int, list[Operation]] = collections.defaultdict(list)
+        self.uses: dict[int, list[tuple[Operation, int]]] = collections.defaultdict(
+            list
+        )
+        self.parent_operations: dict[int, Operation] = {}
+        # Dynamic view type identities become constructor arguments in C++.
+        # Record those uses because they are not ordinary operation operands.
+        self.view_construction_type_users: dict[int, list[Operation]] = (
+            collections.defaultdict(list)
+        )
         self.assumption_inputs: set[int] = set()
-        for operation, block in _walk_operations_with_blocks(self.module.body):
+        for operation, block, parent in _walk_operations_with_blocks(self.module.body):
+            if parent is not None:
+                self.parent_operations[id(operation)] = parent
             self.use_counts.update(operation.operands)
-            for operand in operation.operands:
+            for operand_index, operand in enumerate(operation.operands):
                 self.use_blocks[operand].append(block)
                 self.users[operand].append(operation)
+                self.uses[operand].append((operation, operand_index))
             for result in operation.results:
                 self.definitions[result] = operation
                 self.definition_blocks[result] = block
+                result_type = self.module.values[result].type
+                if not isinstance(result_type, ShapedType) or operation.name not in {
+                    "buffer.view",
+                    "view.subview",
+                }:
+                    continue
+                for dimension in result_type.dims:
+                    if (
+                        isinstance(dimension, DynamicDim)
+                        and dimension.value_id is not None
+                    ):
+                        self.view_construction_type_users[dimension.value_id].append(
+                            operation
+                        )
+                if operation.name == "buffer.view" and isinstance(
+                    result_type.encoding, DynamicEncoding
+                ):
+                    self.view_construction_type_users[
+                        result_type.encoding.value_id
+                    ].append(operation)
             if operation.name in {"scalar.assume", "index.assume"}:
                 self.assumption_inputs.update(operation.operands)
         self.operation_scopes, self.value_scopes = self._collect_value_scopes()
@@ -166,7 +200,8 @@ class CxxRenderContext:
         self.targets = self._collect_targets()
         self.value_origins = list(range(len(self.module.values)))
         self.rendered_assumptions_by_block: dict[int, set[tuple[object, ...]]] = {}
-        self.assignment_targets: dict[int, str] = {}
+        self.assignment_targets: dict[int, int] = {}
+        self.suppressed_forwarding_values: set[int] = set()
         self.target_names: dict[str, str] = {}
 
     def _collect_value_scopes(self) -> tuple[dict[int, int], dict[int, int]]:
@@ -962,7 +997,10 @@ class CxxRenderContext:
         return expression
 
     def expression_type(self, value_id: int) -> str:
-        return self.expression_types.get(value_id, self.cpp_type(value_id))
+        expression_type = self.expression_types.get(value_id)
+        return (
+            expression_type if expression_type is not None else self.cpp_type(value_id)
+        )
 
     def _declare(
         self,
@@ -1018,8 +1056,9 @@ class CxxRenderContext:
             return
         statement_expression = _strip_outer_parentheses(expression)
         prefix = f"[[{statement_attribute}]] " if statement_attribute else ""
-        assignment_target = self.assignment_targets.get(result_id)
-        if assignment_target is not None:
+        assignment_target_id = self.assignment_targets.get(result_id)
+        if assignment_target_id is not None:
+            assignment_target = self.expression(assignment_target_id)
             self.writer.line(f"{prefix}{assignment_target} = {statement_expression};")
             self.expressions[result_id] = assignment_target
         else:
