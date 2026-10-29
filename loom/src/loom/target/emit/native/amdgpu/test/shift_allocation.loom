@@ -1,5 +1,6 @@
 // Runtime scalar inputs keep the locked copies live until all three shifts.
 // Their VGPR count operand occupies the end of an allocation block.
+
 amdgpu.target<gfx90a> @shift_target
 
 low.func.def schedule(locked) target<amdgpu.cdna2.core>(@shift_target) @shift_boundary(%a: reg<amdgpu.sgpr x2>, %b: reg<amdgpu.sgpr x2>, %c: reg<amdgpu.sgpr x2>, %extra_uniform: reg<amdgpu.sgpr>, %uniform_count: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {

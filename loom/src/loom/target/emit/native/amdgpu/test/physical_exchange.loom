@@ -1,5 +1,6 @@
 // Three backedges exchange the active lanes' raw words. Restoring EXEC exposes
 // the untouched lanes as well as NaN-like and sign-bit payloads.
+
 amdgpu.target<gfx11-generic> @wave32 {subgroup_size = 32}
 
 amdgpu.target<gfx11-generic> @wave64 {subgroup_size = 64}

@@ -1,6 +1,7 @@
 // Component-wise float arithmetic through the Vulkan source compiler.
 // Distinct negative lanes expose dropped components and signed remainders.
 // Loop-carried results exercise native vector values through control flow.
+
 spirv.target<vulkan1_3> @target {abi = hal_kernel}
 
 kernel.def target(@target) @vector_float_f16_2() {

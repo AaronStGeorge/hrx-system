@@ -7,6 +7,7 @@
 //
 // Runtime row counts remain dynamic. The configured capacity fixes reusable
 // launch geometry and bounds those values without specializing the fixture.
+
 config.decl @fp8_encode.row_capacity : %value: index where [range(%value, 1, 4294967295)]
 
 kernel.def @f32_to_fp8(%row_count: index) {

@@ -1,6 +1,7 @@
 // Scalar loads and stores preserve complete payloads through a dynamic view
 // origin and element coordinate. Floating values use integer storage so the
 // oracle compares NaN payloads and signed zero bitwise.
+
 func.def @scalar_exchange_observations(%ordinal: index, %word_bits_input: i64, %wide_bits: i64, %word_storage: buffer, %wide_storage: buffer, %float_storage: buffer, %double_storage: buffer, %matrix_storage: buffer, %word_output: buffer, %wide_output: buffer) {
   %c3 = index.constant 3 : index
   %c4 = index.constant 4 : index

@@ -1,6 +1,7 @@
 // A result fragment with both an ordinary vector consumer and a transposed
 // fragment store must retain one logical value across both uses. The VM oracle
 // computes the matrix product and canonical GFX11 lane payload independently.
+
 amdgpu.target<gfx11-generic> @matrix_mixed_consumers_gfx11 {subgroup_size = 32}
 
 kernel.def target(@matrix_mixed_consumers_gfx11) @matrix_mixed_consumers() {

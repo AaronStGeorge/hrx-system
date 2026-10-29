@@ -3159,7 +3159,7 @@ TEST_F(ReaderTest, PreservesSourceTrivia) {
   const iree_string_view_t block_comments[] = {IREE_SV("block")};
   const iree_string_view_t op_comments[] = {IREE_SV("operation")};
   const iree_string_view_t file_header[] = {
-      IREE_SV("File-level overview."),
+      IREE_SV("File-level overview.\n"),
       IREE_SV("Second header line."),
   };
   IREE_ASSERT_OK(loom_module_attach_file_header(module, file_header,

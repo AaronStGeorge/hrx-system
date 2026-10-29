@@ -2,6 +2,7 @@
 // distinct lowering shapes. The wider oracle evaluates every lane independently;
 // f64 represents each source value and each binary result exactly before the
 // final narrowing step.
+
 func.def @arithmetic_f8e4m3(%lhs: buffer, %rhs: buffer, %sum: buffer, %difference: buffer, %product: buffer) {
   %base = index.constant 0 : offset
   %left = buffer.view %lhs[%base] : buffer -> view<4xf8E4M3>

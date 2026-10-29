@@ -1,5 +1,6 @@
 // Integer signedness and f32 rounding stay observable after scalar and packed
 // conversion. The oracle walks scalar elements instead of converting vectors.
+
 kernel.def @integer_floating_shapes() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index

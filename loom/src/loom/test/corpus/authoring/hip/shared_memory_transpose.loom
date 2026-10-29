@@ -7,6 +7,7 @@
 // contract, not a target-emitter trick. The two scratch tiles below make the
 // cross-axis LDS traffic visible while keeping the correctness oracle simple:
 // transposing twice must reproduce the original row-major iota.
+
 kernel.def @shared_memory_tile_double_transpose() {
   %unit = index.constant 1 : index
   %tile = index.constant 8 : index

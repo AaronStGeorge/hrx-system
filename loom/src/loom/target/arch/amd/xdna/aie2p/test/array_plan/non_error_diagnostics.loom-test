@@ -1,7 +1,8 @@
+// A successful diagnostic is an observation, not a rejected plan outcome.
+
 // RUN: with-checks emit aie2p-array-plan-with-remark @remark_preserves_plan
 // REMARK: FOLD/001
 
-// A successful diagnostic is an observation, not a rejected plan outcome.
 aie2p.target<array> @array_target
 
 aie2p.target<core> @core_target

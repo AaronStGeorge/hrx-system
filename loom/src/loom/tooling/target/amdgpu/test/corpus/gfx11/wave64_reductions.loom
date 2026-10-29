@@ -7,6 +7,7 @@
 // rejected by AMDGPU source-to-low diagnostics because native subgroup
 // communication is only proven for the GFX11 family's narrower execution
 // partition.
+
 amdgpu.target<gfx11-generic> @authoring_wave64 {subgroup_size = 64}
 
 kernel.def target(@authoring_wave64) @wave64_workgroup_reduce_sub_wave() {

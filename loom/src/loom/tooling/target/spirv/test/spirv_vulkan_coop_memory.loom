@@ -3,6 +3,7 @@
 // axes whose coordinate is an SSA zero. Each workgroup publishes two tiles.
 // Four-element source carriers stay opaque at both subgroup widths. Integer
 // copies select shared integer allocations for the floating matrix fragments.
+
 spirv.target<vulkan1_3> @wave32 {abi = hal_kernel, subgroup_size = 32}
 
 spirv.target<vulkan1_3> @wave64 {abi = hal_kernel, subgroup_size = 64}

@@ -310,7 +310,7 @@ class Tokenizer:
         return None
 
     def take_file_header(self) -> list[str]:
-        """Take the separated line-1 comment block, if present."""
+        """Take leading paragraphs, retaining internal blank lines as trailing LF."""
         file_header = self._comments[: self._file_header_line_count]
         self._comments = self._comments[self._file_header_line_count :]
         self._file_header_line_count = 0
@@ -412,6 +412,14 @@ class Tokenizer:
         """Create a token."""
         return Token(kind, text, location, self.current_location())
 
+    def _extend_file_header(self) -> None:
+        """Include the current paragraph, retaining the previous separator."""
+        if self._file_header_line_count == len(self._comments):
+            return
+        if self._file_header_line_count:
+            self._comments[self._file_header_line_count - 1] += "\n"
+        self._file_header_line_count = len(self._comments)
+
     def _skip_whitespace_and_comments(self) -> None:
         """Skip whitespace and collect comments."""
         while self._position < len(self._source):
@@ -432,11 +440,10 @@ class Tokenizer:
                 if not self._comments:
                     self._comment_start_line = self._line
                 elif (
-                    self._comment_start_line == 1
-                    and self._file_header_line_count == 0
+                    self._consumed_end_line == 0
                     and self._line > self._comment_end_line + 1
                 ):
-                    self._file_header_line_count = len(self._comments)
+                    self._extend_file_header()
                 self._comment_end_line = self._line
                 comment_start = self._position + 2
                 self._advance()  # skip first /
@@ -459,14 +466,14 @@ class Tokenizer:
 
         source_start_line = self._comment_start_line or self._line
         if (
-            self._comment_start_line == 1
-            and self._file_header_line_count == 0
+            self._comments
+            and self._consumed_end_line == 0
             and (
                 self._position == len(self._source)
                 or self._line > self._comment_end_line + 1
             )
         ):
-            self._file_header_line_count = len(self._comments)
+            self._extend_file_header()
         self._leading_blank_line = (
             self._consumed_end_line != 0
             and source_start_line > self._consumed_end_line + 1

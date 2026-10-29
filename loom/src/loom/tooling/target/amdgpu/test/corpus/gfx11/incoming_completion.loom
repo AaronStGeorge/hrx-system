@@ -1,5 +1,6 @@
 // A load result consumed in a successor block is complete on the backedge.
 // Skipping that consumer keeps the destination leased until the next reuse.
+
 amdgpu.target<gfx11-generic> @incoming_completion_target
 
 low.func.def schedule(locked) target<amdgpu.gfx11.generic.core>(@incoming_completion_target) @incoming_completion_alternating_sum(%lane_offset: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>, %count: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm {

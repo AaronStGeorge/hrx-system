@@ -1619,7 +1619,11 @@ class TestIRStructure:
 
     def test_source_trivia_roundtrip(self) -> None:
         module = _make_single_op_body_module()
-        module.file_header = ("File-level overview.", "Second header line.")
+        module.file_header = (
+            "Copyright Example Authors\n",
+            "File-level overview.",
+            "Second header line.",
+        )
         func_op = module.symbols[0].op
         assert func_op is not None
         block = func_op.regions[0].blocks[0]

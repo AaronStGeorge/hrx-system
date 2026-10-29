@@ -1,5 +1,6 @@
 // Every byte encoding crosses scalar and packed conversion paths. Row scales
 // are runtime data; the oracle uses scalar arithmetic and independent stores.
+
 kernel.def @float8_dequantization() {
   %unit = index.constant 1 : index
   %width = index.constant 64 : index

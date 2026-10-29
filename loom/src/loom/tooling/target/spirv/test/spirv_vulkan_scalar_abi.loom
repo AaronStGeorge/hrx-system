@@ -1,5 +1,6 @@
 // Scalar argument payloads retain low bits, signs, and subnormals across the
 // raw-BDA word ABI. Distinct adjacent arguments expose offset and width errors.
+
 spirv.target<vulkan1_3> @target {abi = hal_kernel}
 
 kernel.def target(@target) @scalar_payload_i8() {

@@ -35,6 +35,7 @@
 // compiler's worker locks and S2MM0 task; the wrapper then parks on exhausted
 // configuration input. The command suffix owns custom DMA drain before native
 // completion.
+
 aie2p.target<array> @array_target
 
 aie2p.target<core> @core_target

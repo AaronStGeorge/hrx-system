@@ -2,6 +2,7 @@
 // Each consumer reverses the records written to mutable state; the controller
 // joins both writers before the next fill. Guards and fresh trial inputs also
 // exercise descriptor reuse, invocation restart, and complete retirement.
+
 aie2p.target<array> @device
 
 func.def inline @fill(%input: buffer, %incoming: channel<tile<16xi32>>) {

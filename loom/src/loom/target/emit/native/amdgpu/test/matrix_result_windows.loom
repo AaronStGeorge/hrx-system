@@ -1,5 +1,6 @@
 // A long MFMA forwards through a short MFMA before the accumulator reaches an
 // ordinary read on the loop backedge. Every lane supplies the same matrix data.
+
 amdgpu.target<gfx90a> @target
 
 low.func.def schedule(locked) target<amdgpu.cdna2.core>(@target) @loop_windows(%lane: reg<amdgpu.vgpr>, %history: reg<amdgpu.sgpr x2>, %final: reg<amdgpu.sgpr x2>, %limit: reg<amdgpu.sgpr>) asm {

@@ -4,6 +4,7 @@
 // in address formation. The destination column stride is a runtime launch
 // argument so the fragment store must preserve the physical layout through
 // target lowering. A padded stride makes an accidental dense store observable.
+
 amdgpu.target<gfx1100> @fragment_result_dynamic_gfx1100_wave64 {subgroup_size = 64}
 
 kernel.def target(@fragment_result_dynamic_gfx1100_wave64) @fragment_result_dynamic_strided_f16acc_f32_store() {

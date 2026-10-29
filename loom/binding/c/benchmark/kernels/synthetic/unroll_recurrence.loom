@@ -1,6 +1,7 @@
 // The benchmark sweeps materialized iteration count. A carried consumer blocks
 // later copies while independent arithmetic exercises interleaved lookahead.
 // The paired kernels isolate source fencing from ordinary SSA dependencies.
+
 config.decl @benchmark.unroll_count : %value: index where [range(%value, 1, 1024)]
 
 kernel.def @unroll_fenced() {

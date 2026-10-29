@@ -60,12 +60,20 @@ static iree_status_t loom_print_file_header(const loom_module_t* module,
   const iree_string_view_t* lines =
       loom_module_file_header(module, &line_count);
   for (iree_host_size_t i = 0; i < line_count; ++i) {
+    iree_string_view_t line = lines[i];
+    bool paragraph_break = iree_string_view_ends_with(line, IREE_SV("\n"));
+    if (paragraph_break) {
+      line = iree_string_view_remove_suffix(line, 1);
+    }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "//"));
-    if (!iree_string_view_is_empty(lines[i])) {
+    if (!iree_string_view_is_empty(line)) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, lines[i]));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, line));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
+    if (paragraph_break) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
+    }
   }
   return iree_ok_status();
 }

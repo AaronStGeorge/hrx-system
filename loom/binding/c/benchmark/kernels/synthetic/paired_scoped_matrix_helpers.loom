@@ -2,6 +2,7 @@
 // stores. Configuration selects the experimental materialized pair count; every
 // pair retains the same two-stage load/consume order and distinct numerical
 // results. Each helper owns its phases while independent instances interleave.
+
 config.decl @benchmark.pair_count : %value: index where [range(%value, 1, 256)]
 
 amdgpu.target<gfx11-generic> @paired_scoped_matrix_target {subgroup_size = 32}

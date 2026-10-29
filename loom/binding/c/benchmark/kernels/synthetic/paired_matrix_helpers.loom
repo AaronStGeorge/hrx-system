@@ -2,6 +2,7 @@
 // stores. Configuration selects the experimental materialized pair count; every
 // pair retains the same two-stage load/consume order and distinct numerical
 // results. Repeated accesses exercise memory-frontier retirement after inlining.
+
 config.decl @benchmark.pair_count : %value: index where [range(%value, 1, 256)]
 
 amdgpu.target<gfx11-generic> @paired_matrix_target {subgroup_size = 32}

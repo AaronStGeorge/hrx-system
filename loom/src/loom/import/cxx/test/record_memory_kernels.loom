@@ -1,4 +1,5 @@
 // Independent byte oracles include natural padding, neighboring records and input.
+
 kernel.decl @record_update_kernel() launch(%records: buffer, %input: buffer, %output: buffer)
 
 kernel.decl @record_volatile_kernel() launch(%records: buffer, %input: buffer, %output: buffer)

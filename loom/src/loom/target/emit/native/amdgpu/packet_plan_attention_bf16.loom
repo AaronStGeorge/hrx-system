@@ -1,4 +1,5 @@
 // Fixed 4096-token, 18-head, 256-wide online BF16 attention workload.
+
 amdgpu.target<gfx1250> @gfx1250
 
 template.decl @benchmark.attention_bf16.m16n16(%query: buffer, %key: buffer, %value: buffer, %output: buffer, %query_tile: index, %query_head: index, %lane: index)

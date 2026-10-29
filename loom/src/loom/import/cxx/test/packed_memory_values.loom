@@ -1,4 +1,5 @@
 // Complete byte oracles include every alignment residue, input and guards.
+
 func.decl @packed_copy(%input: buffer, %input_origin: offset, %output: buffer, %output_origin: offset)
 
 func.def @observations() -> (i1) {

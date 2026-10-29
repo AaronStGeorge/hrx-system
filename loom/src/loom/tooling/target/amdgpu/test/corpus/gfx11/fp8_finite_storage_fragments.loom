@@ -2,6 +2,7 @@
 // storage. These cases intentionally name the physical fragment payloads used
 // by GFX11 WMMA and therefore belong to the GFX11 execution corpus instead of
 // the target-independent FP8 conversion corpus.
+
 amdgpu.target<gfx11-generic> @finite_storage_fragments_gfx11_wave32 {subgroup_size = 32}
 
 // Decode a finite FP8 RHS tile directly into a BF16 matrix fragment.

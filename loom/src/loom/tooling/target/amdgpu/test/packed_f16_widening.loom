@@ -1,6 +1,7 @@
 // Vector widening consumes both halves of every packed source register. The
 // scalar oracle loads each lane independently, so it cannot share the packed
 // high-half selection used by the subject.
+
 kernel.def @widen_packed_f16_lanes() {
   %unit = index.constant 1 : index
   %groups = index.constant 256 : index

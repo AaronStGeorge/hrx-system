@@ -1,5 +1,6 @@
 // Tuple swaps exercise allocator cycle scratch in the accumulator bank. Read,
 // write, broadcast and inline initialization preserve every lane's payload.
+
 amdgpu.target<gfx90a> @target
 
 low.func.def schedule(locked) target<amdgpu.cdna2.core>(@target) @transport(%lane: reg<amdgpu.vgpr>, %input: reg<amdgpu.sgpr x2>, %output: reg<amdgpu.sgpr x2>) asm {

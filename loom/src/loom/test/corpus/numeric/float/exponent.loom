@@ -2,6 +2,7 @@
 // explicitly by comparing discarded bits to the halfway point. The subject
 // uses native exponent instructions or a rounding-bias recipe instead. NaN
 // payload/sign are unobserved.
+
 func.def inline @observe_exponent_bits(%bits: i64, %sign_mask: i64, %infinity: i64, %finite_only: i1) -> (i64) {
   %c1 = scalar.constant 1 : i64
   %magnitude_mask = scalar.subi %sign_mask, %c1 : i64

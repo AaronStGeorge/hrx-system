@@ -1,6 +1,7 @@
 // Uniform constructors cover floating-point and integer cooperative matrices.
 // Carrier widths vary independently of subgroup width. The full output tile
 // checks K*a*b+c, with modulo-2^32 accumulation for the unsigned payload.
+
 config.decl @initializer.carrier_width : %value: index where [range(%value, 1, 8)]
 
 spirv.target<vulkan1_3> @wave32 {abi = hal_kernel, subgroup_size = 32}

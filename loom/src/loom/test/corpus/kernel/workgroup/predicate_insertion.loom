@@ -1,6 +1,7 @@
 // Every work-item has its own source mask, replacement and insertion position.
 // Two complementary active sets cover all cases through divergent control flow;
 // 132 work-items also leave a partial final wave on wave32 and wave64 targets.
+
 func.def device inline @store_predicate_mask(%mask: vector<4xi1>, %position: index, %output: buffer) {
   %base = index.constant 0 : offset
   %destination = buffer.view %output[%base] : buffer -> view<2112xi32>

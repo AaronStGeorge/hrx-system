@@ -1,6 +1,7 @@
 // Compares transposed F32-result-fragment publication to F16 memory against a
 // separately computed F32 result converted elementwise. Distinct matrix
 // operands make both operand exchange and result-coordinate mapping observable.
+
 amdgpu.target<gfx11-generic> @fragment_result_f32_to_f16_gfx11 {subgroup_size = 32}
 
 kernel.def target(@fragment_result_f32_to_f16_gfx11) @publish_transposed_f16() {

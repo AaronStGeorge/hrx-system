@@ -2,6 +2,7 @@
 // GFX12.5 providers release the tile before private work and wait before the
 // next overwrite; other targets use the complete-barrier fallback behind the
 // same template contract.
+
 amdgpu.target<gfx12-generic> @gfx12
 
 amdgpu.target<gfx12-5-generic> @gfx12_5

@@ -1281,7 +1281,10 @@ class Printer:
         self._lines = []
         self._module = module
         self._name_plan = plan_names(module, self._registry, self._layout)
-        self._emit_comments(module.file_header)
+        for line in module.file_header:
+            self._emit_comments((line.removesuffix("\n"),))
+            if line.endswith("\n"):
+                self._lines.append("")
         if module.file_header and (
             any(encoding.alias for encoding in module.encodings)
             or any(symbol.op is not None for symbol in module.symbols)

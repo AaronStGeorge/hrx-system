@@ -2,6 +2,7 @@
 // keeps those masks live together so automatic spill repair is exercised.
 // A snapshot in a later block must keep its address as repair extends storage.
 // One active lane makes a true comparison mask equal to one.
+
 amdgpu.target<gfx11-generic> @spill_target
 
 low.func.def schedule(locked) target<amdgpu.gfx11.generic.core>(@spill_target) @spill_snapshot(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm {

@@ -757,6 +757,9 @@ TEST_F(ParserTest, OperationAndBlockCommentsRoundTrip) {
 
 TEST_F(ParserTest, FileHeaderRoundTrip) {
   const char* source =
+      "// Copyright Example Authors\n"
+      "// SPDX-License-Identifier: MIT\n"
+      "\n"
       "// File-level overview.\n"
       "//  Indented header detail.\n"
       "\n"
@@ -766,10 +769,14 @@ TEST_F(ParserTest, FileHeaderRoundTrip) {
   iree_host_size_t line_count = 0;
   const iree_string_view_t* file_header =
       loom_module_file_header(module, &line_count);
-  ASSERT_EQ(line_count, 2u);
+  ASSERT_EQ(line_count, 4u);
+  EXPECT_TRUE(iree_string_view_equal(file_header[0],
+                                     IREE_SV("Copyright Example Authors")));
+  EXPECT_TRUE(iree_string_view_equal(
+      file_header[1], IREE_SV("SPDX-License-Identifier: MIT\n")));
   EXPECT_TRUE(
-      iree_string_view_equal(file_header[0], IREE_SV("File-level overview.")));
-  EXPECT_TRUE(iree_string_view_equal(file_header[1],
+      iree_string_view_equal(file_header[2], IREE_SV("File-level overview.")));
+  EXPECT_TRUE(iree_string_view_equal(file_header[3],
                                      IREE_SV(" Indented header detail.")));
   loom_op_t* declaration = GetFirstFunctionOp(module);
   ASSERT_NE(declaration, nullptr);
