@@ -4,12 +4,18 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+load("//build_tools/bazel:package_boundary.bzl", "iree_package_boundary")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test", "loom_config_compatible_with")
 
 package(
     default_visibility = ["//loom/src/loom/serve:implementation"],
     features = ["layering_check"],
     licenses = ["notice"],
+)
+
+iree_package_boundary(
+    allowed_descendant_paths = ["testdata/**"],
+    reason = "Program integration fixtures preserve their compilation-role layout.",
 )
 
 exports_files(
@@ -207,6 +213,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "source_index",
+    srcs = ["source_index.c"],
+    hdrs = ["source_index.h"],
+    deps = [
+        ":compilation",
+        ":sources",
+        "//loom/binding/c:loomc",
+        "//loom/src/loom/tooling/input:loomc_configured",
+        "//loom/src/loom/util:digest",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "executable",
     srcs = ["executable.c"],
     hdrs = ["executable.h"],
@@ -232,6 +253,7 @@ loom_cc_library(
     deps = [
         ":compilation",
         ":executable",
+        ":source_index",
         ":sources",
         ":target",
         "//loom/binding/c:loomc",
@@ -319,6 +341,24 @@ loom_cc_test(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/module/hal:types",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "cxx_provider_test",
+    srcs = ["cxx_provider_test.cc"],
+    target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
+    deps = [
+        ":package",
+        ":program",
+        ":source_index",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/vm",
+        "//loom/src/loom/model:card",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
         "//runtime/src/iree/vm",

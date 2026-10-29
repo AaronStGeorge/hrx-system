@@ -12,6 +12,7 @@
 #include "iree/base/threading/notification.h"
 #include "loom/serve/runtime/program/executable.h"
 #include "loom/serve/runtime/program/jit_cache.h"
+#include "loom/serve/runtime/program/source_index.h"
 #include "loom/serve/runtime/program/target.h"
 #include "loom/target/arch/cmd/hal_command_buffer.h"
 #include "loomc/compile.h"
@@ -214,31 +215,13 @@ static void loom_serve_jit_identity_update_u64(loom_sha256_state_t* identity,
   loom_serve_jit_identity_update(identity, encoded, sizeof(encoded));
 }
 
-static void loom_serve_jit_identity_update_source(
-    loom_sha256_state_t* identity, loomc_link_provider_role_t role,
-    iree_string_view_t provider_name, const loomc_source_t* source) {
-  if (!identity) {
-    return;
-  }
-  const iree_string_view_t identifier =
-      iree_string_view_from_loomc(loomc_source_identifier(source));
-  const loomc_byte_span_t contents = loomc_source_contents(source);
-  loom_serve_jit_identity_update_u64(identity, (uint64_t)role);
-  loom_serve_jit_identity_update_view(identity, provider_name);
-  loom_serve_jit_identity_update_u64(identity,
-                                     (uint64_t)loomc_source_format(source));
-  loom_serve_jit_identity_update_view(identity, identifier);
-  loom_serve_jit_identity_update(identity, contents.data,
-                                 (iree_host_size_t)contents.data_length);
-}
-
 static void loom_serve_jit_identity_initialize(
     const loom_serve_sources_t* sources,
     const loomc_sanitizer_options_t* sanitizer,
     const loom_serve_target_t* target, loom_sha256_state_t* out_identity) {
   loom_sha256_initialize(out_identity);
   loom_serve_jit_identity_update_view(
-      out_identity, IREE_SV("loom.serve.compilation-generation.v1"));
+      out_identity, IREE_SV("loom.serve.compilation-generation.v2"));
   loom_serve_jit_identity_update_view(
       out_identity, target->selection.executable_target->family);
   loom_serve_jit_identity_update_view(
@@ -281,96 +264,6 @@ static void loom_serve_jit_identity_initialize(
     loom_serve_jit_identity_update_view(out_identity, iree_string_view_empty());
     loom_serve_jit_identity_update_u64(out_identity, 0);
   }
-}
-
-static iree_status_t loom_serve_jit_index_sources(
-    loomc_context_t* context, const loom_serve_sources_t* sources,
-    loomc_source_t* primary, loom_serve_compilation_report_t* report,
-    iree_allocator_t host_allocator, loom_sha256_state_t* identity,
-    loomc_link_index_t** out_index) {
-  *out_index = NULL;
-  loomc_link_index_builder_t* builder = NULL;
-  iree_status_t status =
-      iree_status_from_loomc(loomc_link_index_builder_allocate(
-          context, NULL, loomc_allocator_from_iree(host_allocator), &builder));
-  iree_string_view_t primary_name = iree_string_view_empty();
-  if (iree_status_is_ok(status) && primary) {
-    primary_name =
-        iree_string_view_from_loomc(loomc_source_identifier(primary));
-    const loomc_link_index_source_options_t options = {
-        .provider_name = loomc_source_identifier(primary),
-        .role = LOOMC_LINK_PROVIDER_ROLE_INPUT,
-    };
-    loom_serve_jit_identity_update_source(
-        identity, options.role,
-        iree_string_view_from_loomc(options.provider_name), primary);
-    status = iree_status_from_loomc(
-        loomc_link_index_builder_add_source(builder, primary, &options, NULL));
-  }
-  for (iree_host_size_t i = 0; i < sources->count && iree_status_is_ok(status);
-       ++i) {
-    loomc_source_t* source = NULL;
-    status = loom_serve_sources_open(sources, sources->values[i],
-                                     host_allocator, &source);
-    if (iree_status_is_ok(status)) {
-      // A model commonly includes its entry source in the provider catalog.
-      // Keep that source's primary role instead of indexing its exports twice.
-      const iree_string_view_t name =
-          iree_string_view_from_loomc(loomc_source_identifier(source));
-      if (!primary || !iree_string_view_equal(name, primary_name)) {
-        const loomc_link_index_source_options_t options = {
-            .provider_name = loomc_string_view_from_iree(sources->values[i]),
-            .role = LOOMC_LINK_PROVIDER_ROLE_LIBRARY,
-        };
-        loom_serve_jit_identity_update_source(
-            identity, options.role,
-            iree_string_view_from_loomc(options.provider_name), source);
-        status = iree_status_from_loomc(loomc_link_index_builder_add_source(
-            builder, source, &options, NULL));
-      }
-    }
-    loomc_source_release(source);
-  }
-  if (sources->card) {
-    const loom_model_selection_t* model =
-        loom_model_card_selection(sources->card);
-    const loom_model_provider_list_t lists[] = {model->inputs,
-                                                model->libraries};
-    for (iree_host_size_t l = 0;
-         l < IREE_ARRAYSIZE(lists) && iree_status_is_ok(status); ++l) {
-      for (iree_host_size_t i = 0;
-           i < lists[l].count && iree_status_is_ok(status); ++i) {
-        const loom_model_provider_t* provider = &lists[l].values[i];
-        loomc_source_t* source = NULL;
-        status = loom_serve_sources_open_provider(sources, provider,
-                                                  host_allocator, &source);
-        if (iree_status_is_ok(status) &&
-            (!primary ||
-             !iree_string_view_equal(
-                 iree_string_view_from_loomc(loomc_source_identifier(source)),
-                 primary_name))) {
-          const loomc_link_index_source_options_t options = {
-              .provider_name = loomc_string_view_from_iree(provider->file.path),
-              .role = l == 0 ? LOOMC_LINK_PROVIDER_ROLE_INPUT
-                             : LOOMC_LINK_PROVIDER_ROLE_LIBRARY};
-          loom_serve_jit_identity_update_source(
-              identity, options.role,
-              iree_string_view_from_loomc(options.provider_name), source);
-          status = iree_status_from_loomc(loomc_link_index_builder_add_source(
-              builder, source, &options, NULL));
-        }
-        loomc_source_release(source);
-      }
-    }
-  }
-  if (iree_status_is_ok(status)) {
-    loomc_result_t* result = NULL;
-    const loomc_status_t operation =
-        loomc_link_index_builder_finish(builder, out_index, &result);
-    status = loom_serve_compilation_result(operation, result, report);
-  }
-  loomc_link_index_builder_free(builder);
-  return status;
 }
 
 static iree_status_t loom_serve_jit_initialize_compilation(
@@ -579,10 +472,15 @@ static iree_status_t loom_serve_jit_create_impl(
   if (iree_status_is_ok(status) && share) {
     loom_serve_jit_identity_initialize(sources, sanitizer, &target, &identity);
   }
+  loom_sha256_t source_identity;
   if (iree_status_is_ok(status)) {
-    status = loom_serve_jit_index_sources(
+    status = loom_serve_source_index_create(
         jit->kernel.context, sources, NULL, report, host_allocator,
-        share ? &identity : NULL, &jit->index);
+        share ? &source_identity : NULL, &jit->index);
+  }
+  if (iree_status_is_ok(status) && share) {
+    loom_serve_jit_identity_update(&identity, source_identity.bytes,
+                                   sizeof(source_identity.bytes));
   }
   if (iree_status_is_ok(status) && share) {
     loom_sha256_t digest;
@@ -1797,8 +1695,9 @@ static iree_status_t loom_serve_jit_compile_vm_source(
   loomc_linker_t* linker = NULL;
   loomc_module_t* module = NULL;
   if (iree_status_is_ok(status)) {
-    status = loom_serve_jit_index_sources(compiler.context, sources, source,
-                                          report, host_allocator, NULL, &index);
+    status =
+        loom_serve_source_index_create(compiler.context, sources, source,
+                                       report, host_allocator, NULL, &index);
   }
   if (iree_status_is_ok(status)) {
     status = iree_status_from_loomc(
