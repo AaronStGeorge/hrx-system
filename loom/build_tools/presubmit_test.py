@@ -116,6 +116,20 @@ class LoomPresubmitTest(unittest.TestCase):
                     "//loom/src/loom/example:test/example.loom-test",
                 )
 
+    def test_bazel_source_label_requires_a_canonical_repository_path(self):
+        for path in (
+            "",
+            ".",
+            "../input.c",
+            "/input.c",
+            "loom/../input.c",
+            "./input.c",
+            "loom//input.c",
+            "loom\\input.c",
+        ):
+            with self.subTest(path=path):
+                self.assertIsNone(self.presubmit.bazel_source_label(path))
+
     def test_affected_query_filters_sources_in_the_configured_test_closure(self):
         query = self.presubmit.affected_bazel_test_query(
             {"//loom:b_test", "//loom:a_test"}, {"//loom:changed.c"}
@@ -151,9 +165,16 @@ class LoomPresubmitTest(unittest.TestCase):
     def test_selected_files_are_mapped_to_source_labels(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             repository_root = Path(temporary_dir)
-            package_root = repository_root / "loom/src/loom/example"
-            package_root.mkdir(parents=True)
-            (package_root / "BUILD.bazel").touch()
+            (repository_root / "BUILD.bazel").touch()
+            for package in (
+                "loom/src/loom/example",
+                "loom/build_tools",
+                "build_tools/embed_data",
+                "runtime/src/iree/base",
+            ):
+                package_root = repository_root / package
+                package_root.mkdir(parents=True)
+                (package_root / "BUILD.bazel").touch()
             with (
                 mock.patch.object(self.presubmit, "REPO_ROOT", repository_root),
                 mock.patch.object(
@@ -167,7 +188,11 @@ class LoomPresubmitTest(unittest.TestCase):
                         [
                             "loom/src/loom/example/library.c",
                             "loom/src/loom/example/test/case.loom-test",
+                            "loom/build_tools/presubmit.py",
+                            "loom/build_tools/cmake/loom_corpus.cmake",
+                            "build_tools/embed_data/embed_data.cc",
                             "runtime/src/iree/base/api.c",
+                            ".bazel_to_cmake.cfg.py",
                         ]
                     ),
                     ["//loom:affected_test"],
@@ -177,12 +202,25 @@ class LoomPresubmitTest(unittest.TestCase):
             {
                 "//loom/src/loom/example:library.c",
                 "//loom/src/loom/example:test/case.loom-test",
+                "//loom/build_tools:presubmit.py",
+                "//loom/build_tools:cmake/loom_corpus.cmake",
+                "//build_tools/embed_data:embed_data.cc",
+                "//runtime/src/iree/base:api.c",
+                "//:.bazel_to_cmake.cfg.py",
             }
         )
 
     def test_global_trigger_selects_full_bazel_suite(self):
         for path in (
-            "loom/build_tools/presubmit.py",
+            "BUILD.bazel",
+            "MODULE.bazel",
+            "MODULE.bazel.lock",
+            "loom/build_tools/bazel/deps.MODULE.bazel",
+            ".bazelrc",
+            ".bazelrc.configured",
+            "build_tools/nativelink/nativelink.bazelrc",
+            "requirements.txt",
+            "requirements-dev.txt",
             "loom/src/loom/example/BUILD",
             "loom/src/loom/example/BUILD.bazel",
             "loom/src/loom/example/rules.bzl",

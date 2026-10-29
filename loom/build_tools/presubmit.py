@@ -385,21 +385,27 @@ def bazel_test_command(target_pattern_file: Path | None = None) -> list[str]:
 def bazel_source_label(path: str) -> str | None:
     source_path = PurePosixPath(path)
     if (
-        "\\" in path
+        not source_path.parts
+        or source_path.is_absolute()
+        or "\\" in path
         or source_path.as_posix() != path
         or ".." in source_path.parts
-        or not path.startswith(PROJECT_ROOT)
     ):
         return None
 
     directory = (REPO_ROOT / source_path).parent
-    while directory != REPO_ROOT:
+    while True:
         if (directory / "BUILD.bazel").is_file() or (directory / "BUILD").is_file():
-            package_path = directory.relative_to(REPO_ROOT).as_posix()
+            package_path = (
+                directory.relative_to(REPO_ROOT).as_posix()
+                if directory != REPO_ROOT
+                else ""
+            )
             source_name = (REPO_ROOT / source_path).relative_to(directory).as_posix()
             return f"//{package_path}:{source_name}"
+        if directory == REPO_ROOT:
+            return None
         directory = directory.parent
-    return None
 
 
 def bazel_node_label(node: str) -> str:
@@ -502,19 +508,19 @@ def query_affected_bazel_test_targets(source_labels: set[str]) -> list[str]:
 
 
 def selected_bazel_test_targets(paths: list[str]) -> list[str] | None:
-    # Build and Starlark edits change the dependency graph itself, so no source
-    # label in the configured graph can bound their effects.
+    # Build definitions and configuration change the graph itself. Ordinary
+    # tools and their inputs instead select consumers through declared edges,
+    # even when those tools live outside Loom or under build_tools.
     if any(
-        is_global_trigger(path)
-        or PurePosixPath(path).name in ("BUILD", "BUILD.bazel")
-        or path.endswith(".bzl")
+        PurePosixPath(path).name in ("BUILD", "BUILD.bazel")
+        or path.endswith((".bzl", "MODULE.bazel", "MODULE.bazel.lock", ".bazelrc"))
+        or PurePosixPath(path).name.startswith(".bazelrc")
+        or (path.startswith("requirements") and path.endswith(".txt"))
         for path in paths
     ):
         return None
     source_labels = set()
     for path in paths:
-        if not path.startswith(PROJECT_ROOT):
-            continue
         source_label = bazel_source_label(path)
         if source_label is not None:
             source_labels.add(source_label)
