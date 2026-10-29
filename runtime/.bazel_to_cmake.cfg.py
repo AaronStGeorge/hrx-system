@@ -58,6 +58,11 @@ class RuntimeBuildFileFunctions(
         kwargs = self._apply_runtime_cmake_policy(kwargs)
         self.cc_library(deps=deps + ["//runtime/src:defines"], **kwargs)
 
+    def iree_cc_library(self, **kwargs):
+        if self._package_name() == "runtime/src":
+            kwargs["cmake_package"] = "iree"
+        self.cc_library(**kwargs)
+
     def iree_runtime_cc_binary(self, deps=[], **kwargs):
         kwargs = self._apply_runtime_cmake_policy(kwargs)
         self.cc_binary(deps=deps + ["//runtime/src:defines"], **kwargs)
@@ -233,7 +238,8 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
     package_prefixes=["runtime"],
     build_file_functions=RuntimeBuildFileFunctions,
     target_mappings={
-        "//runtime/src:defines": ["iree_defs"],
+        "//runtime/src:defines": ["iree::defines"],
+        "@iree_macos_toolchain//:Foundation": ['"-framework Foundation"'],
     },
     condition_mappings={
         "//runtime/src/iree/math:gnu_x86": (
@@ -249,6 +255,7 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
         ),
         "//runtime/config/base:allocator_system_custom": 'IREE_ALLOCATOR_SYSTEM STREQUAL "custom"',
         "//runtime/config/base:allocator_system_mimalloc": 'IREE_ALLOCATOR_SYSTEM STREQUAL "mimalloc"',
+        ":windows_x86_64": 'WIN32 AND IREE_ARCH STREQUAL "x86_64"',
     },
     convert_unmatched_target=convert_unmatched_target,
 )

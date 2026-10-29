@@ -7,7 +7,6 @@
 iree_setup_c_src_root(
   DEFAULT_EXPORT_SET Runtime
   DEFAULT_INSTALL_COMPONENT IREEDevLibraries-Runtime
-  IMPLICIT_DEFS_TARGET iree_defs
 )
 
 # Native file requirements use the syscall metadata definitions independently
@@ -17,13 +16,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   iree_configure_linux_io_uapi()
 endif()
 
-# Enable LLVM coverage for the runtime libraries.
-# All object archives under runtime/src/ will contain coverage information and
-# binaries will be will produce profraw files when requested.
-#
-# TODO(benvanik): ideally we have iree_runtime_cc_library/binary and do this
-# there - today we use the same macros for both compiler and runtime and this
-# is the best way to scope coverage codegen to only the runtime.
+# Runtime coverage and dynamic-dispatch instrumentation policy.
 if(IREE_ENABLE_RUNTIME_COVERAGE)
   message(WARNING
     "IREE_ENABLE_RUNTIME_COVERAGE enabling coverage in all runtime libraries. "
@@ -49,5 +42,3 @@ if(IREE_ENABLE_UBSAN)
     "$<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-fno-sanitize=function>"
   )
 endif(IREE_ENABLE_UBSAN)
-
-iree_add_subdirectory(iree)

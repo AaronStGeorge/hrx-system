@@ -1313,14 +1313,45 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
     def iree_build_test(self, **kwargs):
         pass
 
-    def objc_library(self, tags=None, **kwargs):
+    def objc_library(
+        self,
+        srcs=None,
+        non_arc_srcs=None,
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
+    ):
         if self._should_skip_target(tags=tags):
             return
-        raise NotImplementedError("objc_library requires an explicit CMake projection")
+        self._emit_platform_guard_begin(target_compatible_with)
+        self._converter.body += "enable_language(OBJC)\n"
+        for sources, option in ((srcs, "-fobjc-arc"), (non_arc_srcs, "-fno-objc-arc")):
+            if sources:
+                self._converter.body += (
+                    "set_source_files_properties(\n"
+                    + "".join(
+                        f'  "{path}"\n'
+                        for path in map(self._cmake_source_location_path, sources)
+                    )
+                    + f'  PROPERTIES COMPILE_OPTIONS "{option}")\n'
+                )
+        self.cc_library(srcs=(srcs or []) + (non_arc_srcs or []), **kwargs)
+        self._emit_platform_guard_end(target_compatible_with)
 
-    def iree_msvc_masm_library(self, **kwargs):
-        # CMakeLists.txt owns its equivalent custom ml.exe/ml64.exe invocation.
-        pass
+    def iree_msvc_masm_library(
+        self, name, src, target_compatible_with, visibility=None
+    ):
+        self._emit_platform_guard_begin(target_compatible_with)
+        self._converter.body += (
+            "include(iree_msvc_masm_library)\n"
+            "iree_msvc_masm_library(\n"
+            + self._convert_string_arg_block("NAME", name)
+            + self._convert_string_arg_block(
+                "SRC", self._normalize_source_paths([src])[0]
+            )
+            + ")\n"
+        )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def iree_assert_no_dependency(self, **kwargs):
         pass
@@ -1843,6 +1874,7 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         shared=None,
         sanitizer_suppressions=None,
         target_compatible_with=None,
+        cmake_package=None,
         **kwargs,
     ):
         if self._should_skip_target(**kwargs):
@@ -1906,7 +1938,8 @@ class BuildFileFunctions(GeneratedFileBuildFileFunctions):
         self._converter.body += (
             f"iree_cc_library(\n"
             f"{name_block}"
-            f"{copts_block}"
+            + self._convert_string_arg_block("PACKAGE", cmake_package)
+            + f"{copts_block}"
             f"{cxx_standard_block}"
             f"{cxx_features_block}"
             f"{hdrs_block}"
