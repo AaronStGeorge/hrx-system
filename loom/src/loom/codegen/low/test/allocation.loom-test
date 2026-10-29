@@ -1002,13 +1002,12 @@ spill %huge: stack[8] bytes=36 align=16 stores=1 reloads=1
 
 // ====
 
-// RUN: emit low-allocation-query @loop_backedge_layout_recolors_shared_storage values=%seed0,%seed1,%state0,%state1,%next0,%next1,%gap fixed=%gap:target_id:3:1
+// RUN: emit low-allocation-query @loop_backedge_layout_recolors_shared_storage values=%seed0,%seed1,%state0,%state1,%next0,%next1,%gap
 
 test.target<low_core> @test_target
 
-// %gap occupies the hole between the two queried loop-edge locations. The
-// header-local envelope may retain it, but exact overlap must exclude it from
-// relocation conflicts.
+// Both header values move to their backedge locations by recoloring interfering
+// body values. The live %gap lies between those locations and remains untouched.
 low.func.def target<test.low.core>(@test_target) @loop_backedge_layout_recolors_shared_storage(%condition: reg<test.i32>, %seed0: reg<test.i32>, %seed1: reg<test.i32>, %lhs: reg<test.i32>, %rhs: reg<test.i32>, %gap: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
   low.br ^loop(%seed0: reg<test.i32>, %seed1: reg<test.i32>)
 ^loop(%state0: reg<test.i32>, %state1: reg<test.i32>):
@@ -1035,7 +1034,7 @@ value %state0: test.i32 -> target_id[1:1]
 value %state1: test.i32 -> target_id[6:1]
 value %next0: test.i32 -> target_id[1:1]
 value %next1: test.i32 -> target_id[6:1]
-value %gap: test.i32 -> target_id[3:1]
+value %gap: test.i32 -> target_id[5:1]
 
 // ====
 
