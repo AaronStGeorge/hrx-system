@@ -15,12 +15,17 @@ import sys
 from pathlib import Path
 
 from loom.model import ManifestError, ModelCard
+from loom.model.catalog import ModelCatalog
 from loom.model.fetch import check_output, install, plan_fetch, plan_lock, update_lock
-from loom.model.fetch_catalog import installed_catalog, load_catalog
 from loom.model.fetch_console import AccessWaiter, ConsoleProgress, display_text
 from loom.model.fetch_hf import AccessRequired
 from loom.model.fetch_picker import Picker
-from loom.model.fetch_source import FetchError, document_location
+from loom.model.fetch_publication import (
+    PublicationSnapshot,
+    installed_catalog,
+    load_publication,
+)
+from loom.model.fetch_source import FetchError
 from loom.model.fetch_storage import ContentCache
 from loom.model.memory import describe_memory
 
@@ -103,6 +108,34 @@ def _list_card(card: ModelCard, *, json_output: bool) -> None:
             )
 
 
+def _catalog_model(catalog: ModelCatalog, picker: Picker | None) -> str:
+    choices = catalog.document["models"]
+    if not choices:
+        raise ManifestError("catalog contains no models")
+    if len(choices) == 1:
+        return next(iter(choices))
+    if picker is not None:
+        return picker.model(catalog.document)
+    raise ManifestError(
+        "catalog has multiple models; select --model=ID from: " + ", ".join(choices)
+    )
+
+
+def _list_catalog(snapshot: PublicationSnapshot, *, json_output: bool) -> None:
+    listing = snapshot.content.document
+    if json_output:
+        sys.stdout.write(
+            json.dumps({**listing, "snapshot": snapshot.summary()}, indent=2) + "\n"
+        )
+    else:
+        if snapshot.revision:
+            sys.stderr.write(f"Catalog revision: {snapshot.revision}\n")
+        for identity, entry in listing["models"].items():
+            sys.stdout.write(
+                f"{display_text(identity)}\t{display_text(entry['name'])}\n"
+            )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="loom-fetch",
@@ -110,13 +143,18 @@ def main(argv: list[str] | None = None) -> int:
         "Without a card or model ID, an interactive terminal opens the model picker.",
     )
     parser.add_argument(
-        "card", nargs="?", help="local model JSON or a raw HTTP(S) model-card URL"
+        "card",
+        nargs="?",
+        metavar="SOURCE",
+        help="local model JSON, HTTP(S) model-card or repository URL, or "
+        "PROVIDER:OWNER/REPOSITORY[:PRESET][@REVISION] "
+        "(providers: huggingface, github)",
     )
     parser.add_argument("--model", help="model ID in the selected catalog")
     parser.add_argument(
         "--catalog",
         help="local catalog JSON, Hugging Face catalog URL, "
-        "or github:OWNER/REPOSITORY@TAG_OR_COMMIT; "
+        "or explicit repository reference (selects its root catalog.json); "
         "defaults to this SDK's association",
     )
     parser.add_argument(
@@ -238,15 +276,21 @@ def main(argv: list[str] | None = None) -> int:
                 "--all-variants publishes only a lock; "
                 "--output, --materialize=share/copy, and --list do not apply"
             )
-    if args.card is not None and (args.model is not None or args.catalog is not None):
-        parser.error("a direct card cannot be combined with --model or --catalog")
+    if args.card is not None and args.catalog is not None:
+        parser.error("a source cannot be combined with --catalog")
     interactive = (
         not args.no_input
         and not args.json
         and sys.stdin.isatty()
         and sys.stderr.isatty()
     )
-    if args.card is None and args.model is None and not args.list and not interactive:
+    if (
+        args.card is None
+        and args.catalog is None
+        and args.model is None
+        and not args.list
+        and not interactive
+    ):
         parser.error("select a card or --model=ID; --list shows the available catalog")
     if (
         not args.list
@@ -269,38 +313,30 @@ def main(argv: list[str] | None = None) -> int:
             wait_for_access=wait,
             progress=ConsoleProgress(sys.stderr, quiet=args.quiet),
         )
-        snapshot = None
-        if args.card is None:
-            snapshot = load_catalog(
-                args.catalog or installed_catalog(), cache, offline=args.offline
-            )
+        publication = load_publication(
+            args.card if args.card is not None else args.catalog or installed_catalog(),
+            cache,
+            offline=args.offline,
+            catalog=args.card is None,
+        )
+        if publication.preset is not None:
+            if args.preset is not None and args.preset != publication.preset:
+                raise ManifestError("repository preset conflicts with --preset")
+            if args.all_variants:
+                raise ManifestError("--all-variants cannot select a repository preset")
+            args.preset = publication.preset
+        snapshot = (
+            publication if isinstance(publication.content, ModelCatalog) else None
+        )
+        if snapshot is not None:
             if args.model is None and args.list:
-                listing = snapshot.catalog.document
-                if args.json:
-                    sys.stdout.write(
-                        json.dumps(
-                            {**listing, "snapshot": snapshot.summary()}, indent=2
-                        )
-                        + "\n"
-                    )
-                else:
-                    if snapshot.revision:
-                        sys.stderr.write(f"Catalog revision: {snapshot.revision}\n")
-                    for identity, entry in listing["models"].items():
-                        sys.stdout.write(
-                            f"{display_text(identity)}\t{display_text(entry['name'])}\n"
-                        )
+                _list_catalog(snapshot, json_output=args.json)
                 return 0
             if args.model is None:
-                args.model = picker.model(snapshot.catalog.document)
-            document, card = snapshot.read_model(
-                args.model, cache, offline=args.offline
-            )
+                args.model = _catalog_model(snapshot.content, picker)
         else:
-            document = cache.read_document(
-                document_location(args.card), offline=args.offline
-            )
-            card = ModelCard.parse(document.text)
+            args.model = args.model or publication.content.document["model"]["id"]
+        document, card = publication.read_model(args.model, cache, offline=args.offline)
         if args.list:
             _list_card(card, json_output=args.json)
             return 0

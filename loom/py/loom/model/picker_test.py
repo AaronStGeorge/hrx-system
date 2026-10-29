@@ -359,8 +359,10 @@ def test_dumb_terminal_uses_named_choices(tmp_path):
 @pytest.mark.parametrize("flag", ["--json", "--no-input"])
 def test_explicit_headless_modes_never_open_a_picker(tmp_path, flag):
     result = subprocess.run(
-        _arguments(tmp_path, flag), input=b"fixture/alpha\n", capture_output=True
+        _arguments(tmp_path, flag, "--output=" + str(tmp_path / "installed")),
+        input=b"fixture/alpha\n",
+        capture_output=True,
     )
-    assert result.returncode == 2
-    assert b"select a card or --model=ID" in result.stderr
+    assert result.returncode == 1
+    assert b"select --model=ID" in result.stderr
     assert b"\x1b" not in result.stderr

@@ -45,11 +45,11 @@ iree_py_test(
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = ["loom.model.catalog_test"],
-    data = ["testdata/moonshine.json"],
+    data = ["//loom/py/loom/model/testdata:moonshine"],
     main = "pytest_style_runner.py",
     deps = [
         ":catalog",
-        ":fetch_catalog",
+        ":fetch_publication",
         ":fetch_source",
         ":fetch_storage",
         ":manifest",
@@ -64,13 +64,36 @@ iree_py_binary(
 )
 
 iree_py_library(
-    name = "fetch_catalog",
-    srcs = ["fetch_catalog.py"],
+    name = "fetch_reference",
+    srcs = ["fetch_reference.py"],
+    deps = [
+        ":fetch_hf",
+        ":manifest",
+    ],
+)
+
+iree_py_library(
+    name = "fetch_publication",
+    srcs = ["fetch_publication.py"],
     deps = [
         ":catalog",
-        ":fetch_hf",
+        ":fetch_reference",
         ":fetch_source",
         ":fetch_storage",
+        ":manifest",
+    ],
+)
+
+iree_py_test(
+    name = "fetch_reference_test",
+    srcs = [
+        "fetch_reference_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.model.fetch_reference_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":fetch_reference",
         ":manifest",
     ],
 )
@@ -110,7 +133,7 @@ iree_py_test(
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = ["loom.model.documentation_test"],
-    data = ["testdata/moonshine.json"],
+    data = ["//loom/py/loom/model/testdata:moonshine"],
     main = "pytest_style_runner.py",
     deps = [
         ":documentation",
@@ -282,11 +305,12 @@ iree_py_library(
     name = "fetch_cli",
     srcs = ["fetch_main.py"],
     deps = [
+        ":catalog",
         ":fetch",
-        ":fetch_catalog",
         ":fetch_console",
         ":fetch_hf",
         ":fetch_picker",
+        ":fetch_publication",
         ":fetch_source",
         ":fetch_storage",
         ":manifest",
@@ -422,7 +446,7 @@ iree_py_test(
     ],
     args = ["loom.model.manifest_test"],
     data = [
-        "testdata/moonshine.json",
+        "//loom/py/loom/model/testdata:moonshine",
         "//loom/src/loom/serve/fixture/text:native.card.json",
     ],
     main = "pytest_style_runner.py",

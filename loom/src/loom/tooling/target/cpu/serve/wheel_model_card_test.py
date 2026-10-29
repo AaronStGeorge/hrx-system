@@ -254,7 +254,7 @@ from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import write_module
 from loom.format.text.parser import Parser
 from loom.model import ModelCard
-from loom.model.fetch_catalog import installed_catalog
+from loom.model.fetch_publication import installed_catalog
 
 assert importlib.util.find_spec('huggingface_hub') is None
 distribution = importlib.metadata.distribution('hrx-loom')
@@ -287,7 +287,7 @@ for name in ('model-card', 'model-lock', 'model-catalog'):
             "-c",
             "import importlib.metadata, sys; "
             "assert importlib.metadata.version('hrx-loom') == sys.argv[1]; "
-            "from loom.model.fetch_catalog import installed_catalog; "
+            "from loom.model.fetch_publication import installed_catalog; "
             "assert installed_catalog() == 'github:fixture/library@compatible'",
             associated_wheel.name.split("-")[1],
         )
