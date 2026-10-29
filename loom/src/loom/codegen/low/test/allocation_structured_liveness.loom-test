@@ -26,7 +26,10 @@ CHECK: spills: 0
 
 // ====
 
-// RUN: emit low-allocation-json @type_reference_preserves_edge_source fixed=%source:target_id:0:1 fixed=%packed:target_id:1:1 fixed=%clobber:target_id:1:1 output=none
+// The branch can read the concat's source directly, but its dependent type
+// also observes the packed value. Both storage lifetimes reach the branch;
+// the call is not the packed value's last physical use.
+// RUN: emit low-allocation-query @type_reference_preserves_edge_units lifetimes=%source,%packed,%dependent,%clobber
 
 test.target<low_core> @target
 
@@ -34,8 +37,7 @@ low.func.decl target<test.low.core>(@target) @make_dependent(%width: reg<test.i3
 
 low.func.decl target<test.low.core>(@target) @consume_dependent(%width: reg<test.i32 : index>, %value: reg<test.i32 : vector<[%width]xf32>>)
 
-low.func.def target<test.low.core>(@target) @type_reference_preserves_edge_source(%source: reg<test.i32 : index>) -> (reg<test.i32>) asm {
-  // ERROR@+1: BACKEND/050 {value_name="packed", location_kind="target_id", location_base="1", location_count="1"}
+low.func.def target<test.low.core>(@target) @type_reference_preserves_edge_units(%source: reg<test.i32 : index>) -> (reg<test.i32>) asm {
   %packed = concat(%source) : (reg<test.i32 : index>) -> reg<test.i32 : index>
   %dependent = low.func.call @make_dependent(%packed) : (reg<test.i32 : index>) -> (reg<test.i32 : vector<[%packed]xf32>>)
   %clobber = test.const.i32 3
@@ -44,6 +46,40 @@ low.func.def target<test.low.core>(@target) @type_reference_preserves_edge_sourc
   low.func.call @consume_dependent(%width, %value) : (reg<test.i32 : index>, reg<test.i32 : vector<[%width]xf32>>)
   return %clobber
 }
+
+// ----
+lifetime %source[0]: [0, 4)
+lifetime %packed[0]: [1, 4)
+lifetime %dependent[0]: [2, 4)
+lifetime %clobber[0]: [3, 7)
+
+// ====
+
+// Without the dependent type, the branch only needs the concat's source.
+// The packed storage dies at the call even though its SSA value is forwarded.
+// RUN: emit low-allocation-query @decomposed_edge_releases_packed_units lifetimes=%source,%packed,%ordinary,%clobber
+
+test.target<low_core> @target
+
+low.func.decl target<test.low.core>(@target) @make_ordinary(%width: reg<test.i32 : index>) -> (reg<test.i32>)
+
+low.func.decl target<test.low.core>(@target) @consume_ordinary(%width: reg<test.i32 : index>, %value: reg<test.i32>)
+
+low.func.def target<test.low.core>(@target) @decomposed_edge_releases_packed_units(%source: reg<test.i32 : index>) -> (reg<test.i32>) asm {
+  %packed = concat(%source) : (reg<test.i32 : index>) -> reg<test.i32 : index>
+  %ordinary = low.func.call @make_ordinary(%packed) : (reg<test.i32 : index>) -> (reg<test.i32>)
+  %clobber = test.const.i32 3
+  low.br ^join(%packed: reg<test.i32 : index>, %ordinary: reg<test.i32>)
+^join(%width: reg<test.i32 : index>, %value: reg<test.i32>):
+  low.func.call @consume_ordinary(%width, %value) : (reg<test.i32 : index>, reg<test.i32>)
+  return %clobber
+}
+
+// ----
+lifetime %source[0]: [0, 4)
+lifetime %packed[0]: [1, 2)
+lifetime %ordinary[0]: [2, 4)
+lifetime %clobber[0]: [3, 7)
 
 // ====
 

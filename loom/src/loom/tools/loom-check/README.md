@@ -107,6 +107,10 @@ value IDs, interval endpoints, and physical register choices in JSON.
 `emit low-allocation-query @function` selects exact assignments with
 `values=%source,%result`, reports spill counts with `spill-count`, and lists
 physical edge transfers with `edge-moves`.
+`lifetimes=%source,%result` reports each allocation unit's half-open storage
+lifetime in the completed allocation's instruction-boundary program points.
+These can differ from whole-value SSA lifetimes: a decomposed branch can read
+an aggregate's constituent storage without keeping the aggregate itself live.
 `spill-free` runs the complete production repair loop before querying the final
 allocation. With `spill-count`, it also reports inserted store/reload traffic,
 so a zero final spill count cannot hide materialized spills. `materialize-spills`

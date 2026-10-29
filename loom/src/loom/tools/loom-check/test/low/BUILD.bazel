@@ -30,6 +30,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:storage_layout",
         "//loom/src/loom/codegen/low:storage_transport",
         "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/codegen/low/allocation:live_range",
         "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/codegen/low/schedule:dependencies",
         "//loom/src/loom/format/text:printer",
