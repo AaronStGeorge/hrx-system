@@ -117,12 +117,14 @@ value %result: test.i32 -> target_id[4:4]
 
 // ====
 
-// RUN: emit low-allocation-query @sparse_early_clobber_read values=%source,%rhs,%result spill-count test.i32=8
+// The predicate uses a separate bank, leaving an aligned source whose sparse
+// hole is reusable by %lhs. Its final physical read must still exclude %result.
+// RUN: emit low-allocation-query @sparse_early_clobber_read values=%source,%lhs,%rhs,%result spill-count
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @sparse_early_clobber_read(%condition: reg<test.i32>, %source: reg<test.i32 x4>, %pointer: reg<test.ptr>) -> (reg<test.i32 x4>) asm {
-  low.cond_br %condition, ^other_path, ^read_path : reg<test.i32>
+low.func.def target<test.low.core>(@test_target) @sparse_early_clobber_read(%condition: reg<test.i8>, %source: reg<test.i32 x4>, %pointer: reg<test.ptr>) -> (reg<test.i32 x4>) asm {
+  low.cond_br %condition, ^other_path, ^read_path : reg<test.i8>
 ^other_path:
   %lhs = test.load.v4i32 %pointer
   %rhs = test.load.v4i32 %pointer
@@ -135,9 +137,10 @@ low.func.def target<test.low.core>(@test_target) @sparse_early_clobber_read(%con
 
 // ----
 spills: 0
-value %source: test.i32 -> target_id[4:4]
+value %source: test.i32 -> target_id[0:4]
+value %lhs: test.i32 -> target_id[0:4]
 value %rhs: test.i32 -> target_id[4:4]
-value %result: test.i32 -> target_id[0:4]
+value %result: test.i32 -> target_id[4:4]
 
 // ====
 
