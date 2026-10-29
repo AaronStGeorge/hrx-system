@@ -29,7 +29,7 @@ jobs:
       profile: ${{ inputs.profile }}
 
   windows:
-    name: Windows x86-64 / Installed SDK
+    name: Qualify / Windows x86-64
     needs: build
     runs-on: windows-2025
     timeout-minutes: 10

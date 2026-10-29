@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   identity:
-    name: Validate release identity
+    name: Validate / Release identity
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -32,7 +32,7 @@ jobs:
           python3 loom/packaging/python/release.py check-tag "$GITHUB_REF_NAME"
 
   build_release:
-    name: SDK / Release
+    name: Release
     needs: identity
     uses: ./.github/workflows/build_loom_sdk.yml
     with:
@@ -42,7 +42,7 @@ jobs:
       contents: read
 
   build_tracy:
-    name: SDK / Tracy
+    name: Tracy
     needs: identity
     uses: ./.github/workflows/build_loom_sdk.yml
     with:
@@ -52,7 +52,7 @@ jobs:
       contents: read
 
   build_debug:
-    name: SDK / Debug
+    name: Debug
     needs: identity
     uses: ./.github/workflows/build_loom_sdk.yml
     with:
@@ -62,7 +62,7 @@ jobs:
       contents: read
 
   build_asan:
-    name: SDK / ASAN
+    name: ASAN
     needs: identity
     uses: ./.github/workflows/build_loom_sdk.yml
     with:
@@ -72,7 +72,7 @@ jobs:
       contents: read
 
   bundle:
-    name: Verify complete artifact set
+    name: Bundle / Verify artifact set
     needs: [build_release, build_tracy, build_debug, build_asan]
     runs-on: ubuntu-24.04
     permissions:
@@ -104,7 +104,7 @@ jobs:
           overwrite: true
 
   github:
-    name: Publish GitHub assets
+    name: Publish / GitHub assets
     needs: bundle
     runs-on: ubuntu-24.04
     permissions:
@@ -135,7 +135,7 @@ jobs:
           python3 -m build_tools.ci.loom_release github --tag="$GITHUB_REF_NAME"
 
   pypi:
-    name: Publish normal wheels to PyPI
+    name: Publish / PyPI wheels
     needs: github
     runs-on: ubuntu-24.04
     environment:
