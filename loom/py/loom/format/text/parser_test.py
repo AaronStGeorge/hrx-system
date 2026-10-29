@@ -2078,6 +2078,9 @@ class TestRoundTrip:
 
     def test_file_header_is_owned_by_the_module(self) -> None:
         text = (
+            "// Copyright Example Authors\n"
+            "// SPDX-License-Identifier: MIT\n"
+            "\n"
             "// File-level overview.\n"
             "//  Indented header detail.\n"
             "\n"
@@ -2086,6 +2089,8 @@ class TestRoundTrip:
         )
         module = _op_parser().parse(text)
         assert module.file_header == (
+            "Copyright Example Authors",
+            "SPDX-License-Identifier: MIT\n",
             "File-level overview.",
             " Indented header detail.",
         )
@@ -2105,6 +2110,19 @@ class TestRoundTrip:
 
     def test_file_header_only_roundtrip(self) -> None:
         self._roundtrip_text("// File-level overview.\n")
+
+    @pytest.mark.parametrize("newline", ["\n", "\r\n"])
+    @pytest.mark.parametrize("suffix", ["", "test.decl @documented()\n"])
+    def test_file_header_paragraph_roundtrip(self, newline: str, suffix: str) -> None:
+        source = ("// license\n\n// overview\n//\n\n\n// details\n\n" + suffix).replace(
+            "\n", newline
+        )
+        expected = "// license\n\n// overview\n//\n\n// details\n"
+        if suffix:
+            expected += "\n" + suffix
+        module = _op_parser().parse(source)
+        assert _op_printer().print_module(module) == expected
+        self._roundtrip_text(expected)
 
     def test_vertical_source_grouping_is_canonicalized(self) -> None:
         module = _op_parser().parse(

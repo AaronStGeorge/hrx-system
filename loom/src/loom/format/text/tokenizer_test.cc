@@ -585,6 +585,49 @@ TEST(Tokenizer, DistinguishesFileHeaderFromOperationComments) {
   EXPECT_TRUE(iree_string_view_equal(file_header[0], IREE_SV("file header")));
 }
 
+TEST(Tokenizer, FileHeaderParagraphs) {
+  for (const char* newline : {"\n", "\r\n"}) {
+    for (const char* suffix : {"", "99", "// declaration\n99"}) {
+      SCOPED_TRACE(newline);
+      SCOPED_TRACE(suffix);
+      std::string source;
+      for (char character :
+           std::string(
+               " \t\n\n// license\n\n// overview\n//\n\n\n// details\n\n") +
+               suffix) {
+        if (character == '\n') {
+          source += newline;
+        } else {
+          source += character;
+        }
+      }
+      ScopedTokenizer t(source.c_str());
+      t.peek();
+      const iree_string_view_t* header = NULL;
+      iree_host_size_t count = 0;
+      loom_tokenizer_take_file_header(t.get(), &header, &count);
+      ASSERT_EQ(count, 4u);
+      EXPECT_TRUE(iree_string_view_equal(header[0], IREE_SV("license\n")));
+      EXPECT_TRUE(iree_string_view_equal(header[1], IREE_SV("overview")));
+      EXPECT_TRUE(iree_string_view_equal(header[2], IREE_SV("\n")));
+      EXPECT_TRUE(iree_string_view_equal(header[3], IREE_SV("details")));
+      const iree_string_view_t* comments = NULL;
+      bool leading_blank_line = true;
+      loom_tokenizer_take_pending_comments(t.get(), &comments, &count,
+                                           &leading_blank_line);
+      EXPECT_FALSE(leading_blank_line);
+      if (suffix[0] == '/') {
+        ASSERT_EQ(count, 1u);
+        EXPECT_TRUE(
+            iree_string_view_equal(comments[0], IREE_SV("declaration")));
+      } else {
+        EXPECT_EQ(count, 0u);
+      }
+      ExpectNoInfrastructureStatus(t.get());
+    }
+  }
+}
+
 TEST(Tokenizer, DetectsLeadingBlankLineBeforeCommentsOrToken) {
   ScopedTokenizer t(
       "0\n"

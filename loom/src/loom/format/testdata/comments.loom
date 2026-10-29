@@ -1,3 +1,11 @@
+// Text roundtrip coverage.
+// Leading comment paragraphs retain their source grouping.
+
+// File-level overview remains separate from declaration documentation.
+//
+
+// Additional file-level details retain their paragraph boundary.
+
 // Top-level comments attach to the following operation.
 func.def @comment_surface() {
 // Block comments attach to the following explicit block label.

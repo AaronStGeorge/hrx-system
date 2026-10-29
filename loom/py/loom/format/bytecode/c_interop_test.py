@@ -87,6 +87,9 @@ def _interop_module() -> tuple[Module, RegisterType]:
     parser.register_types(ALL_TEST_TYPES)
     parser.register_parameterized_attrs(ALL_TEST_PARAMETERIZED_ATTRS)
     module = parser.parse(
+        "// Copyright Example Authors\n"
+        "// SPDX-License-Identifier: MIT\n"
+        "\n"
         "// Bytecode interoperability coverage.\n"
         "\n"
         "low.func.decl target<test.low.core> "
@@ -253,7 +256,11 @@ def _test_instance_flags_interop(loom_format: Path) -> None:
 
 
 def _assert_module_structure(module: Module, register_type: RegisterType) -> Block:
-    if module.file_header != ("Bytecode interoperability coverage.",):
+    if module.file_header != (
+        "Copyright Example Authors",
+        "SPDX-License-Identifier: MIT\n",
+        "Bytecode interoperability coverage.",
+    ):
         raise AssertionError("file header did not survive C bytecode")
     if not any(value.type == register_type for value in module.values):
         raise AssertionError(

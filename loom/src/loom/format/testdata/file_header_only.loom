@@ -1,0 +1,7 @@
+// File header without operations.
+// Leading comment paragraphs retain their source grouping.
+
+// A file containing only commentary retains every paragraph.
+//
+
+// The final paragraph has no extra blank line at end of file.

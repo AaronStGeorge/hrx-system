@@ -613,7 +613,8 @@ typedef enum loom_bytecode_section_kind_e {
 // Nonempty comment_data begins with the conventional single ASCII space after
 // the // marker. In-memory comment payloads omit that separator: writers add
 // exactly one and readers remove exactly one while retaining any additional
-// indentation. Empty comments have zero-length comment_data.
+// indentation. Empty comments have zero-length comment_data. File-header
+// payloads may end with LF to preserve a blank line between comment paragraphs.
 //
 // Symbol entry format:
 //

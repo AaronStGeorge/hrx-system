@@ -1062,7 +1062,7 @@ iree_status_t loom_parse_region_with_syntax(
 //===----------------------------------------------------------------------===//
 
 static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
-  // A separated line-1 comment block belongs to the source file rather than
+  // Separated leading comment paragraphs belong to the source file rather than
   // the first alias or operation. Peeking performs the initial trivia scan;
   // taking the file header leaves any adjacent declaration comments pending.
   (void)loom_tokenizer_peek(&parser->tokenizer);

@@ -46,6 +46,19 @@
       }
     },
     {
+      "name": "keeps separated license and overview paragraphs canonical",
+      "run": {
+        "tool": "loom-format",
+        "args": ["--check"]
+      },
+      "stdin": {
+        "text": "// Copyright Example Authors\n// SPDX-License-Identifier: MIT\n\n// File-level overview.\n\nfunc.def @identity(%value: index) -> (index) {\n  func.return %value : index\n}\n"
+      },
+      "stdout": {
+        "empty": true
+      }
+    },
+    {
       "name": "checks multiple canonical text files",
       "steps": [
         {

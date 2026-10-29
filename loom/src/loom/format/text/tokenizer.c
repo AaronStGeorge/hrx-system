@@ -375,6 +375,29 @@ static iree_status_t loom_tokenizer_append_pending_comment(
   return iree_ok_status();
 }
 
+// Extends the file header through the current paragraph. When a later paragraph
+// joins the header, retain the previous paragraph's separator in its last line.
+// The final separator before a declaration is emitted by the module printer.
+static iree_status_t loom_tokenizer_extend_file_header(loom_tokenizer_t* t) {
+  if (t->pending_file_header_line_count == t->pending_comment_count) {
+    return iree_ok_status();
+  }
+  if (t->pending_file_header_line_count > 0) {
+    iree_string_view_t* line =
+        &t->pending_comments[t->pending_file_header_line_count - 1];
+    char* payload = NULL;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(t->scratch_arena, line->size + 1,
+                                             (void**)&payload));
+    if (line->size > 0) {
+      memcpy(payload, line->data, line->size);
+    }
+    payload[line->size] = '\n';
+    *line = iree_make_string_view(payload, line->size + 1);
+  }
+  t->pending_file_header_line_count = t->pending_comment_count;
+  return iree_ok_status();
+}
+
 // Advances past whitespace and comments.
 static iree_status_t loom_tokenizer_skip_whitespace(loom_tokenizer_t* t) {
   while (t->position < t->source.size) {
@@ -390,11 +413,10 @@ static iree_status_t loom_tokenizer_skip_whitespace(loom_tokenizer_t* t) {
       // Line comment: skip to end of line with UTF-8-aware column tracking.
       if (t->pending_comment_count == 0) {
         t->pending_comment_start_line = t->line;
-      } else if (t->pending_comment_start_line == 1 &&
-                 t->pending_file_header_line_count == 0 &&
+      } else if (t->consumed_end_line == 0 &&
                  (uint64_t)t->line >
                      (uint64_t)t->pending_comment_end_line + 1) {
-        t->pending_file_header_line_count = t->pending_comment_count;
+        IREE_RETURN_IF_ERROR(loom_tokenizer_extend_file_header(t));
       }
       t->pending_comment_end_line = t->line;
       iree_host_size_t comment_start = t->position + 2;
@@ -1156,11 +1178,10 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
 
   const uint32_t source_start_line =
       t->pending_comment_count > 0 ? t->pending_comment_start_line : t->line;
-  if (t->pending_comment_start_line == 1 &&
-      t->pending_file_header_line_count == 0 &&
+  if (t->pending_comment_count > 0 && t->consumed_end_line == 0 &&
       (t->position == t->source.size ||
        (uint64_t)t->line > (uint64_t)t->pending_comment_end_line + 1)) {
-    t->pending_file_header_line_count = t->pending_comment_count;
+    IREE_RETURN_IF_ERROR(loom_tokenizer_extend_file_header(t));
   }
   t->pending_leading_blank_line =
       t->consumed_end_line != 0 &&

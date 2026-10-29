@@ -2307,6 +2307,7 @@ class Module:
     name: str = ""
     flags: int = 0
     # File header lines without // or its conventional separator space.
+    # Trailing LF retains a blank line between paragraphs; the final line has none.
     file_header: tuple[str, ...] = ()
 
     # Tables.

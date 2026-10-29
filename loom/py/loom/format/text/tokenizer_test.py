@@ -419,6 +419,28 @@ class TestComments:
         assert header_only.peek().kind == TokenKind.EOF
         assert header_only.take_file_header() == ["file header"]
 
+    @pytest.mark.parametrize("newline", ["\n", "\r\n"])
+    @pytest.mark.parametrize("prefix", ["", " \t\n\n"])
+    @pytest.mark.parametrize("suffix", ["", "99", "// declaration\n99"])
+    def test_file_header_paragraphs(
+        self, newline: str, prefix: str, suffix: str
+    ) -> None:
+        source = (
+            prefix + "// license\n\n// overview\n//\n\n\n// details\n\n" + suffix
+        ).replace("\n", newline)
+        tokenizer = Tokenizer(source)
+        tokenizer.peek_n(1)
+        tokenizer.peek()
+        assert tokenizer.take_file_header() == [
+            "license\n",
+            "overview",
+            "\n",
+            "details",
+        ]
+        comments, blank_line = tokenizer.take_pending_source_trivia()
+        assert comments == (["declaration"] if suffix.startswith("//") else [])
+        assert not blank_line
+
     def test_leading_blank_line_before_comments_or_token(self) -> None:
         tokenizer = Tokenizer("\n0\n1\n\n// grouped\n2\n\n\n3")
 

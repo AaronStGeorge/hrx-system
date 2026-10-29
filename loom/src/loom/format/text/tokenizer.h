@@ -164,7 +164,7 @@ typedef struct loom_tokenizer_t {
   uint32_t pending_comment_start_line;
   // Source line containing the most recent pending comment, or zero when none.
   uint32_t pending_comment_end_line;
-  // Number of initial line-1 comment lines forming a separated file header.
+  // Number of initial comment lines forming separated file-header paragraphs.
   iree_host_size_t pending_file_header_line_count;
   // True when an empty source line precedes the pending comments or token.
   bool pending_leading_blank_line;
@@ -205,13 +205,14 @@ void loom_tokenizer_deinitialize(loom_tokenizer_t* tokenizer);
 // tokens plus |tokenizer->error| metadata.
 iree_status_t loom_tokenizer_consume_status(loom_tokenizer_t* tokenizer);
 
-// Takes a file header from pending source trivia. A file header is the
-// contiguous comment block beginning on source line 1 when an empty line
-// separates it from following source, or when no source follows it. Adjacent
-// line-1 comments remain pending for the first operation. The returned line
-// array is tokenizer-scratch storage; payloads are normalized slices into the
-// original source buffer that omit // and its conventional single separator
-// space.
+// Takes a file header from pending source trivia. A file header consists of
+// leading comment paragraphs through the last empty line before the first
+// token (or all comments when no source follows). The final comment block
+// remains pending for the first operation when adjacent to it. Line payloads
+// retain one trailing LF at each internal paragraph boundary;
+// the final paragraph has none. The line array and extended payloads use
+// tokenizer-scratch storage; other payloads alias the original source buffer.
+// Payloads omit // and its conventional single separator space.
 void loom_tokenizer_take_file_header(loom_tokenizer_t* tokenizer,
                                      const iree_string_view_t** out_lines,
                                      iree_host_size_t* out_line_count);
