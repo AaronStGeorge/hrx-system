@@ -51,12 +51,13 @@ typedef enum loom_view_prefetch_locality_e {
   LOOM_VIEW_PREFETCH_LOCALITY_COUNT_ = 4,
 } loom_view_prefetch_locality_t;
 
-// LOOM_OP_VIEW_SUBVIEW: Form a logical subview from an existing view. Offsets select the logical origin; result type dimensions provide the subview extents. The element-access alignment requirement is preserved; forming a subview makes no memory access or address-alignment promise.
-// %sub = view.subview %source[%row, 0] : view<[%M]x[%N]xf32, %layout> -> view<16x[%N]xf32, %layout>
+// LOOM_OP_VIEW_SUBVIEW: Form a logical subview from an existing view. Offsets select the logical origin; result type dimensions provide the subview extents. When those extents cannot independently preserve the source address function, a trailing encoding co-result captures the source physical layout and the result view type references it. The element-access alignment requirement is preserved; forming a subview makes no memory access or address-alignment promise.
+// %rows = view.subview %source[%row, 0] : view<[%M]x[%N]xf32> -> view<16x[%N]xf32>
 LOOM_DEFINE_ISA(loom_view_subview_isa, LOOM_OP_VIEW_SUBVIEW)
 LOOM_DEFINE_OPERAND(loom_view_subview_source, 0)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_subview_offsets, 1)
 LOOM_DEFINE_RESULT(loom_view_subview_result, 0)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_view_subview_physical_encoding, 1)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_subview_static_offsets, 0)
 iree_status_t loom_view_subview_build(
     loom_builder_t* builder,
@@ -65,7 +66,8 @@ iree_status_t loom_view_subview_build(
     iree_host_size_t offsets_count,
     const int64_t* static_offsets,
     iree_host_size_t static_offsets_count,
-    loom_type_t result_type,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_view_subview_facts(
@@ -73,6 +75,9 @@ iree_status_t loom_view_subview_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+iree_status_t loom_view_subview_type_transfer(
+    loom_type_transfer_context_t* context,
+    const loom_module_t* module, loom_op_t* op);
 iree_status_t loom_view_subview_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);

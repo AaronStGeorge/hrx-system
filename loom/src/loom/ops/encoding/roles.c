@@ -8,6 +8,8 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/encoding/ops.h"
+#include "loom/util/fact_extensions.h"
+#include "loom/util/fact_table.h"
 
 iree_string_view_t loom_encoding_role_description(loom_encoding_role_t role) {
   switch (role) {
@@ -77,4 +79,49 @@ loom_encoding_role_t loom_encoding_value_role(const loom_module_t* module,
   const loom_encoding_t* spec =
       loom_module_encoding(module, loom_encoding_define_spec(op));
   return loom_encoding_static_role(module, spec);
+}
+
+loom_encoding_role_t loom_encoding_type_role(const loom_module_t* module,
+                                             loom_type_t type) {
+  if (!loom_type_can_have_encoding(type)) {
+    return LOOM_ENCODING_ROLE_UNKNOWN;
+  }
+  if (!loom_type_has_encoding(type)) {
+    return LOOM_ENCODING_ROLE_ADDRESS_LAYOUT;
+  }
+  if (loom_type_has_static_encoding(type)) {
+    return loom_encoding_static_role(
+        module, loom_module_encoding(module, type.encoding_id));
+  }
+  if (!loom_type_has_ssa_encoding(type) || !module) {
+    return LOOM_ENCODING_ROLE_UNKNOWN;
+  }
+  const loom_value_id_t encoding_value_id = loom_type_encoding_value_id(type);
+  if (encoding_value_id >= module->values.count) {
+    return LOOM_ENCODING_ROLE_UNKNOWN;
+  }
+  const loom_type_t encoding_type =
+      loom_module_value_type(module, encoding_value_id);
+  return loom_type_is_encoding(encoding_type)
+             ? loom_type_encoding_role(encoding_type)
+             : LOOM_ENCODING_ROLE_UNKNOWN;
+}
+
+loom_encoding_role_t loom_encoding_query_type_role(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t type) {
+  const loom_encoding_role_t declared_role =
+      loom_encoding_type_role(module, type);
+  if (declared_role != LOOM_ENCODING_ROLE_UNKNOWN ||
+      !loom_type_has_ssa_encoding(type) || !context || !context->table) {
+    return declared_role;
+  }
+  loom_value_fact_encoding_summary_t summary = {0};
+  return loom_value_facts_query_encoding_summary(
+             context,
+             loom_value_fact_table_lookup(context->table,
+                                          loom_type_encoding_value_id(type)),
+             &summary)
+             ? summary.role
+             : LOOM_ENCODING_ROLE_UNKNOWN;
 }

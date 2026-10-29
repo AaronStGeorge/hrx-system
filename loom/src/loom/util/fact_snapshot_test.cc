@@ -67,10 +67,10 @@ class FactOriginSnapshotTest : public FactSnapshotTest,
                 .family_kind = LOOM_PARAMETERIZED_ATTR_KIND(3, 7),
                 .key = loom_attr_i64(source),
             });
-      case LOOM_VALUE_FACT_ORIGIN_LAYOUT_STRIDES: {
+      case LOOM_VALUE_FACT_ORIGIN_LAYOUT: {
         const loom_value_id_t strides[] = {source, LOOM_VALUE_ID_INVALID};
-        return loom_value_fact_table_define_layout_strides(&table_, 7,
-                                                           {strides, 2});
+        return loom_value_fact_table_define_layout_explicit_strides(&table_, 7,
+                                                                    strides, 2);
       }
       default:
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT);
@@ -108,7 +108,7 @@ INSTANTIATE_TEST_SUITE_P(
                       LOOM_VALUE_FACT_ORIGIN_EXACT_SCALAR,
                       LOOM_VALUE_FACT_ORIGIN_UNIFORM_SCALE,
                       LOOM_VALUE_FACT_ORIGIN_CONTEXTUAL_QUERY,
-                      LOOM_VALUE_FACT_ORIGIN_LAYOUT_STRIDES));
+                      LOOM_VALUE_FACT_ORIGIN_LAYOUT));
 
 TEST_F(FactSnapshotTest, IdentitySnapshotDoesNotFollowMutableRepresentatives) {
   IREE_ASSERT_OK(loom_value_fact_table_define_identity(&table_, 8, 7, nullptr));

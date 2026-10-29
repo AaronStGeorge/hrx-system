@@ -758,8 +758,8 @@ TEST(EncodingStorageQueryTest, ValueLayoutKeepsNumericAndSsaAxesSeparate) {
   IREE_ASSERT_OK(loom_value_fact_table_define(&table, layout_value, facts));
   const loom_value_id_t stride_values[] = {dynamic_stride,
                                            LOOM_VALUE_ID_INVALID};
-  IREE_ASSERT_OK(loom_value_fact_table_define_layout_strides(
-      &table, layout_value, {stride_values, IREE_ARRAYSIZE(stride_values)}));
+  IREE_ASSERT_OK(loom_value_fact_table_define_layout_explicit_strides(
+      &table, layout_value, stride_values, IREE_ARRAYSIZE(stride_values)));
 
   loom_value_fact_address_layout_t layout = {};
   ASSERT_TRUE(loom_encoding_query_value_address_layout(&table.context,
@@ -772,20 +772,21 @@ TEST(EncodingStorageQueryTest, ValueLayoutKeepsNumericAndSsaAxesSeparate) {
   EXPECT_TRUE(loom_value_facts_as_exact_i64(layout.strides[1], &unit_stride));
   EXPECT_EQ(unit_stride, 1);
 
-  const loom_value_fact_layout_strides_t bindings =
-      loom_encoding_query_value_layout_strides(&table.context, layout_value);
-  ASSERT_EQ(bindings.count, IREE_ARRAYSIZE(stride_values));
-  EXPECT_EQ(bindings.values[0], dynamic_stride);
-  EXPECT_EQ(bindings.values[1], LOOM_VALUE_ID_INVALID);
+  const loom_value_fact_layout_origin_t origin =
+      loom_encoding_query_value_layout_origin(&table.context, layout_value);
+  ASSERT_EQ(origin.kind, LOOM_VALUE_FACT_LAYOUT_ORIGIN_EXPLICIT_STRIDES);
+  ASSERT_EQ(origin.count, IREE_ARRAYSIZE(stride_values));
+  EXPECT_EQ(origin.values.explicit_strides[0], dynamic_stride);
+  EXPECT_EQ(origin.values.explicit_strides[1], LOOM_VALUE_ID_INVALID);
 
   loom_value_fact_address_layout_t absent_layout = {};
   EXPECT_FALSE(loom_encoding_query_value_address_layout(
       /*context=*/nullptr, layout_value, &absent_layout));
   EXPECT_EQ(absent_layout.kind, LOOM_VALUE_FACT_ADDRESS_LAYOUT_UNKNOWN);
-  EXPECT_EQ(loom_encoding_query_value_layout_strides(
+  EXPECT_EQ(loom_encoding_query_value_layout_origin(
                 /*context=*/nullptr, layout_value)
-                .count,
-            0);
+                .kind,
+            LOOM_VALUE_FACT_LAYOUT_ORIGIN_NONE);
 
   iree_arena_deinitialize(&arena);
   iree_arena_block_pool_deinitialize(&block_pool);

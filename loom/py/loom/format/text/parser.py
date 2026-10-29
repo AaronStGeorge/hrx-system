@@ -97,12 +97,14 @@ from loom.ir import (
     OFFSET,
     PREDICATE_KINDS,
     VALUE_DEF_BLOCK_NONE,
+    VALUE_FLAG_BLOCK_ARG,
     Block,
     CanonicalAttrDict,
     DialectType,
     DynamicDim,
     DynamicEncoding,
     EncodingInstance,
+    EncodingRole,
     EncodingType,
     EnumArrayAttr,
     FileLocation,
@@ -2484,8 +2486,21 @@ class Parser:
                 annotation_token.location,
                 self._tokenizer._filename,
             )
-        actual_type = self._module.values[value_ids[element_index]].type
+        actual_value = self._module.values[value_ids[element_index]]
+        actual_type = actual_value.type
         if actual_type == annotated_type:
+            return
+        # Type-binding syntax initially gives an encoding co-result a generic
+        # role. Its first role-qualified use may narrow that result, but an
+        # annotation must never rewrite a callable or block argument contract.
+        if (
+            not actual_value.is_block_arg
+            and isinstance(actual_type, EncodingType)
+            and actual_type.role == EncodingRole.UNKNOWN
+            and isinstance(annotated_type, EncodingType)
+            and annotated_type.role != EncodingRole.UNKNOWN
+        ):
+            self._module.values[value_ids[element_index]].type = annotated_type
             return
         display_name = (
             f"{field_name}[{element_index}]" if include_element_index else field_name
@@ -3885,6 +3900,7 @@ class Parser:
             Value(
                 name=name,
                 type=arg_type,
+                flags=VALUE_FLAG_BLOCK_ARG,
             )
         )
 
@@ -4087,6 +4103,13 @@ class Parser:
             for value_id in pre_arg_ids:
                 self._scope.define(self._module.values[value_id].name, value_id)
                 entry_arg_ids.append(value_id)
+
+        # Entry arguments are already semantically block arguments while the
+        # body is parsed, even though their complete def-site coordinates are
+        # recorded after the region has been assembled. Keep that ownership
+        # visible so operand annotations cannot rewrite signature contracts.
+        for value_id in entry_arg_ids:
+            self._module.values[value_id].flags |= VALUE_FLAG_BLOCK_ARG
 
         blocks: list[Block] = []
         is_first = True

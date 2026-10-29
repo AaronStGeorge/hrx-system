@@ -14,10 +14,10 @@ func.def device inline @compute_subview_scalar_strided(%input: buffer, %output: 
   %layout = encoding.layout.strided [8, 1] : encoding<layout>
   %source = buffer.view %input_aligned[%input_base] : buffer -> view<4x8xf32, %layout>
   %destination = buffer.view %output_aligned[%output_base] : buffer -> view<4x8xf32, %layout>
-  %source_crop = view.subview %source[1, 2] : view<4x8xf32, %layout> -> view<2x3xf32, %layout>
-  %destination_crop = view.subview %destination[1, 1] : view<4x8xf32, %layout> -> view<2x4xf32, %layout>
-  %value = view.load %source_crop[1, 1] : view<2x3xf32, %layout> -> f32
-  view.store %value, %destination_crop[1, 2] : f32, view<2x4xf32, %layout>
+  %source_crop, %source_crop_layout = view.subview %source[1, 2] : view<4x8xf32, %layout> -> view<2x3xf32, %source_crop_layout>
+  %destination_crop, %destination_crop_layout = view.subview %destination[1, 1] : view<4x8xf32, %layout> -> view<2x4xf32, %destination_crop_layout>
+  %value = view.load %source_crop[1, 1] : view<2x3xf32, %source_crop_layout> -> f32
+  view.store %value, %destination_crop[1, 2] : f32, view<2x4xf32, %destination_crop_layout>
   func.return
 }
 
@@ -55,13 +55,13 @@ func.def device inline @compute_subview_nested_dynamic(%input: buffer, %output: 
   %layout = encoding.layout.strided [8, 1] : encoding<layout>
   %source = buffer.view %input_aligned[%origin] : buffer -> view<6x8xi32, %layout>
   %destination = buffer.view %output_aligned[%origin] : buffer -> view<6x8xi32, %layout>
-  %source_outer = view.subview %source[1, 1] : view<6x8xi32, %layout> -> view<4x6xi32, %layout>
-  %source_inner = view.subview %source_outer[1, 2] : view<4x6xi32, %layout> -> view<2x3xi32, %layout>
-  %source_refined = view.refine %source_inner : view<2x3xi32, %layout> -> view<2x3xi32, %layout>
-  %destination_outer = view.subview %destination[1, 0] : view<6x8xi32, %layout> -> view<4x6xi32, %layout>
-  %destination_inner = view.subview %destination_outer[1, 1] : view<4x6xi32, %layout> -> view<2x3xi32, %layout>
-  %value = view.load %source_refined[%row_bounded, %column_bounded] : view<2x3xi32, %layout> -> i32
-  view.store %value, %destination_inner[%row_bounded, %column_bounded] : i32, view<2x3xi32, %layout>
+  %source_outer, %source_outer_layout = view.subview %source[1, 1] : view<6x8xi32, %layout> -> view<4x6xi32, %source_outer_layout>
+  %source_inner, %source_inner_layout = view.subview %source_outer[1, 2] : view<4x6xi32, %source_outer_layout> -> view<2x3xi32, %source_inner_layout>
+  %source_refined = view.refine %source_inner : view<2x3xi32, %source_inner_layout> -> view<2x3xi32, %source_inner_layout>
+  %destination_outer, %destination_outer_layout = view.subview %destination[1, 0] : view<6x8xi32, %layout> -> view<4x6xi32, %destination_outer_layout>
+  %destination_inner, %destination_inner_layout = view.subview %destination_outer[1, 1] : view<4x6xi32, %destination_outer_layout> -> view<2x3xi32, %destination_inner_layout>
+  %value = view.load %source_refined[%row_bounded, %column_bounded] : view<2x3xi32, %source_inner_layout> -> i32
+  view.store %value, %destination_inner[%row_bounded, %column_bounded] : i32, view<2x3xi32, %destination_inner_layout>
   func.return
 }
 
@@ -123,10 +123,10 @@ func.def device inline @compute_subview_vector_strided(%input: buffer, %output: 
   %layout = encoding.layout.strided [12, 1] : encoding<layout>
   %source = buffer.view %input_aligned[%input_base] : buffer -> view<4x12xi32, %layout>
   %destination = buffer.view %output_aligned[%output_base] : buffer -> view<4x12xi32, %layout>
-  %source_crop = view.subview %source[1, 2] : view<4x12xi32, %layout> -> view<2x8xi32, %layout>
-  %destination_crop = view.subview %destination[1, 1] : view<4x12xi32, %layout> -> view<2x8xi32, %layout>
-  %value = vector.load %source_crop[1, 1] : view<2x8xi32, %layout> -> vector<4xi32>
-  vector.store %value, %destination_crop[0, 1] : vector<4xi32>, view<2x8xi32, %layout>
+  %source_crop, %source_crop_layout = view.subview %source[1, 2] : view<4x12xi32, %layout> -> view<2x8xi32, %source_crop_layout>
+  %destination_crop, %destination_crop_layout = view.subview %destination[1, 1] : view<4x12xi32, %layout> -> view<2x8xi32, %destination_crop_layout>
+  %value = vector.load %source_crop[1, 1] : view<2x8xi32, %source_crop_layout> -> vector<4xi32>
+  vector.store %value, %destination_crop[0, 1] : vector<4xi32>, view<2x8xi32, %destination_crop_layout>
   func.return
 }
 
@@ -199,13 +199,13 @@ func.def device inline @compute_subview_atomic_origins(%input: buffer, %output: 
   %aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
   %layout = encoding.layout.strided [8, 1] : encoding<layout>
   %view = buffer.view %aligned[%base] : buffer -> view<4x8xi32, %layout>
-  %crop = view.subview %view[1, 2] : view<4x8xi32, %layout> -> view<2x3xi32, %layout>
+  %crop, %crop_layout = view.subview %view[1, 2] : view<4x8xi32, %layout> -> view<2x3xi32, %crop_layout>
   %increment = scalar.constant 1 : i32
-  view.atomic.reduce<addi> %increment, %crop[1, 1] {ordering = relaxed, scope = device} : i32, view<2x3xi32, %layout>
-  %old = view.atomic.rmw<addi> %increment, %crop[1, 1] {ordering = relaxed, scope = device} : i32, view<2x3xi32, %layout> -> i32
+  view.atomic.reduce<addi> %increment, %crop[1, 1] {ordering = relaxed, scope = device} : i32, view<2x3xi32, %crop_layout>
+  %old = view.atomic.rmw<addi> %increment, %crop[1, 1] {ordering = relaxed, scope = device} : i32, view<2x3xi32, %crop_layout> -> i32
   %expected = scalar.addi %old, %increment : i32
   %replacement = scalar.constant 99 : i32
-  %observed = view.atomic.cmpxchg %expected, %replacement, %crop[1, 1] {failure_ordering = relaxed, scope = device, success_ordering = relaxed} : i32, view<2x3xi32, %layout> -> i32
+  %observed = view.atomic.cmpxchg %expected, %replacement, %crop[1, 1] {failure_ordering = relaxed, scope = device, success_ordering = relaxed} : i32, view<2x3xi32, %crop_layout> -> i32
   %results = buffer.view %output[%output_base] : buffer -> view<2xi32>
   view.store %old, %results[0] : i32, view<2xi32>
   view.store %observed, %results[1] : i32, view<2xi32>
@@ -245,10 +245,10 @@ func.def device inline @compute_subview_vector_aligned(%input: buffer, %output: 
   %layout = encoding.layout.strided [24, 1] : encoding<layout>
   %source = buffer.view %input_aligned[%input_base] : buffer -> view<4x24xi32, %layout>
   %destination = buffer.view %output_aligned[%output_base] : buffer -> view<4x24xi32, %layout>
-  %source_crop = view.subview %source[1, 8] : view<4x24xi32, %layout> -> view<2x8xi32, %layout>
-  %destination_crop = view.subview %destination[1, 0] : view<4x24xi32, %layout> -> view<2x16xi32, %layout>
-  %value = vector.load %source_crop[1, 0] : view<2x8xi32, %layout> -> vector<8xi32>
-  vector.store %value, %destination_crop[0, 8] : vector<8xi32>, view<2x16xi32, %layout>
+  %source_crop, %source_crop_layout = view.subview %source[1, 8] : view<4x24xi32, %layout> -> view<2x8xi32, %source_crop_layout>
+  %destination_crop, %destination_crop_layout = view.subview %destination[1, 0] : view<4x24xi32, %layout> -> view<2x16xi32, %destination_crop_layout>
+  %value = vector.load %source_crop[1, 0] : view<2x8xi32, %source_crop_layout> -> vector<8xi32>
+  vector.store %value, %destination_crop[0, 8] : vector<8xi32>, view<2x16xi32, %destination_crop_layout>
   func.return
 }
 
@@ -275,8 +275,8 @@ func.def @make_storage_crop(%input: buffer, %origin: offset, %columns: index) ->
   %storage = encoding.define #encoding.storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
   %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
   %source = buffer.view %input_aligned[%origin] : buffer -> view<4x[%columns]xf32, %storage>
-  %crop = view.subview %source[1, 2] : view<4x[%columns]xf32, %storage> -> view<2x3xf32, %storage>
-  func.return %storage, %crop : encoding<storage>, view<2x3xf32, %storage>
+  %crop, %crop_storage = view.subview %source[1, 2] : view<4x[%columns]xf32, %storage> -> view<2x3xf32, %crop_storage>
+  func.return %crop_storage, %crop : encoding<storage>, view<2x3xf32, %crop_storage>
 }
 
 func.def @read_storage_crop(%storage: encoding<storage>, %crop: view<2x3xf32, %storage>) -> (f32) {
@@ -372,9 +372,9 @@ func.def device inline @compute_subview_composed_refined_nested(%input: buffer, 
   %storage = encoding.define #encoding.storage {layout = %refined_layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
   %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
   %source = buffer.view %input_aligned[%origin] : buffer -> view<4x4xf32, %storage>
-  %outer = view.subview %source[1, 1] : view<4x4xf32, %storage> -> view<3x3xf32, %storage>
-  %inner = view.subview %outer[1, 1] : view<3x3xf32, %storage> -> view<2x2xf32, %storage>
-  %value = view.load %inner[1, 0] : view<2x2xf32, %storage> -> f32
+  %outer, %outer_storage = view.subview %source[1, 1] : view<4x4xf32, %storage> -> view<3x3xf32, %outer_storage>
+  %inner, %inner_storage = view.subview %outer[1, 1] : view<3x3xf32, %outer_storage> -> view<2x2xf32, %inner_storage>
+  %value = view.load %inner[1, 0] : view<2x2xf32, %inner_storage> -> f32
   %output_origin = index.constant 4 : offset
   %output_aligned = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
   %destination = buffer.view %output_aligned[%output_origin] : buffer -> view<1xf32>

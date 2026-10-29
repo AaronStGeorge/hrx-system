@@ -143,7 +143,8 @@ static iree_status_t loom_wasm_partial_memory_build_chunk_view(
     loom_op_t* chunk_view_op = NULL;
     IREE_RETURN_IF_ERROR(loom_view_subview_build(
         builder, window, /*offsets=*/NULL, 0, &static_offset,
-        /*static_offsets_count=*/1, chunk_view_type, location, &chunk_view_op));
+        /*static_offsets_count=*/1, &chunk_view_type, /*result_count=*/1,
+        location, &chunk_view_op));
     chunk_view = loom_view_subview_result(chunk_view_op);
   }
 
@@ -169,8 +170,8 @@ static iree_status_t loom_wasm_partial_memory_build_window(
   loom_op_t* window_op = NULL;
   IREE_RETURN_IF_ERROR(loom_view_subview_build(
       builder, view, dynamic_indices.values, dynamic_indices.count,
-      static_indices.i64_array, static_indices.count, window_type, op->location,
-      &window_op));
+      static_indices.i64_array, static_indices.count, &window_type,
+      /*result_count=*/1, op->location, &window_op));
   *out_window = loom_view_subview_result(window_op);
   return iree_ok_status();
 }

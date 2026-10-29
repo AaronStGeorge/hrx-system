@@ -21,7 +21,7 @@ class ViewBuilder(DialectBuilder):
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
-    ) -> ValueRef: ...
+    ) -> list[ValueRef]: ...
     def refine(
         self,
         *,

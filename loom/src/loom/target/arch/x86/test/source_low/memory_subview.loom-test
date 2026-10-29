@@ -8,10 +8,10 @@ func.def @subview_scalar_strided(%input: buffer, %output: buffer) -> (f32) {
   %layout = encoding.layout.strided [8, 1] : encoding<layout>
   %source = buffer.view %input_aligned[%input_base] : buffer -> view<4x8xf32, %layout>
   %destination = buffer.view %output_aligned[%output_base] : buffer -> view<4x8xf32, %layout>
-  %source_crop = view.subview %source[1, 2] : view<4x8xf32, %layout> -> view<2x3xf32, %layout>
-  %destination_crop = view.subview %destination[1, 1] : view<4x8xf32, %layout> -> view<2x4xf32, %layout>
-  %value = view.load %source_crop[1, 1] : view<2x3xf32, %layout> -> f32
-  view.store %value, %destination_crop[1, 2] : f32, view<2x4xf32, %layout>
+  %source_crop, %source_crop_layout = view.subview %source[1, 2] : view<4x8xf32, %layout> -> view<2x3xf32, %source_crop_layout>
+  %destination_crop, %destination_crop_layout = view.subview %destination[1, 1] : view<4x8xf32, %layout> -> view<2x4xf32, %destination_crop_layout>
+  %value = view.load %source_crop[1, 1] : view<2x3xf32, %source_crop_layout> -> f32
+  view.store %value, %destination_crop[1, 2] : f32, view<2x4xf32, %destination_crop_layout>
   func.return %value : f32
 }
 
@@ -31,27 +31,27 @@ func.def @subview_f64_dynamic(%input: buffer, %output: buffer, %base: offset, %r
   %layout = encoding.layout.strided [13, 1] : encoding<layout>
   %source = buffer.view %input[%origin] : buffer -> view<4x8xf64, %layout>
   %destination = buffer.view %output[%origin] : buffer -> view<4x8xf64, %layout>
-  %source_crop = view.subview %source[1, 1] : view<4x8xf64, %layout> -> view<2x5xf64, %layout>
-  %destination_crop = view.subview %destination[1, 1] : view<4x8xf64, %layout> -> view<2x5xf64, %layout>
-  %value = view.load %source_crop[%row_bounded, %column_bounded] : view<2x5xf64, %layout> -> f64
-  view.store %value, %destination_crop[%row_bounded, %column_bounded] : f64, view<2x5xf64, %layout>
+  %source_crop, %source_crop_layout = view.subview %source[1, 1] : view<4x8xf64, %layout> -> view<2x5xf64, %source_crop_layout>
+  %destination_crop, %destination_crop_layout = view.subview %destination[1, 1] : view<4x8xf64, %layout> -> view<2x5xf64, %destination_crop_layout>
+  %value = view.load %source_crop[%row_bounded, %column_bounded] : view<2x5xf64, %source_crop_layout> -> f64
+  view.store %value, %destination_crop[%row_bounded, %column_bounded] : f64, view<2x5xf64, %destination_crop_layout>
   func.return %value : f64
 }
 
 // ----
 low.func.def target<x86.avx2.core> abi(object_function) abi_layout({signature = (buffer, buffer, offset, index, index) -> (f64)}) @subview_f64_dynamic(%input: reg<x86.gpr64>, %output: reg<x86.gpr64>, %origin: reg<x86.gpr64>, %row_bounded: reg<x86.gpr64>, %column_bounded: reg<x86.gpr64>) -> (reg<x86.xmm>) asm {
-  %21 = mov.imm64 104
-  %22 = copy %row_bounded : reg<x86.gpr64> -> reg<x86.gpr64>
-  %23 = imul.gpr64 %22, %21
-  %24 = copy %origin : reg<x86.gpr64> -> reg<x86.gpr64>
-  %25 = add.gpr64 %24, %23
-  %26 = mov.imm64 8
-  %27 = copy %column_bounded : reg<x86.gpr64> -> reg<x86.gpr64>
-  %28 = imul.gpr64 %27, %26
-  %29 = copy %25 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %30 = add.gpr64 %29, %28
-  %value = vmovsd.load.indexed.xmm %input, %30 {disp32 = 112, scale = 1}
-  vmovsd.store.indexed.xmm %value, %output, %30 {disp32 = 112, scale = 1}
+  %23 = mov.imm64 104
+  %24 = copy %row_bounded : reg<x86.gpr64> -> reg<x86.gpr64>
+  %25 = imul.gpr64 %24, %23
+  %26 = copy %origin : reg<x86.gpr64> -> reg<x86.gpr64>
+  %27 = add.gpr64 %26, %25
+  %28 = mov.imm64 8
+  %29 = copy %column_bounded : reg<x86.gpr64> -> reg<x86.gpr64>
+  %30 = imul.gpr64 %29, %28
+  %31 = copy %27 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %32 = add.gpr64 %31, %30
+  %value = vmovsd.load.indexed.xmm %input, %32 {disp32 = 112, scale = 1}
+  vmovsd.store.indexed.xmm %value, %output, %32 {disp32 = 112, scale = 1}
   return %value
 }
 
@@ -66,30 +66,30 @@ func.def @subview_nested_dynamic(%input: buffer, %output: buffer, %base: offset,
   %layout = encoding.layout.strided [8, 1] : encoding<layout>
   %source = buffer.view %input_aligned[%origin] : buffer -> view<6x8xi32, %layout>
   %destination = buffer.view %output_aligned[%origin] : buffer -> view<6x8xi32, %layout>
-  %source_outer = view.subview %source[1, 1] : view<6x8xi32, %layout> -> view<4x6xi32, %layout>
-  %source_inner = view.subview %source_outer[1, 2] : view<4x6xi32, %layout> -> view<2x3xi32, %layout>
-  %source_refined = view.refine %source_inner : view<2x3xi32, %layout> -> view<2x3xi32, %layout>
-  %destination_outer = view.subview %destination[1, 0] : view<6x8xi32, %layout> -> view<4x6xi32, %layout>
-  %destination_inner = view.subview %destination_outer[1, 1] : view<4x6xi32, %layout> -> view<2x3xi32, %layout>
-  %value = view.load %source_refined[%row_bounded, %column_bounded] : view<2x3xi32, %layout> -> i32
-  view.store %value, %destination_inner[%row_bounded, %column_bounded] : i32, view<2x3xi32, %layout>
+  %source_outer, %source_outer_layout = view.subview %source[1, 1] : view<6x8xi32, %layout> -> view<4x6xi32, %source_outer_layout>
+  %source_inner, %source_inner_layout = view.subview %source_outer[1, 2] : view<4x6xi32, %source_outer_layout> -> view<2x3xi32, %source_inner_layout>
+  %source_refined = view.refine %source_inner : view<2x3xi32, %source_inner_layout> -> view<2x3xi32, %source_inner_layout>
+  %destination_outer, %destination_outer_layout = view.subview %destination[1, 0] : view<6x8xi32, %layout> -> view<4x6xi32, %destination_outer_layout>
+  %destination_inner, %destination_inner_layout = view.subview %destination_outer[1, 1] : view<4x6xi32, %destination_outer_layout> -> view<2x3xi32, %destination_inner_layout>
+  %value = view.load %source_refined[%row_bounded, %column_bounded] : view<2x3xi32, %source_inner_layout> -> i32
+  view.store %value, %destination_inner[%row_bounded, %column_bounded] : i32, view<2x3xi32, %destination_inner_layout>
   func.return %value : i32
 }
 
 // ----
 low.func.def target<x86.avx2.core> abi(object_function) @subview_nested_dynamic(%input_aligned: reg<x86.gpr64>, %output_aligned: reg<x86.gpr64>, %origin: reg<x86.gpr64>, %row_bounded: reg<x86.gpr64>, %column_bounded: reg<x86.gpr64>) -> (reg<x86.gpr32>) asm {
-  %26 = mov.imm64 32
-  %27 = copy %row_bounded : reg<x86.gpr64> -> reg<x86.gpr64>
-  %28 = imul.gpr64 %27, %26
-  %29 = copy %origin : reg<x86.gpr64> -> reg<x86.gpr64>
-  %30 = add.gpr64 %29, %28
-  %31 = mov.imm64 4
-  %32 = copy %column_bounded : reg<x86.gpr64> -> reg<x86.gpr64>
-  %33 = imul.gpr64 %32, %31
-  %34 = copy %30 : reg<x86.gpr64> -> reg<x86.gpr64>
-  %35 = add.gpr64 %34, %33
-  %value = mov.load.indexed.gpr32 %input_aligned, %35 {disp32 = 76, scale = 1}
-  mov.store.indexed.gpr32 %value, %output_aligned, %35 {disp32 = 68, scale = 1}
+  %30 = mov.imm64 32
+  %31 = copy %row_bounded : reg<x86.gpr64> -> reg<x86.gpr64>
+  %32 = imul.gpr64 %31, %30
+  %33 = copy %origin : reg<x86.gpr64> -> reg<x86.gpr64>
+  %34 = add.gpr64 %33, %32
+  %35 = mov.imm64 4
+  %36 = copy %column_bounded : reg<x86.gpr64> -> reg<x86.gpr64>
+  %37 = imul.gpr64 %36, %35
+  %38 = copy %34 : reg<x86.gpr64> -> reg<x86.gpr64>
+  %39 = add.gpr64 %38, %37
+  %value = mov.load.indexed.gpr32 %input_aligned, %39 {disp32 = 76, scale = 1}
+  mov.store.indexed.gpr32 %value, %output_aligned, %39 {disp32 = 68, scale = 1}
   return %value
 }
 
@@ -103,10 +103,10 @@ func.def @subview_vector_strided(%input: buffer, %output: buffer) {
   %layout = encoding.layout.strided [12, 1] : encoding<layout>
   %source = buffer.view %input_aligned[%input_base] : buffer -> view<4x12xi32, %layout>
   %destination = buffer.view %output_aligned[%output_base] : buffer -> view<4x12xi32, %layout>
-  %source_crop = view.subview %source[1, 2] : view<4x12xi32, %layout> -> view<2x8xi32, %layout>
-  %destination_crop = view.subview %destination[1, 1] : view<4x12xi32, %layout> -> view<2x8xi32, %layout>
-  %value = vector.load %source_crop[1, 1] : view<2x8xi32, %layout> -> vector<4xi32>
-  vector.store %value, %destination_crop[0, 1] : vector<4xi32>, view<2x8xi32, %layout>
+  %source_crop, %source_crop_layout = view.subview %source[1, 2] : view<4x12xi32, %layout> -> view<2x8xi32, %source_crop_layout>
+  %destination_crop, %destination_crop_layout = view.subview %destination[1, 1] : view<4x12xi32, %layout> -> view<2x8xi32, %destination_crop_layout>
+  %value = vector.load %source_crop[1, 1] : view<2x8xi32, %source_crop_layout> -> vector<4xi32>
+  vector.store %value, %destination_crop[0, 1] : vector<4xi32>, view<2x8xi32, %destination_crop_layout>
   func.return
 }
 
@@ -127,10 +127,10 @@ func.def @subview_vector_aligned(%input: buffer, %output: buffer) {
   %layout = encoding.layout.strided [24, 1] : encoding<layout>
   %source = buffer.view %input_aligned[%input_base] : buffer -> view<4x24xi32, %layout>
   %destination = buffer.view %output_aligned[%output_base] : buffer -> view<4x24xi32, %layout>
-  %source_crop = view.subview %source[1, 8] : view<4x24xi32, %layout> -> view<2x8xi32, %layout>
-  %destination_crop = view.subview %destination[1, 0] : view<4x24xi32, %layout> -> view<2x16xi32, %layout>
-  %value = vector.load %source_crop[1, 0] : view<2x8xi32, %layout> -> vector<8xi32>
-  vector.store %value, %destination_crop[0, 8] : vector<8xi32>, view<2x16xi32, %layout>
+  %source_crop, %source_crop_layout = view.subview %source[1, 8] : view<4x24xi32, %layout> -> view<2x8xi32, %source_crop_layout>
+  %destination_crop, %destination_crop_layout = view.subview %destination[1, 0] : view<4x24xi32, %layout> -> view<2x16xi32, %destination_crop_layout>
+  %value = vector.load %source_crop[1, 0] : view<2x8xi32, %source_crop_layout> -> vector<8xi32>
+  vector.store %value, %destination_crop[0, 8] : vector<8xi32>, view<2x16xi32, %destination_crop_layout>
   func.return
 }
 
@@ -149,15 +149,15 @@ func.def @subview_atomic_strided(%buffer: buffer) -> (i32) {
   %aligned = buffer.assume.alignment %global {minimum_alignment = 4} : buffer
   %layout = encoding.layout.strided [8, 1] : encoding<layout>
   %view = buffer.view %aligned[%base] : buffer -> view<4x8xi32, %layout>
-  %crop = view.subview %view[1, 2] : view<4x8xi32, %layout> -> view<2x3xi32, %layout>
+  %crop, %crop_layout = view.subview %view[1, 2] : view<4x8xi32, %layout> -> view<2x3xi32, %crop_layout>
   %increment = scalar.constant 1 : i32
   // ERROR@+1: TARGET/032 {op_constraint="target_contract.memory_atomic.provider_required"}
-  view.atomic.reduce<addi> %increment, %crop[1, 1] {ordering = relaxed, scope = device} : i32, view<2x3xi32, %layout>
+  view.atomic.reduce<addi> %increment, %crop[1, 1] {ordering = relaxed, scope = device} : i32, view<2x3xi32, %crop_layout>
   // ERROR@+1: TARGET/032 {op_constraint="target_contract.memory_atomic.provider_required"}
-  %old = view.atomic.rmw<addi> %increment, %crop[1, 1] {ordering = relaxed, scope = device} : i32, view<2x3xi32, %layout> -> i32
+  %old = view.atomic.rmw<addi> %increment, %crop[1, 1] {ordering = relaxed, scope = device} : i32, view<2x3xi32, %crop_layout> -> i32
   %replacement = scalar.constant 99 : i32
   // ERROR@+1: TARGET/032 {op_constraint="target_contract.memory_atomic.provider_required"}
-  %observed = view.atomic.cmpxchg %old, %replacement, %crop[1, 1] {failure_ordering = relaxed, scope = device, success_ordering = relaxed} : i32, view<2x3xi32, %layout> -> i32
+  %observed = view.atomic.cmpxchg %old, %replacement, %crop[1, 1] {failure_ordering = relaxed, scope = device, success_ordering = relaxed} : i32, view<2x3xi32, %crop_layout> -> i32
   func.return %observed : i32
 }
 
@@ -167,9 +167,9 @@ func.def @subview_prefetch_strided(%input: buffer) {
   %base = index.constant 8 : offset
   %layout = encoding.layout.strided [8, 1] : encoding<layout>
   %view = buffer.view %input[%base] : buffer -> view<4x8xi32, %layout>
-  %outer = view.subview %view[1, 1] : view<4x8xi32, %layout> -> view<3x6xi32, %layout>
-  %inner = view.subview %outer[1, 1] : view<3x6xi32, %layout> -> view<2x3xi32, %layout>
-  view.prefetch %inner[0, 1] {intent = read, locality = l1} : view<2x3xi32, %layout>
+  %outer, %outer_layout = view.subview %view[1, 1] : view<4x8xi32, %layout> -> view<3x6xi32, %outer_layout>
+  %inner, %inner_layout = view.subview %outer[1, 1] : view<3x6xi32, %outer_layout> -> view<2x3xi32, %inner_layout>
+  view.prefetch %inner[0, 1] {intent = read, locality = l1} : view<2x3xi32, %inner_layout>
   func.return
 }
 

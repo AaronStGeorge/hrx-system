@@ -714,8 +714,8 @@ void loom_value_fact_table_snapshot_origins(
       table, value_id, &out_snapshot->uniform_scale);
   loom_value_fact_table_lookup_contextual_query_origin(
       table, value_id, &out_snapshot->contextual_query);
-  out_snapshot->layout_strides =
-      loom_value_fact_table_query_layout_strides(table, value_id);
+  out_snapshot->layout_origin =
+      loom_value_fact_table_query_layout_origin(table, value_id);
 }
 
 bool loom_value_fact_origin_snapshot_equal(
@@ -741,11 +741,8 @@ bool loom_value_fact_origin_snapshot_equal(
              rhs->uniform_scale.scale_value_id &&
          loom_value_fact_contextual_query_origins_equal(
              lhs->contextual_query, rhs->contextual_query) &&
-         lhs->layout_strides.count == rhs->layout_strides.count &&
-         (lhs->layout_strides.count == 0 ||
-          memcmp(lhs->layout_strides.values, rhs->layout_strides.values,
-                 lhs->layout_strides.count *
-                     sizeof(*lhs->layout_strides.values)) == 0);
+         loom_value_fact_layout_origin_equal(lhs->layout_origin,
+                                             rhs->layout_origin);
 }
 
 iree_status_t loom_value_fact_table_define_contextual_query_origin(
@@ -872,15 +869,16 @@ static iree_status_t loom_value_fact_table_copy_origins(
     IREE_RETURN_IF_ERROR(loom_value_fact_table_define_contextual_query_origin(
         target, result_value_id, origin));
   }
-  if ((families & LOOM_VALUE_FACT_ORIGIN_LAYOUT_STRIDES) &&
+  if ((families & LOOM_VALUE_FACT_ORIGIN_LAYOUT) &&
       (source->layout_origins || target->layout_origins)) {
     if (target == source) {
-      IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_layout_strides(
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_layout_origin(
           target, source_value_id, result_value_id));
     } else {
-      IREE_RETURN_IF_ERROR(loom_value_fact_table_define_layout_strides(
-          target, result_value_id,
-          loom_value_fact_table_query_layout_strides(source, source_value_id)));
+      const loom_value_fact_layout_origin_t origin =
+          loom_value_fact_table_query_layout_origin(source, source_value_id);
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_define_layout_origin(
+          target, result_value_id, origin));
     }
   }
   return iree_ok_status();
@@ -1010,9 +1008,8 @@ static void loom_value_fact_table_clear_origin_families(
           table, value_id, LOOM_VALUE_FACT_ORIGIN_CONTEXTUAL_QUERY, true);
     }
   }
-  if ((families & LOOM_VALUE_FACT_ORIGIN_LAYOUT_STRIDES) &&
-      table->layout_origins) {
-    loom_value_fact_table_clear_layout_strides(table, value_id);
+  if ((families & LOOM_VALUE_FACT_ORIGIN_LAYOUT) && table->layout_origins) {
+    loom_value_fact_table_clear_layout_origin(table, value_id);
   }
 }
 

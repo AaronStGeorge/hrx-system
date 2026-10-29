@@ -66,10 +66,10 @@ typedef struct loom_vector_memory_access_t {
   // encoding values.
   loom_value_fact_address_layout_t layout_summary;
 
-  // Retained per-axis SSA strides, with INVALID entries for static axes.
-  // Empty for dense/exact layouts or unavailable scoped materialization.
-  // Borrows immutable storage from the fact table used to describe this access.
-  loom_value_fact_layout_strides_t layout_stride_values;
+  // Retained exact materialization recipe for an SSA encoding. Empty for
+  // static encodings or unavailable scoped materialization. Borrows immutable
+  // storage from the fact table used to describe this access.
+  loom_value_fact_layout_origin_t layout_origin;
 
   // Inline stride fact storage backing layout_summary.
   loom_value_facts_t layout_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK];

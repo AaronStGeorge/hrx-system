@@ -1019,20 +1019,21 @@ TEST_F(FactOriginTest, LayoutAliasPublishesOnlyChangedBindings) {
       LOOM_LOCATION_UNKNOWN, &alias));
   const auto result = loom_encoding_layout_assume_strided_result(alias);
   const auto before =
-      loom_value_fact_table_query_layout_strides(&table_, result);
+      loom_value_fact_table_query_layout_origin(&table_, result);
+  ASSERT_EQ(before.kind, LOOM_VALUE_FACT_LAYOUT_ORIGIN_EXPLICIT_STRIDES);
   ASSERT_EQ(before.count, 1u);
-  EXPECT_EQ(before.values[0], inputs_[4]);
+  EXPECT_EQ(before.values.explicit_strides[0], inputs_[4]);
   IREE_ASSERT_OK(loom_rewriter_set_operand(
       &rewriter_, alias, 0, loom_encoding_layout_strided_result(second)));
-  const auto after =
-      loom_value_fact_table_query_layout_strides(&table_, result);
+  const auto after = loom_value_fact_table_query_layout_origin(&table_, result);
   ASSERT_EQ(after.count, 1u);
-  EXPECT_EQ(after.values[0], inputs_[5]);
-  EXPECT_EQ(before.values[0], inputs_[4]);
+  EXPECT_EQ(after.values.explicit_strides[0], inputs_[5]);
+  EXPECT_EQ(before.values.explicit_strides[0], inputs_[4]);
   const auto bytes = arena_.used_allocation_size;
   EXPECT_FALSE(Compute(alias));
-  EXPECT_EQ(loom_value_fact_table_query_layout_strides(&table_, result).values,
-            after.values);
+  EXPECT_EQ(
+      loom_value_fact_table_query_layout_origin(&table_, result).values.data,
+      after.values.data);
   EXPECT_EQ(arena_.used_allocation_size, bytes);
 }
 

@@ -178,7 +178,7 @@ class ChannelCompletionTest : public ::testing::Test {
     const int64_t zero[] = {0};
     loom_op_t* op;
     IREE_CHECK_OK(loom_view_subview_build(&builder_, source, nullptr, 0, zero,
-                                          IREE_ARRAYSIZE(zero), view_type_,
+                                          IREE_ARRAYSIZE(zero), &view_type_, 1,
                                           LOOM_LOCATION_UNKNOWN, &op));
     return loom_view_subview_result(op);
   }

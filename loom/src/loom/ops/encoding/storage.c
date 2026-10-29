@@ -69,6 +69,38 @@ static iree_status_t loom_encoding_intern_family(
   return loom_module_add_encoding(module, &encoding, out_encoding_id);
 }
 
+iree_status_t loom_encoding_storage_build(loom_builder_t* builder,
+                                          loom_value_id_t layout,
+                                          uint16_t schema_encoding_id,
+                                          loom_type_t result_type,
+                                          loom_location_id_t location,
+                                          loom_op_t** out_op) {
+  IREE_ASSERT_NE(layout, LOOM_VALUE_ID_INVALID);
+  IREE_ASSERT_NE(schema_encoding_id, 0);
+  loom_string_id_t schema_name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      builder->module, loom_encoding_schema_param_name(), &schema_name_id));
+  loom_named_attr_t schema_attribute = {
+      .name_id = schema_name_id,
+      .value = loom_attr_encoding(schema_encoding_id),
+  };
+  uint16_t storage_spec_encoding_id = 0;
+  IREE_RETURN_IF_ERROR(loom_encoding_intern_family(
+      builder->module, &loom_encoding_storage_family_descriptor,
+      &schema_attribute, 1, &storage_spec_encoding_id));
+
+  loom_string_id_t layout_name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      builder->module, loom_encoding_layout_param_name(), &layout_name_id));
+  const loom_named_value_t layout_parameter = {
+      .name_id = layout_name_id,
+      .value_id = layout,
+  };
+  return loom_encoding_define_build(builder, storage_spec_encoding_id,
+                                    &layout_parameter, 1, result_type, location,
+                                    out_op);
+}
+
 static iree_status_t loom_encoding_intern_exact_address_layout(
     loom_module_t* module, loom_value_fact_address_layout_t layout,
     uint16_t* out_encoding_id) {
@@ -496,12 +528,12 @@ bool loom_encoding_query_value_address_layout(
       out_layout);
 }
 
-loom_value_fact_layout_strides_t loom_encoding_query_value_layout_strides(
+loom_value_fact_layout_origin_t loom_encoding_query_value_layout_origin(
     const loom_fact_context_t* context, loom_value_id_t value_id) {
   if (!context || !context->table || value_id == LOOM_VALUE_ID_INVALID) {
-    return (loom_value_fact_layout_strides_t){0};
+    return (loom_value_fact_layout_origin_t){0};
   }
-  return loom_value_fact_table_query_layout_strides(context->table, value_id);
+  return loom_value_fact_table_query_layout_origin(context->table, value_id);
 }
 
 static bool loom_encoding_value_storage_schema(
@@ -553,12 +585,12 @@ bool loom_encoding_query_type_address_layout(
       context, loom_type_encoding_value_id(type), out_layout);
 }
 
-loom_value_fact_layout_strides_t loom_encoding_query_type_layout_strides(
+loom_value_fact_layout_origin_t loom_encoding_query_type_layout_origin(
     const loom_fact_context_t* context, loom_type_t type) {
   if (!context || !loom_type_has_ssa_encoding(type)) {
-    return (loom_value_fact_layout_strides_t){0};
+    return (loom_value_fact_layout_origin_t){0};
   }
-  return loom_encoding_query_value_layout_strides(
+  return loom_encoding_query_value_layout_origin(
       context, loom_type_encoding_value_id(type));
 }
 

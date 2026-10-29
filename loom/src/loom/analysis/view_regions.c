@@ -16,6 +16,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/callable_effects.h"
 #include "loom/ops/channel/ops.h"
+#include "loom/ops/encoding/roles.h"
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/view/ops.h"
@@ -353,21 +354,30 @@ static iree_status_t loom_view_region_axis_stride_expr(
     loom_symbolic_expr_unknown(loom_value_facts_unknown(), out_expression);
     return iree_ok_status();
   }
-  loom_value_facts_t stride_facts = layout.summary.strides[axis];
-  if (loom_value_facts_is_exact(stride_facts) &&
-      !loom_value_facts_is_float(stride_facts)) {
-    loom_symbolic_expr_constant(stride_facts.range_lo, out_expression);
+  const loom_value_facts_t stride_facts = layout.summary.strides[axis];
+  const loom_value_fact_layout_origin_t origin =
+      loom_encoding_query_type_layout_origin(
+          &table->expression_context->fact_table->context, view_type);
+  loom_value_fact_layout_axis_t layout_axis;
+  loom_value_fact_layout_query_axis(table->expression_context->fact_table,
+                                    origin, axis, stride_facts, &layout_axis);
+  if (layout_axis.kind == LOOM_VALUE_FACT_LAYOUT_AXIS_STATIC) {
+    loom_symbolic_expr_constant(layout_axis.static_coefficient, out_expression);
     out_expression->facts = stride_facts;
     *out_known = true;
     return iree_ok_status();
   }
-  const loom_value_fact_layout_strides_t stride_values =
-      loom_encoding_query_type_layout_strides(
-          &table->expression_context->fact_table->context, view_type);
-  if (axis < stride_values.count &&
-      stride_values.values[axis] != LOOM_VALUE_ID_INVALID) {
-    IREE_RETURN_IF_ERROR(loom_symbolic_expr_from_value(
-        table->expression_context, stride_values.values[axis], out_expression));
+  if (layout_axis.kind == LOOM_VALUE_FACT_LAYOUT_AXIS_DYNAMIC) {
+    loom_symbolic_expr_constant(layout_axis.static_coefficient, out_expression);
+    for (uint8_t i = 0; i < layout_axis.dynamic_factor_count; ++i) {
+      loom_symbolic_expr_t factor = {0};
+      IREE_RETURN_IF_ERROR(loom_symbolic_expr_from_value(
+          table->expression_context, layout_axis.dynamic_factors[i], &factor));
+      loom_symbolic_expr_t product = {0};
+      IREE_RETURN_IF_ERROR(
+          loom_view_region_expr_mul(table, out_expression, &factor, &product));
+      *out_expression = product;
+    }
     loom_view_region_expression_refine_facts(out_expression, stride_facts);
     *out_known = true;
     return iree_ok_status();
@@ -563,6 +573,131 @@ static iree_status_t loom_view_region_additional_byte_offset_expr(
                                    out_expression);
 }
 
+static iree_status_t loom_view_region_build_address_projection(
+    loom_view_region_table_t* table, const loom_view_region_t* source_region,
+    loom_type_t source_type, loom_attribute_t static_offsets,
+    loom_value_slice_t dynamic_offsets, int64_t static_element_byte_count,
+    const loom_symbolic_expr_t* additional_offset,
+    const loom_view_address_projection_t** out_projection) {
+  *out_projection = NULL;
+  const loom_view_address_projection_t* source_projection =
+      source_region->address_projection;
+  const bool additional_is_linear =
+      loom_symbolic_expr_is_linear(additional_offset);
+  if (additional_is_linear && !source_projection) {
+    return iree_ok_status();
+  }
+  if (!loom_type_has_ssa_encoding(source_type)) {
+    return iree_ok_status();
+  }
+  const loom_encoding_role_t role = loom_encoding_query_type_role(
+      &table->expression_context->fact_table->context,
+      table->expression_context->module, source_type);
+  if (role != LOOM_ENCODING_ROLE_ADDRESS_LAYOUT &&
+      role != LOOM_ENCODING_ROLE_PHYSICAL_STORAGE) {
+    return iree_ok_status();
+  }
+  const loom_value_id_t source_encoding =
+      loom_type_encoding_value_id(source_type);
+  const loom_value_fact_layout_origin_t origin =
+      loom_encoding_query_value_layout_origin(
+          &table->expression_context->fact_table->context, source_encoding);
+  const loom_value_id_t physical_encoding =
+      origin.has_physical_encoding_value ? origin.physical_encoding_value_id
+                                         : source_encoding;
+
+  loom_symbolic_expr_t linear_byte_offset =
+      source_projection ? source_projection->linear_byte_offset
+                        : source_region->projection_byte_offset;
+  if (!loom_symbolic_expr_is_linear(&linear_byte_offset)) {
+    return iree_ok_status();
+  }
+  if (additional_is_linear) {
+    loom_symbolic_expr_t combined = {0};
+    IREE_RETURN_IF_ERROR(loom_view_region_expr_add(
+        table, &linear_byte_offset, additional_offset, &combined));
+    if (!loom_symbolic_expr_is_linear(&combined)) {
+      return iree_ok_status();
+    }
+    linear_byte_offset = combined;
+  }
+
+  loom_view_address_projection_term_t new_terms[LOOM_TYPE_MAX_RANK];
+  iree_host_size_t new_term_count = 0;
+  if (!additional_is_linear) {
+    if (static_element_byte_count <= 0 ||
+        static_offsets.kind != LOOM_ATTR_I64_ARRAY ||
+        static_offsets.count != loom_type_rank(source_type)) {
+      return iree_ok_status();
+    }
+    uint16_t dynamic_ordinal = 0;
+    for (uint8_t axis = 0; axis < loom_type_rank(source_type); ++axis) {
+      int64_t index = static_offsets.i64_array[axis];
+      loom_value_id_t index_value_id = LOOM_VALUE_ID_INVALID;
+      if (index == INT64_MIN) {
+        if (dynamic_ordinal >= dynamic_offsets.count) {
+          return iree_ok_status();
+        }
+        index_value_id = dynamic_offsets.values[dynamic_ordinal++];
+        const loom_value_facts_t index_facts = loom_value_fact_table_lookup(
+            table->expression_context->fact_table, index_value_id);
+        if (!loom_value_facts_as_exact_i64(index_facts, &index)) {
+          index = 1;
+        } else {
+          index_value_id = LOOM_VALUE_ID_INVALID;
+        }
+      }
+      if (index_value_id == LOOM_VALUE_ID_INVALID && index == 0) {
+        continue;
+      }
+      int64_t coefficient = static_element_byte_count;
+      if (index_value_id == LOOM_VALUE_ID_INVALID &&
+          (!iree_checked_mul_i64(coefficient, index, &coefficient) ||
+           coefficient == INT64_MIN)) {
+        return iree_ok_status();
+      }
+      new_terms[new_term_count++] = (loom_view_address_projection_term_t){
+          .coefficient = coefficient,
+          .physical_encoding_value_id = physical_encoding,
+          .index_value_id = index_value_id,
+          .axis = axis,
+      };
+    }
+    if (dynamic_ordinal != dynamic_offsets.count) {
+      return iree_ok_status();
+    }
+  }
+
+  const iree_host_size_t source_term_count =
+      source_projection ? source_projection->term_count : 0;
+  loom_view_address_projection_t* projection = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(table->expression_context->arena,
+                                           sizeof(*projection),
+                                           (void**)&projection));
+  loom_view_address_projection_term_t* terms = NULL;
+  const iree_host_size_t term_count = source_term_count + new_term_count;
+  if (term_count != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(table->expression_context->arena, term_count,
+                                  sizeof(*terms), (void**)&terms));
+    if (source_term_count != 0) {
+      memcpy(terms, source_projection->terms,
+             source_term_count * sizeof(*terms));
+    }
+    if (new_term_count != 0) {
+      memcpy(terms + source_term_count, new_terms,
+             new_term_count * sizeof(*terms));
+    }
+  }
+  *projection = (loom_view_address_projection_t){
+      .linear_byte_offset = linear_byte_offset,
+      .terms = terms,
+      .term_count = term_count,
+  };
+  *out_projection = projection;
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Region construction
 //===----------------------------------------------------------------------===//
@@ -696,6 +831,11 @@ static iree_status_t loom_view_region_build_subview(
       table, source_type, loom_view_subview_static_offsets(op),
       loom_view_subview_offsets(op), reference.static_element_byte_count,
       &additional_offset));
+  const loom_view_address_projection_t* address_projection = NULL;
+  IREE_RETURN_IF_ERROR(loom_view_region_build_address_projection(
+      table, source_region, source_type, loom_view_subview_static_offsets(op),
+      loom_view_subview_offsets(op), reference.static_element_byte_count,
+      &additional_offset, &address_projection));
   loom_symbolic_expr_t begin = {0};
   IREE_RETURN_IF_ERROR(loom_view_region_expr_add(
       table, &source_region->begin_byte_offset, &additional_offset, &begin));
@@ -708,6 +848,7 @@ static iree_status_t loom_view_region_build_subview(
   IREE_RETURN_IF_ERROR(loom_view_region_expr_add(
       table, &source_region->projection_byte_offset, &additional_offset,
       &out_region->projection_byte_offset));
+  out_region->address_projection = address_projection;
   int64_t static_additional_offset = 0;
   if (loom_view_region_expr_is_constant(&additional_offset,
                                         &static_additional_offset) &&

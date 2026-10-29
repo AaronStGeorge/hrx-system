@@ -352,7 +352,8 @@ static loom_value_facts_t loom_view_extent_max_index_facts(
 static loom_value_facts_t loom_view_suffix_footprint_facts(
     const loom_fact_context_t* context, const loom_module_t* module,
     loom_type_t view_type, uint8_t first_axis,
-    int64_t static_element_byte_count) {
+    int64_t static_element_byte_count,
+    const loom_value_fact_address_layout_t* address_layout) {
   if (static_element_byte_count < 0) {
     return loom_view_nonnegative_unknown_facts();
   }
@@ -370,8 +371,12 @@ static loom_value_facts_t loom_view_suffix_footprint_facts(
     }
 
     loom_value_facts_t stride = loom_value_facts_unknown();
-    if (!loom_view_axis_stride_facts(context, module, view_type, axis,
-                                     &stride)) {
+    const bool has_stride =
+        address_layout ? loom_view_strided_summary_axis_stride_facts(
+                             *address_layout, axis, &stride)
+                       : loom_view_axis_stride_facts(context, module, view_type,
+                                                     axis, &stride);
+    if (!has_stride) {
       return loom_view_nonnegative_unknown_facts();
     }
     loom_value_facts_t contribution = loom_view_muli_nonnegative(
@@ -393,10 +398,15 @@ static loom_value_facts_t loom_view_suffix_footprint_facts(
 
 static loom_value_facts_t loom_view_footprint_facts(
     const loom_fact_context_t* context, const loom_module_t* module,
-    loom_type_t view_type, int64_t static_element_byte_count) {
+    loom_type_t view_type, int64_t static_element_byte_count,
+    const loom_value_fact_address_layout_t* address_layout) {
   loom_view_address_layout_t layout = {0};
-  if (!loom_view_address_layout(context, module, view_type, &layout)) {
-    return loom_view_nonnegative_unknown_facts();
+  if (address_layout) {
+    layout.summary = *address_layout;
+  } else {
+    if (!loom_view_address_layout(context, module, view_type, &layout)) {
+      return loom_view_nonnegative_unknown_facts();
+    }
   }
   if (layout.summary.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE) {
     return loom_view_dense_footprint_facts(context, view_type,
@@ -404,7 +414,8 @@ static loom_value_facts_t loom_view_footprint_facts(
   }
   if (layout.summary.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED) {
     return loom_view_suffix_footprint_facts(context, module, view_type, 0,
-                                            static_element_byte_count);
+                                            static_element_byte_count,
+                                            &layout.summary);
   }
   return loom_view_nonnegative_unknown_facts();
 }
@@ -565,7 +576,8 @@ iree_status_t loom_view_reference_make_record(loom_fact_context_t* context,
   reference.minimum_alignment =
       loom_view_alignment_from_offset_facts(reference.base_byte_offset);
   reference.footprint_byte_length = loom_view_suffix_footprint_facts(
-      context, module, storage_type, 1, reference.static_element_byte_count);
+      context, module, storage_type, 1, reference.static_element_byte_count,
+      /*address_layout=*/NULL);
   return loom_value_facts_make_view_reference(context, reference, out);
 }
 
@@ -588,7 +600,8 @@ iree_status_t loom_view_reference_make_buffer_view(
   view_reference.static_element_byte_count =
       loom_view_static_element_byte_count(result_type);
   view_reference.footprint_byte_length = loom_view_footprint_facts(
-      context, module, result_type, view_reference.static_element_byte_count);
+      context, module, result_type, view_reference.static_element_byte_count,
+      /*address_layout=*/NULL);
   view_reference.minimum_alignment =
       loom_view_alignment_from_offset_facts(view_reference.base_byte_offset);
   view_reference.root_minimum_alignment = buffer_reference.minimum_alignment;
@@ -612,7 +625,8 @@ iree_status_t loom_view_reference_make_unplaced_view(
   loom_value_fact_view_reference_t view_reference =
       loom_view_default_view_reference(result_value_id, result_type);
   view_reference.footprint_byte_length = loom_view_footprint_facts(
-      context, module, result_type, view_reference.static_element_byte_count);
+      context, module, result_type, view_reference.static_element_byte_count,
+      /*address_layout=*/NULL);
   view_reference.memory_space = buffer_reference.memory_space;
   view_reference.alias_scope_id = buffer_reference.alias_scope_id;
   view_reference.nullability = buffer_reference.nullability;
@@ -624,7 +638,9 @@ iree_status_t loom_view_reference_make_subview(
     loom_fact_context_t* context, const loom_module_t* module,
     loom_value_id_t source_value_id, loom_value_facts_t source_facts,
     loom_attribute_t static_offsets, loom_value_slice_t dynamic_offsets,
-    loom_type_t source_type, loom_type_t result_type, loom_value_facts_t* out) {
+    loom_type_t source_type, loom_type_t result_type,
+    const loom_value_fact_address_layout_t* result_address_layout,
+    loom_value_facts_t* out) {
   loom_value_fact_view_reference_t source_reference =
       loom_view_default_view_reference(source_value_id, source_type);
   (void)loom_value_facts_query_view_reference(context, source_facts,
@@ -642,7 +658,8 @@ iree_status_t loom_view_reference_make_subview(
   view_reference.base_byte_offset = loom_view_addi_nonnegative(
       source_reference.base_byte_offset, additional_byte_offset);
   view_reference.footprint_byte_length = loom_view_footprint_facts(
-      context, module, result_type, view_reference.static_element_byte_count);
+      context, module, result_type, view_reference.static_element_byte_count,
+      result_address_layout);
   view_reference.minimum_alignment =
       loom_view_alignment_from_offset_facts(view_reference.base_byte_offset);
   view_reference.root_minimum_alignment =
@@ -674,6 +691,7 @@ iree_status_t loom_view_reference_make_reinterpret(
   view_reference.static_element_byte_count =
       loom_view_static_element_byte_count(result_type);
   view_reference.footprint_byte_length = loom_view_footprint_facts(
-      context, module, result_type, view_reference.static_element_byte_count);
+      context, module, result_type, view_reference.static_element_byte_count,
+      /*address_layout=*/NULL);
   return loom_value_facts_make_view_reference(context, view_reference, out);
 }

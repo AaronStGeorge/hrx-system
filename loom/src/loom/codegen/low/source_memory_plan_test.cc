@@ -263,7 +263,7 @@ TEST_F(SourceMemoryPlanTest, PackedSubviewRetainsStrongerAddressAlignment) {
     loom_op_t* subview = nullptr;
     IREE_ASSERT_OK(loom_view_subview_build(
         &builder_, loom_buffer_view_result(source), nullptr, 0, &subview_offset,
-        1, subview_type, LOOM_LOCATION_UNKNOWN, &subview));
+        1, &subview_type, 1, LOOM_LOCATION_UNKNOWN, &subview));
     const int64_t indices[] = {0, 3, 15};
     const uint32_t expected_alignments[] = {4, 16, 64};
     loom_op_t* loads[IREE_ARRAYSIZE(indices)] = {};

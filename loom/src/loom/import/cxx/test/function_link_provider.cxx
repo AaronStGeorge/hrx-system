@@ -25,3 +25,8 @@ static unsigned local_adjust(unsigned value) { return value + 5u; }
     LinkedDynamicByteView values) {
   return loom::view::load(values, 3u);
 }
+
+[[loom::symbol("library.crop_2x3")]] LinkedCrop linked_crop_2x3(
+    LinkedCropSource source) {
+  return loom::view::subview<2, 3>(source, {1u, 2u}, {});
+}

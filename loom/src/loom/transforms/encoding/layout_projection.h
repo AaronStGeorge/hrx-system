@@ -23,6 +23,16 @@ const loom_boundary_projection_rule_t* loom_cfg_layout_boundary_projection_rule(
 const loom_boundary_projection_rule_t*
 loom_loop_layout_boundary_projection_rule(void);
 
+// Returns the compiler-owned callable physical-encoding transport rule.
+const loom_boundary_projection_rule_t*
+loom_callable_encoding_boundary_projection_rule(void);
+
+// Maps one logical layout axis to its transported scalar component. Returns
+// false for schemas owned by another rule or axes fixed in the schema.
+bool loom_layout_boundary_projection_component_for_axis(
+    const loom_boundary_projection_schema_t* schema, uint8_t axis,
+    uint8_t* out_component);
+
 #ifdef __cplusplus
 }
 #endif

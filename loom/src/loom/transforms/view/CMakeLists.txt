@@ -63,10 +63,12 @@ loom_cc_library(
     loom::ir
     loom::ir::facts
     loom::ops::buffer
+    loom::ops::index
     loom::ops::scf
     loom::rewrite::rewriter
     loom::target::provider
     loom::transforms::boundary::projection_core
+    loom::transforms::encoding::layout_projection
   PUBLIC
 )
 

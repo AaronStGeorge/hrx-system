@@ -21,10 +21,17 @@ using LinkedByteView =
 using LinkedDynamicByteView =
     loom::type::view<loom::type::shape<loom::type::dynamic>,
                      const unsigned char>;
+using LinkedCropSource =
+    loom::type::view<loom::type::shape<4, loom::type::dynamic>,
+                     const unsigned char>;
+using LinkedCrop =
+    loom::type::view<loom::type::shape<2, 3>, const unsigned char>;
 
 [[loom::symbol("library.read_byte")]] unsigned linked_read_byte(
     LinkedByteView values, unsigned position);
 [[loom::symbol("library.read_dynamic_byte")]] unsigned linked_read_dynamic_byte(
     LinkedDynamicByteView values);
+[[loom::symbol("library.crop_2x3")]] LinkedCrop linked_crop_2x3(
+    LinkedCropSource source);
 
 #endif  // LOOM_IMPORT_CXX_TEST_FUNCTION_LINK_HELPERS_H_

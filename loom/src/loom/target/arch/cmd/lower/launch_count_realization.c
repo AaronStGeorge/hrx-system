@@ -1220,8 +1220,8 @@ static iree_status_t loom_cmd_launch_count_build_tuple_view(
   loom_op_t* subview_op = NULL;
   IREE_RETURN_IF_ERROR(loom_view_subview_build(
       builder, slab_view, /*offsets=*/NULL, /*offsets_count=*/0, &static_offset,
-      /*static_offsets_count=*/1, tuple_view_type, demand->consumer->location,
-      &subview_op));
+      /*static_offsets_count=*/1, &tuple_view_type, /*result_count=*/1,
+      demand->consumer->location, &subview_op));
   *out_tuple_view = loom_view_subview_result(subview_op);
   return iree_ok_status();
 }

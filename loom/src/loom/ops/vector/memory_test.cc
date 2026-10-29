@@ -695,9 +695,12 @@ TEST_F(VectorMemoryTest, StridedLayoutSupportsDynamicStride) {
   loom_vector_memory_access_t access;
   ASSERT_TRUE(Describe(view_type, vector_type, &access));
   EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_STRIDED);
-  ASSERT_EQ(access.layout_stride_values.count, 2u);
-  EXPECT_EQ(access.layout_stride_values.values[0], dynamic_stride);
-  EXPECT_EQ(access.layout_stride_values.values[1], LOOM_VALUE_ID_INVALID);
+  ASSERT_EQ(access.layout_origin.kind,
+            LOOM_VALUE_FACT_LAYOUT_ORIGIN_EXPLICIT_STRIDES);
+  ASSERT_EQ(access.layout_origin.count, 2u);
+  EXPECT_EQ(access.layout_origin.values.explicit_strides[0], dynamic_stride);
+  EXPECT_EQ(access.layout_origin.values.explicit_strides[1],
+            LOOM_VALUE_ID_INVALID);
 
   int64_t row_stride = 0;
   int64_t column_stride = 0;
@@ -748,9 +751,12 @@ TEST_F(VectorMemoryTest,
 
   loom_vector_memory_access_t access;
   ASSERT_TRUE(Describe(view_type, vector_type, &access));
-  ASSERT_EQ(access.layout_stride_values.count, 2u);
-  EXPECT_EQ(access.layout_stride_values.values[0], dynamic_stride);
-  EXPECT_EQ(access.layout_stride_values.values[1], LOOM_VALUE_ID_INVALID);
+  ASSERT_EQ(access.layout_origin.kind,
+            LOOM_VALUE_FACT_LAYOUT_ORIGIN_EXPLICIT_STRIDES);
+  ASSERT_EQ(access.layout_origin.count, 2u);
+  EXPECT_EQ(access.layout_origin.values.explicit_strides[0], dynamic_stride);
+  EXPECT_EQ(access.layout_origin.values.explicit_strides[1],
+            LOOM_VALUE_ID_INVALID);
 }
 
 TEST_F(VectorMemoryTest, ByteOffsetRejectsSubByteElementType) {

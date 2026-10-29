@@ -445,24 +445,26 @@ static bool loom_scf_layout_direct_projection(
       layout.rank != rank || !layout.strides) {
     return false;
   }
-  int64_t exact_stride = 0;
-  if (loom_value_facts_as_exact_i64(layout.strides[axis], &exact_stride) &&
-      exact_stride >= 0) {
+  const loom_value_fact_layout_origin_t origin =
+      loom_encoding_query_value_layout_origin(&plan->facts->context, source);
+  loom_value_fact_layout_axis_t layout_axis;
+  loom_value_fact_layout_query_axis(plan->facts->context.table, origin, axis,
+                                    layout.strides[axis], &layout_axis);
+  if (layout_axis.kind == LOOM_VALUE_FACT_LAYOUT_AXIS_STATIC) {
     *out_projection = (loom_scf_layout_projection_t){
         .kind = LOOM_SCF_LAYOUT_PROJECTION_CONSTANT,
-        .value.constant = exact_stride,
+        .value.constant = layout_axis.static_coefficient,
     };
     return true;
   }
-  const loom_value_fact_layout_strides_t bindings =
-      loom_encoding_query_value_layout_strides(&plan->facts->context, source);
-  if (bindings.count != rank ||
-      bindings.values[axis] == LOOM_VALUE_ID_INVALID) {
+  if (layout_axis.kind != LOOM_VALUE_FACT_LAYOUT_AXIS_DYNAMIC ||
+      layout_axis.static_coefficient != 1 ||
+      layout_axis.dynamic_factor_count != 1) {
     return false;
   }
   *out_projection = (loom_scf_layout_projection_t){
       .kind = LOOM_SCF_LAYOUT_PROJECTION_VALUE,
-      .value.value = bindings.values[axis],
+      .value.value = layout_axis.dynamic_factors[0],
   };
   return true;
 }

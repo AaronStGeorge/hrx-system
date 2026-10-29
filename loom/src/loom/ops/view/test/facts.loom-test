@@ -591,6 +591,52 @@ func.def @subview_composes_base_and_root(%buffer: buffer) -> (i1, i64, i64, i64)
 
 // ====
 
+// A shape-changing dense crop captures the source row pitch as an explicit,
+// shape-independent layout and uses it for both origin and footprint facts.
+func.def @subview_captures_dense_pitch(%buffer: buffer) -> (i64, i64, i64, i64, i64) {
+  %offset = index.constant 0 : offset
+  %source = buffer.view %buffer[%offset] : buffer -> view<4x8xf32>
+  %crop, %layout = view.subview %source[1, 2] : view<4x8xf32> -> view<2x3xf32, %layout>
+  %kind = test.fact_encoding_layout_kind %layout : encoding -> i64
+  %row_stride = test.fact_encoding_layout_stride_hi %layout [0] : encoding -> i64
+  %column_stride = test.fact_encoding_layout_stride_hi %layout [1] : encoding -> i64
+  %byte_offset = test.fact_view_byte_offset_hi %crop : view<2x3xf32, %layout> -> i64
+  %byte_length = test.fact_view_byte_length_hi %crop : view<2x3xf32, %layout> -> i64
+  func.return %kind, %row_stride, %column_stride, %byte_offset, %byte_length : i64, i64, i64, i64, i64
+}
+// ----
+func.def @subview_captures_dense_pitch(%buffer: buffer) -> (i64, i64, i64, i64, i64) {
+  %kind = scalar.constant 2 : i64
+  %row_stride = scalar.constant 8 : i64
+  %column_stride = scalar.constant 1 : i64
+  %byte_offset = scalar.constant 40 : i64
+  %byte_length = scalar.constant 44 : i64
+  func.return %kind, %row_stride, %column_stride, %byte_offset, %byte_length : i64, i64, i64, i64, i64
+}
+
+// ====
+
+// Physical storage capture retains both the source address function and its
+// storage schema.
+func.def @subview_captures_physical_storage(%buffer: buffer) -> (i64, i64, i64) {
+  %offset = index.constant 0 : offset
+  %source = buffer.view %buffer[%offset] : buffer -> view<4x8xf32, #encoding.storage<layout=#encoding.layout.dense, schema=#encoding.operand<element_format=bf6, payload_elements=32, payload_registers=6>>>
+  %crop, %storage = view.subview %source[1, 2] : view<4x8xf32, #encoding.storage<layout=#encoding.layout.dense, schema=#encoding.operand<element_format=bf6, payload_elements=32, payload_registers=6>>> -> view<2x3xf32, %storage>
+  %kind = test.fact_encoding_layout_kind %storage : encoding -> i64
+  %row_stride = test.fact_encoding_layout_stride_hi %storage [0] : encoding -> i64
+  %schema = test.fact_encoding_operand_field %storage ["payload_elements"] : encoding -> i64
+  func.return %kind, %row_stride, %schema : i64, i64, i64
+}
+// ----
+func.def @subview_captures_physical_storage(%buffer: buffer) -> (i64, i64, i64) {
+  %kind = scalar.constant 2 : i64
+  %row_stride = scalar.constant 8 : i64
+  %schema = scalar.constant 32 : i64
+  func.return %kind, %row_stride, %schema : i64, i64, i64
+}
+
+// ====
+
 // Offset predicates survive into view facts, preserving range and divisibility.
 func.def @dynamic_offset_facts(%buffer: buffer, %base: offset) -> (i64, i64, i64) {
   %base2 = index.assume %base [range(%base, 0, 4096), multiple_of(%base, 64)] : offset

@@ -163,6 +163,43 @@ func.def @subview_offset_count(%buffer: buffer, %offset: offset) {
 
 // ====
 
+// A dense crop that changes a suffix dimension must capture the source pitch.
+func.def @subview_requires_physical_encoding(%source: view<4x8xf32>) {
+  // ERROR@+1: ENCODING/023
+  %crop = view.subview %source[1, 2] : view<4x8xf32> -> view<2x3xf32>
+  func.return
+}
+
+// ====
+
+// The captured encoding is structural: the result view must reference the
+// exact sibling produced by this operation.
+func.def @subview_requires_sibling_reference(%source: view<4x8xf32>) {
+  // ERROR@+1: STRUCTURE/032 "result type encoding" "physical_encoding co-result"
+  %crop, %layout = view.subview %source[1, 2] : view<4x8xf32> -> view<2x3xf32>
+  func.return
+}
+
+// ====
+
+func.def @subview_rejects_external_encoding(%source: view<4x8xf32>) {
+  %external = encoding.layout.strided [8, 1] : encoding<layout>
+  // ERROR@+1: STRUCTURE/032 "result type encoding" "physical_encoding co-result"
+  %crop, %layout = view.subview %source[1, 2] : view<4x8xf32> -> view<2x3xf32, %external>
+  func.return
+}
+
+// ====
+
+// A redundant co-result is valid even when the type-only one-result proof
+// would also succeed.
+func.def @subview_allows_redundant_capture(%source: view<4x8xf32>) {
+  %rows, %layout = view.subview %source[1, 0] : view<4x8xf32> -> view<2x8xf32, %layout>
+  func.return
+}
+
+// ====
+
 // view.refine can narrow dynamic shape information, but it must not assert an
 // obvious static shape contradiction.
 func.def @refine_static_dimension_mismatch(%buffer: buffer, %offset: offset) {

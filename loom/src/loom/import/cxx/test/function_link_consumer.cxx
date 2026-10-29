@@ -37,13 +37,29 @@ static unsigned observe_linked_dynamic_view() {
   return linked_read_dynamic_byte(view);
 }
 
+static unsigned observe_linked_crop(unsigned columns) {
+  unsigned char values[46];
+  for (unsigned index = 0; index < 46u; ++index) {
+    values[index] = static_cast<unsigned char>(index);
+  }
+  const unsigned char* input = values + 2;
+  auto source = loom::buffer::view<4, loom::type::dynamic>(
+      input, {columns}, loom::encoding::layout::dense<2>());
+  auto crop = linked_crop_2x3(source);
+  return loom::view::load(crop, 1u, 1u);
+}
+
 LOOM_CHECK_CASE(function_link) {
   const auto adjusted = apply_adjustment(2u);
   const auto first = observe_linked_views(0u);
   const auto last = observe_linked_views(3u);
   const auto dynamic = observe_linked_dynamic_view();
+  const auto narrow_crop = observe_linked_crop(8u);
+  const auto wide_crop = observe_linked_crop(11u);
   loom::check::expect_equal(adjusted, 56u);
   loom::check::expect_equal(first, 13u);
   loom::check::expect_equal(last, 26u);
   loom::check::expect_equal(dynamic, 41u);
+  loom::check::expect_equal(narrow_crop, 21u);
+  loom::check::expect_equal(wide_crop, 27u);
 }

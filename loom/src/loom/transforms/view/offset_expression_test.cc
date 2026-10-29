@@ -114,5 +114,71 @@ TEST_F(SymbolicExprTest, ReusesCompleteCompoundRelation) {
   EXPECT_EQ(module_->values.count, value_count);
 }
 
+TEST_F(SymbolicExprTest, TranslatesAffineIndicesInOffsetDomain) {
+  const loom_type_t offset_type = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  loom_value_id_t base = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_value(&builder_, offset_type, &base));
+  const loom_value_id_t positive_index = DefineIndexValue();
+  const loom_value_id_t negative_index = DefineIndexValue();
+  loom_op_t* anchor_op = BuildIndexConstant(0);
+
+  const loom_symbolic_term_t terms[] = {
+      {
+          .coefficient = 4,
+          .value_id = positive_index,
+          .relation_value_id = positive_index,
+      },
+      {
+          .coefficient = -3,
+          .value_id = negative_index,
+          .relation_value_id = negative_index,
+      },
+  };
+  const loom_symbolic_expr_t expression = {
+      .constant = -8,
+      .terms = terms,
+      .term_count = IREE_ARRAYSIZE(terms),
+      .facts = loom_value_facts_unknown(),
+      .flags = LOOM_SYMBOLIC_EXPR_FLAG_LINEAR,
+  };
+  loom_value_id_t materialized = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_view_materialize_offset_expression(
+      &builder_, &expression, base, loom_index_constant_result(anchor_op),
+      &materialized));
+
+  const loom_op_t* subtract_negative =
+      loom_value_def_op(loom_module_value(module_, materialized));
+  ASSERT_TRUE(loom_index_sub_isa(subtract_negative));
+  const loom_op_t* negative_scale = loom_value_def_op(
+      loom_module_value(module_, loom_index_sub_rhs(subtract_negative)));
+  ASSERT_TRUE(loom_index_scale_isa(negative_scale));
+  EXPECT_EQ(loom_index_scale_index(negative_scale), negative_index);
+  const loom_op_t* negative_stride = loom_value_def_op(
+      loom_module_value(module_, loom_index_scale_stride(negative_scale)));
+  ASSERT_TRUE(loom_index_constant_isa(negative_stride));
+  EXPECT_EQ(loom_attr_as_i64(loom_index_constant_value(negative_stride)), 3);
+
+  const loom_op_t* add_positive = loom_value_def_op(
+      loom_module_value(module_, loom_index_sub_lhs(subtract_negative)));
+  ASSERT_TRUE(loom_index_add_isa(add_positive));
+  const loom_op_t* positive_scale = loom_value_def_op(
+      loom_module_value(module_, loom_index_add_rhs(add_positive)));
+  ASSERT_TRUE(loom_index_scale_isa(positive_scale));
+  EXPECT_EQ(loom_index_scale_index(positive_scale), positive_index);
+  const loom_op_t* positive_stride = loom_value_def_op(
+      loom_module_value(module_, loom_index_scale_stride(positive_scale)));
+  ASSERT_TRUE(loom_index_constant_isa(positive_stride));
+  EXPECT_EQ(loom_attr_as_i64(loom_index_constant_value(positive_stride)), 4);
+
+  const loom_op_t* subtract_constant = loom_value_def_op(
+      loom_module_value(module_, loom_index_add_lhs(add_positive)));
+  ASSERT_TRUE(loom_index_sub_isa(subtract_constant));
+  EXPECT_EQ(loom_index_sub_lhs(subtract_constant), base);
+  const loom_op_t* constant = loom_value_def_op(
+      loom_module_value(module_, loom_index_sub_rhs(subtract_constant)));
+  ASSERT_TRUE(loom_index_constant_isa(constant));
+  EXPECT_EQ(loom_attr_as_i64(loom_index_constant_value(constant)), 8);
+}
+
 }  // namespace
 }  // namespace loom

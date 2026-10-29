@@ -131,6 +131,15 @@ class ViewRegionsTest : public ::testing::Test {
     return layout;
   }
 
+  loom_value_id_t DefineStorageArg() {
+    loom_value_id_t storage = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_define_block_arg(
+        &builder_, loom_region_entry_block(loom_func_like_body(function_)),
+        loom_type_encoding_with_role(LOOM_ENCODING_ROLE_PHYSICAL_STORAGE),
+        &storage));
+    return storage;
+  }
+
   loom_op_t* BuildOffsetConstant(int64_t value) {
     loom_op_t* op = nullptr;
     IREE_CHECK_OK(loom_index_constant_build(
@@ -1011,9 +1020,10 @@ TEST_F(ViewRegionsTest, SubviewWriteSharesStorageRoot) {
   const loom_value_id_t view = BuildReadOnlyView(BuildNoAliasBuffer(buffer));
   const int64_t indices[] = {0};
   loom_op_t* alias = nullptr;
-  IREE_ASSERT_OK(loom_view_subview_build(
-      &builder_, view, nullptr, 0, indices, 1,
-      loom_module_value_type(module_, view), LOOM_LOCATION_UNKNOWN, &alias));
+  const loom_type_t alias_type = loom_module_value_type(module_, view);
+  IREE_ASSERT_OK(loom_view_subview_build(&builder_, view, nullptr, 0, indices,
+                                         1, &alias_type, 1,
+                                         LOOM_LOCATION_UNKNOWN, &alias));
   loom_op_t* store = nullptr;
   IREE_ASSERT_OK(loom_view_store_build(
       &builder_, 0, 0, DefineScalarArg(LOOM_SCALAR_TYPE_F32),
@@ -1397,10 +1407,11 @@ TEST_F(ViewRegionsTest, SubviewPreservesRootAndAddsLogicalOffset) {
 
   int64_t static_offsets[] = {2, 0};
   loom_op_t* subview_op = nullptr;
+  const loom_type_t subview_type = ViewType2D(1, 16, layout);
   IREE_ASSERT_OK(loom_view_subview_build(
       &builder_, loom_buffer_view_result(source_op), NULL, 0, static_offsets,
-      IREE_ARRAYSIZE(static_offsets), ViewType2D(1, 16, layout),
-      LOOM_LOCATION_UNKNOWN, &subview_op));
+      IREE_ARRAYSIZE(static_offsets), &subview_type, 1, LOOM_LOCATION_UNKNOWN,
+      &subview_op));
 
   loom_value_fact_table_t facts = {0};
   ComputeFacts(&facts);
@@ -1420,6 +1431,87 @@ TEST_F(ViewRegionsTest, SubviewPreservesRootAndAddsLogicalOffset) {
   EXPECT_EQ(region->begin_byte_offset.constant, 128);
   EXPECT_TRUE(loom_symbolic_expr_is_constant(&region->byte_length));
   EXPECT_EQ(region->byte_length.constant, 64);
+}
+
+TEST_F(ViewRegionsTest, RetainsNestedOpaquePhysicalAddressProjection) {
+  const loom_value_id_t buffer = DefineBufferArg();
+  const loom_value_id_t base_offset = DefineOffsetArg();
+  const loom_value_id_t row = DefineIndexArg();
+  const loom_value_id_t storage = DefineStorageArg();
+
+  loom_op_t* source_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType2D(8, 16, storage),
+                                        LOOM_LOCATION_UNKNOWN, &source_op));
+
+  loom_value_id_t first_result_ids[2];
+  IREE_ASSERT_OK(loom_builder_reserve_values(
+      &builder_, IREE_ARRAYSIZE(first_result_ids), first_result_ids));
+  loom_type_t first_view_type = ViewType2D(4, 4, first_result_ids[1]);
+  const loom_type_t first_result_types[] = {
+      first_view_type,
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_PHYSICAL_STORAGE),
+  };
+  const loom_value_id_t first_dynamic_offsets[] = {row};
+  const int64_t first_static_offsets[] = {INT64_MIN, 2};
+  loom_op_t* first_subview_op = nullptr;
+  IREE_ASSERT_OK(loom_view_subview_build(
+      &builder_, loom_buffer_view_result(source_op), first_dynamic_offsets,
+      IREE_ARRAYSIZE(first_dynamic_offsets), first_static_offsets,
+      IREE_ARRAYSIZE(first_static_offsets), first_result_types,
+      IREE_ARRAYSIZE(first_result_types), LOOM_LOCATION_UNKNOWN,
+      &first_subview_op));
+
+  loom_value_id_t second_result_ids[2];
+  IREE_ASSERT_OK(loom_builder_reserve_values(
+      &builder_, IREE_ARRAYSIZE(second_result_ids), second_result_ids));
+  loom_type_t second_view_type = ViewType2D(2, 2, second_result_ids[1]);
+  const loom_type_t second_result_types[] = {
+      second_view_type,
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_PHYSICAL_STORAGE),
+  };
+  const int64_t second_static_offsets[] = {1, 1};
+  loom_op_t* second_subview_op = nullptr;
+  IREE_ASSERT_OK(loom_view_subview_build(
+      &builder_, loom_view_subview_result(first_subview_op), nullptr, 0,
+      second_static_offsets, IREE_ARRAYSIZE(second_static_offsets),
+      second_result_types, IREE_ARRAYSIZE(second_result_types),
+      LOOM_LOCATION_UNKNOWN, &second_subview_op));
+
+  loom_value_fact_table_t facts = {};
+  ComputeFacts(&facts);
+  loom_view_region_table_t table = {};
+  Analyze(&facts, &table);
+
+  const loom_view_region_t* region = nullptr;
+  IREE_ASSERT_OK(loom_view_region_table_get(
+      &table, loom_view_subview_result(second_subview_op), &region));
+  ASSERT_NE(region, nullptr);
+  EXPECT_FALSE(loom_symbolic_expr_is_linear(&region->projection_byte_offset));
+  ASSERT_NE(region->address_projection, nullptr);
+  EXPECT_TRUE(loom_symbolic_expr_is_constant(
+      &region->address_projection->linear_byte_offset));
+  EXPECT_EQ(region->address_projection->linear_byte_offset.constant, 0);
+  ASSERT_EQ(region->address_projection->term_count, 4);
+
+  const loom_view_address_projection_term_t* terms =
+      region->address_projection->terms;
+  EXPECT_EQ(terms[0].physical_encoding_value_id, storage);
+  EXPECT_EQ(terms[0].axis, 0);
+  EXPECT_EQ(terms[0].index_value_id, row);
+  EXPECT_EQ(terms[0].coefficient, 4);
+  EXPECT_EQ(terms[1].physical_encoding_value_id, storage);
+  EXPECT_EQ(terms[1].axis, 1);
+  EXPECT_EQ(terms[1].index_value_id, LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(terms[1].coefficient, 8);
+  EXPECT_EQ(terms[2].physical_encoding_value_id, storage);
+  EXPECT_EQ(terms[2].axis, 0);
+  EXPECT_EQ(terms[2].index_value_id, LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(terms[2].coefficient, 4);
+  EXPECT_EQ(terms[3].physical_encoding_value_id, storage);
+  EXPECT_EQ(terms[3].axis, 1);
+  EXPECT_EQ(terms[3].index_value_id, LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(terms[3].coefficient, 4);
 }
 
 TEST_F(ViewRegionsTest, StridedFootprintIncludesPaddingGaps) {

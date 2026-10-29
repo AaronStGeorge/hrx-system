@@ -26,7 +26,7 @@ enum loom_value_fact_origin_bits_t {
   LOOM_VALUE_FACT_ORIGIN_EXACT_LANE = 1u << 2,
   LOOM_VALUE_FACT_ORIGIN_UNIFORM_SCALE = 1u << 3,
   LOOM_VALUE_FACT_ORIGIN_CONTEXTUAL_QUERY = 1u << 4,
-  LOOM_VALUE_FACT_ORIGIN_LAYOUT_STRIDES = 1u << 5,
+  LOOM_VALUE_FACT_ORIGIN_LAYOUT = 1u << 5,
   LOOM_VALUE_FACT_ORIGIN_EXACT_SCALAR = 1u << 6,
 };
 
@@ -154,8 +154,8 @@ typedef struct loom_value_fact_origin_snapshot_t {
   loom_value_fact_uniform_scale_origin_t uniform_scale;
   // Contextual query descriptor with its module-owned projection key.
   loom_value_fact_contextual_query_origin_t contextual_query;
-  // Immutable per-axis SSA stride bindings, valid until scope clear.
-  loom_value_fact_layout_strides_t layout_strides;
+  // Immutable exact layout recipe, valid until scope clear.
+  loom_value_fact_layout_origin_t layout_origin;
 } loom_value_fact_origin_snapshot_t;
 
 // Captures every origin family, including absent proofs. The snapshot remains
