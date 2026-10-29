@@ -347,6 +347,52 @@ TEST_P(Aie2pDmaSequenceTest, RetainedRingCreditsBracketEveryCompleteReplay) {
   }
 }
 
+TEST_P(Aie2pDmaSequenceTest, OneCreditBracketsTheEntireRetainedLifetime) {
+  if (!layout()) {
+    return;
+  }
+  for (auto direction : {LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM,
+                         LOOM_XDNA_DMA_DIRECTION_STREAM_TO_MEMORY}) {
+    for (uint32_t capacity : {1u, 2u, 3u}) {
+      for (uint32_t replays :
+           {1u, 2u, 3u, 63u, 64u, 65u, 255u, 256u, 257u, 1024u}) {
+        SCOPED_TRACE(::testing::Message()
+                     << "direction=" << direction << " capacity=" << capacity
+                     << " replays=" << replays);
+        loom_aie2p_native_dma_sequence_t sequence = {};
+        iree_string_view_t reason;
+        bool valid = false;
+        const auto words = descriptor_template();
+        const uint32_t records = capacity * replays;
+        IREE_ASSERT_OK(loom_aie2p_native_build_sequence(
+            dma(), layout(), first_descriptor(), bank_size() - 2, direction,
+            records, capacity, 128, 64, records, words.data(), &sequence,
+            &reason, &valid, &arena_));
+        ASSERT_TRUE(valid);
+        ExpectExecution(sequence, direction, records, capacity, records);
+      }
+    }
+  }
+}
+
+TEST_P(Aie2pDmaSequenceTest, LifetimeBoundariesCannotExceedTheDescriptorBank) {
+  if (!layout()) {
+    return;
+  }
+  const auto direction = LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM;
+  const auto words = descriptor_template();
+  loom_aie2p_native_dma_sequence_t sequence = {};
+  iree_string_view_t reason;
+  bool valid = false;
+  IREE_ASSERT_OK(loom_aie2p_native_build_sequence(
+      dma(), layout(), first_descriptor(), 2, direction, 64, 1, 128, 64, 64,
+      words.data(), &sequence, &reason, &valid, &arena_));
+  EXPECT_FALSE(valid);
+  EXPECT_TRUE(iree_string_view_equal(
+      reason,
+      IREE_SV("descriptor space for the first and last retained ring turns")));
+}
+
 TEST_P(Aie2pDmaSequenceTest, RepeatedAlignedSuffixUsesTheSmallerChain) {
   const auto words = descriptor_template();
   const auto direction = LOOM_XDNA_DMA_DIRECTION_STREAM_TO_MEMORY;

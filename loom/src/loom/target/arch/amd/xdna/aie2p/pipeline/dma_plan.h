@@ -48,6 +48,15 @@ typedef struct loom_aie2p_native_memory_layout_t {
     // The current task continues at the next descriptor.
     loom_xdna_register_field_id_t enable;
   } chain;
+  // Word and fields selecting the on-die payload packet class.
+  struct {
+    // Word containing packet framing fields.
+    uint8_t word;
+    // Packet identity consumed by stream-switch filters.
+    loom_xdna_register_field_id_t id;
+    // Emit one header and packet boundary for this descriptor.
+    loom_xdna_register_field_id_t enable;
+  } packet;
   // Word containing lock actions and descriptor validity.
   uint8_t lock_word;
   // Lock action and validity fields.
@@ -129,9 +138,11 @@ bool loom_aie2p_native_encode_ingress(const loom_xdna_array_family_t* family,
 // tasks fit the hardware queue before any completion wait. The layout is NULL
 // for shim descriptors, whose external address is bound during invocation.
 // Record capacity, alignment, and stride have already passed DMA admission.
-// credit_interval is one for record credits, or one complete retained ring
-// rotation: admission is on its first record and reclamation on its last.
-// A retained ring has a whole number of rotations in repetitions.
+// credit_interval is one for record credits, one complete retained ring
+// rotation, or the complete finite sequence. Admission is on the interval's
+// first record and reclamation on its last. Retained intervals contain whole
+// ring rotations. A finite lifetime uses separately queued first/last turns
+// around lock-free repeated turns, keeping replay counts out of semaphores.
 // On success the caller owns the retained arena storage and commits the exact
 // descriptor count. Unrepresentable programs return a static rejection reason.
 iree_status_t loom_aie2p_native_build_sequence(

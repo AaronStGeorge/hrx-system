@@ -81,23 +81,29 @@ bool loom_aie2p_array_route_egress(
 
 // Connects memory-to-stream and stream-to-memory DMA channels on two workers,
 // reusing the topology-owned |source_channel_index|'s prefixes.
+// Packet classes share that physical tree and retain complete paths for their
+// filters; circuits retain only newly allocated edges.
 // Returns false on link exhaustion, invalidating the builder.
 bool loom_aie2p_array_route_workers(
     loom_aie2p_array_route_builder_t* builder, uint32_t channel_index,
     uint32_t source_channel_index,
     loom_xdna_tile_coordinate_t sender_coordinate, uint8_t sender_dma_channel,
     loom_xdna_tile_coordinate_t receiver_coordinate,
-    uint8_t receiver_dma_channel);
+    uint8_t receiver_dma_channel, bool packet);
 
 // Connects two programmable stream-switch endpoints. The same physical link
 // allocator is used for DMA payload, core control packets, and task completion
 // streams. The caller owns packet filtering where endpoints multiplex traffic.
-bool loom_aie2p_array_route_stream(
-    loom_aie2p_array_route_builder_t* builder, uint32_t channel_index,
-    uint32_t source_channel_index, loom_xdna_tile_coordinate_t source,
-    loom_xdna_stream_port_t source_port, uint8_t source_channel,
-    loom_xdna_tile_coordinate_t destination,
-    loom_xdna_stream_port_t destination_port, uint8_t destination_channel);
+// Packet routes include reused prefixes so each class can install its filters.
+bool loom_aie2p_array_route_stream(loom_aie2p_array_route_builder_t* builder,
+                                   uint32_t channel_index,
+                                   uint32_t source_channel_index,
+                                   loom_xdna_tile_coordinate_t source,
+                                   loom_xdna_stream_port_t source_port,
+                                   uint8_t source_channel,
+                                   loom_xdna_tile_coordinate_t destination,
+                                   loom_xdna_stream_port_t destination_port,
+                                   uint8_t destination_channel, bool packet);
 
 #ifdef __cplusplus
 }  // extern "C"

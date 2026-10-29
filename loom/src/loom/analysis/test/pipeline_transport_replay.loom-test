@@ -116,7 +116,7 @@ worker 0: transport=channel-copy execution_counts=exact batches=2 streams=0
 // ====
 // RUN: emit pipeline-transport @test
 
-// One held record crossing unrelated replay loops cannot become a single replay.
+// One held record crossing sibling loops retains their ordered copy spans.
 func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
@@ -163,7 +163,10 @@ pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: 
 }
 
 // ----
-worker 0: transport=unproven execution_counts=exact batches=0 streams=0
+worker 0: transport=channel-copy execution_counts=exact batches=1 streams=0
+  batch 0: records=1 replays=0
+    record 0: admission=%first source=%source admissions=1 transfers=0 final_release=yes destinations=%left,%left
+    copy_order: %first->%left %first->%left %first->%left %first->%left %first->%left %first->%left
 
 // ====
 // RUN: emit pipeline-transport @test

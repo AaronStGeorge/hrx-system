@@ -435,7 +435,7 @@ static iree_status_t loom_aie2p_native_configure_channels(
       if (reserve) {
         if (position->reservation == 0) {
           action->lock = channel->free_lock;
-          action->expected = (int16_t)channel->replay.count;
+          action->expected = (int16_t)channel->replay.credits;
           action->value = 0;
         }
         position->reservation =
@@ -445,7 +445,7 @@ static iree_status_t loom_aie2p_native_configure_channels(
             source->completion.actions[action_index].credits;
         if (position->publication == channel->replay.record_count) {
           action->lock = channel->ready_lock;
-          action->value = (int16_t)channel->replay.count;
+          action->value = (int16_t)channel->replay.credits;
           position->publication = 0;
         }
       }
@@ -636,6 +636,7 @@ static iree_status_t loom_aie2p_native_select(
     }
     context->workers[i] = (loom_aie2p_native_worker_t){.tile = tile};
     if (source->transport.cohort_count) {
+      uint32_t copy_index = 0;
       for (iree_host_size_t j = 0; j < source->transport.batch_count; ++j) {
         const loom_pipeline_transport_batch_t* batch =
             &source->transport.batches[j];
@@ -650,25 +651,34 @@ static iree_status_t loom_aie2p_native_select(
             &context->channels[bound - realization->resources.channels];
         const loom_aie2p_native_tile_t* owner =
             context->pool_tiles[channel->pool_index];
+        // One admitted batch has a single finite DMA lifetime. Its first
+        // transfer acquires ownership and its last returns it, independently
+        // of the number of replays. Autonomous repeated admissions retain
+        // their per-replay protocol inside the complete stream.
+        const uint64_t credits =
+            first->admissions == 1 || !batch->replays ? 1 : batch->replays;
         if ((channel->replay.record_count &&
              (channel->replay.record_count != batch->record_count ||
-              channel->replay.count != batch->replays)) ||
+              channel->replay.credits != credits)) ||
             batch->record_count != bound->capacity || !channel->record_dense ||
             channel->byte_stride != channel->record_byte_length ||
-            batch->replays > (uint64_t)owner->facts->lock_value_maximum) {
+            batch->replays > UINT32_MAX ||
+            credits > (uint64_t)owner->facts->lock_value_maximum) {
           return loom_aie2p_native_reject(
               context, first->admission->op,
               IREE_SV("one contiguous retained FIFO batch with a representable "
                       "replay credit count"));
         }
         channel->replay.record_count = (uint32_t)batch->record_count;
-        channel->replay.count = (uint32_t)batch->replays;
+        channel->replay.credits = (uint32_t)credits;
       }
       for (iree_host_size_t j = 0; j < source->transport.batch_count; ++j) {
         const loom_pipeline_transport_batch_t* batch =
             &source->transport.batches[j];
         const loom_pipeline_transport_cohort_t* cohort = batch->records;
-        if (cohort->transfers > UINT32_MAX / batch->record_count) {
+        if (cohort->admissions > UINT32_MAX / batch->record_count ||
+            (batch->replays &&
+             cohort->transfers > UINT32_MAX / batch->record_count)) {
           return loom_aie2p_native_reject(
               context, cohort->admission->op,
               IREE_SV("a complete channel-copy count representable by native "
@@ -682,12 +692,12 @@ static iree_status_t loom_aie2p_native_select(
         if (!valid) {
           return iree_ok_status();
         }
-        for (iree_host_size_t k = 0; k < cohort->destination_count; ++k) {
+        for (iree_host_size_t k = 0; k < batch->copy_count; ++k) {
+          const loom_pipeline_transport_copy_t* copy = &batch->copies[k];
           IREE_RETURN_IF_ERROR(loom_aie2p_native_claim_transport_cursor(
-              context, realization, (uint32_t)i, (uint32_t)j,
-              cohort->destinations[k].channel,
-              cohort->destinations[k].reservation, false,
-              cohort->transfers * batch->record_count, &valid));
+              context, realization, (uint32_t)i, copy_index++,
+              copy->destination->channel, copy->destination->reservation, false,
+              copy->executions, &valid));
           if (!valid) {
             return iree_ok_status();
           }

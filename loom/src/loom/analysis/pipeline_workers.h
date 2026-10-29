@@ -82,16 +82,17 @@ typedef struct loom_pipeline_transport_destination_t {
 typedef struct loom_pipeline_transport_cohort_t {
   // Source FIFO admission supplying the record.
   const loom_channel_plan_action_t* admission;
-  // Arena-owned destinations in execution order within one replay.
+  // Arena-owned copy sites in structural execution order.
   const loom_pipeline_transport_destination_t* destinations;
-  // Number of independently completing destinations.
+  // Number of copy sites, including revisits to the same destination channel.
   iree_host_size_t destination_count;
   // Final release of a retained source after replay, or NULL when copy alone
   // consumes all source obligations in the admission's execution scope.
   const loom_op_t* release;
   // Exact number of distinct source records admitted by this source site.
   uint64_t admissions;
-  // Exact number of copies to each destination over the complete invocation.
+  // Common number of copies per destination site over the invocation, or zero
+  // when the sites have different counts or loop scopes.
   uint64_t transfers;
   // Natural loop admitting/releasing this record, or LOOP_NEST_NONE.
   uint16_t admission_scope;
@@ -103,15 +104,44 @@ typedef struct loom_pipeline_transport_cohort_t {
   uint32_t admission_sequence;
 } loom_pipeline_transport_cohort_t;
 
-// An ordered sequence of source records with the same destinations and replay
-// scope. Every retained record stays live until the complete sequence finishes
-// all its replays; a new batch then acquires the next source records.
+// One copy in structural execution order. Source identity is independent of
+// visit order: a retained record may be revisited after other records.
+typedef struct loom_pipeline_transport_copy_t {
+  // Admitted source record supplying this copy's obligation.
+  const loom_pipeline_transport_cohort_t* source;
+  // Reservation, copy operation, and destination channel owned by the cohort.
+  const loom_pipeline_transport_destination_t* destination;
+  // Exact execution count of this copy site over the invocation.
+  uint64_t executions;
+  // Innermost natural loop containing this copy, or LOOP_NEST_NONE.
+  uint16_t scope;
+} loom_pipeline_transport_copy_t;
+
+// Copy span of one exact natural loop. The worker analysis owns its extent;
+// consumers never reconstruct loop membership from source operations.
+typedef struct loom_pipeline_transport_loop_t {
+  // First copy within this loop, or NULL when the loop has no copies.
+  const loom_pipeline_transport_copy_t* begin;
+  // One past the last copy, including nested loops.
+  const loom_pipeline_transport_copy_t* end;
+  // Exact iterations per entry into this loop.
+  uint64_t iterations;
+  // Immediately enclosing loop index, or LOOP_NEST_NONE.
+  uint16_t parent;
+} loom_pipeline_transport_loop_t;
+
+// Consecutive source admissions sharing one ownership interval. Copies retain
+// their independent order and loop scopes; uniform replay is a compact subset.
 typedef struct loom_pipeline_transport_batch_t {
-  // Consecutive source-record cohorts in acquisition and copy order.
+  // Consecutive source-record cohorts in acquisition order.
   const loom_pipeline_transport_cohort_t* records;
   // Number of distinct source records in one sequence.
   iree_host_size_t record_count;
-  // Number of times each admitted sequence is copied to its destinations.
+  // Copy sites in structural execution order within this ownership interval.
+  const loom_pipeline_transport_copy_t* copies;
+  // Number of copy sites, including independently publishing fanout branches.
+  iree_host_size_t copy_count;
+  // Complete uniform replays, or zero for a nonuniform ordered copy program.
   uint64_t replays;
 } loom_pipeline_transport_batch_t;
 
@@ -137,6 +167,10 @@ typedef struct loom_pipeline_transport_t {
   const loom_pipeline_transport_batch_t* batches;
   // Number of independently owned source sequences.
   iree_host_size_t batch_count;
+  // Exact copy spans indexed by natural loop, retained for nonuniform programs.
+  const loom_pipeline_transport_loop_t* copy_loops;
+  // Number of copy-loop spans; zero when uniform replay or straight-line.
+  iree_host_size_t copy_loop_count;
   // Number of executions of the borrowed-movement sequence. A straight-line
   // invocation has one; a regular loop has its proven exact trip count.
   // Channel-copy batches instead retain their own admission and replay counts.
@@ -148,6 +182,32 @@ typedef struct loom_pipeline_transport_t {
   // proof includes every strand's effects and scoped alias contracts.
   bool sources_stable;
 } loom_pipeline_transport_t;
+
+// Finite interpretation of one admitted batch's copy order. Iteration stops at
+// the ownership scope, so repeated admissions remain a separate lifetime axis.
+typedef struct loom_pipeline_transport_copy_cursor_t {
+  // Next dynamic copy visit, or end when this source lifetime is complete.
+  const loom_pipeline_transport_copy_t* next;
+  // One past this batch's structural copy span.
+  const loom_pipeline_transport_copy_t* end;
+  // Borrowed exact loop spans owned by the transport analysis.
+  const loom_pipeline_transport_loop_t* loops;
+  // Arena-owned remaining iterations, indexed by loop.
+  uint64_t* remaining;
+  // Admission scope excluded from expansion, or LOOP_NEST_NONE.
+  uint16_t scope;
+} loom_pipeline_transport_copy_cursor_t;
+
+// Initializes a cursor for a transport containing a nonuniform copy program.
+// Only mutable loop counters allocate; straight-line programs need no storage.
+iree_status_t loom_pipeline_transport_copy_cursor_initialize(
+    const loom_pipeline_transport_t* transport,
+    const loom_pipeline_transport_batch_t* batch, iree_arena_allocator_t* arena,
+    loom_pipeline_transport_copy_cursor_t* out_cursor);
+
+// Returns the next copy in exact execution order, or NULL after one lifetime.
+const loom_pipeline_transport_copy_t* loom_pipeline_transport_copy_cursor_next(
+    loom_pipeline_transport_copy_cursor_t* cursor);
 
 typedef struct loom_pipeline_worker_t {
   // Authored strand and its ordinary call, borrowed through consuming rewrite.
@@ -183,6 +243,8 @@ typedef struct loom_pipeline_worker_t {
   // Exact invocation execution counts per CFG block, or NULL when conditional
   // control or unknown recurrence prevents a complete count proof.
   const uint64_t* block_execution_counts;
+  // Exact loop trip counts retained with block counts, or NULL when unproven.
+  const uint64_t* loop_trip_counts;
 } loom_pipeline_worker_t;
 
 // Binds every outlined strand in one construction occurrence. The construction

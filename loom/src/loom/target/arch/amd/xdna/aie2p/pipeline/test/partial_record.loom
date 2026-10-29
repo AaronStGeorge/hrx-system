@@ -1,0 +1,164 @@
+// One record is filled and drained in more fragments than a DMA bank holds.
+// Explicit group waits retire both members before their descriptors are reused.
+aie2p.target<array> @device
+
+pipeline.def<kernel> @partial_record(%row: index, %compute: i1) run(%input_argument: buffer, %output_argument: buffer) {
+  %input_unique, %output_unique = buffer.assume.noalias %input_argument, %output_argument : buffer, buffer
+  %input, %output = buffer.assume.alignment %input_unique, %output_unique {minimum_alignment = 64} : buffer, buffer
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c16 = index.constant 16 : index
+  %last = index.constant 31 : index
+  %parts = index.constant 32 : index
+  %origin = index.constant 0 : offset
+  %part_bytes = index.constant 64 : offset
+  %bytes = index.constant 2048 : offset
+  %memory = pipeline.memory<workgroup>[0, %row] : pool
+  %storage = buffer.alloca<workgroup> pool(%memory) align(64) %bytes : buffer
+  %slots = buffer.view %storage[%origin] : buffer -> view<1x512xi32>
+  %records = channel.bind<fifo> %slots, %c1 : view<1x512xi32>, index -> channel<tile<512xi32>>
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    %write, %payload = channel.reserve %records : channel<tile<512xi32>> -> (write<tile<512xi32>>, view<512xi32>)
+    scf.for %pair = [%c0 to %c16 step %c1] unroll {
+      %first = index.mul %pair, %c2 : index
+      %second = index.add %first, %c1 : index
+      %first_word = index.mul %first, %c16 : index
+      %second_word = index.mul %second, %c16 : index
+      %first_offset = index.scale %first, %part_bytes : index, offset -> offset
+      %second_offset = index.scale %second, %part_bytes : index, offset -> offset
+      %first_input = buffer.view %input[%first_offset] : buffer -> view<16xi32>
+      %second_input = buffer.view %input[%second_offset] : buffer -> view<16xi32>
+      %first_destination = view.subview %payload[%first_word] : view<512xi32> -> view<16xi32>
+      %second_destination = view.subview %payload[%second_word] : view<512xi32> -> view<16xi32>
+      %first_copy = kernel.async.copy %first_input to %first_destination {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+      %second_copy = kernel.async.copy %second_input to %second_destination {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+      %group = kernel.async.group %first_copy, %second_copy : kernel.async.token, kernel.async.token -> kernel.async.group
+      kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+    }
+    scf.if %compute {
+      %bias = vector.constant 17 : vector<16xi32>
+      scf.for %part = [%c0 to %parts step %c1] {
+        %word = index.mul %part, %c16 : index
+        %value = vector.load %payload[%word] : view<512xi32> -> vector<16xi32>
+        %result = vector.addi %value, %bias : vector<16xi32>
+        vector.store %result, %payload[%word] : vector<16xi32>, view<512xi32>
+      }
+    }
+    channel.publish %write : write<tile<512xi32>>
+    %read, %source = channel.acquire %records : channel<tile<512xi32>> -> (read<tile<512xi32>>, view<512xi32>)
+    scf.for %part = [%c0 to %parts step %c1] unroll {
+      %source_part = index.sub %last, %part : index
+      %word = index.mul %source_part, %c16 : index
+      %fragment = view.subview %source[%word] : view<512xi32> -> view<16xi32>
+      %offset = index.scale %part, %part_bytes : index, offset -> offset
+      %external = buffer.view %output[%offset] : buffer -> view<16xi32>
+      %copy = kernel.async.copy %fragment to %external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
+      %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+      kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+    }
+    channel.release %read : read<tile<512xi32>>
+  }
+}
+
+// The reference directly reverses logical blocks, independently of DMA slots.
+func.def inline @reference(%input: buffer, %output: buffer, %bias: i32) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c16 = index.constant 16 : index
+  %last = index.constant 31 : index
+  %parts = index.constant 32 : index
+  %origin = index.constant 0 : offset
+  %source = buffer.view %input[%origin] : buffer -> view<32x16xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<32x16xi32>
+  scf.for %part = [%c0 to %parts step %c1] {
+    %source_part = index.sub %last, %part : index
+    scf.for %word = [%c0 to %c16 step %c1] {
+      %value = view.load %source[%source_part, %word] : view<32x16xi32> -> i32
+      %result = scalar.addi %value, %bias : i32
+      view.store %result, %destination[%part, %word] : i32, view<32x16xi32>
+    }
+  }
+  func.return
+}
+
+pipeline.def<kernel> public retain target(@device) @partial_record_sram() run(%input: buffer, %output: buffer) {
+  %row = index.constant 1 : index
+  %compute = scalar.constant false : i1
+  pipeline.compose @partial_record[%row, %compute](%input, %output) : [index, i1](buffer, buffer)
+}
+
+func.def @sram_reference(%input: buffer, %output: buffer) {
+  %bias = scalar.constant 0 : i32
+  func.call @reference(%input, %output, %bias) : (buffer, buffer, i32)
+  func.return
+}
+
+check.scenario public @sram_partial_record {
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input_storage = check.generate.random.uniform seed(%seed) range(-1000000 to 1000000) : tensor<544xi32>
+    %input = check.tensor.view %input_storage offset(64) : tensor<544xi32> -> tensor<512xi32>
+    %output_storage = check.generate.fill value(-9999) : tensor<544xi32>
+    %output = check.tensor.view %output_storage offset(64) : tensor<544xi32> -> tensor<512xi32>
+    check.compare<@partial_record_sram, @sram_reference>(%input, %output) : (tensor<512xi32>, tensor<512xi32>) -> () {
+      check.expect.equal actual(%input_storage) expected(%input_storage) : tensor<544xi32>
+      check.expect.equal actual(%output_storage) expected(%output_storage) : tensor<544xi32>
+    }
+  }
+  check.return
+}
+
+pipeline.def<kernel> public retain target(@device) @partial_record_core_memory() run(%input: buffer, %output: buffer) {
+  %row = index.constant 2 : index
+  %compute = scalar.constant false : i1
+  pipeline.compose @partial_record[%row, %compute](%input, %output) : [index, i1](buffer, buffer)
+}
+
+func.def @core_memory_reference(%input: buffer, %output: buffer) {
+  %bias = scalar.constant 0 : i32
+  func.call @reference(%input, %output, %bias) : (buffer, buffer, i32)
+  func.return
+}
+
+check.scenario public @core_memory_partial_record {
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input_storage = check.generate.random.uniform seed(%seed) range(-1000000 to 1000000) : tensor<544xi32>
+    %input = check.tensor.view %input_storage offset(64) : tensor<544xi32> -> tensor<512xi32>
+    %output_storage = check.generate.fill value(-9999) : tensor<544xi32>
+    %output = check.tensor.view %output_storage offset(64) : tensor<544xi32> -> tensor<512xi32>
+    check.compare<@partial_record_core_memory, @core_memory_reference>(%input, %output) : (tensor<512xi32>, tensor<512xi32>) -> () {
+      check.expect.equal actual(%input_storage) expected(%input_storage) : tensor<544xi32>
+      check.expect.equal actual(%output_storage) expected(%output_storage) : tensor<544xi32>
+    }
+  }
+  check.return
+}
+
+pipeline.def<kernel> public retain target(@device) @partial_record_core_control() run(%input: buffer, %output: buffer) {
+  %row = index.constant 2 : index
+  %compute = scalar.constant true : i1
+  pipeline.compose @partial_record[%row, %compute](%input, %output) : [index, i1](buffer, buffer)
+}
+
+func.def @core_control_reference(%input: buffer, %output: buffer) {
+  %bias = scalar.constant 17 : i32
+  func.call @reference(%input, %output, %bias) : (buffer, buffer, i32)
+  func.return
+}
+
+check.scenario public @core_control_partial_record {
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input_storage = check.generate.random.uniform seed(%seed) range(-1000000 to 1000000) : tensor<544xi32>
+    %input = check.tensor.view %input_storage offset(64) : tensor<544xi32> -> tensor<512xi32>
+    %output_storage = check.generate.fill value(-9999) : tensor<544xi32>
+    %output = check.tensor.view %output_storage offset(64) : tensor<544xi32> -> tensor<512xi32>
+    check.compare<@partial_record_core_control, @core_control_reference>(%input, %output) : (tensor<512xi32>, tensor<512xi32>) -> () {
+      check.expect.equal actual(%input_storage) expected(%input_storage) : tensor<544xi32>
+      check.expect.equal actual(%output_storage) expected(%output_storage) : tensor<544xi32>
+    }
+  }
+  check.return
+}

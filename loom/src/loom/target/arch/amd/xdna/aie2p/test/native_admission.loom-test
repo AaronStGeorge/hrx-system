@@ -259,7 +259,7 @@ pipeline.def<kernel> public retain target(@device) @shared_distribution_reader()
 
 aie2p.target<array> @device {device_profile = "amd.xdna.strix.17f0_10"}
 
-// Fanout obligations must not create separate cursors for one destination.
+// Repeated packet copies require a complete retained source lifetime.
 pipeline.def<kernel> public retain target(@device) @shared_distribution_writer() run() {
   %source_memory = pipeline.memory<workgroup>[0, 2] : pool
   %destination_memory = pipeline.memory<workgroup>[0, 3] : pool
@@ -283,10 +283,10 @@ pipeline.def<kernel> public retain target(@device) @shared_distribution_writer()
     }
   }
   pipeline.strand workers([0, 3], [1, 1], [1, 1]) {
+    // ERROR@+1: XDNA/051 {requirement="a complete retained source lifetime per packet program"}
     %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
     %first, %second = channel.fanout %read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
     %first_write, %first_payload = channel.reserve %destination : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-    // ERROR@+1: XDNA/051 {requirement="one ordered transport stream per FIFO read or write cursor"}
     %second_write, %second_payload = channel.reserve %destination : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
     channel.copy %first -> %first_write : read<tile<16xi32>>, write<tile<16xi32>>
     channel.copy %second -> %second_write : read<tile<16xi32>>, write<tile<16xi32>>
@@ -657,9 +657,9 @@ func.def inline @egress(%source: channel<tile<16xi32>>, %output: buffer, %base: 
   func.return
 }
 
-// Copy order must match admission order for autonomous record-batch transport.
+// Packet DMA requires an explicit retained lifetime around reordered copies.
 func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
-  // ERROR@+1: XDNA/051 {requirement="FIFO acquire/reserve/wait/publish/release channel actions"}
+  // ERROR@+1: XDNA/051 {requirement="a complete retained source lifetime per packet program"}
   %a = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
   %b = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
   %first, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
@@ -687,108 +687,6 @@ pipeline.def<kernel> public retain target(@array_target) @test() run(%input_arg:
   %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
   %source_count = index.constant 2 : index
   %left_count = index.constant 2 : index
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @ingress(%input, %source, %source_count) : (buffer, channel<tile<16xi32>>, index)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @worker(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
-  }
-  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
-    func.call @egress(%left, %output, %origin, %left_count) : (channel<tile<16xi32>>, buffer, offset, index)
-  }
-}
-
-// ====
-// RUN: emit source-low output=none
-aie2p.target<array> @array_target {device_profile = "amd.xdna.strix_halo.17f0_11"}
-
-func.def inline @ingress(%input: buffer, %incoming: channel<tile<16xi32>>, %count: index) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %count step %c1] unroll {
-    %offset = index.scale %record, %bytes : index, offset -> offset
-    %external = buffer.view %input[%offset] : buffer -> view<16xi32>
-    %write, %payload = channel.reserve %incoming : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-    %copy = kernel.async.copy %external to %payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.publish %write : write<tile<16xi32>>
-  }
-  func.return
-}
-
-func.def inline @egress(%source: channel<tile<16xi32>>, %output: buffer, %base: offset, %count: index) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %bytes = index.constant 64 : offset
-  scf.for %record = [%c0 to %count step %c1] unroll {
-    %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-    %relative = index.scale %record, %bytes : index, offset -> offset
-    %offset = index.add %base, %relative : offset
-    %external = buffer.view %output[%offset] : buffer -> view<16xi32>
-    %copy = kernel.async.copy %payload to %external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
-    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-    channel.release %read : read<tile<16xi32>>
-  }
-  func.return
-}
-
-// Each independent batch retains its own replay count.
-func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
-  %c0 = index.constant 0 : index
-  %c1 = index.constant 1 : index
-  %c3 = index.constant 3 : index
-  %limit = index.constant 5 : index
-  %first = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
-  cfg.br ^first_header(%c0: index, %first: read<tile<16xi32>>)
-^first_header(%i: index, %first_read: read<tile<16xi32>>):
-  %more_first = index.cmp ult, %i, %c3 : index
-  cfg.cond_br %more_first, ^first_body, ^between
-^first_body:
-  %first_keep, %first_copy = channel.fanout %first_read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
-  %first_write, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-  channel.copy %first_copy -> %first_write : read<tile<16xi32>>, write<tile<16xi32>>
-  %next_i = index.add %i, %c1 : index
-  cfg.br ^first_header(%next_i: index, %first_keep: read<tile<16xi32>>)
-^between:
-  channel.release %first_read : read<tile<16xi32>>
-  // ERROR@+1: XDNA/051 {requirement="one contiguous retained FIFO batch with a representable replay credit count"}
-  %second = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
-  cfg.br ^second_header(%c0: index, %second: read<tile<16xi32>>)
-^second_header(%j: index, %second_read: read<tile<16xi32>>):
-  %more_second = index.cmp ult, %j, %limit : index
-  cfg.cond_br %more_second, ^second_body, ^done
-^second_body:
-  %second_keep, %second_copy = channel.fanout %second_read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
-  %second_write, %second_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
-  channel.copy %second_copy -> %second_write : read<tile<16xi32>>, write<tile<16xi32>>
-  %next_j = index.add %j, %c1 : index
-  cfg.br ^second_header(%next_j: index, %second_keep: read<tile<16xi32>>)
-^done:
-  channel.release %second_read : read<tile<16xi32>>
-  func.return
-}
-
-pipeline.def<kernel> public retain target(@array_target) @test() run(%input_arg: buffer, %output_arg: buffer) {
-  %input_unique, %output_unique = buffer.assume.noalias %input_arg, %output_arg : buffer, buffer
-  %input, %output = buffer.assume.alignment %input_unique, %output_unique {minimum_alignment = 64} : buffer, buffer
-  %origin = index.constant 0 : offset
-  %slot_bytes = index.constant 64 : offset
-  %source_bytes = index.constant 64 : offset
-  %source_capacity = index.constant 1 : index
-  %destination_capacity = index.constant 1 : index
-  %sram = pipeline.memory<workgroup>[0, 1] : pool
-  %left_memory = pipeline.memory<workgroup>[0, 2] : pool
-  %source_storage = buffer.alloca<workgroup> pool(%sram) align(64) %source_bytes : buffer
-  %source_slots = buffer.view %source_storage[%origin] : buffer -> view<1x16xi32>
-  %source = channel.bind<fifo> %source_slots, %source_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
-  %left_storage = buffer.alloca<workgroup> pool(%left_memory) align(64) %slot_bytes : buffer
-  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
-  %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
-  %source_count = index.constant 2 : index
-  %left_count = index.constant 8 : index
   pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
     func.call @ingress(%input, %source, %source_count) : (buffer, channel<tile<16xi32>>, index)
   }
