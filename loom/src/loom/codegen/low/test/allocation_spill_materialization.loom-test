@@ -1,19 +1,25 @@
-// Three live four-unit loads exceed the eight-unit bank. The complete repair
-// finishes with no unresolved spills but retains its inserted memory traffic.
-// RUN: emit low-allocation-query @materialized_spill_traffic strategy=source spill-free spill-count copy-count test.i32=8
+// A seven-unit spill source leaves one physical unit for three scalar results.
+// The complete repair has no unresolved spills but retains its memory traffic
+// across repair iterations. The authored store is not part of that total.
+// RUN: emit low-allocation-query @materialized_spill_traffic strategy=source spill-free spill-count copy-count
 
 test.target<low_core> @target
 
-low.func.def target<test.low.core>(@target) @materialized_spill_traffic(%address: reg<test.ptr>) -> (reg<test.i32 x4>) asm {
-  %first = test.load.v4i32 %address
-  %second = test.load.v4i32 %address
-  %third = test.load.v4i32 %address
-  %pair = test.add.v4i32 %first, %second
-  %result = test.add.v4i32 %pair, %third
+low.func.def target<test.low.core>(@target) @materialized_spill_traffic(%wide: reg<test.pressure.alias32 x7>, %seed0: reg<test.i32>, %seed1: reg<test.i32>, %seed2: reg<test.i32>) -> (reg<test.i32>) asm {
+  %wide_storage = storage {byte_alignment = 4, byte_length = 28} : low.storage<stack>
+  %first = test.move.to.pressure.alias32 %seed0
+  %second = test.move.to.pressure.alias32 %seed1
+  %third = test.move.to.pressure.alias32 %seed2
+  %first_value = copy %first : reg<test.pressure.alias32> -> reg<test.i32>
+  %second_value = copy %second : reg<test.pressure.alias32> -> reg<test.i32>
+  %third_value = copy %third : reg<test.pressure.alias32> -> reg<test.i32>
+  %pair = test.add.i32 %first_value, %second_value
+  %result = test.add.i32 %pair, %third_value
+  low.spill %wide, %wide_storage : reg<test.pressure.alias32 x7>, low.storage<stack>
   return %result
 }
 
 // ----
 spills: 0
-materialized traffic: stores=2 reloads=2
-copies: coalesced=0 materialized=0
+materialized traffic: stores=3 reloads=3
+copies: coalesced=0 materialized=3
