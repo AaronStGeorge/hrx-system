@@ -52,11 +52,12 @@ endforeach()
 
 set(_INDEX 0)
 foreach(_GENERATOR ::generator fixture::generator fixture_generator)
-  iree_py_generated_files(
+  set(_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/output_${_INDEX}.txt")
+  iree_generated_files(
     NAME output_${_INDEX}
     GENERATOR "${_GENERATOR}"
-    OUTPUTS "output_${_INDEX}.txt"
-    OUTPUT_FLAGS --output
+    OUTPUTS "${_OUTPUT}"
+    ARGS "--output=${_OUTPUT}"
   )
   math(EXPR _INDEX "${_INDEX} + 1")
 endforeach()
