@@ -25,6 +25,7 @@ from loom.ir import (
     PredicateArg,
     PredicateListAttr,
     ScalarType,
+    ShapedType,
 )
 
 _ENCODING_SCHEMA_FIELDS = {
@@ -299,8 +300,7 @@ class CxxExpressionRenderer(CxxRenderContext):
         self._declare(result, expression)
         return ("auxiliary_names",)
 
-    def _render_fragment(self, operation: Operation) -> tuple[str, ...]:
-        resolved = self._resolved(operation)
+    def _fragment_shape(self, operation: Operation, resolved: Any) -> str:
         role = resolved.attr("role")
         if role not in {"lhs", "rhs", "init", "result"}:
             raise CxxRenderError(
@@ -313,9 +313,12 @@ class CxxExpressionRenderer(CxxRenderContext):
             self.expression(resolved.value_id("columns")),
         ]
         shape_name = "batched_shape" if blocks else "shape"
-        shape = (
-            f"loom::vector::fragment::{shape_name}{{" + ", ".join(shape_values) + "}"
-        )
+        return f"loom::vector::fragment::{shape_name}{{" + ", ".join(shape_values) + "}"
+
+    def _render_fragment(self, operation: Operation) -> tuple[str, ...]:
+        resolved = self._resolved(operation)
+        role = resolved.attr("role")
+        shape = self._fragment_shape(operation, resolved)
         arguments = [self.expression(resolved.value_id("data")), shape]
         parameters = resolved.value_ids("params")
         if parameters:
@@ -432,7 +435,7 @@ class CxxExpressionRenderer(CxxRenderContext):
                 return self._address_cast_target(result)
         return None
 
-    def _numeric_conversion(self, operation: Operation) -> None:
+    def _numeric_conversion(self, operation: Operation) -> tuple[str, ...]:
         """Projects one exact scalar or native-vector numeric conversion."""
 
         self.uses_numeric_conversion = True
@@ -458,19 +461,35 @@ class CxxExpressionRenderer(CxxRenderContext):
             "fptoui": False,
         }.get(member)
         result_type = self.cpp_type(result, signed=result_signedness)
+        subnormal = operation.attributes.get("subnormal")
+        policy = ""
+        if subnormal is not None:
+            spelling = {"daz": "daz", "ftz": "ftz", "daz|ftz": "daz_ftz"}.get(subnormal)
+            if spelling is None:
+                raise CxxRenderError(
+                    operation,
+                    f"subnormal policy {subnormal!r} has no C++ spelling",
+                )
+            policy = f", loom::conversion::subnormal::{spelling}"
         self._declare(
             result,
-            f"loom::convert<{result_type}>({source_expression})",
+            f"loom::convert<{result_type}{policy}>({source_expression})",
             declaration_type=result_type,
             expression_type=result_type,
             inlineable=True,
         )
+        return ("subnormal",) if subnormal is not None else ()
 
     def _loop_initializer(self, value_id: int) -> str:
         definition = self.definitions.get(value_id)
         if definition is not None and definition.name == "vector.constant":
             value = definition.attributes.get("value")
-            if value == 0 or value == 0.0:
+            value_type = self.module.values[value_id].type
+            if (
+                (value == 0 or value == 0.0)
+                and isinstance(value_type, ShapedType)
+                and value_type.rank == 1
+            ):
                 return f"{self.cpp_type(value_id)}{{}}"
         if definition is not None and definition.name in {
             "scalar.constant",
@@ -756,7 +775,7 @@ class CxxExpressionRenderer(CxxRenderContext):
                 domain = repr(self.module.values[operand].type)
                 expression = (
                     f"loom::{domain}::cast<{self.cpp_type(result)}>"
-                    f"({operand_expression})"
+                    f"({self._address_operand(operand)})"
                 )
             else:
                 expression = self._cast(result, operand_expression)
@@ -890,6 +909,68 @@ class CxxExpressionRenderer(CxxRenderContext):
 
     def _render_comparison(self, operation: Operation) -> tuple[str, ...] | None:
         name = operation.name
+        if name == "vector.cmpi":
+            predicate = operation.attributes.get("predicate")
+            if predicate not in {
+                "eq",
+                "ne",
+                "slt",
+                "sle",
+                "sgt",
+                "sge",
+                "ult",
+                "ule",
+                "ugt",
+                "uge",
+            }:
+                raise CxxRenderError(
+                    operation, f"comparison predicate {predicate!r} is unsupported"
+                )
+            result = operation.results[0]
+            lhs, rhs = (self.expression(operand) for operand in operation.operands)
+            self._declare(
+                result,
+                f"loom::vector::cmpi::{predicate}<{self.cpp_type(result)}>"
+                f"({lhs}, {rhs})",
+                inlineable=True,
+            )
+            return ("predicate",)
+        if name == "vector.cmpf":
+            predicate = operation.attributes.get("predicate")
+            if predicate not in {
+                "oeq",
+                "ogt",
+                "oge",
+                "olt",
+                "ole",
+                "one",
+                "ord",
+                "ueq",
+                "ugt",
+                "uge",
+                "ult",
+                "ule",
+                "une",
+                "uno",
+            }:
+                raise CxxRenderError(
+                    operation,
+                    f"floating comparison predicate {predicate!r} is unsupported",
+                )
+            result = operation.results[0]
+            lhs, rhs = (self.expression(operand) for operand in operation.operands)
+            self._declare(
+                result,
+                f"loom::vector::cmpf::{predicate}<{self.cpp_type(result)}>"
+                f"({lhs}, {rhs})",
+                inlineable=True,
+                statement_attribute=self._fastmath_contract(operation),
+            )
+            return (
+                ("predicate", "fastmath")
+                if "fastmath" in operation.attributes
+                else ("predicate",)
+            )
         if name == "scalar.cmpi":
             predicate = operation.attributes.get("predicate")
             token = {
@@ -908,6 +989,7 @@ class CxxExpressionRenderer(CxxRenderContext):
                 raise CxxRenderError(
                     operation, f"comparison predicate {predicate!r} is unsupported"
                 )
+            statement_attribute = None
         elif name == "scalar.cmpf":
             predicate = operation.attributes.get("predicate")
             # These are exactly the predicates produced by native C++ binary
@@ -927,14 +1009,20 @@ class CxxExpressionRenderer(CxxRenderContext):
                     f"floating comparison predicate {predicate!r} has no "
                     "native C++ binary operator",
                 )
+            statement_attribute = self._fastmath_contract(operation)
         else:
             return None
         self._declare(
             operation.results[0],
             self._binary_expression(operation, token),
             inlineable=True,
+            statement_attribute=statement_attribute,
         )
-        return ("predicate",)
+        return (
+            ("predicate", "fastmath")
+            if "fastmath" in operation.attributes
+            else ("predicate",)
+        )
 
     def _render_buffer_assumption(self, operation: Operation) -> tuple[str, ...]:
         resolved = self._resolved(operation)
@@ -1085,8 +1173,7 @@ class CxxExpressionRenderer(CxxRenderContext):
                 self.expressions[result] = self.expression(source)
                 self.expression_types[result] = self.expression_type(source)
                 return ()
-        self._numeric_conversion(operation)
-        return ()
+        return self._numeric_conversion(operation)
 
     def _render_scalar_intrinsic(self, operation: Operation) -> tuple[str, ...] | None:
         name = operation.name
@@ -1153,6 +1240,194 @@ class CxxExpressionRenderer(CxxRenderContext):
             statement_attribute=fastmath,
         )
         return ("fastmath",) if "fastmath" in operation.attributes else ()
+
+    def _render_structured_vector(self, operation: Operation) -> tuple[str, ...] | None:
+        """Projects vector construction, reshaping, and lane selection."""
+
+        name = operation.name
+        if name == "vector.constant":
+            result = operation.results[0]
+            value = operation.attributes["value"]
+            type_name = self.cpp_type(result)
+            value_type = self.module.values[result].type
+            if isinstance(value_type, ShapedType) and (
+                value_type.rank > 1 or repr(value_type.element_type) == "i1"
+            ):
+                element = self.types.scalar(
+                    value_type.element_type, result in self.signed_values
+                )
+                scalar = (
+                    f"{element}{{}}"
+                    if value == 0 or value == 0.0
+                    else self._literal(value, result)
+                )
+                expression = f"loom::vector::splat<{type_name}>({{}}, {scalar})"
+            else:
+                expression = (
+                    f"{type_name}{{}}"
+                    if value == 0 or value == 0.0
+                    else self._literal(value, result)
+                )
+            self._declare(result, expression)
+            return ("value",)
+        if name == "vector.from_elements":
+            result = operation.results[0]
+            elements = ", ".join(
+                self.expression(operand) for operand in operation.operands
+            )
+            self._declare(result, f"{self.cpp_type(result)}{{{elements}}}")
+            return ()
+        if name == "vector.extract":
+            resolved = self._resolved(operation)
+            indices = self._mixed_indices(
+                resolved, dynamic_field="indices", static_field="static_indices"
+            )
+            source_id = resolved.value_id("source")
+            source_type = self.module.values[source_id].type
+            if isinstance(source_type, ShapedType) and source_type.rank > 1:
+                static_indices = resolved.attr("static_indices")
+                source = self.expression(source_id)
+                result = operation.results[0]
+                if static_indices and all(
+                    index != -(2**63) for index in static_indices
+                ):
+                    selectors = ", ".join(str(index) for index in static_indices)
+                    expression = (
+                        f"loom::vector::extract<{self.cpp_type(result)}, "
+                        f"{selectors}>({source})"
+                    )
+                elif not static_indices or all(
+                    index == -(2**63) for index in static_indices
+                ):
+                    arguments = ", ".join((source, *indices))
+                    expression = (
+                        f"loom::vector::extract<{self.cpp_type(result)}>({arguments})"
+                    )
+                else:
+                    raise CxxRenderError(
+                        operation,
+                        "mixed static and dynamic structured-vector extraction "
+                        "has no C++ projection",
+                    )
+                self._declare(result, expression, inlineable=True)
+                return ("static_indices",)
+            if len(indices) != 1:
+                raise CxxRenderError(
+                    operation, "native vector extraction requires one lane index"
+                )
+            self._declare(
+                operation.results[0],
+                f"{self.expression(operation.operands[0])}[{indices[0]}]",
+                inlineable=True,
+            )
+            return ("static_indices",)
+        if name == "vector.insert":
+            return self._render_vector_insert(operation)
+        if name == "vector.splat":
+            result = operation.results[0]
+            value_type = self.module.values[result].type
+            expression = self.expression(operation.operands[0])
+            if isinstance(value_type, ShapedType) and (
+                value_type.rank > 1 or repr(value_type.element_type) == "i1"
+            ):
+                expression = (
+                    f"loom::vector::splat<{self.cpp_type(result)}>({{}}, {expression})"
+                )
+            self._declare(result, expression)
+            return ()
+        if name == "vector.bitcast":
+            result = operation.results[0]
+            source_id = operation.operands[0]
+            source = self.expression(source_id)
+            source_type = self.module.values[source_id].type
+            result_type = self.module.values[result].type
+            structured = any(
+                isinstance(value_type, ShapedType)
+                and (value_type.rank > 1 or repr(value_type.element_type) == "i1")
+                for value_type in (source_type, result_type)
+            )
+            self._declare(
+                result,
+                f"loom::vector::bitcast<{self.cpp_type(result)}>({source})"
+                if structured
+                else f"__builtin_bit_cast({self.cpp_type(result)}, {source})",
+                inlineable=True,
+            )
+            return ()
+        if name == "vector.iota":
+            resolved = self._resolved(operation)
+            result = resolved.value_id("result")
+            result_type = self.module.values[result].type
+            assert isinstance(result_type, ShapedType)
+            element = self.types.scalar(
+                result_type.element_type, result in self.signed_values
+            )
+
+            def scalar_argument(value_id: int) -> str:
+                expression = self.expression(value_id)
+                if self.expression_type(value_id) != element:
+                    return f"static_cast<{element}>({expression})"
+                return expression
+
+            base = scalar_argument(resolved.value_id("base"))
+            step = scalar_argument(resolved.value_id("step"))
+            self._declare(
+                result,
+                f"loom::vector::iota<{self.cpp_type(result)}>({base}, {step})",
+                inlineable=True,
+            )
+            return ()
+        if name == "vector.concat":
+            resolved = self._resolved(operation)
+            result = resolved.value_id("result")
+            arguments = ", ".join(
+                self.expression(value) for value in resolved.value_ids("inputs")
+            )
+            self._declare(
+                result,
+                f"loom::vector::concat<{resolved.attr('axis')}, "
+                f"{self.cpp_type(result)}>({arguments})",
+                inlineable=True,
+            )
+            return ("axis",)
+        if name == "vector.transpose":
+            resolved = self._resolved(operation)
+            result = resolved.value_id("result")
+            permutation = ", ".join(str(axis) for axis in resolved.attr("permutation"))
+            source = self.expression(resolved.value_id("source"))
+            self._declare(
+                result,
+                f"loom::vector::transpose<{self.cpp_type(result)}, "
+                f"{permutation}>({source})",
+                inlineable=True,
+            )
+            return ("permutation",)
+        if name == "vector.interleave":
+            resolved = self._resolved(operation)
+            result = resolved.value_id("result")
+            even = self.expression(resolved.value_id("even"))
+            odd = self.expression(resolved.value_id("odd"))
+            self._declare(
+                result,
+                f"loom::vector::interleave<{resolved.attr('axis')}, "
+                f"{self.cpp_type(result)}>({even}, {odd})",
+                inlineable=True,
+            )
+            return ("axis",)
+        if name == "vector.select":
+            resolved = self._resolved(operation)
+            result = resolved.value_id("result")
+            arguments = ", ".join(
+                self.expression(resolved.value_id(field))
+                for field in ("condition", "true_value", "false_value")
+            )
+            self._declare(
+                result,
+                f"loom::vector::select({arguments})",
+                inlineable=True,
+            )
+            return ()
+        return None
 
     def _render_simple(self, operation: Operation) -> tuple[str, ...] | None:
         name = operation.name
@@ -1288,54 +1563,9 @@ class CxxExpressionRenderer(CxxRenderContext):
         if projected is not None:
             return projected
 
-        if name == "vector.constant":
-            result = operation.results[0]
-            value = operation.attributes["value"]
-            type_name = self.cpp_type(result)
-            expression = (
-                f"{type_name}{{}}"
-                if value == 0 or value == 0.0
-                else self._literal(value, result)
-            )
-            self._declare(result, expression)
-            return ("value",)
-        if name == "vector.from_elements":
-            result = operation.results[0]
-            elements = ", ".join(
-                self.expression(operand) for operand in operation.operands
-            )
-            self._declare(result, f"{self.cpp_type(result)}{{{elements}}}")
-            return ()
-        if name == "vector.extract":
-            resolved = self._resolved(operation)
-            indices = self._mixed_indices(
-                resolved, dynamic_field="indices", static_field="static_indices"
-            )
-            if len(indices) != 1:
-                raise CxxRenderError(
-                    operation, "native vector extraction requires one lane index"
-                )
-            self._declare(
-                operation.results[0],
-                f"{self.expression(operation.operands[0])}[{indices[0]}]",
-                inlineable=True,
-            )
-            return ("static_indices",)
-        if name == "vector.insert":
-            return self._render_vector_insert(operation)
-        if name == "vector.splat":
-            result = operation.results[0]
-            self._declare(result, self.expression(operation.operands[0]))
-            return ()
-        if name == "vector.bitcast":
-            result = operation.results[0]
-            source = self.expression(operation.operands[0])
-            self._declare(
-                result,
-                f"__builtin_bit_cast({self.cpp_type(result)}, {source})",
-                inlineable=True,
-            )
-            return ()
+        projected = self._render_structured_vector(operation)
+        if projected is not None:
+            return projected
         if name in {"vector.absf", "vector.absi"}:
             member = name.removeprefix("vector.")
             fastmath = self._fastmath_contract(operation)
@@ -1365,6 +1595,22 @@ class CxxExpressionRenderer(CxxRenderContext):
             )
             return ("fastmath",) if fastmath else ()
         if name in {
+            "vector.minsi",
+            "vector.maxsi",
+            "vector.minui",
+            "vector.maxui",
+        }:
+            member = name.removeprefix("vector.")
+            arguments = ", ".join(
+                self.expression(operand) for operand in operation.operands
+            )
+            self._declare(
+                operation.results[0],
+                f"loom::vector::{member}({arguments})",
+                inlineable=True,
+            )
+            return ()
+        if name in {
             "vector.extf",
             "vector.fptrunc",
             "vector.sitofp",
@@ -1375,8 +1621,7 @@ class CxxExpressionRenderer(CxxRenderContext):
             "vector.fptosi",
             "vector.fptoui",
         }:
-            self._numeric_conversion(operation)
-            return ()
+            return self._numeric_conversion(operation)
         if name == "vector.table.lookup":
             result = operation.results[0]
             table, indices = operation.operands
@@ -1410,10 +1655,17 @@ class CxxExpressionRenderer(CxxRenderContext):
             arguments = ", ".join(
                 self.expression(operand) for operand in operation.operands
             )
+            fastmath = self._fastmath_contract(operation)
             self._declare(
-                operation.results[0], f"loom::vector::reduce::{kind}({arguments})"
+                operation.results[0],
+                f"loom::vector::reduce::{kind}({arguments})",
+                statement_attribute=fastmath,
             )
-            return ("kind",)
+            return (
+                ("kind", "fastmath")
+                if "fastmath" in operation.attributes
+                else ("kind",)
+            )
         if name == "kernel.subgroup.reduce":
             kind = operation.attributes.get("kind")
             cluster_size = operation.attributes.get("cluster_size")

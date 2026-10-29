@@ -322,7 +322,7 @@ TEST(TypesTest, FixedArrayStorageRetainsNestedSourceLayout) {
                SourceRejected);
 }
 
-TEST(TypesTest, ViewPartitionsBindEachDestinationShapeAndLayoutIdentity) {
+TEST(TypesTest, ViewPartitionsPreservePlainAndEncodedSourceTypes) {
   loom_cxx_import_options_t options;
   loom_cxx_import_options_initialize(&options);
   Source source(
@@ -336,20 +336,22 @@ TEST(TypesTest, ViewPartitionsBindEachDestinationShapeAndLayoutIdentity) {
               "size_type strides[Rank]; }; "
               "template <size_type... Extents> "
               "struct [[loom::type(\"shape\")]] shape {}; "
-              "template <class Shape, class T, "
-              "loom::encoding::role Role = "
-              "loom::encoding::role::layout> "
+              "template <class Shape, class T, class Encoding = void> "
               "struct [[loom::type(\"view\")]] view { T* data; }; "
               "} } "
               "using Layout = loom::type::encoding<"
               "loom::encoding::role::layout, 2>; "
-              "using Plane = loom::type::view<loom::type::shape<"
+              "using Storage3 = loom::type::encoding<"
+              "loom::encoding::role::storage, 3>; "
+              "using Plain = loom::type::view<loom::type::shape<"
               "loom::type::dynamic, 32>, const float>; "
+              "using Plane = loom::type::view<loom::type::shape<"
+              "loom::type::dynamic, 32>, const float, Layout>; "
               "using Observed = loom::type::view<loom::type::shape<"
               "loom::type::dynamic, 32>, const volatile float>; "
               "using Volume = loom::type::view<loom::type::shape<"
               "loom::type::dynamic, 4, loom::type::dynamic>, "
-              "const float, loom::encoding::role::storage>; "
+              "const float, Storage3>; "
               "struct Packet { Plane plane; unsigned tag; };"),
       IREE_SV("views.cpp"), options);
   Types types(source.unit(), source.diagnostics());
@@ -369,10 +371,26 @@ TEST(TypesTest, ViewPartitionsBindEachDestinationShapeAndLayoutIdentity) {
   EXPECT_EQ(loom_type_encoding_role(layout_types[0]),
             LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
 
+  const auto& plain = types.partition(source_type("Plain"), owner);
+  EXPECT_EQ(plain.kind, ValueKind::View);
+  EXPECT_EQ(plain.component_count, 2u);
+  EXPECT_EQ(static_cast<const ViewPartition&>(plain).encoding, nullptr);
+  const loom_value_id_t plain_ids[] = {9, 10};
+  BoundTypeStorage plain_storage;
+  std::vector<loom_type_t> plain_types;
+  types.append_bound(source_type("Plain"), owner, plain_ids, plain_storage,
+                     plain_types);
+  ASSERT_EQ(plain_types.size(), 2u);
+  EXPECT_EQ(loom_type_kind(plain_types[1]), LOOM_TYPE_VIEW);
+  EXPECT_FALSE(loom_type_has_encoding(plain_types[1]));
+  EXPECT_EQ(loom_type_dim_value_id_at(plain_types[1], 0), 9u);
+
   const auto& plane = types.partition(source_type("Plane"), owner);
   EXPECT_EQ(plane.kind, ValueKind::View);
   EXPECT_EQ(plane.component_count, 3u);
   EXPECT_TRUE(types.requires_binding(source_type("Plane"), owner));
+  EXPECT_EQ(static_cast<const ViewPartition&>(plane).encoding,
+            &static_cast<const EncodingPartition&>(layout));
   EXPECT_EQ(static_cast<const ViewPartition&>(plane).access_flags, 0);
   const auto& observed = types.partition(source_type("Observed"), owner);
   EXPECT_EQ(static_cast<const ViewPartition&>(observed).access_flags,
@@ -676,14 +694,15 @@ TEST(TypesTest, ProjectsEverySupportedViewRankAndEncodingRole) {
     struct [[loom::type("encoding")]] encoding { size_type values[Rank + 1]; };
     template <size_type... Extents>
     struct [[loom::type("shape")]] shape {};
-    template <class Shape, class T,
-              loom::encoding::role Role = loom::encoding::role::layout>
+    template <class Shape, class T, class Encoding = void>
     struct [[loom::type("view")]] view { T* data; };
     } }
     using Layout = loom::type::encoding<loom::encoding::role::layout, 15>;
     using Schema = loom::type::encoding<loom::encoding::role::schema, 0>;
     using Storage = loom::type::encoding<loom::encoding::role::storage, 15>;
     using Transform = loom::type::encoding<loom::encoding::role::transform, 0>;
+    using StaticVolume = loom::type::view<
+        loom::type::shape<2, 3, 5>, const float>;
   )";
   for (size_t rank = 1; rank <= LOOM_TYPE_MAX_RANK; ++rank) {
     source_text += "using Rank" + std::to_string(rank) +
@@ -692,9 +711,10 @@ TEST(TypesTest, ProjectsEverySupportedViewRankAndEncodingRole) {
     for (size_t axis = 1; axis < rank; ++axis) {
       source_text += ", " + std::to_string(axis + 1);
     }
-    source_text += ">, const float, loom::encoding::role::";
-    source_text += rank % 2 ? "layout" : "storage";
-    source_text += ">;\n";
+    source_text += ">, const float, loom::type::encoding<";
+    source_text += rank % 2 ? "loom::encoding::role::layout, "
+                            : "loom::encoding::role::storage, ";
+    source_text += std::to_string(rank) + ">>;\n";
   }
 
   loom_cxx_import_options_t options;
@@ -727,14 +747,23 @@ TEST(TypesTest, ProjectsEverySupportedViewRankAndEncodingRole) {
     EXPECT_EQ(encoding.rank, test.rank);
   }
 
+  std::vector<loom_type_t> static_volume_types;
+  types.append(source_type("StaticVolume"), owner, static_volume_types);
+  ASSERT_EQ(static_volume_types.size(), 1u);
+  EXPECT_EQ(loom_type_rank(static_volume_types[0]), 3u);
+  EXPECT_EQ(loom_type_dim_static_size_at(static_volume_types[0], 0), 2);
+  EXPECT_EQ(loom_type_dim_static_size_at(static_volume_types[0], 1), 3);
+  EXPECT_EQ(loom_type_dim_static_size_at(static_volume_types[0], 2), 5);
+
   for (size_t rank = 1; rank <= LOOM_TYPE_MAX_RANK; ++rank) {
     auto* input = source_type("Rank" + std::to_string(rank));
     const auto& view =
         static_cast<const ViewPartition&>(types.partition(input, owner));
     ASSERT_EQ(view.extents.size(), rank);
-    EXPECT_EQ(view.encoding_role, rank % 2
-                                      ? LOOM_ENCODING_ROLE_ADDRESS_LAYOUT
-                                      : LOOM_ENCODING_ROLE_PHYSICAL_STORAGE);
+    ASSERT_NE(view.encoding, nullptr);
+    EXPECT_EQ(view.encoding->role, rank % 2
+                                       ? LOOM_ENCODING_ROLE_ADDRESS_LAYOUT
+                                       : LOOM_ENCODING_ROLE_PHYSICAL_STORAGE);
     EXPECT_EQ(view.extents[0], -1);
     for (size_t axis = 1; axis < rank; ++axis) {
       EXPECT_EQ(view.extents[axis], static_cast<int64_t>(axis + 1));
@@ -746,7 +775,7 @@ TEST(TypesTest, ProjectsEverySupportedViewRankAndEncodingRole) {
     std::vector<loom_type_t> projected;
     types.append_bound(input, owner, identities, storage, projected);
     ASSERT_EQ(projected.size(), 3u);
-    EXPECT_EQ(loom_type_encoding_role(projected[1]), view.encoding_role);
+    EXPECT_EQ(loom_type_encoding_role(projected[1]), view.encoding->role);
     EXPECT_EQ(loom_type_rank(projected[2]), rank);
     EXPECT_EQ(loom_type_dim_value_id_at(projected[2], 0), first_id);
     for (size_t axis = 1; axis < rank; ++axis) {
@@ -769,17 +798,19 @@ TEST(TypesTest, RejectsInvalidViewRanksAndEncodingRoles) {
     struct [[loom::type("encoding")]] encoding { size_type value; };
     template <size_type... Extents>
     struct [[loom::type("shape")]] shape {};
-    template <class Shape, class T,
-              loom::encoding::role Role = loom::encoding::role::layout>
+    template <class Shape, class T, class Encoding = void>
     struct [[loom::type("view")]] view { T* data; };
     } }
     using RankZero = loom::type::view<loom::type::shape<>, float>;
     using RankSixteen = loom::type::view<loom::type::shape<
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16>, float>;
     using SchemaView = loom::type::view<loom::type::shape<4>, float,
-        loom::encoding::role::schema>;
+        loom::type::encoding<loom::encoding::role::schema, 0>>;
     using TransformView = loom::type::view<loom::type::shape<4>, float,
-        loom::encoding::role::transform>;
+        loom::type::encoding<loom::encoding::role::transform, 0>>;
+    using MismatchedLayout = loom::type::view<loom::type::shape<4>, float,
+        loom::type::encoding<loom::encoding::role::layout, 2>>;
+    using ScalarEncoding = loom::type::view<loom::type::shape<4>, float, int>;
     using LayoutZero = loom::type::encoding<loom::encoding::role::layout, 0>;
     using StorageZero = loom::type::encoding<loom::encoding::role::storage, 0>;
     using SchemaRanked = loom::type::encoding<loom::encoding::role::schema, 1>;
@@ -794,8 +825,9 @@ TEST(TypesTest, RejectsInvalidViewRanksAndEncodingRoles) {
   };
 
   for (const char* name :
-       {"RankZero", "RankSixteen", "SchemaView", "TransformView", "LayoutZero",
-        "StorageZero", "SchemaRanked", "TransformRanked"}) {
+       {"RankZero", "RankSixteen", "SchemaView", "TransformView",
+        "MismatchedLayout", "ScalarEncoding", "LayoutZero", "StorageZero",
+        "SchemaRanked", "TransformRanked"}) {
     EXPECT_THROW(types.partition(source_type(name), owner), SourceRejected);
   }
 }

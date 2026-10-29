@@ -36,7 +36,7 @@ class Scalars {
   // Preserves C++ signedness, width and boolean truth conversion semantics.
   loom_value_id_t convert(loom_value_id_t value, const cxx::Type* input_type,
                           const cxx::Type* output_type, cxx::AST* owner,
-                          uint8_t fastmath = 0);
+                          uint8_t fastmath = 0, uint8_t subnormal = 0);
   // Inputs already have the promoted source input_type. Relational operations
   // select signed, unsigned or floating predicates from that source fact.
   loom_value_id_t binary(cxx::TokenKind token, loom_value_id_t left,

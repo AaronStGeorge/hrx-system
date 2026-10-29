@@ -5,9 +5,9 @@
 namespace loomt = loom::type;
 using layout2 = loomt::encoding<loom::encoding::role::layout, 2>;
 using rows32 =
-    loomt::view<loomt::shape<loomt::dynamic, 32>, const float>;
+    loomt::view<loomt::shape<loomt::dynamic, 32>, const float, layout2>;
 using rows16 =
-    loomt::view<loomt::shape<loomt::dynamic, 16>, const float>;
+    loomt::view<loomt::shape<loomt::dynamic, 16>, const float, layout2>;
 static_assert(__is_trivially_copyable(layout2));
 static_assert(__is_trivially_copyable(rows32));
 static_assert(__is_trivially_copyable(rows16));
@@ -143,7 +143,8 @@ namespace loomt = loom::type;
 using Weight = loomt::float8_e4m3fn_t;
 using Weights =
     loomt::view<loomt::shape<loomt::dynamic, loomt::dynamic, 16>,
-                const Weight, loom::encoding::role::storage>;
+                const Weight,
+                loomt::encoding<loom::encoding::role::storage, 3>>;
 
 static Weights preserve_weights(Weights weights) { return weights; }
 
@@ -224,4 +225,34 @@ func.def public @increment_root(%data: buffer) {
   %10 = index.cast %9 : i32 to index
   view.store %8, %values[%10] : i32, view<4xi32, %values_layout>
   func.return
+}
+
+
+// ====
+// Plain typed buffers preserve byte origins and can change their source element
+// interpretation before constructing and bitcasting equal-sized views.
+#include <loomcxx/view.h>
+using Words = loom::type::view<loom::type::shape<4>, unsigned>;
+using Bytes = loom::type::view<loom::type::shape<16>, unsigned char>;
+
+static Words words(loom::type::buffer<unsigned> data,
+                   loom::type::offset byte_offset) {
+  return loom::buffer::view<4>(data, byte_offset, {});
+}
+Bytes bytes(loom::type::buffer<unsigned char> data,
+            loom::type::offset byte_offset) {
+  Words source = words(loom::buffer::cast<unsigned>(data), byte_offset);
+  return loom::view::bitcast<Bytes>(source);
+}
+
+// ----
+func.def public @bytes(%data: buffer, %byte_offset: offset) -> (view<16xi8>) {
+  %source = func.call pure @words(%data, %byte_offset) : (buffer, offset) -> (view<4xi32>)
+  %4 = view.bitcast %source : view<4xi32> -> view<16xi8>
+  func.return %4 : view<16xi8>
+}
+
+func.def @words(%data: buffer, %byte_offset: offset) -> (view<4xi32>) {
+  %8 = buffer.view %data[%byte_offset] : buffer -> view<4xi32>
+  func.return %8 : view<4xi32>
 }

@@ -191,10 +191,13 @@ struct VectorPartition final : Partition {
   loom_type_t static_type = {};
 };
 
-// Canonical rank-generic source view. Dynamic extents and its encoding are
-// transported before the dependent High view so its type references this
+// Canonical rank-generic source view. Dynamic extents and an optional encoding
+// are transported before the dependent High view so its type references this
 // binding's own component identities at every call and region boundary.
 struct ViewPartition final : Partition {
+  // Whether the High type references a transported extent or encoding value.
+  bool requires_binding() const { return component_count > 1; }
+
   // Concrete source specialization retaining nominal and cv-qualified rules.
   cxx::ClassSymbol* source;
   // Source element type, including cv qualifiers for access admission.
@@ -203,12 +206,16 @@ struct ViewPartition final : Partition {
   loom_scalar_type_t element;
   // Observation semantics retained from the source element qualifier.
   loom_memory_access_flags_t access_flags;
-  // Semantic role of the attached layout or physical-storage encoding.
-  loom_encoding_role_t encoding_role;
+  // Attached layout or physical-storage encoding, or null for a plain view.
+  const EncodingPartition* encoding = nullptr;
   // Static extent, or -1 when the axis has a transported dynamic extent.
   ShapeExtents extents;
   // Component labels in transport order; an empty label names the view itself.
   std::vector<std::string> component_names;
+  // Stable overflow storage for an all-static plain view type.
+  BoundTypeStorage static_type_storage;
+  // Prebound all-static plain High type; unused by dependent views.
+  loom_type_t static_type = {};
 };
 
 // Canonical dense rank-one source tensor handle. Scalar objects project to one

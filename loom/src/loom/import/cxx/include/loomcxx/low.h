@@ -14,11 +14,14 @@ namespace loom::low {
 // the caller's hardware target. Source is one narrow raw string literal with
 // a register signature and body: `(%value: reg<...>) -> (reg<...>) { ... }`.
 //
-// Arguments bind positionally to the literal's formals and are evaluated once.
-// Result and Arguments are ordinary scalar/vector C++ types; Result may also
-// be void. Their selected physical representations must match the authored
-// register signature. The body uses existing Loom assembly syntax and captures
-// only its formal arguments. Register allocation and scheduling remain free.
+// Arguments flatten positionally into the literal's formals and are evaluated
+// once. Static scalar, vector, and typed-buffer arguments use the same
+// component transport as ordinary Loom functions. Result may be a scalar,
+// vector, trivial aggregate of scalar/vector fields, or void. Its fields
+// flatten into the literal's result list in declaration order. Selected
+// physical representations must match the authored register signature. The body
+// uses existing Loom assembly syntax and captures only its formal arguments.
+// Register allocation and scheduling remain free.
 template <class Contract, class Result, class... Arguments>
 [[loom::op("low.assembly")]]
 Result assembly(const char* source, Arguments... arguments);

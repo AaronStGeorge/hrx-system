@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import collections
+import math
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -203,6 +204,8 @@ class CxxRenderContext:
         self.assignment_targets: dict[int, int] = {}
         self.suppressed_forwarding_values: set[int] = set()
         self.target_names: dict[str, str] = {}
+        self.function_names: dict[str, str] = {}
+        self.function_buffer_elements: dict[str, tuple[str | None, ...]] = {}
 
     def _collect_value_scopes(self) -> tuple[dict[int, int], dict[int, int]]:
         """Maps top-level operations and their values to C++ local scopes."""
@@ -300,7 +303,15 @@ class CxxRenderContext:
                 loaded_name = preferred[user.results[0]]
                 if not is_generated(user.results[0]):
                     preferred[result] = f"{loaded_name}_view"
-            elif user.name in {"view.store", "vector.store"} and definition.operands:
+            elif (
+                user.name
+                in {
+                    "view.store",
+                    "vector.store",
+                    "vector.fragment.store",
+                }
+                and definition.operands
+            ):
                 buffer_name = preferred[definition.operands[0]]
                 if not is_generated(definition.operands[0]):
                     preferred[result] = f"{buffer_name}_view"
@@ -415,7 +426,7 @@ class CxxRenderContext:
                     ("extsi", "divsi", "remsi", "minsi", "maxsi", "ashri")
                 ):
                     signed.update(operation.results)
-            elif operation.name == "scalar.cmpi":
+            elif operation.name in {"scalar.cmpi", "vector.cmpi"}:
                 if operation.attributes.get("predicate") in {
                     "slt",
                     "sle",
@@ -605,24 +616,38 @@ class CxxRenderContext:
                     old = self.buffer_info[root].alignment or 1
                     self.buffer_info[root].alignment = max(old, alignment)
 
-    def _analyze_buffers(self, kernel: Operation) -> None:
-        fields = self._resolved(kernel)
+    def _analyze_buffers(self, callable_operation: Operation) -> None:
+        fields = self._resolved(callable_operation)
         body = fields.region("body")
         if body is None or len(body.blocks) != 1:
             raise CxxRenderError(
-                kernel, "kernel body must have one structured entry block"
+                callable_operation,
+                "callable body must have one structured entry block",
             )
         entry = body.blocks[0]
         direct_operations = {id(operation) for operation in entry.ops}
         for argument in entry.arg_ids:
-            if not isinstance(self.module.values[argument].type, BufferType):
+            argument_type = self.module.values[argument].type
+            if isinstance(argument_type, BufferType):
+                self.buffer_roots[argument] = argument
+                self.buffer_info[argument] = BufferInfo(
+                    root=argument,
+                    name=self.names[argument],
+                    is_parameter=True,
+                )
                 continue
-            self.buffer_roots[argument] = argument
-            self.buffer_info[argument] = BufferInfo(
-                root=argument,
-                name=self.names[argument],
-                is_parameter=True,
-            )
+            if (
+                isinstance(argument_type, ShapedType)
+                and argument_type.type_kind == TypeKind.VIEW
+            ):
+                self.view_roots[argument] = argument
+                self.buffer_info[argument] = BufferInfo(
+                    root=argument,
+                    name=self.names[argument],
+                    mutable=True,
+                    is_parameter=True,
+                    element_types={repr(argument_type.element_type)},
+                )
 
         for operation in walk_operations(entry):
             if operation.name in {
@@ -668,7 +693,11 @@ class CxxRenderContext:
                 if root is not None:
                     self.view_roots[resolved.value_id("result")] = root
                 continue
-            if operation.name in {"view.store", "vector.store"}:
+            if operation.name in {
+                "view.store",
+                "vector.store",
+                "vector.fragment.store",
+            }:
                 resolved = self._resolved(operation)
                 root = self.view_roots.get(resolved.value_id("view"))
                 if root is not None:
@@ -723,7 +752,11 @@ class CxxRenderContext:
                     ):
                         self.view_signed.add(view_id)
                         changed = True
-                elif operation.name in {"view.store", "vector.store"}:
+                elif operation.name in {
+                    "view.store",
+                    "vector.store",
+                    "vector.fragment.store",
+                }:
                     resolved = self._resolved(operation)
                     value_field = "value"
                     view_id = resolved.value_id("view")
@@ -766,17 +799,62 @@ class CxxRenderContext:
 
     def _literal(self, value: Any, result_id: int) -> str:
         value_type = self.module.values[result_id].type
+        literal_type = (
+            value_type.element_type
+            if isinstance(value_type, ShapedType)
+            else value_type
+        )
         if isinstance(value, bool):
             return "true" if value else "false"
         if isinstance(value, float):
-            suffix = "f" if repr(value_type) == "f32" else ""
+            type_name = repr(literal_type)
+            use_float_literal = type_name != "f64"
+            if not math.isfinite(value):
+                representations = {
+                    "f16": ("unsigned short", 0x7E00, 0x7C00, 0x8000),
+                    "bf16": ("unsigned short", 0x7FC0, 0x7F80, 0x8000),
+                    "f32": ("unsigned", 0x7FC00000, 0x7F800000, 0x80000000),
+                    "f64": (
+                        "unsigned long long",
+                        0x7FF8000000000000,
+                        0x7FF0000000000000,
+                        0x8000000000000000,
+                    ),
+                    "f8E4M3": ("unsigned char", 0x7F, None, 0x80),
+                    "f8E5M2": ("unsigned char", 0x7E, 0x7C, 0x80),
+                }
+                representation = representations.get(type_name)
+                if representation is None:
+                    raise CxxRenderError(
+                        None,
+                        f"nonfinite {type_name} constant has no exact C++ spelling",
+                    )
+                integer_type, nan_bits, infinity_bits, sign_bit = representation
+                bits = nan_bits if math.isnan(value) else infinity_bits
+                if bits is None:
+                    raise CxxRenderError(
+                        None, f"{type_name} cannot represent an infinity constant"
+                    )
+                if math.copysign(1.0, value) < 0:
+                    bits |= sign_bit
+                suffix = "ull" if integer_type == "unsigned long long" else "u"
+                integer = f"0x{bits:x}{suffix}"
+                if integer_type not in {"unsigned", "unsigned long long"}:
+                    integer = f"static_cast<{integer_type}>({integer})"
+                return (
+                    f"__builtin_bit_cast({self.types.scalar(literal_type)}, {integer})"
+                )
             text = repr(value)
             if "." not in text and "e" not in text.lower():
                 text += ".0"
-            return text + suffix
+            if use_float_literal:
+                text += "f"
+            if type_name in {"f16", "bf16", "f8E4M3", "f8E5M2"}:
+                return f"static_cast<{self.types.scalar(literal_type)}>({text})"
+            return text
         if isinstance(value, int):
-            if isinstance(value_type, ScalarType):
-                name = repr(value_type)
+            if isinstance(literal_type, ScalarType):
+                name = repr(literal_type)
                 if name == "index":
                     return f"loom::type::index{{{value}}}"
                 if name == "offset":

@@ -2,7 +2,9 @@
 #include <loomcxx/view.h>
 
 namespace loomt = loom::type;
-using Grid = loomt::view<loomt::shape<loomt::dynamic, loomt::dynamic>, const unsigned>;
+using Grid = loomt::view<
+    loomt::shape<loomt::dynamic, loomt::dynamic>, const unsigned,
+    loomt::encoding<loom::encoding::role::layout, 2>>;
 
 static Grid crop_once(Grid grid, unsigned& rows, unsigned& columns) {
   --rows;

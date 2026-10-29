@@ -3543,7 +3543,8 @@ class Translator final : private Initialization::Evaluation {
         source_arguments.push_back(expression(argument));
       }
       if (assembly) {
-        return *assembly->call(fragment, source_arguments, &builder_, source);
+        return *assembly->call(fragment, source_arguments, value_arena_,
+                               &builder_, source);
       }
       auto called =
           intrinsics_.call(*binding, source_arguments, value_arena_, storage_,
@@ -4885,7 +4886,8 @@ class Translator final : private Initialization::Evaluation {
             arguments.push_back(expression(argument));
           }
           if (assembly) {
-            assembly->call(fragment, arguments, &builder_, locations_.get(ast));
+            assembly->call(fragment, arguments, value_arena_, &builder_,
+                           locations_.get(ast));
             return;
           }
           auto called = intrinsics_.call(*binding, arguments, value_arena_,

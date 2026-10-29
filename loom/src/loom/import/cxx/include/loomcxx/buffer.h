@@ -78,6 +78,14 @@ enum class memory_space {
 
 namespace buffer {
 
+// Changes only the source-visible element interpretation of an untyped Loom
+// buffer root. Storage identity, byte origin, and all retained facts survive.
+// Element qualifiers cannot be weakened; additional const or volatile access
+// is permitted.
+template <class To, class From>
+[[loom::op("buffer.cast")]] loom::type::buffer<To> cast(
+    loom::type::buffer<From> source);
+
 // Borrows immutable executable storage containing the exact literal payload.
 // The implicit C++ terminator is excluded; explicit NUL bytes are retained.
 // Equal payloads may share storage. Alignment is a positive power of two.

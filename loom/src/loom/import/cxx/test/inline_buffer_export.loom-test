@@ -29,8 +29,8 @@ void payloads(unsigned char* output, loom::type::index position) {
   auto* empty_text = loom::buffer::constant<1>(u8"");
   auto* scratch = loom::buffer::alloca_init<loom::memory_space::private_, 4>("abcd");
   auto* shared = loom::buffer::alloca_init<loom::memory_space::workgroup, 16>(u8"abcd");
-  auto source = loom::buffer::view<7>(raw, {}, loom::encoding::layout::dense<1>());
-  auto destination = loom::buffer::view<1>(output, {}, loom::encoding::layout::dense<1>());
+  auto source = loom::buffer::view<7>(raw, {});
+  auto destination = loom::buffer::view<1>(output, {});
   unsigned char value = loom::view::load(source, position);
   loom::view::store(value, destination, 0);
 }

@@ -11,7 +11,8 @@
 
 namespace loomt = loom::type;
 
-using rows8 = loomt::view<loomt::shape<loomt::dynamic, 8>, const float>;
+using rows8 = loomt::view<loomt::shape<loomt::dynamic, 8>, const float,
+                          loomt::encoding<loom::encoding::role::layout, 2>>;
 using Weight = loomt::float8_e4m3fn_t;
 
 static rows8 preserve_view(rows8 source) { return source; }

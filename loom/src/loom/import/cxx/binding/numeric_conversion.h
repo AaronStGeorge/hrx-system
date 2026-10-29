@@ -52,7 +52,7 @@ class NumericConversionIntrinsic {
   // interpretation and value representation.
   static NumericConversionIntrinsic resolve(
       Operation operation, cxx::TranslationUnit& unit, Diagnostics& diagnostics,
-      Types& types, const cxx::FunctionType* signature, cxx::AST* owner);
+      Types& types, cxx::FunctionSymbol* function, cxx::AST* owner);
 
   // Emits the direct High conversion.
   Value call(std::span<const Value> arguments, ValueArena& arena,
@@ -63,7 +63,8 @@ class NumericConversionIntrinsic {
            input_type_ == other.input_type_ &&
            output_type_ == other.output_type_ &&
            input_vector_ == other.input_vector_ &&
-           output_vector_ == other.output_vector_;
+           output_vector_ == other.output_vector_ &&
+           subnormal_flags_ == other.subnormal_flags_;
   }
 
  private:
@@ -73,12 +74,14 @@ class NumericConversionIntrinsic {
                              const cxx::Type* input_type,
                              const cxx::Type* output_type,
                              const VectorPartition* input_vector = nullptr,
-                             const VectorPartition* output_vector = nullptr)
+                             const VectorPartition* output_vector = nullptr,
+                             uint8_t subnormal_flags = 0)
       : representation_(representation),
         input_type_(input_type),
         output_type_(output_type),
         input_vector_(input_vector),
-        output_vector_(output_vector) {}
+        output_vector_(output_vector),
+        subnormal_flags_(subnormal_flags) {}
 
   // Source value representation selected at specialization admission.
   Representation representation_;
@@ -90,6 +93,8 @@ class NumericConversionIntrinsic {
   const VectorPartition* input_vector_;
   // Rank-generic result partition, present only for SemanticVector.
   const VectorPartition* output_vector_;
+  // DAZ/FTZ permissions carried only by floating-point conversions.
+  uint8_t subnormal_flags_;
 };
 
 }  // namespace loom::cxx_import

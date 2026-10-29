@@ -38,7 +38,9 @@ func.decl @linked(%12: i32) -> (i32)
 // identities without recovering shape relationships from call sites.
 #include <loomcxx/view.h>
 namespace loomt = loom::type;
-using FloatView = loomt::view<loomt::shape<loomt::dynamic>, float>;
+using FloatView = loomt::view<
+    loomt::shape<loomt::dynamic>, float,
+    loomt::encoding<loom::encoding::role::layout, 1>>;
 [[loom::import("math")]] FloatView normalize(FloatView source);
 FloatView entry(FloatView source) { return normalize(source); }
 // ----

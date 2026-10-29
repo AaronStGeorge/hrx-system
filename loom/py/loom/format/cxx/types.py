@@ -80,10 +80,6 @@ class CxxTypes:
             for dimension in value_type.dims
             if isinstance(dimension, StaticDim)
         )
-        if len(dims) != 1:
-            raise CxxRenderError(
-                None, f"native C++ vector requires rank one, got {value_type!r}"
-            )
         element = repr(value_type.element_type)
         key = (element, dims, signed)
         alias = self.vector_aliases.get(key)
@@ -106,9 +102,26 @@ class CxxTypes:
             raise CxxRenderError(
                 None, f"vector element type {element} has no C++ spelling"
             )
-        alias = f"{prefix}x{dims[0]}"
+        alias = prefix + "x" + "x".join(str(dimension) for dimension in dims)
         self.vector_aliases[key] = alias
         return alias
+
+    def view(self, value_type: ShapedType, signed: bool) -> str:
+        """Returns the source carrier for a statically ranked Loom view."""
+
+        if value_type.encoding is not None:
+            raise CxxRenderError(
+                None,
+                f"encoded view type {value_type!r} has no C++ signature spelling",
+            )
+        dimensions = ", ".join(
+            str(dimension.size)
+            if isinstance(dimension, StaticDim)
+            else "loom::type::dynamic"
+            for dimension in value_type.dims
+        )
+        element = self.scalar(value_type.element_type, signed)
+        return f"loom::type::view<loom::type::shape<{dimensions}>, {element}>"
 
     def value(self, value_id: int, *, signed: bool | None = None) -> str:
         value_type = self.module.values[value_id].type
@@ -120,6 +133,8 @@ class CxxTypes:
             and value_type.type_kind == TypeKind.VECTOR
         ):
             return self.vector(value_type, use_signed)
+        if isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VIEW:
+            return self.view(value_type, use_signed)
         if isinstance(value_type, BufferType):
             return "unsigned char*"
         if isinstance(value_type, EncodingType):

@@ -105,3 +105,17 @@ int wrong_result(int value) {
       (%value: reg<test.i32>) -> (reg<test.i32 x2>) { return %value }
   )", value);
 }
+
+// ====
+#include <loomcxx/buffer.h>
+#include <loomcxx/low.h>
+struct [[loom::representation("test.low.core")]] Contract {};
+struct Result {
+  loom::type::buffer<unsigned> value;
+};
+Result invalid(loom::type::buffer<unsigned> value) {
+  // ERROR@+1: LOWERING/059 "assembly result records require scalar or vector fields"
+  return loom::low::assembly<Contract, Result>(R"(
+      (%value: reg<test.ptr>) -> (reg<test.ptr>) { return %value }
+  )", value);
+}

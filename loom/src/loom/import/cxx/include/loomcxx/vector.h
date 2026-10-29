@@ -18,6 +18,9 @@ concept vector_arithmetic_element =
 template <class T>
 concept vector_integer_element = __is_integral(T) && !__is_same(T, bool);
 
+template <class T>
+concept vector_bitwise_element = __is_integral(T);
+
 }  // namespace loom::detail
 
 namespace loom::type {
@@ -56,19 +59,19 @@ template <class Shape, class T>
   requires(loom::detail::vector_arithmetic_element<T>)
 [[loom::op("vector.neg")]] vector<Shape, T> operator-(vector<Shape, T> input);
 template <class Shape, class T>
-  requires(loom::detail::vector_integer_element<T>)
+  requires(loom::detail::vector_bitwise_element<T>)
 [[loom::op("vector.and")]] vector<Shape, T> operator&(vector<Shape, T> lhs,
                                                       vector<Shape, T> rhs);
 template <class Shape, class T>
-  requires(loom::detail::vector_integer_element<T>)
+  requires(loom::detail::vector_bitwise_element<T>)
 [[loom::op("vector.or")]] vector<Shape, T> operator|(vector<Shape, T> lhs,
                                                      vector<Shape, T> rhs);
 template <class Shape, class T>
-  requires(loom::detail::vector_integer_element<T>)
+  requires(loom::detail::vector_bitwise_element<T>)
 [[loom::op("vector.xor")]] vector<Shape, T> operator^(vector<Shape, T> lhs,
                                                       vector<Shape, T> rhs);
 template <class Shape, class T>
-  requires(loom::detail::vector_integer_element<T>)
+  requires(loom::detail::vector_bitwise_element<T>)
 [[loom::op("vector.complement")]] vector<Shape, T> operator~(
     vector<Shape, T> input);
 template <class Shape, class T>
@@ -122,66 +125,66 @@ template <class Result>
 // selects its static register shape while the view supplies element type,
 // layout, extents, alignment, and observation semantics.
 template <class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role,
+          class Encoding,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.load")]] Result load(
-    loom::type::view<loom::type::shape<Extents...>, T, Role> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin);
 
 // Loads one semantic vector at a full-rank logical origin. Dimensions supplies
 // one index for each dynamic result axis in source-axis order.
 template <class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role,
+          class Encoding,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.load")]] Result load(
-    loom::type::view<loom::type::shape<Extents...>, T, Role> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, loom::detail::vector_dimensions<Result> dimensions);
 
 // Stores one contiguous vector at a full-rank logical origin. A semantic value
 // carries its dynamic dimensions. Const destination element types are rejected
 // during source admission.
 template <class Vector, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role,
+          class Encoding,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.store")]] void store(
     Vector value,
-    loom::type::view<loom::type::shape<Extents...>, T, Role> destination,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
     Origin origin);
 
 // Loads active lanes from their corresponding footprint positions and takes
 // inactive lanes from passthrough. Nonzero integer mask lanes are active.
 template <class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role, class Mask,
+          class Encoding, class Mask,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.load.mask")]] Result load_mask(
-    loom::type::view<loom::type::shape<Extents...>, T, Role> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, Mask mask, Result passthrough);
 
 // Stores value lanes whose corresponding integer mask lane is nonzero.
 template <class Vector, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role, class Mask,
+          class Encoding, class Mask,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.store.mask")]] void store_mask(
     Vector value,
-    loom::type::view<loom::type::shape<Extents...>, T, Role> destination,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
     Origin origin, Mask mask);
 
 // Densely consumes consecutive source elements for active lanes and takes
 // inactive lanes from passthrough. Nonzero integer mask lanes are active.
 template <class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role, class Mask,
+          class Encoding, class Mask,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.load.expand")]] Result load_expand(
-    loom::type::view<loom::type::shape<Extents...>, T, Role> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, Mask mask, Result passthrough);
 
 // Densely writes active value lanes to consecutive destination elements.
 template <class Vector, class T, loom::type::size_type... Extents,
-          loom::encoding::role Role, class Mask,
+          class Encoding, class Mask,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.store.compress")]] void store_compress(
     Vector value,
-    loom::type::view<loom::type::shape<Extents...>, T, Role> destination,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
     Origin origin, Mask mask);
 
 // Extracts a rank-preserving register subvector. Offsets supplies one index or
@@ -201,6 +204,105 @@ template <class Result, class Source,
 [[loom::op("vector.slice")]] Result slice(
     Source source, Offsets offsets,
     loom::detail::vector_dimensions<Result> dimensions);
+
+// Constructs row-major lane coordinates from scalar base and step values.
+// Static native or semantic result shapes are selected explicitly.
+template <class Result, class Scalar>
+[[loom::op("vector.iota")]] Result iota(Scalar base, Scalar step);
+
+// Concatenates same-rank vectors along Axis. Result makes the widened shape
+// explicit while input carriers may be native or semantic vectors.
+template <loom::type::size_type Axis, class Result, class... Inputs>
+[[loom::op("vector.concat")]] Result concat(Inputs... inputs);
+
+// Permutes register axes. Each selector maps its result axis to one source
+// axis, matching vector.transpose's result-to-source ordering.
+template <class Result, loom::type::size_type... Permutation, class Source>
+[[loom::op("vector.transpose")]] Result transpose(Source source);
+
+// Interleaves even and odd coordinates along Axis into a doubled result axis.
+template <loom::type::size_type Axis, class Result, class Vector>
+[[loom::op("vector.interleave")]] Result interleave(Vector even, Vector odd);
+
+// Reinterprets an all-static vector register value without numeric conversion.
+template <class Result, class Source>
+[[loom::op("vector.bitcast")]] Result bitcast(Source source);
+
+// Extracts a scalar or tail vector at compile-time leading coordinates.
+template <class Result, loom::type::size_type... StaticIndices, class Source>
+  requires(sizeof...(StaticIndices) > 0)
+[[loom::op("vector.extract")]] Result extract(Source source);
+
+// Extracts a scalar or tail vector at runtime leading coordinates.
+template <class Result, class Source, class... Indices>
+  requires(sizeof...(Indices) > 0)
+[[loom::op("vector.extract")]] Result extract(Source source,
+                                              Indices... indices);
+
+// Selects each result lane from true_value or false_value using an i1 mask.
+template <class Condition, class Vector>
+[[loom::op("vector.select")]] Vector select(Condition condition,
+                                            Vector true_value,
+                                            Vector false_value);
+
+// Exact integer comparison predicates. Result is explicit because native C++
+// vector comparisons produce integer masks while Loom comparisons produce i1
+// masks. Signed and unsigned relational names match vector.cmpi.
+namespace cmpi {
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "eq")]] Result eq(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "ne")]] Result ne(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "slt")]] Result slt(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "sle")]] Result sle(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "sgt")]] Result sgt(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "sge")]] Result sge(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "ult")]] Result ult(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "ule")]] Result ule(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "ugt")]] Result ugt(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpi", "uge")]] Result uge(Left lhs, Right rhs);
+}  // namespace cmpi
+
+// IEEE 754 ordered and unordered floating-point comparison predicates. Names
+// and NaN behavior match vector.cmpf exactly.
+namespace cmpf {
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "oeq")]] Result oeq(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "ogt")]] Result ogt(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "oge")]] Result oge(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "olt")]] Result olt(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "ole")]] Result ole(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "one")]] Result one(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "ord")]] Result ord(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "ueq")]] Result ueq(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "ugt")]] Result ugt(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "uge")]] Result uge(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "ult")]] Result ult(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "ule")]] Result ule(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "une")]] Result une(Left lhs, Right rhs);
+template <class Result, class Left, class Right>
+[[loom::op("vector.cmpf", "uno")]] Result uno(Left lhs, Right rhs);
+}  // namespace cmpf
 
 // Computes the absolute value of every floating-point lane.
 template <class Vector>
@@ -225,6 +327,22 @@ template <class Vector>
 // Computes C99 fmax-style maximum lane-wise, selecting a non-NaN operand.
 template <class Vector>
 [[loom::op("vector.maxnumf")]] Vector maxnumf(Vector lhs, Vector rhs);
+
+// Computes signed integer minimum lane-wise.
+template <class Vector>
+[[loom::op("vector.minsi")]] Vector minsi(Vector lhs, Vector rhs);
+
+// Computes signed integer maximum lane-wise.
+template <class Vector>
+[[loom::op("vector.maxsi")]] Vector maxsi(Vector lhs, Vector rhs);
+
+// Computes unsigned integer minimum lane-wise.
+template <class Vector>
+[[loom::op("vector.minui")]] Vector minui(Vector lhs, Vector rhs);
+
+// Computes unsigned integer maximum lane-wise.
+template <class Vector>
+[[loom::op("vector.maxui")]] Vector maxui(Vector lhs, Vector rhs);
 
 namespace fragment {
 
@@ -267,27 +385,26 @@ template <role Role, class Result, class Source, class Shape>
 // Loads one target-shaped carrier at a full-rank logical origin. Auxiliary is
 // a flat record of named runtime values required by the view's storage schema.
 template <role Role, class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role EncodingRole, class Shape,
+          class Encoding, class Shape,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.fragment.load")]] Result load(
-    loom::type::view<loom::type::shape<Extents...>, T, EncodingRole> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, Shape logical_shape);
 
 template <role Role, class Result, class T, loom::type::size_type... Extents,
-          loom::encoding::role EncodingRole, class Shape, class Auxiliary,
+          class Encoding, class Shape, class Auxiliary,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.fragment.load")]] Result load(
-    loom::type::view<loom::type::shape<Extents...>, T, EncodingRole> source,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> source,
     Origin origin, Shape logical_shape, Auxiliary auxiliary);
 
 // Stores one target-shaped carrier at a full-rank logical origin.
 template <role Role, class Vector, class T, loom::type::size_type... Extents,
-          loom::encoding::role EncodingRole, class Shape,
+          class Encoding, class Shape,
           class Origin = loom::type::coordinates<sizeof...(Extents)>>
 [[loom::op("vector.fragment.store")]] void store(
     Vector value,
-    loom::type::view<loom::type::shape<Extents...>, T, EncodingRole>
-        destination,
+    loom::type::view<loom::type::shape<Extents...>, T, Encoding> destination,
     Origin origin, Shape logical_shape);
 
 }  // namespace fragment

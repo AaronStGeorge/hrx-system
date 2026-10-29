@@ -65,7 +65,7 @@ loom_value_id_t Vectors::convert(loom_value_id_t value,
 loom_value_id_t Vectors::convert_elements(loom_value_id_t value,
                                           const cxx::Type* input_type,
                                           const cxx::Type* output_type,
-                                          cxx::AST* owner) {
+                                          cxx::AST* owner, uint8_t subnormal) {
   auto input = types_.get(input_type, owner);
   auto output = types_.get(output_type, owner);
   auto* input_vector = types_.native_vector(input_type);
@@ -76,12 +76,13 @@ loom_value_id_t Vectors::convert_elements(loom_value_id_t value,
                         "numeric vector conversion requires equal lane counts");
   }
   return convert_elements(value, input, input_vector->elementType(), output,
-                          output_vector->elementType(), owner);
+                          output_vector->elementType(), owner, subnormal);
 }
 
 Value Vectors::convert_elements(Value value, const VectorPartition& input,
                                 const VectorPartition& output,
-                                ValueArena& arena, cxx::AST* owner) {
+                                ValueArena& arena, cxx::AST* owner,
+                                uint8_t subnormal) {
   auto components = value.components();
   auto dimensions = components.first(input.component_count - 1);
   BoundTypeStorage input_storage;
@@ -90,7 +91,7 @@ Value Vectors::convert_elements(Value value, const VectorPartition& input,
   auto output_type = output.bind_type(dimensions, output_storage);
   auto converted = convert_elements(input.vector_value(components), input_type,
                                     input.element_type, output_type,
-                                    output.element_type, owner);
+                                    output.element_type, owner, subnormal);
   std::array<loom_value_id_t, LOOM_TYPE_MAX_RANK + 1> result_components;
   std::copy(dimensions.begin(), dimensions.end(), result_components.begin());
   result_components[dimensions.size()] = converted;
@@ -99,9 +100,12 @@ Value Vectors::convert_elements(Value value, const VectorPartition& input,
                            .first(dimensions.size() + 1));
 }
 
-loom_value_id_t Vectors::convert_elements(
-    loom_value_id_t value, loom_type_t input, const cxx::Type* input_element,
-    loom_type_t output, const cxx::Type* output_element, cxx::AST* owner) {
+loom_value_id_t Vectors::convert_elements(loom_value_id_t value,
+                                          loom_type_t input,
+                                          const cxx::Type* input_element,
+                                          loom_type_t output,
+                                          const cxx::Type* output_element,
+                                          cxx::AST* owner, uint8_t subnormal) {
   if (loom_type_equal(input, output)) {
     return value;
   }
@@ -119,17 +123,19 @@ loom_value_id_t Vectors::convert_elements(
     widened.header =
         loom_type_make_header(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
                               loom_type_rank(input), loom_type_flags(input));
-    check(loom_vector_extf_build(&builder_, 0, value, input, widened, location,
-                                 &op));
-    check(loom_vector_fptrunc_build(&builder_, 0, loom_op_results(op)[0],
-                                    widened, output, location, &op));
+    check(loom_vector_extf_build(
+        &builder_, subnormal & LOOM_VECTOR_FLOATCONVERSIONFLAGS_DAZ, value,
+        input, widened, location, &op));
+    check(loom_vector_fptrunc_build(
+        &builder_, subnormal & LOOM_VECTOR_FLOATCONVERSIONFLAGS_FTZ,
+        loom_op_results(op)[0], widened, output, location, &op));
     return loom_op_results(op)[0];
   }
   bool narrows = input_size > output_size;
   bool unsigned_input = types_.is_unsigned(input_element);
   if (floating_input && floating_output) {
     check((narrows ? loom_vector_fptrunc_build : loom_vector_extf_build)(
-        &builder_, 0, value, input, output, location, &op));
+        &builder_, subnormal, value, input, output, location, &op));
     return loom_op_results(op)[0];
   }
   auto build =

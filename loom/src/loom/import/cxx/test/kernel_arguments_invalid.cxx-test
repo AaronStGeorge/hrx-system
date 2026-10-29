@@ -19,7 +19,7 @@ LOOM_KERNEL void entry(Input input) {}
 #include <loomcxx/kernel.h>
 #include <loomcxx/view.h>
 using Input = loom::type::view<loom::type::shape<4>, unsigned>;
-// ERROR@+1: LOWERING/059 "unsupported C++ type: ::loom::type::view<::loom::type::shape<4>, unsigned int, 0>"
+// ERROR@+1: LOWERING/059 "unsupported C++ type: ::loom::type::view<::loom::type::shape<4>, unsigned int, void>"
 LOOM_KERNEL void entry(Input input) {}
 
 // ====

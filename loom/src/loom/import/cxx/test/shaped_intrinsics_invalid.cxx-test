@@ -156,3 +156,50 @@ using Fragment = loom::type::vector<loom::type::shape<loom::type::dynamic>, floa
 using Fragment = loom::type::vector<loom::type::shape<loom::type::dynamic>, float>;
 // ERROR@+1: LOWERING/059 "vector element, scalar seed, and result types must match"
 [[loom::op("vector.reduce", "addf")]] float custom(Fragment, int);
+
+// ====
+// Signed relational predicates require signed source carriers.
+#include <loomcxx/vector.h>
+using Values = unsigned __attribute__((ext_vector_type(4)));
+using Mask = loom::type::vector<loom::type::shape<4>, bool>;
+Mask invalid(Values lhs, Values rhs) {
+  // ERROR@+1: LOWERING/059 "integer vector comparison predicate signedness must match its operands"
+  return loom::vector::cmpi::slt<Mask>(lhs, rhs);
+}
+
+// ====
+// A transpose is a permutation rather than arbitrary axis replication.
+#include <loomcxx/vector.h>
+using Matrix = loom::type::vector<loom::type::shape<2, 2>, unsigned>;
+Matrix invalid(Matrix value) {
+  // ERROR@+1: LOWERING/059 "vector.transpose permutation must select each source axis exactly once"
+  return loom::vector::transpose<Matrix, 0, 0>(value);
+}
+
+// ====
+// Vector bitcasts preserve the complete register footprint.
+#include <loomcxx/vector.h>
+using Source = unsigned __attribute__((ext_vector_type(4)));
+using Result = unsigned char __attribute__((ext_vector_type(4)));
+Result invalid(Source value) {
+  // ERROR@+1: LOWERING/059 "vector.bitcast requires equal total value bit counts"
+  return loom::vector::bitcast<Result>(value);
+}
+
+// ====
+// Selection conditions use Loom i1 lanes rather than native integer masks.
+#include <loomcxx/vector.h>
+using Values = unsigned __attribute__((ext_vector_type(4)));
+Values invalid(Values condition, Values lhs, Values rhs) {
+  // ERROR@+1: LOWERING/059 "vector.select requires an i1 condition shape and one value type"
+  return loom::vector::select(condition, lhs, rhs);
+}
+
+// ====
+// Runtime extraction cannot consume more leading axes than the source owns.
+#include <loomcxx/vector.h>
+using Values = loom::type::vector<loom::type::shape<4>, unsigned>;
+unsigned invalid(Values source, unsigned first, unsigned second) {
+  // ERROR@+1: LOWERING/059 "vector.extract must consume one or more leading source axes"
+  return loom::vector::extract<unsigned>(source, first, second);
+}
