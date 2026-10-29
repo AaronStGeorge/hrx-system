@@ -237,3 +237,48 @@ low.func.def target<amdgpu.cdna3.core> abi(hal_kernel) @varying_signed_divrem(%d
   %remainder = v_sub_u32 %dividend, %51
   return %quotient, %remainder
 }
+
+// ====
+
+// RUN: emit source-low @uniform_shared_unsigned_divisor target=amdgpu:gfx11-generic output=low
+
+// Independent divisions by the same block-local divisor share its reciprocal
+// preparation while retaining their distinct dividends and projections.
+func.def @uniform_shared_unsigned_divisor(%quotient_dividend: i32, %remainder_dividend: i32, %divisor: i32) -> (i32, i32) {
+  %quotient = scalar.divui %quotient_dividend, %divisor : i32
+  %remainder = scalar.remui %remainder_dividend, %divisor : i32
+  func.return %quotient, %remainder : i32, i32
+}
+
+// ----
+low.func.def target<amdgpu.gfx11.generic.core> abi(hal_kernel) @uniform_shared_unsigned_divisor(%quotient_dividend: reg<amdgpu.sgpr>, %remainder_dividend: reg<amdgpu.sgpr>, %divisor: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm {
+  %12 = s_mov_b32 0
+  %13 = s_mov_b32 1
+  %14 = v_cvt_f32_u32 %divisor
+  %15 = v_rcp_f32 %14
+  %16 = v_mul_f32_lit %15, 1333788670
+  %17 = v_cvt_u32_f32 %16
+  %18 = v_readfirstlane_b32 %17
+  %19 = s_mul_i32 %divisor, %18
+  %20 = s_sub_u32 %12, %19
+  %21 = s_mul_hi_u32 %18, %20
+  %22 = s_add_u32 %18, %21
+  %23 = s_mul_hi_u32 %quotient_dividend, %22
+  %24 = s_mul_i32 %23, %divisor
+  %25 = s_sub_u32 %quotient_dividend, %24
+  %26 = s_add_u32 %23, %13
+  %27, %28 = s_sub_co_u32 %25, %divisor
+  %29 = s_cselect_b32 %23, %26, %28
+  %30 = s_cselect_b32 %25, %27, %28
+  %31 = s_add_u32 %29, %13
+  %32, %33 = s_sub_co_u32 %30, %divisor
+  %quotient = s_cselect_b32 %29, %31, %33
+  %36 = s_mul_hi_u32 %remainder_dividend, %22
+  %37 = s_mul_i32 %36, %divisor
+  %38 = s_sub_u32 %remainder_dividend, %37
+  %40, %41 = s_sub_co_u32 %38, %divisor
+  %43 = s_cselect_b32 %38, %40, %41
+  %45, %46 = s_sub_co_u32 %43, %divisor
+  %remainder = s_cselect_b32 %43, %45, %46
+  return %quotient, %remainder
+}

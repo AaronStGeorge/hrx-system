@@ -24,6 +24,9 @@ from loom.target.arch.amd.xdna.aie2p.contracts.i64 import (
     AIE2P_PAIR_SCALAR_TYPES,
     AIE2P_PAIR_VECTOR_TYPES,
 )
+from loom.target.arch.amd.xdna.aie2p.contracts.integer_division import (
+    append_runtime_unsigned_division_steps,
+)
 from loom.target.arch.amd.xdna.aie2p.contracts.selection import (
     PredicateUpdate as _PredicateUpdate,
 )
@@ -496,36 +499,19 @@ def _unsigned_division_rule(
             result_type=type_pattern,
         ),
     ]
-    for step in range(1, 33):
-        is_final_remainder = step == 32 and not return_quotient
-        remainder = (
-            ValueRef.result("result")
-            if is_final_remainder
-            else ValueRef.temporary(f"division_remainder_{step}")
-        )
-        emits.append(
-            _op_emit(
-                divide_step,
-                operands={
-                    "sd": ValueRef.temporary(f"division_state_{step - 1}"),
-                    "s0": ValueRef.temporary(f"division_remainder_{step - 1}"),
-                    "s1": ValueRef.operand("rhs"),
-                },
-                results={
-                    "d0": remainder,
-                    "sd_out": ValueRef.temporary(f"division_state_{step}"),
-                },
-                result_types={
-                    "d0": DescriptorResultType(),
-                    "sd_out": DescriptorResultType(),
-                },
-            )
-        )
+    final_state, _ = append_runtime_unsigned_division_steps(
+        emits,
+        initial_state=ValueRef.temporary("division_state_0"),
+        initial_remainder=ValueRef.temporary("division_remainder_0"),
+        divisor=ValueRef.operand("rhs"),
+        temporary_prefix="division_",
+        final_remainder=None if return_quotient else ValueRef.result("result"),
+    )
     if return_quotient:
         emits.append(
             _op_emit(
                 move_from_state,
-                operands={"src": ValueRef.temporary("division_state_32")},
+                operands={"src": final_state},
                 results={"dst": ValueRef.result("result")},
             )
         )

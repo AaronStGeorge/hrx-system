@@ -281,6 +281,7 @@ iree_status_t loom_amdgpu_low_legality_verify_wide_division(
 
   const loom_amdgpu_wide_division_domain_t domain =
       loom_amdgpu_wide_division_domain(op);
+  const bool is_unsigned_remainder = loom_scalar_remui_isa(op);
   uint64_t divisor = 0;
   if (!loom_amdgpu_wide_divisor(fact_table, loom_op_const_operands(op)[1],
                                 &divisor)) {
@@ -289,6 +290,9 @@ iree_status_t loom_amdgpu_low_legality_verify_wide_division(
         is_index ? IREE_SV("unsigned_index64_division.constant_nonzero_divisor")
         : domain == LOOM_AMDGPU_WIDE_DIVISION_DOMAIN_SIGNED
             ? IREE_SV("signed_i64_division.constant_nonzero_divisor")
+        : is_unsigned_remainder
+            ? IREE_SV("unsigned_i64_remainder."
+                      "constant_nonzero_or_positive_u32_divisor")
             : IREE_SV("unsigned_i64_division.constant_nonzero_divisor"));
   }
 

@@ -534,6 +534,7 @@ loom_cc_library(
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/amd/xdna/aie2p/ops",
+        "//loom/src/loom/transforms/scalar:wide_remainder_legalization",
         "//runtime/src/iree/base",
     ],
 )
@@ -1594,6 +1595,14 @@ _XDNA_THREE_COLUMN_PROFILE = loom_execution_profile(
     runner_args = ["--device=xdna://0?columns=3"],
     target_class = XDNA_HARDWARE_PROFILE.target_class,
     target_family = XDNA_HARDWARE_PROFILE.target_family,
+)
+
+loom_test(
+    name = "numeric_wide_remainder_test",
+    srcs = ["//loom/src/loom/test/corpus/numeric:integer/division.loom"],
+    benchmark_smoke = False,
+    case = "dynamic_wide_remainder_buffer_values",
+    execution_profiles = [XDNA_HARDWARE_PROFILE],
 )
 
 loom_test(

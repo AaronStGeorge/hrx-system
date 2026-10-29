@@ -626,6 +626,7 @@ loom_cc_library(
     loom::pass::builder
     loom::target::arch::amd::xdna::aie2p::ops
     loom::target::provider
+    loom::transforms::scalar::wide_remainder_legalization
   PUBLIC
 )
 endif()
@@ -1851,6 +1852,45 @@ loom_cc_test(
   LABELS
     "iree-build-requirement=loom.arch.aie2p"
 )
+endif()
+
+if(LOOM_ARCH_AIE2P)
+loom_test_module(
+  NAME
+    numeric_wide_remainder_test_module
+  SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/numeric/integer/division.loom"
+)
+endif()
+
+if(LOOM_ARCH_AIE2P)
+if(AMDF_BUILD AND AMDF_FAMILY_XDNA AND LOOM_ARCH_AIE2P AND LOOM_ARTIFACT_AIE2P_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMD_XDNA)
+loom_execution_test(
+  NAME
+    numeric_wide_remainder_test_execute_xdna_hardware_test
+  CORRECTNESS_ONLY
+  MODULE
+    "::numeric_wide_remainder_test_module"
+  RUNNER_ARGS
+    "--device=xdna"
+    "--case=dynamic_wide_remainder_buffer_values"
+  LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.xdna"
+    "iree-build-requirement=loom.arch.aie2p"
+    "iree-build-requirement=loom.artifact.aie2p_elf"
+    "iree-build-requirement=loom.execute.iree_hal"
+    "iree-build-requirement=runtime.hal.amd_xdna"
+    "iree-run-requirement=libamdf.resource.xdna"
+    "runtime-resource=amd-xdna"
+    "loom-execution-profile=xdna_hardware"
+    "loom-target-family=xdna"
+    "loom-target-class=npu"
+    "loom-executor=hardware"
+  RESOURCE_GROUP
+    "gpu-device"
+)
+endif()
 endif()
 
 if(LOOM_ROUTE_VM_IREE_VM AND LOOM_ARCH_AIE2P)

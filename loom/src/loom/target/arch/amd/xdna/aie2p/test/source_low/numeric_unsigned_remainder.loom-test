@@ -8,7 +8,7 @@ func.def @unsigned_remainder_i32(%value: i32, %divisor: i32) -> (i32) {
 // ====
 
 func.def @unsigned_remainder_i64(%value: i64, %divisor: i64) -> (i64) {
-  // ERROR@+1: TARGET/002 {op_name="scalar.remui"}
+  // ERROR@+1: TARGET/005 {op_name="scalar.remui", subject_role="value_fact", subject_name="rhs", constraint_key="i64_range"}
   %remainder = scalar.remui %value, %divisor : i64
   func.return %remainder : i64
 }
@@ -20,4 +20,92 @@ func.def @unsigned_remainder_index(%value: index, %divisor: index) -> (index) {
   %bounded_divisor = index.assume %divisor [range(%divisor, 1, 4294967295)] : index
   %remainder = index.rem %bounded_value, %bounded_divisor : index
   func.return %remainder : index
+}
+
+// ====
+
+// RUN: emit source-low @word_divisor_unsigned_remainder_i64 target=amd.xdna.aie2p:core output=low
+
+// The target's native divider state spans both words and covers the complete
+// positive u32 divisor family without entering the reference legalizer.
+func.def @word_divisor_unsigned_remainder_i64(%value: i64, %divisor0: i64) -> (i64) {
+  %divisor = scalar.assume %divisor0 [range(%divisor0, 1, 4294967295)] : i64
+  %remainder = scalar.remui %value, %divisor : i64
+  func.return %remainder : i64
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @word_divisor_unsigned_remainder_i64(%value: reg<aie2p.er x2>, %divisor: reg<aie2p.er x2>) -> (reg<aie2p.er x2>) asm {
+  %8 = slice %value[0] : reg<aie2p.er x2> -> reg<aie2p.er>
+  %9 = slice %value[1] : reg<aie2p.er x2> -> reg<aie2p.er>
+  %10 = slice %divisor[0] : reg<aie2p.er x2> -> reg<aie2p.er>
+  %11 = mov.short 0
+  %12 = mov.dividend %9
+  %13, %14 = divs %12, %11, %10
+  %15, %16 = divs %14, %13, %10
+  %17, %18 = divs %16, %15, %10
+  %19, %20 = divs %18, %17, %10
+  %21, %22 = divs %20, %19, %10
+  %23, %24 = divs %22, %21, %10
+  %25, %26 = divs %24, %23, %10
+  %27, %28 = divs %26, %25, %10
+  %29, %30 = divs %28, %27, %10
+  %31, %32 = divs %30, %29, %10
+  %33, %34 = divs %32, %31, %10
+  %35, %36 = divs %34, %33, %10
+  %37, %38 = divs %36, %35, %10
+  %39, %40 = divs %38, %37, %10
+  %41, %42 = divs %40, %39, %10
+  %43, %44 = divs %42, %41, %10
+  %45, %46 = divs %44, %43, %10
+  %47, %48 = divs %46, %45, %10
+  %49, %50 = divs %48, %47, %10
+  %51, %52 = divs %50, %49, %10
+  %53, %54 = divs %52, %51, %10
+  %55, %56 = divs %54, %53, %10
+  %57, %58 = divs %56, %55, %10
+  %59, %60 = divs %58, %57, %10
+  %61, %62 = divs %60, %59, %10
+  %63, %64 = divs %62, %61, %10
+  %65, %66 = divs %64, %63, %10
+  %67, %68 = divs %66, %65, %10
+  %69, %70 = divs %68, %67, %10
+  %71, %72 = divs %70, %69, %10
+  %73, %74 = divs %72, %71, %10
+  %75, %76 = divs %74, %73, %10
+  %77 = mov.dividend %8
+  %78, %79 = divs %77, %75, %10
+  %80, %81 = divs %79, %78, %10
+  %82, %83 = divs %81, %80, %10
+  %84, %85 = divs %83, %82, %10
+  %86, %87 = divs %85, %84, %10
+  %88, %89 = divs %87, %86, %10
+  %90, %91 = divs %89, %88, %10
+  %92, %93 = divs %91, %90, %10
+  %94, %95 = divs %93, %92, %10
+  %96, %97 = divs %95, %94, %10
+  %98, %99 = divs %97, %96, %10
+  %100, %101 = divs %99, %98, %10
+  %102, %103 = divs %101, %100, %10
+  %104, %105 = divs %103, %102, %10
+  %106, %107 = divs %105, %104, %10
+  %108, %109 = divs %107, %106, %10
+  %110, %111 = divs %109, %108, %10
+  %112, %113 = divs %111, %110, %10
+  %114, %115 = divs %113, %112, %10
+  %116, %117 = divs %115, %114, %10
+  %118, %119 = divs %117, %116, %10
+  %120, %121 = divs %119, %118, %10
+  %122, %123 = divs %121, %120, %10
+  %124, %125 = divs %123, %122, %10
+  %126, %127 = divs %125, %124, %10
+  %128, %129 = divs %127, %126, %10
+  %130, %131 = divs %129, %128, %10
+  %132, %133 = divs %131, %130, %10
+  %134, %135 = divs %133, %132, %10
+  %136, %137 = divs %135, %134, %10
+  %138, %139 = divs %137, %136, %10
+  %140, %141 = divs %139, %138, %10
+  %remainder = concat(%140, %11) : (reg<aie2p.er>, reg<aie2p.er>) -> reg<aie2p.er x2>
+  return %remainder
 }

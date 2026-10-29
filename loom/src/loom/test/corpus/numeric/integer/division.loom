@@ -26,6 +26,100 @@ func.def @minimum_remainder_i64(%dividend: i64, %divisor: i64) -> (i64) {
   func.return %remainder : i64
 }
 
+// Keeps the complete unsigned dividend while the runtime divisor fits one
+// word. The assumption records the public callable contract exercised by the
+// inputs below; it does not specialize either operand.
+func.def @dynamic_wide_remainder(%dividend: i64, %divisor0: i64) -> (i64) {
+  %divisor = scalar.assume %divisor0 [range(%divisor0, 1, 4294967295)] : i64
+  %remainder = scalar.remui %dividend, %divisor : i64
+  func.return %remainder : i64
+}
+
+// Computes production-sized lane-varying remainders with the natural wide
+// operation. Divisors are derived from runtime input before the known bound is
+// attached, preventing test inputs from specializing the operation.
+func.def @varying_dynamic_wide_remainders(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %inputs = buffer.view %input[%base] : buffer -> view<8xi64>
+  %results = buffer.view %output[%base] : buffer -> view<4xi64>
+  %begin = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  %divisor_limit = scalar.constant 16000889 : i32
+  %c1 = scalar.constant 1 : i32
+  scf.for %lane = [%begin to %end step %step] {
+    %dividend = view.load %inputs[%lane] : view<8xi64> -> i64
+    %divisor_position = index.add %lane, %end : index
+    %divisor_bits = view.load %inputs[%divisor_position] : view<8xi64> -> i64
+    %divisor_word_bits = scalar.trunci %divisor_bits : i64 to i32
+    %divisor_reduced = scalar.remui %divisor_word_bits, %divisor_limit : i32
+    %divisor_word = scalar.addi %divisor_reduced, %c1 : i32
+    %divisor_wide = scalar.extui %divisor_word : i32 to i64
+    %divisor = scalar.assume %divisor_wide [range(%divisor_wide, 1, 16000889)] : i64
+    %remainder = scalar.remui %dividend, %divisor : i64
+    view.store %remainder, %results[%lane] : i64, view<4xi64>
+  }
+  func.return
+}
+
+// Independent source expression for the prior model workaround. It reduces
+// the high word and then consumes the low word byte by byte, using only u32
+// remainder operations whose inputs cannot overflow for the divisor bound.
+func.def @varying_dynamic_wide_remainders_oracle(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %inputs = buffer.view %input[%base] : buffer -> view<8xi64>
+  %results = buffer.view %output[%base] : buffer -> view<4xi64>
+  %begin = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  %divisor_limit = scalar.constant 16000889 : i32
+  %c1 = scalar.constant 1 : i32
+  %word_shift = scalar.constant 32 : i64
+  %byte_shift = scalar.constant 8 : i32
+  %byte_mask = scalar.constant 255 : i32
+  %shift_24 = scalar.constant 24 : i32
+  %shift_16 = scalar.constant 16 : i32
+  scf.for %lane = [%begin to %end step %step] {
+    %dividend = view.load %inputs[%lane] : view<8xi64> -> i64
+    %divisor_position = index.add %lane, %end : index
+    %divisor_bits = view.load %inputs[%divisor_position] : view<8xi64> -> i64
+    %divisor_word_bits = scalar.trunci %divisor_bits : i64 to i32
+    %divisor_reduced = scalar.remui %divisor_word_bits, %divisor_limit : i32
+    %divisor = scalar.addi %divisor_reduced, %c1 : i32
+
+    %low_word = scalar.trunci %dividend : i64 to i32
+    %high_wide = scalar.shrui %dividend, %word_shift : i64
+    %high_word = scalar.trunci %high_wide : i64 to i32
+    %high_remainder = scalar.remui %high_word, %divisor : i32
+
+    %byte3_shifted = scalar.shrui %low_word, %shift_24 : i32
+    %byte3 = scalar.andi %byte3_shifted, %byte_mask : i32
+    %remainder3_shifted = scalar.shli %high_remainder, %byte_shift : i32
+    %combined3 = scalar.ori %remainder3_shifted, %byte3 : i32
+    %remainder3 = scalar.remui %combined3, %divisor : i32
+
+    %byte2_shifted = scalar.shrui %low_word, %shift_16 : i32
+    %byte2 = scalar.andi %byte2_shifted, %byte_mask : i32
+    %remainder2_shifted = scalar.shli %remainder3, %byte_shift : i32
+    %combined2 = scalar.ori %remainder2_shifted, %byte2 : i32
+    %remainder2 = scalar.remui %combined2, %divisor : i32
+
+    %byte1_shifted = scalar.shrui %low_word, %byte_shift : i32
+    %byte1 = scalar.andi %byte1_shifted, %byte_mask : i32
+    %remainder1_shifted = scalar.shli %remainder2, %byte_shift : i32
+    %combined1 = scalar.ori %remainder1_shifted, %byte1 : i32
+    %remainder1 = scalar.remui %combined1, %divisor : i32
+
+    %byte0 = scalar.andi %low_word, %byte_mask : i32
+    %remainder0_shifted = scalar.shli %remainder1, %byte_shift : i32
+    %combined0 = scalar.ori %remainder0_shifted, %byte0 : i32
+    %remainder0 = scalar.remui %combined0, %divisor : i32
+    %remainder = scalar.extui %remainder0 : i32 to i64
+    view.store %remainder, %results[%lane] : i64, view<4xi64>
+  }
+  func.return
+}
+
 // Excludes zero divisors and signed minimum divided by negative one from
 // generated inputs while retaining arbitrary full-width values elsewhere.
 func.def @random_division_i32_observations(%dividend_bits: i64, %divisor_bits: i64) -> (i32, i32, i32, i32) {
@@ -358,5 +452,51 @@ check.scenario @integer_division_i64_values {
     }
   }
 
+  check.return
+}
+
+check.scenario @dynamic_wide_remainder_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %dividend = check.literal value(0) : i64
+    %divisor = check.literal value(1) : i64
+    check.compare<@dynamic_wide_remainder>(%dividend, %divisor) : (i64, i64) -> [actual(%actual: i64), expected(%expected: i64)] {
+      check.expect.equal actual(%actual) expected(%expected) : i64
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %dividend = check.literal value(-1) : i64
+    %divisor = check.literal value(4294967295) : i64
+    check.compare<@dynamic_wide_remainder>(%dividend, %divisor) : (i64, i64) -> [actual(%actual: i64), expected(%expected: i64)] {
+      check.expect.equal actual(%actual) expected(%expected) : i64
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %dividend = check.literal value(-81985529216486896) : i64
+    %divisor = check.literal value(4294967291) : i64
+    check.compare<@dynamic_wide_remainder>(%dividend, %divisor) : (i64, i64) -> [actual(%actual: i64), expected(%expected: i64)] {
+      check.expect.equal actual(%actual) expected(%expected) : i64
+    }
+  }
+  check.return
+}
+
+// Keeps the production-shaped varying-divisor checks executable on targets
+// whose resident workers use buffer-only invocation ABIs.
+check.scenario @dynamic_wide_remainder_buffer_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-9223372036854775808) step(2305843009213693951) : tensor<8xi64>
+    %output = check.generate.fill value(-123) : tensor<4xi64>
+    check.compare<@varying_dynamic_wide_remainders, @varying_dynamic_wide_remainders_oracle>(%input, %output) : (tensor<8xi64>, tensor<4xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<4xi64>
+    }
+  }
+  check.trial[8](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input = check.generate.random.uniform seed(%seed) range(-9223372036854775808 to 9223372036854775807) : tensor<8xi64>
+    %output = check.generate.fill value(-123) : tensor<4xi64>
+    check.compare<@varying_dynamic_wide_remainders, @varying_dynamic_wide_remainders_oracle>(%input, %output) : (tensor<8xi64>, tensor<4xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<4xi64>
+    }
+  }
   check.return
 }

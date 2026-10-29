@@ -124,6 +124,21 @@ def _evaluate_rule(rule: DescriptorRule, lhs: int, rhs: int) -> int:
             result = int(operands["s0"] < operands["s1"])
         elif semantic_tag == "integer.select.nonzero.i32":
             result = operands["s0"] if operands["s2"] else operands["s1"]
+        elif semantic_tag in (
+            "register.move.to.division-state",
+            "register.move.from.division-state",
+        ):
+            result = operands["src"]
+        elif semantic_tag == "integer.divide.step.unsigned.i32":
+            state = operands["sd"]
+            remainder = (operands["s0"] << 1) | (state >> 31)
+            state = _u32(state << 1)
+            if remainder >= operands["s1"]:
+                remainder -= operands["s1"]
+                state |= 1
+            values[emit.results["d0"]] = _u32(remainder)
+            values[emit.results["sd_out"]] = state
+            continue
         else:
             raise AssertionError(f"unsupported recipe operation {semantic_tag}")
         data_results = [
@@ -376,6 +391,21 @@ def test_i64_binary_recipes_are_exact() -> None:
     for lhs, rhs in _i64_samples():
         for rule, reference in binary_rules:
             assert _evaluate_rule(rule, lhs, rhs) == reference(lhs, rhs) & _U64_MASK
+
+
+def test_i64_unsigned_remainder_by_word_recipe_is_exact() -> None:
+    rule = _rule(scalar_arithmetic.scalar_remui)
+    generator = random.Random(0xA1E2_D1A1)
+    divisors = (1, 2, 3, 2**24 - 1, 2**31, 2**32 - 1)
+    samples = [
+        (value, divisor) for value, _ in _i64_samples()[:256] for divisor in divisors
+    ]
+    samples.extend(
+        (generator.getrandbits(64), generator.randint(1, 2**32 - 1))
+        for _ in range(4096)
+    )
+    for value, divisor in samples:
+        assert _evaluate_rule(rule, value, divisor) == value % divisor
 
 
 def test_i64_shift_recipes_are_exact() -> None:
