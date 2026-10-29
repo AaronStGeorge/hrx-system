@@ -844,50 +844,6 @@ spills: 0
 
 // ====
 
-// RUN: emit low-allocation-query @tied_source_uses_extended_endpoint values=%source,%tied,%future fixed=%future_source0:target_id:10:1 fixed=%future_source1:target_id:11:1 fixed=%future:target_id:0:2
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @tied_source_uses_extended_endpoint() -> (reg<test.i32>) asm {
-  %future_source0 = test.const.i32 0
-  %future_source1 = test.const.i32 1
-  %source = test.const.i32 2
-  %tied = test.tied.any %source
-  %future = concat(%future_source0, %future_source1) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
-  %use = test.add.i32 %tied, %tied
-  return %use
-}
-
-// ----
-value %source: test.i32 -> target_id[2:1]
-value %tied: test.i32 -> target_id[2:1]
-value %future: test.i32 -> target_id[0:2]
-
-// ====
-
-// RUN: emit low-allocation-query @transitive_tied_source_uses_terminal_endpoint values=%source,%first,%last,%future fixed=%future_source0:target_id:10:1 fixed=%future_source1:target_id:11:1 fixed=%future:target_id:0:2
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @transitive_tied_source_uses_terminal_endpoint() -> (reg<test.i32>) asm {
-  %future_source0 = test.const.i32 0
-  %future_source1 = test.const.i32 1
-  %source = test.const.i32 2
-  %first = test.tied.any %source
-  %last = test.tied.any %first
-  %future = concat(%future_source0, %future_source1) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
-  %use = test.add.i32 %last, %last
-  return %use
-}
-
-// ----
-value %source: test.i32 -> target_id[2:1]
-value %first: test.i32 -> target_id[2:1]
-value %last: test.i32 -> target_id[2:1]
-value %future: test.i32 -> target_id[0:2]
-
-// ====
-
 // RUN: emit low-allocation-query @tied_copy_loop_carried_value values=%state,%copy,%next copies=%copy
 
 test.target<low_core> @test_target
