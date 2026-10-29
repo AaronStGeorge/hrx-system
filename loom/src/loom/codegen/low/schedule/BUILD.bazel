@@ -500,6 +500,21 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "physical_issue_test",
+    srcs = ["physical_issue_test.cc"],
+    deps = [
+        ":dependencies",
+        ":dependency_index",
+        ":physical_issue",
+        ":schedule",
+        "//loom/src/loom/target/test:descriptors",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "resource_calendar_test",
     srcs = ["resource_calendar_test.cc"],
     deps = [

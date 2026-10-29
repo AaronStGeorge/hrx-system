@@ -1052,7 +1052,6 @@ loom_cc_test(
         ":packet",
         ":text_asm",
         "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/codegen/low/schedule:physical_issue",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
