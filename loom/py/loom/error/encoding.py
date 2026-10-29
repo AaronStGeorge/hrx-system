@@ -320,6 +320,23 @@ ERR_ENCODING_022 = ErrorDef(
     ),
 )
 
+# ERR_ENCODING_023: Subview result cannot prove physical encoding preservation.
+ERR_ENCODING_023 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=23,
+    severity=Severity.ERROR,
+    summary="Subview result does not preserve its source physical encoding.",
+    message=(
+        "view.subview result type {result_type} does not prove preservation "
+        "of the source address function and storage schema"
+    ),
+    params=(ErrorParam("result_type", ParamKind.TYPE),),
+    fix_hint=(
+        "Bind the view.subview encoding co-result and reference it from the "
+        "result view type"
+    ),
+)
+
 ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_001,
     ERR_ENCODING_002,
@@ -340,4 +357,5 @@ ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_017,
     ERR_ENCODING_021,
     ERR_ENCODING_022,
+    ERR_ENCODING_023,
 )

@@ -77,6 +77,35 @@ loom_value_id_t encoding_component(Value value) {
   return components[components.size() - 2];
 }
 
+bool subview_preserves_dense_suffix(
+    Value source, const ViewPartition& source_view,
+    const ViewPartition& result_view,
+    std::span<const loom_value_id_t> result_dynamic_extents) {
+  auto source_components = source.components();
+  size_t source_dynamic_index = 0;
+  size_t result_dynamic_index = 0;
+  for (size_t axis = 0; axis < source_view.extents.size(); ++axis) {
+    const bool source_dynamic = source_view.extents[axis] < 0;
+    const bool result_dynamic = result_view.extents[axis] < 0;
+    if (axis > 0) {
+      if (source_dynamic != result_dynamic) {
+        return false;
+      }
+      if (source_dynamic) {
+        if (source_components[source_dynamic_index] !=
+            result_dynamic_extents[result_dynamic_index]) {
+          return false;
+        }
+      } else if (source_view.extents[axis] != result_view.extents[axis]) {
+        return false;
+      }
+    }
+    source_dynamic_index += source_dynamic;
+    result_dynamic_index += result_dynamic;
+  }
+  return true;
+}
+
 }  // namespace
 
 bool ViewIntrinsic::supports(std::string_view name) {
@@ -325,9 +354,6 @@ std::optional<Value> ViewIntrinsic::call(std::span<const Value> arguments,
                        is_unsigned_component(unsigned_dimension_mask_, index),
                        builder, location);
       }
-      components[component_count++] = operation_ == Operation::BufferView
-                                          ? arguments[2].components()[0]
-                                          : encoding_component(arguments[0]);
       if (operation_ == Operation::Subview) {
         auto origin = arguments[1].components();
         for (size_t axis = 0; axis < result_view_->extents.size(); ++axis) {
@@ -345,9 +371,21 @@ std::optional<Value> ViewIntrinsic::call(std::span<const Value> arguments,
                       : storage.constrain_origin(arguments[0].pointer(), owner);
       }
 
-      loom_value_id_t result_id;
-      check(loom_builder_reserve_values(builder, 1, &result_id));
-      components[component_count++] = result_id;
+      const bool capture_physical_encoding =
+          operation_ == Operation::Subview &&
+          !subview_preserves_dense_suffix(
+              arguments[0], *source_view_, *result_view_,
+              std::span<const loom_value_id_t>(components)
+                  .first(component_count));
+      std::array<loom_value_id_t, 2> result_ids;
+      const size_t result_count = capture_physical_encoding ? 2 : 1;
+      check(loom_builder_reserve_values(builder, result_count,
+                                        result_ids.data()));
+      components[component_count++] = capture_physical_encoding ? result_ids[1]
+                                      : operation_ == Operation::BufferView
+                                          ? arguments[2].components()[0]
+                                          : encoding_component(arguments[0]);
+      components[component_count++] = result_ids[0];
       std::vector<loom_type_t> result_types;
       BoundTypeStorage type_storage;
       types.append_bound(result_source_type_, owner,
@@ -361,10 +399,15 @@ std::optional<Value> ViewIntrinsic::call(std::span<const Value> arguments,
       } else {
         std::array<int64_t, LOOM_TYPE_MAX_RANK> static_offsets;
         static_offsets.fill(std::numeric_limits<int64_t>::min());
+        std::array<loom_type_t, 2> subview_result_types = {
+            result_type,
+            result_types[result_types.size() - 2],
+        };
         check(loom_view_subview_build(
             builder, view_component(arguments[0]), offsets.data(),
             result_view_->extents.size(), static_offsets.data(),
-            result_view_->extents.size(), result_type, location, &op));
+            result_view_->extents.size(), subview_result_types.data(),
+            result_count, location, &op));
       }
       return arena.capture(*result_view_, {components.data(), component_count});
     }

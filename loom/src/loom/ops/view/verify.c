@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "iree/base/internal/math.h"
 #include "loom/error/emitter.h"
 #include "loom/error/error_catalog.h"
 #include "loom/error/parameter.h"
@@ -11,8 +12,11 @@
 #include "loom/ir/module.h"
 #include "loom/ops/atomic.h"
 #include "loom/ops/cache.h"
+#include "loom/ops/encoding/roles.h"
+#include "loom/ops/encoding/storage.h"
 #include "loom/ops/view/access_verifier.h"
 #include "loom/ops/view/ops.h"
+#include "loom/util/fact_extensions.h"
 
 static iree_status_t loom_view_emit(iree_diagnostic_emitter_t emitter,
                                     const loom_op_t* op,
@@ -136,9 +140,158 @@ static iree_status_t loom_view_refine_verify_static_dimensions(
   return iree_ok_status();
 }
 
+static bool loom_view_subview_dense_suffixes_equal(loom_type_t source_type,
+                                                   loom_type_t result_type) {
+  const uint8_t rank = loom_type_rank(source_type);
+  for (uint8_t axis = 1; axis < rank; ++axis) {
+    if (loom_type_dim(source_type, axis) != loom_type_dim(result_type, axis)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_view_subview_static_dense_stride(loom_type_t type,
+                                                  uint8_t axis,
+                                                  int64_t* out_stride) {
+  int64_t stride = 1;
+  for (uint8_t suffix_axis = (uint8_t)(axis + 1);
+       suffix_axis < loom_type_rank(type); ++suffix_axis) {
+    if (loom_type_dim_is_dynamic_at(type, suffix_axis)) {
+      return false;
+    }
+    const int64_t dimension = loom_type_dim_static_size_at(type, suffix_axis);
+    if (dimension <= 0 || !iree_checked_mul_i64(stride, dimension, &stride)) {
+      return false;
+    }
+  }
+  *out_stride = stride;
+  return true;
+}
+
+static bool loom_view_subview_address_layouts_equal(const loom_module_t* module,
+                                                    loom_type_t source_type,
+                                                    loom_type_t result_type) {
+  loom_value_facts_t source_stride_storage[LOOM_TYPE_MAX_RANK] = {0};
+  loom_value_facts_t result_stride_storage[LOOM_TYPE_MAX_RANK] = {0};
+  loom_value_fact_address_layout_t source_layout = {0};
+  loom_value_fact_address_layout_t result_layout = {0};
+  if (!loom_encoding_query_type_address_layout(
+          /*context=*/NULL, module, source_type, source_stride_storage,
+          IREE_ARRAYSIZE(source_stride_storage), &source_layout) ||
+      !loom_encoding_query_type_address_layout(
+          /*context=*/NULL, module, result_type, result_stride_storage,
+          IREE_ARRAYSIZE(result_stride_storage), &result_layout)) {
+    return false;
+  }
+
+  if (source_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE &&
+      result_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE) {
+    return loom_view_subview_dense_suffixes_equal(source_type, result_type);
+  }
+
+  const uint8_t rank = loom_type_rank(source_type);
+  for (uint8_t axis = 0; axis < rank; ++axis) {
+    int64_t source_stride = 0;
+    int64_t result_stride = 0;
+    if (source_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE) {
+      if (!loom_view_subview_static_dense_stride(source_type, axis,
+                                                 &source_stride)) {
+        return false;
+      }
+    } else if (source_layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED ||
+               source_layout.rank != rank || !source_layout.strides ||
+               !loom_value_facts_as_exact_i64(source_layout.strides[axis],
+                                              &source_stride)) {
+      return false;
+    }
+    if (result_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE) {
+      if (!loom_view_subview_static_dense_stride(result_type, axis,
+                                                 &result_stride)) {
+        return false;
+      }
+    } else if (result_layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED ||
+               result_layout.rank != rank || !result_layout.strides ||
+               !loom_value_facts_as_exact_i64(result_layout.strides[axis],
+                                              &result_stride)) {
+      return false;
+    }
+    if (source_stride != result_stride) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_view_subview_storage_schemas_equal(const loom_module_t* module,
+                                                    loom_type_t source_type,
+                                                    loom_type_t result_type) {
+  loom_value_fact_storage_schema_t source_schema = {0};
+  loom_value_fact_storage_schema_t result_schema = {0};
+  const bool source_has_schema = loom_encoding_query_type_storage_schema(
+      /*context=*/NULL, module, source_type, &source_schema);
+  const bool result_has_schema = loom_encoding_query_type_storage_schema(
+      /*context=*/NULL, module, result_type, &result_schema);
+  return source_has_schema == result_has_schema &&
+         (!source_has_schema ||
+          (source_schema.static_spec_encoding_id ==
+               result_schema.static_spec_encoding_id &&
+           loom_value_fact_encoded_operand_schema_equal(
+               source_schema.encoded_operand, result_schema.encoded_operand)));
+}
+
+static bool loom_view_subview_one_result_is_physical_equivalent(
+    const loom_module_t* module, loom_type_t source_type,
+    loom_type_t result_type) {
+  if (!loom_type_is_view(source_type) || !loom_type_is_view(result_type) ||
+      !loom_type_rank_equals(source_type, result_type)) {
+    return true;
+  }
+
+  if (loom_type_has_ssa_encoding(source_type) ||
+      loom_type_has_ssa_encoding(result_type)) {
+    return loom_type_has_ssa_encoding(source_type) &&
+           loom_type_has_ssa_encoding(result_type) &&
+           loom_type_encoding_equals(source_type, result_type) &&
+           loom_view_subview_dense_suffixes_equal(source_type, result_type);
+  }
+
+  return loom_view_subview_address_layouts_equal(module, source_type,
+                                                 result_type) &&
+         loom_view_subview_storage_schemas_equal(module, source_type,
+                                                 result_type);
+}
+
+static iree_status_t loom_view_subview_emit_result_count(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_u32(op->result_count),
+      loom_param_u32(op->result_count < 1 ? 1 : 2),
+  };
+  return loom_view_emit(emitter, op, LOOM_ERR_STRUCTURE_002, params,
+                        IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_view_subview_emit_sibling_requirement(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_string(IREE_SV("result type encoding")),
+      loom_param_string(IREE_SV("the operation's physical_encoding co-result")),
+  };
+  return loom_view_emit(emitter, op, LOOM_ERR_STRUCTURE_032, params,
+                        IREE_ARRAYSIZE(params));
+}
+
 iree_status_t loom_view_subview_verify(const loom_module_t* module,
                                        const loom_op_t* op,
                                        iree_diagnostic_emitter_t emitter) {
+  if (op->result_count < 1 || op->result_count > 2) {
+    return loom_view_subview_emit_result_count(module, op, emitter);
+  }
   loom_attribute_t static_offsets = loom_view_subview_static_offsets(op);
   loom_type_t source_type =
       loom_module_value_type(module, loom_view_subview_source(op));
@@ -151,9 +304,56 @@ iree_status_t loom_view_subview_verify(const loom_module_t* module,
         emitter, op, IREE_SV("source"), source_type,
         IREE_SV("the same element-access alignment as the result view"));
   }
-  return loom_view_verify_index_list_rank(
+  IREE_RETURN_IF_ERROR(loom_view_verify_index_list_rank(
       module, op, emitter, IREE_SV("source"), source_type, static_offsets,
-      loom_view_subview_offsets(op).count);
+      loom_view_subview_offsets(op).count));
+
+  const loom_value_slice_t physical_encoding =
+      loom_view_subview_physical_encoding(op);
+  if (physical_encoding.count == 0) {
+    if (!loom_view_subview_one_result_is_physical_equivalent(
+            module, source_type, result_type)) {
+      const loom_diagnostic_param_t params[] = {
+          loom_param_type(result_type),
+      };
+      return loom_view_emit(emitter, op, LOOM_ERR_ENCODING_023, params,
+                            IREE_ARRAYSIZE(params));
+    }
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t encoding_result = physical_encoding.values[0];
+  if (!loom_type_has_ssa_encoding(result_type) ||
+      loom_type_encoding_value_id(result_type) != encoding_result) {
+    return loom_view_subview_emit_sibling_requirement(module, op, emitter);
+  }
+
+  const loom_encoding_role_t source_role =
+      loom_encoding_type_role(module, source_type);
+  const loom_type_t encoding_type =
+      loom_module_value_type(module, encoding_result);
+  if (!loom_type_is_encoding(encoding_type)) {
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("physical_encoding")),
+        loom_param_type(encoding_type),
+        loom_param_string(IREE_SV("encoding")),
+    };
+    return loom_view_emit(emitter, op, LOOM_ERR_TYPE_004, params,
+                          IREE_ARRAYSIZE(params));
+  }
+  const loom_encoding_role_t result_role =
+      loom_type_encoding_role(encoding_type);
+  if (source_role != LOOM_ENCODING_ROLE_UNKNOWN &&
+      result_role != LOOM_ENCODING_ROLE_UNKNOWN && source_role != result_role) {
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("physical_encoding")),
+        loom_param_type(encoding_type),
+        loom_param_string(loom_encoding_role_description(source_role)),
+    };
+    return loom_view_emit(emitter, op, LOOM_ERR_TYPE_004, params,
+                          IREE_ARRAYSIZE(params));
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_view_refine_verify(const loom_module_t* module,

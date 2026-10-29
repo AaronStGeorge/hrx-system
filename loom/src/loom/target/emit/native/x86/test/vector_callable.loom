@@ -138,12 +138,12 @@ func.def public @copy_scalar_f32(%input: buffer, %output: buffer, %base: offset,
   %layout = encoding.layout.strided [13, 1] : encoding<layout>
   %source = buffer.view %input[%origin] : buffer -> view<4x8xf32, %layout>
   %destination = buffer.view %output[%origin] : buffer -> view<4x8xf32, %layout>
-  %source_crop = view.subview %source[1, 1] : view<4x8xf32, %layout> -> view<2x5xf32, %layout>
-  %destination_crop = view.subview %destination[1, 1] : view<4x8xf32, %layout> -> view<2x5xf32, %layout>
+  %source_crop, %source_crop_layout = view.subview %source[1, 1] : view<4x8xf32, %layout> -> view<2x5xf32, %source_crop_layout>
+  %destination_crop, %destination_crop_layout = view.subview %destination[1, 1] : view<4x8xf32, %layout> -> view<2x5xf32, %destination_crop_layout>
   %first = view.load %source[0, 0] : view<4x8xf32, %layout> -> f32
   view.store %first, %destination[0, 0] : f32, view<4x8xf32, %layout>
-  %value = view.load %source_crop[%row_bounded, %column_bounded] : view<2x5xf32, %layout> -> f32
-  view.store %value, %destination_crop[%row_bounded, %column_bounded] : f32, view<2x5xf32, %layout>
+  %value = view.load %source_crop[%row_bounded, %column_bounded] : view<2x5xf32, %source_crop_layout> -> f32
+  view.store %value, %destination_crop[%row_bounded, %column_bounded] : f32, view<2x5xf32, %destination_crop_layout>
   func.return %value : f32
 }
 
@@ -154,12 +154,12 @@ func.def public @copy_scalar_f64(%input: buffer, %output: buffer, %base: offset,
   %layout = encoding.layout.strided [13, 1] : encoding<layout>
   %source = buffer.view %input[%origin] : buffer -> view<4x8xf64, %layout>
   %destination = buffer.view %output[%origin] : buffer -> view<4x8xf64, %layout>
-  %source_crop = view.subview %source[1, 1] : view<4x8xf64, %layout> -> view<2x5xf64, %layout>
-  %destination_crop = view.subview %destination[1, 1] : view<4x8xf64, %layout> -> view<2x5xf64, %layout>
+  %source_crop, %source_crop_layout = view.subview %source[1, 1] : view<4x8xf64, %layout> -> view<2x5xf64, %source_crop_layout>
+  %destination_crop, %destination_crop_layout = view.subview %destination[1, 1] : view<4x8xf64, %layout> -> view<2x5xf64, %destination_crop_layout>
   %first = view.load %source[0, 0] : view<4x8xf64, %layout> -> f64
   view.store %first, %destination[0, 0] : f64, view<4x8xf64, %layout>
-  %value = view.load %source_crop[%row_bounded, %column_bounded] : view<2x5xf64, %layout> -> f64
-  view.store %value, %destination_crop[%row_bounded, %column_bounded] : f64, view<2x5xf64, %layout>
+  %value = view.load %source_crop[%row_bounded, %column_bounded] : view<2x5xf64, %source_crop_layout> -> f64
+  view.store %value, %destination_crop[%row_bounded, %column_bounded] : f64, view<2x5xf64, %destination_crop_layout>
   func.return %value : f64
 }
 

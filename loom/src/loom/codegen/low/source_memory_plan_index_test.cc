@@ -1320,11 +1320,12 @@ TEST_F(SourceMemoryPlanTest, SubviewPlanClassifiesWorkitemRow) {
   };
   int64_t static_offsets[] = {INT64_MIN, 0};
   loom_op_t* subview_op = nullptr;
+  const loom_type_t subview_type = ViewType2D(1, 4, layout);
   IREE_ASSERT_OK(loom_view_subview_build(
       &builder_, loom_buffer_view_result(view_op), dynamic_offsets,
       IREE_ARRAYSIZE(dynamic_offsets), static_offsets,
-      IREE_ARRAYSIZE(static_offsets), ViewType2D(1, 4, layout),
-      LOOM_LOCATION_UNKNOWN, &subview_op));
+      IREE_ARRAYSIZE(static_offsets), &subview_type, 1, LOOM_LOCATION_UNKNOWN,
+      &subview_op));
 
   loom_value_fact_table_t facts = {0};
   ComputeFacts(&facts);

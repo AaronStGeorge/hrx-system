@@ -10,6 +10,7 @@ import pytest
 
 from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.buffer import ALL_BUFFER_OPS
+from loom.dialect.cfg import ALL_CFG_OPS
 from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.globals import ALL_GLOBAL_OPS
@@ -26,7 +27,7 @@ from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.view import ALL_VIEW_OPS
 from loom.format.text.parser import ParseError, Parser
-from loom.ir import ENCODING_TYPE, I1, INDEX, Module, Operation
+from loom.ir import ENCODING_LAYOUT_TYPE, ENCODING_TYPE, I1, INDEX, Module, Operation
 
 _ALL_OPS = (
     *ALL_TEST_OPS,
@@ -35,6 +36,7 @@ _ALL_OPS = (
     *ALL_ENCODING_OPS,
     *ALL_POOL_OPS,
     *ALL_GLOBAL_OPS,
+    *ALL_CFG_OPS,
     *ALL_SCF_OPS,
     *ALL_BUFFER_OPS,
     *ALL_VIEW_OPS,
@@ -111,6 +113,47 @@ def test_dynamic_global_load_co_results_have_metadata_types() -> None:
     op = _first_body_op(module, "load", "global.load")
     assert module.values[op.results[1]].type == INDEX
     assert module.values[op.results[2]].type == ENCODING_TYPE
+
+
+def test_encoding_annotation_refines_generic_co_result_role() -> None:
+    source = (
+        "func.def @crop(%source: view<4x8xf32>) -> (encoding<layout>) {\n"
+        "  %view, %layout = view.subview %source[1, 2] : "
+        "view<4x8xf32> -> view<2x3xf32, %layout>\n"
+        "  func.return %layout : encoding<layout>\n"
+        "}\n"
+    )
+    module = _parser().parse(source)
+    op = _first_body_op(module, "crop", "view.subview")
+    assert module.values[op.results[1]].type == ENCODING_LAYOUT_TYPE
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        (
+            "func.def @inspect(%encoding: encoding) {\n"
+            "  %kind = test.fact_encoding_layout_kind %encoding : "
+            "encoding<layout> -> i64\n"
+            "  func.return\n"
+            "}\n"
+        ),
+        (
+            "func.def @inspect(%input: encoding) {\n"
+            "  cfg.br ^inspect(%input: encoding)\n"
+            "^inspect(%encoding: encoding):\n"
+            "  %kind = test.fact_encoding_layout_kind %encoding : "
+            "encoding<layout> -> i64\n"
+            "  func.return\n"
+            "}\n"
+        ),
+    ],
+)
+def test_encoding_annotation_does_not_refine_block_argument_role(
+    source: str,
+) -> None:
+    with pytest.raises(ParseError, match="has type encoding"):
+        _parser().parse(source)
 
 
 def test_dynamic_global_symbols_are_declaration_local() -> None:

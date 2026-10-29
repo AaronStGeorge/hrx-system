@@ -27,6 +27,14 @@ loom_encoding_role_t loom_encoding_static_role(const loom_module_t* module,
 loom_encoding_role_t loom_encoding_value_role(const loom_module_t* module,
                                               loom_value_id_t value_id);
 
+// Returns the semantic role expressed directly by a shaped type's encoding
+// attachment. An absent attachment is the contextual dense address layout.
+// Static attachments resolve through their family descriptor; SSA attachments
+// use only the referenced value's declared encoding role and never inspect its
+// producer.
+loom_encoding_role_t loom_encoding_type_role(const loom_module_t* module,
+                                             loom_type_t type);
+
 #ifdef __cplusplus
 }
 #endif

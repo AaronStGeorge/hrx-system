@@ -22,6 +22,7 @@ from loom.dialect.atomic import AtomicKind, AtomicLoadOrdering, AtomicMemoryFlag
 from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.memory import MemoryAccessFlags
 from loom.dsl import (
+    ANY,
     ATTR_TYPE_ENUM,
     ATTR_TYPE_FLAGS,
     ATTR_TYPE_I64_ARRAY,
@@ -51,7 +52,6 @@ from loom.dsl import (
     ReadWrites,
     Result,
     SameElementType,
-    SameEncoding,
     SameType,
     TotalBitCountEqual,
     Writes,
@@ -159,7 +159,13 @@ view_subview = Op(
     name="view.subview",
     group=view_ops,
     doc=(
-        "Form a logical subview from an existing view. Offsets select the logical origin; result type dimensions provide the subview extents. The element-access alignment requirement is preserved; forming a subview makes no memory access or address-alignment promise."
+        "Form a logical subview from an existing view. Offsets select the "
+        "logical origin; result type dimensions provide the subview extents. "
+        "When those extents cannot independently preserve the source address "
+        "function, a trailing encoding co-result captures the source physical "
+        "layout and the result view type references it. The element-access "
+        "alignment requirement is preserved; forming a subview makes no "
+        "memory access or address-alignment promise."
     ),
     operands=[
         Operand("source", VIEW, doc="Source view.", role=OperandRole.ACCESS_PATH),
@@ -171,7 +177,20 @@ view_subview = Op(
             role=OperandRole.ACCESS_PATH,
         ),
     ],
-    results=[Result("result", VIEW, doc="Subview over the same storage root.", reference_source="source")],
+    results=[
+        Result(
+            "result",
+            VIEW,
+            doc="Subview over the same storage root.",
+            reference_source="source",
+        ),
+        Result(
+            "physical_encoding",
+            ANY,
+            doc="Captured source address layout and storage schema.",
+            variadic=True,
+        ),
+    ],
     attrs=[
         AttrDef(
             "static_offsets",
@@ -181,12 +200,12 @@ view_subview = Op(
     ],
     constraints=[
         SameElementType("source", "result"),
-        SameEncoding("source", "result"),
         RanksMatch("source", "result"),
     ],
     traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
     verify="loom_view_subview_verify",
     facts="loom_view_subview_facts",
+    type_transfer="loom_view_subview_type_transfer",
     format=[
         Ref("source"),
         IndexList("offsets", "static_offsets"),
@@ -196,7 +215,8 @@ view_subview = Op(
         ResultType("result"),
     ],
     examples=[
-        "%sub = view.subview %source[%row, 0] : view<[%M]x[%N]xf32, %layout> -> view<16x[%N]xf32, %layout>",
+        "%rows = view.subview %source[%row, 0] : view<[%M]x[%N]xf32> -> view<16x[%N]xf32>",
+        "%crop, %layout = view.subview %source[%row, 2] : view<[%M]x[%N]xf32> -> view<16x3xf32, %layout>",
     ],
 )
 

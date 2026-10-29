@@ -1011,9 +1011,10 @@ TEST_F(ViewRegionsTest, SubviewWriteSharesStorageRoot) {
   const loom_value_id_t view = BuildReadOnlyView(BuildNoAliasBuffer(buffer));
   const int64_t indices[] = {0};
   loom_op_t* alias = nullptr;
-  IREE_ASSERT_OK(loom_view_subview_build(
-      &builder_, view, nullptr, 0, indices, 1,
-      loom_module_value_type(module_, view), LOOM_LOCATION_UNKNOWN, &alias));
+  const loom_type_t alias_type = loom_module_value_type(module_, view);
+  IREE_ASSERT_OK(loom_view_subview_build(&builder_, view, nullptr, 0, indices,
+                                         1, &alias_type, 1,
+                                         LOOM_LOCATION_UNKNOWN, &alias));
   loom_op_t* store = nullptr;
   IREE_ASSERT_OK(loom_view_store_build(
       &builder_, 0, 0, DefineScalarArg(LOOM_SCALAR_TYPE_F32),
@@ -1397,10 +1398,11 @@ TEST_F(ViewRegionsTest, SubviewPreservesRootAndAddsLogicalOffset) {
 
   int64_t static_offsets[] = {2, 0};
   loom_op_t* subview_op = nullptr;
+  const loom_type_t subview_type = ViewType2D(1, 16, layout);
   IREE_ASSERT_OK(loom_view_subview_build(
       &builder_, loom_buffer_view_result(source_op), NULL, 0, static_offsets,
-      IREE_ARRAYSIZE(static_offsets), ViewType2D(1, 16, layout),
-      LOOM_LOCATION_UNKNOWN, &subview_op));
+      IREE_ARRAYSIZE(static_offsets), &subview_type, 1, LOOM_LOCATION_UNKNOWN,
+      &subview_op));
 
   loom_value_fact_table_t facts = {0};
   ComputeFacts(&facts);

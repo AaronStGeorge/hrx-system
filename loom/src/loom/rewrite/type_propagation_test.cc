@@ -815,7 +815,7 @@ TEST_F(TypePropagationTest, SameEncodingNarrowsSsaEncodingAttachment) {
 
   loom_op_t* subview_op = NULL;
   IREE_ASSERT_OK(loom_view_subview_build(&builder_, source, NULL, 0, NULL, 0,
-                                         result_type, LOOM_LOCATION_UNKNOWN,
+                                         &result_type, 1, LOOM_LOCATION_UNKNOWN,
                                          &subview_op));
 
   bool changed = false;
@@ -825,6 +825,35 @@ TEST_F(TypePropagationTest, SameEncodingNarrowsSsaEncodingAttachment) {
   loom_type_t refined_source_type = loom_module_value_type(module_, source);
   EXPECT_TRUE(loom_type_has_static_encoding(refined_source_type));
   EXPECT_EQ(refined_source_type.encoding_id, encoding_id);
+}
+
+TEST_F(TypePropagationTest, SubviewNarrowsPhysicalEncodingRole) {
+  loom_type_t source_type =
+      loom_type_shaped_2d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(4), loom_dim_pack_static(8), 0);
+  loom_op_t* source_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), source_type, &source_op));
+  loom_value_id_t source = loom_test_constant_result(source_op);
+
+  loom_value_id_t result_ids[2];
+  IREE_ASSERT_OK(loom_builder_reserve_values(&builder_, 2, result_ids));
+  loom_type_t result_type = loom_type_shaped_2d(
+      LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(2),
+      loom_dim_pack_static(3), (uint16_t)result_ids[1]);
+  result_type.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+  loom_type_t result_types[] = {result_type, loom_type_encoding()};
+  loom_op_t* subview_op = NULL;
+  IREE_ASSERT_OK(loom_view_subview_build(
+      &builder_, source, NULL, 0, NULL, 0, result_types,
+      IREE_ARRAYSIZE(result_types), LOOM_LOCATION_UNKNOWN, &subview_op));
+
+  bool changed = false;
+  IREE_EXPECT_OK(Propagate(subview_op, &changed));
+
+  EXPECT_TRUE(changed);
+  EXPECT_EQ(
+      loom_type_encoding_role(loom_module_value_type(module_, result_ids[1])),
+      LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
 }
 
 TEST_F(TypePropagationTest, ValueFactsNarrowDynamicDimensions) {

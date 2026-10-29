@@ -18,6 +18,7 @@
 #include "loom/format/text/parser/regions.h"
 #include "loom/format/text/parser/scope.h"
 #include "loom/format/text/parser/types.h"
+#include "loom/ir/type_refinement.h"
 #include "loom/ops/op_defs.h"
 #include "loom/rewrite/remap.h"
 #include "loom/util/stable_id.h"
@@ -731,6 +732,25 @@ static iree_status_t loom_parse_format_check_operand_type_annotation(
       loom_module_value_type(parser->module, values[element_index]);
   if (loom_type_equal(actual_type, annotated_type)) {
     return iree_ok_status();
+  }
+  const loom_value_t* actual_value =
+      loom_module_value(parser->module, values[element_index]);
+  // Type-binding syntax initially gives an encoding co-result a generic role.
+  // Its first role-qualified use may narrow that result, but an operand
+  // annotation must never rewrite a callable or block argument contract.
+  if (!loom_value_is_block_arg(actual_value) &&
+      loom_type_is_encoding(actual_type) &&
+      loom_type_is_encoding(annotated_type)) {
+    loom_type_t refined_type = actual_type;
+    loom_type_refinement_result_t refinement = LOOM_TYPE_REFINEMENT_UNCHANGED;
+    IREE_RETURN_IF_ERROR(loom_type_refine_element_with_candidate(
+        actual_type, annotated_type, &parser->parser_arena, &refined_type,
+        &refinement));
+    if (refinement == LOOM_TYPE_REFINEMENT_NARROWED &&
+        loom_type_equal(refined_type, annotated_type)) {
+      return loom_module_set_value_type(parser->module, values[element_index],
+                                        refined_type);
+    }
   }
   char field_name_buffer[64];
   iree_string_view_t field_name = loom_parse_format_operand_field_name(

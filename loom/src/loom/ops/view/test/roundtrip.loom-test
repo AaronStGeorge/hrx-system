@@ -57,6 +57,16 @@ func.def @strided_subview(%buffer: buffer, %offset: offset, %row_stride: index, 
 
 // ====
 
+// Shape-changing crops bind the captured physical encoding as a sibling
+// result referenced directly by the result view type.
+func.def @captured_subview_encoding(%source: view<4x8xf32>) -> (encoding<layout>) {
+  %crop, %layout = view.subview %source[1, 2] : view<4x8xf32> -> view<2x3xf32, %layout>
+  test.use %crop : view<2x3xf32, %layout>
+  func.return %layout : encoding<layout>
+}
+
+// ====
+
 // Static strides are carried in the same index-list shape as dynamic strides.
 func.def @static_strided_view(%buffer: buffer, %offset: offset) {
   %layout = encoding.layout.strided [4096, 1] : encoding<layout>

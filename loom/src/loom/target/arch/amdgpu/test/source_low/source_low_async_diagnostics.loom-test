@@ -70,11 +70,11 @@ kernel.def target(@target) @async_gather_dynamic_offset_sum_rejected() {
   %global = buffer.assume.memory_space<global> %input : buffer
   %layout = encoding.layout.strided [536870912, 536870912, 1] : encoding<layout>
   %source_base = buffer.view %global[%buffer_base] : buffer -> view<8x8x4xi8, %layout>
-  %source = view.subview %source_base[%x, %y, 0] : view<8x8x4xi8, %layout> -> view<1x1x4xi8, %layout>
+  %source, %source_layout = view.subview %source_base[%x, %y, 0] : view<8x8x4xi8, %layout> -> view<1x1x4xi8, %source_layout>
   %scratch = buffer.alloca<workgroup> align(16) %bytes : buffer
   %dest = buffer.view %scratch[%buffer_base] : buffer -> view<64x1x1x4xi8>
   // ERROR@+1: AMDGPU/023 {constraint_key="memory_access.dynamic_offset_range"}
-  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x1x4xi8, %layout> to view<64x1x1x4xi8> -> kernel.async.token
+  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x1x4xi8, %source_layout> to view<64x1x1x4xi8> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
   kernel.return
