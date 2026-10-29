@@ -77,6 +77,7 @@ py_library(
         "aliases.py",
         "bazel.py",
         "bazel_launcher.py",
+        "bazel_test_selection.py",
         "ci.py",
         "ci_config.py",
         "cli.py",
@@ -388,6 +389,15 @@ py_test(
 )
 
 py_test(
+    name = "bazel_test_selection_test",
+    size = _PRESUBMIT_TEST_SIZE,
+    srcs = ["bazel_test_selection_test.py"],
+    main = "bazel_test_selection_test.py",
+    tags = _PRESUBMIT_TEST_TAGS,
+    deps = [":devtools"],
+)
+
+py_test(
     name = "project_presubmit_test",
     size = _PRESUBMIT_TEST_SIZE,
     srcs = ["project_presubmit_test.py"],
@@ -448,6 +458,7 @@ test_suite(
         ":bazel_profile_summary_test",
         ":bazel_test",
         ":bazel_test_results_test",
+        ":bazel_test_selection_test",
         ":ci_test",
         ":cli_test",
         ":cmake_targets_test",
