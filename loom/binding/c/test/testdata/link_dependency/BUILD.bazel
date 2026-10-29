@@ -13,7 +13,7 @@ package(
 )
 
 iree_c_embed_data(
-    name = "link_dependency",
+    name = "fixtures",
     testonly = True,
     srcs = glob(["*.loom"]),
     c_file_output = "link_dependency_testdata.c",

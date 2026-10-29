@@ -19,7 +19,7 @@ loom_check_test_suite(
 )
 
 iree_c_embed_data(
-    name = "diagnostic_types",
+    name = "fixtures",
     testonly = True,
     srcs = glob(["*.loom-test"]),
     c_file_output = "diagnostic_type_testdata.c",

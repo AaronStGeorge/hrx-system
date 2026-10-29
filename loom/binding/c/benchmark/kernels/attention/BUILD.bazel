@@ -14,7 +14,7 @@ package(
 exports_files(["prefill_f16_wmma_amdgpu.loom"])
 
 iree_c_embed_data(
-    name = "attention_prefill_smoke",
+    name = "prefill_smoke",
     testonly = True,
     srcs = ["prefill_f16_wmma_amdgpu.loom"],
     c_file_output = "attention_prefill_smoke.c",

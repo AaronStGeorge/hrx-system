@@ -19,7 +19,7 @@ exports_files([
 ])
 
 iree_c_embed_data(
-    name = "synthetic_i32_chain_smoke",
+    name = "i32_chain_smoke",
     testonly = True,
     srcs = ["i32_memory_chain.loom"],
     c_file_output = "synthetic_i32_chain_smoke.c",
@@ -29,7 +29,7 @@ iree_c_embed_data(
 )
 
 iree_c_embed_data(
-    name = "synthetic_paired_matrix_smoke",
+    name = "paired_matrix_smoke",
     testonly = True,
     srcs = [
         "paired_matrix_helpers.loom",
@@ -42,7 +42,7 @@ iree_c_embed_data(
 )
 
 iree_c_embed_data(
-    name = "synthetic_packed_table_lookup_smoke",
+    name = "packed_lookup_smoke",
     testonly = True,
     srcs = ["packed_table_lookup_u4.loom"],
     c_file_output = "synthetic_packed_table_lookup_smoke.c",
@@ -52,7 +52,7 @@ iree_c_embed_data(
 )
 
 iree_c_embed_data(
-    name = "synthetic_pipeline_smoke",
+    name = "pipeline_smoke",
     testonly = True,
     srcs = [
         "segmented_guarded_read_ahead.loom",
@@ -65,7 +65,7 @@ iree_c_embed_data(
 )
 
 iree_c_embed_data(
-    name = "synthetic_unroll_smoke",
+    name = "unroll_smoke",
     testonly = True,
     srcs = ["unroll_recurrence.loom"],
     c_file_output = "synthetic_unroll_smoke.c",

@@ -14,7 +14,7 @@ package(
 exports_files(["gate_up_quadratic_bf16_xdna.loom"])
 
 iree_c_embed_data(
-    name = "ffn_gate_up_smoke",
+    name = "gate_up_smoke",
     testonly = True,
     srcs = [
         "gate_up_quadratic_bf16_amdgpu.loom",
@@ -29,7 +29,7 @@ iree_c_embed_data(
 )
 
 iree_c_embed_data(
-    name = "ffn_routed_gate_up_smoke",
+    name = "routed_gate_up_smoke",
     testonly = True,
     srcs = ["routed_gate_up_swiglu_q4k_q8_amdgpu.loom"],
     c_file_output = "ffn_routed_gate_up_smoke.c",
