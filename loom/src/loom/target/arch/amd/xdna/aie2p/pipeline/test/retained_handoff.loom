@@ -23,6 +23,29 @@ func.def inline @fill(%input: buffer, %incoming: channel<tile<16xi32>>) {
   func.return
 }
 
+// Each async group fills both columns before waiting. The whole unpublished
+// two-record prefix is contiguous within each column, so it can use one DMA.
+func.def inline @fill_pair(%input0: buffer, %incoming0: channel<tile<16xi32>>, %input1: buffer, %incoming1: channel<tile<16xi32>>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %bytes = index.constant 64 : offset
+  scf.for %record = [%c0 to %c2 step %c1] unroll {
+    %offset = index.scale %record, %bytes : index, offset -> offset
+    %external0 = buffer.view %input0[%offset] : buffer -> view<16xi32>
+    %external1 = buffer.view %input1[%offset] : buffer -> view<16xi32>
+    %write0, %payload0 = channel.reserve %incoming0 : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+    %write1, %payload1 = channel.reserve %incoming1 : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+    %copy0 = kernel.async.copy %external0 to %payload0 {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+    %copy1 = kernel.async.copy %external1 to %payload1 {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+    %group = kernel.async.group %copy0, %copy1 : kernel.async.token, kernel.async.token -> kernel.async.group
+    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+    channel.publish %write0 : write<tile<16xi32>>
+    channel.publish %write1 : write<tile<16xi32>>
+  }
+  func.return
+}
+
 func.def inline @forward(%read: read<tile<16xi32>>, %destination: channel<tile<16xi32>>) -> (read<tile<16xi32>>) {
   %retained, %outgoing = channel.fanout %read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
   %write, %payload = channel.reserve %destination : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
@@ -124,8 +147,7 @@ pipeline.def<kernel> public retain target(@device) @retained_handoff() run(%inpu
     scf.for %phase = [%c0 to %c2 step %c1] unroll {
       %read0, %unused0 = channel.acquire %ready0 : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
       %read1, %unused1 = channel.acquire %ready1 : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
-      func.call @fill(%state0, %batch0) : (buffer, channel<tile<16xi32>>)
-      func.call @fill(%state1, %batch1) : (buffer, channel<tile<16xi32>>)
+      func.call @fill_pair(%state0, %batch0, %state1, %batch1) : (buffer, channel<tile<16xi32>>, buffer, channel<tile<16xi32>>)
       channel.release %read0 : read<tile<16xi32>>
       channel.release %read1 : read<tile<16xi32>>
     }

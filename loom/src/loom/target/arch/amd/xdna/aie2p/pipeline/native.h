@@ -212,7 +212,7 @@ typedef struct loom_aie2p_native_transfer_t {
   loom_aie2p_native_dma_descriptor_t* shim_descriptor;
   // Caller buffer ordinal supplying the external base.
   uint32_t binding;
-  // Consecutive authored copies represented by this physical transfer.
+  // Authored copies of adjacent records represented by this physical transfer.
   uint32_t source_count;
   // Worker-local address pair when the descriptor patches its external address.
   // Unused when invocation binding patches one shared fixed address directly.

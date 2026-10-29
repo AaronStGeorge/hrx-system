@@ -654,16 +654,13 @@ static iree_status_t loom_aie2p_native_config_communicate(
   const loom_aie2p_native_worker_t* worker = &context->workers[worker_index];
   const loom_aie2p_native_transfer_t* issue = worker->transfers;
   const loom_aie2p_native_transfer_task_t* complete = worker->transfer_tasks;
-  uint32_t remaining_copies = 0;
   for (iree_host_size_t i = 0; i < source->transport.count; ++i) {
     const loom_pipeline_transport_step_t* step = &source->transport.steps[i];
     switch (step->kind) {
       case LOOM_PIPELINE_TRANSPORT_STEP_TRANSFER: {
-        if (remaining_copies) {
-          --remaining_copies;
+        if (!issue || issue->source != step->source.transfer) {
           break;
         }
-        remaining_copies = issue->source_count - 1;
         if (issue == issue->task->last_transfer) {
           for (const loom_aie2p_native_transfer_t* transfer =
                    issue->task->first_transfer;

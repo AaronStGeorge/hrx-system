@@ -429,31 +429,51 @@ static iree_status_t loom_aie2p_native_select_sequence(
 // reservation until its full-prefix publication. Dense adjacent fills can
 // complete together at the first wait: no reader observes an intermediate
 // record, and no other observable handoff may occur inside this interval.
+// Independent tile fills may interleave inside that same unpublished interval.
 // This consumes canonical transport, completion, and physical slot facts;
 // emitted code never reconstructs the grouping from the source operations.
 static uint32_t loom_aie2p_native_ingress_records(
-    const loom_module_t* module, const loom_pipeline_worker_t* source,
+    const loom_aie2p_native_context_t* context,
+    const loom_pipeline_realization_t* realization,
+    const loom_pipeline_worker_t* source,
     const loom_aie2p_native_worker_t* worker,
     const loom_aie2p_native_channel_t* channel,
     const loom_kernel_async_stream_t* stream, iree_host_size_t first_transfer,
-    iree_host_size_t first_step) {
+    iree_host_size_t first_step, iree_host_size_t completed_groups,
+    iree_host_size_t* members) {
+  const loom_module_t* module = context->code.module;
   const uint32_t count = channel->replay.record_count;
   if (count < 2 || !channel->record_dense ||
-      channel->byte_stride != channel->record_byte_length || !first_step ||
-      stream->transfer_count - first_transfer < count) {
+      channel->byte_stride != channel->record_byte_length ||
+      stream->transfer_count - first_transfer < count ||
+      stream->transfers[first_transfer].group_index != completed_groups) {
     return 1;
   }
-  const loom_pipeline_transport_step_t* preceding =
-      &source->transport.steps[first_step - 1];
-  if (preceding->kind != LOOM_PIPELINE_TRANSPORT_STEP_CHANNEL ||
-      !loom_channel_reserve_isa(preceding->op)) {
-    return 1;
-  }
-  const loom_aie2p_native_configuration_action_t* admission =
-      &worker->configuration_actions[preceding->source.channel -
-                                     source->channels.actions];
-  if (admission->channel != channel || admission->expected < 0) {
-    return 1;
+  // Reading later records early must not cross an outstanding external write.
+  // Earlier members of this group can only be independent ingress copies.
+  const loom_kernel_async_group_t* first_group =
+      &stream->groups[completed_groups];
+  for (iree_host_size_t i = first_group->first_transfer; i < first_transfer;
+       ++i) {
+    const loom_movement_request_t* pending = &stream->transfers[i].request;
+    loom_channel_payload_record_t record;
+    if (pending->kind != LOOM_MOVEMENT_KIND_KERNEL_ASYNC_COPY ||
+        pending->source.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL ||
+        pending->dest.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP ||
+        !loom_channel_completion_try_lookup_payload_record(
+            &source->completion, pending->dest.value_id, &record)) {
+      return 1;
+    }
+    const loom_channel_identity_t* identity =
+        loom_channel_plan_channel(&source->channels, record.value_id);
+    const loom_pipeline_resource_channel_t* other =
+        loom_pipeline_resources_lookup_channel(&realization->resources,
+                                               identity->value_id);
+    const loom_aie2p_native_channel_t* other_channel =
+        &context->channels[other - realization->resources.channels];
+    if (other_channel->pool_index == channel->pool_index) {
+      return 1;
+    }
   }
   const loom_movement_endpoint_t* first =
       &stream->transfers[first_transfer].request.source;
@@ -463,54 +483,64 @@ static uint32_t loom_aie2p_native_ingress_records(
     if (step->op->parent_block != stream->block) {
       return 1;
     }
+    if (step->kind == LOOM_PIPELINE_TRANSPORT_STEP_WAIT) {
+      continue;
+    }
     if (step->kind == LOOM_PIPELINE_TRANSPORT_STEP_CHANNEL) {
       const loom_aie2p_native_configuration_action_t* action =
           &worker->configuration_actions[step->source.channel -
                                          source->channels.actions];
-      if (action->channel != channel || !(loom_channel_reserve_isa(step->op) ||
-                                          loom_channel_publish_isa(step->op))) {
+      if (!(loom_channel_reserve_isa(step->op) ||
+            loom_channel_publish_isa(step->op)) ||
+          action->expected >= 0) {
         return 1;
       }
       if (action->value >= 0) {
-        return copies == count && loom_channel_publish_isa(step->op) ? count
-                                                                     : 1;
+        return copies == count ? count : 1;
       }
       continue;
     }
-    if (step->kind != LOOM_PIPELINE_TRANSPORT_STEP_TRANSFER ||
-        copies == count) {
-      return 1;
-    }
     const loom_kernel_async_transfer_t* transfer = step->source.transfer;
     const loom_movement_request_t* request = &transfer->request;
-    const loom_kernel_async_group_t* group =
-        &stream->groups[transfer->group_index];
+    if (request->kind != LOOM_MOVEMENT_KIND_KERNEL_ASYNC_COPY ||
+        request->source.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL ||
+        request->dest.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+      return 1;
+    }
+    loom_channel_payload_record_t record;
+    if (!loom_channel_completion_try_lookup_payload_record(
+            &source->completion, request->dest.value_id, &record)) {
+      return 1;
+    }
+    const loom_channel_identity_t* identity =
+        loom_channel_plan_channel(&source->channels, record.value_id);
+    if (identity != &channel->source->identity) {
+      const loom_pipeline_resource_channel_t* other =
+          loom_pipeline_resources_lookup_channel(&realization->resources,
+                                                 identity->value_id);
+      const loom_aie2p_native_channel_t* other_channel =
+          &context->channels[other - realization->resources.channels];
+      if (other_channel->pool_index == channel->pool_index) {
+        return 1;
+      }
+      continue;
+    }
     const int64_t offset =
         first->begin_byte_offset.facts.range_lo + copies * channel->byte_stride;
-    if (transfer != &stream->transfers[first_transfer + copies] ||
-        request->kind != LOOM_MOVEMENT_KIND_KERNEL_ASYNC_COPY ||
+    if (copies == count ||
         request->source.root_value_id != first->root_value_id ||
-        request->source.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL ||
-        request->dest.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP ||
         request->transferred_byte_count != channel->record_byte_length ||
         request->source.begin_byte_offset.facts.range_lo != offset ||
         request->source.end_byte_offset.facts.range_hi !=
             offset + channel->record_byte_length ||
-        request->source.end_byte_offset.facts.range_hi > UINT32_MAX ||
-        group->transfer_count != 1 || i + 1 == source->transport.count ||
-        source->transport.steps[i + 1].op != group->completion) {
+        request->source.end_byte_offset.facts.range_hi > UINT32_MAX) {
       return 1;
     }
     const loom_view_region_t* local_view;
     loom_view_region_table_try_lookup(
         &source->asynchronous.movement.view_regions, request->dest.value_id,
         &local_view);
-    loom_channel_payload_record_t record;
-    if (!loom_channel_completion_try_lookup_payload_record(
-            &source->completion, request->dest.value_id, &record) ||
-        local_view->projection_byte_offset.constant != 0 ||
-        loom_channel_plan_channel(&source->channels, record.value_id) !=
-            preceding->source.channel->channel) {
+    if (local_view->projection_byte_offset.constant != 0) {
       return 1;
     }
     const loom_value_id_t reservation =
@@ -531,8 +561,7 @@ static uint32_t loom_aie2p_native_ingress_records(
         return 1;
       }
     }
-    ++copies;
-    ++i;  // The retained group completion immediately follows this copy.
+    members[copies++] = transfer - stream->transfers;
   }
   return 1;
 }
@@ -569,6 +598,8 @@ static iree_status_t loom_aie2p_native_select_worker_transfers(
   loom_aie2p_native_dma_descriptor_t** descriptor_tail = &worker->descriptors;
   loom_aie2p_native_dma_completion_t** completion_tail =
       &worker->dma_completions;
+  iree_host_size_t* members = NULL;
+  uint32_t member_capacity = 0;
   iree_host_size_t stream_index = 0;
   for (const loom_kernel_async_stream_t* stream =
            configuration ? source->transport.streams[0]
@@ -578,7 +609,17 @@ static iree_status_t loom_aie2p_native_select_worker_transfers(
                                      ? source->transport.streams[stream_index]
                                      : NULL)
                               : stream->next) {
+    bool* merged = NULL;
+    if (configuration) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          arena, stream->transfer_count, sizeof(*merged), (void**)&merged));
+      memset(merged, 0, stream->transfer_count * sizeof(*merged));
+    }
+    iree_host_size_t completed_groups = 0;
     for (iree_host_size_t j = 0; j < stream->transfer_count; ++j) {
+      if (merged && merged[j]) {
+        continue;
+      }
       const loom_kernel_async_transfer_t* transfer = &stream->transfers[j];
       const loom_movement_request_t* request = &transfer->request;
       const bool ingress =
@@ -649,15 +690,28 @@ static iree_status_t loom_aie2p_native_select_worker_transfers(
             worker->configuration_records[loom_local_value_domain_ordinal(
                 &source->value_domain, admission)];
         while (source->transport.steps[transport_step].op != request->op) {
+          const loom_op_t* op = source->transport.steps[transport_step].op;
+          while (completed_groups < stream->group_count &&
+                 stream->groups[completed_groups].completion == op) {
+            ++completed_groups;
+          }
           ++transport_step;
+        }
+        if (local_channel->replay.record_count > member_capacity) {
+          member_capacity = local_channel->replay.record_count;
+          IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+              arena, member_capacity, sizeof(*members), (void**)&members));
         }
       }
       const uint32_t source_count =
           configuration && ingress && !record_offset
-              ? loom_aie2p_native_ingress_records(module, source, worker,
-                                                  local_channel, stream, j,
-                                                  transport_step)
+              ? loom_aie2p_native_ingress_records(
+                    context, realization, source, worker, local_channel, stream,
+                    j, transport_step, completed_groups, members)
               : 1;
+      for (uint32_t k = 1; k < source_count; ++k) {
+        merged[members[k]] = true;
+      }
       const loom_aie2p_native_memory_layout_t* layout =
           local_tile->memory_layout;
       loom_aie2p_native_tile_t* shim =
@@ -928,7 +982,6 @@ static iree_status_t loom_aie2p_native_select_worker_transfers(
           group_queue->task = NULL;
         }
       }
-      j += source_count - 1;
     }
   }
   // Sharing can turn an initially fixed address into a per-issue patch. Assign
