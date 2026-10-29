@@ -1,0 +1,340 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("@iree_clang_tidy_llvm//:config.bzl", "CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_test")
+load("//build_tools/bazel:cc_opts.bzl", "cc_opts")
+load("//build_tools/clang_tidy:clang_tidy.bzl", "iree_clang_tidy", "iree_recursion_analysis")
+load(":aspect_selection_test.bzl", "clang_tidy_aspect_selection_test_suite")
+load(":clang_tidy_test.bzl", "clang_tidy_test_plugin")
+
+package(default_visibility = ["//visibility:private"])
+
+_CXX_OPTIONS = cc_opts.iree_cxx_standard_options()
+
+filegroup(
+    name = "testdata",
+    srcs = glob(
+        ["*"],
+        exclude = ["BUILD.bazel"],
+    ) + ["//build_tools/clang_tidy/fixtures:status_macro_scope"],
+    visibility = ["//build_tools/clang_tidy:__pkg__"],
+)
+
+clang_tidy_test_plugin(
+    name = "test_plugin",
+    testonly = True,
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "action_runner_test",
+    srcs = ["action_runner_test.py"],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :test_plugin)",
+        "--config-file=$(location //build_tools/clang_tidy:clang_tidy_config.yaml)",
+        "--vfsoverlay=$(location @iree_clang_tidy_llvm//:clang_resource_overlay)",
+        "--source=$(location :smoke.c)",
+    ],
+    data = [
+        "smoke.c",
+        ":test_plugin",
+        "//build_tools/clang_tidy:clang_tidy_config.yaml",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+        "@iree_clang_tidy_llvm//:clang_resource_headers",
+        "@iree_clang_tidy_llvm//:clang_resource_overlay",
+    ],
+    main = "action_runner_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+    deps = ["//build_tools/clang_tidy:run_clang_tidy_action_lib"],
+)
+
+py_test(
+    name = "aggregate_recursion_summaries_test",
+    srcs = ["aggregate_recursion_summaries_test.py"],
+    main = "aggregate_recursion_summaries_test.py",
+    deps = ["//build_tools/clang_tidy:aggregate_recursion_summaries_lib"],
+)
+
+py_test(
+    name = "designated_initializer_check_test",
+    srcs = [
+        "clang_tidy_test.py",
+        "designated_initializer_check_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--clangxx=$(location @iree_clang_tidy_llvm//:clang++)",
+        "--plugin=$(location :test_plugin)",
+    ],
+    data = [
+        "designated_initializer_check.c",
+        "designated_initializer_check.cc",
+        "designated_initializer_check.h",
+        ":test_plugin",
+        "@iree_clang_tidy_llvm//:clang++",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["."],
+    main = "designated_initializer_check_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "extent_checks_test",
+    srcs = [
+        "clang_tidy_test.py",
+        "extent_checks_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :test_plugin)",
+    ],
+    data = [
+        "extent_checks.c",
+        "extent_checks.cc",
+        ":test_plugin",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["."],
+    main = "extent_checks_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "plugin_smoke_test",
+    srcs = [
+        "clang_tidy_test.py",
+        "smoke_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :test_plugin)",
+    ],
+    data = [
+        "smoke.c",
+        ":test_plugin",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["."],
+    main = "smoke_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "status_checks_test",
+    srcs = [
+        "clang_tidy_test.py",
+        "status_checks_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :test_plugin)",
+    ],
+    data = [
+        "status_checks.c",
+        "status_checks.cc",
+        "status_constructor_checks.cc",
+        ":test_plugin",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["."],
+    main = "status_checks_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "lifecycle_checks_test",
+    srcs = [
+        "clang_tidy_test.py",
+        "lifecycle_checks_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :test_plugin)",
+    ],
+    data = [
+        "lifecycle_checks.c",
+        "non_identifier_functions.cc",
+        ":test_plugin",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["."],
+    main = "lifecycle_checks_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "recursion_check_test",
+    srcs = [
+        "clang_tidy_test.py",
+        "recursion_check_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :test_plugin)",
+    ],
+    data = [
+        "recursion_check.c",
+        ":test_plugin",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["."],
+    main = "recursion_check_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+cc_library(
+    name = "recursion_cross_tu_subject",
+    testonly = True,
+    srcs = [
+        "recursion_cross_tu_a.c",
+        "recursion_cross_tu_b.c",
+    ],
+    tags = ["manual"],
+)
+
+iree_recursion_analysis(
+    name = "recursion_cross_tu_analysis",
+    testonly = True,
+    allow_diagnostics = True,
+    tags = ["manual"],
+    targets = [":recursion_cross_tu_subject"],
+)
+
+py_test(
+    name = "recursion_cross_tu_analysis_test",
+    srcs = ["recursion_cross_tu_analysis_test.py"],
+    args = ["--report=$(location :recursion_cross_tu_analysis)"],
+    data = [":recursion_cross_tu_analysis"],
+    main = "recursion_cross_tu_analysis_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "refcount_checks_test",
+    srcs = [
+        "clang_tidy_test.py",
+        "refcount_checks_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :test_plugin)",
+    ],
+    data = [
+        "non_identifier_functions.cc",
+        "refcount_checks.c",
+        ":test_plugin",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["."],
+    main = "refcount_checks_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "trace_checks_test",
+    srcs = [
+        "clang_tidy_test.py",
+        "trace_checks_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :test_plugin)",
+    ],
+    data = [
+        "trace_checks.c",
+        ":test_plugin",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["."],
+    main = "trace_checks_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "style_checks_test",
+    srcs = [
+        "clang_tidy_test.py",
+        "style_checks_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :test_plugin)",
+    ],
+    data = [
+        "status_macro_scope_test.cc",
+        "style_checks.c",
+        "style_checks.cc",
+        ":test_plugin",
+        "//build_tools/clang_tidy/fixtures:status_macro_scope",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["."],
+    main = "style_checks_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+test_suite(
+    name = "plugin_tests",
+    tags = ["manual"],
+    tests = [
+        ":action_runner_test",
+        ":aggregate_recursion_summaries_test",
+        ":aspect_selection_tests",
+        ":designated_initializer_check_test",
+        ":extent_checks_test",
+        ":lifecycle_checks_test",
+        ":plugin_smoke_test",
+        ":recursion_check_test",
+        ":recursion_cross_tu_analysis_test",
+        ":refcount_checks_test",
+        ":status_checks_test",
+        ":style_checks_test",
+        ":trace_checks_test",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "action_smoke_subject",
+    testonly = True,
+    srcs = [
+        "action_smoke.c",
+        "action_smoke.cc",
+    ],
+    hdrs = ["action_smoke.h"],
+    cxxopts = _CXX_OPTIONS.cxxopts,
+    features = _CXX_OPTIONS.features + ["layering_check"],
+    tags = ["manual"],
+)
+
+iree_clang_tidy(
+    name = "action_smoke",
+    testonly = True,
+    tags = ["manual"],
+    targets = [":action_smoke_subject"],
+    visibility = ["//visibility:public"],
+)
+
+clang_tidy_aspect_selection_test_suite(
+    name = "aspect_selection_tests",
+    target = ":action_smoke_subject",
+)

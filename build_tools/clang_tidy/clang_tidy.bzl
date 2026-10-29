@@ -427,7 +427,7 @@ def make_clang_tidy_aspect(selected_files_values = []):
             ),
             "_plugin": attr.label(
                 cfg = "exec",
-                default = Label("//build_tools/clang_tidy:IREEClangTidyPlugin.so"),
+                default = Label("//build_tools/clang_tidy/iree:IREEClangTidyPlugin.so"),
                 executable = True,
             ),
             "_runner": attr.label(
@@ -533,7 +533,7 @@ collect_recursion_aspect = aspect(
         ),
         "_plugin": attr.label(
             cfg = "exec",
-            default = Label("//build_tools/clang_tidy:IREEClangTidyPlugin.so"),
+            default = Label("//build_tools/clang_tidy/iree:IREEClangTidyPlugin.so"),
             executable = True,
         ),
         "_runner": attr.label(

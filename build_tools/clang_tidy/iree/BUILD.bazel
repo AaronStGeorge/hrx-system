@@ -1,0 +1,41 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("@iree_clang_tidy_llvm//:config.bzl", "CLANG_TIDY_LLVM_COPTS", "CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("//build_tools/bazel:cc_opts.bzl", "cc_opts")
+
+package(default_visibility = ["//visibility:private"])
+
+_CXX_OPTIONS = cc_opts.iree_cxx_standard_options()
+
+filegroup(
+    name = "plugin_sources",
+    srcs = glob([
+        "*.cc",
+        "*.h",
+    ]),
+    visibility = ["//build_tools/clang_tidy:__pkg__"],
+)
+
+cc_binary(
+    name = "IREEClangTidyPlugin.so",
+    srcs = glob([
+        "*.cc",
+        "*.h",
+    ]),
+    copts = CLANG_TIDY_LLVM_COPTS,
+    cxxopts = _CXX_OPTIONS.cxxopts,
+    features = _CXX_OPTIONS.features,
+    includes = [".."],
+    linkshared = True,
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+    visibility = ["//visibility:public"],
+    deps = [
+        "@iree_clang_tidy_llvm//:llvm_headers",
+    ],
+)

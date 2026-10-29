@@ -67,14 +67,14 @@ The action smoke target exercises C and C++ standard-library headers:
 
 ```bash
 iree-bazel-build --repo_env=IREE_CLANG_TIDY_LLVM=auto \
-  //build_tools/clang_tidy:action_smoke
+  //build_tools/clang_tidy/test:action_smoke
 ```
 
 The plugin regression suite runs independently:
 
 ```bash
 iree-bazel-test --repo_env=IREE_CLANG_TIDY_LLVM=auto \
-  //build_tools/clang_tidy:plugin_tests
+  //build_tools/clang_tidy/test:plugin_tests
 ```
 
 ## CMake

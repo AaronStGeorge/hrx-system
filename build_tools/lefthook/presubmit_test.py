@@ -1749,7 +1749,7 @@ class PresubmitTest(unittest.TestCase):
 
         self.assertTrue(ok)
         plugin_test_command = run_command.call_args_list[0].args[0]
-        self.assertIn("//build_tools/clang_tidy:plugin_tests", plugin_test_command)
+        self.assertIn("//build_tools/clang_tidy/test:plugin_tests", plugin_test_command)
         clang_tidy_command = run_command.call_args_list[-1].args[0]
         self.assertIn("//runtime/src/iree/base:all", clang_tidy_command)
 
@@ -1772,7 +1772,7 @@ class PresubmitTest(unittest.TestCase):
 
         self.assertTrue(ok)
         plugin_test_command = run_command.call_args_list[0].args[0]
-        self.assertIn("//build_tools/clang_tidy:plugin_tests", plugin_test_command)
+        self.assertIn("//build_tools/clang_tidy/test:plugin_tests", plugin_test_command)
 
     def test_default_profile_has_no_static_analysis_provider(self):
         ok = presubmit.run_static_analysis(
