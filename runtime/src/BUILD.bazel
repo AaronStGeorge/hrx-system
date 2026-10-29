@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:cc.bzl", "iree_cc_library")
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -17,4 +18,8 @@ iree_cc_library(
     includes = [
         ".",
     ],
+)
+
+iree_cmake_extra_content(
+    content = "include(iree_runtime_source_root)",
 )

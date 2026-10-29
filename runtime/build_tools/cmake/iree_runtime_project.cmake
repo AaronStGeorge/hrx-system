@@ -5,8 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 list(APPEND CMAKE_MODULE_PATH
-  "${CMAKE_CURRENT_LIST_DIR}/../build_tools/amdgpu"
-  "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
+  "${CMAKE_CURRENT_LIST_DIR}/../../../build_tools/amdgpu"
+  "${CMAKE_CURRENT_LIST_DIR}"
 )
 
 option(IREE_BUILD_TESTS "Build IREE runtime unit tests and CTS targets." ON)
@@ -42,7 +42,13 @@ if(IREE_NET_RDMA AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 set(IREE_ALLOCATOR_SYSTEM "libc" CACHE STRING
-  "Default named iree_allocator_t library and function base name.")
+  "System allocator implementation: libc, mimalloc, or custom.")
+set_property(CACHE IREE_ALLOCATOR_SYSTEM PROPERTY STRINGS libc mimalloc custom)
+if(NOT IREE_ALLOCATOR_SYSTEM MATCHES "^(libc|mimalloc|custom)$")
+  message(FATAL_ERROR
+    "Unknown IREE_ALLOCATOR_SYSTEM='${IREE_ALLOCATOR_SYSTEM}'. "
+    "Expected libc, mimalloc, or custom.")
+endif()
 set(IREE_RUNTIME_OPTIMIZATION_PROFILE "" CACHE STRING
   "Runtime optimization profile to apply. One of '', 'lto', 'size'.")
 set(IREE_LTO_MODE "full" CACHE STRING
@@ -128,10 +134,19 @@ include(cts)
 include(iree_execution_test_suite)
 include(iree_external_hal_driver)
 include(iree_runtime_amdgpu_toolchain)
+include(iree_runtime_amdgpu_device_binaries)
 include(iree_runtime_hal_cts_testdata)
 include(iree_runtime_hal_cts_test_suite)
 include(iree_wasm_library)
+include(iree_runtime_tracing)
 
 function(iree_runtime_configure_project)
+  if((IREE_HAL_DRIVER_AMD_GPU OR IREE_HAL_DRIVER_AMD_XDNA) AND NOT AMDF_BUILD)
+    message(FATAL_ERROR "The native AMD HAL engines require AMDF_BUILD")
+  endif()
   iree_runtime_configure_amdgpu_toolchain()
+  if(IREE_ENABLE_RUNTIME_TRACING AND IREE_TRACING_MODE GREATER 0 AND
+      IREE_TRACING_PROVIDER STREQUAL "tracy")
+    include("${IREE_SOURCE_DIR}/build_tools/third_party/tracy_client/tracy_client.cmake")
+  endif()
 endfunction()

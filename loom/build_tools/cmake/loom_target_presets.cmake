@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-include("${CMAKE_CURRENT_LIST_DIR}/../../config/target_presets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/target_presets.cmake")
 
 function(_loom_migrate_legacy_target_capability_cache)
   if(DEFINED LOOM_TARGET_PRESET_SCHEMA_VERSION)

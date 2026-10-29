@@ -86,6 +86,10 @@ iree_runtime_cc_test(
     name = "device_util_default_device_test",
     srcs = ["device_util_test.cc"],
     args = ["--gtest_filter=DeviceUtilTest.CreatesDefaultDevice"],
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_task": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":device_util",
         "//runtime/src/iree/async/util:proactor_pool",
@@ -104,6 +108,10 @@ iree_runtime_cc_test(
         "--device=task",
         "--gtest_filter=DeviceUtilTest.CreatesFlagDevice",
     ],
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_task": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":device_util",
         "//runtime/src/iree/async/util:proactor_pool",
@@ -123,6 +131,10 @@ iree_runtime_cc_test(
         "--device=task",
         "--gtest_filter=DeviceUtilTest.RejectsRepeatedDeviceFlags",
     ],
+    target_compatible_with = select({
+        "//runtime/config/hal:driver_task": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":device_util",
         "//runtime/src/iree/async/util:proactor_pool",

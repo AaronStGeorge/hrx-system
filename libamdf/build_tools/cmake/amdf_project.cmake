@@ -19,7 +19,7 @@ set(AMDF_VERSION "0.1.0")
 
 # The installed shared library and its public table negotiate the same ABI.
 # Reading the public declaration also makes header changes reconfigure CMake.
-set(_AMDF_BASE_HEADER "${CMAKE_CURRENT_LIST_DIR}/include/amdf/base.h")
+set(_AMDF_BASE_HEADER "${CMAKE_CURRENT_LIST_DIR}/../../include/amdf/base.h")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   "${_AMDF_BASE_HEADER}")
 file(STRINGS "${_AMDF_BASE_HEADER}" _AMDF_ABI_DECLARATION

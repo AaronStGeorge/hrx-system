@@ -58,11 +58,13 @@ BUILD files, loaded Starlark data, converter code, or source globs change.
 This also applies to direct CMake invocations and embedding with
 `add_subdirectory`; each build tree owns its generated files.
 
-Edit `BUILD.bazel` for package declarations. CMake-specific additions use
-`iree_cmake_extra_content`, which can include an authored `.cmake` file for
-larger install or packaging logic. Authored `CMakeLists.txt` files retain their
-native directory scope. Generated declarations and build artifacts stay out of
-the source packages.
+`BUILD.bazel` owns product declarations, including sources, dependencies, and
+conditional implementations. Allocator and target configuration select those
+same declarations in both build systems. Native options, SDK installation, and
+CMake consumer fixtures live under the owning project's `build_tools/`;
+`iree_cmake_extra_content` connects that integration to the generated packages.
+Presubmit enforces this boundary: product source directories contain no authored
+CMake files. Generated declarations and build artifacts stay in the build tree.
 
 `LIBHRX_BUILD=OFF` selects a runtime/compiler build. Building the HRX GPU
 runtime instead uses `LIBHRX_BUILD=ON` and its AMDGPU dependencies; see
@@ -328,6 +330,12 @@ Explicit allocator arguments retain their caller-selected implementation. The
 mimalloc configuration composes with ASAN, MSAN, TSAN, and UBSAN. Sanitizer
 instrumentation owns the process allocation boundary in those builds, so the
 effective shared default remains libc and global C++ allocation is not replaced.
+
+`--//runtime/config/base:allocator_system=custom` in Bazel or
+`-DIREE_ALLOCATOR_SYSTEM=custom` in CMake selects an application-owned allocator.
+Applications must supply `IREE_ALLOCATOR_SYSTEM_CTL` and, optionally,
+`IREE_ALLOCATOR_SYSTEM_SELF` through their compile configuration and link their
+allocator implementation. The build then includes neither builtin allocator.
 
 ## Platform Builds and Cross-Compilation
 

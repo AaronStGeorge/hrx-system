@@ -1,7 +1,7 @@
 # GENERATED FILE: DO NOT EDIT.
 # Generator: loom.gen.target.capability_presets.
 # Regenerate: python3 loom/py/loom/gen/run.py capability_presets --in-place
-# Data only: loom/project.cmake owns preset resolution.
+# Data only: loom_project.cmake owns preset resolution.
 
 set(_LOOM_CAPABILITY_ARCHITECTURES
   "aie2p"

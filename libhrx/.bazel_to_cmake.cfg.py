@@ -18,24 +18,6 @@ class HrxBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             return selector.get("//conditions:default", [])
         return super().select(selector)
 
-    def _drop_selects(self, values):
-        if isinstance(values, bazel_to_cmake_converter.MixedDeps):
-            return values.unconditional
-        return values
-
-    def _normalize_label(self, source):
-        path = super()._normalize_label(source)
-        project_prefix = "${PROJECT_SOURCE_DIR}/"
-        if not path.startswith(project_prefix):
-            return path
-
-        # libhrx is a nested CMake project, so PROJECT_SOURCE_DIR names the
-        # libhrx subtree rather than the repository root used by Bazel labels.
-        repo_path = path[len(project_prefix) :]
-        if repo_path.startswith("libhrx/"):
-            return "${LIBHRX_SOURCE_DIR}/" + repo_path[len("libhrx/") :]
-        return "${IREE_ROOT_DIR}/" + repo_path
-
     def hrx_cc_library(self, deps=[], **kwargs):
         self.cc_library(
             deps=deps + ["//runtime/src:defines", "//libhrx:defines"],
@@ -67,7 +49,6 @@ class HrxBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         )
 
     def hrx_cc_shared_library(self, deps=[], **kwargs):
-        kwargs["copts"] = self._drop_selects(kwargs.get("copts"))
         self.cc_library(
             deps=deps + ["//runtime/src:defines", "//libhrx:defines"],
             shared=True,
@@ -158,7 +139,7 @@ class HrxBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             "RESOURCE_GROUP", kwargs.get("resource_group"), quote=False
         )
         self._converter.body += (
-            f"hrx_cc_test(\n"
+            f"iree_cc_test(\n"
             f"{name_block}"
             f"{srcs_block}"
             f"{copts_block}"
@@ -190,7 +171,6 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
     build_file_functions=HrxBuildFileFunctions,
     target_mappings={
         "//build_tools/amdgpu:target_map_h": [],
-        "//libhrx:defines": ["libhrx_defs"],
     },
     convert_unmatched_target=convert_unmatched_target,
 )

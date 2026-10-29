@@ -42,6 +42,80 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertIn('  SRCS\n    "identity.c"\n', converter.body)
 
+    def test_cc_test_tokenizes_arguments_after_location_expansion(self):
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=SimpleNamespace(body=""),
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+        functions.filegroup(name="inputs", srcs=["first.txt", "second.txt"])
+        self.assertEqual(
+            functions._convert_cc_test_args(
+                [
+                    "'--payload=two words' --enabled",
+                    "--input=$(location :first.txt)",
+                    "$(locations :inputs)",
+                    "'$(locations :inputs)'",
+                ]
+            ),
+            [
+                "--payload=two words",
+                "--enabled",
+                "--input={{${PROJECT_SOURCE_DIR}/pkg/first.txt}}",
+                "{{${PROJECT_SOURCE_DIR}/pkg/first.txt}}",
+                "{{${PROJECT_SOURCE_DIR}/pkg/second.txt}}",
+                "{{${PROJECT_SOURCE_DIR}/pkg/first.txt}} {{${PROJECT_SOURCE_DIR}/pkg/second.txt}}",
+            ],
+        )
+
+    def test_target_compatibility_preserves_default_exclusions(self):
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=SimpleNamespace(body=""),
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+        condition = functions.select(
+            {
+                "@platforms//os:windows": ["@platforms//:incompatible"],
+                "//conditions:default": [],
+            }
+        )
+        self.assertEqual(
+            functions._target_compatible_condition(condition),
+            'NOT ((CMAKE_SYSTEM_NAME STREQUAL "Windows"))',
+        )
+
+    def test_compile_options_preserve_language_and_platform(self):
+        for rule in ("cc_library", "cc_binary", "cc_test", "iree_cc_fuzz"):
+            with self.subTest(rule=rule):
+                output = bazel_to_cmake_converter.convert_build_file(
+                    f"""
+{rule}(
+    name = "mixed",
+    srcs = ["first.c", "second.cc"],
+    copts = ["-Wall"],
+    conlyopts = ["-std=c11"],
+    cxxopts = select({{
+        "@platforms//os:windows": ["/EHsc"],
+        "//conditions:default": ["-fexceptions"],
+    }}),
+)
+""",
+                    SimpleNamespace(),
+                    "/repo/pkg",
+                    repo_root="/repo",
+                )
+                self.assertIn('if(CMAKE_SYSTEM_NAME STREQUAL "Windows")', output)
+                self.assertIn('"$<$<COMPILE_LANGUAGE:CXX>:/EHsc>"', output)
+                self.assertIn('"$<$<COMPILE_LANGUAGE:CXX>:-fexceptions>"', output)
+                self.assertIn(
+                    '  COPTS\n    "-Wall"\n    "$<$<COMPILE_LANGUAGE:C>:-std=c11>"\n'
+                    "    ${_mixed_CXX_platform_copts}\n",
+                    output,
+                )
+
     def test_cc_library_group_preserves_interface_dependencies(self):
         converter = SimpleNamespace(body="")
         functions = bazel_to_cmake_converter.BuildFileFunctions(
@@ -264,7 +338,7 @@ unhandled_rule(name = "must_not_disappear")
                 repo_root=str(repo_root),
             )
 
-    def test_loaded_objc_library_requires_explicit_cmake_projection(self):
+    def test_loaded_objc_library_preserves_platform_and_arc_policy(self):
         repo_root = Path(__file__).resolve().parents[2]
         repo_cfg = SimpleNamespace(PROJECTS=[], REPO_MAP={"@hrx": ""})
         build = """
@@ -272,7 +346,9 @@ load("@rules_cc//cc:objc_library.bzl", "objc_library")
 
 objc_library(
     name = "native_activity",
+    srcs = ["automatic.m"],
     non_arc_srcs = ["activity.m"],
+    target_compatible_with = ["@platforms//os:macos"],
     tags = ["skip-bazel_to_cmake"],
 )
 """
@@ -283,15 +359,24 @@ objc_library(
             repo_root=str(repo_root),
         )
         self.assertNotIn("native_activity", cmake)
-        with self.assertRaisesRegex(
-            NotImplementedError, "objc_library requires an explicit CMake projection"
-        ):
-            bazel_to_cmake_converter.convert_build_file(
-                build.replace('"skip-bazel_to_cmake"', ""),
-                repo_cfg,
-                str(repo_root / "synthetic"),
-                repo_root=str(repo_root),
-            )
+        cmake = bazel_to_cmake_converter.convert_build_file(
+            build.replace('"skip-bazel_to_cmake"', ""),
+            repo_cfg,
+            str(repo_root / "synthetic"),
+            repo_root=str(repo_root),
+        )
+        self.assertIn(
+            'if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")\nenable_language(OBJC)', cmake
+        )
+        self.assertIn(
+            '"${PROJECT_SOURCE_DIR}/synthetic/automatic.m"\n  PROPERTIES COMPILE_OPTIONS "-fobjc-arc"',
+            cmake,
+        )
+        self.assertIn(
+            '"${PROJECT_SOURCE_DIR}/synthetic/activity.m"\n  PROPERTIES COMPILE_OPTIONS "-fno-objc-arc"',
+            cmake,
+        )
+        self.assertIn("iree_cc_library(\n  NAME\n    native_activity", cmake)
 
     def test_loaded_shell_test_honors_explicit_conversion_skip(self):
         repo_root = Path(__file__).resolve().parents[2]
@@ -915,7 +1000,9 @@ cc_library(
             build_dir="/repo/pkg",
             repo_root="/repo",
         )
-        functions.iree_spirv_asm_module(name="generated_data", src="input.spvasm")
+        functions.iree_spirv_asm_module(
+            name="generated_data", src="input.spvasm", target_compatible_with=[]
+        )
         functions.iree_py_test(
             name="generated_data_test",
             srcs=["test.py"],
@@ -933,7 +1020,9 @@ cc_library(
             build_dir="/repo/pkg",
             repo_root="/repo",
         )
-        functions.iree_spirv_asm_module(name="generated_data", src="input.spvasm")
+        functions.iree_spirv_asm_module(
+            name="generated_data", src="input.spvasm", target_compatible_with=[]
+        )
         functions.iree_py_test(
             name="configured_data_test",
             srcs=["test.py"],

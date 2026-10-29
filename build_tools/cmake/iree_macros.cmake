@@ -325,8 +325,7 @@ endfunction()
 # PACKAGE_ROOT_PREFIX:
 #   Explicitly set the package root prefix (as something like "iree::foobar").
 #   Default is empty.
-# See runtime/src/CMakeLists.txt for typical usage in a directory tree that
-# installs static dev libraries.
+# Source-root setup belongs to the owning project's build tooling.
 function(iree_setup_c_src_root)
   iree_package_source_dir(_IREE_PACKAGE_SOURCE_DIR)
   cmake_parse_arguments(

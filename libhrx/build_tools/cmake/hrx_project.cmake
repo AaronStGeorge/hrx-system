@@ -5,8 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 list(APPEND CMAKE_MODULE_PATH
-  "${CMAKE_CURRENT_LIST_DIR}/../build_tools/amdgpu"
-  "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
+  "${CMAKE_CURRENT_LIST_DIR}/../../../build_tools/amdgpu"
+  "${CMAKE_CURRENT_LIST_DIR}"
 )
 
 if(NOT DEFINED LIBHRX_BUILD)
@@ -34,8 +34,9 @@ set(_LIBHRX_BUILD_CTS_DEFAULT OFF)
 if(LIBHRX_BUILD AND IREE_BUILD_TESTS)
   set(_LIBHRX_BUILD_CTS_DEFAULT ON)
 endif()
-option(LIBHRX_BUILD_CTS
-  "Build libhrx conformance tests." ${_LIBHRX_BUILD_CTS_DEFAULT})
+cmake_dependent_option(LIBHRX_BUILD_CTS
+  "Build libhrx conformance tests." ${_LIBHRX_BUILD_CTS_DEFAULT}
+  "LIBHRX_BUILD;IREE_BUILD_TESTS" OFF)
 set(HRX_PUBLIC_DIST_COMPONENT "HrxPublicDist" CACHE STRING
   "Install component for the public HRX distribution.")
 include(binary)

@@ -1,51 +1,13 @@
 # Copyright 2026 The HRX Authors
-# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-cmake_minimum_required(VERSION 3.20)
-project(libhrx VERSION ${HRX_VERSION} LANGUAGES C CXX)
-
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-# libhrx targets use headers and do not require C++ module dependency scanning.
-set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-
-include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-set(LIBHRX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(LIBHRX_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
-
-if(NOT TARGET iree_hal_hal)
-  message(FATAL_ERROR
-    "libhrx must be added after the reduced IREE runtime has been configured")
-endif()
-
-iree_setup_c_src_root(
-  PACKAGE_ROOT_PREFIX libhrx
-)
-
-add_library(libhrx_defs INTERFACE)
-target_include_directories(libhrx_defs INTERFACE
-  "$<BUILD_INTERFACE:${LIBHRX_SOURCE_DIR}/include>"
-  "$<BUILD_INTERFACE:${IREE_ROOT_DIR}/runtime/src>"
-  "$<BUILD_INTERFACE:${IREE_BINARY_DIR}/runtime/src>"
-)
-include_directories(
-  "${IREE_ROOT_DIR}/runtime/src"
-  "${IREE_BINARY_DIR}/runtime/src"
-)
-
-function(hrx_cc_test)
-  set(_libhrx_saved_iree_build_tests "${IREE_BUILD_TESTS}")
-  set(IREE_BUILD_TESTS ON)
-  iree_cc_test(${ARGN})
-  set(IREE_BUILD_TESTS "${_libhrx_saved_iree_build_tests}")
-endfunction()
-
 if(BUILD_SHARED_LIBS)
-  # Reject public installation before any child directory installs artifacts.
+  # Component installs cannot form a standalone public SDK.
   # Component DSOs are an in-tree build shape, not the public HRX package.
   install(CODE [[
     message(FATAL_ERROR
@@ -54,31 +16,55 @@ if(BUILD_SHARED_LIBS)
   ]] COMPONENT "${HRX_PUBLIC_DIST_COMPONENT}")
 endif()
 
-iree_add_subdirectory(src/libhrx)
-iree_add_subdirectory(src/binding/common)
-if(LIBHRX_BUILD_HIP_BINDING)
-  iree_add_subdirectory(src/binding/hip)
+set_target_properties(libhrx_src_libhrx_hrx PROPERTIES
+  OUTPUT_NAME hrx
+  VERSION ${PROJECT_VERSION}
+  SOVERSION 0
+  EXPORT_NAME hrx
+  POSITION_INDEPENDENT_CODE ON
+)
+if(APPLE)
+  set_target_properties(libhrx_src_libhrx_hrx PROPERTIES
+    BUILD_RPATH "@loader_path"
+    INSTALL_RPATH "@loader_path"
+    C_VISIBILITY_PRESET hidden
+  )
+  set(_hrx_export_file "${LIBHRX_SOURCE_DIR}/exports/hrx_exports_macos.txt")
+  target_link_options(libhrx_src_libhrx_hrx PRIVATE
+    "-Wl,-exported_symbols_list,${_hrx_export_file}"
+  )
+  set_property(TARGET libhrx_src_libhrx_hrx APPEND PROPERTY
+    LINK_DEPENDS "${_hrx_export_file}"
+  )
+elseif(UNIX)
+  set_target_properties(libhrx_src_libhrx_hrx PROPERTIES
+    BUILD_RPATH "$ORIGIN"
+    INSTALL_RPATH "$ORIGIN"
+    C_VISIBILITY_PRESET hidden
+  )
+  set(_hrx_export_file "${LIBHRX_SOURCE_DIR}/exports/hrx_exports.lds")
+  target_link_options(libhrx_src_libhrx_hrx PRIVATE
+    "-Wl,--version-script=${_hrx_export_file}"
+  )
+  set_property(TARGET libhrx_src_libhrx_hrx APPEND PROPERTY
+    LINK_DEPENDS "${_hrx_export_file}"
+  )
 endif()
-iree_add_subdirectory(tools)
-
-if(LIBHRX_BUILD_CUDA_BINDING)
-  iree_add_subdirectory(src/binding/cuda)
+set_property(TARGET libhrx_src_libhrx_hrx PROPERTY
+  INTERFACE_LINK_LIBRARIES ""
+)
+if(NOT TARGET hrx)
+  add_custom_target(hrx DEPENDS libhrx_src_libhrx_hrx)
 endif()
-
-if(LIBHRX_BUILD_CTS)
-  enable_testing()
-  iree_add_subdirectory(cts)
-endif()
-
-if(LIBHRX_BUILD_PASSTHROUGH)
-  iree_add_subdirectory(src/passthrough)
+if(NOT TARGET hrx::hrx)
+  iree_add_alias_library(hrx::hrx libhrx_src_libhrx_hrx)
 endif()
 
 set(_hrx_cmake_package_dir "${CMAKE_INSTALL_LIBDIR}/cmake/hrx")
 set(_hrx_build_package_dir "${LIBHRX_BINARY_DIR}/cmake/hrx")
 
 configure_package_config_file(
-  cmake/hrx-config.cmake.in
+  "${CMAKE_CURRENT_LIST_DIR}/hrx-config.cmake.in"
   "${_hrx_build_package_dir}/hrx-config.cmake"
   INSTALL_DESTINATION "${_hrx_cmake_package_dir}")
 write_basic_package_version_file(
@@ -102,8 +88,8 @@ install(TARGETS libhrx_src_libhrx_hrx EXPORT hrx-targets
     COMPONENT "${HRX_PUBLIC_DIST_COMPONENT}"
   INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/hrx")
 install(FILES
-  include/hrx_runtime.h
-  include/hrx_runtime_cxx.h
+  "${LIBHRX_SOURCE_DIR}/include/hrx_runtime.h"
+  "${LIBHRX_SOURCE_DIR}/include/hrx_runtime_cxx.h"
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/hrx"
   COMPONENT "${HRX_PUBLIC_DIST_COMPONENT}")
 install(EXPORT hrx-targets

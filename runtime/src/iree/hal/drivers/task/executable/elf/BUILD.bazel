@@ -7,7 +7,6 @@
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
 load("//build_tools/bazel:msvc.bzl", "iree_msvc_masm_library")
-load("//build_tools/bazel:select.bzl", "defaulting_select")
 load(
     "//runtime/build_tools/bazel:cc.bzl",
     "iree_runtime_cc_binary",
@@ -127,7 +126,7 @@ iree_runtime_cc_library(
     hdrs = [
         "arch.h",
     ],
-    deps = ["//runtime/src/iree/base"] + defaulting_select({
+    deps = ["//runtime/src/iree/base"] + select({
         ":windows_x86_64": [":x86_64_msvc_abi_bridge"],
         "//conditions:default": [],
     }),
@@ -148,11 +147,4 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:memory",
     ],
-)
-
-iree_cmake_extra_content(
-    content = """
-include("${_IREE_PACKAGE_SOURCE_DIR}/msvc_masm.cmake")
-""",
-    inline = True,
 )

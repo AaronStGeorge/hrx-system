@@ -364,7 +364,7 @@ def test_package(args: argparse.Namespace) -> None:
         [
             "cmake",
             "-S",
-            REPO_ROOT / "libhrx" / "cts" / "package_smoke",
+            REPO_ROOT / "libhrx" / "build_tools" / "cmake" / "package_smoke",
             "-B",
             hrx_smoke_build_dir,
             *smoke_cmake_options,
@@ -381,7 +381,7 @@ def test_package(args: argparse.Namespace) -> None:
             [
                 "cmake",
                 "-S",
-                REPO_ROOT / "loom" / "binding" / "c" / "packaging" / "package_smoke",
+                REPO_ROOT / "loom" / "build_tools" / "cmake" / "package_smoke",
                 "-B",
                 loomc_smoke_build_dir,
                 *smoke_cmake_options,

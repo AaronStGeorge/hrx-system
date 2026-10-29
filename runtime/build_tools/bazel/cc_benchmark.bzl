@@ -11,6 +11,7 @@ load(
     "//runtime/requirements:package_policy.bzl",
     "apply_runtime_test_policy",
 )
+load(":cc.bzl", "iree_runtime_cc_library")
 load(":cc_attrs.bzl", "runtime_cc_attrs")
 
 _GOOGLE_BENCHMARK_DEP = Label("//third_party:google_benchmark")
@@ -53,3 +54,23 @@ iree_runtime_cc_benchmark = macro(
     inherit_attrs = iree_cc_benchmark,
     attrs = {},
 )
+
+# The disabled implementation is consumed only by the native build emitter.
+# buildifier: disable=unused-variable
+def iree_runtime_benchmark_library(name, srcs, deps, disabled_srcs, disabled_deps, **kwargs):
+    """Declares the runtime benchmark adapter and its uninstrumented implementation.
+
+    Bazel builds requested benchmark targets explicitly and uses the full adapter.
+    Native builds may disable benchmark support for the entire runtime, including
+    threadless deployments. Both implementations have their source/dependency
+    declarations here; the native configuration chooses the implementation.
+
+    Args:
+      name: Public adapter library.
+      srcs: Instrumented implementation sources.
+      deps: Instrumented implementation dependencies.
+      disabled_srcs: Implementation when native benchmarking is disabled.
+      disabled_deps: Dependencies when native benchmarking is disabled.
+      **kwargs: Shared runtime library attributes.
+    """
+    iree_runtime_cc_library(name = name, srcs = srcs, deps = deps, **kwargs)

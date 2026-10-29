@@ -475,3 +475,12 @@ endif()
 """,
     inline = True,
 )
+
+iree_cmake_extra_content(
+    content = """
+if(NOT LIBHRX_BUILD_CTS)
+  return()
+endif()
+""",
+    inline = False,
+)

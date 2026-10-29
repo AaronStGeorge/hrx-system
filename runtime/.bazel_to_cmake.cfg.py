@@ -56,7 +56,17 @@ class RuntimeBuildFileFunctions(
 
     def iree_runtime_cc_library(self, deps=[], **kwargs):
         kwargs = self._apply_runtime_cmake_policy(kwargs)
+        if (
+            self._package_name()
+            == "runtime/src/iree/hal/drivers/task/executable/loaders/registration"
+        ):
+            deps = deps + ["${IREE_HAL_EXECUTABLE_LOADER_EXTRA_DEPS}"]
         self.cc_library(deps=deps + ["//runtime/src:defines"], **kwargs)
+
+    def iree_cc_library(self, **kwargs):
+        if self._package_name() == "runtime/src":
+            kwargs["cmake_package"] = "iree"
+        self.cc_library(**kwargs)
 
     def iree_runtime_cc_binary(self, deps=[], **kwargs):
         kwargs = self._apply_runtime_cmake_policy(kwargs)
@@ -95,6 +105,39 @@ class RuntimeBuildFileFunctions(
             ],
             **kwargs,
         )
+
+    def iree_runtime_tracing_provider(self, name, header, **kwargs):
+        self.iree_runtime_cc_library(
+            name=name,
+            defines=[
+                f'IREE_TRACING_PROVIDER_H=\\"{header}\\"',
+                "IREE_TRACING_MODE=${IREE_TRACING_MODE}",
+            ],
+            **kwargs,
+        )
+
+    def iree_hal_driver_registry(self, name, modules, **kwargs):
+        self._check_no_unhandled_kwargs("iree_hal_driver_registry", kwargs)
+        if modules:
+            raise NotImplementedError(
+                "Native external drivers use iree_register_external_hal_driver"
+            )
+        self._converter.body += (
+            "iree_hal_driver_registry(\n"
+            + self._convert_string_arg_block("NAME", name)
+            + ")\n\n"
+        )
+
+    def iree_runtime_benchmark_library(
+        self, name, srcs, deps, disabled_srcs, disabled_deps, **kwargs
+    ):
+        self._converter.body += "if(IREE_TARGET_HAS_THREADS AND (IREE_BUILD_TESTS OR IREE_BUILD_BENCHMARKS))\n"
+        self.iree_runtime_cc_library(name=name, srcs=srcs, deps=deps, **kwargs)
+        self._converter.body += "else()\n"
+        self.iree_runtime_cc_library(
+            name=name, srcs=disabled_srcs, deps=disabled_deps, **kwargs
+        )
+        self._converter.body += "endif()\n\n"
 
     def iree_runtime_cc_fuzz(self, deps=[], **kwargs):
         kwargs = self._apply_runtime_cmake_policy(kwargs)
@@ -149,7 +192,7 @@ class RuntimeBuildFileFunctions(
                 self._build_dir,
             )
             self._converter.body += (
-                'include("${IREE_SOURCE_DIR}/runtime/src/iree/hal/drivers/amd/gpu/cts/testdata.cmake")\n\n'
+                'include("${IREE_SOURCE_DIR}/runtime/build_tools/cmake/iree_runtime_amd_gpu_cts.cmake")\n\n'
                 "set(_IREE_HAL_AMD_GPU_CTS_TARGETS\n"
                 + "".join(
                     f'  "{target}=LOOM_ARCH_AMDGPU_{capability.upper()}"\n'
@@ -200,7 +243,35 @@ class RuntimeBuildFileFunctions(
         pass
 
     def iree_hal_amdgpu_source_device_binaries(self, name):
-        self._iree_hal_amdgpu_source_device_binaries()
+        module = (
+            "//runtime/src/iree/hal/drivers/amdgpu/device/binaries/source:targets.bzl"
+        )
+        inputs = list(
+            self._loaded_modules.symbol(module, "_GENERATOR_INPUTS", self._build_dir)
+        )
+        inputs += self._loaded_modules.symbol(
+            module, "_GENERATOR_SCRIPT_DEPS", self._build_dir
+        )
+        self._converter.body += (
+            "iree_hal_amdgpu_source_device_binaries(\n"
+            + self._convert_string_arg_block("NAME", name)
+            + self._convert_srcs_block(inputs, block_name="INPUTS")
+            + ")\n\n"
+        )
+
+    def iree_hal_amdgpu_device_binaries(
+        self,
+        name,
+        target_selectors_flag="//runtime/src/iree/hal/drivers/amdgpu:targets",
+        target="amdgcn-amd-amdhsa",
+    ):
+        self._converter.body += (
+            "iree_hal_amdgpu_device_binaries(\n"
+            + self._convert_string_arg_block("NAME", name)
+            + self._convert_string_arg_block("TARGET", target)
+            + self._convert_amdgpu_target_selectors_block(target_selectors_flag)
+            + ")\n\n"
+        )
 
 
 def convert_unmatched_target(converter, target):
@@ -212,7 +283,11 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
     package_prefixes=["runtime"],
     build_file_functions=RuntimeBuildFileFunctions,
     target_mappings={
-        "//runtime/src:defines": ["iree_defs"],
+        "//runtime/src:defines": ["iree::defines"],
+        "//runtime/config/hal:external_driver_registry": [
+            "iree::hal::drivers::configured_external_driver_registry"
+        ],
+        "@iree_macos_toolchain//:Foundation": ['"-framework Foundation"'],
     },
     condition_mappings={
         "//runtime/src/iree/math:gnu_x86": (
@@ -226,6 +301,9 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
         "//runtime/src/iree/math:msvc_x86_32": (
             '(CMAKE_C_COMPILER_ID STREQUAL "MSVC") AND (IREE_ARCH STREQUAL "x86_32")'
         ),
+        "//runtime/config/base:allocator_system_custom": 'IREE_ALLOCATOR_SYSTEM STREQUAL "custom"',
+        "//runtime/config/base:allocator_system_mimalloc": 'IREE_ALLOCATOR_SYSTEM STREQUAL "mimalloc"',
+        ":windows_x86_64": 'WIN32 AND IREE_ARCH STREQUAL "x86_64"',
     },
     convert_unmatched_target=convert_unmatched_target,
 )
