@@ -38,6 +38,7 @@ TEST(MathPolicyTest, OrdinaryElementaryFamily) {
       LOOM_TARGET_MATH_OP_ATAN2F,    LOOM_TARGET_MATH_OP_SINF,
       LOOM_TARGET_MATH_OP_COSF,      LOOM_TARGET_MATH_OP_TANF,
       LOOM_TARGET_MATH_OP_SINTURNSF, LOOM_TARGET_MATH_OP_COSTURNSF,
+      LOOM_TARGET_MATH_OP_ERFF,      LOOM_TARGET_MATH_OP_ERFCF,
   };
   for (auto operation : operations) {
     SCOPED_TRACE(operation);

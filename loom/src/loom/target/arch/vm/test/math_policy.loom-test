@@ -627,3 +627,90 @@ low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_vector_tangent(%0: re
   %9 = conversion.float.truncate %8, "f32.to.bf16" : reg<vm.value : bf16>
   return %6, %9
 }
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @error_functions_f32(%input: f32) -> (f32, f32) {
+  %erf = scalar.erff %input : f32
+  %erfc = scalar.erfcf %input : f32
+  func.return %erf, %erfc : f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @error_functions_f32(%input: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %erf = float.math.unary.f32 %input, "erf"
+  %erfc = float.math.unary.f32 %input, "erfc"
+  return %erf, %erfc
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @error_functions_f64(%input: f64) -> (f64, f64) {
+  %erf = scalar.erff %input : f64
+  %erfc = scalar.erfcf %input : f64
+  func.return %erf, %erfc : f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @error_functions_f64(%input: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %erf = float.math.unary.f64 %input, "erf"
+  %erfc = float.math.unary.f64 %input, "erfc"
+  return %erf, %erfc
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @error_functions_narrow(%input: f8E4M3) -> (f8E4M3, f8E4M3) {
+  %erf = scalar.erff %input : f8E4M3
+  %erfc = scalar.erfcf %input : f8E4M3
+  func.return %erf, %erfc : f8E4M3, f8E4M3
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @error_functions_narrow(%input: reg<vm.value : f8E4M3>) -> (reg<vm.value : f8E4M3>, reg<vm.value : f8E4M3>) asm {
+  %3 = conversion.float.extend %input, "f8e4m3.to.f32" : reg<vm.value : f32>
+  %4 = float.math.unary.f32 %3, "erf"
+  %erf = conversion.float.truncate %4, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  %6 = float.math.unary.f32 %3, "erfc"
+  %erfc = conversion.float.truncate %6, "f32.to.f8e4m3" : reg<vm.value : f8E4M3>
+  return %erf, %erfc
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @error_functions_vector(%input: vector<2xbf16>) -> (vector<2xbf16>, vector<2xbf16>) {
+  %erf = vector.erff %input : vector<2xbf16>
+  %erfc = vector.erfcf %input : vector<2xbf16>
+  func.return %erf, %erfc : vector<2xbf16>, vector<2xbf16>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @error_functions_vector(%0: reg<vm.value : bf16>, %1: reg<vm.value : bf16>) -> (reg<vm.value : bf16>, reg<vm.value : bf16>, reg<vm.value : bf16>, reg<vm.value : bf16>) asm {
+  %6 = conversion.float.extend %0, "bf16.to.f32" : reg<vm.value : f32>
+  %7 = float.math.unary.f32 %6, "erf"
+  %8 = conversion.float.truncate %7, "f32.to.bf16" : reg<vm.value : bf16>
+  %9 = conversion.float.extend %1, "bf16.to.f32" : reg<vm.value : f32>
+  %10 = float.math.unary.f32 %9, "erf"
+  %11 = conversion.float.truncate %10, "f32.to.bf16" : reg<vm.value : bf16>
+  %12 = float.math.unary.f32 %6, "erfc"
+  %13 = conversion.float.truncate %12, "f32.to.bf16" : reg<vm.value : bf16>
+  %14 = float.math.unary.f32 %9, "erfc"
+  %15 = conversion.float.truncate %14, "f32.to.bf16" : reg<vm.value : bf16>
+  return %8, %11, %13, %15
+}

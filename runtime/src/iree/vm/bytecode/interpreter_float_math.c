@@ -9,6 +9,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "iree/math/error_functions.h"
 #include "iree/math/exponential.h"
 #include "iree/math/hyperbolic.h"
 #include "iree/math/inverse_trigonometry.h"
@@ -115,6 +116,12 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits) {
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_ATAN:
       result = iree_math_atan_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ERF:
+      result = iree_math_erf_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_ERFC:
+      result = iree_math_erfc_f32(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_EXPM1:
       result = iree_math_expm1_f32(source);
@@ -235,6 +242,12 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_ATAN:
       result = iree_math_atan_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ERF:
+      result = iree_math_erf_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_ERFC:
+      result = iree_math_erfc_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_EXPM1:
       result = iree_math_expm1_f64(source);

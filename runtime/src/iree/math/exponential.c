@@ -9,6 +9,7 @@
 
 #include <stdbool.h>
 
+#include "iree/math/exponential_reduction.h"
 #include "iree/math/float_bits.h"
 #include "iree/math/logarithm_reduction.h"
 
@@ -538,6 +539,19 @@ static double iree_math_exp_f64_reconstruct(double residual,
   }
   const double scale = iree_math_f64_from_bits(scale_bits);
   return scale + scale * correction;
+}
+
+double iree_math_exp_f64_compensated(double high, double low) {
+  const double value = high + low;
+  const double tail = (high - value) + low;
+  const double reduced = (0x1.71547652b82fep0 * 128.0) * value;
+  double rounded = reduced + 0x1.8p52;
+  const uint64_t encoded_rounded = iree_math_f64_to_bits(rounded);
+  rounded -= 0x1.8p52;
+  const double residual = value + rounded * -0x1.62e42fefa0000p-8 +
+                          rounded * -0x1.cf79abc9e3b3ap-47 + tail;
+  return iree_math_exp_f64_reconstruct(residual, encoded_rounded, 0,
+                                       value <= -512.0);
 }
 
 IREE_API_EXPORT double iree_math_exp_f64(double value) {

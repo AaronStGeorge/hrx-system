@@ -41,6 +41,7 @@ NUMERIC_CORPUS = loom_corpus_manifest(
         "float/hyperbolic.loom",
         "float/inverse_hyperbolic.loom",
         "float/inverse_hyperbolic_narrow.loom",
+        "float/error_functions.loom",
         "float/inverse_trigonometry.loom",
         "float/logarithm.loom",
         "float/narrow_reduction.loom",

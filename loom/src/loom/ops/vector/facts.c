@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
+#include "iree/math/error_functions.h"
 #include "iree/math/exponential.h"
 #include "iree/math/fma.h"
 #include "iree/math/hyperbolic.h"
@@ -3958,8 +3959,10 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_acoshf_facts, iree_math_acosh_f32,
                               iree_math_acosh_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_atanhf_facts, iree_math_atanh_f32,
                               iree_math_atanh_f64)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_erff_facts, erff, erf)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_erfcf_facts, erfcf, erfc)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_erff_facts, iree_math_erf_f32,
+                              iree_math_erf_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_erfcf_facts, iree_math_erfc_f32,
+                              iree_math_erfc_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_logisticf_facts,
                               loom_float_logistic_f32, loom_float_logistic_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_siluf_facts, loom_vector_silu_f32,

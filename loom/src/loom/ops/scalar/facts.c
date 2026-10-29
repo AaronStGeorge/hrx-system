@@ -15,6 +15,7 @@
 #include <math.h>
 
 #include "iree/base/internal/math.h"
+#include "iree/math/error_functions.h"
 #include "iree/math/exponential.h"
 #include "iree/math/hyperbolic.h"
 #include "iree/math/inverse_trigonometry.h"
@@ -397,8 +398,9 @@ FLOAT_UNARY_FACTS(loom_scalar_acoshf_facts, iree_math_acosh_f32,
                   iree_math_acosh_f64)
 FLOAT_UNARY_FACTS(loom_scalar_atanhf_facts, iree_math_atanh_f32,
                   iree_math_atanh_f64)
-FLOAT_UNARY_FACTS(loom_scalar_erff_facts, erff, erf)
-FLOAT_UNARY_FACTS(loom_scalar_erfcf_facts, erfcf, erfc)
+FLOAT_UNARY_FACTS(loom_scalar_erff_facts, iree_math_erf_f32, iree_math_erf_f64)
+FLOAT_UNARY_FACTS(loom_scalar_erfcf_facts, iree_math_erfc_f32,
+                  iree_math_erfc_f64)
 FLOAT_UNARY_FACTS(loom_scalar_logisticf_facts, loom_float_logistic_f32,
                   loom_float_logistic_f64)
 FLOAT_UNARY_FACTS(loom_scalar_siluf_facts, silu_f32, silu_f64)

@@ -173,3 +173,29 @@ func.def @vector_trigonometry() -> (vector<2xf64>, vector<2xf32>, vector<2xf64>,
   %cardinal = vector.constant 1.0 : vector<2xf64>
   func.return %large, %small, %pole, %narrow, %turns, %cardinal : vector<2xf64>, vector<2xf32>, vector<2xf64>, vector<2xf8E4M3>, vector<2xf64>, vector<2xf64>
 }
+
+// ====
+
+func.def @error_functions() -> (vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf8E5M2>, vector<2xf8E5M2>) {
+  %input0 = vector.constant 9.5 : vector<2xf32>
+  %erf0 = vector.erff %input0 : vector<2xf32>
+  %erfc0 = vector.erfcf %input0 : vector<2xf32>
+  %input1 = vector.constant 9.5 : vector<2xf64>
+  %erf1 = vector.erff %input1 : vector<2xf64>
+  %erfc1 = vector.erfcf %input1 : vector<2xf64>
+  %input2 = vector.constant 0.75 : vector<2xf8E5M2>
+  %erf2 = vector.erff %input2 : vector<2xf8E5M2>
+  %erfc2 = vector.erfcf %input2 : vector<2xf8E5M2>
+  func.return %erf0, %erfc0, %erf1, %erfc1, %erf2, %erfc2 : vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf8E5M2>, vector<2xf8E5M2>
+}
+
+// ----
+func.def @error_functions() -> (vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf8E5M2>, vector<2xf8E5M2>) {
+  %erf0 = vector.constant 1.0 : vector<2xf32>
+  %erfc0 = vector.constant 3.769212609340893e-41 : vector<2xf32>
+  %erf1 = vector.constant 1.0 : vector<2xf64>
+  %erfc1 = vector.constant 3.7692144856548802e-41 : vector<2xf64>
+  %erf2 = vector.constant 0.75 : vector<2xf8E5M2>
+  %erfc2 = vector.constant 0.3125 : vector<2xf8E5M2>
+  func.return %erf0, %erfc0, %erf1, %erfc1, %erf2, %erfc2 : vector<2xf32>, vector<2xf32>, vector<2xf64>, vector<2xf64>, vector<2xf8E5M2>, vector<2xf8E5M2>
+}

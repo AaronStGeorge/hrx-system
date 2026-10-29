@@ -349,6 +349,24 @@ _FLOAT_MATH_ORDINARY_UNARY_VALUES = (
         "value of error from correct rounding. Signed zero is preserved. "
         "Every nonfinite input returns canonical positive quiet NaN.",
     ),
+    (
+        "erf",
+        36,
+        "Returns the stable iree/math erf mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN returns canonical positive quiet "
+        "NaN. Signed zero is preserved; infinities return signed one.",
+    ),
+    (
+        "erfc",
+        37,
+        "Returns the stable iree/math erfc mapping with fixed unfused rounding "
+        "points, gradual underflow, and at most one adjacent value of error "
+        "from correct rounding. Every NaN returns canonical positive quiet "
+        "NaN. Either zero returns one; positive infinity returns positive zero; "
+        "negative infinity returns two. The small positive tail is retained "
+        "without subtracting rounded erf from one.",
+    ),
 )
 
 FLOAT_MATH_F32_SELECTOR = _selector(

@@ -1,0 +1,95 @@
+// Paired error functions across all floating source formats. Runtime values
+// cover both signs, complement cancellation, and the exponential tail.
+// The independent oracle contains no error-function operations.
+
+func.def @error_function_observations(%input: f64, %narrow_output: buffer, %wide_output: buffer) {
+  %tail_scale = scalar.constant 2.0 : f64
+  %tail = scalar.mulf %input, %tail_scale : f64
+  %negative = scalar.negf %input : f64
+  %negative_tail = scalar.negf %tail : f64
+  %inputs = vector.from_elements %input, %negative, %tail, %negative_tail : vector<4xf64>
+  %origin = index.constant 0 : offset
+  %narrow_results = buffer.view %narrow_output[%origin] : buffer -> view<5x8xf64>
+  %wide_results = buffer.view %wide_output[%origin] : buffer -> view<8xf64>
+  %e4_inputs = vector.fptrunc %inputs : vector<4xf64> to vector<4xf8E4M3>
+  %e4_erf = vector.erff %e4_inputs : vector<4xf8E4M3>
+  %e4_erfc = vector.erfcf %e4_inputs : vector<4xf8E4M3>
+  %e4_values = vector.concat<0> %e4_erf, %e4_erfc : vector<4xf8E4M3>, vector<4xf8E4M3> -> vector<8xf8E4M3>
+  %e4_wide = vector.extf %e4_values : vector<8xf8E4M3> to vector<8xf64>
+  vector.store %e4_wide, %narrow_results[0, 0] : vector<8xf64>, view<5x8xf64>
+  %e5_inputs = vector.fptrunc %inputs : vector<4xf64> to vector<4xf8E5M2>
+  %e5_erf = vector.erff %e5_inputs : vector<4xf8E5M2>
+  %e5_erfc = vector.erfcf %e5_inputs : vector<4xf8E5M2>
+  %e5_values = vector.concat<0> %e5_erf, %e5_erfc : vector<4xf8E5M2>, vector<4xf8E5M2> -> vector<8xf8E5M2>
+  %e5_wide = vector.extf %e5_values : vector<8xf8E5M2> to vector<8xf64>
+  vector.store %e5_wide, %narrow_results[1, 0] : vector<8xf64>, view<5x8xf64>
+  %half_inputs = vector.fptrunc %inputs : vector<4xf64> to vector<4xf16>
+  %half_erf = vector.erff %half_inputs : vector<4xf16>
+  %half_erfc = vector.erfcf %half_inputs : vector<4xf16>
+  %half_values = vector.concat<0> %half_erf, %half_erfc : vector<4xf16>, vector<4xf16> -> vector<8xf16>
+  %half_wide = vector.extf %half_values : vector<8xf16> to vector<8xf64>
+  vector.store %half_wide, %narrow_results[2, 0] : vector<8xf64>, view<5x8xf64>
+  %brain_inputs = vector.fptrunc %inputs : vector<4xf64> to vector<4xbf16>
+  %brain_erf = vector.erff %brain_inputs : vector<4xbf16>
+  %brain_erfc = vector.erfcf %brain_inputs : vector<4xbf16>
+  %brain_values = vector.concat<0> %brain_erf, %brain_erfc : vector<4xbf16>, vector<4xbf16> -> vector<8xbf16>
+  %brain_wide = vector.extf %brain_values : vector<8xbf16> to vector<8xf64>
+  vector.store %brain_wide, %narrow_results[3, 0] : vector<8xf64>, view<5x8xf64>
+  %single_inputs = vector.fptrunc %inputs : vector<4xf64> to vector<4xf32>
+  %single_erf = vector.erff %single_inputs : vector<4xf32>
+  %single_erfc = vector.erfcf %single_inputs : vector<4xf32>
+  %single_values = vector.concat<0> %single_erf, %single_erfc : vector<4xf32>, vector<4xf32> -> vector<8xf32>
+  %single_wide = vector.extf %single_values : vector<8xf32> to vector<8xf64>
+  vector.store %single_wide, %narrow_results[4, 0] : vector<8xf64>, view<5x8xf64>
+  %wide_erf = vector.erff %inputs : vector<4xf64>
+  %wide_erfc = vector.erfcf %inputs : vector<4xf64>
+  %wide_values = vector.concat<0> %wide_erf, %wide_erfc : vector<4xf64>, vector<4xf64> -> vector<8xf64>
+  vector.store %wide_values, %wide_results[0] : vector<8xf64>, view<8xf64>
+  func.return
+}
+
+// MPFR 4.2.2 directed intervals rounded independently to binary64.
+func.def @error_function_oracle(%input: f64, %narrow_output: buffer, %wide_output: buffer) {
+  %erf0 = scalar.constant 0.71115563365351508 : f64
+  %erf1 = scalar.constant -0.71115563365351508 : f64
+  %erf2 = scalar.constant 0.96610514647531076 : f64
+  %erf3 = scalar.constant -0.96610514647531076 : f64
+  %erfc0 = scalar.constant 0.28884436634648486 : f64
+  %erfc1 = scalar.constant 1.7111556336535152 : f64
+  %erfc2 = scalar.constant 0.033894853524689274 : f64
+  %erfc3 = scalar.constant 1.9661051464753108 : f64
+  %values = vector.from_elements %erf0, %erf1, %erf2, %erf3, %erfc0, %erfc1, %erfc2, %erfc3 : vector<8xf64>
+  %origin = index.constant 0 : offset
+  %narrow_results = buffer.view %narrow_output[%origin] : buffer -> view<5x8xf64>
+  %wide_results = buffer.view %wide_output[%origin] : buffer -> view<8xf64>
+  %e4 = vector.fptrunc %values : vector<8xf64> to vector<8xf8E4M3>
+  %e4_wide = vector.extf %e4 : vector<8xf8E4M3> to vector<8xf64>
+  vector.store %e4_wide, %narrow_results[0, 0] : vector<8xf64>, view<5x8xf64>
+  %e5 = vector.fptrunc %values : vector<8xf64> to vector<8xf8E5M2>
+  %e5_wide = vector.extf %e5 : vector<8xf8E5M2> to vector<8xf64>
+  vector.store %e5_wide, %narrow_results[1, 0] : vector<8xf64>, view<5x8xf64>
+  %half = vector.fptrunc %values : vector<8xf64> to vector<8xf16>
+  %half_wide = vector.extf %half : vector<8xf16> to vector<8xf64>
+  vector.store %half_wide, %narrow_results[2, 0] : vector<8xf64>, view<5x8xf64>
+  %brain = vector.fptrunc %values : vector<8xf64> to vector<8xbf16>
+  %brain_wide = vector.extf %brain : vector<8xbf16> to vector<8xf64>
+  vector.store %brain_wide, %narrow_results[3, 0] : vector<8xf64>, view<5x8xf64>
+  %single = vector.fptrunc %values : vector<8xf64> to vector<8xf32>
+  %single_wide = vector.extf %single : vector<8xf32> to vector<8xf64>
+  vector.store %single_wide, %narrow_results[4, 0] : vector<8xf64>, view<5x8xf64>
+  vector.store %values, %wide_results[0] : vector<8xf64>, view<8xf64>
+  func.return
+}
+
+check.scenario @ordinary_error_functions {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(0.75) : f64
+    %narrow_output = check.generate.fill value(-99.0) : tensor<5x8xf64>
+    %wide_output = check.generate.fill value(-99.0) : tensor<8xf64>
+    check.compare<@error_function_observations, @error_function_oracle>(%input, %narrow_output, %wide_output) : (f64, tensor<5x8xf64>, tensor<8xf64>) -> () {
+      check.expect.approximate actual(%narrow_output) expected(%narrow_output) atol(0.0) rtol(1.1999999999999999e-07) nan(different) : tensor<5x8xf64>, tensor<5x8xf64>
+      check.expect.approximate actual(%wide_output) expected(%wide_output) atol(0.0) rtol(2.2999999999999999e-16) nan(different) : tensor<8xf64>, tensor<8xf64>
+    }
+  }
+  check.return
+}

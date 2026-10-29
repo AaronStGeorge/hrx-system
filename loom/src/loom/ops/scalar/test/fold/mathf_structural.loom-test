@@ -345,3 +345,29 @@ func.def @scalar_trigonometry() -> (f64, f32, f64, f8E4M3, f64, f64) {
   %cardinal = scalar.constant 1.0 : f64
   func.return %large, %small, %pole, %narrow, %turns, %cardinal : f64, f32, f64, f8E4M3, f64, f64
 }
+
+// ====
+
+func.def @error_functions() -> (f32, f32, f64, f64, f16, f16) {
+  %input0 = scalar.constant 9.5 : f32
+  %erf0 = scalar.erff %input0 : f32
+  %erfc0 = scalar.erfcf %input0 : f32
+  %input1 = scalar.constant 9.5 : f64
+  %erf1 = scalar.erff %input1 : f64
+  %erfc1 = scalar.erfcf %input1 : f64
+  %input2 = scalar.constant 0.75 : f16
+  %erf2 = scalar.erff %input2 : f16
+  %erfc2 = scalar.erfcf %input2 : f16
+  func.return %erf0, %erfc0, %erf1, %erfc1, %erf2, %erfc2 : f32, f32, f64, f64, f16, f16
+}
+
+// ----
+func.def @error_functions() -> (f32, f32, f64, f64, f16, f16) {
+  %erf0 = scalar.constant 1.0 : f32
+  %erfc0 = scalar.constant 3.769212609340893e-41 : f32
+  %erf1 = scalar.constant 1.0 : f64
+  %erfc1 = scalar.constant 3.7692144856548802e-41 : f64
+  %erf2 = scalar.constant 0.7109375 : f16
+  %erfc2 = scalar.constant 0.288818359375 : f16
+  func.return %erf0, %erfc0, %erf1, %erfc1, %erf2, %erfc2 : f32, f32, f64, f64, f16, f16
+}

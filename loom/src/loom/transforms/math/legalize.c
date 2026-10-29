@@ -305,6 +305,9 @@ static loom_target_math_op_t loom_math_legalize_op_kind(const loom_op_t* op) {
     case LOOM_OP_SCALAR_TANF:
     case LOOM_OP_VECTOR_TANF:
       return LOOM_TARGET_MATH_OP_TANF;
+    case LOOM_OP_SCALAR_ERFCF:
+    case LOOM_OP_VECTOR_ERFCF:
+      return LOOM_TARGET_MATH_OP_ERFCF;
     case LOOM_OP_SCALAR_ERFF:
     case LOOM_OP_VECTOR_ERFF:
       return LOOM_TARGET_MATH_OP_ERFF;

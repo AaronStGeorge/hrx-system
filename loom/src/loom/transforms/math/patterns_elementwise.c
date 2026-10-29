@@ -913,6 +913,14 @@ static void loom_math_legalize_unary_source_initialize(
       out_source->unary_build =
           is_scalar ? loom_scalar_cosf_build : loom_vector_cosf_build;
       return;
+    case LOOM_TARGET_MATH_OP_ERFF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_erff_build : loom_vector_erff_build;
+      return;
+    case LOOM_TARGET_MATH_OP_ERFCF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_erfcf_build : loom_vector_erfcf_build;
+      return;
     case LOOM_TARGET_MATH_OP_TANF:
       out_source->unary_build =
           is_scalar ? loom_scalar_tanf_build : loom_vector_tanf_build;
@@ -1138,6 +1146,8 @@ static iree_status_t loom_math_legalize_build_widen_f32_round(
     case LOOM_TARGET_MATH_OP_ATANHF:
     case LOOM_TARGET_MATH_OP_SINF:
     case LOOM_TARGET_MATH_OP_COSF:
+    case LOOM_TARGET_MATH_OP_ERFF:
+    case LOOM_TARGET_MATH_OP_ERFCF:
     case LOOM_TARGET_MATH_OP_TANF:
     case LOOM_TARGET_MATH_OP_SINTURNSF:
     case LOOM_TARGET_MATH_OP_COSTURNSF:

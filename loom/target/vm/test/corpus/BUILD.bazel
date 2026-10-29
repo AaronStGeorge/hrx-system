@@ -168,6 +168,7 @@ loom_corpus_test(
             "numeric/float/exponential.loom",
             "numeric/float/logarithm.loom",
             "numeric/float/hyperbolic.loom",
+            "numeric/float/error_functions.loom",
             "numeric/float/inverse_trigonometry.loom",
             "numeric/float/trigonometry.loom",
             "numeric/float/trigonometry_f32.loom",

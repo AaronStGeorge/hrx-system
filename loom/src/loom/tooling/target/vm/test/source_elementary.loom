@@ -259,3 +259,35 @@ check.case public @ordinary_trigonometry_f64 {
   check.expect.approximate actual(%costurns) expected(%costurns_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
   check.return
 }
+
+func.def @error_functions_f32(%input: f32) -> (f32, f32) {
+  %erf = scalar.erff %input : f32
+  %erfc = scalar.erfcf %input : f32
+  func.return %erf, %erfc : f32, f32
+}
+
+check.case public @ordinary_error_functions_f32 {
+  %input = check.literal value(9.5) : f32
+  %erf, %erfc = func.call @error_functions_f32(%input) : (f32) -> (f32, f32)
+  %one = check.literal value(1.0) : f32
+  %tail = check.literal value(3.769212609340893e-41) : f32
+  check.expect.equal actual(%erf) expected(%one) : f32
+  check.expect.approximate actual(%erfc) expected(%tail) atol(1.4012984643248171e-45) rtol(0.0) nan(different) : f32, f32
+  check.return
+}
+
+func.def @error_functions_f64(%input: f64) -> (f64, f64) {
+  %erf = scalar.erff %input : f64
+  %erfc = scalar.erfcf %input : f64
+  func.return %erf, %erfc : f64, f64
+}
+
+check.case public @ordinary_error_functions_f64 {
+  %input = check.literal value(9.5) : f64
+  %erf, %erfc = func.call @error_functions_f64(%input) : (f64) -> (f64, f64)
+  %one = check.literal value(1.0) : f64
+  %tail = check.literal value(3.7692144856548797e-41) : f64
+  check.expect.equal actual(%erf) expected(%one) : f64
+  check.expect.approximate actual(%erfc) expected(%tail) atol(0.0) rtol(2.2999999999999999e-16) nan(different) : f64, f64
+  check.return
+}

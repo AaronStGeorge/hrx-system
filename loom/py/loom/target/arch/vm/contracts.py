@@ -192,6 +192,8 @@ _MATH_SOURCE_OPS = {
     "exp": math.scalar_expf,
     "exp2": math.scalar_exp2f,
     "expm1": math.scalar_expm1f,
+    "erf": math.scalar_erff,
+    "erfc": math.scalar_erfcf,
     "asin": math.scalar_asinf,
     "acos": math.scalar_acosf,
     "atan": math.scalar_atanf,

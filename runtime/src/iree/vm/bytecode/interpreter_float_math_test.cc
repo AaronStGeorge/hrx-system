@@ -352,6 +352,33 @@ TEST_F(VMBytecodeInterpreterFloatMathTest, TrigonometrySelectors) {
             UINT64_C(0xBFF0000000000000));
 }
 
+TEST_F(VMBytecodeInterpreterFloatMathTest, ErrorFunctionSelectors) {
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ERF,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x80000000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ERFC,
+                            UINT32_C(0x80000000)),
+            UINT32_C(0x3F800000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ERFC,
+                            UINT32_C(0x7F800000)),
+            UINT32_C(0x00000000));
+  EXPECT_EQ(ExecuteUnaryF32(IREE_VM_BYTECODE_FLOAT_MATH_F32_ERFC,
+                            UINT32_C(0xFF800000)),
+            UINT32_C(0x40000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ERF,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x8000000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ERFC,
+                            UINT64_C(0x8000000000000000)),
+            UINT64_C(0x3FF0000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ERFC,
+                            UINT64_C(0x7FF0000000000000)),
+            UINT64_C(0x0000000000000000));
+  EXPECT_EQ(ExecuteUnaryF64(IREE_VM_BYTECODE_FLOAT_MATH_F64_ERFC,
+                            UINT64_C(0xFFF0000000000000)),
+            UINT64_C(0x4000000000000000));
+}
+
 TEST_F(VMBytecodeInterpreterFloatMathTest, Atan2OrderAndAliasing) {
   // Deliberately unequal inputs distinguish y/x from x/y. Aliasing either
   // input must retain both coordinates, and F32 clears dirty high cell bits.
