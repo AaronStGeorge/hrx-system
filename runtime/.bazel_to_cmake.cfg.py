@@ -212,7 +212,7 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
     package_prefixes=["runtime"],
     build_file_functions=RuntimeBuildFileFunctions,
     target_mappings={
-        "//runtime/src:defines": [],
+        "//runtime/src:defines": ["iree_defs"],
     },
     convert_unmatched_target=convert_unmatched_target,
 )

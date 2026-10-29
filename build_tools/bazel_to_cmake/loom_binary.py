@@ -108,12 +108,8 @@ class LoomBinaryBuildFileFunctions:
         if self._should_skip_target(tags=tags, **kwargs):
             return
         output = out or name
-        self._target_file_paths[self._current_target_label(name)] = (
-            f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}"
-        )
-        self._target_file_paths[self._current_target_label(output)] = (
-            f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}"
-        )
+        self._register_target_files(name, [f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}"])
+        self._register_target_files(output, [f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}"])
         blocks = [
             self._convert_string_arg_block("NAME", name),
             self._convert_string_arg_block(

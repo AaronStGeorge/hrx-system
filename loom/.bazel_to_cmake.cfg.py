@@ -8,6 +8,7 @@ import dataclasses
 import importlib.util
 import os
 import re
+from types import SimpleNamespace
 
 import bazel_to_cmake_config
 import bazel_to_cmake_converter
@@ -158,13 +159,28 @@ class LoomBuildFileFunctions(
             "loom_corpus_catalog": self.loom_corpus_catalog,
             "loom_corpus_manifest": self.loom_corpus_manifest,
             "loom_execution_profile": self.loom_execution_profile,
+            "native": SimpleNamespace(package_name=self._current_package),
+            "select": self.select,
+            "iree_select": self.iree_select,
+            "iree_cmake_extra_content": self.iree_cmake_extra_content,
+            "apply_loom_target_policy": self._apply_loom_cmake_policy,
+            **{
+                name: getattr(self, name)
+                for name in (
+                    "loom_cc_library",
+                    "loom_cc_library_group",
+                    "loom_cc_instance_library",
+                    "loom_cc_binary",
+                    "loom_cc_test",
+                    "loom_cc_benchmark",
+                    "loom_cc_fuzz",
+                )
+            },
         }
 
     def _custom_initialize(self):
         self._loom_module_targets = set()
-        self._loom_generated_file_families = {}
-        self._loom_low_descriptor_archive_source_vars = {}
-        self._loom_low_descriptor_archive_targets = {}
+        self._loom_generated_external_repositories = {}
         self._loom_generated_external_files = {}
         self.LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY = _LOOM_AMDGPU_TARGET_CONFIG[
             "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY"
@@ -335,9 +351,7 @@ class LoomBuildFileFunctions(
         )
         output = output or (name + (".loombc" if output_format == "bc" else ".loom"))
         self._loom_module_targets.add(self._current_target_label(name))
-        self._target_file_paths[self._current_target_label(name)] = (
-            f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}"
-        )
+        self._register_target_files(name, [f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}"])
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         srcs_block = self._convert_loom_module_inputs("SRCS", srcs)
         libraries_block = self._convert_loom_module_inputs("LIBRARIES", libraries)
@@ -812,13 +826,9 @@ class LoomBuildFileFunctions(
 
     def loom_cc_library(self, deps=[], **kwargs):
         kwargs = self._apply_loom_cmake_policy(kwargs)
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_library",
-            "loom_cc_library",
-            lambda: self.cc_library(
-                deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
-                **kwargs,
-            ),
+        self.cc_library(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            **kwargs,
         )
 
     def loom_cc_library_group(self, **kwargs):
@@ -830,19 +840,15 @@ class LoomBuildFileFunctions(
 
     def loom_cc_binary(self, deps=[], **kwargs):
         kwargs = self._apply_loom_cmake_policy(kwargs)
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_binary",
-            "loom_cc_binary",
-            lambda: self.cc_binary(
-                deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
-                **kwargs,
-            ),
+        self.cc_binary(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            **kwargs,
         )
 
     def loomc_cc_binary(self, runtime_only=False, **kwargs):
         body_start = len(self._converter.body)
         self._emit_rewritten_cmake_rule(
-            "loom_cc_binary", "loomc_cc_binary", lambda: self.loom_cc_binary(**kwargs)
+            "iree_cc_binary", "loomc_cc_binary", lambda: self.loom_cc_binary(**kwargs)
         )
         if runtime_only:
             emitted_body = self._converter.body[body_start:]
@@ -883,14 +889,10 @@ class LoomBuildFileFunctions(
             include_run_requirements=True,
         )
         resource_group = kwargs.pop("resource_group", None)
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_test",
-            "loom_cc_test",
-            lambda: self.cc_test(
-                deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
-                resource_group=resource_group,
-                **kwargs,
-            ),
+        self.cc_test(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            resource_group=resource_group,
+            **kwargs,
         )
 
     def loom_cc_benchmark(self, deps=[], **kwargs):
@@ -898,28 +900,16 @@ class LoomBuildFileFunctions(
             kwargs,
             include_run_requirements=True,
         )
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_binary_benchmark",
-            "loom_cc_benchmark",
-            lambda: self.cc_binary_benchmark(
-                deps=deps
-                + [
-                    "//runtime/src:defines",
-                    "//loom/src:defines",
-                ],
-                **kwargs,
-            ),
+        self.cc_binary_benchmark(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            **kwargs,
         )
 
     def loom_cc_fuzz(self, deps=[], **kwargs):
         kwargs = self._apply_loom_cmake_policy(kwargs)
-        self._emit_rewritten_cmake_rule(
-            "iree_cc_fuzz",
-            "loom_cc_fuzz",
-            lambda: self.iree_cc_fuzz(
-                deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
-                **kwargs,
-            ),
+        self.iree_cc_fuzz(
+            deps=deps + ["//runtime/src:defines", "//loom/src:defines"],
+            **kwargs,
         )
 
     def _cmake_identifier(self, name):
@@ -943,24 +933,19 @@ class LoomBuildFileFunctions(
         if label.startswith("@"):
             repo_name, filename = self._parse_external_file_label(label)
             try:
-                source_var = self._loom_low_descriptor_archive_source_vars[repo_name]
+                source_dir = self._loom_generated_external_repositories[repo_name]
             except KeyError as exc:
                 raise ValueError(
                     f"Generated input {label} has no CMake source mapping for "
                     f"external repo '{repo_name}'"
                 ) from exc
-            return f"${{{source_var}}}/{filename}"
+            return f"{source_dir}/{filename}"
         return self._normalize_label(label)
 
     def _cmake_location_paths(self, label):
         generated_external_file = self._loom_generated_external_files.get(label)
         if generated_external_file is not None:
             return [generated_external_file]
-        outputs = self._loom_generated_file_families.get(
-            self._canonical_location_label(label)
-        )
-        if outputs is not None:
-            return outputs
         return super()._cmake_location_paths(label)
 
     def loom_spirv_registry_sources(
@@ -991,13 +976,6 @@ class LoomBuildFileFunctions(
             target_compatible_with,
         )
 
-    def _convert_generated_input_label(self, label):
-        inputs = [self._convert_generated_file_label(label)]
-        if label.startswith("@") and label not in self._loom_generated_external_files:
-            repo_name, _ = self._parse_external_file_label(label)
-            inputs.append(self._loom_low_descriptor_archive_targets[repo_name])
-        return inputs
-
     def _convert_generated_arg(self, arg):
         def replace_rootpath(match):
             return self._convert_generated_file_label(match.group(1))
@@ -1019,292 +997,17 @@ class LoomBuildFileFunctions(
                 converted_args.extend(self._convert_location_arg(arg))
             return converted_args
 
-        return self._convert_generated_values(args, convert)
+        return self._map_configurable_list(args, convert)
 
     def _convert_generated_inputs(self, inputs):
-        def convert(inputs):
-            converted_inputs = []
-            for label in inputs or []:
-                for converted_input in self._convert_generated_input_label(label):
-                    if converted_input not in converted_inputs:
-                        converted_inputs.append(converted_input)
-            return converted_inputs
-
-        return self._convert_generated_values(inputs, convert)
-
-    def _convert_generated_values(self, values, convert):
-        if values is None:
-            return None
-        if isinstance(values, bazel_to_cmake_converter.ConditionSelect):
-            return bazel_to_cmake_converter.ConditionSelect(
-                {
-                    label: convert(selected_values)
-                    for label, selected_values in values.conditions.items()
-                }
-            )
-        if isinstance(values, bazel_to_cmake_converter.MixedDeps):
-            return bazel_to_cmake_converter.MixedDeps(
-                unconditional=convert(values.unconditional),
-                selects=[
-                    bazel_to_cmake_converter.ConditionSelect(
-                        {
-                            label: convert(selected_values)
-                            for label, selected_values in select.conditions.items()
-                        }
-                    )
-                    for select in values.selects
-                ],
-            )
-        return convert(values)
-
-    def loom_generated_file(
-        self,
-        name,
-        generator,
-        output,
-        output_flag,
-        args=None,
-        inputs=None,
-        comment=None,
-        tags=None,
-        testonly=None,
-        target_compatible_with=None,
-        visibility=None,
-        **kwargs,
-    ):
-        if self._should_skip_target(tags=tags, **kwargs):
-            return
-        target_compatible_with = self._apply_loom_target_compatible_with(
-            target_compatible_with
-        )
-
-        self._target_file_paths[self._current_target_label(name)] = (
-            f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}"
-        )
-        self._target_file_paths[self._current_target_label(output)] = (
-            f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}"
-        )
-        testonly_block = self._convert_option_block("TESTONLY", testonly)
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        generator_block = self._convert_single_target_block("GENERATOR", generator)
-        output_block = self._convert_string_arg_block("OUTPUT", output)
-        output_flag_block = self._convert_string_arg_block("OUTPUT_FLAG", output_flag)
-        args_block, platform_args_block = self._convert_platform_select_strings(
-            name,
-            "ARGS",
-            self._convert_generated_args(args),
-            sort=False,
-        )
-        inputs_block, platform_inputs_block = self._convert_platform_select_strings(
-            name,
-            "INPUTS",
-            self._convert_generated_inputs(inputs),
-            sort=False,
-        )
-        comment_block = self._convert_string_arg_block("COMMENT", comment)
-
-        self._emit_platform_guard_begin(target_compatible_with)
-        if platform_args_block:
-            self._converter.body += platform_args_block
-        if platform_inputs_block:
-            self._converter.body += platform_inputs_block
-        self._converter.body += (
-            f"loom_generated_file(\n"
-            f"{name_block}"
-            f"{generator_block}"
-            f"{output_block}"
-            f"{output_flag_block}"
-            f"{args_block}"
-            f"{inputs_block}"
-            f"{comment_block}"
-            f"{testonly_block}"
-            f")\n\n"
-        )
-        self._emit_platform_guard_end(target_compatible_with)
-
-    def loom_generated_file_family(
-        self,
-        name,
-        generator,
-        outputs,
-        output_flags,
-        output_directories=None,
-        args=None,
-        inputs=None,
-        comment=None,
-        tags=None,
-        testonly=None,
-        target_compatible_with=None,
-        visibility=None,
-        **kwargs,
-    ):
-        if self._should_skip_target(tags=tags, **kwargs):
-            return
-        target_compatible_with = self._apply_loom_target_compatible_with(
-            target_compatible_with
-        )
-
-        for directory in output_directories or []:
-            if directory not in outputs:
-                raise ValueError(
-                    f"generated output directory is not declared: {directory}"
+        return self._map_configurable_list(
+            inputs,
+            lambda labels: list(
+                dict.fromkeys(
+                    self._convert_generated_file_label(label) for label in labels or []
                 )
-        for output in outputs:
-            self._target_file_paths[self._current_target_label(output)] = (
-                f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}"
-            )
-        self._loom_generated_file_families[self._current_target_label(name)] = [
-            f"${{CMAKE_CURRENT_BINARY_DIR}}/{output}" for output in outputs
-        ]
-        testonly_block = self._convert_option_block("TESTONLY", testonly)
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        generator_block = self._convert_single_target_block("GENERATOR", generator)
-        outputs_block = self._convert_string_list_block("OUTPUTS", outputs, sort=False)
-        output_flags_block = self._convert_string_list_block(
-            "OUTPUT_FLAGS", output_flags, sort=False
+            ),
         )
-        args_block, platform_args_block = self._convert_platform_select_strings(
-            name,
-            "ARGS",
-            self._convert_generated_args(args),
-            sort=False,
-        )
-        inputs_block, platform_inputs_block = self._convert_platform_select_strings(
-            name,
-            "INPUTS",
-            self._convert_generated_inputs(inputs),
-            sort=False,
-        )
-        comment_block = self._convert_string_arg_block("COMMENT", comment)
-
-        self._emit_platform_guard_begin(target_compatible_with)
-        if platform_args_block:
-            self._converter.body += platform_args_block
-        if platform_inputs_block:
-            self._converter.body += platform_inputs_block
-        self._converter.body += (
-            f"loom_generated_file_family(\n"
-            f"{name_block}"
-            f"{generator_block}"
-            f"{outputs_block}"
-            f"{output_flags_block}"
-            f"{args_block}"
-            f"{inputs_block}"
-            f"{comment_block}"
-            f"{testonly_block}"
-            f")\n\n"
-        )
-        self._emit_platform_guard_end(target_compatible_with)
-
-    # CMake has no target/exec configuration split. Sources invariant across
-    # that transition therefore use the same custom-command representation as
-    # ordinary generated files.
-    loom_generated_source = loom_generated_file
-    loom_generated_source_family = loom_generated_file_family
-
-    def loom_generated_cc_library(
-        self,
-        name,
-        generator,
-        source=None,
-        srcs=None,
-        textual_hdrs=None,
-        generated_src_flags=None,
-        generated_srcs=None,
-        hdrs=None,
-        generated_hdr_flags=None,
-        generated_hdrs=None,
-        args=None,
-        inputs=None,
-        extra_output_flags=None,
-        extra_outputs=None,
-        deps=None,
-        instance_owned=False,
-        tags=None,
-        testonly=None,
-        target_compatible_with=None,
-        visibility=None,
-        **kwargs,
-    ):
-        if self._should_skip_target(tags=tags, **kwargs):
-            return
-        target_compatible_with = self._apply_loom_target_compatible_with(
-            target_compatible_with
-        )
-
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        generator_block = self._convert_single_target_block("GENERATOR", generator)
-        source_block = self._convert_string_arg_block("SOURCE", source)
-        srcs_block = self._convert_srcs_block(srcs, block_name="SRCS")
-        textual_hdrs_block = self._convert_srcs_block(
-            textual_hdrs, block_name="TEXTUAL_HDRS"
-        )
-        generated_src_flags_block = self._convert_string_list_block(
-            "GENERATED_SRC_FLAGS", generated_src_flags or None, sort=False
-        )
-        generated_srcs_block = self._convert_string_list_block(
-            "GENERATED_SRCS", generated_srcs or None, sort=False
-        )
-        hdrs_block = self._convert_srcs_block(hdrs, block_name="HDRS")
-        generated_hdr_flags_block = self._convert_string_list_block(
-            "GENERATED_HDR_FLAGS", generated_hdr_flags or None, sort=False
-        )
-        generated_hdrs_block = self._convert_string_list_block(
-            "GENERATED_HDRS", generated_hdrs or None, sort=False
-        )
-        args_block, platform_args_block = self._convert_platform_select_strings(
-            name,
-            "ARGS",
-            self._convert_generated_args(args),
-            sort=False,
-        )
-        inputs_block, platform_inputs_block = self._convert_platform_select_strings(
-            name,
-            "INPUTS",
-            self._convert_generated_inputs(inputs),
-            sort=False,
-        )
-        extra_output_flags_block = self._convert_string_list_block(
-            "EXTRA_OUTPUT_FLAGS", extra_output_flags or None, sort=False
-        )
-        extra_outputs_block = self._convert_string_list_block(
-            "EXTRA_OUTPUTS", extra_outputs or None, sort=False
-        )
-        deps_block = self._convert_target_list_block("DEPS", deps)
-        testonly_block = self._convert_option_block("TESTONLY", testonly)
-
-        duplicate_safe_block = self._convert_option_block(
-            "LINKABLE_MORE_THAN_ONCE",
-            instance_owned or "LINKABLE_MORE_THAN_ONCE" in (tags or []),
-        )
-
-        self._emit_platform_guard_begin(target_compatible_with)
-        if platform_args_block:
-            self._converter.body += platform_args_block
-        if platform_inputs_block:
-            self._converter.body += platform_inputs_block
-        self._converter.body += (
-            f"loom_generated_cc_library(\n"
-            f"{name_block}"
-            f"{generator_block}"
-            f"{source_block}"
-            f"{srcs_block}"
-            f"{textual_hdrs_block}"
-            f"{generated_src_flags_block}"
-            f"{generated_srcs_block}"
-            f"{hdrs_block}"
-            f"{generated_hdr_flags_block}"
-            f"{generated_hdrs_block}"
-            f"{args_block}"
-            f"{inputs_block}"
-            f"{extra_output_flags_block}"
-            f"{extra_outputs_block}"
-            f"{deps_block}"
-            f"{testonly_block}"
-            f"{duplicate_safe_block}"
-            f")\n\n"
-        )
-        self._emit_platform_guard_end(target_compatible_with)
 
     def loom_low_descriptor_data_archive(
         self,
@@ -1321,359 +1024,26 @@ class LoomBuildFileFunctions(
         target_compatible_with = self._apply_loom_target_compatible_with(
             target_compatible_with
         )
-        source_var = "_LOOM_%s_SOURCE_DIR" % self._cmake_identifier(name).upper()
-        archive_target = "loom_%s" % self._cmake_identifier(name)
-        self._loom_low_descriptor_archive_source_vars[repo_name] = source_var
-        self._loom_low_descriptor_archive_targets[repo_name] = archive_target
-
-        source_dir = "${PROJECT_BINARY_DIR}/_deps/%s-src" % repo_name
-        source_dir_block = self._convert_string_arg_block(
-            "SOURCE_DIR", "${%s}" % source_var
-        )
-        name_block = self._convert_string_arg_block("NAME", archive_target, quote=False)
-        urls_block = self._convert_string_list_block("URLS", urls, sort=False)
-        sha256_block = self._convert_string_arg_block("SHA256", sha256)
+        if not name or not repo_name or not urls or not sha256:
+            raise ValueError(
+                "descriptor archives require a name, repository, URLs, and hash"
+            )
+        source_dir = f"${{IREE_BINARY_DIR}}/_deps/{repo_name}-src"
+        archive_name = "loom_" + self._cmake_identifier(name)
+        self._loom_generated_external_repositories[repo_name] = source_dir
+        urls_block = self._convert_string_list_block("URL", urls)
         self._converter.header += self._guard_cmake_text(
-            "\n"
-            f"set({source_var}\n"
-            f'  "{source_dir}"\n'
-            f")\n"
-            f"loom_low_descriptor_data_archive(\n"
-            f"{name_block}"
-            f"{source_dir_block}"
+            "include(FetchContent)\n"
+            f"FetchContent_Declare({archive_name}\n"
             f"{urls_block}"
-            f"{sha256_block}"
-            f")\n\n",
+            f'  URL_HASH "SHA256={sha256}"\n'
+            f'  SOURCE_DIR "{source_dir}"\n'
+            "  DOWNLOAD_NO_PROGRESS TRUE\n"
+            "  DOWNLOAD_EXTRACT_TIMESTAMP FALSE\n"
+            ")\n"
+            f"FetchContent_MakeAvailable({archive_name})\n",
             target_compatible_with,
         )
-
-    def _emit_loom_target_table_cc_library(
-        self,
-        name,
-        generator=None,
-        source=None,
-        header=None,
-        generated_hdr_flags=None,
-        generated_hdrs=None,
-        header_only=False,
-        cmake_rule_name="loom_target_table_cc_library",
-        args=None,
-        inputs=None,
-        deps=None,
-        ids_deps=None,
-        tags=None,
-        testonly=None,
-        visibility=None,
-        **kwargs,
-    ):
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        generator_block = (
-            self._convert_single_target_block("GENERATOR", generator)
-            if generator is not None
-            else ""
-        )
-        source_block = self._convert_string_arg_block("SOURCE", source)
-        header_block = self._convert_string_arg_block("HEADER", header)
-        generated_hdr_flags_block = self._convert_string_list_block(
-            "GENERATED_HDR_FLAGS", generated_hdr_flags, sort=False
-        )
-        generated_hdrs_block = self._convert_string_list_block(
-            "GENERATED_HDRS", generated_hdrs, sort=False
-        )
-        args_block, platform_args_block = self._convert_platform_select_strings(
-            name,
-            "ARGS",
-            self._convert_generated_args(args),
-            sort=False,
-        )
-        inputs_block, platform_inputs_block = self._convert_platform_select_strings(
-            name,
-            "INPUTS",
-            self._convert_generated_inputs(inputs),
-            sort=False,
-        )
-        deps_block = self._convert_target_list_block("DEPS", deps)
-        ids_deps_block = self._convert_target_list_block("IDS_DEPS", ids_deps)
-        header_only_block = self._convert_option_block("HEADER_ONLY", header_only)
-        testonly_block = self._convert_option_block("TESTONLY", testonly)
-
-        if platform_args_block:
-            self._converter.body += platform_args_block
-        if platform_inputs_block:
-            self._converter.body += platform_inputs_block
-        self._converter.body += (
-            f"{cmake_rule_name}(\n"
-            f"{name_block}"
-            f"{generator_block}"
-            f"{source_block}"
-            f"{header_block}"
-            f"{generated_hdr_flags_block}"
-            f"{generated_hdrs_block}"
-            f"{args_block}"
-            f"{inputs_block}"
-            f"{deps_block}"
-            f"{ids_deps_block}"
-            f"{header_only_block}"
-            f"{testonly_block}"
-            f")\n\n"
-        )
-
-    def loom_target_table_cc_library(
-        self,
-        name,
-        generator=None,
-        source=None,
-        header=None,
-        generated_hdr_flags=None,
-        generated_hdrs=None,
-        header_only=False,
-        args=None,
-        inputs=None,
-        deps=None,
-        ids_deps=None,
-        tags=None,
-        testonly=None,
-        target_compatible_with=None,
-        visibility=None,
-        **kwargs,
-    ):
-        if self._should_skip_target(tags=tags, **kwargs):
-            return
-        target_compatible_with = self._apply_loom_target_compatible_with(
-            target_compatible_with
-        )
-        self._emit_platform_guard_begin(target_compatible_with)
-        self._emit_loom_target_table_cc_library(
-            name=name,
-            generator=generator,
-            source=source,
-            header=header,
-            generated_hdr_flags=generated_hdr_flags,
-            generated_hdrs=generated_hdrs,
-            header_only=header_only,
-            args=args,
-            inputs=inputs,
-            deps=deps,
-            ids_deps=ids_deps,
-            testonly=testonly,
-            cmake_rule_name="loom_target_table_cc_library",
-        )
-        self._emit_platform_guard_end(target_compatible_with)
-
-    def loom_target_contract_cc_libraries(
-        self,
-        name,
-        contract_deps=None,
-        lower_rule_deps=None,
-        tags=None,
-        testonly=None,
-        target_compatible_with=None,
-        visibility=None,
-        **kwargs,
-    ):
-        if self._should_skip_target(tags=tags, **kwargs):
-            return
-        target_compatible_with = self._apply_loom_target_compatible_with(
-            target_compatible_with
-        )
-
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        contract_deps_block = self._convert_target_list_block(
-            "CONTRACT_DEPS", contract_deps
-        )
-        lower_rule_deps_block = self._convert_target_list_block(
-            "LOWER_RULE_DEPS", lower_rule_deps
-        )
-        testonly_block = self._convert_option_block("TESTONLY", testonly)
-
-        self._emit_platform_guard_begin(target_compatible_with)
-        self._converter.body += (
-            f"loom_target_contract_cc_libraries(\n"
-            f"{name_block}"
-            f"{contract_deps_block}"
-            f"{lower_rule_deps_block}"
-            f"{testonly_block}"
-            f")\n\n"
-        )
-        self._emit_platform_guard_end(target_compatible_with)
-
-    def loom_target_contract_table_cc_libraries(
-        self,
-        name,
-        generator,
-        args=None,
-        index_output=None,
-        shared_strings=None,
-        inputs=None,
-        contract_deps=None,
-        lower_rule_deps=None,
-        tags=None,
-        testonly=None,
-        target_compatible_with=None,
-        visibility=None,
-        **kwargs,
-    ):
-        if self._should_skip_target(tags=tags, **kwargs):
-            return
-        target_compatible_with = self._apply_loom_target_compatible_with(
-            target_compatible_with
-        )
-
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        generator_block = self._convert_single_target_block("GENERATOR", generator)
-        index_block = self._convert_string_arg_block("INDEX_OUTPUT", index_output)
-        shared_strings_block = self._convert_string_arg_block(
-            "SHARED_STRINGS", shared_strings
-        )
-        args_block, platform_args_block = self._convert_platform_select_strings(
-            name,
-            "ARGS",
-            self._convert_generated_args(args),
-            sort=False,
-        )
-        inputs_block, platform_inputs_block = self._convert_platform_select_strings(
-            name,
-            "INPUTS",
-            self._convert_generated_inputs(inputs),
-            sort=False,
-        )
-        contract_deps_block = self._convert_target_list_block(
-            "CONTRACT_DEPS", contract_deps
-        )
-        lower_rule_deps_block = self._convert_target_list_block(
-            "LOWER_RULE_DEPS", lower_rule_deps
-        )
-        testonly_block = self._convert_option_block("TESTONLY", testonly)
-
-        self._emit_platform_guard_begin(target_compatible_with)
-        if platform_args_block:
-            self._converter.body += platform_args_block
-        if platform_inputs_block:
-            self._converter.body += platform_inputs_block
-        self._converter.body += (
-            f"loom_target_contract_table_cc_libraries(\n"
-            f"{name_block}"
-            f"{generator_block}"
-            f"{index_block}"
-            f"{shared_strings_block}"
-            f"{args_block}"
-            f"{inputs_block}"
-            f"{contract_deps_block}"
-            f"{lower_rule_deps_block}"
-            f"{testonly_block}"
-            f")\n\n"
-        )
-        self._emit_platform_guard_end(target_compatible_with)
-
-    def loom_target_contract_file_family(
-        self,
-        name,
-        generator,
-        fragments,
-        args=None,
-        index_output=None,
-        shared_strings=None,
-        inputs=None,
-        comment=None,
-        tags=None,
-        target_compatible_with=None,
-        visibility=None,
-        **kwargs,
-    ):
-        if self._should_skip_target(tags=tags, **kwargs):
-            return
-        target_compatible_with = self._apply_loom_target_compatible_with(
-            target_compatible_with
-        )
-
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        generator_block = self._convert_single_target_block("GENERATOR", generator)
-        index_block = self._convert_string_arg_block("INDEX_OUTPUT", index_output)
-        shared_strings_block = self._convert_string_arg_block(
-            "SHARED_STRINGS", shared_strings
-        )
-        fragments_block = self._convert_string_list_block(
-            "FRAGMENTS",
-            [
-                f"{stem}={fragment_key}"
-                for stem, fragment_key in sorted(fragments.items())
-            ],
-            sort=False,
-        )
-        args_block, platform_args_block = self._convert_platform_select_strings(
-            name,
-            "ARGS",
-            self._convert_generated_args(args),
-            sort=False,
-        )
-        inputs_block, platform_inputs_block = self._convert_platform_select_strings(
-            name,
-            "INPUTS",
-            self._convert_generated_inputs(inputs),
-            sort=False,
-        )
-        comment_block = self._convert_string_arg_block("COMMENT", comment)
-
-        self._emit_platform_guard_begin(target_compatible_with)
-        if platform_args_block:
-            self._converter.body += platform_args_block
-        if platform_inputs_block:
-            self._converter.body += platform_inputs_block
-        self._converter.body += (
-            f"loom_target_contract_file_family(\n"
-            f"{name_block}"
-            f"{generator_block}"
-            f"{index_block}"
-            f"{shared_strings_block}"
-            f"{fragments_block}"
-            f"{args_block}"
-            f"{inputs_block}"
-            f"{comment_block}"
-            f")\n\n"
-        )
-        self._emit_platform_guard_end(target_compatible_with)
-
-    def loom_low_descriptor_cc_library(
-        self,
-        name,
-        generator=None,
-        source=None,
-        header=None,
-        generated_hdr_flags=None,
-        generated_hdrs=None,
-        header_only=False,
-        args=None,
-        inputs=None,
-        deps=None,
-        ids_deps=None,
-        tags=None,
-        testonly=None,
-        target_compatible_with=None,
-        visibility=None,
-        **kwargs,
-    ):
-        if self._should_skip_target(tags=tags, **kwargs):
-            return
-        target_compatible_with = self._apply_loom_target_compatible_with(
-            target_compatible_with
-        )
-        self._emit_platform_guard_begin(target_compatible_with)
-        self._emit_loom_target_table_cc_library(
-            name=name,
-            generator=generator,
-            source=source,
-            header=header,
-            generated_hdr_flags=generated_hdr_flags,
-            generated_hdrs=generated_hdrs,
-            header_only=header_only,
-            args=args,
-            inputs=inputs,
-            deps=deps,
-            ids_deps=ids_deps,
-            testonly=testonly,
-            cmake_rule_name="loom_low_descriptor_cc_library",
-        )
-        self._emit_platform_guard_end(target_compatible_with)
 
     def _loom_check_test_base_name(self, src):
         if src.startswith("${_GLOB_") and src.endswith("}"):
@@ -1942,7 +1312,7 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
     package_prefixes=["loom"],
     build_file_functions=LoomBuildFileFunctions,
     target_mappings={
-        "//loom/src:defines": [],
+        "//loom/src:defines": ["loom_defs"],
     },
     condition_mappings=_LOOM_CONFIG_CMAKE_OPTIONS,
     convert_unmatched_target=convert_unmatched_target,

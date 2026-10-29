@@ -124,7 +124,7 @@ class BazelToCMakeTest(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(RuntimeError, "unknown_rule"):
                     bazel_to_cmake.generate_build_tree(output, ["."])
-                self.assertTrue((output / "CMakeLists.txt").exists())
+                self.assertFalse(output.exists())
                 declaration.write_text("package()\n")
                 bazel_to_cmake.generate_build_tree(output, ["."])
                 self.assertTrue((output / "child/CMakeLists.txt").exists())

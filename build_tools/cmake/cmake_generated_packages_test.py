@@ -88,6 +88,8 @@ class CMakeGeneratedPackagesTest(unittest.TestCase):
                 header.read_text().replace("HEADER_VALUE 3", "HEADER_VALUE 4")
             )
             check(15)
+            (owned / "package/generated.h").unlink()
+            check(15)
 
             extra = source / "package/value_extra.c"
             extra.write_text("int fixture_extra(void) { return 42; }\n")

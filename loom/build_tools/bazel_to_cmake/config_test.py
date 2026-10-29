@@ -86,6 +86,7 @@ cc_library(
         repo_cfg = SimpleNamespace(PROJECTS=[self.project], REPO_MAP={"@hrx": ""})
         output = bazel_to_cmake_converter.convert_build_file(
             """
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_generated_source", "loom_generated_source_family")
 loom_generated_source(
     name = "table_gen",
     generator = ":generate",
@@ -103,10 +104,11 @@ loom_generated_source_family(
             str(REPO_ROOT / "loom/consumer"),
             repo_root=str(REPO_ROOT),
         )
-        self.assertIn("loom_generated_file(\n", output)
-        self.assertIn('OUTPUT\n    "table.inl"', output)
-        self.assertIn("loom_generated_file_family(\n", output)
-        self.assertIn('OUTPUTS\n    "records.c"\n    "records.h"', output)
+        self.assertEqual(output.count("iree_generated_files(\n"), 2)
+        self.assertIn('"${CMAKE_CURRENT_BINARY_DIR}/table.inl"', output)
+        self.assertIn('"--output=${CMAKE_CURRENT_BINARY_DIR}/table.inl"', output)
+        self.assertIn('"${CMAKE_CURRENT_BINARY_DIR}/records.c"', output)
+        self.assertIn('"${CMAKE_CURRENT_BINARY_DIR}/records.h"', output)
 
     def test_loom_image_provider_selection_survives_conversion(self):
         converter = SimpleNamespace(body="")
@@ -274,7 +276,7 @@ loom_generated_source_family(
                     h_file_output="embedded.h",
                     testonly=True,
                 )
-                self.assertIn('"${CMAKE_CURRENT_BINARY_DIR}/mul.xdna"', converter.body)
+                self.assertIn('"${IREE_BINARY_DIR}/programs/mul.xdna"', converter.body)
                 self.assertNotIn("$<TARGET_FILE:", converter.body)
 
     def test_loom_rules_are_available_to_other_project_converters(self):
@@ -363,6 +365,7 @@ loom_kernel_binary(name="program", srcs=["program.loom"], deps=[":support"], tar
         )
         output = bazel_to_cmake_converter.convert_build_file(
             """
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_generated_cc_library")
 loomc_shared_libraries(
     name="loomc_shared",
     components=[":base"] + select({

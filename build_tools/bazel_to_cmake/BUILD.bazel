@@ -29,6 +29,7 @@ py_library(
     srcs = [
         "bazel_to_cmake_config.py",
         "bazel_to_cmake_converter.py",
+        "bazel_to_cmake_generated.py",
         "bazel_to_cmake_loads.py",
         "bazel_to_cmake_requirements.py",
         "bazel_to_cmake_targets.py",

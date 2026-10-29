@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 include("${CMAKE_CURRENT_LIST_DIR}/iree_test_arguments.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/iree_generated_files.cmake")
 
 ###############################################################################
 # Main user rules
@@ -390,57 +391,13 @@ function(iree_py_generated_files)
     set(_RULE_COMMENT "Generating ${_RULE_NAME}")
   endif()
 
-  iree_py_library_entrypoint(_GENERATOR_ENTRYPOINT "${_RULE_GENERATOR}")
-  iree_py_library_collect_sources(_GENERATOR_INPUTS "${_RULE_GENERATOR}")
-  iree_py_library_collect_package_dirs(
-    _GENERATOR_PACKAGE_DIRS "${_RULE_GENERATOR}"
-  )
-  list(APPEND _GENERATOR_PACKAGE_DIRS "$ENV{PYTHONPATH}")
-  if(CMAKE_HOST_WIN32)
-    list(JOIN _GENERATOR_PACKAGE_DIRS "\\;" _GENERATOR_PYTHONPATH)
-  else()
-    list(JOIN _GENERATOR_PACKAGE_DIRS ":" _GENERATOR_PYTHONPATH)
-  endif()
-
-  iree_package_name(_PACKAGE_NAME)
-  set(_GEN_TARGET "${_PACKAGE_NAME}_${_RULE_NAME}")
-  set(_GEN_STAMP
-    "${_IREE_PACKAGE_BINARY_DIR}/CMakeFiles/${_GEN_TARGET}.stamp")
-  iree_resolve_source_files(_RULE_INPUTS ${_RULE_INPUTS})
-  add_custom_command(
-    OUTPUT
-      "${_GEN_STAMP}"
-    BYPRODUCTS
-      ${_OUTPUTS}
-    COMMAND
-      "${CMAKE_COMMAND}" -E env
-      "PYTHONPATH=${_GENERATOR_PYTHONPATH}"
-      "PYTHONDONTWRITEBYTECODE=1"
-      "${Python3_EXECUTABLE}"
-      ${_GENERATOR_ENTRYPOINT}
-      ${_RULE_ARGS}
-      ${_OUTPUT_ARGS}
-    COMMAND
-      "${CMAKE_COMMAND}" -E touch "${_GEN_STAMP}"
-    DEPENDS
-      ${_GENERATOR_INPUTS}
-      ${_RULE_INPUTS}
-    COMMENT
-      "${_RULE_COMMENT}"
-    VERBATIM
-  )
-  set_source_files_properties(
-    ${_RULE_OUTPUTS}
-    ${_OUTPUTS}
-    PROPERTIES GENERATED TRUE
-  )
-
-  add_custom_target("${_GEN_TARGET}"
-    DEPENDS
-      "${_GEN_STAMP}"
-  )
-  iree_register_generated_compile_input("${_GEN_TARGET}"
+  iree_generated_files(
+    NAME "${_RULE_NAME}"
+    GENERATOR "${_RULE_GENERATOR}"
     OUTPUTS ${_OUTPUTS}
+    ARGS ${_RULE_ARGS} ${_OUTPUT_ARGS}
+    INPUTS ${_RULE_INPUTS}
+    COMMENT "${_RULE_COMMENT}"
   )
 endfunction()
 

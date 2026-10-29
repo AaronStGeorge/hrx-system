@@ -6,12 +6,14 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+iree_cc_library(
   NAME
     provider_set
   HDRS
     "provider_set.h"
   DEPS
+    iree_defs
+    loom_defs
     loom::binding::c::loomc
     loom::target::provider
   PUBLIC

@@ -113,7 +113,7 @@ def _loom_generate_outputs(
         rule_kwargs["target_compatible_with"] = target_compatible_with
     if output_directories:
         rule_kwargs["output_directories"] = output_directories
-    rule_kwargs["tags"] = tags + ["skip-bazel_to_cmake"]
+    rule_kwargs["tags"] = tags
     rule_kwargs = apply_loom_target_policy(rule_kwargs)
 
     generate(
@@ -415,10 +415,12 @@ def loom_target_table_cc_library(
     if generator == None:
         fail("loom_target_table_cc_library %s requires generator" % name)
 
-    rule_kwargs = {}
+    rule_kwargs = {"testonly": testonly}
+    if kwargs.get("target_compatible_with") != None:
+        rule_kwargs["target_compatible_with"] = kwargs["target_compatible_with"]
     if visibility != None:
         rule_kwargs["visibility"] = visibility
-    rule_kwargs["tags"] = tags + ["skip-bazel_to_cmake"]
+    rule_kwargs["tags"] = tags
     rule_kwargs = apply_loom_target_policy(rule_kwargs)
 
     source = source or (name + ".c")
@@ -523,10 +525,12 @@ def loom_target_contract_table_cc_libraries(
       visibility: Passed through to the generator and runtime C libraries.
       **kwargs: Additional arguments passed through to both C libraries.
     """
-    rule_kwargs = {}
+    rule_kwargs = {"testonly": testonly}
+    if kwargs.get("target_compatible_with") != None:
+        rule_kwargs["target_compatible_with"] = kwargs["target_compatible_with"]
     if visibility != None:
         rule_kwargs["visibility"] = visibility
-    rule_kwargs["tags"] = tags + ["skip-bazel_to_cmake"]
+    rule_kwargs["tags"] = tags
     rule_kwargs = apply_loom_target_policy(rule_kwargs)
 
     contract_source = name + ".c"
@@ -706,10 +710,12 @@ def loom_generated_cc_library(
     if len(extra_output_flags) != len(extra_outputs):
         fail("extra_output_flags and extra_outputs must have the same length")
 
-    rule_kwargs = {}
+    rule_kwargs = {"testonly": testonly}
+    if kwargs.get("target_compatible_with") != None:
+        rule_kwargs["target_compatible_with"] = kwargs["target_compatible_with"]
     if visibility != None:
         rule_kwargs["visibility"] = visibility
-    rule_kwargs["tags"] = tags + ["skip-bazel_to_cmake"]
+    rule_kwargs["tags"] = tags
     rule_kwargs = apply_loom_target_policy(rule_kwargs)
 
     if source == None and not generated_srcs:
@@ -830,4 +836,5 @@ def loom_low_descriptor_cc_library(
         deps = ids_deps if ids_deps != None else deps,
         testonly = testonly,
         visibility = ids_visibility if ids_visibility != None else visibility,
+        target_compatible_with = kwargs.get("target_compatible_with"),
     )

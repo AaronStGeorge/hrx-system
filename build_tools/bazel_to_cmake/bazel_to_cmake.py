@@ -51,6 +51,7 @@ import argparse
 import importlib.util
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import bazel_to_cmake_converter
@@ -139,8 +140,26 @@ def setup_environment():
         sys.dont_write_bytecode = orig_dont_write_bytecode
 
 
-def convert_directory(directory, input_files):
-    """Returns a package's declarations, or None for a source-authored package."""
+@dataclass
+class Package:
+    # Repository-relative directory that owns the declarations and their outputs.
+    directory: Path
+    # Source declaration used for diagnostics and generated-file attribution.
+    build_file: Path
+    # Native fragments rendered after repository-wide declaration collection.
+    converter: bazel_to_cmake_converter.Converter
+
+    def convert(self):
+        package = self.directory.as_posix()
+        return (
+            f"# Generated from {package}/{self.build_file.name}. Edit the BUILD declaration.\n"
+            "set_property(DIRECTORY PROPERTY IREE_PACKAGE_SOURCE_DIR "
+            f'"${{IREE_SOURCE_DIR}}/{package}")\n' + self.converter.convert()
+        )
+
+
+def evaluate_directory(directory, input_files, generated_files):
+    """Collects a generated package; authored packages retain their native scope."""
     directory = Path(directory)
     if (directory / "CMakeLists.txt").is_file():
         return None
@@ -159,21 +178,32 @@ def convert_directory(directory, input_files):
     if "bazel-to-cmake: skip" in source:
         return None
     try:
-        converted = bazel_to_cmake_converter.convert_build_file(
+        converter = bazel_to_cmake_converter.evaluate_build_file(
             compile(source, str(build_file), "exec"),
             repo_cfg=repo_cfg,
             build_dir=str(directory),
             repo_root=repo_root,
             input_files=input_files,
+            generated_files=generated_files,
         )
     except (NameError, NotImplementedError, KeyError) as error:
         raise RuntimeError(f"Cannot convert {build_file}: {error}") from error
-    package = directory.relative_to(repo_root).as_posix()
-    return (
-        f"# Generated from {package}/{build_file.name}. Edit the BUILD declaration.\n"
-        "set_property(DIRECTORY PROPERTY IREE_PACKAGE_SOURCE_DIR "
-        f'"${{IREE_SOURCE_DIR}}/{package}")\n' + converted
-    )
+    return Package(directory.relative_to(repo_root), build_file, converter)
+
+
+def evaluate_packages(root_dirs, input_files):
+    """Establishes generated-file ownership before any consumer is emitted."""
+    generated_files = {}
+    packages = {}
+    for root_dir in root_dirs:
+        root_path = Path(repo_root) / root_dir
+        if not root_path.is_dir():
+            raise FileNotFoundError(f"Cannot find package root {root_path}")
+        for directory, _, _ in os.walk(root_path):
+            package = evaluate_directory(directory, input_files, generated_files)
+            if package is not None:
+                packages[package.directory] = package
+    return packages
 
 
 def write_if_changed(path, content):
@@ -203,20 +233,10 @@ def generate_build_tree(output_dir, root_dirs):
                 )
     input_files = set()
     output_files = set()
-    for root_dir in root_dirs:
-        root_path = source_root / root_dir
-        if not root_path.is_dir():
-            raise FileNotFoundError(f"Cannot find package root {root_path}")
-        for directory, _, _ in os.walk(root_path):
-            content = convert_directory(directory, input_files)
-            if content is not None:
-                path = (
-                    output_dir
-                    / Path(directory).relative_to(source_root)
-                    / "CMakeLists.txt"
-                )
-                write_if_changed(path, content)
-                output_files.add(path)
+    for package in evaluate_packages(root_dirs, input_files).values():
+        path = output_dir / package.directory / "CMakeLists.txt"
+        write_if_changed(path, package.convert())
+        output_files.add(path)
 
     # Include configuration and handler modules actually imported by conversion.
     # The converter can live outside the source root in embedded fixture builds.
@@ -260,10 +280,11 @@ def main(args):
             path = path.parent
         if not path.is_dir():
             raise FileNotFoundError(f"Cannot find package {path}")
-        content = convert_directory(path, set())
-        if content is None:
+        packages = evaluate_packages(repo_cfg.DEFAULT_ROOT_DIRS, set())
+        package = packages.get(path.relative_to(repo_root))
+        if package is None:
             raise ValueError(f"{path} has no generated CMake package")
-        print(content, end="")
+        print(package.convert(), end="")
     else:
         generate_build_tree(args.output_dir, repo_cfg.DEFAULT_ROOT_DIRS)
 

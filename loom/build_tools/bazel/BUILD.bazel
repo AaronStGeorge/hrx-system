@@ -28,6 +28,7 @@ platform(
 )
 
 exports_files([
+    "build_defs.bzl",
     "defs.bzl",
     "loom_binary.bzl",
     "loom_corpus_build.bzl",

@@ -130,10 +130,8 @@ class AmdfBuildFileFunctions(
         for target in targets:
             product = f"{name}_{target}"
             path = f"${{CMAKE_CURRENT_BINARY_DIR}}/{product}.hsaco"
-            self._target_file_paths[self._current_target_label(product)] = path
-            self._target_file_paths[self._current_target_label(product + ".hsaco")] = (
-                path
-            )
+            self._register_target_files(product, [path])
+            self._register_target_files(product + ".hsaco", [path])
         compatibility = {
             "//loom/config/arch/amdgpu:" + capabilities[target]: []
             for target in targets
@@ -229,9 +227,9 @@ class AmdfBuildFileFunctions(
         if self._should_skip_target(tags=tags, **kwargs):
             return
 
-        self._target_file_paths[
-            self._current_target_label(name + "_shared_artifact")
-        ] = f"$<TARGET_FILE:{name}>"
+        self._register_target_files(
+            name + "_shared_artifact", [f"$<TARGET_FILE:{name}>"]
+        )
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         components_block = self._convert_target_list_block("COMPONENTS", components)
         runtime_data_block, runtime_data_select_block = (
