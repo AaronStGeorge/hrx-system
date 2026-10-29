@@ -6,8 +6,6 @@ package(
     licenses = ["notice"],
 )
 
-exports_files(["testdata/duplicate_symbols.loom-test"])
-
 loom_cc_library(
     name = "format",
     srcs = ["format.c"],

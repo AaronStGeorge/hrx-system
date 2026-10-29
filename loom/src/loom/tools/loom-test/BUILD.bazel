@@ -223,13 +223,13 @@ loom_cc_binary(
 iree_execution_test_suite(
     name = "execution_test",
     data = [
-        "testdata/file_cases.loom",
-        "testdata/library_cases.loom",
-        "testdata/linked_input_cases.loom",
-        "testdata/scalar_cases.loom",
-        "testdata/xfail_cases.loom",
-        "//loom/src/loom/tooling/input:testdata/duplicate_symbols.loom-test",
-        "//loom/src/loom/tooling/testbench:testdata/requirements.loom",
+        "//loom/src/loom/tooling/input/testdata:duplicate_symbols.loom-test",
+        "//loom/src/loom/tooling/testbench/testdata:requirements.loom",
+        "//loom/src/loom/tools/loom-test/testdata:file_cases.loom",
+        "//loom/src/loom/tools/loom-test/testdata:library_cases.loom",
+        "//loom/src/loom/tools/loom-test/testdata:linked_input_cases.loom",
+        "//loom/src/loom/tools/loom-test/testdata:scalar_cases.loom",
+        "//loom/src/loom/tools/loom-test/testdata:xfail_cases.loom",
     ],
     manifests = ["loom-test.test.json"],
     tags = ["hostonly"],
@@ -242,7 +242,7 @@ iree_execution_test_suite(
 
 iree_execution_test_suite(
     name = "scenario_execution_test",
-    data = ["testdata/scenario_cases.loom"],
+    data = ["//loom/src/loom/tools/loom-test/testdata:scenario_cases.loom"],
     manifests = ["scenario_execution.test.json"],
     tags = ["hostonly"],
     target_compatible_with = _VM_EXECUTION_COMPATIBLE_WITH,
@@ -254,8 +254,8 @@ iree_execution_test_suite(
 iree_execution_test_suite(
     name = "scenario_failure_test",
     data = [
-        "testdata/scenario_failures.loom",
-        "testdata/scenario_requirements.loom",
+        "//loom/src/loom/tools/loom-test/testdata:scenario_failures.loom",
+        "//loom/src/loom/tools/loom-test/testdata:scenario_requirements.loom",
     ],
     manifests = ["scenario_failure.test.json"],
     tags = ["hostonly"],

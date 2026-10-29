@@ -328,9 +328,9 @@ loom_cc_test(
 loom_cc_test(
     name = "run_test",
     srcs = ["run_test.cc"],
-    data = ["testdata/planning_error.loom"],
+    data = ["//loom/src/loom/tools/loom-benchmark/testdata:planning_error.loom"],
     env = {
-        "LOOM_BENCHMARK_PLANNING_SOURCE": "$(rootpath testdata/planning_error.loom)",
+        "LOOM_BENCHMARK_PLANNING_SOURCE": "$(rootpath //loom/src/loom/tools/loom-benchmark/testdata:planning_error.loom)",
     },
     deps = [
         ":main",
@@ -360,10 +360,10 @@ loomc_cc_binary(
 iree_execution_test_suite(
     name = "execution_test",
     data = [
-        "testdata/device_events.loom",
-        "testdata/dispatch_benchmarks.loom",
-        "testdata/scalar_benchmarks.loom",
-        "//loom/src/loom/tooling/testbench:testdata/requirements.loom",
+        "//loom/src/loom/tooling/testbench/testdata:requirements.loom",
+        "//loom/src/loom/tools/loom-benchmark/testdata:device_events.loom",
+        "//loom/src/loom/tools/loom-benchmark/testdata:dispatch_benchmarks.loom",
+        "//loom/src/loom/tools/loom-benchmark/testdata:scalar_benchmarks.loom",
     ],
     manifests = ["loom-benchmark.test.json"],
     tags = ["hostonly"],
