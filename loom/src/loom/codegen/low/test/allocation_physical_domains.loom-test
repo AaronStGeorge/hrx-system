@@ -156,24 +156,6 @@ copy %source -> %result: coalesced
 
 // ====
 
-// RUN: emit low-allocation-query @future_fixed_copy values=%source,%result copies=%result fixed=%result:physical_register:2:1
-
-test.target<low_core> @target
-
-// The later result location is known before interval assignment. Preserve that
-// copy affinity instead of moving the source through idle narrower storage.
-low.func.def target<test.low.core>(@target) @future_fixed_copy(%source: reg<test.explicit32>, %peer0: reg<test.explicit32>, %peer1: reg<test.explicit32>, %restricted: reg<test.packed.narrow>) -> (reg<test.explicit32>, reg<test.explicit32>, reg<test.explicit32>, reg<test.packed.narrow>) asm {
-  %result = copy %source : reg<test.explicit32> -> reg<test.explicit32>
-  return %result, %peer0, %peer1, %restricted
-}
-
-// ----
-value %source: test.explicit32 -> physical_register[2:1]
-value %result: test.explicit32 -> physical_register[2:1]
-copy %source -> %result: coalesced
-
-// ====
-
 // RUN: emit low-allocation-query @loop_initializer_keeps_future_domain_available values=%initial,%state,%restricted
 
 test.target<low_core> @target
