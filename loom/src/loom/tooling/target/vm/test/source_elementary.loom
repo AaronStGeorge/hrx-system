@@ -209,3 +209,53 @@ check.case public @ordinary_inverse_trigonometry_f64 {
   check.expect.approximate actual(%atan2) expected(%atan2_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
   check.return
 }
+
+func.def @trigonometry_f32(%input: f32) -> (f32, f32, f32, f32, f32) {
+  %sin = scalar.sinf %input : f32
+  %cos = scalar.cosf %input : f32
+  %tan = scalar.tanf %input : f32
+  %sinturns = scalar.sinturnsf %input : f32
+  %costurns = scalar.costurnsf %input : f32
+  func.return %sin, %cos, %tan, %sinturns, %costurns : f32, f32, f32, f32, f32
+}
+
+check.case public @ordinary_trigonometry_f32 {
+  %input = check.literal value(8192.375) : f32
+  %sin, %cos, %tan, %sinturns, %costurns = func.call @trigonometry_f32(%input) : (f32) -> (f32, f32, f32, f32, f32)
+  %sin_reference = check.literal value(-0.78248113393783569) : f32
+  check.expect.approximate actual(%sin) expected(%sin_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %cos_reference = check.literal value(0.62267428636550903) : f32
+  check.expect.approximate actual(%cos) expected(%cos_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %tan_reference = check.literal value(-1.2566460371017456) : f32
+  check.expect.approximate actual(%tan) expected(%tan_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %sinturns_reference = check.literal value(0.70710676908493042) : f32
+  check.expect.approximate actual(%sinturns) expected(%sinturns_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  %costurns_reference = check.literal value(-0.70710676908493042) : f32
+  check.expect.approximate actual(%costurns) expected(%costurns_reference) atol(0.0) rtol(1.1920928955078125e-07) nan(different) : f32, f32
+  check.return
+}
+
+func.def @trigonometry_f64(%input: f64) -> (f64, f64, f64, f64, f64) {
+  %sin = scalar.sinf %input : f64
+  %cos = scalar.cosf %input : f64
+  %tan = scalar.tanf %input : f64
+  %sinturns = scalar.sinturnsf %input : f64
+  %costurns = scalar.costurnsf %input : f64
+  func.return %sin, %cos, %tan, %sinturns, %costurns : f64, f64, f64, f64, f64
+}
+
+check.case public @ordinary_trigonometry_f64 {
+  %input = check.literal value(8192.375) : f64
+  %sin, %cos, %tan, %sinturns, %costurns = func.call @trigonometry_f64(%input) : (f64) -> (f64, f64, f64, f64, f64)
+  %sin_reference = check.literal value(-0.7824811459662524) : f64
+  check.expect.approximate actual(%sin) expected(%sin_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %cos_reference = check.literal value(0.62267427777879225) : f64
+  check.expect.approximate actual(%cos) expected(%cos_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %tan_reference = check.literal value(-1.2566460088210554) : f64
+  check.expect.approximate actual(%tan) expected(%tan_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %sinturns_reference = check.literal value(0.70710678118654757) : f64
+  check.expect.approximate actual(%sinturns) expected(%sinturns_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  %costurns_reference = check.literal value(-0.70710678118654757) : f64
+  check.expect.approximate actual(%costurns) expected(%costurns_reference) atol(0.0) rtol(2.2204460492503131e-16) nan(different) : f64, f64
+  check.return
+}

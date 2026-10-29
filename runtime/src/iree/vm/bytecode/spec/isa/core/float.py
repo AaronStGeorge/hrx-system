@@ -325,6 +325,30 @@ _FLOAT_MATH_ORDINARY_UNARY_VALUES = (
         "positive quiet NaN. Signed zero is preserved and infinities return "
         "signed pi/2.",
     ),
+    (
+        "sin",
+        31,
+        "Returns the stable iree/math sin mapping for a radian input with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Signed zero is preserved. "
+        "Every nonfinite input returns canonical positive quiet NaN.",
+    ),
+    (
+        "cos",
+        32,
+        "Returns the stable iree/math cos mapping for a radian input with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Cosine returns one at either zero. "
+        "Every nonfinite input returns canonical positive quiet NaN.",
+    ),
+    (
+        "tan",
+        33,
+        "Returns the stable iree/math tan mapping for a radian input with fixed "
+        "unfused rounding points, gradual underflow, and at most one adjacent "
+        "value of error from correct rounding. Signed zero is preserved. "
+        "Every nonfinite input returns canonical positive quiet NaN.",
+    ),
 )
 
 FLOAT_MATH_F32_SELECTOR = _selector(
@@ -403,7 +427,28 @@ FLOAT_MATH_F64_SELECTOR = _selector(
         "Selects one frozen unary f64 mapping. Ordinary elementary functions "
         "use the shared iree/math implementation and preserve gradual underflow."
     ),
-    _FLOAT_MATH_EXACT_UNARY_VALUES + _FLOAT_MATH_ORDINARY_UNARY_VALUES,
+    _FLOAT_MATH_EXACT_UNARY_VALUES
+    + _FLOAT_MATH_ORDINARY_UNARY_VALUES
+    + (
+        (
+            "sin_turns",
+            34,
+            "Returns the stable iree/math sin(2*pi*x) mapping with fixed unfused "
+            "rounding points, gradual underflow, and at most one adjacent value "
+            "of error from correct rounding. Half-integer turns return zero "
+            "with the input sign and odd quarter-turns return exact signed one. "
+            "Every nonfinite input returns canonical positive quiet NaN.",
+        ),
+        (
+            "cos_turns",
+            35,
+            "Returns the stable iree/math cos(2*pi*x) mapping with fixed unfused "
+            "rounding points, gradual underflow, and at most one adjacent value "
+            "of error from correct rounding. Odd quarter-turns return positive "
+            "zero and other cardinals return exact signed one. Every nonfinite "
+            "input returns canonical positive quiet NaN.",
+        ),
+    ),
 )
 
 FLOAT_COMPARE_SELECTOR = _selector(

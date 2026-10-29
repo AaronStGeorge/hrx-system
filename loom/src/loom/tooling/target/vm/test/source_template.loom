@@ -1,0 +1,6 @@
+template.decl @required_transform(%value: f32) -> (f32)
+
+func.def public @missing_implementation(%value: f32) -> (f32) {
+  %result = template.apply<@required_transform>(%value) : (f32) -> (f32)
+  func.return %result : f32
+}

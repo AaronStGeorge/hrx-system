@@ -397,7 +397,8 @@ bool loom_target_math_policy_prefers_fma(
   _(ASINF, op_asinf, "asinf")                            \
   _(ACOSF, op_acosf, "acosf")                            \
   _(ATANF, op_atanf, "atanf")                            \
-  _(ATAN2F, op_atan2f, "atan2f")
+  _(ATAN2F, op_atan2f, "atan2f")                         \
+  _(TANF, op_tanf, "tanf")
 
 #define LOOM_TARGET_MATH_LANE_DOMAIN_NAMES(_) \
   _(UNKNOWN, lane_unknown, "unknown")         \

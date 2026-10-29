@@ -52,6 +52,7 @@ NUMERIC_CORPUS = loom_corpus_manifest(
         "float/selectors.loom",
         "float/sign.loom",
         "float/turns.loom",
+        "float/trigonometry.loom",
         "float/trigonometry_f32.loom",
         "float/trigonometry_f8e4m3.loom",
         "float/trigonometry_f8e5m2.loom",

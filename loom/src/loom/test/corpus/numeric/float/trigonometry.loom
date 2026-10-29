@@ -1,0 +1,112 @@
+// Ordinary radian and turns functions across all floating source formats.
+// Distinct signs exercise odd/even symmetry. Independent MPFR constants keep
+// the reference free of trigonometric operations, including on the VM.
+
+func.def @trigonometry_observations(%input: f64, %narrow_output: buffer, %wide_output: buffer) {
+  %negative = scalar.negf %input : f64
+  %inputs = vector.from_elements %input, %negative : vector<2xf64>
+  %origin = index.constant 0 : offset
+  %narrow_results = buffer.view %narrow_output[%origin] : buffer -> view<5x10xf64>
+  %wide_results = buffer.view %wide_output[%origin] : buffer -> view<10xf64>
+  %e4_inputs = vector.fptrunc %inputs : vector<2xf64> to vector<2xf8E4M3>
+  %e4_sin = vector.sinf %e4_inputs : vector<2xf8E4M3>
+  %e4_cos = vector.cosf %e4_inputs : vector<2xf8E4M3>
+  %e4_tan = vector.tanf %e4_inputs : vector<2xf8E4M3>
+  %e4_sinturns = vector.sinturnsf %e4_inputs : vector<2xf8E4M3>
+  %e4_costurns = vector.costurnsf %e4_inputs : vector<2xf8E4M3>
+  %e4_values = vector.concat<0> %e4_sin, %e4_cos, %e4_tan, %e4_sinturns, %e4_costurns : vector<2xf8E4M3>, vector<2xf8E4M3>, vector<2xf8E4M3>, vector<2xf8E4M3>, vector<2xf8E4M3> -> vector<10xf8E4M3>
+  %e4_wide = vector.extf %e4_values : vector<10xf8E4M3> to vector<10xf64>
+  vector.store %e4_wide, %narrow_results[0, 0] : vector<10xf64>, view<5x10xf64>
+  %e5_inputs = vector.fptrunc %inputs : vector<2xf64> to vector<2xf8E5M2>
+  %e5_sin = vector.sinf %e5_inputs : vector<2xf8E5M2>
+  %e5_cos = vector.cosf %e5_inputs : vector<2xf8E5M2>
+  %e5_tan = vector.tanf %e5_inputs : vector<2xf8E5M2>
+  %e5_sinturns = vector.sinturnsf %e5_inputs : vector<2xf8E5M2>
+  %e5_costurns = vector.costurnsf %e5_inputs : vector<2xf8E5M2>
+  %e5_values = vector.concat<0> %e5_sin, %e5_cos, %e5_tan, %e5_sinturns, %e5_costurns : vector<2xf8E5M2>, vector<2xf8E5M2>, vector<2xf8E5M2>, vector<2xf8E5M2>, vector<2xf8E5M2> -> vector<10xf8E5M2>
+  %e5_wide = vector.extf %e5_values : vector<10xf8E5M2> to vector<10xf64>
+  vector.store %e5_wide, %narrow_results[1, 0] : vector<10xf64>, view<5x10xf64>
+  %half_inputs = vector.fptrunc %inputs : vector<2xf64> to vector<2xf16>
+  %half_sin = vector.sinf %half_inputs : vector<2xf16>
+  %half_cos = vector.cosf %half_inputs : vector<2xf16>
+  %half_tan = vector.tanf %half_inputs : vector<2xf16>
+  %half_sinturns = vector.sinturnsf %half_inputs : vector<2xf16>
+  %half_costurns = vector.costurnsf %half_inputs : vector<2xf16>
+  %half_values = vector.concat<0> %half_sin, %half_cos, %half_tan, %half_sinturns, %half_costurns : vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16> -> vector<10xf16>
+  %half_wide = vector.extf %half_values : vector<10xf16> to vector<10xf64>
+  vector.store %half_wide, %narrow_results[2, 0] : vector<10xf64>, view<5x10xf64>
+  %brain_inputs = vector.fptrunc %inputs : vector<2xf64> to vector<2xbf16>
+  %brain_sin = vector.sinf %brain_inputs : vector<2xbf16>
+  %brain_cos = vector.cosf %brain_inputs : vector<2xbf16>
+  %brain_tan = vector.tanf %brain_inputs : vector<2xbf16>
+  %brain_sinturns = vector.sinturnsf %brain_inputs : vector<2xbf16>
+  %brain_costurns = vector.costurnsf %brain_inputs : vector<2xbf16>
+  %brain_values = vector.concat<0> %brain_sin, %brain_cos, %brain_tan, %brain_sinturns, %brain_costurns : vector<2xbf16>, vector<2xbf16>, vector<2xbf16>, vector<2xbf16>, vector<2xbf16> -> vector<10xbf16>
+  %brain_wide = vector.extf %brain_values : vector<10xbf16> to vector<10xf64>
+  vector.store %brain_wide, %narrow_results[3, 0] : vector<10xf64>, view<5x10xf64>
+  %single_inputs = vector.fptrunc %inputs : vector<2xf64> to vector<2xf32>
+  %single_sin = vector.sinf %single_inputs : vector<2xf32>
+  %single_cos = vector.cosf %single_inputs : vector<2xf32>
+  %single_tan = vector.tanf %single_inputs : vector<2xf32>
+  %single_sinturns = vector.sinturnsf %single_inputs : vector<2xf32>
+  %single_costurns = vector.costurnsf %single_inputs : vector<2xf32>
+  %single_values = vector.concat<0> %single_sin, %single_cos, %single_tan, %single_sinturns, %single_costurns : vector<2xf32>, vector<2xf32>, vector<2xf32>, vector<2xf32>, vector<2xf32> -> vector<10xf32>
+  %single_wide = vector.extf %single_values : vector<10xf32> to vector<10xf64>
+  vector.store %single_wide, %narrow_results[4, 0] : vector<10xf64>, view<5x10xf64>
+  %wide_sin = vector.sinf %inputs : vector<2xf64>
+  %wide_cos = vector.cosf %inputs : vector<2xf64>
+  %wide_tan = vector.tanf %inputs : vector<2xf64>
+  %wide_sinturns = vector.sinturnsf %inputs : vector<2xf64>
+  %wide_costurns = vector.costurnsf %inputs : vector<2xf64>
+  %wide_values = vector.concat<0> %wide_sin, %wide_cos, %wide_tan, %wide_sinturns, %wide_costurns : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64> -> vector<10xf64>
+  vector.store %wide_values, %wide_results[0] : vector<10xf64>, view<10xf64>
+  func.return
+}
+
+// MPFR 4.2.2 directed intervals rounded independently to binary64.
+func.def @trigonometry_oracle(%input: f64, %narrow_output: buffer, %wide_output: buffer) {
+  %sin0 = scalar.constant 0.36627252908604757 : f64
+  %sin1 = scalar.constant -0.36627252908604757 : f64
+  %cos0 = scalar.constant 0.93050762191231429 : f64
+  %cos1 = scalar.constant 0.93050762191231429 : f64
+  %tan0 = scalar.constant 0.39362657592563277 : f64
+  %tan1 = scalar.constant -0.39362657592563277 : f64
+  %sinturns0 = scalar.constant 0.70710678118654757 : f64
+  %sinturns1 = scalar.constant -0.70710678118654757 : f64
+  %costurns0 = scalar.constant -0.70710678118654757 : f64
+  %costurns1 = scalar.constant -0.70710678118654757 : f64
+  %values = vector.from_elements %sin0, %sin1, %cos0, %cos1, %tan0, %tan1, %sinturns0, %sinturns1, %costurns0, %costurns1 : vector<10xf64>
+  %origin = index.constant 0 : offset
+  %narrow_results = buffer.view %narrow_output[%origin] : buffer -> view<5x10xf64>
+  %wide_results = buffer.view %wide_output[%origin] : buffer -> view<10xf64>
+  %e4 = vector.fptrunc %values : vector<10xf64> to vector<10xf8E4M3>
+  %e4_wide = vector.extf %e4 : vector<10xf8E4M3> to vector<10xf64>
+  vector.store %e4_wide, %narrow_results[0, 0] : vector<10xf64>, view<5x10xf64>
+  %e5 = vector.fptrunc %values : vector<10xf64> to vector<10xf8E5M2>
+  %e5_wide = vector.extf %e5 : vector<10xf8E5M2> to vector<10xf64>
+  vector.store %e5_wide, %narrow_results[1, 0] : vector<10xf64>, view<5x10xf64>
+  %half = vector.fptrunc %values : vector<10xf64> to vector<10xf16>
+  %half_wide = vector.extf %half : vector<10xf16> to vector<10xf64>
+  vector.store %half_wide, %narrow_results[2, 0] : vector<10xf64>, view<5x10xf64>
+  %brain = vector.fptrunc %values : vector<10xf64> to vector<10xbf16>
+  %brain_wide = vector.extf %brain : vector<10xbf16> to vector<10xf64>
+  vector.store %brain_wide, %narrow_results[3, 0] : vector<10xf64>, view<5x10xf64>
+  %single = vector.fptrunc %values : vector<10xf64> to vector<10xf32>
+  %single_wide = vector.extf %single : vector<10xf32> to vector<10xf64>
+  vector.store %single_wide, %narrow_results[4, 0] : vector<10xf64>, view<5x10xf64>
+  vector.store %values, %wide_results[0] : vector<10xf64>, view<10xf64>
+  func.return
+}
+
+check.scenario @ordinary_trigonometry {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(0.375) : f64
+    %narrow_output = check.generate.fill value(-99.0) : tensor<5x10xf64>
+    %wide_output = check.generate.fill value(-99.0) : tensor<10xf64>
+    check.compare<@trigonometry_observations, @trigonometry_oracle>(%input, %narrow_output, %wide_output) : (f64, tensor<5x10xf64>, tensor<10xf64>) -> () {
+      check.expect.approximate actual(%narrow_output) expected(%narrow_output) atol(0.0) rtol(1.1999999999999999e-07) nan(different) : tensor<5x10xf64>, tensor<5x10xf64>
+      check.expect.approximate actual(%wide_output) expected(%wide_output) atol(0.0) rtol(2.2999999999999999e-16) nan(different) : tensor<10xf64>, tensor<10xf64>
+    }
+  }
+  check.return
+}

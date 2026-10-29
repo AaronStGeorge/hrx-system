@@ -25,17 +25,19 @@ TEST(MathPolicyTest, OrdinaryElementaryFamily) {
       LOOM_SCALAR_TYPE_BF16,   LOOM_SCALAR_TYPE_F32,    LOOM_SCALAR_TYPE_F64,
   };
   const loom_target_math_op_t operations[] = {
-      LOOM_TARGET_MATH_OP_EXPF,   LOOM_TARGET_MATH_OP_EXP2F,
-      LOOM_TARGET_MATH_OP_SQRTF,  LOOM_TARGET_MATH_OP_RSQRTF,
-      LOOM_TARGET_MATH_OP_CBRTF,  LOOM_TARGET_MATH_OP_LOGF,
-      LOOM_TARGET_MATH_OP_LOG2F,  LOOM_TARGET_MATH_OP_LOG10F,
-      LOOM_TARGET_MATH_OP_LOG1PF, LOOM_TARGET_MATH_OP_EXPM1F,
-      LOOM_TARGET_MATH_OP_POWF,   LOOM_TARGET_MATH_OP_SINHF,
-      LOOM_TARGET_MATH_OP_COSHF,  LOOM_TARGET_MATH_OP_TANHF,
-      LOOM_TARGET_MATH_OP_ASINHF, LOOM_TARGET_MATH_OP_ACOSHF,
-      LOOM_TARGET_MATH_OP_ATANHF, LOOM_TARGET_MATH_OP_ASINF,
-      LOOM_TARGET_MATH_OP_ACOSF,  LOOM_TARGET_MATH_OP_ATANF,
-      LOOM_TARGET_MATH_OP_ATAN2F,
+      LOOM_TARGET_MATH_OP_EXPF,      LOOM_TARGET_MATH_OP_EXP2F,
+      LOOM_TARGET_MATH_OP_SQRTF,     LOOM_TARGET_MATH_OP_RSQRTF,
+      LOOM_TARGET_MATH_OP_CBRTF,     LOOM_TARGET_MATH_OP_LOGF,
+      LOOM_TARGET_MATH_OP_LOG2F,     LOOM_TARGET_MATH_OP_LOG10F,
+      LOOM_TARGET_MATH_OP_LOG1PF,    LOOM_TARGET_MATH_OP_EXPM1F,
+      LOOM_TARGET_MATH_OP_POWF,      LOOM_TARGET_MATH_OP_SINHF,
+      LOOM_TARGET_MATH_OP_COSHF,     LOOM_TARGET_MATH_OP_TANHF,
+      LOOM_TARGET_MATH_OP_ASINHF,    LOOM_TARGET_MATH_OP_ACOSHF,
+      LOOM_TARGET_MATH_OP_ATANHF,    LOOM_TARGET_MATH_OP_ASINF,
+      LOOM_TARGET_MATH_OP_ACOSF,     LOOM_TARGET_MATH_OP_ATANF,
+      LOOM_TARGET_MATH_OP_ATAN2F,    LOOM_TARGET_MATH_OP_SINF,
+      LOOM_TARGET_MATH_OP_COSF,      LOOM_TARGET_MATH_OP_TANF,
+      LOOM_TARGET_MATH_OP_SINTURNSF, LOOM_TARGET_MATH_OP_COSTURNSF,
   };
   for (auto operation : operations) {
     SCOPED_TRACE(operation);
@@ -66,11 +68,20 @@ TEST(MathPolicyTest, OrdinaryElementaryFamily) {
               (operation == LOOM_TARGET_MATH_OP_ASINHF ||
                operation == LOOM_TARGET_MATH_OP_ACOSHF ||
                operation == LOOM_TARGET_MATH_OP_ATANHF);
+          const bool turns_recipe = approximate &&
+                                    element == LOOM_SCALAR_TYPE_F32 &&
+                                    (operation == LOOM_TARGET_MATH_OP_SINF ||
+                                     operation == LOOM_TARGET_MATH_OP_COSF);
           EXPECT_EQ(decision.action,
-                    narrow || inverse_recipe
+                    narrow || inverse_recipe || turns_recipe
                         ? LOOM_TARGET_MATH_POLICY_ACTION_REWRITE
                         : LOOM_TARGET_MATH_POLICY_ACTION_KEEP);
-          if (narrow || inverse_recipe) {
+          if (turns_recipe) {
+            EXPECT_EQ(decision.recipe,
+                      operation == LOOM_TARGET_MATH_OP_SINF
+                          ? LOOM_TARGET_MATH_RECIPE_SIN_TURNS_F32
+                          : LOOM_TARGET_MATH_RECIPE_COS_TURNS_F32);
+          } else if (narrow || inverse_recipe) {
             EXPECT_EQ(decision.recipe,
                       inverse_recipe
                           ? LOOM_TARGET_MATH_RECIPE_INVERSE_HYPERBOLIC_F32

@@ -316,3 +316,32 @@ func.def @scalar_inverse_trigonometry() -> (f32, f64, bf16, f8E5M2) {
   %atan2_result = scalar.constant 2.5 : f8E5M2
   func.return %asin_result, %acos_result, %atan_result, %atan2_result : f32, f64, bf16, f8E5M2
 }
+
+// ====
+
+func.def @scalar_trigonometry() -> (f64, f32, f64, f8E4M3, f64, f64) {
+  %large_input = scalar.constant 1.0715086071862673e+301 : f64
+  %large = scalar.sinf %large_input : f64
+  %small_input = scalar.constant 0.5 : f32
+  %small = scalar.cosf %small_input : f32
+  %pole_input = scalar.constant 1.5707963267948966 : f64
+  %pole = scalar.tanf %pole_input : f64
+  %narrow_input = scalar.constant 0.5 : f8E4M3
+  %narrow = scalar.sinf %narrow_input : f8E4M3
+  %turns_input = scalar.constant 4.9406564584124654e-324 : f64
+  %turns = scalar.sinturnsf %turns_input : f64
+  %cardinal_input = scalar.constant 4503599627370496.0 : f64
+  %cardinal = scalar.costurnsf %cardinal_input : f64
+  func.return %large, %small, %pole, %narrow, %turns, %cardinal : f64, f32, f64, f8E4M3, f64, f64
+}
+
+// ----
+func.def @scalar_trigonometry() -> (f64, f32, f64, f8E4M3, f64, f64) {
+  %large = scalar.constant -0.15920170308624243 : f64
+  %small = scalar.constant 0.87758255004882812 : f32
+  %pole = scalar.constant 16331239353195370.0 : f64
+  %narrow = scalar.constant 0.46875 : f8E4M3
+  %turns = scalar.constant 2.9643938750474793e-323 : f64
+  %cardinal = scalar.constant 1.0 : f64
+  func.return %large, %small, %pole, %narrow, %turns, %cardinal : f64, f32, f64, f8E4M3, f64, f64
+}

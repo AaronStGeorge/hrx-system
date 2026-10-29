@@ -3,9 +3,16 @@
 vm.target<core> @vm
 
 func.def target(@vm) @exact_sine(%value: f32) -> (f32) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.sinf", phase_name="legalize-math", policy_name="vm-math", math_op="sinf", lane_domain="scalar", element_type="f32", constraint_key="math.recipe.afn_f32"}
   %result = scalar.sinf %value : f32
   func.return %result : f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @exact_sine(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>) asm {
+  %result = float.math.unary.f32 %value, "sin"
+  return %result
 }
 
 // ====
@@ -13,9 +20,16 @@ func.def target(@vm) @exact_sine(%value: f32) -> (f32) {
 vm.target<core> @vm
 
 func.def target(@vm) @exact_cosine(%value: f32) -> (f32) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.cosf", phase_name="legalize-math", policy_name="vm-math", math_op="cosf", lane_domain="scalar", element_type="f32", constraint_key="math.recipe.afn_f32"}
   %result = scalar.cosf %value : f32
   func.return %result : f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @exact_cosine(%value: reg<vm.value : f32>) -> (reg<vm.value : f32>) asm {
+  %result = float.math.unary.f32 %value, "cos"
+  return %result
 }
 
 // ====
@@ -23,9 +37,16 @@ func.def target(@vm) @exact_cosine(%value: f32) -> (f32) {
 vm.target<core> @vm
 
 func.def target(@vm) @wide_cosine(%value: f64) -> (f64) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.cosf", phase_name="legalize-math", policy_name="vm-math", math_op="cosf", lane_domain="scalar", element_type="f64", constraint_key="math.recipe.afn_f32"}
   %result = scalar.cosf<afn> %value : f64
   func.return %result : f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @wide_cosine(%value: reg<vm.value : f64>) -> (reg<vm.value : f64>) asm {
+  %result = float.math.unary.f64 %value, "cos"
+  return %result
 }
 
 // ====
@@ -502,4 +523,107 @@ low.func.def target<vm.core>(@vm) abi(vm_function) @inverse_trigonometry_f16(%y:
   %14 = float.math.binary.f32 %6, %13, "atan2"
   %atan2 = conversion.float.truncate %14, "f32.to.f16" : reg<vm.value : f16>
   return %asin, %acos, %atan, %atan2
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @trigonometry_f32(%input: f32) -> (f32, f32, f32, f32, f32) {
+  %sin = scalar.sinf %input : f32
+  %cos = scalar.cosf %input : f32
+  %tan = scalar.tanf %input : f32
+  %sinturns = scalar.sinturnsf %input : f32
+  %costurns = scalar.costurnsf %input : f32
+  func.return %sin, %cos, %tan, %sinturns, %costurns : f32, f32, f32, f32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @trigonometry_f32(%input: reg<vm.value : f32>) -> (reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>, reg<vm.value : f32>) asm {
+  %sin = float.math.unary.f32 %input, "sin"
+  %cos = float.math.unary.f32 %input, "cos"
+  %tan = float.math.unary.f32 %input, "tan"
+  %sinturns = float.math.unary.f32 %input, "sin_turns.approx"
+  %costurns = float.math.unary.f32 %input, "cos_turns.approx"
+  return %sin, %cos, %tan, %sinturns, %costurns
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @trigonometry_f64(%input: f64) -> (f64, f64, f64, f64, f64) {
+  %sin = scalar.sinf %input : f64
+  %cos = scalar.cosf %input : f64
+  %tan = scalar.tanf %input : f64
+  %sinturns = scalar.sinturnsf %input : f64
+  %costurns = scalar.costurnsf %input : f64
+  func.return %sin, %cos, %tan, %sinturns, %costurns : f64, f64, f64, f64, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @trigonometry_f64(%input: reg<vm.value : f64>) -> (reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>, reg<vm.value : f64>) asm {
+  %sin = float.math.unary.f64 %input, "sin"
+  %cos = float.math.unary.f64 %input, "cos"
+  %tan = float.math.unary.f64 %input, "tan"
+  %sinturns = float.math.unary.f64 %input, "sin_turns"
+  %costurns = float.math.unary.f64 %input, "cos_turns"
+  return %sin, %cos, %tan, %sinturns, %costurns
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @trigonometry_f16(%input: f16) -> (f16, f16, f16, f16, f16) {
+  %sin = scalar.sinf %input : f16
+  %cos = scalar.cosf %input : f16
+  %tan = scalar.tanf %input : f16
+  %sinturns = scalar.sinturnsf %input : f16
+  %costurns = scalar.costurnsf %input : f16
+  func.return %sin, %cos, %tan, %sinturns, %costurns : f16, f16, f16, f16, f16
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @trigonometry_f16(%input: reg<vm.value : f16>) -> (reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : f16>) asm {
+  %6 = conversion.float.extend %input, "f16.to.f32" : reg<vm.value : f32>
+  %7 = float.math.unary.f32 %6, "sin"
+  %sin = conversion.float.truncate %7, "f32.to.f16" : reg<vm.value : f16>
+  %9 = float.math.unary.f32 %6, "cos"
+  %cos = conversion.float.truncate %9, "f32.to.f16" : reg<vm.value : f16>
+  %11 = float.math.unary.f32 %6, "tan"
+  %tan = conversion.float.truncate %11, "f32.to.f16" : reg<vm.value : f16>
+  %13 = float.math.unary.f32 %6, "sin_turns.approx"
+  %sinturns = conversion.float.truncate %13, "f32.to.f16" : reg<vm.value : f16>
+  %15 = float.math.unary.f32 %6, "cos_turns.approx"
+  %costurns = conversion.float.truncate %15, "f32.to.f16" : reg<vm.value : f16>
+  return %sin, %cos, %tan, %sinturns, %costurns
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @narrow_vector_tangent(%input: vector<2xbf16>) -> (vector<2xbf16>) {
+  %result = vector.tanf %input : vector<2xbf16>
+  func.return %result : vector<2xbf16>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @narrow_vector_tangent(%0: reg<vm.value : bf16>, %1: reg<vm.value : bf16>) -> (reg<vm.value : bf16>, reg<vm.value : bf16>) asm {
+  %4 = conversion.float.extend %0, "bf16.to.f32" : reg<vm.value : f32>
+  %5 = float.math.unary.f32 %4, "tan"
+  %6 = conversion.float.truncate %5, "f32.to.bf16" : reg<vm.value : bf16>
+  %7 = conversion.float.extend %1, "bf16.to.f32" : reg<vm.value : f32>
+  %8 = float.math.unary.f32 %7, "tan"
+  %9 = conversion.float.truncate %8, "f32.to.bf16" : reg<vm.value : bf16>
+  return %6, %9
 }

@@ -98,6 +98,15 @@ iree_vm_bytecode_float_math_unary_f32(uint8_t selector, uint32_t source_bits) {
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_ATANH:
       result = iree_math_atanh_f32(source);
       break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_SIN:
+      result = iree_math_sin_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_COS:
+      result = iree_math_cos_f32(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F32_TAN:
+      result = iree_math_tan_f32(source);
+      break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F32_ASIN:
       result = iree_math_asin_f32(source);
       break;
@@ -202,6 +211,21 @@ iree_vm_bytecode_float_math_unary_f64(uint8_t selector, uint64_t source_bits) {
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_ATANH:
       result = iree_math_atanh_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SIN:
+      result = iree_math_sin_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_COS:
+      result = iree_math_cos_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_TAN:
+      result = iree_math_tan_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_SIN_TURNS:
+      result = iree_math_sin_turns_f64(source);
+      break;
+    case IREE_VM_BYTECODE_FLOAT_MATH_F64_COS_TURNS:
+      result = iree_math_cos_turns_f64(source);
       break;
     case IREE_VM_BYTECODE_FLOAT_MATH_F64_ASIN:
       result = iree_math_asin_f64(source);

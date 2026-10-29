@@ -597,21 +597,6 @@ void loom_value_facts_eval_float_fma(loom_scalar_type_t scalar_type,
   loom_value_facts_propagate_ternary_distribution(*a, *b, *c, out_facts);
 }
 
-// Reduces |input| to an angle in [-pi/4, pi/4] and returns its quadrant.
-// The quarter-turn divisor is exactly representable, so remquo preserves the
-// periodic position of every finite input while providing the low quotient
-// bits needed to recover the quadrant.
-static double loom_float_reduce_turns_f64(double input, int* out_quadrant) {
-  int quotient = 0;
-  const double residual = remquo(input, 0.25, &quotient);
-  int quadrant = quotient % 4;
-  if (quadrant < 0) {
-    quadrant += 4;
-  }
-  *out_quadrant = quadrant;
-  return residual * 6.2831853071795864769252867665590057683943387987502;
-}
-
 static float loom_float_eval_turns_f32(float input, const void* user_data) {
   const loom_float_turns_kind_t kind =
       *(const loom_float_turns_kind_t*)user_data;
@@ -622,48 +607,8 @@ static float loom_float_eval_turns_f32(float input, const void* user_data) {
 static double loom_float_eval_turns_f64(double input, const void* user_data) {
   const loom_float_turns_kind_t kind =
       *(const loom_float_turns_kind_t*)user_data;
-  int quadrant = 0;
-  const double angle = loom_float_reduce_turns_f64(input, &quadrant);
-  if (angle == 0.0) {
-    if (kind == LOOM_FLOAT_TURNS_SIN) {
-      if (quadrant == 1) {
-        return 1.0;
-      }
-      if (quadrant == 3) {
-        return -1.0;
-      }
-      return copysign(0.0, input);
-    }
-    if (quadrant == 0) {
-      return 1.0;
-    }
-    if (quadrant == 2) {
-      return -1.0;
-    }
-    return 0.0;
-  }
-  if (kind == LOOM_FLOAT_TURNS_SIN) {
-    switch (quadrant) {
-      case 0:
-        return sin(angle);
-      case 1:
-        return cos(angle);
-      case 2:
-        return -sin(angle);
-      default:
-        return -cos(angle);
-    }
-  }
-  switch (quadrant) {
-    case 0:
-      return cos(angle);
-    case 1:
-      return -sin(angle);
-    case 2:
-      return -cos(angle);
-    default:
-      return sin(angle);
-  }
+  return kind == LOOM_FLOAT_TURNS_SIN ? iree_math_sin_turns_f64(input)
+                                      : iree_math_cos_turns_f64(input);
 }
 
 void loom_value_facts_eval_float_turns(loom_scalar_type_t scalar_type,

@@ -144,3 +144,32 @@ func.def @vector_inverse_trigonometry() -> (vector<2xf32>, vector<2xf64>, vector
   %atan2_result = vector.constant 2.5 : vector<2xf8E5M2>
   func.return %asin_result, %acos_result, %atan_result, %atan2_result : vector<2xf32>, vector<2xf64>, vector<2xbf16>, vector<2xf8E5M2>
 }
+
+// ====
+
+func.def @vector_trigonometry() -> (vector<2xf64>, vector<2xf32>, vector<2xf64>, vector<2xf8E4M3>, vector<2xf64>, vector<2xf64>) {
+  %large_input = vector.constant 1.0715086071862673e+301 : vector<2xf64>
+  %large = vector.sinf %large_input : vector<2xf64>
+  %small_input = vector.constant 0.5 : vector<2xf32>
+  %small = vector.cosf %small_input : vector<2xf32>
+  %pole_input = vector.constant 1.5707963267948966 : vector<2xf64>
+  %pole = vector.tanf %pole_input : vector<2xf64>
+  %narrow_input = vector.constant 0.5 : vector<2xf8E4M3>
+  %narrow = vector.sinf %narrow_input : vector<2xf8E4M3>
+  %turns_input = vector.constant 4.9406564584124654e-324 : vector<2xf64>
+  %turns = vector.sinturnsf %turns_input : vector<2xf64>
+  %cardinal_input = vector.constant 4503599627370496.0 : vector<2xf64>
+  %cardinal = vector.costurnsf %cardinal_input : vector<2xf64>
+  func.return %large, %small, %pole, %narrow, %turns, %cardinal : vector<2xf64>, vector<2xf32>, vector<2xf64>, vector<2xf8E4M3>, vector<2xf64>, vector<2xf64>
+}
+
+// ----
+func.def @vector_trigonometry() -> (vector<2xf64>, vector<2xf32>, vector<2xf64>, vector<2xf8E4M3>, vector<2xf64>, vector<2xf64>) {
+  %large = vector.constant -0.15920170308624243 : vector<2xf64>
+  %small = vector.constant 0.87758255004882812 : vector<2xf32>
+  %pole = vector.constant 16331239353195370.0 : vector<2xf64>
+  %narrow = vector.constant 0.46875 : vector<2xf8E4M3>
+  %turns = vector.constant 2.9643938750474793e-323 : vector<2xf64>
+  %cardinal = vector.constant 1.0 : vector<2xf64>
+  func.return %large, %small, %pole, %narrow, %turns, %cardinal : vector<2xf64>, vector<2xf32>, vector<2xf64>, vector<2xf8E4M3>, vector<2xf64>, vector<2xf64>
+}

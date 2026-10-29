@@ -20,6 +20,7 @@
 #include "iree/math/inverse_trigonometry.h"
 #include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
+#include "iree/math/trigonometry.h"
 #include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
@@ -346,8 +347,8 @@ FLOAT_UNARY_FACTS(loom_scalar_rsqrtf_facts, iree_math_rsqrt_f32,
                   iree_math_rsqrt_f64)
 FLOAT_UNARY_FACTS(loom_scalar_cbrtf_facts, iree_math_cbrt_f32,
                   iree_math_cbrt_f64)
-FLOAT_UNARY_FACTS(loom_scalar_sinf_facts, sinf, sin)
-FLOAT_UNARY_FACTS(loom_scalar_cosf_facts, cosf, cos)
+FLOAT_UNARY_FACTS(loom_scalar_sinf_facts, iree_math_sin_f32, iree_math_sin_f64)
+FLOAT_UNARY_FACTS(loom_scalar_cosf_facts, iree_math_cos_f32, iree_math_cos_f64)
 
 static iree_status_t loom_scalar_turnsf_facts(
     const loom_module_t* module, const loom_op_t* op,
@@ -375,7 +376,7 @@ iree_status_t loom_scalar_costurnsf_facts(
                                   LOOM_FLOAT_TURNS_COS);
 }
 
-FLOAT_UNARY_FACTS(loom_scalar_tanf_facts, tanf, tan)
+FLOAT_UNARY_FACTS(loom_scalar_tanf_facts, iree_math_tan_f32, iree_math_tan_f64)
 FLOAT_UNARY_FACTS(loom_scalar_asinf_facts, iree_math_asin_f32,
                   iree_math_asin_f64)
 FLOAT_UNARY_FACTS(loom_scalar_acosf_facts, iree_math_acos_f32,

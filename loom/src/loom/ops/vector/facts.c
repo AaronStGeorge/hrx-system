@@ -25,6 +25,7 @@
 #include "iree/math/inverse_trigonometry.h"
 #include "iree/math/logarithm.h"
 #include "iree/math/roots.h"
+#include "iree/math/trigonometry.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
@@ -3904,8 +3905,10 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_rsqrtf_facts, iree_math_rsqrt_f32,
                               iree_math_rsqrt_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cbrtf_facts, iree_math_cbrt_f32,
                               iree_math_cbrt_f64)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sinf_facts, sinf, sin)
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cosf_facts, cosf, cos)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sinf_facts, iree_math_sin_f32,
+                              iree_math_sin_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cosf_facts, iree_math_cos_f32,
+                              iree_math_cos_f64)
 
 static iree_status_t loom_vector_turnsf_facts(
     loom_fact_context_t* context, const loom_module_t* module,
@@ -3933,7 +3936,8 @@ iree_status_t loom_vector_costurnsf_facts(
                                   result_facts, LOOM_FLOAT_TURNS_COS);
 }
 
-LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_tanf_facts, tanf, tan)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_tanf_facts, iree_math_tan_f32,
+                              iree_math_tan_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_asinf_facts, iree_math_asin_f32,
                               iree_math_asin_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_acosf_facts, iree_math_acos_f32,

@@ -14,7 +14,7 @@
           },
           "stdout": {
             "contains": [
-              "\"case_count\":6",
+              "\"case_count\":8",
               "\"failed_sample_count\":0"
             ]
           }
@@ -32,6 +32,8 @@
               "--root=@ordinary_hyperbolic_f64",
               "--root=@ordinary_inverse_trigonometry_f32",
               "--root=@ordinary_inverse_trigonometry_f64",
+              "--root=@ordinary_trigonometry_f32",
+              "--root=@ordinary_trigonometry_f64",
               "--to=bc",
               "--output={tmp}/elementary.loombc"
             ]
@@ -47,7 +49,7 @@
           },
           "stdout": {
             "contains": [
-              "\"case_count\":6",
+              "\"case_count\":8",
               "\"failed_sample_count\":0"
             ]
           }
@@ -183,8 +185,8 @@
       "run": {
         "tool": "loom-test",
         "args": [
-          "{srcdir}/source_math_case.loom",
-          "--library={srcdir}/source_math.loom"
+          "{srcdir}/source_template_case.loom",
+          "--library={srcdir}/source_template.loom"
         ]
       },
       "exit": {
@@ -192,9 +194,9 @@
       },
       "stderr": {
         "contains": [
-          "source_math.loom:2:3",
-          "vm-math",
-          "scalar.sinf %value : f32"
+          "source_template.loom:4:3",
+          "select-templates",
+          "template.apply<@required_transform>(%value)"
         ]
       },
       "stdout": {
@@ -202,8 +204,8 @@
           "\"category\":\"compile_rejected\"",
           "\"provider\":\"vm\"",
           "\"stage\":\"compile\"",
-          "\"kind\":\"LOWERING/036\"",
-          "legalize-math policy vm-math rejected scalar.sinf"
+          "\"kind\":\"LOWERING/045\"",
+          "required_transform"
         ]
       }
     },
@@ -212,8 +214,8 @@
       "run": {
         "tool": "loom-compile",
         "args": [
-          "{srcdir}/source_math.loom",
-          "--root=@exact_sine",
+          "{srcdir}/source_template.loom",
+          "--root=@missing_implementation",
           "--target=vm:core",
           "--output={tmp}/output.vm"
         ]
@@ -221,9 +223,9 @@
       "exit": {"nonzero": true},
       "stderr": {
         "contains": [
-          "source_math.loom:2:3",
-          "vm-math",
-          "scalar.sinf %value : f32",
+          "source_template.loom:4:3",
+          "select-templates",
+          "template.apply<@required_transform>(%value)",
           "^"
         ]
       }
