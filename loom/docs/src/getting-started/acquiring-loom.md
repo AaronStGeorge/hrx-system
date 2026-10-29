@@ -23,8 +23,11 @@ Use Python 3.12 or newer and one of these platforms:
 AMD GPU and NPU execution uses libamdf with the operating system's device
 driver. The account running Loom needs permission to access the device.
 The SDK includes its native libraries and C++ importer support; a ROCm SDK
-installation is not required. A model must supply programs for the chosen
-device: installing the SDK does not make every model portable to every target.
+installation is not required. Vulkan execution dynamically loads the system
+Vulkan loader and requires a Vulkan 1.3 device with buffer device address
+support. The SDK does not bundle a Vulkan loader or vendor driver. A model must
+supply programs for the chosen device: installing the SDK does not make every
+model portable to every target.
 
 ## Install in a virtual environment
 
@@ -80,9 +83,10 @@ Activating the environment puts its `bin/` directory on PATH on Linux and its
 libraries from the installation. If a command is not found, activate the same
 environment in which pip installed the wheel.
 
-`task` selects CPU execution, `amdgpu` selects native AMD GPU execution, and
-`xdna` selects AMD NPU execution. The driver list reports compiled-in drivers;
-creating a device still requires supported hardware and operating-system access.
+`task` selects CPU execution, `amdgpu` selects native AMD GPU execution, `xdna`
+selects AMD NPU execution, and `vulkan` selects Vulkan execution. The driver
+list reports compiled-in drivers; creating a device still requires supported
+hardware and operating-system access.
 
 Continue with [fetch and serve a model](../serving/workflows/fetch-and-serve.md)
 for a complete speech-recognition request, or [run your first
