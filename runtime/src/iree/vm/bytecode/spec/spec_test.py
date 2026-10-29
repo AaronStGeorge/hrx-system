@@ -120,7 +120,7 @@ class SpecificationTest(unittest.TestCase):
                 len(NUMERIC_TABLES),
                 sum(len(table.values) for table in NUMERIC_TABLES),
             ),
-            (12, 184, 21, 256, tuple(range(1, 14)), 59, 9, 30),
+            (12, 188, 21, 256, tuple(range(1, 14)), 59, 9, 30),
         )
 
     def test_layout_rejects_implicit_alignment_padding(self) -> None:
@@ -156,6 +156,19 @@ class SpecificationTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "duplicate opcode"):
             _specification(instructions=(INTEGER_INSTRUCTIONS[0], duplicate))
+
+    def test_exponent_record_abi(self) -> None:
+        for mnemonic, opcode in (
+            ("float.frexp.f32", 0xA6),
+            ("float.frexp.f64", 0xA7),
+            ("float.ldexp.f32", 0x9E),
+            ("float.ldexp.f64", 0x9F),
+        ):
+            instruction = _instruction(mnemonic)
+            self.assertEqual(instruction.opcode, opcode)
+            self.assertEqual(instruction.byte_length, 4)
+        for width, opcode in ((32, 0x96), (64, 0x97)):
+            self.assertEqual(_instruction(f"float.copysign.f{width}").opcode, opcode)
 
     def test_float_math_selector_abi_is_frozen(self) -> None:
         self.assertEqual(

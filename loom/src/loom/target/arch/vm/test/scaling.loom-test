@@ -1,0 +1,63 @@
+// RUN: emit source-low
+vm.target<core> @vm
+
+func.def target(@vm) @scaling_f32(%input: f32, %power: i32) -> (f32, i32, f32) {
+  %fraction, %exponent = scalar.frexpf %input : f32, i32
+  %scaled = scalar.ldexpf %input, %power : f32, i32
+  func.return %fraction, %exponent, %scaled : f32, i32, f32
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @scaling_f32(%input: reg<vm.value : f32>, %power: reg<vm.value : i32>) -> (reg<vm.value : f32>, reg<vm.value : i32>, reg<vm.value : f32>) asm {
+  %fraction, %exponent = float.frexp.f32 %input
+  %scaled = float.ldexp.f32 %input, %power
+  return %fraction, %exponent, %scaled
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @scaling_f64(%input: f64, %power: i32) -> (f64, i32, f64) {
+  %fraction, %exponent = scalar.frexpf %input : f64, i32
+  %scaled = scalar.ldexpf %input, %power : f64, i32
+  func.return %fraction, %exponent, %scaled : f64, i32, f64
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @scaling_f64(%input: reg<vm.value : f64>, %power: reg<vm.value : i32>) -> (reg<vm.value : f64>, reg<vm.value : i32>, reg<vm.value : f64>) asm {
+  %fraction, %exponent = float.frexp.f64 %input
+  %scaled = float.ldexp.f64 %input, %power
+  return %fraction, %exponent, %scaled
+}
+
+// ====
+
+vm.target<core> @vm
+
+func.def target(@vm) @scaling_narrow_vector(%input: vector<2xf16>, %power: vector<2xi32>) -> (vector<2xf16>, vector<2xi32>, vector<2xf16>) {
+  %fraction, %exponent = vector.frexpf %input : vector<2xf16>, vector<2xi32>
+  %scaled = vector.ldexpf %input, %power : vector<2xf16>, vector<2xi32>
+  func.return %fraction, %exponent, %scaled : vector<2xf16>, vector<2xi32>, vector<2xf16>
+}
+
+// ----
+vm.target<core> @vm
+
+low.func.def target<vm.core>(@vm) abi(vm_function) @scaling_narrow_vector(%0: reg<vm.value : f16>, %1: reg<vm.value : f16>, %2: reg<vm.value : i32>, %3: reg<vm.value : i32>) -> (reg<vm.value : f16>, reg<vm.value : f16>, reg<vm.value : i32>, reg<vm.value : i32>, reg<vm.value : f16>, reg<vm.value : f16>) asm {
+  %10 = conversion.float.extend %0, "f16.to.f32" : reg<vm.value : f32>
+  %11, %12 = float.frexp.f32 %10
+  %13 = conversion.float.truncate %11, "f32.to.f16" : reg<vm.value : f16>
+  %14 = conversion.float.extend %1, "f16.to.f32" : reg<vm.value : f32>
+  %15, %16 = float.frexp.f32 %14
+  %17 = conversion.float.truncate %15, "f32.to.f16" : reg<vm.value : f16>
+  %18 = float.ldexp.f32 %10, %2
+  %19 = conversion.float.truncate %18, "f32.to.f16" : reg<vm.value : f16>
+  %20 = float.ldexp.f32 %14, %3
+  %21 = conversion.float.truncate %20, "f32.to.f16" : reg<vm.value : f16>
+  return %13, %17, %12, %16, %19, %21
+}

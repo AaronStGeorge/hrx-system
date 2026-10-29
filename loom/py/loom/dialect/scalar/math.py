@@ -71,6 +71,8 @@ scalar_ldexpf = Op(
     ],
     examples=["%scaled = scalar.ldexpf %input, %exponent : f64, i32"],
     eager_execution_cost=0,
+    facts="loom_scalar_ldexpf_facts",
+    facts_from_operands=True,
 )
 
 scalar_frexpf = Op(
@@ -100,6 +102,8 @@ scalar_frexpf = Op(
     ],
     examples=["%fraction, %exponent = scalar.frexpf %input : f64, i32"],
     eager_execution_cost=0,
+    facts="loom_scalar_frexpf_facts",
+    facts_from_operands=True,
 )
 
 # ============================================================================

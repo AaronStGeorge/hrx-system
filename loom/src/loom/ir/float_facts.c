@@ -12,6 +12,7 @@
 #include "iree/base/internal/math.h"
 #include "iree/math/fma.h"
 #include "iree/math/rounding.h"
+#include "iree/math/scaling.h"
 #include "iree/math/trigonometry.h"
 
 static bool loom_float_type_uses_f32_arithmetic(
@@ -443,8 +444,8 @@ bool loom_value_facts_as_exact_power_of_two_float(
       !isfinite(value) || value == 0.0) {
     return false;
   }
-  int exponent = 0;
-  const double fraction = frexp(fabs(value), &exponent);
+  int32_t exponent = 0;
+  const double fraction = iree_math_frexp_f64(fabs(value), &exponent);
   if (fraction != 0.5) {
     return false;
   }
@@ -552,6 +553,53 @@ void loom_value_facts_eval_float_binary(loom_scalar_type_t scalar_type,
         loom_value_facts_exact_float(scalar_type, f64_fn(lhs_value, rhs_value));
   }
   loom_value_facts_propagate_binary_distribution(*lhs, *rhs, out_facts);
+}
+
+void loom_value_facts_eval_float_frexp(loom_scalar_type_t scalar_type,
+                                       const loom_value_facts_t* input,
+                                       loom_value_facts_t* out_fraction,
+                                       loom_value_facts_t* out_exponent) {
+  double value = 0.0;
+  *out_fraction = loom_value_facts_unknown();
+  *out_exponent = loom_value_facts_unknown();
+  if (loom_value_facts_is_nan(*input)) {
+    *out_fraction = loom_value_facts_known_nan();
+    *out_exponent = loom_value_facts_exact_i64(0);
+  } else if (loom_value_facts_as_exact_float(scalar_type, *input, &value)) {
+    int32_t exponent = 0;
+    const double fraction =
+        loom_float_type_uses_f32_arithmetic(scalar_type)
+            ? (double)iree_math_frexp_f32((float)value, &exponent)
+            : iree_math_frexp_f64(value, &exponent);
+    *out_fraction = loom_value_facts_exact_float(scalar_type, fraction);
+    *out_exponent = loom_value_facts_exact_i64(exponent);
+  }
+  loom_value_facts_propagate_unary_distribution(*input, out_fraction);
+  loom_value_facts_propagate_unary_distribution(*input, out_exponent);
+}
+
+void loom_value_facts_eval_float_ldexp(loom_scalar_type_t scalar_type,
+                                       const loom_value_facts_t* input,
+                                       const loom_value_facts_t* exponent,
+                                       loom_value_facts_t* out_facts) {
+  double value = 0.0;
+  int64_t power = 0;
+  if (loom_value_facts_is_nan(*input)) {
+    *out_facts = loom_value_facts_known_nan();
+  } else if (!loom_value_facts_as_exact_float(scalar_type, *input, &value) ||
+             !loom_value_facts_as_exact_i64(*exponent, &power)) {
+    *out_facts = loom_value_facts_unknown();
+  } else {
+    // Scaling a narrow significand in F32 is exact until the destination's
+    // rounding boundary. A tiny F32 intermediate cannot straddle a narrow
+    // rounding midpoint because it carries only the source significand bits.
+    const double result =
+        loom_float_type_uses_f32_arithmetic(scalar_type)
+            ? (double)iree_math_ldexp_f32((float)value, (int32_t)power)
+            : iree_math_ldexp_f64(value, (int32_t)power);
+    *out_facts = loom_value_facts_exact_float(scalar_type, result);
+  }
+  loom_value_facts_propagate_binary_distribution(*input, *exponent, out_facts);
 }
 
 void loom_value_facts_eval_float_fma(loom_scalar_type_t scalar_type,
@@ -852,7 +900,7 @@ void loom_value_facts_eval_float_to_integer(
       break;
     }
     case LOOM_FLOAT_INTEGER_CONVERSION_UNSIGNED: {
-      const double upper_exclusive = ldexp(1.0, result_bit_count);
+      const double upper_exclusive = iree_math_ldexp_f64(1.0, result_bit_count);
       if (truncated_value >= 0.0 && truncated_value < upper_exclusive) {
         const uint64_t result_bits = (uint64_t)truncated_value;
         *out_result_facts =

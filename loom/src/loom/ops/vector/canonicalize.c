@@ -250,18 +250,6 @@ static iree_status_t loom_vector_replace_single_result_with_constant_attr(
                                                       replacement);
 }
 
-static iree_status_t loom_vector_replace_single_result_with_constant_facts(
-    loom_op_t* op, loom_rewriter_t* rewriter, loom_value_facts_t element_facts,
-    loom_type_t result_type) {
-  loom_attribute_t attr = {0};
-  if (!loom_vector_facts_to_constant_attr(
-          element_facts, loom_type_element_type(result_type), &attr)) {
-    return iree_ok_status();
-  }
-  return loom_vector_replace_single_result_with_constant_attr(
-      op, rewriter, result_type, attr);
-}
-
 static iree_status_t loom_vector_replace_single_result_with_negf(
     loom_op_t* op, loom_rewriter_t* rewriter, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type) {
@@ -424,24 +412,42 @@ static iree_status_t loom_vector_canonicalize_uniform_result(
     return iree_ok_status();
   }
 
-  loom_type_t result_type = {0};
-  if (!loom_vector_get_single_result_type(rewriter, op, &result_type) ||
-      !loom_type_is_vector(result_type)) {
-    return iree_ok_status();
+  loom_builder_set_before(&rewriter->builder, op);
+  const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    const loom_value_id_t result = results[i];
+    if (!loom_module_value_has_uses(rewriter->module, result)) {
+      continue;
+    }
+    const loom_type_t result_type =
+        loom_module_value_type(rewriter->module, result);
+    if (!loom_type_is_vector(result_type)) {
+      continue;
+    }
+    const loom_value_facts_t facts =
+        loom_rewriter_value_facts(rewriter, result);
+    loom_value_facts_t element = {0};
+    loom_attribute_t attr = {0};
+    if (!loom_vector_query_all_equal_element(&rewriter->fact_table->context,
+                                             facts, &element) ||
+        !loom_vector_facts_to_constant_attr(
+            element, loom_type_element_type(result_type), &attr)) {
+      continue;
+    }
+    loom_op_t* constant_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_vector_constant_build(
+        &rewriter->builder, attr, result_type, op->location, &constant_op));
+    const loom_value_id_t replacement =
+        loom_vector_constant_result(constant_op);
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_copy_value_name(rewriter, result, replacement));
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_replace_all_uses_with(rewriter, result, replacement));
+    *out_changed = true;
   }
-
-  loom_value_id_t result = loom_op_const_results(op)[0];
-  loom_value_facts_t facts = loom_rewriter_value_facts(rewriter, result);
-  loom_value_facts_t element = {0};
-  if (!loom_vector_query_all_equal_element(&rewriter->fact_table->context,
-                                           facts, &element) ||
-      !loom_value_facts_is_exact(element)) {
-    return iree_ok_status();
+  if (*out_changed && loom_rewriter_is_trivially_dead(rewriter, op)) {
+    return loom_rewriter_erase(rewriter, op);
   }
-
-  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_constant_facts(
-      op, rewriter, element, result_type));
-  *out_changed = true;
   return iree_ok_status();
 }
 

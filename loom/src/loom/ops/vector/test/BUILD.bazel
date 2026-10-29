@@ -37,6 +37,7 @@ loom_check_test_suite(
         "partition_projection.loom-test",
         "range_mask_facts.loom-test",
         "roundtrip.loom-test",
+        "scaling.loom-test",
         "selection_facts.loom-test",
         "signed_unary_facts.loom-test",
         "table_canonicalize.loom-test",

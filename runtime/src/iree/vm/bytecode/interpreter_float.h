@@ -12,6 +12,7 @@
 
 #include "iree/base/api.h"
 #include "iree/math/fma.h"
+#include "iree/math/scaling.h"
 #include "iree/vm/bytecode/interpreter_float_math.h"
 #include "iree/vm/bytecode/wire/core.h"
 
@@ -63,7 +64,11 @@
 #define IREE_VM_BYTECODE_FLOAT_QUIET_NAN_BITS UINT32_C(0x7FC00000)
 #define IREE_VM_BYTECODE_FLOAT_FMOD fmodf
 #define IREE_VM_BYTECODE_FLOAT_FMA iree_math_fma_f32
+#define IREE_VM_BYTECODE_FLOAT_FREXP iree_math_frexp_f32
+#define IREE_VM_BYTECODE_FLOAT_LDEXP iree_math_ldexp_f32
 #include "iree/vm/bytecode/interpreter_float_impl.inl"
+#undef IREE_VM_BYTECODE_FLOAT_LDEXP
+#undef IREE_VM_BYTECODE_FLOAT_FREXP
 #undef IREE_VM_BYTECODE_FLOAT_FMA
 #undef IREE_VM_BYTECODE_FLOAT_FMOD
 #undef IREE_VM_BYTECODE_FLOAT_QUIET_NAN_BITS
@@ -86,7 +91,11 @@
 #define IREE_VM_BYTECODE_FLOAT_QUIET_NAN_BITS UINT64_C(0x7FF8000000000000)
 #define IREE_VM_BYTECODE_FLOAT_FMOD fmod
 #define IREE_VM_BYTECODE_FLOAT_FMA iree_math_fma_f64
+#define IREE_VM_BYTECODE_FLOAT_FREXP iree_math_frexp_f64
+#define IREE_VM_BYTECODE_FLOAT_LDEXP iree_math_ldexp_f64
 #include "iree/vm/bytecode/interpreter_float_impl.inl"
+#undef IREE_VM_BYTECODE_FLOAT_LDEXP
+#undef IREE_VM_BYTECODE_FLOAT_FREXP
 #undef IREE_VM_BYTECODE_FLOAT_FMA
 #undef IREE_VM_BYTECODE_FLOAT_FMOD
 #undef IREE_VM_BYTECODE_FLOAT_QUIET_NAN_BITS

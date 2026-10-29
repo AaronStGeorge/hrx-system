@@ -15,9 +15,11 @@ from iree.vm.bytecode.spec.isa.core.float import (
     FloatClampSemantics,
     FloatClassifySemantics,
     FloatCompareSemantics,
+    FloatDecomposeSemantics,
     FloatFmaSemantics,
     FloatMathSemantics,
     FloatMinmaxSemantics,
+    FloatScaleSemantics,
     FloatUnarySemantics,
 )
 from iree.vm.bytecode.spec.isa.core.integer import (
@@ -75,6 +77,8 @@ def test_scalar_packets_preserve_spec_encoding_and_semantic_types():
                 FloatClassifySemantics,
                 FloatClampSemantics,
                 FloatFmaSemantics,
+                FloatDecomposeSemantics,
+                FloatScaleSemantics,
                 FloatMathSemantics,
             ),
         )
@@ -98,6 +102,8 @@ def test_scalar_packets_preserve_spec_encoding_and_semantic_types():
                     FloatMinmaxSemantics,
                     FloatClampSemantics,
                     FloatFmaSemantics,
+                    FloatDecomposeSemantics,
+                    FloatScaleSemantics,
                     FloatMathSemantics,
                 ),
             )
@@ -116,6 +122,14 @@ def test_scalar_packets_preserve_spec_encoding_and_semantic_types():
             else scalar_types[instruction.semantics.bit_width]
         )
         assert result_type.element_type is expected_type
+        if isinstance(instruction.semantics, FloatDecomposeSemantics):
+            assert len(descriptor.asm_forms[0].result_value_types) == 2
+            assert (
+                descriptor.asm_forms[0].result_value_types[1].element_type
+                is ScalarTypeKind.I32
+            )
+        else:
+            assert len(descriptor.asm_forms[0].result_value_types) == 1
 
 
 def test_register_fields_preserve_the_wire_bank_and_position():

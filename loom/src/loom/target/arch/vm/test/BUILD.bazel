@@ -24,6 +24,7 @@ loom_check_test_suite(
         "math_policy.loom-test",
         "rounding.loom-test",
         "scalar.loom-test",
+        "scaling.loom-test",
     ],
     target_compatible_with = loom_config_compatible_with(["//loom/config/arch:vm"]),
 )

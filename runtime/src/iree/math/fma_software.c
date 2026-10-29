@@ -5,9 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Fused arithmetic adapted from musl, revision
-// 7813e9119eb5fe681b6750b8a033a0490bca0941 (src/math/fma.c, fmaf.c, and
-// scalbn.c). Floating exception flags are unobservable; only nearest-even
-// result mapping and gradual underflow are retained.
+// 7813e9119eb5fe681b6750b8a033a0490bca0941 (src/math/fma.c and fmaf.c).
+// Floating exception flags are unobservable; only nearest-even result mapping
+// and gradual underflow are retained.
 //
 // Copyright © 2005-2020 Rich Felker, et al.
 //
@@ -34,34 +34,7 @@
 
 #include "iree/base/internal/math.h"
 #include "iree/math/float_bits.h"
-
-static double iree_math_fma_scale_f64(double value, int exponent) {
-  double result = value;
-
-  if (exponent > 1023) {
-    result *= 0x1p1023;
-    exponent -= 1023;
-    if (exponent > 1023) {
-      result *= 0x1p1023;
-      exponent -= 1023;
-      if (exponent > 1023) {
-        exponent = 1023;
-      }
-    }
-  } else if (exponent < -1022) {
-    // Keep the final exponent below -53 so subnormal scaling rounds once.
-    result *= 0x1p-1022 * 0x1p53;
-    exponent += 1022 - 53;
-    if (exponent < -1022) {
-      result *= 0x1p-1022 * 0x1p53;
-      exponent += 1022 - 53;
-      if (exponent < -1022) {
-        exponent = -1022;
-      }
-    }
-  }
-  return result * iree_math_f64_from_bits((uint64_t)(0x3ff + exponent) << 52);
-}
+#include "iree/math/scaling.h"
 
 float iree_math_fma_f32_software(float a, float b, float c) {
   double product = (double)a * b;
@@ -258,5 +231,5 @@ double iree_math_fma_f64_software(double a, double b, double c) {
       result = (double)integer;
     }
   }
-  return iree_math_fma_scale_f64(result, exponent);
+  return iree_math_ldexp_f64(result, exponent);
 }

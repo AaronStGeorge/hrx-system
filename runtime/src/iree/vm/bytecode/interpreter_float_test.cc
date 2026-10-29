@@ -84,6 +84,66 @@ uint64_t ExecuteClamp(Execute execute, uint64_t value, uint64_t lower,
   return values[1];
 }
 
+TEST(VMBytecodeInterpreterFloatTest,
+     DecomposesF32BeforePublishingAliasedResults) {
+  for (uint8_t source : {0, 1}) {
+    uint64_t values[] = {UINT64_MAX, UINT64_MAX};
+    values[source] = UINT64_C(0xabcdef00bfc00000);
+    iree_vm_bytecode_float_frexp_f32_t record = {
+        .fraction_v8 = 0,
+        .exponent_v8 = 1,
+        .source_v8 = source,
+    };
+    iree_vm_bytecode_execute_float_frexp_f32(&record, values);
+    EXPECT_EQ(UINT64_C(0xbf400000), values[0]);
+    EXPECT_EQ(1u, values[1]);
+  }
+}
+
+TEST(VMBytecodeInterpreterFloatTest, ScalesF32BeforePublishingAliasedResult) {
+  for (uint8_t destination : {0, 1}) {
+    uint64_t values[] = {UINT64_C(0xabcdef00bfc00000),
+                         UINT64_C(0xabcdef00fffffffe)};
+    iree_vm_bytecode_float_ldexp_f32_t record = {
+        .destination_v8 = destination,
+        .source_v8 = 0,
+        .exponent_v8 = 1,
+    };
+    iree_vm_bytecode_execute_float_ldexp_f32(&record, values);
+    EXPECT_EQ(UINT64_C(0xbec00000), values[destination]);
+  }
+}
+
+TEST(VMBytecodeInterpreterFloatTest,
+     DecomposesF64BeforePublishingAliasedResults) {
+  for (uint8_t source : {0, 1}) {
+    uint64_t values[] = {UINT64_MAX, UINT64_MAX};
+    values[source] = UINT64_C(0xbff8000000000000);
+    iree_vm_bytecode_float_frexp_f64_t record = {
+        .fraction_v8 = 0,
+        .exponent_v8 = 1,
+        .source_v8 = source,
+    };
+    iree_vm_bytecode_execute_float_frexp_f64(&record, values);
+    EXPECT_EQ(UINT64_C(0xbfe8000000000000), values[0]);
+    EXPECT_EQ(1u, values[1]);
+  }
+}
+
+TEST(VMBytecodeInterpreterFloatTest, ScalesF64BeforePublishingAliasedResult) {
+  for (uint8_t destination : {0, 1}) {
+    uint64_t values[] = {UINT64_C(0xbff8000000000000),
+                         UINT64_C(0xabcdef00fffffffe)};
+    iree_vm_bytecode_float_ldexp_f64_t record = {
+        .destination_v8 = destination,
+        .source_v8 = 0,
+        .exponent_v8 = 1,
+    };
+    iree_vm_bytecode_execute_float_ldexp_f64(&record, values);
+    EXPECT_EQ(UINT64_C(0xbfd8000000000000), values[destination]);
+  }
+}
+
 TEST(VMBytecodeInterpreterFloatTest, ExecutesSelectedWidthArithmetic) {
   constexpr uint32_t kF32One = UINT32_C(0x3F800000);
   constexpr uint32_t kF32Half = UINT32_C(0x3F000000);

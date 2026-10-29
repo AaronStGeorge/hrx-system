@@ -31,9 +31,11 @@ from iree.vm.bytecode.spec.isa.core.float import (
     FloatClampSemantics,
     FloatClassifySemantics,
     FloatCompareSemantics,
+    FloatDecomposeSemantics,
     FloatFmaSemantics,
     FloatMathSemantics,
     FloatMinmaxSemantics,
+    FloatScaleSemantics,
     FloatUnaryOperation,
     FloatUnarySemantics,
 )
@@ -639,6 +641,44 @@ def _gelu_math_rule(descriptor, selector, bit_width):
     )
 
 
+def _exponent_cases():
+    for descriptor in VM_CORE_DESCRIPTOR_SET.descriptors:
+        semantics = _INSTRUCTIONS[descriptor.encoding_id].semantics
+        if isinstance(semantics, FloatDecomposeSemantics):
+            source_op = math.scalar_frexpf
+            operands = {"source_v8": ValueRef.operand("input")}
+            results = {
+                "fraction_v8": ValueRef.result("fraction"),
+                "exponent_v8": ValueRef.result("exponent"),
+            }
+            floating_result = "fraction"
+        elif isinstance(semantics, FloatScaleSemantics):
+            source_op = math.scalar_ldexpf
+            operands = {
+                "source_v8": ValueRef.operand("input"),
+                "exponent_v8": ValueRef.operand("exponent"),
+            }
+            results = {"destination_v8": ValueRef.result("result")}
+            floating_result = "result"
+        else:
+            continue
+        floating_type = Scalar(f"f{semantics.bit_width}")
+        yield DescriptorRule(
+            source_op=source_op,
+            descriptor=descriptor,
+            guards=(
+                Guard.value_type("input", floating_type),
+                Guard.value_type("exponent", Scalar("i32")),
+                Guard.value_type(floating_result, floating_type),
+            ),
+            emit=(
+                EmitDescriptorOp(
+                    descriptor=descriptor, operands=operands, results=results
+                ),
+            ),
+        )
+
+
 def _math_cases():
     remaining = set(_MATH_SOURCE_OPS)
     for descriptor in VM_CORE_DESCRIPTOR_SET.descriptors:
@@ -1147,6 +1187,7 @@ VM_CORE_CONTRACT_FRAGMENT = ContractFragment(
     + tuple(_selected_cases())
     + tuple(_conversion_cases())
     + tuple(_math_cases())
+    + tuple(_exponent_cases())
     + tuple(_address_cases())
     + tuple(_buffer_cases())
     + (RecipeRule(source_op=global_load),)

@@ -14,7 +14,7 @@
           },
           "stdout": {
             "contains": [
-              "\"case_count\":15",
+              "\"case_count\":17",
               "\"failed_sample_count\":0"
             ]
           }
@@ -41,6 +41,8 @@
               "--root=@ordinary_activations_narrow",
               "--root=@ordinary_rounding_f32",
               "--root=@ordinary_rounding_f64",
+              "--root=@ordinary_scaling_f32",
+              "--root=@ordinary_scaling_f64",
               "--to=bc",
               "--output={tmp}/elementary.loombc"
             ]
@@ -56,7 +58,7 @@
           },
           "stdout": {
             "contains": [
-              "\"case_count\":15",
+              "\"case_count\":17",
               "\"failed_sample_count\":0"
             ]
           }

@@ -119,6 +119,74 @@ static double EvaluateTurns(loom_scalar_type_t scalar_type,
                          loom_value_facts_exact_float(scalar_type, input)));
 }
 
+TEST(FloatFacts, BinaryExponentFamily) {
+  const iree_fpu_state_t saved =
+      iree_fpu_state_push(IREE_FPU_STATE_FLAG_MASK_EXCEPTIONS |
+                          IREE_FPU_STATE_FLAG_ROUND_TO_NEAREST);
+  struct Format {
+    // Source and result floating representation.
+    loom_scalar_type_t type;
+    // Smallest positive subnormal, expressed exactly in F64.
+    double minimum;
+    // Base-two exponent of the smallest subnormal.
+    int32_t power;
+  };
+  const Format formats[] = {
+      {LOOM_SCALAR_TYPE_F8E4M3, 0x1p-9, -9},
+      {LOOM_SCALAR_TYPE_F8E5M2, 0x1p-16, -16},
+      {LOOM_SCALAR_TYPE_F16, 0x1p-24, -24},
+      {LOOM_SCALAR_TYPE_BF16, 0x1p-133, -133},
+      {LOOM_SCALAR_TYPE_F32, 0x1p-149, -149},
+      {LOOM_SCALAR_TYPE_F64, 0x1p-1074, -1074},
+  };
+  for (const auto& format : formats) {
+    SCOPED_TRACE(loom_scalar_type_name(format.type));
+    for (double sign : {-1.0, 1.0}) {
+      auto input =
+          loom_value_facts_exact_float(format.type, sign * format.minimum);
+      loom_value_facts_mark_subgroup_uniform(&input);
+      loom_value_facts_t fraction = {}, exponent = {}, scaled = {};
+      loom_value_facts_eval_float_frexp(format.type, &input, &fraction,
+                                        &exponent);
+      EXPECT_EQ(sign * 0.5, ExactFloatValue(format.type, fraction));
+      EXPECT_EQ(format.power + 1, exponent.range_lo);
+      EXPECT_TRUE(loom_value_facts_is_exact(exponent));
+      EXPECT_TRUE(loom_value_facts_is_subgroup_uniform(fraction));
+      EXPECT_TRUE(loom_value_facts_is_subgroup_uniform(exponent));
+      loom_value_facts_eval_float_ldexp(format.type, &fraction, &exponent,
+                                        &scaled);
+      EXPECT_EQ(sign * format.minimum, ExactFloatValue(format.type, scaled));
+      for (double multiplier : {1.5, 2.5}) {
+        input = loom_value_facts_exact_float(format.type, sign * multiplier);
+        exponent = loom_value_facts_exact_i64(format.power);
+        loom_value_facts_eval_float_ldexp(format.type, &input, &exponent,
+                                          &scaled);
+        EXPECT_EQ(sign * 2 * format.minimum,
+                  ExactFloatValue(format.type, scaled));
+      }
+      input = loom_value_facts_exact_float(format.type, sign * 0.0);
+      loom_value_facts_eval_float_frexp(format.type, &input, &fraction,
+                                        &exponent);
+      EXPECT_EQ(DoubleBits(sign * 0.0),
+                DoubleBits(ExactFloatValue(format.type, fraction)));
+      EXPECT_EQ(0, exponent.range_lo);
+    }
+    auto input = loom_value_facts_known_nan();
+    loom_value_facts_t fraction = {}, exponent = {};
+    loom_value_facts_eval_float_frexp(format.type, &input, &fraction,
+                                      &exponent);
+    EXPECT_TRUE(loom_value_facts_is_nan(fraction));
+    EXPECT_TRUE(loom_value_facts_is_exact(exponent));
+    EXPECT_EQ(0, exponent.range_lo);
+    input = loom_value_facts_unknown();
+    loom_value_facts_eval_float_frexp(format.type, &input, &fraction,
+                                      &exponent);
+    EXPECT_FALSE(loom_value_facts_is_exact(fraction));
+    EXPECT_FALSE(loom_value_facts_is_exact(exponent));
+  }
+  iree_fpu_state_pop(saved);
+}
+
 TEST(FloatFacts, IndependentFloatClassPromises) {
   for (bool not_nan : {false, true}) {
     for (bool not_inf : {false, true}) {

@@ -154,6 +154,21 @@ void loom_value_facts_eval_float_binary(loom_scalar_type_t scalar_type,
                                         loom_float_binary_f64_fn_t f64_fn,
                                         loom_value_facts_t* out_facts);
 
+// Decomposes an exact input into its same-format fraction and signed i32
+// exponent. Special values have exponent zero; unknown inputs remain unknown.
+void loom_value_facts_eval_float_frexp(loom_scalar_type_t scalar_type,
+                                       const loom_value_facts_t* input,
+                                       loom_value_facts_t* out_fraction,
+                                       loom_value_facts_t* out_exponent);
+
+// Scales an exact floating input by an exact signed i32 exponent and rounds
+// once to the source format. Requires the caller-owned nearest-even arithmetic
+// environment with input and output subnormals preserved.
+void loom_value_facts_eval_float_ldexp(loom_scalar_type_t scalar_type,
+                                       const loom_value_facts_t* input,
+                                       const loom_value_facts_t* exponent,
+                                       loom_value_facts_t* out_facts);
+
 // Evaluates a fused multiply-add with one rounding to |scalar_type|. Narrow
 // results retain the contribution of addends lost in F32/F64 intermediates.
 // Exact operand payloads have already been rounded to their declared type.

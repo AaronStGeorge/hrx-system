@@ -17,8 +17,9 @@ from iree.vm.bytecode.spec.isa import (
     Instruction,
     InstructionFamily,
     InstructionField,
+    RecordRule,
 )
-from iree.vm.bytecode.spec.isa.core.rules import FieldRule
+from iree.vm.bytecode.spec.isa.core.rules import FieldRule, RecordRuleKind
 from iree.vm.bytecode.spec.schema import (
     U8,
     U16,
@@ -71,6 +72,16 @@ class FloatClampSemantics(NamedTuple):
 
 
 class FloatFmaSemantics(NamedTuple):
+    bit_width: int
+
+
+class FloatDecomposeSemantics(NamedTuple):
+    # IEEE width of the source and fraction; the exponent is always i32.
+    bit_width: int
+
+
+class FloatScaleSemantics(NamedTuple):
+    # IEEE width of the source and result; the exponent is always i32.
     bit_width: int
 
 
@@ -1199,6 +1210,90 @@ def _clamp(opcode: int, width: int) -> Instruction:
     )
 
 
+def _frexp(opcode: int, width: int) -> Instruction:
+    mnemonic = f"float.frexp.f{width}"
+    return Instruction(
+        opcode=opcode,
+        mnemonic=mnemonic,
+        since=CORE_0,
+        family=FLOAT_FAMILY,
+        summary=f"Decomposes an f{width} value into its fraction and i32 exponent.",
+        fields=(
+            _value("fraction_v8", FieldRole.RESULT, "Fraction result register."),
+            _value(
+                "exponent_v8", FieldRole.RESULT, "Signed i32 exponent result register."
+            ),
+            _value("source_v8", FieldRole.OPERAND, "Source floating value register."),
+        ),
+        semantics=FloatDecomposeSemantics(width),
+        behavior=(
+            "Reads the source before publishing either result. Finite nonzero values "
+            "decompose exactly into a signed fraction of magnitude [0.5, 1) and an "
+            "i32 exponent such that source = fraction * 2^exponent, including "
+            "subnormal sources. Signed zero and infinity retain their floating "
+            "value with exponent zero. NaNs produce canonical positive quiet NaN "
+            "and exponent zero. Either destination may alias the source."
+        ),
+        success=(
+            f"fraction_v8 receives the f{width} fraction"
+            + (" and clears its high cell half." if width == 32 else "."),
+            "exponent_v8 receives the low 32 exponent bits and clears its high half.",
+        ),
+        assembly=f"%v<fraction>, %v<exponent> = {mnemonic} %v<source>",
+        pseudocode=(
+            f"source = read_float(source_v8, {width});\n"
+            "(fraction, exponent) = decompose_binary_exponent(source);\n"
+            f"write_float(fraction_v8, fraction, {width});\n"
+            "write_integer(exponent_v8, exponent, 32);\n"
+            "pc = pc + 4;"
+        ),
+        rules=(
+            RecordRule(
+                RecordRuleKind.FIELDS_DISTINCT,
+                ("fraction_v8", "exponent_v8"),
+                summary="The fraction and exponent result registers must differ.",
+            ),
+        ),
+    )
+
+
+def _ldexp(opcode: int, width: int) -> Instruction:
+    mnemonic = f"float.ldexp.f{width}"
+    return Instruction(
+        opcode=opcode,
+        mnemonic=mnemonic,
+        since=CORE_0,
+        family=FLOAT_FAMILY,
+        summary=f"Scales an f{width} value by a signed i32 power of two.",
+        fields=(
+            _value("destination_v8", FieldRole.RESULT, "Floating result register."),
+            _value("source_v8", FieldRole.OPERAND, "Source floating value register."),
+            _value(
+                "exponent_v8",
+                FieldRole.OPERAND,
+                "Signed i32 scaling exponent register.",
+            ),
+        ),
+        semantics=FloatScaleSemantics(width),
+        behavior=(
+            "Reads both operands before computing source * 2^exponent with one "
+            "nearest-even rounding at the selected width. Every signed i32 exponent "
+            "is valid, including extremes. Subnormal inputs/results use gradual "
+            "underflow; overflow produces signed infinity. Signed zero and infinity "
+            "are preserved and NaNs become canonical positive quiet NaN."
+        ),
+        success=(_result(width),),
+        assembly=f"%v<destination> = {mnemonic} %v<source>, %v<exponent>",
+        pseudocode=(
+            f"source = read_float(source_v8, {width});\n"
+            "exponent = read_signed_integer(exponent_v8, 32);\n"
+            f"result = scale_binary_exponent(source, exponent, {width});\n"
+            f"write_float(destination_v8, result, {width});\n"
+            "pc = pc + 4;"
+        ),
+    )
+
+
 def _math(opcode: int, width: int, *, binary: bool = False) -> Instruction:
     arity = "binary" if binary else "unary"
     sources = ("left", "right") if binary else ("source",)
@@ -1311,24 +1406,30 @@ def _fma(opcode: int, width: int) -> Instruction:
     )
 
 
-_INSTRUCTIONS_BY_OPCODE = {
-    instruction.opcode: instruction
-    for instruction in (
-        *(_binary(definition) for definition in _BINARY_DEFINITIONS),
-        *(_sign_unary(definition) for definition in _SIGN_DEFINITIONS),
-        *(_selected_binary(definition) for definition in _SELECTED_BINARY_DEFINITIONS),
-        _classify(0x92, 32),
-        _classify(0x93, 64),
-        _clamp(0x94, 32),
-        _clamp(0x95, 64),
-        _math(0x98, 32),
-        _math(0x99, 64),
-        _fma(0x9A, 32),
-        _fma(0x9B, 64),
-        _math(0x9C, 32, binary=True),
-        _math(0x9D, 64, binary=True),
-    )
-}
 FLOAT_INSTRUCTIONS = tuple(
-    _INSTRUCTIONS_BY_OPCODE[opcode] for opcode in sorted(_INSTRUCTIONS_BY_OPCODE)
+    sorted(
+        (
+            *(_binary(definition) for definition in _BINARY_DEFINITIONS),
+            *(_sign_unary(definition) for definition in _SIGN_DEFINITIONS),
+            *(
+                _selected_binary(definition)
+                for definition in _SELECTED_BINARY_DEFINITIONS
+            ),
+            _classify(0x92, 32),
+            _classify(0x93, 64),
+            _clamp(0x94, 32),
+            _clamp(0x95, 64),
+            _frexp(0xA6, 32),
+            _frexp(0xA7, 64),
+            _math(0x98, 32),
+            _math(0x99, 64),
+            _fma(0x9A, 32),
+            _fma(0x9B, 64),
+            _math(0x9C, 32, binary=True),
+            _math(0x9D, 64, binary=True),
+            _ldexp(0x9E, 32),
+            _ldexp(0x9F, 64),
+        ),
+        key=lambda instruction: instruction.opcode,
+    )
 )

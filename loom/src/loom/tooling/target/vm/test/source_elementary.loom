@@ -405,3 +405,69 @@ check.case public @ordinary_rounding_f64 {
   check.expect.bitwise actual(%round) expected(%away) : f64
   check.return
 }
+
+func.def @scaling_f32(%input: f32, %power: i32) -> (f32, i32, f32) {
+  %fraction, %exponent = scalar.frexpf %input : f32, i32
+  %scaled = scalar.ldexpf %input, %power : f32, i32
+  func.return %fraction, %exponent, %scaled : f32, i32, f32
+}
+
+func.def @fraction_f32(%input: f32) -> (f32) {
+  %fraction, %exponent = scalar.frexpf %input : f32, i32
+  func.return %fraction : f32
+}
+
+func.def @exponent_f32(%input: f32) -> (i32) {
+  %fraction, %exponent = scalar.frexpf %input : f32, i32
+  func.return %exponent : i32
+}
+
+check.case public @ordinary_scaling_f32 {
+  %input = check.literal value(-1.5) : f32
+  %power = check.literal value(-2) : i32
+  %fraction, %exponent, %scaled = func.call @scaling_f32(%input, %power) : (f32, i32) -> (f32, i32, f32)
+  %fraction_only = func.call @fraction_f32(%input) : (f32) -> (f32)
+  %exponent_only = func.call @exponent_f32(%input) : (f32) -> (i32)
+  %expected_fraction = check.literal value(-0.75) : f32
+  %expected_exponent = check.literal value(1) : i32
+  %expected_scaled = check.literal value(-0.375) : f32
+  check.expect.bitwise actual(%fraction) expected(%expected_fraction) : f32
+  check.expect.equal actual(%exponent) expected(%expected_exponent) : i32
+  check.expect.bitwise actual(%scaled) expected(%expected_scaled) : f32
+  check.expect.bitwise actual(%fraction_only) expected(%expected_fraction) : f32
+  check.expect.equal actual(%exponent_only) expected(%expected_exponent) : i32
+  check.return
+}
+
+func.def @scaling_f64(%input: f64, %power: i32) -> (f64, i32, f64) {
+  %fraction, %exponent = scalar.frexpf %input : f64, i32
+  %scaled = scalar.ldexpf %input, %power : f64, i32
+  func.return %fraction, %exponent, %scaled : f64, i32, f64
+}
+
+func.def @fraction_f64(%input: f64) -> (f64) {
+  %fraction, %exponent = scalar.frexpf %input : f64, i32
+  func.return %fraction : f64
+}
+
+func.def @exponent_f64(%input: f64) -> (i32) {
+  %fraction, %exponent = scalar.frexpf %input : f64, i32
+  func.return %exponent : i32
+}
+
+check.case public @ordinary_scaling_f64 {
+  %input = check.literal value(-1.5) : f64
+  %power = check.literal value(-2) : i32
+  %fraction, %exponent, %scaled = func.call @scaling_f64(%input, %power) : (f64, i32) -> (f64, i32, f64)
+  %fraction_only = func.call @fraction_f64(%input) : (f64) -> (f64)
+  %exponent_only = func.call @exponent_f64(%input) : (f64) -> (i32)
+  %expected_fraction = check.literal value(-0.75) : f64
+  %expected_exponent = check.literal value(1) : i32
+  %expected_scaled = check.literal value(-0.375) : f64
+  check.expect.bitwise actual(%fraction) expected(%expected_fraction) : f64
+  check.expect.equal actual(%exponent) expected(%expected_exponent) : i32
+  check.expect.bitwise actual(%scaled) expected(%expected_scaled) : f64
+  check.expect.bitwise actual(%fraction_only) expected(%expected_fraction) : f64
+  check.expect.equal actual(%exponent_only) expected(%expected_exponent) : i32
+  check.return
+}

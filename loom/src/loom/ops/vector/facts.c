@@ -3309,6 +3309,70 @@ static iree_status_t loom_vector_float_binary_summary_facts(
                                                   &result_facts[0]);
 }
 
+static void loom_vector_ldexp_transfer(loom_scalar_type_t scalar_type,
+                                       const loom_value_facts_t* input,
+                                       const loom_value_facts_t* exponent,
+                                       const void* user_data,
+                                       loom_value_facts_t* out) {
+  loom_value_facts_eval_float_ldexp(scalar_type, input, exponent, out);
+}
+
+iree_status_t loom_vector_ldexpf_facts(loom_fact_context_t* context,
+                                       const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       const loom_value_facts_t* operand_facts,
+                                       loom_value_facts_t* result_facts) {
+  return loom_vector_float_binary_summary_facts(
+      context, loom_vector_result_element_type(module, op), operand_facts,
+      result_facts, loom_vector_ldexp_transfer, NULL, /*fast_math_flags=*/0);
+}
+
+iree_status_t loom_vector_frexpf_facts(loom_fact_context_t* context,
+                                       const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       const loom_value_facts_t* operand_facts,
+                                       loom_value_facts_t* result_facts) {
+  const loom_scalar_type_t scalar_type =
+      loom_vector_result_element_type(module, op);
+  loom_value_facts_t input = {0};
+  if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
+                                              &input)) {
+    loom_value_facts_t fraction = {0};
+    loom_value_facts_t exponent = {0};
+    loom_value_facts_eval_float_frexp(scalar_type, &input, &fraction,
+                                      &exponent);
+    IREE_RETURN_IF_ERROR(loom_value_facts_make_uniform_element(
+        context, fraction, &result_facts[0]));
+    return loom_value_facts_make_uniform_element(context, exponent,
+                                                 &result_facts[1]);
+  }
+
+  loom_value_fact_small_static_lanes_t input_lanes = {0};
+  if (!loom_vector_facts_query_small_lanes(context, operand_facts[0],
+                                           &input_lanes)) {
+    result_facts[0] = loom_value_facts_unknown();
+    result_facts[1] = loom_value_facts_unknown();
+    // Only the floating fraction retains the source's native fragment layout.
+    bool fragment_handled = false;
+    return loom_vector_try_preserve_lanewise_fragment_facts(
+        context, operand_facts, 1, result_facts, &fragment_handled);
+  }
+  loom_value_facts_t fractions[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  loom_value_facts_t exponents[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (iree_host_size_t i = 0; i < input_lanes.count; ++i) {
+    loom_value_facts_eval_float_frexp(scalar_type, &input_lanes.lanes[i],
+                                      &fractions[i], &exponents[i]);
+  }
+  const loom_value_fact_small_static_lanes_t fraction_lanes = {
+      .lanes = fractions, .count = input_lanes.count};
+  const loom_value_fact_small_static_lanes_t exponent_lanes = {
+      .lanes = exponents, .count = input_lanes.count};
+  IREE_RETURN_IF_ERROR(loom_value_facts_make_small_static_lanes(
+      context, fraction_lanes, &result_facts[0]));
+  return loom_value_facts_make_small_static_lanes(context, exponent_lanes,
+                                                  &result_facts[1]);
+}
+
 typedef struct loom_vector_float_binary_math_transfer_t {
   // Evaluation in the F32 arithmetic domain, including narrower formats.
   loom_float_binary_f32_fn_t f32_fn;
