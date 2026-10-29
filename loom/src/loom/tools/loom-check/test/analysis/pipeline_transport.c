@@ -22,7 +22,8 @@ static bool loom_check_test_pipeline_transport_matches(
 
 static iree_status_t loom_check_test_pipeline_transport_print(
     const loom_module_t* module, const loom_pipeline_worker_t* worker,
-    iree_host_size_t worker_index, iree_string_builder_t* output) {
+    iree_host_size_t worker_index, iree_arena_allocator_t* arena,
+    iree_string_builder_t* output) {
   const loom_pipeline_transport_t* transport = &worker->transport;
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output,
@@ -62,6 +63,24 @@ static iree_status_t loom_check_test_pipeline_transport_print(
         IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
             output, "%s%%%.*s", k ? "," : "", (int)destination.size,
             destination.data));
+      }
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
+    }
+    if (!batch->replays) {
+      loom_pipeline_transport_copy_cursor_t cursor;
+      IREE_RETURN_IF_ERROR(loom_pipeline_transport_copy_cursor_initialize(
+          transport, batch, arena, &cursor));
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(output, "    copy_order:"));
+      const loom_pipeline_transport_copy_t* copy = NULL;
+      while ((copy = loom_pipeline_transport_copy_cursor_next(&cursor))) {
+        const iree_string_view_t source = loom_module_value_name(
+            module, loom_op_const_results(copy->source->admission->op)[0]);
+        const iree_string_view_t destination = loom_module_value_name(
+            module, copy->destination->channel->value_id);
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+            output, " %%%.*s->%%%.*s", (int)source.size, source.data,
+            (int)destination.size, destination.data));
       }
       IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
     }
@@ -127,7 +146,7 @@ static iree_status_t loom_check_test_pipeline_transport_execute(
   }
   for (iree_host_size_t i = 0; i < resources.strand_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_check_test_pipeline_transport_print(
-        module, &workers[i], i, &request->result->actual_output));
+        module, &workers[i], i, arena, &request->result->actual_output));
   }
   return iree_ok_status();
 }

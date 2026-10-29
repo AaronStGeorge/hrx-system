@@ -636,6 +636,7 @@ static iree_status_t loom_aie2p_native_select(
     }
     context->workers[i] = (loom_aie2p_native_worker_t){.tile = tile};
     if (source->transport.cohort_count) {
+      uint32_t copy_index = 0;
       for (iree_host_size_t j = 0; j < source->transport.batch_count; ++j) {
         const loom_pipeline_transport_batch_t* batch =
             &source->transport.batches[j];
@@ -654,7 +655,8 @@ static iree_status_t loom_aie2p_native_select(
         // transfer acquires ownership and its last returns it, independently
         // of the number of replays. Autonomous repeated admissions retain
         // their per-replay protocol inside the complete stream.
-        const uint64_t credits = first->admissions == 1 ? 1 : batch->replays;
+        const uint64_t credits =
+            first->admissions == 1 || !batch->replays ? 1 : batch->replays;
         if ((channel->replay.record_count &&
              (channel->replay.record_count != batch->record_count ||
               channel->replay.credits != credits)) ||
@@ -674,7 +676,9 @@ static iree_status_t loom_aie2p_native_select(
         const loom_pipeline_transport_batch_t* batch =
             &source->transport.batches[j];
         const loom_pipeline_transport_cohort_t* cohort = batch->records;
-        if (cohort->transfers > UINT32_MAX / batch->record_count) {
+        if (cohort->admissions > UINT32_MAX / batch->record_count ||
+            (batch->replays &&
+             cohort->transfers > UINT32_MAX / batch->record_count)) {
           return loom_aie2p_native_reject(
               context, cohort->admission->op,
               IREE_SV("a complete channel-copy count representable by native "
@@ -688,12 +692,12 @@ static iree_status_t loom_aie2p_native_select(
         if (!valid) {
           return iree_ok_status();
         }
-        for (iree_host_size_t k = 0; k < cohort->destination_count; ++k) {
+        for (iree_host_size_t k = 0; k < batch->copy_count; ++k) {
+          const loom_pipeline_transport_copy_t* copy = &batch->copies[k];
           IREE_RETURN_IF_ERROR(loom_aie2p_native_claim_transport_cursor(
-              context, realization, (uint32_t)i, (uint32_t)j,
-              cohort->destinations[k].channel,
-              cohort->destinations[k].reservation, false,
-              cohort->transfers * batch->record_count, &valid));
+              context, realization, (uint32_t)i, copy_index++,
+              copy->destination->channel, copy->destination->reservation, false,
+              copy->executions, &valid));
           if (!valid) {
             return iree_ok_status();
           }

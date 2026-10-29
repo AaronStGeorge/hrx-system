@@ -2081,7 +2081,7 @@ static iree_status_t loom_aie2p_array_plan_routed_channel(
   if (!loom_aie2p_array_route_workers(
           &builder->route_builder, channel_index, channel->source_channel_index,
           sender_dma->coordinate, sender_dma->dma_channel,
-          receiver_dma->coordinate, receiver_dma->dma_channel)) {
+          receiver_dma->coordinate, receiver_dma->dma_channel, false)) {
     return loom_aie2p_array_diagnose_route_capacity(builder, channel_index);
   }
   if (owns_sender_dma) {

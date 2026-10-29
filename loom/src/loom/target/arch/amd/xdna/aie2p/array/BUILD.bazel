@@ -137,6 +137,18 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "route_test",
+    srcs = ["route_test.cc"],
+    deps = [
+        ":plan",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "local_memory_test",
     srcs = ["local_memory_test.cc"],
     deps = [

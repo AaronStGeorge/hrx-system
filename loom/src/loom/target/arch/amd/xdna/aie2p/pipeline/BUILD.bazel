@@ -91,6 +91,7 @@ loom_cc_library(
     srcs = [
         "channels.c",
         "configuration.c",
+        "distribution.c",
         "dma.c",
         "native.c",
         "switch.c",
@@ -135,6 +136,7 @@ loom_cc_library(
         "//loom/src/loom/transforms/view:offset_expression",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:arena",
     ],
 )

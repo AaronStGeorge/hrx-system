@@ -51,6 +51,7 @@ loom_test(
     name = "one_column_test",
     srcs = [
         "finite_ingress.loom",
+        "ordered_prefix.loom",
         "ordered_replay.loom",
         "retained_lifetime.loom",
         "retained_replay.loom",

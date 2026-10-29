@@ -26,6 +26,14 @@ const loom_aie2p_native_memory_layout_t loom_aie2p_compute_memory = {
                 LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_DMA_BD_WORD4_ITERATION_CURRENT,
         },
     .lock_word = 5,
+    .packet =
+        {
+            .word = 1,
+            .id =
+                LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_DMA_BD_WORD1_PACKET_ID,
+            .enable =
+                LOOM_XDNA_REGISTER_FIELD_COMPUTE_MEMORY_DMA_BD_WORD1_ENABLE_PACKET,
+        },
     .chain =
         {
             .word = 5,
@@ -106,6 +114,13 @@ const loom_aie2p_native_memory_layout_t loom_aie2p_sram_memory = {
                 LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_DMA_BD_WORD6_ITERATION_CURRENT,
         },
     .lock_word = 7,
+    .packet =
+        {
+            .word = 0,
+            .id = LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_DMA_BD_WORD0_PACKET_ID,
+            .enable =
+                LOOM_XDNA_REGISTER_FIELD_MEMORY_TILE_DMA_BD_WORD0_ENABLE_PACKET,
+        },
     .chain =
         {
             .word = 1,

@@ -232,7 +232,7 @@ static bool loom_aie2p_array_plan_route(
     loom_aie2p_array_route_builder_t* builder, uint32_t channel_index,
     iree_host_size_t node_index, loom_xdna_tile_coordinate_t destination,
     loom_xdna_stream_port_t destination_port, uint8_t destination_channel,
-    bool vertical_first) {
+    bool vertical_first, bool packet) {
   // Existing multicast prefixes retain their physical arrival and lane. Only
   // the unreserved suffix participates in lane selection.
   while (builder->prefixes.nodes[node_index].coordinate.column !=
@@ -246,6 +246,20 @@ static bool loom_aie2p_array_plan_route(
                                          vertical_first);
     if (node->children[direction] == IREE_HOST_SIZE_MAX) {
       break;
+    }
+    if (packet) {
+      // Packet classes share the physical source tree to preserve stream
+      // order. Every class retains its complete path so its filters also
+      // admit that class on links already allocated for another branch.
+      static const loom_xdna_stream_port_t outputs[] = {
+          LOOM_XDNA_STREAM_PORT_NORTH, LOOM_XDNA_STREAM_PORT_SOUTH,
+          LOOM_XDNA_STREAM_PORT_WEST, LOOM_XDNA_STREAM_PORT_EAST};
+      const loom_aie2p_array_route_node_t* child =
+          &builder->prefixes.nodes[node->children[direction]];
+      loom_aie2p_array_append_route(
+          builder, channel_index, node->coordinate,
+          LOOM_AIE2P_ARRAY_SWITCH_KIND_STREAM_SWITCH, node->incoming_port,
+          node->incoming_channel, outputs[direction], child->incoming_channel);
     }
     node_index = node->children[direction];
   }
@@ -328,7 +342,7 @@ bool loom_aie2p_array_route_ingress(
   }
   return loom_aie2p_array_plan_route(
       builder, channel_index, *root, worker_coordinate,
-      LOOM_XDNA_STREAM_PORT_DMA, worker_dma_channel, false);
+      LOOM_XDNA_STREAM_PORT_DMA, worker_dma_channel, false, false);
 }
 
 static iree_host_size_t loom_aie2p_array_route_worker_source(
@@ -357,7 +371,7 @@ bool loom_aie2p_array_route_egress(
       shim_dma_channel);
   if (!loom_aie2p_array_plan_route(builder, channel_index, node_index,
                                    shim_coordinate, LOOM_XDNA_STREAM_PORT_SOUTH,
-                                   shim_link_channel, true)) {
+                                   shim_link_channel, true, false)) {
     return false;
   }
   loom_aie2p_array_append_route(builder, channel_index, shim_coordinate,
@@ -367,12 +381,15 @@ bool loom_aie2p_array_route_egress(
   return true;
 }
 
-bool loom_aie2p_array_route_stream(
-    loom_aie2p_array_route_builder_t* builder, uint32_t channel_index,
-    uint32_t source_channel_index, loom_xdna_tile_coordinate_t source,
-    loom_xdna_stream_port_t source_port, uint8_t source_channel,
-    loom_xdna_tile_coordinate_t destination,
-    loom_xdna_stream_port_t destination_port, uint8_t destination_channel) {
+bool loom_aie2p_array_route_stream(loom_aie2p_array_route_builder_t* builder,
+                                   uint32_t channel_index,
+                                   uint32_t source_channel_index,
+                                   loom_xdna_tile_coordinate_t source,
+                                   loom_xdna_stream_port_t source_port,
+                                   uint8_t source_channel,
+                                   loom_xdna_tile_coordinate_t destination,
+                                   loom_xdna_stream_port_t destination_port,
+                                   uint8_t destination_channel, bool packet) {
   iree_host_size_t* root = &builder->prefixes.roots[source_channel_index];
   if (*root == IREE_HOST_SIZE_MAX) {
     *root = loom_aie2p_array_create_route_node(builder, source, source_port,
@@ -380,7 +397,7 @@ bool loom_aie2p_array_route_stream(
   }
   return loom_aie2p_array_plan_route(builder, channel_index, *root, destination,
                                      destination_port, destination_channel,
-                                     false);
+                                     false, packet);
 }
 
 bool loom_aie2p_array_route_workers(
@@ -388,7 +405,7 @@ bool loom_aie2p_array_route_workers(
     uint32_t source_channel_index,
     loom_xdna_tile_coordinate_t sender_coordinate, uint8_t sender_dma_channel,
     loom_xdna_tile_coordinate_t receiver_coordinate,
-    uint8_t receiver_dma_channel) {
+    uint8_t receiver_dma_channel, bool packet) {
   const uint8_t sender_stream_channel = loom_aie2p_array_dma_stream_channel(
       builder, sender_coordinate, LOOM_XDNA_DMA_DIRECTION_MEMORY_TO_STREAM,
       sender_dma_channel);
@@ -398,5 +415,5 @@ bool loom_aie2p_array_route_workers(
   return loom_aie2p_array_route_stream(
       builder, channel_index, source_channel_index, sender_coordinate,
       LOOM_XDNA_STREAM_PORT_DMA, sender_stream_channel, receiver_coordinate,
-      LOOM_XDNA_STREAM_PORT_DMA, receiver_stream_channel);
+      LOOM_XDNA_STREAM_PORT_DMA, receiver_stream_channel, packet);
 }

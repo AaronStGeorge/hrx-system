@@ -1,0 +1,276 @@
+// Query records select one destination; increasing K/V prefixes reach both.
+// Nested replays retain source ownership and preserve the complete copy order.
+aie2p.target<array> @device
+
+func.def inline @send(%read: read<tile<16xi32>>, %destination: channel<tile<16xi32>>) -> (read<tile<16xi32>>) {
+  %keep, %copy = channel.fanout %read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %write, %payload = channel.reserve %destination : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %copy -> %write : read<tile<16xi32>>, write<tile<16xi32>>
+  func.return %keep : read<tile<16xi32>>
+}
+
+func.def inline @broadcast(%read: read<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) -> (read<tile<16xi32>>) {
+  %keep, %a, %b = channel.fanout %read : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>, read<tile<16xi32>>)
+  %write_a, %payload_a = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %a -> %write_a : read<tile<16xi32>>, write<tile<16xi32>>
+  %write_b, %payload_b = channel.reserve %right : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %b -> %write_b : read<tile<16xi32>>, write<tile<16xi32>>
+  func.return %keep : read<tile<16xi32>>
+}
+
+func.def inline @drain(%source: channel<tile<16xi32>>, %output: buffer, %count: index) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %bytes = index.constant 64 : offset
+  scf.for %i = [%c0 to %count step %c1] {
+    %read, %payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+    %offset = index.scale %i, %bytes : index, offset -> offset
+    %external = buffer.view %output[%offset] : buffer -> view<16xi32>
+    %copy = kernel.async.copy %payload to %external {cache_scope = workgroup, cache_temporal = regular, direction = workgroup_to_global} : view<16xi32> to view<16xi32> -> kernel.async.token
+    %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+    channel.release %read : read<tile<16xi32>>
+  }
+  func.return
+}
+
+pipeline.def<kernel> @prefix(%outer: index, %inner: index, %batches: index, %capacity: index, %source_row: index) run(%input_arg: buffer, %left_arg: buffer, %right_arg: buffer) {
+  %input_unique, %left_unique, %right_unique = buffer.assume.noalias %input_arg, %left_arg, %right_arg : buffer, buffer, buffer
+  %input, %left_output, %right_output = buffer.assume.alignment %input_unique, %left_unique, %right_unique {minimum_alignment = 64} : buffer, buffer, buffer
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c6 = index.constant 6 : index
+  %c8 = index.constant 8 : index
+  %origin = index.constant 0 : offset
+  %bytes = index.constant 64 : offset
+  %batch_bytes = index.constant 512 : offset
+  %replays = index.mul %outer, %inner : index
+  %prefix_count = index.mul %replays, %c2 : index
+  %records_per_batch = index.add %prefix_count, %c6 : index
+  %record_count = index.mul %records_per_batch, %batches : index
+  %input_records = index.mul %batches, %c8 : index
+  %local_bytes = index.scale %capacity, %bytes : index, offset -> offset
+  %memory = pipeline.memory<workgroup>[0, %source_row] : pool
+  %storage = buffer.alloca<workgroup> pool(%memory) align(64) %batch_bytes : buffer
+  %slots = buffer.view %storage[%origin] : buffer -> view<8x16xi32>
+  %source = channel.bind<fifo> %slots, %c8 : view<8x16xi32>, index -> channel<tile<16xi32>>
+  %left_memory = pipeline.memory<workgroup>[0, 2] : pool
+  %left_storage = buffer.alloca<workgroup> pool(%left_memory) align(64) %local_bytes : buffer
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<[%capacity]x16xi32>
+  %left = channel.bind<fifo> %left_slots, %capacity : view<[%capacity]x16xi32>, index -> channel<tile<16xi32>>
+  %right_memory = pipeline.memory<workgroup>[0, 3] : pool
+  %right_storage = buffer.alloca<workgroup> pool(%right_memory) align(64) %local_bytes : buffer
+  %right_slots = buffer.view %right_storage[%origin] : buffer -> view<[%capacity]x16xi32>
+  %right = channel.bind<fifo> %right_slots, %capacity : view<[%capacity]x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    scf.for %i = [%c0 to %input_records step %c1] {
+      %offset = index.scale %i, %bytes : index, offset -> offset
+      %external = buffer.view %input[%offset] : buffer -> view<16xi32>
+      %write, %payload = channel.reserve %source : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+      %copy = kernel.async.copy %external to %payload {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi32> to view<16xi32> -> kernel.async.token
+      %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+      kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+      channel.publish %write : write<tile<16xi32>>
+    }
+  }
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    scf.for %batch = [%c0 to %batches step %c1] {
+      %record0, %payload0 = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %record1, %payload1 = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %record2, %payload2 = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %record3, %payload3 = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %record4, %payload4 = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %record5, %payload5 = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %record6, %payload6 = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %record7, %payload7 = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
+      %keep0 = func.call @send(%record0, %left) : (read<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+      %keep2 = func.call @send(%record2, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+      %key, %value = scf.for %o = [%c0 to %outer step %c1](%a = %record4 : read<tile<16xi32>>, %b = %record5 : read<tile<16xi32>>) -> (read<tile<16xi32>>, read<tile<16xi32>>) {
+        %next_a, %next_b = scf.for %i = [%c0 to %inner step %c1](%k = %a : read<tile<16xi32>>, %v = %b : read<tile<16xi32>>) -> (read<tile<16xi32>>, read<tile<16xi32>>) {
+          %keep_k = func.call @broadcast(%k, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+          %keep_v = func.call @broadcast(%v, %right, %left) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+          scf.yield %keep_k, %keep_v : read<tile<16xi32>>, read<tile<16xi32>>
+        }
+        scf.yield %next_a, %next_b : read<tile<16xi32>>, read<tile<16xi32>>
+      }
+      %keep1 = func.call @send(%record1, %left) : (read<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+      %keep3 = func.call @send(%record3, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+      %keep4 = func.call @broadcast(%key, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+      %keep5 = func.call @broadcast(%value, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+      %keep6 = func.call @broadcast(%record6, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+      %keep7 = func.call @broadcast(%record7, %left, %right) : (read<tile<16xi32>>, channel<tile<16xi32>>, channel<tile<16xi32>>) -> (read<tile<16xi32>>)
+      channel.release %keep0 : read<tile<16xi32>>
+      channel.release %keep1 : read<tile<16xi32>>
+      channel.release %keep2 : read<tile<16xi32>>
+      channel.release %keep3 : read<tile<16xi32>>
+      channel.release %keep4 : read<tile<16xi32>>
+      channel.release %keep5 : read<tile<16xi32>>
+      channel.release %keep6 : read<tile<16xi32>>
+      channel.release %keep7 : read<tile<16xi32>>
+    }
+  }
+  pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
+    func.call @drain(%left, %left_output, %record_count) : (channel<tile<16xi32>>, buffer, index)
+  }
+  pipeline.strand workers([0, 3], [1, 1], [1, 1]) {
+    func.call @drain(%right, %right_output, %record_count) : (channel<tile<16xi32>>, buffer, index)
+  }
+}
+
+// The reference indexes logical records directly, independently of channels,
+// multicast, packet boundaries, physical slot ownership, or nested loop order.
+func.def inline @reference(%input: buffer, %left: buffer, %right: buffer, %replays: index, %batches: index) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %c3 = index.constant 3 : index
+  %c4 = index.constant 4 : index
+  %c6 = index.constant 6 : index
+  %words = index.constant 16 : index
+  %origin = index.constant 0 : offset
+  %prefix_count = index.mul %replays, %c2 : index
+  %second_query = index.add %prefix_count, %c1 : index
+  %suffix_base = index.add %prefix_count, %c2 : index
+  %count = index.add %prefix_count, %c6 : index
+  %source = buffer.view %input[%origin] : buffer -> view<[%batches]x8x16xi32>
+  %a = buffer.view %left[%origin] : buffer -> view<[%batches]x[%count]x16xi32>
+  %b = buffer.view %right[%origin] : buffer -> view<[%batches]x[%count]x16xi32>
+  scf.for %batch = [%c0 to %batches step %c1] {
+    scf.for %word = [%c0 to %words step %c1] {
+      %q0 = view.load %source[%batch, %c0, %word] : view<[%batches]x8x16xi32> -> i32
+      %q1 = view.load %source[%batch, %c1, %word] : view<[%batches]x8x16xi32> -> i32
+      %q2 = view.load %source[%batch, %c2, %word] : view<[%batches]x8x16xi32> -> i32
+      %q3 = view.load %source[%batch, %c3, %word] : view<[%batches]x8x16xi32> -> i32
+      view.store %q0, %a[%batch, %c0, %word] : i32, view<[%batches]x[%count]x16xi32>
+      view.store %q2, %b[%batch, %c0, %word] : i32, view<[%batches]x[%count]x16xi32>
+      view.store %q1, %a[%batch, %second_query, %word] : i32, view<[%batches]x[%count]x16xi32>
+      view.store %q3, %b[%batch, %second_query, %word] : i32, view<[%batches]x[%count]x16xi32>
+    }
+    scf.for %replay = [%c0 to %replays step %c1] {
+      %replay_offset = index.mul %replay, %c2 : index
+      %base = index.add %replay_offset, %c1 : index
+      scf.for %part = [%c0 to %c2 step %c1] {
+        %record = index.add %c4, %part : index
+        %result = index.add %base, %part : index
+        scf.for %word = [%c0 to %words step %c1] {
+          %value = view.load %source[%batch, %record, %word] : view<[%batches]x8x16xi32> -> i32
+          view.store %value, %a[%batch, %result, %word] : i32, view<[%batches]x[%count]x16xi32>
+          view.store %value, %b[%batch, %result, %word] : i32, view<[%batches]x[%count]x16xi32>
+        }
+      }
+    }
+    scf.for %part = [%c0 to %c4 step %c1] {
+      %record = index.add %c4, %part : index
+      %result = index.add %suffix_base, %part : index
+      scf.for %word = [%c0 to %words step %c1] {
+        %value = view.load %source[%batch, %record, %word] : view<[%batches]x8x16xi32> -> i32
+        view.store %value, %a[%batch, %result, %word] : i32, view<[%batches]x[%count]x16xi32>
+        view.store %value, %b[%batch, %result, %word] : i32, view<[%batches]x[%count]x16xi32>
+      }
+    }
+  }
+  func.return
+}
+
+pipeline.def<kernel> public retain target(@device) @straight() run(%input: buffer, %left: buffer, %right: buffer) {
+  %outer = index.constant 1 : index
+  %inner = index.constant 1 : index
+  %batches = index.constant 1 : index
+  %capacity = index.constant 1 : index
+  %source_row = index.constant 1 : index
+  pipeline.compose @prefix[%outer, %inner, %batches, %capacity, %source_row](%input, %left, %right) : [index, index, index, index, index](buffer, buffer, buffer)
+}
+
+func.def @reference_straight(%input: buffer, %left: buffer, %right: buffer) {
+  %replays = index.constant 1 : index
+  %batches = index.constant 1 : index
+  func.call @reference(%input, %left, %right, %replays, %batches) : (buffer, buffer, buffer, index, index)
+  func.return
+}
+
+check.scenario public @straight_prefixes {
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input_storage = check.generate.random.uniform seed(%seed) range(-1000000 to 1000000) : tensor<160xi32>
+    %input = check.tensor.view %input_storage offset(64) : tensor<160xi32> -> tensor<128xi32>
+    %left_storage = check.generate.fill value(-9999) : tensor<160xi32>
+    %left = check.tensor.view %left_storage offset(64) : tensor<160xi32> -> tensor<128xi32>
+    %right_storage = check.generate.fill value(1234567) : tensor<160xi32>
+    %right = check.tensor.view %right_storage offset(64) : tensor<160xi32> -> tensor<128xi32>
+    check.compare<@straight, @reference_straight>(%input, %left, %right) : (tensor<128xi32>, tensor<128xi32>, tensor<128xi32>) -> () {
+      check.expect.equal actual(%input_storage) expected(%input_storage) : tensor<160xi32>
+      check.expect.equal actual(%left_storage) expected(%left_storage) : tensor<160xi32>
+      check.expect.equal actual(%right_storage) expected(%right_storage) : tensor<160xi32>
+    }
+  }
+  check.return
+}
+
+pipeline.def<kernel> public retain target(@device) @nested() run(%input: buffer, %left: buffer, %right: buffer) {
+  %outer = index.constant 2 : index
+  %inner = index.constant 3 : index
+  %batches = index.constant 3 : index
+  %capacity = index.constant 2 : index
+  %source_row = index.constant 1 : index
+  pipeline.compose @prefix[%outer, %inner, %batches, %capacity, %source_row](%input, %left, %right) : [index, index, index, index, index](buffer, buffer, buffer)
+}
+
+func.def @reference_nested(%input: buffer, %left: buffer, %right: buffer) {
+  %replays = index.constant 6 : index
+  %batches = index.constant 3 : index
+  func.call @reference(%input, %left, %right, %replays, %batches) : (buffer, buffer, buffer, index, index)
+  func.return
+}
+
+check.scenario public @nested_prefixes {
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input_storage = check.generate.random.uniform seed(%seed) range(-1000000 to 1000000) : tensor<416xi32>
+    %input = check.tensor.view %input_storage offset(64) : tensor<416xi32> -> tensor<384xi32>
+    %left_storage = check.generate.fill value(-9999) : tensor<896xi32>
+    %left = check.tensor.view %left_storage offset(64) : tensor<896xi32> -> tensor<864xi32>
+    %right_storage = check.generate.fill value(1234567) : tensor<896xi32>
+    %right = check.tensor.view %right_storage offset(64) : tensor<896xi32> -> tensor<864xi32>
+    check.compare<@nested, @reference_nested>(%input, %left, %right) : (tensor<384xi32>, tensor<864xi32>, tensor<864xi32>) -> () {
+      check.expect.equal actual(%input_storage) expected(%input_storage) : tensor<416xi32>
+      check.expect.equal actual(%left_storage) expected(%left_storage) : tensor<896xi32>
+      check.expect.equal actual(%right_storage) expected(%right_storage) : tensor<896xi32>
+    }
+  }
+  check.return
+}
+
+pipeline.def<kernel> public retain target(@device) @partial_ring() run(%input: buffer, %left: buffer, %right: buffer) {
+  %outer = index.constant 1 : index
+  %inner = index.constant 1 : index
+  %batches = index.constant 1 : index
+  %capacity = index.constant 3 : index
+  %source_row = index.constant 2 : index
+  pipeline.compose @prefix[%outer, %inner, %batches, %capacity, %source_row](%input, %left, %right) : [index, index, index, index, index](buffer, buffer, buffer)
+}
+
+func.def @reference_partial_ring(%input: buffer, %left: buffer, %right: buffer) {
+  %replays = index.constant 1 : index
+  %batches = index.constant 1 : index
+  func.call @reference(%input, %left, %right, %replays, %batches) : (buffer, buffer, buffer, index, index)
+  func.return
+}
+
+check.scenario public @partial_ring_prefixes {
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %input_storage = check.generate.random.uniform seed(%seed) range(-1000000 to 1000000) : tensor<160xi32>
+    %input = check.tensor.view %input_storage offset(64) : tensor<160xi32> -> tensor<128xi32>
+    %left_storage = check.generate.fill value(-9999) : tensor<160xi32>
+    %left = check.tensor.view %left_storage offset(64) : tensor<160xi32> -> tensor<128xi32>
+    %right_storage = check.generate.fill value(1234567) : tensor<160xi32>
+    %right = check.tensor.view %right_storage offset(64) : tensor<160xi32> -> tensor<128xi32>
+    check.compare<@partial_ring, @reference_partial_ring>(%input, %left, %right) : (tensor<128xi32>, tensor<128xi32>, tensor<128xi32>) -> () {
+      check.expect.equal actual(%input_storage) expected(%input_storage) : tensor<160xi32>
+      check.expect.equal actual(%left_storage) expected(%left_storage) : tensor<160xi32>
+      check.expect.equal actual(%right_storage) expected(%right_storage) : tensor<160xi32>
+    }
+  }
+  check.return
+}

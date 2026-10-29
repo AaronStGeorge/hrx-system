@@ -48,6 +48,15 @@ typedef struct loom_aie2p_native_memory_layout_t {
     // The current task continues at the next descriptor.
     loom_xdna_register_field_id_t enable;
   } chain;
+  // Word and fields selecting the on-die payload packet class.
+  struct {
+    // Word containing packet framing fields.
+    uint8_t word;
+    // Packet identity consumed by stream-switch filters.
+    loom_xdna_register_field_id_t id;
+    // Emit one header and packet boundary for this descriptor.
+    loom_xdna_register_field_id_t enable;
+  } packet;
   // Word containing lock actions and descriptor validity.
   uint8_t lock_word;
   // Lock action and validity fields.

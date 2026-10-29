@@ -1,6 +1,6 @@
 // RUN: emit pipeline-transport @test
 
-// Copy order must match admission order for autonomous record-batch transport.
+// Copy order retains source identity independently of admission order.
 func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
   %a = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
   %b = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
@@ -25,7 +25,49 @@ pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: 
 }
 
 // ----
-worker 0: transport=unproven execution_counts=exact batches=0 streams=0
+worker 0: transport=channel-copy execution_counts=exact batches=1 streams=0
+  batch 0: records=2 replays=0
+    record 0: admission=%a source=%source admissions=1 transfers=1 final_release=no destinations=%left
+    record 1: admission=%b source=%source admissions=1 transfers=1 final_release=no destinations=%left
+    copy_order: %b->%left %a->%left
+
+// ====
+// RUN: emit pipeline-transport @test
+
+// Retained ownership permits copy order to differ from admission order.
+func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>) {
+  %a = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %b = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
+  %keep_a, %copy_a = channel.fanout %a : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %keep_b, %copy_b = channel.fanout %b : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
+  %first, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %copy_b -> %first : read<tile<16xi32>>, write<tile<16xi32>>
+  %second, %second_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
+  channel.copy %copy_a -> %second : read<tile<16xi32>>, write<tile<16xi32>>
+  channel.release %keep_a : read<tile<16xi32>>
+  channel.release %keep_b : read<tile<16xi32>>
+  func.return
+}
+
+pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: buffer) {
+  %origin = index.constant 0 : offset
+  %source_capacity = index.constant 2 : index
+  %destination_capacity = index.constant 1 : index
+  %source_slots = buffer.view %source_storage[%origin] : buffer -> view<2x16xi32>
+  %source = channel.bind<fifo> %source_slots, %source_capacity : view<2x16xi32>, index -> channel<tile<16xi32>>
+  %left_slots = buffer.view %left_storage[%origin] : buffer -> view<1x16xi32>
+  %left = channel.bind<fifo> %left_slots, %destination_capacity : view<1x16xi32>, index -> channel<tile<16xi32>>
+  pipeline.strand workers([0], [1], [1]) {
+    func.call @worker(%source, %left) : (channel<tile<16xi32>>, channel<tile<16xi32>>)
+  }
+}
+
+// ----
+worker 0: transport=channel-copy execution_counts=exact batches=1 streams=0
+  batch 0: records=2 replays=0
+    record 0: admission=%a source=%source admissions=1 transfers=1 final_release=yes destinations=%left
+    record 1: admission=%b source=%source admissions=1 transfers=1 final_release=yes destinations=%left
+    copy_order: %b->%left %a->%left
 
 // ====
 // RUN: emit pipeline-transport @test
@@ -171,8 +213,7 @@ worker 0: transport=unproven execution_counts=exact batches=0 streams=0
 // ====
 // RUN: emit pipeline-transport @test
 
-// Equal exact trip counts do not establish one common replay scope.
-// One retained record crosses both loops and has only one final release.
+// One retained record spans sibling loops; each retains its own copy order.
 func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) {
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
@@ -220,4 +261,7 @@ pipeline.def<kernel> public @test() run(%source_storage: buffer, %left_storage: 
 }
 
 // ----
-worker 0: transport=unproven execution_counts=exact batches=0 streams=0
+worker 0: transport=channel-copy execution_counts=exact batches=1 streams=0
+  batch 0: records=1 replays=0
+    record 0: admission=%initial source=%source admissions=1 transfers=0 final_release=yes destinations=%left,%right
+    copy_order: %initial->%left %initial->%left %initial->%left %initial->%right %initial->%right %initial->%right

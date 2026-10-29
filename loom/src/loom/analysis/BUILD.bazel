@@ -930,6 +930,18 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "pipeline_workers_test",
+    srcs = ["pipeline_workers_test.cc"],
+    deps = [
+        ":pipeline_workers",
+        "//loom/src/loom/util:cfg_loop_nest",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "vector_memory_footprint",
     srcs = [

@@ -420,6 +420,13 @@ TEST_F(PipelineConstructionTest, CapturesKeepProtocolAndStorageSeparate) {
       EXPECT_EQ(cohort.destinations[0].copy, selected.channels.actions[2].op);
       EXPECT_EQ(cohort.destinations[0].channel,
                 selected.channels.actions[1].channel);
+      ASSERT_EQ(selected.transport.batch_count, 1u);
+      const auto& batch = selected.transport.batches[0];
+      ASSERT_EQ(batch.copy_count, 1u);
+      EXPECT_EQ(batch.copies[0].source, &cohort);
+      EXPECT_EQ(batch.copies[0].destination, &cohort.destinations[0]);
+      EXPECT_EQ(batch.copies[0].executions, 1u);
+      EXPECT_EQ(batch.copies[0].scope, LOOM_CFG_LOOP_NEST_NONE);
       ASSERT_NE(selected.graph, nullptr);
       EXPECT_FALSE(loom_local_value_domain_is_acquired(&selected.value_domain));
       loom_local_value_domain_restore(&selected.value_domain);
