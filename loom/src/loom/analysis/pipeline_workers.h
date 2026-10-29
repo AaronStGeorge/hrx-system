@@ -93,6 +93,11 @@ typedef struct loom_pipeline_transport_cohort_t {
   uint64_t admissions;
   // Exact number of copies to each destination over the complete invocation.
   uint64_t transfers;
+  // Natural loop admitting/releasing this record, or LOOP_NEST_NONE.
+  uint16_t admission_scope;
+  // Natural loop containing its copies, or LOOP_NEST_NONE. Independent replay
+  // loops remain separate batches even when their execution counts agree.
+  uint16_t copy_scope;
 } loom_pipeline_transport_cohort_t;
 
 // An ordered sequence of source records with the same destinations and replay
@@ -108,10 +113,10 @@ typedef struct loom_pipeline_transport_batch_t {
 } loom_pipeline_transport_batch_t;
 
 typedef struct loom_pipeline_transport_t {
-  // All observable sites in CFG reverse postorder, preserving order within
-  // each block; NULL when ordinary execution is required. For borrowed
-  // movement, admission proves one straight-line sequence or repeated body.
-  // Record-batch lifetime and replay order are retained separately below.
+  // All observable sites in structural execution order, visiting loop bodies
+  // before their continuations; NULL when ordinary execution is required. For
+  // borrowed movement, admission proves one straight-line sequence or repeated
+  // body. Record-batch lifetime and replay order are retained separately below.
   const loom_pipeline_transport_step_t* steps;
   // Number of steps in the complete invocation.
   iree_host_size_t count;

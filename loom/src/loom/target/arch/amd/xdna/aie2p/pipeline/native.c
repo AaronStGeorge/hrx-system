@@ -277,8 +277,8 @@ static iree_status_t loom_aie2p_native_select_buffer_accesses(
 static iree_status_t loom_aie2p_native_claim_transport_cursor(
     loom_aie2p_native_context_t* context,
     const loom_pipeline_realization_t* realization, uint32_t worker_index,
-    const loom_channel_identity_t* identity, const loom_op_t* op, bool reader,
-    uint64_t admissions, bool* out_valid) {
+    uint32_t batch_index, const loom_channel_identity_t* identity,
+    const loom_op_t* op, bool reader, uint64_t admissions, bool* out_valid) {
   *out_valid = false;
   const loom_pipeline_resource_channel_t* bound =
       loom_pipeline_resources_lookup_channel(&realization->resources,
@@ -293,13 +293,21 @@ static iree_status_t loom_aie2p_native_claim_transport_cursor(
         IREE_SV(
             "a positive channel-copy count representable by native cursors"));
   }
-  if (cursor->worker != UINT32_MAX) {
+  if (cursor->worker != UINT32_MAX &&
+      (cursor->worker != worker_index ||
+       cursor->transport_batch == batch_index)) {
     return loom_aie2p_native_reject(
         context, op,
         IREE_SV("one ordered transport stream per FIFO read or write cursor"));
   }
+  if (admissions > UINT32_MAX - cursor->maximum_admissions) {
+    return loom_aie2p_native_reject(
+        context, op,
+        IREE_SV("a complete transport count representable by native cursors"));
+  }
   cursor->worker = worker_index;
-  cursor->maximum_admissions = (uint32_t)admissions;
+  cursor->transport_batch = batch_index;
+  cursor->maximum_admissions += (uint32_t)admissions;
   cursor->advances =
       channel->source->capacity > 1 && cursor->maximum_admissions > 1;
   *out_valid = true;
@@ -642,7 +650,9 @@ static iree_status_t loom_aie2p_native_select(
             &context->channels[bound - realization->resources.channels];
         const loom_aie2p_native_tile_t* owner =
             context->pool_tiles[channel->pool_index];
-        if (channel->replay.record_count ||
+        if ((channel->replay.record_count &&
+             (channel->replay.record_count != batch->record_count ||
+              channel->replay.count != batch->replays)) ||
             batch->record_count != bound->capacity || !channel->record_dense ||
             channel->byte_stride != channel->record_byte_length ||
             batch->replays > (uint64_t)owner->facts->lock_value_maximum) {
@@ -666,15 +676,15 @@ static iree_status_t loom_aie2p_native_select(
         }
         bool valid = false;
         IREE_RETURN_IF_ERROR(loom_aie2p_native_claim_transport_cursor(
-            context, realization, (uint32_t)i, cohort->admission->channel,
-            cohort->admission->op, true,
+            context, realization, (uint32_t)i, (uint32_t)j,
+            cohort->admission->channel, cohort->admission->op, true,
             cohort->admissions * batch->record_count, &valid));
         if (!valid) {
           return iree_ok_status();
         }
         for (iree_host_size_t k = 0; k < cohort->destination_count; ++k) {
           IREE_RETURN_IF_ERROR(loom_aie2p_native_claim_transport_cursor(
-              context, realization, (uint32_t)i,
+              context, realization, (uint32_t)i, (uint32_t)j,
               cohort->destinations[k].channel,
               cohort->destinations[k].reservation, false,
               cohort->transfers * batch->record_count, &valid));

@@ -201,6 +201,9 @@ TEST_F(CfgLoopNestTest, UnmodeledPathsDoNotProduceExactCounts) {
       {{1}, {2, 4}, {1, 4}, {}, {}},
       {{1, 2}, {2, 3}, {1, 3}, {}},
       {{0}},
+      // A multiway loop header still chooses among body paths. A unique
+      // backedge/exit cannot make both alternatives execute on every turn.
+      {{1}, {2, 3, 5}, {4}, {4}, {1}, {}},
   };
   for (const auto& successors : cases) {
     CfgGraph fixture(successors);
@@ -209,6 +212,60 @@ TEST_F(CfgLoopNestTest, UnmodeledPathsDoNotProduceExactCounts) {
     std::vector<uint64_t> counts(successors.size());
     EXPECT_FALSE(loom_cfg_loop_nest_calculate_block_execution_counts(
         &nest, trips.data(), counts.data()));
+  }
+}
+
+TEST_F(CfgLoopNestTest, StructuralOrderVisitsBodiesBeforeContinuations) {
+  struct Case {
+    // Successor lists deliberately use non-execution block order.
+    std::vector<std::vector<uint16_t>> successors;
+    // Each reachable block once, with nested bodies before their exits.
+    std::vector<uint16_t> expected;
+  };
+  const Case cases[] = {
+      {{}, {}},
+      {{{}}, {0}},
+      {{{3}, {}, {1}, {2}}, {0, 3, 2, 1}},
+      // Two sibling loops with opposite conditional successor orders.
+      {{{4}, {4}, {3, 5}, {2}, {2, 1}, {}, {6}}, {0, 4, 1, 2, 3, 5}},
+      // Nested loops with distinct latches and an unreachable self-cycle.
+      {{{4}, {4}, {5, 1}, {}, {2, 6}, {2}, {3}, {7}}, {0, 4, 2, 5, 1, 6, 3}},
+      // The inner exit is the outer backedge; neither header repeats.
+      {{{1}, {2, 4}, {3, 1}, {2}, {}}, {0, 1, 2, 3, 4}},
+      // Header-only inner loop, whose exit is again the outer backedge.
+      {{{1}, {2, 3}, {1, 2}, {}}, {0, 1, 2, 3}},
+  };
+  for (const auto& test : cases) {
+    CfgGraph fixture(test.successors);
+    const auto nest = Build(fixture);
+    std::vector<uint64_t> trips(nest.loop_count, 3);
+    std::vector<uint64_t> counts(test.successors.size());
+    ASSERT_TRUE(loom_cfg_loop_nest_calculate_block_execution_counts(
+        &nest, trips.data(), counts.data()));
+    std::vector<uint16_t> order(fixture.get()->reverse_postorder.count);
+    loom_cfg_loop_nest_order_blocks(&nest, order.data());
+    EXPECT_EQ(order, test.expected);
+  }
+}
+
+TEST_F(CfgLoopNestTest, StructuralOrderClosesDeepSharedLatchesIteratively) {
+  constexpr uint16_t depth = 8192;
+  std::vector<std::vector<uint16_t>> successors(depth + 2);
+  successors[0] = {1};
+  for (uint16_t i = 1; i <= depth; ++i) {
+    successors[i] = {uint16_t(i == depth ? i : i + 1),
+                     uint16_t(i == 1 ? depth + 1 : i - 1)};
+  }
+  CfgGraph fixture(successors);
+  const auto nest = Build(fixture);
+  std::vector<uint64_t> trips(nest.loop_count, 1);
+  std::vector<uint64_t> counts(successors.size());
+  ASSERT_TRUE(loom_cfg_loop_nest_calculate_block_execution_counts(
+      &nest, trips.data(), counts.data()));
+  std::vector<uint16_t> order(successors.size());
+  loom_cfg_loop_nest_order_blocks(&nest, order.data());
+  for (uint16_t i = 0; i < order.size(); ++i) {
+    EXPECT_EQ(order[i], i);
   }
 }
 

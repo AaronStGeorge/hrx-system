@@ -245,10 +245,10 @@ pipeline.def<kernel> public retain target(@device) @shared_distribution_reader()
     }
   }
   pipeline.strand workers([0, 3], [1, 1], [1, 1]) {
+    // ERROR@+1: XDNA/051 {requirement="successive retained batches with one controller-owned publication per phase"}
     %first_read, %first_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
     %left_write, %left_payload = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
     channel.copy %first_read -> %left_write : read<tile<16xi32>>, write<tile<16xi32>>
-    // ERROR@+1: XDNA/051 {requirement="one ordered transport stream per FIFO read or write cursor"}
     %second_read, %second_payload = channel.acquire %source : channel<tile<16xi32>> -> (read<tile<16xi32>>, view<16xi32>)
     %right_write, %right_payload = channel.reserve %right : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
     channel.copy %second_read -> %right_write : read<tile<16xi32>>, write<tile<16xi32>>

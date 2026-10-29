@@ -233,7 +233,6 @@ func.def @worker(%source: channel<tile<16xi32>>, %other: channel<tile<16xi32>>, 
   %b = channel.accept %other : channel<tile<16xi32>> -> read<tile<16xi32>>
   %first, %first_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
   channel.copy %a -> %first : read<tile<16xi32>>, write<tile<16xi32>>
-  // ERROR@+1: XDNA/051 {requirement="one ordered transport stream per FIFO read or write cursor"}
   %second, %second_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)
   channel.copy %b -> %second : read<tile<16xi32>>, write<tile<16xi32>>
   func.return
@@ -263,6 +262,7 @@ pipeline.def<kernel> public retain target(@array_target) @test() run(%input_arg:
   pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
     func.call @ingress(%input, %source, %source_count) : (buffer, channel<tile<16xi32>>, index)
   }
+  // ERROR@+1: XDNA/051 {requirement="DMA-owned SRAM storage with compute-memory handoffs"}
   pipeline.strand workers([0, 2], [1, 1], [1, 1]) {
     func.call @ingress(%input, %other, %source_count) : (buffer, channel<tile<16xi32>>, index)
   }
@@ -317,8 +317,8 @@ func.def inline @egress(%source: channel<tile<16xi32>>, %output: buffer, %base: 
 
 // The same destinations in a different order require separate batches.
 func.def @worker(%source: channel<tile<16xi32>>, %left: channel<tile<16xi32>>, %right: channel<tile<16xi32>>) {
+  // ERROR@+1: XDNA/051 {requirement="successive retained batches with one controller-owned publication per phase"}
   %a = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
-  // ERROR@+1: XDNA/051 {requirement="one ordered transport stream per FIFO read or write cursor"}
   %b = channel.accept %source : channel<tile<16xi32>> -> read<tile<16xi32>>
   %al, %ar = channel.fanout %a : read<tile<16xi32>> -> (read<tile<16xi32>>, read<tile<16xi32>>)
   %first_left, %first_left_view = channel.reserve %left : channel<tile<16xi32>> -> (write<tile<16xi32>>, view<16xi32>)

@@ -1617,6 +1617,16 @@ loom_test(
 )
 
 loom_test(
+    name = "pipeline_ordered_replay_test",
+    srcs = ["pipeline/test/ordered_replay.loom"],
+    benchmark_smoke = False,
+    execution_profiles = [_XDNA_ONE_COLUMN_PROFILE],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:vm_iree_vm",
+    ]),
+)
+
+loom_test(
     name = "pipeline_retained_replay_test",
     srcs = ["pipeline/test/retained_replay.loom"],
     benchmark_smoke = False,
