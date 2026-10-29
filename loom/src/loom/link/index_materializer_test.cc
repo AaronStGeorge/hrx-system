@@ -23,7 +23,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/link/module_index.h"
-#include "loom/link/testdata/config_providers_testdata.h"
+#include "loom/link/testdata/config_providers/config_providers_testdata.h"
 #include "loom/ops/config/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/op_registry.h"

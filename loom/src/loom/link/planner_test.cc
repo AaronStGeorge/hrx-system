@@ -19,7 +19,7 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/link/testdata/planner_testdata.h"
+#include "loom/link/testdata/planner/planner_testdata.h"
 #include "loom/ops/check/ops.h"
 #include "loom/ops/command/ops.h"
 #include "loom/ops/config/ops.h"

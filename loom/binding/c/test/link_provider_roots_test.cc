@@ -10,7 +10,7 @@
 
 #include "iree/base/api.h"
 #include "iree/testing/gtest.h"
-#include "loom/src/loom/link/testdata/provider_roots_testdata.h"
+#include "loom/src/loom/link/testdata/provider_roots/provider_roots_testdata.h"
 #include "loomc/link.h"
 #include "test/util.h"
 

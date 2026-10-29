@@ -16,7 +16,7 @@
 #include "loom/binding/c/src/product.h"
 #include "loom/format/bytecode/format.h"
 #include "loom/ir/module.h"
-#include "loom/link/testdata/template_selection_testdata.h"
+#include "loom/link/testdata/template_selection/template_selection_testdata.h"
 #include "loomc/compile.h"
 #include "loomc/link.h"
 #include "loomc/module.h"
