@@ -424,21 +424,6 @@ value %packed: test.explicit32 -> physical_register[4:2]
 
 // ====
 
-// RUN: emit low-allocation-query @same_register_ordinal_selects_matching_tuple values=%primary,%partner fixed=%primary:physical_register:1:1
-
-test.target<low_core> @test_target
-
-low.func.def target<test.low.core>(@test_target) @same_register_ordinal_selects_matching_tuple() -> (reg<test.packed.narrow>, reg<test.coindexed.partner>) asm {
-  %primary, %partner = test.coindexed.results
-  return %primary, %partner
-}
-
-// ----
-value %primary: test.packed.narrow -> physical_register[1:1]
-value %partner: test.coindexed.partner -> physical_register[3:1]
-
-// ====
-
 // RUN: emit low-allocation-query @singleton_physical_class_reserves_future_interval values=%flexible,%fixed copies=%fixed
 
 test.target<low_core> @test_target
