@@ -1,0 +1,46 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:python.bzl", "iree_py_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_py_library(
+    name = "descriptors",
+    srcs = [
+        "__init__.py",
+        "avx2.py",
+        "avx512.py",
+        "avx512_bf16.py",
+        "avx512_fp16.py",
+        "avx_ne_convert.py",
+        "common.py",
+        "composite.py",
+        "encoding.py",
+        "f16c.py",
+        "float_conversion.py",
+        "float_integer.py",
+        "half_conversion.py",
+        "integer_bits.py",
+        "integer_float.py",
+        "integer_rotation.py",
+        "integer_unary.py",
+        "memory.py",
+        "packed_dot.py",
+        "scalar.py",
+    ],
+    deps = [
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch:package",
+        "//loom/py/loom/target/arch/x86:native_vector",
+        "//loom/py/loom/target/arch/x86:scalar_families",
+        "//loom/py/loom/target/arch/x86:target_info",
+        "//loom/py/loom/target/arch/x86:vector_families",
+    ],
+)

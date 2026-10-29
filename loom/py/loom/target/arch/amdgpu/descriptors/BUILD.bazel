@@ -1,0 +1,94 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:python.bzl", "iree_py_library", "iree_py_test")
+
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_py_library(
+    name = "descriptors",
+    srcs = [
+        "__init__.py",
+        "alignment.py",
+        "alu.py",
+        "api.py",
+        "atomic.py",
+        "bitwise.py",
+        "candidates.py",
+        "categories.py",
+        "cdna.py",
+        "cluster.py",
+        "common.py",
+        "contracts.py",
+        "control.py",
+        "exponent.py",
+        "integer_multiply.py",
+        "matrix.py",
+        "matrix_schedule.py",
+        "memory.py",
+        "memory_assembly.py",
+        "memory_banks.py",
+        "memory_candidates.py",
+        "memory_predication.py",
+        "rdna3.py",
+        "rdna35.py",
+        "rdna4.py",
+        "rdna4m.py",
+        "register_moves.py",
+        "scalar_carry.py",
+        "scalar_float.py",
+        "sets.py",
+        "tensor.py",
+        "timing.py",
+        "workgroup.py",
+    ],
+    deps = [
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch:package",
+        "//loom/py/loom/target/arch/amdgpu:descriptor_overlay",
+        "//loom/py/loom/target/arch/amdgpu:encoding_info",
+        "//loom/py/loom/target/arch/amdgpu:isa_xml",
+        "//loom/py/loom/target/arch/amdgpu:matrix_contracts",
+        "//loom/py/loom/target/arch/amdgpu:matrix_formats",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_test(
+    name = "descriptors_test",
+    srcs = [
+        "alignment_test.py",
+        "alu_test.py",
+        "atomic_test.py",
+        "bitwise_test.py",
+        "memory_test.py",
+        "rdna35_test.py",
+        "rdna4_test.py",
+        "rdna4m_test.py",
+        "storage_lease_test.py",
+        "timing_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = [
+        "loom.target.arch.amdgpu.descriptors.alignment_test",
+        "loom.target.arch.amdgpu.descriptors.alu_test",
+        "loom.target.arch.amdgpu.descriptors.atomic_test",
+        "loom.target.arch.amdgpu.descriptors.bitwise_test",
+        "loom.target.arch.amdgpu.descriptors.memory_test",
+        "loom.target.arch.amdgpu.descriptors.rdna35_test",
+        "loom.target.arch.amdgpu.descriptors.rdna4_test",
+        "loom.target.arch.amdgpu.descriptors.rdna4m_test",
+        "loom.target.arch.amdgpu.descriptors.storage_lease_test",
+        "loom.target.arch.amdgpu.descriptors.timing_test",
+    ],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":descriptors",
+    ],
+)

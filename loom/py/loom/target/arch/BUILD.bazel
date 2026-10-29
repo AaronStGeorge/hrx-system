@@ -51,8 +51,8 @@ iree_py_library(
     name = "all_targets",
     deps = [
         "//loom/py/loom/target/arch/amd/xdna/aie2p:dialect",
-        "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:dialect",
+        "//loom/py/loom/target/arch/amdgpu/descriptors",
         "//loom/py/loom/target/arch/cmd:descriptors",
         "//loom/py/loom/target/arch/spirv:descriptors",
         "//loom/py/loom/target/arch/spirv:dialect",
@@ -60,7 +60,7 @@ iree_py_library(
         "//loom/py/loom/target/arch/vm:dialect",
         "//loom/py/loom/target/arch/wasm:descriptors",
         "//loom/py/loom/target/arch/wasm:dialect",
-        "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/arch/x86:dialect",
+        "//loom/py/loom/target/arch/x86/descriptors",
     ],
 )

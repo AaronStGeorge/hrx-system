@@ -87,40 +87,6 @@ iree_py_library(
 )
 
 iree_py_library(
-    name = "descriptors",
-    srcs = [
-        "descriptors/__init__.py",
-        "descriptors/avx2.py",
-        "descriptors/avx512.py",
-        "descriptors/avx512_bf16.py",
-        "descriptors/avx512_fp16.py",
-        "descriptors/avx_ne_convert.py",
-        "descriptors/common.py",
-        "descriptors/composite.py",
-        "descriptors/encoding.py",
-        "descriptors/f16c.py",
-        "descriptors/float_conversion.py",
-        "descriptors/float_integer.py",
-        "descriptors/half_conversion.py",
-        "descriptors/integer_bits.py",
-        "descriptors/integer_float.py",
-        "descriptors/integer_rotation.py",
-        "descriptors/integer_unary.py",
-        "descriptors/memory.py",
-        "descriptors/packed_dot.py",
-        "descriptors/scalar.py",
-    ],
-    deps = [
-        ":native_vector",
-        ":scalar_families",
-        ":target_info",
-        ":vector_families",
-        "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch:package",
-    ],
-)
-
-iree_py_library(
     name = "machine_models",
     srcs = ["machine_models.py"],
     deps = [
@@ -139,8 +105,8 @@ iree_py_test(
     args = ["loom.target.arch.x86.machine_models_test"],
     main = "pytest_style_runner.py",
     deps = [
-        ":descriptors",
         ":machine_models",
+        "//loom/py/loom/target/arch/x86/descriptors",
     ],
 )
 
@@ -182,8 +148,8 @@ iree_py_test(
     args = ["loom.target.arch.x86.vector_families_test"],
     main = "pytest_style_runner.py",
     deps = [
-        ":descriptors",
         ":vector_families",
+        "//loom/py/loom/target/arch/x86/descriptors",
     ],
 )
 
@@ -196,8 +162,8 @@ iree_py_test(
     args = ["loom.target.arch.x86.avx512_fp16_test"],
     main = "pytest_style_runner.py",
     deps = [
-        ":descriptors",
         ":vector_families",
+        "//loom/py/loom/target/arch/x86/descriptors",
     ],
 )
 
@@ -210,9 +176,9 @@ iree_py_test(
     args = ["loom.target.arch.x86.avx512_bf16_test"],
     main = "pytest_style_runner.py",
     deps = [
-        ":descriptors",
         ":target_info",
         "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/x86/descriptors",
     ],
 )
 
@@ -225,8 +191,8 @@ iree_py_test(
     args = ["loom.target.arch.x86.avx_ne_convert_test"],
     main = "pytest_style_runner.py",
     deps = [
-        ":descriptors",
         ":target_info",
         "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/x86/descriptors",
     ],
 )
