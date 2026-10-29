@@ -81,6 +81,8 @@ _REG_ALIAS64 = "test.alias64"
 _REG_PRESSURE_ALIAS32 = "test.pressure.alias32"
 _REG_PRESSURE_ALIAS64 = "test.pressure.alias64"
 _REG_EXPLICIT32 = "test.explicit32"
+_REG_RECOLOR32 = "test.recolor32"
+_REG_RECOLOR_STATE = "test.recolor.state"
 _REG_EXPLICIT_RANGE32 = "test.explicit_range32"
 _REG_SPILLABLE_EXPLICIT32 = "test.spillable.explicit32"
 _REG_FIXED_R0 = "test.fixed.r0"
@@ -137,6 +139,8 @@ _PTR_ALT = (RegClassAlt(_REG_PTR),)
 _PHYS_ALT = (RegClassAlt(_REG_PHYS),)
 _SPECIAL_ALT = (RegClassAlt(_REG_SPECIAL),)
 _EXPLICIT32_ALT = (RegClassAlt(_REG_EXPLICIT32),)
+_RECOLOR32_ALT = (RegClassAlt(_REG_RECOLOR32),)
+_RECOLOR_STATE_ALT = (RegClassAlt(_REG_RECOLOR_STATE),)
 _SPILLABLE_EXPLICIT32_ALT = (RegClassAlt(_REG_SPILLABLE_EXPLICIT32),)
 _FIXED_R0_ALT = (RegClassAlt(_REG_FIXED_R0),)
 _SCHEDULE_STATE_ALT = (RegClassAlt(_REG_SCHEDULE_STATE),)
@@ -264,6 +268,14 @@ def _explicit32_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _EXPLICIT32_ALT)
 
 
+def _recolor32_result(field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _RECOLOR32_ALT)
+
+
+def _recolor32_operand(field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _RECOLOR32_ALT)
+
+
 def _spillable_explicit32_result(field_name: str = "dst") -> Operand:
     return Operand(field_name, OperandRole.RESULT, _SPILLABLE_EXPLICIT32_ALT)
 
@@ -363,6 +375,16 @@ def _special_state_operand(field_name: str) -> Operand:
 
 def _fixed_r0_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _FIXED_R0_ALT)
+
+
+def _recolor_state_write(field_name: str = "state_out") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _RECOLOR_STATE_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE),
+        write_event=_EVENT_STATE_WRITE,
+    )
 
 
 def _special_state_read(field_name: str = "state_in") -> Operand:
@@ -596,6 +618,27 @@ TEST_LOW_CONST_EXPLICIT32_DESCRIPTOR = Descriptor(
     schedule_class=_SCHEDULE_CONST,
     flags=(DescriptorFlag.DEAD_REMOVABLE,),
     instruction_classes=(InstructionClass.OTHER,),
+)
+
+TEST_LOW_RECOLOR_CREATE_DESCRIPTOR = Descriptor(
+    key="test.recolor.create",
+    mnemonic="test.recolor.create",
+    semantic_tag="test.recolor.create",
+    operands=(_recolor32_result(),),
+    asm_forms=_asm(results=("dst",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_RECOLOR_CONSUME_DESCRIPTOR = Descriptor(
+    key="test.recolor.consume",
+    mnemonic="test.recolor.consume",
+    semantic_tag="test.recolor.consume",
+    operands=(_recolor32_operand("value"),),
+    asm_forms=_asm(operands=("value",)),
+    effects=(_STORE_EFFECT,),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
 )
 
 TEST_LOW_REMATERIALIZE_I32_DESCRIPTOR = Descriptor(
@@ -1761,6 +1804,16 @@ TEST_LOW_STATE_ASSIGN_I32_DESCRIPTOR = Descriptor(
     flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.STATE_ASSIGNMENT),
 )
 
+TEST_LOW_FIXED_STATE_ASSIGN_I32_DESCRIPTOR = Descriptor(
+    key="test.fixed.state.assign.i32",
+    mnemonic="test.fixed.state.assign.i32",
+    semantic_tag="test.fixed.state.assign.i32",
+    operands=(_i32_operand("value"), _recolor_state_write()),
+    asm_forms=_asm(operands=("value",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.STATE_ASSIGNMENT),
+)
+
 TEST_LOW_STATE_ASSIGN_I32_IMMEDIATE_DESCRIPTOR = Descriptor(
     key="test.state.assign.i32.immediate",
     mnemonic="test.state.assign.i32.immediate",
@@ -2342,6 +2395,28 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             ),
         ),
         RegClass(
+            _REG_RECOLOR32,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(
+                RegClassFlag.PHYSICAL,
+                RegClassFlag.UNSPILLABLE,
+                RegClassFlag.EXPLICIT_PHYSICAL_REGISTERS,
+            ),
+            physical_registers=("test.recolor1", "test.recolor0"),
+        ),
+        RegClass(
+            _REG_RECOLOR_STATE,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(
+                RegClassFlag.PHYSICAL,
+                RegClassFlag.UNSPILLABLE,
+                RegClassFlag.EXPLICIT_PHYSICAL_REGISTERS,
+            ),
+            physical_registers=("test.recolor0",),
+        ),
+        RegClass(
             _REG_SPILLABLE_EXPLICIT32,
             32,
             SpillSlotSpace.STACK,
@@ -2465,6 +2540,8 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         PhysicalRegister("test.q0", (0, 1, 2, 3)),
         PhysicalRegister("test.a0", (1,)),
         PhysicalRegister("test.a1", (0,)),
+        PhysicalRegister("test.recolor0", (4,)),
+        PhysicalRegister("test.recolor1", (5,)),
     ),
     physical_register_views=(
         PhysicalRegisterView("test.l0", _REG_EXPLICIT32, ("test.r0", "test.r2")),
@@ -2752,6 +2829,8 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         TEST_LOW_CONST_ZERO_I32_DESCRIPTOR,
         TEST_LOW_CONST_PACKED_NARROW_DESCRIPTOR,
         TEST_LOW_CONST_EXPLICIT32_DESCRIPTOR,
+        TEST_LOW_RECOLOR_CREATE_DESCRIPTOR,
+        TEST_LOW_RECOLOR_CONSUME_DESCRIPTOR,
         TEST_LOW_REMATERIALIZE_I32_DESCRIPTOR,
         TEST_LOW_REMATERIALIZE_SPILLABLE_EXPLICIT32_DESCRIPTOR,
         TEST_LOW_REMATERIALIZE_EXPLICIT32_DESCRIPTOR,
@@ -2833,6 +2912,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         TEST_LOW_STATE_SAMPLE_I32_DESCRIPTOR,
         TEST_LOW_STATE_READ_BOTH_I32_DESCRIPTOR,
         TEST_LOW_STATE_ASSIGN_I32_DESCRIPTOR,
+        TEST_LOW_FIXED_STATE_ASSIGN_I32_DESCRIPTOR,
         TEST_LOW_STATE_ASSIGN_I32_IMMEDIATE_DESCRIPTOR,
         TEST_LOW_STATE_UPDATE_I32_DESCRIPTOR,
         TEST_LOW_SCHEDULE_STATE_UPDATE_I32_DESCRIPTOR,

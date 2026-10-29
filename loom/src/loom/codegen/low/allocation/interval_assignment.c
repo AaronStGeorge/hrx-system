@@ -1206,13 +1206,19 @@ loom_low_allocation_interval_assignment_try_relocate_required_blocker(
   *out_relocated = false;
   const loom_low_descriptor_set_t* descriptors =
       state->context->target->descriptor_set;
-  if (loom_low_reg_class_uses_explicit_physical_registers(
-          &descriptors->reg_classes[capacity->descriptor_reg_class_id])) {
-    return loom_low_allocation_ordinal_recolor_try(
+  const loom_low_reg_class_t* requested_reg_class =
+      &descriptors->reg_classes[capacity->descriptor_reg_class_id];
+  const bool uses_explicit_physical_registers =
+      loom_low_reg_class_uses_explicit_physical_registers(requested_reg_class);
+  if (uses_explicit_physical_registers) {
+    IREE_RETURN_IF_ERROR(loom_low_allocation_ordinal_recolor_try(
         state->context->value_domain, state->context->storage_transport,
         search_context, &state->result.assignment_map,
         state->result.assignments, state->scratch_arena, entry->interval,
-        value_ordinal, capacity, out_location_base, out_relocated);
+        value_ordinal, capacity, out_location_base, out_relocated));
+    if (*out_relocated) {
+      return iree_ok_status();
+    }
   }
   const loom_liveness_interval_t* interval = entry->interval;
   const uint32_t alignment = loom_low_allocation_live_range_interval_alignment(
@@ -1231,13 +1237,24 @@ loom_low_allocation_interval_assignment_try_relocate_required_blocker(
                            LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE)) ||
         !loom_low_allocation_storage_reg_classes_share(
             descriptors, active->descriptor_reg_class_id,
-            capacity->descriptor_reg_class_id) ||
-        active->location_base >= capacity->max_units ||
-        active->location_base % alignment != 0 ||
-        interval->unit_count > capacity->max_units - active->location_base) {
+            capacity->descriptor_reg_class_id)) {
       continue;
     }
     const uint32_t candidate_base = active->location_base;
+    if (uses_explicit_physical_registers) {
+      uint32_t pressure_extent = 0;
+      if (!loom_low_allocation_storage_explicit_physical_location(
+              descriptors, capacity->descriptor_reg_class_id, candidate_base,
+              interval->unit_count,
+              /*out_first_candidate_ordinal=*/NULL, &pressure_extent) ||
+          pressure_extent > capacity->max_units) {
+        continue;
+      }
+    } else if (candidate_base >= capacity->max_units ||
+               candidate_base % alignment != 0 ||
+               interval->unit_count > capacity->max_units - candidate_base) {
+      continue;
+    }
     const loom_value_id_t ignored_value = active->value_id;
     // The old location must become legal by moving this one owner. Check this
     // before mutating any assignment, including fixed and leased reservations.
@@ -1265,8 +1282,9 @@ loom_low_allocation_interval_assignment_try_relocate_required_blocker(
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_interval_assignment_try_relocate_independent_assignment(
             state, search_context, assignment_index,
-            capacity->descriptor_reg_class_id, capacity->max_units, UINT32_MAX,
-            &protected_assignment, out_relocated));
+            capacity->descriptor_reg_class_id,
+            uses_explicit_physical_registers ? 0 : capacity->max_units,
+            UINT32_MAX, &protected_assignment, out_relocated));
     if (*out_relocated) {
       *out_location_base = candidate_base;
       return iree_ok_status();
