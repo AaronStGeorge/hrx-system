@@ -8,6 +8,8 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/encoding/ops.h"
+#include "loom/util/fact_extensions.h"
+#include "loom/util/fact_table.h"
 
 iree_string_view_t loom_encoding_role_description(loom_encoding_role_t role) {
   switch (role) {
@@ -102,5 +104,24 @@ loom_encoding_role_t loom_encoding_type_role(const loom_module_t* module,
       loom_module_value_type(module, encoding_value_id);
   return loom_type_is_encoding(encoding_type)
              ? loom_type_encoding_role(encoding_type)
+             : LOOM_ENCODING_ROLE_UNKNOWN;
+}
+
+loom_encoding_role_t loom_encoding_query_type_role(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t type) {
+  const loom_encoding_role_t declared_role =
+      loom_encoding_type_role(module, type);
+  if (declared_role != LOOM_ENCODING_ROLE_UNKNOWN ||
+      !loom_type_has_ssa_encoding(type) || !context || !context->table) {
+    return declared_role;
+  }
+  loom_value_fact_encoding_summary_t summary = {0};
+  return loom_value_facts_query_encoding_summary(
+             context,
+             loom_value_fact_table_lookup(context->table,
+                                          loom_type_encoding_value_id(type)),
+             &summary)
+             ? summary.role
              : LOOM_ENCODING_ROLE_UNKNOWN;
 }

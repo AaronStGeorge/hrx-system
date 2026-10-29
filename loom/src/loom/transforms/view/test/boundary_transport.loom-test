@@ -208,13 +208,10 @@ func.def noinline target(@carrier_target) @forward_window(%input_root: buffer, %
 func.def public target(@carrier_target) @call_window(%storage: buffer, %base: offset, %position: index) -> (buffer, offset) {
   %whole = buffer.view %storage[%base] : buffer -> view<8xi32>
   %window = view.subview %whole[%position] : view<8xi32> -> view<1xi32>
-  %13 = index.cast %base : offset to i64
-  %14 = index.cast %position : index to i64
-  %15 = scalar.constant 4 : i64
-  %16 = scalar.muli %14, %15 : i64
-  %17 = scalar.addi %13, %16 : i64
-  %18 = index.cast %17 : i64 to offset
-  %result_root, %result_offset = func.call @forward_window(%storage, %18) : (buffer, offset) -> (buffer, offset)
+  %13 = index.constant 4 : offset
+  %14 = index.scale %position, %13 : index, offset -> offset
+  %15 = index.add %base, %14 : offset
+  %result_root, %result_offset = func.call @forward_window(%storage, %15) : (buffer, offset) -> (buffer, offset)
   %result = buffer.view %result_root[%result_offset] : buffer -> view<1xi32>
   func.return %result_root, %result_offset : buffer, offset
 }
@@ -261,17 +258,14 @@ func.def public target(@carrier_target) @choose_crops(%left_root: buffer, %left_
   } else {
     scf.yield %right_root, %right_offset : buffer, offset
   }
-  %18 = index.cast %selected_offset : offset to i64
-  %19 = scalar.constant 4 : i64
-  %20 = scalar.addi %18, %19 : i64
-  %21 = index.cast %position : index to i64
-  %22 = scalar.constant 4 : i64
-  %23 = scalar.muli %21, %22 : i64
-  %24 = scalar.addi %20, %23 : i64
-  %25 = index.cast %24 : i64 to offset
-  %26 = index.constant 24 : offset
-  %27 = index.add %selected_offset, %26 : offset
-  func.return %selected_root, %selected_offset, %selected_root, %25, %selected_root, %27 : buffer, offset, buffer, offset, buffer, offset
+  %18 = index.constant 4 : offset
+  %19 = index.add %selected_offset, %18 : offset
+  %20 = index.constant 4 : offset
+  %21 = index.scale %position, %20 : index, offset -> offset
+  %22 = index.add %19, %21 : offset
+  %23 = index.constant 24 : offset
+  %24 = index.add %selected_offset, %23 : offset
+  func.return %selected_root, %selected_offset, %selected_root, %22, %selected_root, %24 : buffer, offset, buffer, offset, buffer, offset
 }
 
 // ====

@@ -13,15 +13,20 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/target/provider.h"
 #include "loom/transforms/boundary/projection_plan.h"
+#include "loom/transforms/encoding/layout_projection.h"
 #include "loom/transforms/view/offset_expression.h"
 
 typedef struct loom_view_boundary_projection_plan_state_t {
   // Shared physical schema for each retained view slot.
   loom_boundary_projection_schema_t schema;
 } loom_view_boundary_projection_plan_state_t;
+
+typedef struct loom_view_boundary_address_term_t
+    loom_view_boundary_address_term_t;
 
 typedef struct loom_view_boundary_offset_t {
   // View value whose definition anchors offset materialization.
@@ -32,6 +37,10 @@ typedef struct loom_view_boundary_offset_t {
   loom_value_id_t base_value_id;
   // Retained affine expression added to base_value_id.
   const loom_symbolic_expr_t* expression;
+  // Planned physical-layout products added after expression.
+  const loom_view_boundary_address_term_t* address_terms;
+  // Number of entries in address_terms.
+  iree_host_size_t address_term_count;
   // Candidate supplying base_value_id, or IREE_HOST_SIZE_MAX.
   iree_host_size_t dependency;
 } loom_view_boundary_offset_t;
@@ -88,6 +97,17 @@ typedef struct loom_view_boundary_projection_function_state_t {
   // Selection index by function-local result ordinal, or IREE_HOST_SIZE_MAX.
   iree_host_size_t* selection_indices;
 } loom_view_boundary_projection_function_state_t;
+
+typedef struct loom_view_boundary_address_term_t {
+  // Candidate supplying the projected physical layout.
+  iree_host_size_t layout_dependency;
+  // Scalar stride component within layout_dependency.
+  uint8_t layout_component;
+  // Dynamic subview index, or INVALID when folded into coefficient.
+  loom_value_id_t index_value_id;
+  // Static byte coefficient multiplying the stride and optional index.
+  int64_t coefficient;
+} loom_view_boundary_address_term_t;
 
 static loom_view_boundary_projection_plan_state_t*
 loom_view_boundary_plan_state(const loom_boundary_projection_rule_t* rule,
@@ -174,7 +194,48 @@ static iree_status_t loom_view_boundary_plan_slot(
   return iree_ok_status();
 }
 
-static void loom_view_boundary_plan_offset(
+static iree_status_t loom_view_boundary_plan_address_terms(
+    loom_boundary_projection_plan_t* plan,
+    const loom_boundary_projection_function_t* function,
+    const loom_view_address_projection_t* projection,
+    loom_view_boundary_offset_t* offset, bool* out_planned) {
+  *out_planned = false;
+  loom_view_boundary_address_term_t* terms = NULL;
+  if (projection->term_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        plan->arena, projection->term_count, sizeof(*terms), (void**)&terms));
+  }
+  for (iree_host_size_t i = 0; i < projection->term_count; ++i) {
+    const loom_view_address_projection_term_t* source = &projection->terms[i];
+    const iree_host_size_t layout_dependency =
+        loom_boundary_projection_slot_index(function,
+                                            source->physical_encoding_value_id);
+    if (layout_dependency == IREE_HOST_SIZE_MAX ||
+        !function->candidates[layout_dependency].selected) {
+      return iree_ok_status();
+    }
+    uint8_t layout_component = 0;
+    if (!loom_layout_boundary_projection_component_for_axis(
+            &function->candidates[layout_dependency].schema, source->axis,
+            &layout_component)) {
+      return iree_ok_status();
+    }
+    terms[i] = (loom_view_boundary_address_term_t){
+        .layout_dependency = layout_dependency,
+        .layout_component = layout_component,
+        .index_value_id = source->index_value_id,
+        .coefficient = source->coefficient,
+    };
+  }
+  offset->expression = &projection->linear_byte_offset;
+  offset->address_terms = terms;
+  offset->address_term_count = projection->term_count;
+  *out_planned = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_view_boundary_plan_offset(
+    loom_boundary_projection_plan_t* plan,
     const loom_boundary_projection_function_t* function,
     const loom_view_boundary_projection_function_state_t* state,
     const loom_view_region_t* region, loom_view_boundary_offset_t* offset) {
@@ -185,29 +246,39 @@ static void loom_view_boundary_plan_offset(
       .dependency = IREE_HOST_SIZE_MAX,
   };
   if (offset->value_id != LOOM_VALUE_ID_INVALID) {
-    return;
+    return iree_ok_status();
   }
-  if (loom_symbolic_expr_is_linear(&region->projection_byte_offset)) {
-    const iree_host_size_t dependency = loom_boundary_projection_slot_index(
-        function, region->base_view_value_id);
-    if (dependency != IREE_HOST_SIZE_MAX) {
-      offset->dependency = dependency;
-    } else {
-      const loom_view_region_t* base_region = NULL;
-      if (loom_view_region_table_try_lookup(
-              &state->regions, region->base_view_value_id, &base_region)) {
-        offset->base_value_id = base_region->begin_value_id;
-      }
+  const iree_host_size_t dependency =
+      loom_boundary_projection_slot_index(function, region->base_view_value_id);
+  if (dependency != IREE_HOST_SIZE_MAX) {
+    offset->dependency = dependency;
+  } else {
+    const loom_view_region_t* base_region = NULL;
+    if (loom_view_region_table_try_lookup(
+            &state->regions, region->base_view_value_id, &base_region)) {
+      offset->base_value_id = base_region->begin_value_id;
     }
-    if (offset->dependency != IREE_HOST_SIZE_MAX ||
-        offset->base_value_id != LOOM_VALUE_ID_INVALID) {
+  }
+  const bool has_base = offset->dependency != IREE_HOST_SIZE_MAX ||
+                        offset->base_value_id != LOOM_VALUE_ID_INVALID;
+  if (loom_symbolic_expr_is_linear(&region->projection_byte_offset)) {
+    if (has_base) {
       offset->expression = &region->projection_byte_offset;
-      return;
+      return iree_ok_status();
+    }
+  }
+  if (has_base && region->address_projection) {
+    bool planned = false;
+    IREE_RETURN_IF_ERROR(loom_view_boundary_plan_address_terms(
+        plan, function, region->address_projection, offset, &planned));
+    if (planned) {
+      return iree_ok_status();
     }
   }
   if (loom_symbolic_expr_is_linear(&region->begin_byte_offset)) {
     offset->expression = &region->begin_byte_offset;
   }
+  return iree_ok_status();
 }
 
 static bool loom_view_boundary_schema_uses_rule(
@@ -225,10 +296,11 @@ static bool loom_view_boundary_function_requires_analysis(
     const loom_boundary_projection_rule_t* rule,
     const loom_boundary_projection_plan_t* plan,
     const loom_boundary_projection_function_t* function) {
-  if (loom_view_boundary_schema_uses_rule(function->argument_schemas,
-                                          function->argument_count, rule) ||
-      loom_view_boundary_schema_uses_rule(function->result_schemas,
-                                          function->result_count, rule)) {
+  if (function->signature_changes &&
+      (loom_view_boundary_schema_uses_rule(function->argument_schemas,
+                                           function->argument_count, rule) ||
+       loom_view_boundary_schema_uses_rule(function->result_schemas,
+                                           function->result_count, rule))) {
     return true;
   }
   for (iree_host_size_t i = 0; i < function->candidate_count; ++i) {
@@ -244,10 +316,11 @@ static bool loom_view_boundary_function_requires_analysis(
   for (iree_host_size_t i = 0; i < function->call_count; ++i) {
     const loom_boundary_projection_function_t* callee =
         &plan->functions[function->calls[i].callee_index];
-    if (loom_view_boundary_schema_uses_rule(callee->argument_schemas,
-                                            callee->argument_count, rule) ||
-        loom_view_boundary_schema_uses_rule(callee->result_schemas,
-                                            callee->result_count, rule)) {
+    if (callee->signature_changes &&
+        (loom_view_boundary_schema_uses_rule(callee->argument_schemas,
+                                             callee->argument_count, rule) ||
+         loom_view_boundary_schema_uses_rule(callee->result_schemas,
+                                             callee->result_count, rule))) {
       return true;
     }
   }
@@ -294,8 +367,8 @@ static iree_status_t loom_view_boundary_prepare_function(
       plan->arena, state->regions.region_count, sizeof(*state->offsets),
       (void**)&state->offsets));
   for (iree_host_size_t i = 0; i < state->regions.region_count; ++i) {
-    loom_view_boundary_plan_offset(function, state, &state->regions.regions[i],
-                                   &state->offsets[i]);
+    IREE_RETURN_IF_ERROR(loom_view_boundary_plan_offset(
+        plan, function, state, &state->regions.regions[i], &state->offsets[i]));
   }
   return iree_ok_status();
 }
@@ -512,6 +585,18 @@ static iree_status_t loom_view_boundary_add_coordinate_dependencies(
         plan, function, coordinate->dependency, destination_index,
         /*orders_realization=*/false));
   }
+  if (coordinate->region_id != LOOM_VIEW_REGION_ID_INVALID) {
+    const loom_view_boundary_projection_function_state_t* state =
+        loom_view_boundary_function_state(rule, plan, function);
+    IREE_ASSERT(state != NULL);
+    const loom_view_boundary_offset_t* offset =
+        &state->offsets[coordinate->region_id];
+    for (iree_host_size_t i = 0; i < offset->address_term_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_boundary_projection_add_dependency(
+          plan, function, offset->address_terms[i].layout_dependency,
+          destination_index, /*orders_realization=*/false));
+    }
+  }
   if (coordinate->selection == IREE_HOST_SIZE_MAX) {
     return iree_ok_status();
   }
@@ -587,9 +672,101 @@ static iree_status_t loom_view_boundary_materialize_offset(
   }
   const loom_symbolic_expr_t* expression = offset->expression;
   IREE_ASSERT(expression != NULL);
+  const bool expression_is_identity =
+      offset->base_value_id != LOOM_VALUE_ID_INVALID &&
+      expression->constant == 0 && expression->term_count == 0;
   IREE_RETURN_IF_ERROR(loom_view_materialize_offset_expression(
       &plan->rewriter.builder, expression, offset->base_value_id,
       offset->anchor_value_id, &offset->value_id));
+  if (offset->address_term_count == 0) {
+    *out_value = offset->value_id;
+    return iree_ok_status();
+  }
+
+  loom_builder_t* builder = &plan->rewriter.builder;
+  if (expression_is_identity) {
+    const loom_value_t* anchor_value =
+        loom_module_value(plan->module, offset->anchor_value_id);
+    const loom_op_t* anchor_op =
+        loom_value_is_block_arg(anchor_value)
+            ? loom_value_def_block(anchor_value)->first_op
+            : loom_value_def_op(anchor_value);
+    if (loom_value_is_block_arg(anchor_value)) {
+      loom_builder_set_before(builder, anchor_op);
+    } else {
+      loom_builder_set_after(builder, anchor_op);
+    }
+  }
+
+  const loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  const loom_type_t offset_type = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  const loom_value_t* anchor_value =
+      loom_module_value(plan->module, offset->anchor_value_id);
+  const loom_op_t* anchor_op =
+      loom_value_is_block_arg(anchor_value)
+          ? loom_value_def_block(anchor_value)->first_op
+          : loom_value_def_op(anchor_value);
+  const loom_location_id_t location = anchor_op->location;
+  loom_value_id_t displacement = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
+  for (iree_host_size_t i = 0; i < offset->address_term_count; ++i) {
+    const loom_view_boundary_address_term_t* term = &offset->address_terms[i];
+    const loom_boundary_projection_slot_t* layout =
+        &function->candidates[term->layout_dependency];
+    IREE_ASSERT_LT(term->layout_component, layout->schema.component_count);
+    loom_value_id_t stride =
+        layout->component_value_ids[term->layout_component];
+    IREE_ASSERT_NE(stride, LOOM_VALUE_ID_INVALID);
+    IREE_ASSERT(loom_type_equal(loom_module_value_type(plan->module, stride),
+                                index_type));
+    IREE_ASSERT_NE(term->coefficient, INT64_MIN);
+    const int64_t magnitude =
+        term->coefficient < 0 ? -term->coefficient : term->coefficient;
+    loom_op_t* constant_op = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_index_constant_build(builder, loom_attr_i64(magnitude),
+                                  offset_type, location, &constant_op));
+    loom_op_t* scale_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_index_scale_build(
+        builder, stride, loom_index_constant_result(constant_op), offset_type,
+        location, &scale_op));
+    loom_value_id_t product = loom_index_scale_result(scale_op);
+
+    if (term->index_value_id != LOOM_VALUE_ID_INVALID) {
+      const loom_value_id_t index = loom_boundary_projection_resolve_value(
+          function, term->index_value_id);
+      IREE_ASSERT(loom_type_equal(loom_module_value_type(plan->module, index),
+                                  index_type));
+      IREE_RETURN_IF_ERROR(loom_index_scale_build(
+          builder, index, product, offset_type, location, &scale_op));
+      product = loom_index_scale_result(scale_op);
+    }
+    if (term->coefficient < 0) {
+      if (zero == LOOM_VALUE_ID_INVALID) {
+        loom_op_t* zero_op = NULL;
+        IREE_RETURN_IF_ERROR(loom_index_constant_build(
+            builder, loom_attr_i64(0), offset_type, location, &zero_op));
+        zero = loom_index_constant_result(zero_op);
+      }
+      loom_op_t* negate_op = NULL;
+      IREE_RETURN_IF_ERROR(loom_index_sub_build(
+          builder, zero, product, offset_type, location, &negate_op));
+      product = loom_index_sub_result(negate_op);
+    }
+    if (displacement == LOOM_VALUE_ID_INVALID) {
+      displacement = product;
+    } else {
+      loom_op_t* add_op = NULL;
+      IREE_RETURN_IF_ERROR(loom_index_add_build(
+          builder, displacement, product, offset_type, location, &add_op));
+      displacement = loom_index_add_result(add_op);
+    }
+  }
+  IREE_ASSERT_NE(displacement, LOOM_VALUE_ID_INVALID);
+  loom_op_t* add_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_add_build(
+      builder, offset->value_id, displacement, offset_type, location, &add_op));
+  offset->value_id = loom_index_add_result(add_op);
   *out_value = offset->value_id;
   return iree_ok_status();
 }

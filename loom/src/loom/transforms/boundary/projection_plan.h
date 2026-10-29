@@ -142,6 +142,10 @@ struct loom_boundary_projection_function_t {
   loom_boundary_projection_schema_t* result_schemas;
   // Physical start index for each logical result.
   uint16_t* result_indices;
+  // Projected logical results in dependency-safe reconstruction order.
+  uint16_t* result_realization_order;
+  // Number of entries in result_realization_order.
+  uint16_t result_realization_count;
   // Function-local facts retained until the atomic rewrite completes.
   loom_value_fact_table_t* facts;
   // Retained CFG snapshot for the function body, or NULL for declarations.
@@ -262,6 +266,14 @@ iree_status_t loom_boundary_projection_plan_prepare(
 iree_host_size_t loom_boundary_projection_slot_index(
     const loom_boundary_projection_function_t* function,
     loom_value_id_t value_id);
+
+// Finds |value_id| in one logical callable signature partition. This is a
+// bounded signature query used by rules while selecting dependent schemas.
+bool loom_boundary_projection_signature_slot_index(
+    const loom_module_t* module,
+    const loom_boundary_projection_function_t* function,
+    loom_boundary_projection_slot_role_t role, loom_value_id_t value_id,
+    uint16_t* out_index);
 
 // Records one definition replacement in the application correspondence.
 // Resolution follows chains when a replacement is itself replaced later.

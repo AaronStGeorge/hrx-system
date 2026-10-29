@@ -34,7 +34,10 @@ static iree_host_size_t loom_value_fact_layout_origin_element_size(
 
 bool loom_value_fact_layout_origin_equal(loom_value_fact_layout_origin_t lhs,
                                          loom_value_fact_layout_origin_t rhs) {
-  if (lhs.kind != rhs.kind || lhs.count != rhs.count) {
+  if (lhs.kind != rhs.kind || lhs.count != rhs.count ||
+      lhs.has_physical_encoding_value != rhs.has_physical_encoding_value ||
+      (lhs.has_physical_encoding_value &&
+       lhs.physical_encoding_value_id != rhs.physical_encoding_value_id)) {
     return false;
   }
   if (lhs.kind == LOOM_VALUE_FACT_LAYOUT_ORIGIN_NONE) {
@@ -86,19 +89,17 @@ void loom_value_fact_table_clear_layout_origin(loom_value_fact_table_t* table,
                                       LOOM_VALUE_FACT_ORIGIN_LAYOUT, changed);
 }
 
-static iree_status_t loom_value_fact_table_define_layout_origin(
+static iree_status_t loom_value_fact_table_store_layout_origin(
     loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_fact_layout_origin_kind_t kind, const void* values,
-    uint16_t count) {
-  if (!count) {
+    loom_value_fact_layout_origin_t origin) {
+  if (origin.kind == LOOM_VALUE_FACT_LAYOUT_ORIGIN_NONE) {
+    origin.count = 0;
+    origin.values.data = NULL;
+  }
+  if (origin.count == 0 && !origin.has_physical_encoding_value) {
     loom_value_fact_table_clear_layout_origin(table, value_id);
     return iree_ok_status();
   }
-  const loom_value_fact_layout_origin_t origin = {
-      .kind = kind,
-      .count = count,
-      .values.data = values,
-  };
   const loom_value_fact_layout_origin_t previous =
       loom_value_fact_table_query_layout_origin(table, value_id);
   if (loom_value_fact_layout_origin_equal(previous, origin)) {
@@ -110,18 +111,17 @@ static iree_status_t loom_value_fact_table_define_layout_origin(
   IREE_RETURN_IF_ERROR(
       loom_value_fact_layout_origins_ensure_capacity(table, value_id));
   const iree_host_size_t byte_length =
-      count * loom_value_fact_layout_origin_element_size(kind);
+      origin.count * loom_value_fact_layout_origin_element_size(origin.kind);
   loom_value_fact_layout_origin_t* storage = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate(table->transient_arena,
                                            sizeof(*storage) + byte_length,
                                            (void**)&storage));
   void* payload = storage + 1;
-  memcpy(payload, values, byte_length);
-  *storage = (loom_value_fact_layout_origin_t){
-      .kind = kind,
-      .count = count,
-      .values.data = payload,
-  };
+  if (byte_length != 0) {
+    memcpy(payload, origin.values.data, byte_length);
+  }
+  *storage = origin;
+  storage->values.data = byte_length != 0 ? payload : NULL;
   table->layout_origins->entries[loom_value_fact_range_offset(
       table->layout_origins->range, value_id)] = storage;
   loom_value_fact_table_record_origin(table, value_id,
@@ -129,20 +129,46 @@ static iree_status_t loom_value_fact_table_define_layout_origin(
   return iree_ok_status();
 }
 
+iree_status_t loom_value_fact_table_define_layout_origin(
+    loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_fact_layout_origin_t origin) {
+  return loom_value_fact_table_store_layout_origin(table, value_id, origin);
+}
+
 iree_status_t loom_value_fact_table_define_layout_explicit_strides(
     loom_value_fact_table_t* table, loom_value_id_t value_id,
     const loom_value_id_t* strides, uint16_t count) {
-  return loom_value_fact_table_define_layout_origin(
-      table, value_id, LOOM_VALUE_FACT_LAYOUT_ORIGIN_EXPLICIT_STRIDES, strides,
-      count);
+  loom_value_fact_layout_origin_t origin =
+      loom_value_fact_table_query_layout_origin(table, value_id);
+  origin.kind = count ? LOOM_VALUE_FACT_LAYOUT_ORIGIN_EXPLICIT_STRIDES
+                      : LOOM_VALUE_FACT_LAYOUT_ORIGIN_NONE;
+  origin.count = count;
+  origin.values.explicit_strides = strides;
+  return loom_value_fact_table_store_layout_origin(table, value_id, origin);
 }
 
 iree_status_t loom_value_fact_table_define_layout_dense_dimensions(
     loom_value_fact_table_t* table, loom_value_id_t value_id,
     const uint64_t* dimensions, uint16_t count) {
-  return loom_value_fact_table_define_layout_origin(
-      table, value_id, LOOM_VALUE_FACT_LAYOUT_ORIGIN_DENSE_DIMENSIONS,
-      dimensions, count);
+  loom_value_fact_layout_origin_t origin =
+      loom_value_fact_table_query_layout_origin(table, value_id);
+  origin.kind = count ? LOOM_VALUE_FACT_LAYOUT_ORIGIN_DENSE_DIMENSIONS
+                      : LOOM_VALUE_FACT_LAYOUT_ORIGIN_NONE;
+  origin.count = count;
+  origin.values.dense_dimensions = dimensions;
+  return loom_value_fact_table_store_layout_origin(table, value_id, origin);
+}
+
+iree_status_t loom_value_fact_table_define_layout_physical_encoding_value(
+    loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_id_t physical_encoding_value_id) {
+  loom_value_fact_layout_origin_t origin =
+      loom_value_fact_table_query_layout_origin(table, value_id);
+  origin.has_physical_encoding_value =
+      physical_encoding_value_id != LOOM_VALUE_ID_INVALID;
+  origin.physical_encoding_value_id =
+      origin.has_physical_encoding_value ? physical_encoding_value_id : 0;
+  return loom_value_fact_table_store_layout_origin(table, value_id, origin);
 }
 
 iree_status_t loom_value_fact_table_forward_layout_origin(

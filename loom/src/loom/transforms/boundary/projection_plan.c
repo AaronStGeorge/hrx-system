@@ -247,13 +247,65 @@ static bool loom_boundary_projection_value_has_nonoperand_uses(
          loom_value_has_attribute_uses(value);
 }
 
-static bool loom_boundary_projection_type_requires_coupled_transport(
-    loom_type_t type) {
-  // An SSA encoding is another logical boundary value whose projection must
-  // be coordinated with the dependent value. A callable projection rule does
-  // not yet own that paired signature, so selecting either half would discard
-  // the runtime layout contract.
-  return loom_type_has_ssa_encoding(type);
+static bool loom_boundary_projection_value_has_attribute_uses(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  return loom_value_has_attribute_uses(loom_module_value(module, value_id));
+}
+
+bool loom_boundary_projection_signature_slot_index(
+    const loom_module_t* module,
+    const loom_boundary_projection_function_t* function,
+    loom_boundary_projection_slot_role_t role, loom_value_id_t value_id,
+    uint16_t* out_index) {
+  const loom_value_t* value = loom_module_value(module, value_id);
+  uint16_t index = 0;
+  switch (role) {
+    case LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_ARGUMENT: {
+      if (function->argument_operand_offset == UINT16_MAX) {
+        loom_region_t* body = loom_func_like_body(function->function);
+        if (!body || !loom_value_is_block_arg(value) ||
+            loom_value_def_block(value) != loom_region_entry_block(body)) {
+          return false;
+        }
+        index = loom_value_def_index(value);
+      } else {
+        if (loom_value_is_block_arg(value)) {
+          return false;
+        }
+        const loom_use_t* definition_use = loom_value_single_use(value);
+        if (!definition_use ||
+            loom_use_user_op(*definition_use) != function->function.op) {
+          return false;
+        }
+        const uint16_t operand_index = loom_use_operand_index(*definition_use);
+        if (operand_index < function->argument_operand_offset) {
+          return false;
+        }
+        index = (uint16_t)(operand_index - function->argument_operand_offset);
+      }
+      if (index >= function->argument_count ||
+          function->arguments[index] != value_id) {
+        return false;
+      }
+      break;
+    }
+    case LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_RESULT: {
+      if (loom_value_is_block_arg(value) ||
+          loom_value_def_op(value) != function->function.op) {
+        return false;
+      }
+      index = loom_value_def_index(value);
+      if (index >= function->result_count ||
+          function->results[index] != value_id) {
+        return false;
+      }
+      break;
+    }
+    default:
+      return false;
+  }
+  *out_index = index;
+  return true;
 }
 
 static bool loom_boundary_projection_tie_uses_expanded_slot(
@@ -297,6 +349,197 @@ static bool loom_boundary_projection_call_tie_uses_expanded_slot(
     }
   }
   return false;
+}
+
+static bool loom_boundary_projection_schema_removes_reference(
+    const loom_module_t* module,
+    const loom_boundary_projection_schema_t* schema, loom_value_id_t provider) {
+  if (!loom_boundary_projection_schema_is_projected(schema)) {
+    return false;
+  }
+  for (uint16_t i = 0; i < schema->component_count; ++i) {
+    if (loom_type_references_value(module, schema->component_types[i],
+                                   provider)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_boundary_projection_is_encoding_view_dependency(
+    const loom_module_t* module, loom_value_id_t provider,
+    loom_value_id_t carrier, uint8_t* inout_rank) {
+  const loom_type_t provider_type = loom_module_value_type(module, provider);
+  const loom_type_t carrier_type = loom_module_value_type(module, carrier);
+  if (!loom_type_is_encoding(provider_type) ||
+      !loom_type_is_view(carrier_type) ||
+      !loom_type_has_ssa_encoding(carrier_type) ||
+      loom_type_encoding_value_id(carrier_type) != provider) {
+    return false;
+  }
+  const uint8_t rank = loom_type_rank(carrier_type);
+  if (*inout_rank != UINT8_MAX && *inout_rank != rank) {
+    return false;
+  }
+  *inout_rank = rank;
+  return true;
+}
+
+static bool loom_boundary_projection_validate_signature_partition(
+    const loom_boundary_projection_plan_t* plan,
+    const loom_boundary_projection_function_t* function,
+    loom_boundary_projection_slot_role_t role, const loom_value_id_t* values,
+    uint16_t count, const loom_boundary_projection_schema_t* schemas) {
+  const loom_boundary_projection_slot_role_t other_role =
+      role == LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_ARGUMENT
+          ? LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_RESULT
+          : LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_ARGUMENT;
+  for (uint16_t i = 0; i < count; ++i) {
+    const loom_boundary_projection_schema_t* provider_schema = &schemas[i];
+    if (!loom_boundary_projection_schema_is_projected(provider_schema)) {
+      continue;
+    }
+    const loom_value_id_t provider = values[i];
+    uint8_t dependent_rank = UINT8_MAX;
+    loom_type_use_iterator_t users;
+    loom_module_value_type_users(plan->module, provider, &users);
+    for (loom_value_id_t carrier = loom_type_users_next(&users);
+         carrier != LOOM_VALUE_ID_INVALID;
+         carrier = loom_type_users_next(&users)) {
+      uint16_t carrier_index = 0;
+      if (loom_boundary_projection_signature_slot_index(
+              plan->module, function, other_role, carrier, &carrier_index)) {
+        return false;
+      }
+      if (!loom_boundary_projection_signature_slot_index(
+              plan->module, function, role, carrier, &carrier_index)) {
+        continue;
+      }
+      const loom_boundary_projection_schema_t* carrier_schema =
+          &schemas[carrier_index];
+      if (!loom_boundary_projection_is_encoding_view_dependency(
+              plan->module, provider, carrier, &dependent_rank) ||
+          !loom_boundary_projection_schema_removes_reference(
+              plan->module, carrier_schema, provider)) {
+        return false;
+      }
+    }
+  }
+
+  // A projected view whose encoding is another signature slot is only valid
+  // when that provider is projected in the same partition. The two physical
+  // schemas then contain no surviving SSA reference to one another.
+  for (uint16_t i = 0; i < count; ++i) {
+    if (!loom_boundary_projection_schema_is_projected(&schemas[i])) {
+      continue;
+    }
+    const loom_type_t type = loom_module_value_type(plan->module, values[i]);
+    if (!loom_type_is_view(type) || !loom_type_has_ssa_encoding(type)) {
+      continue;
+    }
+    const loom_value_id_t provider = loom_type_encoding_value_id(type);
+    uint16_t provider_index = 0;
+    if (!loom_boundary_projection_signature_slot_index(
+            plan->module, function, role, provider, &provider_index) ||
+        !loom_boundary_projection_schema_is_projected(
+            &schemas[provider_index])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_boundary_projection_plan_result_realization_order(
+    loom_boundary_projection_plan_t* plan,
+    loom_boundary_projection_function_t* function) {
+  uint16_t projected_count = 0;
+  for (uint16_t i = 0; i < function->result_count; ++i) {
+    projected_count += loom_boundary_projection_schema_is_projected(
+        &function->result_schemas[i]);
+  }
+  function->result_realization_count = projected_count;
+  if (projected_count == 0) {
+    return iree_ok_status();
+  }
+
+  uint16_t* indegrees = NULL;
+  uint16_t* queue = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(plan->arena, function->result_count,
+                                sizeof(*indegrees), (void**)&indegrees));
+  memset(indegrees, 0, function->result_count * sizeof(*indegrees));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      plan->arena, projected_count, sizeof(*queue), (void**)&queue));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      plan->arena, projected_count, sizeof(*function->result_realization_order),
+      (void**)&function->result_realization_order));
+
+  for (uint16_t provider_index = 0; provider_index < function->result_count;
+       ++provider_index) {
+    if (!loom_boundary_projection_schema_is_projected(
+            &function->result_schemas[provider_index])) {
+      continue;
+    }
+    loom_type_use_iterator_t users;
+    loom_module_value_type_users(plan->module,
+                                 function->results[provider_index], &users);
+    for (loom_value_id_t carrier = loom_type_users_next(&users);
+         carrier != LOOM_VALUE_ID_INVALID;
+         carrier = loom_type_users_next(&users)) {
+      uint16_t carrier_index = 0;
+      if (loom_boundary_projection_signature_slot_index(
+              plan->module, function,
+              LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_RESULT, carrier,
+              &carrier_index) &&
+          loom_boundary_projection_schema_is_projected(
+              &function->result_schemas[carrier_index])) {
+        ++indegrees[carrier_index];
+      }
+    }
+  }
+
+  uint16_t head = 0;
+  uint16_t tail = 0;
+  // Queue independent results in reverse signature order to keep their
+  // materializations stable. Dependency edges override that order.
+  for (uint16_t count = function->result_count; count != 0; --count) {
+    const uint16_t i = (uint16_t)(count - 1);
+    if (loom_boundary_projection_schema_is_projected(
+            &function->result_schemas[i]) &&
+        indegrees[i] == 0) {
+      queue[tail++] = i;
+    }
+  }
+  uint16_t ordered_count = 0;
+  while (head < tail) {
+    const uint16_t provider_index = queue[head++];
+    function->result_realization_order[ordered_count++] = provider_index;
+    loom_type_use_iterator_t users;
+    loom_module_value_type_users(plan->module,
+                                 function->results[provider_index], &users);
+    for (loom_value_id_t carrier = loom_type_users_next(&users);
+         carrier != LOOM_VALUE_ID_INVALID;
+         carrier = loom_type_users_next(&users)) {
+      uint16_t carrier_index = 0;
+      if (!loom_boundary_projection_signature_slot_index(
+              plan->module, function,
+              LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_RESULT, carrier,
+              &carrier_index) ||
+          !loom_boundary_projection_schema_is_projected(
+              &function->result_schemas[carrier_index])) {
+        continue;
+      }
+      IREE_ASSERT_NE(indegrees[carrier_index], 0);
+      if (--indegrees[carrier_index] == 0) {
+        queue[tail++] = carrier_index;
+      }
+    }
+  }
+  if (ordered_count != projected_count) {
+    function->selected = false;
+    function->result_realization_count = 0;
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_boundary_projection_plan_function_signature(
@@ -416,13 +659,11 @@ static iree_status_t loom_boundary_projection_plan_function_signature(
       ++final_argument_count;
       continue;
     }
-    const loom_type_t type = loom_module_value_type(plan->module, argument);
     out_function->argument_schemas[i] = schema;
     out_function->signature_changes = true;
     final_argument_count += schema.component_count;
-    if (loom_boundary_projection_type_requires_coupled_transport(type) ||
-        loom_boundary_projection_value_has_nonoperand_uses(plan->module,
-                                                           argument)) {
+    if (loom_boundary_projection_value_has_attribute_uses(plan->module,
+                                                          argument)) {
       out_function->selected = false;
     }
   }
@@ -458,14 +699,12 @@ static iree_status_t loom_boundary_projection_plan_function_signature(
       ++final_result_count;
       continue;
     }
-    const loom_type_t type = loom_module_value_type(plan->module, result);
     out_function->result_schemas[i] = schema;
     out_function->signature_changes = true;
     out_function->result_signature_changes = true;
     final_result_count += schema.component_count;
-    if (loom_boundary_projection_type_requires_coupled_transport(type) ||
-        loom_boundary_projection_value_has_nonoperand_uses(plan->module,
-                                                           result) ||
+    if (loom_boundary_projection_value_has_attribute_uses(plan->module,
+                                                          result) ||
         loom_module_value(plan->module, result)->use_count != 0) {
       out_function->selected = false;
     }
@@ -482,6 +721,24 @@ static iree_status_t loom_boundary_projection_plan_function_signature(
                                                         &ties[i])) {
       out_function->selected = false;
     }
+  }
+  if (out_function->selected &&
+      !loom_boundary_projection_validate_signature_partition(
+          plan, out_function, LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_ARGUMENT,
+          out_function->arguments, out_function->argument_count,
+          out_function->argument_schemas)) {
+    out_function->selected = false;
+  }
+  if (out_function->selected &&
+      !loom_boundary_projection_validate_signature_partition(
+          plan, out_function, LOOM_BOUNDARY_PROJECTION_SLOT_FUNCTION_RESULT,
+          out_function->results, out_function->result_count,
+          out_function->result_schemas)) {
+    out_function->selected = false;
+  }
+  if (out_function->selected) {
+    IREE_RETURN_IF_ERROR(loom_boundary_projection_plan_result_realization_order(
+        plan, out_function));
   }
   return iree_ok_status();
 }
@@ -774,8 +1031,8 @@ static iree_status_t loom_boundary_projection_collect_op(
             &callee_plan->result_schemas[i])) {
       continue;
     }
-    if (loom_boundary_projection_value_has_nonoperand_uses(
-            collect->plan->module, results.values[i])) {
+    if (loom_boundary_projection_value_has_attribute_uses(collect->plan->module,
+                                                          results.values[i])) {
       collect->function->selected = false;
       callee_plan->selected = false;
       continue;
@@ -1633,6 +1890,11 @@ iree_status_t loom_boundary_projection_plan_prepare(
     }
     loom_local_value_domain_release(&function->domain);
     IREE_RETURN_IF_ERROR(status);
+  }
+  for (iree_host_size_t i = 0; i < rules.count; ++i) {
+    if (rules.values[i]->finalize_plan) {
+      rules.values[i]->finalize_plan(rules.values[i], plan);
+    }
   }
   return loom_boundary_projection_propagate_rejections(plan);
 }

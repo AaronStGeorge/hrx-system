@@ -94,6 +94,74 @@ TEST_F(FactLayoutTest, DenseRecipesOwnPackedDimensions) {
   EXPECT_EQ(arena_.used_allocation_size, bytes);
 }
 
+TEST_F(FactLayoutTest, PhysicalEncodingIdentitySurvivesRecipeChanges) {
+  constexpr loom_value_id_t encoding = 3;
+  constexpr loom_value_id_t physical_encoding = 7;
+  IREE_ASSERT_OK(loom_value_fact_table_define_layout_physical_encoding_value(
+      &table_, encoding, physical_encoding));
+  auto origin = loom_value_fact_table_query_layout_origin(&table_, encoding);
+  EXPECT_EQ(origin.kind, LOOM_VALUE_FACT_LAYOUT_ORIGIN_NONE);
+  EXPECT_EQ(origin.count, 0);
+  EXPECT_TRUE(origin.has_physical_encoding_value);
+  EXPECT_EQ(origin.physical_encoding_value_id, physical_encoding);
+
+  const loom_value_id_t strides[] = {1, LOOM_VALUE_ID_INVALID};
+  IREE_ASSERT_OK(loom_value_fact_table_define_layout_explicit_strides(
+      &table_, encoding, strides, IREE_ARRAYSIZE(strides)));
+  origin = loom_value_fact_table_query_layout_origin(&table_, encoding);
+  EXPECT_EQ(origin.kind, LOOM_VALUE_FACT_LAYOUT_ORIGIN_EXPLICIT_STRIDES);
+  EXPECT_TRUE(origin.has_physical_encoding_value);
+  EXPECT_EQ(origin.physical_encoding_value_id, physical_encoding);
+
+  IREE_ASSERT_OK(loom_value_fact_table_define_layout_explicit_strides(
+      &table_, encoding, nullptr, 0));
+  origin = loom_value_fact_table_query_layout_origin(&table_, encoding);
+  EXPECT_EQ(origin.kind, LOOM_VALUE_FACT_LAYOUT_ORIGIN_NONE);
+  EXPECT_TRUE(origin.has_physical_encoding_value);
+  EXPECT_EQ(origin.physical_encoding_value_id, physical_encoding);
+
+  IREE_ASSERT_OK(loom_value_fact_table_define_layout_physical_encoding_value(
+      &table_, encoding, LOOM_VALUE_ID_INVALID));
+  origin = loom_value_fact_table_query_layout_origin(&table_, encoding);
+  EXPECT_FALSE(origin.has_physical_encoding_value);
+}
+
+TEST_F(FactLayoutTest, PhysicalEncodingIdentityForwardsAndCopiesAcrossScopes) {
+  constexpr loom_value_id_t encoding = 3;
+  constexpr loom_value_id_t forwarded = 100;
+  constexpr loom_value_id_t physical_encoding = 0;
+  const uint64_t dimensions[] = {loom_dim_pack_dynamic(1),
+                                 loom_dim_pack_static(4)};
+  IREE_ASSERT_OK(loom_value_fact_table_define_layout_dense_dimensions(
+      &table_, encoding, dimensions, IREE_ARRAYSIZE(dimensions)));
+  IREE_ASSERT_OK(loom_value_fact_table_define_layout_physical_encoding_value(
+      &table_, encoding, physical_encoding));
+  IREE_ASSERT_OK(loom_value_fact_table_forward_layout_origin(&table_, encoding,
+                                                             forwarded));
+
+  const auto source =
+      loom_value_fact_table_query_layout_origin(&table_, encoding);
+  const auto shared =
+      loom_value_fact_table_query_layout_origin(&table_, forwarded);
+  EXPECT_TRUE(loom_value_fact_layout_origin_equal(source, shared));
+  EXPECT_EQ(source.values.data, shared.values.data);
+  EXPECT_TRUE(shared.has_physical_encoding_value);
+  EXPECT_EQ(shared.physical_encoding_value_id, physical_encoding);
+
+  loom_value_fact_table_t copied_table = {};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&copied_table, &arena_, 0));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_clone_origins(&copied_table, &table_, encoding));
+  const auto copied =
+      loom_value_fact_table_query_layout_origin(&copied_table, encoding);
+  EXPECT_TRUE(loom_value_fact_layout_origin_equal(source, copied));
+  EXPECT_NE(source.values.data, copied.values.data);
+
+  auto different_identity = copied;
+  different_identity.physical_encoding_value_id = 9;
+  EXPECT_FALSE(loom_value_fact_layout_origin_equal(source, different_identity));
+}
+
 TEST_F(FactLayoutTest, ForwardingSharesAndReplacesRecipes) {
   const loom_value_id_t strides[] = {1, LOOM_VALUE_ID_INVALID};
   IREE_ASSERT_OK(loom_value_fact_table_define_layout_explicit_strides(

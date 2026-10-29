@@ -42,32 +42,62 @@ static void loom_view_subview_dense_strides(const loom_fact_context_t* context,
 }
 
 static iree_status_t loom_view_subview_capture_layout_origin(
-    loom_fact_context_t* context, loom_type_t source_type,
+    loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t source_type,
     loom_value_fact_address_layout_kind_t source_layout_kind,
     loom_value_id_t result_value_id) {
+  const bool has_source_encoding = loom_type_has_ssa_encoding(source_type);
+  const loom_value_id_t source_encoding =
+      has_source_encoding ? loom_type_encoding_value_id(source_type)
+                          : LOOM_VALUE_ID_INVALID;
+  const bool has_physical_encoding =
+      has_source_encoding &&
+      loom_encoding_query_type_role(context, module, source_type) ==
+          LOOM_ENCODING_ROLE_PHYSICAL_STORAGE;
+  const loom_value_fact_layout_origin_t source_origin =
+      has_source_encoding ? loom_value_fact_table_query_layout_origin(
+                                context->table, source_encoding)
+                          : (loom_value_fact_layout_origin_t){0};
+  const loom_value_id_t physical_encoding =
+      has_physical_encoding && source_origin.has_physical_encoding_value
+          ? source_origin.physical_encoding_value_id
+          : source_encoding;
   if (source_layout_kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE) {
     bool has_dynamic_stride = false;
     for (uint8_t axis = 1; axis < loom_type_rank(source_type); ++axis) {
       has_dynamic_stride |= loom_type_dim_is_dynamic_at(source_type, axis);
     }
-    if (!has_dynamic_stride && !context->table->layout_origins) {
+    if (!has_dynamic_stride && !has_physical_encoding &&
+        !context->table->layout_origins) {
       return iree_ok_status();
     }
     uint64_t dimensions[LOOM_TYPE_MAX_RANK] = {0};
     for (uint8_t axis = 0; axis < loom_type_rank(source_type); ++axis) {
       dimensions[axis] = loom_type_dim(source_type, axis);
     }
-    return loom_value_fact_table_define_layout_dense_dimensions(
-        context->table, result_value_id, dimensions,
-        loom_type_rank(source_type));
+    return loom_value_fact_table_define_layout_origin(
+        context->table, result_value_id,
+        (loom_value_fact_layout_origin_t){
+            .values.dense_dimensions = dimensions,
+            .physical_encoding_value_id = physical_encoding,
+            .count = loom_type_rank(source_type),
+            .kind = LOOM_VALUE_FACT_LAYOUT_ORIGIN_DENSE_DIMENSIONS,
+            .has_physical_encoding_value = has_physical_encoding,
+        });
   }
 
   if (source_layout_kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED &&
-      loom_type_has_ssa_encoding(source_type) &&
-      context->table->layout_origins) {
+      has_source_encoding && context->table->layout_origins &&
+      (!has_physical_encoding || source_origin.has_physical_encoding_value)) {
     return loom_value_fact_table_forward_layout_origin(
-        context->table, loom_type_encoding_value_id(source_type),
-        result_value_id);
+        context->table, source_encoding, result_value_id);
+  }
+  if (has_physical_encoding) {
+    loom_value_fact_layout_origin_t result_origin = source_origin;
+    result_origin.has_physical_encoding_value = true;
+    result_origin.physical_encoding_value_id = physical_encoding;
+    return loom_value_fact_table_define_layout_origin(
+        context->table, result_value_id, result_origin);
   }
   if (context->table->layout_origins) {
     loom_value_fact_table_clear_layout_origin(context->table, result_value_id);
@@ -108,13 +138,13 @@ static iree_status_t loom_view_subview_capture_physical_encoding(
   }
 
   IREE_RETURN_IF_ERROR(loom_view_subview_capture_layout_origin(
-      context, source_type, source_layout.kind, result_value_id));
+      context, module, source_type, source_layout.kind, result_value_id));
 
   loom_value_fact_storage_schema_t storage_schema = {0};
   (void)loom_encoding_query_type_storage_schema(context, module, source_type,
                                                 &storage_schema);
   loom_value_fact_encoding_summary_t summary = {
-      .role = loom_encoding_type_role(module, source_type),
+      .role = loom_encoding_query_type_role(context, module, source_type),
       .address_layout = *out_address_layout,
       .storage_schema = storage_schema,
   };

@@ -16,6 +16,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_fact_context_t loom_fact_context_t;
+
 // Returns a diagnostic-facing description of |role|.
 iree_string_view_t loom_encoding_role_description(loom_encoding_role_t role);
 
@@ -34,6 +36,13 @@ loom_encoding_role_t loom_encoding_value_role(const loom_module_t* module,
 // producer.
 loom_encoding_role_t loom_encoding_type_role(const loom_module_t* module,
                                              loom_type_t type);
+
+// Returns the semantic role of a shaped type's encoding attachment, resolving
+// an otherwise generic SSA encoding through its indexed facts. This never
+// inspects the encoding value's producer.
+loom_encoding_role_t loom_encoding_query_type_role(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t type);
 
 #ifdef __cplusplus
 }

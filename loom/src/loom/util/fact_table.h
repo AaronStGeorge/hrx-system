@@ -349,8 +349,9 @@ struct loom_value_fact_table_t {
     iree_host_size_t origin_capacity;
   } contextual_query_origins;
 
-  // Scope-local per-axis SSA layout strides. Allocated only for dynamic
-  // explicit layouts; separate from numeric extensions that cross call scopes.
+  // Scope-local physical-layout provenance. Allocated only when an exact SSA
+  // layout recipe or storage-schema identity must survive local inference;
+  // separate from numeric extensions that cross call scopes.
   loom_value_fact_layout_origins_t* layout_origins;
 
   // Scope-local exact vector partitions indexed by logical vector value ID.

@@ -469,18 +469,27 @@ static iree_status_t loom_boundary_projection_rebuild_call(
     IREE_RETURN_IF_ERROR(loom_boundary_projection_replace_definition(
         plan, function, source_results[i], results[i]));
   }
-  next_result = result_offset;
   for (uint16_t i = 0; i < callee->result_count; ++i) {
+    const loom_boundary_projection_schema_t* schema =
+        &callee->result_schemas[i];
+    if (loom_boundary_projection_schema_is_projected(schema)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_boundary_projection_replace_definition(
+        plan, function, call_results.values[i],
+        results[result_offset + callee->result_indices[i]]));
+  }
+  loom_builder_set_after(builder, target);
+  for (uint16_t order_index = 0; order_index < callee->result_realization_count;
+       ++order_index) {
+    const uint16_t i = callee->result_realization_order[order_index];
     const loom_value_id_t source_result = call_results.values[i];
     const loom_boundary_projection_schema_t* schema =
         &callee->result_schemas[i];
-    if (!loom_boundary_projection_schema_is_projected(schema)) {
-      IREE_RETURN_IF_ERROR(loom_boundary_projection_replace_definition(
-          plan, function, source_result, results[next_result++]));
-      continue;
-    }
+    IREE_ASSERT(loom_boundary_projection_schema_is_projected(schema));
     const iree_host_size_t candidate_index =
         loom_boundary_projection_slot_index(function, source_result);
+    IREE_ASSERT_NE(candidate_index, IREE_HOST_SIZE_MAX);
     loom_boundary_projection_slot_t* candidate =
         &function->candidates[candidate_index];
     for (uint16_t component = 0; component < schema->component_count;
@@ -494,13 +503,13 @@ static iree_status_t loom_boundary_projection_rebuild_call(
     loom_type_t logical_type = loom_type_none();
     IREE_RETURN_IF_ERROR(
         loom_ir_remap_type(&remap, candidate->logical_type, &logical_type));
-    loom_builder_set_after(builder, target);
     IREE_RETURN_IF_ERROR(schema->rule->transport.reconstruct(
         schema->rule, plan, function, candidate, logical_type, source->location,
         &candidate->replacement_value_id));
     IREE_RETURN_IF_ERROR(loom_boundary_projection_replace_definition(
         plan, function, source_result, candidate->replacement_value_id));
-    next_result = (uint16_t)(next_result + schema->component_count);
+    IREE_RETURN_IF_ERROR(loom_ir_remap_map_value(
+        &remap, source_result, candidate->replacement_value_id));
   }
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(&plan->rewriter, source));
   ++plan->calls_rewritten;

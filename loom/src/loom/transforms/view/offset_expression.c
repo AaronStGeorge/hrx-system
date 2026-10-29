@@ -22,6 +22,82 @@ static iree_status_t loom_view_offset_constant(loom_builder_t* builder,
   return iree_ok_status();
 }
 
+// Returns true when an affine translation can remain entirely in the physical
+// offset domain. index.scale preserves the full target offset width while
+// converting each logical coordinate term to a byte displacement. INT64_MIN
+// cannot be represented as a nonnegative offset magnitude.
+static bool loom_view_can_materialize_offset_domain_translation(
+    const loom_builder_t* builder, const loom_symbolic_expr_t* expression) {
+  if (expression->constant == INT64_MIN) {
+    return false;
+  }
+  const loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  for (iree_host_size_t i = 0; i < expression->term_count; ++i) {
+    const loom_symbolic_term_t* term = &expression->terms[i];
+    if (term->coefficient == INT64_MIN ||
+        !loom_type_equal(
+            loom_module_value_type(builder->module, term->relation_value_id),
+            index_type)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_view_materialize_offset_domain_translation(
+    loom_builder_t* builder, const loom_symbolic_expr_t* expression,
+    loom_value_id_t base_value_id, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  const loom_type_t offset_type = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  loom_value_id_t sum = base_value_id;
+  if (expression->constant != 0) {
+    const int64_t magnitude =
+        expression->constant < 0 ? -expression->constant : expression->constant;
+    loom_op_t* constant = NULL;
+    IREE_RETURN_IF_ERROR(loom_index_constant_build(
+        builder, loom_attr_i64(magnitude), offset_type, location, &constant));
+    loom_op_t* translation = NULL;
+    if (expression->constant < 0) {
+      IREE_RETURN_IF_ERROR(loom_index_sub_build(
+          builder, sum, loom_index_constant_result(constant), offset_type,
+          location, &translation));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_index_add_build(
+          builder, sum, loom_index_constant_result(constant), offset_type,
+          location, &translation));
+    }
+    sum = loom_op_results(translation)[0];
+  }
+  for (iree_host_size_t i = 0; i < expression->term_count; ++i) {
+    const loom_symbolic_term_t* term = &expression->terms[i];
+    if (term->coefficient == 0) {
+      continue;
+    }
+    const int64_t magnitude =
+        term->coefficient < 0 ? -term->coefficient : term->coefficient;
+    loom_op_t* stride = NULL;
+    IREE_RETURN_IF_ERROR(loom_index_constant_build(
+        builder, loom_attr_i64(magnitude), offset_type, location, &stride));
+    loom_op_t* scale = NULL;
+    IREE_RETURN_IF_ERROR(loom_index_scale_build(
+        builder, term->relation_value_id, loom_index_constant_result(stride),
+        offset_type, location, &scale));
+    loom_op_t* translation = NULL;
+    if (term->coefficient < 0) {
+      IREE_RETURN_IF_ERROR(
+          loom_index_sub_build(builder, sum, loom_index_scale_result(scale),
+                               offset_type, location, &translation));
+    } else {
+      IREE_RETURN_IF_ERROR(
+          loom_index_add_build(builder, sum, loom_index_scale_result(scale),
+                               offset_type, location, &translation));
+    }
+    sum = loom_op_results(translation)[0];
+  }
+  *out_value = sum;
+  return iree_ok_status();
+}
+
 iree_status_t loom_view_materialize_offset_expression(
     loom_builder_t* builder, const loom_symbolic_expr_t* expression,
     loom_value_id_t base_value_id, loom_value_id_t anchor_value_id,
@@ -95,6 +171,20 @@ iree_status_t loom_view_materialize_offset_expression(
                         expression->facts.range_hi <= 0;
   const bool translate = base_value_id != LOOM_VALUE_ID_INVALID &&
                          (expression->facts.range_lo >= 0 || subtract);
+  // A completely unconstrained affine translation has no signed range to
+  // preserve and does not admit a separate unsigned displacement. Scale each
+  // coordinate into the offset domain and combine it with the opaque physical
+  // base there instead of requiring the base itself to fit signed i64. Bounded
+  // expressions stay on the path below so their range remains visible to
+  // subrange analysis.
+  const bool range_is_unknown = expression->facts.range_lo == INT64_MIN &&
+                                expression->facts.range_hi == INT64_MAX;
+  if (base_value_id != LOOM_VALUE_ID_INVALID && range_is_unknown &&
+      loom_view_can_materialize_offset_domain_translation(builder,
+                                                          expression)) {
+    return loom_view_materialize_offset_domain_translation(
+        builder, expression, base_value_id, location, out_value);
+  }
   loom_value_id_t sum = translate ? LOOM_VALUE_ID_INVALID : base_value_id;
   // Physical byte expressions use the full offset width. Logical index
   // carriers may be narrower on the selected target. Signed intermediates

@@ -87,6 +87,14 @@ typedef iree_status_t (*loom_boundary_projection_prepare_function_fn_t)(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function);
 
+// Finalizes invocation-wide rule decisions after every outgoing source has
+// been planned and before cross-function rejection propagation. The callback
+// consumes only retained plan state and may deselect functions whose connected
+// signature contract could not be resolved consistently.
+typedef void (*loom_boundary_projection_finalize_plan_fn_t)(
+    const loom_boundary_projection_rule_t* rule,
+    loom_boundary_projection_plan_t* plan);
+
 // Returns whether |rule| participates in |function| before signature discovery.
 // Only the function and version fields are populated. This is a bounded policy
 // query over that header; it must not inspect later plan fields or walk IR.
@@ -204,6 +212,8 @@ struct loom_boundary_projection_rule_t {
   // function local-value domain is acquired only while this callback and later
   // planning callbacks run.
   loom_boundary_projection_prepare_function_fn_t prepare_function;
+  // Optional invocation-wide validation after all source recipes are planned.
+  loom_boundary_projection_finalize_plan_fn_t finalize_plan;
   // Bounded semantic query and schema planner.
   loom_boundary_projection_plan_slot_fn_t plan_slot;
   // Source transport plus the destination callbacks selected by each schema.

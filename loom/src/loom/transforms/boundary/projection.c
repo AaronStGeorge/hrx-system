@@ -105,7 +105,8 @@ static iree_status_t loom_project_boundary_representations_run_rules(
         statistics->loop_predicate_projections += rule_statistics.projections;
         statistics->loop_predicate_components += rule_statistics.components;
       } else if (rule == loom_cfg_layout_boundary_projection_rule() ||
-                 rule == loom_loop_layout_boundary_projection_rule()) {
+                 rule == loom_loop_layout_boundary_projection_rule() ||
+                 rule == loom_callable_encoding_boundary_projection_rule()) {
         statistics->layout_projections += rule_statistics.projections;
         statistics->layout_components += rule_statistics.components;
       } else if (rule == loom_view_boundary_projection_rule()) {
@@ -126,6 +127,7 @@ iree_status_t loom_project_boundary_representations_run(loom_pass_t* pass,
       loom_loop_predicate_boundary_projection_rule(),
       loom_cfg_layout_boundary_projection_rule(),
       loom_loop_layout_boundary_projection_rule(),
+      loom_callable_encoding_boundary_projection_rule(),
       loom_view_boundary_projection_rule(),
       loom_vector_packet_boundary_projection_rule(),
   };

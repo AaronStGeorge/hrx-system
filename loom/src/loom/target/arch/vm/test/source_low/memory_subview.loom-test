@@ -128,8 +128,6 @@ func.def @make_storage_crop(%input: buffer, %origin: offset, %columns: index) ->
   %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
   %source = buffer.view %input_aligned[%origin] : buffer -> view<4x[%columns]xf32, %storage>
   %crop, %crop_storage = view.subview %source[1, 2] : view<4x[%columns]xf32, %storage> -> view<2x3xf32, %crop_storage>
-  // ERROR@+2: TARGET/033 {op_name="func.return", field_name="source", actual_type="encoding<storage>"}
-  // ERROR@+1: TARGET/033 {op_name="func.return", field_name="source", actual_type="view<2x3xf32, %crop_storage>"}
   func.return %crop_storage, %crop : encoding<storage>, view<2x3xf32, %crop_storage>
 }
 
@@ -148,6 +146,34 @@ func.def public @subview_composed_helpers(%input: buffer, %output: buffer, %widt
   %destination = buffer.view %output_aligned[%output_origin] : buffer -> view<1xf32>
   view.store %value, %destination[0] : f32, view<1xf32>
   func.return
+}
+
+// ----
+low.func.def target<vm.core> @make_storage_crop(%input_aligned: reg<vm.ref : buffer>, %columns: reg<vm.value : i64>) -> (%result_storage_stride_0: reg<vm.value : i64>, %result_storage_stride_1: reg<vm.value : i64>, reg<vm.ref : buffer>, reg<vm.value : i64>) asm {
+  %67 = constant.i64 16
+  %68 = constant.i64 4
+  %69 = integer.mul.i64 %columns, %68
+  %70 = integer.add.i64 %67, %69
+  %71 = constant.i64 1
+  return %columns, %71, %input_aligned, %70
+}
+
+low.func.def target<vm.core> @read_storage_crop(%storage_stride_0: reg<vm.value : i64>, %storage_stride_1: reg<vm.value : i64>, %crop: reg<vm.ref : buffer>, %crop_offset: reg<vm.value : i64>) -> (reg<vm.value : f32>) asm {
+  %77 = constant.i64 2 : reg<vm.value>
+  %78 = integer.shift.left.i64 %storage_stride_0, %77
+  %79 = integer.add.i64 %crop_offset, %78
+  %81 = integer.shift.left.i64 %storage_stride_1, %77
+  %82 = integer.add.i64 %79, %81
+  %value = buffer.load %crop, %82, %82, 0, "i32.x1" : reg<vm.value : f32>
+  return %value
+}
+
+low.func.def public target<vm.core> abi(vm_function) @subview_composed_helpers(%input: reg<vm.ref : buffer>, %destination: reg<vm.ref : buffer>, %columns: reg<vm.value : i64>) asm {
+  %storage_stride_0, %storage_stride_1, %crop_root, %crop_offset = low.func.call pure @make_storage_crop(%input, %columns) : (reg<vm.ref : buffer>, reg<vm.value : i64>) -> (reg<vm.value : i64>, reg<vm.value : i64>, reg<vm.ref : buffer>, reg<vm.value : i64>)
+  %value = low.func.call @read_storage_crop(%storage_stride_0, %storage_stride_1, %crop_root, %crop_offset) : (reg<vm.value : i64>, reg<vm.value : i64>, reg<vm.ref : buffer>, reg<vm.value : i64>) -> (reg<vm.value : f32>)
+  %92 = constant.i64 4
+  buffer.store %destination, %92, %92, %value, 0, "i32.x1"
+  return
 }
 
 // ====

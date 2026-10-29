@@ -35,6 +35,31 @@ extern "C" {
 typedef uint32_t loom_view_region_id_t;
 #define LOOM_VIEW_REGION_ID_INVALID ((loom_view_region_id_t)UINT32_MAX)
 
+// One exact byte-displacement product whose layout axis is not yet a scalar
+// SSA value. Boundary projection resolves physical_encoding_value_id to the
+// selected stride component without recovering the subview producer.
+typedef struct loom_view_address_projection_term_t {
+  // Static byte coefficient multiplying the stride and optional index.
+  int64_t coefficient;
+  // Root physical encoding supplying the element-stride axis.
+  loom_value_id_t physical_encoding_value_id;
+  // Dynamic subview index, or INVALID when folded into coefficient.
+  loom_value_id_t index_value_id;
+  // Physical layout axis selected from the encoding.
+  uint8_t axis;
+} loom_view_address_projection_term_t;
+
+// Exact projection offset retained when ordinary linear symbolic terms cannot
+// represent a product involving a future physical-layout component.
+typedef struct loom_view_address_projection_t {
+  // Exact linear portion added before the physical-layout products.
+  loom_symbolic_expr_t linear_byte_offset;
+  // Arena-owned physical-layout products.
+  const loom_view_address_projection_term_t* terms;
+  // Number of entries in terms.
+  iree_host_size_t term_count;
+} loom_view_address_projection_t;
+
 // Access bits derived from memory-operand descriptors.
 enum loom_view_access_flag_bits_e {
   // The view is read by at least one memory operation.
@@ -114,6 +139,10 @@ typedef struct loom_view_region_t {
 
   // Symbolic byte offset from base_view_value_id to view_value_id.
   loom_symbolic_expr_t projection_byte_offset;
+
+  // Exact non-linear projection retained for physical boundary transport, or
+  // NULL when projection_byte_offset is complete.
+  const loom_view_address_projection_t* address_projection;
 
   // Existing SSA value that materializes begin_byte_offset, or invalid when
   // the begin offset only exists as a symbolic expression.

@@ -877,25 +877,8 @@ static iree_status_t loom_value_fact_table_copy_origins(
     } else {
       const loom_value_fact_layout_origin_t origin =
           loom_value_fact_table_query_layout_origin(source, source_value_id);
-      switch (origin.kind) {
-        case LOOM_VALUE_FACT_LAYOUT_ORIGIN_NONE:
-          loom_value_fact_table_clear_layout_origin(target, result_value_id);
-          break;
-        case LOOM_VALUE_FACT_LAYOUT_ORIGIN_EXPLICIT_STRIDES: {
-          IREE_RETURN_IF_ERROR(
-              loom_value_fact_table_define_layout_explicit_strides(
-                  target, result_value_id, origin.values.explicit_strides,
-                  origin.count));
-          break;
-        }
-        case LOOM_VALUE_FACT_LAYOUT_ORIGIN_DENSE_DIMENSIONS: {
-          IREE_RETURN_IF_ERROR(
-              loom_value_fact_table_define_layout_dense_dimensions(
-                  target, result_value_id, origin.values.dense_dimensions,
-                  origin.count));
-          break;
-        }
-      }
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_define_layout_origin(
+          target, result_value_id, origin));
     }
   }
   return iree_ok_status();

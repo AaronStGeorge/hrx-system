@@ -30,6 +30,7 @@ extern "C" {
 #endif
 
 typedef struct loom_fact_context_t loom_fact_context_t;
+typedef struct loom_builder_t loom_builder_t;
 typedef struct loom_value_facts_t loom_value_facts_t;
 typedef struct loom_value_fact_address_layout_t
     loom_value_fact_address_layout_t;
@@ -54,6 +55,16 @@ iree_status_t loom_encoding_register_storage_family(loom_context_t* context);
 iree_status_t loom_encoding_intern_exact_summary(
     loom_module_t* module, const loom_value_fact_encoding_summary_t* summary,
     uint16_t* out_encoding_id);
+
+// Builds physical storage from a dynamic address layout and an exact static
+// storage schema. The storage-family spec and parameter names are interned in
+// the builder's module; only |layout| remains an SSA parameter.
+iree_status_t loom_encoding_storage_build(loom_builder_t* builder,
+                                          loom_value_id_t layout,
+                                          uint16_t schema_encoding_id,
+                                          loom_type_t result_type,
+                                          loom_location_id_t location,
+                                          loom_op_t** out_op);
 
 // Maximum static layout rank decoded into caller-provided stride storage.
 // Shaped type ranks are packed in four header bits, so no well-formed consumer

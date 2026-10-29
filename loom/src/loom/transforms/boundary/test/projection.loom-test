@@ -255,10 +255,10 @@ CHECK: *"cfg-edges-rewritten":0,"loops-rewritten":1,"loop-predicate-projections"
 
 test.target<low_core> @carrier_target {abi = hal_kernel, subgroup_size = 64}
 
-kernel.def target(@carrier_target) @kernel_local_loop_layout() {
+kernel.def target(@carrier_target) @kernel_local_loop_layout(%workgroups: index) {
   %c1 = index.constant 1 : index
   %size = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%size, %c1, %c1) : index
+  kernel.launch.config workgroups(%workgroups, %c1, %c1) workgroup_size(%size, %c1, %c1) : index
 } launch() {
   %lane = kernel.subgroup.lane.id : index
   %c0 = index.constant 0 : index
@@ -275,10 +275,10 @@ kernel.def target(@carrier_target) @kernel_local_loop_layout() {
 // ----
 test.target<low_core> @carrier_target {abi = hal_kernel, subgroup_size = 64}
 
-kernel.def target(@carrier_target) @kernel_local_loop_layout() {
+kernel.def target(@carrier_target) @kernel_local_loop_layout(%workgroups: index) {
   %c1 = index.constant 1 : index
   %size = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%size, %c1, %c1) : index
+  kernel.launch.config workgroups(%workgroups, %c1, %c1) workgroup_size(%size, %c1, %c1) : index
 } launch() {
   %lane = kernel.subgroup.lane.id : index
   %c0 = index.constant 0 : index
@@ -785,6 +785,144 @@ func.def public target(@carrier_target) @structured_view_identity(%input_root: b
     view.store %value, %input[0] : i32, view<4xi32>
   }
   func.return %input_root, %input_offset : buffer, offset
+}
+
+// ====
+
+// Callable projection carries a layout and dependent view through both result
+// and argument signatures. The reader's logical argument order is deliberately
+// carrier-first; reconstruction must still define the layout before remapping
+// the view type.
+// RUN: pass specialize-target-callgraph,project-boundary-representations
+
+test.target<low_core> @carrier_target
+
+func.def target(@carrier_target) @make_callable_crop(%input: buffer, %origin: offset, %columns: index) -> (%crop_layout: encoding<layout>, %crop: view<2x3xf32, %crop_layout>) {
+  %source = buffer.view %input[%origin] : buffer -> view<4x[%columns]xf32>
+  %result, %layout = view.subview %source[1, 2] : view<4x[%columns]xf32> -> view<2x3xf32, %layout>
+  func.return %layout, %result : encoding<layout>, view<2x3xf32, %layout>
+}
+
+func.def target(@carrier_target) @read_callable_crop(%crop: view<2x3xf32, %layout>, %layout: encoding<layout>) -> (f32) {
+  %value = view.load %crop[1, 1] : view<2x3xf32, %layout> -> f32
+  func.return %value : f32
+}
+
+func.def public target(@carrier_target) @call_callable_crop(%input: buffer, %origin: offset, %columns: index) -> (f32) {
+  %layout, %crop = func.call @make_callable_crop(%input, %origin, %columns) : (buffer, offset, index) -> (encoding<layout>, view<2x3xf32, %layout>)
+  %value = func.call @read_callable_crop(%crop, %layout) : (view<2x3xf32, %layout>, encoding<layout>) -> (f32)
+  func.return %value : f32
+}
+
+// ----
+test.target<low_core> @carrier_target
+
+func.def target(@carrier_target) @make_callable_crop(%input: buffer, %origin: offset, %columns: index) -> (%crop_layout_stride_0: index, %crop_layout_stride_1: index, %crop_root: buffer, %crop_offset: offset) {
+  %source = buffer.view %input[%origin] : buffer -> view<4x[%columns]xf32>
+  %result, %layout = view.subview %source[1, 2] : view<4x[%columns]xf32> -> view<2x3xf32, %layout>
+  %31 = index.constant 8 : offset
+  %32 = index.add %origin, %31 : offset
+  %33 = index.constant 4 : offset
+  %34 = index.scale %columns, %33 : index, offset -> offset
+  %35 = index.add %32, %34 : offset
+  %30 = index.constant 1 : index
+  func.return %columns, %30, %input, %35 : index, index, buffer, offset
+}
+
+func.def target(@carrier_target) @read_callable_crop(%crop_root: buffer, %crop_offset: offset, %layout_stride_0: index, %layout_stride_1: index) -> (f32) {
+  %layout = encoding.layout.strided [%layout_stride_0, %layout_stride_1] : encoding<layout>
+  %crop = buffer.view %crop_root[%crop_offset] : buffer -> view<2x3xf32, %layout>
+  %value = view.load %crop[1, 1] : view<2x3xf32, %layout> -> f32
+  func.return %value : f32
+}
+
+func.def public target(@carrier_target) @call_callable_crop(%input: buffer, %origin: offset, %columns: index) -> (f32) {
+  %layout_stride_0, %layout_stride_1, %crop_root, %crop_offset = func.call @make_callable_crop(%input, %origin, %columns) : (buffer, offset, index) -> (index, index, buffer, offset)
+  %layout = encoding.layout.strided [%layout_stride_0, %layout_stride_1] : encoding<layout>
+  %crop = buffer.view %crop_root[%crop_offset] : buffer -> view<2x3xf32, %layout>
+  %value = func.call @read_callable_crop(%crop_root, %crop_offset, %layout_stride_0, %layout_stride_1) : (buffer, offset, index, index) -> (f32)
+  func.return %value : f32
+}
+
+// ====
+
+// Callable physical storage retains its exact schema while nested subviews
+// accumulate dynamic and static products over a rank-three dense layout. Both
+// signatures put the carrier before its encoding to exercise dependency-safe
+// reconstruction rather than source signature order.
+// RUN: pass specialize-target-callgraph,project-boundary-representations
+
+test.target<low_core> @carrier_target
+
+func.def target(@carrier_target) @make_callable_storage_crop(%source: view<4x[%rows]x[%columns]xf32, %storage>, %storage: encoding<storage>, %row: index, %rows: index, %columns: index) -> (%crop: view<2x3x4xf32, %crop_storage>, %crop_storage: encoding<storage>) {
+  %middle, %middle_storage = view.subview %source[%row, 2, 3] : view<4x[%rows]x[%columns]xf32, %storage> -> view<3x3x4xf32, %middle_storage>
+  %result, %result_storage = view.subview %middle[-1, 0, 0] : view<3x3x4xf32, %middle_storage> -> view<2x3x4xf32, %result_storage>
+  func.return %result, %result_storage : view<2x3x4xf32, %result_storage>, encoding<storage>
+}
+
+func.def target(@carrier_target) @read_callable_storage_crop(%crop: view<2x3x4xf32, %storage>, %storage: encoding<storage>) -> (f32) {
+  %value = view.load %crop[1, 1, 1] : view<2x3x4xf32, %storage> -> f32
+  func.return %value : f32
+}
+
+func.def public target(@carrier_target) @call_callable_storage_crop(%input: buffer, %origin: offset, %row: index, %rows: index, %columns: index) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %schema = encoding.define #encoding.f32 : encoding<schema>
+  %storage = encoding.define #encoding.storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
+  %source = buffer.view %input[%origin] : buffer -> view<4x[%rows]x[%columns]xf32, %storage>
+  %crop, %crop_storage = func.call @make_callable_storage_crop(%source, %storage, %row, %rows, %columns) : (view<4x[%rows]x[%columns]xf32, %storage>, encoding<storage>, index, index, index) -> (view<2x3x4xf32, %crop_storage>, encoding<storage>)
+  %value = func.call @read_callable_storage_crop(%crop, %crop_storage) : (view<2x3x4xf32, %crop_storage>, encoding<storage>) -> (f32)
+  func.return %value : f32
+}
+
+// ----
+test.target<low_core> @carrier_target
+
+func.def target(@carrier_target) @make_callable_storage_crop(%source_root: buffer, %source_offset: offset, %storage_stride_0: index, %storage_stride_1: index, %storage_stride_2: index, %row: index, %rows: index, %columns: index) -> (%crop_root: buffer, %crop_offset: offset, %crop_storage_stride_0: index, %crop_storage_stride_1: index, %crop_storage_stride_2: index) {
+  %storage = encoding.layout.strided [%storage_stride_0, %storage_stride_1, %storage_stride_2] : encoding<layout>
+  %37 = encoding.define #encoding.storage<schema=#encoding.f32> {layout = %storage : encoding<layout>} : encoding<storage>
+  %source = buffer.view %source_root[%source_offset] : buffer -> view<4x[%rows]x[%columns]xf32, %37>
+  %middle, %middle_storage = view.subview %source[%row, 2, 3] : view<4x[%rows]x[%columns]xf32, %37> -> view<3x3x4xf32, %middle_storage>
+  %result, %result_storage = view.subview %middle[-1, 0, 0] : view<3x3x4xf32, %middle_storage> -> view<2x3x4xf32, %result_storage>
+  %51 = index.constant 4 : offset
+  %52 = index.scale %storage_stride_0, %51 : index, offset -> offset
+  %53 = index.scale %row, %52 : index, offset -> offset
+  %54 = index.constant 8 : offset
+  %55 = index.scale %storage_stride_1, %54 : index, offset -> offset
+  %56 = index.add %53, %55 : offset
+  %57 = index.constant 12 : offset
+  %58 = index.scale %storage_stride_2, %57 : index, offset -> offset
+  %59 = index.add %56, %58 : offset
+  %60 = index.constant 4 : offset
+  %61 = index.scale %storage_stride_0, %60 : index, offset -> offset
+  %62 = index.constant 0 : offset
+  %63 = index.sub %62, %61 : offset
+  %64 = index.add %59, %63 : offset
+  %65 = index.add %source_offset, %64 : offset
+  func.return %source_root, %65, %storage_stride_0, %storage_stride_1, %storage_stride_2 : buffer, offset, index, index, index
+}
+
+func.def target(@carrier_target) @read_callable_storage_crop(%crop_root: buffer, %crop_offset: offset, %storage_stride_0: index, %storage_stride_1: index, %storage_stride_2: index) -> (f32) {
+  %storage = encoding.layout.strided [%storage_stride_0, %storage_stride_1, %storage_stride_2] : encoding<layout>
+  %43 = encoding.define #encoding.storage<schema=#encoding.f32> {layout = %storage : encoding<layout>} : encoding<storage>
+  %crop = buffer.view %crop_root[%crop_offset] : buffer -> view<2x3x4xf32, %43>
+  %value = view.load %crop[1, 1, 1] : view<2x3x4xf32, %43> -> f32
+  func.return %value : f32
+}
+
+func.def public target(@carrier_target) @call_callable_storage_crop(%input: buffer, %origin: offset, %row: index, %rows: index, %columns: index) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %schema = encoding.define #encoding.f32 : encoding<schema>
+  %storage = encoding.define #encoding.storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
+  %source = buffer.view %input[%origin] : buffer -> view<4x[%rows]x[%columns]xf32, %storage>
+  %46 = index.mul %rows, %columns : index
+  %47 = index.constant 1 : index
+  %crop_root, %crop_offset, %crop_storage_stride_0, %crop_storage_stride_1, %crop_storage_stride_2 = func.call @make_callable_storage_crop(%input, %origin, %46, %columns, %47, %row, %rows, %columns) : (buffer, offset, index, index, index, index, index, index) -> (buffer, offset, index, index, index)
+  %48 = encoding.layout.strided [%crop_storage_stride_0, %crop_storage_stride_1, %crop_storage_stride_2] : encoding<layout>
+  %crop_storage = encoding.define #encoding.storage<schema=#encoding.f32> {layout = %48 : encoding<layout>} : encoding<storage>
+  %crop = buffer.view %crop_root[%crop_offset] : buffer -> view<2x3x4xf32, %crop_storage>
+  %value = func.call @read_callable_storage_crop(%crop_root, %crop_offset, %crop_storage_stride_0, %crop_storage_stride_1, %crop_storage_stride_2) : (buffer, offset, index, index, index) -> (f32)
+  func.return %value : f32
 }
 
 // ====
