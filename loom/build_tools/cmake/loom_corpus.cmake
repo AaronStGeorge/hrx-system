@@ -606,7 +606,9 @@ function(_loom_declare_corpus_build ID)
       endif()
     endforeach()
 
-    add_custom_target("${_PROGRAM_TARGET}" DEPENDS ${_PROGRAM_OUTPUTS})
+    # Own the generated commands directly. A DEPENDS utility command repeats
+    # the compiler's transitive build dependencies for every corpus program.
+    add_custom_target("${_PROGRAM_TARGET}" SOURCES ${_PROGRAM_OUTPUTS})
     set_target_properties("${_PROGRAM_TARGET}" PROPERTIES
       LOOM_CORPUS_ARTIFACTS "${_PROGRAM_ARTIFACTS}"
       LOOM_CORPUS_COMPILE_REPORTS "${_PROGRAM_REPORTS}"

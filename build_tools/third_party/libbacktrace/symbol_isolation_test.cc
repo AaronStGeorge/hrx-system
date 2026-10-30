@@ -15,24 +15,30 @@ static std::atomic<int> application_create_count{0};
 static std::atomic<int> application_sort_count{0};
 
 struct backtrace_state;
-extern "C" struct backtrace_state* backtrace_create_state(
-    const char*, int, void (*)(void*, const char*, int), void*) {
+extern "C" __attribute__((visibility("default"))) struct backtrace_state*
+backtrace_create_state(const char*, int, void (*)(void*, const char*, int),
+                       void*) {
   application_create_count.fetch_add(1, std::memory_order_relaxed);
   return nullptr;
 }
 
-extern "C" void backtrace_qsort(void* base, size_t count, size_t size,
-                                int (*compare)(const void*, const void*)) {
+extern "C" __attribute__((visibility("default"))) void backtrace_qsort(
+    void* base, size_t count, size_t size,
+    int (*compare)(const void*, const void*)) {
   application_sort_count.fetch_add(1, std::memory_order_relaxed);
   std::qsort(base, count, size, compare);
 }
 
 namespace iree {
-namespace {
 
-IREE_ATTRIBUTE_NOINLINE iree_status_t CaptureIsolatedStatus() {
+// External linkage keeps this frame in the executable's exported symbols even
+// when its debug information and static symbol table have been stripped.
+__attribute__((visibility("default"))) IREE_ATTRIBUTE_NOINLINE iree_status_t
+CaptureIsolatedStatus() {
   return iree_make_status(IREE_STATUS_INTERNAL, "private stack trace");
 }
+
+namespace {
 
 TEST(LibbacktraceTest, ApplicationSymbolsCannotInterposePrivateImplementation) {
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_STACK_TRACE) == 0

@@ -16,13 +16,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from build_tools.devtools import project_presubmit
+from build_tools.devtools import bazel_test_selection, project_presubmit
 
 PROJECT_NAME = "runtime"
 PROJECT_ROOT = "runtime/"
 CMAKE_TEST_REGEX = "^iree/"
 CMAKE_TEST_EXCLUDE_REGEX = "^iree/hal/drivers/task/executable/elf/elf_module_test$"
-GLOBAL_TEST_TRIGGERS = (
+GLOBAL_CMAKE_TRIGGERS = (
     "BUILD.bazel",
     "MODULE.bazel",
     ".bazelrc",
@@ -31,6 +31,15 @@ GLOBAL_TEST_TRIGGERS = (
 )
 BAZEL_TEST_EXCLUDES = (
     "-//runtime/src/iree/hal/drivers/task/executable/elf:elf_module_test",
+)
+
+
+BAZEL_TESTS = bazel_test_selection.TestSuite(
+    name=PROJECT_NAME,
+    targets=(
+        "//runtime/...",
+        *BAZEL_TEST_EXCLUDES,
+    ),
 )
 
 
@@ -52,7 +61,7 @@ def is_global_trigger(path: str) -> bool:
     if path.startswith("requirements") and path.endswith(".txt"):
         return True
     return any(
-        path == trigger or path.startswith(trigger) for trigger in GLOBAL_TEST_TRIGGERS
+        path == trigger or path.startswith(trigger) for trigger in GLOBAL_CMAKE_TRIGGERS
     )
 
 
@@ -63,7 +72,7 @@ def selected_files(files_from: str | None) -> list[str]:
         return [line.strip() for line in file_list if line.strip()]
 
 
-def should_run_tests(files_from: str | None) -> bool:
+def should_run_cmake_tests(files_from: str | None) -> bool:
     paths = selected_files(files_from)
     if not paths:
         return files_from is None
@@ -72,22 +81,10 @@ def should_run_tests(files_from: str | None) -> bool:
     )
 
 
-def bazel_test_command() -> list[str]:
-    return [
-        "bazel",
-        "test",
-        "--config=presubmit",
-        *project_presubmit.bazel_config_args(),
-        "--",
-        "//runtime/...",
-        *BAZEL_TEST_EXCLUDES,
-    ]
-
-
-def run_bazel_tests() -> bool:
-    return run_command(
-        bazel_test_command(),
-        "Bazel tests",
+def run_bazel_tests(files_from: str | None = None) -> bool:
+    return BAZEL_TESTS.run(
+        REPO_ROOT,
+        paths=selected_files(files_from) if files_from is not None else None,
     )
 
 
@@ -119,13 +116,10 @@ def main() -> int:
     args = parse_arguments()
     if not args.tests:
         return 0
-    if not should_run_tests(args.files_from):
-        print("runtime presubmit: no runtime-affecting files")
-        return 0
     if args.lane == "bazel":
-        ok = run_bazel_tests()
+        ok = run_bazel_tests(args.files_from)
     elif args.lane == "cmake":
-        ok = run_cmake_tests()
+        ok = not should_run_cmake_tests(args.files_from) or run_cmake_tests()
     else:
         raise ValueError(f"unknown lane: {args.lane}")
     return 0 if ok else 1

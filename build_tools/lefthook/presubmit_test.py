@@ -305,7 +305,7 @@ class PresubmitTest(unittest.TestCase):
                 ):
                     self.assertEqual(presubmit.run_build_file_check([path]), allowed)
 
-    def test_project_selection_uses_product_ownership(self):
+    def test_hygiene_and_cmake_selection_use_source_ownership(self):
         cases = (
             ("runtime/build_tools/presubmit.py", {"runtime"}),
             ("libamdf/build_tools/presubmit.py", {"libamdf"}),
@@ -334,7 +334,7 @@ class PresubmitTest(unittest.TestCase):
                     expected_projects,
                 )
 
-    def test_root_tools_do_not_broaden_affected_product_projects(self):
+    def test_root_tools_do_not_broaden_hygiene_and_cmake_projects(self):
         projects = presubmit.projects_for_paths(
             [
                 "build_tools/devtools/ci.py",
@@ -1290,8 +1290,9 @@ class PresubmitTest(unittest.TestCase):
 
     def test_bazel_source_label_for_path_preserves_package_relative_path(self):
         self.assertEqual(
-            presubmit.bazel_source_label_for_path(
-                "build_tools/bazel/test/cc_benchmark_smoke_test_fixture.c"
+            presubmit.bazel_test_selection.source_label(
+                presubmit.REPO_ROOT,
+                "build_tools/bazel/test/cc_benchmark_smoke_test_fixture.c",
             ),
             "//build_tools/bazel/test:cc_benchmark_smoke_test_fixture.c",
         )
@@ -1957,133 +1958,42 @@ class PresubmitTest(unittest.TestCase):
             scan.call_args.args[0], [presubmit.semgrep_scan_command(paths[:2])]
         )
 
-    def test_workflows_and_requirements_trigger_devtools_tests(self):
+    def test_workflows_and_requirements_trigger_checkout_checks(self):
         self.assertTrue(
-            presubmit.is_devtools_test_trigger(".github/workflows/docs.yml")
-        )
-        self.assertTrue(presubmit.is_devtools_test_trigger("requirements-analysis.in"))
-        self.assertTrue(
-            presubmit.is_devtools_test_trigger("requirements-analysis.lock.txt")
+            presubmit.is_devtools_checkout_trigger(".github/workflows/docs.yml")
         )
         self.assertTrue(
-            presubmit.is_devtools_test_trigger("loom/docs/requirements.lock.txt")
+            presubmit.is_devtools_checkout_trigger("requirements-analysis.in")
         )
-        self.assertFalse(presubmit.is_devtools_test_trigger("runtime/requirements.txt"))
-        self.assertFalse(presubmit.is_devtools_test_trigger("README.md"))
+        self.assertTrue(
+            presubmit.is_devtools_checkout_trigger("requirements-analysis.lock.txt")
+        )
+        self.assertTrue(
+            presubmit.is_devtools_checkout_trigger("loom/docs/requirements.lock.txt")
+        )
+        self.assertFalse(
+            presubmit.is_devtools_checkout_trigger("runtime/requirements.txt")
+        )
+        self.assertFalse(presubmit.is_devtools_checkout_trigger("README.md"))
 
-    def test_repository_tool_tests_follow_changed_file_ownership(self):
-        cases = (
-            (
-                ["runtime/src/iree/base/status.c"],
-                [],
-            ),
-            (
-                [".github/workflows/ci_libhrx.yml"],
-                [presubmit.DEVTOOLS_PRESUBMIT_TEST_TARGET],
-            ),
-            (
-                [".github/workflows/ci_iree.yml"],
-                [
-                    presubmit.DEVTOOLS_PRESUBMIT_TEST_TARGET,
-                    presubmit.CI_PRESUBMIT_TEST_TARGET,
-                ],
-            ),
-            (
-                [".github/workflows/presubmit.yml"],
-                [
-                    presubmit.DEVTOOLS_PRESUBMIT_TEST_TARGET,
-                    presubmit.LEFTHOOK_PRESUBMIT_TEST_TARGET,
-                ],
-            ),
-            (
-                ["build_tools/lefthook/presubmit.py"],
-                [presubmit.LEFTHOOK_PRESUBMIT_TEST_TARGET],
-            ),
-            (
-                ["build_tools/ci/github_actions_watch.py"],
-                [presubmit.CI_PRESUBMIT_TEST_TARGET],
-            ),
-            (
-                [presubmit.SEMGREP_CONFIG],
-                [presubmit.LEFTHOOK_PRESUBMIT_TEST_TARGET],
-            ),
-            (
-                [next(iter(presubmit.SEMGREP_TEST_PATHS))],
-                [presubmit.LEFTHOOK_PRESUBMIT_TEST_TARGET],
-            ),
-            (
-                ["build_tools/lefthook/README.md"],
-                [],
-            ),
-            (
-                ["runtime/build_tools/presubmit.py"],
-                ["//runtime/build_tools:presubmit_tests"],
-            ),
-            (
-                ["runtime/build_tools/BUILD.bazel"],
-                ["//runtime/build_tools:presubmit_tests"],
-            ),
-            (
-                ["libamdf/build_tools/presubmit.py"],
-                ["//libamdf/build_tools:presubmit_tests"],
-            ),
-            (
-                ["libamdf/build_tools/BUILD.bazel"],
-                ["//libamdf/build_tools:presubmit_tests"],
-            ),
-            (
-                ["runtime/build_tools/bazel/cc.bzl"],
-                [],
-            ),
-            (
-                ["loom/build_tools/linters/loom_source_lint.py"],
-                ["//loom/build_tools:presubmit_tests"],
-            ),
-            (
-                ["loom/build_tools/amdgpu/target_config.py"],
-                [],
-            ),
-            (
-                ["build_tools/devtools/project_presubmit.py"],
-                [
-                    presubmit.DEVTOOLS_PRESUBMIT_TEST_TARGET,
-                    "//runtime/build_tools:presubmit_tests",
-                    "//libamdf/build_tools:presubmit_tests",
-                    "//loom/build_tools:presubmit_tests",
-                ],
-            ),
-        )
-        for paths, expected_targets in cases:
-            with self.subTest(paths=paths):
-                self.assertEqual(
-                    presubmit.repository_tool_test_targets(paths),
-                    expected_targets,
+    def test_repository_policy_suites_preserve_platform_and_project_ownership(self):
+        for platform in ("linux", "win32", "darwin"):
+            with (
+                self.subTest(platform=platform),
+                mock.patch.object(presubmit.sys, "platform", platform),
+            ):
+                suite = presubmit.repository_test_suite()
+            self.assertEqual(
+                presubmit.CI_PRESUBMIT_TEST_TARGET in suite.manual_suites,
+                platform == "linux",
+            )
+            self.assertTrue(
+                all(
+                    project.presubmit_test_target in suite.manual_suites
+                    for project in presubmit.existing_project_scripts()
+                    if project.presubmit_test_target
                 )
-
-    def test_ci_presubmit_tests_follow_changed_inputs_on_linux(self):
-        cases = (
-            "build_tools/ci/github_actions_watch.py",
-            "build_tools/ci/github_actions_watch_test.py",
-            "build_tools/ci/BUILD.bazel",
-            ".github/scripts/check_rocm_environment.sh",
-            ".github/scripts/check_vulkan_hardware_environment.sh",
-            ".github/workflows/ci_iree.yml",
-        )
-        for path in cases:
-            for host_platform in ("linux", "win32", "darwin"):
-                with self.subTest(path=path, platform=host_platform):
-                    with mock.patch.object(presubmit.sys, "platform", host_platform):
-                        targets = presubmit.repository_tool_test_targets([path])
-                    self.assertEqual(
-                        presubmit.CI_PRESUBMIT_TEST_TARGET in targets,
-                        host_platform == "linux",
-                    )
-        for path in (".github/workflows/docs.yml", "build_tools/README.md"):
-            with self.subTest(path=path):
-                self.assertNotIn(
-                    presubmit.CI_PRESUBMIT_TEST_TARGET,
-                    presubmit.repository_tool_test_targets([path]),
-                )
+            )
 
     def test_existing_project_scripts_include_all_projects(self):
         self.assertEqual(
@@ -2091,7 +2001,8 @@ class PresubmitTest(unittest.TestCase):
             {project.name for project in presubmit.existing_project_scripts()},
         )
 
-    def test_repository_tool_tests_use_selected_execution_policy(self):
+    def test_repository_tools_receive_shared_inputs_and_execution_policy(self):
+        suite = presubmit.repository_test_suite()
         with (
             mock.patch.dict(
                 os.environ,
@@ -2102,25 +2013,46 @@ class PresubmitTest(unittest.TestCase):
                 },
                 clear=True,
             ),
+            mock.patch.object(presubmit, "repository_test_suite", return_value=suite),
             mock.patch.object(
-                presubmit,
-                "repository_tool_test_targets",
-                return_value=["//build_tools/performance:performance_test"],
-            ),
-            mock.patch.object(
-                presubmit, "run_command", return_value=True
-            ) as run_command,
+                presubmit.bazel_test_selection.TestSuite, "run", return_value=True
+            ) as run,
         ):
             self.assertTrue(
-                presubmit.run_repository_tool_tests(
-                    ["build_tools/performance/x.py"], False
-                )
+                presubmit.run_repository_tool_tests(["producer/input.c"], False)
             )
-
-        command = run_command.call_args.args[0]
-        self.assertEqual(command[:3], ["bazel", "test", "--config=presubmit"])
+            command = suite.test_command()
+        run.assert_called_once_with(
+            presubmit.REPO_ROOT, paths=["producer/input.c"], verbose=False
+        )
         self.assertIn("--config=remote-execution", command)
         self.assertIn("--config=local-tests", command)
+
+    def test_bazel_test_dispatch_reaches_all_projects_for_shared_inputs(self):
+        args = types.SimpleNamespace(
+            hygiene=False,
+            tests=True,
+            lane="bazel",
+            project_tests=True,
+            print_plan=False,
+            fix=False,
+            verbose=False,
+            static_analysis=False,
+            clang_tidy=False,
+        )
+        paths = ["producer/input.c"]
+        with (
+            mock.patch.object(
+                presubmit, "run_repository_tool_tests_for_lane", return_value=True
+            ),
+            mock.patch.object(
+                presubmit, "run_project_presubmits", return_value=True
+            ) as run,
+        ):
+            self.assertEqual(presubmit.run_presubmit(args, input_scope(paths), []), 0)
+        self.assertEqual(run.call_args.args[0], presubmit.existing_project_scripts())
+        self.assertEqual(run.call_args.args[1], paths)
+        self.assertEqual(run.call_args.kwargs["phase"], "tests")
 
     def test_cmake_tool_inputs_run_the_owned_ctest_package(self):
         build_dir = Path("build/cmake-test")

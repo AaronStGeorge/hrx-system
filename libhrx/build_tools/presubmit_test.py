@@ -9,6 +9,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -30,7 +32,7 @@ class LibhrxPresubmitTest(unittest.TestCase):
         cls.presubmit = load_presubmit_module()
 
     def test_bazel_tests_exclude_runtime_resource_requirements(self):
-        command = self.presubmit.bazel_test_command()
+        command = self.presubmit.BAZEL_TESTS.test_command()
 
         self.assertEqual(command[:3], ["bazel", "test", "--config=presubmit"])
         self.assertEqual(command[-1], "//libhrx/...")
@@ -38,6 +40,26 @@ class LibhrxPresubmitTest(unittest.TestCase):
             arg for arg in command if arg.startswith("--test_tag_filters=")
         )
         self.assertIn("-iree-run-requirement=runtime.resource.amd_gpu", tag_filter)
+
+    def test_bazel_selection_receives_inputs_outside_libhrx(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file_list = Path(directory) / "files.txt"
+            file_list.write_text("build_tools/shared/tool.py\n", encoding="utf-8")
+            args = types.SimpleNamespace(
+                tests=True, lane="bazel", files_from=str(file_list)
+            )
+            with (
+                mock.patch.object(self.presubmit, "parse_arguments", return_value=args),
+                mock.patch.object(
+                    self.presubmit.bazel_test_selection.TestSuite,
+                    "run",
+                    return_value=True,
+                ) as run,
+            ):
+                self.assertEqual(self.presubmit.main(), 0)
+            run.assert_called_once_with(
+                self.presubmit.REPO_ROOT, paths=["build_tools/shared/tool.py"]
+            )
 
     def test_bazel_tests_use_selected_execution_policy(self):
         with mock.patch.dict(
@@ -49,7 +71,7 @@ class LibhrxPresubmitTest(unittest.TestCase):
             },
             clear=True,
         ):
-            command = self.presubmit.bazel_test_command()
+            command = self.presubmit.BAZEL_TESTS.test_command()
 
         self.assertIn("--config=remote-execution", command)
         self.assertIn("--config=local-tests", command)

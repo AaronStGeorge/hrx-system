@@ -73,6 +73,9 @@ alias(
 cc_test(
     name = "symbol_isolation_test",
     srcs = ["symbol_isolation_test.cc"],
+    # Expose the application's interposing symbols and stack-frame witness
+    # independently of debug information or the executable's static symbols.
+    linkopts = ["-Wl,--export-dynamic"],
     linkstatic = False,
     target_compatible_with = ["@platforms//os:linux"],
     deps = [

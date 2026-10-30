@@ -7,8 +7,8 @@
 
 """Root presubmit dispatcher.
 
-The root owns repository-wide hygiene and maps changed files to project
-presubmit entry points. Project-specific test policy stays in each project.
+The root owns repository-wide hygiene and dispatches configured test selection
+to every project. Project-specific configuration stays in each project.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from urllib.request import url2pathname
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from build_tools.devtools import project_presubmit
+from build_tools.devtools import bazel_test_selection, project_presubmit
 from build_tools.devtools.bazel import (
     BazelSourceOwnerQueryError,
     clang_tidy_configuration_args,
@@ -186,11 +186,14 @@ CONFLICT_MARKER_PATTERN = re.compile(r"^(<<<<<<< .+|>>>>>>> .+)")
 
 @dataclass(frozen=True)
 class Project:
+    # Project name used in progress messages.
     name: str
+    # Source ownership boundary for hygiene and CMake validation.
     root: str
+    # Entry point owning project configuration and validation.
     script: str
+    # Explicit manual policy suite, separate from product tests.
     presubmit_test_target: str | None = None
-    presubmit_test_dependencies: tuple[str, ...] = ()
 
 
 PROJECTS = (
@@ -199,37 +202,24 @@ PROJECTS = (
         root="runtime/",
         script="runtime/build_tools/presubmit.py",
         presubmit_test_target="//runtime/build_tools:presubmit_tests",
-        presubmit_test_dependencies=(
-            "build_tools/devtools/BUILD.bazel",
-            "build_tools/devtools/project_presubmit.py",
-        ),
     ),
     Project(
         name="libamdf",
         root="libamdf/",
         script="libamdf/build_tools/presubmit.py",
         presubmit_test_target="//libamdf/build_tools:presubmit_tests",
-        presubmit_test_dependencies=(
-            "build_tools/devtools/BUILD.bazel",
-            "build_tools/devtools/project_presubmit.py",
-        ),
     ),
     Project(
         name="libhrx",
         root="libhrx/",
         script="libhrx/build_tools/presubmit.py",
+        presubmit_test_target="//libhrx/build_tools:presubmit_tests",
     ),
     Project(
         name="loom",
         root="loom/",
         script="loom/build_tools/presubmit.py",
         presubmit_test_target="//loom/build_tools:presubmit_tests",
-        presubmit_test_dependencies=(
-            "build_tools/devtools/BUILD.bazel",
-            "build_tools/devtools/project_presubmit.py",
-            "build_tools/devtools/source_lock.py",
-            "loom/build_tools/linters/loom_source_lint.py",
-        ),
     ),
 )
 
@@ -240,34 +230,13 @@ GLOBAL_PROJECT_TRIGGERS = (
     ".bazel_to_cmake.cfg.py",
     "requirements",
 )
-DEVTOOLS_TEST_TRIGGERS = (
+DEVTOOLS_CHECKOUT_TRIGGERS = (
     ".github/workflows/",
     "dev.py",
     "requirements-analysis",
     "requirements-dev",
     "loom/docs/requirements",
     "build_tools/devtools/",
-)
-LEFTHOOK_TEST_PATHS = frozenset(
-    {
-        ".github/workflows/presubmit.yml",
-        "lefthook.yml",
-        "build_tools/lefthook/BUILD.bazel",
-        "build_tools/lefthook/commit_msg.py",
-        "build_tools/lefthook/commit_msg_test.py",
-        "build_tools/lefthook/presubmit.py",
-        "build_tools/lefthook/presubmit_test.py",
-        SEMGREP_CONFIG,
-        *SEMGREP_TEST_PATHS,
-        "build_tools/devtools/source_lock.py",
-    }
-)
-CI_PRESUBMIT_TEST_PATHS = frozenset(
-    {
-        ".github/scripts/check_rocm_environment.sh",
-        ".github/scripts/check_vulkan_hardware_environment.sh",
-        ".github/workflows/ci_iree.yml",
-    }
 )
 DEVTOOLS_PRESUBMIT_TEST_TARGET = "//build_tools/devtools:presubmit_tests"
 LEFTHOOK_PRESUBMIT_TEST_TARGET = "//build_tools/lefthook:presubmit_tests"
@@ -1286,20 +1255,6 @@ def bazel_package_target_for_path(path: str) -> str | None:
     return None
 
 
-def bazel_source_label_for_path(path: str) -> str | None:
-    source_path = REPO_ROOT / path
-    current = source_path.parent
-    while current != current.parent:
-        if (current / "BUILD.bazel").is_file() or (current / "BUILD").is_file():
-            package = current.relative_to(REPO_ROOT).as_posix()
-            source_name = source_path.relative_to(current).as_posix()
-            return f"//{package}:{source_name}" if package else f"//:{source_name}"
-        if current == REPO_ROOT:
-            break
-        current = current.parent
-    return None
-
-
 def semgrep_jobs() -> int:
     configured_jobs = os.environ.get("IREE_SEMGREP_JOBS")
     if configured_jobs:
@@ -1624,8 +1579,8 @@ def projects_for_paths(paths: list[str]) -> list[Project]:
     projects = existing_project_scripts()
     if any(is_global_project_trigger(path) for path in paths):
         return projects
-    # Repository-root tools own focused test and CI contracts; they are not
-    # part of every product's local test contract.
+    # Source ownership scopes hygiene and CMake validation. Bazel test
+    # selection receives all changed paths in every project configuration.
     selected = []
     for project in projects:
         if any(path.startswith(project.root) for path in paths):
@@ -1685,62 +1640,29 @@ def run_project_presubmits(
     return ok
 
 
-def is_project_presubmit_test_trigger(project: Project, path: str) -> bool:
-    script_stem = project.script.removesuffix(".py")
-    build_file = project.script.rpartition("/")[0] + "/BUILD.bazel"
-    return path in (
-        project.script,
-        f"{script_stem}_test.py",
-        build_file,
-        *project.presubmit_test_dependencies,
+def repository_test_suite() -> bazel_test_selection.TestSuite:
+    manual_suites = [DEVTOOLS_PRESUBMIT_TEST_TARGET, LEFTHOOK_PRESUBMIT_TEST_TARGET]
+    if sys.platform == "linux":
+        manual_suites.append(CI_PRESUBMIT_TEST_TARGET)
+    manual_suites.extend(
+        project.presubmit_test_target
+        for project in existing_project_scripts()
+        if project.presubmit_test_target
     )
-
-
-def repository_tool_test_targets(paths: list[str]) -> list[str]:
-    targets = []
-    if any(is_devtools_test_trigger(path) for path in paths):
-        targets.append(DEVTOOLS_PRESUBMIT_TEST_TARGET)
-    if any(is_lefthook_test_trigger(path) for path in paths):
-        targets.append(LEFTHOOK_PRESUBMIT_TEST_TARGET)
-    if sys.platform == "linux" and any(
-        path.startswith("build_tools/ci/") or path in CI_PRESUBMIT_TEST_PATHS
-        for path in paths
-    ):
-        targets.append(CI_PRESUBMIT_TEST_TARGET)
-    for project in existing_project_scripts():
-        if project.presubmit_test_target and any(
-            is_project_presubmit_test_trigger(project, path) for path in paths
-        ):
-            targets.append(project.presubmit_test_target)
-    return targets
+    return bazel_test_selection.TestSuite(
+        name="repository tools",
+        targets=("//build_tools/...",),
+        manual_suites=tuple(manual_suites),
+    )
 
 
 def run_repository_tool_tests(paths: list[str], verbose: bool) -> bool:
-    test_targets = repository_tool_test_targets(paths)
-    if not test_targets:
-        return skip_step("Repository tool tests", "no repository tool inputs")
-    ok = True
-    ok = (
-        run_command(
-            [
-                "bazel",
-                "test",
-                "--config=presubmit",
-                *project_presubmit.bazel_config_args(),
-                *test_targets,
-            ],
-            "Repository tool Bazel tests",
-            verbose,
-        )
-        and ok
-    )
-    if DEVTOOLS_PRESUBMIT_TEST_TARGET in test_targets:
+    ok = repository_test_suite().run(REPO_ROOT, paths=paths, verbose=verbose)
+    # This smoke checks launchers and local checkout state outside Bazel.
+    if any(is_devtools_checkout_trigger(path) for path in paths):
         ok = (
             run_command(
-                [
-                    "python",
-                    "build_tools/devtools/cli_smoke_test.py",
-                ],
+                ["python", "build_tools/devtools/cli_smoke_test.py"],
                 "Root devtools command smoke test",
                 verbose,
             )
@@ -1756,7 +1678,7 @@ def run_repository_tool_tests_for_lane(
         return run_repository_tool_tests(paths, verbose)
     if lane != "cmake":
         raise ValueError(f"unknown lane: {lane}")
-    has_devtools_inputs = any(is_devtools_test_trigger(path) for path in paths)
+    has_devtools_inputs = any(is_devtools_checkout_trigger(path) for path in paths)
     has_cmake_tool_inputs = any(
         path.startswith(CMAKE_TOOL_TEST_PATH_PREFIX) for path in paths
     )
@@ -1811,19 +1733,15 @@ def run_repository_tool_tests_for_lane(
     return ok
 
 
-def is_devtools_test_trigger(path: str) -> bool:
+def is_devtools_checkout_trigger(path: str) -> bool:
     if path.startswith("requirements-") and (
         path.endswith(".in") or path.endswith(".lock.txt")
     ):
         return True
     return any(
         path == trigger or path.startswith(trigger)
-        for trigger in DEVTOOLS_TEST_TRIGGERS
+        for trigger in DEVTOOLS_CHECKOUT_TRIGGERS
     )
-
-
-def is_lefthook_test_trigger(path: str) -> bool:
-    return path in LEFTHOOK_TEST_PATHS
 
 
 def run_semgrep(inputs: PresubmitInputs, profile: str, verbose: bool) -> bool:
@@ -2588,7 +2506,7 @@ def run_clang_tidy(
         translation_unit_labels = {
             label
             for label in (
-                bazel_source_label_for_path(path)
+                bazel_test_selection.source_label(REPO_ROOT, path)
                 for path in candidate_files
                 if Path(path).suffix in CLANG_TIDY_TRANSLATION_UNIT_EXTENSIONS
             )
@@ -2748,6 +2666,11 @@ def print_plan(
     else:
         print("  projects: none")
     print(f"  project tests: {'enabled' if args.project_tests else 'disabled'}")
+    if args.tests and args.project_tests and args.lane == "bazel":
+        print(
+            "  dependency selection: "
+            + ", ".join(project.name for project in existing_project_scripts())
+        )
     sys.stdout.flush()
 
 
@@ -2851,9 +2774,12 @@ def run_presubmit(
             and ok
         )
         if args.project_tests:
+            test_projects = (
+                existing_project_scripts() if args.lane == "bazel" else projects
+            )
             ok = (
                 run_project_presubmits(
-                    projects,
+                    test_projects,
                     paths,
                     fix=args.fix,
                     verbose=args.verbose,

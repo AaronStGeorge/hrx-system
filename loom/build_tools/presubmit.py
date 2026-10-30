@@ -10,11 +10,9 @@
 from __future__ import annotations
 
 import argparse
-import re
 import subprocess
 import sys
-import tempfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
@@ -23,7 +21,7 @@ sys.path.insert(0, str(REPO_ROOT / "loom/py"))
 from loom.gen import checked_in_artifacts
 from loom.tools.source_inventory import is_format_source_path, is_lint_source_path
 
-from build_tools.devtools import project_presubmit
+from build_tools.devtools import bazel_test_selection, project_presubmit
 from build_tools.devtools.command_line import batch_path_commands
 from build_tools.devtools.source_lock import NonEmptyTrackedFileSnapshot
 from loom.build_tools import target_presets
@@ -70,12 +68,10 @@ BAZEL_TEST_CONFIGURATION_ARGS = (
     "--config=presubmit",
     *BAZEL_CONFIGURATION_ARGS,
 )
-BAZEL_FULL_TEST_TARGET = "//loom/..."
-# Match the execution tag filter before configured dependency analysis: manual
-# SDK tests can require configurations that ordinary presubmits do not select.
-BAZEL_TESTS_QUERY = (
-    f"let tests = tests({BAZEL_FULL_TEST_TARGET}) in "
-    r'$tests except attr(tags, "(^|, |\[)manual(,|\]|$)", $tests)'
+BAZEL_TESTS = bazel_test_selection.TestSuite(
+    name=PROJECT_NAME,
+    targets=("//loom/...",),
+    configuration_args=BAZEL_TEST_CONFIGURATION_ARGS,
 )
 LOOM_FORMAT_BAZEL_TARGET = "//loom/src/loom/tools/loom-format:loom-format"
 LOOM_FORMAT_CMAKE_TARGET = "loom::tools::loom-format"
@@ -364,195 +360,11 @@ def run_cmake_source_lint(*, files_from: str | None) -> bool:
     return public_lint_ok and repository_lint_ok
 
 
-def bazel_test_command(target_pattern_file: Path | None = None) -> list[str]:
-    command = [
-        "bazel",
-        "test",
-        *BAZEL_TEST_CONFIGURATION_ARGS,
-        *project_presubmit.bazel_config_args(),
-        "--test_tag_filters=-manual",
-    ]
-    if target_pattern_file is None:
-        command.append(BAZEL_FULL_TEST_TARGET)
-    else:
-        # Query-expanded affected tests have the same compatibility selection
-        # semantics as the full suite, not user-explicit target intent.
-        command.append("--skip_incompatible_explicit_targets")
-        command.append(f"--target_pattern_file={target_pattern_file}")
-    return command
-
-
-def bazel_source_label(path: str) -> str | None:
-    source_path = PurePosixPath(path)
-    if (
-        "\\" in path
-        or source_path.as_posix() != path
-        or ".." in source_path.parts
-        or not path.startswith(PROJECT_ROOT)
-    ):
-        return None
-
-    directory = (REPO_ROOT / source_path).parent
-    while directory != REPO_ROOT:
-        if (directory / "BUILD.bazel").is_file() or (directory / "BUILD").is_file():
-            package_path = directory.relative_to(REPO_ROOT).as_posix()
-            source_name = (REPO_ROOT / source_path).relative_to(directory).as_posix()
-            return f"//{package_path}:{source_name}"
-        directory = directory.parent
-    return None
-
-
-def bazel_node_label(node: str) -> str:
-    separator = node.rfind(" (")
-    if separator < 0 or not node.endswith(")"):
-        raise ValueError(f"malformed configured Bazel node: {node}")
-    return node[:separator]
-
-
-def affected_bazel_test_query(test_targets: set[str], source_labels: set[str]) -> str:
-    """Selects tests through their configured dependencies, including transitions."""
-    # Filter the analyzed closure instead of resolving changed paths as target
-    # patterns: deleted, untracked, or configuration-excluded files may have no
-    # node. Query strings preserve backslashes rather than decoding JSON escapes.
-    source_pattern = "|".join(re.escape(label) for label in sorted(source_labels))
-    source_pattern = source_pattern.replace('"', r"\x22")
-    return (
-        "let tests = set(\n  " + "\n  ".join(sorted(test_targets)) + ") in\n"
-        "let dependencies = deps($tests) in\n"
-        "$tests intersect rdeps($dependencies, "
-        f'filter("^({source_pattern})$", $dependencies))\n'
-    )
-
-
-class BazelDependencyQueryError(RuntimeError):
-    pass
-
-
-def query_affected_bazel_test_targets(source_labels: set[str]) -> list[str]:
-    with tempfile.TemporaryDirectory(prefix="loom-bazel-affected-") as temp_dir:
-        temp_path = Path(temp_dir)
-        # Enumerating concrete test rules first keeps cquery from analyzing
-        # non-test support targets under //loom/... that are intentionally
-        # invalid outside their analysis tests. The configured graph then
-        # preserves select() decisions made by the presubmit configuration.
-        test_targets_path = temp_path / "test_targets.txt"
-        if not run_command(
-            [
-                "bazel",
-                "query",
-                "--output=label",
-                f"--output_file={test_targets_path}",
-                BAZEL_TESTS_QUERY,
-            ],
-            "Discover Bazel test targets",
-        ):
-            raise BazelDependencyQueryError("failed to discover Bazel test targets")
-        test_targets = {
-            line.strip()
-            for line in test_targets_path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        }
-        if not test_targets:
-            raise BazelDependencyQueryError("Bazel reported no Loom test targets")
-
-        query_path = temp_path / "test_dependencies.query"
-        query_path.write_text(
-            affected_bazel_test_query(test_targets, source_labels),
-            encoding="utf-8",
-        )
-        affected_targets_path = temp_path / "affected_targets.txt"
-        if not run_command(
-            [
-                "bazel",
-                "cquery",
-                *BAZEL_TEST_CONFIGURATION_ARGS,
-                *project_presubmit.bazel_config_args(),
-                # Explicit aspect nodes preserve reverse edges. Flattening an
-                # aspect's forward dependencies during rdeps can select siblings
-                # that do not depend on the changed file.
-                "--experimental_explicit_aspects",
-                "--output=label",
-                f"--query_file={query_path}",
-                f"--output_file={affected_targets_path}",
-            ],
-            "Resolve Bazel test dependencies",
-        ):
-            raise BazelDependencyQueryError(
-                "failed to resolve configured Bazel test dependencies"
-            )
-        try:
-            targets = sorted(
-                {
-                    bazel_node_label(line)
-                    for line in affected_targets_path.read_text(
-                        encoding="utf-8"
-                    ).splitlines()
-                    if line
-                }
-            )
-        except (OSError, ValueError) as exc:
-            raise BazelDependencyQueryError(
-                f"failed to read configured Bazel test dependencies: {exc}"
-            ) from exc
-        print(
-            "loom presubmit: Bazel dependency graph selected "
-            f"{len(targets)} of {len(test_targets)} tests"
-        )
-        return targets
-
-
-def selected_bazel_test_targets(paths: list[str]) -> list[str] | None:
-    # Build and Starlark edits change the dependency graph itself, so no source
-    # label in the configured graph can bound their effects.
-    if any(
-        is_global_trigger(path)
-        or PurePosixPath(path).name in ("BUILD", "BUILD.bazel")
-        or path.endswith(".bzl")
-        for path in paths
-    ):
-        return None
-    source_labels = set()
-    for path in paths:
-        if not path.startswith(PROJECT_ROOT):
-            continue
-        source_label = bazel_source_label(path)
-        if source_label is not None:
-            source_labels.add(source_label)
-    if not source_labels:
-        return []
-    return query_affected_bazel_test_targets(source_labels)
-
-
-def run_affected_bazel_tests(targets: list[str]) -> bool:
-    with tempfile.TemporaryDirectory(prefix="loom-bazel-test-targets-") as temp_dir:
-        target_file_path = Path(temp_dir) / "targets.txt"
-        target_file_path.write_text(
-            "".join(f"{target}\n" for target in targets), encoding="utf-8"
-        )
-        return run_command(
-            bazel_test_command(target_file_path),
-            "Bazel tests",
-            success_exit_codes=(0, 4),
-        )
-
-
 def run_bazel_tests(files_from: str | None = None) -> bool:
-    if files_from is None:
-        return run_command(bazel_test_command(), "Bazel tests")
-
-    try:
-        selected_targets = selected_bazel_test_targets(selected_files(files_from))
-    except BazelDependencyQueryError as exc:
-        print(f"loom presubmit: {exc}", file=sys.stderr)
-        return False
-    if selected_targets is None:
-        return run_command(bazel_test_command(), "Bazel tests")
-    if not selected_targets:
-        print("loom presubmit: no Bazel tests depend on the selected files")
-        return True
-    # Bazel reports exit 4 when every selected test is excluded by the resource
-    # and manual tag filters.
-    return run_affected_bazel_tests(selected_targets)
+    return BAZEL_TESTS.run(
+        REPO_ROOT,
+        paths=selected_files(files_from) if files_from is not None else None,
+    )
 
 
 def run_cmake_tests() -> bool:
@@ -582,11 +394,9 @@ def run_cmake_tests() -> bool:
 def run_presubmit(args: argparse.Namespace) -> int:
     if not args.hygiene and not args.tests:
         return 0
-    if not should_run_presubmit(args.files_from):
-        print("loom presubmit: no Loom-affecting files")
-        return 0
+    project_inputs = should_run_presubmit(args.files_from)
     ok = True
-    if args.hygiene:
+    if args.hygiene and project_inputs:
         ok = run_generated_artifact_maintenance(args.fix, args.files_from) and ok
         ok = (
             run_source_format_maintenance(
@@ -606,7 +416,7 @@ def run_presubmit(args: argparse.Namespace) -> int:
         if args.lane == "bazel":
             ok = run_bazel_tests(args.files_from) and ok
         elif args.lane == "cmake":
-            ok = run_cmake_tests() and ok
+            ok = (not project_inputs or run_cmake_tests()) and ok
         else:
             raise ValueError(f"unknown lane: {args.lane}")
     return 0 if ok else 1
