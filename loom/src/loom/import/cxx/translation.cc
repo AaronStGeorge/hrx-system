@@ -32,6 +32,7 @@
 
 #include "iree/base/api.h"
 #include "loom/import/cxx/binding/assumptions.h"
+#include "loom/import/cxx/binding/command_programs.h"
 #include "loom/import/cxx/binding/config.h"
 #include "loom/import/cxx/binding/constexpr.h"
 #include "loom/import/cxx/binding/exponent.h"
@@ -61,6 +62,7 @@
 #include "loom/import/cxx/value/types.h"
 #include "loom/import/cxx/value/vector.h"
 #include "loom/ir/module.h"
+#include "loom/ops/command/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/global/ops.h"
 #include "loom/ops/index/ops.h"
@@ -95,11 +97,13 @@ class Translator final : private Initialization::Evaluation {
         initialization_(unit, diagnostics, types_, scalars_, vectors_, storage_,
                         objects_, value_arena_, locations_, builder_, *this),
         launches_(unit, diagnostics),
+        command_programs_(unit, diagnostics),
         intrinsics_(unit, diagnostics, types_, scalars_, vectors_, locations_,
                     names_, launches_, function_contracts_, module),
         functions_(unit, diagnostics, module, immutable_objects_, intrinsics_,
-                   launches_, configs_, fastmath_, function_contracts_,
-                   target_definitions_, template_definitions_, names_),
+                   launches_, command_programs_, configs_, fastmath_,
+                   function_contracts_, target_definitions_,
+                   template_definitions_, names_),
         options_(options),
         default_fastmath_flags_(options.fp_model == LOOM_CXX_FP_MODEL_FAST
                                     ? LOOM_SCALAR_FASTMATHFLAGS_FAST
@@ -544,6 +548,34 @@ class Translator final : private Initialization::Evaluation {
     return value_arena_.capture(partition, components);
   }
 
+  Value command_region_value(loom_region_t* region,
+                             const CommandProgramProjection& program,
+                             const CommandParameterProjection& parameter,
+                             const Partition& partition) {
+    auto* block = loom_region_entry_block(region);
+    auto arguments =
+        std::span<const loom_value_id_t>(block->arg_ids, block->arg_count);
+    if (!parameter.binding_ordinal) {
+      return value_arena_.capture(
+          partition, arguments.subspan(parameter.specialization_offset,
+                                       parameter.component_count));
+    }
+    const size_t binding_index =
+        program.specialization_count + *parameter.binding_ordinal;
+    if (!parameter.specialization_count) {
+      return value_arena_.capture(partition,
+                                  arguments.subspan(binding_index, 1));
+    }
+    std::array<loom_value_id_t, LOOM_TYPE_MAX_RANK + 2> components;
+    IREE_ASSERT_LE(parameter.component_count, components.size());
+    std::copy_n(arguments.begin() + parameter.specialization_offset,
+                parameter.specialization_count, components.begin());
+    components[parameter.specialization_count] = arguments[binding_index];
+    return value_arena_.capture(
+        partition, std::span<const loom_value_id_t>(components.data(),
+                                                    parameter.component_count));
+  }
+
   loom_value_id_t result(loom_op_t* op, const std::string& hint = "") {
     auto value = loom_op_results(op)[0];
     return hint.empty() ? value : name(value, hint);
@@ -787,8 +819,14 @@ class Translator final : private Initialization::Evaluation {
                             partition.kind == ValueKind::Pointer;
       // Only pointers change representation at kernel entry: the ABI supplies
       // one buffer, and source pointer transport adds its zero byte origin.
-      auto value = region_value(region, argument_index,
-                                kernel_pointer ? kSSAPartition : partition);
+      auto value =
+          defined.kind == FunctionKind::CommandProgram
+              ? command_region_value(
+                    region, *defined.command_program,
+                    defined.command_program->parameters[parameter_index],
+                    partition)
+              : region_value(region, argument_index,
+                             kernel_pointer ? kSSAPartition : partition);
       if (kernel_pointer) {
         auto buffer = value.ssa();
         if (!defined.parameter_contracts.empty()) {
@@ -834,6 +872,9 @@ class Translator final : private Initialization::Evaluation {
     loom_op_t* terminator;
     if (returned.unreachable) {
       check(loom_func_unreachable_build(
+          &builder_, locations_.get(returned.source), &terminator));
+    } else if (defined.kind == FunctionKind::CommandProgram) {
+      check(loom_command_return_build(
           &builder_, locations_.get(returned.source), &terminator));
     } else if (defined.kind == FunctionKind::Kernel) {
       check(loom_kernel_return_build(&builder_, locations_.get(returned.source),
@@ -4970,6 +5011,8 @@ class Translator final : private Initialization::Evaluation {
   Initialization initialization_;
   // Admitted launch contracts, including bounds from function redeclarations.
   LaunchContracts launches_;
+  // Command annotations and the retained source/native signature permutation.
+  CommandPrograms command_programs_;
   // Retained generated operation bindings for reached source declarations.
   Intrinsics intrinsics_;
   // Literal admission records one batch for source-boundary verification.

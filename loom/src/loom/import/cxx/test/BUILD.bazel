@@ -88,6 +88,8 @@ loom_check_test_suite(
         "check_typed_expectations_invalid.cxx-test",
         "class_conversions.cxx-test",
         "class_conversions_invalid.cxx-test",
+        "command_programs.cxx-test",
+        "command_programs_invalid.cxx-test",
         "condition_declarations.cxx-test",
         "condition_loop_cleanup.cxx-test",
         "conditionals.cxx-test",

@@ -1,0 +1,56 @@
+// RUN: verify
+// ERROR@+1: LOWERING/059 "command_program requires a concrete non-variadic void namespace-scope function"
+[[loom::command_program]] unsigned bad_result() { return 0u; }
+
+// ====
+// ERROR@+2: LOWERING/059 "command_program requires a concrete non-variadic void namespace-scope function"
+template <typename T>
+[[loom::command_program]] void pattern(T value) { (void)value; }
+
+// ====
+// ERROR@+1: LOWERING/059 "launch requires a leading command_program parameter attribute"
+void ordinary([[loom::launch]] unsigned value) { (void)value; }
+
+// ====
+#include <loomcxx/buffer.h>
+namespace loomt = loom::type;
+using Bytes = loomt::buffer<unsigned char>;
+// ERROR@+1: LOWERING/059 "one launch boundary is allowed per command declaration"
+[[loom::command_program]] void repeated([[loom::launch]] Bytes input, [[loom::launch]] Bytes output) {
+  (void)input;
+  (void)output;
+}
+
+// ====
+#include <loomcxx/buffer.h>
+[[loom::command_program]] void conflict(unsigned value, [[loom::launch]] loom::type::buffer<unsigned char> output);
+// ERROR@+1: LOWERING/059 "conflicting launch boundaries across command redeclarations"
+[[loom::command_program]] void conflict([[loom::launch]] unsigned value, loom::type::buffer<unsigned char> output) {
+  (void)value;
+  (void)output;
+}
+
+// ====
+// ERROR@+1: LOWERING/059 "launch-bound command_program parameters require a direct loom::type::buffer or loom::type::view value"
+[[loom::command_program]] void scalar_binding([[loom::launch]] unsigned value) { (void)value; }
+
+// ====
+// ERROR@+1: LOWERING/059 "command_program parameters require non-reference, non-volatile value types"
+[[loom::command_program]] void referenced(unsigned& value) { (void)value; }
+
+// ====
+// ERROR@+1: LOWERING/059 "command_program takes no argument clause"
+[[loom::command_program("bad")]] void arguments() {}
+
+// ====
+// ERROR@+1: LOWERING/059 "command_program cannot be combined with another callable kind"
+[[loom::command_program, loom::kernel]] void conflicting_kinds() {}
+
+// ====
+#include <loomcxx/view.h>
+namespace loomt = loom::type;
+using Output = loomt::view<loomt::shape<4>, float>;
+[[loom::command_program]] void ordinary_write([[loom::launch]] Output output) {
+  // ERROR@+1: STRUCTURE/053 "'view.store' has effects that are neither deterministic read-only preparation nor an explicit command"
+  loom::view::store(1.0f, output, 0u);
+}

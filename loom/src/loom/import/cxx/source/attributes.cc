@@ -31,6 +31,13 @@ void reject_misplaced_binding_attributes(
               "import bindings require namespace-scope functions "
               "with a leading attribute");
         }
+        if (name == "command_program" &&
+            scope != BindingAttributeScope::Declaration) {
+          diagnostics.reject(
+              unit, attribute,
+              "command_program requires a namespace-scope function with a "
+              "leading attribute");
+        }
         if (name == "config" && scope != BindingAttributeScope::Declaration) {
           diagnostics.reject(unit, attribute,
                              "config bindings require namespace-scope scalar "
@@ -50,11 +57,19 @@ void reject_misplaced_binding_attributes(
               "leading attribute");
         }
         if ((name == "assume_aligned" || name == "noalias") &&
-            scope != BindingAttributeScope::Parameter) {
+            scope != BindingAttributeScope::Parameter &&
+            scope != BindingAttributeScope::CommandParameter) {
           diagnostics.reject(
               unit, attribute,
               std::string(name) +
                   " requires a leading pointer parameter attribute");
+        }
+        if (name == "launch" &&
+            scope != BindingAttributeScope::CommandParameter) {
+          diagnostics.reject(
+              unit, attribute,
+              "launch requires a leading command_program parameter "
+              "attribute");
         }
         if (name == "constexpr" &&
             scope != BindingAttributeScope::LocalDeclaration) {
@@ -90,7 +105,8 @@ void reject_misplaced_binding_attributes(
 void reject_misplaced_binding_declarator(
     cxx::TranslationUnit& unit, Diagnostics& diagnostics,
     cxx::DeclaratorAST* declarator,
-    cxx::FunctionDeclaratorChunkAST* parameter_owner) {
+    cxx::FunctionDeclaratorChunkAST* parameter_owner,
+    BindingAttributeScope parameter_scope) {
   if (!declarator) {
     return;
   }
@@ -108,7 +124,7 @@ void reject_misplaced_binding_declarator(
   } else if (auto* nested = cxx::ast_cast<cxx::NestedDeclaratorAST>(
                  declarator->coreDeclarator)) {
     reject_misplaced_binding_declarator(unit, diagnostics, nested->declarator,
-                                        parameter_owner);
+                                        parameter_owner, parameter_scope);
   } else if (auto* bitfield = cxx::ast_cast<cxx::BitfieldDeclaratorAST>(
                  declarator->coreDeclarator)) {
     reject_misplaced_binding_attributes(unit, diagnostics,
@@ -134,7 +150,7 @@ void reject_misplaced_binding_declarator(
              function->parameterDeclarationClause->parameterDeclarationList}) {
       reject_misplaced_binding_attributes(
           unit, diagnostics, parameter->attributeList,
-          function == parameter_owner ? BindingAttributeScope::Parameter
+          function == parameter_owner ? parameter_scope
                                       : BindingAttributeScope::Local);
       reject_misplaced_binding_declarator(unit, diagnostics,
                                           parameter->declarator);
