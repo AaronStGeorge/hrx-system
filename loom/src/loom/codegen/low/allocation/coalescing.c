@@ -1253,6 +1253,21 @@ loom_low_allocation_coalescing_has_assigned_downstream_edge_destination(
   return false;
 }
 
+// A destination can be defined after the edge while sharing storage acquired
+// earlier by a required alias. Only the canonical storage lifetime establishes
+// whether a reservation is wholly in the future.
+static bool loom_low_allocation_coalescing_destination_storage_is_future(
+    const loom_low_allocation_coalescing_context_t* context,
+    const loom_low_placement_relation_t* relation) {
+  const loom_value_ordinal_t* origins =
+      context->placement->tied_storage_origins_by_value_ordinal;
+  const loom_value_ordinal_t origin = origins != NULL
+                                          ? origins[relation->result_ordinal]
+                                          : relation->result_ordinal;
+  return context->search_context->unit_liveness->values[origin]
+             .acquisition_start_point >= relation->write_point;
+}
+
 static bool loom_low_allocation_coalescing_is_forward_branch_alias_relation(
     const loom_low_allocation_coalescing_context_t* context,
     const loom_low_placement_relation_t* relation) {
@@ -1264,9 +1279,8 @@ static bool loom_low_allocation_coalescing_is_forward_branch_alias_relation(
              context, relation) &&
          !loom_low_allocation_coalescing_has_assigned_downstream_edge_destination(
              context, relation->result_ordinal) &&
-         context->search_context->unit_liveness
-                 ->values[relation->result_ordinal]
-                 .acquisition_start_point >= relation->write_point;
+         loom_low_allocation_coalescing_destination_storage_is_future(context,
+                                                                      relation);
 }
 
 typedef enum loom_low_allocation_concat_source_result_e {
@@ -1371,8 +1385,8 @@ loom_low_allocation_coalescing_assign_concat_source_relation(
           destination->unit_count == result_interval->unit_count &&
           loom_liveness_value_class_equal(destination->value_class,
                                           result_interval->value_class) &&
-          context->search_context->unit_liveness->values[edge->result_ordinal]
-                  .acquisition_start_point >= edge->write_point &&
+          loom_low_allocation_coalescing_destination_storage_is_future(context,
+                                                                       edge) &&
           (destination_assignment != NULL ||
            loom_low_allocation_target_constraints_fixed_value_for_value_ordinal(
                context->target_constraints, edge->result_ordinal) == NULL) &&
