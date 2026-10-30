@@ -697,6 +697,38 @@ class PresubmitTest(unittest.TestCase):
                 )
             self.assertIn("MODULE.cmake.lock is stale", output.getvalue())
 
+    def test_package_boundary_check_uses_selected_file_scope(self):
+        paths = ["project/source.cc", "project/nested/BUILD.bazel"]
+        with mock.patch.object(
+            presubmit.package_boundary,
+            "check_touched_packages",
+            return_value=True,
+        ) as check:
+            self.assertTrue(presubmit.run_package_boundary_check(paths, verbose=False))
+
+        check.assert_called_once_with(
+            presubmit.REPO_ROOT,
+            paths,
+            verbose=False,
+        )
+
+    def test_hygiene_runs_package_boundary_check(self):
+        paths = ["project/source.cc"]
+        with (
+            mock.patch.object(presubmit, "run_command", return_value=True),
+            mock.patch.object(presubmit, "run_inline_check", return_value=True),
+            mock.patch.object(presubmit, "run_buildifier", return_value=True),
+            mock.patch.object(
+                presubmit, "run_package_boundary_check", return_value=True
+            ) as check,
+            mock.patch.object(presubmit, "run_ruff", return_value=True),
+            mock.patch.object(presubmit, "run_clang_format", return_value=True),
+            mock.patch.object(presubmit, "run_amdgpu_target_map", return_value=True),
+        ):
+            self.assertTrue(presubmit.run_hygiene(paths, fix=False, verbose=False))
+
+        check.assert_called_once_with(paths, verbose=False)
+
     def test_clang_tidy_candidates_require_configured_prefix_and_extension(self):
         with (
             mock.patch.object(presubmit, "CLANG_TIDY_PATH_PREFIXES", ("project/src/",)),

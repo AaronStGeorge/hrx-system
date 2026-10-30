@@ -326,12 +326,12 @@ format's `warningsList` accepts category names, not the CLI shorthand `all`.
 
 ### Bazel Package Boundaries
 
-The package-boundary checker maps selected paths to their nearest `BUILD.bazel`,
-queries those packages as expanded Bazel XML, and reports source labels that
-contain a descendant directory. It is not part of automatic presubmit
-validation. A directory contributing build inputs is a package ownership
-boundary: give it a `BUILD.bazel` and reference its targets instead of reaching
-through the parent package.
+Changed-file hygiene maps every selected path to its nearest `BUILD.bazel`,
+queries those packages as expanded Bazel XML, and rejects source labels that
+contain a descendant directory. `--all` supplies every tracked path and checks
+the complete package graph. A directory contributing build inputs is a package
+ownership boundary: give it a `BUILD.bazel` and reference its targets instead
+of reaching through the parent package.
 
 Some source trees are intentionally one ownership unit even though their
 installed or embedded layout contains directories. Those packages declare the
