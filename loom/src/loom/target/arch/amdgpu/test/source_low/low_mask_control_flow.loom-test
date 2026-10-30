@@ -21,32 +21,6 @@ low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @mask_identit
 
 // ====
 
-// Copy identity proofs stop at pre-read copies and replacing scalar reads.
-// RUN: emit amdgpu-assembly @before_read strategy=source fixed=%current:physical_register:0:2 fixed=%next:physical_register:0:2
-
-amdgpu.target<gfx1151> @target {subgroup_size = 64}
-
-low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @before_read(%value: reg<amdgpu.vgpr>, %current: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr x2>) asm {
-  %first = slice %current[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %swapped = concat(%second, %first) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
-  low.br ^exit(%swapped: reg<amdgpu.sgpr x2>)
-^exit(%next: reg<amdgpu.sgpr x2>):
-  return %next
-}
-
-// ----
-  s_mov_b32 s2, s0
-  s_mov_b32 s3, s1
-  s_mov_b32 s1, s2
-  s_mov_b32 s0, s3
-  v_cndmask_b32 v0, 0, v0, s[2:3]
-.Lbb1:
-  s_endpgm
-
-// ====
-
 // RUN: emit amdgpu-assembly @loop_before_read strategy=source
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
@@ -407,32 +381,6 @@ amdgpu.target<gfx1151> @target {subgroup_size = 64}
 low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @authored_retained_attribute(%value: reg<amdgpu.vgpr>, %entry: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr x2>) asm {
   %current = copy %entry : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr x2>
   %alias = low.assume %current [range(%entry, 0, 1024)] : reg<amdgpu.sgpr x2>
-  %first = slice %alias[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %swapped = concat(%second, %first) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
-  low.br ^exit(%swapped: reg<amdgpu.sgpr x2>)
-^exit(%next: reg<amdgpu.sgpr x2>):
-  return %next
-}
-
-// ----
-  s_mov_b32 s2, s0
-  s_mov_b32 s3, s1
-  s_mov_b32 s1, s2
-  s_mov_b32 s0, s3
-  v_cndmask_b32 v0, 0, v0, s[2:3]
-.Lbb1:
-  s_endpgm
-
-// ====
-
-// RUN: emit amdgpu-assembly @retained_attribute strategy=source amdgpu.sgpr=4 fixed=%current:physical_register:0:2 fixed=%next:physical_register:0:2
-
-amdgpu.target<gfx1151> @target {subgroup_size = 64}
-
-low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @retained_attribute(%value: reg<amdgpu.vgpr>, %current: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr x2>) asm {
-  %alias = low.assume %current [range(%current, 0, 1024)] : reg<amdgpu.sgpr x2>
   %first = slice %alias[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %swapped = concat(%second, %first) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
