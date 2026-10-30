@@ -64,7 +64,7 @@ LOOM_CHECK_CASE(negative_offset) {
 void ordinary(unsigned* output) { output[0] = 7; }
 LOOM_CHECK_CASE(not_a_kernel) {
   const auto storage = loom::check::fill<1, unsigned>(0u);
-  // ERROR@+1: LOWERING/059 "kernel.launch requires a kernel as its first template argument"
+  // ERROR@+1: LOWERING/059 "kernel.launch requires a kernel or kernel-scoped pipeline as its first template argument"
   loom::check::launch<ordinary>(storage);
 }
 

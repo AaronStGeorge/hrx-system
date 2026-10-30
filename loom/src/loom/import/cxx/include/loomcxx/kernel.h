@@ -71,6 +71,28 @@ class [[loom::type("kernel.async.group")]] async_group {};
 
 namespace kernel {
 
+// Syntax-only bundle separating launch workloads from kernel ABI arguments.
+// Workloads must appear directly as the first argument of kernel::launch or
+// check::launch and match the kernel configuration parameters exactly.
+namespace detail {
+
+template <class... Args>
+struct [[loom::workload]] workload_values {};
+
+}  // namespace detail
+
+template <class... Args>
+[[loom::workload]] detail::workload_values<Args...> workload(Args... args);
+
+// Launches a statically named kernel or kernel-scoped pipeline from a command
+// program. A configured kernel's typed workloads precede its ABI arguments in
+// one workload bundle. A pipeline contract instead declares its specialization
+// and binding boundary with [[loom::launch]], and receives its source arguments
+// directly. Typed buffers bind kernel pointer or pipeline buffer arguments;
+// scalars retain exact ABI types.
+template <auto Kernel, class... Args>
+[[loom::op("kernel.launch")]] void launch(Args... args);
+
 namespace async {
 
 // Required memory-space direction for a byte-for-byte asynchronous copy.

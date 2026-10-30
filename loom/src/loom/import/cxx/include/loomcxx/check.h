@@ -8,6 +8,7 @@
 #define LOOMCXX_CHECK_H_
 
 #include <loomcxx/index.h>
+#include <loomcxx/kernel.h>
 #include <loomcxx/shape.h>
 
 // Declares a correctness case with immutable scalar and scalar-record values,
@@ -41,23 +42,6 @@ class [[loom::type("tensor")]] tensor {
 };
 
 }  // namespace loom::type
-
-namespace loom::kernel {
-
-// Syntax-only bundle separating launch workloads from kernel ABI arguments.
-// Workloads must appear directly as the first argument of check::launch and
-// match the kernel's configuration function parameters exactly.
-namespace detail {
-
-template <class... Args>
-struct [[loom::workload]] workload_values {};
-
-}  // namespace detail
-
-template <class... Args>
-[[loom::workload]] detail::workload_values<Args...> workload(Args... args);
-
-}  // namespace loom::kernel
 
 namespace loom::check {
 

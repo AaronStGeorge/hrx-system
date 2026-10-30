@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "loom/import/cxx/binding/command_programs.h"
 #include "loom/import/cxx/binding/config.h"
 #include "loom/import/cxx/binding/fastmath.h"
 #include "loom/import/cxx/binding/function_contracts.h"
@@ -25,6 +26,7 @@
 #include "loom/import/cxx/binding/intrinsics.h"
 #include "loom/import/cxx/binding/launch.h"
 #include "loom/import/cxx/binding/parameter_contracts.h"
+#include "loom/import/cxx/binding/pipeline_contracts.h"
 #include "loom/import/cxx/binding/target_definitions.h"
 #include "loom/import/cxx/binding/template_definitions.h"
 #include "loom/import/cxx/control/analysis.h"
@@ -40,6 +42,7 @@ class ImmutableObjects;
 enum class FunctionKind {
   Ordinary,
   Kernel,
+  CommandProgram,
   TemplateDefinition,
   LaunchConfiguration,
   ClusteredLaunchConfiguration,
@@ -119,6 +122,8 @@ struct FunctionBody {
   std::optional<ImplicitObjectParameter> implicit_object;
   // Retained whole-function source facts shared with body translation.
   const ControlFlow* control;
+  // Source/native argument permutation for a command-program body.
+  const StagedSignatureProjection* command_program = nullptr;
 };
 
 // Native definition and any source-owned launch configuration body that must
@@ -138,7 +143,9 @@ class Functions {
  public:
   Functions(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
             loom_module_t* module, ImmutableObjects& immutable_objects,
-            Intrinsics& intrinsics, LaunchContracts& launches, Configs& configs,
+            Intrinsics& intrinsics, LaunchContracts& launches,
+            CommandPrograms& command_programs,
+            PipelineContracts& pipeline_contracts, Configs& configs,
             FastMathContracts& fastmath, FunctionContracts& function_contracts,
             TargetDefinitions& target_definitions,
             TemplateDefinitions& template_definitions, SymbolNames& names)
@@ -148,6 +155,8 @@ class Functions {
         immutable_objects_(immutable_objects),
         intrinsics_(intrinsics),
         launches_(launches),
+        command_programs_(command_programs),
+        pipeline_contracts_(pipeline_contracts),
         configs_(configs),
         fastmath_(fastmath),
         function_contracts_(function_contracts),
@@ -176,6 +185,15 @@ class Functions {
   bool is_check_case(cxx::FunctionSymbol* function) const;
   // Whether the declaration owns a check case or scenario record.
   bool is_check_record(cxx::FunctionSymbol* function) const;
+  // Whether the declaration owns a reusable command program.
+  bool is_command_program(cxx::FunctionSymbol* function) const {
+    return command_programs_.contains(function);
+  }
+  // Returns the retained command source/native signature projection.
+  const StagedSignatureProjection& command_program(
+      cxx::FunctionSymbol* function, Types& types, cxx::AST* owner) {
+    return command_programs_.project(function, types, owner);
+  }
   // Emits reachable bodyless declarations after recursive body discovery.
   void build_declarations(Types& types, Locations& locations,
                           loom_builder_t* builder);
@@ -264,6 +282,10 @@ class Functions {
   Intrinsics& intrinsics_;
   // Retains merged launch contracts for definitions and concrete instances.
   LaunchContracts& launches_;
+  // Retains command annotations and source/native signature projections.
+  CommandPrograms& command_programs_;
+  // Retains external kernel-scoped pipeline launch contracts.
+  PipelineContracts& pipeline_contracts_;
   // Reconciles named scalar settings before root selection and body lowering.
   Configs& configs_;
   // Reconciles lexical floating-point permissions across redeclarations.

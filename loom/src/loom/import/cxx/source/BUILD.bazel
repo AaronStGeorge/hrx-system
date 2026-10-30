@@ -39,6 +39,7 @@ iree_c_embed_data(
         "//loom/src/loom/import/cxx:include/loomcxx/buffer.h",
         "//loom/src/loom/import/cxx:include/loomcxx/cache.h",
         "//loom/src/loom/import/cxx:include/loomcxx/check.h",
+        "//loom/src/loom/import/cxx:include/loomcxx/command.h",
         "//loom/src/loom/import/cxx:include/loomcxx/encoding.h",
         "//loom/src/loom/import/cxx:include/loomcxx/encoding_type.h",
         "//loom/src/loom/import/cxx:include/loomcxx/index.h",

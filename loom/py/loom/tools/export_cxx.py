@@ -81,7 +81,7 @@ def _create_argument_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="@SYMBOL",
-        help="Kernel root to render. Repeat to select multiple kernels.",
+        help="Callable root to render. Repeat to select multiple callables.",
     )
     return parser
 

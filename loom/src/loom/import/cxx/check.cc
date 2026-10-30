@@ -119,6 +119,9 @@ class CheckBody {
       auto* function = callee(call);
       if (auto* binding = intrinsics_.check_binding(function, call)) {
         check_call(call, *binding);
+      } else if (auto* launch =
+                     intrinsics_.kernel_launch_binding(function, call)) {
+        kernel_launch(call, *launch);
       } else {
         invocation(call, function);
       }
@@ -378,7 +381,6 @@ class CheckBody {
         continue;
       }
       if (has_action || binding->is_observation() ||
-          binding->operation == Operation::Launch ||
           binding->operation == Operation::Requires ||
           binding->operation == Operation::Trial) {
         fail(statement, "operation is not a check trial value source");
@@ -619,7 +621,7 @@ class CheckBody {
   }
 
   void append_workloads(cxx::ExpressionAST* source,
-                        const CheckIntrinsic& binding,
+                        cxx::FunctionSymbol* configuration,
                         std::vector<loom_value_id_t>& workloads) {
     auto* call = direct_call(source);
     auto* function = call ? callee(call) : nullptr;
@@ -628,7 +630,7 @@ class CheckBody {
            "kernel workloads require a direct "
            "loom::kernel::workload(...) call");
     }
-    auto parameters = binding.configuration->parameters();
+    auto parameters = configuration->parameters();
     auto* argument = call->expressionList;
     for (auto* parameter : parameters) {
       if (!argument) {
@@ -839,7 +841,7 @@ class CheckBody {
       if (sources.empty()) {
         fail(call, "configured check subject requires launch workloads");
       }
-      append_workloads(sources[0], binding, result.parameters);
+      append_workloads(sources[0], binding.configuration, result.parameters);
       first_argument = 1;
     }
     std::vector<Value> values;
@@ -991,6 +993,36 @@ class CheckBody {
     translate_comparison(lambda, loom_check_compare_comparison(op),
                          actual_types, expected_types, std::move(captures));
     loom_builder_restore(&builder_, saved);
+  }
+
+  void kernel_launch(cxx::CallExpressionAST* call,
+                     const KernelLaunchIntrinsic& binding) {
+    if (observing_) {
+      fail(call, "check expectations must be terminal");
+    }
+    if (!functions_.definition(binding.kernel)) {
+      fail(call, "check launches require a defined kernel");
+    }
+    std::vector<loom_value_id_t> workloads;
+    auto* argument = call->expressionList;
+    if (binding.configuration && !binding.configuration->parameters().empty()) {
+      append_workloads(argument->value, binding.configuration, workloads);
+      argument = argument->next;
+    }
+    std::vector<loom_value_id_t> arguments;
+    for (; argument; argument = argument->next) {
+      auto value = expression(argument->value);
+      if (!value.is_tensor() && value.partition().kind != ValueKind::SSA) {
+        fail(argument->value,
+             "check kernel arguments require tensors or scalar values");
+      }
+      append_subject_value(value, arguments);
+    }
+    loom_op_t* op;
+    check(loom_kernel_launch_build(
+        &builder_, functions_.declare(binding.kernel, call), workloads.data(),
+        workloads.size(), arguments.data(), arguments.size(),
+        locations_.get(call), &op));
   }
 
   std::optional<Value> check_call(cxx::CallExpressionAST* call,
@@ -1182,30 +1214,6 @@ class CheckBody {
               &builder_, actual_value, expected_value, maximum_distance,
               location, &op));
         }
-        break;
-      }
-      case Operation::Launch: {
-        if (observing_) {
-          fail(call, "check expectations must be terminal");
-        }
-        if (!functions_.definition(binding.kernel)) {
-          fail(call, "check launches require a defined kernel");
-        }
-        std::vector<loom_value_id_t> workloads;
-        auto* argument = call->expressionList;
-        if (binding.configuration &&
-            !binding.configuration->parameters().empty()) {
-          append_workloads(argument->value, binding, workloads);
-          argument = argument->next;
-        }
-        std::vector<loom_value_id_t> arguments;
-        for (; argument; argument = argument->next) {
-          append_subject_value(expression(argument->value), arguments);
-        }
-        auto symbol = functions_.declare(binding.kernel, call);
-        check(loom_kernel_launch_build(&builder_, symbol, workloads.data(),
-                                       workloads.size(), arguments.data(),
-                                       arguments.size(), location, &op));
         break;
       }
       case Operation::EntropyFork: {

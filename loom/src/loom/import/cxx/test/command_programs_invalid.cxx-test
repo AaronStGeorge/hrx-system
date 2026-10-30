@@ -1,0 +1,110 @@
+// RUN: verify
+// ERROR@+1: LOWERING/059 "command_program requires a concrete non-variadic void namespace-scope function"
+[[loom::command_program]] unsigned bad_result() { return 0u; }
+
+// ====
+// ERROR@+2: LOWERING/059 "command_program requires a concrete non-variadic void namespace-scope function"
+template <typename T>
+[[loom::command_program]] void pattern(T value) { (void)value; }
+
+// ====
+// ERROR@+1: LOWERING/059 "launch requires a leading command_program or pipeline parameter attribute"
+void ordinary([[loom::launch]] unsigned value) { (void)value; }
+
+// ====
+#include <loomcxx/buffer.h>
+namespace loomt = loom::type;
+using Bytes = loomt::buffer<unsigned char>;
+// ERROR@+1: LOWERING/059 "one launch boundary is allowed per command declaration"
+[[loom::command_program]] void repeated([[loom::launch]] Bytes input, [[loom::launch]] Bytes output) {
+  (void)input;
+  (void)output;
+}
+
+// ====
+#include <loomcxx/buffer.h>
+[[loom::command_program]] void conflict(unsigned value, [[loom::launch]] loom::type::buffer<unsigned char> output);
+// ERROR@+1: LOWERING/059 "conflicting launch boundaries across command redeclarations"
+[[loom::command_program]] void conflict([[loom::launch]] unsigned value, loom::type::buffer<unsigned char> output) {
+  (void)value;
+  (void)output;
+}
+
+// ====
+// ERROR@+1: LOWERING/059 "launch-bound command_program parameters require a direct loom::type::buffer or loom::type::view value"
+[[loom::command_program]] void scalar_binding([[loom::launch]] unsigned value) { (void)value; }
+
+// ====
+// ERROR@+1: LOWERING/059 "command_program parameters require non-reference, non-volatile value types"
+[[loom::command_program]] void referenced(unsigned& value) { (void)value; }
+
+// ====
+// ERROR@+1: LOWERING/059 "command_program takes no argument clause"
+[[loom::command_program("bad")]] void arguments() {}
+
+// ====
+// ERROR@+1: LOWERING/059 "command_program cannot be combined with another callable kind"
+[[loom::command_program, loom::kernel]] void conflicting_kinds() {}
+
+// ====
+#include <loomcxx/view.h>
+namespace loomt = loom::type;
+using Output = loomt::view<loomt::shape<4>, float>;
+[[loom::command_program]] void ordinary_write([[loom::launch]] Output output) {
+  // ERROR@+1: STRUCTURE/053 "'view.store' has effects that are neither deterministic read-only preparation nor an explicit command"
+  loom::view::store(1.0f, output, 0u);
+}
+
+// ====
+#include <loomcxx/command.h>
+[[loom::command_program]] void leaf();
+[[loom::command_program]] void direct_call() {
+  // ERROR@+1: LOWERING/059 "command programs require an explicit command launch operation"
+  leaf();
+}
+
+// ====
+void schedule_outside_command() {
+  // ERROR@+1: LOWERING/059 "serial and concurrent regions require a command_program body"
+  [[loom::serial]] {}
+}
+
+// ====
+[[loom::command_program]] void schedule_on_if(bool condition) {
+  // ERROR@+1: LOWERING/059 "serial and concurrent require an attributed compound statement"
+  [[loom::serial]] if (condition) {}
+}
+
+// ====
+[[loom::command_program]] void schedule_mutation(unsigned value) {
+  // ERROR@+1: LOWERING/059 "command schedule regions cannot update enclosing automatic values because they have no results"
+  [[loom::concurrent]] { value = 1u; }
+}
+
+// ====
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+using Bytes = loom::type::buffer<unsigned char>;
+[[loom::kernel]] void kernel(unsigned char* output) {}
+void launch_outside_command(Bytes output) {
+  // ERROR@+1: LOWERING/059 "kernel.launch requires a command_program body"
+  loom::kernel::launch<kernel>(output);
+}
+
+// ====
+#include <loomcxx/command.h>
+using Bytes = loom::type::buffer<unsigned char>;
+[[loom::command_program]] void child([[loom::launch]] Bytes output);
+void command_launch_outside_command(Bytes output) {
+  // ERROR@+1: LOWERING/059 "command.program.launch requires a command_program body"
+  loom::command::launch<child>(output);
+}
+
+// ====
+#include <loomcxx/command.h>
+using Parameters = loom::type::buffer<const unsigned char>;
+[[loom::command_program]] void mutable_parameter([[loom::launch]] Parameters parameters) {
+  // ERROR@+1: LOWERING/059 "command.parameter requires a const-qualified result element type"
+  auto value = loom::command::parameter<loom::type::shape<4>, float>(parameters, "weight");
+  (void)value;
+}

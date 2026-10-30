@@ -156,6 +156,140 @@ def test_projects_selected_function_roots_without_unrelated_kernels() -> None:
     assert "copy_one" not in result
 
 
+def test_projects_command_program_signatures_and_schedule_regions() -> None:
+    source = """\
+command.program.decl public @decode.leaf(%tokens: i32, %tile_dim0: index, %tile_layout: encoding<layout>) launch(%parameters: buffer, %tile: view<[%tile_dim0]x4xf32, %tile_layout>)
+
+command.program.def public @decode.root(%tokens: i32, %tile_dim0: index, %tile_layout: encoding<layout>) launch(%parameters: buffer, %tile: view<[%tile_dim0]x4xf32, %tile_layout>) where [ne(%tokens, 0)] {
+  command.serial {
+    command.concurrent {
+      command.program.launch @decode.leaf[%tokens, %tile_dim0, %tile_layout](%parameters, %tile) : [i32, index, encoding<layout>](buffer, view<[%tile_dim0]x4xf32, %tile_layout>)
+    }
+  }
+  command.return
+}
+
+command.program.def public @ignored() launch() {
+  command.return
+}
+"""
+
+    result = render_module(load_module(source.encode()), roots=("decode.root",))
+
+    assert result.count("#include <loomcxx/command.h>") == 1
+    assert 'loom::symbol("decode.leaf")' in result
+    assert 'loom::symbol("decode.root")' in result
+    assert "ignored" not in result
+    assert (
+        "unsigned tokens, [[loom::launch]] "
+        "loom::type::buffer<unsigned char> parameters, "
+        "loom::type::view<loom::type::shape<loom::type::dynamic, 4>, float, "
+        "loom::type::encoding<loom::encoding::role::layout, 2>> tile"
+    ) in result
+    assert "[[loom::serial]] {" in result
+    assert "[[loom::concurrent]] {" in result
+    assert "loom::command::launch<decode_leaf>(tokens, parameters, tile);" in result
+
+
+def test_projects_kernel_scoped_pipeline_contracts_and_launches() -> None:
+    source = """\
+pipeline.decl<kernel> @resident(%width: index) run(%input: buffer, %output: buffer) where [multiple_of(%width, 4)]
+
+command.program.def public @run(%width: index) launch(%input: buffer, %output: buffer) {
+  kernel.launch @resident[%width](%input, %output) : [index](buffer, buffer)
+  command.return
+}
+"""
+
+    result = render_module(load_module(source.encode()), roots=("run",))
+
+    assert '[[loom::pipeline("kernel"), loom::symbol("resident")]]' in result
+    assert (
+        "void resident(loom::type::index width, [[loom::launch]] "
+        "loom::type::buffer<unsigned char> input, "
+        "loom::type::buffer<unsigned char> output) "
+        "[[loom::where(loom::predicate::multiple_of(width, 4))]];" in result
+    )
+    assert "loom::kernel::launch<resident>(width, input, output);" in result
+    assert "pipeline.decl" not in result
+
+
+def test_pipeline_buffer_contract_accepts_dynamic_view_argument() -> None:
+    source = """\
+pipeline.decl<kernel> @consume() run(%input: buffer)
+
+command.program.def public @run(%width: index) launch(%input: view<[%width]xf32>) {
+  kernel.launch @consume(%input) : (view<[%width]xf32>)
+  command.return
+}
+"""
+
+    result = render_module(load_module(source.encode()), roots=("run",))
+
+    assert (
+        "void consume([[loom::launch]] "
+        "loom::type::buffer<unsigned char> input);" in result
+    )
+    assert (
+        "void run([[loom::launch]] loom::type::view<"
+        "loom::type::shape<loom::type::dynamic>, float> input)" in result
+    )
+    assert "loom::kernel::launch<consume>(input);" in result
+
+
+def test_projects_implicit_and_ranged_kernel_launch_contracts() -> None:
+    source = """\
+kernel.def @bounded() {
+  %count_x = config.get @bounded.workgroup_count.x : index
+  %count_y = config.get @bounded.workgroup_count.y : index
+  %count_z = config.get @bounded.workgroup_count.z : index
+  %size_x = config.get @bounded.workgroup_size.x : index
+  %size_y = config.get @bounded.workgroup_size.y : index
+  %size_z = config.get @bounded.workgroup_size.z : index
+  kernel.launch.config workgroups(%count_x, %count_y, %count_z) workgroup_size(%size_x, %size_y, %size_z) : index
+} launch() {
+  kernel.return
+}
+
+config.decl @bounded.workgroup_count.x : index
+config.decl @bounded.workgroup_count.y : index
+config.decl @bounded.workgroup_count.z : index
+config.decl @bounded.workgroup_size.x : %size_x: index where [range(%size_x, 32, 128)]
+config.decl @bounded.workgroup_size.y : %size_y: index where [range(%size_y, 1, 1)]
+config.decl @bounded.workgroup_size.z : %size_z: index where [range(%size_z, 1, 1)]
+"""
+
+    result = render_module(load_module(source.encode()), roots=("bounded",))
+
+    assert "[[loom::kernel, loom::workgroup_size_range(32, 128, 1, 1, 1, 1)]]" in result
+    assert "workgroup_count" not in result
+    assert "config.decl" not in result
+
+
+def test_rejects_unowned_configuration_declarations() -> None:
+    source = SOURCE_MODULE + "\nconfig.decl @library.option : index\n"
+
+    with pytest.raises(
+        CxxRenderError,
+        match="configuration declaration is not owned by a projected kernel launch contract",
+    ):
+        render_module(load_module(source.encode()))
+
+
+def test_rejects_command_signatures_without_a_source_order_projection() -> None:
+    source = """\
+command.program.def public @misordered(%dimension: index, %token: i32) launch(%output: view<[%dimension]xf32>) {
+  command.return
+}
+"""
+
+    with pytest.raises(
+        CxxRenderError,
+        match="staged signature dependencies do not form a C\\+\\+ source-order projection",
+    ):
+        render_module(load_module(source.encode()))
+
+
 def test_preserves_scalar_kernel_arguments() -> None:
     source = SOURCE_MODULE.replace(
         "} launch(%input: buffer, %output: buffer) {",

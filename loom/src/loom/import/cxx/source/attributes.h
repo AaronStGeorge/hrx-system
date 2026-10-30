@@ -47,6 +47,7 @@ enum class BindingAttributeScope {
   Declaration,
   Function,
   Parameter,
+  StagedParameter,
   LocalDeclaration,
   Statement,
   CheckStatement,
@@ -87,7 +88,8 @@ void reject_misplaced_binding_attributes(
 void reject_misplaced_binding_declarator(
     cxx::TranslationUnit& unit, Diagnostics& diagnostics,
     cxx::DeclaratorAST* declarator,
-    cxx::FunctionDeclaratorChunkAST* parameter_owner = nullptr);
+    cxx::FunctionDeclaratorChunkAST* parameter_owner = nullptr,
+    BindingAttributeScope parameter_scope = BindingAttributeScope::Parameter);
 
 // Checks one statement's leading attributes during its owner's body walk.
 // Scope distinguishes ordinary translated statements from check records,

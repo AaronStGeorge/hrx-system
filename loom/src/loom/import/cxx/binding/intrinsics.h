@@ -21,14 +21,17 @@
 #include "loom/import/cxx/binding/atomic.h"
 #include "loom/import/cxx/binding/buffer.h"
 #include "loom/import/cxx/binding/check.h"
+#include "loom/import/cxx/binding/command.h"
 #include "loom/import/cxx/binding/decode.h"
 #include "loom/import/cxx/binding/encoding.h"
 #include "loom/import/cxx/binding/fragment.h"
 #include "loom/import/cxx/binding/function_contracts.h"
 #include "loom/import/cxx/binding/index_values.h"
 #include "loom/import/cxx/binding/kernel.h"
+#include "loom/import/cxx/binding/kernel_launch.h"
 #include "loom/import/cxx/binding/launch.h"
 #include "loom/import/cxx/binding/numeric_conversion.h"
+#include "loom/import/cxx/binding/pipeline_contracts.h"
 #include "loom/import/cxx/binding/scalar_bindings.h"
 #include "loom/import/cxx/binding/shaped.h"
 #include "loom/import/cxx/binding/target.h"
@@ -87,19 +90,21 @@ class Intrinsics {
              loom_type_equal(type, other.type) && result == other.result;
     }
   };
-  using Binding =
-      std::variant<ScalarBinding, ShapedIntrinsic, EncodingIntrinsic,
-                   DecodeIntrinsic, FragmentIntrinsic, BufferIntrinsic,
-                   ViewIntrinsic, VectorArithmeticIntrinsic,
-                   VectorMemoryIntrinsic, AsyncIntrinsic, AtomicIntrinsic,
-                   FenceIntrinsic, KernelCollectiveIntrinsic,
-                   SubgroupShuffleIntrinsic, BarrierIntrinsic, TargetIntrinsic,
-                   AssemblyIntrinsic, TemplateApplyIntrinsic, CheckIntrinsic,
-                   AddressIntrinsic, NumericConversionIntrinsic>;
+  using Binding = std::variant<
+      ScalarBinding, ShapedIntrinsic, EncodingIntrinsic, DecodeIntrinsic,
+      FragmentIntrinsic, BufferIntrinsic, ViewIntrinsic,
+      VectorArithmeticIntrinsic, VectorMemoryIntrinsic, AsyncIntrinsic,
+      AtomicIntrinsic, FenceIntrinsic, KernelCollectiveIntrinsic,
+      SubgroupShuffleIntrinsic, BarrierIntrinsic, TargetIntrinsic,
+      AssemblyIntrinsic, TemplateApplyIntrinsic, CheckIntrinsic,
+      KernelLaunchIntrinsic, CommandLaunchIntrinsic, CommandParameterIntrinsic,
+      AddressIntrinsic, NumericConversionIntrinsic>;
 
   Intrinsics(cxx::TranslationUnit& unit, Diagnostics& diagnostics, Types& types,
              Scalars& scalars, Vectors& vectors, Locations& locations,
              SymbolNames& names, LaunchContracts& launches,
+             CommandPrograms& command_programs,
+             PipelineContracts& pipeline_contracts,
              FunctionContracts& function_contracts, loom_module_t* module)
       : unit_(unit),
         diagnostics_(diagnostics),
@@ -109,6 +114,8 @@ class Intrinsics {
         locations_(locations),
         names_(names),
         launches_(launches),
+        command_programs_(command_programs),
+        pipeline_contracts_(pipeline_contracts),
         function_contracts_(function_contracts),
         module_(module) {}
 
@@ -122,6 +129,16 @@ class Intrinsics {
   // Check-body translation owns its source constants and emission.
   const CheckIntrinsic* check_binding(cxx::FunctionSymbol* function,
                                       cxx::AST* owner);
+
+  // Returns an admitted explicit kernel launch, or null for another
+  // declaration. Check and command bodies consume the same source contract.
+  const KernelLaunchIntrinsic* kernel_launch_binding(
+      cxx::FunctionSymbol* function, cxx::AST* owner);
+
+  // Returns an admitted explicit command-program launch, or null for another
+  // declaration.
+  const CommandLaunchIntrinsic* command_launch_binding(
+      cxx::FunctionSymbol* function, cxx::AST* owner);
 
   // Resolves a concrete operation once for call admission. The returned binding
   // remains stable until this invocation ends, including across nested calls.
@@ -183,6 +200,10 @@ class Intrinsics {
   SymbolNames& names_;
   // Source launch contracts supplying configured-kernel workload signatures.
   LaunchContracts& launches_;
+  // Source/native command signature projections shared with call emission.
+  CommandPrograms& command_programs_;
+  // External kernel-scoped pipeline contracts shared with launch emission.
+  PipelineContracts& pipeline_contracts_;
   // Callable predicates projected onto lazy template family declarations.
   FunctionContracts& function_contracts_;
   // Invocation-owned output module interning static source specifications.

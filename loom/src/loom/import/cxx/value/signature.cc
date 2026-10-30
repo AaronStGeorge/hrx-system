@@ -47,6 +47,23 @@ void append_bound(Types& types, std::span<const cxx::Type* const> sources,
 
 }  // namespace
 
+void StagedSignatureProjection::append(const cxx::Type* source_type,
+                                       size_t component_count,
+                                       size_t parameter_specialization_count) {
+  IREE_ASSERT_LE(parameter_specialization_count, component_count);
+  source_types.push_back(source_type);
+  parameters.push_back({
+      specialization_count + binding_count,
+      component_count,
+      specialization_count,
+      parameter_specialization_count,
+      binding_count,
+      component_count - parameter_specialization_count,
+  });
+  specialization_count += parameter_specialization_count;
+  binding_count += component_count - parameter_specialization_count;
+}
+
 BoundSignature bind_signature(Types& types,
                               std::span<const cxx::Type* const> sources,
                               cxx::AST* owner, loom_builder_t* builder,
@@ -82,6 +99,72 @@ BoundSignature bind_signature_to(Types& types,
   result.identities.assign(identities.begin(), identities.end());
   append_bound(types, sources, owner, result.identities, result.type_storage,
                result.types);
+  return result;
+}
+
+BoundStagedSignature bind_staged_signature(
+    const StagedSignatureProjection& projection, Types& types, cxx::AST* owner,
+    loom_builder_t* builder, SignatureIdentityRequirement identities) {
+  BoundStagedSignature result;
+  result.projection = &projection;
+  const size_t component_count =
+      projection.specialization_count + projection.binding_count;
+  const bool requires_identities =
+      identities == SignatureIdentityRequirement::Required ||
+      projection.requires_binding;
+  if (requires_identities) {
+    result.destination_identities.resize(component_count);
+    check(loom_builder_reserve_values(builder, component_count,
+                                      result.destination_identities.data()));
+    result.source_identities.resize(component_count);
+    for (const auto& parameter : projection.parameters) {
+      for (size_t index = 0; index < parameter.specialization_count; ++index) {
+        result.source_identities[parameter.source_component_offset + index] =
+            result.destination_identities[parameter.specialization_offset +
+                                          index];
+      }
+      for (size_t index = 0; index < parameter.binding_count; ++index) {
+        result.source_identities[parameter.source_component_offset +
+                                 parameter.specialization_count + index] =
+            result.destination_identities[projection.specialization_count +
+                                          parameter.binding_offset + index];
+      }
+    }
+  }
+
+  result.specialization_types.reserve(projection.specialization_count);
+  result.binding_types.reserve(projection.binding_count);
+  std::vector<loom_type_t> source_types;
+  source_types.reserve(component_count);
+  for (size_t ordinal = 0; ordinal < projection.source_types.size();
+       ++ordinal) {
+    const auto& parameter = projection.parameters[ordinal];
+    const size_t previous_count = source_types.size();
+    if (requires_identities) {
+      types.append_bound(
+          projection.source_types[ordinal], owner,
+          std::span<const loom_value_id_t>(result.source_identities)
+              .subspan(parameter.source_component_offset,
+                       parameter.component_count),
+          result.type_storage, source_types);
+    } else {
+      types.append(projection.source_types[ordinal], owner, source_types);
+    }
+    IREE_ASSERT_EQ(source_types.size() - previous_count,
+                   parameter.component_count);
+  }
+  for (const auto& parameter : projection.parameters) {
+    const auto parameter_types = std::span<const loom_type_t>(source_types)
+                                     .subspan(parameter.source_component_offset,
+                                              parameter.component_count);
+    result.specialization_types.insert(
+        result.specialization_types.end(), parameter_types.begin(),
+        parameter_types.begin() + parameter.specialization_count);
+    result.binding_types.insert(
+        result.binding_types.end(),
+        parameter_types.begin() + parameter.specialization_count,
+        parameter_types.end());
+  }
   return result;
 }
 

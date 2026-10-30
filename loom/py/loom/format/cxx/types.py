@@ -12,6 +12,8 @@ from loom.format.cxx.errors import CxxRenderError
 from loom.ir import (
     BufferType,
     DialectType,
+    DynamicEncoding,
+    EncodingInstance,
     EncodingType,
     Module,
     ScalarType,
@@ -106,22 +108,55 @@ class CxxTypes:
         self.vector_aliases[key] = alias
         return alias
 
-    def view(self, value_type: ShapedType, signed: bool) -> str:
-        """Returns the source carrier for a statically ranked Loom view."""
+    def view_arguments(
+        self, value_type: ShapedType, signed: bool, *, const: bool = False
+    ) -> tuple[str, str, str | None]:
+        """Returns the shape, element, and encoding template arguments."""
 
-        if value_type.encoding is not None:
-            raise CxxRenderError(
-                None,
-                f"encoded view type {value_type!r} has no C++ signature spelling",
-            )
         dimensions = ", ".join(
             str(dimension.size)
             if isinstance(dimension, StaticDim)
             else "loom::type::dynamic"
             for dimension in value_type.dims
         )
+        shape = f"loom::type::shape<{dimensions}>"
         element = self.scalar(value_type.element_type, signed)
-        return f"loom::type::view<loom::type::shape<{dimensions}>, {element}>"
+        if const:
+            element = f"const {element}"
+
+        encoding = value_type.encoding
+        if encoding is None:
+            return shape, element, None
+        if isinstance(encoding, EncodingInstance):
+            raise CxxRenderError(
+                None,
+                f"statically encoded view type {value_type!r} has no C++ "
+                "signature spelling",
+            )
+        if not isinstance(encoding, DynamicEncoding):
+            raise CxxRenderError(
+                None, f"view encoding {encoding!r} has no C++ signature spelling"
+            )
+        encoding_type = self.module.values[encoding.value_id].type
+        if not isinstance(encoding_type, EncodingType):
+            raise CxxRenderError(
+                None, "dynamic view encoding does not reference an encoding value"
+            )
+        role = encoding_type.role.name.lower()
+        return (
+            shape,
+            element,
+            f"loom::type::encoding<loom::encoding::role::{role}, {value_type.rank}>",
+        )
+
+    def view(self, value_type: ShapedType, signed: bool, *, const: bool = False) -> str:
+        """Returns the source carrier for a statically ranked Loom view."""
+
+        shape, element, encoding = self.view_arguments(value_type, signed, const=const)
+        arguments = [shape, element]
+        if encoding is not None:
+            arguments.append(encoding)
+        return f"loom::type::view<{', '.join(arguments)}>"
 
     def value(self, value_id: int, *, signed: bool | None = None) -> str:
         value_type = self.module.values[value_id].type
