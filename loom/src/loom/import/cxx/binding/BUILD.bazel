@@ -491,6 +491,34 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "command",
+    srcs = ["command.cc"],
+    hdrs = ["command.h"],
+    cxx_features = CXX_COMPILER_OPTIONS["cxx_features"],
+    cxx_standard = CXX_COMPILER_OPTIONS["cxx_standard"],
+    deps = [
+        ":command_programs",
+        "//loom/src/loom/import/cxx/source:error",
+        "//loom/src/loom/import/cxx/value:types",
+        "//runtime/src/iree/base",
+        "//third_party:cxx_parser",
+    ],
+)
+
+loom_cc_library(
+    name = "command_schedule",
+    srcs = ["command_schedule.cc"],
+    hdrs = ["command_schedule.h"],
+    cxx_features = CXX_COMPILER_OPTIONS["cxx_features"],
+    cxx_standard = CXX_COMPILER_OPTIONS["cxx_standard"],
+    deps = [
+        "//loom/src/loom/import/cxx/source:attributes",
+        "//loom/src/loom/import/cxx/source:frontend",
+        "//third_party:cxx_parser",
+    ],
+)
+
+loom_cc_library(
     name = "check",
     srcs = ["check.cc"],
     hdrs = ["check.h"],
@@ -524,6 +552,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "kernel_launch",
+    srcs = ["kernel_launch.cc"],
+    hdrs = ["kernel_launch.h"],
+    cxx_features = CXX_COMPILER_OPTIONS["cxx_features"],
+    cxx_standard = CXX_COMPILER_OPTIONS["cxx_standard"],
+    deps = [
+        ":launch",
+        "//loom/src/loom/import/cxx/source:attributes",
+        "//loom/src/loom/import/cxx/source:error",
+        "//loom/src/loom/import/cxx/value:types",
+        "//third_party:cxx_parser",
+    ],
+)
+
+loom_cc_library(
     name = "target",
     srcs = ["target.cc"],
     hdrs = ["target.h"],
@@ -550,12 +593,14 @@ loom_cc_library(
         ":atomic",
         ":buffer",
         ":check",
+        ":command",
         ":decode",
         ":encoding",
         ":fragment",
         ":function_contracts",
         ":index_values",
         ":kernel",
+        ":kernel_launch",
         ":launch",
         ":numeric_conversion",
         ":scalar_bindings",

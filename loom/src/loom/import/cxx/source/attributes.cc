@@ -99,6 +99,13 @@ void reject_misplaced_binding_attributes(
               "fastmath requires a function, automatic declaration, or "
               "leading statement attribute");
         }
+        if ((name == "serial" || name == "concurrent") &&
+            scope != BindingAttributeScope::Statement) {
+          diagnostics.reject(
+              unit, attribute,
+              "serial and concurrent require a leading compound-statement "
+              "attribute");
+        }
       });
 }
 

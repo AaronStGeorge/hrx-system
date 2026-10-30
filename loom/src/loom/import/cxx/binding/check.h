@@ -34,7 +34,6 @@ struct CheckIntrinsic {
     Bitwise,
     Requires,
     Event,
-    Launch,
     Trial,
     Generate,
     Compare,
@@ -70,8 +69,6 @@ struct CheckIntrinsic {
   const TensorPartition* expected_tensor = nullptr;
   // Tensor result for generation or slicing, owned by Types.
   const TensorPartition* result_tensor = nullptr;
-  // Statically selected kernel declaration, borrowed from the source unit.
-  cxx::FunctionSymbol* kernel = nullptr;
   // Ordinary generator or target subject selected by a template argument.
   cxx::FunctionSymbol* subject = nullptr;
   // Optional distinct oracle selected by a second template argument.

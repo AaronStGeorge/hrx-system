@@ -10,6 +10,7 @@
 #include <cxx/ast_interpreter.h>
 #include <cxx/control.h>
 #include <cxx/initialization.h>
+#include <cxx/literals.h>
 #include <cxx/memory_layout.h>
 #include <cxx/names.h>
 #include <cxx/symbols.h>
@@ -33,6 +34,7 @@
 #include "iree/base/api.h"
 #include "loom/import/cxx/binding/assumptions.h"
 #include "loom/import/cxx/binding/command_programs.h"
+#include "loom/import/cxx/binding/command_schedule.h"
 #include "loom/import/cxx/binding/config.h"
 #include "loom/import/cxx/binding/constexpr.h"
 #include "loom/import/cxx/binding/exponent.h"
@@ -99,7 +101,8 @@ class Translator final : private Initialization::Evaluation {
         launches_(unit, diagnostics),
         command_programs_(unit, diagnostics),
         intrinsics_(unit, diagnostics, types_, scalars_, vectors_, locations_,
-                    names_, launches_, function_contracts_, module),
+                    names_, launches_, command_programs_, function_contracts_,
+                    module),
         functions_(unit, diagnostics, module, immutable_objects_, intrinsics_,
                    launches_, command_programs_, configs_, fastmath_,
                    function_contracts_, target_definitions_,
@@ -2222,6 +2225,257 @@ class Translator final : private Initialization::Evaluation {
     return ordinary_call(call, function, locations_.get(call));
   }
 
+  cxx::CallExpressionAST* direct_wrapped_call(cxx::ExpressionAST* source) {
+    while (source) {
+      if (auto* nested = cxx::ast_cast<cxx::NestedExpressionAST>(source)) {
+        source = nested->expression;
+        continue;
+      }
+      if (auto* initializer =
+              cxx::ast_cast<cxx::DefaultInitializerExpressionAST>(source)) {
+        source = initializer->expression;
+        continue;
+      }
+      if (auto* cast = cxx::ast_cast<cxx::ImplicitCastExpressionAST>(source);
+          cast && !cast->conversionFunction) {
+        source = cast->expression;
+        continue;
+      }
+      return cxx::ast_cast<cxx::CallExpressionAST>(source);
+    }
+    return nullptr;
+  }
+
+  const cxx::Type* storage_element_type(const cxx::Type* source_type,
+                                        const Partition& partition) {
+    if (auto* pointer =
+            cxx::type_cast<cxx::PointerType>(types_.unqualified(source_type))) {
+      return pointer->elementType();
+    }
+    return partition.kind == ValueKind::Buffer
+               ? static_cast<const BufferPartition&>(partition).element_type
+               : nullptr;
+  }
+
+  bool storage_elements_compatible(const cxx::Type* expected,
+                                   const cxx::Type* actual) {
+    if (!expected || !actual ||
+        types_.unqualified(expected) != types_.unqualified(actual)) {
+      return false;
+    }
+    auto traits = unit_.typeTraits();
+    return !(traits.is_const(actual) && !traits.is_const(expected)) &&
+           !(traits.is_volatile(actual) && !traits.is_volatile(expected));
+  }
+
+  void append_kernel_workloads(cxx::ExpressionAST* source,
+                               const KernelLaunchIntrinsic& launch,
+                               std::vector<loom_value_id_t>& workloads) {
+    auto* call = direct_wrapped_call(source);
+    auto* function = call ? direct_callee(call) : nullptr;
+    if (!function || !annotated(function, "workload")) {
+      fail(source,
+           "kernel workloads require a direct loom::kernel::workload(...) "
+           "call");
+    }
+    auto parameters = launch.configuration->parameters();
+    auto* argument = call->expressionList;
+    for (auto* parameter : parameters) {
+      if (!argument) {
+        fail(source,
+             "loom::kernel::workload argument count must match the kernel "
+             "configuration");
+      }
+      auto* parameter_type = types_.unqualified(parameter->type());
+      const auto& expected = types_.partition(parameter_type, argument->value);
+      auto value = expression(argument->value);
+      const auto& actual = value.partition();
+      auto* expected_element = storage_element_type(parameter_type, expected);
+      auto* actual_element =
+          storage_element_type(argument->value->type, actual);
+      if (expected.kind == ValueKind::Pointer && value.is_buffer()) {
+        if (!storage_elements_compatible(expected_element, actual_element)) {
+          fail(argument->value,
+               "kernel workload buffer element type must match the "
+               "configuration pointer element type");
+        }
+        workloads.push_back(value.ssa());
+        auto byte_offset = scalars_.integer(0, LOOM_SCALAR_TYPE_OFFSET,
+                                            locations_.get(argument->value));
+        workloads.push_back(name(
+            byte_offset,
+            cxx::to_string(parameter->name()) + std::string("_byte_offset")));
+      } else {
+        if (types_.unqualified(argument->value->type) != parameter_type ||
+            actual.component_count != expected.component_count) {
+          fail(argument->value,
+               "loom::kernel::workload arguments must match the kernel "
+               "configuration parameters");
+        }
+        value.append_to(workloads);
+      }
+      argument = argument->next;
+    }
+    if (argument) {
+      fail(source,
+           "loom::kernel::workload argument count must match the kernel "
+           "configuration");
+    }
+  }
+
+  void kernel_launch(cxx::CallExpressionAST* call,
+                     const KernelLaunchIntrinsic& launch) {
+    if (current_function_.kind != FunctionKind::CommandProgram) {
+      fail(call, "kernel.launch requires a command_program body");
+    }
+    std::vector<loom_value_id_t> workloads;
+    auto* argument = call->expressionList;
+    if (launch.configuration && !launch.configuration->parameters().empty()) {
+      append_kernel_workloads(argument->value, launch, workloads);
+      argument = argument->next;
+    }
+    auto* kernel_type =
+        cxx::type_cast<cxx::FunctionType>(launch.kernel->type());
+    auto kernel_parameters = kernel_type->parameterTypes();
+    std::vector<loom_value_id_t> arguments;
+    size_t ordinal = 0;
+    for (; argument; argument = argument->next, ++ordinal) {
+      auto value = expression(argument->value);
+      auto expected = types_.get(kernel_parameters[ordinal], argument->value);
+      if (loom_type_kind(expected) == LOOM_TYPE_BUFFER) {
+        if (!value.is_buffer()) {
+          fail(argument->value,
+               "command kernel pointer arguments require typed buffers");
+        }
+        const auto& actual =
+            static_cast<const BufferPartition&>(value.partition());
+        auto* expected_element = storage_element_type(
+            kernel_parameters[ordinal],
+            types_.partition(kernel_parameters[ordinal], argument->value));
+        if (!storage_elements_compatible(expected_element,
+                                         actual.element_type)) {
+          fail(argument->value,
+               "command kernel buffer element type must match the kernel "
+               "pointer element type");
+        }
+        arguments.push_back(value.ssa());
+      } else {
+        arguments.push_back(value.ssa());
+      }
+    }
+    loom_op_t* op;
+    check(loom_kernel_launch_build(
+        &builder_, functions_.declare(launch.kernel, call), workloads.data(),
+        workloads.size(), arguments.data(), arguments.size(),
+        locations_.get(call), &op));
+  }
+
+  void command_launch(cxx::CallExpressionAST* call,
+                      const CommandLaunchIntrinsic& launch) {
+    if (current_function_.kind != FunctionKind::CommandProgram) {
+      fail(call, "command.program.launch requires a command_program body");
+    }
+    std::vector<loom_value_id_t> specializations(
+        launch.projection->specialization_count);
+    std::vector<loom_value_id_t> bindings(launch.projection->binding_count);
+    size_t ordinal = 0;
+    for (auto* argument : cxx::ListView{call->expressionList}) {
+      auto value = expression(argument);
+      const auto& parameter = launch.projection->parameters[ordinal++];
+      auto components = value.components();
+      IREE_ASSERT_EQ(components.size(), parameter.component_count);
+      std::copy_n(components.begin(), parameter.specialization_count,
+                  specializations.begin() + parameter.specialization_offset);
+      if (parameter.binding_ordinal) {
+        bindings[*parameter.binding_ordinal] = components.back();
+      }
+    }
+    loom_op_t* op;
+    check(loom_command_program_launch_build(
+        &builder_, functions_.declare(launch.program, call),
+        specializations.data(), specializations.size(), bindings.data(),
+        bindings.size(), locations_.get(call), &op));
+  }
+
+  std::string_view required_string_literal(cxx::ExpressionAST* source,
+                                           const char* message) {
+    while (source) {
+      if (auto* nested = cxx::ast_cast<cxx::NestedExpressionAST>(source)) {
+        source = nested->expression;
+        continue;
+      }
+      if (auto* initializer =
+              cxx::ast_cast<cxx::DefaultInitializerExpressionAST>(source)) {
+        source = initializer->expression;
+        continue;
+      }
+      if (auto* cast = cxx::ast_cast<cxx::ImplicitCastExpressionAST>(source);
+          cast && !cast->conversionFunction) {
+        source = cast->expression;
+        continue;
+      }
+      auto* literal = cxx::ast_cast<cxx::StringLiteralExpressionAST>(source);
+      if (!literal) {
+        fail(source, message);
+      }
+      return literal->literal->stringValue();
+    }
+    fail(current_function_.source, message);
+  }
+
+  Value command_parameter(cxx::CallExpressionAST* call,
+                          const CommandParameterIntrinsic& binding) {
+    if (current_function_.kind != FunctionKind::CommandProgram) {
+      fail(call, "command parameter operations require a command_program body");
+    }
+    auto* argument = call->expressionList;
+    if (binding.operation == CommandParameterIntrinsic::Operation::Base) {
+      auto source = expression(argument->value);
+      loom_op_t* op;
+      check(loom_command_parameter_base_build(
+          &builder_, source.components().back(), types_.get(call->type, call),
+          locations_.get(call), &op));
+      auto result = loom_op_results(op)[0];
+      return value_arena_.capture(*binding.result, {&result, 1});
+    }
+
+    auto source = expression(argument->value);
+    argument = argument->next;
+    std::vector<loom_value_id_t> components;
+    components.reserve(binding.binding_component_count + 1);
+    for (size_t index = 0; index < binding.binding_component_count; ++index) {
+      auto value = expression(argument->value);
+      IREE_ASSERT_EQ(value.components().size(), 1);
+      components.push_back(value.components()[0]);
+      argument = argument->next;
+    }
+    auto pattern = required_string_literal(
+        argument->value,
+        "command.parameter requires a string literal key pattern");
+    argument = argument->next;
+    std::vector<loom_value_id_t> substitutions;
+    for (; argument; argument = argument->next) {
+      substitutions.push_back(expression(argument->value).ssa());
+    }
+
+    std::vector<loom_value_id_t> type_identities = components;
+    type_identities.push_back(LOOM_VALUE_ID_INVALID);
+    BoundTypeStorage type_storage;
+    std::vector<loom_type_t> component_types;
+    types_.append_bound(call->type, call, type_identities, type_storage,
+                        component_types);
+    IREE_ASSERT_EQ(component_types.size(), type_identities.size());
+    loom_string_id_t pattern_id;
+    check(loom_module_intern_string(module_, view(pattern), &pattern_id));
+    loom_op_t* op;
+    check(loom_command_parameter_build(
+        &builder_, source.ssa(), pattern_id, substitutions.data(),
+        substitutions.size(), component_types.back(), locations_.get(call),
+        &op));
+    components.push_back(loom_op_results(op)[0]);
+    return value_arena_.capture(*binding.result, components);
+  }
+
   void admit_ordinary_operator(const DirectOperatorCall& call,
                                cxx::ExpressionAST* expression) {
     auto* function = call.function;
@@ -3546,6 +3800,11 @@ class Translator final : private Initialization::Evaluation {
         if (annotated(function, "kernel")) {
           fail(ast, "kernels require an explicit launch operation");
         }
+        if (functions_.is_command_program(function)) {
+          fail(ast,
+               "command programs require an explicit command launch "
+               "operation");
+        }
         auto called = ordinary_call(call, function, source);
         if (!called) {
           fail(ast, "void function cannot be used as a value");
@@ -3564,6 +3823,13 @@ class Translator final : private Initialization::Evaluation {
                                ast->type, ast);
         }
         return *called;
+      }
+      if (auto* parameter = std::get_if<CommandParameterIntrinsic>(binding)) {
+        return command_parameter(call, *parameter);
+      }
+      if (std::holds_alternative<KernelLaunchIntrinsic>(*binding) ||
+          std::holds_alternative<CommandLaunchIntrinsic>(*binding)) {
+        fail(ast, "void launch operation cannot be used as a value");
       }
       if (auto* buffer = std::get_if<BufferIntrinsic>(binding);
           buffer && buffer->has_literal()) {
@@ -4122,12 +4388,61 @@ class Translator final : private Initialization::Evaluation {
     return iteration_statement(body, tracks_break);
   }
 
+  void command_schedule(const CommandSchedule& schedule) {
+    if (current_function_.kind != FunctionKind::CommandProgram) {
+      fail(schedule.body,
+           "serial and concurrent regions require a command_program body");
+    }
+    if (!live_mutations(schedule.body).empty()) {
+      fail(schedule.body,
+           "command schedule regions cannot update enclosing automatic "
+           "values because they have no results");
+    }
+    if (control_->returns(schedule.body) != ExitFlow::None) {
+      fail(schedule.body,
+           "command schedule regions cannot contain function returns");
+    }
+    if (control_->iteration_exits(schedule.body) != ExitFlow::None) {
+      fail(schedule.body,
+           "command schedule regions cannot exit an enclosing loop");
+    }
+
+    loom_op_t* op;
+    if (schedule.kind == CommandSchedule::Kind::Serial) {
+      check(loom_command_serial_build(&builder_, locations_.get(schedule.body),
+                                      &op));
+    } else {
+      check(loom_command_concurrent_build(&builder_,
+                                          locations_.get(schedule.body), &op));
+    }
+    auto* region = schedule.kind == CommandSchedule::Kind::Serial
+                       ? loom_command_serial_body(op)
+                       : loom_command_concurrent_body(op);
+    auto saved = loom_builder_enter_region(&builder_, op, region);
+    auto outer_values = values_;
+    for (auto* child : cxx::ListView{schedule.body->statementList}) {
+      statement(child);
+      if (!control_->falls_through(child)) {
+        break;
+      }
+    }
+    loom_op_t* terminator;
+    check(loom_command_yield_build(&builder_, locations_.get(schedule.body),
+                                   &terminator));
+    values_ = std::move(outer_values);
+    loom_builder_restore(&builder_, saved);
+  }
+
   void statement(cxx::StatementAST* ast) {
     FastMathScope math_scope(
         lexical_fastmath_flags_,
         resolve_fastmath(ast ? fastmath_.statement(ast) : std::nullopt));
     ast = selected_statement(ast);
     if (!ast) {
+      return;
+    }
+    if (auto schedule = CommandSchedule::resolve(unit_, diagnostics_, ast)) {
+      command_schedule(*schedule);
       return;
     }
     if (auto* compound = cxx::ast_cast<cxx::CompoundStatementAST>(ast)) {
@@ -4910,6 +5225,14 @@ class Translator final : private Initialization::Evaluation {
         }
         auto* binding = function ? intrinsics_.lookup(function, ast) : nullptr;
         if (binding) {
+          if (auto* launch = std::get_if<KernelLaunchIntrinsic>(binding)) {
+            kernel_launch(call, *launch);
+            return;
+          }
+          if (auto* launch = std::get_if<CommandLaunchIntrinsic>(binding)) {
+            command_launch(call, *launch);
+            return;
+          }
           if (std::holds_alternative<AsyncIntrinsic>(*binding)) {
             require_kernel_context(ast);
           }
@@ -4944,6 +5267,11 @@ class Translator final : private Initialization::Evaluation {
         }
         if (annotated(function, "kernel")) {
           fail(ast, "kernels require an explicit launch operation");
+        }
+        if (functions_.is_command_program(function)) {
+          fail(ast,
+               "command programs require an explicit command launch "
+               "operation");
         }
         auto called = ordinary_call(call, function, locations_.get(ast));
         if (called) {

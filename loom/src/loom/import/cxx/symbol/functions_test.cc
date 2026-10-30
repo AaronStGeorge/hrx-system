@@ -89,8 +89,8 @@ TEST_F(FunctionsTest, RootsQueueEachConcreteHelperOnceWithPrivateVisibility) {
   FastMathContracts fastmath(source.unit(), source.diagnostics());
   FunctionContracts function_contracts(source.unit(), source.diagnostics());
   Intrinsics intrinsics(source.unit(), source.diagnostics(), types, scalars,
-                        vectors, locations, names, launches, function_contracts,
-                        module_);
+                        vectors, locations, names, launches, command_programs,
+                        function_contracts, module_);
   Configs configs(source.unit(), source.diagnostics(), types, scalars,
                   locations, names);
   TargetDefinitions target_definitions(source.unit(), source.diagnostics(),
@@ -150,8 +150,8 @@ TEST_F(FunctionsTest,
   FastMathContracts fastmath(source.unit(), source.diagnostics());
   FunctionContracts function_contracts(source.unit(), source.diagnostics());
   Intrinsics intrinsics(source.unit(), source.diagnostics(), types, scalars,
-                        vectors, locations, names, launches, function_contracts,
-                        module_);
+                        vectors, locations, names, launches, command_programs,
+                        function_contracts, module_);
   Configs configs(source.unit(), source.diagnostics(), types, scalars,
                   locations, names);
   TargetDefinitions target_definitions(source.unit(), source.diagnostics(),
@@ -202,8 +202,8 @@ TEST_F(FunctionsTest, ConfiguredScenarioRetainsItsNativeRegionSignature) {
   FastMathContracts fastmath(source.unit(), source.diagnostics());
   FunctionContracts function_contracts(source.unit(), source.diagnostics());
   Intrinsics intrinsics(source.unit(), source.diagnostics(), types, scalars,
-                        vectors, locations, names, launches, function_contracts,
-                        module_);
+                        vectors, locations, names, launches, command_programs,
+                        function_contracts, module_);
   Configs configs(source.unit(), source.diagnostics(), types, scalars,
                   locations, names);
   TargetDefinitions target_definitions(source.unit(), source.diagnostics(),

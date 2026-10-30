@@ -38,11 +38,6 @@ bool is_string_type(Types& types, const cxx::Type* type) {
                         cxx::TypeKind::kChar;
 }
 
-bool is_workload_type(Types& types, const cxx::Type* type) {
-  auto* record = cxx::type_cast<cxx::ClassType>(types.unqualified(type));
-  return record && annotated(record->definition(), "workload");
-}
-
 void require_tensor_extent(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
                            Types& types, const cxx::Type* type,
                            cxx::AST* owner) {
@@ -138,9 +133,6 @@ std::optional<CheckIntrinsic::Operation> CheckIntrinsic::parse_operation(
   }
   if (name == "check.expect.event") {
     return Operation::Event;
-  }
-  if (name == "kernel.launch") {
-    return Operation::Launch;
   }
   if (name == "check.trial") {
     return Operation::Trial;
@@ -349,64 +341,6 @@ std::optional<CheckIntrinsic> CheckIntrinsic::resolve(
       }
       break;
     }
-    case Operation::Launch: {
-      auto arguments = function->templateArguments();
-      auto selected = arguments.empty()
-                          ? std::nullopt
-                          : cxx::template_argument_value(arguments[0]);
-      auto* address =
-          selected ? std::get_if<std::shared_ptr<cxx::ConstAddress>>(&*selected)
-                   : nullptr;
-      result.kernel =
-          address && *address
-              ? cxx::symbol_cast<cxx::FunctionSymbol>((*address)->symbol())
-              : nullptr;
-      if (!returns_void || !result.kernel ||
-          !annotated(result.kernel, "kernel")) {
-        fail("kernel.launch requires a kernel as its first template argument");
-      }
-      if (!result.kernel->templateArguments().empty() &&
-          result.kernel->declaration()) {
-        launches.declaration(result.kernel,
-                             result.kernel->declaration()->attributeList);
-      }
-      result.configuration = launches.configuration_function(result.kernel);
-      auto* kernel_type =
-          cxx::type_cast<cxx::FunctionType>(result.kernel->type());
-      auto kernel_parameters = kernel_type->parameterTypes();
-      bool has_workload =
-          !parameters.empty() && is_workload_type(types, parameters[0]);
-      bool requires_workload =
-          result.configuration && !result.configuration->parameters().empty();
-      if (requires_workload && !has_workload) {
-        fail(
-            "configured kernel launches require "
-            "loom::kernel::workload(...) before the kernel arguments");
-      }
-      if (!requires_workload && has_workload) {
-        fail(
-            "loom::kernel::workload(...) requires a kernel configuration with "
-            "workload parameters");
-      }
-      size_t parameter_offset = has_workload ? 1 : 0;
-      if (kernel_parameters.size() + parameter_offset != parameters.size()) {
-        fail("kernel.launch arguments must match the kernel signature");
-      }
-      for (size_t index = 0; index < kernel_parameters.size(); ++index) {
-        auto expected = types.get(kernel_parameters[index], owner);
-        if (loom_type_kind(expected) == LOOM_TYPE_BUFFER) {
-          require_tensor(unit, diagnostics, types,
-                         parameters[index + parameter_offset], owner);
-        } else if (!loom_type_equal(
-                       expected, types.get(parameters[index + parameter_offset],
-                                           owner))) {
-          fail(
-              "kernel.launch scalar arguments must match the kernel parameter "
-              "types");
-        }
-      }
-      break;
-    }
     case Operation::Trial: {
       auto arguments = function->templateArguments();
       auto count_value = arguments.empty()
@@ -491,9 +425,8 @@ bool CheckIntrinsic::equivalent(const CheckIntrinsic& other) const {
          loom_type_equal(expected_scalar_type, other.expected_scalar_type) &&
          source_tensor == other.source_tensor &&
          expected_tensor == other.expected_tensor &&
-         result_tensor == other.result_tensor && kernel == other.kernel &&
-         subject == other.subject && oracle == other.oracle &&
-         trial_count == other.trial_count &&
+         result_tensor == other.result_tensor && subject == other.subject &&
+         oracle == other.oracle && trial_count == other.trial_count &&
          configuration == other.configuration;
 }
 

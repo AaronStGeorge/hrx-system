@@ -175,6 +175,12 @@ void Intrinsics::declaration(cxx::FunctionSymbol* function,
                 !AtomicIntrinsic::supports(selected->arguments[0]->name()) &&
                 !FenceIntrinsic::supports(selected->arguments[0]->name()) &&
                 !BarrierIntrinsic::supports(selected->arguments[0]->name()) &&
+                !KernelLaunchIntrinsic::supports(
+                    selected->arguments[0]->name()) &&
+                !CommandLaunchIntrinsic::supports(
+                    selected->arguments[0]->name()) &&
+                !CommandParameterIntrinsic::supports(
+                    selected->arguments[0]->name()) &&
                 !CheckIntrinsic::parse_operation(
                     selected->arguments[0]->name()) &&
                 !AssemblyIntrinsic::supports(selected->arguments[0]->name()) &&
@@ -229,6 +235,19 @@ Intrinsics::Binding Intrinsics::resolve(cxx::FunctionSymbol* function,
   if (auto fragment = FragmentIntrinsic::resolve(
           unit_, diagnostics_, types_, function, attribute, module_, owner)) {
     return *fragment;
+  }
+  if (auto launch = KernelLaunchIntrinsic::resolve(
+          unit_, diagnostics_, types_, launches_, function, attribute, owner)) {
+    return *launch;
+  }
+  if (auto launch = CommandLaunchIntrinsic::resolve(unit_, diagnostics_, types_,
+                                                    command_programs_, function,
+                                                    attribute, owner)) {
+    return *launch;
+  }
+  if (auto parameter = CommandParameterIntrinsic::resolve(
+          unit_, diagnostics_, types_, function, attribute, owner)) {
+    return *parameter;
   }
   if (auto binding = CheckIntrinsic::resolve(
           unit_, diagnostics_, types_, launches_, function, attribute, owner)) {
@@ -486,6 +505,18 @@ const CheckIntrinsic* Intrinsics::check_binding(cxx::FunctionSymbol* function,
                                                 cxx::AST* owner) {
   auto* binding = lookup(function, owner);
   return binding ? std::get_if<CheckIntrinsic>(binding) : nullptr;
+}
+
+const KernelLaunchIntrinsic* Intrinsics::kernel_launch_binding(
+    cxx::FunctionSymbol* function, cxx::AST* owner) {
+  auto* binding = lookup(function, owner);
+  return binding ? std::get_if<KernelLaunchIntrinsic>(binding) : nullptr;
+}
+
+const CommandLaunchIntrinsic* Intrinsics::command_launch_binding(
+    cxx::FunctionSymbol* function, cxx::AST* owner) {
+  auto* binding = lookup(function, owner);
+  return binding ? std::get_if<CommandLaunchIntrinsic>(binding) : nullptr;
 }
 
 IntrinsicCallResult Intrinsics::call(const Binding& admitted,
