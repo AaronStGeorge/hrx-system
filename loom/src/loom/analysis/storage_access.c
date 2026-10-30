@@ -23,7 +23,7 @@ typedef struct loom_storage_access_caller_t {
 } loom_storage_access_caller_t;
 
 typedef struct loom_storage_access_function_record_t {
-  // Completed local graph consumed by allocation interference.
+  // Canonical local graph and transitive callable access summary.
   loom_storage_access_function_t graph;
   // Source definition whose body remains alive throughout construction.
   loom_func_like_t function;
@@ -38,8 +38,6 @@ typedef struct loom_storage_access_function_record_t {
   } branch;
   // Pending body discovery; each reached definition is queued exactly once.
   struct loom_storage_access_function_record_t* next_pending;
-  // Reference nodes in formal argument order; scalar entries are NULL.
-  loom_storage_reference_t** arguments;
   // Last direct use retained in source walk order, or NULL.
   loom_storage_access_use_t* use_tail;
   // Last rendezvous retained in source order, or NULL.
@@ -48,8 +46,6 @@ typedef struct loom_storage_access_function_record_t {
   loom_storage_access_caller_t* callers;
   // Next function awaiting propagation of its unbounded-memory effect.
   struct loom_storage_access_function_record_t* next_unbounded;
-  // True after a direct or transitive unbounded access has been discovered.
-  bool has_unbounded_memory_access;
 } loom_storage_access_function_record_t;
 
 typedef struct loom_storage_access_state_t {
@@ -202,14 +198,14 @@ static iree_status_t loom_storage_access_enqueue_function(
   const loom_block_t* entry =
       loom_region_entry_block(loom_func_like_body(function));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->scope->arena, entry->arg_count, sizeof(*record->arguments),
-      (void**)&record->arguments));
+      state->scope->arena, entry->arg_count, sizeof(*record->graph.arguments),
+      (void**)&record->graph.arguments));
   for (uint16_t i = 0; i < entry->arg_count; ++i) {
-    record->arguments[i] = NULL;
+    record->graph.arguments[i] = NULL;
     const loom_value_id_t value_id = loom_block_arg_id(entry, i);
     if (loom_storage_access_is_reference(state->scope->module, value_id)) {
       IREE_RETURN_IF_ERROR(loom_storage_access_add_reference(
-          state, record, value_id, &record->arguments[i]));
+          state, record, value_id, &record->graph.arguments[i]));
     }
   }
   loom_storage_access_index_function(state, record, previous);
@@ -349,10 +345,10 @@ static iree_status_t loom_storage_access_record_barrier(
 static void loom_storage_access_mark_unbounded(
     loom_storage_access_state_t* state,
     loom_storage_access_function_record_t* function) {
-  if (function->has_unbounded_memory_access) {
+  if (function->graph.has_unbounded_memory_access) {
     return;
   }
-  function->has_unbounded_memory_access = true;
+  function->graph.has_unbounded_memory_access = true;
   if (state->last_unbounded) {
     state->last_unbounded->next_unbounded = function;
   } else {
@@ -411,13 +407,13 @@ static iree_status_t loom_storage_access_visit(
     *caller = (loom_storage_access_caller_t){.function = state->current,
                                              .next = callee_record->callers};
     callee_record->callers = caller;
-    if (callee_record->has_unbounded_memory_access) {
+    if (callee_record->graph.has_unbounded_memory_access) {
       loom_storage_access_mark_unbounded(state, state->current);
     }
     const loom_value_slice_t arguments = loom_call_like_operands(call);
     const uint16_t argument_offset = loom_call_like_operand_offset(call);
     for (uint16_t i = 0; i < arguments.count; ++i) {
-      loom_storage_reference_t* formal = callee_record->arguments[i];
+      loom_storage_reference_t* formal = callee_record->graph.arguments[i];
       if (!formal) {
         continue;
       }
@@ -544,8 +540,8 @@ static iree_status_t loom_storage_access_build_pending(
       const loom_block_t* entry = loom_region_entry_block(
           loom_func_like_body(state->current->function));
       for (uint16_t i = 0; i < entry->arg_count; ++i) {
-        if (state->current->arguments[i]) {
-          loom_storage_access_include(state, state->current->arguments[i],
+        if (state->current->graph.arguments[i]) {
+          loom_storage_access_include(state, state->current->graph.arguments[i],
                                       LOOM_STORAGE_ACCESS_ESCAPE);
         }
       }
@@ -593,11 +589,11 @@ void loom_storage_access_scope_initialize(
   *out_scope = (loom_storage_access_scope_t){.module = module, .arena = arena};
 }
 
-static iree_status_t loom_storage_access_require_record(
+iree_status_t loom_storage_access_require_function(
     loom_storage_access_scope_t* scope, loom_func_like_t function,
     loom_local_value_domain_t* value_domain,
-    const loom_storage_access_function_record_t** out_record) {
-  *out_record = NULL;
+    const loom_storage_access_function_t** out_function) {
+  *out_function = NULL;
   if (scope->state == NULL) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate(
         scope->arena, sizeof(*scope->state), (void**)&scope->state));
@@ -616,21 +612,9 @@ static iree_status_t loom_storage_access_require_record(
     }
   }
   if (iree_status_is_ok(status)) {
-    *out_record = record;
+    *out_function = &record->graph;
   }
   return status;
-}
-
-iree_status_t loom_storage_access_require_function(
-    loom_storage_access_scope_t* scope, loom_func_like_t function,
-    loom_local_value_domain_t* value_domain,
-    const loom_storage_access_function_t** out_function) {
-  *out_function = NULL;
-  const loom_storage_access_function_record_t* record = NULL;
-  IREE_RETURN_IF_ERROR(loom_storage_access_require_record(
-      scope, function, value_domain, &record));
-  *out_function = &record->graph;
-  return iree_ok_status();
 }
 
 iree_status_t loom_storage_access_require_call(
@@ -648,12 +632,12 @@ iree_status_t loom_storage_access_require_call(
   const loom_func_like_t function =
       loom_storage_access_call_function(scope->module, call);
   if (loom_func_like_isa(function)) {
-    const loom_storage_access_function_record_t* record = NULL;
-    IREE_RETURN_IF_ERROR(loom_storage_access_require_record(
-        scope, function, value_domain, &record));
+    const loom_storage_access_function_t* summary = NULL;
+    IREE_RETURN_IF_ERROR(loom_storage_access_require_function(
+        scope, function, value_domain, &summary));
     *out_call = (loom_storage_access_call_t){
-        .arguments = (const loom_storage_reference_t* const*)record->arguments,
-        .has_unbounded_memory_access = record->has_unbounded_memory_access,
+        .arguments = (const loom_storage_reference_t* const*)summary->arguments,
+        .has_unbounded_memory_access = summary->has_unbounded_memory_access,
     };
     return iree_ok_status();
   }

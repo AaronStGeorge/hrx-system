@@ -40,7 +40,7 @@ typedef struct loom_storage_access_use_t {
   loom_value_id_t value_id;
   // Effects of this direct use, excluding any separately referenced callee.
   loom_storage_access_effects_t effects;
-  // Completed formal-argument effects for a semantic call, or NULL.
+  // Completed formal-argument effects for an exact source call, or NULL.
   const loom_storage_reference_t* callee_argument;
   // Next classified use of the same reference.
   struct loom_storage_access_use_t* next;
@@ -88,14 +88,18 @@ typedef struct loom_storage_access_barrier_t {
 } loom_storage_access_barrier_t;
 
 typedef struct loom_storage_access_function_t {
+  // Formal references in entry-block argument order; scalar entries are NULL.
+  loom_storage_reference_t** arguments;
   // Canonical reference nodes, including unused formal references.
   loom_storage_reference_t* references;
   // Direct uses in source walk order across all canonical references.
   loom_storage_access_use_t* uses;
   // Qualifying workgroup barriers in source traversal order.
   loom_storage_access_barrier_t* barriers;
-  // The body may access storage without an identified reference operand.
+  // A local non-call operation may access storage without a bounded operand.
   bool has_unknown_memory_access;
+  // This body or a reached callee may access storage without a bounded operand.
+  bool has_unbounded_memory_access;
 } loom_storage_access_function_t;
 
 typedef struct loom_storage_access_scope_t {
