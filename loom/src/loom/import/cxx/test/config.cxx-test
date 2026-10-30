@@ -35,6 +35,48 @@ func.def public @read_extent() -> (index) {
 }
 
 // ====
+// Address and encoding configs remain first-class values instead of falling
+// back to fixed-width integers or opaque source objects.
+#include <loomcxx/encoding_type.h>
+#include <loomcxx/index.h>
+#include <loomcxx/predicate.h>
+[[loom::config("model.byte_offset"), loom::where(
+  loom::predicate::range(0, 4096) && loom::predicate::multiple_of(64))]]
+extern const loom::type::offset byte_offset;
+[[loom::config("model.schema")]]
+extern const loom::type::encoding<loom::encoding::role::schema> schema;
+[[loom::config("model.transform")]]
+extern const loom::type::encoding<loom::encoding::role::transform> transform;
+loom::type::offset read_byte_offset() { return byte_offset; }
+loom::type::encoding<loom::encoding::role::schema> read_schema() {
+  return schema;
+}
+loom::type::encoding<loom::encoding::role::transform> read_transform() {
+  return transform;
+}
+// ----
+config.decl @model.byte_offset : %0: offset where [range(%0, 0, 4096), multiple_of(%0, 64)]
+
+config.decl @model.schema : encoding<schema>
+
+config.decl @model.transform : encoding<transform>
+
+func.def public @read_byte_offset() -> (offset) {
+  %byte_offset = config.get @model.byte_offset : offset
+  func.return %byte_offset : offset
+}
+
+func.def public @read_schema() -> (encoding<schema>) {
+  %schema = config.get @model.schema : encoding<schema>
+  func.return %schema : encoding<schema>
+}
+
+func.def public @read_transform() -> (encoding<transform>) {
+  %transform = config.get @model.transform : encoding<transform>
+  func.return %transform : encoding<transform>
+}
+
+// ====
 // A C++ constant initializes an exact index specialization and every source
 // read materializes an index-domain constant.
 #include <loomcxx/index.h>
@@ -97,6 +139,16 @@ func.def public @after() -> (i32) {
   %10 = scalar.addi %8, %twice : i32
   func.return %10 : i32
 }
+
+// ====
+// Exact definitions retain their source contract after validating the default.
+#include <loomcxx/index.h>
+#include <loomcxx/predicate.h>
+[[loom::config("model.block_size"), loom::where(
+  loom::predicate::range(16, 256) && loom::predicate::multiple_of(16))]]
+const loom::type::index block_size{64};
+// ----
+config.def @model.block_size = 64 : %0: index where [range(%0, 16, 256), multiple_of(%0, 16)]
 
 // ====
 // Schedule values can remain native index configs while ordinary loop bounds
@@ -206,7 +258,7 @@ extern const unsigned tile_alias;
 [[loom::config("model.tile")]] const unsigned tile = 64u;
 unsigned read_tile() { return tile + tile_alias; }
 // ----
-config.def @model.tile = 64 : i32
+config.def @model.tile = 64 : %0: i32 where [range(%0, 16, 256), multiple_of(%0, 16)]
 
 func.def public @read_tile() -> (i32) {
   %tile = scalar.constant 64 : i32

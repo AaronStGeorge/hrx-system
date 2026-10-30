@@ -101,6 +101,28 @@ def _render_amdgpu_target(target_name: str, target: TargetInfo) -> list[str]:
     return lines
 
 
+def _render_aie2p_target(target_name: str, target: TargetInfo) -> list[str]:
+    target_fields = [f".kind = {json.dumps(target.kind)}"]
+    device_profile = target.operation.attributes.get("device_profile")
+    if isinstance(device_profile, Utf8Attr):
+        device_profile = device_profile.value
+    if device_profile is not None:
+        if not isinstance(device_profile, str):
+            raise CxxRenderError(
+                target.operation, "AIE2P device_profile is not a string"
+            )
+        target_fields.append(f".device_profile = {json.dumps(device_profile)}")
+    if len(target_fields) == 1:
+        return [
+            f"constexpr loom::aie2p::target {target_name}{{{target_fields[0]}}};",
+            "",
+        ]
+    lines = [f"constexpr loom::aie2p::target {target_name}{{"]
+    lines.extend(f"  {field}," for field in target_fields)
+    lines.extend(("};", ""))
+    return lines
+
+
 def _render_targets(
     targets: tuple[tuple[str, str | None, TargetInfo], ...],
 ) -> list[str]:
@@ -108,6 +130,8 @@ def _render_targets(
     for target_name, target_type_name, target in targets:
         if target.operation_name == "target.generic":
             lines.extend(_render_generic_target(target_name, target_type_name, target))
+        elif target.operation_name == "aie2p.target":
+            lines.extend(_render_aie2p_target(target_name, target))
         else:
             lines.extend(_render_amdgpu_target(target_name, target))
     return lines
@@ -121,6 +145,7 @@ def render_preamble(
     uses_pipelines: bool,
     uses_buffers: bool,
     uses_views: bool,
+    uses_encodings: bool,
     vector_aliases: dict[tuple[str, tuple[int, ...], bool], str],
     record_declarations: dict[str, tuple[tuple[str, str], ...]],
     table_lookup_declarations: set[tuple[str, str, str, str]],
@@ -144,7 +169,9 @@ def render_preamble(
     target_operations = {target.operation_name for _, _, target in targets}
     if "amdgpu.target" in target_operations:
         headers.add("loomcxx/target/amdgpu.h")
-    elif "target.generic" in target_operations:
+    if "aie2p.target" in target_operations:
+        headers.add("loomcxx/target/aie2p.h")
+    if "target.generic" in target_operations:
         headers.add("loomcxx/target.h")
     if any(name.startswith("view.atomic.") for name in operation_names):
         headers.add("loomcxx/atomic.h")
@@ -202,6 +229,16 @@ def render_preamble(
             headers.add("loomcxx/buffer.h")
         elif scalar_names & {"index", "offset"}:
             headers.add("loomcxx/index.h")
+    if uses_encodings and headers.isdisjoint(
+        {
+            "loomcxx/command.h",
+            "loomcxx/kernel.h",
+            "loomcxx/pipeline.h",
+            "loomcxx/vector.h",
+            "loomcxx/view.h",
+        }
+    ):
+        headers.add("loomcxx/encoding_type.h")
     if scalar_names & {"f8E4M3", "f8E5M2"}:
         headers.add("loomcxx/numeric.h")
     system_headers = {"stdfloat"} if scalar_names & {"f16", "bf16"} else set()

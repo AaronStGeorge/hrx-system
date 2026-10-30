@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from loom.format.cxx.context import walk_operations
 from loom.format.cxx.errors import CxxRenderError
 from loom.format.cxx.pipelines import CxxPipelineRenderer
 from loom.ir import (
@@ -199,9 +200,27 @@ class CxxKernelConfigurationRenderer(CxxPipelineRenderer):
             )
         if consumed_operations != {id(operation) for operation in block.ops}:
             return None
+        consumed_symbols = {
+            str(declaration.attributes["symbol"])
+            for declaration in self.config_symbols.values()
+            if id(declaration) in consumed_declarations
+        }
+        if any(
+            operation.name == "config.get"
+            and operation.attributes.get("config") in consumed_symbols
+            and id(operation) not in consumed_operations
+            for operation in walk_operations(self.module.body)
+        ):
+            return None
         self._validate_projected_attributes(launch, ())
         self.projected_config_declarations.update(consumed_declarations)
         return attributes
+
+    def _plan_kernel_configurations(self, kernels: list[Operation]) -> None:
+        for kernel in kernels:
+            self.kernel_source_launch_attributes[id(kernel)] = (
+                self._source_launch_attributes(kernel)
+            )
 
     def _configuration_parameters(
         self, kernel: Operation, arguments: list[int]
@@ -323,7 +342,9 @@ class CxxKernelConfigurationRenderer(CxxPipelineRenderer):
 
     def _render_kernel_configuration(self, kernel: Operation) -> list[str]:
         symbol = str(self._resolved(kernel).attr("callee"))
-        source_attributes = self._source_launch_attributes(kernel)
+        source_attributes = self.kernel_source_launch_attributes.get(id(kernel))
+        if id(kernel) not in self.kernel_source_launch_attributes:
+            source_attributes = self._source_launch_attributes(kernel)
         if source_attributes is not None:
             self.kernel_workload_component_counts[symbol] = ()
             return source_attributes

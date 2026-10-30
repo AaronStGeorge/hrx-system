@@ -69,14 +69,22 @@ void strided_pair_dot(const _Float16* lhs, const _Float16* rhs, float* output, u
   loom::vector::store(result, output_view, {row, 0});
 }
 
-// Workgroup allocation and asynchronous gather retain their staging structure.
+// Workgroup allocation and every portable asynchronous transfer retain their
+// staging, predication, direction, participant set, and cache policy.
 [[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(64, 1, 1)]]
-void gather_tile(const unsigned char* input) {
+void async_transfers(const unsigned char* input, unsigned char* output, unsigned participants, bool enabled) {
   auto source = loom::buffer::view<4>(input, {}, loom::encoding::layout::dense<1>());
+  auto output_view = loom::buffer::view<4>(output, {}, loom::encoding::layout::dense<1>());
   auto* storage = loom::buffer::alloca<unsigned char, loom::memory_space::workgroup, 64>(256);
-  auto destination = loom::buffer::view<64, 4>(storage, {}, loom::encoding::layout::dense<2>());
-  auto transfer = loom::kernel::async::gather<loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, destination);
-  auto stage = loom::kernel::async::group(transfer);
+  auto lane_destination = loom::buffer::view<4>(storage, {}, loom::encoding::layout::dense<1>());
+  auto tile_destination = loom::buffer::view<64, 4>(storage, {}, loom::encoding::layout::dense<2>());
+  auto load = loom::kernel::async::copy<loom::kernel::async::direction::global_to_workgroup, loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, lane_destination);
+  auto store = loom::kernel::async::copy_mask<loom::kernel::async::direction::workgroup_to_global, loom::cache::scope::device, loom::cache::temporal::non_temporal_writeback>(lane_destination, output_view, enabled);
+  auto gather = loom::kernel::async::gather<loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, tile_destination);
+  auto gather_tail = loom::kernel::async::gather_mask<loom::cache::scope::cluster, loom::cache::temporal::last_use>(source, tile_destination, enabled);
+  auto cluster = loom::kernel::async::cluster::gather<loom::cache::scope::cluster, loom::cache::temporal::high_temporal>(source, lane_destination, participants);
+  auto cluster_tail = loom::kernel::async::cluster::gather_mask<loom::cache::scope::system, loom::cache::temporal::bypass>(source, lane_destination, participants, enabled);
+  auto stage = loom::kernel::async::group(load, store, gather, gather_tail, cluster, cluster_tail);
   loom::kernel::async::wait<0>(stage);
 }
 
@@ -157,13 +165,20 @@ void strided_pair_dot(const std::float16_t* lhs, const std::float16_t* rhs, floa
 }
 
 [[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(64, 1, 1)]]
-void gather_tile(const unsigned char* input) {
+void async_transfers(const unsigned char* input, unsigned char* output, unsigned participants, bool enabled) {
   auto source = loom::buffer::view<4>(input, {}, loom::encoding::layout::dense<1>());
+  auto output_view = loom::buffer::view<4>(output, {}, loom::encoding::layout::dense<1>());
   auto* storage = loom::buffer::alloca<unsigned char, loom::memory_space::workgroup, 64>(loom::type::index{256});
-  auto destination = loom::buffer::view<64, 4>(storage, {}, loom::encoding::layout::dense<2>());
-  auto transfer = loom::kernel::async::gather<loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, destination);
-  auto transfer_group = loom::kernel::async::group(transfer);
-  loom::kernel::async::wait<0>(transfer_group);
+  auto lane_destination = loom::buffer::view<4>(storage, {}, loom::encoding::layout::dense<1>());
+  auto tile_destination = loom::buffer::view<64, 4>(storage, {}, loom::encoding::layout::dense<2>());
+  auto load = loom::kernel::async::copy<loom::kernel::async::direction::global_to_workgroup, loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, lane_destination);
+  auto store = loom::kernel::async::copy_mask<loom::kernel::async::direction::workgroup_to_global, loom::cache::scope::device, loom::cache::temporal::non_temporal_writeback>(lane_destination, output_view, enabled);
+  auto gather = loom::kernel::async::gather<loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, tile_destination);
+  auto gather_tail = loom::kernel::async::gather_mask<loom::cache::scope::cluster, loom::cache::temporal::last_use>(source, tile_destination, enabled);
+  auto cluster = loom::kernel::async::cluster::gather<loom::cache::scope::cluster, loom::cache::temporal::high_temporal>(source, lane_destination, participants);
+  auto cluster_tail = loom::kernel::async::cluster::gather_mask<loom::cache::scope::system, loom::cache::temporal::bypass>(source, lane_destination, participants, enabled);
+  auto load_group = loom::kernel::async::group(load, store, gather, gather_tail, cluster, cluster_tail);
+  loom::kernel::async::wait<0>(load_group);
 }
 
 [[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
@@ -366,13 +381,13 @@ using Row = loom::type::view<loom::type::shape<4>, float>;
 using Float32x4 = float __attribute__((ext_vector_type(4)));
 
 [[loom::symbol("math.copy_double"), loom::force_inline]]
-void math_copy_double(loom::type::view<loom::type::shape<4>, float> source, loom::type::view<loom::type::shape<4>, float> destination);
+void math_copy_double(loom::type::view<loom::type::shape<4>, const float> source, loom::type::view<loom::type::shape<4>, float> destination);
 
 [[loom::symbol("math.double"), loom::force_inline]]
 static Float32x4 math_double(Float32x4 input);
 
 [[loom::symbol("math.copy_double"), loom::force_inline]]
-void math_copy_double(loom::type::view<loom::type::shape<4>, float> source, loom::type::view<loom::type::shape<4>, float> destination) {
+void math_copy_double(loom::type::view<loom::type::shape<4>, const float> source, loom::type::view<loom::type::shape<4>, float> destination) {
   Float32x4 input = loom::vector::load<Float32x4>(source, loom::type::indices{loom::type::index{0}});
   Float32x4 result = math_double(input);
   loom::vector::store(result, destination, loom::type::indices{loom::type::index{0}});
@@ -428,7 +443,7 @@ Boolx4 classify(Int32x4 lhs, Int32x4 rhs, Float32x4 values);
 Float16x4 narrow(Float32x4 values);
 
 [[loom::symbol("bytes")]]
-loom::type::view<loom::type::shape<16>, unsigned char> bytes(loom::type::buffer<unsigned> data, loom::type::offset byte_offset);
+loom::type::view<loom::type::shape<16>, const unsigned char> bytes(loom::type::buffer<unsigned> data, loom::type::offset byte_offset);
 
 [[loom::symbol("infinity")]]
 float infinity();
@@ -449,9 +464,9 @@ Float16x4 narrow(Float32x4 values) {
 }
 
 [[loom::symbol("bytes")]]
-loom::type::view<loom::type::shape<16>, unsigned char> bytes(loom::type::buffer<unsigned> data, loom::type::offset byte_offset) {
-  auto words = loom::buffer::view<4>(data, byte_offset, {});
-  return loom::view::bitcast<loom::type::view<loom::type::shape<16>, unsigned char>>(words);
+loom::type::view<loom::type::shape<16>, const unsigned char> bytes(loom::type::buffer<unsigned> data, loom::type::offset byte_offset) {
+  auto words = loom::buffer::view<4>(loom::buffer::cast<const unsigned>(data), byte_offset, {});
+  return loom::view::bitcast<loom::type::view<loom::type::shape<16>, const unsigned char>>(words);
 }
 
 [[loom::symbol("infinity")]]
@@ -718,6 +733,40 @@ void resident(unsigned factor, loom::type::index column, loom::type::index count
 }
 
 // ====
+// RUN: emit cxx @aie_pipeline
+#include <loomcxx/pipeline.h>
+#include <loomcxx/target/aie2p.h>
+
+constexpr loom::aie2p::target array_target{
+    .kind = "array",
+    .device_profile = "amd.xdna.strix_halo.17f0_11",
+};
+
+[[loom::pipeline("kernel"), loom::target(array_target)]]
+void aie_pipeline() {
+  [[loom::strand(loom::type::indices{loom::type::index{0}, loom::type::index{1}}, loom::type::indices{loom::type::index{4}, loom::type::index{2}}, loom::type::indices{loom::type::index{1}, loom::type::index{1}}), loom::target(array_target)]] {
+  }
+}
+
+// ----
+#include <loomcxx/pipeline.h>
+#include <loomcxx/target/aie2p.h>
+
+constexpr loom::aie2p::target rendered_target{
+  .kind = "array",
+  .device_profile = "amd.xdna.strix_halo.17f0_11",
+};
+
+[[loom::pipeline("kernel"), loom::symbol("aie_pipeline"), loom::target(rendered_target)]]
+void aie_pipeline();
+
+[[loom::pipeline("kernel"), loom::symbol("aie_pipeline"), loom::target(rendered_target)]]
+void aie_pipeline() {
+  [[loom::strand(loom::type::indices{loom::type::index{0}, loom::type::index{1}}, loom::type::indices{loom::type::index{4}, loom::type::index{2}}, loom::type::indices{loom::type::index{1}, loom::type::index{1}}), loom::target(rendered_target)]] {
+  }
+}
+
+// ====
 // RUN: emit cxx @streaming
 #include <loomcxx/pipeline.h>
 
@@ -726,11 +775,14 @@ using Layout = loomt::encoding<loom::encoding::role::layout, 2>;
 using Payload = loomt::tile<loomt::shape<loomt::dynamic, 4>, float, Layout>;
 using Stream = loomt::channel<Payload>;
 using Slots = loomt::view<loomt::shape<2, loomt::dynamic, 4>, float>;
+using PayloadView = loomt::view<loomt::shape<loomt::dynamic, 4>, const float, Layout>;
+
+float first(PayloadView payload) { return loom::view::load(payload, 0, 0); }
 
 float consume(Stream input) {
   auto read = loom::channel::accept(input);
   auto payload = loom::channel::wait(read);
-  auto value = loom::view::load(payload, 0, 0);
+  auto value = first(payload);
   loom::channel::release(read);
   return value;
 }
@@ -776,6 +828,9 @@ float consume(Stream input) {
 // ----
 #include <loomcxx/pipeline.h>
 
+[[loom::symbol("first")]]
+float first(loom::type::view<loom::type::shape<loom::type::dynamic, 4>, const float, loom::type::encoding<loom::encoding::role::layout, 2>> payload);
+
 [[loom::symbol("consume")]]
 float consume(loom::type::channel<loom::type::tile<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>>> input);
 
@@ -783,13 +838,19 @@ float consume(loom::type::channel<loom::type::tile<loom::type::shape<loom::type:
 void streaming(loom::type::index column, loom::type::index capacity, loom::type::encoding<loom::encoding::role::layout> payload_layout, [[loom::launch]] loom::type::view<loom::type::shape<2, loom::type::dynamic, 4>, float> slots);
 
 [[loom::pipeline("kernel"), loom::symbol("sink")]]
-void sink([[loom::launch]] loom::type::channel<loom::type::tile<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>>> v55);
+void sink([[loom::launch]] loom::type::channel<loom::type::tile<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>>> v60);
+
+[[loom::symbol("first")]]
+float first(loom::type::view<loom::type::shape<loom::type::dynamic, 4>, const float, loom::type::encoding<loom::encoding::role::layout, 2>> payload) {
+  float v8 = loom::view::load(payload, loom::type::index{0}, loom::type::index{0});
+  return v8;
+}
 
 [[loom::symbol("consume")]]
 float consume(loom::type::channel<loom::type::tile<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>>> input) {
   auto read = loom::channel::accept(input);
   auto payload = loom::channel::wait(read);
-  float value = loom::view::load(payload, loom::type::index{0}, loom::type::index{0});
+  float value = first(payload);
   loom::channel::release(read);
   return value;
 }
@@ -809,7 +870,7 @@ void streaming(loom::type::index column, loom::type::index capacity, loom::type:
     loom::channel::release(fanout.second);
     auto pending = loom::channel::accept(input);
     auto payload = loom::channel::wait(pending);
-    float v39 = loom::view::load(payload, loom::type::index{0}, loom::type::index{0});
+    float v44 = loom::view::load(payload, loom::type::index{0}, loom::type::index{0});
     loom::channel::release(pending);
     auto mutable_read = loom::channel::accept<loom::channel::mode::mutable_>(input);
     auto mutable_payload = loom::channel::wait(mutable_read);
@@ -820,6 +881,115 @@ void streaming(loom::type::index column, loom::type::index capacity, loom::type:
     loom::channel::copy(source, reservation_2.write);
     auto selection = loom::channel::select(input);
     loom::channel::release(selection.read);
-    float v52 = consume(input);
+    float v57 = consume(input);
   }
+}
+
+// ====
+// RUN: emit cxx @configured
+#include <loomcxx/encoding_type.h>
+#include <loomcxx/index.h>
+#include <loomcxx/predicate.h>
+
+using Schema = loom::type::encoding<loom::encoding::role::schema>;
+struct Configuration {
+  loom::type::index input_size;
+  Schema schema;
+};
+
+[[loom::config("pipeline.input_size"), loom::where(loom::predicate::range(1, 65536) && loom::predicate::multiple_of(64))]]
+extern const loom::type::index input_size;
+[[loom::config("pipeline.schema")]] extern const Schema schema;
+
+Configuration configured() { return {input_size, schema}; }
+
+// ----
+#include <loomcxx/encoding_type.h>
+#include <loomcxx/index.h>
+#include <loomcxx/predicate.h>
+
+struct configured_result {
+  loom::type::index value0;
+  loom::type::encoding<loom::encoding::role::schema> value1;
+};
+
+[[loom::config("pipeline.input_size"), loom::where(loom::predicate::range(1, 65536) && loom::predicate::multiple_of(64))]]
+extern const loom::type::index input_size;
+[[loom::config("pipeline.schema")]]
+extern const loom::type::encoding<loom::encoding::role::schema> schema;
+
+[[loom::symbol("configured")]]
+configured_result configured();
+
+[[loom::symbol("configured")]]
+configured_result configured() {
+  return {input_size, schema};
+}
+
+// ====
+// Exact config defaults and their specialization contracts survive export.
+// RUN: emit cxx
+#include <loomcxx/index.h>
+#include <loomcxx/predicate.h>
+
+[[loom::config("pipeline.tile_size"), loom::where(loom::predicate::range(16, 256) && loom::predicate::multiple_of(16))]]
+const loom::type::index tile_size{64};
+
+loom::type::index default_tile_size() { return tile_size; }
+
+// ----
+#include <loomcxx/index.h>
+#include <loomcxx/predicate.h>
+
+[[loom::config("pipeline.tile_size"), loom::where(loom::predicate::range(16, 256) && loom::predicate::multiple_of(16))]]
+const loom::type::index tile_size = loom::type::index{64};
+
+[[loom::symbol("default_tile_size")]]
+loom::type::index default_tile_size();
+
+[[loom::symbol("default_tile_size")]]
+loom::type::index default_tile_size() {
+  return loom::type::index{64};
+}
+
+// ====
+// Predicate constants retain the declared C++ scalar family.
+// RUN: emit cxx @configured_scalars
+#include <loomcxx/predicate.h>
+
+[[loom::config("pipeline.enabled"), loom::where(loom::predicate::eq(true))]]
+extern const bool enabled;
+[[loom::config("pipeline.scale"), loom::where(loom::predicate::eq(1.0f) && loom::predicate::finite())]]
+extern const float scale;
+[[loom::config("pipeline.byte"), loom::where(loom::predicate::range(static_cast<unsigned char>(1), static_cast<unsigned char>(127)))]]
+extern const unsigned char byte;
+
+float configured_scalars() {
+  if (enabled) return scale;
+  return static_cast<float>(byte);
+}
+
+// ----
+#include <loomcxx/numeric.h>
+#include <loomcxx/predicate.h>
+
+[[loom::config("pipeline.enabled"), loom::where(loom::predicate::eq(true))]]
+extern const bool enabled;
+[[loom::config("pipeline.scale"), loom::where(loom::predicate::eq(1.0f) && loom::predicate::finite())]]
+extern const float scale;
+[[loom::config("pipeline.byte"), loom::where(loom::predicate::range(static_cast<unsigned char>(1), static_cast<unsigned char>(127)))]]
+extern const unsigned char byte;
+
+[[loom::symbol("configured_scalars")]]
+float configured_scalars();
+
+[[loom::symbol("configured_scalars")]]
+float configured_scalars() {
+  float v5 = float{};
+  if (enabled) {
+    v5 = scale;
+  } else {
+    v5 = loom::convert<float>(byte);
+  }
+  return v5;
 }

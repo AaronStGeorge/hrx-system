@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from loom.builtin_types import ChannelReadMode
 from loom.format.cxx.errors import CxxRenderError
 from loom.ir import (
     BufferType,
@@ -49,6 +50,7 @@ _UNSIGNED_INTEGER_TYPES = {
 # Auto-deduced kernel topology values retain the index domain while exposing a
 # conventional unsigned conversion for ordinary C++ expressions.
 KERNEL_COORDINATE_CPP_TYPE = "loom::kernel::coordinate"
+_CHANNEL_READ_MUTABLE_MODE = ChannelReadMode.case("mutable").value
 
 
 class CxxTypes:
@@ -189,7 +191,7 @@ class CxxTypes:
         if family == "read":
             mode = value_type.get("mode")
             if mode is not None:
-                if mode != "mutable":
+                if mode != _CHANNEL_READ_MUTABLE_MODE:
                     raise CxxRenderError(
                         None, f"channel read mode {mode!r} has no C++ spelling"
                     )

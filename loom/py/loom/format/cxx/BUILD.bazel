@@ -16,6 +16,7 @@ iree_py_library(
     srcs = [
         "__init__.py",
         "commands.py",
+        "configs.py",
         "context.py",
         "errors.py",
         "expressions.py",
@@ -27,6 +28,7 @@ iree_py_library(
         "renderer.py",
         "translation_unit.py",
         "types.py",
+        "view_access.py",
     ],
     deps = [
         "//loom/py/loom:package",

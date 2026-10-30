@@ -225,7 +225,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         if isinstance(value_type, BufferType):
             return "loom::type::buffer<unsigned char>"
         if isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VIEW:
-            return self.types.view(value_type, value_id in self.signed_values)
+            return self.cpp_type(value_id)
         type_name = self.cpp_type(value_id)
         if type_name == "auto":
             raise CxxRenderError(

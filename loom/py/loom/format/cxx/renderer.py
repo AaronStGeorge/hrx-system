@@ -12,22 +12,25 @@ import re
 from collections.abc import Sequence
 from dataclasses import replace
 
+from loom.format.cxx.configs import CxxConfigRenderer
 from loom.format.cxx.context import (
     _memory_space,
     _strip_outer_parentheses,
+    is_pure_operation,
     is_target_operation,
     walk_operations,
 )
 from loom.format.cxx.errors import CxxRenderError
-from loom.format.cxx.kernel_configurations import CxxKernelConfigurationRenderer
 from loom.format.cxx.naming import clean_identifier, loop_carrier_stem
 from loom.format.cxx.translation_unit import render_preamble
 from loom.format.cxx.types import KERNEL_COORDINATE_CPP_TYPE
+from loom.format.cxx.view_access import plan_view_access
 from loom.ir import (
     Block,
     BufferType,
     DynamicDim,
     DynamicEncoding,
+    EncodingType,
     Module,
     Operation,
     ParameterizedType,
@@ -64,7 +67,7 @@ def _buffer_payload_literal(contents: bytes | Utf8Attr) -> str:
     return prefix + '"' + "".join(escaped) + '"'
 
 
-class CxxRenderer(CxxKernelConfigurationRenderer):
+class CxxRenderer(CxxConfigRenderer):
     def _view_shape_arguments(
         self, operation: Operation, view_type: ShapedType
     ) -> tuple[str, str]:
@@ -342,17 +345,22 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                     "view access alignment has no C++ type projection",
                 )
             root = self.buffer_roots.get(buffer_id)
-            is_const = root is not None and not self.buffer_info[root].mutable
+            is_const = (
+                not self.view_access.is_mutable(result)
+                if self.view_access is not None
+                else root is not None and not self.buffer_info[root].mutable
+            )
             element = self.types.scalar(
                 result_type.element_type, result in self.view_signed
             )
             source_type = self.expression_type(buffer_id)
             arguments: list[str]
             if source_type.startswith("loom::type::buffer<"):
-                target_type = f"loom::type::buffer<{element}>"
+                qualified_element = f"const {element}" if is_const else element
+                target_type = f"loom::type::buffer<{qualified_element}>"
                 source = self.expression(buffer_id)
                 if source_type != target_type:
-                    source = f"loom::buffer::cast<{element}>({source})"
+                    source = f"loom::buffer::cast<{qualified_element}>({source})"
                 arguments = [source]
                 if self._constant_integer(offset_id) != 0:
                     arguments.append(self._address_operand(offset_id))
@@ -579,18 +587,56 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 [],
             )
             return ("memory_space", "scope", "ordering")
-        if name == "kernel.async.gather":
+        if name in {
+            "kernel.async.copy",
+            "kernel.async.copy.mask",
+            "kernel.async.gather",
+            "kernel.async.gather.mask",
+            "kernel.async.cluster.gather",
+            "kernel.async.cluster.gather.mask",
+        }:
             resolved = self._resolved(operation)
             scope = resolved.attr("cache_scope")
             temporal = resolved.attr("cache_temporal")
+            is_copy = name.startswith("kernel.async.copy")
+            is_cluster = name.startswith("kernel.async.cluster.")
+            is_masked = name.endswith(".mask")
+            if is_copy:
+                function = "copy_mask" if is_masked else "copy"
+                template_arguments = [
+                    "loom::kernel::async::direction::"
+                    + str(resolved.attr("direction")),
+                    f"loom::cache::scope::{scope}",
+                    f"loom::cache::temporal::{temporal}",
+                ]
+            else:
+                function = "gather_mask" if is_masked else "gather"
+                if is_cluster:
+                    function = "cluster::" + function
+                template_arguments = [
+                    f"loom::cache::scope::{scope}",
+                    f"loom::cache::temporal::{temporal}",
+                ]
+            arguments = [
+                self.expression(resolved.value_id("source")),
+                self.expression(resolved.value_id("dest")),
+            ]
+            if is_cluster:
+                arguments.append(self.expression(resolved.value_id("cluster_mask")))
+            if is_masked:
+                arguments.append(self.expression(resolved.value_id("predicate")))
             expression = (
-                f"loom::kernel::async::gather<loom::cache::scope::{scope}, "
-                f"loom::cache::temporal::{temporal}>("
-                f"{self.expression(resolved.value_id('source'))}, "
-                f"{self.expression(resolved.value_id('dest'))})"
+                f"loom::kernel::async::{function}<"
+                + ", ".join(template_arguments)
+                + ">("
+                + ", ".join(arguments)
+                + ")"
             )
             self._declare(resolved.value_id("token"), expression)
-            return ("cache_scope", "cache_temporal")
+            projected = ["cache_scope", "cache_temporal"]
+            if is_copy:
+                projected.append("direction")
+            return tuple(projected)
         if name == "kernel.async.group":
             arguments = ", ".join(
                 self.expression(operand) for operand in operation.operands
@@ -838,17 +884,52 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
             forward_only.add(index)
         return forward_only
 
-    def _while_identity_condition(self, before: Block) -> int | None:
-        """Returns an identity-header loop's condition block argument."""
+    def _while_condition_expression(self, before: Block) -> str | None:
+        """Projects a pure identity-forwarding header into one C++ expression."""
 
-        if len(before.ops) != 1 or before.ops[0].name != "scf.condition":
+        if not before.ops or before.ops[-1].name != "scf.condition":
             return None
-        condition = before.ops[0]
+        condition = before.ops[-1]
         resolved = self._resolved(condition)
-        if resolved.value_ids("forwarded") != before.arg_ids:
+        if resolved.value_ids("forwarded") != before.arg_ids or any(
+            operation.regions or not is_pure_operation(operation)
+            for operation in before.ops[:-1]
+        ):
             return None
-        condition_id = resolved.value_id("condition")
-        return condition_id if condition_id in before.arg_ids else None
+
+        # Reuse the normal operation renderers so the condition accepts the
+        # complete expression vocabulary without a second spelling table. A
+        # header is directly projectable only when those renderers collapse it
+        # to the condition assignment itself; a named intermediate or any
+        # required statement retains the general guarded-loop projection.
+        expressions = self.expressions.copy()
+        expression_types = self.expression_types.copy()
+        temporary_names = self.temporary_names.copy()
+        line_count = len(self.writer.lines)
+        try:
+            self._render_block(
+                before,
+                condition_target="__loom_condition",
+                condition_forward_targets=[None] * len(before.arg_ids),
+            )
+            condition_expression = _strip_outer_parentheses(
+                self.expression(resolved.value_id("condition"))
+            )
+            emitted_line_count = len(self.writer.lines) - line_count
+        except Exception:
+            self.expressions = expressions
+            self.expression_types = expression_types
+            self.temporary_names = temporary_names
+            raise
+        finally:
+            del self.writer.lines[line_count:]
+
+        if emitted_line_count == 1:
+            return condition_expression
+        self.expressions = expressions
+        self.expression_types = expression_types
+        self.temporary_names = temporary_names
+        return None
 
     def _forwarding_closure(
         self,
@@ -960,10 +1041,10 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
             self.expressions[argument] = self.expression(result)
             self.expression_types[argument] = self.expression_type(result)
 
-        identity_condition = self._while_identity_condition(before)
-        if shared_carriers and identity_condition is not None:
-            self._validate_projected_attributes(before.ops[0], ())
-            condition = _strip_outer_parentheses(self.expression(identity_condition))
+        condition = (
+            self._while_condition_expression(before) if shared_carriers else None
+        )
+        if condition is not None:
             self.writer.open(f"while ({condition})")
             self._render_block(after, yield_targets=header_targets)
             self.writer.close()
@@ -1088,6 +1169,10 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
         self.assignment_targets = {**previous_assignments, **direct_assignments}
         try:
             for operation in block.ops:
+                if operation.name == "config.get":
+                    projected = self._render_config_get(operation)
+                    self._validate_projected_attributes(operation, projected)
+                    continue
                 if operation.name == "kernel.launch.config":
                     self._validate_projected_attributes(operation, ())
                     if not launch_configuration:
@@ -1337,10 +1422,10 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 self._declare(result.value_id, f"{record_name}.value{index}")
         projected_attributes = ["callee"]
         effect_contract = resolved.attr("effect_contract")
-        if effect_contract == "pure":
-            # A C++ call carries purity from the callable definition. The
-            # importer reconstructs the explicit func.call contract after the
-            # emitted definition is parsed and analyzed.
+        if effect_contract in {"pure", "readonly"}:
+            # A C++ call carries its effect contract from the callable
+            # definition. The importer reconstructs the explicit func.call
+            # contract after the emitted definition is parsed and analyzed.
             projected_attributes.append("effect_contract")
         elif effect_contract is not None:
             raise CxxRenderError(
@@ -1514,6 +1599,7 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                     ordinal += 1
                 used_names.add(type_name)
                 self.target_type_names[symbol] = type_name
+        self.translation_unit_names = used_names
 
     def render(self) -> str:
         kernels = [
@@ -1553,6 +1639,7 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 "pipeline.def",
                 "pipeline.decl",
                 "config.decl",
+                "config.def",
             } or is_target_operation(operation):
                 continue
             raise CxxRenderError(
@@ -1560,6 +1647,13 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 "a top-level definition would be omitted from the C++ projection",
             )
         self._plan_callable_names(kernels, functions, commands, pipelines)
+        self.view_access = plan_view_access(
+            self.module, self._resolved, self._flat_source_parameters
+        )
+        self._plan_kernel_configurations(kernels)
+        self._plan_config_names()
+        if self._render_configs():
+            self.writer.line()
         for index, function in enumerate(functions):
             if index:
                 self.writer.line()
@@ -1614,13 +1708,13 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
 
         for operation in self.module.body.ops:
             if (
-                operation.name == "config.decl"
+                operation.name in {"config.decl", "config.def"}
                 and id(operation) not in self.projected_config_declarations
+                and id(operation) not in self.rendered_config_operations
             ):
                 raise CxxRenderError(
                     operation,
-                    "configuration declaration is not owned by a projected "
-                    "kernel launch contract",
+                    "configuration symbol was omitted from the C++ projection",
                 )
 
         operation_names = {
@@ -1637,15 +1731,20 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
             isinstance(
                 predicates := operation.attributes.get("predicates"), PredicateListAttr
             )
-            and any(
-                any(
-                    argument.tag == "value"
-                    and isinstance(self.module.values[argument.value].type, ScalarType)
-                    and repr(self.module.values[argument.value].type)
-                    in {"index", "offset"}
-                    for argument in predicate.args
+            and (
+                operation.name in {"config.decl", "config.def"}
+                or any(
+                    any(
+                        argument.tag == "value"
+                        and isinstance(
+                            self.module.values[argument.value].type, ScalarType
+                        )
+                        and repr(self.module.values[argument.value].type)
+                        in {"index", "offset"}
+                        for argument in predicate.args
+                    )
+                    for predicate in predicates
                 )
-                for predicate in predicates
             )
             for operation in self.module.body.ops
             if id(operation) not in self.projected_config_declarations
@@ -1671,6 +1770,9 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 isinstance(value.type, ShapedType)
                 and value.type.type_kind == TypeKind.VIEW
                 for value in self.module.values
+            ),
+            uses_encodings=any(
+                isinstance(value.type, EncodingType) for value in self.module.values
             ),
             vector_aliases=self.types.vector_aliases,
             record_declarations=self.record_declarations,

@@ -18,7 +18,7 @@
 
 namespace loom::cxx_import {
 
-// Owns named scalar configuration bindings for one translation unit. Collection
+// Owns named configuration bindings for one translation unit. Collection
 // reconciles source redeclarations and aliases by explicit key before any reads
 // are lowered. A definition fixes every alias in this import; declaration-only
 // bindings remain symbolic until ordinary Loom configuration specialization.
@@ -64,7 +64,7 @@ class Configs {
     std::string_view name;
     // Unqualified source type retains signedness and nominal enum identity.
     const cxx::Type* source_type;
-    // Scalar carrier shared by declarations, definitions and value reads.
+    // Single Loom carrier shared by declarations and value reads.
     loom_type_t type;
     // Merged unresolved-value constraints with subject ordinal zero.
     std::vector<loom_predicate_t> predicates;

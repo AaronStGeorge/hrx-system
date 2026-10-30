@@ -266,12 +266,86 @@ config.decl @bounded.workgroup_size.z : %size_z: index where [range(%size_z, 1, 
     assert "config.decl" not in result
 
 
-def test_rejects_unowned_configuration_declarations() -> None:
-    source = SOURCE_MODULE + "\nconfig.decl @library.option : index\n"
+def test_keeps_launch_config_globals_read_by_the_kernel_body() -> None:
+    source = """\
+kernel.def @configured() {
+  %count_x = config.get @configured.workgroup_count.x : index
+  %count_y = config.get @configured.workgroup_count.y : index
+  %count_z = config.get @configured.workgroup_count.z : index
+  %size_x = config.get @configured.workgroup_size.x : index
+  %size_y = config.get @configured.workgroup_size.y : index
+  %size_z = config.get @configured.workgroup_size.z : index
+  kernel.launch.config workgroups(%count_x, %count_y, %count_z) workgroup_size(%size_x, %size_y, %size_z) : index
+} launch(%output: buffer) {
+  %count = config.get @configured.workgroup_count.x : index
+  %value = index.cast %count : index to i32
+  %byte_offset = index.constant 0 : offset
+  %output_view = buffer.view %output[%byte_offset] : buffer -> view<1xi32>
+  view.store %value, %output_view[0] : i32, view<1xi32>
+  kernel.return
+}
+
+config.decl @configured.workgroup_count.x : index
+config.decl @configured.workgroup_count.y : index
+config.decl @configured.workgroup_count.z : index
+config.decl @configured.workgroup_size.x : index
+config.decl @configured.workgroup_size.y : index
+config.decl @configured.workgroup_size.z : index
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "extern const loom::type::index workgroup_count_x;" in result
+    assert "extern const loom::type::index workgroup_size_x;" in result
+    assert "static loom::kernel::configuration configured_configuration()" in result
+    assert result.count("loom::index::cast<unsigned>(workgroup_count_x)") == 2
+
+
+def test_projects_ordinary_configuration_declarations() -> None:
+    source = (
+        "config.decl @library.option : %option: index "
+        "where [range(%option, 1, 64), multiple_of(%option, 4)]\n\n"
+        "func.def public @read_option() -> (index) {\n"
+        "  %option = config.get @library.option : index\n"
+        "  func.return %option : index\n"
+        "}\n"
+    )
+
+    result = render_module(load_module(source.encode()))
+
+    assert (
+        result
+        == """\
+#include <loomcxx/index.h>
+#include <loomcxx/predicate.h>
+
+[[loom::config(\"library.option\"), loom::where(loom::predicate::range(1, 64) && loom::predicate::multiple_of(4))]]
+extern const loom::type::index option;
+
+[[loom::symbol(\"read_option\")]]
+loom::type::index read_option();
+
+[[loom::symbol(\"read_option\")]]
+loom::type::index read_option() {
+  return option;
+}
+"""
+    )
+
+
+def test_rejects_ranked_configuration_encodings_without_a_source_rank() -> None:
+    source = """\
+config.decl @layout : encoding<layout>
+
+func.def public @read_layout() -> (encoding<layout>) {
+  %layout = config.get @layout : encoding<layout>
+  func.return %layout : encoding<layout>
+}
+"""
 
     with pytest.raises(
         CxxRenderError,
-        match="configuration declaration is not owned by a projected kernel launch contract",
+        match="ranked layout and storage configs require a source rank",
     ):
         render_module(load_module(source.encode()))
 
@@ -623,6 +697,33 @@ kernel.def @bounded_loop() {
     assert "terminal = terminal + loom::type::index{1};" in result
 
 
+def test_projects_expression_only_while_header_as_natural_cxx() -> None:
+    source = """\
+kernel.def @bounded_loop() {
+  %count = index.constant 1 : index
+  kernel.launch.config workgroups(%count, %count, %count) workgroup_size(%count, %count, %count) : index
+} launch() {
+  %begin = index.constant 0 : index
+  %terminal = scf.while(%before = %begin : index) -> (index) {
+    %0 = index.constant 4 : index
+    %1 = index.cmp slt, %before, %0 : index
+    scf.condition %1, %before : i1, index
+  } do(%position: index) {
+    %2 = index.constant 1 : index
+    %3 = index.add %position, %2 : index
+    scf.yield %3 : index
+  }
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "while (terminal < loom::type::index{4}) {" in result
+    assert "terminal = terminal + loom::type::index{1};" in result
+    assert "loop_continues" not in result
+
+
 def test_projects_identity_header_while_without_a_synthetic_guard() -> None:
     source = """\
 kernel.def @identity_header_loop() {
@@ -957,6 +1058,23 @@ kernel.def @scoped_alignment() {
     assert "[[loom::assume_aligned" not in result
     assert "if (active) {" in result
     assert "auto aligned = loom::buffer::assume::alignment<16>(input);" in result
+
+
+def test_keeps_pipeline_buffer_alignment_in_the_definition_body() -> None:
+    source = """\
+pipeline.def<kernel> @aligned() run(%input: buffer) {
+  %aligned = buffer.assume.alignment %input {minimum_alignment = 64} : buffer
+  pipeline.finish
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert (
+        "void aligned([[loom::launch]] loom::type::buffer<unsigned char> input)"
+        in result
+    )
+    assert "loom::buffer::assume::alignment<64>(input)" in result
 
 
 def test_projects_buffer_alias_contracts_at_their_lexical_scope() -> None:
@@ -1489,7 +1607,7 @@ func.def inline @math.double(%input: vector<4xf32>) -> (vector<4xf32>) {
     assert '[[loom::symbol("math.copy_double"), loom::force_inline]]' in result
     assert (
         "void math_copy_double("
-        "loom::type::view<loom::type::shape<4>, float> source, "
+        "loom::type::view<loom::type::shape<4>, const float> source, "
         "loom::type::view<loom::type::shape<4>, float> destination)" in result
     )
     assert "Float32x4 result = math_double(input);" in result
