@@ -69,54 +69,6 @@ low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @loop_identit
 
 // ====
 
-// RUN: emit amdgpu-assembly @identity strategy=source fixed=%current:physical_register:0:2 fixed=%next:physical_register:0:2
-
-amdgpu.target<gfx1151> @target {subgroup_size = 64}
-
-low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @identity(%value: reg<amdgpu.vgpr>, %current: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr x2>) asm {
-  %first = slice %current[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %same = concat(%first, %second) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
-  low.br ^exit(%same: reg<amdgpu.sgpr x2>)
-^exit(%next: reg<amdgpu.sgpr x2>):
-  return %next
-}
-
-// ----
-  v_cndmask_b32 v0, 0, v0, s[0:1]
-.Lbb1:
-  s_endpgm
-
-// ====
-
-// RUN: emit amdgpu-assembly @after_reset strategy=source fixed=%current:physical_register:0:2 fixed=%next:physical_register:0:2
-
-amdgpu.target<gfx1151> @target {subgroup_size = 64}
-
-low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @after_reset(%value: reg<amdgpu.vgpr>, %current: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr x2>) asm {
-  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
-  %first = slice %current[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %broadcast = v_mov_b32_copy %first
-  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %swapped = concat(%second, %first) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  low.br ^exit(%swapped: reg<amdgpu.sgpr x2>)
-^exit(%next: reg<amdgpu.sgpr x2>):
-  return %next
-}
-
-// ----
-  v_cndmask_b32 v0, 0, v0, s[0:1]
-  s_mov_b32 s3, s0
-  v_mov_b32 v0, s3
-  s_mov_b32 s2, s1
-  s_mov_b32 s0, s2
-  s_mov_b32 s1, s3
-.Lbb1:
-  s_endpgm
-
-// ====
-
 // RUN: emit amdgpu-assembly @carried_mask_update strategy=source
 
 amdgpu.target<gfx1151> @target {subgroup_size = 64}
@@ -398,3 +350,168 @@ low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @authored_ret
   v_cndmask_b32 v0, 0, v0, s[2:3]
 .Lbb1:
   s_endpgm
+
+// ====
+
+// A copied mask can retain a previous iteration's read. Its permuted backedge
+// requires real register moves, not a forced identity or scratch spill.
+// RUN: emit amdgpu-assembly @copied_mask_loop strategy=source
+
+amdgpu.target<gfx1151> @target {subgroup_size = 64}
+
+low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @copied_mask_loop(%value: reg<amdgpu.vgpr>, %seed: reg<amdgpu.sgpr x2>) asm {
+  low.br ^loop(%seed: reg<amdgpu.sgpr x2>)
+^loop(%entry: reg<amdgpu.sgpr x2>):
+  %current = copy %entry : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr x2>
+  %alias = low.assume %current [range(%entry, 0, 1024)] : reg<amdgpu.sgpr x2>
+  %first = slice %alias[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %swapped = concat(%second, %first) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
+  low.br ^loop(%swapped: reg<amdgpu.sgpr x2>)
+}
+
+// ----
+.Lbb1:
+  s_mov_b32 s3, s0
+  s_mov_b32 s2, s1
+  v_cndmask_b32 v1, 0, v0, s[0:1]
+  s_mov_b32 s0, s2
+  s_waitcnt_depctr 0xff9e
+  s_mov_b32 s1, s3
+  s_waitcnt_depctr 0xff9e
+  s_branch .Lbb1
+
+// ====
+
+// Consistent copied identities still coalesce completely.
+// RUN: emit amdgpu-assembly @copied_mask_identity strategy=source
+
+amdgpu.target<gfx1151> @target {subgroup_size = 64}
+
+low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @copied_mask_identity(%value: reg<amdgpu.vgpr>, %seed: reg<amdgpu.sgpr x2>) asm {
+  low.br ^loop(%seed: reg<amdgpu.sgpr x2>)
+^loop(%entry: reg<amdgpu.sgpr x2>):
+  %current = copy %entry : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr x2>
+  %first = slice %current[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %same = concat(%first, %second) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
+  low.br ^loop(%same: reg<amdgpu.sgpr x2>)
+}
+
+// ----
+.Lbb1:
+  v_cndmask_b32 v1, 0, v0, s[0:1]
+  s_branch .Lbb1
+
+// ====
+
+// A longer copy chain has the same permutation conflict. The exit keeps the
+// selected value observable, and no metadata reference is needed to trigger it.
+// RUN: emit amdgpu-assembly @copied_mask_chain strategy=source
+
+amdgpu.target<gfx1151> @target {subgroup_size = 64}
+
+low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @copied_mask_chain(%value: reg<amdgpu.vgpr>, %seed: reg<amdgpu.sgpr x2>, %repeat: reg<amdgpu.scc>) -> (reg<amdgpu.vgpr>) asm {
+  low.br ^loop(%seed: reg<amdgpu.sgpr x2>)
+^loop(%entry: reg<amdgpu.sgpr x2>):
+  %copied = copy %entry : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr x2>
+  %current = copy %copied : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr x2>
+  %first = slice %current[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %swapped = concat(%second, %first) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
+  low.cond_br %repeat, ^latch, ^exit : reg<amdgpu.scc>
+^latch:
+  low.br ^loop(%swapped: reg<amdgpu.sgpr x2>)
+^exit:
+  return %selected
+}
+
+// ----
+.Lbb1:
+  s_mov_b32 s3, s0
+  s_mov_b32 s2, s1
+  v_cndmask_b32 v1, 0, v0, s[0:1]
+  s_cbranch_scc0 .Lbb3
+.Lbb2:
+  s_mov_b32 s0, s2
+  s_waitcnt_depctr 0xff9e
+  s_mov_b32 s1, s3
+  s_waitcnt_depctr 0xff9e
+  s_branch .Lbb1
+.Lbb3:
+  s_endpgm
+
+// ====
+
+// A contradiction within the loop's copy component must not remove write
+// exclusions against the independent mask retained by the other branch.
+// RUN: emit amdgpu-assembly @copied_mask_branch strategy=source
+
+amdgpu.target<gfx1151> @target {subgroup_size = 64}
+
+low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @copied_mask_branch(%condition: reg<amdgpu.scc>, %value: reg<amdgpu.vgpr>, %seed: reg<amdgpu.sgpr x2>, %other: reg<amdgpu.sgpr x2>) asm {
+  low.br ^loop(%seed: reg<amdgpu.sgpr x2>)
+^loop(%entry: reg<amdgpu.sgpr x2>):
+  %current = copy %entry : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr x2>
+  %first = slice %current[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %swapped = concat(%second, %first) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.cond_br %condition, ^left, ^right : reg<amdgpu.scc>
+^left:
+  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
+  low.br ^latch
+^right:
+  %other_selected = v_cndmask_b32_src0_inline %value, %other {false_value = 0}
+  low.br ^latch
+^latch:
+  low.br ^loop(%swapped: reg<amdgpu.sgpr x2>)
+}
+
+// ----
+.Lbb1:
+  s_mov_b32 s5, s0
+  s_mov_b32 s4, s1
+  s_cbranch_scc0 .Lbb3
+.Lbb2:
+  v_cndmask_b32 v1, 0, v0, s[0:1]
+  s_branch .Lbb4
+.Lbb3:
+  v_cndmask_b32 v1, 0, v0, s[2:3]
+.Lbb4:
+  s_mov_b32 s0, s4
+  s_waitcnt_depctr 0xff9e
+  s_mov_b32 s1, s5
+  s_waitcnt_depctr 0xff9e
+  s_branch .Lbb1
+
+// ====
+
+// The ordinary scalar VALU input retires the mask read before its permuted
+// backedge copies overwrite the loop-carried pair.
+// RUN: emit amdgpu-assembly @after_reset_loop strategy=source
+
+amdgpu.target<gfx1151> @target {subgroup_size = 64}
+
+low.func.def schedule(locked) target<amdgpu.rdna3_5.core>(@target) @after_reset_loop(%value: reg<amdgpu.vgpr>, %seed: reg<amdgpu.sgpr x2>) asm {
+  low.br ^loop(%seed: reg<amdgpu.sgpr x2>)
+^loop(%current: reg<amdgpu.sgpr x2>):
+  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
+  %first = slice %current[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %broadcast = v_mov_b32_copy %first
+  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %swapped = concat(%second, %first) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.br ^loop(%swapped: reg<amdgpu.sgpr x2>)
+}
+
+// ----
+.Lbb1:
+  v_cndmask_b32 v1, 0, v0, s[0:1]
+  s_mov_b32 s3, s0
+  v_mov_b32 v1, s3
+  s_mov_b32 s2, s1
+  s_mov_b32 s0, s2
+  s_mov_b32 s1, s3
+  s_branch .Lbb1

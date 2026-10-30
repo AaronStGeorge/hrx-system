@@ -367,11 +367,16 @@ static bool loom_low_write_access_has_live_source(
 typedef struct loom_low_write_identity_t {
   // Canonical parent storage origin.
   loom_value_ordinal_t parent;
-  // Number of members when this entry is a root.
-  uint32_t size;
+  // Union rank when this entry is a root; at most log2(value_count).
+  uint8_t rank;
+  // A copy in this root's component cannot satisfy its zero-copy equation.
+  bool has_conflict;
   // Signed location difference from the parent.
   int64_t offset;
 } loom_low_write_identity_t;
+
+static_assert(sizeof(loom_low_write_identity_t) == 16,
+              "completion identities must remain compact");
 
 static loom_low_write_identity_t loom_low_write_identity_root(
     loom_low_write_identity_t* identities, loom_value_ordinal_t value) {
@@ -546,7 +551,7 @@ static uint32_t loom_low_write_seed_completion(
 typedef struct loom_low_write_completion_t {
   // Constraint owner; retired value metadata holds endpoint incidence ranges.
   loom_low_allocation_write_interference_t* table;
-  // Weighted union forest, with component sizes at roots.
+  // Weighted union forest, with component ranks and copy conflicts at roots.
   loom_low_write_identity_t* identities;
   // Next member in a root-headed component list, or UINT32_MAX.
   uint32_t* next_members;
@@ -597,7 +602,7 @@ static iree_status_t loom_low_write_completion_initialize(
   loom_low_write_identity_t* identities = completion->identities;
   loom_value_ordinal_t anchor = LOOM_VALUE_ORDINAL_INVALID;
   for (uint32_t v = 0; v < table->value_count; ++v) {
-    identities[v] = (loom_low_write_identity_t){.parent = v, .size = 1};
+    identities[v] = (loom_low_write_identity_t){.parent = v};
     completion->next_members[v] = UINT32_MAX;
     completion->tails[v] = v;
     table->values[v].constraints = (loom_low_write_range_t){0};
@@ -608,7 +613,7 @@ static iree_status_t loom_low_write_completion_initialize(
         identities[v].parent = anchor;
         identities[v].offset = (int64_t)table->values[v].fixed_base -
                                table->values[anchor].fixed_base;
-        ++identities[anchor].size;
+        identities[anchor].rank = 1;
         completion->next_members[completion->tails[anchor]] = v;
         completion->tails[anchor] = v;
       }
@@ -702,14 +707,15 @@ static void loom_low_write_completion_merge(
   uint32_t loser = destination.parent;
   uint32_t winner = source.parent;
   int64_t offset = required + source.offset - destination.offset;
-  if (identities[loser].size > identities[winner].size) {
+  if (identities[loser].rank > identities[winner].rank) {
     loser = source.parent;
     winner = destination.parent;
     offset = -offset;
   }
   // Only relationships crossing this component boundary become connected now.
-  // Visit the smaller list before linking its root, so already-connected rows
-  // are never enqueued again. Each member participates at most log2(V) times.
+  // Visit the lower-rank list before linking its root, so already-connected
+  // rows are never enqueued again. Every visited member's root rank increases
+  // on a merge, bounding its participation by log2(V).
   for (uint32_t v = loser; v != UINT32_MAX; v = completion->next_members[v]) {
     const loom_low_write_range_t range = table->values[v].constraints;
     for (uint32_t i = 0; i < range.count; ++i) {
@@ -726,7 +732,10 @@ static void loom_low_write_completion_merge(
   }
   identities[loser].parent = winner;
   identities[loser].offset = offset;
-  identities[winner].size += identities[loser].size;
+  if (identities[winner].rank == identities[loser].rank) {
+    ++identities[winner].rank;
+  }
+  identities[winner].has_conflict |= identities[loser].has_conflict;
   completion->next_members[completion->tails[winner]] = loser;
   completion->tails[winner] = completion->tails[loser];
 }
@@ -776,6 +785,7 @@ static iree_status_t loom_low_write_classify_completion(
         (int64_t)row->units.source_offset - row->destination_offset;
     if (destination.parent == source.parent) {
       if (destination.offset - source.offset != required) {
+        identities[destination.parent].has_conflict = true;
         loom_low_write_constraint_complete(row);
       }
     } else {
@@ -790,19 +800,32 @@ static iree_status_t loom_low_write_classify_completion(
                      LOOM_LOW_WRITE_CONSTRAINTS_PER_SEGMENT);
     loom_low_write_constraint_t* row = loom_low_write_constraint_at(table, c);
     for (; c < segment_end; ++c, ++row) {
-      if (row->source != LOOM_VALUE_ORDINAL_INVALID ||
-          row->retained.count == 0) {
+      if (loom_low_write_constraint_is_complete(row)) {
         continue;
       }
       const loom_low_write_identity_t destination =
           loom_low_write_identity_root(identities, row->destination);
       const loom_low_write_identity_t retained =
           loom_low_write_identity_root(identities, row->retained.value);
-      if (destination.parent == retained.parent &&
+      if (destination.parent != retained.parent) {
+        continue;
+      }
+      // Contradictory copies require native completion somewhere in this
+      // component. Their tentative no-op equations cannot remain allocation
+      // requirements: an earlier copy may preserve an ordinary live source
+      // which a later equation would overwrite. Let normal coalescing choose
+      // the moves, and let physical planning complete their actual writes.
+      // Other retained components and ordinary source lifetimes stay intact.
+      if (row->source != LOOM_VALUE_ORDINAL_INVALID &&
+          !identities[destination.parent].has_conflict) {
+        continue;
+      }
+      if (row->retained.count == 0 ||
           loom_low_write_ranges_overlap(
               destination.offset + row->destination_offset - retained.offset -
                   row->retained.offset,
-              row->units.count, row->retained.count)) {
+              loom_low_write_constraint_write_count(row),
+              row->retained.count)) {
         loom_low_write_constraint_complete(row);
       }
     }
