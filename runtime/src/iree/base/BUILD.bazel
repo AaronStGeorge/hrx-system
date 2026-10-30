@@ -222,6 +222,23 @@ iree_runtime_cc_test(
 )
 
 iree_runtime_cc_test(
+    name = "status_stack_trace_fallback_test",
+    srcs = ["status_stack_trace_fallback_test.cc"],
+    linkopts = [
+        "-Wl,--export-dynamic",
+        "-Wl,--wrap=backtrace_pcinfo",
+        "-Wl,--wrap=iree_private_backtrace_pcinfo",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//third_party:libbacktrace",
+    ],
+)
+
+iree_runtime_cc_test(
     name = "status_stack_trace_test",
     srcs = [
         "status_stack_trace_test.cc",

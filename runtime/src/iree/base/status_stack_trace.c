@@ -157,6 +157,11 @@ static int iree_libbacktrace_pcinfo_callback(void* data, uintptr_t pc,
   // directly in this callback.
   Dl_info info;
   if (dladdr((void*)pc, &info) != 0 && info.dli_fname) {
+    // A successful callback can still lack a debug symbol. Retain any exported
+    // symbol the loader knows instead of treating that callback as complete.
+    if (!function) {
+      function = info.dli_sname;
+    }
     iree_string_view_t fname = iree_status_trim_file_path(info.dli_fname);
     state->buffer_length = iree_string_buffer_append_format(
         state->buffer_capacity, state->buffer, state->buffer_length, "%.*s",
