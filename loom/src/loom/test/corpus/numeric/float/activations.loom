@@ -636,19 +636,7 @@ func.def @ordinary_activation_observations(%input: f64, %narrow_output: buffer, 
 
 // MPFR 4.2.2 directed intervals, evaluated independently at +/-0.5.
 func.def @ordinary_activation_oracle(%input: f64, %narrow_output: buffer, %wide_output: buffer) {
-  %logistic_positive = scalar.constant 0.62245933120185459 : f64
-  %logistic_negative = scalar.constant 0.37754066879814546 : f64
-  %silu_positive = scalar.constant 0.3112296656009273 : f64
-  %silu_negative = scalar.constant -0.18877033439907273 : f64
-  %softplus_positive = scalar.constant 0.97407698418010669 : f64
-  %softplus_negative = scalar.constant 0.47407698418010669 : f64
-  %erf_positive = scalar.constant 0.34573123063700656 : f64
-  %erf_negative = scalar.constant -0.15426876936299344 : f64
-  %tanh_positive = scalar.constant 0.34571400982514394 : f64
-  %tanh_negative = scalar.constant -0.15428599017485609 : f64
-  %scaled_positive = scalar.constant 0.35038843660638014 : f64
-  %scaled_negative = scalar.constant -0.14961156339361989 : f64
-  %values = vector.from_elements %logistic_positive, %logistic_negative, %silu_positive, %silu_negative, %softplus_positive, %softplus_negative, %erf_positive, %erf_negative, %tanh_positive, %tanh_negative, %scaled_positive, %scaled_negative : vector<12xf64>
+  %values = vector.constantf [0.62245933120185459, 0.37754066879814546, 0.3112296656009273, -0.18877033439907273, 0.97407698418010669, 0.47407698418010669, 0.34573123063700656, -0.15426876936299344, 0.34571400982514394, -0.15428599017485609, 0.35038843660638014, -0.14961156339361989] : vector<12xf64>
   %origin = index.constant 0 : offset
   %narrow_results = buffer.view %narrow_output[%origin] : buffer -> view<5x12xf64>
   %wide_results = buffer.view %wide_output[%origin] : buffer -> view<12xf64>

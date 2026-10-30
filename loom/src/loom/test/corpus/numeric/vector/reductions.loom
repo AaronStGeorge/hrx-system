@@ -101,11 +101,8 @@ func.def @vector_axis_reductions(%storage_buffer: buffer) {
   %matrix = vector.from_elements %a, %b, %c, %d, %e, %f : vector<2x3xi32>
   %transpose = vector.transpose<[1, 0]> %matrix : vector<2x3xi32> -> vector<3x2xi32>
   %cube = vector.from_elements %a, %b, %c, %d, %e, %f, %a, %f : vector<2x2x2xi32>
-  %c10 = scalar.constant 10 : i32
-  %c100 = scalar.constant 100 : i32
-  %c1000 = scalar.constant 1000 : i32
-  %row_init = vector.from_elements %c10, %c100 : vector<2xi32>
-  %column_init = vector.from_elements %c10, %c100, %c1000 : vector<3xi32>
+  %row_init = vector.constanti [10, 100] : vector<2xi32>
+  %column_init = vector.constanti [10, 100, 1000] : vector<3xi32>
   %rows = vector.reduce.axes<addi> %transpose, %row_init axes [0] : vector<3x2xi32>, vector<2xi32>
   %columns = vector.reduce.axes<addi> %transpose, %column_init axes [1] : vector<3x2xi32>, vector<3xi32>
   %planes = vector.reduce.axes<addi> %cube, %row_init axes [0, 2] : vector<2x2x2xi32>, vector<2xi32>

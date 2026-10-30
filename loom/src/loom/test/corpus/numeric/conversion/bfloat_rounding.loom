@@ -139,10 +139,7 @@ func.def @finite_bfloat_products_oracle(%even_tie: f32, %odd_tie: f32, %signed_z
   %words = vector.trunci %high : vector<3xi32> to vector<3xi16>
   %sign_mask = vector.splati -32768 : vector<3xi16>
   %signs = vector.andi %words, %sign_mask : vector<3xi16>
-  %even_bits = scalar.constant 16256 : i16
-  %odd_bits = scalar.constant 16258 : i16
-  %c0 = scalar.constant 0 : i16
-  %magnitudes = vector.from_elements %even_bits, %odd_bits, %c0 : vector<3xi16>
+  %magnitudes = vector.constanti [16256, 16258, 0] : vector<3xi16>
   %expected = vector.ori %signs, %magnitudes : vector<3xi16>
   %even = vector.extract %expected[0] : vector<3xi16> -> i16
   %odd = vector.extract %expected[1] : vector<3xi16> -> i16

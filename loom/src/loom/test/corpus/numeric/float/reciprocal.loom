@@ -32,39 +32,7 @@ func.def inline @reciprocal_ulp_error(%actual: f64, %expected: f64) -> (i64) {
 }
 
 func.def inline @reciprocal_boundary(%ordinal: i64) -> (i64) {
-  %bits0 = scalar.constant 0 : i64
-  %bits1 = scalar.constant 1 : i64
-  %bits2 = scalar.constant 2 : i64
-  %bits3 = scalar.constant 3 : i64
-  %bits4 = scalar.constant 1125899906842623 : i64
-  %bits5 = scalar.constant 1125899906842624 : i64
-  %bits6 = scalar.constant 1125899906842625 : i64
-  %bits7 = scalar.constant 2251799813685247 : i64
-  %bits8 = scalar.constant 2251799813685248 : i64
-  %bits9 = scalar.constant 2251799813685249 : i64
-  %bits10 = scalar.constant 4503599627370494 : i64
-  %bits11 = scalar.constant 4503599627370495 : i64
-  %bits12 = scalar.constant 4503599627370496 : i64
-  %bits13 = scalar.constant 4503599627370497 : i64
-  %bits14 = scalar.constant 4602678819172646912 : i64
-  %bits15 = scalar.constant 4607182418800017407 : i64
-  %bits16 = scalar.constant 4607182418800017408 : i64
-  %bits17 = scalar.constant 4607182418800017409 : i64
-  %bits18 = scalar.constant 4611686018427387903 : i64
-  %bits19 = scalar.constant 4611686018427387904 : i64
-  %bits20 = scalar.constant 4611686018427387905 : i64
-  %bits21 = scalar.constant 9205357638345293824 : i64
-  %bits22 = scalar.constant 9209861237972664320 : i64
-  %bits23 = scalar.constant 9214364837600034815 : i64
-  %bits24 = scalar.constant 9214364837600034816 : i64
-  %bits25 = scalar.constant 9214364837600034817 : i64
-  %bits26 = scalar.constant 9218868437227405310 : i64
-  %bits27 = scalar.constant 9218868437227405311 : i64
-  %bits28 = scalar.constant 9218868437227405312 : i64
-  %bits29 = scalar.constant 9218868437227405313 : i64
-  %bits30 = scalar.constant 9221120237041090560 : i64
-  %bits31 = scalar.constant 9221120237041090645 : i64
-  %values = vector.from_elements %bits0, %bits1, %bits2, %bits3, %bits4, %bits5, %bits6, %bits7, %bits8, %bits9, %bits10, %bits11, %bits12, %bits13, %bits14, %bits15, %bits16, %bits17, %bits18, %bits19, %bits20, %bits21, %bits22, %bits23, %bits24, %bits25, %bits26, %bits27, %bits28, %bits29, %bits30, %bits31 : vector<32xi64>
+  %values = vector.constanti [0, 1, 2, 3, 1125899906842623, 1125899906842624, 1125899906842625, 2251799813685247, 2251799813685248, 2251799813685249, 4503599627370494, 4503599627370495, 4503599627370496, 4503599627370497, 4602678819172646912, 4607182418800017407, 4607182418800017408, 4607182418800017409, 4611686018427387903, 4611686018427387904, 4611686018427387905, 9205357638345293824, 9209861237972664320, 9214364837600034815, 9214364837600034816, 9214364837600034817, 9218868437227405310, 9218868437227405311, 9218868437227405312, 9218868437227405313, 9221120237041090560, 9221120237041090645] : vector<32xi64>
   %magnitude_mask = scalar.constant 31 : i64
   %sign_mask = scalar.constant -9223372036854775808 : i64
   %magnitude_ordinal = scalar.andi %ordinal, %magnitude_mask : i64

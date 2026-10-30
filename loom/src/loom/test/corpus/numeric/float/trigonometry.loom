@@ -65,17 +65,7 @@ func.def @trigonometry_observations(%input: f64, %narrow_output: buffer, %wide_o
 
 // MPFR 4.2.2 directed intervals rounded independently to binary64.
 func.def @trigonometry_oracle(%input: f64, %narrow_output: buffer, %wide_output: buffer) {
-  %sin0 = scalar.constant 0.36627252908604757 : f64
-  %sin1 = scalar.constant -0.36627252908604757 : f64
-  %cos0 = scalar.constant 0.93050762191231429 : f64
-  %cos1 = scalar.constant 0.93050762191231429 : f64
-  %tan0 = scalar.constant 0.39362657592563277 : f64
-  %tan1 = scalar.constant -0.39362657592563277 : f64
-  %sinturns0 = scalar.constant 0.70710678118654757 : f64
-  %sinturns1 = scalar.constant -0.70710678118654757 : f64
-  %costurns0 = scalar.constant -0.70710678118654757 : f64
-  %costurns1 = scalar.constant -0.70710678118654757 : f64
-  %values = vector.from_elements %sin0, %sin1, %cos0, %cos1, %tan0, %tan1, %sinturns0, %sinturns1, %costurns0, %costurns1 : vector<10xf64>
+  %values = vector.constantf [0.36627252908604757, -0.36627252908604757, 0.93050762191231429, 0.93050762191231429, 0.39362657592563277, -0.39362657592563277, 0.70710678118654757, -0.70710678118654757, -0.70710678118654757, -0.70710678118654757] : vector<10xf64>
   %origin = index.constant 0 : offset
   %narrow_results = buffer.view %narrow_output[%origin] : buffer -> view<5x10xf64>
   %wide_results = buffer.view %wide_output[%origin] : buffer -> view<10xf64>

@@ -11,11 +11,7 @@ func.def @packed_byte_reverse_bias(%input: buffer, %output: buffer) {
   %source, %destination = buffer.assume.noalias %aligned_input, %aligned_output : buffer, buffer
   %input_words = buffer.view %source[%base] : buffer -> view<256xi32>
   %output_words = buffer.view %destination[%base] : buffer -> view<256xi32>
-  %c1 = scalar.constant 1 : i8
-  %c2 = scalar.constant 2 : i8
-  %c3 = scalar.constant 3 : i8
-  %c4 = scalar.constant 4 : i8
-  %bias = vector.from_elements %c1, %c2, %c3, %c4 : vector<4xi8>
+  %bias = vector.constanti [1, 2, 3, 4] : vector<4xi8>
   scf.for %i = [%begin to %end step %step] {
     %packed = vector.load %input_words[%i] : view<256xi32> -> vector<1xi32>
     %bytes = vector.bitcast %packed : vector<1xi32> to vector<4xi8>
@@ -177,11 +173,7 @@ func.def @packed_byte_transpose_4x4(%input: buffer, %output: buffer) {
   %source, %destination = buffer.assume.noalias %aligned_input, %aligned_output : buffer, buffer
   %input_bytes = buffer.view %source[%base] : buffer -> view<256x16xi8>
   %output_bytes = buffer.view %destination[%base] : buffer -> view<256x16xi8>
-  %indices0 = scalar.constant 201851904 : i32
-  %indices1 = scalar.constant 218694913 : i32
-  %indices2 = scalar.constant 235537922 : i32
-  %indices3 = scalar.constant 252380931 : i32
-  %packed_indices = vector.from_elements %indices0, %indices1, %indices2, %indices3 : vector<4xi32>
+  %packed_indices = vector.constanti [201851904, 218694913, 235537922, 252380931] : vector<4xi32>
   %indices = vector.bitcast %packed_indices : vector<4xi32> to vector<16xi8>
   scf.for %packet = [%begin to %end step %step] {
     %bytes = vector.load %input_bytes[%packet, 0] : view<256x16xi8> -> vector<16xi8>

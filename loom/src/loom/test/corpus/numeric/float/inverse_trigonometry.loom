@@ -68,15 +68,7 @@ func.def @inverse_trigonometry_observations(%y: f64, %x: f64, %narrow_output: bu
 // Directed MPFR 4.2.2 intervals round independently to these constants. The
 // oracle contains no inverse-trigonometric operation, including on the VM.
 func.def @inverse_trigonometry_oracle(%y: f64, %x: f64, %narrow_output: buffer, %wide_output: buffer) {
-  %asin0 = scalar.constant 0.52359877559829893 : f64
-  %asin1 = scalar.constant -0.52359877559829893 : f64
-  %acos0 = scalar.constant 1.0471975511965979 : f64
-  %acos1 = scalar.constant 2.0943951023931957 : f64
-  %atan0 = scalar.constant 0.46364760900080609 : f64
-  %atan1 = scalar.constant -0.46364760900080609 : f64
-  %atan20 = scalar.constant 2.5535900500422257 : f64
-  %atan21 = scalar.constant -0.5880026035475675 : f64
-  %values = vector.from_elements %asin0, %asin1, %acos0, %acos1, %atan0, %atan1, %atan20, %atan21 : vector<8xf64>
+  %values = vector.constantf [0.52359877559829893, -0.52359877559829893, 1.0471975511965979, 2.0943951023931957, 0.46364760900080609, -0.46364760900080609, 2.5535900500422257, -0.5880026035475675] : vector<8xf64>
   %origin = index.constant 0 : offset
   %narrow_results = buffer.view %narrow_output[%origin] : buffer -> view<5x8xf64>
   %wide_results = buffer.view %wide_output[%origin] : buffer -> view<8xf64>

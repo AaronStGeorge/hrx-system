@@ -4,10 +4,8 @@
 func.def device inline @compute_approximate_extended_math_f32(%output: buffer) {
   %base = index.constant 0 : offset
   %results = buffer.view %output[%base] : buffer -> view<18xf32>
-  %c0 = scalar.constant 0.0 : f32
   %c1 = scalar.constant 1.0 : f32
   %c2 = scalar.constant 2.0 : f32
-  %cn3 = scalar.constant -3.0 : f32
   %ln_two = scalar.constant 0.69314718055994529 : f32
   %e = scalar.constant 2.7182818284590451 : f32
   %nan_bits = scalar.constant 2143289344 : i32
@@ -22,10 +20,10 @@ func.def device inline @compute_approximate_extended_math_f32(%output: buffer) {
   view.store %scalar_exp2, %results[2] : f32, view<18xf32>
   view.store %scalar_log2, %results[3] : f32, view<18xf32>
 
-  %exp_inputs = vector.from_elements %c0, %ln_two : vector<2xf32>
-  %log_inputs = vector.from_elements %c1, %e : vector<2xf32>
-  %base_two_inputs = vector.from_elements %c0, %c1 : vector<2xf32>
-  %log_two_inputs = vector.from_elements %c1, %c2 : vector<2xf32>
+  %exp_inputs = vector.constantf [0.0, 0.69314718055994529] : vector<2xf32>
+  %log_inputs = vector.constantf [1.0, 2.7182818284590451] : vector<2xf32>
+  %base_two_inputs = vector.constantf [0.0, 1.0] : vector<2xf32>
+  %log_two_inputs = vector.constantf [1.0, 2.0] : vector<2xf32>
   %vector_exp = vector.expf<afn> %exp_inputs : vector<2xf32>
   %vector_log = vector.logf<afn> %log_inputs : vector<2xf32>
   %vector_exp2 = vector.exp2f<afn> %base_two_inputs : vector<2xf32>
@@ -36,7 +34,7 @@ func.def device inline @compute_approximate_extended_math_f32(%output: buffer) {
   vector.store %vector_log2, %results[10] : vector<2xf32>, view<18xf32>
 
   %extrema_lhs = vector.from_elements %nan, %c2 : vector<2xf32>
-  %extrema_rhs = vector.from_elements %c1, %cn3 : vector<2xf32>
+  %extrema_rhs = vector.constantf [1.0, -3.0] : vector<2xf32>
   %vector_min = vector.minnumf<nsz> %extrema_lhs, %extrema_rhs : vector<2xf32>
   %vector_max = vector.maxnumf<nsz> %extrema_lhs, %extrema_rhs : vector<2xf32>
   vector.store %vector_min, %results[12] : vector<2xf32>, view<18xf32>

@@ -125,23 +125,7 @@ func.def public @inverse_f8e4m3_observations(%packet_count: index, %input: buffe
 func.def @inverse_f8e4m3_inputs(%input: buffer) {
   %origin = index.constant 0 : offset
   %inputs = buffer.view %input[%origin] : buffer -> view<16xi8>
-  %positive_zero_input = scalar.constant 0 : i8
-  %negative_zero_input = scalar.constant -128 : i8
-  %min_subnormal = scalar.constant 1 : i8
-  %max_subnormal = scalar.constant 7 : i8
-  %min_normal = scalar.constant 8 : i8
-  %before_half = scalar.constant 47 : i8
-  %half = scalar.constant 48 : i8
-  %after_half = scalar.constant 49 : i8
-  %before_one = scalar.constant 55 : i8
-  %positive_domain_endpoint = scalar.constant 56 : i8
-  %after_one = scalar.constant 57 : i8
-  %negative_domain_endpoint = scalar.constant -72 : i8
-  %negative_after_one = scalar.constant -71 : i8
-  %max_finite = scalar.constant 126 : i8
-  %infinity_or_nan = scalar.constant 127 : i8
-  %nan = scalar.constant -1 : i8
-  %values = vector.from_elements %positive_zero_input, %negative_zero_input, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %positive_domain_endpoint, %after_one, %negative_domain_endpoint, %negative_after_one, %max_finite, %infinity_or_nan, %nan : vector<16xi8>
+  %values = vector.constanti [0, -128, 1, 7, 8, 47, 48, 49, 55, 56, 57, -72, -71, 126, 127, -1] : vector<16xi8>
   vector.store %values, %inputs[0] : vector<16xi8>, view<16xi8>
   func.return
 }
@@ -196,23 +180,7 @@ func.def public @inverse_f8e5m2_observations(%packet_count: index, %input: buffe
 func.def @inverse_f8e5m2_inputs(%input: buffer) {
   %origin = index.constant 0 : offset
   %inputs = buffer.view %input[%origin] : buffer -> view<16xi8>
-  %positive_zero_input = scalar.constant 0 : i8
-  %negative_zero_input = scalar.constant -128 : i8
-  %min_subnormal = scalar.constant 1 : i8
-  %max_subnormal = scalar.constant 3 : i8
-  %min_normal = scalar.constant 4 : i8
-  %before_half = scalar.constant 55 : i8
-  %half = scalar.constant 56 : i8
-  %after_half = scalar.constant 57 : i8
-  %before_one = scalar.constant 59 : i8
-  %positive_domain_endpoint = scalar.constant 60 : i8
-  %after_one = scalar.constant 61 : i8
-  %negative_domain_endpoint = scalar.constant -68 : i8
-  %negative_after_one = scalar.constant -67 : i8
-  %max_finite = scalar.constant 123 : i8
-  %infinity_or_nan = scalar.constant 124 : i8
-  %nan = scalar.constant 126 : i8
-  %values = vector.from_elements %positive_zero_input, %negative_zero_input, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %positive_domain_endpoint, %after_one, %negative_domain_endpoint, %negative_after_one, %max_finite, %infinity_or_nan, %nan : vector<16xi8>
+  %values = vector.constanti [0, -128, 1, 3, 4, 55, 56, 57, 59, 60, 61, -68, -67, 123, 124, 126] : vector<16xi8>
   vector.store %values, %inputs[0] : vector<16xi8>, view<16xi8>
   func.return
 }
@@ -267,23 +235,7 @@ func.def public @inverse_f16_observations(%packet_count: index, %input: buffer, 
 func.def @inverse_f16_inputs(%input: buffer) {
   %origin = index.constant 0 : offset
   %inputs = buffer.view %input[%origin] : buffer -> view<16xi16>
-  %positive_zero_input = scalar.constant 0 : i16
-  %negative_zero_input = scalar.constant -32768 : i16
-  %min_subnormal = scalar.constant 1 : i16
-  %max_subnormal = scalar.constant 1023 : i16
-  %min_normal = scalar.constant 1024 : i16
-  %before_half = scalar.constant 14335 : i16
-  %half = scalar.constant 14336 : i16
-  %after_half = scalar.constant 14337 : i16
-  %before_one = scalar.constant 15359 : i16
-  %positive_domain_endpoint = scalar.constant 15360 : i16
-  %after_one = scalar.constant 15361 : i16
-  %negative_domain_endpoint = scalar.constant -17408 : i16
-  %negative_after_one = scalar.constant -17407 : i16
-  %max_finite = scalar.constant 31743 : i16
-  %infinity_or_nan = scalar.constant 31744 : i16
-  %nan = scalar.constant 32256 : i16
-  %values = vector.from_elements %positive_zero_input, %negative_zero_input, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %positive_domain_endpoint, %after_one, %negative_domain_endpoint, %negative_after_one, %max_finite, %infinity_or_nan, %nan : vector<16xi16>
+  %values = vector.constanti [0, -32768, 1, 1023, 1024, 14335, 14336, 14337, 15359, 15360, 15361, -17408, -17407, 31743, 31744, 32256] : vector<16xi16>
   vector.store %values, %inputs[0] : vector<16xi16>, view<16xi16>
   func.return
 }
@@ -338,23 +290,7 @@ func.def public @inverse_bf16_observations(%packet_count: index, %input: buffer,
 func.def @inverse_bf16_inputs(%input: buffer) {
   %origin = index.constant 0 : offset
   %inputs = buffer.view %input[%origin] : buffer -> view<16xi16>
-  %positive_zero_input = scalar.constant 0 : i16
-  %negative_zero_input = scalar.constant -32768 : i16
-  %min_subnormal = scalar.constant 1 : i16
-  %max_subnormal = scalar.constant 127 : i16
-  %min_normal = scalar.constant 128 : i16
-  %before_half = scalar.constant 16127 : i16
-  %half = scalar.constant 16128 : i16
-  %after_half = scalar.constant 16129 : i16
-  %before_one = scalar.constant 16255 : i16
-  %positive_domain_endpoint = scalar.constant 16256 : i16
-  %after_one = scalar.constant 16257 : i16
-  %negative_domain_endpoint = scalar.constant -16512 : i16
-  %negative_after_one = scalar.constant -16511 : i16
-  %max_finite = scalar.constant 32639 : i16
-  %infinity_or_nan = scalar.constant 32640 : i16
-  %nan = scalar.constant 32704 : i16
-  %values = vector.from_elements %positive_zero_input, %negative_zero_input, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %positive_domain_endpoint, %after_one, %negative_domain_endpoint, %negative_after_one, %max_finite, %infinity_or_nan, %nan : vector<16xi16>
+  %values = vector.constanti [0, -32768, 1, 127, 128, 16127, 16128, 16129, 16255, 16256, 16257, -16512, -16511, 32639, 32640, 32704] : vector<16xi16>
   vector.store %values, %inputs[0] : vector<16xi16>, view<16xi16>
   func.return
 }

@@ -789,17 +789,27 @@ static iree_status_t loom_vector_canonicalize_iota(loom_op_t* op,
   loom_builder_set_before(&rewriter->builder, op);
   loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
 
-  loom_value_id_t elements[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {
-      LOOM_VALUE_ID_INVALID};
-  for (uint64_t i = 0; i < lane_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(
-        rewriter, lanes[i], element_type, op->location, &elements[i]));
-  }
-
   loom_op_t* replacement_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_from_elements_build(
-      &rewriter->builder, elements, (iree_host_size_t)lane_count, result_type,
-      op->location, &replacement_op));
+  if (loom_scalar_type_is_integer(loom_type_element_type(result_type))) {
+    int64_t values[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {0};
+    for (uint64_t i = 0; i < lane_count; ++i) {
+      const bool exact = loom_value_facts_as_exact_i64(lanes[i], &values[i]);
+      IREE_ASSERT_TRUE(exact);
+    }
+    IREE_RETURN_IF_ERROR(loom_vector_constanti_build(
+        &rewriter->builder, values, (iree_host_size_t)lane_count, result_type,
+        op->location, &replacement_op));
+  } else {
+    loom_value_id_t elements[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {
+        LOOM_VALUE_ID_INVALID};
+    for (uint64_t i = 0; i < lane_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(
+          rewriter, lanes[i], element_type, op->location, &elements[i]));
+    }
+    IREE_RETURN_IF_ERROR(loom_vector_from_elements_build(
+        &rewriter->builder, elements, (iree_host_size_t)lane_count, result_type,
+        op->location, &replacement_op));
+  }
   IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
       op, rewriter, replacement_op, value_checkpoint));
   *out_changed = true;

@@ -518,20 +518,17 @@ func.def @empty_iota(%base: index, %step: index) -> (vector<0xindex>) {
 
 // ====
 
-// A small static iota with exact base and step materializes explicit lanes.
-func.def @static_iota_to_from_elements() -> (vector<4xi32>) {
+// A small fixed-width iota with exact base and step materializes one typed
+// literal instead of separate scalar lane definitions.
+func.def @static_iota_to_constanti() -> (vector<4xi32>) {
   %base = scalar.constant 3 : i32
   %step = scalar.constant 4 : i32
   %r = vector.iota %base step %step : vector<4xi32>
   func.return %r : vector<4xi32>
 }
 // ----
-func.def @static_iota_to_from_elements() -> (vector<4xi32>) {
-  %4 = scalar.constant 3 : i32
-  %5 = scalar.constant 7 : i32
-  %6 = scalar.constant 11 : i32
-  %7 = scalar.constant 15 : i32
-  %r = vector.from_elements %4, %5, %6, %7 : vector<4xi32>
+func.def @static_iota_to_constanti() -> (vector<4xi32>) {
+  %r = vector.constanti [3, 7, 11, 15] : vector<4xi32>
   func.return %r : vector<4xi32>
 }
 

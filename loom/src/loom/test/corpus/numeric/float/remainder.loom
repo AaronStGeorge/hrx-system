@@ -4,17 +4,7 @@
 func.def @remainder_inputs(%input: buffer) {
   %origin = index.constant 0 : offset
   %inputs = buffer.view %input[%origin] : buffer -> view<16xi32>
-  %negative_odd = scalar.constant -7 : i32
-  %negative_multiple = scalar.constant -6 : i32
-  %negative_neighbor = scalar.constant -5 : i32
-  %negative_divisor = scalar.constant -3 : i32
-  %negative_fraction = scalar.constant -1 : i32
-  %zero_dividend = scalar.constant 0 : i32
-  %positive_fraction = scalar.constant 1 : i32
-  %positive_divisor = scalar.constant 3 : i32
-  %positive_neighbor = scalar.constant 5 : i32
-  %positive_odd = scalar.constant 7 : i32
-  %pairs = vector.from_elements %negative_odd, %positive_divisor, %negative_multiple, %positive_divisor, %negative_neighbor, %negative_divisor, %negative_fraction, %positive_odd, %zero_dividend, %positive_divisor, %positive_fraction, %negative_odd, %positive_neighbor, %positive_divisor, %positive_odd, %negative_divisor : vector<16xi32>
+  %pairs = vector.constanti [-7, 3, -6, 3, -5, -3, -1, 7, 0, 3, 1, -7, 5, 3, 7, -3] : vector<16xi32>
   vector.store %pairs, %inputs[0] : vector<16xi32>, view<16xi32>
   func.return
 }

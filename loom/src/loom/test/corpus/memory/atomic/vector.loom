@@ -94,9 +94,7 @@ kernel.def @masked_outside_view() {
   %c0 = index.constant 0 : index
   %outside = index.constant -100 : index
   %offsets = vector.from_elements %c0, %outside : vector<2xindex>
-  %enabled = scalar.constant true : i1
-  %disabled = scalar.constant false : i1
-  %mask = vector.from_elements %enabled, %disabled : vector<2xi1>
+  %mask = vector.constanti [1, 0] : vector<2xi1>
   %increment = vector.splati 1 : vector<2xi32>
   %passthrough = vector.splati -101 : vector<2xi32>
   %old = vector.atomic.rmw.mask<addi> %increment, %view[0][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<2xi32>, view<1xi32>, vector<2xindex>, vector<2xi1>, vector<2xi32>
@@ -323,9 +321,7 @@ kernel.def @vector_atomic_float_cmpxchg() {
   %origin = index.constant 0 : index
   %stride = index.constant 1 : index
   %offsets = vector.iota %origin step %stride : vector<2xindex>
-  %mismatch_bits = scalar.constant -2147483648 : i32
-  %match_bits = scalar.constant 0 : i32
-  %expected_bits = vector.from_elements %mismatch_bits, %match_bits : vector<2xi32>
+  %expected_bits = vector.constanti [-2147483648, 0] : vector<2xi32>
   %expected = vector.bitcast %expected_bits : vector<2xi32> to vector<2xf32>
   %nan_bits = vector.splati 2143294004 : vector<2xi32>
   %nan = vector.bitcast %nan_bits : vector<2xi32> to vector<2xf32>

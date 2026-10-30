@@ -97,23 +97,7 @@ func.def @rounding_f16_observations(%input: buffer, %output: buffer) {
 func.def @rounding_f16_inputs(%input: buffer) {
   %base = index.constant 0 : offset
   %source = buffer.view %input[%base] : buffer -> view<32xi16>
-  %signed_zero = scalar.constant 0 : i16
-  %min_subnormal = scalar.constant 1 : i16
-  %max_subnormal = scalar.constant 1023 : i16
-  %min_normal = scalar.constant 1024 : i16
-  %before_half = scalar.constant 14335 : i16
-  %half = scalar.constant 14336 : i16
-  %after_half = scalar.constant 14337 : i16
-  %before_one = scalar.constant 15359 : i16
-  %unity_bits = scalar.constant 15360 : i16
-  %after_one = scalar.constant 15361 : i16
-  %odd_half = scalar.constant 15872 : i16
-  %even_half = scalar.constant 16640 : i16
-  %last_fractional = scalar.constant 25599 : i16
-  %first_integral = scalar.constant 25600 : i16
-  %infinity_or_max = scalar.constant 31744 : i16
-  %nan = scalar.constant 32256 : i16
-  %positive = vector.from_elements %signed_zero, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %unity_bits, %after_one, %odd_half, %even_half, %last_fractional, %first_integral, %infinity_or_max, %nan : vector<16xi16>
+  %positive = vector.constanti [0, 1, 1023, 1024, 14335, 14336, 14337, 15359, 15360, 15361, 15872, 16640, 25599, 25600, 31744, 32256] : vector<16xi16>
   %sign = vector.splati -32768 : vector<16xi16>
   %negative = vector.xori %positive, %sign : vector<16xi16>
   vector.store %positive, %source[0] : vector<16xi16>, view<32xi16>
@@ -169,23 +153,7 @@ func.def @rounding_bf16_observations(%input: buffer, %output: buffer) {
 func.def @rounding_bf16_inputs(%input: buffer) {
   %base = index.constant 0 : offset
   %source = buffer.view %input[%base] : buffer -> view<32xi16>
-  %signed_zero = scalar.constant 0 : i16
-  %min_subnormal = scalar.constant 1 : i16
-  %max_subnormal = scalar.constant 127 : i16
-  %min_normal = scalar.constant 128 : i16
-  %before_half = scalar.constant 16127 : i16
-  %half = scalar.constant 16128 : i16
-  %after_half = scalar.constant 16129 : i16
-  %before_one = scalar.constant 16255 : i16
-  %unity_bits = scalar.constant 16256 : i16
-  %after_one = scalar.constant 16257 : i16
-  %odd_half = scalar.constant 16320 : i16
-  %even_half = scalar.constant 16416 : i16
-  %last_fractional = scalar.constant 17151 : i16
-  %first_integral = scalar.constant 17152 : i16
-  %infinity_or_max = scalar.constant 32640 : i16
-  %nan = scalar.constant 32704 : i16
-  %positive = vector.from_elements %signed_zero, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %unity_bits, %after_one, %odd_half, %even_half, %last_fractional, %first_integral, %infinity_or_max, %nan : vector<16xi16>
+  %positive = vector.constanti [0, 1, 127, 128, 16127, 16128, 16129, 16255, 16256, 16257, 16320, 16416, 17151, 17152, 32640, 32704] : vector<16xi16>
   %sign = vector.splati -32768 : vector<16xi16>
   %negative = vector.xori %positive, %sign : vector<16xi16>
   vector.store %positive, %source[0] : vector<16xi16>, view<32xi16>
@@ -241,23 +209,7 @@ func.def @rounding_f8e4m3_observations(%input: buffer, %output: buffer) {
 func.def @rounding_f8e4m3_inputs(%input: buffer) {
   %base = index.constant 0 : offset
   %source = buffer.view %input[%base] : buffer -> view<32xi8>
-  %signed_zero = scalar.constant 0 : i8
-  %min_subnormal = scalar.constant 1 : i8
-  %max_subnormal = scalar.constant 7 : i8
-  %min_normal = scalar.constant 8 : i8
-  %before_half = scalar.constant 47 : i8
-  %half = scalar.constant 48 : i8
-  %after_half = scalar.constant 49 : i8
-  %before_one = scalar.constant 55 : i8
-  %unity_bits = scalar.constant 56 : i8
-  %after_one = scalar.constant 57 : i8
-  %odd_half = scalar.constant 60 : i8
-  %even_half = scalar.constant 66 : i8
-  %last_fractional = scalar.constant 79 : i8
-  %first_integral = scalar.constant 80 : i8
-  %infinity_or_max = scalar.constant 126 : i8
-  %nan = scalar.constant 127 : i8
-  %positive = vector.from_elements %signed_zero, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %unity_bits, %after_one, %odd_half, %even_half, %last_fractional, %first_integral, %infinity_or_max, %nan : vector<16xi8>
+  %positive = vector.constanti [0, 1, 7, 8, 47, 48, 49, 55, 56, 57, 60, 66, 79, 80, 126, 127] : vector<16xi8>
   %sign = vector.splati -128 : vector<16xi8>
   %negative = vector.xori %positive, %sign : vector<16xi8>
   vector.store %positive, %source[0] : vector<16xi8>, view<32xi8>
@@ -313,23 +265,7 @@ func.def @rounding_f8e5m2_observations(%input: buffer, %output: buffer) {
 func.def @rounding_f8e5m2_inputs(%input: buffer) {
   %base = index.constant 0 : offset
   %source = buffer.view %input[%base] : buffer -> view<32xi8>
-  %signed_zero = scalar.constant 0 : i8
-  %min_subnormal = scalar.constant 1 : i8
-  %max_subnormal = scalar.constant 3 : i8
-  %min_normal = scalar.constant 4 : i8
-  %before_half = scalar.constant 55 : i8
-  %half = scalar.constant 56 : i8
-  %after_half = scalar.constant 57 : i8
-  %before_one = scalar.constant 59 : i8
-  %unity_bits = scalar.constant 60 : i8
-  %after_one = scalar.constant 61 : i8
-  %odd_half = scalar.constant 62 : i8
-  %even_half = scalar.constant 65 : i8
-  %last_fractional = scalar.constant 67 : i8
-  %first_integral = scalar.constant 68 : i8
-  %infinity_or_max = scalar.constant 124 : i8
-  %nan = scalar.constant 126 : i8
-  %positive = vector.from_elements %signed_zero, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %unity_bits, %after_one, %odd_half, %even_half, %last_fractional, %first_integral, %infinity_or_max, %nan : vector<16xi8>
+  %positive = vector.constanti [0, 1, 3, 4, 55, 56, 57, 59, 60, 61, 62, 65, 67, 68, 124, 126] : vector<16xi8>
   %sign = vector.splati -128 : vector<16xi8>
   %negative = vector.xori %positive, %sign : vector<16xi8>
   vector.store %positive, %source[0] : vector<16xi8>, view<32xi8>
@@ -495,23 +431,7 @@ func.def @rounding_f32_vector_oracle(%input: buffer, %output: buffer) {
 func.def @rounding_f32_inputs(%input: buffer) {
   %base = index.constant 0 : offset
   %source = buffer.view %input[%base] : buffer -> view<32xi32>
-  %signed_zero = scalar.constant 0 : i32
-  %min_subnormal = scalar.constant 1 : i32
-  %max_subnormal = scalar.constant 8388607 : i32
-  %min_normal = scalar.constant 8388608 : i32
-  %before_half = scalar.constant 1056964607 : i32
-  %half = scalar.constant 1056964608 : i32
-  %after_half = scalar.constant 1056964609 : i32
-  %before_one = scalar.constant 1065353215 : i32
-  %unity_bits = scalar.constant 1065353216 : i32
-  %after_one = scalar.constant 1065353217 : i32
-  %odd_half = scalar.constant 1069547520 : i32
-  %even_half = scalar.constant 1075838976 : i32
-  %last_fractional = scalar.constant 1258291199 : i32
-  %first_integral = scalar.constant 1258291200 : i32
-  %infinity_or_max = scalar.constant 2139095040 : i32
-  %nan = scalar.constant 2143289344 : i32
-  %positive = vector.from_elements %signed_zero, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %unity_bits, %after_one, %odd_half, %even_half, %last_fractional, %first_integral, %infinity_or_max, %nan : vector<16xi32>
+  %positive = vector.constanti [0, 1, 8388607, 8388608, 1056964607, 1056964608, 1056964609, 1065353215, 1065353216, 1065353217, 1069547520, 1075838976, 1258291199, 1258291200, 2139095040, 2143289344] : vector<16xi32>
   %sign = vector.splati -2147483648 : vector<16xi32>
   %negative = vector.xori %positive, %sign : vector<16xi32>
   vector.store %positive, %source[0] : vector<16xi32>, view<32xi32>
@@ -581,23 +501,7 @@ func.def @rounding_f64_vector_oracle(%input: buffer, %output: buffer) {
 func.def @rounding_f64_inputs(%input: buffer) {
   %base = index.constant 0 : offset
   %source = buffer.view %input[%base] : buffer -> view<32xi64>
-  %signed_zero = scalar.constant 0 : i64
-  %min_subnormal = scalar.constant 1 : i64
-  %max_subnormal = scalar.constant 4503599627370495 : i64
-  %min_normal = scalar.constant 4503599627370496 : i64
-  %before_half = scalar.constant 4602678819172646911 : i64
-  %half = scalar.constant 4602678819172646912 : i64
-  %after_half = scalar.constant 4602678819172646913 : i64
-  %before_one = scalar.constant 4607182418800017407 : i64
-  %unity_bits = scalar.constant 4607182418800017408 : i64
-  %after_one = scalar.constant 4607182418800017409 : i64
-  %odd_half = scalar.constant 4609434218613702656 : i64
-  %even_half = scalar.constant 4612811918334230528 : i64
-  %last_fractional = scalar.constant 4841369599423283199 : i64
-  %first_integral = scalar.constant 4841369599423283200 : i64
-  %infinity_or_max = scalar.constant 9218868437227405312 : i64
-  %nan = scalar.constant 9221120237041090560 : i64
-  %positive = vector.from_elements %signed_zero, %min_subnormal, %max_subnormal, %min_normal, %before_half, %half, %after_half, %before_one, %unity_bits, %after_one, %odd_half, %even_half, %last_fractional, %first_integral, %infinity_or_max, %nan : vector<16xi64>
+  %positive = vector.constanti [0, 1, 4503599627370495, 4503599627370496, 4602678819172646911, 4602678819172646912, 4602678819172646913, 4607182418800017407, 4607182418800017408, 4607182418800017409, 4609434218613702656, 4612811918334230528, 4841369599423283199, 4841369599423283200, 9218868437227405312, 9221120237041090560] : vector<16xi64>
   %sign = vector.splati -9223372036854775808 : vector<16xi64>
   %negative = vector.xori %positive, %sign : vector<16xi64>
   vector.store %positive, %source[0] : vector<16xi64>, view<32xi64>

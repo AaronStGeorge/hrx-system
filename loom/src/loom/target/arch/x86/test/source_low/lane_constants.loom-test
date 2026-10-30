@@ -6,32 +6,20 @@
 x86.target<avx512> @target
 
 func.def target(@target) @construct_exact_lanes() -> (vector<16xi8>, vector<8xi16>, vector<8xf32>, vector<8xi64>) {
-  %i8_low = scalar.constant 1 : i8
-  %i8_high = scalar.constant -2 : i8
-  %xmm_bytes = vector.from_elements %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high : vector<16xi8>
-  %i16_low = scalar.constant 258 : i16
-  %i16_high = scalar.constant -3 : i16
-  %xmm_words = vector.from_elements %i16_low, %i16_high, %i16_low, %i16_high, %i16_low, %i16_high, %i16_low, %i16_high : vector<8xi16>
-  %f32_low = scalar.constant 1.5 : f32
-  %f32_high = scalar.constant -2.25 : f32
-  %ymm_dwords = vector.from_elements %f32_low, %f32_high, %f32_low, %f32_high, %f32_low, %f32_high, %f32_low, %f32_high : vector<8xf32>
-  %i64_low = scalar.constant 81985529216486895 : i64
-  %i64_high = scalar.constant -2 : i64
-  %zmm_qwords = vector.from_elements %i64_low, %i64_high, %i64_low, %i64_high, %i64_low, %i64_high, %i64_low, %i64_high : vector<8xi64>
+  %xmm_bytes = vector.constanti [1, -2, 1, -2, 1, -2, 1, -2, 1, -2, 1, -2, 1, -2, 1, -2] : vector<16xi8>
+  %xmm_words = vector.constanti [258, -3, 258, -3, 258, -3, 258, -3] : vector<8xi16>
+  %ymm_dwords = vector.constantf [1.5, -2.25, 1.5, -2.25, 1.5, -2.25, 1.5, -2.25] : vector<8xf32>
+  %zmm_qwords = vector.constanti [81985529216486895, -2, 81985529216486895, -2, 81985529216486895, -2, 81985529216486895, -2] : vector<8xi64>
   func.return %xmm_bytes, %xmm_words, %ymm_dwords, %zmm_qwords : vector<16xi8>, vector<8xi16>, vector<8xf32>, vector<8xi64>
 }
 
 func.def target(@target) @reuse_exact_lanes() -> (vector<16xi8>) {
-  %low = scalar.constant 1 : i8
-  %high = scalar.constant -2 : i8
-  %result = vector.from_elements %low, %high, %low, %high, %low, %high, %low, %high, %low, %high, %low, %high, %low, %high, %low, %high : vector<16xi8>
+  %result = vector.constanti [1, -2, 1, -2, 1, -2, 1, -2, 1, -2, 1, -2, 1, -2, 1, -2] : vector<16xi8>
   func.return %result : vector<16xi8>
 }
 
 func.def target(@target) @construct_uniform_lanes() -> (vector<8xi16>) {
-  %left = scalar.constant 7 : i16
-  %right = scalar.constant 7 : i16
-  %result = vector.from_elements %left, %right, %left, %right, %left, %right, %left, %right : vector<8xi16>
+  %result = vector.constanti [7, 7, 7, 7, 7, 7, 7, 7] : vector<8xi16>
   func.return %result : vector<8xi16>
 }
 
@@ -44,24 +32,12 @@ func.def target(@target) @construct_mixed_lanes(%dynamic: i32) -> (vector<4xi32>
 }
 
 func.def target(@target) @construct_exact_storage_lanes() -> (vector<16xf8E4M3>, vector<16xf8E5M2>, vector<8xf16>, vector<8xbf16>, vector<4xi32>, vector<2xf64>) {
-  %e4_low = scalar.constant 1.5 : f8E4M3
-  %e4_high = scalar.constant -1.5 : f8E4M3
-  %e4 = vector.from_elements %e4_low, %e4_high, %e4_low, %e4_high, %e4_low, %e4_high, %e4_low, %e4_high, %e4_low, %e4_high, %e4_low, %e4_high, %e4_low, %e4_high, %e4_low, %e4_high : vector<16xf8E4M3>
-  %e5_low = scalar.constant 1.5 : f8E5M2
-  %e5_high = scalar.constant -1.5 : f8E5M2
-  %e5 = vector.from_elements %e5_low, %e5_high, %e5_low, %e5_high, %e5_low, %e5_high, %e5_low, %e5_high, %e5_low, %e5_high, %e5_low, %e5_high, %e5_low, %e5_high, %e5_low, %e5_high : vector<16xf8E5M2>
-  %f16_low = scalar.constant 1.5 : f16
-  %f16_high = scalar.constant -2.0 : f16
-  %f16 = vector.from_elements %f16_low, %f16_high, %f16_low, %f16_high, %f16_low, %f16_high, %f16_low, %f16_high : vector<8xf16>
-  %bf16_low = scalar.constant 1.5 : bf16
-  %bf16_high = scalar.constant -2.0 : bf16
-  %bf16 = vector.from_elements %bf16_low, %bf16_high, %bf16_low, %bf16_high, %bf16_low, %bf16_high, %bf16_low, %bf16_high : vector<8xbf16>
-  %i32_low = scalar.constant 305419896 : i32
-  %i32_high = scalar.constant -2 : i32
-  %i32 = vector.from_elements %i32_low, %i32_high, %i32_low, %i32_high : vector<4xi32>
-  %f64_low = scalar.constant 1.5 : f64
-  %f64_high = scalar.constant -2.25 : f64
-  %f64 = vector.from_elements %f64_low, %f64_high : vector<2xf64>
+  %e4 = vector.constantf [1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5] : vector<16xf8E4M3>
+  %e5 = vector.constantf [1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5, 1.5, -1.5] : vector<16xf8E5M2>
+  %f16 = vector.constantf [1.5, -2.0, 1.5, -2.0, 1.5, -2.0, 1.5, -2.0] : vector<8xf16>
+  %bf16 = vector.constantf [1.5, -2.0, 1.5, -2.0, 1.5, -2.0, 1.5, -2.0] : vector<8xbf16>
+  %i32 = vector.constanti [305419896, -2, 305419896, -2] : vector<4xi32>
+  %f64 = vector.constantf [1.5, -2.25] : vector<2xf64>
   func.return %e4, %e5, %f16, %bf16, %i32, %f64 : vector<16xf8E4M3>, vector<16xf8E5M2>, vector<8xf16>, vector<8xbf16>, vector<4xi32>, vector<2xf64>
 }
 

@@ -63,9 +63,7 @@ func.def @x86_root_f64_approximate_observations(%first_bits: i64, %second_bits: 
 }
 
 func.def @x86_root_f64_approximate_oracle(%first_bits: i64, %second_bits: i64, %output: buffer) {
-  %first_inverse = scalar.constant 1.4142135623730951 : f64
-  %second_inverse = scalar.constant 0.57735026918962584 : f64
-  %results = vector.from_elements %first_inverse, %first_inverse, %second_inverse : vector<3xf64>
+  %results = vector.constantf [1.4142135623730951, 1.4142135623730951, 0.57735026918962584] : vector<3xf64>
   %origin = index.constant 0 : offset
   %output_view = buffer.view %output[%origin] : buffer -> view<3xf64>
   vector.store %results, %output_view[0] : vector<3xf64>, view<3xf64>

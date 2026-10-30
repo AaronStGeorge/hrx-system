@@ -61,13 +61,10 @@ kernel.def @q8_mixed_u8s8_dot4_all_ones() {
 } launch(%output: buffer) {
   %base = index.constant 0 : offset
   %output_index = index.constant 0 : index
-  %lhs0 = scalar.constant -1 : i8
-  %rhs0 = scalar.constant -1 : i8
-  %dot_initial = scalar.constant 0 : i32
   %output_words = buffer.view %output[%base] : buffer -> view<1xi32>
-  %lhs = vector.from_elements %lhs0, %lhs0, %lhs0, %lhs0 : vector<4xi8>
-  %rhs = vector.from_elements %rhs0, %rhs0, %rhs0, %rhs0 : vector<4xi8>
-  %acc = vector.from_elements %dot_initial : vector<1xi32>
+  %lhs = vector.constanti [-1, -1, -1, -1] : vector<4xi8>
+  %rhs = vector.constanti [-1, -1, -1, -1] : vector<4xi8>
+  %acc = vector.constanti [0] : vector<1xi32>
   %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   %result = vector.extract %dot[0] : vector<1xi32> -> i32
   view.store %result, %output_words[%output_index] : i32, view<1xi32>
