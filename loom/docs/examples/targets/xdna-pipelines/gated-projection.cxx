@@ -94,6 +94,7 @@ static LOOM_FORCE_INLINE void gate_up_tile(InputView input, WeightView weights,
   loom::view::store(static_cast<float>(result[0]), output, loomt::index{0});
 }
 
+// --8<-- [start:fill-input]
 static LOOM_FORCE_INLINE void fill_input(loomt::index record, Bytes input,
                                          InputChannel inputs) {
   auto byte_offset = loom::offset::cast(record * input_size * loomt::index{2});
@@ -108,7 +109,9 @@ static LOOM_FORCE_INLINE void fill_input(loomt::index record, Bytes input,
   loom::kernel::async::wait<0>(loom::kernel::async::group(copy));
   loom::channel::publish(reservation.write);
 }
+// --8<-- [end:fill-input]
 
+// --8<-- [start:drain-output]
 static LOOM_FORCE_INLINE void drain_output(loomt::index record,
                                            OutputChannel outputs,
                                            Bytes output) {
@@ -123,6 +126,7 @@ static LOOM_FORCE_INLINE void drain_output(loomt::index record,
   loom::kernel::async::wait<0>(loom::kernel::async::group(copy));
   loom::channel::release(acquisition.read);
 }
+// --8<-- [end:drain-output]
 
 [[loom::pipeline("kernel"), loom::target(npu)]]
 void ffn_gate_up_quadratic_bf16([[loom::launch]] Bytes input, Bytes weights,

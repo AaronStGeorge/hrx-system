@@ -5,11 +5,11 @@ inside one device invocation. DMA can fill an input while a compute worker
 processes another record. Channels govern when each record becomes readable and
 when its storage can be reused; the host does not dispatch every stage.
 
-This walkthrough follows a BF16 gate/up projection from authored Loom to a
-native XDNA executable. The same source is a maintained compiler workload.
-It exercises ordinary functions, owned channels, adjacent tile memory, DMA,
-and specialization. It computes one projection pair and a quadratic gate,
-not a complete FFN or an optimized matrix multiplication.
+This walkthrough follows a BF16 gate/up projection from authored C++ through
+Loom High IR to a native XDNA executable. The same source is a maintained
+compiler workload. It exercises ordinary functions, owned channels, adjacent
+tile memory, DMA, and specialization. It computes one projection pair and a
+quadratic gate, not a complete FFN or an optimized matrix multiplication.
 
 The current native realization requires explicit singleton worker selections,
 specialized storage sizes, and channel protocols supported by the target.
@@ -19,12 +19,14 @@ does not yet turn this example into a GPU or CPU executable.
 
 ## Compile a complete program
 
-Save [gated-projection.loom](../generated/examples/targets/xdna-pipelines/gated-projection.loom).
+Save [gated-projection.cxx](../generated/examples/targets/xdna-pipelines/gated-projection.cxx).
 It includes all helper functions and the public
-`@ffn_gate_up_quadratic_bf16` pipeline. With an installed Loom toolchain that
-includes XDNA, compile for Strix Halo NPU5:
+`ffn_gate_up_quadratic_bf16` pipeline. With an installed Loom toolchain that
+includes the C++ importer and XDNA, import and compile it for Strix Halo NPU5:
 
 ```shell
+loom-import-cxx --root=ffn_gate_up_quadratic_bf16 \
+  gated-projection.cxx --output=gated-projection.loom
 loom-format --check gated-projection.loom
 loom-compile gated-projection.loom \
   --root=@ffn_gate_up_quadratic_bf16 \
@@ -53,8 +55,10 @@ chosen quadratic gate is different from SiLU or SwiGLU.
 
 ## Construct storage and independently progressing strands
 
-Here is the complete pipeline body from that source. Its helper definitions
-are in the downloadable file; the transfer helpers appear below.
+Here is the complete pipeline body in the imported High IR. Its helper
+definitions are in the downloadable generated
+[module](../generated/examples/targets/xdna-pipelines/gated-projection.loom);
+the authored C++ transfer helpers appear below.
 
 ```loom
 --8<-- "generated/examples/targets/xdna-pipelines/pipeline.loom"
@@ -117,8 +121,8 @@ checks the complete placement against the device's available memory.
 The ingress helper reserves writable storage, launches a copy into it, waits
 for that copy, then publishes the initialized record:
 
-```loom
---8<-- "generated/examples/targets/xdna-pipelines/gated-projection.loom:fill-input"
+```c++
+--8<-- "generated/examples/targets/xdna-pipelines/gated-projection.cxx:fill-input"
 ```
 
 `write<tile<[%input_size]xbf16>>` owns the reservation. The view is a borrowed way to access
@@ -128,8 +132,8 @@ would let the consumer read incomplete data.
 
 The output helper follows the other side of the lifetime:
 
-```loom
---8<-- "generated/examples/targets/xdna-pipelines/gated-projection.loom:drain-output"
+```c++
+--8<-- "generated/examples/targets/xdna-pipelines/gated-projection.cxx:drain-output"
 ```
 
 `channel.acquire` returns an owned read plus a ready payload view. The read
