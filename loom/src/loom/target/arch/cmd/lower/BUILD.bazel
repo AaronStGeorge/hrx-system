@@ -98,6 +98,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:types",
         "//loom/src/loom/target/arch/cmd:abi_layout",
+        "//loom/src/loom/target/arch/cmd:program",
         "//loom/src/loom/target/arch/cmd/descriptors",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

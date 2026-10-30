@@ -80,9 +80,10 @@ typedef struct loom_cmd_lower_plan_t {
   loom_cmd_abi_layout_t abi_layout;
   // Classified command and wave order borrowed from source scheduling.
   const loom_cmd_schedule_plan_t* schedule;
-  // Physical workgroup-count placement in schedule command order.
+  // Physical workgroup-count placement in schedule order; unused for
+  // timestamps.
   const loom_cmd_dispatch_count_t* dispatch_counts;
-  // Executable placements in schedule command order.
+  // Executable placements in schedule order; unused for timestamps.
   const loom_cmd_lower_dispatch_t* dispatches;
 } loom_cmd_lower_plan_t;
 

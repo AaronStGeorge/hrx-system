@@ -575,6 +575,18 @@ static iree_status_t loom_cmd_serialize_flatten_arguments(
   return iree_ok_status();
 }
 
+static iree_status_t loom_cmd_serialize_timestamp(
+    loom_cmd_serialize_build_t* build, const loom_op_t* op,
+    loom_cmd_program_command_kind_t kind) {
+  const loom_cmd_serialize_value_t* target =
+      loom_cmd_serialize_operand(build, loom_low_op_operands(op).values[0]);
+  const loom_cmd_program_command_t command = {
+      .kind = kind,
+      .payload.timestamp.target_buffer_ref = target->payload.index,
+  };
+  return loom_cmd_serialize_append_command(build, command);
+}
+
 static iree_status_t loom_cmd_serialize_fill(
     loom_cmd_serialize_build_t* build, const loom_op_t* op,
     loom_cmd_program_command_kind_t kind) {
@@ -763,6 +775,16 @@ static iree_status_t loom_cmd_serialize_packet(
     return loom_cmd_serialize_buffer_ref(
         build, op, LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE,
         LOOM_CMD_SERIALIZE_VALUE_KIND_BINDING);
+  }
+  if (loom_cmd_serialize_packet_is(build, packet,
+                                   CMD_CORE_DESCRIPTOR_REF_TIMESTAMP)) {
+    return loom_cmd_serialize_timestamp(
+        build, op, LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP);
+  }
+  if (loom_cmd_serialize_packet_is(build, packet,
+                                   CMD_CORE_DESCRIPTOR_REF_TIMESTAMP_BARRIER)) {
+    return loom_cmd_serialize_timestamp(
+        build, op, LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP_BARRIER);
   }
   if (loom_cmd_serialize_packet_is(build, packet,
                                    CMD_CORE_DESCRIPTOR_REF_FILL)) {
@@ -1054,6 +1076,9 @@ static void loom_cmd_serialize_write_commands(
         command.argument_schema_index);
     uint32_t operands[5] = {0};
     switch ((uint32_t)loom_cmd_program_command_kind_base(command.kind)) {
+      case LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP:
+        operands[0] = command.payload.timestamp.target_buffer_ref;
+        break;
       case LOOM_CMD_PROGRAM_COMMAND_KIND_FILL:
         operands[0] = command.payload.fill.target_buffer_ref;
         operands[1] = command.payload.fill.pattern;

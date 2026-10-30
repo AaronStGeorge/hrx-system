@@ -45,7 +45,8 @@ typedef struct loom_cmd_dispatch_count_t {
 
 // Classifies physical workgroup-count placement for every scheduled dispatch.
 //
-// The schedule must contain only configured kernel.dispatch commands. Exact
+// Configured dispatches and pipeline launches receive count rows; timestamp
+// commands do not dispatch work and leave their rows unpopulated. Exact
 // scalar tuples become direct artifact metadata. Exactly placed views rooted in
 // immutable parameters remain static indirect. Views rooted in caller-supplied
 // buffers or command buffer.alloca storage use dynamic indirect fetches because

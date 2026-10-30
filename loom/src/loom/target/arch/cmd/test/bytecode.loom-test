@@ -1,5 +1,19 @@
 // RUN: format bytecode
 
+low.func.def target<cmd.core> abi(command_program) @capture_bindings() asm {
+  %fixed = resource<command_input> {index = 0, source_type = buffer} : reg<cmd.buffer>
+  %dynamic = resource<command_input> {index = 0, source_type = buffer} : reg<cmd.binding>
+  %c0 = cmd.constant.u64 0
+  %sample_bytes = cmd.constant.u64 8
+  %start = cmd.buffer.ref.direct %fixed, %c0, %sample_bytes
+  %end = cmd.buffer.ref.binding %dynamic, %sample_bytes, %sample_bytes
+  cmd.timestamp %start
+  cmd.timestamp.barrier %end
+  return
+}
+
+// ====
+
 low.func.def target<cmd.core> abi(command_program) @one_dispatch() asm {
   %parameters = resource<command_input> {index = 0, source_type = buffer} : reg<cmd.buffer>
   %output = resource<command_input> {index = 0, source_type = buffer} : reg<cmd.binding>

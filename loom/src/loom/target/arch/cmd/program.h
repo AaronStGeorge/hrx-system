@@ -23,6 +23,10 @@ enum {
       LOOM_CMD_PROGRAM_LAUNCH_COUNT_DIMENSION_COUNT * sizeof(uint32_t),
   // Required byte alignment of one serialized workgroup-count tuple.
   LOOM_CMD_PROGRAM_LAUNCH_COUNT_TUPLE_ALIGNMENT = 4,
+  // Byte length of one raw queue-family clock sample.
+  LOOM_CMD_PROGRAM_TIMESTAMP_BYTE_LENGTH = 8,
+  // Required byte alignment of one raw queue-family clock sample.
+  LOOM_CMD_PROGRAM_TIMESTAMP_ALIGNMENT = 8,
 };
 
 // Materialization role of a serialized buffer root.
@@ -111,6 +115,8 @@ typedef enum loom_cmd_program_command_kind_e {
   LOOM_CMD_PROGRAM_COMMAND_KIND_DISPATCH_INDIRECT_DYNAMIC = 5,
   // Order all earlier commands before all later commands.
   LOOM_CMD_PROGRAM_COMMAND_KIND_BARRIER_EXECUTION = 6,
+  // Write one raw 64-bit queue-family clock sample to a buffer reference.
+  LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP = 7,
   // Perform a full execution barrier, then fill one buffer range.
   LOOM_CMD_PROGRAM_COMMAND_KIND_FILL_BARRIER =
       LOOM_CMD_PROGRAM_COMMAND_KIND_BARRIER_BIT |
@@ -133,6 +139,10 @@ typedef enum loom_cmd_program_command_kind_e {
   LOOM_CMD_PROGRAM_COMMAND_KIND_DISPATCH_INDIRECT_DYNAMIC_BARRIER =
       LOOM_CMD_PROGRAM_COMMAND_KIND_BARRIER_BIT |
       LOOM_CMD_PROGRAM_COMMAND_KIND_DISPATCH_INDIRECT_DYNAMIC,
+  // Join prior execution, then capture one clock sample.
+  LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP_BARRIER =
+      LOOM_CMD_PROGRAM_COMMAND_KIND_BARRIER_BIT |
+      LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP,
 } loom_cmd_program_command_kind_t;
 
 // Returns true when |kind| joins all prior execution before its payload.
@@ -170,6 +180,11 @@ typedef struct loom_cmd_program_command_t {
   uint32_t argument_schema_index;
   // Command-specific payload.
   union {
+    // Payload for either timestamp command kind.
+    struct {
+      // Eight-byte-aligned, eight-byte destination buffer-reference index.
+      uint32_t target_buffer_ref;
+    } timestamp;
     // Payload for either fill command kind.
     struct {
       // Target buffer-reference table index.

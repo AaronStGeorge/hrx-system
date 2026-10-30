@@ -135,6 +135,9 @@ iree_status_t loom_cmd_program_plan_publish_kernel_requests(
          ++command_ordinal) {
       const loom_cmd_schedule_command_t* command =
           &root->schedule->commands[command_ordinal];
+      if (command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP) {
+        continue;
+      }
       IREE_ASSERT(loom_symbol_ref_is_valid(command->callee));
       IREE_ASSERT_EQ(command->callee.module_id, 0u);
       IREE_ASSERT_LT(command->callee.symbol_id, symbol_count);
@@ -181,6 +184,9 @@ iree_status_t loom_cmd_program_plan_publish_kernel_requests(
          command_ordinal < root->schedule->command_count; ++command_ordinal) {
       const loom_cmd_schedule_command_t* command =
           &root->schedule->commands[command_ordinal];
+      if (command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP) {
+        continue;
+      }
       const loom_symbol_id_t symbol_id = command->callee.symbol_id;
       if (kernel_source->source_definitions.values[symbol_id] ==
           LOOM_LINK_MODULE_INDEX_INVALID_ORDINAL) {
@@ -277,6 +283,9 @@ iree_status_t loom_cmd_program_plan_publish_generated_kernel_requests(
          command_ordinal < root->schedule->command_count; ++command_ordinal) {
       const loom_cmd_schedule_command_t* command =
           &root->schedule->commands[command_ordinal];
+      if (command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP) {
+        continue;
+      }
       const loom_cmd_launch_count_kernel_t* generated =
           loom_cmd_launch_count_realization_lookup(realization,
                                                    command->callee);

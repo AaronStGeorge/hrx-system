@@ -12,7 +12,7 @@ The command compiler is independent of HAL. A materializer maps the portable
 artifact to its command system, such as a HAL command buffer, a CUDA graph, or
 a native queue packet sequence.
 
-Four boundaries keep the feature composable:
+These boundaries keep the feature composable:
 
 - Source command programs remain open Loom IR. Normal linking,
   specialization, and canonicalization apply before portability is required.
@@ -90,10 +90,17 @@ command.def public @attention(%token_count: index) launch(
 
 Ordinary function calls, program calls, loops, conditionals, templates, and
 value-fact refinement remain source constructs. Planning specializes them
-until the command schedule is a closed sequence of kernel launches and explicit
-`command.serial` or `command.concurrent` regions. A residual construct without
-a portable command meaning fails at that boundary instead of acquiring an
-implicit runtime interpretation.
+until the command schedule is a closed sequence of kernel launches, clock
+captures, and explicit `command.serial` or `command.concurrent` regions. A
+residual construct without a portable command meaning fails at that boundary
+instead of acquiring an implicit runtime interpretation.
+
+`command.timestamp` captures a raw queue-family clock sample into a writable,
+aligned `view<1xi64>`. It participates in ordinary wave scheduling and storage
+lifetime planning, and lowers to `cmd.timestamp` or `cmd.timestamp.barrier`
+with a normal buffer reference. No kernel entry or separate allocation is
+needed. Portable records preserve the capture; HAL materialization reports
+`UNIMPLEMENTED` until capture and execution ordering are implemented there.
 
 `command.parameter` names immutable content within an explicit source buffer.
 It returns a typed logical view and contributes a placement requirement; it

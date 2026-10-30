@@ -19,6 +19,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/cmd/abi_layout.h"
 #include "loom/target/arch/cmd/descriptors/descriptors.h"
+#include "loom/target/arch/cmd/program.h"
 #include "loom/target/types.h"
 
 typedef struct loom_cmd_lower_constant_t {
@@ -662,6 +663,26 @@ static iree_status_t loom_cmd_lower_build_dispatch(
   }
 }
 
+static iree_status_t loom_cmd_lower_build_timestamp(
+    loom_cmd_lower_state_t* state, const loom_cmd_schedule_command_t* command,
+    bool has_barrier) {
+  const loom_location_id_t location = command->source_op->location;
+  loom_cmd_lower_buffer_tuple_t tuple =
+      state->resources.source_values[command->arguments.values[0]].buffer;
+  IREE_RETURN_IF_ERROR(loom_cmd_lower_build_u64_constant(
+      state, LOOM_CMD_PROGRAM_TIMESTAMP_BYTE_LENGTH, location,
+      &tuple.byte_length));
+  loom_value_id_t target = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_cmd_lower_build_buffer_ref_from_tuple(
+      state, &tuple, location, &target));
+  loom_op_t* timestamp = NULL;
+  return loom_cmd_lower_build_descriptor_op(
+      state,
+      has_barrier ? CMD_CORE_DESCRIPTOR_REF_TIMESTAMP_BARRIER
+                  : CMD_CORE_DESCRIPTOR_REF_TIMESTAMP,
+      &target, 1, NULL, 0, location, &timestamp);
+}
+
 static iree_status_t loom_cmd_lower_build_commands(
     loom_cmd_lower_state_t* state) {
   const loom_cmd_schedule_plan_t* schedule = state->plan->schedule;
@@ -674,10 +695,17 @@ static iree_status_t loom_cmd_lower_build_commands(
     const loom_cmd_schedule_wave_t wave = schedule->waves[wave_index];
     IREE_ASSERT_GT(wave.command_count, 0u);
     for (iree_host_size_t i = 0; i < wave.command_count; ++i) {
-      const iree_host_size_t dispatch_index = wave.command_offset + i;
+      const iree_host_size_t command_index = wave.command_offset + i;
       const bool has_barrier = wave_index != 0 && i == 0;
-      IREE_RETURN_IF_ERROR(
-          loom_cmd_lower_build_dispatch(state, dispatch_index, has_barrier));
+      const loom_cmd_schedule_command_t* command =
+          &schedule->commands[command_index];
+      if (command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP) {
+        IREE_RETURN_IF_ERROR(
+            loom_cmd_lower_build_timestamp(state, command, has_barrier));
+      } else {
+        IREE_RETURN_IF_ERROR(
+            loom_cmd_lower_build_dispatch(state, command_index, has_barrier));
+      }
     }
   }
   loom_op_t* return_op = NULL;

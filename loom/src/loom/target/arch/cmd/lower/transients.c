@@ -6,7 +6,6 @@
 
 #include "loom/target/arch/cmd/lower/transients.h"
 
-#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -54,6 +53,12 @@ typedef struct loom_cmd_transient_free_range_t {
 } loom_cmd_transient_free_range_t;
 
 typedef struct loom_cmd_transient_build_t {
+  // Source module owning allocation and view locations.
+  const loom_module_t* module;
+
+  // Reports authored storage constraints before Low conversion.
+  iree_diagnostic_emitter_t diagnostic_emitter;
+
   // Complete value facts for the source program.
   const loom_value_fact_table_t* fact_table;
 
@@ -152,14 +157,6 @@ static iree_status_t loom_cmd_transient_append_range(
     loom_cmd_transient_build_t* build, loom_value_id_t source_value,
     const loom_cmd_transient_allocation_t* allocation, uint64_t byte_offset,
     uint64_t byte_length) {
-  if (byte_offset > allocation->byte_length ||
-      byte_length > allocation->byte_length - byte_offset) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "command transient range [0x%" PRIx64 ", 0x%" PRIx64
-                            ") exceeds its 0x%" PRIx64 "-byte allocation",
-                            byte_offset, byte_offset + byte_length,
-                            allocation->byte_length);
-  }
   IREE_RETURN_IF_ERROR(loom_cmd_transient_reserve_buffer_range(build));
   build->buffer_ranges[build->buffer_range_count++] = (loom_cmd_buffer_range_t){
       .source_value = source_value,
@@ -482,7 +479,8 @@ static iree_status_t loom_cmd_transient_pack_allocations(
 }
 
 static iree_status_t loom_cmd_transient_append_result_range(
-    loom_cmd_transient_build_t* build, loom_value_id_t result) {
+    loom_cmd_transient_build_t* build, const loom_op_t* op,
+    loom_value_id_t result, loom_walk_result_t* out_result) {
   const loom_value_facts_t facts =
       loom_value_fact_table_lookup(build->fact_table, result);
   loom_value_fact_view_reference_t view_reference = {0};
@@ -502,10 +500,17 @@ static iree_status_t loom_cmd_transient_append_result_range(
         !loom_value_facts_as_exact_i64(view_reference.footprint_byte_length,
                                        &byte_length) ||
         byte_offset < 0 || byte_length < 0) {
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "command transient views require exact nonnegative byte ranges "
-          "before command planning");
+      *out_result = LOOM_WALK_ABORT;
+      return loom_cmd_transient_emit_allocation_error(
+          build->module, op, build->diagnostic_emitter,
+          IREE_SV("exact nonnegative view byte ranges"));
+    }
+    if ((uint64_t)byte_offset > allocation->byte_length ||
+        (uint64_t)byte_length > allocation->byte_length - byte_offset) {
+      *out_result = LOOM_WALK_ABORT;
+      return loom_cmd_transient_emit_allocation_error(
+          build->module, op, build->diagnostic_emitter,
+          IREE_SV("view ranges contained in their allocation"));
     }
     return loom_cmd_transient_append_range(build, result, allocation,
                                            (uint64_t)byte_offset,
@@ -537,9 +542,10 @@ static iree_status_t loom_cmd_transient_range_visit(
   loom_cmd_transient_build_t* build = (loom_cmd_transient_build_t*)user_data;
 
   const loom_value_id_t* results = loom_op_const_results(op);
-  for (uint16_t i = 0; i < op->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(
-        loom_cmd_transient_append_result_range(build, results[i]));
+  for (uint16_t i = 0;
+       i < op->result_count && *out_result == LOOM_WALK_CONTINUE; ++i) {
+    IREE_RETURN_IF_ERROR(loom_cmd_transient_append_result_range(
+        build, op, results[i], out_result));
   }
   return iree_ok_status();
 }
@@ -561,6 +567,8 @@ iree_status_t loom_cmd_transient_layout_build(
   memset(out_layout, 0, sizeof(*out_layout));
 
   loom_cmd_transient_build_t build = {
+      .module = module,
+      .diagnostic_emitter = diagnostic_emitter,
       .fact_table = fact_table,
       .binding_index = binding_index,
       .scratch_arena = scratch_arena,
@@ -582,7 +590,9 @@ iree_status_t loom_cmd_transient_layout_build(
       module, program, LOOM_WALK_PRE_ORDER,
       (loom_walk_callback_t){loom_cmd_transient_range_visit, &build},
       &walk_result));
-  IREE_ASSERT_EQ(walk_result, LOOM_WALK_CONTINUE);
+  if (walk_result == LOOM_WALK_ABORT) {
+    return iree_ok_status();
+  }
 
   *out_layout = (loom_cmd_transient_layout_t){
       .requirement =

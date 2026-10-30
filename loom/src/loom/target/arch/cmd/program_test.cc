@@ -326,6 +326,56 @@ static iree_const_byte_span_t AsByteSpan(const std::vector<uint8_t>& data) {
   return iree_make_const_byte_span(data.data(), data.size());
 }
 
+TEST(CmdProgramTest, TimestampUsesOrdinaryBufferReferences) {
+  for (auto kind : {LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP,
+                    LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP_BARRIER}) {
+    SCOPED_TRACE(kind);
+    std::vector<uint8_t> data = BuildValidProgram();
+    const uint32_t command_offset = iree_unaligned_load_le_u32(
+        data.data() + LOOM_CMD_PROGRAM_HEADER_COMMAND_TABLE_OFFSET);
+    const uint32_t reference_offset = iree_unaligned_load_le_u32(
+        data.data() + LOOM_CMD_PROGRAM_HEADER_BUFFER_REF_TABLE_OFFSET);
+    StoreBufferRef(data, reference_offset, 0,
+                   LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE, 0, 8, 8);
+    StoreCommand(data, command_offset, 0, kind, 0, 0, 0);
+    loom_cmd_program_t program = {};
+    IREE_ASSERT_OK(loom_cmd_program_parse(AsByteSpan(data), &program));
+    const auto capture = loom_cmd_program_command_at(&program, 0);
+    EXPECT_EQ(capture.kind, kind);
+    const auto target = loom_cmd_program_buffer_ref_at(
+        &program, capture.payload.timestamp.target_buffer_ref);
+    EXPECT_EQ(target.role, LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE);
+    EXPECT_EQ(target.root_index, 0u);
+    EXPECT_EQ(target.byte_offset, 8u);
+    EXPECT_EQ(target.byte_length, 8u);
+  }
+}
+
+TEST(CmdProgramTest, TimestampRejectsInvalidStorageAndPayload) {
+  std::vector<uint8_t> data = BuildValidProgram();
+  const uint32_t command_offset = iree_unaligned_load_le_u32(
+      data.data() + LOOM_CMD_PROGRAM_HEADER_COMMAND_TABLE_OFFSET);
+  const uint32_t reference_offset = iree_unaligned_load_le_u32(
+      data.data() + LOOM_CMD_PROGRAM_HEADER_BUFFER_REF_TABLE_OFFSET);
+  StoreCommand(data, command_offset, 0, LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP,
+               0, 0, 0);
+  loom_cmd_program_t program = {};
+  StoreBufferRef(data, reference_offset, 0,
+                 LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE, 0, 4, 8);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_cmd_program_parse(AsByteSpan(data), &program));
+  StoreBufferRef(data, reference_offset, 0,
+                 LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE, 0, 8, 16);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_cmd_program_parse(AsByteSpan(data), &program));
+  StoreBufferRef(data, reference_offset, 0,
+                 LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE, 0, 8, 8);
+  StoreCommand(data, command_offset, 0, LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP,
+               0, 0, 0, 1);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_cmd_program_parse(AsByteSpan(data), &program));
+}
+
 TEST(CmdProgramTest, ParsesCanonicalProgram) {
   const std::vector<uint8_t> data = BuildValidProgram();
   loom_cmd_program_t program = {};

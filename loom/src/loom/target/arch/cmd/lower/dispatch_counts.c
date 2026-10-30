@@ -280,6 +280,9 @@ iree_status_t loom_cmd_dispatch_count_table_build(
       const iree_host_size_t command_index = wave.command_offset + i;
       const loom_cmd_schedule_command_t* command =
           &schedule->commands[command_index];
+      if (command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP) {
+        continue;
+      }
       if (command->kind != LOOM_CMD_SCHEDULE_COMMAND_KIND_PIPELINE_LAUNCH &&
           loom_kernel_dispatch_workgroup_size(command->source_op).count != 0) {
         status = loom_cmd_dispatch_count_emit_override_error(&build, command);
