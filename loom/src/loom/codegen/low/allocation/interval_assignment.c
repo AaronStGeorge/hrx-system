@@ -1931,6 +1931,10 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
       if (spill_requirement ==
           LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NESTED_REGION_ARGUMENT) {
         failure_code = IREE_SV("nested-region-argument-register-exhausted");
+      } else if (
+          spill_requirement ==
+          LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NO_OPERAND_USES) {
+        failure_code = IREE_SV("unspillable-register-exhausted");
       }
       IREE_RETURN_IF_ERROR(
           loom_low_allocation_interval_assignment_record_failure(

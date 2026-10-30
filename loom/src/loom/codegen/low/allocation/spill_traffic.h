@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Allocation constraints for materialized spill traffic.
+// Register requirements for operand spill materialization.
 
 #ifndef LOOM_CODEGEN_LOW_ALLOCATION_SPILL_TRAFFIC_H_
 #define LOOM_CODEGEN_LOW_ALLOCATION_SPILL_TRAFFIC_H_
@@ -26,11 +26,15 @@ typedef enum loom_low_allocation_spill_register_requirement_e {
   // The value is an argument of a nested region whose structured-control ABI
   // requires a register at the region boundary.
   LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NESTED_REGION_ARGUMENT = 2,
+  // No operand use can be replaced with a reload, so spilling cannot shorten
+  // the value's lifetime, including any dependent-type observations.
+  LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NO_OPERAND_USES = 3,
 } loom_low_allocation_spill_register_requirement_t;
 
 // Returns the register requirement for |value_id| under the spill materializer
-// owned by |function_region|. Function-region block arguments are supported by
-// CFG edge rewriting; nested-region block arguments are not.
+// owned by |function_region|. Function-region block arguments can spill their
+// operand uses while preserving metadata references; nested-region arguments
+// retain their structured-control ABI registers.
 loom_low_allocation_spill_register_requirement_t
 loom_low_allocation_spill_register_requirement_for_value(
     const loom_module_t* module, const loom_region_t* function_region,

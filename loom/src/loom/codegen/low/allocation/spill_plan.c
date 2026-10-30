@@ -19,6 +19,19 @@
 
 #define LOOM_LOW_ALLOCATION_SPILL_PLAN_MAX_NATURAL_ALIGNMENT 16u
 
+// Operand spilling does not rewrite attributes or dependent types. Their
+// referenced argument retains its definition and incoming payloads, with a
+// store at block entry instead of predecessor stores and argument removal.
+static bool loom_low_allocation_spill_plan_removes_argument(
+    const loom_module_t* module, const loom_region_t* body,
+    loom_value_id_t value_id) {
+  const loom_value_t* value = loom_module_value(module, value_id);
+  return loom_value_is_block_arg(value) &&
+         loom_value_def_block(value) != loom_region_const_entry_block(body) &&
+         !loom_value_has_attribute_uses(value) &&
+         !loom_module_value_has_type_uses(module, value_id);
+}
+
 static uint32_t loom_low_allocation_spill_plan_natural_chunk_units(
     uint32_t unit_count) {
   if (unit_count >= 4) {
@@ -844,8 +857,8 @@ static void loom_low_spill_materialization_plan_one(
   loom_block_t* argument_block =
       is_block_argument ? loom_value_def_block(value) : NULL;
   const bool remove_argument_payload =
-      is_block_argument &&
-      argument_block != loom_region_const_entry_block(builder->body);
+      loom_low_allocation_spill_plan_removes_argument(
+          builder->table->module, builder->body, spill_plan->value_id);
 
   const loom_low_spill_materialization_value_ref_t current_value =
       loom_low_spill_materialization_resolve_value(
@@ -1063,8 +1076,10 @@ static iree_status_t loom_low_spill_materialization_project_instructions(
             IREE_ASSERT_NE(liveness->blocks[0].operation_count, 0u);
             operation_index = liveness->blocks[0].operation_start;
           }
+        } else if (loom_value_is_block_arg(value)) {
+          operation_index = loom_low_spill_materialization_operation_index(
+              builder, loom_value_def_block(value)->first_op);
         } else {
-          IREE_ASSERT(!loom_value_is_block_arg(value));
           operation_index = loom_low_spill_materialization_operation_index(
               builder, loom_value_def_op(value));
           executes_after = true;
@@ -1418,7 +1433,8 @@ static void loom_low_allocation_spill_plan_value_reload_traffic(
 
   const loom_block_t* block = NULL;
   uint16_t arg_index = 0;
-  if (loom_value_is_block_arg(value)) {
+  if (loom_low_allocation_spill_plan_removes_argument(module, body,
+                                                      assignment->value_id)) {
     block = loom_value_def_block(value);
     arg_index = loom_value_def_index(value);
   }
@@ -1477,25 +1493,21 @@ static void loom_low_allocation_spill_plan_value_reload_traffic(
 }
 
 static iree_status_t loom_low_allocation_spill_plan_value_store_count(
-    const loom_cfg_graph_t* cfg_graph, loom_value_id_t value_id,
-    const loom_value_t* value, uint32_t reload_count,
+    const loom_module_t* module, const loom_cfg_graph_t* cfg_graph,
+    loom_value_id_t value_id, const loom_value_t* value, uint32_t reload_count,
     uint32_t* out_store_count) {
   *out_store_count = 0;
   if (reload_count == 0) {
     return iree_ok_status();
   }
-  if (!loom_value_is_block_arg(value)) {
+  if (!loom_low_allocation_spill_plan_removes_argument(
+          module, cfg_graph->region, value_id)) {
     *out_store_count = 1;
     return iree_ok_status();
   }
 
   const loom_block_t* block = loom_value_def_block(value);
   const uint16_t arg_index = loom_value_def_index(value);
-  if (block == loom_region_const_entry_block(cfg_graph->region)) {
-    *out_store_count = 1;
-    return iree_ok_status();
-  }
-
   uint32_t store_count = 0;
   const loom_cfg_edge_index_span_t predecessor_edges =
       loom_cfg_graph_predecessor_edges(cfg_graph,
@@ -1536,7 +1548,7 @@ static iree_status_t loom_low_allocation_spill_plan_traffic_for_layout(
       &reload_count, &reload_bytes);
   uint32_t store_count = 0;
   IREE_RETURN_IF_ERROR(loom_low_allocation_spill_plan_value_store_count(
-      cfg_graph, value_id, value, reload_count, &store_count));
+      module, cfg_graph, value_id, value, reload_count, &store_count));
   *out_traffic = (loom_low_allocation_spill_plan_traffic_t){
       .store_count = store_count,
       .store_bytes = (uint64_t)store_count * byte_size,
