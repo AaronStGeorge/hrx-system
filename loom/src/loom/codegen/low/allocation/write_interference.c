@@ -8,79 +8,11 @@
 
 #include <string.h>
 
-#include "iree/base/bitmap.h"
+#include "loom/codegen/low/allocation/write_interference_events.h"
 #include "loom/codegen/low/allocation/write_interference_flow.h"
 #include "loom/codegen/low/read_retention.h"
 #include "loom/util/index_set.h"
 #include "loom/util/segmented_storage.h"
-
-typedef struct loom_low_write_range_t {
-  // First element in the owning array.
-  uint32_t start;
-  // Number of elements in the range.
-  uint32_t count;
-} loom_low_write_range_t;
-
-typedef struct loom_low_write_value_t {
-  // Required tied-storage origin in the local ordinal domain.
-  loom_value_ordinal_t origin;
-  // Fixed physical base, or UINT32_MAX when unconstrained.
-  uint32_t fixed_base;
-  // Collection metadata retires before the query index is constructed.
-  union {
-    // Register extents used by operand collection and completion
-    // classification.
-    struct {
-      // Width of the value's linear register range.
-      uint32_t width;
-      // First retained-read unit bit, or UINT32_MAX if never retained.
-      uint32_t retained_start;
-    } construction;
-    // Indexed write constraints and copy equations mentioning this origin.
-    loom_low_write_range_t constraints;
-  };
-} loom_low_write_value_t;
-
-enum loom_low_write_access_flag_bits_e {
-  LOOM_LOW_WRITE_ACCESS_RETAIN = 1u << 0,
-  LOOM_LOW_WRITE_ACCESS_WRITE = 1u << 1,
-  LOOM_LOW_WRITE_ACCESS_INTERFERE = 1u << 2,
-};
-
-typedef struct loom_low_write_access_t {
-  // Storage origin read or written by the event.
-  loom_value_ordinal_t value;
-  // Structural source origin, or INVALID for an unconditional access.
-  loom_value_ordinal_t source;
-  // First accessed unit in |value|.
-  uint32_t offset;
-  // First copied unit in |source|.
-  uint32_t source_offset;
-  // Number of accessed units.
-  uint32_t count;
-  // Next access at this point, or UINT32_MAX.
-  uint32_t next;
-  // Read, overwrite and hazardous-write effects.
-  uint8_t flags;
-} loom_low_write_access_t;
-
-typedef struct loom_low_write_event_t {
-  // First access at this write point, or UINT32_MAX.
-  uint32_t access;
-  // Shared immutable snapshot before this point's writes, after its read reset.
-  loom_low_write_range_t retained;
-  // A replacing read clears the incoming retained domain before writes.
-  bool reset;
-} loom_low_write_event_t;
-
-typedef struct loom_low_write_retained_t {
-  // Canonical storage origin whose read is retained.
-  loom_value_ordinal_t value;
-  // First retained unit within the origin.
-  uint32_t offset;
-  // Number of consecutive retained units.
-  uint32_t count;
-} loom_low_write_retained_t;
 
 // Fresh retained ranges are nonempty. A zero retained count denotes a proved
 // copy equation while its source remains present, or completed interference
@@ -174,16 +106,8 @@ struct loom_low_allocation_write_interference_t {
   const loom_low_allocation_unit_liveness_t* unit_liveness;
   // Number of entries in |values|.
   iree_host_size_t value_count;
-  // Collected instruction effects and retained ranges by write point.
-  loom_low_write_event_t* events;
-  // Number of entries in |events|.
-  uint32_t point_count;
-  // Collected operand and structural accesses.
-  loom_low_write_access_t* accesses;
-  // Number of initialized accesses.
-  iree_host_size_t access_count;
-  // Logical capacity of |accesses|, at most UINT32_MAX.
-  iree_host_size_t access_capacity;
+  // Collected accesses and immutable retained snapshots.
+  loom_low_write_events_t events;
   // Construction units and query inference have disjoint lifetimes.
   union {
     // Number of bits in the compact retained allocation-unit domain, a subset
@@ -192,12 +116,6 @@ struct loom_low_allocation_write_interference_t {
     // Origins in the current successful query witness, or zero when empty.
     uint32_t inferred_count;
   };
-  // Immutable retained-range snapshots shared by events with unchanged state.
-  loom_low_write_retained_t* retained;
-  // Number of initialized retained ranges.
-  iree_host_size_t retained_count;
-  // Logical capacity of |retained|, at most UINT32_MAX.
-  iree_host_size_t retained_capacity;
   // Stable bounded segments of final conditional physical-write exclusions.
   loom_segmented_storage_t constraints;
   // Exact number of rows in the finalized constraint table.
@@ -248,7 +166,7 @@ iree_status_t loom_low_allocation_write_interference_allocate(
       .rule = rule,
       .register_class = LOOM_LOW_REG_CLASS_NONE,
       .value_count = liveness->value_count,
-      .point_count = end_point + 1,
+      .events = {.point_count = end_point + 1},
   };
   const loom_low_descriptor_set_t* descriptors = target->descriptor_set;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -287,44 +205,13 @@ iree_status_t loom_low_allocation_write_interference_allocate(
             },
     };
   }
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, table->point_count,
-                                                 sizeof(*table->events),
-                                                 (void**)&table->events));
-  for (uint32_t p = 0; p < table->point_count; ++p) {
-    table->events[p] = (loom_low_write_event_t){.access = UINT32_MAX};
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, table->events.point_count, sizeof(*table->events.points),
+      (void**)&table->events.points));
+  for (uint32_t p = 0; p < table->events.point_count; ++p) {
+    table->events.points[p] = (loom_low_write_event_t){.access = UINT32_MAX};
   }
   *out_interference = table;
-  return iree_ok_status();
-}
-
-// Called only for full construction arrays. Limiting logical capacity makes
-// the next growth fail before an append can use UINT32_MAX as a row index.
-static iree_status_t loom_low_write_grow_array(iree_arena_allocator_t* arena,
-                                               iree_host_size_t count,
-                                               iree_host_size_t element_size,
-                                               iree_host_size_t* inout_capacity,
-                                               void** inout_values) {
-  if (count == UINT32_MAX) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "retained-write rows exceed u32 index capacity");
-  }
-  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-      arena, count, count + 1, element_size, inout_capacity, inout_values));
-  *inout_capacity = iree_min(*inout_capacity, UINT32_MAX);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_write_append_access(
-    loom_low_allocation_write_interference_t* table, uint32_t point,
-    loom_low_write_access_t access, iree_arena_allocator_t* arena) {
-  if (table->access_count == table->access_capacity) {
-    IREE_RETURN_IF_ERROR(loom_low_write_grow_array(
-        arena, table->access_count, sizeof(*table->accesses),
-        &table->access_capacity, (void**)&table->accesses));
-  }
-  access.next = table->events[point].access;
-  table->events[point].access = (uint32_t)table->access_count;
-  table->accesses[table->access_count++] = access;
   return iree_ok_status();
 }
 
@@ -349,13 +236,14 @@ iree_status_t loom_low_allocation_write_interference_note_occurrence(
       const uint16_t register_class =
           descriptors->reg_class_alts[operand->reg_class_alt_start]
               .reg_class_id;
-      table->events[point].reset |= table->reset_classes[register_class] != 0;
+      table->events.points[point].reset |=
+          table->reset_classes[register_class] != 0;
     }
     return iree_ok_status();
   }
   const bool result = operand_index < descriptor->result_count;
   if (reader && !result) {
-    table->events[point].reset |=
+    table->events.points[point].reset |=
         table->reset_classes[occurrence->register_class] != 0;
   }
   if (occurrence->register_class != table->register_class) {
@@ -377,8 +265,8 @@ iree_status_t loom_low_allocation_write_interference_note_occurrence(
     }
   }
   if (flags != 0) {
-    IREE_RETURN_IF_ERROR(loom_low_write_append_access(
-        table, point,
+    IREE_RETURN_IF_ERROR(loom_low_write_events_append(
+        &table->events, point,
         (loom_low_write_access_t){.value = occurrence->origin,
                                   .source = LOOM_VALUE_ORDINAL_INVALID,
                                   .count = occurrence->unit_count,
@@ -396,126 +284,6 @@ void loom_low_allocation_write_interference_note_fixed(
           assignment, table->register_class)) {
     table->values[origin].fixed_base = assignment->location_base;
   }
-}
-
-static bool loom_low_write_known_delta(
-    const loom_low_allocation_write_interference_t* table,
-    loom_value_ordinal_t destination, loom_value_ordinal_t source,
-    int64_t* out_delta) {
-  if (destination == source) {
-    *out_delta = 0;
-    return true;
-  }
-  const uint32_t destination_base = table->values[destination].fixed_base;
-  const uint32_t source_base = table->values[source].fixed_base;
-  if (destination_base == UINT32_MAX || source_base == UINT32_MAX) {
-    return false;
-  }
-  *out_delta = (int64_t)destination_base - source_base;
-  return true;
-}
-
-// Known writes cut only the overwritten units. For ALU writes this boundary
-// promises the physical planner's post-write dependency; memory results carry
-// their ordinary asynchronous completion dependency before reuse.
-// Returns whether a previously materialized snapshot must be rebuilt.
-static bool loom_low_write_transfer(
-    const loom_low_allocation_write_interference_t* table, uint32_t point,
-    const loom_low_write_retained_t* units, iree_bitmap_t active) {
-  bool invalidated = false;
-  const loom_low_write_event_t* event = &table->events[point];
-  for (uint32_t a = event->access; a != UINT32_MAX;
-       a = table->accesses[a].next) {
-    const loom_low_write_access_t* access = &table->accesses[a];
-    if (!iree_any_bit_set(access->flags, LOOM_LOW_WRITE_ACCESS_WRITE)) {
-      continue;
-    }
-    if (access->source != LOOM_VALUE_ORDINAL_INVALID) {
-      int64_t delta = 0;
-      if (!loom_low_write_known_delta(table, access->value, access->source,
-                                      &delta) ||
-          delta + access->offset == access->source_offset) {
-        continue;
-      }
-    }
-    for (iree_host_size_t bit = iree_bitmap_find_first_set(active, 0);
-         bit < active.bit_count;
-         bit = iree_bitmap_find_first_set(active, bit + 1)) {
-      const loom_low_write_retained_t* unit = &units[bit];
-      int64_t delta = 0;
-      if (loom_low_write_known_delta(table, access->value, unit->value,
-                                     &delta) &&
-          unit->offset >= delta + access->offset &&
-          unit->offset < delta + access->offset + access->count) {
-        iree_bitmap_reset(active, bit);
-        invalidated = true;
-      }
-    }
-  }
-  for (uint32_t a = event->access; a != UINT32_MAX;
-       a = table->accesses[a].next) {
-    const loom_low_write_access_t* access = &table->accesses[a];
-    if (iree_any_bit_set(access->flags, LOOM_LOW_WRITE_ACCESS_RETAIN)) {
-      iree_bitmap_set_span(
-          active, table->values[access->value].construction.retained_start,
-          access->count);
-      invalidated = true;
-    }
-  }
-  return invalidated;
-}
-
-static iree_status_t loom_low_write_snapshot(
-    loom_low_allocation_write_interference_t* table,
-    const loom_low_write_retained_t* units, iree_bitmap_t active,
-    iree_arena_allocator_t* arena, loom_low_write_range_t* out_snapshot) {
-  *out_snapshot =
-      (loom_low_write_range_t){.start = (uint32_t)table->retained_count};
-  for (iree_host_size_t bit = iree_bitmap_find_first_set(active, 0);
-       bit < active.bit_count;) {
-    loom_low_write_retained_t range = units[bit++];
-    while (bit < active.bit_count && iree_bitmap_test(active, bit) &&
-           units[bit].value == range.value &&
-           units[bit].offset == range.offset + range.count) {
-      ++range.count;
-      ++bit;
-    }
-    if (table->retained_count == table->retained_capacity) {
-      IREE_RETURN_IF_ERROR(loom_low_write_grow_array(
-          arena, table->retained_count, sizeof(*table->retained),
-          &table->retained_capacity, (void**)&table->retained));
-    }
-    table->retained[table->retained_count++] = range;
-    ++out_snapshot->count;
-    if (bit < active.bit_count) {
-      bit = iree_bitmap_find_first_set(active, bit);
-    }
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_write_count_constraints(
-    loom_low_allocation_write_interference_t* table, uint32_t point) {
-  const loom_low_write_event_t* event = &table->events[point];
-  if (event->retained.count == 0) {
-    return iree_ok_status();
-  }
-  for (uint32_t a = event->access; a != UINT32_MAX;
-       a = table->accesses[a].next) {
-    const loom_low_write_access_t* access = &table->accesses[a];
-    if (iree_any_bit_set(access->flags, LOOM_LOW_WRITE_ACCESS_INTERFERE)) {
-      const uint32_t write_count =
-          access->source != LOOM_VALUE_ORDINAL_INVALID ? access->count : 1;
-      const uint64_t row_count = (uint64_t)event->retained.count * write_count;
-      if (row_count > UINT32_MAX - table->constraint_count) {
-        return iree_make_status(
-            IREE_STATUS_RESOURCE_EXHAUSTED,
-            "retained-write table exceeds u32 index capacity");
-      }
-      table->constraint_count += row_count;
-    }
-  }
-  return iree_ok_status();
 }
 
 static iree_status_t loom_low_write_allocate_constraints(
@@ -546,13 +314,13 @@ static iree_status_t loom_low_write_allocate_constraints(
 static uint32_t loom_low_write_record_point(
     loom_low_allocation_write_interference_t* table, uint32_t point,
     uint32_t next_constraint) {
-  const loom_low_write_event_t* event = &table->events[point];
+  const loom_low_write_event_t* event = &table->events.points[point];
   for (uint32_t r = 0; r < event->retained.count; ++r) {
     const loom_low_write_retained_t range =
-        table->retained[event->retained.start + r];
+        table->events.retained[event->retained.start + r];
     for (uint32_t a = event->access; a != UINT32_MAX;
-         a = table->accesses[a].next) {
-      const loom_low_write_access_t* access = &table->accesses[a];
+         a = table->events.accesses[a].next) {
+      const loom_low_write_access_t* access = &table->events.accesses[a];
       if (!iree_any_bit_set(access->flags, LOOM_LOW_WRITE_ACCESS_INTERFERE)) {
         continue;
       }
@@ -702,7 +470,7 @@ static iree_status_t loom_low_write_classify_copy_chains(
     for (; c < segment_end; ++c, ++row) {
       int64_t delta = 0;
       if (row->source == LOOM_VALUE_ORDINAL_INVALID ||
-          !loom_low_write_known_delta(table, row->destination,
+          !loom_low_write_known_delta(table->values, row->destination,
                                       row->retained.value, &delta) ||
           !loom_low_write_ranges_overlap(
               delta + row->destination_offset - row->retained.offset, 1,
@@ -713,8 +481,8 @@ static iree_status_t loom_low_write_classify_copy_chains(
       uint32_t current = starts[row->source] + row->units.source_offset;
       while (current != UINT32_MAX) {
         const loom_low_write_copy_unit_t* unit = &units[current];
-        if (loom_low_write_known_delta(table, unit->value, row->retained.value,
-                                       &delta)) {
+        if (loom_low_write_known_delta(table->values, unit->value,
+                                       row->retained.value, &delta)) {
           if (delta + unit->offset != position) {
             loom_low_write_constraint_complete(row);
             --*inout_seed_count;
@@ -725,11 +493,11 @@ static iree_status_t loom_low_write_classify_copy_chains(
           break;
         }
         const loom_low_write_range_t retained =
-            table->events[unit->point].retained;
+            table->events.points[unit->point].retained;
         bool active = false;
         for (uint32_t i = 0; i < retained.count; ++i) {
           const loom_low_write_retained_t* range =
-              &table->retained[retained.start + i];
+              &table->events.retained[retained.start + i];
           active |= range->value == row->retained.value &&
                     position >= range->offset &&
                     position < range->offset + range->count;
@@ -757,7 +525,7 @@ static uint32_t loom_low_write_seed_completion(
     loom_low_write_constraint_t* row = loom_low_write_constraint_at(table, c);
     for (; c < segment_end; ++c, ++row) {
       int64_t delta = 0;
-      if (!loom_low_write_known_delta(table, row->destination,
+      if (!loom_low_write_known_delta(table->values, row->destination,
                                       row->retained.value, &delta) ||
           !loom_low_write_ranges_overlap(
               delta + row->destination_offset - row->retained.offset,
@@ -1157,8 +925,8 @@ static iree_status_t loom_low_write_finalize_impl(
         }
         const loom_low_placement_concat_source_t source =
             loom_low_placement_concat_source(placement, range.start + i);
-        IREE_RETURN_IF_ERROR(loom_low_write_append_access(
-            table, relation->write_point,
+        IREE_RETURN_IF_ERROR(loom_low_write_events_append(
+            &table->events, relation->write_point,
             (loom_low_write_access_t){
                 .value = table->values[relation->result_ordinal].origin,
                 .source = table->values[source.value_ordinal].origin,
@@ -1177,8 +945,8 @@ static iree_status_t loom_low_write_finalize_impl(
         continue;
       }
     }
-    IREE_RETURN_IF_ERROR(loom_low_write_append_access(
-        table, relation->write_point,
+    IREE_RETURN_IF_ERROR(loom_low_write_events_append(
+        &table->events, relation->write_point,
         (loom_low_write_access_t){
             .value = table->values[relation->result_ordinal].origin,
             .source = table->values[relation->source_ordinal].origin,
@@ -1192,103 +960,13 @@ static iree_status_t loom_low_write_finalize_impl(
   }
   const iree_arena_checkpoint_t construction_checkpoint =
       iree_arena_checkpoint_save(scratch_arena);
-  loom_low_write_retained_t* units = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(scratch_arena, table->retained_unit_count,
-                                sizeof(*units), (void**)&units));
-  for (uint32_t v = 0; v < table->value_count; ++v) {
-    const loom_low_write_value_t* value = &table->values[v];
-    if (value->construction.retained_start == UINT32_MAX) {
-      continue;
-    }
-    for (uint32_t u = 0; u < value->construction.width; ++u) {
-      units[value->construction.retained_start + u] =
-          (loom_low_write_retained_t){v, u, 1};
-    }
-  }
   loom_low_write_flow_t flow;
   IREE_RETURN_IF_ERROR(loom_low_write_flow_build(
-      liveness, cfg_graph, table->point_count, scratch_arena, &flow));
-  const iree_host_size_t word_count =
-      iree_bitmap_calculate_words(table->retained_unit_count);
-  const iree_host_size_t byte_count = word_count * sizeof(uint64_t);
-  uint64_t* incoming = NULL;
-  uint64_t* active_words = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      scratch_arena, flow.block_count, byte_count, (void**)&incoming));
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(scratch_arena, byte_count, (void**)&active_words));
-  memset(incoming, 0, flow.block_count * byte_count);
-  iree_bitmap_t active = {.bit_count = table->retained_unit_count,
-                          .words = active_words};
-  // All transfers are monotone gen/kill maps. Only changed incoming sets
-  // require another evaluation. Seed every span: local reads can generate
-  // retained state even without incoming bits or reachable predecessors.
-  uint32_t* pending_next = flow.worklist;
-  for (uint32_t b = 0; b < flow.block_count; ++b) {
-    pending_next[b] = b + 1;
-  }
-  uint32_t pending_head = 0;
-  uint32_t pending_tail = flow.block_count - 1;
-  pending_next[pending_tail] = UINT32_MAX;
-  while (pending_head != UINT32_MAX) {
-    const uint32_t b = pending_head;
-    pending_head = pending_next[b];
-    // A self-link marks absence; queued links name a distinct next span or
-    // UINT32_MAX at the tail. Removing membership before transfer permits
-    // a self-loop to enqueue this span again without a separate bitmap.
-    pending_next[b] = b;
-    const loom_low_write_flow_block_t* block = &flow.blocks[b];
-    memcpy(active_words, incoming + b * word_count, byte_count);
-    for (uint32_t p = block->begin; p < block->end; ++p) {
-      if (table->events[p].reset) {
-        iree_bitmap_reset_all(active);
-      }
-      loom_low_write_transfer(table, p, units, active);
-    }
-    for (uint32_t s = 0; s < block->successor_count; ++s) {
-      const uint32_t successor = flow.successors[block->successor_start + s];
-      uint64_t* next = incoming + successor * word_count;
-      bool changed = false;
-      for (iree_host_size_t w = 0; w < word_count; ++w) {
-        const uint64_t added = active_words[w] & ~next[w];
-        next[w] |= added;
-        changed |= added != 0;
-      }
-      if (changed && pending_next[successor] == successor) {
-        if (pending_head == UINT32_MAX) {
-          pending_head = successor;
-        } else {
-          pending_next[pending_tail] = successor;
-        }
-        pending_tail = successor;
-        pending_next[successor] = UINT32_MAX;
-      }
-    }
-  }
-  for (uint32_t b = 0; b < flow.block_count; ++b) {
-    const loom_low_write_flow_block_t* block = &flow.blocks[b];
-    memcpy(active_words, incoming + b * word_count, byte_count);
-    loom_low_write_range_t snapshot = {0};
-    bool snapshot_invalidated = true;
-    for (uint32_t p = block->begin; p < block->end; ++p) {
-      if (table->events[p].reset) {
-        iree_bitmap_reset_all(active);
-        snapshot = (loom_low_write_range_t){0};
-        snapshot_invalidated = false;
-      }
-      // The transfer owns every mutation of |active|. Preserve its snapshot
-      // until that producer invalidates it instead of comparing or rebuilding
-      // identical ranges at every point. A reset establishes the empty set.
-      if (snapshot_invalidated) {
-        IREE_RETURN_IF_ERROR(
-            loom_low_write_snapshot(table, units, active, arena, &snapshot));
-      }
-      table->events[p].retained = snapshot;
-      IREE_RETURN_IF_ERROR(loom_low_write_count_constraints(table, p));
-      snapshot_invalidated = loom_low_write_transfer(table, p, units, active);
-    }
-  }
+      liveness, cfg_graph, table->events.point_count, scratch_arena, &flow));
+  IREE_RETURN_IF_ERROR(loom_low_write_events_solve(
+      &table->events, table->values, table->value_count,
+      table->retained_unit_count, &flow, arena, scratch_arena,
+      &table->constraint_count));
   // Events own their immutable snapshots in the decision arena. The flow graph,
   // bitmaps and unit decoder no longer participate in constraint construction.
   iree_arena_checkpoint_restore(&construction_checkpoint);
@@ -1296,10 +974,10 @@ static iree_status_t loom_low_write_finalize_impl(
   // count. All segments are allocated before row publication; no payload moves
   // during construction or subsequent classification and candidate queries.
   const uint32_t retained_constraint_count = table->constraint_count;
-  for (uint32_t point = 1; point < table->point_count; ++point) {
-    for (uint32_t a = table->events[point].access; a != UINT32_MAX;
-         a = table->accesses[a].next) {
-      const loom_low_write_access_t* access = &table->accesses[a];
+  for (uint32_t point = 1; point < table->events.point_count; ++point) {
+    for (uint32_t a = table->events.points[point].access; a != UINT32_MAX;
+         a = table->events.accesses[a].next) {
+      const loom_low_write_access_t* access = &table->events.accesses[a];
       if (!loom_low_write_access_has_live_source(
               table, liveness, placement, unit_liveness, access, point)) {
         continue;
@@ -1315,13 +993,13 @@ static iree_status_t loom_low_write_finalize_impl(
   IREE_RETURN_IF_ERROR(loom_low_write_allocate_constraints(table, arena));
   table->constraint_count = retained_constraint_count;
   uint32_t next_constraint = 0;
-  for (uint32_t p = 1; p < table->point_count; ++p) {
+  for (uint32_t p = 1; p < table->events.point_count; ++p) {
     next_constraint = loom_low_write_record_point(table, p, next_constraint);
   }
-  for (uint32_t point = 1; point < table->point_count; ++point) {
-    for (uint32_t a = table->events[point].access; a != UINT32_MAX;
-         a = table->accesses[a].next) {
-      const loom_low_write_access_t* access = &table->accesses[a];
+  for (uint32_t point = 1; point < table->events.point_count; ++point) {
+    for (uint32_t a = table->events.points[point].access; a != UINT32_MAX;
+         a = table->events.accesses[a].next) {
+      const loom_low_write_access_t* access = &table->events.accesses[a];
       if (!loom_low_write_access_has_live_source(
               table, liveness, placement, unit_liveness, access, point)) {
         continue;
@@ -1676,20 +1354,8 @@ bool loom_low_allocation_write_interference_temporary_conflicts(
           LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
     return false;
   }
-  const loom_low_write_range_t range = table->events[write_point].retained;
-  for (uint32_t i = 0; i < range.count; ++i) {
-    const loom_low_write_retained_t* retained =
-        &table->retained[range.start + i];
-    // Move planning consumes final spill-free assignments. Retained origins
-    // already have physical locations; no speculative inference participates.
-    const loom_low_allocation_assignment_t* assignment =
-        &assignments->assignments
-             [assignments->assignment_indices_by_origin[retained->value]];
-    const int64_t offset = (int64_t)temporary->location -
-                           assignment->location_base - retained->offset;
-    if (offset >= 0 && offset < retained->count) {
-      return true;
-    }
-  }
-  return false;
+  return loom_low_write_events_temporary_conflicts(
+      &table->events, assignments->assignments,
+      assignments->assignment_indices_by_origin, write_point,
+      temporary->location);
 }
