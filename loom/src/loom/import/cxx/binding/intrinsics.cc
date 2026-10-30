@@ -182,6 +182,10 @@ void Intrinsics::declaration(cxx::FunctionSymbol* function,
                     selected->arguments[0]->name()) &&
                 !CommandParameterIntrinsic::supports(
                     selected->arguments[0]->name()) &&
+                !PipelineMemoryIntrinsic::supports(
+                    selected->arguments[0]->name()) &&
+                !PipelineComposeIntrinsic::supports(
+                    selected->arguments[0]->name()) &&
                 !CheckIntrinsic::parse_operation(
                     selected->arguments[0]->name()) &&
                 !AssemblyIntrinsic::supports(selected->arguments[0]->name()) &&
@@ -298,6 +302,15 @@ Intrinsics::Binding Intrinsics::resolve(cxx::FunctionSymbol* function,
   if (auto channel = ChannelIntrinsic::resolve(unit_, diagnostics_, types_,
                                                function, attribute, owner)) {
     return *channel;
+  }
+  if (auto memory = PipelineMemoryIntrinsic::resolve(
+          unit_, diagnostics_, types_, function, attribute, owner)) {
+    return *memory;
+  }
+  if (auto compose = PipelineComposeIntrinsic::resolve(
+          unit_, diagnostics_, types_, pipeline_contracts_, function, attribute,
+          owner)) {
+    return *compose;
   }
   if (auto fence = FenceIntrinsic::resolve(unit_, diagnostics_, function,
                                            attribute, owner)) {

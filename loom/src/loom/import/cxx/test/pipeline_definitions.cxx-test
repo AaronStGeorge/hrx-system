@@ -1,0 +1,47 @@
+// RUN: pass cse
+#include <loomcxx/kernel.h>
+#include <loomcxx/pipeline.h>
+#include <loomcxx/target.h>
+
+namespace loomt = loom::type;
+using Bytes = loomt::buffer<unsigned char>;
+
+struct [[loom::target("target.generic")]] generic_target {
+  const char* kind;
+};
+constexpr generic_target worker_target{.kind = "reference"};
+
+[[loom::pipeline("kernel")]] void child(unsigned factor, [[loom::launch]] Bytes output);
+
+[[loom::pipeline("kernel"), loom::target(worker_target)]] void resident(unsigned factor, loomt::index column, loomt::index count, [[loom::launch]] Bytes output) {
+  auto pool = loom::pipeline::memory<loom::memory_space::workgroup>(loomt::indices{column, loomt::index{3}});
+  auto* scratch = loom::buffer::alloca<unsigned char, loom::memory_space::workgroup, 64>(loomt::index{256}, pool);
+  (void)scratch;
+  loom::pipeline::compose<child>(factor, output);
+
+  [[loom::strand(loomt::indices{column, loomt::index{2}}, loomt::indices{count, loomt::index{1}}, loomt::indices{loomt::index{1}, loomt::index{1}}), loom::target(worker_target)]] {
+    auto worker = loom::kernel::workitem::id.x;
+    (void)worker;
+    (void)output;
+  }
+}
+
+// ----
+target.generic<reference> @worker_target
+
+pipeline.def<kernel> public target(@worker_target) @resident(%factor: i32, %column: index, %count: index) run(%output: buffer) {
+  %pool = pipeline.memory<workgroup>[%column, 3] : pool
+  %5 = scalar.constant 256 : i32
+  %6 = scalar.extsi %5 : i32 to i64
+  %7 = index.cast %6 : i64 to index
+  %8 = index.constant 1 : offset
+  %9 = index.scale %7, %8 : index, offset -> offset
+  %scratch = buffer.alloca<workgroup> pool(%pool) align(64) %9 : buffer
+  %scratch_byte_offset = index.constant 0 : offset
+  pipeline.compose @child[%factor](%output) : [i32](buffer)
+  pipeline.strand target(@worker_target) workers([%column, 2], [%count, 1], [1, 1]) {
+    %workitem_id_x = kernel.workitem.id<x> : index
+  }
+}
+
+pipeline.decl<kernel> @child(%13: i32) run(%14: buffer)

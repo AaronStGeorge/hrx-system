@@ -223,6 +223,20 @@ template <class Payload>
 
 }  // namespace loom::channel
 
+namespace loom::pipeline {
+
+// Selects the pool at one worker coordinate tuple in the enclosing invocation.
+template <loom::memory_space Space, loom::type::size_type Rank>
+[[loom::op("pipeline.memory")]] loom::type::pool memory(
+    loom::type::indices<Rank> coordinates);
+
+// Constructs one fresh child graph and substitutes its complete staged
+// signature. This does not launch or wait for another invocation.
+template <auto Pipeline, class... Args>
+[[loom::op("pipeline.compose")]] void compose(Args... arguments);
+
+}  // namespace loom::pipeline
+
 namespace loom::buffer {
 
 // Selects an explicit backing resource for a fresh element allocation.

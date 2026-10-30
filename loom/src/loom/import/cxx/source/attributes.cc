@@ -43,11 +43,11 @@ void reject_misplaced_binding_attributes(
                              "config bindings require namespace-scope scalar "
                              "variables with a leading attribute");
         }
-        if (name == "target" && scope != BindingAttributeScope::Declaration) {
-          diagnostics.reject(
-              unit, attribute,
-              "target bindings require namespace-scope kernels or template "
-              "definitions with a leading attribute");
+        if (name == "target" && scope != BindingAttributeScope::Declaration &&
+            scope != BindingAttributeScope::Statement) {
+          diagnostics.reject(unit, attribute,
+                             "target bindings require a leading attribute on a "
+                             "namespace-scope callable or a pipeline strand");
         }
         if ((name == "template_def" || name == "priority") &&
             scope != BindingAttributeScope::Declaration) {
@@ -99,11 +99,11 @@ void reject_misplaced_binding_attributes(
               "fastmath requires a function, automatic declaration, or "
               "leading statement attribute");
         }
-        if ((name == "serial" || name == "concurrent") &&
+        if ((name == "serial" || name == "concurrent" || name == "strand") &&
             scope != BindingAttributeScope::Statement) {
           diagnostics.reject(
               unit, attribute,
-              "serial and concurrent require a leading compound-statement "
+              "region attributes require a leading compound-statement "
               "attribute");
         }
       });

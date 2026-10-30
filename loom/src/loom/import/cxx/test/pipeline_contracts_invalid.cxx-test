@@ -3,10 +3,6 @@
 [[loom::pipeline("device")]] void wrong_scope();
 
 // ====
-// ERROR@+1: LOWERING/059 "pipeline contracts require a bodyless function declaration"
-[[loom::pipeline("kernel")]] void body() {}
-
-// ====
 // ERROR@+1: LOWERING/059 "pipeline cannot be combined with another callable kind"
 [[loom::pipeline("kernel"), loom::kernel]] void conflicting();
 
@@ -52,7 +48,7 @@ using Root = loom::type::buffer<unsigned char>;
 using Storage = loom::type::buffer<unsigned char>;
 [[loom::pipeline("kernel")]] void external([[loom::launch]] Storage data);
 [[loom::command_program]] void call_directly([[loom::launch]] Storage data) {
-  // ERROR@+1: LOWERING/059 "pipeline contracts require an explicit kernel launch operation"
+  // ERROR@+1: LOWERING/059 "pipelines require explicit composition or kernel launch"
   external(data);
 }
 

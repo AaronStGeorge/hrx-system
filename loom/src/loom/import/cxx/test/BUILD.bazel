@@ -183,6 +183,8 @@ loom_check_test_suite(
         "pipeline_channels_invalid.cxx-test",
         "pipeline_contracts.cxx-test",
         "pipeline_contracts_invalid.cxx-test",
+        "pipeline_definitions.cxx-test",
+        "pipeline_definitions_invalid.cxx-test",
         "pipeline_types.cxx-test",
         "pipeline_types_invalid.cxx-test",
         "pointers.cxx-test",

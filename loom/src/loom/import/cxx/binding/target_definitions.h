@@ -53,6 +53,11 @@ class TargetDefinitions {
   // have been validated by build().
   loom_symbol_ref_t reference(cxx::FunctionSymbol* function) const;
 
+  // Returns one admitted constexpr target object reference for a statement
+  // binding. Invalid object identities diagnose at the owning attribute.
+  loom_symbol_ref_t reference(cxx::VariableSymbol* variable,
+                              cxx::AST* owner) const;
+
   // Rejects a target binding on a function consumed as kernel launch
   // configuration instead of emitted as a callable definition.
   void reject_launch_configuration_function(

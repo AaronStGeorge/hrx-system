@@ -22,9 +22,9 @@ namespace loom::cxx_import {
 
 class Types;
 
-// Owns bodyless pipeline contracts used as external launchable symbols. The
-// first supported product carrier is kernel scope; pipeline body authoring is
-// independently owned by the pipeline source surface.
+// Owns pipeline declarations and definitions used as launchable symbols. The
+// first supported product carrier is kernel scope; one retained staged
+// signature governs declarations, definitions, composition, and launches.
 class PipelineContracts {
  public:
   PipelineContracts(cxx::TranslationUnit& unit, Diagnostics& diagnostics)
@@ -59,8 +59,6 @@ class PipelineContracts {
     cxx::AttributeAST* launch_source = nullptr;
     // Source boundary declared by launch_source; absent means no bindings.
     std::optional<size_t> launch_parameter_ordinal;
-    // A concrete body is invalid for this external declaration surface.
-    cxx::AST* definition_source = nullptr;
     // Best parameter source ranges, preferring a later redeclaration.
     std::vector<cxx::ParameterDeclarationAST*> parameter_sources;
     // Final immutable projection, constructed on first signature use.
@@ -74,7 +72,7 @@ class PipelineContracts {
   cxx::TranslationUnit& unit_;
   // Source admission diagnostic boundary.
   Diagnostics& diagnostics_;
-  // Only bodyless kernel-scoped pipeline contracts occupy the index.
+  // Kernel-scoped pipeline contracts occupy the index.
   std::unordered_map<cxx::FunctionSymbol*, Contract> contracts_;
 };
 
