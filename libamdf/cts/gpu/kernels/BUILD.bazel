@@ -162,21 +162,21 @@ amdf_cts_gpu_kernel_set(
 # Native interrupt fragments are selected with the physical compiler profile.
 # A restricted compiler needs only its own representation vocabulary.
 _SHADER_EVENT_SOURCE_BY_CAPABILITY = {
-    "descriptor_set_cdna2_core": "shader_event/cdna2.loom",
-    "descriptor_set_cdna3_core": "shader_event/cdna3.loom",
-    "descriptor_set_cdna4_core": "shader_event/cdna4.loom",
-    "descriptor_set_rdna3_5_core": "shader_event/rdna35.loom",
-    "descriptor_set_rdna3_core": "shader_event/rdna3.loom",
-    "descriptor_set_rdna4_core": "shader_event/rdna4.loom",
-    "descriptor_set_rdna4_gfx1250_a0_core": "shader_event/gfx1250_a0.loom",
-    "descriptor_set_rdna4_gfx1251_core": "shader_event/gfx1251.loom",
-    "descriptor_set_rdna4_gfx125x_core": "shader_event/gfx1250.loom",
-    "descriptor_set_rdna4m_core": "shader_event/rdna4m.loom",
+    "descriptor_set_cdna2_core": "//libamdf/cts/gpu/kernels/shader_event:cdna2.loom",
+    "descriptor_set_cdna3_core": "//libamdf/cts/gpu/kernels/shader_event:cdna3.loom",
+    "descriptor_set_cdna4_core": "//libamdf/cts/gpu/kernels/shader_event:cdna4.loom",
+    "descriptor_set_rdna3_5_core": "//libamdf/cts/gpu/kernels/shader_event:rdna35.loom",
+    "descriptor_set_rdna3_core": "//libamdf/cts/gpu/kernels/shader_event:rdna3.loom",
+    "descriptor_set_rdna4_core": "//libamdf/cts/gpu/kernels/shader_event:rdna4.loom",
+    "descriptor_set_rdna4_gfx1250_a0_core": "//libamdf/cts/gpu/kernels/shader_event:gfx1250_a0.loom",
+    "descriptor_set_rdna4_gfx1251_core": "//libamdf/cts/gpu/kernels/shader_event:gfx1251.loom",
+    "descriptor_set_rdna4_gfx125x_core": "//libamdf/cts/gpu/kernels/shader_event:gfx1250.loom",
+    "descriptor_set_rdna4m_core": "//libamdf/cts/gpu/kernels/shader_event:rdna4m.loom",
 }
 
 amdf_cts_gpu_kernel_set(
     name = "shader_event_kernels",
-    srcs = ["shader_event/kernel.loom"],
+    srcs = ["//libamdf/cts/gpu/kernels/shader_event:kernel.loom"],
     entry_point = "shader_event",
     namespace = "kernels::shader_event",
     target_srcs = {
@@ -548,7 +548,7 @@ amdf_cts_gpu_kernel_set(
     entry_point = "lds_exchange",
     namespace = "kernels::lds_exchange",
     target_srcs = {
-        target: "targets/" + target + "/default.loom"
+        target: "//libamdf/cts/gpu/kernels/targets/" + target + ":default.loom"
         for target in AMDF_CTS_GPU_KERNEL_TARGETS
     },
     targets = AMDF_CTS_GPU_KERNEL_TARGETS,
@@ -560,7 +560,7 @@ amdf_cts_gpu_kernel_set(
     entry_point = "lds_exchange",
     namespace = "kernels::lds_exchange_wave64",
     target_srcs = {
-        target: "targets/" + target + "/wave64.loom"
+        target: "//libamdf/cts/gpu/kernels/targets/" + target + ":wave64.loom"
         for target in AMDF_CTS_GPU_DUAL_WAVE_TARGETS
     },
     targets = AMDF_CTS_GPU_DUAL_WAVE_TARGETS,
@@ -683,7 +683,7 @@ amdf_cts_gpu_kernel_set(
     entry_point = "private_roundtrip",
     namespace = "kernels::private_roundtrip",
     target_srcs = {
-        target: "targets/" + target + "/default.loom"
+        target: "//libamdf/cts/gpu/kernels/targets/" + target + ":default.loom"
         for target in AMDF_CTS_GPU_KERNEL_TARGETS
     },
     targets = AMDF_CTS_GPU_KERNEL_TARGETS,
@@ -695,7 +695,7 @@ amdf_cts_gpu_kernel_set(
     entry_point = "private_roundtrip",
     namespace = "kernels::private_roundtrip_wave64",
     target_srcs = {
-        target: "targets/" + target + "/wave64.loom"
+        target: "//libamdf/cts/gpu/kernels/targets/" + target + ":wave64.loom"
         for target in AMDF_CTS_GPU_DUAL_WAVE_TARGETS
     },
     targets = AMDF_CTS_GPU_DUAL_WAVE_TARGETS,
