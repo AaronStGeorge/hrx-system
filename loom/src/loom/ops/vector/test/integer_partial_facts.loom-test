@@ -156,7 +156,8 @@ func.def @independent_bitwise_bounds(%low: vector<4xi32>, %high: vector<4xi32>) 
 
 // ====
 
-// Unknown inputs and transfers that cannot derive a bound remain unknown.
+// Width-independent bitwise transfers remain unknown when neither operand
+// supplies a bound. Fixed-width arithmetic still retains its type domain.
 func.def @unknown_results(%lhs: vector<4xi8>, %rhs: vector<4xi8>) -> (i64, i64, i64, i64) {
   %masked = vector.andi %lhs, %rhs : vector<4xi8>
   %increment = vector.splati 15 : vector<4xi8>
@@ -171,8 +172,8 @@ func.def @unknown_results(%lhs: vector<4xi8>, %rhs: vector<4xi8>) -> (i64, i64, 
 func.def @unknown_results(%lhs: vector<4xi8>, %rhs: vector<4xi8>) -> (i64, i64, i64, i64) {
   %masked_lo = scalar.constant -9223372036854775808 : i64
   %masked_hi = scalar.constant -9223372036854775808 : i64
-  %added_lo = scalar.constant -9223372036854775808 : i64
-  %added_hi = scalar.constant -9223372036854775808 : i64
+  %added_lo = scalar.constant -128 : i64
+  %added_hi = scalar.constant 127 : i64
   func.return %masked_lo, %masked_hi, %added_lo, %added_hi : i64, i64, i64, i64
 }
 

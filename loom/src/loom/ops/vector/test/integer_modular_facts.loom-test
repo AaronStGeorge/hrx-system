@@ -1,0 +1,160 @@
+// RUN: pass canonicalize
+
+// Uniform exact summaries retain the declared i8 arithmetic domain.
+func.def @uniform_i8_boundaries() -> (i8, i8, i8, i8, i8) {
+  %maximum = vector.splati 127 : vector<4xi8>
+  %minimum = vector.splati -128 : vector<4xi8>
+  %c1 = vector.splati 1 : vector<4xi8>
+  %c2 = vector.splati 2 : vector<4xi8>
+  %c7 = vector.splati 7 : vector<4xi8>
+  %sum = vector.addi %maximum, %c1 : vector<4xi8>
+  %difference = vector.subi %minimum, %c1 : vector<4xi8>
+  %product = vector.muli %maximum, %c2 : vector<4xi8>
+  %fma = vector.fmai %maximum, %c2, %c1 : vector<4xi8>
+  %shifted = vector.shli %c1, %c7 : vector<4xi8>
+  %sum_lane = vector.extract %sum[0] : vector<4xi8> -> i8
+  %difference_lane = vector.extract %difference[0] : vector<4xi8> -> i8
+  %product_lane = vector.extract %product[0] : vector<4xi8> -> i8
+  %fma_lane = vector.extract %fma[0] : vector<4xi8> -> i8
+  %shifted_lane = vector.extract %shifted[0] : vector<4xi8> -> i8
+  func.return %sum_lane, %difference_lane, %product_lane, %fma_lane, %shifted_lane : i8, i8, i8, i8, i8
+}
+
+// ----
+func.def @uniform_i8_boundaries() -> (i8, i8, i8, i8, i8) {
+  %sum_lane = scalar.constant -128 : i8
+  %difference_lane = scalar.constant 127 : i8
+  %product_lane = scalar.constant -2 : i8
+  %fma_lane = scalar.constant -1 : i8
+  %shifted_lane = scalar.constant -128 : i8
+  func.return %sum_lane, %difference_lane, %product_lane, %fma_lane, %shifted_lane : i8, i8, i8, i8, i8
+}
+
+// ====
+
+// Predicate arithmetic is modulo two instead of using an unbounded signed
+// carrier for the exact facts.
+func.def @predicate_boundaries() -> (i1, i1, i1, i1, i1) {
+  %c0 = vector.splati 0 : vector<4xi1>
+  %c1 = vector.splati 1 : vector<4xi1>
+  %sum = vector.addi %c1, %c1 : vector<4xi1>
+  %difference = vector.subi %c0, %c1 : vector<4xi1>
+  %product = vector.muli %c1, %c1 : vector<4xi1>
+  %fma = vector.fmai %c1, %c1, %c1 : vector<4xi1>
+  %negative = vector.negi %c1 : vector<4xi1>
+  %sum_lane = vector.extract %sum[0] : vector<4xi1> -> i1
+  %difference_lane = vector.extract %difference[0] : vector<4xi1> -> i1
+  %product_lane = vector.extract %product[0] : vector<4xi1> -> i1
+  %fma_lane = vector.extract %fma[0] : vector<4xi1> -> i1
+  %negative_lane = vector.extract %negative[0] : vector<4xi1> -> i1
+  func.return %sum_lane, %difference_lane, %product_lane, %fma_lane, %negative_lane : i1, i1, i1, i1, i1
+}
+
+// ----
+func.def @predicate_boundaries() -> (i1, i1, i1, i1, i1) {
+  %sum_lane = scalar.constant false : i1
+  %difference_lane = scalar.constant true : i1
+  %product_lane = scalar.constant true : i1
+  %fma_lane = scalar.constant false : i1
+  %negative_lane = scalar.constant true : i1
+  func.return %sum_lane, %difference_lane, %product_lane, %fma_lane, %negative_lane : i1, i1, i1, i1, i1
+}
+
+// ====
+
+// Small static summaries apply modular arithmetic independently to each lane.
+func.def @independent_i16_boundaries() -> (i16, i16, i16, i16) {
+  %maximum = scalar.constant 32767 : i16
+  %minimum = scalar.constant -32768 : i16
+  %c1 = scalar.constant 1 : i16
+  %c2 = scalar.constant 2 : i16
+  %lhs = vector.from_elements %maximum, %minimum, %maximum, %maximum : vector<4xi16>
+  %rhs = vector.from_elements %c1, %c1, %c2, %c2 : vector<4xi16>
+  %accumulator = vector.splati 1 : vector<4xi16>
+  %sum = vector.addi %lhs, %rhs : vector<4xi16>
+  %difference = vector.subi %lhs, %rhs : vector<4xi16>
+  %product = vector.muli %lhs, %rhs : vector<4xi16>
+  %fma = vector.fmai %lhs, %rhs, %accumulator : vector<4xi16>
+  %sum_lane = vector.extract %sum[0] : vector<4xi16> -> i16
+  %difference_lane = vector.extract %difference[1] : vector<4xi16> -> i16
+  %product_lane = vector.extract %product[2] : vector<4xi16> -> i16
+  %fma_lane = vector.extract %fma[3] : vector<4xi16> -> i16
+  func.return %sum_lane, %difference_lane, %product_lane, %fma_lane : i16, i16, i16, i16
+}
+
+// ----
+func.def @independent_i16_boundaries() -> (i16, i16, i16, i16) {
+  %sum_lane = scalar.constant -32768 : i16
+  %difference_lane = scalar.constant 32767 : i16
+  %product_lane = scalar.constant -2 : i16
+  %fma_lane = scalar.constant -1 : i16
+  func.return %sum_lane, %difference_lane, %product_lane, %fma_lane : i16, i16, i16, i16
+}
+
+// ====
+
+// Raw-bit exact transfer preserves results that overflow the signed i64 fact
+// carrier before wrapping.
+func.def @full_width_boundaries() -> (i64, i64, i64, i64, i64, i64, i64) {
+  %maximum = vector.splati 9223372036854775807 : vector<2xi64>
+  %minimum = vector.splati -9223372036854775808 : vector<2xi64>
+  %c1 = vector.splati 1 : vector<2xi64>
+  %c2 = vector.splati 2 : vector<2xi64>
+  %c63 = vector.splati 63 : vector<2xi64>
+  %sum = vector.addi %maximum, %c1 : vector<2xi64>
+  %difference = vector.subi %minimum, %c1 : vector<2xi64>
+  %product = vector.muli %maximum, %c2 : vector<2xi64>
+  %fma = vector.fmai %maximum, %c2, %c1 : vector<2xi64>
+  %shifted = vector.shli %c1, %c63 : vector<2xi64>
+  %negative = vector.negi %minimum : vector<2xi64>
+  %absolute = vector.absi %minimum : vector<2xi64>
+  %sum_lane = vector.extract %sum[0] : vector<2xi64> -> i64
+  %difference_lane = vector.extract %difference[0] : vector<2xi64> -> i64
+  %product_lane = vector.extract %product[0] : vector<2xi64> -> i64
+  %fma_lane = vector.extract %fma[0] : vector<2xi64> -> i64
+  %shifted_lane = vector.extract %shifted[0] : vector<2xi64> -> i64
+  %negative_lane = vector.extract %negative[0] : vector<2xi64> -> i64
+  %absolute_lane = vector.extract %absolute[0] : vector<2xi64> -> i64
+  func.return %sum_lane, %difference_lane, %product_lane, %fma_lane, %shifted_lane, %negative_lane, %absolute_lane : i64, i64, i64, i64, i64, i64, i64
+}
+
+// ----
+func.def @full_width_boundaries() -> (i64, i64, i64, i64, i64, i64, i64) {
+  %sum_lane = scalar.constant -9223372036854775808 : i64
+  %difference_lane = scalar.constant 9223372036854775807 : i64
+  %product_lane = scalar.constant -2 : i64
+  %fma_lane = scalar.constant -1 : i64
+  %shifted_lane = scalar.constant -9223372036854775808 : i64
+  %negative_lane = scalar.constant -9223372036854775808 : i64
+  %absolute_lane = scalar.constant -9223372036854775808 : i64
+  func.return %sum_lane, %difference_lane, %product_lane, %fma_lane, %shifted_lane, %negative_lane, %absolute_lane : i64, i64, i64, i64, i64, i64, i64
+}
+
+// ====
+
+// A range beyond the signed boundary wraps to the corresponding negative
+// interval. Signed-no-wrap promises retain the mathematical facts instead.
+func.def @range_boundaries(%high0: i32, %promised0: i8) -> (i64, i64, i64, i64) {
+  %high = scalar.assume %high0 [range(%high0, 2147483640, 2147483647)] : i32
+  %high_values = vector.splat %high : vector<4xi32>
+  %c16_i32 = vector.splati 16 : vector<4xi32>
+  %wrapped = vector.addi %high_values, %c16_i32 : vector<4xi32>
+  %wrapped_lo = test.fact_all_equal_range_lo %wrapped : vector<4xi32> -> i64
+  %wrapped_hi = test.fact_all_equal_range_hi %wrapped : vector<4xi32> -> i64
+  %promised = scalar.assume %promised0 [range(%promised0, 120, 127)] : i8
+  %promised_values = vector.splat %promised : vector<4xi8>
+  %c16_i8 = vector.splati 16 : vector<4xi8>
+  %mathematical = vector.addi<nsw> %promised_values, %c16_i8 : vector<4xi8>
+  %mathematical_lo = test.fact_all_equal_range_lo %mathematical : vector<4xi8> -> i64
+  %mathematical_hi = test.fact_all_equal_range_hi %mathematical : vector<4xi8> -> i64
+  func.return %wrapped_lo, %wrapped_hi, %mathematical_lo, %mathematical_hi : i64, i64, i64, i64
+}
+
+// ----
+func.def @range_boundaries(%high0: i32, %promised0: i8) -> (i64, i64, i64, i64) {
+  %wrapped_lo = scalar.constant -2147483640 : i64
+  %wrapped_hi = scalar.constant -2147483633 : i64
+  %mathematical_lo = scalar.constant 136 : i64
+  %mathematical_hi = scalar.constant 143 : i64
+  func.return %wrapped_lo, %wrapped_hi, %mathematical_lo, %mathematical_hi : i64, i64, i64, i64
+}

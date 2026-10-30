@@ -493,3 +493,35 @@ func.def @addi_nonwrapping_range(%value0: i32) -> (i64, i64) {
   %maximum = scalar.constant 1040 : i64
   func.return %minimum, %maximum : i64, i64
 }
+
+// ====
+
+// Exact fixed-width transfers retain their raw result even when the
+// mathematical value is outside the signed i64 fact carrier.
+func.def @full_width_modular_facts() -> (i64, i64, i64, i64, i64, i64, i64) {
+  %maximum = scalar.constant 9223372036854775807 : i64
+  %minimum = scalar.constant -9223372036854775808 : i64
+  %c1 = scalar.constant 1 : i64
+  %c2 = scalar.constant 2 : i64
+  %shift = scalar.constant 63 : i64
+  %sum = scalar.addi %maximum, %c1 : i64
+  %difference = scalar.subi %minimum, %c1 : i64
+  %product = scalar.muli %maximum, %c2 : i64
+  %fma = scalar.fmai %maximum, %c2, %c1 : i64
+  %shifted = scalar.shli %c1, %shift : i64
+  %negative = scalar.negi %minimum : i64
+  %absolute = scalar.absi %minimum : i64
+  func.return %sum, %difference, %product, %fma, %shifted, %negative, %absolute : i64, i64, i64, i64, i64, i64, i64
+}
+
+// ----
+func.def @full_width_modular_facts() -> (i64, i64, i64, i64, i64, i64, i64) {
+  %sum = scalar.constant -9223372036854775808 : i64
+  %difference = scalar.constant 9223372036854775807 : i64
+  %product = scalar.constant -2 : i64
+  %fma = scalar.constant -1 : i64
+  %shifted = scalar.constant -9223372036854775808 : i64
+  %negative = scalar.constant -9223372036854775808 : i64
+  %absolute = scalar.constant -9223372036854775808 : i64
+  func.return %sum, %difference, %product, %fma, %shifted, %negative, %absolute : i64, i64, i64, i64, i64, i64, i64
+}

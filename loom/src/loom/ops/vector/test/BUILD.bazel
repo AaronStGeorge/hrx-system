@@ -30,6 +30,7 @@ loom_check_test_suite(
         "fast_math_facts.loom-test",
         "float_conversion_facts.loom-test",
         "integer_extrema_facts.loom-test",
+        "integer_modular_facts.loom-test",
         "integer_partial_facts.loom-test",
         "load_extract.loom-test",
         "numeric_projection.loom-test",
