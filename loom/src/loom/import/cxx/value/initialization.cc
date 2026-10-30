@@ -49,6 +49,30 @@ class ReceiverScope {
   Initialization::Evaluation& evaluation_;
 };
 
+// Importer-owned construction cost. Expression evaluation is common to both
+// candidates and is deliberately excluded; these counts describe only the
+// operations and SSA edges that assemble the final vector.
+struct VectorConstructionCost {
+  size_t operation_count = 0;
+  size_t operand_count = 0;
+
+  bool strictly_smaller_than(const VectorConstructionCost& other) const {
+    return operation_count < other.operation_count &&
+           operand_count < other.operand_count;
+  }
+};
+
+struct VectorInitializerLane {
+  cxx::ExpressionAST* expression = nullptr;
+  std::optional<cxx::ConstValue> constant;
+  bool literal_encodable = false;
+};
+
+bool vector_literal_can_encode(const cxx::ConstValue& value) {
+  const auto* floating = std::get_if<cxx::ConstFloat>(&value);
+  return !floating || !floating->isNaN();
+}
+
 // Walks the frontend-owned declaration-order plan once. The importer supplies
 // only the destination policy; constructor synthesis, omitted members, and
 // default-member clauses remain source semantic facts.
@@ -210,6 +234,131 @@ std::optional<loom_value_id_t> Initialization::constant_vector(
   return vectors_.constant(cxx::ConstValue{std::move(values)}, type, owner);
 }
 
+loom_value_id_t Initialization::initialize_vector(
+    const cxx::Type* type, cxx::List<cxx::ExpressionAST*>* elements,
+    cxx::AST* owner) {
+  if (auto constant = constant_vector(type, elements, owner)) {
+    return *constant;
+  }
+
+  auto* vector = types_.native_vector(type);
+  const size_t lane_count = vector->elementCount();
+  std::vector<VectorInitializerLane> lanes;
+  lanes.reserve(lane_count);
+  cxx::ASTInterpreter interpreter(&unit_);
+  for (auto* element : cxx::ListView{elements}) {
+    VectorInitializerLane lane{.expression = element};
+    auto value = scalar_constant(unit_, element);
+    if (value) {
+      lane.constant = interpreter.convertArithmetic(*value, element->type,
+                                                    vector->elementType());
+      lane.literal_encodable =
+          lane.constant && vector_literal_can_encode(*lane.constant);
+    }
+    lanes.push_back(std::move(lane));
+  }
+
+  // The ordinary constructor remains the diagnostic owner for excess lanes.
+  // Pure constants can be materialized from their converted frontend value;
+  // this is the same exact conversion used by the all-literal path and makes
+  // the construction cost below concrete rather than syntax-dependent.
+  auto emit_from_elements = [&]() {
+    std::vector<loom_value_id_t> components;
+    components.reserve(lanes.size());
+    for (const auto& lane : lanes) {
+      components.push_back(
+          lane.constant
+              ? scalars_.constant(*lane.constant, vector->elementType(),
+                                  lane.expression)
+              : evaluation_
+                    .convert(lane.expression, vector->elementType(), owner)
+                    .ssa());
+    }
+    return vectors_.construct(components, type, owner);
+  };
+
+  if (lanes.size() > lane_count) {
+    return emit_from_elements();
+  }
+
+  VectorConstructionCost from_elements_cost{
+      .operation_count = 1,
+      .operand_count = lane_count,
+  };
+  VectorConstructionCost literal_patch_cost{
+      .operation_count = 1,
+      .operand_count = 0,
+  };
+  for (const auto& lane : lanes) {
+    if (lane.literal_encodable) {
+      ++from_elements_cost.operation_count;
+      continue;
+    }
+
+    // Each patch adds one static vector.insert with two SSA operands. A pure
+    // NaN additionally uses the same payload constant and bitcast in both
+    // candidates; only its insertion is unique to the compact form.
+    ++literal_patch_cost.operation_count;
+    literal_patch_cost.operand_count += 2;
+    if (lane.constant) {
+      from_elements_cost.operation_count += 2;
+      ++from_elements_cost.operand_count;
+      literal_patch_cost.operation_count += 2;
+      ++literal_patch_cost.operand_count;
+    }
+  }
+  if (lanes.size() < lane_count) {
+    // vector.from_elements shares one scalar zero across omitted lanes.
+    ++from_elements_cost.operation_count;
+  }
+  if (!literal_patch_cost.strictly_smaller_than(from_elements_cost)) {
+    return emit_from_elements();
+  }
+
+  auto base = std::make_shared<cxx::InitializerList>();
+  base->elements.reserve(lane_count);
+  for (size_t lane_index = 0; lane_index < lane_count; ++lane_index) {
+    const bool literal_lane =
+        lane_index < lanes.size() && lanes[lane_index].literal_encodable;
+    base->elements.emplace_back(literal_lane ? *lanes[lane_index].constant
+                                             : cxx::ConstValue{int64_t{0}},
+                                vector->elementType());
+  }
+  const auto& first_value = std::get<0>(base->elements.front());
+  const auto first_attribute =
+      scalars_.constant_attribute(first_value, vector->elementType(), owner);
+  bool uniform = true;
+  for (size_t lane_index = 1; lane_index < lane_count; ++lane_index) {
+    const auto& value = std::get<0>(base->elements[lane_index]);
+    const auto attribute =
+        scalars_.constant_attribute(value, vector->elementType(), owner);
+    uniform &= loom_attribute_equal(&first_attribute, &attribute);
+  }
+  // Uniform literals become typed splats. Splat-plus-patch target selection is
+  // not proven, so only a nonuniform literal authorizes compaction.
+  if (uniform) {
+    return emit_from_elements();
+  }
+
+  loom_value_id_t result =
+      vectors_.constant(cxx::ConstValue{std::move(base)}, type, owner);
+  for (size_t lane_index = 0; lane_index < lanes.size(); ++lane_index) {
+    const auto& lane = lanes[lane_index];
+    if (lane.literal_encodable) {
+      continue;
+    }
+    const loom_value_id_t value =
+        lane.constant
+            ? scalars_.constant(*lane.constant, vector->elementType(),
+                                lane.expression)
+            : evaluation_.convert(lane.expression, vector->elementType(), owner)
+                  .ssa();
+    result = vectors_.insert_static(
+        result, value, static_cast<int64_t>(lane_index), type, owner);
+  }
+  return result;
+}
+
 Value Initialization::finish_value_receiver(const RecordPartition& record,
                                             cxx::AST* owner) {
   std::vector<loom_value_id_t> components;
@@ -358,16 +507,8 @@ Value Initialization::from_elements(const cxx::Type* type,
         unit_, owner,
         "Loom source values require an operation result or a copy");
   }
-  if (auto* vector = types_.native_vector(type)) {
-    if (auto constant = constant_vector(type, elements, owner)) {
-      return *constant;
-    }
-    std::vector<loom_value_id_t> components;
-    for (auto* element : cxx::ListView{elements}) {
-      components.push_back(
-          evaluation_.convert(element, vector->elementType(), owner).ssa());
-    }
-    return vectors_.construct(components, type, owner);
+  if (types_.native_vector(type)) {
+    return initialize_vector(type, elements, owner);
   }
   auto output = types_.get(type, owner);
   if (elements && !elements->next) {

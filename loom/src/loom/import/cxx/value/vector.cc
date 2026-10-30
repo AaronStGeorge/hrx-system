@@ -401,6 +401,19 @@ loom_value_id_t Vectors::insert(loom_value_id_t destination,
   return loom_op_results(op)[0];
 }
 
+loom_value_id_t Vectors::insert_static(loom_value_id_t destination,
+                                       loom_value_id_t lane, int64_t index,
+                                       const cxx::Type* source_type,
+                                       cxx::AST* owner) {
+  auto output = types_.get(source_type, owner);
+  loom_op_t* op;
+  check(loom_vector_insert_build(&builder_, lane, destination,
+                                 /*indices=*/nullptr, /*indices_count=*/0,
+                                 &index, /*static_indices_count=*/1, output,
+                                 locations_.get(owner), &op));
+  return loom_op_results(op)[0];
+}
+
 loom_value_id_t Vectors::cast_index(loom_value_id_t index,
                                     const cxx::Type* index_type,
                                     cxx::AST* owner) {
