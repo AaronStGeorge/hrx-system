@@ -208,6 +208,15 @@ class CxxRenderContext:
         self.function_buffer_elements: dict[str, tuple[str | None, ...]] = {}
         self.command_names: dict[str, str] = {}
         self.kernel_buffer_elements: dict[str, tuple[str | None, ...]] = {}
+        self.kernel_configuration_names: dict[str, str] = {}
+        self.kernel_workload_component_counts: dict[str, tuple[int, ...]] = {}
+        self.config_symbols: dict[str, Operation] = {
+            str(operation.attributes["symbol"]): operation
+            for operation in self.module.body.ops
+            if operation.name in {"config.decl", "config.def"}
+            and isinstance(operation.attributes.get("symbol"), str)
+        }
+        self.projected_config_declarations: set[int] = set()
 
     def _collect_value_scopes(self) -> tuple[dict[int, int], dict[int, int]]:
         """Maps top-level operations and their values to C++ local scopes."""

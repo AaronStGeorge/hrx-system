@@ -12,13 +12,13 @@ import re
 from collections.abc import Sequence
 from dataclasses import replace
 
-from loom.format.cxx.commands import CxxCommandRenderer
 from loom.format.cxx.context import (
     _memory_space,
     _strip_outer_parentheses,
     walk_operations,
 )
 from loom.format.cxx.errors import CxxRenderError
+from loom.format.cxx.kernel_configurations import CxxKernelConfigurationRenderer
 from loom.format.cxx.naming import clean_identifier, loop_carrier_stem
 from loom.format.cxx.translation_unit import render_preamble
 from loom.format.cxx.types import KERNEL_COORDINATE_CPP_TYPE
@@ -61,7 +61,7 @@ def _buffer_payload_literal(contents: bytes | Utf8Attr) -> str:
     return prefix + '"' + "".join(escaped) + '"'
 
 
-class CxxRenderer(CxxCommandRenderer):
+class CxxRenderer(CxxKernelConfigurationRenderer):
     def _view_shape_arguments(
         self, operation: Operation, view_type: ShapedType
     ) -> tuple[str, str]:
@@ -1076,12 +1076,23 @@ class CxxRenderer(CxxCommandRenderer):
         yield_targets: Sequence[int | None] | None = None,
         condition_target: str | None = None,
         condition_forward_targets: Sequence[int | None] | None = None,
+        launch_configuration: bool = False,
     ) -> None:
         direct_assignments = self._direct_yield_assignments(block, yield_targets)
         previous_assignments = self.assignment_targets
         self.assignment_targets = {**previous_assignments, **direct_assignments}
         try:
             for operation in block.ops:
+                if operation.name == "kernel.launch.config":
+                    self._validate_projected_attributes(operation, ())
+                    if not launch_configuration:
+                        raise CxxRenderError(
+                            operation,
+                            "launch configuration terminator appears outside its "
+                            "kernel configuration",
+                        )
+                    self._render_launch_configuration_return(operation)
+                    continue
                 if operation.name == "func.return":
                     self._validate_projected_attributes(operation, ())
                     if not operation.operands:
@@ -1168,48 +1179,6 @@ class CxxRenderer(CxxCommandRenderer):
         finally:
             self.assignment_targets = previous_assignments
 
-    def _launch_values(self, kernel: Operation) -> tuple[list[str], list[str]]:
-        resolved = self._resolved(kernel)
-        config = resolved.region("config")
-        if config is None or len(config.blocks) != 1:
-            raise CxxRenderError(
-                kernel, "kernel launch configuration must be one block"
-            )
-        local: dict[int, str] = {}
-        launch: Operation | None = None
-        for operation in config.blocks[0].ops:
-            if operation.name == "index.constant":
-                self._validate_projected_attributes(operation, ("value",))
-                result = operation.results[0]
-                local[result] = str(operation.attributes["value"])
-            elif operation.name == "kernel.launch.config":
-                self._validate_projected_attributes(operation, ())
-                launch = operation
-            else:
-                raise CxxRenderError(
-                    operation, "launch configuration uses a non-constant expression"
-                )
-        if launch is None:
-            raise CxxRenderError(kernel, "kernel has no launch configuration")
-        if len(launch.operands) != 6:
-            raise CxxRenderError(
-                launch,
-                "clustered launch geometry requires a configuration-function "
-                "projection",
-            )
-        fields = self._resolved(launch)
-        try:
-            counts = [
-                local[fields.value_id(f"workgroup_count_{axis}")] for axis in "xyz"
-            ]
-            sizes = [local[fields.value_id(f"workgroup_size_{axis}")] for axis in "xyz"]
-        except KeyError as error:
-            raise CxxRenderError(
-                launch,
-                "dynamic launch geometry requires a configuration-function projection",
-            ) from error
-        return counts, sizes
-
     def _parameter_element(self, root: int) -> str:
         elements = self.buffer_info[root].element_types
         if not elements or len(elements) != 1:
@@ -1241,7 +1210,9 @@ class CxxRenderer(CxxCommandRenderer):
         body = resolved.region("body")
         assert body is not None
         entry = body.blocks[0]
-        counts, sizes = self._launch_values(kernel)
+        attributes = self._render_kernel_configuration(kernel)
+        self.temporary_names = set(self.scope_names[scope])
+        self.rendered_assumptions_by_block.clear()
         target_symbol = resolved.attr("target")
         target_info = self.targets.get(str(target_symbol)) if target_symbol else None
         if target_symbol is not None and target_info is None:
@@ -1254,11 +1225,8 @@ class CxxRenderer(CxxCommandRenderer):
                 f"target record {target_info.operation_name} has no C++ "
                 "declaration projection",
             )
-        attributes = ["loom::kernel"]
         if target_info is not None:
             attributes.append(f"loom::target({self.target_names[str(target_symbol)]})")
-        attributes.append(f"loom::workgroup_count({', '.join(counts)})")
-        attributes.append(f"loom::workgroup_size({', '.join(sizes)})")
         self.writer.attributes(attributes)
 
         parameters: list[str] = []
@@ -1476,6 +1444,17 @@ class CxxRenderer(CxxCommandRenderer):
             used_names.add(name)
             self.command_names[symbol] = name
 
+        for kernel in kernels:
+            symbol = str(self._resolved(kernel).attr("callee"))
+            base = clean_identifier(symbol, "kernel") + "_configuration"
+            name = base
+            ordinal = 2
+            while name in used_names:
+                name = f"{base}_{ordinal}"
+                ordinal += 1
+            used_names.add(name)
+            self.kernel_configuration_names[symbol] = name
+
         target_symbols: list[str] = []
         for callable_operation in (*kernels, *commands):
             resolved = self._resolved(callable_operation)
@@ -1531,6 +1510,7 @@ class CxxRenderer(CxxCommandRenderer):
                 "func.def",
                 "command.program.def",
                 "command.program.decl",
+                "config.decl",
             } or operation.name.endswith(".target"):
                 continue
             raise CxxRenderError(
@@ -1579,6 +1559,17 @@ class CxxRenderer(CxxCommandRenderer):
             else:
                 self._render_kernel(callable_operation)
 
+        for operation in self.module.body.ops:
+            if (
+                operation.name == "config.decl"
+                and id(operation) not in self.projected_config_declarations
+            ):
+                raise CxxRenderError(
+                    operation,
+                    "configuration declaration is not owned by a projected "
+                    "kernel launch contract",
+                )
+
         operation_names = {
             operation.name for operation in walk_operations(self.module.body)
         }
@@ -1604,6 +1595,7 @@ class CxxRenderer(CxxCommandRenderer):
                 for predicate in predicates
             )
             for operation in self.module.body.ops
+            if id(operation) not in self.projected_config_declarations
         )
         preamble = render_preamble(
             operation_names=operation_names,
@@ -1676,6 +1668,17 @@ def _select_callable_roots(module: Module, roots: Sequence[str]) -> Module:
         for region in symbol.op.regions:
             for block in region.blocks:
                 for operation in walk_operations(block):
+                    if operation.name == "config.get":
+                        config = operation.attributes.get("config")
+                        config_definition = (
+                            symbols.get(config) if isinstance(config, str) else None
+                        )
+                        if (
+                            config_definition is not None
+                            and config_definition.op is not None
+                        ):
+                            selected_operation_ids.add(id(config_definition.op))
+                        continue
                     if operation.name not in {
                         "func.call",
                         "command.program.launch",

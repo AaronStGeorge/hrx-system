@@ -19,6 +19,7 @@ iree_py_library(
         "context.py",
         "errors.py",
         "expressions.py",
+        "kernel_configurations.py",
         "naming.py",
         "printer.py",
         "registry.py",

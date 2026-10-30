@@ -51,7 +51,7 @@ def _quote_string(value: str | Utf8Attr) -> str:
 class CxxCommandRenderer(CxxExpressionRenderer):
     """Renders command definitions and operations from verified High IR."""
 
-    def _view_dependencies(self, value_id: int) -> tuple[int, ...]:
+    def _source_view_dependencies(self, value_id: int) -> tuple[int, ...]:
         value_type = self.module.values[value_id].type
         if not (
             isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VIEW
@@ -63,7 +63,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
                 if dimension.value_id is None:
                     raise CxxRenderError(
                         None,
-                        "command view parameter has an unbound dynamic dimension",
+                        "source view parameter has an unbound dynamic dimension",
                     )
                 dependencies.append(dimension.value_id)
         if isinstance(value_type.encoding, DynamicEncoding):
@@ -71,7 +71,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         elif value_type.encoding is not None:
             raise CxxRenderError(
                 None,
-                "statically encoded command view has no C++ signature projection",
+                "statically encoded source view has no C++ signature projection",
             )
         return tuple(dependencies)
 
@@ -111,7 +111,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
                     operation,
                     "command launch binding is neither a buffer nor a typed view",
                 )
-            dependencies = self._view_dependencies(binding)
+            dependencies = self._source_view_dependencies(binding)
             for dependency in dependencies:
                 if dependency not in specialization_set:
                     raise CxxRenderError(
@@ -136,7 +136,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         specialization_dependencies: set[int] = set()
         specialization_views: dict[int, tuple[int, ...]] = {}
         for value in remaining:
-            dependencies = self._view_dependencies(value)
+            dependencies = self._source_view_dependencies(value)
             if not dependencies:
                 continue
             for dependency in dependencies:
@@ -343,11 +343,21 @@ class CxxCommandRenderer(CxxExpressionRenderer):
                 operation, f"launched kernel {symbol!r} is not present"
             )
         workloads = resolved.value_ids("workloads")
-        if workloads:
+        component_counts = self.kernel_workload_component_counts.get(symbol)
+        if component_counts is None:
             raise CxxRenderError(
                 operation,
-                "configured kernel launch requires a configuration-function projection",
+                f"kernel {symbol!r} has no rendered launch configuration",
             )
+        if sum(component_counts) != len(workloads):
+            raise CxxRenderError(
+                operation, "kernel launch workload arity is inconsistent"
+            )
+        workload_arguments: list[str] = []
+        component_ordinal = 0
+        for component_count in component_counts:
+            component_ordinal += component_count
+            workload_arguments.append(self.expression(workloads[component_ordinal - 1]))
         arguments = resolved.value_ids("arguments")
         if len(arguments) != len(expected_elements):
             raise CxxRenderError(
@@ -361,6 +371,11 @@ class CxxCommandRenderer(CxxExpressionRenderer):
                 if self.expression_type(argument) != expected_type:
                     expression = f"loom::buffer::cast<{element}>({expression})"
             rendered.append(expression)
+        if workload_arguments:
+            rendered.insert(
+                0,
+                "loom::kernel::workload(" + ", ".join(workload_arguments) + ")",
+            )
         self.writer.line(f"loom::kernel::launch<{symbol}>({', '.join(rendered)});")
         return ("callee",)
 
