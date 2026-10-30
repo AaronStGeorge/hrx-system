@@ -4,8 +4,8 @@
 #ifndef HRX_CTS_CORE_AMDGPU_HIP_PRINTF_TEST_DATA_HPP_
 #define HRX_CTS_CORE_AMDGPU_HIP_PRINTF_TEST_DATA_HPP_
 
-#include "libhrx/cts/amdgpu_hip_printf_test_kernels.h"
 #include "libhrx/cts/core/amdgpu_test_data.hpp"
+#include "libhrx/cts/tests/hip/amdgpu_hip_printf_test_kernels.h"
 
 namespace hrx_cts {
 

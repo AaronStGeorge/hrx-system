@@ -1,0 +1,46 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_library")
+
+package(
+    default_visibility = ["//libhrx/cts/tests:__subpackages__"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+hrx_cc_library(
+    name = "harness",
+    testonly = True,
+    srcs = [
+        "hrx_loader.cpp",
+        "main.cpp",
+    ],
+    hdrs = [
+        "hrx_loader.hpp",
+        "hrx_test_fixture.hpp",
+    ],
+    cxxopts = select({
+        "//build_tools/bazel:cc_compiler_clang_cl": [],
+        "//build_tools/bazel:cc_compiler_msvc": [],
+        "//conditions:default": ["-fexceptions"],
+    }),
+    includes = ["."],
+    deps = [
+        "//build_tools/bazel:dl",
+        "//third_party:catch2",
+    ],
+)
+
+exports_files(
+    [
+        "amdgpu_executable_test_data.hpp",
+        "amdgpu_hip_cooperative_test_data.hpp",
+        "amdgpu_hip_module_library_test_data.hpp",
+        "amdgpu_hip_printf_test_data.hpp",
+        "amdgpu_test_data.hpp",
+    ],
+)

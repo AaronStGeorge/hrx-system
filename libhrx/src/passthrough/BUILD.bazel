@@ -27,7 +27,11 @@ _PASSTHROUGH_LIBRARIES = [
         "hip_logging.c",
         ["//build_tools/bazel:pthreads"],
     ),
-    ("hip_noop", "interceptors/passthrough_interceptor.c", []),
+    (
+        "hip_noop",
+        "//libhrx/src/passthrough/interceptors:passthrough_interceptor.c",
+        [],
+    ),
     (
         "hip_buffer_tracer",
         "hip_buffer_tracer.c",

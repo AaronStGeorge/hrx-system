@@ -1,0 +1,41 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//libhrx/build_tools/bazel:cts.bzl", "hrx_cts_test")
+load(
+    "//libhrx/cts:defs.bzl",
+    "AMDGPU_CTS_COMPATIBILITY_CONDITIONS",
+    "AMD_GPU_CTS_RESOURCE_GROUP",
+    "AMD_GPU_CTS_TAGS",
+)
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+_AMDGPU_CTS_COMPATIBILITY = select(AMDGPU_CTS_COMPATIBILITY_CONDITIONS)
+
+hrx_cts_test(
+    name = "legacy_virtual_memory",
+    srcs = ["legacy_virtual_memory_test.cpp"],
+    args = ["--hrx-device=cpu:0"],
+)
+
+hrx_cts_test(
+    name = "legacy_virtual_memory_gpu",
+    srcs = ["legacy_virtual_memory_test.cpp"],
+    args = ["--hrx-device=gpu:0"],
+    resource_group = AMD_GPU_CTS_RESOURCE_GROUP,
+    tags = AMD_GPU_CTS_TAGS,
+    target_compatible_with = _AMDGPU_CTS_COMPATIBILITY,
+)
+
+hrx_cts_test(
+    name = "virtual_memory",
+    srcs = ["virtual_memory_test.cpp"],
+)

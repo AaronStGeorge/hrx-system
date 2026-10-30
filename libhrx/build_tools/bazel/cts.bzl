@@ -29,7 +29,7 @@ def hrx_cts_test(name, srcs, deps = None, data = None, args = None, **kwargs):
         name = "hrx_cts_" + name,
         srcs = srcs,
         deps = [
-            ":core",
+            "//libhrx/cts/core:harness",
             "//third_party:catch2",
         ] + deps,
         data = [

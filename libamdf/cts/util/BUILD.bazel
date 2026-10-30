@@ -105,27 +105,11 @@ amdf_cc_library(
 )
 
 amdf_cc_library(
-    name = "native_event_linux",
-    testonly = True,
-    srcs = ["linux/native_event.cc"],
-    target_compatible_with = ["@platforms//os:linux"],
-    deps = [":native_event_headers"],
-)
-
-amdf_cc_library(
-    name = "native_event_windows",
-    testonly = True,
-    srcs = ["windows/native_event.cc"],
-    target_compatible_with = ["@platforms//os:windows"],
-    deps = [":native_event_headers"],
-)
-
-amdf_cc_library(
     name = "native_event",
     testonly = True,
     deps = iree_select({
-        "@platforms//os:windows": [":native_event_windows"],
-        "//conditions:default": [":native_event_linux"],
+        "@platforms//os:windows": ["//libamdf/cts/util/windows:native_event"],
+        "//conditions:default": ["//libamdf/cts/util/linux:native_event"],
     }),
 )
 
