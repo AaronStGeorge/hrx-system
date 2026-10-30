@@ -7,6 +7,7 @@
 load("//build_tools/amdgpu:binary.bzl", "iree_amdgpu_library_variants")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
+load("//runtime/src/iree/hal/drivers/amdgpu/device/support:defs.bzl", "IREE_HAL_AMDGPU_DEVICE_SUPPORT_HDRS")
 load(":device_bitcode_sources.bzl", "IREE_HAL_AMDGPU_DEVICE_BITCODE_SRCS")
 
 package(
@@ -22,15 +23,11 @@ DEVICE_HDRS = [
     "grid_sync.h",
     "kernel_tables.h",
     "kernels.h",
-    "support/asan.h",
-    "support/common.h",
-    "support/feedback.h",
-    "support/kernel.h",
-    "support/queue.h",
-    "support/signal.h",
-    "support/tsan.h",
     "tsan.h",
     "timestamp.h",
+] + [
+    "//runtime/src/iree/hal/drivers/amdgpu/device/support:" + header
+    for header in IREE_HAL_AMDGPU_DEVICE_SUPPORT_HDRS
 ]
 
 filegroup(

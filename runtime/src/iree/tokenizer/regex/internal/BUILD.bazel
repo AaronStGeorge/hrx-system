@@ -1,0 +1,70 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
+
+package(
+    default_visibility = ["//runtime/src/iree/tokenizer/regex:__pkg__"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_runtime_cc_library(
+    name = "lexer",
+    srcs = ["lexer.c"],
+    hdrs = ["lexer.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:unicode",
+        "//runtime/src/iree/tokenizer/regex:exec",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "ast",
+    hdrs = ["ast.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+iree_runtime_cc_library(
+    name = "parser",
+    srcs = ["parser.c"],
+    hdrs = ["parser.h"],
+    deps = [
+        ":ast",
+        ":lexer",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/tokenizer/regex:exec",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "nfa",
+    srcs = ["nfa.c"],
+    hdrs = ["nfa.h"],
+    deps = [
+        ":ast",
+        ":lexer",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:unicode",
+        "//runtime/src/iree/tokenizer/regex:exec",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "dfa",
+    srcs = ["dfa.c"],
+    hdrs = ["dfa.h"],
+    deps = [
+        ":nfa",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/tokenizer/regex:exec",
+    ],
+)

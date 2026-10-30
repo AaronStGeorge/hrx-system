@@ -51,7 +51,10 @@ PACKAGE_POLICIES = [
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
     ),
     package_policy(
-        packages = ["runtime/src/iree/hal/drivers/amd/fabric/cts"],
+        packages = [
+            "runtime/src/iree/hal/drivers/amd/fabric/cts",
+            "runtime/src/iree/hal/drivers/amd/fabric/cts/linux",
+        ],
         build_requirements = [LIBAMDF, LIBAMDF_GPU],
         run_requirements = [LIBAMDF_GPU_RESOURCE],
         resource_group = GPU_DEVICE_RESOURCE_GROUP,
@@ -74,7 +77,10 @@ PACKAGE_POLICIES = [
         build_requirements = [LIBAMDF],
     ),
     package_policy(
-        packages = ["runtime/src/iree/hal/drivers/amd/xdna"],
+        packages = [
+            "runtime/src/iree/hal/drivers/amd/xdna",
+            "runtime/src/iree/hal/drivers/amd/xdna/testing",
+        ],
         build_requirements = [HAL_AMD_XDNA, LIBAMDF],
     ),
     package_policy(

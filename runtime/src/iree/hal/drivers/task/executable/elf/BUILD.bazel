@@ -6,7 +6,6 @@
 
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
-load("//build_tools/bazel:msvc.bzl", "iree_msvc_masm_library")
 load(
     "//runtime/build_tools/bazel:cc.bzl",
     "iree_runtime_cc_binary",
@@ -17,14 +16,6 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-config_setting(
-    name = "windows_x86_64",
-    constraint_values = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:windows",
-    ],
 )
 
 iree_cmake_extra_content(
@@ -41,18 +32,31 @@ endif()
 #===------------------------------------------------------------------------===#
 
 iree_runtime_cc_library(
+    name = "headers",
+    hdrs = [
+        "arch.h",
+        "elf_types.h",
+        "platform.h",
+    ],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:memory",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "elf_module",
     srcs = [
         "elf_module.c",
     ],
     hdrs = [
         "elf_module.h",
-        "elf_types.h",
     ],
     deps = [
-        ":arch",
-        ":platform",
+        ":headers",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/task/executable/elf/arch",
+        "//runtime/src/iree/hal/drivers/task/executable/elf/platform",
     ],
 )
 
@@ -98,53 +102,4 @@ iree_executable_test(
     name = "elf_module_native_test",
     src = ":elf_module_native_test_binary",
     target_compatible_with = ["@platforms//os:linux"],
-)
-
-#===------------------------------------------------------------------------===#
-# Architecture and platform support
-#===------------------------------------------------------------------------===#
-
-iree_msvc_masm_library(
-    name = "x86_64_msvc_abi_bridge",
-    src = "arch/x86_64_msvc.asm",
-    target_compatible_with = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:windows",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "arch",
-    srcs = [
-        "arch/arm_32.c",
-        "arch/arm_64.c",
-        "arch/riscv.c",
-        "arch/x86_32.c",
-        "arch/x86_64.c",
-        "elf_types.h",
-    ],
-    hdrs = [
-        "arch.h",
-    ],
-    deps = ["//runtime/src/iree/base"] + select({
-        ":windows_x86_64": [":x86_64_msvc_abi_bridge"],
-        "//conditions:default": [],
-    }),
-)
-
-iree_runtime_cc_library(
-    name = "platform",
-    srcs = [
-        "platform/apple.c",
-        "platform/generic.c",
-        "platform/linux.c",
-        "platform/windows.c",
-    ],
-    hdrs = [
-        "platform.h",
-    ],
-    deps = [
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:memory",
-    ],
 )

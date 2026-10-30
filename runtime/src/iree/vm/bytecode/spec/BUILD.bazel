@@ -12,37 +12,33 @@ package(
 )
 
 iree_py_library(
-    name = "model",
+    name = "schema",
     srcs = [
         "__init__.py",
-        "isa/__init__.py",
-        "isa/core/__init__.py",
-        "isa/core/abi.py",
-        "isa/core/buffer.py",
-        "isa/core/constant.py",
-        "isa/core/control.py",
-        "isa/core/conversion.py",
-        "isa/core/float.py",
-        "isa/core/function.py",
-        "isa/core/globals.py",
-        "isa/core/integer.py",
-        "isa/core/ref.py",
-        "isa/core/rules.py",
-        "isa/core/stack.py",
-        "isa/core/value.py",
-        "isa/validation.py",
-        "module/__init__.py",
-        "module/container.py",
-        "module/numeric.py",
-        "module/records.py",
-        "module/rules.py",
-        "module/validation.py",
-        "render/__init__.py",
         "schema.py",
-        "specification.py",
         "version.py",
     ],
     imports = ["../../../.."],
+)
+
+iree_py_library(
+    name = "specification",
+    srcs = ["specification.py"],
+    deps = [
+        ":schema",
+        "//runtime/src/iree/vm/bytecode/spec/isa",
+        "//runtime/src/iree/vm/bytecode/spec/isa:validation",
+        "//runtime/src/iree/vm/bytecode/spec/isa/core",
+        "//runtime/src/iree/vm/bytecode/spec/module",
+    ],
+)
+
+iree_py_library(
+    name = "model",
+    deps = [
+        ":schema",
+        ":specification",
+    ],
 )
 
 iree_py_library(
@@ -52,9 +48,7 @@ iree_py_library(
 
 iree_py_library(
     name = "runtime_renderer",
-    srcs = ["render/c_runtime.py"],
-    imports = ["../../../.."],
-    deps = [":model"],
+    deps = ["//runtime/src/iree/vm/bytecode/spec/render:runtime"],
 )
 
 iree_py_library(
@@ -67,38 +61,17 @@ iree_py_library(
 
 iree_py_library(
     name = "documentation_renderer",
-    srcs = ["render/markdown.py"],
-    imports = ["../../../.."],
-    deps = [":model"],
+    deps = ["//runtime/src/iree/vm/bytecode/spec/render:documentation"],
 )
 
 iree_py_library(
     name = "tooling_renderer",
-    srcs = [
-        "render/c_assembler.py",
-        "render/c_disassembler.py",
-        "render/c_tooling.py",
-    ],
-    imports = ["../../../.."],
-    deps = [
-        ":model",
-        ":text_model",
-    ],
+    deps = ["//runtime/src/iree/vm/bytecode/spec/render:tooling"],
 )
 
 iree_py_library(
     name = "text_model",
-    srcs = [
-        "text/__init__.py",
-        "text/instruction.py",
-        "text/module/__init__.py",
-        "text/module/layout.py",
-        "text/module/syntax.py",
-        "text/module/validation.py",
-        "text/specification.py",
-    ],
-    imports = ["../../../.."],
-    deps = [":model"],
+    deps = ["//runtime/src/iree/vm/bytecode/spec/text:text_model"],
 )
 
 iree_py_binary(

@@ -6,6 +6,7 @@
 
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
+load("//runtime/src/iree/hal/drivers/amd/xdna/testing:defs.bzl", "NATIVE_QUEUE_TEST_PLATFORMS")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -372,63 +373,15 @@ iree_runtime_cc_library(
     ],
 )
 
-# These tests implement libamdf's native queue wake protocol, which uses an
-# eventfd or Win32 Event rather than the pipe events used by other platforms.
-_NATIVE_QUEUE_TEST_PLATFORMS = select({
-    "@platforms//os:android": [],
-    "@platforms//os:linux": [],
-    "@platforms//os:windows": [],
-    "//conditions:default": ["@platforms//:incompatible"],
-})
-
-iree_runtime_cc_library(
-    name = "allocation_tracker",
-    testonly = True,
-    hdrs = ["testing/allocation_tracker.h"],
-    deps = [
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/testing:gtest",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "queue_test_util",
-    testonly = True,
-    hdrs = ["testing/queue_test_util.h"],
-    target_compatible_with = _NATIVE_QUEUE_TEST_PLATFORMS,
-    deps = [
-        ":allocation_tracker",
-        ":device",
-        ":memory",
-        ":queue",
-        ":queue_frontier",
-        ":semaphore",
-        "//libamdf:headers",
-        "//runtime/src/iree/async",
-        "//runtime/src/iree/async/util:proactor_pool",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal",
-        "//runtime/src/iree/hal/drivers/amd/fabric",
-        "//runtime/src/iree/hal/drivers/amd/fabric:buffer",
-        "//runtime/src/iree/hal/drivers/amd/fabric:memory_backend",
-        "//runtime/src/iree/hal/drivers/amd/xdna/image/testing:image_fixture",
-        "//runtime/src/iree/hal/memory:slab_cache",
-        "//runtime/src/iree/hal/memory:tlsf_pool",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 iree_runtime_cc_test(
     name = "queue_test",
     srcs = ["queue_test.cc"],
-    target_compatible_with = _NATIVE_QUEUE_TEST_PLATFORMS,
+    target_compatible_with = NATIVE_QUEUE_TEST_PLATFORMS,
     deps = [
         ":device",
         ":memory",
         ":queue",
         ":queue_frontier",
-        ":queue_test_util",
         ":semaphore",
         "//libamdf:headers",
         "//runtime/src/iree/async",
@@ -438,6 +391,7 @@ iree_runtime_cc_test(
         "//runtime/src/iree/hal/drivers/amd/fabric:buffer",
         "//runtime/src/iree/hal/drivers/amd/fabric:memory_backend",
         "//runtime/src/iree/hal/drivers/amd/xdna/image/testing:image_fixture",
+        "//runtime/src/iree/hal/drivers/amd/xdna/testing:queue_test_util",
         "//runtime/src/iree/hal/memory:slab_cache",
         "//runtime/src/iree/hal/memory:tlsf_pool",
         "//runtime/src/iree/testing:gtest",
@@ -448,14 +402,14 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "queue_memory_test",
     srcs = ["queue_memory_test.cc"],
-    target_compatible_with = _NATIVE_QUEUE_TEST_PLATFORMS,
+    target_compatible_with = NATIVE_QUEUE_TEST_PLATFORMS,
     deps = [
         ":queue",
-        ":queue_test_util",
         "//runtime/src/iree/async",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amd/xdna/image/testing:image_fixture",
+        "//runtime/src/iree/hal/drivers/amd/xdna/testing:queue_test_util",
         "//runtime/src/iree/hal/memory:fixed_block_pool",
         "//runtime/src/iree/hal/memory:tlsf_pool",
         "//runtime/src/iree/hal/testing:deferred_pool",
@@ -467,14 +421,14 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "command_buffer_test",
     srcs = ["command_buffer_test.cc"],
-    target_compatible_with = _NATIVE_QUEUE_TEST_PLATFORMS,
+    target_compatible_with = NATIVE_QUEUE_TEST_PLATFORMS,
     deps = [
-        ":queue_test_util",
         ":semaphore",
         "//runtime/src/iree/async",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amd/xdna/image/testing:image_fixture",
+        "//runtime/src/iree/hal/drivers/amd/xdna/testing:queue_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -483,11 +437,11 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "profile_test",
     srcs = ["profile_test.cc"],
-    target_compatible_with = _NATIVE_QUEUE_TEST_PLATFORMS,
+    target_compatible_with = NATIVE_QUEUE_TEST_PLATFORMS,
     deps = [
-        ":queue_test_util",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/xdna/testing:queue_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
