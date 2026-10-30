@@ -180,14 +180,10 @@ loom_module(
 iree_executable_test(
     name = "gfx11_loop_entry_access_test",
     src = "//loom/src/loom/tools/loom-test",
-    args = [
-        "$(rootpath :gfx11_loop_entry_module)",
-        "--device=amdgpu",
-        "--sanitizer=access",
-    ],
+    args = ["$(rootpath :gfx11_loop_entry_module)"] + AMD_GPU_ACCESS_PROFILE.runner_args,
     data = [":gfx11_loop_entry_module"],
-    resource_group = GPU_DEVICE_RESOURCE_GROUP,
-    tags = _EXECUTION_TAGS + ["notsan"],
+    resource_group = AMD_GPU_ACCESS_PROFILE.resource_group,
+    tags = _EXECUTION_TAGS + AMD_GPU_ACCESS_PROFILE.tags,
     target_compatible_with = _GFX11_COMPATIBLE_WITH + loom_config_compatible_with([
         "//runtime/config/hal:driver_amd_gpu",
     ]),

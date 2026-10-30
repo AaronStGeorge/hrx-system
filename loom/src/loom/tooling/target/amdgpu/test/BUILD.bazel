@@ -77,14 +77,26 @@ iree_execution_test_suite(
 
 iree_execution_test_suite(
     name = "benchmark_scenario_correctness_test",
-    data = [
-        "//loom/src/loom/tooling/testbench/testdata:benchmark_device_events.loom",
-        "//loom/src/loom/tooling/testbench/testdata:benchmark_scenarios.loom",
-    ],
+    data = ["//loom/src/loom/tooling/testbench/testdata:benchmark_scenarios.loom"],
     manifests = ["benchmark_scenario_correctness.test.json"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = [
         "iree-run-requirement=libamdf.resource.amd_gpu",
+    ],
+    target_compatible_with = _AMDGPU_EXECUTION_COMPATIBLE_WITH + loom_config_compatible_with([
+        "//loom/config/execute:vm_iree_vm",
+    ]),
+    tools = {"benchmark": "//loom/src/loom/tools/loom-benchmark"},
+)
+
+iree_execution_test_suite(
+    name = "benchmark_device_events_test",
+    data = ["//loom/src/loom/tooling/testbench/testdata:benchmark_device_events.loom"],
+    manifests = ["benchmark_device_events.test.json"],
+    resource_group = GPU_DEVICE_RESOURCE_GROUP,
+    tags = [
+        "iree-run-requirement=libamdf.resource.amd_gpu",
+        "requires-amd-gpu-feedback",
     ],
     target_compatible_with = _AMDGPU_EXECUTION_COMPATIBLE_WITH + loom_config_compatible_with([
         "//loom/config/execute:vm_iree_vm",

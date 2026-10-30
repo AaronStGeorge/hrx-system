@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "invoke-only trials reject unhandled device assertions before timing",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/../../../testbench/testdata/benchmark_device_events.loom", "--scenario-correctness=true", "--device=amdgpu", "--sanitizer=ubsan", "--sanitizer-reporting=report-only", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "exit": {"nonzero": true},
+      "stdout": {
+        "contains": {"unordered": ["\"action\":\"invoke\"", "\"unhandled_error_count\":1", "\"sample_count\":1,\"failed_sample_count\":1"]},
+        "not_contains": ["\"state\":\"ok\"", "\"operation_timing_ns\""]
+      }
+    }
+  ]
+}
