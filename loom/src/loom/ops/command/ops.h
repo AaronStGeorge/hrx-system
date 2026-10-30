@@ -163,6 +163,7 @@ iree_status_t loom_command_serial_build(
     loom_builder_t* builder,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_command_schedule_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 
 // LOOM_OP_COMMAND_CONCURRENT: Permit child commands to execute without dependency edges between siblings and join them on exit.
 // command.concurrent {

@@ -1,0 +1,183 @@
+// Both serial spellings compose with the implicit serial command body.
+// Captured values and allocation definitions retain their original order.
+// RUN: pass canonicalize
+
+kernel.entry.decl @consume(%value: i32, %output: buffer)
+
+command.def @serial_composition() launch(%input: view<1xi32>, %output: buffer, %clock: view<1xi64>) {
+  %dispatch_count = index.constant 1 : index
+  command.serial {
+    command.timestamp %clock : view<1xi64>
+    %value = view.load %input[0] : view<1xi32> -> i32
+    command.serial {
+      %bytes = index.constant 16 : offset
+      %scratch = buffer.alloca<global> align(8) %bytes : buffer
+      kernel.launch.serial {
+        kernel.launch.serial {
+          kernel.dispatch @consume[%dispatch_count](%value, %scratch) : [index](i32, buffer)
+        }
+        kernel.dispatch @consume[%dispatch_count](%value, %output) : [index](i32, buffer)
+      }
+    }
+    command.timestamp %clock : view<1xi64>
+  }
+  command.return
+}
+
+// ----
+kernel.entry.decl @consume(%value: i32, %output: buffer)
+
+command.def @serial_composition() launch(%input: view<1xi32>, %output: buffer, %clock: view<1xi64>) {
+  %dispatch_count = index.constant 1 : index
+  command.timestamp %clock : view<1xi64>
+  %value = view.load %input[0] : view<1xi32> -> i32
+  %bytes = index.constant 16 : offset
+  %scratch = buffer.alloca<global> align(8) %bytes : buffer
+  kernel.dispatch @consume[%dispatch_count](%value, %scratch) : [index](i32, buffer)
+  kernel.dispatch @consume[%dispatch_count](%value, %output) : [index](i32, buffer)
+  command.timestamp %clock : view<1xi64>
+  command.return
+}
+
+// ====
+
+// Equal concurrent compositions flatten, but serial branches keep their joins.
+// RUN: pass canonicalize
+
+kernel.entry.decl @first()
+
+kernel.entry.decl @second()
+
+kernel.entry.decl @third()
+
+kernel.entry.decl @fourth()
+
+command.def @concurrent_composition() launch(%clock: view<1xi64>) {
+  %dispatch_count = index.constant 1 : index
+  command.concurrent {
+    command.concurrent {
+      command.serial {
+        command.timestamp %clock : view<1xi64>
+        kernel.dispatch @first[%dispatch_count]() : [index]()
+      }
+      kernel.launch.concurrent {
+        kernel.launch.concurrent {
+          kernel.dispatch @second[%dispatch_count]() : [index]()
+        }
+        kernel.launch.serial {
+          kernel.dispatch @third[%dispatch_count]() : [index]()
+          kernel.dispatch @fourth[%dispatch_count]() : [index]()
+        }
+      }
+    }
+  }
+  command.return
+}
+
+// ----
+kernel.entry.decl @first()
+
+kernel.entry.decl @second()
+
+kernel.entry.decl @third()
+
+kernel.entry.decl @fourth()
+
+command.def @concurrent_composition() launch(%clock: view<1xi64>) {
+  %dispatch_count = index.constant 1 : index
+  command.concurrent {
+    command.serial {
+      command.timestamp %clock : view<1xi64>
+      kernel.dispatch @first[%dispatch_count]() : [index]()
+    }
+    kernel.dispatch @second[%dispatch_count]() : [index]()
+    kernel.launch.serial {
+      kernel.dispatch @third[%dispatch_count]() : [index]()
+      kernel.dispatch @fourth[%dispatch_count]() : [index]()
+    }
+  }
+  command.return
+}
+
+// ====
+
+// An ordinary function does not promise implicit command composition.
+// RUN: pass canonicalize
+
+kernel.entry.decl @work()
+
+func.def @explicit_launch_order() {
+  %dispatch_count = index.constant 1 : index
+  kernel.launch.serial {
+    kernel.launch.serial {
+      kernel.dispatch @work[%dispatch_count]() : [index]()
+    }
+    kernel.launch.concurrent {
+      kernel.dispatch @work[%dispatch_count]() : [index]()
+      kernel.dispatch @work[%dispatch_count]() : [index]()
+    }
+  }
+  func.return
+}
+
+// ----
+kernel.entry.decl @work()
+
+func.def @explicit_launch_order() {
+  %dispatch_count = index.constant 1 : index
+  kernel.launch.serial {
+    kernel.dispatch @work[%dispatch_count]() : [index]()
+    kernel.launch.concurrent {
+      kernel.dispatch @work[%dispatch_count]() : [index]()
+      kernel.dispatch @work[%dispatch_count]() : [index]()
+    }
+  }
+  func.return
+}
+
+// ====
+
+// The helper's serial scope is redundant at the root and necessary in a fork.
+// RUN: pass inline-callables,canonicalize
+
+kernel.entry.decl @step()
+
+kernel.entry.decl @other()
+
+command.def @pair() launch() {
+  %dispatch_count = index.constant 1 : index
+  kernel.dispatch @step[%dispatch_count]() : [index]()
+  kernel.dispatch @step[%dispatch_count]() : [index]()
+  command.return
+}
+
+command.def public @factored_program() launch() {
+  %dispatch_count = index.constant 1 : index
+  command.launch @pair() : ()
+  command.concurrent {
+    command.launch @pair() : ()
+    kernel.dispatch @other[%dispatch_count]() : [index]()
+  }
+  command.return
+}
+
+// ----
+kernel.entry.decl @step()
+
+kernel.entry.decl @other()
+
+command.def public @factored_program() launch() {
+  %dispatch_count$1 = index.constant 1 : index
+  %dispatch_count$2 = index.constant 1 : index
+  kernel.dispatch @step[%dispatch_count$2]() : [index]()
+  kernel.dispatch @step[%dispatch_count$2]() : [index]()
+  command.concurrent {
+    command.serial {
+      %dispatch_count = index.constant 1 : index
+      kernel.dispatch @step[%dispatch_count]() : [index]()
+      kernel.dispatch @step[%dispatch_count]() : [index]()
+    }
+    kernel.dispatch @other[%dispatch_count$1]() : [index]()
+  }
+  command.return
+}

@@ -2263,6 +2263,8 @@ def _launch_schedule(name: str, doc: str) -> Op:
             NoAncestor("kernel.def"),
         ],
         verify="loom_kernel_launch_schedule_verify",
+        canonicalize="loom_command_schedule_canonicalize",
+        canonicalize_without_facts=True,
         format=[Region("body")],
         examples=[f"{name} {{\n  kernel.launch.yield\n}}"],
     )
