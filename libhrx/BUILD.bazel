@@ -6,11 +6,17 @@
 
 load("//build_tools/bazel:cc.bzl", "iree_cc_library")
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
+load("//build_tools/bazel:package_boundary.bzl", "iree_package_boundary")
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+iree_package_boundary(
+    allowed_descendant_paths = ["include/**"],
+    reason = "The installed HRX SDK preserves its public include tree.",
 )
 
 iree_cc_library(
