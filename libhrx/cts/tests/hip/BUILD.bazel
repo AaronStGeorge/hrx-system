@@ -1,0 +1,258 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/amdgpu:binary.bzl", "iree_amdgpu_binary_variants_embed_data")
+load(
+    "//build_tools/sanitizer:suppressions.bzl",
+    "hsa_suppressions",
+    "rocm_suppressions",
+)
+load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_test")
+load(
+    "//libhrx/cts:defs.bzl",
+    "AMDGPU_CTS_COMPATIBILITY_CONDITIONS",
+    "AMD_GPU_CTS_RESOURCE_GROUP",
+    "AMD_GPU_CTS_TAGS",
+)
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+_AMDGPU_CTS_COMPATIBILITY = select(AMDGPU_CTS_COMPATIBILITY_CONDITIONS)
+
+_HIP_GPU_CTS_COMPATIBILITY = ["@platforms//os:linux"] + _AMDGPU_CTS_COMPATIBILITY
+
+_HIP_RUNTIME = "//libhrx/src/binding/hip:amdhip64"
+
+_HIP_RUNTIME_ENV = {
+    "HRX_TEST_LIBAMDHIP64": "$(location //libhrx/src/binding/hip:amdhip64)",
+}
+
+_HIP_TEST_DEPS = [
+    "//build_tools/bazel:dl",
+    "//libhrx/src/binding/hip:launch_params",
+    "//runtime/src/iree/testing:gtest",
+    "//runtime/src/iree/testing:gtest_main",
+]
+
+iree_amdgpu_binary_variants_embed_data(
+    name = "amdgpu_hip_printf_test_kernels",
+    testonly = True,
+    srcs = ["blocking_printf_kernel.hip"],
+    binary_name_prefix = "hrx_cts_hip_printf_kernel",
+    c_file_output = "amdgpu_hip_printf_test_kernels.c",
+    h_file_output = "amdgpu_hip_printf_test_kernels.h",
+    identifier = "hrx_cts_amdgpu_hip_printf_test_kernels",
+    source_format = "hip",
+    tags = ["manual"],
+    target = "amdgcn-amd-amdhsa",
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_amdgpu_binary_variants_embed_data(
+    name = "amdgpu_hip_cooperative_test_kernels",
+    testonly = True,
+    srcs = ["cooperative_kernel.hip"],
+    binary_name_prefix = "hrx_cts_hip_cooperative_kernel",
+    c_file_output = "amdgpu_hip_cooperative_test_kernels.c",
+    h_file_output = "amdgpu_hip_cooperative_test_kernels.h",
+    identifier = "hrx_cts_amdgpu_hip_cooperative_test_kernels",
+    source_format = "hip",
+    tags = ["manual"],
+    target = "amdgcn-amd-amdhsa",
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_amdgpu_binary_variants_embed_data(
+    name = "amdgpu_hip_module_library_test_kernels",
+    testonly = True,
+    srcs = ["module_library_kernel.hip"],
+    binary_name_prefix = "hrx_cts_hip_module_library_kernel",
+    c_file_output = "amdgpu_hip_module_library_test_kernels.c",
+    h_file_output = "amdgpu_hip_module_library_test_kernels.h",
+    identifier = "hrx_cts_amdgpu_hip_module_library_test_kernels",
+    source_format = "hip",
+    tags = ["manual"],
+    target = "amdgcn-amd-amdhsa",
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+hrx_cc_test(
+    name = "hip_event_test",
+    srcs = ["event_test.cpp"],
+    data = [_HIP_RUNTIME],
+    env = _HIP_RUNTIME_ENV,
+    resource_group = AMD_GPU_CTS_RESOURCE_GROUP,
+    sanitizer_suppressions = hsa_suppressions,
+    tags = AMD_GPU_CTS_TAGS,
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    deps = _HIP_TEST_DEPS,
+)
+
+hrx_cc_test(
+    name = "hip_event_timing_test",
+    srcs = [
+        "event_timing_test.cpp",
+        "//libhrx/cts/core:amdgpu_executable_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_test_data.hpp",
+    ],
+    copts = ["-Wno-attributes"],
+    data = [_HIP_RUNTIME],
+    env = _HIP_RUNTIME_ENV,
+    resource_group = AMD_GPU_CTS_RESOURCE_GROUP,
+    sanitizer_suppressions = hsa_suppressions,
+    tags = AMD_GPU_CTS_TAGS,
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    deps = [
+        "//build_tools/amdgpu:target_map_h",
+        "//libhrx/cts/tests/executable:amdgpu_executable_test_kernels",
+    ] + _HIP_TEST_DEPS,
+)
+
+hrx_cc_test(
+    name = "hip_launch_validation_api_test",
+    srcs = [
+        "launch_validation_api_test.cc",
+        "//libhrx/cts/core:amdgpu_executable_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_test_data.hpp",
+    ],
+    # The test loads the built runtime through its public ABI and resolves
+    # production function handles from an embedded executable image.
+    data = [_HIP_RUNTIME],
+    env = _HIP_RUNTIME_ENV,
+    resource_group = AMD_GPU_CTS_RESOURCE_GROUP,
+    sanitizer_suppressions = rocm_suppressions,
+    tags = AMD_GPU_CTS_TAGS,
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    deps = [
+        "//build_tools/amdgpu:target_map_h",
+        "//build_tools/bazel:pthreads",
+        "//libhrx/cts/tests/executable:amdgpu_executable_test_kernels",
+        "//libhrx/src/binding/hip:hip_dso_test_util",
+    ] + _HIP_TEST_DEPS,
+)
+
+hrx_cc_test(
+    name = "hip_module_execution_test",
+    srcs = [
+        "module_execution_test.cpp",
+        "//libhrx/cts/core:amdgpu_executable_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_hip_cooperative_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_hip_printf_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_test_data.hpp",
+    ],
+    copts = ["-Wno-attributes"],
+    data = [_HIP_RUNTIME],
+    env = _HIP_RUNTIME_ENV,
+    resource_group = AMD_GPU_CTS_RESOURCE_GROUP,
+    sanitizer_suppressions = hsa_suppressions,
+    tags = AMD_GPU_CTS_TAGS,
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    deps = [
+        ":amdgpu_hip_cooperative_test_kernels",
+        ":amdgpu_hip_printf_test_kernels",
+        "//build_tools/amdgpu:target_map_h",
+        "//libhrx/cts/tests/executable:amdgpu_executable_test_kernels",
+    ] + _HIP_TEST_DEPS,
+)
+
+hrx_cc_test(
+    name = "hip_module_library_execution_test",
+    srcs = [
+        "module_library_execution_test.cpp",
+        "//libhrx/cts/core:amdgpu_executable_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_hip_module_library_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_test_data.hpp",
+    ],
+    copts = ["-Wno-attributes"],
+    data = [_HIP_RUNTIME],
+    env = {
+        # The linker keeps COMGR's process-global LLVM registrations resident
+        # because they cannot be reconstructed after unloading. ASAN continues
+        # to instrument accesses; only its process-exit leak scan is disabled.
+        "ASAN_OPTIONS": "detect_leaks=0",
+        "HRX_TEST_LIBAMDHIP64": "$(location //libhrx/src/binding/hip:amdhip64)",
+    },
+    resource_group = AMD_GPU_CTS_RESOURCE_GROUP,
+    sanitizer_suppressions = rocm_suppressions,
+    tags = AMD_GPU_CTS_TAGS,
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    deps = [
+        ":amdgpu_hip_module_library_test_kernels",
+        "//build_tools/amdgpu:target_map_h",
+        "//libhrx/cts/tests/executable:amdgpu_executable_test_kernels",
+        "//runtime/src/iree/testing:temp_file",
+    ] + _HIP_TEST_DEPS,
+)
+
+hrx_cc_test(
+    name = "hip_occupancy_test",
+    srcs = [
+        "occupancy_test.cpp",
+        "//libhrx/cts/core:amdgpu_executable_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_test_data.hpp",
+    ],
+    copts = ["-Wno-attributes"],
+    data = [_HIP_RUNTIME],
+    env = _HIP_RUNTIME_ENV,
+    resource_group = AMD_GPU_CTS_RESOURCE_GROUP,
+    sanitizer_suppressions = hsa_suppressions,
+    tags = AMD_GPU_CTS_TAGS,
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    deps = [
+        "//build_tools/amdgpu:target_map_h",
+        "//libhrx/cts/tests/executable:amdgpu_executable_test_kernels",
+    ] + _HIP_TEST_DEPS,
+)
+
+hrx_cc_test(
+    name = "hip_device_event_sink_test",
+    srcs = [
+        "device_event_sink_test.cpp",
+        "//libhrx/cts/core:amdgpu_hip_printf_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_test_data.hpp",
+    ],
+    copts = ["-Wno-attributes"],
+    data = [_HIP_RUNTIME],
+    env = _HIP_RUNTIME_ENV,
+    resource_group = AMD_GPU_CTS_RESOURCE_GROUP,
+    sanitizer_suppressions = hsa_suppressions,
+    tags = AMD_GPU_CTS_TAGS,
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    deps = [
+        ":amdgpu_hip_printf_test_kernels",
+        "//build_tools/amdgpu:target_map_h",
+    ] + _HIP_TEST_DEPS,
+)
+
+hrx_cc_test(
+    name = "hip_blocking_printf_stress_test",
+    srcs = [
+        "blocking_printf_stress_test.cpp",
+        "//libhrx/cts/core:amdgpu_hip_printf_test_data.hpp",
+        "//libhrx/cts/core:amdgpu_test_data.hpp",
+    ],
+    copts = ["-Wno-attributes"],
+    data = [_HIP_RUNTIME],
+    env = _HIP_RUNTIME_ENV,
+    resource_group = AMD_GPU_CTS_RESOURCE_GROUP,
+    sanitizer_suppressions = hsa_suppressions,
+    tags = AMD_GPU_CTS_TAGS + [
+        "manual",
+        "stress",
+    ],
+    target_compatible_with = _HIP_GPU_CTS_COMPATIBILITY,
+    deps = [
+        ":amdgpu_hip_printf_test_kernels",
+        "//build_tools/amdgpu:target_map_h",
+    ] + _HIP_TEST_DEPS,
+)

@@ -94,7 +94,7 @@ class HrxBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         args = kwargs.get("args")
         full_deps = (
             [
-                ":core",
+                "//libhrx/cts/core:harness",
                 "//third_party:catch2",
             ]
             + deps

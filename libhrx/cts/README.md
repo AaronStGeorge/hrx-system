@@ -42,6 +42,6 @@ cmake -S . -B build/hrx-runtime ... -DLIBHRX_BUILD_CTS=ON -DBUILD_TESTING=ON
 ctest --test-dir build/hrx-runtime --output-on-failure
 
 # Run a specific category
-build/hrx-runtime/cts/hrx_cts_allocator
-build/hrx-runtime/cts/hrx_cts_transfer
+build/hrx-runtime/cts/tests/allocator/hrx_cts_allocator
+build/hrx-runtime/cts/tests/transfer/hrx_cts_transfer
 ```
