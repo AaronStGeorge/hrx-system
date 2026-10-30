@@ -37,18 +37,6 @@
 // Macros for mechanical fact inference functions
 //===----------------------------------------------------------------------===//
 
-static void loom_scalar_wrap_result_facts(const loom_module_t* module,
-                                          const loom_op_t* op,
-                                          loom_value_facts_t* facts) {
-  if (iree_any_bit_set(op->instance_flags, LOOM_INTEGER_OVERFLOW_FLAG_NSW)) {
-    return;
-  }
-  const loom_type_t result_type =
-      loom_module_value_type(module, loom_op_const_results(op)[0]);
-  *facts = loom_value_facts_wrap_integer(
-      *facts, loom_scalar_type_bitwidth(loom_type_element_type(result_type)));
-}
-
 #define BINARY_FACTS(name, transfer_fn, ...)                             \
   iree_status_t name(loom_fact_context_t* context,                       \
                      const loom_module_t* module, const loom_op_t* op,   \
@@ -71,17 +59,31 @@ static void loom_scalar_wrap_result_facts(const loom_module_t* module,
     return iree_ok_status();                                           \
   }
 
-#define WRAPPING_BINARY_FACTS(name, transfer_fn) \
-  BINARY_FACTS(name, transfer_fn,                \
-               loom_scalar_wrap_result_facts(module, op, &result_facts[0]);)
+#define MODULAR_BINARY_FACTS(name, mathematical_fn, modular_fn)                \
+  iree_status_t name(loom_fact_context_t* context,                             \
+                     const loom_module_t* module, const loom_op_t* op,         \
+                     const loom_value_facts_t* operand_facts,                  \
+                     loom_value_facts_t* result_facts) {                       \
+    if (iree_any_bit_set(op->instance_flags,                                   \
+                         LOOM_INTEGER_OVERFLOW_FLAG_NSW)) {                    \
+      mathematical_fn(&operand_facts[0], &operand_facts[1], &result_facts[0]); \
+    } else {                                                                   \
+      const int32_t bit_count = loom_scalar_type_bitwidth(                     \
+          loom_scalar_result_element_type(module, op));                        \
+      modular_fn(&operand_facts[0], &operand_facts[1], bit_count,              \
+                 &result_facts[0]);                                            \
+    }                                                                          \
+    return iree_ok_status();                                                   \
+  }
 
-#define WRAPPING_UNARY_FACTS(name, transfer_fn)                        \
+#define MODULAR_UNARY_FACTS(name, modular_fn)                          \
   iree_status_t name(loom_fact_context_t* context,                     \
                      const loom_module_t* module, const loom_op_t* op, \
                      const loom_value_facts_t* operand_facts,          \
                      loom_value_facts_t* result_facts) {               \
-    transfer_fn(&operand_facts[0], &result_facts[0]);                  \
-    loom_scalar_wrap_result_facts(module, op, &result_facts[0]);       \
+    const int32_t bit_count = loom_scalar_type_bitwidth(               \
+        loom_scalar_result_element_type(module, op));                  \
+    modular_fn(&operand_facts[0], bit_count, &result_facts[0]);        \
     return iree_ok_status();                                           \
   }
 
@@ -156,9 +158,12 @@ iree_status_t loom_scalar_constant_facts(
 // Integer arithmetic
 //===----------------------------------------------------------------------===//
 
-WRAPPING_BINARY_FACTS(loom_scalar_addi_facts, loom_value_facts_addi)
-WRAPPING_BINARY_FACTS(loom_scalar_subi_facts, loom_value_facts_subi)
-WRAPPING_BINARY_FACTS(loom_scalar_muli_facts, loom_value_facts_muli)
+MODULAR_BINARY_FACTS(loom_scalar_addi_facts, loom_value_facts_addi,
+                     loom_value_facts_addi_modular)
+MODULAR_BINARY_FACTS(loom_scalar_subi_facts, loom_value_facts_subi,
+                     loom_value_facts_subi_modular)
+MODULAR_BINARY_FACTS(loom_scalar_muli_facts, loom_value_facts_muli,
+                     loom_value_facts_muli_modular)
 BINARY_FACTS(loom_scalar_divsi_facts, loom_value_facts_divsi)
 WIDTH_BINARY_FACTS(loom_scalar_divui_facts, loom_value_facts_divui)
 BINARY_FACTS(loom_scalar_remsi_facts, loom_value_facts_remsi)
@@ -188,8 +193,8 @@ iree_status_t loom_scalar_divremui_facts(
   return iree_ok_status();
 }
 
-WRAPPING_UNARY_FACTS(loom_scalar_negi_facts, loom_value_facts_negi)
-WRAPPING_UNARY_FACTS(loom_scalar_absi_facts, loom_value_facts_absi)
+MODULAR_UNARY_FACTS(loom_scalar_negi_facts, loom_value_facts_negi_modular)
+MODULAR_UNARY_FACTS(loom_scalar_absi_facts, loom_value_facts_absi_modular)
 WIDTH_BINARY_FACTS(loom_scalar_minsi_facts, loom_value_facts_minsi)
 WIDTH_BINARY_FACTS(loom_scalar_maxsi_facts, loom_value_facts_maxsi)
 BINARY_FACTS(loom_scalar_minui_facts, loom_value_facts_minui)
@@ -201,9 +206,16 @@ iree_status_t loom_scalar_fmai_facts(loom_fact_context_t* context,
                                      const loom_op_t* op,
                                      const loom_value_facts_t* operand_facts,
                                      loom_value_facts_t* result_facts) {
-  loom_value_facts_fmai(&operand_facts[0], &operand_facts[1], &operand_facts[2],
-                        &result_facts[0]);
-  loom_scalar_wrap_result_facts(module, op, &result_facts[0]);
+  if (iree_any_bit_set(op->instance_flags, LOOM_INTEGER_OVERFLOW_FLAG_NSW)) {
+    loom_value_facts_fmai(&operand_facts[0], &operand_facts[1],
+                          &operand_facts[2], &result_facts[0]);
+  } else {
+    const int32_t bit_count =
+        loom_scalar_type_bitwidth(loom_scalar_result_element_type(module, op));
+    loom_value_facts_fmai_modular(&operand_facts[0], &operand_facts[1],
+                                  &operand_facts[2], bit_count,
+                                  &result_facts[0]);
+  }
   return iree_ok_status();
 }
 
@@ -533,8 +545,15 @@ iree_status_t loom_scalar_shli_facts(loom_fact_context_t* context,
                                      const loom_op_t* op,
                                      const loom_value_facts_t* operand_facts,
                                      loom_value_facts_t* result_facts) {
-  loom_value_facts_shli(&operand_facts[0], &operand_facts[1], &result_facts[0]);
-  loom_scalar_wrap_result_facts(module, op, &result_facts[0]);
+  if (iree_any_bit_set(op->instance_flags, LOOM_INTEGER_OVERFLOW_FLAG_NSW)) {
+    loom_value_facts_shli(&operand_facts[0], &operand_facts[1],
+                          &result_facts[0]);
+  } else {
+    const int32_t bit_count =
+        loom_scalar_type_bitwidth(loom_scalar_result_element_type(module, op));
+    loom_value_facts_shli_modular(&operand_facts[0], &operand_facts[1],
+                                  bit_count, &result_facts[0]);
+  }
   return iree_ok_status();
 }
 BINARY_FACTS(loom_scalar_shrsi_facts, loom_value_facts_shrsi)

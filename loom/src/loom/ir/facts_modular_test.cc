@@ -1,0 +1,123 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include <climits>
+#include <cstdint>
+
+#include "iree/testing/gtest.h"
+#include "loom/ir/facts.h"
+
+namespace loom {
+namespace {
+
+static void ExpectExact(loom_value_facts_t facts, int64_t expected) {
+  EXPECT_TRUE(loom_value_facts_is_exact(facts));
+  EXPECT_EQ(facts.range_lo, expected);
+}
+
+TEST(ModularIntegerFacts, ExactArithmeticAcrossWidths) {
+  struct TestCase {
+    int32_t bit_count;
+    int64_t maximum;
+    int64_t minimum;
+  };
+  const TestCase cases[] = {
+      {1, 1, 0},
+      {8, INT8_MAX, INT8_MIN},
+      {16, INT16_MAX, INT16_MIN},
+      {32, INT32_MAX, INT32_MIN},
+      {64, INT64_MAX, INT64_MIN},
+  };
+  for (const TestCase& test_case : cases) {
+    SCOPED_TRACE(test_case.bit_count);
+    const loom_value_facts_t maximum =
+        loom_value_facts_exact_i64(test_case.maximum);
+    const loom_value_facts_t minimum =
+        loom_value_facts_exact_i64(test_case.minimum);
+    const loom_value_facts_t one = loom_value_facts_exact_i64(1);
+    const loom_value_facts_t multiplier =
+        loom_value_facts_exact_i64(test_case.bit_count == 1 ? 1 : 2);
+    loom_value_facts_t result;
+
+    loom_value_facts_addi_modular(&maximum, &one, test_case.bit_count, &result);
+    ExpectExact(result, test_case.minimum);
+    loom_value_facts_subi_modular(&minimum, &one, test_case.bit_count, &result);
+    ExpectExact(result, test_case.maximum);
+    loom_value_facts_muli_modular(&maximum, &multiplier, test_case.bit_count,
+                                  &result);
+    ExpectExact(result, test_case.bit_count == 1 ? 1 : -2);
+    loom_value_facts_fmai_modular(&maximum, &multiplier, &one,
+                                  test_case.bit_count, &result);
+    ExpectExact(result, test_case.bit_count == 1 ? 0 : -1);
+  }
+}
+
+TEST(ModularIntegerFacts, ExactUnaryAndShiftAcrossWidths) {
+  struct TestCase {
+    int32_t bit_count;
+    int64_t minimum;
+  };
+  const TestCase cases[] = {
+      {1, 1}, {8, INT8_MIN}, {16, INT16_MIN}, {32, INT32_MIN}, {64, INT64_MIN},
+  };
+  for (const TestCase& test_case : cases) {
+    SCOPED_TRACE(test_case.bit_count);
+    const loom_value_facts_t minimum =
+        loom_value_facts_exact_i64(test_case.minimum);
+    const loom_value_facts_t one = loom_value_facts_exact_i64(1);
+    const loom_value_facts_t shift =
+        loom_value_facts_exact_i64(test_case.bit_count - 1);
+    loom_value_facts_t result;
+
+    loom_value_facts_negi_modular(&minimum, test_case.bit_count, &result);
+    ExpectExact(result, test_case.minimum);
+    loom_value_facts_absi_modular(&minimum, test_case.bit_count, &result);
+    ExpectExact(result, test_case.minimum);
+    loom_value_facts_shli_modular(&one, &shift, test_case.bit_count, &result);
+    ExpectExact(result, test_case.minimum);
+  }
+}
+
+TEST(ModularIntegerFacts, RangesRemainSoundAcrossWrap) {
+  loom_value_facts_t lhs = loom_value_facts_make(120, 127, 1);
+  loom_value_facts_mark_lane_varying(&lhs);
+  const loom_value_facts_t rhs = loom_value_facts_make(1, 16, 1);
+  loom_value_facts_t result;
+  loom_value_facts_addi_modular(&lhs, &rhs, 8, &result);
+  EXPECT_EQ(result.range_lo, INT8_MIN);
+  EXPECT_EQ(result.range_hi, INT8_MAX);
+  EXPECT_TRUE(loom_value_facts_is_lane_varying(result));
+
+  lhs = loom_value_facts_make(60, 64, 4);
+  const loom_value_facts_t two = loom_value_facts_exact_i64(2);
+  loom_value_facts_muli_modular(&lhs, &two, 8, &result);
+  EXPECT_EQ(result.range_lo, INT8_MIN);
+  EXPECT_EQ(result.range_hi, INT8_MAX);
+  EXPECT_EQ(result.known_divisor, 8);
+}
+
+TEST(ModularIntegerFacts, OutOfDomainShiftDoesNotFold) {
+  const loom_value_facts_t one = loom_value_facts_exact_i64(1);
+  const loom_value_facts_t width = loom_value_facts_exact_i64(8);
+  loom_value_facts_t result;
+  loom_value_facts_shli_modular(&one, &width, 8, &result);
+  EXPECT_EQ(result.range_lo, INT8_MIN);
+  EXPECT_EQ(result.range_hi, INT8_MAX);
+}
+
+TEST(ModularIntegerFacts, OutputMayAliasInputs) {
+  loom_value_facts_t lhs = loom_value_facts_exact_i64(INT64_MAX);
+  const loom_value_facts_t one = loom_value_facts_exact_i64(1);
+  loom_value_facts_addi_modular(&lhs, &one, 64, &lhs);
+  ExpectExact(lhs, INT64_MIN);
+
+  loom_value_facts_t rhs = loom_value_facts_exact_i64(1);
+  loom_value_facts_subi_modular(&lhs, &rhs, 64, &rhs);
+  ExpectExact(rhs, INT64_MAX);
+}
+
+}  // namespace
+}  // namespace loom

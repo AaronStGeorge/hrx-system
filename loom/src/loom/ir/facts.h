@@ -1040,6 +1040,37 @@ void loom_value_facts_fmai(const loom_value_facts_t* a,
                            loom_value_facts_t* out);
 
 //===----------------------------------------------------------------------===//
+// Fixed-width modular transfer functions
+//===----------------------------------------------------------------------===//
+//
+// These apply the corresponding integer operation modulo 2^bit_count. Unlike
+// applying loom_value_facts_wrap_integer after a mathematical transfer, exact
+// 64-bit overflow remains exact because raw-bit arithmetic happens before the
+// mathematical fact domain can saturate. |bit_count| is a verified integer
+// width in [1, 64]. Output may alias one input.
+
+void loom_value_facts_addi_modular(const loom_value_facts_t* lhs,
+                                   const loom_value_facts_t* rhs,
+                                   int32_t bit_count, loom_value_facts_t* out);
+void loom_value_facts_subi_modular(const loom_value_facts_t* lhs,
+                                   const loom_value_facts_t* rhs,
+                                   int32_t bit_count, loom_value_facts_t* out);
+void loom_value_facts_muli_modular(const loom_value_facts_t* lhs,
+                                   const loom_value_facts_t* rhs,
+                                   int32_t bit_count, loom_value_facts_t* out);
+void loom_value_facts_shli_modular(const loom_value_facts_t* lhs,
+                                   const loom_value_facts_t* rhs,
+                                   int32_t bit_count, loom_value_facts_t* out);
+void loom_value_facts_negi_modular(const loom_value_facts_t* input,
+                                   int32_t bit_count, loom_value_facts_t* out);
+void loom_value_facts_absi_modular(const loom_value_facts_t* input,
+                                   int32_t bit_count, loom_value_facts_t* out);
+void loom_value_facts_fmai_modular(const loom_value_facts_t* a,
+                                   const loom_value_facts_t* b,
+                                   const loom_value_facts_t* c,
+                                   int32_t bit_count, loom_value_facts_t* out);
+
+//===----------------------------------------------------------------------===//
 // Shaped type helpers
 //===----------------------------------------------------------------------===//
 
