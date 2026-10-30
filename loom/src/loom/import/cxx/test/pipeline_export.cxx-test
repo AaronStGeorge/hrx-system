@@ -1,5 +1,5 @@
 // REQUIRES: loom-export-cxx
-// RUN: emit cxx @resident
+// RUN: emit cxx
 #include <loomcxx/kernel.h>
 #include <loomcxx/pipeline.h>
 #include <loomcxx/target.h>
@@ -69,7 +69,6 @@ void resident(unsigned factor, loom::type::index column, loom::type::index count
 }
 
 // ====
-// RUN: emit cxx @aie_pipeline
 #include <loomcxx/pipeline.h>
 #include <loomcxx/target/aie2p.h>
 
@@ -103,7 +102,6 @@ void aie_pipeline() {
 }
 
 // ====
-// RUN: emit cxx @streaming
 #include <loomcxx/pipeline.h>
 
 namespace loomt = loom::type;
@@ -222,7 +220,6 @@ void streaming(loom::type::index column, loom::type::index capacity, loom::type:
 }
 
 // ====
-// RUN: emit cxx @configured
 #include <loomcxx/encoding_type.h>
 #include <loomcxx/index.h>
 #include <loomcxx/predicate.h>
@@ -264,7 +261,6 @@ configured_result configured() {
 
 // ====
 // Exact config defaults and their specialization contracts survive export.
-// RUN: emit cxx
 #include <loomcxx/index.h>
 #include <loomcxx/predicate.h>
 
@@ -290,7 +286,6 @@ loom::type::index default_tile_size() {
 
 // ====
 // Predicate constants retain the declared C++ scalar family.
-// RUN: emit cxx @configured_scalars
 #include <loomcxx/predicate.h>
 
 [[loom::config("pipeline.enabled"), loom::where(loom::predicate::eq(true))]]
