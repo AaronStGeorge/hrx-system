@@ -2,6 +2,28 @@
 #include <loomcxx/pipeline.h>
 
 namespace loomt = loom::type;
+using Layout = loomt::encoding<loom::encoding::role::layout, 2>;
+using Payload = loomt::tile<loomt::shape<loomt::dynamic, 8>, float, Layout>;
+using Stream = loomt::channel<Payload>;
+
+Stream forward(Stream stream);
+
+Stream entry(Stream stream, loomt::pool pool, Payload payload) {
+  return forward(stream);
+}
+
+// ----
+func.def public @entry(%stream_dim0: index, %stream_encoding: encoding<layout>, %stream: channel<tile<[%stream_dim0]x8xf32, %stream_encoding>>, %pool: pool, %payload_dim0: index, %payload_encoding: encoding<layout>, %payload: tile<[%payload_dim0]x8xf32, %payload_encoding>) -> (%7: index, %8: encoding<layout>, channel<tile<[%7]x8xf32, %8>>) {
+  %10, %11, %12 = func.call @forward(%stream_dim0, %stream_encoding, %stream) : (index, encoding<layout>, channel<tile<[%stream_dim0]x8xf32, %stream_encoding>>) -> (index, encoding<layout>, channel<tile<[%10]x8xf32, %11>>)
+  func.return %10, %11, %12 : index, encoding<layout>, channel<tile<[%10]x8xf32, %11>>
+}
+
+func.decl @forward(%13: index, %14: encoding<layout>, %15: channel<tile<[%13]x8xf32, %14>>) -> (%16: index, %17: encoding<layout>, channel<tile<[%16]x8xf32, %17>>)
+
+// ====
+#include <loomcxx/pipeline.h>
+
+namespace loomt = loom::type;
 
 using Layout = loomt::encoding<loom::encoding::role::layout, 2>;
 using StorageLayout = loomt::encoding<loom::encoding::role::layout, 3>;
@@ -133,3 +155,108 @@ func.def public @pooled_allocations(%count: i64, %native_count: index, %byte_len
   %62 = index.constant 0 : offset
   func.return
 }
+
+// ====
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+namespace loomt = loom::type;
+using Tile = loomt::view<loomt::shape<loomt::dynamic, 4>, float, loomt::encoding<loom::encoding::role::layout, 2>>;
+using Output = loomt::buffer<float>;
+
+[[loom::pipeline("kernel"), loom::symbol("resident.tile")]] void resident(unsigned factor, [[loom::launch]] Tile tile, float scale, Output output) [[loom::where(factor > 0u)]];
+
+[[loom::command_program, loom::symbol("run.tile")]] void run(unsigned factor, float scale, [[loom::launch]] Tile tile, Output output) {
+  [[loom::serial]] {
+    loom::kernel::launch<resident>(factor, tile, scale, output);
+  }
+}
+
+// ----
+command.def public @run.tile(%factor: i32, %scale: f32, %tile_dim0: index, %tile_layout: encoding<layout>) launch(%tile: view<[%tile_dim0]x4xf32, %tile_layout>, %output: buffer) {
+  command.serial {
+    kernel.launch @resident.tile[%factor, %tile_dim0, %tile_layout](%tile, %scale, %output) : [i32, index, encoding<layout>](view<[%tile_dim0]x4xf32, %tile_layout>, f32, buffer)
+  }
+  command.return
+}
+
+pipeline.decl<kernel> @resident.tile(%6: i32, %7: index, %8: encoding<layout>) run(%9: view<[%7]x4xf32, %8>, %10: f32, %11: buffer) where [ne(%6, 0)]
+
+// ====
+// Pipeline buffer contracts accept the same shaped-handle materialization as
+// native kernel launches. A proven zero-origin C++ allocation also projects to
+// its buffer root without transporting its source-only byte offset.
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+namespace loomt = loom::type;
+using Bytes = loomt::buffer<unsigned char>;
+using Dynamic = loomt::view<loomt::shape<loomt::dynamic, 4>, float, loomt::encoding<loom::encoding::role::layout, 2>>;
+
+[[loom::pipeline("kernel")]] void materialized([[loom::launch]] Bytes input, Bytes scratch);
+
+[[loom::command_program]] void launch_materialized([[loom::launch]] Dynamic input) {
+  auto* scratch = loom::buffer::alloca<loom::memory_space::global, 64>(loom::type::offset{256});
+  loom::kernel::launch<materialized>(input, scratch);
+}
+
+// ----
+command.def public @launch_materialized(%input_dim0: index, %input_layout: encoding<layout>) launch(%input: view<[%input_dim0]x4xf32, %input_layout>) {
+  %3 = scalar.constant 256 : i32
+  %4 = scalar.extsi %3 : i32 to i64
+  %5 = index.cast %4 : i64 to offset
+  %scratch = buffer.alloca<global> align(64) %5 : buffer
+  %scratch_byte_offset = index.constant 0 : offset
+  kernel.launch @materialized(%input, %scratch) : (view<[%input_dim0]x4xf32, %input_layout>, buffer)
+  command.return
+}
+
+pipeline.decl<kernel> @materialized() run(%8: buffer, %9: buffer)
+
+// ====
+#include <loomcxx/kernel.h>
+#include <loomcxx/pipeline.h>
+#include <loomcxx/target.h>
+
+namespace loomt = loom::type;
+using Bytes = loomt::buffer<unsigned char>;
+
+struct [[loom::target("target.generic")]] generic_target {
+  const char* kind;
+};
+constexpr generic_target worker_target{.kind = "reference"};
+
+[[loom::pipeline("kernel")]] void child(unsigned factor, [[loom::launch]] Bytes output);
+
+[[loom::pipeline("kernel"), loom::target(worker_target)]] void resident(unsigned factor, loomt::index column, loomt::index count, [[loom::launch]] Bytes output) {
+  auto pool = loom::pipeline::memory<loom::memory_space::workgroup>(loomt::indices{column, loomt::index{3}});
+  auto* scratch = loom::buffer::alloca<unsigned char, loom::memory_space::workgroup, 64>(loomt::index{256}, pool);
+  (void)scratch;
+  loom::pipeline::compose<child>(factor, output);
+
+  [[loom::strand(loomt::indices{column, loomt::index{2}}, loomt::indices{count, loomt::index{1}}, loomt::indices{loomt::index{1}, loomt::index{1}}), loom::target(worker_target)]] {
+    auto worker = loom::kernel::workitem::id.x;
+    (void)worker;
+    (void)output;
+  }
+}
+
+// ----
+target.generic<reference> @worker_target
+
+pipeline.def<kernel> public target(@worker_target) @resident(%factor: i32, %column: index, %count: index) run(%output: buffer) {
+  %pool = pipeline.memory<workgroup>[%column, 3] : pool
+  %5 = scalar.constant 256 : i32
+  %6 = scalar.extsi %5 : i32 to i64
+  %7 = index.cast %6 : i64 to index
+  %8 = index.constant 1 : offset
+  %9 = index.scale %7, %8 : index, offset -> offset
+  %scratch = buffer.alloca<workgroup> pool(%pool) align(64) %9 : buffer
+  %scratch_byte_offset = index.constant 0 : offset
+  pipeline.compose @child[%factor](%output) : [i32](buffer)
+  pipeline.strand target(@worker_target) workers([%column, 2], [%count, 1], [1, 1]) {
+    %workitem_id_x = kernel.workitem.id<x> : index
+  }
+}
+
+pipeline.decl<kernel> @child(%13: i32) run(%14: buffer)
