@@ -52,12 +52,14 @@ from loom.dsl import (
     ImplicitTerminator,
     Op,
     Operand,
+    OperandRole,
     OpPhase,
     RegionDef,
     Result,
     SymbolDefinition,
     SymbolDefinitionFlag,
     SymbolReference,
+    Writes,
 )
 
 command_ops = Dialect(
@@ -383,6 +385,36 @@ command_concurrent = _schedule(
 )
 
 
+command_timestamp = Op(
+    "command.timestamp",
+    group=command_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Capture the executing queue family's clock into one naturally aligned "
+        "64-bit destination. The destination is an unencoded view<1xi64>; its "
+        "bits contain raw unsigned ticks, not a duration or host time. Clock "
+        "frequency and valid width belong to the execution domain. Serial and "
+        "concurrent command regions determine ordering, just as for dispatches. "
+        "Capture is a nondeterministic storage write; it does not synchronize "
+        "the host or other queues. Successful program completion makes the "
+        "sample valid, including a sample whose value is zero."
+    ),
+    operands=[
+        Operand(
+            "target",
+            VIEW,
+            role=OperandRole.ACCESS_PATH,
+            doc="Eight-byte-aligned destination for one raw clock sample.",
+        ),
+    ],
+    traits=[COMMAND_EFFECT],
+    effects=[Writes("target")],
+    verify="loom_command_timestamp_verify",
+    format=[Ref("target"), COLON, TypeOf("target")],
+    examples=["command.timestamp %sample : view<1xi64>"],
+)
+
+
 ALL_COMMAND_OPS: tuple[Op, ...] = (
     command_def,
     command_decl,
@@ -393,4 +425,5 @@ ALL_COMMAND_OPS: tuple[Op, ...] = (
     command_concurrent,
     command_parameter,
     command_parameter_base,
+    command_timestamp,
 )

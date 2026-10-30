@@ -29,6 +29,27 @@ static iree_status_t loom_command_emit(iree_diagnostic_emitter_t emitter,
   return iree_diagnostic_emit(emitter, &emission);
 }
 
+iree_status_t loom_command_timestamp_verify(const loom_module_t* module,
+                                            const loom_op_t* op,
+                                            iree_diagnostic_emitter_t emitter) {
+  const loom_type_t type =
+      loom_module_value_type(module, loom_command_timestamp_target(op));
+  if (loom_type_is_view(type) && loom_type_rank(type) == 1 &&
+      !loom_type_dim_is_dynamic_at(type, 0) &&
+      loom_type_dim_static_size_at(type, 0) == 1 &&
+      loom_type_element_type(type) == LOOM_SCALAR_TYPE_I64 &&
+      !loom_type_has_encoding(type)) {
+    return iree_ok_status();
+  }
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("target")),
+      loom_param_type(type),
+      loom_param_string(IREE_SV("unencoded view<1xi64>")),
+  };
+  return loom_command_emit(emitter, op, LOOM_ERR_TYPE_003, params,
+                           IREE_ARRAYSIZE(params));
+}
+
 static iree_status_t loom_command_emit_launch_related(
     iree_diagnostic_emitter_t emitter, const loom_op_t* launch_op,
     const loom_op_t* definition_op, const loom_error_def_t* error,

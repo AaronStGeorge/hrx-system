@@ -64,6 +64,16 @@ def test_program_declaration_roundtrip() -> None:
     _roundtrip(text)
 
 
+def test_timestamp_roundtrip() -> None:
+    _roundtrip(
+        """command.def @capture() launch(%sample: view<1xi64>) {
+  command.timestamp %sample : view<1xi64>
+  command.return
+}
+"""
+    )
+
+
 def test_program_without_specializations_roundtrip() -> None:
     _roundtrip("command.def @static_program() launch(%parameters: buffer) {\n  command.return\n}\n")
 

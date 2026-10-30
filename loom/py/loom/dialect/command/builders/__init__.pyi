@@ -88,3 +88,9 @@ class CommandBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
+    def timestamp(
+        self,
+        *,
+        target: ValueRef,
+        location_id: int | None = ...,
+    ) -> None: ...

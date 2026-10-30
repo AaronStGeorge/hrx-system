@@ -1,5 +1,12 @@
 // RUN: roundtrip
 
+command.def @capture() launch(%sample: view<1xi64>) {
+  command.timestamp %sample : view<1xi64>
+  command.return
+}
+
+// ====
+
 command.def @static_program() launch(%parameters: buffer) {
   %embedding = command.parameter %parameters, "token_embd.weight" : view<1024xi8>
   %base = command.parameter.base %embedding : view<1024xi8> -> buffer
