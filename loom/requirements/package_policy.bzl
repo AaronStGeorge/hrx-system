@@ -39,6 +39,10 @@ load(
 
 PACKAGE_POLICIES = [
     package_policy(
+        packages = ["loom/..."],
+        forbidden_deps = ["//runtime/src/iree/hal/drivers/amdgpu/..."],
+    ),
+    package_policy(
         packages = ["loom/binding/c/target/spirv/vulkan/..."],
         build_requirements = [ARCH_SPIRV, VULKAN_API],
     ),
@@ -70,10 +74,6 @@ PACKAGE_POLICIES = [
         build_requirements = [ARCH_AMDGPU],
     ),
     package_policy(
-        packages = ["loom/src/loom/target/arch/amdgpu/hal"],
-        forbidden_deps = ["//runtime/src/iree/hal/drivers/amdgpu/..."],
-    ),
-    package_policy(
         packages = ["loom/src/loom/target/arch/spirv/..."],
         build_requirements = [ARCH_SPIRV],
     ),
@@ -96,7 +96,6 @@ PACKAGE_POLICIES = [
     package_policy(
         packages = ["loom/src/loom/target/emit/native/amdgpu/..."],
         build_requirements = [ARCH_AMDGPU, ARTIFACT_AMDGPU_ELF],
-        forbidden_deps = ["//runtime/src/iree/hal/drivers/amdgpu/..."],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/native/aie2p/..."],

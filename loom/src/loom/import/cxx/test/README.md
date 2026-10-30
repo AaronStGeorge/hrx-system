@@ -41,7 +41,8 @@ shows handwritten cases and benchmarks.
 ```sh
 iree-bazel-test --config=asan --config=loom-importer-cxx \
   --config=loom-target-amd-gpu \
-  --//runtime/config/hal:drivers=amdgpu \
+  --//runtime/config/hal:drivers=amd-gpu \
+  --//libamdf/config:enabled=true --//libamdf/config:families=rdna,cdna \
   //loom/src/loom/tooling/target/amdgpu/test/cxx:kernels_test
 
 iree-bazel-test --config=asan --config=loom-importer-cxx \
