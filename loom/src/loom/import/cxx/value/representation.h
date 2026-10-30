@@ -94,6 +94,7 @@ class Value {
                 partition_->kind == ValueKind::Buffer ||
                 partition_->kind == ValueKind::Address ||
                 partition_->kind == ValueKind::OpaqueDialect ||
+                partition_->kind == ValueKind::Encoding ||
                 partition_->kind == ValueKind::Pool);
     return storage_.inline_values[0];
   }

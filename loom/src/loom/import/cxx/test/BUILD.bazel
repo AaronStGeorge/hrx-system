@@ -179,6 +179,8 @@ loom_check_test_suite(
         "parameter_alignment_invalid.cxx-test",
         "parameter_noalias.cxx-test",
         "parameter_noalias_invalid.cxx-test",
+        "pipeline_channels.cxx-test",
+        "pipeline_channels_invalid.cxx-test",
         "pipeline_contracts.cxx-test",
         "pipeline_contracts_invalid.cxx-test",
         "pipeline_types.cxx-test",

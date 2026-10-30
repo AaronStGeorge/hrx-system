@@ -74,17 +74,19 @@ class BufferIntrinsic {
   BufferIntrinsic(const cxx::Type* element_type,
                   const cxx::Type* element_count_type,
                   loom_value_fact_memory_space_t memory_space,
-                  int64_t alignment)
+                  int64_t alignment, bool has_pool)
       : operation_(Operation::AllocaElements),
         element_type_(element_type),
         element_count_type_(element_count_type),
         memory_space_(memory_space),
-        alignment_(alignment) {}
+        alignment_(alignment),
+        has_pool_(has_pool) {}
   BufferIntrinsic(loom_value_fact_memory_space_t memory_space,
-                  int64_t alignment)
+                  int64_t alignment, bool has_pool)
       : operation_(Operation::AllocaBytes),
         memory_space_(memory_space),
-        alignment_(alignment) {}
+        alignment_(alignment),
+        has_pool_(has_pool) {}
   explicit BufferIntrinsic(const cxx::Type* element_type)
       : operation_(Operation::AssumeNoalias), element_type_(element_type) {}
   BufferIntrinsic(const cxx::Type* element_type, int64_t alignment)
@@ -115,6 +117,8 @@ class BufferIntrinsic {
       LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
   // Positive power-of-two minimum byte alignment.
   int64_t alignment_ = 0;
+  // Whether buffer.alloca takes an explicit allocation pool operand.
+  bool has_pool_ = false;
 };
 
 }  // namespace loom::cxx_import

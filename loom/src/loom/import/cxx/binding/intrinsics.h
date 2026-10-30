@@ -20,6 +20,7 @@
 #include "loom/import/cxx/binding/async.h"
 #include "loom/import/cxx/binding/atomic.h"
 #include "loom/import/cxx/binding/buffer.h"
+#include "loom/import/cxx/binding/channel.h"
 #include "loom/import/cxx/binding/check.h"
 #include "loom/import/cxx/binding/command.h"
 #include "loom/import/cxx/binding/decode.h"
@@ -92,7 +93,7 @@ class Intrinsics {
   };
   using Binding = std::variant<
       ScalarBinding, ShapedIntrinsic, EncodingIntrinsic, DecodeIntrinsic,
-      FragmentIntrinsic, BufferIntrinsic, ViewIntrinsic,
+      FragmentIntrinsic, BufferIntrinsic, ViewIntrinsic, ChannelIntrinsic,
       VectorArithmeticIntrinsic, VectorMemoryIntrinsic, AsyncIntrinsic,
       AtomicIntrinsic, FenceIntrinsic, KernelCollectiveIntrinsic,
       SubgroupShuffleIntrinsic, BarrierIntrinsic, TargetIntrinsic,

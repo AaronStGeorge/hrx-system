@@ -266,6 +266,12 @@ struct VectorPartition final : Partition {
 // are transported before the dependent High view so its type references this
 // binding's own component identities at every call and region boundary.
 struct ViewPartition final : Partition {
+  // Binds the High view type to dynamic extents in source-axis order followed
+  // by an optional encoding identity.
+  loom_type_t bind_type(std::span<const loom_value_id_t> dependencies,
+                        BoundTypeStorage& storage) const;
+  // Returns the view SSA value from one complete component binding.
+  loom_value_id_t view_value(std::span<const loom_value_id_t> components) const;
   // Whether the High type references a transported extent or encoding value.
   bool requires_binding() const { return component_count > 1; }
 

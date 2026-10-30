@@ -105,6 +105,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "channel",
+    srcs = ["channel.cc"],
+    hdrs = ["channel.h"],
+    cxx_features = CXX_COMPILER_OPTIONS["cxx_features"],
+    cxx_standard = CXX_COMPILER_OPTIONS["cxx_standard"],
+    deps = [
+        "//loom/src/loom/import/cxx/source:error",
+        "//loom/src/loom/import/cxx/value:types",
+        "//loom/src/loom/ops/channel",
+        "//runtime/src/iree/base:core_headers",
+        "//third_party:cxx_parser",
+    ],
+)
+
+loom_cc_library(
     name = "assumptions",
     srcs = ["assumptions.cc"],
     hdrs = ["assumptions.h"],
@@ -593,6 +608,7 @@ loom_cc_library(
         ":async",
         ":atomic",
         ":buffer",
+        ":channel",
         ":check",
         ":command",
         ":decode",

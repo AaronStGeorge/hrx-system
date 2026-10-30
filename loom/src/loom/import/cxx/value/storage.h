@@ -154,12 +154,14 @@ class Storage {
                             loom_value_id_t element_count,
                             const cxx::Type* element_count_type,
                             loom_value_fact_memory_space_t memory_space,
-                            int64_t explicit_alignment, cxx::AST* owner);
+                            int64_t explicit_alignment, loom_value_id_t pool,
+                            cxx::AST* owner);
   // Allocates an exact runtime byte extent already represented in Loom's
   // physical offset domain. No logical count conversion or scaling is added.
   Pointer allocate_bytes(loom_value_id_t byte_length,
                          loom_value_fact_memory_space_t memory_space,
-                         int64_t alignment, cxx::AST* owner);
+                         int64_t alignment, loom_value_id_t pool,
+                         cxx::AST* owner);
   // Returns the storage root of a pointer proven to have zero byte origin.
   // Interior pointers cannot cross an untyped buffer ABI boundary.
   loom_value_id_t zero_origin_root(Pointer pointer, cxx::AST* owner);

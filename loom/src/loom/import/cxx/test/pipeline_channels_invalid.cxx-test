@@ -1,0 +1,79 @@
+// RUN: verify
+#include <loomcxx/pipeline.h>
+
+namespace loomt = loom::type;
+using Layout = loomt::encoding<loom::encoding::role::layout, 1>;
+using Payload = loomt::tile<loomt::shape<4>, float, Layout>;
+using Stream = loomt::channel<Payload>;
+using Slots = loomt::view<loomt::shape<2, 4>, float>;
+
+template <loom::channel::discipline Discipline>
+[[loom::op("channel.bind")]] Stream missing_encoding(Slots slots,
+                                                       loomt::index capacity);
+
+void bind_without_payload_encoding(Slots slots, loomt::index capacity) {
+  // ERROR@+1: LOWERING/059 "encoded channel.bind requires its exact payload encoding"
+  missing_encoding<loom::channel::discipline::fifo>(slots, capacity);
+}
+
+// ====
+#include <loomcxx/pipeline.h>
+
+namespace loomt = loom::type;
+using Payload = loomt::tile<loomt::shape<4>, float>;
+using Read = loomt::read<Payload>;
+using Writable = loomt::view<loomt::shape<4>, float>;
+
+// ERROR@+1: LOWERING/059 "channel.wait result must be a const view for immutable reads"
+[[loom::op("channel.wait")]] Writable writable_immutable_wait(Read read);
+
+// ====
+#include <loomcxx/pipeline.h>
+
+namespace loomt = loom::type;
+using Payload = loomt::tile<loomt::shape<4>, float>;
+
+void insufficient_fanout(loomt::read<Payload> read) {
+  // ERROR@+1: LOWERING/059 "channel.fanout requires an immutable read and a result aggregate containing at least two matching reads"
+  loom::channel::fanout<1>(read);
+}
+
+// ====
+#include <loomcxx/pipeline.h>
+
+namespace loomt = loom::type;
+using Payload = loomt::tile<loomt::shape<4>, float>;
+using Read = loomt::read<Payload>;
+
+struct addressable_reads {
+  Read values[2];
+};
+
+// ERROR@+1: LOWERING/059 "channel.fanout requires an immutable read and a result aggregate containing at least two matching reads"
+[[loom::op("channel.fanout")]] addressable_reads addressable_fanout(Read read);
+
+// ====
+#include <loomcxx/pipeline.h>
+
+template <class T, loom::memory_space Space, __SIZE_TYPE__ Alignment>
+[[loom::op("buffer.alloca")]] T* invalid_pool(__SIZE_TYPE__ count,
+                                               unsigned pool);
+
+void pool_operand(__SIZE_TYPE__ count) {
+  // ERROR@+1: LOWERING/059 "buffer.alloca second operand must be a Loom pool"
+  invalid_pool<float, loom::memory_space::private_, 4>(count, 0);
+}
+
+// ====
+#include <loomcxx/pipeline.h>
+
+namespace loomt = loom::type;
+using Payload = loomt::tile<loomt::shape<4>, float>;
+using Stream = loomt::channel<Payload>;
+using Slots = loomt::view<loomt::shape<2, 4>, float>;
+
+void invalid_discipline(Slots slots, loomt::index capacity) {
+  // ERROR@+1: LOWERING/059 "channel.bind requires a supported discipline template argument"
+  loom::channel::bind<static_cast<loom::channel::discipline>(2)>(slots,
+                                                                 capacity);
+}

@@ -220,6 +220,38 @@ loom_value_id_t VectorPartition::vector_value(
   return components.back();
 }
 
+loom_type_t ViewPartition::bind_type(
+    std::span<const loom_value_id_t> dependencies,
+    BoundTypeStorage& storage) const {
+  IREE_ASSERT(dependencies.size() == component_count - 1);
+  if (!requires_binding()) {
+    return static_type;
+  }
+  std::array<uint64_t, LOOM_TYPE_MAX_RANK> dimensions;
+  size_t dependency = 0;
+  for (size_t axis = 0; axis < extents.size(); ++axis) {
+    dimensions[axis] = extents[axis] < 0
+                           ? loom_dim_pack_dynamic(dependencies[dependency++])
+                           : loom_dim_pack_static(extents[axis]);
+  }
+  std::optional<loom_value_id_t> encoding_value;
+  if (encoding) {
+    encoding_value = dependencies[dependency++];
+    IREE_ASSERT_LE(*encoding_value, UINT16_MAX);
+  }
+  IREE_ASSERT_EQ(dependency, dependencies.size());
+  return make_encoded_shaped_type(
+      LOOM_TYPE_VIEW, element,
+      std::span<const uint64_t>(dimensions).first(extents.size()),
+      encoding_value, storage);
+}
+
+loom_value_id_t ViewPartition::view_value(
+    std::span<const loom_value_id_t> components) const {
+  IREE_ASSERT(components.size() == component_count);
+  return components.back();
+}
+
 loom_type_t TensorPartition::bind_type(
     std::span<const loom_value_id_t> dynamic_extents) const {
   IREE_ASSERT(dynamic_extents.size() == (is_dynamic() ? 1u : 0u));
@@ -1707,40 +1739,32 @@ void Types::append_bound(const cxx::Type* input, cxx::AST* owner,
     }
     case ValueKind::View: {
       const auto& view = static_cast<const ViewPartition&>(admitted);
-      if (!view.requires_binding()) {
-        output.push_back(view.static_type);
-        return;
-      }
       if (view.requires_binding() &&
           identities.size() != admitted.component_count) {
         diagnostics_.reject(
             unit_, owner,
             "view values require reserved destination component identities");
       }
-      std::array<uint64_t, LOOM_TYPE_MAX_RANK> dimensions;
       size_t component = 0;
       for (size_t axis = 0; axis < view.extents.size(); ++axis) {
         if (view.extents[axis] < 0) {
-          dimensions[axis] = loom_dim_pack_dynamic(identities[component++]);
           output.push_back(loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
-        } else {
-          dimensions[axis] = loom_dim_pack_static(view.extents[axis]);
+          ++component;
         }
       }
-      std::optional<loom_value_id_t> encoding;
       if (view.encoding) {
-        encoding = identities[component++];
-        if (*encoding > UINT16_MAX) {
+        if (identities[component] > UINT16_MAX) {
           diagnostics_.reject(
               unit_, owner,
               "view encoding identity exceeds Loom's current type capacity");
         }
         output.push_back(loom_type_encoding_with_role(view.encoding->role));
+        ++component;
       }
-      output.push_back(make_encoded_shaped_type(
-          LOOM_TYPE_VIEW, view.element,
-          std::span<const uint64_t>(dimensions).first(view.extents.size()),
-          encoding, storage));
+      output.push_back(view.bind_type(identities.empty()
+                                          ? std::span<const loom_value_id_t>{}
+                                          : identities.first(component),
+                                      storage));
       return;
     }
   }

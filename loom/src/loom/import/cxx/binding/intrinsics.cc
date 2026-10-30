@@ -161,7 +161,8 @@ void Intrinsics::declaration(cxx::FunctionSymbol* function,
                    selected->arguments[0]->name()) ||
                SubgroupShuffleIntrinsic::supports(
                    selected->arguments[0]->name()) ||
-               BufferIntrinsic::supports(selected->arguments[0]->name())) {
+               BufferIntrinsic::supports(selected->arguments[0]->name()) ||
+               ChannelIntrinsic::supports(selected->arguments[0]->name())) {
       // Concrete specialization owns source type and template-argument
       // validation. Retain the complete descriptor until those are known.
     } else if (selected->arguments.size() != 1 ||
@@ -293,6 +294,10 @@ Intrinsics::Binding Intrinsics::resolve(cxx::FunctionSymbol* function,
   if (auto buffer = BufferIntrinsic::resolve(unit_, diagnostics_, types_,
                                              function, attribute, owner)) {
     return *buffer;
+  }
+  if (auto channel = ChannelIntrinsic::resolve(unit_, diagnostics_, types_,
+                                               function, attribute, owner)) {
+    return *channel;
   }
   if (auto fence = FenceIntrinsic::resolve(unit_, diagnostics_, function,
                                            attribute, owner)) {
@@ -538,6 +543,9 @@ IntrinsicCallResult Intrinsics::call(const Binding& admitted,
   }
   if (auto* buffer = std::get_if<BufferIntrinsic>(binding)) {
     return {buffer->call(arguments, arena, storage, owner)};
+  }
+  if (auto* channel = std::get_if<ChannelIntrinsic>(binding)) {
+    return {channel->call(arguments, arena, builder, location)};
   }
   if (auto* view = std::get_if<ViewIntrinsic>(binding)) {
     return {view->call(arguments, types_, arena, storage, owner, builder,

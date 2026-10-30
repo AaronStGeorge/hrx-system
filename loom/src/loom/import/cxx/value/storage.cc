@@ -450,7 +450,7 @@ Pointer Storage::allocate_elements(const cxx::Type* element_type,
                                    const cxx::Type* element_count_type,
                                    loom_value_fact_memory_space_t memory_space,
                                    int64_t explicit_alignment,
-                                   cxx::AST* owner) {
+                                   loom_value_id_t pool, cxx::AST* owner) {
   auto element_bytes = types_.storage_size(element_type, owner);
   auto* layout = unit_.control()->memoryLayout();
   auto alignment = layout->alignmentOf(element_type);
@@ -478,9 +478,11 @@ Pointer Storage::allocate_elements(const cxx::Type* element_type,
                                source, &op));
   auto byte_length = loom_op_results(op)[0];
   check(loom_buffer_alloca_build(
-      &builder_, /*build_flags=*/0, memory_space, LOOM_VALUE_ID_INVALID,
-      std::max<int64_t>(*alignment, explicit_alignment), byte_length,
-      loom_type_buffer(), source, &op));
+      &builder_,
+      pool == LOOM_VALUE_ID_INVALID ? 0
+                                    : LOOM_BUFFER_ALLOCA_BUILD_FLAG_HAS_POOL,
+      memory_space, pool, std::max<int64_t>(*alignment, explicit_alignment),
+      byte_length, loom_type_buffer(), source, &op));
   auto root = loom_op_results(op)[0];
   roots_[root] = {.memory_space = memory_space, .allocation = std::nullopt};
   auto base = scalars_.integer(0, LOOM_SCALAR_TYPE_OFFSET, source);
@@ -490,11 +492,15 @@ Pointer Storage::allocate_elements(const cxx::Type* element_type,
 
 Pointer Storage::allocate_bytes(loom_value_id_t byte_length,
                                 loom_value_fact_memory_space_t memory_space,
-                                int64_t alignment, cxx::AST* owner) {
+                                int64_t alignment, loom_value_id_t pool,
+                                cxx::AST* owner) {
   auto source = locations_.get(owner);
   loom_op_t* op;
-  check(loom_buffer_alloca_build(&builder_, /*build_flags=*/0, memory_space,
-                                 LOOM_VALUE_ID_INVALID, alignment, byte_length,
+  check(loom_buffer_alloca_build(&builder_,
+                                 pool == LOOM_VALUE_ID_INVALID
+                                     ? 0
+                                     : LOOM_BUFFER_ALLOCA_BUILD_FLAG_HAS_POOL,
+                                 memory_space, pool, alignment, byte_length,
                                  loom_type_buffer(), source, &op));
   auto root = loom_op_results(op)[0];
   roots_[root] = {.memory_space = memory_space, .allocation = std::nullopt};
