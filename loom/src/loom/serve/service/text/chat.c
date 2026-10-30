@@ -1716,9 +1716,11 @@ iree_status_t loom_serve_text_chat_event(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "data: "));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_response_begin(
       response, "chat.completion.chunk", output));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"choices\":[{\"index\":0,\"delta\":%.*s,\"finish_reason\":",
-      (int)delta.size, delta.data));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+      output, ",\"choices\":[{\"index\":0,\"delta\":"));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, delta));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(output, ",\"finish_reason\":"));
   if (finish_reason.size) {
     IREE_RETURN_IF_ERROR(loom_serve_text_chat_quote(output, finish_reason));
   } else {

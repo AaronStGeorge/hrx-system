@@ -225,6 +225,58 @@ TEST_P(TextHttpTest, TranslationFailureDiscardsUnpublishedOutput) {
   }
 }
 
+TEST_P(TextHttpTest, LargeEscapedCallsSurvivePacketAndTransportGrowth) {
+  const size_t lengths[] = {0, 1023, 8191, 16383, 32767, 65535};
+  std::string expected_calls = "[";
+  for (size_t i = 0; i < IREE_ARRAYSIZE(lengths); ++i) {
+    if (i) {
+      expected_calls += ',';
+    }
+    expected_calls += '{';
+    if (GetParam()) {
+      expected_calls += "\"index\":" + std::to_string(i) + ',';
+    }
+    expected_calls +=
+        "\"id\":\"call_7_" + std::to_string(i) +
+        R"(","type":"function","function":{"name":"task","arguments":"{\"prompt\":\")";
+    // Put an escape across a 10,000-byte boundary. A cut after the first
+    // backslash would leave an invalid escape before the SSE suffix.
+    const size_t padding_length =
+        i == 0
+            ? 9999 - IREE_SV(R"({"tool_calls":)").size - expected_calls.size()
+            : lengths[i];
+    const std::string padding(padding_length, static_cast<char>('a' + i));
+    const std::string arguments =
+        R"({"prompt":")" + padding + R"(\n quote \" slash \\ tab \t λ"})";
+    IREE_ASSERT_OK(loom_serve_text_tool_calls_append(
+        &calls_, 7, IREE_SV("task"),
+        iree_make_string_view(arguments.data(), arguments.size())));
+    expected_calls += padding + R"(\\n quote \\\" slash \\\\ tab \\t λ\"}"}})";
+  }
+  expected_calls += ']';
+  IREE_ASSERT_OK(consumer_.vtable->complete(consumer_.self, &response_,
+                                            &content_, &reasoning_, &calls_,
+                                            IREE_SV("tool_calls"), &scratch_));
+  loom_serve_text_tool_calls_reset(&calls_);
+  iree_string_builder_reset(&scratch_);
+  ASSERT_NO_FATAL_FAILURE(Publish());
+  const auto response = Finish();
+  const auto calls_begin = response.find("\"tool_calls\":");
+  ASSERT_NE(calls_begin, std::string::npos);
+  const auto actual_calls =
+      response.substr(calls_begin + 13, expected_calls.size());
+  size_t matching = 0;
+  while (matching < actual_calls.size() && matching < expected_calls.size() &&
+         actual_calls[matching] == expected_calls[matching]) {
+    ++matching;
+  }
+  EXPECT_EQ(matching, expected_calls.size())
+      << "actual length " << actual_calls.size() << " actual suffix "
+      << actual_calls.substr(matching, 100) << " expected suffix "
+      << expected_calls.substr(matching, 100);
+  EXPECT_EQ(response.find("data: [DONE]\n\n") != std::string::npos, GetParam());
+}
+
 INSTANTIATE_TEST_SUITE_P(Delivery, TextHttpTest, ::testing::Bool());
 
 struct RejectionCase {

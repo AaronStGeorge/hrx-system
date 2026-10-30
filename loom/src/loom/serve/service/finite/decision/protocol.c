@@ -596,9 +596,16 @@ static iree_status_t loom_serve_decision_answer(
       uniform_spread += fabs((double)i - (double)(count - 1) / 2.0) / count;
       const char* quote =
           option->type == IREE_JSON_VALUE_TYPE_STRING ? "\"" : "";
-      status = iree_string_builder_append_format(
-          output, "%s\"%zu\":%s%.*s%s", i ? "," : "", i, quote,
-          (int)option->length, request->json.data + option->offset, quote);
+      status = iree_string_builder_append_format(output, "%s\"%zu\":%s",
+                                                 i ? "," : "", i, quote);
+      if (iree_status_is_ok(status)) {
+        status = iree_string_builder_append_string(
+            output, iree_make_string_view(request->json.data + option->offset,
+                                          option->length));
+      }
+      if (iree_status_is_ok(status)) {
+        status = iree_string_builder_append_cstring(output, quote);
+      }
     }
     IREE_RETURN_IF_ERROR(status);
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "}"));
