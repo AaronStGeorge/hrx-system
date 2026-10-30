@@ -25,11 +25,7 @@ load(
 load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_compile_tests")
 load(
     "//loom/target/amdgpu:execution_profiles.bzl",
-    "AMDGPU_ACCESS_PROFILE",
-    "AMDGPU_ASAN_PROFILE",
-    "AMDGPU_HARDWARE_PROFILE",
-    "AMDGPU_TSAN_CAPACITY_PROFILE",
-    "AMDGPU_TSAN_PROFILE",
+    "AMD_GPU_ACCESS_PROFILE",
     "AMD_GPU_ASAN_PROFILE",
     "AMD_GPU_HARDWARE_PROFILE",
     "AMD_GPU_TSAN_CAPACITY_PROFILE",
@@ -46,9 +42,9 @@ _AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/emit:amdgpu_elf",
 ])
 
-_LEGACY_AMDGPU_EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
+_AMDGPU_EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/execute:amdgpu_hal",
-    "//runtime/config/hal:driver_amdgpu",
+    "//runtime/config/hal:driver_amd_gpu",
 ])
 
 _GFX11_GENERIC_REPRESENTATION = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.gfx11.generic.core"]
@@ -88,10 +84,9 @@ iree_execution_test_suite(
     manifests = ["benchmark_scenario_correctness.test.json"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = [
-        "iree-run-requirement=runtime.resource.amd_gpu",
-        "runtime-resource=amd-gpu",
+        "iree-run-requirement=libamdf.resource.amd_gpu",
     ],
-    target_compatible_with = _LEGACY_AMDGPU_EXECUTION_COMPATIBLE_WITH + loom_config_compatible_with([
+    target_compatible_with = _AMDGPU_EXECUTION_COMPATIBLE_WITH + loom_config_compatible_with([
         "//loom/config/execute:vm_iree_vm",
     ]),
     tools = {"benchmark": "//loom/src/loom/tools/loom-benchmark"},
@@ -103,10 +98,9 @@ iree_execution_test_suite(
     manifests = ["benchmark_profile_policy.test.json"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = [
-        "iree-run-requirement=runtime.resource.amd_gpu",
-        "runtime-resource=amd-gpu",
+        "iree-run-requirement=libamdf.resource.amd_gpu",
     ],
-    target_compatible_with = _LEGACY_AMDGPU_EXECUTION_COMPATIBLE_WITH + loom_config_compatible_with([
+    target_compatible_with = _AMDGPU_EXECUTION_COMPATIBLE_WITH + loom_config_compatible_with([
         "//loom/config/execute:vm_iree_vm",
     ]),
     tools = {"loom-benchmark": "//loom/src/loom/tools/loom-benchmark"},
@@ -232,9 +226,8 @@ loom_test(
         "generated_tensor_cases.loom",
     ],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -242,9 +235,8 @@ loom_test(
     name = "packed_integer_widening_test",
     srcs = ["packed_integer_widening.loom"],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -254,9 +246,8 @@ loom_test(
     benchmark_smoke = False,
     compile_targets = ["//loom/target/amdgpu:" + target for target in LOOM_AMDGPU_SUPPORTED_TARGETS],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -264,9 +255,8 @@ loom_test(
     name = "packed_table_lookup_test",
     srcs = ["packed_table_lookup.loom"],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -275,9 +265,8 @@ loom_test(
     srcs = ["packed_nibble_unpack.loom"],
     compile_targets = ["//loom/target/amdgpu:" + target for target in LOOM_AMDGPU_SUPPORTED_TARGETS],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -287,9 +276,8 @@ loom_test(
     benchmark_smoke = False,
     compile_targets = ["//loom/target/amdgpu:" + target for target in LOOM_AMDGPU_SUPPORTED_TARGETS],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -297,9 +285,8 @@ loom_test(
     name = "kernarg_test",
     srcs = ["amdgpu_unused_kernargs.loom"],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -307,9 +294,8 @@ loom_test(
     name = "callable_values_test",
     srcs = ["callable_values.loom"],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -317,9 +303,8 @@ loom_test(
     name = "narrow_argument_test",
     srcs = ["narrow_arguments.loom"],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -331,9 +316,8 @@ loom_test(
         "//loom/target/amdgpu:gfx1151",
     ],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
     target_compatible_with = _GFX11_EXECUTION_COMPATIBLE_WITH,
 )
@@ -343,7 +327,6 @@ loom_test(
     srcs = ["//loom/src/loom/test/corpus/sanitizer:access_reporting.loom"],
     configs = {"asan_launch_bound.tile_capacity": "1"},
     execution_profiles = [
-        AMDGPU_ASAN_PROFILE,
         AMD_GPU_ASAN_PROFILE,
     ],
 )
@@ -353,7 +336,6 @@ loom_test(
     srcs = ["//loom/src/loom/test/corpus/sanitizer:assertion_reporting.loom"],
     # Authored assertions must provision feedback without insertion options.
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
     ],
     tags = ["requires-amd-gpu-feedback"],
@@ -362,7 +344,7 @@ loom_test(
 loom_test(
     name = "unroll_fences_access_test",
     srcs = ["amdgpu_unroll_fences.loom"],
-    execution_profiles = [AMDGPU_ACCESS_PROFILE],
+    execution_profiles = [AMD_GPU_ACCESS_PROFILE],
 )
 
 loom_test(
@@ -377,13 +359,12 @@ loom_test(
         "//loom/src/loom/test/corpus/checked_benchmarks:sparse_token_attention_f32.loom",
     ],
     benchmark_smoke = False,
-    execution_profiles = [AMDGPU_ACCESS_PROFILE],
+    execution_profiles = [AMD_GPU_ACCESS_PROFILE],
 )
 
 loom_test(
     name = "checked_benchmark_workload_test",
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
     ],
     module = "//loom/src/loom/test/corpus/checked_benchmarks:checked_benchmark_workload_module",
@@ -396,7 +377,6 @@ loom_test(
         "mlp_down_projection_residual_bf16.row_capacity": "3584",
     },
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
     ],
     module = "//loom/src/loom/test/corpus/authoring:authoring_benchmark_workload_module",
@@ -406,7 +386,7 @@ loom_test(
 loom_test(
     name = "split_kv_stage2_access_test",
     srcs = ["//loom/src/loom/test/corpus/checked_benchmarks:split_kv_online_softmax_combine_f32.loom"],
-    execution_profiles = [AMDGPU_ACCESS_PROFILE],
+    execution_profiles = [AMD_GPU_ACCESS_PROFILE],
 )
 
 loom_test(
@@ -431,9 +411,8 @@ loom_test(
         "//loom/target/amdgpu:gfx1250",
     ],
     execution_profiles = [
-        AMDGPU_HARDWARE_PROFILE,
         AMD_GPU_HARDWARE_PROFILE,
-        AMDGPU_ACCESS_PROFILE,
+        AMD_GPU_ACCESS_PROFILE,
     ],
 )
 
@@ -441,7 +420,6 @@ loom_test(
     name = "tsan_test",
     srcs = ["//loom/src/loom/test/corpus/sanitizer:race_workgroup.loom"],
     execution_profiles = [
-        AMDGPU_TSAN_PROFILE,
         AMD_GPU_TSAN_PROFILE,
     ],
 )
@@ -450,7 +428,6 @@ loom_test(
     name = "tsan_collective_publication_test",
     srcs = ["//loom/src/loom/test/corpus/kernel/workgroup:publication.loom"],
     execution_profiles = [
-        AMDGPU_TSAN_PROFILE,
         AMD_GPU_TSAN_PROFILE,
     ],
 )
@@ -459,7 +436,6 @@ loom_test(
     name = "tsan_fragment_test",
     srcs = ["//loom/src/loom/tooling/target/amdgpu/test/corpus/gfx11:fragment_repack_bf16.loom"],
     execution_profiles = [
-        AMDGPU_TSAN_PROFILE,
         AMD_GPU_TSAN_PROFILE,
     ],
     target_compatible_with = _GFX11_EXECUTION_COMPATIBLE_WITH,
@@ -470,7 +446,6 @@ loom_test(
     srcs = ["//loom/src/loom/test/corpus/sanitizer:race_subgroup.loom"],
     compile_targets = ["//loom/target/amdgpu:" + target for target in LOOM_AMDGPU_SUPPORTED_TARGETS],
     execution_profiles = [
-        AMDGPU_TSAN_PROFILE,
         AMD_GPU_TSAN_PROFILE,
     ],
 )
@@ -479,7 +454,6 @@ loom_test(
     name = "tsan_capacity_test",
     srcs = ["//loom/src/loom/test/corpus/sanitizer:race_capacity.loom"],
     execution_profiles = [
-        AMDGPU_TSAN_CAPACITY_PROFILE,
         AMD_GPU_TSAN_CAPACITY_PROFILE,
     ],
 )
@@ -505,10 +479,9 @@ iree_execution_test_suite(
     manifests = ["check-target-requirements.test.json"],
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
     tags = [
-        "iree-run-requirement=runtime.resource.amd_gpu",
-        "runtime-resource=amd-gpu",
+        "iree-run-requirement=libamdf.resource.amd_gpu",
     ],
-    target_compatible_with = _LEGACY_AMDGPU_EXECUTION_COMPATIBLE_WITH,
+    target_compatible_with = _AMDGPU_EXECUTION_COMPATIBLE_WITH,
     tools = {
         "loom-benchmark": "//loom/src/loom/tools/loom-benchmark",
         "loom-test": "//loom/src/loom/tools/loom-test",

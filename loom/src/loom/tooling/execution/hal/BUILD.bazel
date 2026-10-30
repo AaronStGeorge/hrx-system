@@ -15,7 +15,6 @@ load(
 )
 load("//loom/build_tools/bazel:defs.bzl", "loom_test")
 load("//loom/target:execution_profiles.bzl", "GPU_HARDWARE_PROFILES")
-load("//loom/target/amdgpu:execution_profiles.bzl", "AMD_GPU_HARDWARE_PROFILE")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -34,13 +33,11 @@ _TASK_EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
 
 _AMDGPU_EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/execute:amdgpu_hal",
-    "//runtime/config/hal:driver_amdgpu",
+    "//runtime/config/hal:driver_amd_gpu",
 ])
 
 _AMDGPU_EXECUTION_TAGS = [
-    "iree-run-requirement=runtime.resource.amd_gpu",
-    "requires-gpu-amd",
-    "runtime-resource=amd-gpu",
+    "iree-run-requirement=libamdf.resource.amd_gpu",
 ]
 
 iree_execution_test_suite(
@@ -106,13 +103,13 @@ loom_test(
         "//loom/src/loom/tooling/execution/hal/testdata:launch_schedule_hal_actual.loom",
         "//loom/src/loom/tooling/execution/hal/testdata:scenario_batch_hal_actual.loom",
     ],
-    execution_profiles = GPU_HARDWARE_PROFILES + [AMD_GPU_HARDWARE_PROFILE],
+    execution_profiles = GPU_HARDWARE_PROFILES,
 )
 
 loom_test(
     name = "scenario_compare_test",
     srcs = ["//loom/src/loom/tooling/execution/hal/testdata:scenario_compare_hal_vm.loom"],
-    execution_profiles = GPU_HARDWARE_PROFILES + [AMD_GPU_HARDWARE_PROFILE],
+    execution_profiles = GPU_HARDWARE_PROFILES,
 )
 
 iree_executable_test(
@@ -120,7 +117,7 @@ iree_executable_test(
     src = "//loom/src/loom/tools/loom-benchmark",
     args = [
         "$(rootpath //loom/src/loom/tooling/execution/hal/testdata:scenario_compare_hal_vm.loom)",
-        "--device=legacy-amdgpu",
+        "--device=amdgpu",
         "--case=@scenario_scalar_results",
         "--benchmark=@scenario_scalar_results_throughput",
         "--sample=2",
@@ -145,7 +142,7 @@ iree_executable_test(
     src = "//loom/src/loom/tools/loom-benchmark",
     args = [
         "$(rootpath //loom/src/loom/tooling/execution/hal/testdata:scenario_compare_hal_vm.loom)",
-        "--device=legacy-amdgpu",
+        "--device=amdgpu",
         "--compare=@scenario_benchmark_baseline_throughput,@scenario_benchmark_candidate_throughput",
         "--sample=2",
         "--repetitions=1",

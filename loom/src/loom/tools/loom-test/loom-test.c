@@ -131,10 +131,6 @@ int main(int argc, char** argv) {
   const loom_run_hal_target_route_t hal_target_routes[] = {
 #if LOOM_TEST_HAVE_AMDGPU
       {
-          .driver_name = IREE_SV("legacy-amdgpu"),
-          .provider = loomc_amdgpu_iree_hal_target_provider(),
-      },
-      {
           .driver_name = IREE_SV("amdgpu"),
           .provider = loomc_amdgpu_iree_hal_target_provider(),
       },

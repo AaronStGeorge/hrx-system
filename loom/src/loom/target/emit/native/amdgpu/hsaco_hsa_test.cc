@@ -279,7 +279,7 @@ void AppendHsaLibraryCandidates(std::vector<std::string>* candidates) {
       "libhsa-runtime64.so",
 #endif  // IREE_PLATFORM_WINDOWS
   };
-  const char* env_path = std::getenv("IREE_HAL_AMDGPU_LIBHSA_PATH");
+  const char* env_path = std::getenv("LOOM_HSA_LIBRARY_PATH");
   if (env_path != nullptr && env_path[0] != '\0') {
     const std::string path_fragment(env_path);
     AppendHsaLibraryCandidate(candidates, path_fragment);
@@ -305,7 +305,7 @@ iree_status_t LoadHsaLibrary(HsaApi* api) {
   std::string failures;
   for (const std::string& candidate : candidates) {
     // ROCr retains process-wide KFD state after hsa_shut_down. Keep its module
-    // loaded across runtime instances, matching the HAL's HSA loader lifetime.
+    // loaded across runtime instances.
     iree_status_t status = iree_dynamic_library_load_from_file(
         candidate.c_str(), IREE_DYNAMIC_LIBRARY_FLAG_NODELETE,
         iree_allocator_system(), &api->library);
@@ -320,7 +320,7 @@ iree_status_t LoadHsaLibrary(HsaApi* api) {
 
   return iree_make_status(IREE_STATUS_NOT_FOUND,
                           "HSA runtime unavailable; specify "
-                          "IREE_HAL_AMDGPU_LIBHSA_PATH if the runtime is "
+                          "LOOM_HSA_LIBRARY_PATH if the runtime is "
                           "not on the loader path:%s",
                           failures.c_str());
 }

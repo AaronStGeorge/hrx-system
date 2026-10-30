@@ -17,23 +17,24 @@ load(
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
 load("//loom/build_tools/bazel:defs.bzl", "loom_test")
 load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test")
-load("//loom/target/amdgpu:execution_profiles.bzl", "amdgpu_execution_profile")
+load("//loom/target/amdgpu:execution_profiles.bzl", "amd_gpu_execution_profile")
 
 package(default_visibility = ["//visibility:public"])
 
-_AMDGPU_EXECUTION_PROFILE = amdgpu_execution_profile(
+_AMDGPU_EXECUTION_PROFILE = amd_gpu_execution_profile(
     name = "amdgpu",
 )
 
 # Access-instrumented execution fails automatically when a report is emitted.
 _EXECUTION_PROFILES = [
     _AMDGPU_EXECUTION_PROFILE,
-    amdgpu_execution_profile(
+    amd_gpu_execution_profile(
         name = "amdgpu_access",
         runner_args = [
             "--sanitizer=access",
             "--sanitizer-reporting=report-only",
         ],
+        tags = ["requires-amd-gpu-feedback"],
     ),
 ]
 

@@ -31,18 +31,12 @@ iree_string_list_flag(
 ]
 
 selects.config_setting_group(
-    name = "amdgpu_driver",
-    match_any = [
-        "//runtime/config/hal:driver_amd_gpu",
-        "//runtime/config/hal:driver_amdgpu",
-    ],
-)
-
-selects.config_setting_group(
     name = "amdgpu_hal",
     match_all = [
         ":iree_hal",
-        ":amdgpu_driver",
+        "//runtime/config/hal:driver_amd_gpu",
+        "//libamdf/config:enabled_setting",
+        "//libamdf/config/family:gpu",
         "//loom/config/emit:amdgpu_elf",
     ],
 )

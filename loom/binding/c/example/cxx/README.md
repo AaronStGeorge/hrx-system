@@ -65,20 +65,22 @@ through the ordinary HIP header facade.
 
 ```sh
 iree-bazel-run --config=loom-importer-cxx --config=loom-target-amd-gpu \
-  --//runtime/config/hal:drivers=amdgpu,task \
+  --//runtime/config/hal:drivers=amd-gpu,task \
+  --//libamdf/config:enabled=true --//libamdf/config:families=rdna,cdna \
   //loom/binding/c/example/cxx:jit_amdgpu
 ```
 
-The first optional argument is a HAL device URI, defaulting to `legacy-amdgpu`.
+The first optional argument is a HAL device URI, defaulting to `amdgpu`.
 The second supplies an external facade include root, disabling embedded
 headers for the import:
 
 ```sh
 iree-bazel-run --config=loom-importer-cxx --config=loom-target-amd-gpu \
-  --//runtime/config/hal:drivers=amdgpu,task \
+  --//runtime/config/hal:drivers=amd-gpu,task \
+  --//libamdf/config:enabled=true --//libamdf/config:families=rdna,cdna \
   --//loom/config/import/cxx:embed_includes=false \
   //loom/binding/c/example/cxx:jit_amdgpu -- \
-  legacy-amdgpu loom/src/loom/import/cxx/include
+  amdgpu loom/src/loom/import/cxx/include
 ```
 
 The driver prepares the context, compiler and target pipeline before accepting

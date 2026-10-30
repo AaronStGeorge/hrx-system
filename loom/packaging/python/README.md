@@ -116,8 +116,7 @@ PR and manual build jobs have read permissions and publish no release.
 compiler targets, and media codecs independently of the worktree configuration.
 Native AMD execution uses the operating-system device driver; it requires no
 ROCm SDK. The `amdgpu`, `rdna`, `cdna`, and `xdna` drivers use libamdf. Vulkan
-execution dynamically loads the system loader. The ROCr-based `legacy-amdgpu`
-driver is excluded from this configuration. Instrumentation and optimization
+execution dynamically loads the system loader. Instrumentation and optimization
 are selected separately, as shown below.
 
 Windows SDK profiles use the redistributable dynamic C runtime. The debug

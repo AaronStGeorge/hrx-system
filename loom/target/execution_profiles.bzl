@@ -12,12 +12,12 @@ load(
 )
 load(
     "//loom/target/amdgpu:execution_profiles.bzl",
-    "AMDGPU_HARDWARE_PROFILE",
+    "AMD_GPU_HARDWARE_PROFILE",
 )
 
 # Each child executes on a compatible local device; offline compiler profiles
 # separately qualify code generation for explicit architecture selectors.
 GPU_HARDWARE_PROFILES = [
-    AMDGPU_HARDWARE_PROFILE,
+    AMD_GPU_HARDWARE_PROFILE,
     SPIRV_VULKAN_HARDWARE_PROFILE,
 ]

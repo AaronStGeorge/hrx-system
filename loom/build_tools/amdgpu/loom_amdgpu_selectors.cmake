@@ -57,12 +57,12 @@ endfunction()
 
 function(_loom_amdgpu_expand_iree_hal_target_selectors out_targets)
   set(_expanded_targets)
-  if(NOT DEFINED IREE_HAL_AMDGPU_TARGETS)
+  if(NOT DEFINED IREE_HAL_AMD_GPU_TARGETS)
     message(FATAL_ERROR
       "LOOM_ARCH_AMDGPU_TARGETS contains iree_hal but "
-      "IREE_HAL_AMDGPU_TARGETS is not defined.")
+      "IREE_HAL_AMD_GPU_TARGETS is not defined.")
   endif()
-  foreach(_iree_hal_selector ${IREE_HAL_AMDGPU_TARGETS})
+  foreach(_iree_hal_selector ${IREE_HAL_AMD_GPU_TARGETS})
     if("${_iree_hal_selector}" IN_LIST
         _LOOM_AMDGPU_SUPPORTED_CODE_OBJECT_PROCESSORS)
       continue()
@@ -138,7 +138,7 @@ function(loom_amdgpu_configure_target_selectors)
       list(APPEND _loom_amdgpu_generic_targets
         ${_LOOM_AMDGPU_SUPPORTED_CODE_OBJECT_PROCESSORS})
     elseif("${_selector}" STREQUAL "${LOOM_AMDGPU_TARGET_SOURCE_IREE_HAL}")
-      foreach(_iree_hal_selector ${IREE_HAL_AMDGPU_TARGETS})
+      foreach(_iree_hal_selector ${IREE_HAL_AMD_GPU_TARGETS})
         if("${_iree_hal_selector}" IN_LIST
             _LOOM_AMDGPU_SUPPORTED_CODE_OBJECT_PROCESSORS)
           list(APPEND _loom_amdgpu_generic_targets "${_iree_hal_selector}")
@@ -150,7 +150,7 @@ function(loom_amdgpu_configure_target_selectors)
   endforeach()
   list(REMOVE_DUPLICATES _loom_amdgpu_generic_targets)
 
-  if(DEFINED IREE_HAL_AMDGPU_TARGETS)
+  if(DEFINED IREE_HAL_AMD_GPU_TARGETS)
     _loom_amdgpu_expand_iree_hal_target_selectors(
       _loom_amdgpu_iree_hal_exact_targets
     )
@@ -158,7 +158,7 @@ function(loom_amdgpu_configure_target_selectors)
     set(_loom_amdgpu_iree_hal_exact_targets)
   endif()
   set(_loom_amdgpu_iree_hal_generic_targets)
-  foreach(_selector ${IREE_HAL_AMDGPU_TARGETS})
+  foreach(_selector ${IREE_HAL_AMD_GPU_TARGETS})
     if("${_selector}" IN_LIST _LOOM_AMDGPU_SUPPORTED_CODE_OBJECT_PROCESSORS)
       list(APPEND _loom_amdgpu_iree_hal_generic_targets "${_selector}")
     endif()
