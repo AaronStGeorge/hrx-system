@@ -23,3 +23,46 @@ low.func.def target<test.low.core>(@target) @materialized_spill_traffic(%wide: r
 spills: 0
 materialized traffic: stores=3 reloads=3
 copies: coalesced=0 materialized=3
+
+// ====
+
+// The attribute keeps the loop argument and its self edge. The estimator and
+// materializer must both count that edge's reload and the block-entry store.
+// RUN: emit low-allocation-query @retained_self_edge spill-plans=%wide materialize-spills
+
+test.target<low_core> @target
+
+low.func.def schedule(locked) target<test.low.core>(@target) @retained_self_edge(%initial: reg<test.pressure.alias32 x7>, %seed0: reg<test.i32>, %seed1: reg<test.i32>) asm {
+  low.br ^loop(%initial: reg<test.pressure.alias32 x7>)
+^loop(%wide: reg<test.pressure.alias32 x7>):
+  %first = test.move.to.pressure.alias32 %seed0
+  %second = test.move.to.pressure.alias32 %seed1
+  %first_value = copy %first : reg<test.pressure.alias32> -> reg<test.i32>
+  %second_value = copy %second : reg<test.pressure.alias32> -> reg<test.i32>
+  %pair = test.add.i32 %first_value, %second_value
+  %assumed = low.assume %pair [range(%wide, 0, 1024)] : reg<test.i32>
+  low.br ^loop(%wide: reg<test.pressure.alias32 x7>)
+}
+
+// ----
+spill %wide: stack[0] bytes=28 align=16 stores=1 reloads=1
+storage: 1 reservations, 28 bytes
+traffic: 1 stores, 1 reloads
+errors: 0
+
+test.target<low_core> @target
+
+low.func.def schedule(locked) target<test.low.core>(@target) @retained_self_edge(%initial: reg<test.pressure.alias32 x7>, %seed0: reg<test.i32>, %seed1: reg<test.i32>) asm {
+  %retained_self_edge_spill_storage_0 = storage {byte_alignment = 16, byte_length = 28} : low.storage<stack>
+  low.br ^loop(%initial: reg<test.pressure.alias32 x7>)
+^loop(%wide: reg<test.pressure.alias32 x7>):
+  low.spill %wide, %retained_self_edge_spill_storage_0 : reg<test.pressure.alias32 x7>, low.storage<stack>
+  %first = test.move.to.pressure.alias32 %seed0
+  %second = test.move.to.pressure.alias32 %seed1
+  %first_value = copy %first : reg<test.pressure.alias32> -> reg<test.i32>
+  %second_value = copy %second : reg<test.pressure.alias32> -> reg<test.i32>
+  %pair = test.add.i32 %first_value, %second_value
+  %assumed = low.assume %pair [range(%wide, 0, 1024)] : reg<test.i32>
+  %11 = low.reload %retained_self_edge_spill_storage_0 : low.storage<stack> -> reg<test.pressure.alias32 x7>
+  low.br ^loop(%11: reg<test.pressure.alias32 x7>)
+}

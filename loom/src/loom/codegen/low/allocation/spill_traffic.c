@@ -17,13 +17,15 @@ loom_low_allocation_spill_register_requirement_for_value(
     return LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NONE;
   }
   const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value) &&
-      loom_value_def_block(value)->parent_region != function_region) {
-    return LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NESTED_REGION_ARGUMENT;
-  }
-  const loom_op_t* defining_op = loom_def_op(value->def);
-  if (defining_op && loom_low_reload_isa(defining_op)) {
-    return LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_MATERIALIZED_TRAFFIC;
+  if (loom_value_is_block_arg(value)) {
+    if (loom_value_def_block(value)->parent_region != function_region) {
+      return LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NESTED_REGION_ARGUMENT;
+    }
+  } else {
+    const loom_op_t* defining_op = loom_value_def_op(value);
+    if (defining_op && loom_low_reload_isa(defining_op)) {
+      return LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_MATERIALIZED_TRAFFIC;
+    }
   }
   const loom_use_t* uses = loom_value_uses(value);
   for (uint32_t i = 0; i < value->use_count; ++i) {
@@ -33,5 +35,7 @@ loom_low_allocation_spill_register_requirement_for_value(
       return LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_MATERIALIZED_TRAFFIC;
     }
   }
-  return LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NONE;
+  return value->use_count == 0
+             ? LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NO_OPERAND_USES
+             : LOOM_LOW_ALLOCATION_SPILL_REGISTER_REQUIREMENT_NONE;
 }

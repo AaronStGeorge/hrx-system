@@ -1,3 +1,117 @@
+// An attribute still refers to the original argument after its ordinary use
+// moves to a reload. The incoming edge and argument definition must survive.
+// RUN: pass low-materialize-allocation
+
+test.target<low_core> @target
+
+low.func.def schedule(locked) target<test.low.core>(@target) @attribute_argument(%initial: reg<test.pressure.alias32 x7>, %seed0: reg<test.i32>, %seed1: reg<test.i32>) -> (reg<test.pressure.alias32 x7>, reg<test.i32>) asm {
+  low.br ^body(%initial: reg<test.pressure.alias32 x7>)
+^body(%wide: reg<test.pressure.alias32 x7>):
+  %first = test.move.to.pressure.alias32 %seed0
+  %second = test.move.to.pressure.alias32 %seed1
+  %first_value = copy %first : reg<test.pressure.alias32> -> reg<test.i32>
+  %second_value = copy %second : reg<test.pressure.alias32> -> reg<test.i32>
+  %pair = test.add.i32 %first_value, %second_value
+  %alias = low.assume %wide [range(%wide, 0, 1024)] : reg<test.pressure.alias32 x7>
+  return %alias, %pair
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def schedule(locked) target<test.low.core>(@target) @attribute_argument(%initial: reg<test.pressure.alias32 x7>, %seed0: reg<test.i32>, %seed1: reg<test.i32>) -> (reg<test.pressure.alias32 x7>, reg<test.i32>) asm {
+  %attribute_argument_spill_storage_0 = storage {byte_alignment = 16, byte_length = 28} : low.storage<stack>
+  low.br ^body(%initial: reg<test.pressure.alias32 x7>)
+^body(%wide: reg<test.pressure.alias32 x7>):
+  low.spill %wide, %attribute_argument_spill_storage_0 : reg<test.pressure.alias32 x7>, low.storage<stack>
+  %first = test.move.to.pressure.alias32 %seed0
+  %second = test.move.to.pressure.alias32 %seed1
+  %first_value = copy %first : reg<test.pressure.alias32> -> reg<test.i32>
+  %second_value = copy %second : reg<test.pressure.alias32> -> reg<test.i32>
+  %pair = test.add.i32 %first_value, %second_value
+  %13 = low.reload %attribute_argument_spill_storage_0 : low.storage<stack> -> reg<test.pressure.alias32 x7>
+  %alias = low.assume %13 [range(%wide, 0, 1024)] : reg<test.pressure.alias32 x7>
+  return %alias, %pair
+}
+
+// ====
+
+// A peer argument's dependent type retains the original width definition,
+// independently of the ordinary operand use that spilling redirects.
+// RUN: pass low-materialize-allocation
+
+test.target<low_core> @target
+
+low.func.def schedule(locked) target<test.low.core>(@target) @dependent_argument(%initial: reg<test.alias32 : index>, %data: reg<test.i32 : vector<[%initial]xf32>>, %seed: reg<test.i32>) -> (reg<test.alias32 : index>, reg<test.i32>) asm {
+  low.br ^body(%initial: reg<test.alias32 : index>, %data: reg<test.i32 : vector<[%initial]xf32>>)
+^body(%width: reg<test.alias32 : index>, %dependent: reg<test.i32 : vector<[%width]xf32>>):
+  %value = copy %seed : reg<test.i32> -> reg<test.alias32>
+  %result = copy %value : reg<test.alias32> -> reg<test.i32>
+  return %width, %result
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def schedule(locked) target<test.low.core>(@target) @dependent_argument(%initial: reg<test.alias32 : index>, %data: reg<test.i32 : vector<[%initial]xf32>>, %seed: reg<test.i32>) -> (reg<test.alias32 : index>, reg<test.i32>) asm {
+  %dependent_argument_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<stack>
+  low.br ^body(%initial: reg<test.alias32 : index>, %data: reg<test.i32 : vector<[%initial]xf32>>)
+^body(%width: reg<test.alias32 : index>, %dependent: reg<test.i32 : vector<[%width]xf32>>):
+  low.spill %width, %dependent_argument_spill_storage_0 : reg<test.alias32 : index>, low.storage<stack>
+  %value = copy %seed : reg<test.i32> -> reg<test.alias32>
+  %result = copy %value : reg<test.alias32> -> reg<test.i32>
+  %10 = low.reload %dependent_argument_spill_storage_0 : low.storage<stack> -> reg<test.alias32 : index>
+  return %10, %result
+}
+
+// ====
+
+// An unused result still needs a register at its definition. Spilling the
+// live input frees that register; spilling the unused result makes no progress.
+// RUN: pass low-materialize-allocation
+
+test.target<low_core> @target
+
+low.func.def schedule(locked) target<test.low.core>(@target) @unused_result(%initial: reg<test.alias32>, %seed: reg<test.i32>) -> (reg<test.alias32>) asm {
+  %discarded = copy %seed : reg<test.i32> -> reg<test.alias32>
+  return %initial
+}
+
+// ----
+test.target<low_core> @target
+
+low.func.def schedule(locked) target<test.low.core>(@target) @unused_result(%initial: reg<test.alias32>, %seed: reg<test.i32>) -> (reg<test.alias32>) asm {
+  %unused_result_spill_storage_0 = storage {byte_alignment = 4, byte_length = 4} : low.storage<stack>
+  low.spill %initial, %unused_result_spill_storage_0 : reg<test.alias32>, low.storage<stack>
+  %discarded = copy %seed : reg<test.i32> -> reg<test.alias32>
+  %5 = low.reload %unused_result_spill_storage_0 : low.storage<stack> -> reg<test.alias32>
+  return %5
+}
+
+// ====
+
+// A value used only by dependent types has no operands to reload. This
+// one-register bank cannot hold it across another register's definition;
+// allocation reports that conflict instead of retrying an empty spill plan.
+// RUN: pass low-materialize-allocation
+
+test.target<low_core> @target
+
+low.func.def schedule(locked) target<test.low.core>(@target) @type_only_use(%initial: reg<test.alias32 : index>, %data: reg<test.i32 : vector<[%initial]xf32>>, %seed: reg<test.i32>) -> (reg<test.i32>) asm {
+  %destination = storage {byte_alignment = 4, byte_length = 4} : low.storage<stack>
+  low.br ^body(%initial: reg<test.alias32 : index>, %data: reg<test.i32 : vector<[%initial]xf32>>)
+^body(%width: reg<test.alias32 : index>, %dependent: reg<test.i32 : vector<[%width]xf32>>):
+  // ERROR@+1: BACKEND/005 {function_name="type_only_use", budget="1", peak="2", failure_code="spill-traffic-register-exhausted"}
+  %value = copy %seed : reg<test.i32> -> reg<test.alias32>
+  %result = copy %value : reg<test.alias32> -> reg<test.i32>
+  low.spill %dependent, %destination : reg<test.i32 : vector<[%width]xf32>>, low.storage<stack>
+  return %result
+}
+
+// ----
+
+// ====
+
 // Inlining appends the producer after its loop, and CFG simplification forwards
 // the invariant argument to that later concat. Its scalar source must remain
 // live across repeated edge reads, with sparse reservations preserving holes.
