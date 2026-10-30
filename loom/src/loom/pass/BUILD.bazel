@@ -295,7 +295,7 @@ loom_cc_library(
     srcs = ["builtin_registry.c"],
     hdrs = ["builtin_registry.h"],
     visibility = [
-        "//loom/binding/c:__pkg__",
+        "//loom/binding/c:implementation",
         "//loom/binding/c/target/cmd:__pkg__",
         "//loom/src/loom/codegen/low:__pkg__",
         "//loom/src/loom/target/arch/amdgpu:__pkg__",

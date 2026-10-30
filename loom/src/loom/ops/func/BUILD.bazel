@@ -14,7 +14,7 @@ package(
 )
 
 _FUNC_VISIBILITY = [
-    "//loom/binding/c:__pkg__",
+    "//loom/binding/c:implementation",
     "//loom/src/loom/analysis:__pkg__",
     "//loom/src/loom/codegen/low:__pkg__",
     "//loom/src/loom/codegen/low/testing:__pkg__",
