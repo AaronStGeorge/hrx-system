@@ -17,6 +17,7 @@
 #include "iree/testing/gtest.h"
 #include "loom/import/cxx/source/error.h"
 #include "loom/import/cxx/value/builder_test.h"
+#include "loom/ops/type_builders.h"
 
 namespace loom::cxx_import {
 namespace {
@@ -108,6 +109,132 @@ TEST_F(TypesWithModuleTest, ProjectsSpecialAndRegisteredOpaqueHandles) {
   EXPECT_THROW(types.get(source_type("MalformedBuffer"), owner),
                SourceRejected);
   EXPECT_THROW(types.get(source_type("Unknown"), owner), SourceRejected);
+}
+
+TEST_F(TypesWithModuleTest, ProjectsPipelinePayloadAndHandleFamilies) {
+  Source source(IREE_SV(R"(
+    namespace loom {
+    namespace encoding {
+    enum class role { layout, schema, storage, transform };
+    }
+    namespace channel {
+    enum class mode { immutable = 0, mutable_ = 1 };
+    }
+    namespace type {
+    using size_type = __SIZE_TYPE__;
+    inline constexpr size_type dynamic = ~size_type{0};
+    template<size_type... Extents>
+    struct [[loom::type("shape")]] shape {};
+    template<loom::encoding::role Role, size_type Rank>
+    struct [[loom::type("encoding")]] encoding {};
+    template<class Shape, class T, class Encoding = void>
+    struct [[loom::type("tile")]] tile {};
+    struct [[loom::type("pool")]] pool {};
+    template<class Payload>
+    struct [[loom::type("channel")]] channel {};
+    template<class Payload, loom::channel::mode Mode =
+                                loom::channel::mode::immutable>
+    struct [[loom::type("read")]] read {};
+    template<class Payload>
+    struct [[loom::type("write")]] write {};
+    }
+    }
+    using Layout = loom::type::encoding<loom::encoding::role::layout, 2>;
+    using StaticTile = loom::type::tile<loom::type::shape<4, 8>, float>;
+    using DynamicTile = loom::type::tile<
+        loom::type::shape<loom::type::dynamic, 8>, float, Layout>;
+    using StaticChannel = loom::type::channel<StaticTile>;
+    using DynamicChannel = loom::type::channel<DynamicTile>;
+    using ImmutableRead = loom::type::read<StaticTile>;
+    using MutableRead = loom::type::read<
+        StaticTile, loom::channel::mode::mutable_>;
+    using DynamicWrite = loom::type::write<DynamicTile>;
+    using Pool = loom::type::pool;
+  )"),
+                IREE_SV("pipeline_types.cxx"), options());
+  Types types(source.unit(), source.diagnostics(), module_);
+  auto* owner = source.unit().ast();
+  auto source_type = [&](const char* name) {
+    return (*source.unit().globalScope()->find(name).begin())->type();
+  };
+
+  const auto& static_tile = static_cast<const TilePartition&>(
+      types.partition(source_type("StaticTile"), owner));
+  EXPECT_EQ(static_tile.kind, ValueKind::Tile);
+  EXPECT_EQ(static_tile.component_count, 1u);
+  EXPECT_FALSE(static_tile.requires_binding());
+  EXPECT_EQ(loom_type_kind(static_tile.static_type), LOOM_TYPE_TILE);
+  EXPECT_EQ(loom_type_dim_static_size_at(static_tile.static_type, 0), 4);
+  EXPECT_EQ(loom_type_dim_static_size_at(static_tile.static_type, 1), 8);
+
+  const auto& dynamic_tile = static_cast<const TilePartition&>(
+      types.partition(source_type("DynamicTile"), owner));
+  EXPECT_EQ(dynamic_tile.component_count, 3u);
+  EXPECT_TRUE(dynamic_tile.requires_binding());
+  EXPECT_EQ(dynamic_tile.component_names,
+            (std::vector<std::string>{"dim0", "encoding", ""}));
+  const loom_value_id_t dynamic_ids[] = {11, 12, 13};
+  BoundTypeStorage tile_storage;
+  std::vector<loom_type_t> tile_types;
+  types.append_bound(source_type("DynamicTile"), owner, dynamic_ids,
+                     tile_storage, tile_types);
+  ASSERT_EQ(tile_types.size(), 3u);
+  EXPECT_EQ(loom_type_element_type(tile_types[0]), LOOM_SCALAR_TYPE_INDEX);
+  EXPECT_EQ(loom_type_encoding_role(tile_types[1]),
+            LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
+  EXPECT_EQ(loom_type_kind(tile_types[2]), LOOM_TYPE_TILE);
+  EXPECT_EQ(loom_type_dim_value_id_at(tile_types[2], 0), 11u);
+  EXPECT_EQ(loom_type_dim_static_size_at(tile_types[2], 1), 8);
+  EXPECT_EQ(loom_type_encoding_value_id(tile_types[2]), 12u);
+
+  std::vector<loom_type_t> static_channel_types;
+  types.append(source_type("StaticChannel"), owner, static_channel_types);
+  ASSERT_EQ(static_channel_types.size(), 1u);
+  ASSERT_TRUE(loom_channel_type_isa(static_channel_types[0]));
+  auto static_payload = loom_type_table_get(
+      &module_->types, loom_channel_type_payload(static_channel_types[0]));
+  EXPECT_TRUE(loom_type_equal(static_payload, static_tile.static_type));
+
+  const auto& dynamic_channel = static_cast<const ChannelPartition&>(
+      types.partition(source_type("DynamicChannel"), owner));
+  EXPECT_EQ(dynamic_channel.component_count, 3u);
+  EXPECT_TRUE(dynamic_channel.requires_binding());
+  EXPECT_EQ(dynamic_channel.component_names,
+            (std::vector<std::string>{"dim0", "encoding", ""}));
+  BoundTypeStorage channel_storage;
+  std::vector<loom_type_t> channel_types;
+  types.append_bound(source_type("DynamicChannel"), owner, dynamic_ids,
+                     channel_storage, channel_types);
+  ASSERT_EQ(channel_types.size(), 3u);
+  ASSERT_TRUE(loom_channel_type_isa(channel_types[2]));
+  auto dynamic_payload = loom_type_table_get(
+      &module_->types, loom_channel_type_payload(channel_types[2]));
+  EXPECT_EQ(loom_type_dim_value_id_at(dynamic_payload, 0), 11u);
+  EXPECT_EQ(loom_type_encoding_value_id(dynamic_payload), 12u);
+
+  std::vector<loom_type_t> immutable_read_types;
+  types.append(source_type("ImmutableRead"), owner, immutable_read_types);
+  ASSERT_EQ(immutable_read_types.size(), 1u);
+  EXPECT_TRUE(loom_read_type_isa(immutable_read_types[0]));
+  EXPECT_FALSE(loom_read_type_has_mode(immutable_read_types[0]));
+  std::vector<loom_type_t> mutable_read_types;
+  types.append(source_type("MutableRead"), owner, mutable_read_types);
+  ASSERT_EQ(mutable_read_types.size(), 1u);
+  EXPECT_TRUE(loom_read_type_has_mode(mutable_read_types[0]));
+  EXPECT_EQ(loom_read_type_mode(mutable_read_types[0]),
+            LOOM_READ_TYPE_MODE_MUTABLE);
+
+  BoundTypeStorage write_storage;
+  std::vector<loom_type_t> write_types;
+  types.append_bound(source_type("DynamicWrite"), owner, dynamic_ids,
+                     write_storage, write_types);
+  ASSERT_EQ(write_types.size(), 3u);
+  EXPECT_TRUE(loom_write_type_isa(write_types[2]));
+
+  const auto& pool = types.partition(source_type("Pool"), owner);
+  EXPECT_EQ(pool.kind, ValueKind::Pool);
+  EXPECT_EQ(loom_type_kind(types.get(source_type("Pool"), owner)),
+            LOOM_TYPE_POOL);
 }
 
 TEST(TypesTest, ProjectsTheConfiguredDataModelAndRetainsSignedness) {

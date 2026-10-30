@@ -406,7 +406,8 @@ class Translator final : private Initialization::Evaluation {
       return Value(result);
     }
     if (value.is_record() || value.is_array() || value.is_buffer() ||
-        value.is_opaque_dialect() || value.is_encoding() || value.is_vector() ||
+        value.is_opaque_dialect() || value.is_encoding() || value.is_pool() ||
+        value.is_tile() || value.is_channel() || value.is_vector() ||
         value.is_view() || value.is_tensor()) {
       if (&types_.partition(output_type, owner) != &value.partition()) {
         fail(owner, "conversion must preserve the source value type");
@@ -517,6 +518,22 @@ class Translator final : private Initialization::Evaluation {
     } else if (value.is_view()) {
       const auto& partition =
           static_cast<const ViewPartition&>(value.partition());
+      auto components = value.components();
+      for (size_t index = 0; index < components.size(); ++index) {
+        auto suffix = partition.component_names[index];
+        name(components[index], suffix.empty() ? hint : hint + "_" + suffix);
+      }
+    } else if (value.is_tile()) {
+      const auto& partition =
+          static_cast<const TilePartition&>(value.partition());
+      auto components = value.components();
+      for (size_t index = 0; index < components.size(); ++index) {
+        auto suffix = partition.component_names[index];
+        name(components[index], suffix.empty() ? hint : hint + "_" + suffix);
+      }
+    } else if (value.is_channel()) {
+      const auto& partition =
+          static_cast<const ChannelPartition&>(value.partition());
       auto components = value.components();
       for (size_t index = 0; index < components.size(); ++index) {
         auto suffix = partition.component_names[index];
@@ -3010,6 +3027,12 @@ class Translator final : private Initialization::Evaluation {
       source = static_cast<const OpaqueDialectPartition&>(partition).source;
     } else if (partition.kind == ValueKind::Encoding) {
       source = static_cast<const EncodingPartition&>(partition).source;
+    } else if (partition.kind == ValueKind::Pool) {
+      source = static_cast<const PoolPartition&>(partition).source;
+    } else if (partition.kind == ValueKind::Tile) {
+      source = static_cast<const TilePartition&>(partition).source;
+    } else if (partition.kind == ValueKind::Channel) {
+      source = static_cast<const ChannelPartition&>(partition).source;
     } else if (partition.kind == ValueKind::Vector) {
       source = static_cast<const VectorPartition&>(partition).source;
     } else if (partition.kind == ValueKind::View) {

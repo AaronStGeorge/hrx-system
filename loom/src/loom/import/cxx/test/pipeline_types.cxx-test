@@ -1,0 +1,21 @@
+// RUN: roundtrip
+#include <loomcxx/pipeline.h>
+
+namespace loomt = loom::type;
+using Layout = loomt::encoding<loom::encoding::role::layout, 2>;
+using Payload = loomt::tile<loomt::shape<loomt::dynamic, 8>, float, Layout>;
+using Stream = loomt::channel<Payload>;
+
+Stream forward(Stream stream);
+
+Stream entry(Stream stream, loomt::pool pool, Payload payload) {
+  return forward(stream);
+}
+
+// ----
+func.def public @entry(%stream_dim0: index, %stream_encoding: encoding<layout>, %stream: channel<tile<[%stream_dim0]x8xf32, %stream_encoding>>, %pool: pool, %payload_dim0: index, %payload_encoding: encoding<layout>, %payload: tile<[%payload_dim0]x8xf32, %payload_encoding>) -> (%7: index, %8: encoding<layout>, channel<tile<[%7]x8xf32, %8>>) {
+  %10, %11, %12 = func.call @forward(%stream_dim0, %stream_encoding, %stream) : (index, encoding<layout>, channel<tile<[%stream_dim0]x8xf32, %stream_encoding>>) -> (index, encoding<layout>, channel<tile<[%10]x8xf32, %11>>)
+  func.return %10, %11, %12 : index, encoding<layout>, channel<tile<[%10]x8xf32, %11>>
+}
+
+func.decl @forward(%13: index, %14: encoding<layout>, %15: channel<tile<[%13]x8xf32, %14>>) -> (%16: index, %17: encoding<layout>, channel<tile<[%16]x8xf32, %17>>)

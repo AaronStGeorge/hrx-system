@@ -161,6 +161,77 @@ class ShapeExtents {
   std::unique_ptr<int64_t[]> overflow_extents_;
 };
 
+// Canonical rank-generic tile value. Dynamic extents and an optional encoding
+// are transported before the dependent tile so its High type references this
+// binding's own component identities at every call and region boundary.
+struct TilePartition final : Partition {
+  // Binds the High tile type to |dependencies|. Dependencies contain dynamic
+  // extents in source-axis order followed by an optional encoding identity.
+  loom_type_t bind_type(std::span<const loom_value_id_t> dependencies,
+                        BoundTypeStorage& storage) const;
+  // Returns the tile SSA value from one complete component binding.
+  loom_value_id_t tile_value(std::span<const loom_value_id_t> components) const;
+  bool requires_binding() const { return component_count > 1; }
+
+  // Concrete source specialization retaining nominal copy semantics.
+  cxx::ClassSymbol* source;
+  // Unqualified source scalar element type.
+  const cxx::Type* element_type;
+  // High scalar representation of one logical element.
+  loom_scalar_type_t element;
+  // Attached semantic encoding, or null for an unencoded tile.
+  const EncodingPartition* encoding = nullptr;
+  // Static extent, or -1 when the axis has a transported dynamic extent.
+  ShapeExtents extents;
+  // Component labels in transport order; an empty label names the tile.
+  std::vector<std::string> component_names;
+  // Stable overflow storage for an all-static unencoded tile type.
+  BoundTypeStorage static_type_storage;
+  // Prebound all-static unencoded High type; unused by dependent tiles.
+  loom_type_t static_type = {};
+};
+
+// Semantic identity of one channel-family source handle.
+enum class ChannelHandleKind {
+  Channel,
+  Read,
+  Write,
+};
+
+// Canonical channel, read, or write handle parameterized by a tile payload.
+// Payload dependencies travel before the final handle and bind its nested tile
+// type locally at every destination edge.
+struct ChannelPartition final : Partition {
+  // Binds the parameterized High handle type to |dependencies|, which follow
+  // the payload tile's dynamic-extent and optional-encoding order.
+  loom_type_t bind_type(loom_module_t* module,
+                        std::span<const loom_value_id_t> dependencies,
+                        BoundTypeStorage& storage) const;
+  // Returns the final handle SSA value from one complete component binding.
+  loom_value_id_t handle_value(
+      std::span<const loom_value_id_t> components) const;
+  bool requires_binding() const { return component_count > 1; }
+
+  // Concrete source specialization retaining nominal copy semantics.
+  cxx::ClassSymbol* source;
+  // Canonical tile payload shared with direct tile values.
+  const TilePartition* payload;
+  // Distinguishes communication, consumption, and production handles.
+  ChannelHandleKind handle_kind;
+  // Whether a read carries exclusive mutable permission; false otherwise.
+  bool mutable_read = false;
+  // Component labels in transport order; an empty label names the handle.
+  std::vector<std::string> component_names;
+  // Prebound parameterized High type; unused by dependent payloads.
+  loom_type_t static_type = {};
+};
+
+// Canonical source handle projected to Loom's builtin allocation pool type.
+struct PoolPartition final : Partition {
+  // Concrete source class retaining copy and lifetime semantics.
+  cxx::ClassSymbol* source;
+};
+
 // Canonical rank-generic source vector. Dynamic extents are transported before
 // the dependent High vector so its type references this binding's own
 // component identities at every call and region boundary. Native C++ vectors
@@ -305,10 +376,11 @@ class Types {
   void append(const cxx::Type* input, cxx::AST* owner,
               std::vector<loom_type_t>& output);
   // Appends a High signature bound to this destination's flattened component
-  // IDs. Static leaves ignore their IDs; dependent views reference their own
-  // dynamic extents and encoding. |identities| is either empty for a wholly
-  // static projection or exactly the partition's component count. |storage|
-  // must outlive the builder call that consumes the returned types.
+  // IDs. Static leaves ignore their IDs; dependent shaped values and handles
+  // reference their own dynamic extents and encoding. |identities| is either
+  // empty for a wholly static projection or exactly the partition's component
+  // count. |storage| must outlive the builder call consuming the returned
+  // types.
   void append_bound(const cxx::Type* input, cxx::AST* owner,
                     std::span<const loom_value_id_t> identities,
                     BoundTypeStorage& storage,
@@ -348,6 +420,10 @@ class Types {
                                   cxx::AST* owner);
   const EncodingPartition* encoding(const cxx::ClassType* input,
                                     cxx::AST* owner);
+  const PoolPartition* pool(const cxx::ClassType* input, cxx::AST* owner);
+  const TilePartition* tile(const cxx::ClassType* input, cxx::AST* owner);
+  const ChannelPartition* channel(const cxx::ClassType* input,
+                                  std::string_view name, cxx::AST* owner);
   const OpaqueDialectPartition* opaque_dialect(const cxx::ClassType* input,
                                                std::string_view name,
                                                cxx::AST* owner);
@@ -383,6 +459,13 @@ class Types {
   // Admitted special source objects, keyed by concrete specialization.
   std::unordered_map<cxx::ClassSymbol*, std::unique_ptr<EncodingPartition>>
       encodings_;
+  // Admitted allocation pool handles keyed by their source class.
+  std::unordered_map<cxx::ClassSymbol*, std::unique_ptr<PoolPartition>> pools_;
+  // Admitted tile specializations retaining element and extent contracts.
+  std::unordered_map<cxx::ClassSymbol*, std::unique_ptr<TilePartition>> tiles_;
+  // Admitted channel-family handles retaining their payload contracts.
+  std::unordered_map<cxx::ClassSymbol*, std::unique_ptr<ChannelPartition>>
+      channels_;
   // Admitted opaque dialect handles keyed by concrete source class.
   std::unordered_map<cxx::ClassSymbol*, std::unique_ptr<OpaqueDialectPartition>>
       opaque_dialects_;
