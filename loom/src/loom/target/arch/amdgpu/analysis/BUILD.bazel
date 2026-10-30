@@ -21,7 +21,7 @@ loom_cc_library(
     srcs = ["lds_bank_service.c"],
     hdrs = ["lds_bank_service.h"],
     textual_hdrs = ["//loom/src/loom/target/arch/amdgpu:lds_bank_service_model_rows.inl"],
-    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"],
+    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"],
     deps = [
         "//loom/src/loom/target/arch/amdgpu:target_info_defs",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",

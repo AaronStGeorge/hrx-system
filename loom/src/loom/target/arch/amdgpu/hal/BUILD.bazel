@@ -21,7 +21,7 @@ loom_cc_library(
     hdrs = ["kernel_abi.h"],
     visibility = [
         "//loom/src/loom/target/arch/amdgpu:__pkg__",
-        "//loom/src/loom/target/arch/amdgpu/lower:__pkg__",
+        "//loom/src/loom/target/arch/amdgpu/lower:implementation",
         "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
     ],
     deps = [

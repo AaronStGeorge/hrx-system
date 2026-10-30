@@ -14,7 +14,7 @@ package(
 
 _AMDGPU_HAL_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/hal:__pkg__"]
 
-_AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
+_AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"]
 
 _AMDGPU_NATIVE_VISIBILITY = ["//loom/src/loom/target/emit/native/amdgpu:__pkg__"]
 

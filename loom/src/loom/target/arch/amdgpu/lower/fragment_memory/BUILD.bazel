@@ -1,0 +1,95 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test")
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+exports_files(
+    [
+        "access.c",
+        "address.c",
+        "emit.c",
+        "layout.c",
+        "narrow.c",
+        "packet.c",
+        "plan.c",
+        "publication_cost.c",
+        "transpose.c",
+    ],
+    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"],
+)
+
+loom_cc_library(
+    name = "types",
+    hdrs = [
+        "access.h",
+        "address.h",
+        "emit.h",
+        "layout.h",
+        "narrow.h",
+        "packet.h",
+        "plan.h",
+        "publication_cost.h",
+        "transpose.h",
+    ],
+    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"],
+    deps = [
+        "//loom/src/loom/codegen/low:representation_plan",
+        "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target/arch/amdgpu/lower:component_api",
+        "//loom/src/loom/target/arch/amdgpu/lower/encoding",
+    ],
+)
+
+loom_cc_test(
+    name = "packet_test",
+    srcs = ["packet_test.cc"],
+    deps = [
+        ":types",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
+        "//loom/src/loom/target/arch/amdgpu/lower",
+        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "transpose_test",
+    srcs = ["transpose_test.cc"],
+    deps = [
+        ":types",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
+        "//loom/src/loom/target/arch/amdgpu/lower",
+        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_check_test(
+    name = "transpose_loom_test",
+    src = "transpose.loom-test",
+    compile_targets = ["//loom/target/amdgpu:gfx1200"],
+)
+
+loom_check_test(
+    name = "transpose_gfx950_loom_test",
+    src = "transpose_gfx950.loom-test",
+    compile_targets = ["//loom/target/amdgpu:gfx950"],
+)

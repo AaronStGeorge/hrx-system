@@ -49,7 +49,7 @@ _DESCRIPTOR_SET_RDNA4_GFX1250_A0 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY[
 
 _AMDGPU_LOW_REGISTRY_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu:__pkg__",
-    "//loom/src/loom/target/arch/amdgpu/lower:__pkg__",
+    "//loom/src/loom/target/arch/amdgpu/lower:implementation",
     "//loom/src/loom/target/arch/amdgpu/planning:__pkg__",
     "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
     "//loom/src/loom/tooling/target/amdgpu:__pkg__",
@@ -81,7 +81,7 @@ _AMDGPU_ISA_XML_INPUTS = [
 ]
 
 _AMDGPU_DESCRIPTOR_TABLE_VISIBILITY = [
-    "//loom/src/loom/target/arch/amdgpu/lower:__pkg__",
+    "//loom/src/loom/target/arch/amdgpu/lower:implementation",
     "//loom/src/loom/target/arch/amdgpu/planning:__pkg__",
     "//loom/src/loom/target/arch/amdgpu/refs:__pkg__",
 ]

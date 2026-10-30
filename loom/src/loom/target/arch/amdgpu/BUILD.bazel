@@ -26,7 +26,7 @@ _AMDGPU_ENCODING_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/encoding:__pk
 
 _AMDGPU_HAL_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/hal:__pkg__"]
 
-_AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
+_AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"]
 
 _AMDGPU_MATRIX_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/matrix:__pkg__"]
 
@@ -384,7 +384,10 @@ loom_cc_library(
         "//loom/src/loom/target:legalization",
         "//loom/src/loom/target/arch/amdgpu:target_info_defs",
         "//loom/src/loom/target/arch/amdgpu/lower",
+        "//loom/src/loom/target/arch/amdgpu/lower:component_api",
         "//loom/src/loom/target/arch/amdgpu/lower:kinds",
+        "//loom/src/loom/target/arch/amdgpu/lower/encoding",
+        "//loom/src/loom/target/arch/amdgpu/lower/value",
         "//loom/src/loom/target/arch/amdgpu/matrix:contract",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//loom/src/loom/transforms/conversion:target_legalization",
@@ -483,6 +486,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/diagnostics:packet_diagnostics",
         "//loom/src/loom/target/arch/amdgpu/lower",
+        "//loom/src/loom/target/arch/amdgpu/lower:component_api",
         "//loom/src/loom/target/arch/amdgpu/lower:kinds",
         "//loom/src/loom/target/arch/amdgpu/ops",
         "//loom/src/loom/transforms/scalar:wide_remainder_legalization",
@@ -544,6 +548,7 @@ loom_cc_test(
         "//loom/src/loom/sanitizer:site_table",
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/lower",
+        "//loom/src/loom/target/arch/amdgpu/lower:component_api",
         "//loom/src/loom/target/arch/amdgpu/ops",
         "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base",
@@ -568,6 +573,7 @@ loom_cc_test(
         "//loom/src/loom/target/arch/amdgpu/abi:tsan",
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/lower",
+        "//loom/src/loom/target/arch/amdgpu/lower:component_api",
         "//loom/src/loom/target/arch/amdgpu/ops",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//loom/src/loom/testing:module_ptr",

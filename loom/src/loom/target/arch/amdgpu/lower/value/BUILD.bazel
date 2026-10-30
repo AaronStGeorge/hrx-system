@@ -1,0 +1,73 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+)
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+exports_files(
+    [
+        "bit_count.c",
+        "dynamic_integer_division.c",
+        "integer64.c",
+        "integer64_emit.c",
+        "integer_division.c",
+        "integer_division_dispatch.c",
+        "runtime_u32_division.c",
+        "scalar_conversion.c",
+        "storage.c",
+        "vector_construct.c",
+        "vector_conversion.c",
+        "vector_transform.c",
+    ],
+    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"],
+)
+
+loom_cc_library(
+    name = "value",
+    hdrs = [
+        "bit_count.h",
+        "dynamic_integer_division.h",
+        "integer64.h",
+        "integer_division.h",
+        "integer_division_dispatch.h",
+        "runtime_u32_division.h",
+        "scalar_conversion.h",
+        "storage.h",
+        "vector_construct.h",
+        "vector_conversion.h",
+        "vector_transform.h",
+    ],
+    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"],
+    deps = [
+        "//loom/src/loom/codegen/low/lower",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target/arch/amdgpu:error_defs",
+        "//loom/src/loom/target/arch/amdgpu:target_info_defs",
+        "//loom/src/loom/target/arch/amdgpu/contracts",
+        "//loom/src/loom/target/arch/amdgpu/lower:component_api",
+        "//loom/src/loom/target/arch/amdgpu/lower:materializers",
+        "//loom/src/loom/target/arch/amdgpu/lower/encoding",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+    ],
+)

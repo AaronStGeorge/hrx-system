@@ -16,7 +16,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
+_AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"]
 
 _AMDGPU_ARCH_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu:__pkg__"]
 
