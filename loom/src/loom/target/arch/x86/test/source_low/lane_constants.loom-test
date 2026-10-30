@@ -41,6 +41,35 @@ func.def target(@target) @construct_exact_storage_lanes() -> (vector<16xf8E4M3>,
   func.return %e4, %e5, %f16, %bf16, %i32, %f64 : vector<16xf8E4M3>, vector<16xf8E5M2>, vector<8xf16>, vector<8xbf16>, vector<4xi32>, vector<2xf64>
 }
 
+// Static live patches preserve the immutable literal load instead of
+// reconstructing its exact lanes as scalar immediates. A repeated write keeps
+// only the outermost value, while dense live construction stays in SSA form.
+func.def target(@target) @patch_exact_integer_lanes(%lane: i32) -> (vector<8xi32>) {
+  %base = vector.constanti [11, 22, 33, 44, 55, 66, 77, 88] : vector<8xi32>
+  %result = vector.insert %lane into %base[3] : i32, vector<8xi32>
+  func.return %result : vector<8xi32>
+}
+
+func.def target(@target) @patch_exact_float_lanes(%low: f32, %high: f32) -> (vector<8xf32>) {
+  %base = vector.constantf [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, -0.0] : vector<8xf32>
+  %with_low = vector.insert %low into %base[1] : f32, vector<8xf32>
+  %result = vector.insert %high into %with_low[6] : f32, vector<8xf32>
+  func.return %result : vector<8xf32>
+}
+
+func.def target(@target) @replace_exact_lane_twice(%first: i32, %last: i32) -> (vector<8xi32>) {
+  %base = vector.constanti [11, 22, 33, 44, 55, 66, 77, 88] : vector<8xi32>
+  %dead = vector.insert %first into %base[3] : i32, vector<8xi32>
+  %result = vector.insert %last into %dead[3] : i32, vector<8xi32>
+  func.return %result : vector<8xi32>
+}
+
+func.def target(@target) @construct_dense_live_lanes(%v0: i32, %v1: i32, %v2: i32, %v3: i32, %v4: i32, %v5: i32, %v6: i32) -> (vector<8xi32>) {
+  %exact = scalar.constant 88 : i32
+  %result = vector.from_elements %v0, %v1, %v2, %v3, %v4, %v5, %v6, %exact : vector<8xi32>
+  func.return %result : vector<8xi32>
+}
+
 // ----
 x86.target<avx512> @target
 
@@ -84,6 +113,49 @@ low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({s
   return %e4, %e5, %f16, %bf16, %i32, %f64
 }
 
+low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({signature = (i32) -> (vector<8xi32>)}) @patch_exact_integer_lanes(%lane: reg<x86.gpr32>) -> (reg<x86.ymm>) asm {
+  %base = avx2.vmovdqu.rodata.ymm @__low_rodata_470935ef
+  %37 = vextractf128.xmm %base, 0
+  %38 = vpinsrd.xmm %37, %lane, 3
+  %result = vinsertf128.ymm.xmm %base, %38, 0
+  return %result
+}
+
+low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({signature = (f32, f32) -> (vector<8xf32>)}) @patch_exact_float_lanes(%low: reg<x86.xmm>, %high: reg<x86.xmm>) -> (reg<x86.ymm>) asm {
+  %base = avx2.vmovdqu.rodata.ymm @__low_rodata_ab4bda1e
+  %44 = vextractf128.xmm %base, 0
+  %45 = vinsertps.xmm %44, %low, 16
+  %with_low = vinsertf128.ymm.xmm %base, %45, 0
+  %47 = vextractf128.xmm %with_low, 1
+  %48 = vinsertps.xmm %47, %high, 32
+  %result = vinsertf128.ymm.xmm %with_low, %48, 1
+  return %result
+}
+
+low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({signature = (i32, i32) -> (vector<8xi32>)}) @replace_exact_lane_twice(%first: reg<x86.gpr32>, %last: reg<x86.gpr32>) -> (reg<x86.ymm>) asm {
+  %base = avx2.vmovdqu.rodata.ymm @__low_rodata_470935ef
+  %54 = vextractf128.xmm %base, 0
+  %55 = vpinsrd.xmm %54, %last, 3
+  %result = vinsertf128.ymm.xmm %base, %55, 0
+  return %result
+}
+
+low.func.def target<x86.avx512.core>(@target) abi(object_function) abi_layout({signature = (i32, i32, i32, i32, i32, i32, i32) -> (vector<8xi32>)}) @construct_dense_live_lanes(%v0: reg<x86.gpr32>, %v1: reg<x86.gpr32>, %v2: reg<x86.gpr32>, %v3: reg<x86.gpr32>, %v4: reg<x86.gpr32>, %v5: reg<x86.gpr32>, %v6: reg<x86.gpr32>) -> (reg<x86.ymm>) asm {
+  %exact = mov.imm32 88
+  %66 = vmovd.xmm.gpr32 %v0
+  %67 = vpinsrd.xmm %66, %v1, 1
+  %68 = vpinsrd.xmm %67, %v2, 2
+  %69 = vpinsrd.xmm %68, %v3, 3
+  %70 = vmovd.xmm.gpr32 %v4
+  %71 = vpinsrd.xmm %70, %v5, 1
+  %72 = vpinsrd.xmm %71, %v6, 2
+  %73 = vpinsrd.xmm %72, %exact, 3
+  %74 = vxorps.zero.ymm
+  %75 = vinsertf128.ymm.xmm %74, %69, 0
+  %result = vinsertf128.ymm.xmm %75, %73, 1
+  return %result
+}
+
 global.rodata.def @__low_rodata_c4c062ff = align(16) bytes("01fe01fe01fe01fe01fe01fe01fe01fe")
 
 global.rodata.def @__low_rodata_4a75d4f7 = align(16) bytes("0201fdff0201fdff0201fdff0201fdff")
@@ -103,3 +175,7 @@ global.rodata.def @__low_rodata_184f736f = align(16) bytes("c03f00c0c03f00c0c03f
 global.rodata.def @__low_rodata_9bdcd267 = align(16) bytes("78563412feffffff78563412feffffff")
 
 global.rodata.def @__low_rodata_f5738314 = align(16) bytes("000000000000f83f00000000000002c0")
+
+global.rodata.def @__low_rodata_470935ef = align(32) bytes("0b00000016000000210000002c00000037000000420000004d00000058000000")
+
+global.rodata.def @__low_rodata_ab4bda1e = align(32) bytes("0000803f0000004000004040000080400000a0400000c0400000e04000000080")
