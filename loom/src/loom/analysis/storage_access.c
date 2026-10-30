@@ -91,7 +91,11 @@ static bool loom_storage_access_is_reference(const loom_module_t* module,
 
 static loom_func_like_t loom_storage_access_call_function(
     const loom_module_t* module, loom_call_like_t call) {
-  if (loom_call_like_is_direct_semantic(call)) {
+  // An exact template call already names its implementation. Its body shares
+  // the ordinary source-call argument contract; unresolved template selection
+  // remains opaque and never enters the reached-body graph.
+  if (loom_call_like_is_direct_semantic(call) ||
+      loom_call_like_kind(call) == LOOM_CALL_LIKE_KIND_TEMPLATE) {
     const loom_symbol_ref_t callee = loom_call_like_callee(call);
     if (callee.module_id == 0) {
       const loom_func_like_t function = loom_func_like_cast(

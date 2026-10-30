@@ -1,5 +1,94 @@
 // RUN: emit storage-interference @test
 
+// Exact template calls preserve the selected body's argument effects through
+// another exact call and an ordinary helper. Returning one argument does not
+// make unused, read-only, or written siblings escape.
+template.decl @copy(%unused: buffer, %source: view<1xi32>, %target: view<1xi32>, %returned: buffer) -> (buffer)
+
+func.def @copy_value(%source: view<1xi32>, %target: view<1xi32>) {
+  %value = view.load %source[0] : view<1xi32> -> i32
+  view.store %value, %target[0] : i32, view<1xi32>
+  func.return
+}
+
+template.def<@copy> @copy_body(%unused: buffer, %source: view<1xi32>, %target: view<1xi32>, %returned: buffer) -> (buffer) {
+  func.call @copy_value(%source, %target) : (view<1xi32>, view<1xi32>)
+  template.return %returned : buffer
+}
+
+template.def<@copy> @forward(%unused: buffer, %source: view<1xi32>, %target: view<1xi32>, %returned: buffer) -> (buffer) {
+  %result = template.call @copy_body(%unused, %source, %target, %returned) : (buffer, view<1xi32>, view<1xi32>, buffer) -> (buffer)
+  template.return %result : buffer
+}
+
+func.def @test(%limit: index) {
+  %origin = index.constant 0 : offset
+  %bytes = index.constant 4 : offset
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  scf.for %index = [%begin to %limit step %step] {
+    %unused = buffer.alloca<private> align(4) %bytes : buffer
+    %source = buffer.alloca<private> align(4) %bytes : buffer
+    %target = buffer.alloca<private> align(4) %bytes : buffer
+    %returned = buffer.alloca<private> align(4) %bytes : buffer
+    %source_view = buffer.view %source[%origin] : buffer -> view<1xi32>
+    %target_view = buffer.view %target[%origin] : buffer -> view<1xi32>
+    %result = template.call @forward(%unused, %source_view, %target_view, %returned) : (buffer, view<1xi32>, view<1xi32>, buffer) -> (buffer)
+  }
+  func.return
+}
+
+// ----
+unused: accessed=no single_instance=yes
+source: accessed=yes single_instance=yes
+target: accessed=yes single_instance=yes
+returned: accessed=yes single_instance=unproven
+unused / source: workgroup_nonoverlap=unproven
+unused / target: workgroup_nonoverlap=unproven
+unused / returned: workgroup_nonoverlap=unproven
+source / target: workgroup_nonoverlap=unproven
+source / returned: workgroup_nonoverlap=unproven
+target / returned: workgroup_nonoverlap=unproven
+
+// ====
+
+// An exact body may still reach opaque calls and unresolved provider selection.
+// Neither the external call nor an unselected available body proves bounded use.
+func.decl @external(%input: buffer)
+
+template.decl @selected_later(%input: buffer)
+
+template.def<@selected_later> @unused_candidate(%input: buffer) {
+  template.return
+}
+
+template.decl @forward(%opaque: buffer, %unresolved: buffer)
+
+template.def<@forward> @forward_body(%opaque: buffer, %unresolved: buffer) {
+  func.call @external(%opaque) : (buffer)
+  template.apply<@selected_later>(%unresolved) : (buffer)
+  template.return
+}
+
+func.def @test(%limit: index) {
+  %bytes = index.constant 4 : offset
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  scf.for %index = [%begin to %limit step %step] {
+    %opaque = buffer.alloca<private> align(4) %bytes : buffer
+    %unresolved = buffer.alloca<private> align(4) %bytes : buffer
+    template.call @forward_body(%opaque, %unresolved) : (buffer, buffer)
+  }
+  func.return
+}
+
+// ----
+opaque: accessed=yes single_instance=unproven
+unresolved: accessed=yes single_instance=unproven
+opaque / unresolved: workgroup_nonoverlap=unproven
+
+// ====
+
 // Forward callees are discovered without replacing the caller's fact scope.
 // An unpassed allocation remains private across a nested scalar call.
 func.def @test(%output: view<1xi32>, %limit: index) {

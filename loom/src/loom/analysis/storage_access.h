@@ -138,8 +138,9 @@ iree_status_t loom_storage_access_require_function(
     const loom_storage_access_function_t** out_function);
 
 // Projects the canonical reached-body summaries through |call|. Pure calls
-// need no graph; opaque memory effects remain unbounded. Visible semantic
-// callees share the same demand scope and fixed point as function queries.
+// need no graph; opaque memory effects remain unbounded. Visible semantic and
+// exact template callees share the demand scope and fixed point of function
+// queries; unresolved template applications remain opaque.
 // The caller's active value domain is restored before returning.
 iree_status_t loom_storage_access_require_call(
     loom_storage_access_scope_t* scope, loom_call_like_t call,
