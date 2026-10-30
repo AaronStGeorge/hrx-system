@@ -8,7 +8,7 @@ template <typename T>
 [[loom::command_program]] void pattern(T value) { (void)value; }
 
 // ====
-// ERROR@+1: LOWERING/059 "launch requires a leading command_program parameter attribute"
+// ERROR@+1: LOWERING/059 "launch requires a leading command_program or pipeline parameter attribute"
 void ordinary([[loom::launch]] unsigned value) { (void)value; }
 
 // ====

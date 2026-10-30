@@ -160,6 +160,9 @@ class Storage {
   Pointer allocate_bytes(loom_value_id_t byte_length,
                          loom_value_fact_memory_space_t memory_space,
                          int64_t alignment, cxx::AST* owner);
+  // Returns the storage root of a pointer proven to have zero byte origin.
+  // Interior pointers cannot cross an untyped buffer ABI boundary.
+  loom_value_id_t zero_origin_root(Pointer pointer, cxx::AST* owner);
   // Refines one pointer root with a scoped no-alias identity while preserving
   // its byte origin and compiler-owned allocation facts.
   Pointer assume_noalias(Pointer pointer, cxx::AST* owner);

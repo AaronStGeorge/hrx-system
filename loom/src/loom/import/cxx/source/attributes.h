@@ -47,7 +47,7 @@ enum class BindingAttributeScope {
   Declaration,
   Function,
   Parameter,
-  CommandParameter,
+  StagedParameter,
   LocalDeclaration,
   Statement,
   CheckStatement,

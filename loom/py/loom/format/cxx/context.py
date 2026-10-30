@@ -207,6 +207,8 @@ class CxxRenderContext:
         self.function_names: dict[str, str] = {}
         self.function_buffer_elements: dict[str, tuple[str | None, ...]] = {}
         self.command_names: dict[str, str] = {}
+        self.pipeline_names: dict[str, str] = {}
+        self.pipeline_declarations: dict[str, Operation] = {}
         self.kernel_buffer_elements: dict[str, tuple[str | None, ...]] = {}
         self.kernel_configuration_names: dict[str, str] = {}
         self.kernel_workload_component_counts: dict[str, tuple[int, ...]] = {}

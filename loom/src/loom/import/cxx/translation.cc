@@ -100,12 +100,13 @@ class Translator final : private Initialization::Evaluation {
                         objects_, value_arena_, locations_, builder_, *this),
         launches_(unit, diagnostics),
         command_programs_(unit, diagnostics),
+        pipeline_contracts_(unit, diagnostics),
         intrinsics_(unit, diagnostics, types_, scalars_, vectors_, locations_,
-                    names_, launches_, command_programs_, function_contracts_,
-                    module),
+                    names_, launches_, command_programs_, pipeline_contracts_,
+                    function_contracts_, module),
         functions_(unit, diagnostics, module, immutable_objects_, intrinsics_,
-                   launches_, command_programs_, configs_, fastmath_,
-                   function_contracts_, target_definitions_,
+                   launches_, command_programs_, pipeline_contracts_, configs_,
+                   fastmath_, function_contracts_, target_definitions_,
                    template_definitions_, names_),
         options_(options),
         default_fastmath_flags_(options.fp_model == LOOM_CXX_FP_MODEL_FAST
@@ -552,28 +553,29 @@ class Translator final : private Initialization::Evaluation {
   }
 
   Value command_region_value(loom_region_t* region,
-                             const CommandProgramProjection& program,
-                             const CommandParameterProjection& parameter,
+                             const StagedSignatureProjection& program,
+                             const StagedParameterProjection& parameter,
                              const Partition& partition) {
     auto* block = loom_region_entry_block(region);
     auto arguments =
         std::span<const loom_value_id_t>(block->arg_ids, block->arg_count);
-    if (!parameter.binding_ordinal) {
+    if (!parameter.binding_count) {
       return value_arena_.capture(
           partition, arguments.subspan(parameter.specialization_offset,
                                        parameter.component_count));
     }
     const size_t binding_index =
-        program.specialization_count + *parameter.binding_ordinal;
+        program.specialization_count + parameter.binding_offset;
     if (!parameter.specialization_count) {
-      return value_arena_.capture(partition,
-                                  arguments.subspan(binding_index, 1));
+      return value_arena_.capture(
+          partition, arguments.subspan(binding_index, parameter.binding_count));
     }
     std::array<loom_value_id_t, LOOM_TYPE_MAX_RANK + 2> components;
     IREE_ASSERT_LE(parameter.component_count, components.size());
     std::copy_n(arguments.begin() + parameter.specialization_offset,
                 parameter.specialization_count, components.begin());
-    components[parameter.specialization_count] = arguments[binding_index];
+    std::copy_n(arguments.begin() + binding_index, parameter.binding_count,
+                components.begin() + parameter.specialization_count);
     return value_arena_.capture(
         partition, std::span<const loom_value_id_t>(components.data(),
                                                     parameter.component_count));
@@ -2330,6 +2332,18 @@ class Translator final : private Initialization::Evaluation {
     }
     std::vector<loom_value_id_t> workloads;
     auto* argument = call->expressionList;
+    if (launch.pipeline) {
+      std::vector<loom_value_id_t> arguments;
+      append_staged_arguments(argument, *launch.pipeline,
+                              launch.pipeline_buffer_materializations,
+                              workloads, arguments);
+      loom_op_t* op;
+      check(loom_kernel_launch_build(
+          &builder_, functions_.declare(launch.kernel, call), workloads.data(),
+          workloads.size(), arguments.data(), arguments.size(),
+          locations_.get(call), &op));
+      return;
+    }
     if (launch.configuration && !launch.configuration->parameters().empty()) {
       append_kernel_workloads(argument->value, launch, workloads);
       argument = argument->next;
@@ -2370,26 +2384,50 @@ class Translator final : private Initialization::Evaluation {
         locations_.get(call), &op));
   }
 
+  void append_staged_arguments(cxx::List<cxx::ExpressionAST*>* source,
+                               const StagedSignatureProjection& projection,
+                               std::span<const uint8_t> buffer_materializations,
+                               std::vector<loom_value_id_t>& specializations,
+                               std::vector<loom_value_id_t>& bindings) {
+    specializations.resize(projection.specialization_count);
+    bindings.resize(projection.binding_count);
+    size_t ordinal = 0;
+    for (auto* argument : cxx::ListView{source}) {
+      auto value = expression(argument);
+      const auto& parameter = projection.parameters[ordinal];
+      auto components = value.components();
+      loom_value_id_t storage_operand = LOOM_VALUE_ID_INVALID;
+      if (!buffer_materializations.empty() &&
+          buffer_materializations[ordinal]) {
+        if (value.is_pointer()) {
+          storage_operand =
+              storage_.zero_origin_root(value.pointer(), argument);
+        } else {
+          storage_operand = components.back();
+        }
+        components = {&storage_operand, 1};
+      }
+      ++ordinal;
+      IREE_ASSERT_EQ(components.size(), parameter.component_count);
+      std::copy_n(components.begin(), parameter.specialization_count,
+                  specializations.begin() + parameter.specialization_offset);
+      std::copy_n(components.begin() + parameter.specialization_count,
+                  parameter.binding_count,
+                  bindings.begin() + parameter.binding_offset);
+    }
+    IREE_ASSERT_EQ(ordinal, projection.parameters.size());
+  }
+
   void command_launch(cxx::CallExpressionAST* call,
                       const CommandLaunchIntrinsic& launch) {
     if (current_function_.kind != FunctionKind::CommandProgram) {
       fail(call, "command.program.launch requires a command_program body");
     }
-    std::vector<loom_value_id_t> specializations(
-        launch.projection->specialization_count);
-    std::vector<loom_value_id_t> bindings(launch.projection->binding_count);
-    size_t ordinal = 0;
-    for (auto* argument : cxx::ListView{call->expressionList}) {
-      auto value = expression(argument);
-      const auto& parameter = launch.projection->parameters[ordinal++];
-      auto components = value.components();
-      IREE_ASSERT_EQ(components.size(), parameter.component_count);
-      std::copy_n(components.begin(), parameter.specialization_count,
-                  specializations.begin() + parameter.specialization_offset);
-      if (parameter.binding_ordinal) {
-        bindings[*parameter.binding_ordinal] = components.back();
-      }
-    }
+    std::vector<loom_value_id_t> specializations;
+    std::vector<loom_value_id_t> bindings;
+    append_staged_arguments(call->expressionList, *launch.projection,
+                            /*buffer_materializations=*/{}, specializations,
+                            bindings);
     loom_op_t* op;
     check(loom_command_program_launch_build(
         &builder_, functions_.declare(launch.program, call),
@@ -3803,6 +3841,11 @@ class Translator final : private Initialization::Evaluation {
         if (functions_.is_command_program(function)) {
           fail(ast,
                "command programs require an explicit command launch "
+               "operation");
+        }
+        if (pipeline_contracts_.contains(function)) {
+          fail(ast,
+               "pipeline contracts require an explicit kernel launch "
                "operation");
         }
         auto called = ordinary_call(call, function, source);
@@ -5273,6 +5316,11 @@ class Translator final : private Initialization::Evaluation {
                "command programs require an explicit command launch "
                "operation");
         }
+        if (pipeline_contracts_.contains(function)) {
+          fail(ast,
+               "pipeline contracts require an explicit kernel launch "
+               "operation");
+        }
         auto called = ordinary_call(call, function, locations_.get(ast));
         if (called) {
           fail(ast, "value-producing function reached a void call");
@@ -5341,6 +5389,8 @@ class Translator final : private Initialization::Evaluation {
   LaunchContracts launches_;
   // Command annotations and the retained source/native signature permutation.
   CommandPrograms command_programs_;
+  // External kernel-scoped pipeline contracts and staged signatures.
+  PipelineContracts pipeline_contracts_;
   // Retained generated operation bindings for reached source declarations.
   Intrinsics intrinsics_;
   // Literal admission records one batch for source-boundary verification.

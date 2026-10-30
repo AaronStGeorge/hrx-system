@@ -1,0 +1,67 @@
+// RUN: verify
+// ERROR@+1: LOWERING/059 "pipeline requires the single product scope"
+[[loom::pipeline("device")]] void wrong_scope();
+
+// ====
+// ERROR@+1: LOWERING/059 "pipeline contracts require a bodyless function declaration"
+[[loom::pipeline("kernel")]] void body() {}
+
+// ====
+// ERROR@+1: LOWERING/059 "pipeline cannot be combined with another callable kind"
+[[loom::pipeline("kernel"), loom::kernel]] void conflicting();
+
+// ====
+#include <loomcxx/buffer.h>
+[[loom::pipeline("kernel")]] void changing(unsigned value, [[loom::launch]] loom::type::buffer<unsigned char> output);
+// ERROR@+1: LOWERING/059 "conflicting launch boundaries across pipeline redeclarations"
+[[loom::pipeline("kernel")]] void changing([[loom::launch]] unsigned value, loom::type::buffer<unsigned char> output);
+
+// ====
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+using Bytes = loom::type::buffer<unsigned char>;
+// ERROR@+1: LOWERING/059 "pipeline contracts require direct Loom value types instead of source pointers, records, or arrays"
+[[loom::pipeline("kernel")]] void pointer([[loom::launch]] unsigned char* output);
+[[loom::command_program]] void launch_pointer([[loom::launch]] Bytes output) {
+  loom::kernel::launch<pointer>(output);
+}
+
+// ====
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+using Data = loom::type::buffer<unsigned char>;
+[[loom::pipeline("kernel")]] void typed(unsigned count, [[loom::launch]] Data data);
+[[loom::command_program]] void mismatched(float count, [[loom::launch]] Data data) {
+  // ERROR@+1: LOWERING/059 "kernel.launch arguments must match the pipeline source types"
+  loom::kernel::launch<typed>(count, data);
+}
+
+// ====
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+using Root = loom::type::buffer<unsigned char>;
+[[loom::pipeline("kernel")]] void sink([[loom::launch]] Root data);
+[[loom::command_program]] void launch_interior() {
+  auto* scratch = loom::buffer::alloca<loom::memory_space::global, 64>(loom::type::offset{256});
+  // ERROR@+1: LOWERING/059 "buffer ABI arguments require a zero-origin source pointer"
+  loom::kernel::launch<sink>(scratch + 1);
+}
+
+// ====
+#include <loomcxx/command.h>
+using Storage = loom::type::buffer<unsigned char>;
+[[loom::pipeline("kernel")]] void external([[loom::launch]] Storage data);
+[[loom::command_program]] void call_directly([[loom::launch]] Storage data) {
+  // ERROR@+1: LOWERING/059 "pipeline contracts require an explicit kernel launch operation"
+  external(data);
+}
+
+// ====
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+struct Pair { unsigned first; unsigned second; };
+// ERROR@+1: LOWERING/059 "pipeline contracts require direct Loom value types instead of source pointers, records, or arrays"
+[[loom::pipeline("kernel")]] void aggregate([[loom::launch]] Pair value);
+[[loom::command_program]] void launch_aggregate(Pair value) {
+  loom::kernel::launch<aggregate>(value);
+}

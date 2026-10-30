@@ -237,7 +237,8 @@ Intrinsics::Binding Intrinsics::resolve(cxx::FunctionSymbol* function,
     return *fragment;
   }
   if (auto launch = KernelLaunchIntrinsic::resolve(
-          unit_, diagnostics_, types_, launches_, function, attribute, owner)) {
+          unit_, diagnostics_, types_, launches_, pipeline_contracts_, function,
+          attribute, owner)) {
     return *launch;
   }
   if (auto launch = CommandLaunchIntrinsic::resolve(unit_, diagnostics_, types_,

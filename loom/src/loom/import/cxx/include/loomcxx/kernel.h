@@ -84,9 +84,12 @@ struct [[loom::workload]] workload_values {};
 template <class... Args>
 [[loom::workload]] detail::workload_values<Args...> workload(Args... args);
 
-// Launches a statically named kernel from a command program. A configured
-// kernel's typed workloads precede its ABI arguments in one workload bundle.
-// Typed buffers bind kernel pointer parameters; scalars retain exact ABI types.
+// Launches a statically named kernel or kernel-scoped pipeline from a command
+// program. A configured kernel's typed workloads precede its ABI arguments in
+// one workload bundle. A pipeline contract instead declares its specialization
+// and binding boundary with [[loom::launch]], and receives its source arguments
+// directly. Typed buffers bind kernel pointer or pipeline buffer arguments;
+// scalars retain exact ABI types.
 template <auto Kernel, class... Args>
 [[loom::op("kernel.launch")]] void launch(Args... args);
 

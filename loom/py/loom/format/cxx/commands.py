@@ -81,6 +81,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         arguments: list[int],
         *,
         specialization_count: int | None = None,
+        allow_nonstorage_bindings: bool = False,
     ) -> tuple[list[_SourceParameter], list[_SourceParameter]]:
         if specialization_count is None:
             specialization_count = operation.attributes.get("specialization_count")
@@ -90,7 +91,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
             or specialization_count > len(arguments)
         ):
             raise CxxRenderError(
-                operation, "command signature has an invalid specialization count"
+                operation, "staged signature has an invalid specialization count"
             )
         specializations = arguments[:specialization_count]
         bindings = arguments[specialization_count:]
@@ -100,29 +101,27 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         binding_dependencies: set[int] = set()
         for binding in bindings:
             value_type = self.module.values[binding].type
-            if not (
-                isinstance(value_type, BufferType)
-                or (
-                    isinstance(value_type, ShapedType)
-                    and value_type.type_kind == TypeKind.VIEW
-                )
-            ):
+            is_storage = isinstance(value_type, BufferType) or (
+                isinstance(value_type, ShapedType)
+                and value_type.type_kind == TypeKind.VIEW
+            )
+            if not is_storage and not allow_nonstorage_bindings:
                 raise CxxRenderError(
                     operation,
-                    "command launch binding is neither a buffer nor a typed view",
+                    "launch binding is neither a buffer nor a typed view",
                 )
             dependencies = self._source_view_dependencies(binding)
             for dependency in dependencies:
                 if dependency not in specialization_set:
                     raise CxxRenderError(
                         operation,
-                        "command view binding references a value outside its "
+                        "view binding references a value outside its "
                         "specialization prefix",
                     )
                 if dependency in binding_dependencies:
                     raise CxxRenderError(
                         operation,
-                        "command view bindings share a dependent signature value",
+                        "view bindings share a dependent signature value",
                     )
                 binding_dependencies.add(dependency)
             binding_parameters.append(
@@ -143,14 +142,13 @@ class CxxCommandRenderer(CxxExpressionRenderer):
                 if dependency not in remaining_set:
                     raise CxxRenderError(
                         operation,
-                        "command specialization view references a value outside "
+                        "specialization view references a value outside "
                         "its flattened source parameter",
                     )
                 if dependency in specialization_dependencies:
                     raise CxxRenderError(
                         operation,
-                        "command specialization views share a dependent signature "
-                        "value",
+                        "specialization views share a dependent signature value",
                     )
                 specialization_dependencies.add(dependency)
             specialization_views[value] = dependencies
@@ -177,18 +175,24 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         if expected_specializations != specializations:
             raise CxxRenderError(
                 operation,
-                "command signature dependencies do not form a C++ source-order "
+                "staged signature dependencies do not form a C++ source-order "
                 "projection",
             )
         return specialization_parameters, binding_parameters
 
-    def _command_parameter_type(self, value_id: int) -> str:
+    def _staged_parameter_type(self, operation: Operation, value_id: int) -> str:
         value_type = self.module.values[value_id].type
         if isinstance(value_type, BufferType):
             return "loom::type::buffer<unsigned char>"
         if isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VIEW:
             return self.types.view(value_type, value_id in self.signed_values)
-        return self.cpp_type(value_id)
+        type_name = self.cpp_type(value_id)
+        if type_name == "auto":
+            raise CxxRenderError(
+                operation,
+                f"staged parameter type {value_type!r} has no explicit C++ spelling",
+            )
+        return type_name
 
     def _view_dependency_expressions(
         self, operation: Operation, value_type: ShapedType
@@ -204,16 +208,22 @@ class CxxCommandRenderer(CxxExpressionRenderer):
             )
         return dependencies
 
-    def _bind_command_parameters(
+    def _bind_staged_parameters(
         self,
         operation: Operation,
         arguments: list[int],
+        *,
+        allow_nonstorage_bindings: bool = False,
     ) -> tuple[list[str], list[_SourceParameter], list[_SourceParameter]]:
-        specializations, bindings = self._source_parameters(operation, arguments)
+        specializations, bindings = self._source_parameters(
+            operation,
+            arguments,
+            allow_nonstorage_bindings=allow_nonstorage_bindings,
+        )
         parameters: list[str] = []
         for ordinal, parameter in enumerate((*specializations, *bindings)):
             name = self.names[parameter.value_id]
-            type_name = self._command_parameter_type(parameter.value_id)
+            type_name = self._staged_parameter_type(operation, parameter.value_id)
             attribute = (
                 "[[loom::launch]] "
                 if bindings and ordinal == len(specializations)
@@ -248,7 +258,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
 
     def _command_signature(self, operation: Operation, arguments: list[int]) -> str:
         resolved = self._resolved(operation)
-        parameters, _, _ = self._bind_command_parameters(operation, arguments)
+        parameters, _, _ = self._bind_staged_parameters(operation, arguments)
         symbol = str(resolved.attr("callee"))
         visibility = resolved.attr("visibility")
         storage = "" if visibility == "public" else "static "
@@ -285,6 +295,78 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         self.writer.line(
             self._command_signature(operation, list(operation.operands)) + ";"
         )
+
+    def _pipeline_attributes(self, operation: Operation) -> list[str]:
+        resolved = self._resolved(operation)
+        if resolved.attr("scope") != "kernel":
+            raise CxxRenderError(
+                operation, "only kernel-scoped pipeline contracts are launchable"
+            )
+        if resolved.attr("visibility") is not None:
+            raise CxxRenderError(
+                operation,
+                "public pipeline declarations have no C++ contract projection",
+            )
+        if resolved.attr("retain") is not None:
+            raise CxxRenderError(
+                operation, "retained pipeline declarations have no C++ projection"
+            )
+        symbol = str(resolved.attr("callee"))
+        attributes = [
+            'loom::pipeline("kernel")',
+            f"loom::symbol({_quote_string(symbol)})",
+        ]
+        target_symbol = resolved.attr("target")
+        if target_symbol is not None:
+            target_info = self.targets.get(str(target_symbol))
+            if target_info is None:
+                raise CxxRenderError(
+                    operation,
+                    f"target record {target_symbol!s} is not present in the module",
+                )
+            if target_info.operation_name != "amdgpu.target":
+                raise CxxRenderError(
+                    target_info.operation,
+                    f"target record {target_info.operation_name} has no C++ "
+                    "declaration projection",
+                )
+            attributes.append(f"loom::target({self.target_names[str(target_symbol)]})")
+        return attributes
+
+    def _render_pipeline_declaration(self, operation: Operation) -> None:
+        self._validate_projected_attributes(
+            operation,
+            (
+                "callee",
+                "scope",
+                "visibility",
+                "retain",
+                "target",
+                "predicates",
+                "specialization_count",
+            ),
+        )
+        arguments = list(operation.operands)
+        parameters, _, _ = self._bind_staged_parameters(
+            operation, arguments, allow_nonstorage_bindings=True
+        )
+        symbol = str(self._resolved(operation).attr("callee"))
+        signature = f"void {self.pipeline_names[symbol]}(" + ", ".join(parameters) + ")"
+        predicates = self._resolved(operation).attr("predicates")
+        if predicates is not None:
+            if not isinstance(predicates, PredicateListAttr):
+                raise CxxRenderError(
+                    operation, "pipeline predicates are not predicate-list metadata"
+                )
+            conditions = [
+                condition
+                for predicate in predicates
+                if (condition := self._predicate(predicate)) is not None
+            ]
+            if conditions:
+                signature += " [[loom::where(" + " && ".join(conditions) + ")]]"
+        self.writer.attributes(self._pipeline_attributes(operation))
+        self.writer.line(signature + ";")
 
     def _render_command_program(self, operation: Operation) -> None:
         scope = self.operation_scopes[id(operation)]
@@ -337,6 +419,48 @@ class CxxCommandRenderer(CxxExpressionRenderer):
     def _render_kernel_launch(self, operation: Operation) -> tuple[str, ...]:
         resolved = self._resolved(operation)
         symbol = str(resolved.attr("callee"))
+        pipeline_name = self.pipeline_names.get(symbol)
+        if pipeline_name is not None:
+            pipeline = self.pipeline_declarations[symbol]
+            source_specializations, source_bindings = self._source_parameters(
+                pipeline,
+                list(pipeline.operands),
+                allow_nonstorage_bindings=True,
+            )
+            workloads = resolved.value_ids("workloads")
+            arguments = resolved.value_ids("arguments")
+            if len(arguments) != len(source_bindings):
+                raise CxxRenderError(
+                    operation, "pipeline launch binding arity is inconsistent"
+                )
+            source_arguments: list[str] = []
+            workload_ordinal = 0
+            for parameter in source_specializations:
+                workload_ordinal += len(parameter.dependencies) + 1
+                if workload_ordinal > len(workloads):
+                    raise CxxRenderError(
+                        operation,
+                        "pipeline launch specialization arity is inconsistent",
+                    )
+                source_arguments.append(
+                    self.expression(workloads[workload_ordinal - 1])
+                )
+            for parameter, argument in zip(source_bindings, arguments, strict=True):
+                workload_ordinal += len(parameter.dependencies)
+                if workload_ordinal > len(workloads):
+                    raise CxxRenderError(
+                        operation,
+                        "pipeline launch specialization arity is inconsistent",
+                    )
+                source_arguments.append(self.expression(argument))
+            if workload_ordinal != len(workloads):
+                raise CxxRenderError(
+                    operation, "pipeline launch specialization arity is inconsistent"
+                )
+            self.writer.line(
+                f"loom::kernel::launch<{pipeline_name}>({', '.join(source_arguments)});"
+            )
+            return ("callee",)
         expected_elements = self.kernel_buffer_elements.get(symbol)
         if expected_elements is None:
             raise CxxRenderError(

@@ -38,6 +38,7 @@
 #include "loom/ops/command/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/ops/pipeline/ops.h"
 #include "loom/ops/template/ops.h"
 
 namespace loom::cxx_import {
@@ -158,6 +159,7 @@ void Functions::select(std::span<const iree_string_view_t> roots) {
   std::vector<cxx::FunctionSymbol*> definitions;
   collect(root->declarationList, DeclarationScope::Namespace, definitions);
   command_programs_.finish();
+  pipeline_contracts_.finish();
   loom_builder_t builder;
   loom_builder_initialize(module_, &module_->arena, loom_module_block(module_),
                           &builder);
@@ -529,12 +531,14 @@ bool Functions::admit_declaration(
   if (source_declarator) {
     auto* prototype =
         function ? cxx::getFunctionPrototype(source_declarator) : nullptr;
-    auto parameter_scope = annotated(function, "command_program")
-                               ? BindingAttributeScope::CommandParameter
+    auto parameter_scope = (annotated(function, "command_program") ||
+                            annotated(function, "pipeline"))
+                               ? BindingAttributeScope::StagedParameter
                                : BindingAttributeScope::Parameter;
     reject_misplaced_binding_declarator(unit_, diagnostics_, source_declarator,
                                         prototype, parameter_scope);
     command_programs_.declaration(function, attributes, prototype, owner);
+    pipeline_contracts_.declaration(function, attributes, prototype, owner);
     if (function && !function->isTemplatePattern()) {
       parameter_contracts_.declaration(function, prototype);
       fastmath_.declaration(function, attributes, prototype);
@@ -871,7 +875,8 @@ loom_symbol_ref_t Functions::retain(FunctionInstance instance,
           "called function with internal linkage requires a definition");
     }
     external_.insert(function->canonical());
-    if (!command_programs_.contains(declaration.function)) {
+    if (!command_programs_.contains(declaration.function) &&
+        !pipeline_contracts_.contains(declaration.function)) {
       admit_reference_parameters(declaration.function,
                                  owner ? owner : declaration.source);
     }
@@ -1295,6 +1300,34 @@ void Functions::build_declarations(Types& types, Locations& locations,
           "bodyless function declarations cannot carry fastmath contracts");
     }
     const auto target = target_definitions_.reference(symbol);
+    if (pipeline_contracts_.contains(symbol)) {
+      const bool has_predicates = function_contracts_.has_predicates(symbol);
+      auto signature = pipeline_contracts_.bind(
+          symbol, types, source, builder,
+          has_predicates ? SignatureIdentityRequirement::Required
+                         : SignatureIdentityRequirement::DependentTypes);
+      auto predicates = function_contracts_.bind(
+          symbol, types, signature.source_identities,
+          FunctionContractSignature::Flattened, source);
+      loom_pipeline_decl_build_flags_t flags =
+          LOOM_PIPELINE_DECL_BUILD_FLAG_HAS_SCOPE;
+      if (loom_symbol_ref_is_valid(target)) {
+        flags |= LOOM_PIPELINE_DECL_BUILD_FLAG_HAS_TARGET;
+      }
+      if (!predicates.empty()) {
+        flags |= LOOM_PIPELINE_DECL_BUILD_FLAG_HAS_PREDICATES;
+      }
+      loom_op_t* op;
+      check(loom_pipeline_decl_build(
+          builder, flags, LOOM_PIPELINE_SCOPE_KERNEL,
+          /*visibility=*/0, /*retain=*/0, target,
+          callees_.at({symbol->canonical(), ImplicitObjectABI::None}),
+          signature.specialization_types.data(),
+          signature.specialization_types.size(), signature.binding_types.data(),
+          signature.binding_types.size(), predicates.data(), predicates.size(),
+          locations.get(source), &op));
+      continue;
+    }
     if (command_programs_.contains(symbol)) {
       const bool has_predicates = function_contracts_.has_predicates(symbol);
       auto signature = command_programs_.bind(
@@ -1414,7 +1447,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
   std::optional<LaunchConfiguration> launch_configuration;
   BoundSignature configuration_signature;
   BoundSignature callable_signature;
-  BoundCommandProgramSignature command_signature;
+  BoundStagedSignature command_signature;
   if (kernel) {
     for (auto* parameter : parameters) {
       arguments.push_back(

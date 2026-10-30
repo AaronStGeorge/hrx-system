@@ -58,18 +58,18 @@ void reject_misplaced_binding_attributes(
         }
         if ((name == "assume_aligned" || name == "noalias") &&
             scope != BindingAttributeScope::Parameter &&
-            scope != BindingAttributeScope::CommandParameter) {
+            scope != BindingAttributeScope::StagedParameter) {
           diagnostics.reject(
               unit, attribute,
               std::string(name) +
                   " requires a leading pointer parameter attribute");
         }
         if (name == "launch" &&
-            scope != BindingAttributeScope::CommandParameter) {
+            scope != BindingAttributeScope::StagedParameter) {
           diagnostics.reject(
               unit, attribute,
-              "launch requires a leading command_program parameter "
-              "attribute");
+              "launch requires a leading command_program or pipeline "
+              "parameter attribute");
         }
         if (name == "constexpr" &&
             scope != BindingAttributeScope::LocalDeclaration) {

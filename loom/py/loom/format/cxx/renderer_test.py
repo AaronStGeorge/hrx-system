@@ -191,6 +191,52 @@ command.program.def public @ignored() launch() {
     assert "loom::command::launch<decode_leaf>(tokens, parameters, tile);" in result
 
 
+def test_projects_kernel_scoped_pipeline_contracts_and_launches() -> None:
+    source = """\
+pipeline.decl<kernel> @resident(%width: index) run(%input: buffer, %output: buffer) where [multiple_of(%width, 4)]
+
+command.program.def public @run(%width: index) launch(%input: buffer, %output: buffer) {
+  kernel.launch @resident[%width](%input, %output) : [index](buffer, buffer)
+  command.return
+}
+"""
+
+    result = render_module(load_module(source.encode()), roots=("run",))
+
+    assert '[[loom::pipeline("kernel"), loom::symbol("resident")]]' in result
+    assert (
+        "void resident(loom::type::index width, [[loom::launch]] "
+        "loom::type::buffer<unsigned char> input, "
+        "loom::type::buffer<unsigned char> output) "
+        "[[loom::where(loom::predicate::multiple_of(width, 4))]];" in result
+    )
+    assert "loom::kernel::launch<resident>(width, input, output);" in result
+    assert "pipeline.decl" not in result
+
+
+def test_pipeline_buffer_contract_accepts_dynamic_view_argument() -> None:
+    source = """\
+pipeline.decl<kernel> @consume() run(%input: buffer)
+
+command.program.def public @run(%width: index) launch(%input: view<[%width]xf32>) {
+  kernel.launch @consume(%input) : (view<[%width]xf32>)
+  command.return
+}
+"""
+
+    result = render_module(load_module(source.encode()), roots=("run",))
+
+    assert (
+        "void consume([[loom::launch]] "
+        "loom::type::buffer<unsigned char> input);" in result
+    )
+    assert (
+        "void run([[loom::launch]] loom::type::view<"
+        "loom::type::shape<loom::type::dynamic>, float> input)" in result
+    )
+    assert "loom::kernel::launch<consume>(input);" in result
+
+
 def test_projects_implicit_and_ranged_kernel_launch_contracts() -> None:
     source = """\
 kernel.def @bounded() {
@@ -239,7 +285,7 @@ command.program.def public @misordered(%dimension: index, %token: i32) launch(%o
 
     with pytest.raises(
         CxxRenderError,
-        match="command signature dependencies do not form a C\\+\\+ source-order projection",
+        match="staged signature dependencies do not form a C\\+\\+ source-order projection",
     ):
         render_module(load_module(source.encode()))
 

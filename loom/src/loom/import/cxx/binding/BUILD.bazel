@@ -559,6 +559,7 @@ loom_cc_library(
     cxx_standard = CXX_COMPILER_OPTIONS["cxx_standard"],
     deps = [
         ":launch",
+        ":pipeline_contracts",
         "//loom/src/loom/import/cxx/source:attributes",
         "//loom/src/loom/import/cxx/source:error",
         "//loom/src/loom/import/cxx/value:types",
@@ -603,6 +604,7 @@ loom_cc_library(
         ":kernel_launch",
         ":launch",
         ":numeric_conversion",
+        ":pipeline_contracts",
         ":scalar_bindings",
         ":shaped",
         ":target",
@@ -634,6 +636,22 @@ loom_cc_library(
         "//loom/src/loom/import/cxx/value:signature",
         "//loom/src/loom/import/cxx/value:types",
         "//loom/src/loom/ops:op_defs",
+        "//third_party:cxx_parser",
+    ],
+)
+
+loom_cc_library(
+    name = "pipeline_contracts",
+    srcs = ["pipeline_contracts.cc"],
+    hdrs = ["pipeline_contracts.h"],
+    cxx_features = CXX_COMPILER_OPTIONS["cxx_features"],
+    cxx_standard = CXX_COMPILER_OPTIONS["cxx_standard"],
+    deps = [
+        "//loom/src/loom/import/cxx/source",
+        "//loom/src/loom/import/cxx/source:attributes",
+        "//loom/src/loom/import/cxx/source:error",
+        "//loom/src/loom/import/cxx/value:signature",
+        "//loom/src/loom/import/cxx/value:types",
         "//third_party:cxx_parser",
     ],
 )

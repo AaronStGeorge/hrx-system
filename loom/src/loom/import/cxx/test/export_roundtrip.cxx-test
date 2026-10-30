@@ -536,6 +536,78 @@ void decode_root(unsigned tokens, loom::type::index layer, loom::type::index row
 }
 
 // ====
+// RUN: emit cxx @run.tile
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+namespace loomt = loom::type;
+using Tile = loomt::view<loomt::shape<loomt::dynamic, 4>, float, loomt::encoding<loom::encoding::role::layout, 2>>;
+using Output = loomt::buffer<float>;
+
+[[loom::pipeline("kernel"), loom::symbol("resident.tile")]]
+void resident(unsigned factor, [[loom::launch]] Tile tile, float scale, Output output) [[loom::where(factor > 0u)]];
+
+[[loom::command_program, loom::symbol("run.tile")]]
+void run(unsigned factor, float scale, [[loom::launch]] Tile tile, Output output) {
+  [[loom::serial]] {
+    loom::kernel::launch<resident>(factor, tile, scale, output);
+  }
+}
+
+// ----
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+[[loom::pipeline("kernel"), loom::symbol("resident.tile")]]
+void resident_tile(unsigned v6, [[loom::launch]] loom::type::view<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>> v9, float v10, loom::type::buffer<unsigned char> v11) [[loom::where((v6 != 0u))]];
+
+[[loom::command_program, loom::symbol("run.tile")]]
+void run_tile(unsigned factor, float scale, [[loom::launch]] loom::type::view<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>> tile, loom::type::buffer<unsigned char> output);
+
+[[loom::command_program, loom::symbol("run.tile")]]
+void run_tile(unsigned factor, float scale, [[loom::launch]] loom::type::view<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>> tile, loom::type::buffer<unsigned char> output) {
+  [[loom::serial]] {
+    loom::kernel::launch<resident_tile>(factor, tile, scale, output);
+  }
+}
+
+// ====
+// A pipeline's declared buffer ABI remains authoritative when the command
+// supplies a dynamically shaped view for materialization at the launch.
+// RUN: emit cxx @launch.dynamic
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+namespace loomt = loom::type;
+using Dynamic = loomt::view<loomt::shape<loomt::dynamic>, float>;
+using Bytes = loomt::buffer<unsigned char>;
+
+[[loom::pipeline("kernel"), loom::symbol("consume.dynamic")]] void consume([[loom::launch]] Bytes input);
+
+[[loom::command_program, loom::symbol("launch.dynamic")]] void launch([[loom::launch]] Dynamic input) {
+  [[loom::serial]] {
+    loom::kernel::launch<consume>(input);
+  }
+}
+
+// ----
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+[[loom::pipeline("kernel"), loom::symbol("consume.dynamic")]]
+void consume_dynamic([[loom::launch]] loom::type::buffer<unsigned char> v2);
+
+[[loom::command_program, loom::symbol("launch.dynamic")]]
+void launch_dynamic([[loom::launch]] loom::type::view<loom::type::shape<loom::type::dynamic>, float> input);
+
+[[loom::command_program, loom::symbol("launch.dynamic")]]
+void launch_dynamic([[loom::launch]] loom::type::view<loom::type::shape<loom::type::dynamic>, float> input) {
+  [[loom::serial]] {
+    loom::kernel::launch<consume_dynamic>(input);
+  }
+}
+
+// ====
 // RUN: emit cxx @bounded
 #include <loomcxx/kernel.h>
 

@@ -503,6 +503,15 @@ Pointer Storage::allocate_bytes(loom_value_id_t byte_length,
   return {root, base};
 }
 
+loom_value_id_t Storage::zero_origin_root(Pointer pointer, cxx::AST* owner) {
+  if (!zero_origin_offsets_.contains(pointer.byte_offset)) {
+    diagnostics_.reject(
+        unit_, owner,
+        "buffer ABI arguments require a zero-origin source pointer");
+  }
+  return pointer.root;
+}
+
 Pointer Storage::assume_noalias(Pointer pointer, cxx::AST* owner) {
   return {assume_noalias(pointer.root, owner), pointer.byte_offset};
 }

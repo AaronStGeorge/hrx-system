@@ -26,6 +26,7 @@
 #include "loom/import/cxx/binding/intrinsics.h"
 #include "loom/import/cxx/binding/launch.h"
 #include "loom/import/cxx/binding/parameter_contracts.h"
+#include "loom/import/cxx/binding/pipeline_contracts.h"
 #include "loom/import/cxx/binding/target_definitions.h"
 #include "loom/import/cxx/binding/template_definitions.h"
 #include "loom/import/cxx/control/analysis.h"
@@ -122,7 +123,7 @@ struct FunctionBody {
   // Retained whole-function source facts shared with body translation.
   const ControlFlow* control;
   // Source/native argument permutation for a command-program body.
-  const CommandProgramProjection* command_program = nullptr;
+  const StagedSignatureProjection* command_program = nullptr;
 };
 
 // Native definition and any source-owned launch configuration body that must
@@ -143,7 +144,8 @@ class Functions {
   Functions(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
             loom_module_t* module, ImmutableObjects& immutable_objects,
             Intrinsics& intrinsics, LaunchContracts& launches,
-            CommandPrograms& command_programs, Configs& configs,
+            CommandPrograms& command_programs,
+            PipelineContracts& pipeline_contracts, Configs& configs,
             FastMathContracts& fastmath, FunctionContracts& function_contracts,
             TargetDefinitions& target_definitions,
             TemplateDefinitions& template_definitions, SymbolNames& names)
@@ -154,6 +156,7 @@ class Functions {
         intrinsics_(intrinsics),
         launches_(launches),
         command_programs_(command_programs),
+        pipeline_contracts_(pipeline_contracts),
         configs_(configs),
         fastmath_(fastmath),
         function_contracts_(function_contracts),
@@ -187,9 +190,8 @@ class Functions {
     return command_programs_.contains(function);
   }
   // Returns the retained command source/native signature projection.
-  const CommandProgramProjection& command_program(cxx::FunctionSymbol* function,
-                                                  Types& types,
-                                                  cxx::AST* owner) {
+  const StagedSignatureProjection& command_program(
+      cxx::FunctionSymbol* function, Types& types, cxx::AST* owner) {
     return command_programs_.project(function, types, owner);
   }
   // Emits reachable bodyless declarations after recursive body discovery.
@@ -282,6 +284,8 @@ class Functions {
   LaunchContracts& launches_;
   // Retains command annotations and source/native signature projections.
   CommandPrograms& command_programs_;
+  // Retains external kernel-scoped pipeline launch contracts.
+  PipelineContracts& pipeline_contracts_;
   // Reconciles named scalar settings before root selection and body lowering.
   Configs& configs_;
   // Reconciles lexical floating-point permissions across redeclarations.

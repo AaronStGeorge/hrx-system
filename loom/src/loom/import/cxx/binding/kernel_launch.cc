@@ -13,9 +13,11 @@
 #include <cxx/types.h>
 
 #include <memory>
+#include <utility>
 #include <variant>
 
 #include "loom/import/cxx/binding/launch.h"
+#include "loom/import/cxx/binding/pipeline_contracts.h"
 #include "loom/import/cxx/source/attributes.h"
 #include "loom/import/cxx/source/error.h"
 #include "loom/import/cxx/value/types.h"
@@ -36,8 +38,9 @@ bool KernelLaunchIntrinsic::supports(std::string_view name) {
 
 std::optional<KernelLaunchIntrinsic> KernelLaunchIntrinsic::resolve(
     cxx::TranslationUnit& unit, Diagnostics& diagnostics, Types& types,
-    LaunchContracts& launches, cxx::FunctionSymbol* function,
-    const cxx::Attribute& attribute, cxx::AST* owner) {
+    LaunchContracts& launches, PipelineContracts& pipelines,
+    cxx::FunctionSymbol* function, const cxx::Attribute& attribute,
+    cxx::AST* owner) {
   if (attribute.arguments.empty() ||
       !supports(attribute.arguments[0]->name())) {
     return std::nullopt;
@@ -63,8 +66,42 @@ std::optional<KernelLaunchIntrinsic> KernelLaunchIntrinsic::resolve(
       address && *address
           ? cxx::symbol_cast<cxx::FunctionSymbol>((*address)->symbol())
           : nullptr;
-  if (!kernel || !annotated(kernel, "kernel")) {
-    fail("kernel.launch requires a kernel as its first template argument");
+  const bool pipeline = kernel && pipelines.contains(kernel);
+  if (!kernel || (!annotated(kernel, "kernel") && !pipeline)) {
+    fail(
+        "kernel.launch requires a kernel or kernel-scoped pipeline as its "
+        "first template argument");
+  }
+  if (pipeline) {
+    const auto& projection = pipelines.project(kernel, types, owner);
+    auto source_parameters = kernel->parameters();
+    auto parameters = signature->parameterTypes();
+    std::vector<uint8_t> buffer_materializations(parameters.size());
+    if (source_parameters.size() != parameters.size()) {
+      fail("kernel.launch arguments must match the pipeline signature");
+    }
+    for (size_t index = 0; index < source_parameters.size(); ++index) {
+      auto* expected =
+          types.unqualified_value(source_parameters[index]->type());
+      auto* actual = types.unqualified_value(parameters[index]);
+      if (expected == actual) {
+        continue;
+      }
+      const auto& expected_partition = types.partition(expected, owner);
+      const auto& actual_partition = types.partition(actual, owner);
+      const bool materializes_buffer =
+          expected_partition.kind == ValueKind::Buffer &&
+          (actual_partition.kind == ValueKind::Buffer ||
+           actual_partition.kind == ValueKind::View ||
+           actual_partition.kind == ValueKind::Tensor ||
+           actual_partition.kind == ValueKind::Pointer);
+      if (!materializes_buffer) {
+        fail("kernel.launch arguments must match the pipeline source types");
+      }
+      buffer_materializations[index] = 1;
+    }
+    return KernelLaunchIntrinsic{kernel, /*configuration=*/nullptr, &projection,
+                                 std::move(buffer_materializations)};
   }
   if (!kernel->templateArguments().empty() && kernel->declaration()) {
     launches.declaration(kernel, kernel->declaration()->attributeList);
@@ -112,7 +149,8 @@ std::optional<KernelLaunchIntrinsic> KernelLaunchIntrinsic::resolve(
           "types");
     }
   }
-  return KernelLaunchIntrinsic{kernel, configuration};
+  return KernelLaunchIntrinsic{kernel, configuration, /*pipeline=*/nullptr,
+                               /*pipeline_buffer_materializations=*/{}};
 }
 
 }  // namespace loom::cxx_import

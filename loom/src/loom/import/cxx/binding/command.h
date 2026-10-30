@@ -37,7 +37,7 @@ struct CommandLaunchIntrinsic {
   // Statically selected command declaration or definition.
   cxx::FunctionSymbol* program;
   // Callee-owned source/native signature projection.
-  const CommandProgramProjection* projection;
+  const StagedSignatureProjection* projection;
 };
 
 // Typed named-parameter lookup and parameter-relative buffer recovery.

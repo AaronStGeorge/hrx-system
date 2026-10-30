@@ -24,67 +24,6 @@ namespace loom::cxx_import {
 
 class Types;
 
-// Retained placement of one source parameter in a command program's native
-// signature. Source specializations remain contiguous. A launch-bound view
-// contributes its dependent extent and encoding components to the
-// specialization prefix and its final handle to the binding suffix.
-struct CommandParameterProjection {
-  // Offset in source-component order across all source parameters.
-  size_t source_component_offset;
-  // Total flattened source components reconstructed for the C++ parameter.
-  size_t component_count;
-  // First native specialization component contributed by this parameter.
-  size_t specialization_offset;
-  // Number of leading source components transported as specializations.
-  size_t specialization_count;
-  // Native launch-binding ordinal, absent for a source specialization.
-  std::optional<size_t> binding_ordinal;
-};
-
-// Immutable source-to-native signature projection for one command program.
-// Consumers use these offsets directly; no body or call site rediscovers the
-// launch boundary or inspects shaped types to recover component placement.
-struct CommandProgramProjection {
-  // Source ordinal of the first launch-bound parameter.
-  size_t launch_parameter_ordinal;
-  // Flattened native specialization count before the launch boundary.
-  size_t specialization_count;
-  // One native binding for each source parameter at or after the boundary.
-  size_t binding_count;
-  // Whether any native component type references another component identity.
-  bool requires_binding;
-  // Canonical unqualified source types in source parameter order.
-  std::vector<const cxx::Type*> source_types;
-  // Source parameter order, retained independently of native argument order.
-  std::vector<CommandParameterProjection> parameters;
-};
-
-// Types and reserved identities consumed by one command definition or
-// declaration builder. Destination identities follow native order while
-// source identities follow flattened C++ parameter order for predicates.
-struct BoundCommandProgramSignature {
-  BoundCommandProgramSignature() = default;
-  BoundCommandProgramSignature(const BoundCommandProgramSignature&) = delete;
-  BoundCommandProgramSignature& operator=(const BoundCommandProgramSignature&) =
-      delete;
-  BoundCommandProgramSignature(BoundCommandProgramSignature&&) = default;
-  BoundCommandProgramSignature& operator=(BoundCommandProgramSignature&&) =
-      default;
-
-  // Retained projection shared with body and call translation.
-  const CommandProgramProjection* projection = nullptr;
-  // Native specialization types in command signature order.
-  std::vector<loom_type_t> specialization_types;
-  // Native launch-binding types in command signature order.
-  std::vector<loom_type_t> binding_types;
-  // Builder-reserved identities in specialization-then-binding order.
-  std::vector<loom_value_id_t> destination_identities;
-  // The same identities permuted into flattened source parameter order.
-  std::vector<loom_value_id_t> source_identities;
-  // Overflow type payloads retained through the owning builder call.
-  BoundTypeStorage type_storage;
-};
-
 // Owns command-program source admission and the single retained projection
 // consumed by definitions, declarations, body binding, and explicit launches.
 class CommandPrograms {
@@ -104,15 +43,14 @@ class CommandPrograms {
   bool contains(cxx::FunctionSymbol* function) const;
 
   // Returns the retained projection, admitting source component types once.
-  const CommandProgramProjection& project(cxx::FunctionSymbol* function,
-                                          Types& types, cxx::AST* owner);
+  const StagedSignatureProjection& project(cxx::FunctionSymbol* function,
+                                           Types& types, cxx::AST* owner);
 
   // Binds the projected native signature to the next command op build.
-  BoundCommandProgramSignature bind(
-      cxx::FunctionSymbol* function, Types& types, cxx::AST* owner,
-      loom_builder_t* builder,
-      SignatureIdentityRequirement identities =
-          SignatureIdentityRequirement::DependentTypes);
+  BoundStagedSignature bind(cxx::FunctionSymbol* function, Types& types,
+                            cxx::AST* owner, loom_builder_t* builder,
+                            SignatureIdentityRequirement identities =
+                                SignatureIdentityRequirement::DependentTypes);
 
  private:
   struct Contract {
@@ -125,7 +63,7 @@ class CommandPrograms {
     // Best parameter source ranges, preferring the concrete definition.
     std::vector<cxx::ParameterDeclarationAST*> parameter_sources;
     // Final immutable projection, constructed on first signature use.
-    std::unique_ptr<CommandProgramProjection> projection;
+    std::unique_ptr<StagedSignatureProjection> projection;
   };
 
   cxx::AST* parameter_source(const Contract& contract, size_t ordinal,

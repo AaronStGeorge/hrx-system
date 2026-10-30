@@ -86,11 +86,12 @@ TEST_F(FunctionsTest, RootsQueueEachConcreteHelperOnceWithPrivateVisibility) {
                                      locations, names, module_);
   LaunchContracts launches(source.unit(), source.diagnostics());
   CommandPrograms command_programs(source.unit(), source.diagnostics());
+  PipelineContracts pipeline_contracts(source.unit(), source.diagnostics());
   FastMathContracts fastmath(source.unit(), source.diagnostics());
   FunctionContracts function_contracts(source.unit(), source.diagnostics());
   Intrinsics intrinsics(source.unit(), source.diagnostics(), types, scalars,
                         vectors, locations, names, launches, command_programs,
-                        function_contracts, module_);
+                        pipeline_contracts, function_contracts, module_);
   Configs configs(source.unit(), source.diagnostics(), types, scalars,
                   locations, names);
   TargetDefinitions target_definitions(source.unit(), source.diagnostics(),
@@ -98,8 +99,8 @@ TEST_F(FunctionsTest, RootsQueueEachConcreteHelperOnceWithPrivateVisibility) {
   TemplateDefinitions template_definitions(source.unit(), source.diagnostics());
   Functions functions(source.unit(), source.diagnostics(), module_,
                       immutable_objects, intrinsics, launches, command_programs,
-                      configs, fastmath, function_contracts, target_definitions,
-                      template_definitions, names);
+                      pipeline_contracts, configs, fastmath, function_contracts,
+                      target_definitions, template_definitions, names);
   const iree_string_view_t roots[] = {IREE_SV("entry")};
   functions.select(roots);
   ASSERT_EQ(functions.pending().size(), 1u);
@@ -147,11 +148,12 @@ TEST_F(FunctionsTest,
                                      locations, names, module_);
   LaunchContracts launches(source.unit(), source.diagnostics());
   CommandPrograms command_programs(source.unit(), source.diagnostics());
+  PipelineContracts pipeline_contracts(source.unit(), source.diagnostics());
   FastMathContracts fastmath(source.unit(), source.diagnostics());
   FunctionContracts function_contracts(source.unit(), source.diagnostics());
   Intrinsics intrinsics(source.unit(), source.diagnostics(), types, scalars,
                         vectors, locations, names, launches, command_programs,
-                        function_contracts, module_);
+                        pipeline_contracts, function_contracts, module_);
   Configs configs(source.unit(), source.diagnostics(), types, scalars,
                   locations, names);
   TargetDefinitions target_definitions(source.unit(), source.diagnostics(),
@@ -159,8 +161,8 @@ TEST_F(FunctionsTest,
   TemplateDefinitions template_definitions(source.unit(), source.diagnostics());
   Functions functions(source.unit(), source.diagnostics(), module_,
                       immutable_objects, intrinsics, launches, command_programs,
-                      configs, fastmath, function_contracts, target_definitions,
-                      template_definitions, names);
+                      pipeline_contracts, configs, fastmath, function_contracts,
+                      target_definitions, template_definitions, names);
   functions.select({});
   ASSERT_EQ(functions.pending().size(), 2u);
   auto defined =
@@ -199,11 +201,12 @@ TEST_F(FunctionsTest, ConfiguredScenarioRetainsItsNativeRegionSignature) {
                                      locations, names, module_);
   LaunchContracts launches(source.unit(), source.diagnostics());
   CommandPrograms command_programs(source.unit(), source.diagnostics());
+  PipelineContracts pipeline_contracts(source.unit(), source.diagnostics());
   FastMathContracts fastmath(source.unit(), source.diagnostics());
   FunctionContracts function_contracts(source.unit(), source.diagnostics());
   Intrinsics intrinsics(source.unit(), source.diagnostics(), types, scalars,
                         vectors, locations, names, launches, command_programs,
-                        function_contracts, module_);
+                        pipeline_contracts, function_contracts, module_);
   Configs configs(source.unit(), source.diagnostics(), types, scalars,
                   locations, names);
   TargetDefinitions target_definitions(source.unit(), source.diagnostics(),
@@ -211,8 +214,8 @@ TEST_F(FunctionsTest, ConfiguredScenarioRetainsItsNativeRegionSignature) {
   TemplateDefinitions template_definitions(source.unit(), source.diagnostics());
   Functions functions(source.unit(), source.diagnostics(), module_,
                       immutable_objects, intrinsics, launches, command_programs,
-                      configs, fastmath, function_contracts, target_definitions,
-                      template_definitions, names);
+                      pipeline_contracts, configs, fastmath, function_contracts,
+                      target_definitions, template_definitions, names);
 
   functions.select({});
   ASSERT_EQ(functions.pending().size(), 1u);

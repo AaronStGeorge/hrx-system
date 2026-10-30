@@ -31,6 +31,7 @@
 #include "loom/import/cxx/binding/kernel_launch.h"
 #include "loom/import/cxx/binding/launch.h"
 #include "loom/import/cxx/binding/numeric_conversion.h"
+#include "loom/import/cxx/binding/pipeline_contracts.h"
 #include "loom/import/cxx/binding/scalar_bindings.h"
 #include "loom/import/cxx/binding/shaped.h"
 #include "loom/import/cxx/binding/target.h"
@@ -103,6 +104,7 @@ class Intrinsics {
              Scalars& scalars, Vectors& vectors, Locations& locations,
              SymbolNames& names, LaunchContracts& launches,
              CommandPrograms& command_programs,
+             PipelineContracts& pipeline_contracts,
              FunctionContracts& function_contracts, loom_module_t* module)
       : unit_(unit),
         diagnostics_(diagnostics),
@@ -113,6 +115,7 @@ class Intrinsics {
         names_(names),
         launches_(launches),
         command_programs_(command_programs),
+        pipeline_contracts_(pipeline_contracts),
         function_contracts_(function_contracts),
         module_(module) {}
 
@@ -199,6 +202,8 @@ class Intrinsics {
   LaunchContracts& launches_;
   // Source/native command signature projections shared with call emission.
   CommandPrograms& command_programs_;
+  // External kernel-scoped pipeline contracts shared with launch emission.
+  PipelineContracts& pipeline_contracts_;
   // Callable predicates projected onto lazy template family declarations.
   FunctionContracts& function_contracts_;
   // Invocation-owned output module interning static source specifications.

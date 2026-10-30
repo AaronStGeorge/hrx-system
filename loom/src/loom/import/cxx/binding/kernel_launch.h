@@ -9,14 +9,18 @@
 
 #include <cxx/attributes.h>
 
+#include <cstdint>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 namespace loom::cxx_import {
 
 class Diagnostics;
 class LaunchContracts;
+class PipelineContracts;
 class Types;
+struct StagedSignatureProjection;
 
 // Source contract shared by check-runner and command-program kernel launches.
 // Admission resolves the selected kernel, configuration, workload bundle, and
@@ -27,17 +31,27 @@ struct KernelLaunchIntrinsic {
   static bool supports(std::string_view name);
   static std::optional<KernelLaunchIntrinsic> resolve(
       cxx::TranslationUnit& unit, Diagnostics& diagnostics, Types& types,
-      LaunchContracts& launches, cxx::FunctionSymbol* function,
-      const cxx::Attribute& attribute, cxx::AST* owner);
+      LaunchContracts& launches, PipelineContracts& pipelines,
+      cxx::FunctionSymbol* function, const cxx::Attribute& attribute,
+      cxx::AST* owner);
 
   bool equivalent(const KernelLaunchIntrinsic& other) const {
-    return kernel == other.kernel && configuration == other.configuration;
+    return kernel == other.kernel && configuration == other.configuration &&
+           pipeline == other.pipeline &&
+           pipeline_buffer_materializations ==
+               other.pipeline_buffer_materializations;
   }
 
   // Statically selected concrete kernel declaration.
   cxx::FunctionSymbol* kernel;
   // Kernel-owned launch configuration, absent for fixed geometry.
   cxx::FunctionSymbol* configuration;
+  // Staged source/native signature for a kernel-scoped pipeline contract.
+  const StagedSignatureProjection* pipeline;
+  // Source arguments requiring buffer-boundary materialization. Exact source
+  // arguments remain zero; nonzero entries select one transport operand from
+  // a source buffer, shaped handle, or proven zero-origin pointer root.
+  std::vector<uint8_t> pipeline_buffer_materializations;
 };
 
 }  // namespace loom::cxx_import
