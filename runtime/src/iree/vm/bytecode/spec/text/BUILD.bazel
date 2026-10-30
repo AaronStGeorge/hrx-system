@@ -1,0 +1,54 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:python.bzl", "iree_py_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_py_library(
+    name = "text",
+    srcs = ["__init__.py"],
+    deps = [
+        "//runtime/src/iree/vm/bytecode/spec:schema",
+        "//runtime/src/iree/vm/bytecode/spec/isa",
+    ],
+)
+
+iree_py_library(
+    name = "instruction",
+    srcs = ["instruction.py"],
+    deps = [
+        ":text",
+        "//runtime/src/iree/vm/bytecode/spec:schema",
+        "//runtime/src/iree/vm/bytecode/spec:specification",
+        "//runtime/src/iree/vm/bytecode/spec/isa",
+        "//runtime/src/iree/vm/bytecode/spec/isa/core",
+    ],
+)
+
+iree_py_library(
+    name = "specification",
+    srcs = ["specification.py"],
+    deps = [
+        ":instruction",
+        ":text",
+        "//runtime/src/iree/vm/bytecode/spec:specification",
+        "//runtime/src/iree/vm/bytecode/spec/text/module",
+    ],
+)
+
+iree_py_library(
+    name = "text_model",
+    deps = [
+        ":instruction",
+        ":specification",
+        ":text",
+        "//runtime/src/iree/vm/bytecode/spec/text/module",
+    ],
+)
