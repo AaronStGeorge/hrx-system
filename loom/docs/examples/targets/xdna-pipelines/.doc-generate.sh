@@ -14,6 +14,7 @@ if [[ -n "${RUNFILES_DIR:-}" ]]; then
 else
   repo_root="$(cd -- "${script_dir}/../../../../.." && pwd -P)"
   "${repo_root}/build_tools/bin/iree-bazel-build" --config=asan \
+    --config=loom-importer-cxx \
     //loom/src/loom/tools/loom-format \
     //loom/src/loom/tools/loom-import-cxx \
     //loom/src/loom/tools/loom-compile
