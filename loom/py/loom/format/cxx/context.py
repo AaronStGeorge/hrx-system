@@ -342,7 +342,11 @@ class CxxRenderContext:
                 source_name = preferred[definition.operands[0]]
                 if not is_generated(definition.operands[0]):
                     preferred[result] = f"{source_name}_group"
-            elif definition.name == "vector.from_elements" and is_generated(result):
+            elif definition.name in {
+                "vector.constanti",
+                "vector.constantf",
+                "vector.from_elements",
+            } and is_generated(result):
                 users = self.users[result]
                 if users and all(
                     user.name == "vector.table.lookup"
@@ -421,6 +425,10 @@ class CxxRenderContext:
             if operation.name == "scalar.constant":
                 value = operation.attributes.get("value")
                 if isinstance(value, int) and value < 0:
+                    signed.update(operation.results)
+            elif operation.name == "vector.constanti":
+                values = operation.attributes["values"]
+                if any(value < 0 for value in values):
                     signed.update(operation.results)
             elif operation.name == "vector.from_elements":
                 if any(operand in signed for operand in operation.operands):

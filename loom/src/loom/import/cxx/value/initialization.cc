@@ -149,7 +149,7 @@ Value Initialization::value(const cxx::Type* type,
 Value Initialization::zero(const cxx::Type* type, cxx::AST* owner) {
   type = types_.unqualified(type);
   if (types_.native_vector(type)) {
-    return vectors_.construct({}, type, owner);
+    return vectors_.zero(type, owner);
   }
   if (auto* array = types_.array(type, owner)) {
     std::vector<loom_value_id_t> components;
@@ -187,6 +187,27 @@ Value Initialization::zero(const cxx::Type* type, cxx::AST* owner) {
   check(loom_module_set_value_name(builder_.module, result,
                                    zero_name(loom_type_element_type(output))));
   return result;
+}
+
+std::optional<loom_value_id_t> Initialization::constant_vector(
+    const cxx::Type* type, cxx::List<cxx::ExpressionAST*>* elements,
+    cxx::AST* owner) {
+  auto* vector = types_.native_vector(type);
+  auto values = std::make_shared<cxx::InitializerList>();
+  cxx::ASTInterpreter interpreter(&unit_);
+  for (auto* element : cxx::ListView{elements}) {
+    auto value = scalar_constant(unit_, element);
+    if (!value) {
+      return std::nullopt;
+    }
+    auto converted = interpreter.convertArithmetic(*value, element->type,
+                                                   vector->elementType());
+    if (!converted) {
+      return std::nullopt;
+    }
+    values->elements.emplace_back(std::move(*converted), vector->elementType());
+  }
+  return vectors_.constant(cxx::ConstValue{std::move(values)}, type, owner);
 }
 
 Value Initialization::finish_value_receiver(const RecordPartition& record,
@@ -338,6 +359,9 @@ Value Initialization::from_elements(const cxx::Type* type,
         "Loom source values require an operation result or a copy");
   }
   if (auto* vector = types_.native_vector(type)) {
+    if (auto constant = constant_vector(type, elements, owner)) {
+      return *constant;
+    }
     std::vector<loom_value_id_t> components;
     for (auto* element : cxx::ListView{elements}) {
       components.push_back(

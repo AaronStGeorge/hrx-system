@@ -60,6 +60,8 @@ class Vectors {
   // trailing lanes are zero, as in a C/C++ aggregate initializer.
   loom_value_id_t construct(std::span<const loom_value_id_t> elements,
                             const cxx::Type* source_type, cxx::AST* owner);
+  // Materializes value initialization without manufacturing scalar lanes.
+  loom_value_id_t zero(const cxx::Type* source_type, cxx::AST* owner);
   // Materializes the typed lanes of a frontend vector constant.
   loom_value_id_t constant(const cxx::ConstValue& value,
                            const cxx::Type* source_type, cxx::AST* owner);

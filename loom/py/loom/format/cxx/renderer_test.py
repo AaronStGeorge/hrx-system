@@ -1538,6 +1538,55 @@ func.def public @math.nonfinite() -> (f32, f64, vector<2x2xf32>) {
     assert "__builtin_bit_cast(float, 0xff800000u)" in result
 
 
+def test_projects_compact_native_vector_literals() -> None:
+    source = """\
+func.def public @math.constants() -> (vector<2xi16>, vector<2xf16>, vector<2xf64>) {
+  %integers = vector.constanti [-3, 4] : vector<2xi16>
+  %halves = vector.constantf [1.5, -0.0] : vector<2xf16>
+  %doubles = vector.constantf [2.25, -4.5] : vector<2xf64>
+  func.return %integers, %halves, %doubles : vector<2xi16>, vector<2xf16>, vector<2xf64>
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "using Int16x2 = short __attribute__((ext_vector_type(2)));" in result
+    assert "Int16x2 integers = Int16x2{-3, 4};" in result
+    assert (
+        "Float16x2 halves = Float16x2{"
+        "static_cast<std::float16_t>(1.5f), "
+        "static_cast<std::float16_t>(-0.0f)};" in result
+    )
+    assert "Float64x2 doubles = Float64x2{2.25, -4.5};" in result
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "vector.constanti [0, 1] : vector<2xi1>",
+        "vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<2x2xf32>",
+    ],
+)
+def test_rejects_compact_literals_without_native_cxx_carriers(
+    literal: str,
+) -> None:
+    source = f"""\
+func.def public @math.constant() {{
+  %value = {literal}
+  func.return
+}}
+"""
+
+    with pytest.raises(
+        CxxRenderError,
+        match=(
+            "nonuniform structured or predicate vector literals have no "
+            "native C\\+\\+ carrier"
+        ),
+    ):
+        render_module(load_module(source.encode()))
+
+
 @pytest.mark.parametrize(
     ("predicate", "operator"),
     [

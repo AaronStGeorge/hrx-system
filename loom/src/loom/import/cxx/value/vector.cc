@@ -308,6 +308,19 @@ loom_value_id_t Vectors::construct(std::span<const loom_value_id_t> elements,
   return loom_op_results(op)[0];
 }
 
+loom_value_id_t Vectors::zero(const cxx::Type* source_type, cxx::AST* owner) {
+  auto output = types_.get(source_type, owner);
+  loom_op_t* op;
+  if (loom_scalar_type_is_float(loom_type_element_type(output))) {
+    check(loom_vector_splatf_build(&builder_, 0.0, output,
+                                   locations_.get(owner), &op));
+    return loom_vector_splatf_result(op);
+  }
+  check(loom_vector_splati_build(&builder_, 0, output, locations_.get(owner),
+                                 &op));
+  return loom_vector_splati_result(op);
+}
+
 loom_value_id_t Vectors::constant(const cxx::ConstValue& value,
                                   const cxx::Type* source_type,
                                   cxx::AST* owner) {

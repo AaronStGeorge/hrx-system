@@ -108,6 +108,11 @@ class Initialization {
                       cxx::VariableSymbol* implicit_element,
                       cxx::FunctionSymbol* constructor, cxx::AST* owner,
                       std::optional<Value> retained);
+  // Returns a compact vector literal when every source lane is a pure
+  // frontend constant. Runtime and side-effecting lanes remain SSA elements.
+  std::optional<loom_value_id_t> constant_vector(
+      const cxx::Type* type, cxx::List<cxx::ExpressionAST*>* elements,
+      cxx::AST* owner);
   loom_string_id_t zero_name(loom_scalar_type_t scalar_type);
   Value zero(const cxx::Type* type, cxx::AST* owner);
   Value default_record(const RecordPartition& record,

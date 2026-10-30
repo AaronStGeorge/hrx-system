@@ -42,8 +42,8 @@ void replace_lane(unsigned* output, unsigned index, unsigned replacement) {
 void fill_lanes(unsigned* output, unsigned count) {
   UInt32x4 values = UInt32x4{0u, 0u, 0u, 0u};
   for (unsigned index_1 = 0u; index_1 < count; ++index_1) {
-    unsigned v37 = index_1;
-    values[loom::index::cast(static_cast<int>(v37))] = (v37 + 1u);
+    unsigned v35 = index_1;
+    values[loom::index::cast(static_cast<int>(v35))] = (v35 + 1u);
   }
   auto output_view = loom::buffer::view<4>(output, {}, loom::encoding::layout::dense<1>());
   loom::vector::store(values, output_view, loom::type::indices{loom::type::index{0}});
