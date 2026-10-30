@@ -86,7 +86,8 @@ struct CallPropagation {
 // Retained proof that a source loop has a stable, nonwrapping counted interval.
 struct CountedLoop {
   struct Bound {
-    // Resolved identifier supplying the loop-invariant bound.
+    // Resolved identifier supplying the loop-invariant bound, or null when
+    // the retained expression is an exact constant.
     cxx::Symbol* binding;
     // Resolved source expression, including inserted value materializations.
     cxx::ExpressionAST* expression;

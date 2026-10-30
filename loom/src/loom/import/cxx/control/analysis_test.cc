@@ -354,6 +354,8 @@ TEST(ControlFlowTest, AddressAdmissionRetainsNativeUnitStepIntervals) {
     const char* loop;
     // Expected native range, or no value for general while semantics.
     std::optional<CountedLoop::AddressDomain> domain;
+    // Whether the admitted upper bound is an exact temporary constant.
+    bool constant_bound = false;
   };
   const Case cases[] = {
       {"loom::type::index",
@@ -368,6 +370,14 @@ TEST(ControlFlowTest, AddressAdmissionRetainsNativeUnitStepIntervals) {
       {"loom::type::offset",
        "for (auto i=begin; i<end; i=loom::type::offset{1}+i) {}",
        CountedLoop::AddressDomain::Offset},
+      {"loom::type::index",
+       "for (auto i=begin; i<loom::type::index{4}; "
+       "i=i+loom::type::index{1}) {}",
+       CountedLoop::AddressDomain::Index, true},
+      {"loom::type::offset",
+       "for (auto i=begin; i<loom::type::offset(4); "
+       "i=i+loom::type::offset{1}) {}",
+       CountedLoop::AddressDomain::Offset, true},
       {"loom::type::index",
        "for (auto i=begin; i<end; i=i+loom::type::index{2}) {}", std::nullopt},
       {"loom::type::offset",
@@ -428,7 +438,9 @@ TEST(ControlFlowTest, AddressAdmissionRetainsNativeUnitStepIntervals) {
                   ->initDeclaratorList->value->symbol);
     const auto& range = std::get<CountedLoop::AddressRange>(counted->range);
     EXPECT_EQ(range.domain, *test.domain);
-    EXPECT_EQ(range.upper.binding, function->symbol->parameters()[1]);
+    EXPECT_EQ(range.upper.binding, test.constant_bound
+                                       ? nullptr
+                                       : function->symbol->parameters()[1]);
     EXPECT_EQ(range.upper.expression,
               cxx::ast_cast<cxx::BinaryExpressionAST>(loop->condition)
                   ->rightExpression);

@@ -82,10 +82,15 @@ cxx::IdExpressionAST* address_identity(cxx::TranslationUnit& unit,
              : nullptr;
 }
 
-bool is_address_unit(cxx::TranslationUnit& unit,
-                     const AddressPartition& address,
-                     cxx::ExpressionAST* expression) {
+std::optional<std::intmax_t> address_constant(cxx::TranslationUnit& unit,
+                                              const AddressPartition& address,
+                                              cxx::ExpressionAST* expression) {
   expression = unwrap_expression(expression);
+  auto traits = unit.typeTraits();
+  if (!traits.is_same(traits.remove_cv(expression->type),
+                      address.source->type())) {
+    return std::nullopt;
+  }
   cxx::List<cxx::ExpressionAST*>* arguments = nullptr;
   if (auto* construction =
           cxx::ast_cast<cxx::BracedTypeConstructionAST>(expression)) {
@@ -96,13 +101,16 @@ bool is_address_unit(cxx::TranslationUnit& unit,
                  cxx::ast_cast<cxx::TypeConstructionAST>(expression)) {
     arguments = construction->expressionList;
   }
-  auto value = arguments && !arguments->next
-                   ? integer_constant(unit, arguments->value)
-                   : std::nullopt;
-  auto traits = unit.typeTraits();
-  return traits.is_same(traits.remove_cv(expression->type),
-                        address.source->type()) &&
-         value && *value == 1;
+  return arguments && !arguments->next
+             ? integer_constant(unit, arguments->value)
+             : std::nullopt;
+}
+
+bool is_address_unit(cxx::TranslationUnit& unit,
+                     const AddressPartition& address,
+                     cxx::ExpressionAST* expression) {
+  auto value = address_constant(unit, address, expression);
+  return value && *value == 1;
 }
 
 struct IntegerIncrement {
@@ -259,7 +267,8 @@ const CountedLoop* ControlFlow::counted(cxx::ForStatementAST* loop) const {
   } else {
     bound = &std::get<CountedLoop::AddressRange>(found->second.range).upper;
   }
-  return bound && addressed(bound->binding) ? nullptr : &found->second;
+  return bound && bound->binding && addressed(bound->binding) ? nullptr
+                                                              : &found->second;
 }
 
 const SwitchLayout& ControlFlow::switch_layout(
@@ -1565,7 +1574,9 @@ std::optional<CountedLoop> ControlFlow::classify_address(
   auto predicate = domain == LOOM_SCALAR_TYPE_INDEX ? "slt" : "ult";
   auto* left = address_identity(unit_, address, condition->leftExpression);
   auto* bound = address_identity(unit_, address, condition->rightExpression);
-  if (!left || left->symbol != induction || !bound ||
+  const bool constant_bound =
+      address_constant(unit_, address, condition->rightExpression).has_value();
+  if (!left || left->symbol != induction || (!bound && !constant_bound) ||
       !operation_is(condition->symbol, "index.cmp", predicate)) {
     return std::nullopt;
   }
@@ -1603,17 +1614,18 @@ std::optional<CountedLoop> ControlFlow::classify_address(
   const auto& body_writes = written(loop->statement);
   const auto& loop_writes = written(loop);
   if (std::ranges::find(body_writes, induction) != body_writes.end() ||
-      unit_.typeTraits().is_volatile(bound->type) ||
-      std::ranges::find(loop_writes, bound->symbol) != loop_writes.end()) {
+      (bound &&
+       (unit_.typeTraits().is_volatile(bound->type) ||
+        std::ranges::find(loop_writes, bound->symbol) != loop_writes.end()))) {
     return std::nullopt;
   }
-  return CountedLoop{
-      induction,
-      CountedLoop::AddressRange{
-          CountedLoop::Bound{bound->symbol, condition->rightExpression},
-          domain == LOOM_SCALAR_TYPE_INDEX
-              ? CountedLoop::AddressDomain::Index
-              : CountedLoop::AddressDomain::Offset}};
+  return CountedLoop{induction,
+                     CountedLoop::AddressRange{
+                         CountedLoop::Bound{bound ? bound->symbol : nullptr,
+                                            condition->rightExpression},
+                         domain == LOOM_SCALAR_TYPE_INDEX
+                             ? CountedLoop::AddressDomain::Index
+                             : CountedLoop::AddressDomain::Offset}};
 }
 
 }  // namespace loom::cxx_import
