@@ -12,7 +12,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 source "${script_dir}/../../example.shlib"
 
 if [[ "$#" -lt 2 || "$#" -gt 3 ]]; then
-  printf 'usage: %s source.loom output-directory [device-profile]\n' "$0" >&2
+  printf 'usage: %s source.cxx output-directory [device-profile]\n' "$0" >&2
   exit 64
 fi
 
@@ -20,16 +20,23 @@ source_file="$1"
 output_dir="$2"
 profile="${3:-amd.xdna.strix_halo.17f0_11}"
 loom_format="${LOOM_FORMAT:-loom-format}"
+loom_import_cxx="${LOOM_IMPORT_CXX:-loom-import-cxx}"
 loom_compile="${LOOM_COMPILE:-loom-compile}"
 loom_example_require_tool "${loom_format}"
+loom_example_require_tool "${loom_import_cxx}"
 loom_example_require_tool "${loom_compile}"
 mkdir -p -- "${output_dir}"
 
-loom_example_section "Check the authored source"
-loom_example_run_tool loom-format "${loom_format}" --check "${source_file}"
+loom_example_section "Import the authored C++ into Loom High IR"
+loom_example_run_tool loom-import-cxx "${loom_import_cxx}" \
+  --root=ffn_gate_up_quadratic_bf16 "${source_file}" \
+  --output="${output_dir}/imported.loom"
+loom_example_run_tool loom-format "${loom_format}" --check \
+  "${output_dir}/imported.loom"
 
 loom_example_section "Compile the pipeline and retain its compilation boundaries"
-loom_example_run_tool loom-compile "${loom_compile}" "${source_file}" \
+loom_example_run_tool loom-compile "${loom_compile}" \
+  "${output_dir}/imported.loom" \
   --root=@ffn_gate_up_quadratic_bf16 \
   --target="amd.xdna.aie2p:${profile}" --format=xdna \
   --config=ffn_gate_up.input_size=512 \

@@ -15,15 +15,17 @@ else
   repo_root="$(cd -- "${script_dir}/../../../../.." && pwd -P)"
   "${repo_root}/build_tools/bin/iree-bazel-build" --config=asan \
     //loom/src/loom/tools/loom-format \
+    //loom/src/loom/tools/loom-import-cxx \
     //loom/src/loom/tools/loom-compile
   tools_root="${repo_root}/bazel-bin"
 fi
 export LOOM_FORMAT="${tools_root}/loom/src/loom/tools/loom-format/loom-format"
+export LOOM_IMPORT_CXX="${tools_root}/loom/src/loom/tools/loom-import-cxx/loom-import-cxx"
 export LOOM_COMPILE="${tools_root}/loom/src/loom/tools/loom-compile/loom-compile"
 
 output_dir="${1:-${TEST_UNDECLARED_OUTPUTS_DIR:-${repo_root}/build/loom-docs/examples/targets/xdna-pipelines}}"
 mkdir -p -- "${output_dir}"
-source_file="${repo_root}/loom/binding/c/benchmark/kernels/ffn/gate_up_quadratic_bf16_xdna.loom"
+source_file="${repo_root}/loom/docs/examples/targets/xdna-pipelines/gated-projection.cxx"
 temporary_root="$(mktemp -d "${TMPDIR:-/tmp}/loom-doc-xdna-pipeline.XXXXXX")"
 cleanup() {
   rm -r -- "${temporary_root}"
@@ -36,8 +38,12 @@ for profile in amd.xdna.strix.17f0_10 amd.xdna.strix_halo.17f0_11; do
 done
 
 # Publish source and complete compiler-produced IR, without executable caches.
-cp -- "${source_file}" "${output_dir}/gated-projection.loom"
-sed -n '/^pipeline.def/,$p' "${source_file}" >"${output_dir}/pipeline.loom"
+cp -- "${source_file}" "${output_dir}/gated-projection.cxx"
+cp -- "${temporary_root}/amd.xdna.strix_halo.17f0_11/imported.loom" \
+  "${output_dir}/gated-projection.loom"
+sed -n '/^pipeline.def/,$p' \
+  "${temporary_root}/amd.xdna.strix_halo.17f0_11/imported.loom" \
+  >"${output_dir}/pipeline.loom"
 for boundary in outline-pipeline-strands aie2p-lower-pipeline; do
   cp -- "${temporary_root}/amd.xdna.strix_halo.17f0_11/${boundary}.loom" \
     "${output_dir}/${boundary}.loom"
