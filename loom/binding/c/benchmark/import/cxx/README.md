@@ -7,8 +7,10 @@ body while adding one facade or facade combination: `<stdfloat>`,
 `<loomcxx/numeric.h>`, `<loomcxx/vector.h>`,
 `<loomcxx/encoding_type.h>`, `<loomcxx/encoding.h>`,
 `<loomcxx/view.h>`, `<loomcxx/atomic.h>`, `<loomcxx/predicate.h>`,
-`<loomcxx/kernel.h>`, or the kernel and predicate facades together. Comparing
-them with `NoIncludes` isolates header cost.
+`<loomcxx/pipeline.h>`, `<loomcxx/kernel.h>`, or the kernel with the pipeline
+or predicate facade. Comparing them with `NoIncludes` isolates header cost;
+comparing `KernelPipeline` with `Kernel` isolates the pipeline declarations
+after their shared view and buffer dependencies are already parsed.
 `RankTwoView` imports a dynamic-row, static-column view through a dense layout.
 `RankThreeStorageView` composes a rank-three layout with an FP8 schema and loads
 through the resulting physical-storage view. Together they retain the ordinary
@@ -26,6 +28,13 @@ preprocesses and parses the source again; no parsed C++ state is cached.
 `loomc_module_deserialize_from_source`. It is the control for separating the
 one-time frontend cost from later specialization. These cases require no
 target backend.
+
+`PipelineDefinition` imports a complete configured pipeline with two placed
+strands, pooled workgroup storage, FIFO channel ownership, asynchronous
+transport, and BF16 vector math. Its cold, preamble-creation, and
+preamble-restored rows keep the complete pipeline frontend cost visible without
+coupling the timed bytes to the independently maintained target-specific
+documentation example.
 
 ## Closed Q8S32 specialization
 
