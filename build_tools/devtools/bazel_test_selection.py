@@ -144,36 +144,38 @@ class TestSuite:
             )
         return command
 
+    def discover_targets(
+        self, repo_root: Path, temp_path: Path, *, verbose: bool = False
+    ) -> set[str]:
+        # Discover concrete test rules without walking unconfigured deps:
+        # inactive select branches may require unavailable SDKs, and other
+        # support rules may intentionally be invalid outside analysis tests.
+        test_targets_path = temp_path / "test_targets.txt"
+        if not project_presubmit.run_command(
+            self.name,
+            [
+                "bazel",
+                "query",
+                "--output=label",
+                f"--output_file={test_targets_path}",
+                self.discovery_query(),
+            ],
+            "Discover Bazel test targets",
+            cwd=repo_root,
+            verbose=verbose,
+        ):
+            raise DependencyQueryError("failed to discover Bazel test targets")
+        test_targets = set(test_targets_path.read_text(encoding="utf-8").splitlines())
+        if not test_targets:
+            raise DependencyQueryError(f"Bazel reported no {self.name} test targets")
+        return test_targets
+
     def query_affected_targets(
         self, repo_root: Path, source_labels: set[str], *, verbose: bool = False
     ) -> list[str]:
         with tempfile.TemporaryDirectory(prefix="iree-bazel-affected-") as temp_dir:
             temp_path = Path(temp_dir)
-            # Discover concrete test rules without walking unconfigured deps:
-            # inactive select branches may require unavailable SDKs, and other
-            # support rules may intentionally be invalid outside analysis tests.
-            test_targets_path = temp_path / "test_targets.txt"
-            if not project_presubmit.run_command(
-                self.name,
-                [
-                    "bazel",
-                    "query",
-                    "--output=label",
-                    f"--output_file={test_targets_path}",
-                    self.discovery_query(),
-                ],
-                "Discover Bazel test targets",
-                cwd=repo_root,
-                verbose=verbose,
-            ):
-                raise DependencyQueryError("failed to discover Bazel test targets")
-            test_targets = set(
-                test_targets_path.read_text(encoding="utf-8").splitlines()
-            )
-            if not test_targets:
-                raise DependencyQueryError(
-                    f"Bazel reported no {self.name} test targets"
-                )
+            test_targets = self.discover_targets(repo_root, temp_path, verbose=verbose)
             query_path = temp_path / "test_dependencies.query"
             query_path.write_text(
                 affected_query(test_targets, source_labels), encoding="utf-8"
@@ -241,31 +243,46 @@ class TestSuite:
                 if paths is not None
                 else None
             )
+            if targets is None and not self.manual_suites:
+                return project_presubmit.run_command(
+                    self.name,
+                    self.test_command(),
+                    "Bazel tests",
+                    cwd=repo_root,
+                    verbose=verbose,
+                )
+            if targets == []:
+                print(
+                    f"{self.name} presubmit: no Bazel tests depend on the selected files"
+                )
+                return True
+            with tempfile.TemporaryDirectory(
+                prefix="iree-bazel-test-targets-"
+            ) as temp_dir:
+                # Full policy runs use the same explicit manual membership as
+                # affected runs. Wildcard suite expansion could admit other
+                # manual members before we can apply this selection policy.
+                success_exit_codes = (0, 4)
+                if targets is None:
+                    targets = sorted(
+                        self.discover_targets(
+                            repo_root, Path(temp_dir), verbose=verbose
+                        )
+                    )
+                    success_exit_codes = (0,)
+                target_file = Path(temp_dir) / "targets.txt"
+                target_file.write_text(
+                    "".join(f"{target}\n" for target in targets), encoding="utf-8"
+                )
+                # Exit 4 means every affected test was filtered by execution policy.
+                return project_presubmit.run_command(
+                    self.name,
+                    self.test_command(target_file),
+                    "Bazel tests",
+                    cwd=repo_root,
+                    verbose=verbose,
+                    success_exit_codes=success_exit_codes,
+                )
         except DependencyQueryError as exc:
             print(f"{self.name} presubmit: {exc}", file=sys.stderr)
             return False
-        if targets is None:
-            return project_presubmit.run_command(
-                self.name,
-                self.test_command(),
-                "Bazel tests",
-                cwd=repo_root,
-                verbose=verbose,
-            )
-        if not targets:
-            print(f"{self.name} presubmit: no Bazel tests depend on the selected files")
-            return True
-        with tempfile.TemporaryDirectory(prefix="iree-bazel-test-targets-") as temp_dir:
-            target_file = Path(temp_dir) / "targets.txt"
-            target_file.write_text(
-                "".join(f"{target}\n" for target in targets), encoding="utf-8"
-            )
-            # Exit 4 means every selected test was filtered by execution policy.
-            return project_presubmit.run_command(
-                self.name,
-                self.test_command(target_file),
-                "Bazel tests",
-                cwd=repo_root,
-                verbose=verbose,
-                success_exit_codes=(0, 4),
-            )

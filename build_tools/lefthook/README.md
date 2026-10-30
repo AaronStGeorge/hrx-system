@@ -6,6 +6,27 @@ dispatcher owns file selection, profiles, hygiene checks, and project test
 routing. Project-specific policy stays in each project under
 `*/build_tools/presubmit.py`.
 
+## Test Selection
+
+Bazel presubmit selects affected tests across every project and the repository
+build tools. Each project supplies its test roots and build configuration to
+the shared selector in `build_tools/devtools/bazel_test_selection.py`. A changed
+runtime source can therefore select Loom consumers, and a shared generator can
+select tests in several projects without a separate path-to-test table.
+
+The selector discovers eligible test rules with `query`, then follows their
+configured dependencies with `cquery` using the same options as test execution.
+This preserves `select()` choices, tool transitions, and aspect edges. Ordinary
+manual tests remain excluded; explicitly registered presubmit suites include
+their manual policy tests. The resulting labels go to a target-pattern file,
+with compatibility and execution-resource policy applied by Bazel. Query
+failures fail presubmit; an empty selection runs no tests.
+
+Changes to BUILD files, Starlark rules, module definitions, and Bazel
+configuration conservatively select the full suites because they change the
+graph itself. CMake validation and source hygiene retain their project-owned
+selection and entry points.
+
 ## Commit Contract
 
 A successful Git commit must not commit stale formatter or generated-file
@@ -206,12 +227,12 @@ The GitHub Presubmit workflow calls:
 python dev.py bazel presubmit --profile ci --no-project-tests
 ```
 
-That workflow still runs full tracked-tree hygiene, changed repository-tool
-test suites, and configured static-analysis providers. Developer workflow,
+That workflow still runs full tracked-tree hygiene, affected repository-tool
+tests, and configured static-analysis providers. Developer workflow,
 Lefthook, and project-presubmit policy tests are tagged `manual` so product and
 platform wildcard builds do not rediscover them. The dispatcher selects their
-explicit suites only when the owning scripts, shared support, or workflow
-configuration changes. Runtime/libhrx/loom product tests remain skipped because
+affected members through the same configured dependency graph as ordinary
+tests. Runtime/libamdf/libhrx/loom product tests remain skipped because
 dedicated CI workflows own those build and test lanes.
 
 `lefthook.yml` requires Lefthook 2.1.9 or newer because the repository uses

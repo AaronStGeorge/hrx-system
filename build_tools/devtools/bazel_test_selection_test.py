@@ -211,6 +211,36 @@ class BazelTestSelectionTest(unittest.TestCase):
         self.assertIn("-//tools:excluded_test", command)
         self.assertIn("--test_tag_filters=-manual", self.suite.test_command())
 
+    def test_full_policy_runs_use_the_discovered_members_and_require_tests(self):
+        suite = selection.TestSuite(
+            name="policy", targets=("//tools/...",), manual_suites=("//tools:policy",)
+        )
+
+        def run(_name, command, _description, **kwargs):
+            self.assertEqual(command[1], "test")
+            target_file = Path(
+                next(
+                    arg.split("=", 1)[1]
+                    for arg in command
+                    if arg.startswith("--target_pattern_file=")
+                )
+            )
+            self.assertEqual(
+                target_file.read_text(), "//tools:ordinary_test\n//tools:policy_test\n"
+            )
+            self.assertEqual(kwargs["success_exit_codes"], (0,))
+            return True
+
+        with (
+            mock.patch.object(
+                selection.TestSuite,
+                "discover_targets",
+                return_value={"//tools:ordinary_test", "//tools:policy_test"},
+            ),
+            mock.patch.object(project_presubmit, "run_command", side_effect=run),
+        ):
+            self.assertTrue(suite.run(Path.cwd()))
+
     def test_query_errors_are_not_empty_selections_or_full_suite_fallbacks(self):
         for failed_phase in ("query", "cquery"):
             with self.subTest(failed_phase=failed_phase):

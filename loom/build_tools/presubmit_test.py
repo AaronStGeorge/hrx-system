@@ -57,6 +57,27 @@ class LoomPresubmitTest(unittest.TestCase):
         )
         self.assertEqual(self.presubmit.BAZEL_TESTS.targets, ("//loom/...",))
 
+    def test_bazel_selection_receives_shared_inputs_without_running_loom_hygiene(self):
+        args = types.SimpleNamespace(
+            hygiene=True, tests=True, lane="bazel", files_from="files.txt", fix=False
+        )
+        with (
+            mock.patch.object(
+                self.presubmit, "selected_files", return_value=["producer/input.c"]
+            ),
+            mock.patch.object(
+                self.presubmit.bazel_test_selection.TestSuite, "run", return_value=True
+            ) as run,
+            mock.patch.object(
+                self.presubmit, "run_generated_artifact_maintenance"
+            ) as maintain,
+        ):
+            self.assertEqual(self.presubmit.run_presubmit(args), 0)
+        run.assert_called_once_with(
+            self.presubmit.REPO_ROOT, paths=["producer/input.c"]
+        )
+        maintain.assert_not_called()
+
     def test_cmake_tests_exclude_runtime_resource_labels(self):
         self.assertEqual(
             self.presubmit.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX,

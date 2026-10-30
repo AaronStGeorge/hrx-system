@@ -394,11 +394,9 @@ def run_cmake_tests() -> bool:
 def run_presubmit(args: argparse.Namespace) -> int:
     if not args.hygiene and not args.tests:
         return 0
-    if not should_run_presubmit(args.files_from):
-        print("loom presubmit: no Loom-affecting files")
-        return 0
+    project_inputs = should_run_presubmit(args.files_from)
     ok = True
-    if args.hygiene:
+    if args.hygiene and project_inputs:
         ok = run_generated_artifact_maintenance(args.fix, args.files_from) and ok
         ok = (
             run_source_format_maintenance(
@@ -418,7 +416,7 @@ def run_presubmit(args: argparse.Namespace) -> int:
         if args.lane == "bazel":
             ok = run_bazel_tests(args.files_from) and ok
         elif args.lane == "cmake":
-            ok = run_cmake_tests() and ok
+            ok = (not project_inputs or run_cmake_tests()) and ok
         else:
             raise ValueError(f"unknown lane: {args.lane}")
     return 0 if ok else 1
