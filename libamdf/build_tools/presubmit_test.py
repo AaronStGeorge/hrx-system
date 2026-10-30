@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -31,15 +32,32 @@ class LibamdfPresubmitTest(unittest.TestCase):
         cls.presubmit = load_presubmit_module()
 
     def test_bazel_tests_explicitly_enable_libamdf(self):
-        command = self.presubmit.bazel_test_command()
+        command = self.presubmit.BAZEL_TESTS.test_command()
 
-        self.assertEqual(command[0], self.presubmit.sys.executable)
-        self.assertEqual(command[1], str(self.presubmit.REPO_ROOT / "dev.py"))
-        self.assertEqual(command[2:4], ["bazel", "test"])
-        self.assertEqual(command.count("--config=presubmit"), 0)
+        self.assertEqual(command[:3], ["bazel", "test", "--config=presubmit"])
         self.assertIn("--//libamdf/config:enabled=true", command)
         self.assertIn("//libamdf/...", command)
-        self.assertFalse(any(arg.startswith("--test_tag_filters=") for arg in command))
+        self.assertIn("--test_tag_filters=-manual", command)
+
+    def test_bazel_selection_receives_inputs_outside_libamdf(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file_list = Path(directory) / "files.txt"
+            file_list.write_text("build_tools/shared/tool.py\n", encoding="utf-8")
+            args = types.SimpleNamespace(
+                tests=True, lane="bazel", files_from=str(file_list)
+            )
+            with (
+                mock.patch.object(self.presubmit, "parse_arguments", return_value=args),
+                mock.patch.object(
+                    self.presubmit.bazel_test_selection.TestSuite,
+                    "run",
+                    return_value=True,
+                ) as run,
+            ):
+                self.assertEqual(self.presubmit.main(), 0)
+            run.assert_called_once_with(
+                self.presubmit.REPO_ROOT, paths=["build_tools/shared/tool.py"]
+            )
 
     def test_bazel_tests_use_selected_execution_policy(self):
         with mock.patch.dict(
@@ -51,7 +69,7 @@ class LibamdfPresubmitTest(unittest.TestCase):
             },
             clear=True,
         ):
-            command = self.presubmit.bazel_test_command()
+            command = self.presubmit.BAZEL_TESTS.test_command()
 
         self.assertIn("--config=remote-execution", command)
         self.assertIn("--config=local-tests", command)
@@ -76,17 +94,17 @@ class LibamdfPresubmitTest(unittest.TestCase):
             ["cmake", "test", "-R", "TARGET_A", "-LE", "TARGET_B"],
         )
 
-    def test_libamdf_change_runs_tests(self):
+    def test_libamdf_change_runs_cmake_tests(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             file_list = Path(temporary_directory) / "files.txt"
             file_list.write_text("libamdf/include/amdf/amdf.h\n", encoding="utf-8")
-            self.assertTrue(self.presubmit.should_run_tests(str(file_list)))
+            self.assertTrue(self.presubmit.should_run_cmake_tests(str(file_list)))
 
-    def test_unrelated_change_skips_tests(self):
+    def test_unrelated_change_skips_cmake_tests(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             file_list = Path(temporary_directory) / "files.txt"
             file_list.write_text("docs/unrelated.md\n", encoding="utf-8")
-            self.assertFalse(self.presubmit.should_run_tests(str(file_list)))
+            self.assertFalse(self.presubmit.should_run_cmake_tests(str(file_list)))
 
 
 if __name__ == "__main__":
