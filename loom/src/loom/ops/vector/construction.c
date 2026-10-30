@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/ir/float_facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
@@ -155,6 +156,70 @@ static iree_status_t loom_vector_canonicalize_extract_from_elements(
         result_type, op->location, &construction));
     IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
         op, rewriter, construction, checkpoint));
+  }
+  *out_changed = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_canonicalize_extract_from_literal(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* source_def_op,
+    loom_type_t source_type, loom_type_t result_type, bool* out_changed) {
+  *out_changed = false;
+  const loom_attribute_t static_indices =
+      loom_vector_extract_static_indices(op);
+  if (!loom_vector_static_indices_are_proven_in_bounds(source_type,
+                                                       static_indices)) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t offset = 0;
+  iree_host_size_t count = 0;
+  if (loom_vector_constanti_isa(source_def_op)) {
+    count = loom_vector_constanti_values(source_def_op).count;
+  } else {
+    count = loom_vector_constantf_values(source_def_op).count;
+  }
+  for (uint16_t axis = 0; axis < static_indices.count; ++axis) {
+    count /= (iree_host_size_t)loom_type_dim_static_size_at(source_type, axis);
+    offset += (iree_host_size_t)static_indices.i64_array[axis] * count;
+  }
+
+  loom_builder_set_before(&rewriter->builder, op);
+  const loom_value_id_t checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  if (loom_type_is_scalar(result_type)) {
+    loom_value_facts_t facts = loom_value_facts_unknown();
+    if (loom_vector_constanti_isa(source_def_op)) {
+      facts = loom_value_facts_exact_i64(
+          loom_vector_constanti_values(source_def_op).i64_array[offset]);
+    } else {
+      facts = loom_value_facts_exact_float(
+          loom_type_element_type(result_type),
+          loom_vector_constantf_values(source_def_op).values[offset]);
+    }
+    loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(
+        rewriter, facts, result_type, op->location, &replacement));
+    IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+        rewriter, op, &replacement, 1, checkpoint));
+    IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_value(
+        op, rewriter, replacement));
+  } else {
+    loom_op_t* replacement = NULL;
+    if (loom_vector_constanti_isa(source_def_op)) {
+      const loom_attribute_t values =
+          loom_vector_constanti_values(source_def_op);
+      IREE_RETURN_IF_ERROR(loom_vector_constanti_build(
+          &rewriter->builder, values.i64_array + offset, count, result_type,
+          op->location, &replacement));
+    } else {
+      const loom_f64_array_t values =
+          loom_vector_constantf_values(source_def_op);
+      IREE_RETURN_IF_ERROR(loom_vector_constantf_build(
+          &rewriter->builder, values.values + offset, count, result_type,
+          op->location, &replacement));
+    }
+    IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
+        op, rewriter, replacement, checkpoint));
   }
   *out_changed = true;
   return iree_ok_status();
@@ -561,27 +626,53 @@ iree_status_t loom_vector_fold_constant_lanes(loom_op_t* op,
       loom_module_value_type(rewriter->module, result);
   const loom_type_t element_type =
       loom_type_scalar(loom_type_element_type(result_type));
+  const loom_scalar_type_t element_scalar_type =
+      loom_type_element_type(result_type);
+  double floating_values[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {0};
+  int64_t integer_values[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {0};
   for (iree_host_size_t lane = 0; lane < lanes.count; ++lane) {
     if (!loom_rewriter_can_materialize_constant(rewriter, lanes.lanes[lane],
                                                 element_type)) {
+      return iree_ok_status();
+    }
+    if (loom_scalar_type_is_float(element_scalar_type) &&
+        !loom_value_facts_as_exact_float(element_scalar_type, lanes.lanes[lane],
+                                         &floating_values[lane])) {
+      return iree_ok_status();
+    }
+    if (loom_scalar_type_is_integer(element_scalar_type) &&
+        !loom_value_facts_as_exact_i64(lanes.lanes[lane],
+                                       &integer_values[lane])) {
       return iree_ok_status();
     }
   }
   loom_builder_set_before(&rewriter->builder, op);
   const loom_value_id_t value_checkpoint =
       loom_rewriter_value_checkpoint(rewriter);
-  loom_value_id_t elements[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT];
-  for (iree_host_size_t lane = 0; lane < lanes.count; ++lane) {
-    IREE_RETURN_IF_ERROR(
-        loom_rewriter_build_constant(rewriter, lanes.lanes[lane], element_type,
-                                     op->location, &elements[lane]));
-  }
   loom_op_t* replacement_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_from_elements_build(
-      &rewriter->builder, elements, lanes.count, result_type, op->location,
-      &replacement_op));
-  const loom_value_id_t replacement =
-      loom_vector_from_elements_result(replacement_op);
+  loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+  if (loom_scalar_type_is_float(element_scalar_type)) {
+    IREE_RETURN_IF_ERROR(loom_vector_constantf_build(
+        &rewriter->builder, floating_values, lanes.count, result_type,
+        op->location, &replacement_op));
+    replacement = loom_vector_constantf_result(replacement_op);
+  } else if (loom_scalar_type_is_integer(element_scalar_type)) {
+    IREE_RETURN_IF_ERROR(loom_vector_constanti_build(
+        &rewriter->builder, integer_values, lanes.count, result_type,
+        op->location, &replacement_op));
+    replacement = loom_vector_constanti_result(replacement_op);
+  } else {
+    loom_value_id_t elements[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT];
+    for (iree_host_size_t lane = 0; lane < lanes.count; ++lane) {
+      IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(
+          rewriter, lanes.lanes[lane], element_type, op->location,
+          &elements[lane]));
+    }
+    IREE_RETURN_IF_ERROR(loom_vector_from_elements_build(
+        &rewriter->builder, elements, lanes.count, result_type, op->location,
+        &replacement_op));
+    replacement = loom_vector_from_elements_result(replacement_op);
+  }
   IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
       rewriter, op, &replacement, 1, value_checkpoint));
   IREE_RETURN_IF_ERROR(
@@ -1336,6 +1427,11 @@ iree_status_t loom_vector_project_structure(loom_op_t* op,
   }
   if (loom_vector_from_elements_isa(producer)) {
     return loom_vector_canonicalize_extract_from_elements(
+        op, rewriter, producer, source_type, result_type, out_changed);
+  }
+  if (loom_vector_constanti_isa(producer) ||
+      loom_vector_constantf_isa(producer)) {
+    return loom_vector_canonicalize_extract_from_literal(
         op, rewriter, producer, source_type, result_type, out_changed);
   }
   if (loom_vector_slice_isa(producer)) {

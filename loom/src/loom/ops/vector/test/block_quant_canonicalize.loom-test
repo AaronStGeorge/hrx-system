@@ -9,9 +9,7 @@ func.def @q4_0_repack_to_dot8i4_micro_gemv() -> (i32, i32) {
   %schema = encoding.define #ggml.q4_0 : encoding<schema>
   test.use %schema : encoding<schema>
 
-  %row0_storage = scalar.constant 1985229328 : i32
-  %row1_storage = scalar.constant -19088744 : i32
-  %rows = vector.from_elements %row0_storage, %row1_storage : vector<2xi32>
+  %rows = vector.constanti [1985229328, -19088744] : vector<2xi32>
 
   %q4_offset_to_signed_mask = vector.splati -2004318072 : vector<2xi32>
   %signed_rows = vector.xori %rows, %q4_offset_to_signed_mask : vector<2xi32>
@@ -42,11 +40,7 @@ func.def @q4_0_reference_chunk_folds() -> (i1) {
   %schema = encoding.define #ggml.q4_0 : encoding<schema>
   test.use %schema : encoding<schema>
 
-  %b0 = scalar.constant 16 : i8
-  %b1 = scalar.constant 50 : i8
-  %b2 = scalar.constant 84 : i8
-  %b3 = scalar.constant 118 : i8
-  %qs = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xi8>
+  %qs = vector.constanti [16, 50, 84, 118] : vector<4xi8>
 
   %lo = vector.bitfield.extractu %qs {offset = 0, width = 4} : vector<4xi8> -> vector<4xi8>
   %hi = vector.bitfield.extractu %qs {offset = 4, width = 4} : vector<4xi8> -> vector<4xi8>
@@ -54,15 +48,7 @@ func.def @q4_0_reference_chunk_folds() -> (i1) {
   %bias = vector.splati -8 : vector<8xi8>
   %signed = vector.addi %codes, %bias : vector<8xi8>
 
-  %e0 = scalar.constant -8 : i8
-  %e1 = scalar.constant -6 : i8
-  %e2 = scalar.constant -4 : i8
-  %e3 = scalar.constant -2 : i8
-  %e4 = scalar.constant -7 : i8
-  %e5 = scalar.constant -5 : i8
-  %e6 = scalar.constant -3 : i8
-  %e7 = scalar.constant -1 : i8
-  %expected = vector.from_elements %e0, %e1, %e2, %e3, %e4, %e5, %e6, %e7 : vector<8xi8>
+  %expected = vector.constanti [-8, -6, -4, -2, -7, -5, -3, -1] : vector<8xi8>
   %matches = vector.cmpi eq, %signed, %expected : vector<8xi8> -> vector<8xi1>
   %true = scalar.constant true : i1
   %ok = vector.reduce<andi> %matches, %true : vector<8xi1>, i1
@@ -86,22 +72,14 @@ func.def @q8_0_reference_chunk_folds() -> (i1) {
   %schema = encoding.define #ggml.q8_0 : encoding<schema>
   test.use %schema : encoding<schema>
 
-  %q0 = scalar.constant -3 : i8
-  %q1 = scalar.constant -1 : i8
-  %q2 = scalar.constant 2 : i8
-  %q3 = scalar.constant 7 : i8
-  %q = vector.from_elements %q0, %q1, %q2, %q3 : vector<4xi8>
+  %q = vector.constanti [-3, -1, 2, 7] : vector<4xi8>
 
   %scale = scalar.constant 0.5 : f16
   %scalev = vector.splat %scale : vector<4xf16>
   %qf = vector.sitofp %q : vector<4xi8> to vector<4xf16>
   %decoded = vector.mulf %qf, %scalev : vector<4xf16>
 
-  %e0 = scalar.constant -1.5 : f16
-  %e1 = scalar.constant -0.5 : f16
-  %e2 = scalar.constant 1.0 : f16
-  %e3 = scalar.constant 3.5 : f16
-  %expected = vector.from_elements %e0, %e1, %e2, %e3 : vector<4xf16>
+  %expected = vector.constantf [-1.5, -0.5, 1.0, 3.5] : vector<4xf16>
   %matches = vector.cmpf oeq, %decoded, %expected : vector<4xf16> -> vector<4xi1>
   %true = scalar.constant true : i1
   %ok = vector.reduce<andi> %matches, %true : vector<4xi1>, i1
@@ -124,22 +102,14 @@ func.def @q8_0_dense_activation_dot_folds() -> (i1) {
   %schema = encoding.define #ggml.q8_0 : encoding<schema>
   test.use %schema : encoding<schema>
 
-  %q0 = scalar.constant -3 : i8
-  %q1 = scalar.constant -1 : i8
-  %q2 = scalar.constant 2 : i8
-  %q3 = scalar.constant 7 : i8
-  %q = vector.from_elements %q0, %q1, %q2, %q3 : vector<4xi8>
+  %q = vector.constanti [-3, -1, 2, 7] : vector<4xi8>
 
   %scale = scalar.constant 0.5 : f32
   %scalev = vector.splat %scale : vector<4xf32>
   %qf = vector.sitofp %q : vector<4xi8> to vector<4xf32>
   %decoded = vector.mulf %qf, %scalev : vector<4xf32>
 
-  %a0 = scalar.constant 1.0 : f32
-  %a1 = scalar.constant -2.0 : f32
-  %a2 = scalar.constant 0.5 : f32
-  %a3 = scalar.constant 0.25 : f32
-  %activation = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xf32>
+  %activation = vector.constantf [1.0, -2.0, 0.5, 0.25] : vector<4xf32>
 
   %products = vector.mulf %decoded, %activation : vector<4xf32>
   %dot_init = scalar.constant 0.0 : f32
@@ -165,17 +135,9 @@ func.def @q8_0_two_row_micro_gemv_folds() -> (f32, f32) {
   %schema = encoding.define #ggml.q8_0 : encoding<schema>
   test.use %schema : encoding<schema>
 
-  %row0_q0 = scalar.constant -3 : i8
-  %row0_q1 = scalar.constant -1 : i8
-  %row0_q2 = scalar.constant 2 : i8
-  %row0_q3 = scalar.constant 7 : i8
-  %row0_q = vector.from_elements %row0_q0, %row0_q1, %row0_q2, %row0_q3 : vector<4xi8>
+  %row0_q = vector.constanti [-3, -1, 2, 7] : vector<4xi8>
 
-  %row1_q0 = scalar.constant 4 : i8
-  %row1_q1 = scalar.constant 0 : i8
-  %row1_q2 = scalar.constant -2 : i8
-  %row1_q3 = scalar.constant 1 : i8
-  %row1_q = vector.from_elements %row1_q0, %row1_q1, %row1_q2, %row1_q3 : vector<4xi8>
+  %row1_q = vector.constanti [4, 0, -2, 1] : vector<4xi8>
 
   %row0_scale = scalar.constant 0.5 : f32
   %row0_scalev = vector.splat %row0_scale : vector<4xf32>
@@ -187,11 +149,7 @@ func.def @q8_0_two_row_micro_gemv_folds() -> (f32, f32) {
   %row1_qf = vector.sitofp %row1_q : vector<4xi8> to vector<4xf32>
   %row1_decoded = vector.mulf %row1_qf, %row1_scalev : vector<4xf32>
 
-  %a0 = scalar.constant 1.0 : f32
-  %a1 = scalar.constant -2.0 : f32
-  %a2 = scalar.constant 0.5 : f32
-  %a3 = scalar.constant 0.25 : f32
-  %activation = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xf32>
+  %activation = vector.constantf [1.0, -2.0, 0.5, 0.25] : vector<4xf32>
 
   %row0_products = vector.mulf %row0_decoded, %activation : vector<4xf32>
   %row1_products = vector.mulf %row1_decoded, %activation : vector<4xf32>
@@ -217,17 +175,9 @@ func.def @q8_0_two_row_micro_gemv_folds() -> (f32, f32) {
 func.def @q8_0_decoded_pair_dot_reference_folds() -> (f32) {
   %schema = encoding.define #ggml.q8_0 : encoding<schema>
 
-  %lhs0 = scalar.constant -3 : i8
-  %lhs1 = scalar.constant -1 : i8
-  %lhs2 = scalar.constant 2 : i8
-  %lhs3 = scalar.constant 7 : i8
-  %lhs_payload = vector.from_elements %lhs0, %lhs1, %lhs2, %lhs3 : vector<4xi8>
+  %lhs_payload = vector.constanti [-3, -1, 2, 7] : vector<4xi8>
 
-  %rhs0 = scalar.constant 4 : i8
-  %rhs1 = scalar.constant 5 : i8
-  %rhs2 = scalar.constant -2 : i8
-  %rhs3 = scalar.constant 1 : i8
-  %rhs_payload = vector.from_elements %rhs0, %rhs1, %rhs2, %rhs3 : vector<4xi8>
+  %rhs_payload = vector.constanti [4, 5, -2, 1] : vector<4xi8>
 
   %lhs_scale = vector.splatf 0.5 : vector<1xf16>
   %rhs_scale = vector.splatf -0.25 : vector<1xf16>
@@ -253,17 +203,9 @@ func.def @q8_0_explicit_scaled_dot4i_contract_folds() -> (f32) {
   %schema = encoding.define #ggml.q8_0 : encoding<schema>
   test.use %schema : encoding<schema>
 
-  %lhs0 = scalar.constant -3 : i8
-  %lhs1 = scalar.constant -1 : i8
-  %lhs2 = scalar.constant 2 : i8
-  %lhs3 = scalar.constant 7 : i8
-  %lhs = vector.from_elements %lhs0, %lhs1, %lhs2, %lhs3 : vector<4xi8>
+  %lhs = vector.constanti [-3, -1, 2, 7] : vector<4xi8>
 
-  %rhs0 = scalar.constant 4 : i8
-  %rhs1 = scalar.constant 5 : i8
-  %rhs2 = scalar.constant -2 : i8
-  %rhs3 = scalar.constant 1 : i8
-  %rhs = vector.from_elements %rhs0, %rhs1, %rhs2, %rhs3 : vector<4xi8>
+  %rhs = vector.constanti [4, 5, -2, 1] : vector<4xi8>
 
   %acc = vector.splati 0 : vector<1xi32>
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
@@ -368,15 +310,9 @@ func.def @q6_k_reference_chunk_folds() -> (i1) {
   %schema = encoding.define #ggml.q6_k : encoding<schema>
   test.use %schema : encoding<schema>
 
-  %l0 = scalar.constant 16 : i8
-  %l1 = scalar.constant 50 : i8
-  %l2 = scalar.constant 84 : i8
-  %l3 = scalar.constant 118 : i8
-  %low_packed = vector.from_elements %l0, %l1, %l2, %l3 : vector<4xi8>
+  %low_packed = vector.constanti [16, 50, 84, 118] : vector<4xi8>
 
-  %h0 = scalar.constant 36 : i8
-  %h1 = scalar.constant 27 : i8
-  %high_packed = vector.from_elements %h0, %h1 : vector<2xi8>
+  %high_packed = vector.constanti [36, 27] : vector<2xi8>
 
   %lo4 = vector.bitfield.extractu %low_packed {offset = 0, width = 4} : vector<4xi8> -> vector<4xi8>
   %hi4 = vector.bitfield.extractu %low_packed {offset = 4, width = 4} : vector<4xi8> -> vector<4xi8>
@@ -389,15 +325,7 @@ func.def @q6_k_reference_chunk_folds() -> (i1) {
   %bias = vector.splati -32 : vector<8xi8>
   %signed = vector.addi %codes, %bias : vector<8xi8>
 
-  %e0 = scalar.constant -32 : i8
-  %e1 = scalar.constant 17 : i8
-  %e2 = scalar.constant -14 : i8
-  %e3 = scalar.constant 3 : i8
-  %e4 = scalar.constant 4 : i8
-  %e5 = scalar.constant -11 : i8
-  %e6 = scalar.constant -26 : i8
-  %e7 = scalar.constant -25 : i8
-  %expected = vector.from_elements %e0, %e1, %e2, %e3, %e4, %e5, %e6, %e7 : vector<8xi8>
+  %expected = vector.constanti [-32, 17, -14, 3, 4, -11, -26, -25] : vector<8xi8>
   %matches = vector.cmpi eq, %signed, %expected : vector<8xi8> -> vector<8xi1>
   %true = scalar.constant true : i1
   %ok = vector.reduce<andi> %matches, %true : vector<8xi1>, i1
@@ -419,30 +347,12 @@ func.def @iq_grid_reference_chunk_folds() -> (i1) {
   %schema = encoding.define #encoding.u4<codebook=dynamic_table_operand, payload_elements=4, payload_packing=codebook_indices> : encoding<schema>
   test.use %schema : encoding<schema>
 
-  %p0 = scalar.constant 16 : i8
-  %p1 = scalar.constant 50 : i8
-  %packed = vector.from_elements %p0, %p1 : vector<2xi8>
+  %packed = vector.constanti [16, 50] : vector<2xi8>
   %codes = vector.bitunpacku<4> %packed : vector<2xi8> -> vector<4xi8>
 
-  %g0 = scalar.constant -1.0 : f16
-  %g1 = scalar.constant -0.5 : f16
-  %g2 = scalar.constant 0.5 : f16
-  %g3 = scalar.constant 1.0 : f16
-  %g4 = scalar.constant -1.5 : f16
-  %g5 = scalar.constant -0.75 : f16
-  %g6 = scalar.constant 0.75 : f16
-  %g7 = scalar.constant 1.5 : f16
-  %g8 = scalar.constant -2.0 : f16
-  %g9 = scalar.constant -0.25 : f16
-  %g10 = scalar.constant 0.25 : f16
-  %g11 = scalar.constant 2.0 : f16
-  %g12 = scalar.constant -3.0 : f16
-  %g13 = scalar.constant -0.125 : f16
-  %g14 = scalar.constant 0.125 : f16
-  %g15 = scalar.constant 3.0 : f16
-  %grid = vector.from_elements %g0, %g1, %g2, %g3, %g4, %g5, %g6, %g7, %g8, %g9, %g10, %g11, %g12, %g13, %g14, %g15 : vector<16xf16>
+  %grid = vector.constantf [-1.0, -0.5, 0.5, 1.0, -1.5, -0.75, 0.75, 1.5, -2.0, -0.25, 0.25, 2.0, -3.0, -0.125, 0.125, 3.0] : vector<16xf16>
   %decoded = vector.table.lookup %grid[%codes] : vector<16xf16>, vector<4xi8> -> vector<4xf16>
-  %expected = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xf16>
+  %expected = vector.constantf [-1.0, -0.5, 0.5, 1.0] : vector<4xf16>
   %matches = vector.cmpf oeq, %decoded, %expected : vector<4xf16> -> vector<4xi1>
   %true = scalar.constant true : i1
   %ok = vector.reduce<andi> %matches, %true : vector<4xi1>, i1

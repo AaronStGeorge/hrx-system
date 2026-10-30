@@ -1719,6 +1719,24 @@ static iree_status_t loom_vector_verify_static_threshold_order(
         /*right_index=*/0);
   }
 
+  if (loom_vector_constantf_isa(def_op)) {
+    const loom_f64_array_t values = loom_vector_constantf_values(def_op);
+    double previous_value = 0.0;
+    for (uint32_t i = 0; i < values.count; ++i) {
+      const double value = values.values[i];
+      if (isnan(value)) {
+        return loom_vector_emit_static_threshold_order(
+            emitter, op, IREE_SV("thresholds"), i, i);
+      }
+      if (i > 0 && previous_value > value) {
+        return loom_vector_emit_static_threshold_order(
+            emitter, op, IREE_SV("thresholds"), i - 1, i);
+      }
+      previous_value = value;
+    }
+    return iree_ok_status();
+  }
+
   if (!loom_vector_from_elements_isa(def_op)) {
     return iree_ok_status();
   }

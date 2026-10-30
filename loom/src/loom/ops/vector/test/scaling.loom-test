@@ -19,12 +19,8 @@ func.def @uniform_scaling() -> (vector<2xbf16>, vector<2xi32>, vector<2xbf16>) {
 // ====
 
 func.def @nonuniform_scaling() -> (f64, i32, f64, f64, i32, f64) {
-  %tiny = scalar.constant 4.9406564584124654e-324 : f64
-  %negative = scalar.constant -1.5 : f64
-  %normalize = scalar.constant 1074 : i32
-  %shrink = scalar.constant -2 : i32
-  %input = vector.from_elements %tiny, %negative : vector<2xf64>
-  %powers = vector.from_elements %normalize, %shrink : vector<2xi32>
+  %input = vector.constantf [4.9406564584124654e-324, -1.5] : vector<2xf64>
+  %powers = vector.constanti [1074, -2] : vector<2xi32>
   %fractions, %exponents = vector.frexpf %input : vector<2xf64>, vector<2xi32>
   %scaled = vector.ldexpf %input, %powers : vector<2xf64>, vector<2xi32>
   %tiny_fraction = vector.extract %fractions[0] : vector<2xf64> -> f64

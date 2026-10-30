@@ -3,11 +3,7 @@
 // Exact indices retained through integer packing become an explicit static
 // permutation when the table and result have the same shape.
 func.def @packed_fixed_permutation(%table: vector<16xi8>) -> (vector<16xi8>) {
-  %a = scalar.constant 201851904 : i32
-  %b = scalar.constant 218694913 : i32
-  %c = scalar.constant 235537922 : i32
-  %d = scalar.constant 252380931 : i32
-  %packed = vector.from_elements %a, %b, %c, %d : vector<4xi32>
+  %packed = vector.constanti [201851904, 218694913, 235537922, 252380931] : vector<4xi32>
   %indices = vector.bitcast %packed : vector<4xi32> to vector<16xi8>
   %result = vector.table.lookup %table[%indices] : vector<16xi8>, vector<16xi8> -> vector<16xi8>
   func.return %result : vector<16xi8>
@@ -23,8 +19,7 @@ func.def @packed_fixed_permutation(%table: vector<16xi8>) -> (vector<16xi8>) {
 
 // A lookup that changes shape is not representable by vector.shuffle.
 func.def @fixed_lookup_different_shape(%table: vector<16xi8>) -> (vector<4xi8>) {
-  %packed = scalar.constant 66051 : i32
-  %source = vector.from_elements %packed : vector<1xi32>
+  %source = vector.constanti [66051] : vector<1xi32>
   %indices = vector.bitcast %source : vector<1xi32> to vector<4xi8>
   %result = vector.table.lookup %table[%indices] : vector<16xi8>, vector<4xi8> -> vector<4xi8>
   func.return %result : vector<4xi8>

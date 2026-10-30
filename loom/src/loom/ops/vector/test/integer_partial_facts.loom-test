@@ -77,11 +77,7 @@ func.def @bounded_mask(%input: vector<4xi8>, %mask: i8) -> (i64, i64) {
 
 // Independent lane masks retain independent bounds in both operand orders.
 func.def @lane_masks(%input: vector<4xi8>) -> (i64, i64, i64, i64) {
-  %c1 = scalar.constant 1 : i8
-  %c15 = scalar.constant 15 : i8
-  %c63 = scalar.constant 63 : i8
-  %c0 = scalar.constant 0 : i8
-  %masks = vector.from_elements %c1, %c15, %c63, %c0 : vector<4xi8>
+  %masks = vector.constanti [1, 15, 63, 0] : vector<4xi8>
   %masked = vector.andi %input, %masks : vector<4xi8>
   %commuted = vector.andi %masks, %input : vector<4xi8>
   %lane0 = vector.extract %masked[0] : vector<4xi8> -> i8
@@ -132,11 +128,8 @@ func.def @uniform_bitwise_bounds(%low: vector<32xi32>, %high: vector<32xi32>) ->
 func.def @independent_bitwise_bounds(%low: vector<4xi32>, %high: vector<4xi32>) -> (i64, i64, i64, i64, i64) {
   %low_mask = vector.splati 7 : vector<4xi32>
   %low_bits = vector.andi %low, %low_mask : vector<4xi32>
-  %c8 = scalar.constant 8 : i32
-  %c128 = scalar.constant 128 : i32
-  %c256 = scalar.constant 256 : i32
   %c0 = scalar.constant 0 : i32
-  %high_masks = vector.from_elements %c8, %c128, %c256, %c0 : vector<4xi32>
+  %high_masks = vector.constanti [8, 128, 256, 0] : vector<4xi32>
   %high_bits = vector.andi %high, %high_masks : vector<4xi32>
   %codes = vector.ori %high_bits, %low_bits : vector<4xi32>
   %lane0 = vector.extract %codes[0] : vector<4xi32> -> i32
@@ -206,11 +199,7 @@ func.def @uniform_logical_shift(%input: vector<32xi8>) -> (i64, i64, i1) {
 
 // Each lane retains its own width-derived bound.
 func.def @independent_logical_shifts(%input: vector<4xi8>) -> (i64, i64, i64, i64) {
-  %c0 = scalar.constant 0 : i8
-  %c1 = scalar.constant 1 : i8
-  %c4 = scalar.constant 4 : i8
-  %c7 = scalar.constant 7 : i8
-  %amounts = vector.from_elements %c0, %c1, %c4, %c7 : vector<4xi8>
+  %amounts = vector.constanti [0, 1, 4, 7] : vector<4xi8>
   %shifted = vector.shrui %input, %amounts : vector<4xi8>
   %lane0 = vector.extract %shifted[0] : vector<4xi8> -> i8
   %lane1 = vector.extract %shifted[1] : vector<4xi8> -> i8

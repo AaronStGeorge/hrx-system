@@ -51,10 +51,12 @@ iree_status_t loom_vector_project_regular_partition(loom_op_t* op,
                                                     loom_rewriter_t* rewriter,
                                                     bool* out_changed);
 
-// Folds a pure single-vector-result operation to vector.from_elements when
+// Folds a pure single-vector-result operation to a typed vector literal when
 // retained small-static-lane facts provide an exact constant for every lane.
-// The caller selects operations whose constant construction is canonical;
-// unknown lanes and NaN facts without retained payloads remain unchanged.
+// Coordinate element types retain scalar construction because typed vector
+// literals deliberately represent only fixed-width numeric elements. The
+// caller selects operations whose constant construction is canonical; unknown
+// lanes and NaN facts without retained payloads remain unchanged.
 iree_status_t loom_vector_fold_constant_lanes(loom_op_t* op,
                                               loom_rewriter_t* rewriter,
                                               bool* out_changed);

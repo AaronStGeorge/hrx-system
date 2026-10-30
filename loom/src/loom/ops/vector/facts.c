@@ -1926,6 +1926,78 @@ iree_status_t loom_vector_splatf_facts(loom_fact_context_t* context,
   return iree_ok_status();
 }
 
+iree_status_t loom_vector_constanti_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)operand_facts;
+  const loom_attribute_t values = loom_vector_constanti_values(op);
+  bool all_equal = true;
+  for (uint16_t i = 1; i < values.count; ++i) {
+    all_equal &= values.i64_array[i] == values.i64_array[0];
+  }
+  if (all_equal) {
+    IREE_RETURN_IF_ERROR(loom_value_facts_make_uniform_element(
+        context, loom_value_facts_exact_i64(values.i64_array[0]),
+        &result_facts[0]));
+    loom_value_facts_mark_cluster_uniform(&result_facts[0]);
+    return iree_ok_status();
+  }
+  if (values.count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (uint16_t i = 0; i < values.count; ++i) {
+    lanes[i] = loom_value_facts_exact_i64(values.i64_array[i]);
+  }
+  return loom_value_facts_make_small_static_lanes(
+      context,
+      (loom_value_fact_small_static_lanes_t){
+          .lanes = lanes,
+          .count = values.count,
+      },
+      &result_facts[0]);
+}
+
+iree_status_t loom_vector_constantf_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)operand_facts;
+  const loom_f64_array_t values = loom_vector_constantf_values(op);
+  const loom_scalar_type_t element_type = loom_type_element_type(
+      loom_module_value_type(module, loom_vector_constantf_result(op)));
+  bool all_equal = true;
+  for (uint16_t i = 1; i < values.count; ++i) {
+    all_equal &= memcmp(&values.values[i], &values.values[0],
+                        sizeof(values.values[0])) == 0;
+  }
+  if (all_equal) {
+    IREE_RETURN_IF_ERROR(loom_value_facts_make_uniform_element(
+        context, loom_value_facts_exact_float(element_type, values.values[0]),
+        &result_facts[0]));
+    loom_value_facts_mark_cluster_uniform(&result_facts[0]);
+    return iree_ok_status();
+  }
+  if (values.count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (uint16_t i = 0; i < values.count; ++i) {
+    lanes[i] = loom_value_facts_exact_float(element_type, values.values[i]);
+  }
+  return loom_value_facts_make_small_static_lanes(
+      context,
+      (loom_value_fact_small_static_lanes_t){
+          .lanes = lanes,
+          .count = values.count,
+      },
+      &result_facts[0]);
+}
+
 iree_status_t loom_vector_splat_facts(loom_fact_context_t* context,
                                       const loom_module_t* module,
                                       const loom_op_t* op,

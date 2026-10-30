@@ -3584,6 +3584,11 @@ iree_status_t loom_vector_constanti_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_constanti_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_vector_constanti_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_vector_constanti_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -3601,6 +3606,11 @@ iree_status_t loom_vector_constantf_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_constantf_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_vector_constantf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_vector_constantf_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
