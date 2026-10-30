@@ -463,3 +463,66 @@ float infinity() {
 float quiet_nan() {
   return __builtin_bit_cast(float, 2143289344u);
 }
+
+// ====
+// RUN: emit cxx @decode.root
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+namespace loomt = loom::type;
+using Parameters = loomt::buffer<const unsigned char>;
+using Output = loomt::buffer<unsigned char>;
+using Tile = loomt::view<loomt::shape<loomt::dynamic, 4>, float, loomt::encoding<loom::encoding::role::layout, 2>>;
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(64, 1, 1)]]
+void copy(unsigned count, const float* input, float* output) {
+  auto input_view = loom::buffer::view<1>(input, {});
+  float value = loom::view::load(input_view, 0);
+  auto output_view = loom::buffer::view<1>(output, {});
+  loom::view::store(value, output_view, 0);
+}
+
+[[loom::command_program, loom::symbol("decode.leaf")]]
+void decode_leaf(unsigned tokens, loomt::index layer, [[loom::launch]] Parameters parameters, Output output, Tile tile);
+
+[[loom::command_program, loom::symbol("decode.root")]]
+void decode_root(unsigned tokens, loomt::index layer, loomt::index rows, [[loom::launch]] Parameters parameters, Output output, Tile tile) [[loom::where(tokens != 0u)]] {
+  auto weight = loom::command::parameter<loomt::shape<loomt::dynamic, 4>, const float, loomt::encoding<loom::encoding::role::layout, 2>>(parameters, rows, loom::encoding::layout::dense<2>(), "blk.{}.weight", layer);
+  auto base = loom::command::base(weight);
+  [[loom::serial]] {
+    loom::kernel::launch<copy>(tokens, base, loom::buffer::cast<float>(output));
+    [[loom::concurrent]] {
+      loom::command::launch<decode_leaf>(tokens, layer, parameters, output, tile);
+    }
+  }
+}
+
+// ----
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+[[loom::command_program, loom::symbol("decode.root")]]
+void decode_root(unsigned tokens, loom::type::index layer, loom::type::index rows, [[loom::launch]] loom::type::buffer<unsigned char> parameters, loom::type::buffer<unsigned char> output, loom::type::view<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>> tile) [[loom::where((tokens != 0u))]];
+
+[[loom::command_program, loom::symbol("decode.leaf")]]
+void decode_leaf(unsigned v29, loom::type::index v30, [[loom::launch]] loom::type::buffer<unsigned char> v33, loom::type::buffer<unsigned char> v34, loom::type::view<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>> v35);
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(64, 1, 1)]]
+void copy(unsigned count, const float* input, float* output) {
+  auto input_view = loom::buffer::view<1>(input, {});
+  float value = loom::view::load(input_view, loom::type::index{0});
+  auto output_view = loom::buffer::view<1>(output, {});
+  loom::view::store(value, output_view, loom::type::index{0});
+}
+
+[[loom::command_program, loom::symbol("decode.root")]]
+void decode_root(unsigned tokens, loom::type::index layer, loom::type::index rows, [[loom::launch]] loom::type::buffer<unsigned char> parameters, loom::type::buffer<unsigned char> output, loom::type::view<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>> tile) [[loom::where((tokens != 0u))]] {
+  auto weight = loom::command::parameter<loom::type::shape<loom::type::dynamic, 4>, const float, loom::type::encoding<loom::encoding::role::layout, 2>>(parameters, rows, loom::encoding::layout::dense<2>(), "blk.{}.weight", layer);
+  auto base = loom::command::base(weight);
+  [[loom::serial]] {
+    loom::kernel::launch<copy>(tokens, base, loom::buffer::cast<float>(output));
+    [[loom::concurrent]] {
+      loom::command::launch<decode_leaf>(tokens, layer, parameters, output, tile);
+    }
+  }
+}

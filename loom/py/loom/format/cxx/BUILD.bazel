@@ -15,6 +15,7 @@ iree_py_library(
     name = "cxx",
     srcs = [
         "__init__.py",
+        "commands.py",
         "context.py",
         "errors.py",
         "expressions.py",

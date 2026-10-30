@@ -12,13 +12,13 @@ import re
 from collections.abc import Sequence
 from dataclasses import replace
 
+from loom.format.cxx.commands import CxxCommandRenderer
 from loom.format.cxx.context import (
     _memory_space,
     _strip_outer_parentheses,
     walk_operations,
 )
 from loom.format.cxx.errors import CxxRenderError
-from loom.format.cxx.expressions import CxxExpressionRenderer
 from loom.format.cxx.naming import clean_identifier, loop_carrier_stem
 from loom.format.cxx.translation_unit import render_preamble
 from loom.format.cxx.types import KERNEL_COORDINATE_CPP_TYPE
@@ -29,6 +29,7 @@ from loom.ir import (
     DynamicEncoding,
     Module,
     Operation,
+    PredicateListAttr,
     ScalarType,
     ShapedType,
     StaticDim,
@@ -60,7 +61,7 @@ def _buffer_payload_literal(contents: bytes | Utf8Attr) -> str:
     return prefix + '"' + "".join(escaped) + '"'
 
 
-class CxxRenderer(CxxExpressionRenderer):
+class CxxRenderer(CxxCommandRenderer):
     def _view_shape_arguments(
         self, operation: Operation, view_type: ShapedType
     ) -> tuple[str, str]:
@@ -322,17 +323,7 @@ class CxxRenderer(CxxExpressionRenderer):
                 )
             extents, dimensions = self._view_shape_arguments(operation, result_type)
             if isinstance(result_type.encoding, DynamicEncoding):
-                encoding_id = result_type.encoding.value_id
-                definition = self.definitions.get(encoding_id)
-                if definition is None:
-                    raise CxxRenderError(
-                        operation,
-                        "view encoding value is not defined in the projected scope",
-                    )
-                if definition.name == "encoding.layout.dense":
-                    encoding = f"loom::encoding::layout::dense<{result_type.rank}>()"
-                else:
-                    encoding = self.expression(encoding_id)
+                encoding = self.dynamic_view_encoding_expression(operation, result_type)
             elif result_type.encoding is None:
                 encoding = None
             else:
@@ -1155,6 +1146,10 @@ class CxxRenderer(CxxExpressionRenderer):
                     self._validate_projected_attributes(operation, ())
                     self._render_while(operation)
                     continue
+                projected = self._render_command_op(operation)
+                if projected is not None:
+                    self._validate_projected_attributes(operation, projected)
+                    continue
                 projected = self._render_simple(operation)
                 if projected is not None:
                     self._validate_projected_attributes(operation, projected)
@@ -1267,6 +1262,7 @@ class CxxRenderer(CxxExpressionRenderer):
         self.writer.attributes(attributes)
 
         parameters: list[str] = []
+        buffer_elements: list[str | None] = []
         for argument in entry.arg_ids:
             root = self.buffer_roots.get(argument)
             if root is not None:
@@ -1284,6 +1280,7 @@ class CxxRenderer(CxxExpressionRenderer):
                 const = "" if info.mutable else "const "
                 element = self._parameter_element(root)
                 parameters.append(f"{attribute}{const}{element}* {info.name}")
+                buffer_elements.append(f"{const}{element}")
                 self.expressions[argument] = info.name
                 continue
             value_type = self.module.values[argument].type
@@ -1295,12 +1292,15 @@ class CxxRenderer(CxxExpressionRenderer):
             name = self.names[argument]
             type_name = self.cpp_type(argument)
             parameters.append(f"{type_name} {name}")
+            buffer_elements.append(None)
             self.expressions[argument] = name
             self.expression_types[argument] = type_name
+        symbol = str(resolved.attr("callee"))
+        self.kernel_buffer_elements[symbol] = tuple(buffer_elements)
         if parameters:
-            self.writer.open(f"void {resolved.attr('callee')}({', '.join(parameters)})")
+            self.writer.open(f"void {symbol}({', '.join(parameters)})")
         else:
-            self.writer.open(f"void {resolved.attr('callee')}()")
+            self.writer.open(f"void {symbol}()")
         self._render_block(entry)
         self.writer.close()
 
@@ -1446,7 +1446,10 @@ class CxxRenderer(CxxExpressionRenderer):
         self.writer.close()
 
     def _plan_callable_names(
-        self, kernels: list[Operation], functions: list[Operation]
+        self,
+        kernels: list[Operation],
+        functions: list[Operation],
+        commands: list[Operation],
     ) -> None:
         used_names = {str(self._resolved(kernel).attr("callee")) for kernel in kernels}
         for function in functions:
@@ -1460,9 +1463,22 @@ class CxxRenderer(CxxExpressionRenderer):
             used_names.add(name)
             self.function_names[symbol] = name
 
+        for command in commands:
+            symbol = str(self._resolved(command).attr("callee"))
+            if symbol in self.command_names:
+                continue
+            base = clean_identifier(symbol, "command_program")
+            name = base
+            ordinal = 2
+            while name in used_names:
+                name = f"{base}_{ordinal}"
+                ordinal += 1
+            used_names.add(name)
+            self.command_names[symbol] = name
+
         target_symbols: list[str] = []
-        for kernel in kernels:
-            resolved = self._resolved(kernel)
+        for callable_operation in (*kernels, *commands):
+            resolved = self._resolved(callable_operation)
             target_symbol = resolved.attr("target")
             if target_symbol is not None:
                 symbol = str(target_symbol)
@@ -1494,33 +1510,72 @@ class CxxRenderer(CxxExpressionRenderer):
             for operation in self.module.body.ops
             if operation.name == "func.def"
         ]
-        if not kernels and not functions:
+        commands = [
+            operation
+            for operation in self.module.body.ops
+            if operation.name in {"command.program.def", "command.program.decl"}
+        ]
+        command_definitions = [
+            operation
+            for operation in commands
+            if operation.name == "command.program.def"
+        ]
+        if not kernels and not functions and not commands:
             raise CxxRenderError(
                 None,
                 "module contains no callable definitions",
             )
         for operation in self.module.body.ops:
-            if operation.name in {"kernel.def", "func.def"} or operation.name.endswith(
-                ".target"
-            ):
+            if operation.name in {
+                "kernel.def",
+                "func.def",
+                "command.program.def",
+                "command.program.decl",
+            } or operation.name.endswith(".target"):
                 continue
             raise CxxRenderError(
                 operation,
                 "a top-level definition would be omitted from the C++ projection",
             )
-        self._plan_callable_names(kernels, functions)
+        self._plan_callable_names(kernels, functions, commands)
         for index, function in enumerate(functions):
             if index:
                 self.writer.line()
             self._render_function_declaration(function)
         if functions:
             self.writer.line()
-        callables = [*functions, *kernels]
+        for index, command in enumerate(commands):
+            if index:
+                self.writer.line()
+            if command.name == "command.program.def":
+                body = self._resolved(command).region("body")
+                assert body is not None
+                self._validate_projected_attributes(
+                    command,
+                    (
+                        "callee",
+                        "visibility",
+                        "target",
+                        "predicates",
+                        "specialization_count",
+                    ),
+                )
+                self.writer.attributes(self._command_attributes(command))
+                self.writer.line(
+                    self._command_signature(command, list(body.blocks[0].arg_ids)) + ";"
+                )
+            else:
+                self._render_command_declaration(command)
+        if commands:
+            self.writer.line()
+        callables = [*functions, *kernels, *command_definitions]
         for index, callable_operation in enumerate(callables):
             if index:
                 self.writer.line()
             if callable_operation.name == "func.def":
                 self._render_function(callable_operation)
+            elif callable_operation.name == "command.program.def":
+                self._render_command_program(callable_operation)
             else:
                 self._render_kernel(callable_operation)
 
@@ -1534,6 +1589,22 @@ class CxxRenderer(CxxExpressionRenderer):
                 scalar_names.add(repr(value_type))
             elif isinstance(value_type, ShapedType):
                 scalar_names.add(repr(value_type.element_type))
+        uses_predicate_functions = any(
+            isinstance(
+                predicates := operation.attributes.get("predicates"), PredicateListAttr
+            )
+            and any(
+                any(
+                    argument.tag == "value"
+                    and isinstance(self.module.values[argument.value].type, ScalarType)
+                    and repr(self.module.values[argument.value].type)
+                    in {"index", "offset"}
+                    for argument in predicate.args
+                )
+                for predicate in predicates
+            )
+            for operation in self.module.body.ops
+        )
         preamble = render_preamble(
             operation_names=operation_names,
             scalar_names=scalar_names,
@@ -1555,6 +1626,7 @@ class CxxRenderer(CxxExpressionRenderer):
             ),
             uses_scalar_functions=self.uses_scalar_functions,
             uses_numeric_conversion=self.uses_numeric_conversion,
+            uses_predicate_functions=uses_predicate_functions,
         )
         return "\n".join((*preamble, *self.writer.lines)) + "\n"
 
@@ -1576,13 +1648,21 @@ def _select_callable_roots(module: Module, roots: Sequence[str]) -> Module:
     symbols = {symbol.name: symbol for symbol in module.symbols}
     selected_operation_ids: set[int] = set()
     target_names: set[str] = set()
-    pending = list(normalized_roots)
+    pending = [(name, True) for name in normalized_roots]
     while pending:
-        name = pending.pop()
+        name, require_definition = pending.pop()
         symbol = symbols.get(name)
         if symbol is None or symbol.op is None:
             raise CxxRenderError(None, f"callable root '@{name}' was not found")
-        if symbol.op.name not in {"kernel.def", "func.def"}:
+        callable_operations = {
+            "kernel.def",
+            "func.def",
+            "command.program.def",
+            "command.program.decl",
+        }
+        if symbol.op.name not in callable_operations or (
+            require_definition and symbol.op.name == "command.program.decl"
+        ):
             raise CxxRenderError(
                 symbol.op,
                 f"root '@{name}' is not a callable definition",
@@ -1596,11 +1676,15 @@ def _select_callable_roots(module: Module, roots: Sequence[str]) -> Module:
         for region in symbol.op.regions:
             for block in region.blocks:
                 for operation in walk_operations(block):
-                    if operation.name != "func.call":
+                    if operation.name not in {
+                        "func.call",
+                        "command.program.launch",
+                        "kernel.launch",
+                    }:
                         continue
                     callee = operation.attributes.get("callee")
                     if isinstance(callee, str):
-                        pending.append(callee)
+                        pending.append((callee, False))
 
     selected_operations = [
         operation

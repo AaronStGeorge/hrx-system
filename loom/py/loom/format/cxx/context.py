@@ -206,6 +206,8 @@ class CxxRenderContext:
         self.target_names: dict[str, str] = {}
         self.function_names: dict[str, str] = {}
         self.function_buffer_elements: dict[str, tuple[str | None, ...]] = {}
+        self.command_names: dict[str, str] = {}
+        self.kernel_buffer_elements: dict[str, tuple[str | None, ...]] = {}
 
     def _collect_value_scopes(self) -> tuple[dict[int, int], dict[int, int]]:
         """Maps top-level operations and their values to C++ local scopes."""
@@ -1091,6 +1093,24 @@ class CxxRenderContext:
         return (
             expression_type if expression_type is not None else self.cpp_type(value_id)
         )
+
+    def dynamic_view_encoding_expression(
+        self, operation: Operation, value_type: ShapedType
+    ) -> str:
+        """Returns the source expression for a dynamic shaped encoding."""
+
+        encoding = value_type.encoding
+        if not isinstance(encoding, DynamicEncoding):
+            raise CxxRenderError(operation, "view does not have a dynamic encoding")
+        definition = self.definitions.get(encoding.value_id)
+        if definition is None:
+            raise CxxRenderError(
+                operation,
+                "view encoding value is not defined in the projected scope",
+            )
+        if definition.name == "encoding.layout.dense":
+            return f"loom::encoding::layout::dense<{value_type.rank}>()"
+        return self.expression(encoding.value_id)
 
     def _declare(
         self,

@@ -36,6 +36,7 @@ def render_preamble(
     targets: tuple[tuple[str, TargetInfo], ...],
     uses_scalar_functions: bool,
     uses_numeric_conversion: bool,
+    uses_predicate_functions: bool,
 ) -> list[str]:
     """Renders includes, helper declarations, and source target metadata."""
 
@@ -45,13 +46,15 @@ def render_preamble(
     )
     if uses_kernel_header:
         headers.add("loomcxx/kernel.h")
+    if any(name.startswith("command.") for name in operation_names):
+        headers.add("loomcxx/command.h")
     if targets:
         headers.add("loomcxx/target/amdgpu.h")
     if any(name.startswith("view.atomic.") for name in operation_names):
         headers.add("loomcxx/atomic.h")
     if uses_scalar_functions:
         headers.add("loomcxx/scalar.h")
-    if "index.assume" in operation_names:
+    if "index.assume" in operation_names or uses_predicate_functions:
         headers.add("loomcxx/predicate.h")
     if "encoding.define" in operation_names:
         headers.add("loomcxx/encoding.h")

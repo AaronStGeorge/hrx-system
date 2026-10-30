@@ -156,6 +156,55 @@ def test_projects_selected_function_roots_without_unrelated_kernels() -> None:
     assert "copy_one" not in result
 
 
+def test_projects_command_program_signatures_and_schedule_regions() -> None:
+    source = """\
+command.program.decl public @decode.leaf(%tokens: i32, %tile_dim0: index, %tile_layout: encoding<layout>) launch(%parameters: buffer, %tile: view<[%tile_dim0]x4xf32, %tile_layout>)
+
+command.program.def public @decode.root(%tokens: i32, %tile_dim0: index, %tile_layout: encoding<layout>) launch(%parameters: buffer, %tile: view<[%tile_dim0]x4xf32, %tile_layout>) where [ne(%tokens, 0)] {
+  command.serial {
+    command.concurrent {
+      command.program.launch @decode.leaf[%tokens, %tile_dim0, %tile_layout](%parameters, %tile) : [i32, index, encoding<layout>](buffer, view<[%tile_dim0]x4xf32, %tile_layout>)
+    }
+  }
+  command.return
+}
+
+command.program.def public @ignored() launch() {
+  command.return
+}
+"""
+
+    result = render_module(load_module(source.encode()), roots=("decode.root",))
+
+    assert result.count("#include <loomcxx/command.h>") == 1
+    assert 'loom::symbol("decode.leaf")' in result
+    assert 'loom::symbol("decode.root")' in result
+    assert "ignored" not in result
+    assert (
+        "unsigned tokens, [[loom::launch]] "
+        "loom::type::buffer<unsigned char> parameters, "
+        "loom::type::view<loom::type::shape<loom::type::dynamic, 4>, float, "
+        "loom::type::encoding<loom::encoding::role::layout, 2>> tile"
+    ) in result
+    assert "[[loom::serial]] {" in result
+    assert "[[loom::concurrent]] {" in result
+    assert "loom::command::launch<decode_leaf>(tokens, parameters, tile);" in result
+
+
+def test_rejects_command_signatures_without_a_source_order_projection() -> None:
+    source = """\
+command.program.def public @misordered(%dimension: index, %token: i32) launch(%output: view<[%dimension]xf32>) {
+  command.return
+}
+"""
+
+    with pytest.raises(
+        CxxRenderError,
+        match="command signature dependencies do not form a C\\+\\+ source-order projection",
+    ):
+        render_module(load_module(source.encode()))
+
+
 def test_preserves_scalar_kernel_arguments() -> None:
     source = SOURCE_MODULE.replace(
         "} launch(%input: buffer, %output: buffer) {",
