@@ -339,6 +339,7 @@ loom_py_test(
         "--fixture=$(rootpath //loom/src/loom/serve/fixture/speech:model.json)",
         "--fixture=$(rootpath //loom/src/loom/serve/fixture/text:model.json)",
         "--device=vulkan",
+        "--driver=vulkan",
         "--pool_backing=fixed",
     ],
     data = DECISION_SOURCES + EMBEDDING_SOURCES + IMAGE_SOURCES + SPEECH_SOURCES + TEXT_SOURCES + [

@@ -222,6 +222,8 @@ class MemoryTest : public ::testing::Test {
       loom_serve_workspace_release(virtual_workspace);
       virtual_workspace = nullptr;
     }
+    IREE_EXPECT_OK(loom_serve_test_workspace_await_idle(
+        loom_serve_pool_workspace(storage_owner)));
     if (logical_pool) {
       // Raw queue captures can retire after timeline readiness.
       while (iree_atomic_ref_count_load(&logical_pool->resource.ref_count) >

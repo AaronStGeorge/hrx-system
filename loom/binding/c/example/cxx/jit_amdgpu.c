@@ -461,8 +461,7 @@ int main(int argc, char** argv) {
     return 1;
   }
   jit_state_t state = {0};
-  iree_status_t status =
-      initialize(&state, argc > 1 ? argv[1] : "legacy-amdgpu");
+  iree_status_t status = initialize(&state, argc > 1 ? argv[1] : "amdgpu");
   if (iree_status_is_ok(status)) {
     status = compile_source(&state, argc > 2 ? argv[2] : NULL);
   }

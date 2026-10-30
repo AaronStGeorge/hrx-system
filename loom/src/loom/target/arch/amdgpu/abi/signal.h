@@ -6,10 +6,8 @@
 
 // AMDGPU signal ABI constants used by Loom code generation.
 //
-// This header intentionally mirrors only the device-visible layout facts needed
-// by the compiler. It must not include runtime/src/iree/hal/drivers/amdgpu/abi
-// headers because their host side includes HSA headers, while the Loom compiler
-// should stay independent from HSA except in execution/tooling code.
+// These device-visible constants follow the AMD HSA signal ABI independently
+// of the host runtime's signal storage and ownership implementation.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_ABI_SIGNAL_H_
 #define LOOM_TARGET_ARCH_AMDGPU_ABI_SIGNAL_H_
@@ -20,7 +18,7 @@
 extern "C" {
 #endif
 
-// AMD signal kind stored as a 64-bit ABI field in iree_amd_signal_t.
+// AMD signal kind stored as a 64-bit field in the device-visible signal record.
 typedef int64_t loom_amdgpu_signal_kind_t;
 
 enum loom_amdgpu_signal_kind_e {

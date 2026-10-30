@@ -264,6 +264,27 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_test(
+    name = "loom_abi_test",
+    srcs = ["loom_abi_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH + select({
+        "//loom/config/arch:amdgpu": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":context",
+        ":feedback",
+        ":source_context",
+        ":tsan",
+        "//loom/src/loom/target/arch/amdgpu/abi:test_headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd/fabric:asan_support",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
     name = "feedback_test",
     srcs = ["feedback_test.cc"],
     target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,

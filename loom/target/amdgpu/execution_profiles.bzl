@@ -22,39 +22,7 @@ load(
 )
 load(
     "//runtime/requirements:defs.bzl",
-    "AMDGPU_RESOURCE",
-    "HAL_AMDGPU",
     "HAL_AMD_GPU",
-)
-
-def amdgpu_execution_profile(
-        name,
-        runner_args = [],
-        tags = []):
-    """Defines AMDGPU execution with shared device and resource requirements.
-
-    Callers own instrumentation and diagnostic reporting.
-    Workload configuration and case selection remain on the test declaration.
-    """
-    return loom_execution_profile(
-        name = name,
-        build_requirements = [
-            ARCH_AMDGPU,
-            ARTIFACT_AMDGPU_ELF,
-            EXECUTE_IREE_HAL,
-            HAL_AMDGPU,
-        ],
-        executor = "hardware",
-        resource_group = GPU_DEVICE_RESOURCE_GROUP,
-        run_requirements = [AMDGPU_RESOURCE],
-        runner_args = ["--device=legacy-amdgpu"] + runner_args,
-        tags = tags,
-        target_class = "gpu",
-        target_family = "amdgpu",
-    )
-
-AMDGPU_HARDWARE_PROFILE = amdgpu_execution_profile(
-    name = "amdgpu_hardware",
 )
 
 def amd_gpu_execution_profile(name, runner_args = [], tags = [], device = "amdgpu"):
@@ -99,50 +67,10 @@ AMD_GPU_TSAN_PROFILE = amd_gpu_execution_profile(
     runner_args = ["--sanitizer=tsan", "--sanitizer-reporting=report-only"],
 )
 
+# A small queue shadow exercises exact-boundary and capacity-report paths.
 AMD_GPU_TSAN_CAPACITY_PROFILE = amd_gpu_execution_profile(
     name = "amd_gpu_tsan_capacity",
     tags = ["requires-amd-gpu-feedback"],
     device = "amdgpu://?tsan_report_policy=report-only&tsan_shadow_size=1440",
     runner_args = ["--sanitizer=tsan", "--sanitizer-reporting=report-only"],
-)
-
-AMDGPU_ACCESS_PROFILE = amdgpu_execution_profile(
-    name = "amdgpu_access",
-    runner_args = ["--sanitizer=access"],
-    tags = ["notsan"],
-)
-
-AMDGPU_ASAN_PROFILE = amdgpu_execution_profile(
-    name = "amdgpu_asan",
-    runner_args = [
-        "--sanitizer=asan",
-        "--sanitizer-reporting=report-only",
-        "--amdgpu_asan=true",
-        "--amdgpu_asan_report_policy=report-only",
-    ],
-    tags = ["notsan"],
-)
-
-AMDGPU_TSAN_PROFILE = amdgpu_execution_profile(
-    name = "amdgpu_tsan",
-    runner_args = [
-        "--sanitizer=tsan",
-        "--sanitizer-reporting=report-only",
-        "--amdgpu_tsan=true",
-        "--amdgpu_tsan_report_policy=report-only",
-    ],
-)
-
-# A deliberately small queue shadow arena used to exercise the compiler's
-# exact-boundary and capacity-report paths without allocating a production-size
-# sanitizer shadow during the test.
-AMDGPU_TSAN_CAPACITY_PROFILE = amdgpu_execution_profile(
-    name = "amdgpu_tsan_capacity",
-    runner_args = [
-        "--sanitizer=tsan",
-        "--sanitizer-reporting=report-only",
-        "--amdgpu_tsan=true",
-        "--amdgpu_tsan_report_policy=report-only",
-        "--amdgpu_tsan_shadow_size=1440",
-    ],
 )

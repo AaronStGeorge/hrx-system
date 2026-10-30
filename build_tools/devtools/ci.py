@@ -347,13 +347,6 @@ def validate_enabled_drivers(enabled_drivers: tuple[str, ...]) -> frozenset[str]
     return enabled_driver_set
 
 
-def amdgpu_bazel_options(target_selector: str) -> tuple[str, ...]:
-    return (
-        runtime_configure.NATIVE_AMDGPU_TARGETS_FLAG + "=" + target_selector,
-        loom_configure.NATIVE_AMDGPU_TARGETS_FLAG + "=iree_hal",
-    )
-
-
 def amd_gpu_device_compiler_options() -> tuple[str, ...]:
     # The native HAL consumes HIP code objects without loading ROCr. Its CTS
     # still compiles real HIP inputs with the installed ROCm device toolchain.
@@ -596,7 +589,6 @@ def cmake_configure_step(
         command.append(ROCM_PINNED_DEPENDENCY_MODE_OPTION)
         if amdgpu_target_selector is not None:
             command.append(f"-DIREE_HAL_AMDGPU_TARGETS={amdgpu_target_selector}")
-            command.append("-DLOOM_ARCH_AMDGPU_TARGETS=iree_hal")
         if amdgpu_device_binary_mode == "source":
             command.extend(cmake_amdgpu_device_binary_options())
         elif amdgpu_device_binary_mode == "prebuilt":
@@ -908,7 +900,6 @@ def amdgpu_test_steps(
             # Compiler compatibility and hardware execution share one target
             # selector so other architectures are rejected during analysis.
             "--//loom/config/arch/amdgpu:targets=" + target_selector,
-            "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
             "--//runtime/src/iree/hal/drivers/amd/gpu:targets=" + target_selector,
             "--//runtime/config/hal:drivers=task,amd-gpu",
         )
@@ -947,9 +938,6 @@ def amdgpu_windows_steps(
         + amd_gpu_device_compiler_options()
         + (
             "--//loom/config/arch/amdgpu:targets=" + target_selector,
-            # Loom's IREE HAL representation compatibility reads the shared
-            # AMDGPU selector even when native execution uses the AMD GPU HAL.
-            "--//runtime/src/iree/hal/drivers/amdgpu:targets=" + target_selector,
             "--//runtime/src/iree/hal/drivers/amd/gpu:targets=" + target_selector,
         )
     )
@@ -1324,7 +1312,6 @@ def cmake_amdgpu_steps(
                 "-DAMDF_FAMILY_CDNA=ON",
                 "-DAMDF_FAMILY_XDNA=OFF",
                 "-DLOOM_BUILD=ON",
-                "-DIREE_HAL_AMDGPU_TARGETS=" + target_selector,
                 "-DIREE_HAL_AMD_GPU_TARGETS=" + target_selector,
                 "-DLOOM_ARCH_AMDGPU_TARGETS=" + target_selector,
             )

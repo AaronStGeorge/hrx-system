@@ -9,6 +9,7 @@
 #include "iree/base/threading/call_once.h"
 #include "iree/base/threading/mutex.h"
 #include "iree/base/threading/notification.h"
+#include "iree/base/threading/thread.h"
 #include "iree/hal/pool_wait.h"
 #include "loom/serve/runtime/execution/workspace.h"
 
@@ -37,6 +38,19 @@ iree_status_t loom_serve_test_driver_acquire(loom_serve_host_t* host,
       iree_status_clone(loom_serve_test_driver_registration_status));
   return iree_hal_driver_registry_acquire_driver(
       iree_hal_driver_registry_default(), device->driver_name, out_driver);
+}
+
+iree_status_t loom_serve_test_workspace_await_idle(
+    loom_serve_workspace_t* workspace) {
+  // Use the shortest enabled idle interval. Readiness is the last raw root's
+  // retirement, not elapsed time or the model's completion semaphore.
+  iree_status_t status = iree_ok_status();
+  while (iree_status_is_ok(status) &&
+         loom_serve_workspace_trim_idle(workspace, iree_time_now(), 1)) {
+    status = loom_serve_workspace_advance(workspace);
+    iree_thread_yield();
+  }
+  return status;
 }
 
 typedef struct loom_serve_test_capacity_wait_t {

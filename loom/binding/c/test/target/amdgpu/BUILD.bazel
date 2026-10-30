@@ -6,7 +6,6 @@
 
 load("//build_tools/bazel:test_resources.bzl", "GPU_DEVICE_RESOURCE_GROUP")
 load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
-load("//build_tools/sanitizer:suppressions.bzl", "rocm_suppressions")
 load("//loom/build_tools/amdgpu:descriptor_sets.bzl", "loom_amdgpu_selected_descriptor_set_defines")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
@@ -27,7 +26,7 @@ _AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
 
 _AMDGPU_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/execute:amdgpu_hal",
-    "//runtime/config/hal:driver_amdgpu",
+    "//runtime/config/hal:driver_amd_gpu",
 ])
 
 loom_cc_library(
@@ -149,10 +148,8 @@ loom_cc_test(
     srcs = ["iree_hal_execution_test.cc"],
     defines = loom_amdgpu_selected_descriptor_set_defines(),
     resource_group = GPU_DEVICE_RESOURCE_GROUP,
-    sanitizer_suppressions = rocm_suppressions,
     tags = [
-        "iree-run-requirement=runtime.resource.amd_gpu",
-        "runtime-resource=amd-gpu",
+        "iree-run-requirement=libamdf.resource.amd_gpu",
     ],
     target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
     deps = [

@@ -120,7 +120,7 @@ static void PrintBenchmarkReplayAgentMarkdown(FILE* file) {
       "the replay iteration completes:\n"
       "\n"
       "```bash\n"
-      "iree-benchmark-replay --device=legacy-amdgpu --benchmark_min_time=50x "
+      "iree-benchmark-replay --device=amdgpu --benchmark_min_time=50x "
       "\\\n"
       "  --device_profiling_mode=queue-events,device-queue-events \\\n"
       "  --device_profiling_output=/tmp/model-replay.ireeprof \\\n"

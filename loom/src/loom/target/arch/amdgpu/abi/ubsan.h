@@ -6,10 +6,9 @@
 
 // AMDGPU UBSAN feedback ABI constants used by Loom code generation.
 //
-// This header intentionally mirrors only the device-visible layout facts needed
-// by the compiler. It must not include runtime/src/iree/hal/drivers/amdgpu/abi
-// headers because their host side includes HSA headers, while the Loom compiler
-// should stay independent from HSA except in execution/tooling code.
+// Device-visible layouts belong to the compiler's code-object contract. Keep
+// these constants independent of runtime implementation headers; runtime ABI
+// tests qualify the host configuration and report consumers against them.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_ABI_UBSAN_H_
 #define LOOM_TARGET_ARCH_AMDGPU_ABI_UBSAN_H_

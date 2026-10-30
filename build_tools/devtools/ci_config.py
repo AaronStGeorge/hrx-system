@@ -213,7 +213,7 @@ AMD_GPU_BAZEL_TARGETS = (
     "//loom/docs/examples/getting-started/first-kernel/...",
     "//loom/docs/examples/guide/functions-and-control/...",
 )
-AMD_GPU_WEIGHTS_TARGET = "//loom/src/loom/tooling/target/amdgpu/serve:gpu_weights_test"
+AMD_GPU_WEIGHTS_TARGET = "//loom/src/loom/tooling/target/amdgpu/serve:weights_test"
 # The complete weights suite exercises shader assertions. Windows runs its
 # streaming cases separately without requesting the unavailable feedback service.
 AMD_GPU_WINDOWS_BAZEL_TARGETS = AMD_GPU_BAZEL_TARGETS + ("-" + AMD_GPU_WEIGHTS_TARGET,)

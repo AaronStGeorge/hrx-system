@@ -35,17 +35,6 @@ loom_cc_library(
     ),
 )
 
-loom_cc_test(
-    name = "asan_test",
-    srcs = ["asan_test.cc"],
-    deps = [
-        ":asan",
-        "//runtime/src/iree/hal/drivers/amdgpu/abi",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_cc_library(
     name = "feedback",
     hdrs = ["feedback.h"],
@@ -62,7 +51,6 @@ loom_cc_test(
     srcs = ["feedback_test.cc"],
     deps = [
         ":feedback",
-        "//runtime/src/iree/hal/drivers/amdgpu/abi",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -84,7 +72,6 @@ loom_cc_test(
     srcs = ["tsan_test.cc"],
     deps = [
         ":tsan",
-        "//runtime/src/iree/hal/drivers/amdgpu/abi",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -98,17 +85,6 @@ loom_cc_library(
         _AMDGPU_NATIVE_VISIBILITY +
         _AMDGPU_TOOLING_VISIBILITY
     ),
-)
-
-loom_cc_test(
-    name = "ubsan_test",
-    srcs = ["ubsan_test.cc"],
-    deps = [
-        ":ubsan",
-        "//runtime/src/iree/hal/drivers/amdgpu/abi",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
 )
 
 loom_cc_library(
@@ -129,4 +105,17 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
+)
+
+# The native runtime qualifies its wire consumer against compiler-owned layouts.
+loom_cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = [
+        "asan.h",
+        "feedback.h",
+        "tsan.h",
+        "ubsan.h",
+    ],
+    visibility = ["//runtime/src/iree/hal/drivers/amd/gpu:__pkg__"],
 )

@@ -1,7 +1,7 @@
 {
   "devices": {
     "cpu": {"uri": "task"},
-    "gpu": {"uri": "legacy-amdgpu"}
+    "gpu": {"uri": "amdgpu"}
   },
   "pools": {
     "activity": {"devices": ["cpu"], "pool_backing": "fixed"},

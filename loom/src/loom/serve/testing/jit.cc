@@ -207,6 +207,8 @@ void JitTest::TearDown() {
   if (device_owner_) {
     // Each case starts cold without recycling its native device.
     loom_serve_device_trim_programs(device_owner_);
+    IREE_EXPECT_OK(loom_serve_test_workspace_await_idle(
+        loom_serve_pool_workspace(storage_owner_)));
     IREE_EXPECT_OK(loom_serve_test_pool_trim_and_drain(storage_owner_, 0));
     const auto workspace = loom_serve_pool_statistics(storage_owner_).workspace;
     EXPECT_EQ(workspace.reservation_count, 0u);

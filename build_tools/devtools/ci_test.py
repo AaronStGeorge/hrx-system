@@ -1120,10 +1120,6 @@ class CiTest(unittest.TestCase):
                     "--//loom/config/arch/amdgpu:targets=selected-hardware",
                     test_step.argv,
                 )
-                self.assertIn(
-                    "--//runtime/src/iree/hal/drivers/amdgpu:targets=selected-hardware",
-                    test_step.argv,
-                )
 
     def test_amdgpu_loom_importers_are_forwarded_to_configuration(self):
         args = ci.parse_arguments(
@@ -1994,7 +1990,7 @@ fi
             "-DLOOM_ARCH_AMDGPU_TARGETS=selected-hardware", configure_step.argv
         )
         self.assertIn(
-            "-DIREE_HAL_AMDGPU_TARGETS=selected-hardware", configure_step.argv
+            "-DIREE_HAL_AMD_GPU_TARGETS=selected-hardware", configure_step.argv
         )
 
     def test_cmake_amdgpu_msan_builds_driver_targets_without_test_deps(self):

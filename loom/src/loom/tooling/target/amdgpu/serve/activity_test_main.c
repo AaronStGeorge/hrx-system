@@ -6,7 +6,7 @@
 
 #include <stdio.h>
 
-#include "iree/hal/drivers/amdgpu/registration/driver_module.h"
+#include "iree/hal/drivers/amd/registration/driver_module.h"
 #include "loom/tools/loom-serve/activity_test.h"
 #include "loomc/target/amdgpu/base.h"
 #include "loomc/target/amdgpu/iree_hal.h"
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
   iree_status_t status =
       iree_hal_driver_registry_allocate(iree_allocator_system(), &drivers);
   if (iree_status_is_ok(status)) {
-    status = iree_hal_amdgpu_driver_module_register(drivers);
+    status = iree_hal_amd_driver_module_register(drivers);
   }
   int result = 1;
   if (iree_status_is_ok(status)) {
