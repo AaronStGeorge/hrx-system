@@ -181,7 +181,8 @@ enum {
   LOOM_OP_VECTOR_REFINE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 156),
   LOOM_OP_VECTOR_SPLATF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 157),
   LOOM_OP_VECTOR_CONSTANTI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 158),
-  LOOM_OP_VECTOR_COUNT_ = 159,
+  LOOM_OP_VECTOR_CONSTANTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 159),
+  LOOM_OP_VECTOR_COUNT_ = 160,
 };
 
 // IEEE 754 fast-math relaxation flags for float operations. nnan and ninf are independent author promises, not runtime checks or requests to clamp results. Together they guarantee finite floating-point results, but do not imply exact representability in a narrower type or absence of subnormals. Behavior outside an authored promise is not constrained by the operation's ordinary special-value contract. Flags do not refine unrelated uses of an operand.
@@ -3584,6 +3585,23 @@ iree_status_t loom_vector_constanti_build(
     loom_op_t** out_op);
 iree_status_t loom_vector_constanti_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_constanti_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_CONSTANTF: Materialize a non-empty all-static floating-point vector from ordered binary64 literal lanes. Values use logical row-major lane order, and their count must match the result shape. The result element type determines each lane's target floating-point format. Uniform literals canonicalize to vector.splatf; target legalization expands remaining literals through the shared scalar construction path.
+// %v = vector.constantf [1.0, -2.0, 3.5, 4.0] : vector<2x2xf16>
+LOOM_DEFINE_ISA(loom_vector_constantf_isa, LOOM_OP_VECTOR_CONSTANTF)
+LOOM_DEFINE_RESULT(loom_vector_constantf_result, 0)
+LOOM_DEFINE_ATTR_F64_ARRAY(loom_vector_constantf_values, 0)
+iree_status_t loom_vector_constantf_build(
+    loom_builder_t* builder,
+    const double* values,
+    iree_host_size_t values_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_constantf_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_vector_constantf_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

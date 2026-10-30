@@ -810,11 +810,10 @@ static iree_status_t loom_vector_legalize_from_elements(
   return iree_ok_status();
 }
 
-static iree_status_t loom_vector_legalize_constanti(
-    const loom_target_legalizer_entry_t* entry,
+static iree_status_t loom_vector_legalize_constant_elements(
     loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_attribute_t values, loom_value_id_t result, bool is_floating,
     loom_target_legalizer_result_t* out_result) {
-  (void)entry;
   *out_result = (loom_target_legalizer_result_t){
       .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
   };
@@ -824,9 +823,8 @@ static iree_status_t loom_vector_legalize_constanti(
     return iree_ok_status();
   }
 
-  const loom_attribute_t values = loom_vector_constanti_values(op);
   const loom_type_t result_type =
-      loom_module_value_type(context->module, loom_vector_constanti_result(op));
+      loom_module_value_type(context->module, result);
   const loom_type_t element_type =
       loom_type_scalar(loom_type_element_type(result_type));
   loom_rewriter_t* rewriter = context->rewriter;
@@ -838,9 +836,11 @@ static iree_status_t loom_vector_legalize_constanti(
       rewriter->arena, values.count, sizeof(*elements), (void**)&elements));
   for (uint16_t i = 0; i < values.count; ++i) {
     loom_op_t* constant_op = NULL;
+    const loom_attribute_t value = is_floating
+                                       ? loom_attr_f64(values.f64_array[i])
+                                       : loom_attr_i64(values.i64_array[i]);
     IREE_RETURN_IF_ERROR(loom_scalar_constant_build(
-        &rewriter->builder, loom_attr_i64(values.i64_array[i]), element_type,
-        op->location, &constant_op));
+        &rewriter->builder, value, element_type, op->location, &constant_op));
     elements[i] = loom_scalar_constant_result(constant_op);
   }
   loom_op_t* construction_op = NULL;
@@ -855,6 +855,27 @@ static iree_status_t loom_vector_legalize_constanti(
       loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement, 1));
   out_result->action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN;
   return iree_ok_status();
+}
+
+static iree_status_t loom_vector_legalize_constanti(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  return loom_vector_legalize_constant_elements(
+      context, op, loom_vector_constanti_values(op),
+      loom_vector_constanti_result(op), false, out_result);
+}
+
+static iree_status_t loom_vector_legalize_constantf(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  const loom_f64_array_t values = loom_vector_constantf_values(op);
+  return loom_vector_legalize_constant_elements(
+      context, op, loom_attr_f64_array(values.values, (uint16_t)values.count),
+      loom_vector_constantf_result(op), true, out_result);
 }
 
 static iree_status_t loom_vector_legalize_dotf(
@@ -1604,6 +1625,10 @@ static const loom_target_legalizer_rule_t kVectorLegalizerRules[] = {
     {
         .root_kind = LOOM_OP_VECTOR_CONSTANTI,
         .legalize = loom_vector_legalize_constanti,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_CONSTANTF,
+        .legalize = loom_vector_legalize_constantf,
     },
     {
         .root_kind = LOOM_OP_VECTOR_NEGI,

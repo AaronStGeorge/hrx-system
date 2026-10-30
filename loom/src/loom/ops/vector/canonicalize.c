@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <string.h>
+
 #include "loom/ir/attribute.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/float_facts.h"
@@ -2342,6 +2344,29 @@ iree_status_t loom_vector_constanti_canonicalize(loom_op_t* op,
   IREE_RETURN_IF_ERROR(
       loom_vector_splati_build(&rewriter->builder, values.i64_array[0],
                                result_type, op->location, &splat_op));
+  return loom_vector_replace_single_result_with_new_op(op, rewriter, splat_op,
+                                                       value_checkpoint);
+}
+
+iree_status_t loom_vector_constantf_canonicalize(loom_op_t* op,
+                                                 loom_rewriter_t* rewriter) {
+  const loom_f64_array_t values = loom_vector_constantf_values(op);
+  for (uint16_t i = 1; i < values.count; ++i) {
+    if (memcmp(&values.values[i], &values.values[0],
+               sizeof(values.values[0])) != 0) {
+      return iree_ok_status();
+    }
+  }
+
+  const loom_type_t result_type = loom_module_value_type(
+      rewriter->module, loom_vector_constantf_result(op));
+  loom_builder_set_before(&rewriter->builder, op);
+  const loom_value_id_t value_checkpoint =
+      loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* splat_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_splatf_build(&rewriter->builder,
+                                                values.values[0], result_type,
+                                                op->location, &splat_op));
   return loom_vector_replace_single_result_with_new_op(op, rewriter, splat_op,
                                                        value_checkpoint);
 }

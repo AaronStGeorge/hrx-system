@@ -786,17 +786,9 @@ iree_status_t loom_vector_empty_verify(const loom_module_t* module,
       IREE_SV("static zero-lane vector type"));
 }
 
-iree_status_t loom_vector_constanti_verify(const loom_module_t* module,
-                                           const loom_op_t* op,
-                                           iree_diagnostic_emitter_t emitter) {
-  const loom_type_t result_type =
-      loom_module_value_type(module, loom_vector_constanti_result(op));
-  if (!loom_type_is_vector(result_type) ||
-      !loom_type_is_all_static(result_type) ||
-      !loom_scalar_type_is_integer(loom_type_element_type(result_type))) {
-    return iree_ok_status();
-  }
-
+static iree_status_t loom_vector_constant_element_count_verify(
+    const loom_op_t* op, loom_type_t result_type, iree_host_size_t value_count,
+    iree_diagnostic_emitter_t emitter) {
   uint64_t expected_count = 0;
   if (!loom_type_static_element_count(result_type, &expected_count)) {
     return iree_ok_status();
@@ -808,12 +800,28 @@ iree_status_t loom_vector_constanti_verify(const loom_module_t* module,
                 "values"));
   }
 
-  const loom_attribute_t values = loom_vector_constanti_values(op);
-  if (values.count != expected_count) {
+  if (value_count != expected_count) {
     return loom_vector_emit_count_mismatch(
-        emitter, op, IREE_SV("values"), values.count,
+        emitter, op, IREE_SV("values"), value_count,
         IREE_SV("result element count"), expected_count);
   }
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_constanti_verify(const loom_module_t* module,
+                                           const loom_op_t* op,
+                                           iree_diagnostic_emitter_t emitter) {
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_constanti_result(op));
+  if (!loom_type_is_vector(result_type) ||
+      !loom_type_is_all_static(result_type) ||
+      !loom_scalar_type_is_integer(loom_type_element_type(result_type))) {
+    return iree_ok_status();
+  }
+
+  const loom_attribute_t values = loom_vector_constanti_values(op);
+  IREE_RETURN_IF_ERROR(loom_vector_constant_element_count_verify(
+      op, result_type, values.count, emitter));
 
   int64_t minimum_value = 0;
   int64_t maximum_value = 0;
@@ -832,6 +840,21 @@ iree_status_t loom_vector_constanti_verify(const loom_module_t* module,
         IREE_SV("result element type domain"));
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_vector_constantf_verify(const loom_module_t* module,
+                                           const loom_op_t* op,
+                                           iree_diagnostic_emitter_t emitter) {
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_constantf_result(op));
+  if (!loom_type_is_vector(result_type) ||
+      !loom_type_is_all_static(result_type) ||
+      !loom_scalar_type_is_float(loom_type_element_type(result_type))) {
+    return iree_ok_status();
+  }
+  const loom_f64_array_t values = loom_vector_constantf_values(op);
+  return loom_vector_constant_element_count_verify(op, result_type,
+                                                   values.count, emitter);
 }
 
 iree_status_t loom_vector_broadcast_verify(const loom_module_t* module,

@@ -1931,3 +1931,32 @@ func.def @uniform_integer_literal() -> (vector<4xi32>) {
   %value = vector.splati 7 : vector<4xi32>
   func.return %value : vector<4xi32>
 }
+
+// ====
+
+// RUN: pass canonicalize
+
+func.def @uniform_floating_literal() -> (vector<4xf32>) {
+  %value = vector.constantf [-0.0, -0.0, -0.0, -0.0] : vector<4xf32>
+  func.return %value : vector<4xf32>
+}
+// ----
+func.def @uniform_floating_literal() -> (vector<4xf32>) {
+  %value = vector.splatf -0.0 : vector<4xf32>
+  func.return %value : vector<4xf32>
+}
+
+// ====
+
+// RUN: pass canonicalize
+
+// Signed zero remains structural and prevents a false uniform fold.
+func.def @distinct_signed_zeros() -> (vector<2xf32>) {
+  %value = vector.constantf [0.0, -0.0] : vector<2xf32>
+  func.return %value : vector<2xf32>
+}
+// ----
+func.def @distinct_signed_zeros() -> (vector<2xf32>) {
+  %value = vector.constantf [0.0, -0.0] : vector<2xf32>
+  func.return %value : vector<2xf32>
+}

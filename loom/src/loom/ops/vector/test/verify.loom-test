@@ -1923,3 +1923,35 @@ func.def @constanti_i1_lane_out_of_range() {
   %value = vector.constanti [1, -1] : vector<2xi1>
   func.return
 }
+
+// ====
+
+func.def @constantf_count_mismatch() {
+  // ERROR@+1: STRUCTURE/013 "values" "3" "result element count" "4"
+  %value = vector.constantf [1.0, 2.0, 3.0] : vector<4xf32>
+  func.return
+}
+
+// ====
+
+func.def @constantf_dynamic_shape(%n: index) {
+  // ERROR@+1: TYPE/004 "all-static vector shape"
+  %value = vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<[%n]xf32>
+  func.return
+}
+
+// ====
+
+func.def @constantf_integer_element() {
+  // ERROR@+1: TYPE/004 "float_element"
+  %value = vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<4xi32>
+  func.return
+}
+
+// ====
+
+func.def @constantf_empty() {
+  // ERROR@+1: TYPE/004 "use vector.empty"
+  %value = vector.constantf [] : vector<0xf32>
+  func.return
+}

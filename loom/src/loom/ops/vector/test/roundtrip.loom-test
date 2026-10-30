@@ -66,6 +66,21 @@ func.def @integer_literal_element_families() {
 
 // ====
 
+// Floating literals use binary64 source spellings and the result type selects
+// each lane's target format.
+func.def @floating_literal_element_families() {
+  %f8e4m3 = vector.constantf [-1.0, 2.0] : vector<2xf8E4M3>
+  %f8e5m2 = vector.constantf [-1.0, 2.0] : vector<2xf8E5M2>
+  %f16 = vector.constantf [-3.0, 4.0] : vector<2xf16>
+  %bf16 = vector.constantf [-5.0, 6.0] : vector<2xbf16>
+  %f32 = vector.constantf [-7.0, 8.0] : vector<2xf32>
+  %f64 = vector.constantf [nan, inf, -inf, -0.0] : vector<4xf64>
+  test.use %f8e4m3, %f8e5m2, %f16, %bf16, %f32, %f64 : vector<2xf8E4M3>, vector<2xf8E5M2>, vector<2xf16>, vector<2xbf16>, vector<2xf32>, vector<4xf64>
+  func.return
+}
+
+// ====
+
 // Address-domain casts preserve vector shape while making every semantic
 // boundary explicit in the element types.
 func.def @address_casts(%i1: vector<2xi1>, %i8: vector<2xi8>, %i16: vector<2xi16>, %i32: vector<2xi32>, %i64: vector<2xi64>, %indices: vector<2xindex>, %offsets: vector<2xoffset>) {
