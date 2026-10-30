@@ -4,8 +4,8 @@ unsigned entry() { return __builtin_bit_cast(unsigned, Bytes4{0x12, 0x34, 0x56, 
 
 // ----
 func.def public @entry() -> (i32) {
-  %25 = scalar.constant 2018915346 : i32
-  func.return %25 : i32
+  %21 = scalar.constant 2018915346 : i32
+  func.return %21 : i32
 }
 
 // ====
@@ -28,8 +28,8 @@ unsigned entry() {
 
 // ----
 func.def public @entry() -> (i32) {
-  %55 = scalar.constant -2147483648 : i32
-  func.return %55 : i32
+  %51 = scalar.constant -2147483648 : i32
+  func.return %51 : i32
 }
 
 // ====
@@ -42,8 +42,8 @@ unsigned entry() {
 
 // ----
 func.def public @entry() -> (i32) {
-  %62 = scalar.constant 2139169605 : i32
-  func.return %62 : i32
+  %58 = scalar.constant 2139169605 : i32
+  func.return %58 : i32
 }
 
 // ====
@@ -54,6 +54,6 @@ unsigned entry() {
 
 // ----
 func.def public @entry() -> (i32) {
-  %16 = scalar.constant -2147468288 : i32
-  func.return %16 : i32
+  %13 = scalar.constant -2147468288 : i32
+  func.return %13 : i32
 }

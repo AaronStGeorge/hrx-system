@@ -1038,6 +1038,41 @@ func.def @static_constant_poison(%x: f32, %y: f32) -> (vector<2xi32>, vector<2xf
 
 // ====
 
+// Dynamic extraction selects directly from typed literal lanes without first
+// expanding a vector.from_elements aggregate.
+func.def @dynamic_literal_extract(%index: index) -> (i32, f32) {
+  %integers = vector.constanti [7, 11, 13] : vector<3xi32>
+  %floats = vector.constantf [-1.0, 0.5, 2.0] : vector<3xf32>
+  %integer = vector.extract %integers[%index] : vector<3xi32> -> i32
+  %float = vector.extract %floats[%index] : vector<3xf32> -> f32
+  func.return %integer, %float : i32, f32
+}
+
+// ----
+func.def @dynamic_literal_extract(%index: index) -> (i32, f32) {
+  %16 = scalar.constant 7 : i32
+  %17 = scalar.constant 11 : i32
+  %18 = index.constant 1 : index
+  %19 = index.cmp eq, %index, %18 : index
+  %20 = scf.select %19, %17, %16 : i32
+  %21 = scalar.constant 13 : i32
+  %22 = index.constant 2 : index
+  %23 = index.cmp eq, %index, %22 : index
+  %integer = scf.select %23, %21, %20 : i32
+  %7 = scalar.constant -1.0 : f32
+  %8 = scalar.constant 0.5 : f32
+  %9 = index.constant 1 : index
+  %10 = index.cmp eq, %index, %9 : index
+  %11 = scf.select %10, %8, %7 : f32
+  %12 = scalar.constant 2.0 : f32
+  %13 = index.constant 2 : index
+  %14 = index.cmp eq, %index, %13 : index
+  %float = scf.select %14, %12, %11 : f32
+  func.return %integer, %float : i32, f32
+}
+
+// ====
+
 // Empty vectors are already the canonical zero-lane aggregate boundary.
 func.def @empty_boundary() -> (vector<0xf32>) {
   %r = vector.empty : vector<0xf32>
@@ -2517,22 +2552,20 @@ func.def @dynamic_bitpack_q3(%n: index, %m: index, %codes: vector<[%n]xi8>, %pac
 // Table lookup keeps the register table explicit while exposing the per-lane
 // integer-to-index boundary used to select decoded values.
 func.def @static_table_lookup(%table: vector<4xf32>) -> (vector<2xf32>) {
-  %i0 = scalar.constant 3 : i8
-  %i1 = scalar.constant 0 : i8
-  %codes = vector.from_elements %i0, %i1 : vector<2xi8>
+  %codes = vector.constanti [3, 0] : vector<2xi8>
   %r = vector.table.lookup %table[%codes] : vector<4xf32>, vector<2xi8> -> vector<2xf32>
   func.return %r : vector<2xf32>
 }
 
 // ----
 func.def @static_table_lookup(%table: vector<4xf32>) -> (vector<2xf32>) {
-  %i0 = scalar.constant 3 : i8
-  %i1 = scalar.constant 0 : i8
-  %6 = index.cast %i0 : i8 to index
-  %7 = vector.extract %table[%6] : vector<4xf32> -> f32
-  %8 = index.cast %i1 : i8 to index
+  %4 = scalar.constant 3 : i8
+  %5 = index.cast %4 : i8 to index
+  %6 = vector.extract %table[%5] : vector<4xf32> -> f32
+  %7 = scalar.constant 0 : i8
+  %8 = index.cast %7 : i8 to index
   %9 = vector.extract %table[%8] : vector<4xf32> -> f32
-  %r = vector.from_elements %7, %9 : vector<2xf32>
+  %r = vector.from_elements %6, %9 : vector<2xf32>
   func.return %r : vector<2xf32>
 }
 
@@ -2565,47 +2598,44 @@ func.def @dynamic_table_lookup(%n: index, %table: vector<4xf32>, %codes: vector<
 // Static table quantize spells out compare-and-count semantics. tie=upper
 // counts thresholds equal to the value, and nan=max selects the top code.
 func.def @static_table_quantize(%values: vector<2xf32>) -> (vector<2xi8>) {
-  %t0 = scalar.constant -1.0 : f32
-  %t1 = scalar.constant 0.0 : f32
-  %t2 = scalar.constant 1.0 : f32
-  %thresholds = vector.from_elements %t0, %t1, %t2 : vector<3xf32>
+  %thresholds = vector.constantf [-1.0, 0.0, 1.0] : vector<3xf32>
   %r = vector.table.quantize %values, %thresholds {nan = max, tie = upper} : vector<2xf32>, vector<3xf32> -> vector<2xi8>
   func.return %r : vector<2xi8>
 }
 
 // ----
 func.def @static_table_quantize(%values: vector<2xf32>) -> (vector<2xi8>) {
-  %t0 = scalar.constant -1.0 : f32
-  %t1 = scalar.constant 0.0 : f32
-  %t2 = scalar.constant 1.0 : f32
-  %7 = vector.extract %values[0] : vector<2xf32> -> f32
-  %8 = scalar.constant 0 : i8
-  %9 = scalar.cmpf ole, %t0, %7 : f32
-  %10 = scalar.constant 1 : i8
-  %11 = scalar.addi %8, %10 : i8
-  %12 = scf.select %9, %11, %8 : i8
-  %13 = scalar.cmpf ole, %t1, %7 : f32
-  %14 = scalar.constant 1 : i8
-  %15 = scalar.addi %12, %14 : i8
-  %16 = scf.select %13, %15, %12 : i8
-  %17 = scalar.cmpf ole, %t2, %7 : f32
+  %4 = vector.extract %values[0] : vector<2xf32> -> f32
+  %5 = scalar.constant 0 : i8
+  %6 = scalar.constant -1.0 : f32
+  %7 = scalar.cmpf ole, %6, %4 : f32
+  %8 = scalar.constant 1 : i8
+  %9 = scalar.addi %5, %8 : i8
+  %10 = scf.select %7, %9, %5 : i8
+  %11 = scalar.constant 0.0 : f32
+  %12 = scalar.cmpf ole, %11, %4 : f32
+  %13 = scalar.constant 1 : i8
+  %14 = scalar.addi %10, %13 : i8
+  %15 = scf.select %12, %14, %10 : i8
+  %16 = scalar.constant 1.0 : f32
+  %17 = scalar.cmpf ole, %16, %4 : f32
   %18 = scalar.constant 1 : i8
-  %19 = scalar.addi %16, %18 : i8
-  %20 = scf.select %17, %19, %16 : i8
+  %19 = scalar.addi %15, %18 : i8
+  %20 = scf.select %17, %19, %15 : i8
   %21 = scalar.constant 3 : i8
-  %22 = scalar.isnanf %7 : f32
+  %22 = scalar.isnanf %4 : f32
   %23 = scf.select %22, %21, %20 : i8
   %24 = vector.extract %values[1] : vector<2xf32> -> f32
   %25 = scalar.constant 0 : i8
-  %26 = scalar.cmpf ole, %t0, %24 : f32
+  %26 = scalar.cmpf ole, %6, %24 : f32
   %27 = scalar.constant 1 : i8
   %28 = scalar.addi %25, %27 : i8
   %29 = scf.select %26, %28, %25 : i8
-  %30 = scalar.cmpf ole, %t1, %24 : f32
+  %30 = scalar.cmpf ole, %11, %24 : f32
   %31 = scalar.constant 1 : i8
   %32 = scalar.addi %29, %31 : i8
   %33 = scf.select %30, %32, %29 : i8
-  %34 = scalar.cmpf ole, %t2, %24 : f32
+  %34 = scalar.cmpf ole, %16, %24 : f32
   %35 = scalar.constant 1 : i8
   %36 = scalar.addi %33, %35 : i8
   %37 = scf.select %34, %36, %33 : i8

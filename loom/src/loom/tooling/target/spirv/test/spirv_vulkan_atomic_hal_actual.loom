@@ -698,13 +698,11 @@ kernel.def @global_vector_atomic_forms() {
   %c7_index = index.constant 7 : index
   %c8_index = index.constant 8 : index
   %c9_index = index.constant 9 : index
-  %false = scalar.constant false : i1
-  %true = scalar.constant true : i1
   %failure = scalar.constant 0 : i32
   %success = scalar.constant 1 : i32
   %offsets = vector.from_elements %c0_index, %c1_index : vector<2xindex>
-  %first_lane_mask = vector.from_elements %true, %false : vector<2xi1>
-  %second_lane_mask = vector.from_elements %false, %true : vector<2xi1>
+  %first_lane_mask = vector.constanti [1, 0] : vector<2xi1>
+  %second_lane_mask = vector.constanti [0, 1] : vector<2xi1>
 
   %values_global = buffer.assume.memory_space<global> %values : buffer
   %results_global = buffer.assume.memory_space<global> %results : buffer
@@ -715,11 +713,9 @@ kernel.def @global_vector_atomic_forms() {
 
   %reduce_initial0 = scalar.constant 1 : i32
   %reduce_initial1 = scalar.constant 2 : i32
-  %reduce_value0 = scalar.constant 3 : i32
-  %reduce_value1 = scalar.constant 4 : i32
   %reduce_expected0 = scalar.constant 4 : i32
   %reduce_expected1 = scalar.constant 6 : i32
-  %reduce_values = vector.from_elements %reduce_value0, %reduce_value1 : vector<2xi32>
+  %reduce_values = vector.constanti [3, 4] : vector<2xi32>
   view.store %reduce_initial0, %values_view[%c0_index] : i32, view<10xi32, %layout>
   view.store %reduce_initial1, %values_view[%c1_index] : i32, view<10xi32, %layout>
   vector.atomic.reduce<addi> %reduce_values, %values_view[0][%offsets] {ordering = relaxed, scope = workgroup} : vector<2xi32>, view<10xi32, %layout>, vector<2xindex>
@@ -750,7 +746,7 @@ kernel.def @global_vector_atomic_forms() {
   %rmw_initial1 = scalar.constant 6 : i32
   %rmw_value0 = scalar.constant 7 : i32
   %rmw_value1 = scalar.constant 8 : i32
-  %rmw_values = vector.from_elements %rmw_value0, %rmw_value1 : vector<2xi32>
+  %rmw_values = vector.constanti [7, 8] : vector<2xi32>
   view.store %rmw_initial0, %values_view[%c4_index] : i32, view<10xi32, %layout>
   view.store %rmw_initial1, %values_view[%c5_index] : i32, view<10xi32, %layout>
   %rmw_old = vector.atomic.rmw<xchgi> %rmw_values, %values_view[4][%offsets] {ordering = acquire, scope = workgroup} : vector<2xi32>, view<10xi32, %layout>, vector<2xindex>
@@ -770,13 +766,10 @@ kernel.def @global_vector_atomic_forms() {
 
   %masked_rmw_initial0 = scalar.constant 10 : i32
   %masked_rmw_initial1 = scalar.constant 12 : i32
-  %masked_rmw_value0 = scalar.constant 3 : i32
-  %masked_rmw_value1 = scalar.constant 5 : i32
   %masked_rmw_passthrough0 = scalar.constant 101 : i32
-  %masked_rmw_passthrough1 = scalar.constant 102 : i32
   %masked_rmw_expected1 = scalar.constant 9 : i32
-  %masked_rmw_values = vector.from_elements %masked_rmw_value0, %masked_rmw_value1 : vector<2xi32>
-  %masked_rmw_passthrough = vector.from_elements %masked_rmw_passthrough0, %masked_rmw_passthrough1 : vector<2xi32>
+  %masked_rmw_values = vector.constanti [3, 5] : vector<2xi32>
+  %masked_rmw_passthrough = vector.constanti [101, 102] : vector<2xi32>
   view.store %masked_rmw_initial0, %values_view[%c6_index] : i32, view<10xi32, %layout>
   view.store %masked_rmw_initial1, %values_view[%c7_index] : i32, view<10xi32, %layout>
   %masked_rmw_old = vector.atomic.rmw.mask<xori> %masked_rmw_values, %values_view[6][%offsets], %second_lane_mask, %masked_rmw_passthrough {ordering = acq_rel, scope = workgroup} : vector<2xi32>, view<10xi32, %layout>, vector<2xindex>, vector<2xi1>, vector<2xi32>
@@ -796,11 +789,9 @@ kernel.def @global_vector_atomic_forms() {
 
   %cmpx_initial0 = scalar.constant 20 : i32
   %cmpx_initial1 = scalar.constant 21 : i32
-  %cmpx_expected1 = scalar.constant 99 : i32
   %cmpx_replacement0 = scalar.constant 30 : i32
-  %cmpx_replacement1 = scalar.constant 31 : i32
-  %cmpx_expected = vector.from_elements %cmpx_initial0, %cmpx_expected1 : vector<2xi32>
-  %cmpx_replacement = vector.from_elements %cmpx_replacement0, %cmpx_replacement1 : vector<2xi32>
+  %cmpx_expected = vector.constanti [20, 99] : vector<2xi32>
+  %cmpx_replacement = vector.constanti [30, 31] : vector<2xi32>
   view.store %cmpx_initial0, %values_view[%c8_index] : i32, view<10xi32, %layout>
   view.store %cmpx_initial1, %values_view[%c9_index] : i32, view<10xi32, %layout>
   %cmpx_old = vector.atomic.cmpxchg %cmpx_expected, %cmpx_replacement, %values_view[8][%offsets] {failure_ordering = acquire, scope = workgroup, success_ordering = acq_rel} : vector<2xi32>, view<10xi32, %layout>, vector<2xindex> -> vector<2xi32>

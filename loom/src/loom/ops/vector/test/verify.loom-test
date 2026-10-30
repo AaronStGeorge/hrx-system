@@ -1293,9 +1293,7 @@ func.def @mma_result_type_must_match_init(%lhs: vector<8xf16>, %rhs: vector<8xf1
 
 // Fully static threshold tables must be nondecreasing.
 func.def @table_quantize_unsorted_thresholds(%values: vector<4xf32>) {
-  %t0 = scalar.constant 0.0 : f32
-  %t1 = scalar.constant -1.0 : f32
-  %thresholds = vector.from_elements %t0, %t1 : vector<2xf32>
+  %thresholds = vector.constantf [0.0, -1.0] : vector<2xf32>
   // ERROR@+1: STRUCTURE/015 "thresholds" "0" "1"
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<4xf32>, vector<2xf32> -> vector<4xi8>
   func.return
@@ -1873,5 +1871,85 @@ func.def @mulf_rejects_integer_overflow_flag(%a: vector<4xf32>, %b: vector<4xf32
 func.def @preservation_requires_floating_add(%view: view<1xf32>, %value: vector<2xf32>, %offsets: vector<2xindex>, %mask: vector<2xi1>) {
   // ERROR@+1: STRUCTURE/014 "noftz requires floating-point atomic addition"
   %old = vector.atomic.rmw.mask<xchgf, noftz> %value, %view[0][%offsets], %mask, %value {ordering = relaxed, scope = workgroup} : vector<2xf32>, view<1xf32>, vector<2xindex>, vector<2xi1>, vector<2xf32>
+  func.return
+}
+
+// ====
+
+func.def @constanti_count_mismatch() {
+  // ERROR@+1: STRUCTURE/013 "values" "3" "result element count" "4"
+  %value = vector.constanti [1, 2, 3] : vector<4xi32>
+  func.return
+}
+
+// ====
+
+func.def @constanti_dynamic_shape(%n: index) {
+  // ERROR@+1: TYPE/004 "all-static vector shape"
+  %value = vector.constanti [1, 2, 3, 4] : vector<[%n]xi32>
+  func.return
+}
+
+// ====
+
+func.def @constanti_address_element() {
+  // ERROR@+1: TYPE/004 "integer_element"
+  %value = vector.constanti [1, 2, 3, 4] : vector<4xindex>
+  func.return
+}
+
+// ====
+
+func.def @constanti_empty() {
+  // ERROR@+1: TYPE/004 "use vector.empty"
+  %value = vector.constanti [] : vector<0xi32>
+  func.return
+}
+
+// ====
+
+func.def @constanti_lane_out_of_range() {
+  // ERROR@+1: STRUCTURE/014 "values[2]" "128" "result element type domain"
+  %value = vector.constanti [-128, 127, 128, 0] : vector<4xi8>
+  func.return
+}
+
+// ====
+
+func.def @constanti_i1_lane_out_of_range() {
+  // ERROR@+1: STRUCTURE/014 "values[1]" "-1" "result element type domain"
+  %value = vector.constanti [1, -1] : vector<2xi1>
+  func.return
+}
+
+// ====
+
+func.def @constantf_count_mismatch() {
+  // ERROR@+1: STRUCTURE/013 "values" "3" "result element count" "4"
+  %value = vector.constantf [1.0, 2.0, 3.0] : vector<4xf32>
+  func.return
+}
+
+// ====
+
+func.def @constantf_dynamic_shape(%n: index) {
+  // ERROR@+1: TYPE/004 "all-static vector shape"
+  %value = vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<[%n]xf32>
+  func.return
+}
+
+// ====
+
+func.def @constantf_integer_element() {
+  // ERROR@+1: TYPE/004 "float_element"
+  %value = vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<4xi32>
+  func.return
+}
+
+// ====
+
+func.def @constantf_empty() {
+  // ERROR@+1: TYPE/004 "use vector.empty"
+  %value = vector.constantf [] : vector<0xf32>
   func.return
 }

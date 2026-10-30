@@ -4,12 +4,8 @@ func.def @remainder_lanes() -> (vector<2xbf16>, f64, f64) {
   %a = vector.splatf -1.75 : vector<2xbf16>
   %b = vector.splatf 0.75 : vector<2xbf16>
   %uniform = vector.remf %a, %b : vector<2xbf16>
-  %normal = scalar.constant 2.2250738585072014e-308 : f64
-  %neighbor = scalar.constant 2.2250738585072019e-308 : f64
-  %negative = scalar.constant -1.75 : f64
-  %divisor = scalar.constant 0.75 : f64
-  %left = vector.from_elements %neighbor, %negative : vector<2xf64>
-  %right = vector.from_elements %normal, %divisor : vector<2xf64>
+  %left = vector.constantf [2.2250738585072019e-308, -1.75] : vector<2xf64>
+  %right = vector.constantf [2.2250738585072014e-308, 0.75] : vector<2xf64>
   %results = vector.remf %left, %right : vector<2xf64>
   %tiny = vector.extract %results[0] : vector<2xf64> -> f64
   %signed = vector.extract %results[1] : vector<2xf64> -> f64

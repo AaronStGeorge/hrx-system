@@ -44,9 +44,7 @@ func.def @uniform_minimum() -> (i8, i8, i8) {
 
 // Small-lane summaries wrap independently at each lane's declared width.
 func.def @mixed_boundaries() -> (i16, i16, i16, i16) {
-  %minimum = scalar.constant -32768 : i16
-  %neighbor = scalar.constant -32767 : i16
-  %values = vector.from_elements %minimum, %neighbor : vector<2xi16>
+  %values = vector.constanti [-32768, -32767] : vector<2xi16>
   %negative = vector.negi %values : vector<2xi16>
   %absolute = vector.absi %values : vector<2xi16>
   %n0 = vector.extract %negative[0] : vector<2xi16> -> i16

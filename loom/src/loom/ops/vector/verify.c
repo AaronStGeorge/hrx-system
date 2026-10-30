@@ -786,6 +786,77 @@ iree_status_t loom_vector_empty_verify(const loom_module_t* module,
       IREE_SV("static zero-lane vector type"));
 }
 
+static iree_status_t loom_vector_constant_element_count_verify(
+    const loom_op_t* op, loom_type_t result_type, iree_host_size_t value_count,
+    iree_diagnostic_emitter_t emitter) {
+  uint64_t expected_count = 0;
+  if (!loom_type_static_element_count(result_type, &expected_count)) {
+    return iree_ok_status();
+  }
+  if (expected_count == 0) {
+    return loom_vector_emit_result_constraint(
+        emitter, op, IREE_SV("result"), result_type,
+        IREE_SV("non-empty vector type; use vector.empty for static zero-lane "
+                "values"));
+  }
+
+  if (value_count != expected_count) {
+    return loom_vector_emit_count_mismatch(
+        emitter, op, IREE_SV("values"), value_count,
+        IREE_SV("result element count"), expected_count);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_constanti_verify(const loom_module_t* module,
+                                           const loom_op_t* op,
+                                           iree_diagnostic_emitter_t emitter) {
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_constanti_result(op));
+  if (!loom_type_is_vector(result_type) ||
+      !loom_type_is_all_static(result_type) ||
+      !loom_scalar_type_is_integer(loom_type_element_type(result_type))) {
+    return iree_ok_status();
+  }
+
+  const loom_attribute_t values = loom_vector_constanti_values(op);
+  IREE_RETURN_IF_ERROR(loom_vector_constant_element_count_verify(
+      op, result_type, values.count, emitter));
+
+  int64_t minimum_value = 0;
+  int64_t maximum_value = 0;
+  loom_scalar_type_integer_domain(loom_type_element_type(result_type),
+                                  &minimum_value, &maximum_value);
+  for (uint16_t i = 0; i < values.count; ++i) {
+    const int64_t value = values.i64_array[i];
+    if (value >= minimum_value && value <= maximum_value) {
+      continue;
+    }
+    char value_name_buffer[32];
+    iree_snprintf(value_name_buffer, sizeof(value_name_buffer), "values[%u]",
+                  i);
+    return loom_vector_emit_attribute_value_constraint(
+        emitter, op, iree_make_cstring_view(value_name_buffer), value,
+        IREE_SV("result element type domain"));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_constantf_verify(const loom_module_t* module,
+                                           const loom_op_t* op,
+                                           iree_diagnostic_emitter_t emitter) {
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_constantf_result(op));
+  if (!loom_type_is_vector(result_type) ||
+      !loom_type_is_all_static(result_type) ||
+      !loom_scalar_type_is_float(loom_type_element_type(result_type))) {
+    return iree_ok_status();
+  }
+  const loom_f64_array_t values = loom_vector_constantf_values(op);
+  return loom_vector_constant_element_count_verify(op, result_type,
+                                                   values.count, emitter);
+}
+
 iree_status_t loom_vector_broadcast_verify(const loom_module_t* module,
                                            const loom_op_t* op,
                                            iree_diagnostic_emitter_t emitter) {
@@ -1646,6 +1717,24 @@ static iree_status_t loom_vector_verify_static_threshold_order(
     return loom_vector_emit_static_threshold_order(
         emitter, op, IREE_SV("thresholds"), /*left_index=*/0,
         /*right_index=*/0);
+  }
+
+  if (loom_vector_constantf_isa(def_op)) {
+    const loom_f64_array_t values = loom_vector_constantf_values(def_op);
+    double previous_value = 0.0;
+    for (uint32_t i = 0; i < values.count; ++i) {
+      const double value = values.values[i];
+      if (isnan(value)) {
+        return loom_vector_emit_static_threshold_order(
+            emitter, op, IREE_SV("thresholds"), i, i);
+      }
+      if (i > 0 && previous_value > value) {
+        return loom_vector_emit_static_threshold_order(
+            emitter, op, IREE_SV("thresholds"), i - 1, i);
+      }
+      previous_value = value;
+    }
+    return iree_ok_status();
   }
 
   if (!loom_vector_from_elements_isa(def_op)) {

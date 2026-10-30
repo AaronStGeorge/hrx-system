@@ -66,9 +66,7 @@ global.rodata.def @reverse_i32x16_control = align(64) bytes("0f0000000e0000000d0
 func.def public target(@target) @write_exact_avx512_lanes(%output: buffer) {
   %origin = index.constant 0 : offset
   %view = buffer.view %output[%origin] : buffer -> view<8xf64>
-  %low = scalar.constant 1.25 : f64
-  %high = scalar.constant -2.5 : f64
-  %values = vector.from_elements %low, %high, %low, %high, %low, %high, %low, %high : vector<8xf64>
+  %values = vector.constantf [1.25, -2.5, 1.25, -2.5, 1.25, -2.5, 1.25, -2.5] : vector<8xf64>
   vector.store %values, %view[0] : vector<8xf64>, view<8xf64>
   func.return
 }

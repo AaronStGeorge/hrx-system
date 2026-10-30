@@ -99,13 +99,7 @@ func.def public @update(%values: buffer, %values_byte_offset: offset) -> (vector
 }
 
 func.def @adjust(%value: vector<3xf16>) -> (vector<3xf16>) {
-  %57 = scalar.constant 1.0 : f32
-  %58 = scalar.fptrunc %57 : f32 to f16
-  %59 = scalar.constant 2.0 : f32
-  %60 = scalar.fptrunc %59 : f32 to f16
-  %61 = scalar.constant 3.0 : f32
-  %62 = scalar.fptrunc %61 : f32 to f16
-  %63 = vector.from_elements %58, %60, %62 : vector<3xf16>
-  %64 = vector.addf %value, %63 : vector<3xf16>
-  func.return %64 : vector<3xf16>
+  %57 = vector.constantf [1.0, 2.0, 3.0] : vector<3xf16>
+  %58 = vector.addf %value, %57 : vector<3xf16>
+  func.return %58 : vector<3xf16>
 }

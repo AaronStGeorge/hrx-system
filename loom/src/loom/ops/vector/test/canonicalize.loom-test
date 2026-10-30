@@ -68,9 +68,7 @@ func.def @lane_bounded_unsigned_remainder(%first: i32, %second: i32) -> (vector<
   %small = scalar.assume %first [range(%first, 0, 6)] : i32
   %large = scalar.assume %second [range(%second, 10, 30)] : i32
   %input = vector.from_elements %small, %large : vector<2xi32>
-  %c7 = scalar.constant 7 : i32
-  %c31 = scalar.constant 31 : i32
-  %divisor = vector.from_elements %c7, %c31 : vector<2xi32>
+  %divisor = vector.constanti [7, 31] : vector<2xi32>
   %result = vector.remui %input, %divisor : vector<2xi32>
   func.return %result : vector<2xi32>
 }
@@ -90,9 +88,7 @@ func.def @partially_bounded_unsigned_remainder(%first: i32, %second: i32) -> (ve
   %small = scalar.assume %first [range(%first, 0, 6)] : i32
   %large = scalar.assume %second [range(%second, 10, 31)] : i32
   %input = vector.from_elements %small, %large : vector<2xi32>
-  %c7 = scalar.constant 7 : i32
-  %c31 = scalar.constant 31 : i32
-  %divisor = vector.from_elements %c7, %c31 : vector<2xi32>
+  %divisor = vector.constanti [7, 31] : vector<2xi32>
   %result = vector.remui %input, %divisor : vector<2xi32>
   func.return %result : vector<2xi32>
 }
@@ -102,9 +98,7 @@ func.def @partially_bounded_unsigned_remainder(%first: i32, %second: i32) -> (ve
   %small = scalar.assume %first [range(%first, 0, 6)] : i32
   %large = scalar.assume %second [range(%second, 10, 31)] : i32
   %input = vector.from_elements %small, %large : vector<2xi32>
-  %c7 = scalar.constant 7 : i32
-  %c31 = scalar.constant 31 : i32
-  %divisor = vector.from_elements %c7, %c31 : vector<2xi32>
+  %divisor = vector.constanti [7, 31] : vector<2xi32>
   %result = vector.remui %input, %divisor : vector<2xi32>
   func.return %result : vector<2xi32>
 }
@@ -524,20 +518,17 @@ func.def @empty_iota(%base: index, %step: index) -> (vector<0xindex>) {
 
 // ====
 
-// A small static iota with exact base and step materializes explicit lanes.
-func.def @static_iota_to_from_elements() -> (vector<4xi32>) {
+// A small fixed-width iota with exact base and step materializes one typed
+// literal instead of separate scalar lane definitions.
+func.def @static_iota_to_constanti() -> (vector<4xi32>) {
   %base = scalar.constant 3 : i32
   %step = scalar.constant 4 : i32
   %r = vector.iota %base step %step : vector<4xi32>
   func.return %r : vector<4xi32>
 }
 // ----
-func.def @static_iota_to_from_elements() -> (vector<4xi32>) {
-  %4 = scalar.constant 3 : i32
-  %5 = scalar.constant 7 : i32
-  %6 = scalar.constant 11 : i32
-  %7 = scalar.constant 15 : i32
-  %r = vector.from_elements %4, %5, %6, %7 : vector<4xi32>
+func.def @static_iota_to_constanti() -> (vector<4xi32>) {
+  %r = vector.constanti [3, 7, 11, 15] : vector<4xi32>
   func.return %r : vector<4xi32>
 }
 
@@ -1226,9 +1217,7 @@ func.def @shift_dynamic_zero_identities(%count: index, %values: vector<[%count]x
 
 // Zero in only some lanes does not make a whole-vector identity.
 func.def @shift_mixed_counts(%values: vector<4xi8>) -> (vector<4xi8>, vector<4xi8>, vector<4xi8>) {
-  %c0 = scalar.constant 0 : i8
-  %c1 = scalar.constant 1 : i8
-  %counts = vector.from_elements %c0, %c1, %c0, %c1 : vector<4xi8>
+  %counts = vector.constanti [0, 1, 0, 1] : vector<4xi8>
   %left = vector.shli %values, %counts : vector<4xi8>
   %arithmetic = vector.shrsi %values, %counts : vector<4xi8>
   %logical = vector.shrui %values, %counts : vector<4xi8>
@@ -1916,4 +1905,79 @@ func.def @planned_out_of_range(%source: vector<4xi8>, %value: i8) -> (i8, vector
   %read = vector.extract %source[%end] : vector<4xi8> -> i8
   %write = vector.insert %value into %source[%end] : i8, vector<4xi8>
   func.return %read, %write : i8, vector<4xi8>
+}
+
+// ====
+
+// RUN: pass canonicalize
+
+func.def @uniform_integer_literal() -> (vector<4xi32>) {
+  %value = vector.constanti [7, 7, 7, 7] : vector<4xi32>
+  func.return %value : vector<4xi32>
+}
+// ----
+func.def @uniform_integer_literal() -> (vector<4xi32>) {
+  %value = vector.splati 7 : vector<4xi32>
+  func.return %value : vector<4xi32>
+}
+
+// ====
+
+// RUN: pass canonicalize
+
+func.def @uniform_floating_literal() -> (vector<4xf32>) {
+  %value = vector.constantf [-0.0, -0.0, -0.0, -0.0] : vector<4xf32>
+  func.return %value : vector<4xf32>
+}
+// ----
+func.def @uniform_floating_literal() -> (vector<4xf32>) {
+  %value = vector.splatf -0.0 : vector<4xf32>
+  func.return %value : vector<4xf32>
+}
+
+// ====
+
+// RUN: pass canonicalize
+
+// Signed zero remains structural and prevents a false uniform fold.
+func.def @distinct_signed_zeros() -> (vector<2xf32>) {
+  %value = vector.constantf [0.0, -0.0] : vector<2xf32>
+  func.return %value : vector<2xf32>
+}
+// ----
+func.def @distinct_signed_zeros() -> (vector<2xf32>) {
+  %value = vector.constantf [0.0, -0.0] : vector<2xf32>
+  func.return %value : vector<2xf32>
+}
+
+// ====
+
+// RUN: pass canonicalize
+
+// Literal extraction remains direct beyond the bounded lane-fact summary.
+func.def @extract_wide_integer_literal() -> (i32) {
+  %value = vector.constanti [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] : vector<17xi32>
+  %result = vector.extract %value[16] : vector<17xi32> -> i32
+  func.return %result : i32
+}
+// ----
+func.def @extract_wide_integer_literal() -> (i32) {
+  %result = scalar.constant 16 : i32
+  func.return %result : i32
+}
+
+// ====
+
+// RUN: pass canonicalize
+
+// Partial extraction slices the row-major literal without scalar expansion.
+func.def @extract_floating_literal_slice() -> (vector<2xf16>) {
+  %value = vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<2x2xf16>
+  %result = vector.extract %value[1] : vector<2x2xf16> -> vector<2xf16>
+  func.return %result : vector<2xf16>
+}
+// ----
+func.def @extract_floating_literal_slice() -> (vector<2xf16>) {
+  %result = vector.constantf [3.0, 4.0] : vector<2xf16>
+  func.return %result : vector<2xf16>
 }

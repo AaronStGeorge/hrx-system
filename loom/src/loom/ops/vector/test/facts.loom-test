@@ -39,9 +39,7 @@ func.def @index_cast_unknown_i8_to_offset(%source: vector<4xi8>) -> (i64, i64) {
 // Small static lane facts retain each lane independently through the shared
 // scalar address conversion.
 func.def @index_cast_small_lanes_to_index() -> (i64, i64) {
-  %negative = scalar.constant -2 : i16
-  %positive = scalar.constant 7 : i16
-  %source = vector.from_elements %negative, %positive : vector<2xi16>
+  %source = vector.constanti [-2, 7] : vector<2xi16>
   %indices = vector.index_cast %source : vector<2xi16> to vector<2xindex>
   %lane0 = vector.extract %indices[0] : vector<2xindex> -> index
   %lane1 = vector.extract %indices[1] : vector<2xindex> -> index
@@ -60,13 +58,9 @@ func.def @index_cast_small_lanes_to_index() -> (i64, i64) {
 
 // Per-lane FMA facts preserve the exact side of a narrow rounding midpoint.
 func.def @fmaf_bf16_single_rounding() -> (bf16, bf16) {
-  %a0 = scalar.constant 1.0078125 : bf16
-  %a1 = scalar.constant -1.0078125 : bf16
-  %c0 = scalar.constant -9.3132257461547852e-10 : bf16
-  %c1 = scalar.constant 9.3132257461547852e-10 : bf16
-  %a = vector.from_elements %a0, %a1 : vector<2xbf16>
+  %a = vector.constantf [1.0078125, -1.0078125] : vector<2xbf16>
   %b = vector.splatf 1.5 : vector<2xbf16>
-  %c = vector.from_elements %c0, %c1 : vector<2xbf16>
+  %c = vector.constantf [-9.3132257461547852e-10, 9.3132257461547852e-10] : vector<2xbf16>
   %r = vector.fmaf %a, %b, %c : vector<2xbf16>
   %positive = vector.extract %r[0] : vector<2xbf16> -> bf16
   %negative = vector.extract %r[1] : vector<2xbf16> -> bf16
@@ -265,10 +259,7 @@ func.def @reduce_uniform_float_math() -> (f32) {
 // Reductions round after every addf rather than carrying host-double precision
 // through the full reduction.
 func.def @reduce_f32_rounds_each_step() -> (f32) {
-  %large = scalar.constant 16777216.0 : f32
-  %c1 = scalar.constant 1.0 : f32
-  %negative_large = scalar.constant -16777216.0 : f32
-  %v = vector.from_elements %large, %c1, %negative_large : vector<3xf32>
+  %v = vector.constantf [16777216.0, 1.0, -16777216.0] : vector<3xf32>
   %c0 = scalar.constant 0.0 : f32
   %result = vector.reduce<addf> %v, %c0 : vector<3xf32>, f32
   func.return %result : f32
@@ -283,9 +274,7 @@ func.def @reduce_f32_rounds_each_step() -> (f32) {
 
 // Small per-lane float facts compose through new lanewise unary and binary ops.
 func.def @small_static_float_math_extract() -> (f32) {
-  %c1 = scalar.constant 1.0 : f32
-  %c4 = scalar.constant 4.0 : f32
-  %v = vector.from_elements %c1, %c4 : vector<2xf32>
+  %v = vector.constantf [1.0, 4.0] : vector<2xf32>
   %root = vector.sqrtf %v : vector<2xf32>
   %max = vector.maximumf %v, %root : vector<2xf32>
   %r = vector.extract %max[1] : vector<2xf32> -> f32
@@ -465,9 +454,7 @@ func.def @structural_uniform_facts() -> (i32, i32, i32, i32) {
 
 // Broadcast facts remap trailing source axes into each result lane.
 func.def @broadcast_small_static_lanes() -> (i32, i32) {
-  %c5 = scalar.constant 5 : i32
-  %c6 = scalar.constant 6 : i32
-  %v = vector.from_elements %c5, %c6 : vector<2xi32>
+  %v = vector.constanti [5, 6] : vector<2xi32>
   %wide = vector.broadcast %v : vector<2xi32> -> vector<3x2xi32>
   %r0 = vector.extract %wide[1, 0] : vector<3x2xi32> -> i32
   %r1 = vector.extract %wide[2, 1] : vector<3x2xi32> -> i32
@@ -484,12 +471,8 @@ func.def @broadcast_small_static_lanes() -> (i32, i32) {
 
 // Insert facts overwrite only the static inserted lane.
 func.def @insert_scalar_small_static_lane() -> (i32, i32) {
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %c4 = scalar.constant 4 : i32
   %c9 = scalar.constant 9 : i32
-  %v = vector.from_elements %c1, %c2, %c3, %c4 : vector<4xi32>
+  %v = vector.constanti [1, 2, 3, 4] : vector<4xi32>
   %updated = vector.insert %c9 into %v[2] : i32, vector<4xi32>
   %r0 = vector.extract %updated[1] : vector<4xi32> -> i32
   %r1 = vector.extract %updated[2] : vector<4xi32> -> i32
@@ -497,9 +480,9 @@ func.def @insert_scalar_small_static_lane() -> (i32, i32) {
 }
 // ----
 func.def @insert_scalar_small_static_lane() -> (i32, i32) {
-  %c2 = scalar.constant 2 : i32
   %c9 = scalar.constant 9 : i32
-  func.return %c2, %c9 : i32, i32
+  %r0 = scalar.constant 2 : i32
+  func.return %r0, %c9 : i32, i32
 }
 
 // ====
@@ -507,13 +490,7 @@ func.def @insert_scalar_small_static_lane() -> (i32, i32) {
 // Transpose facts use the same result-axis to source-axis permutation as the
 // op verifier and type transfer.
 func.def @transpose_small_static_lanes() -> (i32, i32) {
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %c4 = scalar.constant 4 : i32
-  %c5 = scalar.constant 5 : i32
-  %c6 = scalar.constant 6 : i32
-  %v = vector.from_elements %c1, %c2, %c3, %c4, %c5, %c6 : vector<2x3xi32>
+  %v = vector.constanti [1, 2, 3, 4, 5, 6] : vector<2x3xi32>
   %t = vector.transpose<[1, 0]> %v : vector<2x3xi32> -> vector<3x2xi32>
   %r0 = vector.extract %t[0, 1] : vector<3x2xi32> -> i32
   %r1 = vector.extract %t[2, 1] : vector<3x2xi32> -> i32
@@ -530,13 +507,9 @@ func.def @transpose_small_static_lanes() -> (i32, i32) {
 
 // Bitcast facts reinterpret exact same-width lanes.
 func.def @bitcast_same_lane_raw_bits() -> (f32, i32) {
-  %lhs_bits = scalar.constant 1065353216 : i32
-  %rhs_bits = scalar.constant 1073741824 : i32
-  %bits = vector.from_elements %lhs_bits, %rhs_bits : vector<2xi32>
+  %bits = vector.constanti [1065353216, 1073741824] : vector<2xi32>
   %floats = vector.bitcast %bits : vector<2xi32> to vector<2xf32>
-  %lhs_value = scalar.constant 1.0 : f32
-  %rhs_value = scalar.constant 2.0 : f32
-  %float_values = vector.from_elements %lhs_value, %rhs_value : vector<2xf32>
+  %float_values = vector.constantf [1.0, 2.0] : vector<2xf32>
   %roundtrip = vector.bitcast %float_values : vector<2xf32> to vector<2xi32>
   %r0 = vector.extract %floats[0] : vector<2xf32> -> f32
   %r1 = vector.extract %roundtrip[1] : vector<2xi32> -> i32
@@ -555,11 +528,7 @@ func.def @bitcast_same_lane_raw_bits() -> (f32, i32) {
 // The signed results also prove that the retained raw bits are interpreted in
 // the destination element domain.
 func.def @bitcast_split_integer_lanes() -> (i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8) {
-  %a = scalar.constant 50462976 : i32
-  %b = scalar.constant 117835012 : i32
-  %c = scalar.constant 185207048 : i32
-  %d = scalar.constant -2130739456 : i32
-  %packed = vector.from_elements %a, %b, %c, %d : vector<4xi32>
+  %packed = vector.constanti [50462976, 117835012, 185207048, -2130739456] : vector<4xi32>
   %bytes = vector.bitcast %packed : vector<4xi32> to vector<16xi8>
   %r0 = vector.extract %bytes[0] : vector<16xi8> -> i8
   %r1 = vector.extract %bytes[1] : vector<16xi8> -> i8
@@ -605,23 +574,7 @@ func.def @bitcast_split_integer_lanes() -> (i8, i8, i8, i8, i8, i8, i8, i8, i8, 
 
 // Joining narrow exact lanes uses the same low-lane-first bit order.
 func.def @bitcast_join_integer_lanes() -> (i32, i32, i32, i32) {
-  %c0 = scalar.constant 0 : i8
-  %c1 = scalar.constant 1 : i8
-  %c2 = scalar.constant 2 : i8
-  %c3 = scalar.constant 3 : i8
-  %c4 = scalar.constant 4 : i8
-  %c5 = scalar.constant 5 : i8
-  %c6 = scalar.constant 6 : i8
-  %c7 = scalar.constant 7 : i8
-  %c8 = scalar.constant 8 : i8
-  %c9 = scalar.constant 9 : i8
-  %c10 = scalar.constant 10 : i8
-  %c11 = scalar.constant 11 : i8
-  %c12 = scalar.constant 12 : i8
-  %c13 = scalar.constant 13 : i8
-  %c14 = scalar.constant 14 : i8
-  %c15 = scalar.constant 15 : i8
-  %bytes = vector.from_elements %c0, %c1, %c2, %c3, %c4, %c5, %c6, %c7, %c8, %c9, %c10, %c11, %c12, %c13, %c14, %c15 : vector<16xi8>
+  %bytes = vector.constanti [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] : vector<16xi8>
   %packed = vector.bitcast %bytes : vector<16xi8> to vector<4xi32>
   %r0 = vector.extract %packed[0] : vector<4xi32> -> i32
   %r1 = vector.extract %packed[1] : vector<4xi32> -> i32
@@ -656,12 +609,8 @@ func.def @bitcast_join_requires_exact_lanes(%dynamic: i8) -> (i32) {
 
 // Small per-lane facts compose with uniform facts through lanewise integer ops.
 func.def @small_lanewise_with_uniform_then_reduce() -> (i32) {
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %c4 = scalar.constant 4 : i32
   %c10 = scalar.constant 10 : i32
-  %v = vector.from_elements %c1, %c2, %c3, %c4 : vector<4xi32>
+  %v = vector.constanti [1, 2, 3, 4] : vector<4xi32>
   %offset = vector.splat %c10 : vector<4xi32>
   %sum = vector.addi %v, %offset : vector<4xi32>
   %c0 = scalar.constant 0 : i32
@@ -709,10 +658,7 @@ func.def @wave2_integer_uniform_facts() -> (i32, i32, i32, i32, i32) {
 
 // Bit-count vector facts use the declared integer element width for each lane.
 func.def @wave2_bit_count_small_lanes() -> (i32, i32, i32) {
-  %c1 = scalar.constant 1 : i32
-  %c8 = scalar.constant 8 : i32
-  %cn1 = scalar.constant -1 : i32
-  %v = vector.from_elements %c1, %c8, %cn1 : vector<3xi32>
+  %v = vector.constanti [1, 8, -1] : vector<3xi32>
   %clz = vector.ctlzi %v : vector<3xi32>
   %ctz = vector.cttzi %v : vector<3xi32>
   %pop = vector.ctpopi %v : vector<3xi32>
@@ -733,12 +679,8 @@ func.def @wave2_bit_count_small_lanes() -> (i32, i32, i32) {
 
 // Rotate facts reduce each signed lane amount modulo the declared lane width.
 func.def @wave2_rotate_small_lanes() -> (i8, i8, i8, i8) {
-  %v0 = scalar.constant -127 : i8
-  %v1 = scalar.constant 1 : i8
-  %a0 = scalar.constant 9 : i8
-  %a1 = scalar.constant -1 : i8
-  %values = vector.from_elements %v0, %v1 : vector<2xi8>
-  %amounts = vector.from_elements %a0, %a1 : vector<2xi8>
+  %values = vector.constanti [-127, 1] : vector<2xi8>
+  %amounts = vector.constanti [9, -1] : vector<2xi8>
   %left = vector.rotli %values, %amounts : vector<2xi8>
   %right = vector.rotri %values, %amounts : vector<2xi8>
   %l0 = vector.extract %left[0] : vector<2xi8> -> i8
@@ -761,9 +703,7 @@ func.def @wave2_rotate_small_lanes() -> (i8, i8, i8, i8) {
 // Bitfield facts interpret exact lane payloads as raw typed bits, so both
 // unsigned and signed field extraction can fold through scalar extracts.
 func.def @bitfield_extract_small_lanes() -> (i32, i32) {
-  %a0 = scalar.constant 31 : i16
-  %a1 = scalar.constant 240 : i16
-  %v = vector.from_elements %a0, %a1 : vector<2xi16>
+  %v = vector.constanti [31, 240] : vector<2xi16>
   %lo = vector.bitfield.extractu %v {offset = 0, width = 4} : vector<2xi16> -> vector<2xi32>
   %hi = vector.bitfield.extracts %v {offset = 4, width = 4} : vector<2xi16> -> vector<2xi32>
   %r0 = vector.extract %lo[0] : vector<2xi32> -> i32
@@ -873,11 +813,7 @@ func.def @turn_trig_uniform_exact_quadrants() -> (f32, f32, f32, f32) {
 // Bitpack and bitunpack facts follow the same little-endian bitstream order as
 // vector-to-scalar lowering, including fields that share one storage lane.
 func.def @bitpack_bitunpack_q4_round_trip() -> (i8, i8, i8) {
-  %c0 = scalar.constant 0 : i8
-  %c1 = scalar.constant 1 : i8
-  %c2 = scalar.constant 2 : i8
-  %c3 = scalar.constant 3 : i8
-  %codes = vector.from_elements %c0, %c1, %c2, %c3 : vector<4xi8>
+  %codes = vector.constanti [0, 1, 2, 3] : vector<4xi8>
   %packed = vector.bitpack<4> %codes : vector<4xi8> -> vector<2xi8>
   %unpacked = vector.bitunpacku<4> %packed : vector<2xi8> -> vector<4xi8>
   %signed = vector.bitunpacks<4> %packed : vector<2xi8> -> vector<4xi8>
@@ -922,14 +858,8 @@ func.def @bitunpack_large_uniform_bounds(%packed: vector<32xi8>) -> (i64, i64, i
 
 // Table lookup facts compose exact code lanes with explicit register tables.
 func.def @table_lookup_small_lanes() -> (f16, f16) {
-  %g0 = scalar.constant -1.0 : f16
-  %g1 = scalar.constant -0.5 : f16
-  %g2 = scalar.constant 0.5 : f16
-  %g3 = scalar.constant 1.0 : f16
-  %grid = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xf16>
-  %i0 = scalar.constant 3 : i8
-  %i1 = scalar.constant 1 : i8
-  %indices = vector.from_elements %i0, %i1 : vector<2xi8>
+  %grid = vector.constantf [-1.0, -0.5, 0.5, 1.0] : vector<4xf16>
+  %indices = vector.constanti [3, 1] : vector<2xi8>
   %values = vector.table.lookup %grid[%indices] : vector<4xf16>, vector<2xi8> -> vector<2xf16>
   %r0 = vector.extract %values[0] : vector<2xf16> -> f16
   %r1 = vector.extract %values[1] : vector<2xf16> -> f16
@@ -949,9 +879,7 @@ func.def @table_lookup_mixed_quarters() -> (i8, i8, i8, i8) {
   %base = scalar.constant -127 : i8
   %step = scalar.constant 16 : i8
   %table = vector.iota %base step %step : vector<16xi8>
-  %low = scalar.constant 28 : i8
-  %high = scalar.constant 122 : i8
-  %packed = vector.from_elements %low, %high : vector<2xi8>
+  %packed = vector.constanti [28, 122] : vector<2xi8>
   %codes = vector.bitunpacku<4> %packed : vector<2xi8> -> vector<4xi8>
   %values = vector.table.lookup %table[%codes] : vector<16xi8>, vector<4xi8> -> vector<4xi8>
   %r0 = vector.extract %values[0] : vector<4xi8> -> i8
@@ -973,14 +901,8 @@ func.def @table_lookup_mixed_quarters() -> (i8, i8, i8, i8) {
 
 // Table quantization facts count ordered threshold comparisons directly.
 func.def @table_quantize_small_lanes() -> (i8, i8, i8) {
-  %t0 = scalar.constant -1.0 : f16
-  %t1 = scalar.constant 0.0 : f16
-  %t2 = scalar.constant 1.0 : f16
-  %thresholds = vector.from_elements %t0, %t1, %t2 : vector<3xf16>
-  %v0 = scalar.constant -2.0 : f16
-  %v1 = scalar.constant 0.0 : f16
-  %v2 = scalar.constant 2.0 : f16
-  %values = vector.from_elements %v0, %v1, %v2 : vector<3xf16>
+  %thresholds = vector.constantf [-1.0, 0.0, 1.0] : vector<3xf16>
+  %values = vector.constantf [-2.0, 0.0, 2.0] : vector<3xf16>
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = upper} : vector<3xf16>, vector<3xf16> -> vector<3xi8>
   %r0 = vector.extract %codes[0] : vector<3xi8> -> i8
   %r1 = vector.extract %codes[1] : vector<3xi8> -> i8
@@ -1000,11 +922,7 @@ func.def @table_quantize_small_lanes() -> (i8, i8, i8) {
 // Hadamard facts use the same staged butterfly as scalar lowering so exact
 // vectors can fold without constructing a dense transform matrix.
 func.def @transform_hadamard_small_static_lanes() -> (f32, f32, f32, f32) {
-  %c0 = scalar.constant 1.0 : f32
-  %c1 = scalar.constant 2.0 : f32
-  %c2 = scalar.constant 3.0 : f32
-  %c3 = scalar.constant 4.0 : f32
-  %v = vector.from_elements %c0, %c1, %c2, %c3 : vector<4xf32>
+  %v = vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<4xf32>
   %xf = encoding.define #transform.hadamard : encoding<transform>
   %r = vector.transform %v, %xf : vector<4xf32>, encoding<transform> -> vector<4xf32>
   %r0 = vector.extract %r[0] : vector<4xf32> -> f32
@@ -1026,11 +944,7 @@ func.def @transform_hadamard_small_static_lanes() -> (f32, f32, f32, f32) {
 
 // Orthonormal normalization scales the staged butterfly by 1/sqrt(N).
 func.def @transform_hadamard_orthonormal_small_static_lanes() -> (f32, f32, f32, f32) {
-  %c0 = scalar.constant 1.0 : f32
-  %c1 = scalar.constant 2.0 : f32
-  %c2 = scalar.constant 3.0 : f32
-  %c3 = scalar.constant 4.0 : f32
-  %v = vector.from_elements %c0, %c1, %c2, %c3 : vector<4xf32>
+  %v = vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<4xf32>
   %xf = encoding.define #transform.hadamard<normalization=orthonormal> : encoding<transform>
   %r = vector.transform %v, %xf : vector<4xf32>, encoding<transform> -> vector<4xf32>
   %r0 = vector.extract %r[0] : vector<4xf32> -> f32
@@ -1053,11 +967,7 @@ func.def @transform_hadamard_orthonormal_small_static_lanes() -> (f32, f32, f32,
 // Transform facts mirror the staged f32 additions emitted by reference
 // scalarization instead of summing a lane in host-double precision.
 func.def @transform_hadamard_rounds_each_step() -> (f32) {
-  %large = scalar.constant 16777216.0 : f32
-  %c1 = scalar.constant 1.0 : f32
-  %negative_large = scalar.constant -16777216.0 : f32
-  %c0 = scalar.constant 0.0 : f32
-  %v = vector.from_elements %large, %c1, %negative_large, %c0 : vector<4xf32>
+  %v = vector.constantf [16777216.0, 1.0, -16777216.0, 0.0] : vector<4xf32>
   %xf = encoding.define #transform.hadamard : encoding<transform>
   %r = vector.transform %v, %xf : vector<4xf32>, encoding<transform> -> vector<4xf32>
   %r0 = vector.extract %r[0] : vector<4xf32> -> f32
@@ -1101,18 +1011,14 @@ func.def @wave2_float_predicate_facts() -> (i1, i1, i1, f32) {
 
 // Static extracts from small vector summaries are scalar facts immediately.
 func.def @extract_from_small_static_lanes() -> (i32) {
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %c4 = scalar.constant 4 : i32
-  %v = vector.from_elements %c1, %c2, %c3, %c4 : vector<4xi32>
+  %v = vector.constanti [1, 2, 3, 4] : vector<4xi32>
   %r = vector.extract %v[2] : vector<4xi32> -> i32
   func.return %r : i32
 }
 // ----
 func.def @extract_from_small_static_lanes() -> (i32) {
-  %c3 = scalar.constant 3 : i32
-  func.return %c3 : i32
+  %r = scalar.constant 3 : i32
+  func.return %r : i32
 }
 
 // ====
@@ -1120,13 +1026,7 @@ func.def @extract_from_small_static_lanes() -> (i32) {
 // Multi-axis extracts use row-major logical lane order and partial extracts
 // preserve the tail-vector fact summary.
 func.def @extract_rank2_small_static_lanes() -> (i32, i32) {
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %c4 = scalar.constant 4 : i32
-  %c5 = scalar.constant 5 : i32
-  %c6 = scalar.constant 6 : i32
-  %v = vector.from_elements %c1, %c2, %c3, %c4, %c5, %c6 : vector<2x3xi32>
+  %v = vector.constanti [1, 2, 3, 4, 5, 6] : vector<2x3xi32>
   %element = vector.extract %v[1, 2] : vector<2x3xi32> -> i32
   %row = vector.extract %v[1] : vector<2x3xi32> -> vector<3xi32>
   %c0 = scalar.constant 0 : i32
@@ -1135,20 +1035,16 @@ func.def @extract_rank2_small_static_lanes() -> (i32, i32) {
 }
 // ----
 func.def @extract_rank2_small_static_lanes() -> (i32, i32) {
-  %c6 = scalar.constant 6 : i32
+  %element = scalar.constant 6 : i32
   %sum = scalar.constant 15 : i32
-  func.return %c6, %sum : i32, i32
+  func.return %element, %sum : i32, i32
 }
 
 // ====
 
 // Shuffle remaps small per-lane summaries instead of dropping them.
 func.def @shuffle_small_static_lanes_then_extract() -> (i32) {
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %c4 = scalar.constant 4 : i32
-  %v = vector.from_elements %c1, %c2, %c3, %c4 : vector<4xi32>
+  %v = vector.constanti [1, 2, 3, 4] : vector<4xi32>
   %reversed = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
   %r = vector.extract %reversed[0] : vector<4xi32> -> i32
   func.return %r : i32
@@ -1164,16 +1060,10 @@ func.def @shuffle_small_static_lanes_then_extract() -> (i32) {
 // Small mask summaries let vector.select keep lane-specific facts when the
 // selected values also have lane-queryable summaries.
 func.def @select_small_mask_then_reduce() -> (i32) {
-  %true = scalar.constant true : i1
-  %false = scalar.constant false : i1
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %c4 = scalar.constant 4 : i32
   %c10 = scalar.constant 10 : i32
-  %mask = vector.from_elements %true, %false, %true, %false : vector<4xi1>
+  %mask = vector.constanti [1, 0, 1, 0] : vector<4xi1>
   %a = vector.splat %c10 : vector<4xi32>
-  %b = vector.from_elements %c1, %c2, %c3, %c4 : vector<4xi32>
+  %b = vector.constanti [1, 2, 3, 4] : vector<4xi32>
   %selected = vector.select %mask, %a, %b : vector<4xi32>
   %c0 = scalar.constant 0 : i32
   %r = vector.reduce<addi> %selected, %c0 : vector<4xi32>, i32
@@ -1189,13 +1079,9 @@ func.def @select_small_mask_then_reduce() -> (i32) {
 
 // Unknown per-lane masks preserve the meet of the selected lane facts.
 func.def @select_unknown_mask_preserves_lane_meets(%m0: i1, %m1: i1, %m2: i1, %m3: i1) -> (i64, i64, i64, i64) {
-  %c0 = scalar.constant 0 : i32
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
   %sentinel = scalar.constant 2147483647 : i32
   %mask = vector.from_elements %m0, %m1, %m2, %m3 : vector<4xi1>
-  %indices = vector.from_elements %c0, %c1, %c2, %c3 : vector<4xi32>
+  %indices = vector.constanti [0, 1, 2, 3] : vector<4xi32>
   %sentinels = vector.splat %sentinel : vector<4xi32>
   %selected = vector.select %mask, %indices, %sentinels : vector<4xi32>
   %first = vector.extract %selected[0] : vector<4xi32> -> i32
@@ -1278,13 +1164,9 @@ func.def @select_cmpf_mask_preserves_iota_lane_meets(%scores: vector<4xf32>, %be
 
 // Dot products can fold small explicit lane vectors.
 func.def @dotf_small_static_lanes() -> (f32) {
-  %a0 = scalar.constant 1.0 : f32
-  %a1 = scalar.constant 2.0 : f32
-  %b0 = scalar.constant 3.0 : f32
-  %b1 = scalar.constant 4.0 : f32
   %init = scalar.constant 5.0 : f32
-  %a = vector.from_elements %a0, %a1 : vector<2xf32>
-  %b = vector.from_elements %b0, %b1 : vector<2xf32>
+  %a = vector.constantf [1.0, 2.0] : vector<2xf32>
+  %b = vector.constantf [3.0, 4.0] : vector<2xf32>
   %r = vector.dotf %a, %b, %init : vector<2xf32>, vector<2xf32>, f32
   func.return %r : f32
 }
@@ -1299,19 +1181,9 @@ func.def @dotf_small_static_lanes() -> (f32) {
 // Grouped f16 dot facts follow the same last-axis pairing as vector.dot2f
 // lowering: each result lane consumes two adjacent source lanes.
 func.def @dot2f_small_static_lanes() -> (f32, f32) {
-  %a0 = scalar.constant 1.0 : f16
-  %a1 = scalar.constant 2.0 : f16
-  %a2 = scalar.constant 3.0 : f16
-  %a3 = scalar.constant 4.0 : f16
-  %b0 = scalar.constant 5.0 : f16
-  %b1 = scalar.constant 6.0 : f16
-  %b2 = scalar.constant 7.0 : f16
-  %b3 = scalar.constant 8.0 : f16
-  %acc0 = scalar.constant 10.0 : f32
-  %acc1 = scalar.constant 20.0 : f32
-  %a = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xf16>
-  %b = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xf16>
-  %acc = vector.from_elements %acc0, %acc1 : vector<2xf32>
+  %a = vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<4xf16>
+  %b = vector.constantf [5.0, 6.0, 7.0, 8.0] : vector<4xf16>
+  %acc = vector.constantf [10.0, 20.0] : vector<2xf32>
   %r = vector.dot2f %a, %b, %acc : vector<4xf16>, vector<4xf16>, vector<2xf32>
   %r0 = vector.extract %r[0] : vector<2xf32> -> f32
   %r1 = vector.extract %r[1] : vector<2xf32> -> f32
@@ -1328,18 +1200,9 @@ func.def @dot2f_small_static_lanes() -> (f32, f32) {
 
 // Grouped i8 dot facts preserve signedness choices from the template kind.
 func.def @dot4i_small_static_lanes() -> (i32) {
-  %a0 = scalar.constant -1 : i8
-  %a1 = scalar.constant 2 : i8
-  %a2 = scalar.constant -3 : i8
-  %a3 = scalar.constant 4 : i8
-  %b0 = scalar.constant -1 : i8
-  %b1 = scalar.constant 6 : i8
-  %b2 = scalar.constant 7 : i8
-  %b3 = scalar.constant 8 : i8
-  %acc0 = scalar.constant 100 : i32
-  %a = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xi8>
-  %b = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xi8>
-  %acc = vector.from_elements %acc0 : vector<1xi32>
+  %a = vector.constanti [-1, 2, -3, 4] : vector<4xi8>
+  %b = vector.constanti [-1, 6, 7, 8] : vector<4xi8>
+  %acc = vector.constanti [100] : vector<1xi32>
   %r = vector.dot4i<s8u8> %a, %b, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   %r0 = vector.extract %r[0] : vector<1xi32> -> i32
   func.return %r0 : i32
@@ -1354,12 +1217,9 @@ func.def @dot4i_small_static_lanes() -> (i32) {
 
 // Packed i4 dot facts unpack little-endian nibbles with per-side signedness.
 func.def @dot8i4_small_static_lanes() -> (i32) {
-  %lhs0 = scalar.constant 124076833 : i32
-  %rhs0 = scalar.constant 158027055 : i32
-  %acc0 = scalar.constant 100 : i32
-  %lhs = vector.from_elements %lhs0 : vector<1xi32>
-  %rhs = vector.from_elements %rhs0 : vector<1xi32>
-  %acc = vector.from_elements %acc0 : vector<1xi32>
+  %lhs = vector.constanti [124076833] : vector<1xi32>
+  %rhs = vector.constanti [158027055] : vector<1xi32>
+  %acc = vector.constanti [100] : vector<1xi32>
   %r = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<1xi32>
   %r0 = vector.extract %r[0] : vector<1xi32> -> i32
   func.return %r0 : i32
@@ -1374,19 +1234,14 @@ func.def @dot8i4_small_static_lanes() -> (i32) {
 
 // Integer dot facts retain exact results when accumulation wraps modulo i32.
 func.def @integer_dot_facts_wrap_i32() -> (i32, i32) {
-  %c255_i8 = scalar.constant -1 : i8
-  %c1_i8 = scalar.constant 1 : i8
-  %c0_i8 = scalar.constant 0 : i8
-  %lhs4 = vector.from_elements %c255_i8, %c0_i8, %c0_i8, %c0_i8 : vector<4xi8>
-  %rhs4 = vector.from_elements %c1_i8, %c0_i8, %c0_i8, %c0_i8 : vector<4xi8>
-  %max = scalar.constant 2147483647 : i32
-  %acc = vector.from_elements %max : vector<1xi32>
+  %lhs4 = vector.constanti [-1, 0, 0, 0] : vector<4xi8>
+  %rhs4 = vector.constanti [1, 0, 0, 0] : vector<4xi8>
+  %acc = vector.constanti [2147483647] : vector<1xi32>
   %dot4 = vector.dot4i<u8s8> %lhs4, %rhs4, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   %result4 = vector.extract %dot4[0] : vector<1xi32> -> i32
 
-  %packed_one = scalar.constant 1 : i32
-  %lhs8 = vector.from_elements %packed_one : vector<1xi32>
-  %rhs8 = vector.from_elements %packed_one : vector<1xi32>
+  %lhs8 = vector.constanti [1] : vector<1xi32>
+  %rhs8 = vector.constanti [1] : vector<1xi32>
   %dot8 = vector.dot8i4<u4u4> %lhs8, %rhs8, %acc : vector<1xi32>
   %result8 = vector.extract %dot8[0] : vector<1xi32> -> i32
   func.return %result4, %result8 : i32, i32
@@ -1423,15 +1278,9 @@ func.def @dot8i4_uniform_dynamic_identity(%n: index) -> (i32) {
 // Packed fp8/bf8 dot facts decode little-endian bytes according to the
 // template kind. 0x38 is fp8(E4M3) 1.0, and 0x3c is bf8(E5M2) 1.0.
 func.def @dot4f8_small_static_lanes() -> (f32, f32) {
-  %lhs0 = scalar.constant 943208504 : i32
-  %rhs0 = scalar.constant 1010580540 : i32
-  %lhs1 = scalar.constant 0 : i32
-  %rhs1 = scalar.constant 0 : i32
-  %acc0 = scalar.constant 5.0 : f32
-  %acc1 = scalar.constant -3.0 : f32
-  %lhs = vector.from_elements %lhs0, %lhs1 : vector<2xi32>
-  %rhs = vector.from_elements %rhs0, %rhs1 : vector<2xi32>
-  %acc = vector.from_elements %acc0, %acc1 : vector<2xf32>
+  %lhs = vector.constanti [943208504, 0] : vector<2xi32>
+  %rhs = vector.constanti [1010580540, 0] : vector<2xi32>
+  %acc = vector.constantf [5.0, -3.0] : vector<2xf32>
   %r = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<2xi32>, vector<2xf32>
   %r0 = vector.extract %r[0] : vector<2xf32> -> f32
   %r1 = vector.extract %r[1] : vector<2xf32> -> f32
@@ -1448,12 +1297,9 @@ func.def @dot4f8_small_static_lanes() -> (f32, f32) {
 
 // All template spellings decode the selected lhs/rhs field formats.
 func.def @dot4f8_all_kind_ones() -> (f32, f32, f32, f32) {
-  %fp8_unit_lane_word = scalar.constant 943208504 : i32
-  %bf8_unit_lane_word = scalar.constant 1010580540 : i32
-  %c0 = scalar.constant 0.0 : f32
-  %fp8 = vector.from_elements %fp8_unit_lane_word : vector<1xi32>
-  %bf8 = vector.from_elements %bf8_unit_lane_word : vector<1xi32>
-  %acc = vector.from_elements %c0 : vector<1xf32>
+  %fp8 = vector.constanti [943208504] : vector<1xi32>
+  %bf8 = vector.constanti [1010580540] : vector<1xi32>
+  %acc = vector.constantf [0.0] : vector<1xf32>
   %r0v = vector.dot4f8<fp8bf8> %fp8, %bf8, %acc : vector<1xi32>, vector<1xf32>
   %r1v = vector.dot4f8<bf8fp8> %bf8, %fp8, %acc : vector<1xi32>, vector<1xf32>
   %r2v = vector.dot4f8<fp8fp8> %fp8, %fp8, %acc : vector<1xi32>, vector<1xf32>
@@ -1621,18 +1467,12 @@ func.def @cfg_join_uniform_vector_facts(%condition: i1) -> (i64, i64) {
 // Small static summaries meet corresponding lanes instead of flattening the
 // whole vector to one aggregate scalar range.
 func.def @cfg_join_small_static_lane_facts(%condition: i1) -> (i64, i64, i64, i64) {
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %c4 = scalar.constant 4 : i32
-  %c5 = scalar.constant 5 : i32
-  %c7 = scalar.constant 7 : i32
   cfg.cond_br %condition, ^left, ^right
 ^left:
-  %left_value = vector.from_elements %c1, %c2, %c3, %c4 : vector<4xi32>
+  %left_value = vector.constanti [1, 2, 3, 4] : vector<4xi32>
   cfg.br ^join(%left_value: vector<4xi32>)
 ^right:
-  %right_value = vector.from_elements %c5, %c2, %c7, %c4 : vector<4xi32>
+  %right_value = vector.constanti [5, 2, 7, 4] : vector<4xi32>
   cfg.br ^join(%right_value: vector<4xi32>)
 ^join(%value: vector<4xi32>):
   %lane0 = vector.extract %value[0] : vector<4xi32> -> i32
@@ -1646,18 +1486,12 @@ func.def @cfg_join_small_static_lane_facts(%condition: i1) -> (i64, i64, i64, i6
 
 // ----
 func.def @cfg_join_small_static_lane_facts(%condition: i1) -> (i64, i64, i64, i64) {
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %c4 = scalar.constant 4 : i32
-  %c5 = scalar.constant 5 : i32
-  %c7 = scalar.constant 7 : i32
   cfg.cond_br %condition, ^left, ^right
 ^left:
-  %left_value = vector.from_elements %c1, %c2, %c3, %c4 : vector<4xi32>
+  %left_value = vector.constanti [1, 2, 3, 4] : vector<4xi32>
   cfg.br ^join(%left_value: vector<4xi32>)
 ^right:
-  %right_value = vector.from_elements %c5, %c2, %c7, %c4 : vector<4xi32>
+  %right_value = vector.constanti [5, 2, 7, 4] : vector<4xi32>
   cfg.br ^join(%right_value: vector<4xi32>)
 ^join(%value: vector<4xi32>):
   %lane0_lo = scalar.constant 1 : i64
@@ -1672,15 +1506,13 @@ func.def @cfg_join_small_static_lane_facts(%condition: i1) -> (i64, i64, i64, i6
 // A uniform summary can meet a bounded per-lane summary without discarding
 // lanes whose fact remains exact.
 func.def @cfg_join_uniform_and_small_static_facts(%condition: i1) -> (i64, i64, i64, i64) {
-  %c2 = scalar.constant 2 : i32
   %c4 = scalar.constant 4 : i32
-  %c8 = scalar.constant 8 : i32
   cfg.cond_br %condition, ^uniform, ^lanes
 ^uniform:
   %uniform_value = vector.splat %c4 : vector<4xi32>
   cfg.br ^join(%uniform_value: vector<4xi32>)
 ^lanes:
-  %lane_value = vector.from_elements %c2, %c4, %c8, %c4 : vector<4xi32>
+  %lane_value = vector.constanti [2, 4, 8, 4] : vector<4xi32>
   cfg.br ^join(%lane_value: vector<4xi32>)
 ^join(%value: vector<4xi32>):
   %lane0 = vector.extract %value[0] : vector<4xi32> -> i32
@@ -1694,15 +1526,12 @@ func.def @cfg_join_uniform_and_small_static_facts(%condition: i1) -> (i64, i64, 
 
 // ----
 func.def @cfg_join_uniform_and_small_static_facts(%condition: i1) -> (i64, i64, i64, i64) {
-  %c2 = scalar.constant 2 : i32
-  %c4 = scalar.constant 4 : i32
-  %c8 = scalar.constant 8 : i32
   cfg.cond_br %condition, ^uniform, ^lanes
 ^uniform:
   %uniform_value = vector.splati 4 : vector<4xi32>
   cfg.br ^join(%uniform_value: vector<4xi32>)
 ^lanes:
-  %lane_value = vector.from_elements %c2, %c4, %c8, %c4 : vector<4xi32>
+  %lane_value = vector.constanti [2, 4, 8, 4] : vector<4xi32>
   cfg.br ^join(%lane_value: vector<4xi32>)
 ^join(%value: vector<4xi32>):
   %lane0_lo = scalar.constant 2 : i64
@@ -1718,15 +1547,13 @@ func.def @cfg_join_uniform_and_small_static_facts(%condition: i1) -> (i64, i64, 
 // block arguments. Side effects keep both regions present so this crosses the
 // generic RegionBranch summary path.
 func.def @region_branch_join_uniform_and_small_static_facts(%condition: i1) -> (i64, i64, i64, i64) {
-  %c2 = scalar.constant 2 : i32
   %c4 = scalar.constant 4 : i32
-  %c8 = scalar.constant 8 : i32
   %value = scf.if %condition -> (vector<4xi32>) {
     %uniform_value = vector.splat %c4 : vector<4xi32>
     test.use %uniform_value : vector<4xi32>
     scf.yield %uniform_value : vector<4xi32>
   } else {
-    %lane_value = vector.from_elements %c2, %c4, %c8, %c4 : vector<4xi32>
+    %lane_value = vector.constanti [2, 4, 8, 4] : vector<4xi32>
     test.use %lane_value : vector<4xi32>
     scf.yield %lane_value : vector<4xi32>
   }
@@ -1741,14 +1568,11 @@ func.def @region_branch_join_uniform_and_small_static_facts(%condition: i1) -> (
 
 // ----
 func.def @region_branch_join_uniform_and_small_static_facts(%condition: i1) -> (i64, i64, i64, i64) {
-  %c2 = scalar.constant 2 : i32
-  %c4 = scalar.constant 4 : i32
-  %c8 = scalar.constant 8 : i32
   scf.if %condition {
     %uniform_value = vector.splati 4 : vector<4xi32>
     test.use %uniform_value : vector<4xi32>
   } else {
-    %lane_value = vector.from_elements %c2, %c4, %c8, %c4 : vector<4xi32>
+    %lane_value = vector.constanti [2, 4, 8, 4] : vector<4xi32>
     test.use %lane_value : vector<4xi32>
   }
   %lane0_lo = scalar.constant 2 : i64
@@ -1871,12 +1695,8 @@ func.def @loop_join_small_static_lane_facts(%n: index) -> (i64, i64, i64, i64) {
   %c0 = index.constant 0 : index
   %n2 = index.assume %n [range(%n, 0, 4)] : index
   %c1 = index.constant 1 : index
-  %v0 = scalar.constant 0 : i32
-  %v4 = scalar.constant 4 : i32
-  %v6 = scalar.constant 6 : i32
-  %v10 = scalar.constant 10 : i32
-  %initial = vector.from_elements %v0, %v10 : vector<2xi32>
-  %backedge = vector.from_elements %v4, %v6 : vector<2xi32>
+  %initial = vector.constanti [0, 10] : vector<2xi32>
+  %backedge = vector.constanti [4, 6] : vector<2xi32>
   %result = scf.for %iv = [%c0 to %n2 step %c1](%carried = %initial : vector<2xi32>) -> (vector<2xi32>) {
     scf.yield %backedge : vector<2xi32>
   }
@@ -1906,8 +1726,7 @@ func.def @loop_widens_changing_small_static_lane_facts(%n: index) -> (i64, i64) 
   %c0 = index.constant 0 : index
   %n2 = index.assume %n [range(%n, 1, 8)] : index
   %c1 = index.constant 1 : index
-  %v0 = scalar.constant 0 : i32
-  %initial = vector.from_elements %v0, %v0 : vector<2xi32>
+  %initial = vector.constanti [0, 0] : vector<2xi32>
   %increment = vector.splati 1 : vector<2xi32>
   %result = scf.for %iv = [%c0 to %n2 step %c1](%carried = %initial : vector<2xi32>) -> (vector<2xi32>) {
     %next = vector.addi %carried, %increment : vector<2xi32>
@@ -2242,19 +2061,9 @@ func.def @finite_numeric_format_vector_decode_content(%payload: vector<1xi32>) -
 // Native grouped arithmetic may differ under cancellation. Compile-time
 // evaluation retains the target-independent ordered f32 reference.
 func.def @dot2f_f16_reference_cancellation() -> (f32, f32) {
-  %a0 = scalar.constant 1.0 : f16
-  %a1 = scalar.constant 2.0 : f16
-  %a2 = scalar.constant -3.0 : f16
-  %a3 = scalar.constant 4.0 : f16
-  %b0 = scalar.constant 5.0 : f16
-  %b1 = scalar.constant -6.0 : f16
-  %b2 = scalar.constant 7.0 : f16
-  %b3 = scalar.constant 8.0 : f16
-  %seed0 = scalar.constant 9.0 : f32
-  %seed1 = scalar.constant -10.0 : f32
-  %lhs = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xf16>
-  %rhs = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xf16>
-  %seed = vector.from_elements %seed0, %seed1 : vector<2xf32>
+  %lhs = vector.constantf [1.0, 2.0, -3.0, 4.0] : vector<4xf16>
+  %rhs = vector.constantf [5.0, -6.0, 7.0, 8.0] : vector<4xf16>
+  %seed = vector.constantf [9.0, -10.0] : vector<2xf32>
   %result = vector.dot2f %lhs, %rhs, %seed : vector<4xf16>, vector<4xf16>, vector<2xf32>
   %first = vector.extract %result[0] : vector<2xf32> -> f32
   %second = vector.extract %result[1] : vector<2xf32> -> f32
@@ -2273,19 +2082,9 @@ func.def @dot2f_f16_reference_cancellation() -> (f32, f32) {
 // Native grouped arithmetic may differ under cancellation. Compile-time
 // evaluation retains the target-independent ordered f32 reference.
 func.def @dot2f_bf16_reference_cancellation() -> (f32, f32) {
-  %a0 = scalar.constant 1.0 : bf16
-  %a1 = scalar.constant 2.0 : bf16
-  %a2 = scalar.constant -3.0 : bf16
-  %a3 = scalar.constant 4.0 : bf16
-  %b0 = scalar.constant 5.0 : bf16
-  %b1 = scalar.constant -6.0 : bf16
-  %b2 = scalar.constant 7.0 : bf16
-  %b3 = scalar.constant 8.0 : bf16
-  %seed0 = scalar.constant 9.0 : f32
-  %seed1 = scalar.constant -10.0 : f32
-  %lhs = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xbf16>
-  %rhs = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xbf16>
-  %seed = vector.from_elements %seed0, %seed1 : vector<2xf32>
+  %lhs = vector.constantf [1.0, 2.0, -3.0, 4.0] : vector<4xbf16>
+  %rhs = vector.constantf [5.0, -6.0, 7.0, 8.0] : vector<4xbf16>
+  %seed = vector.constantf [9.0, -10.0] : vector<2xf32>
   %result = vector.dot2f %lhs, %rhs, %seed : vector<4xbf16>, vector<4xbf16>, vector<2xf32>
   %first = vector.extract %result[0] : vector<2xf32> -> f32
   %second = vector.extract %result[1] : vector<2xf32> -> f32

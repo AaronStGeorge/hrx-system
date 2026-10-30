@@ -27,18 +27,10 @@ func.def public @write_exact_avx2_lanes(%byte_output: buffer, %word_output: buff
   %dword_view = buffer.view %dword_output[%origin] : buffer -> view<8xf32>
   %qword_view = buffer.view %qword_output[%origin] : buffer -> view<4xi64>
 
-  %i8_low = scalar.constant 1 : i8
-  %i8_high = scalar.constant -2 : i8
-  %bytes = vector.from_elements %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high, %i8_low, %i8_high : vector<16xi8>
-  %bf16_low = scalar.constant 1.5 : bf16
-  %bf16_high = scalar.constant -2.0 : bf16
-  %words = vector.from_elements %bf16_low, %bf16_high, %bf16_low, %bf16_high, %bf16_low, %bf16_high, %bf16_low, %bf16_high : vector<8xbf16>
-  %f32_low = scalar.constant 1.5 : f32
-  %f32_high = scalar.constant -2.25 : f32
-  %dwords = vector.from_elements %f32_low, %f32_high, %f32_low, %f32_high, %f32_low, %f32_high, %f32_low, %f32_high : vector<8xf32>
-  %i64_low = scalar.constant 81985529216486895 : i64
-  %i64_high = scalar.constant -2 : i64
-  %qwords = vector.from_elements %i64_low, %i64_high, %i64_low, %i64_high : vector<4xi64>
+  %bytes = vector.constanti [1, -2, 1, -2, 1, -2, 1, -2, 1, -2, 1, -2, 1, -2, 1, -2] : vector<16xi8>
+  %words = vector.constantf [1.5, -2.0, 1.5, -2.0, 1.5, -2.0, 1.5, -2.0] : vector<8xbf16>
+  %dwords = vector.constantf [1.5, -2.25, 1.5, -2.25, 1.5, -2.25, 1.5, -2.25] : vector<8xf32>
+  %qwords = vector.constanti [81985529216486895, -2, 81985529216486895, -2] : vector<4xi64>
 
   vector.store %bytes, %byte_view[0] : vector<16xi8>, view<16xi8>
   vector.store %words, %word_view[0] : vector<8xbf16>, view<8xbf16>

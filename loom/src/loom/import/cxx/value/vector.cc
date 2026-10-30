@@ -308,10 +308,63 @@ loom_value_id_t Vectors::construct(std::span<const loom_value_id_t> elements,
   return loom_op_results(op)[0];
 }
 
+loom_value_id_t Vectors::zero(const cxx::Type* source_type, cxx::AST* owner) {
+  auto output = types_.get(source_type, owner);
+  loom_op_t* op;
+  if (loom_scalar_type_is_float(loom_type_element_type(output))) {
+    check(loom_vector_splatf_build(&builder_, 0.0, output,
+                                   locations_.get(owner), &op));
+    return loom_vector_splatf_result(op);
+  }
+  check(loom_vector_splati_build(&builder_, 0, output, locations_.get(owner),
+                                 &op));
+  return loom_vector_splati_result(op);
+}
+
 loom_value_id_t Vectors::constant(const cxx::ConstValue& value,
                                   const cxx::Type* source_type,
                                   cxx::AST* owner) {
   const auto& list = *std::get<std::shared_ptr<cxx::InitializerList>>(value);
+  auto* vector = types_.native_vector(source_type);
+  auto output = types_.get(source_type, owner);
+  if (list.elements.size() > vector->elementCount()) {
+    diagnostics_.reject(unit_, owner, "too many vector initializer lanes");
+  }
+  if (loom_scalar_type_is_integer(loom_type_element_type(output))) {
+    std::vector<int64_t> values;
+    values.reserve(vector->elementCount());
+    for (const auto& element : list.elements) {
+      values.push_back(loom_attr_as_i64(scalars_.constant_attribute(
+          std::get<0>(element), vector->elementType(), owner)));
+    }
+    values.resize(vector->elementCount(), 0);
+    loom_op_t* op;
+    check(loom_vector_constanti_build(&builder_, values.data(), values.size(),
+                                      output, locations_.get(owner), &op));
+    return loom_vector_constanti_result(op);
+  }
+
+  bool can_encode_float_literals = true;
+  std::vector<double> values;
+  values.reserve(vector->elementCount());
+  for (const auto& element : list.elements) {
+    const auto& value = std::get<0>(element);
+    const auto* floating = std::get_if<cxx::ConstFloat>(&value);
+    if (floating && floating->isNaN()) {
+      can_encode_float_literals = false;
+      break;
+    }
+    values.push_back(loom_attr_as_f64(
+        scalars_.constant_attribute(value, vector->elementType(), owner)));
+  }
+  if (can_encode_float_literals) {
+    values.resize(vector->elementCount(), 0.0);
+    loom_op_t* op;
+    check(loom_vector_constantf_build(&builder_, values.data(), values.size(),
+                                      output, locations_.get(owner), &op));
+    return loom_vector_constantf_result(op);
+  }
+
   std::vector<loom_value_id_t> elements;
   elements.reserve(list.elements.size());
   for (const auto& [element, element_type] : list.elements) {

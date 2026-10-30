@@ -41,11 +41,41 @@ func.def @construction(%x: f32, %i: i32, %n: index) {
   %tail = vector.mask.range [%c0 to %n step %c1] : index -> vector<16xi1>
   %int_tail = vector.mask.range [%ci0 to %ci4 step %ci1] : i32 -> vector<4xi1>
   %c = vector.splatf 0.0 : vector<4xf32>
+  %table = vector.constanti [-128, -42, -17, -5, -1, 0, 1, 4, 7, 13, 25, 42, 59, 77, 100, 127] : vector<16xi8>
   %wide = vector.broadcast %c : vector<4xf32> -> vector<4x4xf32>
   %lane0 = vector.extract %c[0] : vector<4xf32> -> f32
   %updated = vector.insert %lane0 into %c[%n] : f32, vector<4xf32>
   %from = vector.from_elements %x, %x, %x, %x : vector<4xf32>
-  test.use %ps, %pv, %empty, %vf, %empty_splat, %vi, %lanes, %int_lanes, %dyn_lanes, %tail, %int_tail, %wide, %updated, %from : f32, vector<4xf32>, vector<0xf32>, vector<16xf32>, vector<0xf32>, vector<[%n]xi32>, vector<16xindex>, vector<4xi32>, vector<[%n]xindex>, vector<16xi1>, vector<4xi1>, vector<4x4xf32>, vector<4xf32>, vector<4xf32>
+  test.use %ps, %pv, %empty, %vf, %empty_splat, %vi, %lanes, %int_lanes, %dyn_lanes, %tail, %int_tail, %table, %wide, %updated, %from : f32, vector<4xf32>, vector<0xf32>, vector<16xf32>, vector<0xf32>, vector<[%n]xi32>, vector<16xindex>, vector<4xi32>, vector<[%n]xindex>, vector<16xi1>, vector<4xi1>, vector<16xi8>, vector<4x4xf32>, vector<4xf32>, vector<4xf32>
+  func.return
+}
+
+// ====
+
+// Dense integer literals cover every fixed-width integer element family.
+// Index and offset are address types and remain scalar or splat constructions.
+func.def @integer_literal_element_families() {
+  %i1 = vector.constanti [0, 1] : vector<2xi1>
+  %i8 = vector.constanti [-1, 2] : vector<2xi8>
+  %i16 = vector.constanti [-3, 4] : vector<2xi16>
+  %i32 = vector.constanti [-5, 6] : vector<2xi32>
+  %i64 = vector.constanti [-7, 8] : vector<2xi64>
+  test.use %i1, %i8, %i16, %i32, %i64 : vector<2xi1>, vector<2xi8>, vector<2xi16>, vector<2xi32>, vector<2xi64>
+  func.return
+}
+
+// ====
+
+// Floating literals use binary64 source spellings and the result type selects
+// each lane's target format.
+func.def @floating_literal_element_families() {
+  %f8e4m3 = vector.constantf [-1.0, 2.0] : vector<2xf8E4M3>
+  %f8e5m2 = vector.constantf [-1.0, 2.0] : vector<2xf8E5M2>
+  %f16 = vector.constantf [-3.0, 4.0] : vector<2xf16>
+  %bf16 = vector.constantf [-5.0, 6.0] : vector<2xbf16>
+  %f32 = vector.constantf [-7.0, 8.0] : vector<2xf32>
+  %f64 = vector.constantf [nan, inf, -inf, -0.0] : vector<4xf64>
+  test.use %f8e4m3, %f8e5m2, %f16, %bf16, %f32, %f64 : vector<2xf8E4M3>, vector<2xf8E5M2>, vector<2xf16>, vector<2xbf16>, vector<2xf32>, vector<4xf64>
   func.return
 }
 

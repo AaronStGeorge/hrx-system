@@ -50,15 +50,7 @@ func.def @error_function_observations(%input: f64, %narrow_output: buffer, %wide
 
 // MPFR 4.2.2 directed intervals rounded independently to binary64.
 func.def @error_function_oracle(%input: f64, %narrow_output: buffer, %wide_output: buffer) {
-  %erf0 = scalar.constant 0.71115563365351508 : f64
-  %erf1 = scalar.constant -0.71115563365351508 : f64
-  %erf2 = scalar.constant 0.96610514647531076 : f64
-  %erf3 = scalar.constant -0.96610514647531076 : f64
-  %erfc0 = scalar.constant 0.28884436634648486 : f64
-  %erfc1 = scalar.constant 1.7111556336535152 : f64
-  %erfc2 = scalar.constant 0.033894853524689274 : f64
-  %erfc3 = scalar.constant 1.9661051464753108 : f64
-  %values = vector.from_elements %erf0, %erf1, %erf2, %erf3, %erfc0, %erfc1, %erfc2, %erfc3 : vector<8xf64>
+  %values = vector.constantf [0.71115563365351508, -0.71115563365351508, 0.96610514647531076, -0.96610514647531076, 0.28884436634648486, 1.7111556336535152, 0.033894853524689274, 1.9661051464753108] : vector<8xf64>
   %origin = index.constant 0 : offset
   %narrow_results = buffer.view %narrow_output[%origin] : buffer -> view<5x8xf64>
   %wide_results = buffer.view %wide_output[%origin] : buffer -> view<8xf64>

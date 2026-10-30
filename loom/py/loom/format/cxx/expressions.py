@@ -1340,13 +1340,36 @@ class CxxExpressionRenderer(CxxRenderContext):
                 )
             self._declare(result, expression)
             return ("value",)
-        if name == "vector.from_elements":
+        if name in {
+            "vector.constanti",
+            "vector.constantf",
+            "vector.from_elements",
+        }:
             result = operation.results[0]
-            elements = ", ".join(
-                self.expression(operand) for operand in operation.operands
-            )
+            value_type = self.module.values[result].type
+            if not (
+                isinstance(value_type, ShapedType)
+                and value_type.rank == 1
+                and repr(value_type.element_type) != "i1"
+            ):
+                raise CxxRenderError(
+                    operation,
+                    "nonuniform structured or predicate vector literals have "
+                    "no native C++ carrier",
+                )
+            if name == "vector.from_elements":
+                elements = ", ".join(
+                    self.expression(operand) for operand in operation.operands
+                )
+                projected_attributes: tuple[str, ...] = ()
+            else:
+                elements = ", ".join(
+                    self._literal(value, result)
+                    for value in operation.attributes["values"]
+                )
+                projected_attributes = ("values",)
             self._declare(result, f"{self.cpp_type(result)}{{{elements}}}")
-            return ()
+            return projected_attributes
         if name == "vector.extract":
             resolved = self._resolved(operation)
             indices = self._mixed_indices(

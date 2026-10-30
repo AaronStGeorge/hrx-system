@@ -36,25 +36,9 @@ Codes4 lookup(Bytes4 packed) {
 
 // ----
 func.def public @lookup(%packed: vector<4xi8>) -> (vector<4xi8>) {
-  %2 = scalar.constant -127 : i8
-  %3 = scalar.constant -104 : i8
-  %4 = scalar.constant -83 : i8
-  %5 = scalar.constant -65 : i8
-  %6 = scalar.constant -49 : i8
-  %7 = scalar.constant -35 : i8
-  %8 = scalar.constant -22 : i8
-  %9 = scalar.constant -10 : i8
-  %10 = scalar.constant 1 : i8
-  %11 = scalar.constant 13 : i8
-  %12 = scalar.constant 25 : i8
-  %13 = scalar.constant 38 : i8
-  %14 = scalar.constant 53 : i8
-  %15 = scalar.constant 69 : i8
-  %16 = scalar.constant 89 : i8
-  %17 = scalar.constant 113 : i8
-  %table = vector.from_elements %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17 : vector<16xi8>
-  %56 = vector.splati 15 : vector<4xi8>
-  %indices = vector.andi %packed, %56 : vector<4xi8>
-  %55 = vector.table.lookup %table[%indices] : vector<16xi8>, vector<4xi8> -> vector<4xi8>
-  func.return %55 : vector<4xi8>
+  %table = vector.constanti [-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113] : vector<16xi8>
+  %40 = vector.splati 15 : vector<4xi8>
+  %indices = vector.andi %packed, %40 : vector<4xi8>
+  %39 = vector.table.lookup %table[%indices] : vector<16xi8>, vector<4xi8> -> vector<4xi8>
+  func.return %39 : vector<4xi8>
 }

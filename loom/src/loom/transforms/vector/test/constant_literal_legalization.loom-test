@@ -1,0 +1,47 @@
+// RUN: pass target-legalize{mode=eager,policy=reference-only},dce
+
+test.target<low_core> @target
+
+func.def target(@target) @integer_literal_table() -> (vector<4xi32>) {
+  %table = vector.constanti [-128, -1, 42, 127] : vector<4xi32>
+  func.return %table : vector<4xi32>
+}
+
+// ----
+test.target<low_core> @target
+
+func.def target(@target) @integer_literal_table() -> (vector<4xi32>) {
+  %2 = scalar.constant -128 : i32
+  %3 = scalar.constant -1 : i32
+  %4 = scalar.constant 42 : i32
+  %5 = scalar.constant 127 : i32
+  %7 = vector.splat %2 : vector<4xi32>
+  %8 = vector.insert %3 into %7[1] : i32, vector<4xi32>
+  %9 = vector.insert %4 into %8[2] : i32, vector<4xi32>
+  %table = vector.insert %5 into %9[3] : i32, vector<4xi32>
+  func.return %table : vector<4xi32>
+}
+
+// ====
+
+test.target<low_core> @target
+
+func.def target(@target) @floating_literal_table() -> (vector<4xf32>) {
+  %table = vector.constantf [0.0, -0.0, 2.5, -3.0] : vector<4xf32>
+  func.return %table : vector<4xf32>
+}
+
+// ----
+test.target<low_core> @target
+
+func.def target(@target) @floating_literal_table() -> (vector<4xf32>) {
+  %2 = scalar.constant 0.0 : f32
+  %3 = scalar.constant -0.0 : f32
+  %4 = scalar.constant 2.5 : f32
+  %5 = scalar.constant -3.0 : f32
+  %7 = vector.splat %2 : vector<4xf32>
+  %8 = vector.insert %3 into %7[1] : f32, vector<4xf32>
+  %9 = vector.insert %4 into %8[2] : f32, vector<4xf32>
+  %table = vector.insert %5 into %9[3] : f32, vector<4xf32>
+  func.return %table : vector<4xf32>
+}

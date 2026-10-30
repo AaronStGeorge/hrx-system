@@ -62,9 +62,7 @@ func.def @compact_masked_memory(%left: i32, %right: i32, %old: i32) -> (i32, i32
   %target = buffer.view %output[%base] : buffer -> view<2xi32>
   view.store %left, %source[0] : i32, view<2xi32>
   view.store %right, %source[1] : i32, view<2xi32>
-  %active = scalar.constant true : i1
-  %inactive = scalar.constant false : i1
-  %mask = vector.from_elements %inactive, %active, %inactive, %active : vector<4xi1>
+  %mask = vector.constanti [0, 1, 0, 1] : vector<4xi1>
   %passthrough = vector.splat %old : vector<4xi32>
   %loaded = vector.load.expand %source[0], %mask, %passthrough : view<2xi32>, vector<4xi1>, vector<4xi32>
   %lane0 = vector.extract %loaded[0] : vector<4xi32> -> i32

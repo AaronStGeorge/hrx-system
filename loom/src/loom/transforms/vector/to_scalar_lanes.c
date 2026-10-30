@@ -25,15 +25,21 @@
 #include "loom/transforms/vector/to_scalar_tables.h"
 #include "loom/transforms/vector/to_scalar_transforms.h"
 
+typedef enum loom_vector_to_scalar_lane_cache_conversion_e {
+  LOOM_VECTOR_TO_SCALAR_LANE_CACHE_IDENTITY = 0,
+  LOOM_VECTOR_TO_SCALAR_LANE_CACHE_ZERO_EXTEND = 1,
+  LOOM_VECTOR_TO_SCALAR_LANE_CACHE_SIGN_EXTEND = 2,
+} loom_vector_to_scalar_lane_cache_conversion_t;
+
 struct loom_vector_to_scalar_lane_cache_entry_t {
   // Vector SSA value whose lane was materialized.
   loom_value_id_t vector_value;
   // Static linear lane ordinal within vector_value.
   int64_t ordinal;
-  // Integer scalar type produced after extension/truncation.
+  // Scalar type produced after the recorded conversion.
   loom_type_t result_type;
-  // Integer extension mode used when casting the source lane to result_type.
-  loom_vector_to_scalar_integer_extension_t extension;
+  // Conversion applied while materializing the cached lane.
+  loom_vector_to_scalar_lane_cache_conversion_t conversion;
   // Cached scalar SSA value for the materialized and cast lane.
   loom_value_id_t lane;
   // Next entry in the state-local arena-owned cache.
@@ -335,16 +341,16 @@ iree_status_t loom_vector_to_scalar_cast_numeric_lane(
   IREE_BUILTIN_UNREACHABLE();
 }
 
-static bool loom_vector_to_scalar_lookup_cached_static_integer_lane(
+static bool loom_vector_to_scalar_lookup_cached_static_lane(
     const loom_vector_to_scalar_state_t* state, loom_value_id_t vector_value,
     int64_t ordinal, loom_type_t result_type,
-    loom_vector_to_scalar_integer_extension_t extension,
+    loom_vector_to_scalar_lane_cache_conversion_t conversion,
     loom_value_id_t* out_lane) {
   const loom_vector_to_scalar_lane_cache_entry_t* entry = state->lane_cache;
   while (entry != NULL) {
     if (entry->vector_value == vector_value && entry->ordinal == ordinal &&
         loom_type_equal(entry->result_type, result_type) &&
-        entry->extension == extension) {
+        entry->conversion == conversion) {
       *out_lane = entry->lane;
       return true;
     }
@@ -353,10 +359,11 @@ static bool loom_vector_to_scalar_lookup_cached_static_integer_lane(
   return false;
 }
 
-static iree_status_t loom_vector_to_scalar_cache_static_integer_lane(
+static iree_status_t loom_vector_to_scalar_cache_static_lane(
     loom_vector_to_scalar_state_t* state, loom_value_id_t vector_value,
     int64_t ordinal, loom_type_t result_type,
-    loom_vector_to_scalar_integer_extension_t extension, loom_value_id_t lane) {
+    loom_vector_to_scalar_lane_cache_conversion_t conversion,
+    loom_value_id_t lane) {
   loom_vector_to_scalar_lane_cache_entry_t* entry = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate(state->rewriter->arena,
                                            sizeof(*entry), (void**)&entry));
@@ -364,7 +371,7 @@ static iree_status_t loom_vector_to_scalar_cache_static_integer_lane(
       .vector_value = vector_value,
       .ordinal = ordinal,
       .result_type = result_type,
-      .extension = extension,
+      .conversion = conversion,
       .lane = lane,
       .next = state->lane_cache,
   };
@@ -377,8 +384,12 @@ iree_status_t loom_vector_to_scalar_materialize_cached_static_integer_lane(
     loom_type_t vector_type, int64_t ordinal, loom_type_t result_type,
     loom_vector_to_scalar_integer_extension_t extension,
     loom_value_id_t* out_lane) {
-  if (loom_vector_to_scalar_lookup_cached_static_integer_lane(
-          state, vector_value, ordinal, result_type, extension, out_lane)) {
+  const loom_vector_to_scalar_lane_cache_conversion_t conversion =
+      extension == LOOM_VECTOR_TO_SCALAR_INTEGER_EXTENSION_SIGN
+          ? LOOM_VECTOR_TO_SCALAR_LANE_CACHE_SIGN_EXTEND
+          : LOOM_VECTOR_TO_SCALAR_LANE_CACHE_ZERO_EXTEND;
+  if (loom_vector_to_scalar_lookup_cached_static_lane(
+          state, vector_value, ordinal, result_type, conversion, out_lane)) {
     return iree_ok_status();
   }
 
@@ -391,8 +402,8 @@ iree_status_t loom_vector_to_scalar_materialize_cached_static_integer_lane(
       state, source_lane, loom_vector_to_scalar_lane_type(vector_type),
       result_type, extension == LOOM_VECTOR_TO_SCALAR_INTEGER_EXTENSION_SIGN,
       &cast_lane));
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_cache_static_integer_lane(
-      state, vector_value, ordinal, result_type, extension, cast_lane));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_cache_static_lane(
+      state, vector_value, ordinal, result_type, conversion, cast_lane));
   *out_lane = cast_lane;
   return iree_ok_status();
 }
@@ -866,6 +877,11 @@ bool loom_vector_to_scalar_can_materialize_def_lane(
       return true;
     }
 
+    if (loom_vector_constanti_isa(def_op) ||
+        loom_vector_constantf_isa(def_op)) {
+      return true;
+    }
+
     if (loom_vector_splat_isa(def_op) ||
         loom_vector_literal_splat_isa(def_op) ||
         loom_vector_poison_isa(def_op)) {
@@ -1041,6 +1057,77 @@ static iree_status_t loom_vector_to_scalar_try_from_elements_lane(
   return status;
 }
 
+static iree_status_t loom_vector_to_scalar_build_literal_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t vector_value,
+    const loom_op_t* def_op, loom_type_t vector_type, uint16_t ordinal,
+    loom_value_id_t* out_lane) {
+  const loom_type_t lane_type = loom_vector_to_scalar_lane_type(vector_type);
+  if (loom_vector_to_scalar_lookup_cached_static_lane(
+          state, vector_value, ordinal, lane_type,
+          LOOM_VECTOR_TO_SCALAR_LANE_CACHE_IDENTITY, out_lane)) {
+    return iree_ok_status();
+  }
+  loom_attribute_t value = {0};
+  if (loom_vector_constanti_isa(def_op)) {
+    value =
+        loom_attr_i64(loom_vector_constanti_values(def_op).i64_array[ordinal]);
+  } else {
+    value = loom_attr_f64(loom_vector_constantf_values(def_op).values[ordinal]);
+  }
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_attr_constant(
+      &state->rewriter->builder, lane_type, def_op->location, value, out_lane));
+  return loom_vector_to_scalar_cache_static_lane(
+      state, vector_value, ordinal, lane_type,
+      LOOM_VECTOR_TO_SCALAR_LANE_CACHE_IDENTITY, *out_lane);
+}
+
+static iree_status_t loom_vector_to_scalar_try_literal_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t vector_value,
+    const loom_op_t* def_op, loom_type_t vector_type,
+    loom_vector_to_scalar_index_list_t indices, bool* out_materialized,
+    loom_value_id_t* out_lane) {
+  const uint16_t element_count =
+      loom_vector_constanti_isa(def_op)
+          ? loom_vector_constanti_values(def_op).count
+          : loom_vector_constantf_values(def_op).count;
+  if (!loom_vector_to_scalar_indices_are_dynamic(indices)) {
+    const int64_t ordinal = loom_vector_to_scalar_linear_ordinal_static(
+        vector_type, indices.static_indices);
+    if (ordinal < 0 || ordinal >= element_count) {
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_literal_lane(
+        state, vector_value, def_op, vector_type, (uint16_t)ordinal, out_lane));
+    *out_materialized = true;
+    return iree_ok_status();
+  }
+
+  loom_vector_to_scalar_index_term_t ordinal = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_linear_ordinal_term(
+      state, vector_type, indices, &ordinal));
+  loom_value_id_t lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_literal_lane(
+      state, vector_value, def_op, vector_type, 0, &lane));
+  for (uint16_t i = 1; i < element_count; ++i) {
+    loom_value_id_t candidate = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_literal_lane(
+        state, vector_value, def_op, vector_type, i, &candidate));
+    loom_value_id_t condition = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_term_cmp(
+        state, LOOM_INDEX_CMP_PREDICATE_EQ, ordinal,
+        loom_vector_to_scalar_static_term(i), &condition));
+    loom_op_t* select_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_scf_select_build(
+        &state->rewriter->builder, condition, candidate, lane,
+        loom_vector_to_scalar_lane_type(vector_type), state->location,
+        &select_op));
+    lane = loom_scf_select_result(select_op);
+  }
+  *out_lane = lane;
+  *out_materialized = true;
+  return iree_ok_status();
+}
+
 static iree_status_t
 loom_vector_to_scalar_try_physical_result_fragment_load_lane(
     loom_vector_to_scalar_state_t* state, loom_op_t* def_op,
@@ -1135,6 +1222,10 @@ iree_status_t loom_vector_to_scalar_try_materialize_def_lane(
   if (loom_vector_from_elements_isa(def_op)) {
     return loom_vector_to_scalar_try_from_elements_lane(
         state, def_op, vector_type, indices, out_materialized, out_lane);
+  }
+  if (loom_vector_constanti_isa(def_op) || loom_vector_constantf_isa(def_op)) {
+    return loom_vector_to_scalar_try_literal_lane(
+        state, value, def_op, vector_type, indices, out_materialized, out_lane);
   }
   if (loom_vector_splat_isa(def_op)) {
     *out_lane = loom_vector_splat_scalar(def_op);

@@ -23,14 +23,10 @@ Int4 entry(int first) {
 
 // ----
 func.def public @entry(%first: i32) -> (vector<4xi32>) {
-  %2 = scalar.constant 11 : i32
-  %3 = scalar.constant 12 : i32
-  %4 = scalar.constant 13 : i32
-  %5 = scalar.constant 14 : i32
-  %result$6 = vector.from_elements %2, %3, %4, %5 : vector<4xi32>
-  %7 = scalar.constant 0 : i32
-  %result$8 = vector.from_elements %first, %7, %7, %7 : vector<4xi32>
-  func.return %result$8 : vector<4xi32>
+  %result$2 = vector.constanti [11, 12, 13, 14] : vector<4xi32>
+  %3 = scalar.constant 0 : i32
+  %result$4 = vector.from_elements %first, %3, %3, %3 : vector<4xi32>
+  func.return %result$4 : vector<4xi32>
 }
 
 // ====
@@ -47,12 +43,11 @@ Int4 entry(int first) {
 
 // ----
 func.def public @entry(%first: i32) -> (vector<4xi32>) {
-  %2 = scalar.constant 0 : i32
-  %state_value$3 = vector.from_elements %2, %2, %2, %2 : vector<4xi32>
-  %4 = scalar.constant 9 : i32
-  %5 = scalar.constant 0 : i32
-  %state_value$6 = vector.from_elements %first, %4, %5, %5 : vector<4xi32>
-  func.return %state_value$6 : vector<4xi32>
+  %state_value$2 = vector.constanti [0, 0, 0, 0] : vector<4xi32>
+  %3 = scalar.constant 9 : i32
+  %4 = scalar.constant 0 : i32
+  %state_value$5 = vector.from_elements %first, %3, %4, %4 : vector<4xi32>
+  func.return %state_value$5 : vector<4xi32>
 }
 
 // ====
@@ -61,10 +56,9 @@ void entry(volatile UInt4* output) { *output = {}; }
 
 // ----
 func.def public @entry(%output: buffer, %output_byte_offset: offset) {
-  %2 = scalar.constant 0 : i32
-  %3 = vector.from_elements %2, %2, %2, %2 : vector<4xi32>
-  %4 = buffer.view %output[%output_byte_offset] : buffer -> view<4xi32>
-  vector.store<volatile> %3, %4[0] : vector<4xi32>, view<4xi32>
+  %2 = vector.constanti [0, 0, 0, 0] : vector<4xi32>
+  %3 = buffer.view %output[%output_byte_offset] : buffer -> view<4xi32>
+  vector.store<volatile> %2, %3[0] : vector<4xi32>, view<4xi32>
   func.return
 }
 
@@ -109,16 +103,12 @@ int entry() { return choose({1, 2, 3, 4}); }
 
 // ----
 func.def public @entry() -> (i32) {
-  %1 = scalar.constant 1 : i32
-  %2 = scalar.constant 2 : i32
-  %3 = scalar.constant 3 : i32
-  %4 = scalar.constant 4 : i32
-  %5 = vector.from_elements %1, %2, %3, %4 : vector<4xi32>
-  %6 = func.call pure @choose(%5) : (vector<4xi32>) -> (i32)
-  func.return %6 : i32
+  %1 = vector.constanti [1, 2, 3, 4] : vector<4xi32>
+  %2 = func.call pure @choose(%1) : (vector<4xi32>) -> (i32)
+  func.return %2 : i32
 }
 
 func.def @choose(%value: vector<4xi32>) -> (i32) {
-  %9 = scalar.constant 1 : i32
-  func.return %9 : i32
+  %5 = scalar.constant 1 : i32
+  func.return %5 : i32
 }

@@ -164,24 +164,20 @@ func.def public @update(%batches: buffer, %batches_byte_offset: offset, %batch: 
   %20 = scalar.assume %19 [range(%19, 0, 9223372036854775807)] : i64
   %21 = index.cast %20 : i64 to offset
   %values_byte_offset = index.add %21, %13 : offset
-  %24 = scalar.constant 1.0 : f32
-  %25 = scalar.constant 2.0 : f32
-  %26 = scalar.constant 3.0 : f32
-  %27 = scalar.constant 4.0 : f32
-  %28 = vector.from_elements %24, %25, %26, %27 : vector<4xf32>
-  %29 = scalar.extui %index : i32 to i64
-  %50 = scalar.constant 4 : i64
-  %51 = scalar.shli %29, %50 : i64
-  %32 = index.cast %values_byte_offset : offset to i64
-  %33 = scalar.addi %32, %51 : i64
-  %34 = scalar.assume %33 [range(%33, 0, 9223372036854775807)] : i64
-  %35 = index.cast %34 : i64 to offset
-  %36 = buffer.view %batches[%35] : buffer -> view<4xf32>
-  %37 = vector.load %36[0] : view<4xf32> -> vector<4xf32>
-  %38 = vector.addf %37, %28 : vector<4xf32>
-  vector.store %38, %36[0] : vector<4xf32>, view<4xf32>
-  %47 = vector.load %36[0] : view<4xf32> -> vector<4xf32>
-  func.return %47 : vector<4xf32>
+  %24 = vector.constantf [1.0, 2.0, 3.0, 4.0] : vector<4xf32>
+  %25 = scalar.extui %index : i32 to i64
+  %46 = scalar.constant 4 : i64
+  %47 = scalar.shli %25, %46 : i64
+  %28 = index.cast %values_byte_offset : offset to i64
+  %29 = scalar.addi %28, %47 : i64
+  %30 = scalar.assume %29 [range(%29, 0, 9223372036854775807)] : i64
+  %31 = index.cast %30 : i64 to offset
+  %32 = buffer.view %batches[%31] : buffer -> view<4xf32>
+  %33 = vector.load %32[0] : view<4xf32> -> vector<4xf32>
+  %34 = vector.addf %33, %24 : vector<4xf32>
+  vector.store %34, %32[0] : vector<4xf32>, view<4xf32>
+  %43 = vector.load %32[0] : view<4xf32> -> vector<4xf32>
+  func.return %43 : vector<4xf32>
 }
 
 // ====

@@ -152,6 +152,7 @@ iree_status_t loom_vector_table_lookup_simplify_indices(
   const loom_value_slice_t elements =
       loom_vector_from_elements_elements(construction);
   loom_scalar_type_t element_type = LOOM_SCALAR_TYPE_NONE;
+  bool all_indices_exact = true;
   int64_t constant_minimum = 0;
   int64_t constant_maximum = 0;
   for (uint16_t i = 0; i < elements.count; ++i) {
@@ -163,6 +164,7 @@ iree_status_t loom_vector_table_lookup_simplify_indices(
       constant_maximum = iree_max(constant_maximum, constant);
       continue;
     }
+    all_indices_exact = false;
     const loom_value_id_t value =
         loom_vector_table_unpromoted_index(rewriter, elements.values[i]);
     const loom_scalar_type_t candidate_type =
@@ -195,12 +197,38 @@ iree_status_t loom_vector_table_lookup_simplify_indices(
     return iree_ok_status();
   }
 
-  loom_value_id_t* narrowed = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      rewriter->arena, elements.count, sizeof(*narrowed), (void**)&narrowed));
+  loom_type_t narrowed_type = old_type;
+  narrowed_type.header = loom_type_make_header(LOOM_TYPE_VECTOR, element_type,
+                                               loom_type_rank(old_type),
+                                               loom_type_flags(old_type));
+  narrowed_type.encoding_id = 0;
+  narrowed_type.encoding_flags = 0;
   loom_builder_set_before(&rewriter->builder, op);
   const loom_value_id_t value_checkpoint =
       loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* narrowed_construction = NULL;
+  if (all_indices_exact) {
+    int64_t* values = NULL;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        rewriter->arena, elements.count, sizeof(*values), (void**)&values));
+    for (uint16_t i = 0; i < elements.count; ++i) {
+      const bool exact = loom_value_facts_as_exact_i64(
+          loom_rewriter_value_facts(rewriter, elements.values[i]), &values[i]);
+      IREE_ASSERT_TRUE(exact);
+    }
+    IREE_RETURN_IF_ERROR(loom_vector_constanti_build(
+        &rewriter->builder, values, elements.count, narrowed_type, op->location,
+        &narrowed_construction));
+    IREE_RETURN_IF_ERROR(loom_vector_table_replace(
+        op, rewriter, loom_vector_constanti_result(narrowed_construction),
+        loom_vector_table_lookup_table(op), value_checkpoint));
+    *out_changed = true;
+    return iree_ok_status();
+  }
+
+  loom_value_id_t* narrowed = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, elements.count, sizeof(*narrowed), (void**)&narrowed));
   for (uint16_t i = 0; i < elements.count; ++i) {
     int64_t constant = 0;
     if (loom_value_facts_as_exact_i64(
@@ -216,13 +244,6 @@ iree_status_t loom_vector_table_lookup_simplify_indices(
           loom_vector_table_unpromoted_index(rewriter, elements.values[i]);
     }
   }
-  loom_type_t narrowed_type = old_type;
-  narrowed_type.header = loom_type_make_header(LOOM_TYPE_VECTOR, element_type,
-                                               loom_type_rank(old_type),
-                                               loom_type_flags(old_type));
-  narrowed_type.encoding_id = 0;
-  narrowed_type.encoding_flags = 0;
-  loom_op_t* narrowed_construction = NULL;
   IREE_RETURN_IF_ERROR(loom_vector_from_elements_build(
       &rewriter->builder, narrowed, elements.count, narrowed_type, op->location,
       &narrowed_construction));

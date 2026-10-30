@@ -20,9 +20,7 @@ func.def @boolean_fields(%input: i8) -> (i64, i64) {
 
 // A small nonuniform vector exercises per-lane extraction facts.
 func.def @boolean_field_lanes() -> (i8, i8) {
-  %c0 = scalar.constant 0 : i8
-  %c8 = scalar.constant 8 : i8
-  %source = vector.from_elements %c0, %c8 : vector<2xi8>
+  %source = vector.constanti [0, 8] : vector<2xi8>
   %fields = vector.bitfield.extracts %source {offset = 3, width = 1} : vector<2xi8> -> vector<2xi1>
   %bytes = vector.extui %fields : vector<2xi1> to vector<2xi8>
   %a = vector.extract %bytes[0] : vector<2xi8> -> i8

@@ -194,10 +194,7 @@ func.def @classification_consumers(%lhs: vector<4xbf16>, %rhs: vector<4xbf16>) -
 
 // Exceptional lanes retain ordinary NaN and signed-zero semantics.
 func.def @exceptional_values() -> (i1, i1, i1, i1) {
-  %nan = scalar.constant nan : f32
-  %cn0 = scalar.constant -0.0 : f32
-  %infinity = scalar.constant inf : f32
-  %values = vector.from_elements %nan, %cn0, %infinity : vector<3xf32>
+  %values = vector.constantf [nan, -0.0, inf] : vector<3xf32>
   %ordered = vector.cmpf ord, %values, %values : vector<3xf32> -> vector<3xi1>
   %equal = vector.cmpf oeq, %values, %values : vector<3xf32> -> vector<3xi1>
   %unordered_equal = vector.cmpf ueq, %values, %values : vector<3xf32> -> vector<3xi1>
