@@ -1154,30 +1154,56 @@ iree_status_t loom_kernel_launch_yield_verify(
       IREE_SV("kernel.launch.serial or kernel.launch.concurrent"));
 }
 
+typedef struct loom_kernel_launch_schedule_verification_t {
+  // Module containing the schedule being verified.
+  const loom_module_t* module;
+  // Destination for invalid preparation diagnostics.
+  iree_diagnostic_emitter_t emitter;
+} loom_kernel_launch_schedule_verification_t;
+
+static iree_status_t loom_kernel_verify_launch_preparation(
+    void* user_data, loom_op_t* op, const loom_walk_context_t* context,
+    loom_walk_result_t* out_result) {
+  const loom_kernel_launch_schedule_verification_t* verification = user_data;
+  *out_result = LOOM_WALK_CONTINUE;
+  if (loom_kernel_launch_isa(op) || loom_kernel_dispatch_isa(op) ||
+      loom_kernel_launch_serial_isa(op) ||
+      loom_kernel_launch_concurrent_isa(op) ||
+      loom_kernel_launch_yield_isa(op)) {
+    // Each nested schedule verifies its own preparation. Pruning it keeps
+    // every preparation operation owned by exactly one schedule check.
+    *out_result = LOOM_WALK_SKIP;
+    return iree_ok_status();
+  }
+  const loom_trait_flags_t traits =
+      loom_op_effective_traits(verification->module, op);
+  if (!iree_any_bit_set(traits, LOOM_TRAIT_COMMAND_EFFECT) &&
+      loom_callable_effects_classify_traits(traits) !=
+          LOOM_CALLABLE_EFFECT_CONTRACT_UNSPECIFIED) {
+    return iree_ok_status();
+  }
+  *out_result = LOOM_WALK_ABORT;
+  return loom_kernel_emit_launch_placement_error(
+      verification->module, op, verification->emitter,
+      IREE_SV("kernel launch schedule"));
+}
+
 iree_status_t loom_kernel_launch_schedule_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter) {
   loom_region_t* body = loom_kernel_launch_serial_isa(op)
                             ? loom_kernel_launch_serial_body(op)
                             : loom_kernel_launch_concurrent_body(op);
-  const loom_block_t* block = loom_region_const_block(body, 0);
-  loom_op_t* child_op = NULL;
-  loom_block_for_each_op(block, child_op) {
-    if (loom_kernel_launch_isa(child_op) ||
-        loom_kernel_dispatch_isa(child_op) ||
-        loom_kernel_launch_serial_isa(child_op) ||
-        loom_kernel_launch_concurrent_isa(child_op) ||
-        loom_kernel_launch_yield_isa(child_op)) {
-      continue;
-    }
-    if (loom_callable_effects_classify_traits(loom_op_effective_traits(
-            module, child_op)) != LOOM_CALLABLE_EFFECT_CONTRACT_UNSPECIFIED) {
-      continue;
-    }
-    return loom_kernel_emit_launch_placement_error(
-        module, child_op, emitter, IREE_SV("kernel launch schedule"));
-  }
-  return iree_ok_status();
+  loom_kernel_launch_schedule_verification_t verification = {
+      .module = module,
+      .emitter = emitter,
+  };
+  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
+  return loom_walk_region(
+      module, body, LOOM_WALK_PRE_ORDER,
+      (loom_walk_callback_t){loom_kernel_verify_launch_preparation,
+                             &verification},
+      &walk_result);
 }
 
 static iree_status_t loom_kernel_verify_barrier_attributes(

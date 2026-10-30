@@ -712,6 +712,69 @@ func.def @launch_schedule_rejects_effectful_preparation() {
 
 // ====
 
+// Preparation obeys the same effect contract inside control flow. A nested
+// schedule owns its check, so the outer schedule does not repeat the diagnostic.
+func.def @launch_schedule_rejects_nested_write(%condition: i1, %output: view<1xi32>, %value: i32) {
+  kernel.launch.serial {
+    kernel.launch.concurrent {
+      scf.if %condition {
+        // ERROR@+1: STRUCTURE/029 "view.store" "direct" "kernel launch schedule" "scf.if"
+        view.store %value, %output[0] : i32, view<1xi32>
+      }
+    }
+  }
+  func.return
+}
+
+// ====
+
+func.decl @unknown_nested_preparation() -> (index)
+
+func.def @launch_schedule_rejects_nested_call(%condition: i1) {
+  kernel.launch.serial {
+    scf.if %condition {
+      // ERROR@+1: STRUCTURE/029 "func.call" "direct" "kernel launch schedule" "scf.if"
+      %unused = func.call @unknown_nested_preparation() : () -> (index)
+    }
+  }
+  func.return
+}
+
+// ====
+
+// General command effects belong in command schedules, not launch preparation.
+func.def @launch_schedule_rejects_other_commands(%sample: view<1xi64>) {
+  kernel.launch.serial {
+    // ERROR@+1: STRUCTURE/029 "command.concurrent" "direct" "kernel launch schedule" "kernel.launch.serial"
+    command.concurrent {
+      command.timestamp %sample : view<1xi64>
+    }
+  }
+  func.return
+}
+
+// ====
+
+kernel.entry.decl @prepared_work(%output: buffer)
+
+func.def @launch_schedule_accepts_nested_read(%condition: i1, %counts: view<1xindex>, %output: buffer) {
+  kernel.launch.concurrent {
+    %count = scf.if %condition -> (index) {
+      %loaded = view.load %counts[0] : view<1xindex> -> index
+      scf.yield %loaded : index
+    } else {
+      %empty = index.constant 0 : index
+      scf.yield %empty : index
+    }
+    kernel.launch.serial {
+      kernel.dispatch @prepared_work[%count](%output) : [index](buffer)
+    }
+  }
+  func.return
+}
+
+// ====
+
 kernel.def @launch_config_requires_index_operands() {
   %c1 = index.constant 1 : index
   %bad = scalar.constant 0 : i32

@@ -761,6 +761,8 @@ typedef uint8_t loom_op_flags_t;
 // Generic semantic trait bitfield. Op vtables carry construction defaults and
 // op instances carry the effective trait word consumed by pass hot paths.
 enum loom_trait_bits_e {
+  // Op has no intrinsic memory or nondeterministic effects. Nested regions
+  // retain their own effects and must be considered independently.
   LOOM_TRAIT_PURE = 1u << 0,
   LOOM_TRAIT_COMMUTATIVE = 1u << 1,
   LOOM_TRAIT_IDEMPOTENT = 1u << 2,
@@ -858,8 +860,9 @@ enum loom_trait_bits_e {
   // module symbol table.
   LOOM_TRAIT_MODULE_SCOPE = 1u << 26,
   // Op represents an explicit command-program effect such as dispatch or
-  // schedule composition. The op independently declares its exact or unknown
-  // effects; this trait classifies those effects instead of replacing them.
+  // schedule composition. Leaf ops declare their exact or unknown effects;
+  // structural ops inherit their regions' effects. This trait classifies
+  // effects instead of replacing them.
   LOOM_TRAIT_COMMAND_EFFECT = 1u << 27,
   // Op materializes a poison value. Poison represents an invalid observation
   // sentinel that propagates through ordinary pure computation until erased

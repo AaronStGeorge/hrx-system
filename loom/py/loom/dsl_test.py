@@ -3066,6 +3066,10 @@ class TestEffects:
         with _raises(ValueError, match="COMMAND_EFFECT requires"):
             Op("test.bad", traits=[COMMAND_EFFECT])
 
+    def test_command_effect_classifies_nested_effects(self) -> None:
+        op = Op("test.schedule", regions=[RegionDef("body")], traits=[COMMAND_EFFECT])
+        assert op.is_pure  # Composition itself has no intrinsic effects.
+
     def test_constant_like_requires_pure_source_shape(self) -> None:
         with _raises(ValueError, match="CONSTANT_LIKE requires PURE"):
             Op(

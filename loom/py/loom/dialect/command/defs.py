@@ -363,11 +363,13 @@ def _schedule(name: str, doc: str) -> Op:
                 terminator="command.yield",
             ),
         ],
+        # Composition owns ordering; nested operations carry memory effects.
         traits=[
-            UNKNOWN_EFFECTS,
             COMMAND_EFFECT,
             ImplicitTerminator("command.yield"),
         ],
+        canonicalize="loom_command_schedule_canonicalize",
+        canonicalize_without_facts=True,
         format=[Region("body")],
         examples=[f"{name} {{\n  command.yield\n}}"],
     )

@@ -30,6 +30,18 @@ loom_cc_instance_library(
     ],
 )
 
+loom_cc_library(
+    name = "canonicalize",
+    srcs = ["canonicalize.c"],
+    deps = [
+        ":op_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/kernel:op_defs",
+        "//loom/src/loom/rewrite:rewriter",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_generated_cc_library(
     name = "command",
     srcs = [
@@ -52,6 +64,7 @@ loom_generated_cc_library(
     textual_hdrs = ["ops.inc"],
     deps = [
         ":builders",
+        ":canonicalize",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:parameter",
