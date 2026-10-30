@@ -31,6 +31,16 @@ enum loom_storage_access_effect_bits_e {
 };
 typedef uint8_t loom_storage_access_effects_t;
 
+// Envelope of accesses reached through one reference. This describes proven
+// confinement, not an exact byte interval or a restriction on derived views.
+enum loom_storage_access_footprint_e {
+  // Every reached access stays within this reference's current byte span.
+  LOOM_STORAGE_ACCESS_FOOTPRINT_REFERENCE = 0,
+  // Accesses may reach elsewhere in the reference's backing storage.
+  LOOM_STORAGE_ACCESS_FOOTPRINT_STORAGE = 1,
+};
+typedef uint8_t loom_storage_access_footprint_t;
+
 typedef struct loom_storage_reference_t loom_storage_reference_t;
 
 typedef struct loom_storage_access_use_t {
@@ -40,7 +50,7 @@ typedef struct loom_storage_access_use_t {
   loom_value_id_t value_id;
   // Effects of this direct use, excluding any separately referenced callee.
   loom_storage_access_effects_t effects;
-  // Completed formal-argument effects for a semantic call, or NULL.
+  // Completed formal-argument effects for an exact source call, or NULL.
   const loom_storage_reference_t* callee_argument;
   // Next classified use of the same reference.
   struct loom_storage_access_use_t* next;
@@ -66,6 +76,11 @@ struct loom_storage_reference_t {
   uint32_t index;
   // Completed union of read, write, and escape effects through all uses.
   loom_storage_access_effects_t effects;
+  // Completed access envelope relative to this reference's current span.
+  loom_storage_access_footprint_t footprint;
+  // Envelope required when transporting this reference's accesses to origins.
+  // Value-preserving relations retain the span; projections may change it.
+  loom_storage_access_footprint_t origin_footprint;
   // True while this node awaits monotone effect propagation.
   bool queued;
   // Next node in the construction worklist.
@@ -88,14 +103,18 @@ typedef struct loom_storage_access_barrier_t {
 } loom_storage_access_barrier_t;
 
 typedef struct loom_storage_access_function_t {
+  // Formal references in entry-block argument order; scalar entries are NULL.
+  loom_storage_reference_t** arguments;
   // Canonical reference nodes, including unused formal references.
   loom_storage_reference_t* references;
   // Direct uses in source walk order across all canonical references.
   loom_storage_access_use_t* uses;
   // Qualifying workgroup barriers in source traversal order.
   loom_storage_access_barrier_t* barriers;
-  // The body may access storage without an identified reference operand.
+  // A local non-call operation may access storage without a bounded operand.
   bool has_unknown_memory_access;
+  // This body or a reached callee may access storage without a bounded operand.
+  bool has_unbounded_memory_access;
 } loom_storage_access_function_t;
 
 typedef struct loom_storage_access_scope_t {
@@ -108,7 +127,10 @@ typedef struct loom_storage_access_scope_t {
 } loom_storage_access_scope_t;
 
 // Memory effects projected through one call boundary. Reference arguments
-// retain their own effects; unbounded accesses are not confined to arguments.
+// retain their own effects and proven footprint through all derived aliases.
+// Effect flags alone do not bound accesses to an argument view's current byte
+// span: a callee may move that view within its backing storage. Unbounded
+// accesses are not confined to arguments at all.
 typedef struct loom_storage_access_call_t {
   // Completed formal references in call argument order, with NULL entries for
   // scalar arguments. NULL when no bounded argument summary is needed or known.
@@ -138,8 +160,9 @@ iree_status_t loom_storage_access_require_function(
     const loom_storage_access_function_t** out_function);
 
 // Projects the canonical reached-body summaries through |call|. Pure calls
-// need no graph; opaque memory effects remain unbounded. Visible semantic
-// callees share the same demand scope and fixed point as function queries.
+// need no graph; opaque memory effects remain unbounded. Visible semantic and
+// exact template callees share the demand scope and fixed point of function
+// queries; unresolved template applications remain opaque.
 // The caller's active value domain is restored before returning.
 iree_status_t loom_storage_access_require_call(
     loom_storage_access_scope_t* scope, loom_call_like_t call,

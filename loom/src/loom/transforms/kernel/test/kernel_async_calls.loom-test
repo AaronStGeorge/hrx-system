@@ -1,5 +1,125 @@
 // RUN: pass kernel-synchronization-legality
 
+// A view argument is a window into its backing storage, not an access bound
+// for the callee. Moving the window can reach an in-flight destination even
+// though the argument's original footprint is disjoint from it.
+func.def @read_previous_window(%window: view<16xi8>) -> (i8) {
+  %current = view.load %window[0] : view<16xi8> -> i8
+  %previous = view.subview %window[-16] : view<16xi8> -> view<16xi8>
+  %value = view.load %previous[0] : view<16xi8> -> i8
+  %sum = scalar.addi %current, %value : i8
+  func.return %sum : i8
+}
+
+func.def @forward_previous_window(%window: view<16xi8>, %recurse: i1) -> (i8) {
+  %value = scf.if %recurse -> (i8) {
+    %stop = scalar.constant 0 : i1
+    %nested = func.call @forward_previous_window(%window, %stop) : (view<16xi8>, i1) -> (i8)
+    scf.yield %nested : i8
+  } else {
+    %loaded = func.call @read_previous_window(%window) : (view<16xi8>) -> (i8)
+    scf.yield %loaded : i8
+  }
+  func.return %value : i8
+}
+
+func.def @rejects_call_reading_derived_destination(%input: buffer, %recurse: i1) {
+  %base = index.constant 0 : offset
+  %tail = index.constant 16 : offset
+  %bytes = index.constant 32 : offset
+  %global = buffer.assume.memory_space<global> %input : buffer
+  %source = buffer.view %global[%tail] : buffer -> view<16xi8>
+  %scratch = buffer.alloca<workgroup> align(16) %bytes : buffer
+  %suffix = buffer.view %scratch[%tail] : buffer -> view<16xi8>
+  %dest = buffer.view %scratch[%base] : buffer -> view<16xi8>
+  %copy = kernel.async.copy %source to %dest {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8> to view<16xi8> -> kernel.async.token
+  // Complete the helper's summary before discovering the recursive caller.
+  %source_value = func.call @read_previous_window(%source) : (view<16xi8>) -> (i8)
+  // ERROR@+1: LOWERING/028 {op_name="func.call", phase_name="kernel-synchronization-legality"}
+  %value = func.call @forward_previous_window(%suffix, %recurse) : (view<16xi8>, i1) -> (i8)
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+// The same storage contract applies across exact template calls and their
+// reached helpers. The original argument is before the pending source, while
+// the helper's derived window writes the source itself.
+func.def @write_next_window(%window: view<16xi8>, %value: i8) {
+  %next = view.subview %window[16] : view<16xi8> -> view<16xi8>
+  view.store %value, %next[0] : i8, view<16xi8>
+  func.return
+}
+
+template.decl @write_window(%window: view<16xi8>, %value: i8)
+
+template.def<@write_window> @write_via_helper(%window: view<16xi8>, %value: i8) {
+  func.call @write_next_window(%window, %value) : (view<16xi8>, i8)
+  template.return
+}
+
+func.def @rejects_call_writing_derived_source(%input: buffer) {
+  %base = index.constant 0 : offset
+  %tail = index.constant 16 : offset
+  %bytes = index.constant 16 : offset
+  %value = scalar.constant 7 : i8
+  %global = buffer.assume.memory_space<global> %input : buffer
+  %prefix = buffer.view %global[%base] : buffer -> view<16xi8>
+  %source = buffer.view %global[%tail] : buffer -> view<16xi8>
+  %scratch = buffer.alloca<workgroup> align(16) %bytes : buffer
+  %dest = buffer.view %scratch[%base] : buffer -> view<16xi8>
+  %copy = kernel.async.copy %source to %dest {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8> to view<16xi8> -> kernel.async.token
+  // ERROR@+1: LOWERING/037 {op_name="template.call", phase_name="kernel-synchronization-legality"}
+  template.call @write_via_helper(%prefix, %value) : (view<16xi8>, i8)
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+// Confinement survives equal-span reinterpretation and value selection. An
+// unused projection does not widen it. Distinct allocations and disjoint spans
+// of one allocation both remain legal, as do source reads and unused arguments.
+func.def @access_independent_storage(%source: view<16xi8>, %other: view<16xi8>, %sibling: view<16xi8>, %unused: view<16xi8>, %choose: i1) {
+  %unused_projection = view.subview %sibling[16] : view<16xi8> -> view<16xi8>
+  %words = view.bitcast %sibling : view<16xi8> -> view<4xi32>
+  %bytes = view.bitcast %words : view<4xi32> -> view<16xi8>
+  %selected = scf.select %choose, %bytes, %sibling : view<16xi8>
+  %begin = index.constant 0 : index
+  %end = index.constant 2 : index
+  %step = index.constant 1 : index
+  %carried = scf.for %i = [%begin to %end step %step](%window = %selected : view<16xi8>) -> (view<16xi8>) {
+    scf.yield %window : view<16xi8>
+  }
+  %value = view.load %source[0] : view<16xi8> -> i8
+  view.store %value, %other[0] : i8, view<16xi8>
+  view.store %value, %carried[0] : i8, view<16xi8>
+  func.return
+}
+
+func.def @allows_independent_call_during_copy(%input: buffer, %choose: i1) {
+  %base = index.constant 0 : offset
+  %tail = index.constant 16 : offset
+  %bytes = index.constant 32 : offset
+  %global = buffer.assume.memory_space<global> %input : buffer
+  %source = buffer.view %global[%base] : buffer -> view<16xi8>
+  %scratch = buffer.alloca<workgroup> align(16) %bytes : buffer
+  %other_storage = buffer.alloca<workgroup> align(16) %bytes : buffer
+  %dest = buffer.view %scratch[%base] : buffer -> view<16xi8>
+  %sibling = buffer.view %scratch[%tail] : buffer -> view<16xi8>
+  %other = buffer.view %other_storage[%base] : buffer -> view<16xi8>
+  %copy = kernel.async.copy %source to %dest {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8> to view<16xi8> -> kernel.async.token
+  func.call @access_independent_storage(%source, %other, %sibling, %dest, %choose) : (view<16xi8>, view<16xi8>, view<16xi8>, view<16xi8>, i1)
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
 func.def noinline @read(%values: view<16xi8>) -> (i8) {
   %value = view.load %values[0] : view<16xi8> -> i8
   func.return %value : i8

@@ -666,14 +666,13 @@ loom_kernel_synchronization_legality_check_pending_source_hazard(
 }
 
 static iree_status_t
-loom_kernel_synchronization_legality_check_reference_access(
+loom_kernel_synchronization_legality_resolve_reference_region(
     loom_kernel_synchronization_legality_state_t* state,
-    const loom_kernel_synchronization_legality_stream_t* stream,
-    const loom_op_t* op, loom_value_id_t value_id, loom_operand_flags_t flags) {
+    loom_value_id_t value_id, loom_view_region_t* buffer_region,
+    const loom_view_region_t** out_region) {
   const loom_view_region_t* access_region = NULL;
   IREE_RETURN_IF_ERROR(loom_view_region_table_get(
       &state->result->movement.view_regions, value_id, &access_region));
-  loom_view_region_t buffer_region = {0};
   if (!access_region &&
       loom_type_is_buffer(loom_module_value_type(state->module, value_id))) {
     loom_value_fact_buffer_reference_t reference = {
@@ -683,19 +682,28 @@ loom_kernel_synchronization_legality_check_reference_access(
     (void)loom_value_facts_query_buffer_reference(
         &state->fact_table->context,
         loom_value_fact_table_lookup(state->fact_table, value_id), &reference);
-    buffer_region.root_value_id =
+    buffer_region->root_value_id =
         loom_value_fact_buffer_reference_resolve_root_value(reference,
                                                             value_id);
-    buffer_region.alias_scope_id = reference.alias_scope_id;
-    buffer_region.memory_space = reference.memory_space;
-    buffer_region.nullability = reference.nullability;
-    buffer_region.origin = reference.origin;
-    loom_symbolic_expr_constant(0, &buffer_region.begin_byte_offset);
+    buffer_region->alias_scope_id = reference.alias_scope_id;
+    buffer_region->memory_space = reference.memory_space;
+    buffer_region->nullability = reference.nullability;
+    buffer_region->origin = reference.origin;
+    loom_symbolic_expr_constant(0, &buffer_region->begin_byte_offset);
     loom_symbolic_expr_unknown(reference.maximum_byte_extent,
-                               &buffer_region.byte_length);
-    buffer_region.end_byte_offset = buffer_region.byte_length;
-    access_region = &buffer_region;
+                               &buffer_region->byte_length);
+    buffer_region->end_byte_offset = buffer_region->byte_length;
+    access_region = buffer_region;
   }
+  *out_region = access_region;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_kernel_synchronization_legality_check_region_access(
+    loom_kernel_synchronization_legality_state_t* state,
+    const loom_kernel_synchronization_legality_stream_t* stream,
+    const loom_op_t* op, const loom_view_region_t* access_region,
+    loom_operand_flags_t flags) {
   if (!access_region) {
     return iree_ok_status();
   }
@@ -739,9 +747,37 @@ static iree_status_t loom_kernel_synchronization_legality_check_call(
                                                  LOOM_STORAGE_ACCESS_ESCAPE)) {
       flags |= LOOM_OPERAND_WRITES;
     }
+    loom_view_region_t buffer_region = {0};
+    const loom_view_region_t* argument_region = NULL;
     IREE_RETURN_IF_ERROR(
-        loom_kernel_synchronization_legality_check_reference_access(
-            state, stream, call.op, loom_value_slice_get(arguments, i), flags));
+        loom_kernel_synchronization_legality_resolve_reference_region(
+            state, loom_value_slice_get(arguments, i), &buffer_region,
+            &argument_region));
+    loom_view_region_t root_region;
+    if (reference->footprint == LOOM_STORAGE_ACCESS_FOOTPRINT_STORAGE) {
+      // A callee may move a view window outside its argument's current span
+      // while remaining inside the same backing storage. Retain root
+      // disjointness without inventing a bounded interval for those accesses.
+      root_region = (loom_view_region_t){
+          .root_value_id = argument_region->root_value_id,
+          .alias_scope_id = argument_region->alias_scope_id,
+          .nullability = argument_region->nullability,
+          .origin = argument_region->origin,
+          .memory_space = argument_region->memory_space,
+          .precision_flags = argument_region->precision_flags &
+                             LOOM_VIEW_REGION_PRECISION_ROOT,
+      };
+      loom_symbolic_expr_unknown(loom_value_facts_unknown(),
+                                 &root_region.begin_byte_offset);
+      loom_symbolic_expr_unknown(loom_value_facts_make(0, INT64_MAX, 1),
+                                 &root_region.byte_length);
+      loom_symbolic_expr_unknown(loom_value_facts_unknown(),
+                                 &root_region.end_byte_offset);
+      argument_region = &root_region;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_kernel_synchronization_legality_check_region_access(
+            state, stream, call.op, argument_region, flags));
     if (state->failed) {
       return iree_ok_status();
     }
@@ -772,9 +808,14 @@ loom_kernel_synchronization_legality_check_op_memory_accesses(
                           LOOM_OPERAND_READS | LOOM_OPERAND_WRITES)) {
       continue;
     }
+    loom_view_region_t buffer_region = {0};
+    const loom_view_region_t* access_region = NULL;
     IREE_RETURN_IF_ERROR(
-        loom_kernel_synchronization_legality_check_reference_access(
-            state, stream, op, operands[i], descriptor->flags));
+        loom_kernel_synchronization_legality_resolve_reference_region(
+            state, operands[i], &buffer_region, &access_region));
+    IREE_RETURN_IF_ERROR(
+        loom_kernel_synchronization_legality_check_region_access(
+            state, stream, op, access_region, descriptor->flags));
     if (state->failed) {
       return iree_ok_status();
     }

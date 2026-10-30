@@ -8,6 +8,40 @@ func.def @single_group_wait() {
 
 // ====
 
+// Exact template calls use the same canonical access summary as ordinary
+// calls: reading an in-flight copy's source is safe, but writing it is not.
+template.decl @read(%source: view<16xi8>) -> (i8)
+
+template.def<@read> @read_source(%source: view<16xi8>) -> (i8) {
+  %value = view.load %source[0] : view<16xi8> -> i8
+  template.return %value : i8
+}
+
+template.decl @write(%target: view<16xi8>, %value: i8)
+
+template.def<@write> @write_target(%target: view<16xi8>, %value: i8) {
+  view.store %value, %target[0] : i8, view<16xi8>
+  template.return
+}
+
+func.def @checks_exact_template_accesses(%input: buffer) {
+  %base = index.constant 0 : offset
+  %bytes = index.constant 16 : offset
+  %global = buffer.assume.memory_space<global> %input : buffer
+  %source = buffer.view %global[%base] : buffer -> view<16xi8>
+  %scratch = buffer.alloca<workgroup> align(16) %bytes : buffer
+  %dest = buffer.view %scratch[%base] : buffer -> view<16xi8>
+  %copy = kernel.async.copy %source to %dest {cache_scope = workgroup, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8> to view<16xi8> -> kernel.async.token
+  %value = template.call @read_source(%source) : (view<16xi8>) -> (i8)
+  // ERROR@+1: LOWERING/037 {op_name="template.call", phase_name="kernel-synchronization-legality"}
+  template.call @write_target(%source, %value) : (view<16xi8>, i8)
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
 // RUN: pass select-templates{rewrite=inline},kernel-synchronization-legality
 
 template.decl @test.async.stage() -> (kernel.async.group)

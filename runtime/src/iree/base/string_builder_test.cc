@@ -17,12 +17,13 @@ using iree::Status;
 using iree::StatusCode;
 using iree::testing::status::StatusIs;
 
-// Pass intentionally invalid formats as runtime data so compiler format
-// diagnostics remain enabled for ordinary calls.
+// Read intentionally invalid formats through a volatile pointer so optimizers
+// cannot diagnose them after inlining. Ordinary calls retain format checking.
 template <typename... Args>
 iree_status_t AppendInvalidFormat(iree_string_builder_t* builder,
                                   const char* format, Args... args) {
-  return iree_string_builder_append_format(builder, format, args...);
+  const char* volatile runtime_format = format;
+  return iree_string_builder_append_format(builder, runtime_format, args...);
 }
 
 struct StringBuilder {
