@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from loom.format.cxx.commands import CxxCommandRenderer
 from loom.format.cxx.errors import CxxRenderError
+from loom.format.cxx.pipelines import CxxPipelineRenderer
 from loom.ir import (
     Block,
     BufferType,
@@ -38,7 +38,7 @@ class _DimensionProjection:
     declarations: tuple[Operation, ...]
 
 
-class CxxKernelConfigurationRenderer(CxxCommandRenderer):
+class CxxKernelConfigurationRenderer(CxxPipelineRenderer):
     """Renders fixed and workload-dependent kernel launch configurations."""
 
     def _launch_dimension_attribute(
@@ -215,7 +215,7 @@ class CxxKernelConfigurationRenderer(CxxCommandRenderer):
                 and value_type.type_kind == TypeKind.VIEW
             ):
                 continue
-            dependencies = self._source_view_dependencies(value_id)
+            dependencies = self._source_type_dependencies(value_id)
             start = ordinal - len(dependencies)
             if start < 0 or tuple(arguments[start:ordinal]) != dependencies:
                 raise CxxRenderError(

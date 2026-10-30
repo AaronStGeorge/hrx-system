@@ -21,6 +21,7 @@ iree_py_library(
         "expressions.py",
         "kernel_configurations.py",
         "naming.py",
+        "pipelines.py",
         "printer.py",
         "registry.py",
         "renderer.py",

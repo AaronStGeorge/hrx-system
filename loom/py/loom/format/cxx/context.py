@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from loom.dsl import Op
+from loom.dsl import Op, TargetLikeInterface
 from loom.fields import compute_layout, resolve_fields
 from loom.format.cxx.errors import CxxRenderError
 from loom.format.cxx.naming import clean_identifier
@@ -31,6 +31,8 @@ from loom.ir import (
     DynamicEncoding,
     Module,
     Operation,
+    ParameterizedType,
+    PoolType,
     Predicate,
     PredicateListAttr,
     ScalarType,
@@ -41,6 +43,16 @@ from loom.ir import (
 
 _OPS: tuple[Op, ...] = source_ops()
 _OP_BY_NAME = {operation.name: operation for operation in _OPS}
+
+
+def is_target_operation(operation: Operation) -> bool:
+    """Returns whether an operation defines a target-family record."""
+
+    descriptor = _OP_BY_NAME.get(operation.name)
+    return descriptor is not None and any(
+        isinstance(interface, TargetLikeInterface)
+        for interface in descriptor.interfaces
+    )
 
 
 def walk_operations(block: Block) -> Iterable[Operation]:
@@ -204,11 +216,12 @@ class CxxRenderContext:
         self.assignment_targets: dict[int, int] = {}
         self.suppressed_forwarding_values: set[int] = set()
         self.target_names: dict[str, str] = {}
+        self.target_type_names: dict[str, str] = {}
         self.function_names: dict[str, str] = {}
         self.function_buffer_elements: dict[str, tuple[str | None, ...]] = {}
         self.command_names: dict[str, str] = {}
         self.pipeline_names: dict[str, str] = {}
-        self.pipeline_declarations: dict[str, Operation] = {}
+        self.pipeline_callables: dict[str, Operation] = {}
         self.kernel_buffer_elements: dict[str, tuple[str | None, ...]] = {}
         self.kernel_configuration_names: dict[str, str] = {}
         self.kernel_workload_component_counts: dict[str, tuple[int, ...]] = {}
@@ -519,7 +532,7 @@ class CxxRenderContext:
     def _collect_targets(self) -> dict[str, TargetInfo]:
         targets: dict[str, TargetInfo] = {}
         for operation in self.module.body.ops:
-            if operation.name.endswith(".target"):
+            if is_target_operation(operation):
                 symbol = operation.attributes.get("symbol")
                 kind = operation.attributes.get("kind")
                 if isinstance(symbol, str) and isinstance(kind, str):
@@ -582,6 +595,27 @@ class CxxRenderContext:
                         tuple(features),
                     )
         return targets
+
+    def _target_attribute(self, operation: Operation, symbol: str) -> str:
+        """Returns one source target binding after validating its projection."""
+
+        target = self.targets.get(symbol)
+        if target is None:
+            raise CxxRenderError(
+                operation, f"target record {symbol!r} is not present in the module"
+            )
+        if target.operation_name not in {"amdgpu.target", "target.generic"}:
+            raise CxxRenderError(
+                target.operation,
+                f"target record {target.operation_name} has no C++ declaration "
+                "projection",
+            )
+        name = self.target_names.get(symbol)
+        if name is None:
+            raise CxxRenderError(
+                operation, f"target record {symbol!r} has no planned C++ name"
+            )
+        return f"loom::target({name})"
 
     def _validate_projected_attributes(
         self, operation: Operation, projected: tuple[str, ...]
@@ -1147,8 +1181,10 @@ class CxxRenderContext:
             type_name = declaration_type
         elif (
             isinstance(result_type, ShapedType)
-            and result_type.type_kind == TypeKind.VIEW
-        ) or isinstance(result_type, (BufferType, DialectType)):
+            and result_type.type_kind in {TypeKind.TILE, TypeKind.VIEW}
+        ) or isinstance(
+            result_type, (BufferType, DialectType, ParameterizedType, PoolType)
+        ):
             type_name = "auto"
         else:
             type_name = self.cpp_type(result_id)

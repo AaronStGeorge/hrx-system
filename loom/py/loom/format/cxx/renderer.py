@@ -15,6 +15,7 @@ from dataclasses import replace
 from loom.format.cxx.context import (
     _memory_space,
     _strip_outer_parentheses,
+    is_target_operation,
     walk_operations,
 )
 from loom.format.cxx.errors import CxxRenderError
@@ -29,6 +30,8 @@ from loom.ir import (
     DynamicEncoding,
     Module,
     Operation,
+    ParameterizedType,
+    PoolType,
     PredicateListAttr,
     ScalarType,
     ShapedType,
@@ -278,10 +281,7 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
             return attributes
         if name == "buffer.alloca":
             resolved = self._resolved(operation)
-            if resolved.value_ids("pool"):
-                raise CxxRenderError(
-                    operation, "explicit allocation pools have no C++ projection"
-                )
+            pools = resolved.value_ids("pool")
             space = resolved.attr("memory_space")
             alignment = resolved.attr("base_alignment")
             length_id = resolved.value_id("byte_length")
@@ -300,7 +300,12 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
             template = f"{_memory_space(space)}, {alignment}"
             if not allocates_bytes:
                 template = f"unsigned char, {template}"
-            expression = f"loom::buffer::alloca<{template}>({length})"
+            arguments = [length]
+            if pools:
+                arguments.append(self.expression(pools[0]))
+            expression = (
+                f"loom::buffer::alloca<{template}>(" + ", ".join(arguments) + ")"
+            )
             self._declare(
                 result,
                 expression,
@@ -1095,15 +1100,18 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                     continue
                 if operation.name == "func.return":
                     self._validate_projected_attributes(operation, ())
-                    if not operation.operands:
+                    results = self._flat_source_parameters(
+                        operation, list(operation.operands)
+                    )
+                    if not results:
                         self.writer.line("return;")
-                    elif len(operation.operands) == 1:
+                    elif len(results) == 1:
                         self.writer.line(
-                            f"return {self.expression(operation.operands[0])};"
+                            f"return {self.expression(results[0].value_id)};"
                         )
                     else:
                         values = ", ".join(
-                            self.expression(value) for value in operation.operands
+                            self.expression(result.value_id) for result in results
                         )
                         self.writer.line(f"return {{{values}}};")
                     continue
@@ -1156,6 +1164,10 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 if operation.name == "scf.while":
                     self._validate_projected_attributes(operation, ())
                     self._render_while(operation)
+                    continue
+                projected = self._render_pipeline_op(operation)
+                if projected is not None:
+                    self._validate_projected_attributes(operation, projected)
                     continue
                 projected = self._render_command_op(operation)
                 if projected is not None:
@@ -1214,19 +1226,8 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
         self.temporary_names = set(self.scope_names[scope])
         self.rendered_assumptions_by_block.clear()
         target_symbol = resolved.attr("target")
-        target_info = self.targets.get(str(target_symbol)) if target_symbol else None
-        if target_symbol is not None and target_info is None:
-            raise CxxRenderError(
-                kernel, f"target record {target_symbol!s} is not present in the module"
-            )
-        if target_info is not None and target_info.operation_name != "amdgpu.target":
-            raise CxxRenderError(
-                target_info.operation,
-                f"target record {target_info.operation_name} has no C++ "
-                "declaration projection",
-            )
-        if target_info is not None:
-            attributes.append(f"loom::target({self.target_names[str(target_symbol)]})")
+        if target_symbol is not None:
+            attributes.append(self._target_attribute(kernel, str(target_symbol)))
         self.writer.attributes(attributes)
 
         parameters: list[str] = []
@@ -1273,14 +1274,14 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
         self.writer.close()
 
     def _function_result_type(self, function: Operation) -> str:
-        results = function.results
+        results = self._flat_source_parameters(function, list(function.results))
         if not results:
             return "void"
         if len(results) == 1:
-            return self.cpp_type(results[0])
+            return self.cpp_type(results[0].value_id)
         symbol = str(self._resolved(function).attr("callee"))
         fields = tuple(
-            (f"value{index}", self.cpp_type(result))
+            (f"value{index}", self.cpp_type(result.value_id))
             for index, result in enumerate(results)
         )
         return self._record_type(
@@ -1296,8 +1297,12 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 operation, f"called function {symbol!r} is not present in the module"
             )
         expected_buffers = self.function_buffer_elements.get(symbol)
+        source_operands = self._flat_source_parameters(
+            operation, list(operation.operands)
+        )
         arguments_list: list[str] = []
-        for index, operand in enumerate(operation.operands):
+        for index, parameter in enumerate(source_operands):
+            operand = parameter.value_id
             expression = self.expression(operand)
             expected_element = (
                 expected_buffers[index]
@@ -1311,22 +1316,25 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
             arguments_list.append(expression)
         arguments = ", ".join(arguments_list)
         call = f"{callee}({arguments})"
-        if not operation.results:
+        source_results = self._flat_source_parameters(
+            operation, list(operation.results)
+        )
+        if not source_results:
             self.writer.line(f"{call};")
-        elif len(operation.results) == 1:
-            self._declare(operation.results[0], call)
+        elif len(source_results) == 1:
+            self._declare(source_results[0].value_id, call)
         else:
             fields = tuple(
-                (f"value{index}", self.cpp_type(result))
-                for index, result in enumerate(operation.results)
+                (f"value{index}", self.cpp_type(result.value_id))
+                for index, result in enumerate(source_results)
             )
             record_type = self._record_type(
                 clean_identifier(symbol, "function") + "_result", fields
             )
             record_name = self._temporary_name("call_result")
             self.writer.line(f"{record_type} {record_name} = {call};")
-            for index, result in enumerate(operation.results):
-                self._declare(result, f"{record_name}.value{index}")
+            for index, result in enumerate(source_results):
+                self._declare(result.value_id, f"{record_name}.value{index}")
         projected_attributes = ["callee"]
         effect_contract = resolved.attr("effect_contract")
         if effect_contract == "pure":
@@ -1366,7 +1374,9 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
         entry = body.blocks[0]
         parameters: list[str] = []
         buffer_elements: list[str | None] = []
-        for argument in entry.arg_ids:
+        source_parameters = self._flat_source_parameters(function, list(entry.arg_ids))
+        for parameter in source_parameters:
+            argument = parameter.value_id
             value_type = self.module.values[argument].type
             if isinstance(value_type, BufferType):
                 element = self._parameter_element(argument)
@@ -1455,7 +1465,7 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 ordinal += 1
             used_names.add(name)
             self.pipeline_names[symbol] = name
-            self.pipeline_declarations[symbol] = pipeline
+            self.pipeline_callables[symbol] = pipeline
 
         for kernel in kernels:
             symbol = str(self._resolved(kernel).attr("callee"))
@@ -1469,13 +1479,18 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
             self.kernel_configuration_names[symbol] = name
 
         target_symbols: list[str] = []
+
+        def add_target(target: object) -> None:
+            if isinstance(target, str) and target and target not in target_symbols:
+                target_symbols.append(target)
+
         for callable_operation in (*kernels, *commands, *pipelines):
             resolved = self._resolved(callable_operation)
-            target_symbol = resolved.attr("target")
-            if target_symbol is not None:
-                symbol = str(target_symbol)
-                if symbol and symbol not in target_symbols:
-                    target_symbols.append(symbol)
+            add_target(resolved.attr("target"))
+            for region in callable_operation.regions:
+                for block in region.blocks:
+                    for nested in walk_operations(block):
+                        add_target(nested.attributes.get("target"))
 
         for symbol in target_symbols:
             base = (
@@ -1490,6 +1505,15 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 ordinal += 1
             used_names.add(name)
             self.target_names[symbol] = name
+            if self.targets[symbol].operation_name == "target.generic":
+                type_base = f"{name}_type"
+                type_name = type_base
+                ordinal = 2
+                while type_name in used_names:
+                    type_name = f"{type_base}_{ordinal}"
+                    ordinal += 1
+                used_names.add(type_name)
+                self.target_type_names[symbol] = type_name
 
     def render(self) -> str:
         kernels = [
@@ -1510,7 +1534,7 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
         pipelines = [
             operation
             for operation in self.module.body.ops
-            if operation.name == "pipeline.decl"
+            if operation.name in {"pipeline.def", "pipeline.decl"}
         ]
         command_definitions = [
             operation for operation in commands if operation.name == "command.def"
@@ -1526,9 +1550,10 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 "func.def",
                 "command.def",
                 "command.decl",
+                "pipeline.def",
                 "pipeline.decl",
                 "config.decl",
-            } or operation.name.endswith(".target"):
+            } or is_target_operation(operation):
                 continue
             raise CxxRenderError(
                 operation,
@@ -1571,7 +1596,10 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 self._render_command_declaration(command)
         if commands:
             self.writer.line()
-        callables = [*functions, *kernels, *command_definitions]
+        pipeline_definitions = [
+            operation for operation in pipelines if operation.name == "pipeline.def"
+        ]
+        callables = [*functions, *kernels, *command_definitions, *pipeline_definitions]
         for index, callable_operation in enumerate(callables):
             if index:
                 self.writer.line()
@@ -1579,6 +1607,8 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
                 self._render_function(callable_operation)
             elif callable_operation.name == "command.def":
                 self._render_command_program(callable_operation)
+            elif callable_operation.name == "pipeline.def":
+                self._render_pipeline_definition(callable_operation)
             else:
                 self._render_kernel(callable_operation)
 
@@ -1623,7 +1653,17 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
         preamble = render_preamble(
             operation_names=operation_names,
             scalar_names=scalar_names,
-            has_kernels=bool(kernels or pipelines),
+            has_kernels=bool(kernels),
+            uses_pipelines=bool(pipelines)
+            or any(name.startswith("channel.") for name in operation_names)
+            or any(
+                isinstance(value.type, (ParameterizedType, PoolType))
+                or (
+                    isinstance(value.type, ShapedType)
+                    and value.type.type_kind == TypeKind.TILE
+                )
+                for value in self.module.values
+            ),
             uses_buffers=any(
                 isinstance(value.type, BufferType) for value in self.module.values
             ),
@@ -1636,7 +1676,11 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
             record_declarations=self.record_declarations,
             table_lookup_declarations=self.table_lookup_declarations,
             targets=tuple(
-                (target_name, self.targets[target_symbol])
+                (
+                    target_name,
+                    self.target_type_names.get(target_symbol),
+                    self.targets[target_symbol],
+                )
                 for target_symbol, target_name in self.target_names.items()
             ),
             uses_scalar_functions=self.uses_scalar_functions,
@@ -1647,7 +1691,7 @@ class CxxRenderer(CxxKernelConfigurationRenderer):
 
 
 def _select_callable_roots(module: Module, roots: Sequence[str]) -> Module:
-    """Returns selected callables, their helper closure, and kernel targets."""
+    """Returns selected callables, their helper closure, and target records."""
 
     normalized_roots: list[str] = []
     seen_roots: set[str] = set()
@@ -1674,6 +1718,7 @@ def _select_callable_roots(module: Module, roots: Sequence[str]) -> Module:
             "func.def",
             "command.def",
             "command.decl",
+            "pipeline.def",
             "pipeline.decl",
         }
         if symbol.op.name not in callable_operations or (
@@ -1692,6 +1737,9 @@ def _select_callable_roots(module: Module, roots: Sequence[str]) -> Module:
         for region in symbol.op.regions:
             for block in region.blocks:
                 for operation in walk_operations(block):
+                    nested_target = operation.attributes.get("target")
+                    if isinstance(nested_target, str):
+                        target_names.add(nested_target)
                     if operation.name == "config.get":
                         config = operation.attributes.get("config")
                         config_definition = (
@@ -1707,6 +1755,7 @@ def _select_callable_roots(module: Module, roots: Sequence[str]) -> Module:
                         "func.call",
                         "command.launch",
                         "kernel.launch",
+                        "pipeline.compose",
                     }:
                         continue
                     callee = operation.attributes.get("callee")
@@ -1718,7 +1767,7 @@ def _select_callable_roots(module: Module, roots: Sequence[str]) -> Module:
         for operation in module.body.ops
         if id(operation) in selected_operation_ids
         or (
-            operation.name.endswith(".target")
+            is_target_operation(operation)
             and operation.attributes.get("symbol") in target_names
         )
     ]
