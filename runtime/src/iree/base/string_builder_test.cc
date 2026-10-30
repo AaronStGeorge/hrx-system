@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <climits>
 #include <string>
 
 #include "iree/base/api.h"
@@ -130,6 +131,28 @@ TEST(StringBuilderTest, QueryFormat) {
   EXPECT_EQ(iree_string_builder_size(builder), 6 + 1024);
 }
 
+TEST(StringBuilderTest, QueryLargeFormat) {
+  auto builder = StringBuilder::MakeEmpty();
+  IREE_EXPECT_OK(iree_string_builder_append_format(builder, "prefix"));
+  IREE_EXPECT_OK(
+      iree_string_builder_append_format(builder, "%*s", INT_MAX, "suffix"));
+  EXPECT_EQ(iree_string_builder_size(builder), (iree_host_size_t)INT_MAX + 6);
+  EXPECT_THAT(Status(iree_string_builder_append_format(builder, "%*s!", INT_MAX,
+                                                       "suffix")),
+              StatusIs(StatusCode::kInvalidArgument));
+  EXPECT_EQ(iree_string_builder_size(builder), (iree_host_size_t)INT_MAX + 6);
+}
+
+TEST(StringBuilderTest, QueryFormatOverflowPreservesSize) {
+  auto builder = StringBuilder::MakeEmpty();
+  char* head = nullptr;
+  IREE_ASSERT_OK(
+      iree_string_builder_append_inline(builder, IREE_HOST_SIZE_MAX, &head));
+  EXPECT_THAT(Status(iree_string_builder_append_format(builder, "x")),
+              StatusIs(StatusCode::kOutOfRange));
+  EXPECT_EQ(iree_string_builder_size(builder), IREE_HOST_SIZE_MAX);
+}
+
 TEST(StringBuilderTest, Empty) {
   auto builder = StringBuilder::MakeSystem();
   EXPECT_EQ(iree_string_builder_size(builder), 0);
@@ -208,6 +231,32 @@ TEST(StringBuilderTest, Format) {
   EXPECT_EQ(strlen(builder.builder.buffer), 6 + 1024);  // NUL check
   EXPECT_EQ(builder.ToString(),
             std::string("abcabc") + std::string(1023, ' ') + std::string("x"));
+}
+
+TEST(StringBuilderTest, LargeFormattedSpan) {
+  auto builder = StringBuilder::MakeSystem();
+  const std::string text(32768, 'x');
+  IREE_ASSERT_OK(iree_string_builder_append_format(
+      builder, "[%.*s]", (int)text.size(), text.data()));
+  EXPECT_EQ(iree_string_builder_size(builder), text.size() + 2);
+  EXPECT_TRUE(builder.ToString() == "[" + text + "]");
+  EXPECT_EQ(builder.builder.buffer[builder.builder.size], '\0');
+}
+
+TEST(StringBuilderTest, FormatFailure) {
+  auto builder = StringBuilder::MakeSystem();
+  EXPECT_THAT(Status(iree_string_builder_append_format(builder, "prefix%*s",
+                                                       INT_MIN, "x")),
+              StatusIs(StatusCode::kInvalidArgument));
+  EXPECT_EQ(builder.ToString(), "prefix");
+  EXPECT_STREQ(builder.builder.buffer, "prefix");
+  // Preserve the allocation failure even if a later format is invalid.
+  InlineStringBuilder<4> small;
+  EXPECT_THAT(Status(iree_string_builder_append_format(small, "prefix%*s",
+                                                       INT_MIN, "x")),
+              StatusIs(StatusCode::kResourceExhausted));
+  EXPECT_EQ(small.ToString(), "pre");
+  EXPECT_STREQ(small.builder.buffer, "pre");
 }
 
 TEST(StringBuilderTest, InlineStorage) {

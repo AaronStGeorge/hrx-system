@@ -154,6 +154,9 @@ IREE_API_EXPORT iree_status_t iree_string_builder_append_cstring(
     iree_string_builder_t* builder, const char* value);
 
 // Appends a printf-style formatted string to the builder.
+// Returns INVALID_ARGUMENT if the format is invalid or its output length is
+// not representable by printf's int return type. A failure may leave a partial
+// append in the builder.
 IREE_API_EXPORT IREE_PRINTF_ATTRIBUTE(2, 3) iree_status_t
     iree_string_builder_append_format(iree_string_builder_t* builder,
                                       const char* format, ...);

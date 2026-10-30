@@ -189,23 +189,18 @@ IREE_API_EXPORT iree_status_t iree_string_builder_append_cstring(
 
 // State threaded through the fctprintf callback during formatting.
 typedef struct iree_string_builder_printf_state_t {
+  // Borrowed destination receiving formatted characters.
   iree_string_builder_t* builder;
+  // First allocation failure, retained until formatting returns.
   iree_status_t status;
 } iree_string_builder_printf_state_t;
 
 // Per-character callback from iree_vfctprintf that appends to the builder.
-// Handles both size-calculation mode (no buffer, just counting) and normal mode
-// (writing characters and growing the buffer as needed).
+// Writes characters and grows the buffer as needed.
 static void iree_string_builder_printf_out(char character, void* user_data) {
   iree_string_builder_printf_state_t* state =
       (iree_string_builder_printf_state_t*)user_data;
   iree_string_builder_t* builder = state->builder;
-
-  // Size-calculation mode: just count characters, no buffer operations.
-  if (iree_string_builder_is_calculating_size(builder)) {
-    builder->size++;
-    return;
-  }
 
   // Bail if a previous callback already failed (allocation error).
   if (!iree_status_is_ok(state->status)) {
@@ -228,13 +223,30 @@ IREE_API_EXPORT iree_status_t IREE_PRINTF_ATTRIBUTE(2, 3)
   va_list varargs;
   va_start(varargs, format);
   iree_string_builder_printf_state_t state = {builder, iree_ok_status()};
-  iree_vfctprintf(iree_string_builder_printf_out, &state, format, varargs);
+  bool calculating_size = iree_string_builder_is_calculating_size(builder);
+  int length = calculating_size
+                   ? iree_vsnprintf(NULL, 0, format, varargs)
+                   : iree_vfctprintf(iree_string_builder_printf_out, &state,
+                                     format, varargs);
   va_end(varargs);
   // NUL-terminate the buffer (fctprintf does not emit a terminator).
-  if (!iree_string_builder_is_calculating_size(builder) && builder->buffer) {
+  if (builder->buffer) {
     builder->buffer[builder->size] = '\0';
   }
-  return state.status;
+  IREE_RETURN_IF_ERROR(state.status);
+  if (length < 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "invalid format or unrepresentable output length");
+  }
+  if (calculating_size) {
+    iree_host_size_t new_size = 0;
+    if (!iree_host_size_checked_add(builder->size, (iree_host_size_t)length,
+                                    &new_size)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE, "capacity overflow");
+    }
+    builder->size = new_size;
+  }
+  return iree_ok_status();
 }
 
 // Callback for iree_string_builder_append_status that appends chunks to a

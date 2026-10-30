@@ -64,7 +64,8 @@ typedef void (*iree_printf_callback_t)(char character, void* user_data);
 // Formats a string into |buffer| of |count| bytes using a printf-style
 // |format| string and variable arguments. Returns the number of characters
 // that would have been written (excluding NUL) if the buffer were large enough,
-// or -1 on format error (unknown specifier, truncated format string).
+// or -1 on format error (unknown specifier, truncated format string, or a
+// width, precision, or output length that cannot be represented by int).
 // If |buffer| is NULL, no characters are written and the return value is the
 // number of characters that would be written (dry-run for size measurement).
 IREE_PRINTF_ATTRIBUTE(3, 4)
@@ -77,7 +78,7 @@ int iree_vsnprintf(char* buffer, size_t count, const char* format,
 // Formats a string using a printf-style |format| and sends each character to
 // |callback| with the provided |user_data|. The callback does NOT receive a NUL
 // terminator. Returns the number of characters for which the callback was
-// invoked, or -1 on format error.
+// invoked, or -1 on format error or representational overflow, as above.
 IREE_PRINTF_ATTRIBUTE(3, 4)
 int iree_fctprintf(iree_printf_callback_t callback, void* user_data,
                    const char* format, ...);

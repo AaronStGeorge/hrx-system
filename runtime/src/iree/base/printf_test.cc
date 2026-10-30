@@ -81,8 +81,10 @@ static void ExpectMatchesLibcV(const char* format, ...) {
   va_copy(args2, args1);
   int libc_length = vsnprintf(libc_buffer, sizeof(libc_buffer), format, args1);
   va_end(args1);
-  iree_vsnprintf(iree_buffer, sizeof(iree_buffer), format, args2);
+  int iree_length =
+      iree_vsnprintf(iree_buffer, sizeof(iree_buffer), format, args2);
   va_end(args2);
+  EXPECT_EQ(iree_length, libc_length) << "Format: " << format;
   EXPECT_STREQ(iree_buffer, libc_buffer)
       << "Format: \"" << format << "\" (libc_length=" << libc_length << ")";
 }
@@ -783,21 +785,97 @@ TEST(Printf, VariadicCallbackWrapper) {
   EXPECT_EQ(result, "42-ok");
 }
 
-TEST(Printf, LargeWidthPrecisionClamping) {
-  // Width/precision > IREE_PRINTF_MAX_WIDTH_PRECISION (10000) gets clamped.
-  // This exercises the clamping path in iree_printf_parse_uint and the dynamic
-  // width/precision parser.
-  std::string result = Format("%99999d", 42);
-  EXPECT_GE((int)result.size(), 10000);
-  EXPECT_LE((int)result.size(), 10001);
-  // Dynamic width clamping via *.
-  result = Format("%*d", 99999, 42);
-  EXPECT_GE((int)result.size(), 10000);
-  EXPECT_LE((int)result.size(), 10001);
-  // Dynamic precision clamping via *.
-  result = Format("%.*d", 99999, 42);
-  EXPECT_GE((int)result.size(), 10000);
-  EXPECT_LE((int)result.size(), 10001);
+TEST(Printf, LargeWidthAndPrecisionPreserveOutput) {
+  auto check = [](const std::string& expected, const char* format,
+                  auto... args) {
+    SCOPED_TRACE(format);
+    // Keep failure diagnostics bounded even for large outputs.
+    EXPECT_TRUE(Format(format, args...) == expected);
+    EXPECT_TRUE(FormatCallback(format, args...) == expected);
+    ExpectMatchesLibc(format, args...);
+  };
+  for (int count : {9999, 10000, 10001, 32768}) {
+    SCOPED_TRACE(count);
+    const std::string spaces(count - 2, ' ');
+    const std::string zeros(count - 2, '0');
+    check(spaces + "42", "%*d", count, 42);
+    check("42" + spaces, "%*d", -count, 42);
+    check(zeros + "42", "%.*u", count, 42u);
+    check("-" + zeros + "42", "%.*i", count, -42);
+    check("0x" + zeros + "2a", "%#.*x", count, 42u);
+    check("0X" + zeros + "2A", "%#.*X", count, 42u);
+    check(zeros + "52", "%#.*o", count, 42u);
+    const std::string text(count, 'x');
+    check(text, "%.*s", count, (text + "discard").c_str());
+    check(spaces + "xy", "%*s", count, "xy");
+    check(std::string(count - 1, ' ') + "!", "%*c", count, '!');
+    check("1." + std::string(count, '0'), "%.*f", count, 1.0);
+    check("1." + std::string(count, '0') + "e+00", "%.*e", count, 1.0);
+    check("0.0001220703125" + std::string(count - 10, '0'), "%#.*g", count,
+          0.0001220703125);
+  }
+  check(std::string(32766, ' ') + "42", "%32768d", 42);
+  check(std::string(32766, '0') + "42", "%.32768d", 42);
+  const std::string text(32769, 'x');
+  check(text.substr(0, 32768), "%.32768s", text.c_str());
+  // Pointer spelling is implementation-specific; compare to our contract.
+  const std::string pointer = std::string(32765, ' ') + "0x1";
+  EXPECT_TRUE(Format("%32768p", (void*)0x1) == pointer);
+  EXPECT_TRUE(FormatCallback("%32768p", (void*)0x1) == pointer);
+}
+
+TEST(Printf, RepresentationalBoundaries) {
+  auto check = [](int expected_length, const char* format, auto... args) {
+    SCOPED_TRACE(format);
+    // Unwritten padding is counted, not emitted one byte at a time. These
+    // queries exercise full int-range arithmetic without large allocations.
+    EXPECT_EQ(format_invalid(nullptr, 0, format, args...), expected_length);
+    char buffer[8] = {};
+    EXPECT_EQ(format_invalid(buffer, sizeof(buffer), format, args...),
+              expected_length);
+    EXPECT_EQ(buffer[sizeof(buffer) - 1], '\0');
+  };
+  check(INT_MAX, "%2147483647d", 42);
+  check(INT_MAX, "%.2147483647d", 42);
+  check(INT_MAX, "%*s", INT_MAX, "x");
+  check(INT_MAX, "%*s", -INT_MAX, "x");
+  check(INT_MAX, "%*c", INT_MAX, 'x');
+  check(INT_MAX, "%*p", INT_MAX, (void*)0x1);
+  check(INT_MAX, "%.*d", INT_MAX, 42);
+  check(INT_MAX, "%#.*o", INT_MAX, 42u);
+  check(INT_MAX, "%#.*x", INT_MAX - 2, 42u);
+  check(INT_MAX, "%+.*d", INT_MAX - 1, 42);
+  check(INT_MAX, "%.*f", INT_MAX - 2, 1.0);
+  check(INT_MAX, "%.*f", INT_MAX - 310, DBL_MAX);
+  check(INT_MAX, "%.*e", INT_MAX - 6, 1.0);
+  check(INT_MAX, "%.*e", INT_MAX - 7, DBL_MIN);
+  check(INT_MAX, "%#.*g", INT_MAX - 1, 1.0);
+  check(INT_MAX, "%#.*g", INT_MAX - 5, 0.0001);
+  check(INT_MAX, "%*f", INT_MAX, INFINITY);
+  check(INT_MAX, "%*f", INT_MAX, NAN);
+  check(1, "%.*s", INT_MAX, "x");
+  check(1, "%.*s", INT_MIN, "x");
+  check(1, "%.*g", INT_MAX, 1.0);
+
+  check(-1, "%2147483648d", 42);
+  check(-1, "%.2147483648s", "x");
+  check(-1, "%999999999999999999999999999999999999d", 42);
+  check(-1, "%*s", INT_MIN, "x");
+  check(-1, "%+.*d", INT_MAX, 42);
+  check(-1, "%#.*x", INT_MAX, 42u);
+  check(-1, "%*sX", INT_MAX, "x");
+  check(-1, "%*s%%", INT_MAX, "x");
+  check(-1, "%*s%*s", INT_MAX, "x", INT_MAX, "y");
+  for (double value : {0.0, 1.25, 0.0001, DBL_MIN, DBL_MAX}) {
+    check(-1, "%.*f", INT_MAX, value);
+    check(-1, "%.*e", INT_MAX, value);
+    check(-1, "%#.*g", INT_MAX, value);
+  }
+  std::string output;
+  EXPECT_EQ(iree_fctprintf(format_callback_append, &output, "prefix%*s",
+                           INT_MIN, "x"),
+            -1);
+  EXPECT_EQ(output, "prefix");
 }
 
 TEST(Printf, ExponentialLargePrecisionZero) {
