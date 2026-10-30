@@ -17,6 +17,14 @@ using iree::Status;
 using iree::StatusCode;
 using iree::testing::status::StatusIs;
 
+// Pass intentionally invalid formats as runtime data so compiler format
+// diagnostics remain enabled for ordinary calls.
+template <typename... Args>
+iree_status_t AppendInvalidFormat(iree_string_builder_t* builder,
+                                  const char* format, Args... args) {
+  return iree_string_builder_append_format(builder, format, args...);
+}
+
 struct StringBuilder {
   static StringBuilder MakeSystem() {
     iree_string_builder_t builder;
@@ -137,8 +145,7 @@ TEST(StringBuilderTest, QueryLargeFormat) {
   IREE_EXPECT_OK(
       iree_string_builder_append_format(builder, "%*s", INT_MAX, "suffix"));
   EXPECT_EQ(iree_string_builder_size(builder), (iree_host_size_t)INT_MAX + 6);
-  EXPECT_THAT(Status(iree_string_builder_append_format(builder, "%*s!", INT_MAX,
-                                                       "suffix")),
+  EXPECT_THAT(Status(AppendInvalidFormat(builder, "%*s!", INT_MAX, "suffix")),
               StatusIs(StatusCode::kInvalidArgument));
   EXPECT_EQ(iree_string_builder_size(builder), (iree_host_size_t)INT_MAX + 6);
 }
@@ -245,15 +252,13 @@ TEST(StringBuilderTest, LargeFormattedSpan) {
 
 TEST(StringBuilderTest, FormatFailure) {
   auto builder = StringBuilder::MakeSystem();
-  EXPECT_THAT(Status(iree_string_builder_append_format(builder, "prefix%*s",
-                                                       INT_MIN, "x")),
+  EXPECT_THAT(Status(AppendInvalidFormat(builder, "prefix%*s", INT_MIN, "x")),
               StatusIs(StatusCode::kInvalidArgument));
   EXPECT_EQ(builder.ToString(), "prefix");
   EXPECT_STREQ(builder.builder.buffer, "prefix");
   // Preserve the allocation failure even if a later format is invalid.
   InlineStringBuilder<4> small;
-  EXPECT_THAT(Status(iree_string_builder_append_format(small, "prefix%*s",
-                                                       INT_MIN, "x")),
+  EXPECT_THAT(Status(AppendInvalidFormat(small, "prefix%*s", INT_MIN, "x")),
               StatusIs(StatusCode::kResourceExhausted));
   EXPECT_EQ(small.ToString(), "pre");
   EXPECT_STREQ(small.builder.buffer, "pre");

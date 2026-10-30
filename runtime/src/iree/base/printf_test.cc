@@ -637,6 +637,16 @@ static int format_invalid(char* buffer, size_t count, const char* format, ...) {
   return result;
 }
 
+// Callback counterpart for intentionally invalid formats.
+static int format_callback_invalid(std::string* output, const char* format,
+                                   ...) {
+  va_list args;
+  va_start(args, format);
+  int result = iree_vfctprintf(format_callback_append, output, format, args);
+  va_end(args);
+  return result;
+}
+
 TEST(Printf, UnknownSpecifier) {
   char buffer[32];
   EXPECT_EQ(format_invalid(buffer, sizeof(buffer), "%q", 42), -1);
@@ -872,9 +882,7 @@ TEST(Printf, RepresentationalBoundaries) {
     check(-1, "%#.*g", INT_MAX, value);
   }
   std::string output;
-  EXPECT_EQ(iree_fctprintf(format_callback_append, &output, "prefix%*s",
-                           INT_MIN, "x"),
-            -1);
+  EXPECT_EQ(format_callback_invalid(&output, "prefix%*s", INT_MIN, "x"), -1);
   EXPECT_EQ(output, "prefix");
 }
 
