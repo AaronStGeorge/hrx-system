@@ -285,9 +285,18 @@ std::optional<BufferIntrinsic> BufferIntrinsic::resolve(
     return BufferIntrinsic(source_element_type,
                            static_cast<int64_t>(alignment_bytes));
   }
-  if (signature->isVariadic() || parameters.size() != 1 || !result) {
+  if (signature->isVariadic() || parameters.empty() || parameters.size() > 2 ||
+      !result) {
+    diagnostics.reject(
+        unit, owner,
+        "buffer.alloca requires a count, an optional pool, and a pointer "
+        "result");
+  }
+  const bool has_pool = parameters.size() == 2;
+  if (has_pool &&
+      types.partition(parameters[1], owner).kind != ValueKind::Pool) {
     diagnostics.reject(unit, owner,
-                       "buffer.alloca requires one count and a pointer result");
+                       "buffer.alloca second operand must be a Loom pool");
   }
   auto count_domain = types.address_domain(parameters[0], owner);
   bool allocates_bytes = count_domain == LOOM_SCALAR_TYPE_OFFSET;
@@ -335,9 +344,9 @@ std::optional<BufferIntrinsic> BufferIntrinsic::resolve(
 
   return allocates_bytes
              ? BufferIntrinsic(memory_space,
-                               static_cast<int64_t>(alignment_bytes))
+                               static_cast<int64_t>(alignment_bytes), has_pool)
              : BufferIntrinsic(element_type, parameters[0], memory_space,
-                               static_cast<int64_t>(alignment_bytes));
+                               static_cast<int64_t>(alignment_bytes), has_pool);
 }
 
 Value BufferIntrinsic::call(std::span<const Value> arguments, ValueArena& arena,
@@ -372,12 +381,14 @@ Value BufferIntrinsic::call(std::span<const Value> arguments, ValueArena& arena,
     return arena.capture(source.partition(), {&root, 1});
   }
   if (operation_ == Operation::AllocaBytes) {
-    return Value(storage.allocate_bytes(arguments[0].ssa(), memory_space_,
-                                        alignment_, owner));
+    return Value(storage.allocate_bytes(
+        arguments[0].ssa(), memory_space_, alignment_,
+        has_pool_ ? arguments[1].ssa() : LOOM_VALUE_ID_INVALID, owner));
   }
-  return Value(storage.allocate_elements(element_type_, arguments[0].ssa(),
-                                         element_count_type_, memory_space_,
-                                         alignment_, owner));
+  return Value(storage.allocate_elements(
+      element_type_, arguments[0].ssa(), element_count_type_, memory_space_,
+      alignment_, has_pool_ ? arguments[1].ssa() : LOOM_VALUE_ID_INVALID,
+      owner));
 }
 
 Value BufferIntrinsic::call_literal(cxx::TranslationUnit& unit,
@@ -407,7 +418,8 @@ bool BufferIntrinsic::equivalent(const BufferIntrinsic& other) const {
          element_type_ == other.element_type_ &&
          element_count_type_ == other.element_count_type_ &&
          result_buffer_ == other.result_buffer_ &&
-         memory_space_ == other.memory_space_ && alignment_ == other.alignment_;
+         memory_space_ == other.memory_space_ &&
+         alignment_ == other.alignment_ && has_pool_ == other.has_pool_;
 }
 
 }  // namespace loom::cxx_import

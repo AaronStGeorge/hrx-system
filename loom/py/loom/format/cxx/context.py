@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from loom.dsl import Op
+from loom.dsl import Op, TargetLikeInterface
 from loom.fields import compute_layout, resolve_fields
 from loom.format.cxx.errors import CxxRenderError
 from loom.format.cxx.naming import clean_identifier
@@ -23,6 +23,7 @@ from loom.format.cxx.printer import CxxWriter
 from loom.format.cxx.registry import source_ops
 from loom.format.cxx.translation_unit import TargetInfo
 from loom.format.cxx.types import CxxTypes
+from loom.format.cxx.view_access import ViewAccessPlan
 from loom.ir import (
     Block,
     BufferType,
@@ -31,6 +32,8 @@ from loom.ir import (
     DynamicEncoding,
     Module,
     Operation,
+    ParameterizedType,
+    PoolType,
     Predicate,
     PredicateListAttr,
     ScalarType,
@@ -41,6 +44,23 @@ from loom.ir import (
 
 _OPS: tuple[Op, ...] = source_ops()
 _OP_BY_NAME = {operation.name: operation for operation in _OPS}
+
+
+def is_target_operation(operation: Operation) -> bool:
+    """Returns whether an operation defines a target-family record."""
+
+    descriptor = _OP_BY_NAME.get(operation.name)
+    return descriptor is not None and any(
+        isinstance(interface, TargetLikeInterface)
+        for interface in descriptor.interfaces
+    )
+
+
+def is_pure_operation(operation: Operation) -> bool:
+    """Returns whether the operation descriptor permits expression projection."""
+
+    descriptor = _OP_BY_NAME.get(operation.name)
+    return descriptor is not None and descriptor.is_pure
 
 
 def walk_operations(block: Block) -> Iterable[Operation]:
@@ -184,6 +204,7 @@ class CxxRenderContext:
         self.uses_numeric_conversion = False
         self.signed_values = self._analyze_signed_values()
         self.types = CxxTypes(module, self.signed_values)
+        self.view_access: ViewAccessPlan | None = None
         self.unsigned_upper_bounds: dict[int, int | None] = {}
         self.assumption_inputs = {
             operand
@@ -204,14 +225,16 @@ class CxxRenderContext:
         self.assignment_targets: dict[int, int] = {}
         self.suppressed_forwarding_values: set[int] = set()
         self.target_names: dict[str, str] = {}
+        self.target_type_names: dict[str, str] = {}
         self.function_names: dict[str, str] = {}
         self.function_buffer_elements: dict[str, tuple[str | None, ...]] = {}
         self.command_names: dict[str, str] = {}
         self.pipeline_names: dict[str, str] = {}
-        self.pipeline_declarations: dict[str, Operation] = {}
+        self.pipeline_callables: dict[str, Operation] = {}
         self.kernel_buffer_elements: dict[str, tuple[str | None, ...]] = {}
         self.kernel_configuration_names: dict[str, str] = {}
         self.kernel_workload_component_counts: dict[str, tuple[int, ...]] = {}
+        self.kernel_source_launch_attributes: dict[int, list[str] | None] = {}
         self.config_symbols: dict[str, Operation] = {
             str(operation.attributes["symbol"]): operation
             for operation in self.module.body.ops
@@ -219,6 +242,9 @@ class CxxRenderContext:
             and isinstance(operation.attributes.get("symbol"), str)
         }
         self.projected_config_declarations: set[int] = set()
+        self.rendered_config_operations: set[int] = set()
+        self.config_names: dict[str, str] = {}
+        self.translation_unit_names: set[str] = set()
 
     def _collect_value_scopes(self) -> tuple[dict[int, int], dict[int, int]]:
         """Maps top-level operations and their values to C++ local scopes."""
@@ -422,7 +448,7 @@ class CxxRenderContext:
     def _analyze_signed_values(self) -> set[int]:
         signed: set[int] = set()
         for operation in walk_operations(self.module.body):
-            if operation.name == "scalar.constant":
+            if operation.name in {"scalar.constant", "config.def"}:
                 value = operation.attributes.get("value")
                 if isinstance(value, int) and value < 0:
                     signed.update(operation.results)
@@ -492,6 +518,18 @@ class CxxRenderContext:
             "vector.insert",
             "vector.splat",
         }
+        config_values: dict[str, set[int]] = collections.defaultdict(set)
+        for operation in walk_operations(self.module.body):
+            symbol = (
+                operation.attributes.get("config")
+                if operation.name == "config.get"
+                else operation.attributes.get("symbol")
+                if operation.name in {"config.decl", "config.def"}
+                else None
+            )
+            if isinstance(symbol, str):
+                config_values[symbol].update(operation.results)
+
         changed = True
         operations = list(walk_operations(self.module.body))
         while changed:
@@ -514,26 +552,36 @@ class CxxRenderContext:
                         if result not in signed:
                             signed.add(result)
                             changed = True
+            for values in config_values.values():
+                if values & signed:
+                    for value in values:
+                        if value not in signed:
+                            signed.add(value)
+                            changed = True
         return signed
 
     def _collect_targets(self) -> dict[str, TargetInfo]:
         targets: dict[str, TargetInfo] = {}
         for operation in self.module.body.ops:
-            if operation.name.endswith(".target"):
+            if is_target_operation(operation):
                 symbol = operation.attributes.get("symbol")
                 kind = operation.attributes.get("kind")
                 if isinstance(symbol, str) and isinstance(kind, str):
-                    if operation.name != "amdgpu.target":
+                    if operation.name not in {"amdgpu.target", "aie2p.target"}:
                         targets[symbol] = TargetInfo(
                             operation, operation.name, kind, None, ()
                         )
                         continue
-                    supported_attributes = {
-                        "symbol",
-                        "kind",
-                        "subgroup_size",
-                        "features",
-                    }
+                    supported_attributes = (
+                        {
+                            "symbol",
+                            "kind",
+                            "subgroup_size",
+                            "features",
+                        }
+                        if operation.name == "amdgpu.target"
+                        else {"symbol", "kind", "device_profile"}
+                    )
                     unsupported = sorted(
                         set(operation.attributes) - supported_attributes
                     )
@@ -582,6 +630,31 @@ class CxxRenderContext:
                         tuple(features),
                     )
         return targets
+
+    def _target_attribute(self, operation: Operation, symbol: str) -> str:
+        """Returns one source target binding after validating its projection."""
+
+        target = self.targets.get(symbol)
+        if target is None:
+            raise CxxRenderError(
+                operation, f"target record {symbol!r} is not present in the module"
+            )
+        if target.operation_name not in {
+            "aie2p.target",
+            "amdgpu.target",
+            "target.generic",
+        }:
+            raise CxxRenderError(
+                target.operation,
+                f"target record {target.operation_name} has no C++ declaration "
+                "projection",
+            )
+        name = self.target_names.get(symbol)
+        if name is None:
+            raise CxxRenderError(
+                operation, f"target record {symbol!r} has no planned C++ name"
+            )
+        return f"loom::target({name})"
 
     def _validate_projected_attributes(
         self, operation: Operation, projected: tuple[str, ...]
@@ -655,6 +728,7 @@ class CxxRenderContext:
             )
         entry = body.blocks[0]
         direct_operations = {id(operation) for operation in entry.ops}
+        parameter_contracts = callable_operation.name == "kernel.def"
         for argument in entry.arg_ids:
             argument_type = self.module.values[argument].type
             if isinstance(argument_type, BufferType):
@@ -673,7 +747,11 @@ class CxxRenderContext:
                 self.buffer_info[argument] = BufferInfo(
                     root=argument,
                     name=self.names[argument],
-                    mutable=True,
+                    mutable=(
+                        self.view_access.is_mutable(argument)
+                        if self.view_access is not None
+                        else True
+                    ),
                     is_parameter=True,
                     element_types={repr(argument_type.element_type)},
                 )
@@ -686,7 +764,8 @@ class CxxRenderContext:
             }:
                 self._analyze_buffer_assumption(
                     operation,
-                    operation.name != "buffer.assume.memory_space"
+                    parameter_contracts
+                    and operation.name != "buffer.assume.memory_space"
                     and id(operation) in direct_operations,
                 )
                 continue
@@ -743,11 +822,22 @@ class CxxRenderContext:
                 if root is not None:
                     self.buffer_info[root].mutable = True
                 continue
-            if operation.name == "kernel.async.gather":
+            if operation.name in {
+                "kernel.async.copy",
+                "kernel.async.copy.mask",
+                "kernel.async.gather",
+                "kernel.async.gather.mask",
+                "kernel.async.cluster.gather",
+                "kernel.async.cluster.gather.mask",
+                "kernel.async.tensor.load.to.lds",
+                "kernel.async.tensor.store.from.lds",
+            }:
                 resolved = self._resolved(operation)
                 root = self.view_roots.get(resolved.value_id("dest"))
                 if root is not None:
                     self.buffer_info[root].mutable = True
+
+        self._apply_view_access_mutability()
 
         for root, information in self.buffer_info.items():
             definition = self.definitions.get(root)
@@ -827,7 +917,26 @@ class CxxRenderContext:
                         self.view_signed.add(view_id)
                         changed = True
 
+    def _apply_view_access_mutability(self) -> None:
+        if self.view_access is None:
+            return
+        for view_id, root in self.view_roots.items():
+            if self.view_access.is_mutable(view_id):
+                self.buffer_info[root].mutable = True
+
     def cpp_type(self, value_id: int, *, signed: bool | None = None) -> str:
+        value_type = self.module.values[value_id].type
+        if (
+            self.view_access is not None
+            and isinstance(value_type, ShapedType)
+            and value_type.type_kind == TypeKind.VIEW
+        ):
+            use_signed = value_id in self.signed_values if signed is None else signed
+            return self.types.view(
+                value_type,
+                use_signed,
+                const=not self.view_access.is_mutable(value_id),
+            )
         return self.types.value(value_id, signed=signed)
 
     def _literal(self, value: Any, result_id: int) -> str:
@@ -1147,8 +1256,10 @@ class CxxRenderContext:
             type_name = declaration_type
         elif (
             isinstance(result_type, ShapedType)
-            and result_type.type_kind == TypeKind.VIEW
-        ) or isinstance(result_type, (BufferType, DialectType)):
+            and result_type.type_kind in {TypeKind.TILE, TypeKind.VIEW}
+        ) or isinstance(
+            result_type, (BufferType, DialectType, ParameterizedType, PoolType)
+        ):
             type_name = "auto"
         else:
             type_name = self.cpp_type(result_id)

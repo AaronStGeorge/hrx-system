@@ -460,6 +460,17 @@ loom_symbol_ref_t TargetDefinitions::reference(
   return definitions_[definition->second].reference;
 }
 
+loom_symbol_ref_t TargetDefinitions::reference(cxx::VariableSymbol* variable,
+                                               cxx::AST* owner) const {
+  auto definition =
+      variable ? variables_.find(variable->canonical()) : variables_.end();
+  if (definition == variables_.end()) {
+    diagnostics_.reject(unit_, owner,
+                        "target binding requires an admitted target object");
+  }
+  return definitions_[definition->second].reference;
+}
+
 void TargetDefinitions::reject_launch_configuration_function(
     cxx::FunctionSymbol* function) const {
   auto binding = functions_.find(function->canonical());

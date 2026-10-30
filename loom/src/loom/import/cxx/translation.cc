@@ -40,9 +40,11 @@
 #include "loom/import/cxx/binding/exponent.h"
 #include "loom/import/cxx/binding/fastmath.h"
 #include "loom/import/cxx/binding/function_contracts.h"
+#include "loom/import/cxx/binding/index_expression.h"
 #include "loom/import/cxx/binding/intrinsics.h"
 #include "loom/import/cxx/binding/launch.h"
 #include "loom/import/cxx/binding/loop_schedule.h"
+#include "loom/import/cxx/binding/pipeline_strand.h"
 #include "loom/import/cxx/binding/target_definitions.h"
 #include "loom/import/cxx/binding/template_definitions.h"
 #include "loom/import/cxx/check.h"
@@ -69,6 +71,7 @@
 #include "loom/ops/global/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/ops/pipeline/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/template/ops.h"
@@ -160,10 +163,15 @@ class Translator final : private Initialization::Evaluation {
     // Required inlining defers the IR ancestor requirement until expansion.
     if (current_function_.kind == FunctionKind::Kernel ||
         current_function_.kind == FunctionKind::TemplateDefinition ||
+        (current_function_.kind == FunctionKind::Pipeline &&
+         pipeline_strand_depth_ != 0) ||
         (current_function_.kind == FunctionKind::Ordinary &&
          loom_func_def_inline_policy(current_function_.operation) ==
              LOOM_INLINE_POLICY_INLINE)) {
       return;
+    }
+    if (current_function_.kind == FunctionKind::Pipeline) {
+      fail(owner, "kernel intrinsic in a pipeline requires a strand body");
     }
     fail(owner, "kernel intrinsic requires a kernel or force-inline helper");
   }
@@ -406,7 +414,8 @@ class Translator final : private Initialization::Evaluation {
       return Value(result);
     }
     if (value.is_record() || value.is_array() || value.is_buffer() ||
-        value.is_opaque_dialect() || value.is_encoding() || value.is_vector() ||
+        value.is_opaque_dialect() || value.is_encoding() || value.is_pool() ||
+        value.is_tile() || value.is_channel() || value.is_vector() ||
         value.is_view() || value.is_tensor()) {
       if (&types_.partition(output_type, owner) != &value.partition()) {
         fail(owner, "conversion must preserve the source value type");
@@ -522,6 +531,22 @@ class Translator final : private Initialization::Evaluation {
         auto suffix = partition.component_names[index];
         name(components[index], suffix.empty() ? hint : hint + "_" + suffix);
       }
+    } else if (value.is_tile()) {
+      const auto& partition =
+          static_cast<const TilePartition&>(value.partition());
+      auto components = value.components();
+      for (size_t index = 0; index < components.size(); ++index) {
+        auto suffix = partition.component_names[index];
+        name(components[index], suffix.empty() ? hint : hint + "_" + suffix);
+      }
+    } else if (value.is_channel()) {
+      const auto& partition =
+          static_cast<const ChannelPartition&>(value.partition());
+      auto components = value.components();
+      for (size_t index = 0; index < components.size(); ++index) {
+        auto suffix = partition.component_names[index];
+        name(components[index], suffix.empty() ? hint : hint + "_" + suffix);
+      }
     } else if (value.is_tensor()) {
       const auto& partition =
           static_cast<const TensorPartition&>(value.partition());
@@ -552,10 +577,10 @@ class Translator final : private Initialization::Evaluation {
     return value_arena_.capture(partition, components);
   }
 
-  Value command_region_value(loom_region_t* region,
-                             const StagedSignatureProjection& program,
-                             const StagedParameterProjection& parameter,
-                             const Partition& partition) {
+  Value staged_region_value(loom_region_t* region,
+                            const StagedSignatureProjection& signature,
+                            const StagedParameterProjection& parameter,
+                            const Partition& partition) {
     auto* block = loom_region_entry_block(region);
     auto arguments =
         std::span<const loom_value_id_t>(block->arg_ids, block->arg_count);
@@ -565,7 +590,7 @@ class Translator final : private Initialization::Evaluation {
                                        parameter.component_count));
     }
     const size_t binding_index =
-        program.specialization_count + parameter.binding_offset;
+        signature.specialization_count + parameter.binding_offset;
     if (!parameter.specialization_count) {
       return value_arena_.capture(
           partition, arguments.subspan(binding_index, parameter.binding_count));
@@ -750,6 +775,7 @@ class Translator final : private Initialization::Evaluation {
                              fastmath_.function(body_contract.source->symbol)
                                  .value_or(default_fastmath_flags_));
     current_function_ = body_contract;
+    pipeline_strand_depth_ = 0;
     const auto& defined = current_function_;
     auto* body = defined.body;
     auto* op = defined.operation;
@@ -825,10 +851,10 @@ class Translator final : private Initialization::Evaluation {
       // Only pointers change representation at kernel entry: the ABI supplies
       // one buffer, and source pointer transport adds its zero byte origin.
       auto value =
-          defined.kind == FunctionKind::CommandProgram
-              ? command_region_value(
-                    region, *defined.command_program,
-                    defined.command_program->parameters[parameter_index],
+          defined.staged_signature
+              ? staged_region_value(
+                    region, *defined.staged_signature,
+                    defined.staged_signature->parameters[parameter_index],
                     partition)
               : region_value(region, argument_index,
                              kernel_pointer ? kSSAPartition : partition);
@@ -880,6 +906,9 @@ class Translator final : private Initialization::Evaluation {
           &builder_, locations_.get(returned.source), &terminator));
     } else if (defined.kind == FunctionKind::CommandProgram) {
       check(loom_command_return_build(
+          &builder_, locations_.get(returned.source), &terminator));
+    } else if (defined.kind == FunctionKind::Pipeline) {
+      check(loom_pipeline_finish_build(
           &builder_, locations_.get(returned.source), &terminator));
     } else if (defined.kind == FunctionKind::Kernel) {
       check(loom_kernel_return_build(&builder_, locations_.get(returned.source),
@@ -2418,6 +2447,55 @@ class Translator final : private Initialization::Evaluation {
     IREE_ASSERT_EQ(ordinal, projection.parameters.size());
   }
 
+  std::vector<loom_value_id_t> dynamic_indices(const IndexList& list) {
+    std::vector<loom_value_id_t> values;
+    values.reserve(list.dynamic_expressions().size());
+    for (auto* source : list.dynamic_expressions()) {
+      auto value = expression(source).ssa();
+      values.push_back(IndexExpression::build(unit_, &builder_, source, value,
+                                              locations_.get(source)));
+    }
+    return values;
+  }
+
+  Value pipeline_memory(cxx::CallExpressionAST* call,
+                        const PipelineMemoryIntrinsic& binding) {
+    if (current_function_.kind != FunctionKind::Pipeline) {
+      fail(call, "pipeline.memory requires a pipeline definition body");
+    }
+    if (pipeline_strand_depth_) {
+      fail(call, "pipeline.memory belongs outside pipeline strand bodies");
+    }
+    auto coordinates = IndexList::admit(unit_, diagnostics_, types_,
+                                        call->expressionList->value,
+                                        "pipeline.memory coordinates");
+    auto dynamic = dynamic_indices(coordinates);
+    loom_op_t* op;
+    check(loom_pipeline_memory_build(
+        &builder_, binding.memory_space, dynamic.data(), dynamic.size(),
+        coordinates.static_values().data(), coordinates.static_values().size(),
+        types_.get(call->type, call), locations_.get(call), &op));
+    auto result = loom_op_results(op)[0];
+    return value_arena_.capture(*binding.result, {&result, 1});
+  }
+
+  void pipeline_compose(cxx::CallExpressionAST* call,
+                        const PipelineComposeIntrinsic& binding) {
+    if (current_function_.kind != FunctionKind::Pipeline) {
+      fail(call, "pipeline.compose requires a pipeline definition body");
+    }
+    std::vector<loom_value_id_t> specializations;
+    std::vector<loom_value_id_t> bindings;
+    append_staged_arguments(call->expressionList, *binding.projection,
+                            /*buffer_materializations=*/{}, specializations,
+                            bindings);
+    loom_op_t* op;
+    check(loom_pipeline_compose_build(
+        &builder_, functions_.declare(binding.pipeline, call),
+        specializations.data(), specializations.size(), bindings.data(),
+        bindings.size(), locations_.get(call), &op));
+  }
+
   void command_launch(cxx::CallExpressionAST* call,
                       const CommandLaunchIntrinsic& launch) {
     if (current_function_.kind != FunctionKind::CommandProgram) {
@@ -3010,6 +3088,12 @@ class Translator final : private Initialization::Evaluation {
       source = static_cast<const OpaqueDialectPartition&>(partition).source;
     } else if (partition.kind == ValueKind::Encoding) {
       source = static_cast<const EncodingPartition&>(partition).source;
+    } else if (partition.kind == ValueKind::Pool) {
+      source = static_cast<const PoolPartition&>(partition).source;
+    } else if (partition.kind == ValueKind::Tile) {
+      source = static_cast<const TilePartition&>(partition).source;
+    } else if (partition.kind == ValueKind::Channel) {
+      source = static_cast<const ChannelPartition&>(partition).source;
     } else if (partition.kind == ValueKind::Vector) {
       source = static_cast<const VectorPartition&>(partition).source;
     } else if (partition.kind == ValueKind::View) {
@@ -3844,9 +3928,7 @@ class Translator final : private Initialization::Evaluation {
                "operation");
         }
         if (pipeline_contracts_.contains(function)) {
-          fail(ast,
-               "pipeline contracts require an explicit kernel launch "
-               "operation");
+          fail(ast, "pipelines require explicit composition or kernel launch");
         }
         auto called = ordinary_call(call, function, source);
         if (!called) {
@@ -3870,9 +3952,13 @@ class Translator final : private Initialization::Evaluation {
       if (auto* parameter = std::get_if<CommandParameterIntrinsic>(binding)) {
         return command_parameter(call, *parameter);
       }
+      if (auto* memory = std::get_if<PipelineMemoryIntrinsic>(binding)) {
+        return pipeline_memory(call, *memory);
+      }
       if (std::holds_alternative<KernelLaunchIntrinsic>(*binding) ||
-          std::holds_alternative<CommandLaunchIntrinsic>(*binding)) {
-        fail(ast, "void launch operation cannot be used as a value");
+          std::holds_alternative<CommandLaunchIntrinsic>(*binding) ||
+          std::holds_alternative<PipelineComposeIntrinsic>(*binding)) {
+        fail(ast, "void graph operation cannot be used as a value");
       }
       if (auto* buffer = std::get_if<BufferIntrinsic>(binding);
           buffer && buffer->has_literal()) {
@@ -4476,16 +4562,125 @@ class Translator final : private Initialization::Evaluation {
     loom_builder_restore(&builder_, saved);
   }
 
+  void pipeline_strand(const PipelineStrand& strand) {
+    if (current_function_.kind != FunctionKind::Pipeline) {
+      fail(strand.source, "strand requires a pipeline definition body");
+    }
+    if (!live_mutations(strand.body).empty()) {
+      fail(strand.body,
+           "pipeline strands cannot update enclosing automatic values "
+           "because they have no results");
+    }
+    if (control_->returns(strand.body) != ExitFlow::None) {
+      fail(strand.body, "pipeline strands cannot contain function returns");
+    }
+    if (control_->iteration_exits(strand.body) != ExitFlow::None) {
+      fail(strand.body, "pipeline strands cannot exit an enclosing loop");
+    }
+
+    auto origins = dynamic_indices(strand.origins);
+    auto counts = dynamic_indices(strand.counts);
+    auto strides = dynamic_indices(strand.strides);
+    auto target = strand.target ? target_definitions_.reference(
+                                      strand.target, strand.target_source)
+                                : loom_symbol_ref_null();
+    loom_op_t* op;
+    check(loom_pipeline_strand_build(
+        &builder_,
+        loom_symbol_ref_is_valid(target)
+            ? LOOM_PIPELINE_STRAND_BUILD_FLAG_HAS_TARGET
+            : 0,
+        target, origins.data(), origins.size(),
+        strand.origins.static_values().data(),
+        strand.origins.static_values().size(), counts.data(), counts.size(),
+        strand.counts.static_values().data(),
+        strand.counts.static_values().size(), strides.data(), strides.size(),
+        strand.strides.static_values().data(),
+        strand.strides.static_values().size(), locations_.get(strand.source),
+        &op));
+    auto saved =
+        loom_builder_enter_region(&builder_, op, loom_pipeline_strand_body(op));
+    auto outer_values = values_;
+    ++pipeline_strand_depth_;
+    for (auto* child : cxx::ListView{strand.body->statementList}) {
+      statement(child);
+      if (!control_->falls_through(child)) {
+        break;
+      }
+    }
+    loom_op_t* terminator;
+    check(loom_pipeline_end_build(&builder_, locations_.get(strand.body),
+                                  &terminator));
+    --pipeline_strand_depth_;
+    values_ = std::move(outer_values);
+    loom_builder_restore(&builder_, saved);
+  }
+
+  void validate_statement_attributes(cxx::StatementAST* statement) {
+    const bool loop = cxx::ast_cast<cxx::ForStatementAST>(statement) ||
+                      cxx::ast_cast<cxx::WhileStatementAST>(statement) ||
+                      cxx::ast_cast<cxx::DoStatementAST>(statement);
+    const bool declaration =
+        cxx::ast_cast<cxx::DeclarationStatementAST>(statement) != nullptr;
+    cxx::AttributeAST* region = nullptr;
+    cxx::AttributeAST* strand = nullptr;
+    cxx::AttributeAST* target = nullptr;
+    visit_loom_attributes(
+        unit_, statement_attributes(statement),
+        [&](std::string_view name, cxx::AttributeAST* attribute) {
+          if (name == "fastmath" || loop) {
+            return;
+          }
+          if (declaration && (name == "constexpr" || name == "workgroup")) {
+            return;
+          }
+          if (name == "serial" || name == "concurrent" || name == "strand") {
+            if (region) {
+              diagnostics_.reject(
+                  unit_, attribute,
+                  "one command or pipeline region is allowed per statement");
+            }
+            region = attribute;
+            if (name == "strand") {
+              strand = attribute;
+            }
+            return;
+          }
+          if (name == "target") {
+            if (target) {
+              diagnostics_.reject(unit_, attribute,
+                                  "one target is allowed per statement");
+            }
+            target = attribute;
+            return;
+          }
+          diagnostics_.reject(unit_, attribute,
+                              "unsupported Loom statement attribute");
+        });
+    if (target && !strand) {
+      diagnostics_.reject(unit_, target,
+                          "statement target requires a pipeline strand");
+    }
+  }
+
   void statement(cxx::StatementAST* ast) {
     FastMathScope math_scope(
         lexical_fastmath_flags_,
         resolve_fastmath(ast ? fastmath_.statement(ast) : std::nullopt));
+    if (ast) {
+      validate_statement_attributes(ast);
+    }
     ast = selected_statement(ast);
     if (!ast) {
       return;
     }
     if (auto schedule = CommandSchedule::resolve(unit_, diagnostics_, ast)) {
       command_schedule(*schedule);
+      return;
+    }
+    if (auto strand =
+            PipelineStrand::resolve(unit_, diagnostics_, types_, ast)) {
+      pipeline_strand(*strand);
       return;
     }
     if (auto* compound = cxx::ast_cast<cxx::CompoundStatementAST>(ast)) {
@@ -5276,6 +5471,13 @@ class Translator final : private Initialization::Evaluation {
             command_launch(call, *launch);
             return;
           }
+          if (auto* compose = std::get_if<PipelineComposeIntrinsic>(binding)) {
+            pipeline_compose(call, *compose);
+            return;
+          }
+          if (std::holds_alternative<PipelineMemoryIntrinsic>(*binding)) {
+            fail(ast, "value-producing pipeline.memory reached a void call");
+          }
           if (std::holds_alternative<AsyncIntrinsic>(*binding)) {
             require_kernel_context(ast);
           }
@@ -5317,9 +5519,7 @@ class Translator final : private Initialization::Evaluation {
                "operation");
         }
         if (pipeline_contracts_.contains(function)) {
-          fail(ast,
-               "pipeline contracts require an explicit kernel launch "
-               "operation");
+          fail(ast, "pipelines require explicit composition or kernel launch");
         }
         auto called = ordinary_call(call, function, locations_.get(ast));
         if (called) {
@@ -5405,6 +5605,9 @@ class Translator final : private Initialization::Evaluation {
   uint8_t lexical_fastmath_flags_ = 0;
   // Source and native definition contracts for the body being translated.
   FunctionBody current_function_ = {};
+  // Lexical pipeline strand nesting admits kernel operations only in worker
+  // execution regions and rejects construction-only memory queries there.
+  size_t pipeline_strand_depth_ = 0;
   // Bound symbols, never identifier spellings, key source-to-SSA mappings.
   std::unordered_map<cxx::Symbol*, Value> values_;
   // Storage-backed automatic objects retain one allocation across direct and

@@ -4,10 +4,11 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""C++ carrier types for projected Loom scalar and vector values."""
+"""C++ carrier types for projected Loom values."""
 
 from __future__ import annotations
 
+from loom.builtin_types import ChannelReadMode
 from loom.format.cxx.errors import CxxRenderError
 from loom.ir import (
     BufferType,
@@ -16,6 +17,8 @@ from loom.ir import (
     EncodingInstance,
     EncodingType,
     Module,
+    ParameterizedType,
+    PoolType,
     ScalarType,
     ShapedType,
     StaticDim,
@@ -47,6 +50,7 @@ _UNSIGNED_INTEGER_TYPES = {
 # Auto-deduced kernel topology values retain the index domain while exposing a
 # conventional unsigned conversion for ordinary C++ expressions.
 KERNEL_COORDINATE_CPP_TYPE = "loom::kernel::coordinate"
+_CHANNEL_READ_MUTABLE_MODE = ChannelReadMode.case("mutable").value
 
 
 class CxxTypes:
@@ -108,7 +112,7 @@ class CxxTypes:
         self.vector_aliases[key] = alias
         return alias
 
-    def view_arguments(
+    def shaped_arguments(
         self, value_type: ShapedType, signed: bool, *, const: bool = False
     ) -> tuple[str, str, str | None]:
         """Returns the shape, element, and encoding template arguments."""
@@ -152,31 +156,76 @@ class CxxTypes:
     def view(self, value_type: ShapedType, signed: bool, *, const: bool = False) -> str:
         """Returns the source carrier for a statically ranked Loom view."""
 
-        shape, element, encoding = self.view_arguments(value_type, signed, const=const)
+        shape, element, encoding = self.shaped_arguments(
+            value_type, signed, const=const
+        )
         arguments = [shape, element]
         if encoding is not None:
             arguments.append(encoding)
         return f"loom::type::view<{', '.join(arguments)}>"
 
-    def value(self, value_id: int, *, signed: bool | None = None) -> str:
-        value_type = self.module.values[value_id].type
-        use_signed = value_id in self.signed_values if signed is None else signed
+    def tile(self, value_type: ShapedType, signed: bool) -> str:
+        """Returns the source carrier for a tile-level aggregate value."""
+
+        shape, element, encoding = self.shaped_arguments(value_type, signed)
+        arguments = [shape, element]
+        if encoding is not None:
+            arguments.append(encoding)
+        return f"loom::type::tile<{', '.join(arguments)}>"
+
+    def parameterized(self, value_type: ParameterizedType, signed: bool) -> str:
+        """Returns the source carrier for a builtin parameterized value."""
+
+        family = value_type.family_name
+        if family not in {"channel", "read", "write"}:
+            raise CxxRenderError(
+                None,
+                f"parameterized type {value_type!r} has no C++ value spelling",
+            )
+        payload = value_type.get("payload")
+        if not isinstance(payload, ShapedType) or payload.type_kind != TypeKind.TILE:
+            raise CxxRenderError(
+                None, f"{family} payload {payload!r} has no C++ type spelling"
+            )
+        arguments = [self.tile(payload, signed)]
+        if family == "read":
+            mode = value_type.get("mode")
+            if mode is not None:
+                if mode != _CHANNEL_READ_MUTABLE_MODE:
+                    raise CxxRenderError(
+                        None, f"channel read mode {mode!r} has no C++ spelling"
+                    )
+                arguments.append("loom::channel::mode::mutable_")
+        return f"loom::type::{family}<{', '.join(arguments)}>"
+
+    def type(self, value_type: object, signed: bool = False) -> str:
+        """Returns a C++ type spelling independent of one SSA identity."""
+
         if isinstance(value_type, ScalarType):
-            return self.scalar(value_type, use_signed)
-        if (
-            isinstance(value_type, ShapedType)
-            and value_type.type_kind == TypeKind.VECTOR
-        ):
-            return self.vector(value_type, use_signed)
-        if isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VIEW:
-            return self.view(value_type, use_signed)
+            return self.scalar(value_type, signed)
+        if isinstance(value_type, ShapedType):
+            if value_type.type_kind == TypeKind.VECTOR:
+                return self.vector(value_type, signed)
+            if value_type.type_kind == TypeKind.VIEW:
+                return self.view(value_type, signed)
+            if value_type.type_kind == TypeKind.TILE:
+                return self.tile(value_type, signed)
         if isinstance(value_type, BufferType):
             return "unsigned char*"
         if isinstance(value_type, EncodingType):
             role = value_type.role.name.lower()
             return f"loom::type::encoding<loom::encoding::role::{role}>"
+        if isinstance(value_type, PoolType):
+            return "loom::type::pool"
+        if isinstance(value_type, ParameterizedType):
+            return self.parameterized(value_type, signed)
         if isinstance(value_type, DialectType):
             return "auto"
         raise CxxRenderError(
             None, f"value type {value_type!r} has no C++ value spelling"
         )
+
+    def value(self, value_id: int, *, signed: bool | None = None) -> str:
+        value_type = self.module.values[value_id].type
+        use_signed = value_id in self.signed_values if signed is None else signed
+        return self.type(value_type, use_signed)

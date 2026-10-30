@@ -103,9 +103,6 @@ void PipelineContracts::declaration(
     contract.launch_source = launch_source;
     contract.launch_parameter_ordinal = launch_parameter_ordinal;
   }
-  if (cxx::ast_cast<cxx::FunctionDefinitionAST>(owner)) {
-    contract.definition_source = owner;
-  }
   if (!parameter_sources.empty()) {
     contract.parameter_sources = std::move(parameter_sources);
   }
@@ -129,11 +126,6 @@ void PipelineContracts::finish() {
           unit_, contract.source,
           "pipeline requires a concrete non-variadic void namespace-scope "
           "function declaration");
-    }
-    if (contract.definition_source) {
-      diagnostics_.reject(
-          unit_, contract.definition_source,
-          "pipeline contracts require a bodyless function declaration");
     }
     if (annotated(function, "kernel") ||
         annotated(function, "command_program") ||

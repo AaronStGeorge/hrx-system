@@ -42,11 +42,26 @@ _Q8S32_SOURCES = [
     "q8s32_specialization_providers.loom",
 ]
 
+_PIPELINE_SOURCES = [
+    "gated_projection_pipeline.cxx",
+]
+
 # Timed translation units are private, controlled inputs. Tests and authoring
 # examples must not depend on their snapshots.
 exports_files(
-    _KERNEL_SOURCES + _Q8S32_SOURCES,
+    _KERNEL_SOURCES + _PIPELINE_SOURCES + _Q8S32_SOURCES,
     visibility = ["//visibility:private"],
+)
+
+iree_c_embed_data(
+    name = "pipeline_sources",
+    testonly = True,
+    srcs = _PIPELINE_SOURCES,
+    c_file_output = "pipeline_sources.c",
+    flatten = True,
+    h_file_output = "pipeline_sources.h",
+    identifier = "loomc_cxx_benchmark_pipeline_sources",
+    target_compatible_with = _IMPORT_COMPATIBLE_WITH,
 )
 
 iree_c_embed_data(

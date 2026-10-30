@@ -43,6 +43,7 @@ enum class FunctionKind {
   Ordinary,
   Kernel,
   CommandProgram,
+  Pipeline,
   TemplateDefinition,
   LaunchConfiguration,
   ClusteredLaunchConfiguration,
@@ -122,8 +123,8 @@ struct FunctionBody {
   std::optional<ImplicitObjectParameter> implicit_object;
   // Retained whole-function source facts shared with body translation.
   const ControlFlow* control;
-  // Source/native argument permutation for a command-program body.
-  const StagedSignatureProjection* command_program = nullptr;
+  // Source/native argument permutation for a staged callable body.
+  const StagedSignatureProjection* staged_signature = nullptr;
 };
 
 // Native definition and any source-owned launch configuration body that must
@@ -284,7 +285,7 @@ class Functions {
   LaunchContracts& launches_;
   // Retains command annotations and source/native signature projections.
   CommandPrograms& command_programs_;
-  // Retains external kernel-scoped pipeline launch contracts.
+  // Retains kernel-scoped pipeline declarations and definitions.
   PipelineContracts& pipeline_contracts_;
   // Reconciles named scalar settings before root selection and body lowering.
   Configs& configs_;

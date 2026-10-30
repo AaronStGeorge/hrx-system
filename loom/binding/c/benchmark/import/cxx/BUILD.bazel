@@ -62,6 +62,7 @@ loom_cc_benchmark(
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c/benchmark:compile_throughput_benchmark_harness",
+        "//loom/binding/c/benchmark/import/cxx/inputs:pipeline_sources",
         "//loom/binding/c/benchmark/import/cxx/inputs:q8s32_sources",
         "//loom/binding/c/import/cxx",
         "//runtime/src/iree/base",

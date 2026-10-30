@@ -35,6 +35,9 @@ enum class ValueKind {
   Address,
   OpaqueDialect,
   Encoding,
+  Pool,
+  Tile,
+  Channel,
   Vector,
   View,
   Tensor
@@ -80,6 +83,9 @@ class Value {
     return partition_->kind == ValueKind::OpaqueDialect;
   }
   bool is_encoding() const { return partition_->kind == ValueKind::Encoding; }
+  bool is_pool() const { return partition_->kind == ValueKind::Pool; }
+  bool is_tile() const { return partition_->kind == ValueKind::Tile; }
+  bool is_channel() const { return partition_->kind == ValueKind::Channel; }
   bool is_vector() const { return partition_->kind == ValueKind::Vector; }
   bool is_view() const { return partition_->kind == ValueKind::View; }
   bool is_tensor() const { return partition_->kind == ValueKind::Tensor; }
@@ -87,7 +93,9 @@ class Value {
     IREE_ASSERT(partition_->kind == ValueKind::SSA ||
                 partition_->kind == ValueKind::Buffer ||
                 partition_->kind == ValueKind::Address ||
-                partition_->kind == ValueKind::OpaqueDialect);
+                partition_->kind == ValueKind::OpaqueDialect ||
+                partition_->kind == ValueKind::Encoding ||
+                partition_->kind == ValueKind::Pool);
     return storage_.inline_values[0];
   }
   Pointer pointer() const {

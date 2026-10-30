@@ -1,0 +1,262 @@
+// RUN: roundtrip
+#include <loomcxx/pipeline.h>
+
+namespace loomt = loom::type;
+using Layout = loomt::encoding<loom::encoding::role::layout, 2>;
+using Payload = loomt::tile<loomt::shape<loomt::dynamic, 8>, float, Layout>;
+using Stream = loomt::channel<Payload>;
+
+Stream forward(Stream stream);
+
+Stream entry(Stream stream, loomt::pool pool, Payload payload) {
+  return forward(stream);
+}
+
+// ----
+func.def public @entry(%stream_dim0: index, %stream_encoding: encoding<layout>, %stream: channel<tile<[%stream_dim0]x8xf32, %stream_encoding>>, %pool: pool, %payload_dim0: index, %payload_encoding: encoding<layout>, %payload: tile<[%payload_dim0]x8xf32, %payload_encoding>) -> (%7: index, %8: encoding<layout>, channel<tile<[%7]x8xf32, %8>>) {
+  %10, %11, %12 = func.call @forward(%stream_dim0, %stream_encoding, %stream) : (index, encoding<layout>, channel<tile<[%stream_dim0]x8xf32, %stream_encoding>>) -> (index, encoding<layout>, channel<tile<[%10]x8xf32, %11>>)
+  func.return %10, %11, %12 : index, encoding<layout>, channel<tile<[%10]x8xf32, %11>>
+}
+
+func.decl @forward(%13: index, %14: encoding<layout>, %15: channel<tile<[%13]x8xf32, %14>>) -> (%16: index, %17: encoding<layout>, channel<tile<[%16]x8xf32, %17>>)
+
+// ====
+#include <loomcxx/pipeline.h>
+
+namespace loomt = loom::type;
+
+using Layout = loomt::encoding<loom::encoding::role::layout, 2>;
+using StorageLayout = loomt::encoding<loom::encoding::role::layout, 3>;
+using Payload = loomt::tile<loomt::shape<loomt::dynamic, 8>, float, Layout>;
+using Stream = loomt::channel<Payload>;
+using Slots = loomt::view<loomt::shape<loomt::dynamic, loomt::dynamic, 8>,
+                          float, StorageLayout>;
+
+void channel_operations(Slots slots, loomt::index capacity,
+                        Layout payload_layout, float seed) {
+  auto stream = loom::channel::bind<loom::channel::discipline::fifo>(
+      slots, capacity, payload_layout);
+
+  auto reservation = loom::channel::reserve(stream);
+  loom::view::store(seed, reservation.payload, 0, 0);
+  loom::channel::publish(reservation.write);
+
+  auto accepted = loom::channel::accept(stream);
+  auto payload = loom::channel::wait(accepted);
+  auto observed = loom::view::load(payload, 0, 0);
+  auto copies = loom::channel::fanout<2>(accepted);
+  loom::channel::release(copies.first);
+  loom::channel::release(copies.second);
+
+  auto mutable_read =
+      loom::channel::accept<loom::channel::mode::mutable_>(stream);
+  auto mutable_payload = loom::channel::wait(mutable_read);
+  loom::view::store(observed, mutable_payload, 0, 0);
+  loom::channel::release(mutable_read);
+
+  auto acquisition =
+      loom::channel::acquire<loom::channel::mode::mutable_>(stream);
+  loom::view::store(seed, acquisition.payload, 0, 0);
+  loom::channel::release(acquisition.read);
+
+  auto triple = loom::channel::fanout<3>(loom::channel::accept(stream));
+  loom::channel::release(triple.first);
+  loom::channel::release(triple.remaining.first);
+  loom::channel::release(triple.remaining.second);
+
+  auto source = loom::channel::accept(stream);
+  auto target = loom::channel::reserve(stream);
+  loom::channel::copy(source, target.write);
+
+  auto selected = loom::channel::select(stream);
+  loom::channel::release(selected.read);
+}
+
+using PlainPayload = loomt::tile<loomt::shape<4>, unsigned>;
+using PlainStream = loomt::channel<PlainPayload>;
+using PlainSlots = loomt::view<loomt::shape<2, 4>, unsigned>;
+
+PlainStream bind_plain(PlainSlots slots, loomt::index capacity) {
+  return loom::channel::bind<loom::channel::discipline::fifo>(slots, capacity);
+}
+
+void pooled_allocations(__SIZE_TYPE__ count, loomt::index native_count,
+                        loomt::offset byte_length, loomt::pool pool) {
+  loom::buffer::alloca<float, loom::memory_space::private_>(count, pool);
+  loom::buffer::alloca<float, loom::memory_space::workgroup>(native_count,
+                                                             pool);
+  loom::buffer::alloca<loom::memory_space::private_>(byte_length, pool);
+}
+
+// ----
+func.def public @channel_operations(%slots_dim0: index, %slots_dim1: index, %slots_layout: encoding<layout>, %slots: view<[%slots_dim0]x[%slots_dim1]x8xf32, %slots_layout>, %capacity: index, %payload_layout: encoding<layout>, %seed: f32) {
+  %stream = channel.bind<fifo> %slots, %capacity : view<[%slots_dim0]x[%slots_dim1]x8xf32, %slots_layout>, index -> channel<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  %reservation_write, %reservation_payload = channel.reserve %stream : channel<tile<[%slots_dim1]x8xf32, %payload_layout>> -> (write<tile<[%slots_dim1]x8xf32, %payload_layout>>, view<[%slots_dim1]x8xf32, %payload_layout>)
+  %10 = scalar.constant 0 : i32
+  %11 = scalar.constant 0 : i32
+  %12 = index.cast %10 : i32 to index
+  %13 = index.cast %11 : i32 to index
+  view.store %seed, %reservation_payload[%12, %13] : f32, view<[%slots_dim1]x8xf32, %payload_layout>
+  channel.publish %reservation_write : write<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  %accepted = channel.accept %stream : channel<tile<[%slots_dim1]x8xf32, %payload_layout>> -> read<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  %payload = channel.wait %accepted : read<tile<[%slots_dim1]x8xf32, %payload_layout>> -> view<[%slots_dim1]x8xf32, %payload_layout>
+  %16 = scalar.constant 0 : i32
+  %17 = scalar.constant 0 : i32
+  %18 = index.cast %16 : i32 to index
+  %19 = index.cast %17 : i32 to index
+  %observed = view.load %payload[%18, %19] : view<[%slots_dim1]x8xf32, %payload_layout> -> f32
+  %copies_first, %copies_second = channel.fanout %accepted : read<tile<[%slots_dim1]x8xf32, %payload_layout>> -> (read<tile<[%slots_dim1]x8xf32, %payload_layout>>, read<tile<[%slots_dim1]x8xf32, %payload_layout>>)
+  channel.release %copies_first : read<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  channel.release %copies_second : read<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  %mutable_read = channel.accept<mutable> %stream : channel<tile<[%slots_dim1]x8xf32, %payload_layout>> -> read<tile<[%slots_dim1]x8xf32, %payload_layout>, mutable>
+  %mutable_payload = channel.wait %mutable_read : read<tile<[%slots_dim1]x8xf32, %payload_layout>, mutable> -> view<[%slots_dim1]x8xf32, %payload_layout>
+  %25 = scalar.constant 0 : i32
+  %26 = scalar.constant 0 : i32
+  %27 = index.cast %25 : i32 to index
+  %28 = index.cast %26 : i32 to index
+  view.store %observed, %mutable_payload[%27, %28] : f32, view<[%slots_dim1]x8xf32, %payload_layout>
+  channel.release %mutable_read : read<tile<[%slots_dim1]x8xf32, %payload_layout>, mutable>
+  %acquisition_read, %acquisition_payload = channel.acquire<mutable> %stream : channel<tile<[%slots_dim1]x8xf32, %payload_layout>> -> (read<tile<[%slots_dim1]x8xf32, %payload_layout>, mutable>, view<[%slots_dim1]x8xf32, %payload_layout>)
+  %31 = scalar.constant 0 : i32
+  %32 = scalar.constant 0 : i32
+  %33 = index.cast %31 : i32 to index
+  %34 = index.cast %32 : i32 to index
+  view.store %seed, %acquisition_payload[%33, %34] : f32, view<[%slots_dim1]x8xf32, %payload_layout>
+  channel.release %acquisition_read : read<tile<[%slots_dim1]x8xf32, %payload_layout>, mutable>
+  %35 = channel.accept %stream : channel<tile<[%slots_dim1]x8xf32, %payload_layout>> -> read<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  %triple_first, %triple_remaining_first, %triple_remaining_second = channel.fanout %35 : read<tile<[%slots_dim1]x8xf32, %payload_layout>> -> (read<tile<[%slots_dim1]x8xf32, %payload_layout>>, read<tile<[%slots_dim1]x8xf32, %payload_layout>>, read<tile<[%slots_dim1]x8xf32, %payload_layout>>)
+  channel.release %triple_first : read<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  channel.release %triple_remaining_first : read<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  channel.release %triple_remaining_second : read<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  %source = channel.accept %stream : channel<tile<[%slots_dim1]x8xf32, %payload_layout>> -> read<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  %target_write, %target_payload = channel.reserve %stream : channel<tile<[%slots_dim1]x8xf32, %payload_layout>> -> (write<tile<[%slots_dim1]x8xf32, %payload_layout>>, view<[%slots_dim1]x8xf32, %payload_layout>)
+  channel.copy %source -> %target_write : read<tile<[%slots_dim1]x8xf32, %payload_layout>>, write<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  %selected_source_rank, %selected_read = channel.select %stream : channel<tile<[%slots_dim1]x8xf32, %payload_layout>> -> (index, read<tile<[%slots_dim1]x8xf32, %payload_layout>>)
+  channel.release %selected_read : read<tile<[%slots_dim1]x8xf32, %payload_layout>>
+  func.return
+}
+
+func.def public @bind_plain(%slots: view<2x4xi32>, %capacity: index) -> (channel<tile<4xi32>>) {
+  %47 = channel.bind<fifo> %slots, %capacity : view<2x4xi32>, index -> channel<tile<4xi32>>
+  func.return %47 : channel<tile<4xi32>>
+}
+
+func.def public @pooled_allocations(%count: i64, %native_count: index, %byte_length: offset, %pool: pool) {
+  %52 = index.cast %count : i64 to index
+  %53 = index.constant 4 : offset
+  %54 = index.scale %52, %53 : index, offset -> offset
+  %55 = buffer.alloca<private> pool(%pool) align(4) %54 : buffer
+  %56 = index.constant 0 : offset
+  %57 = index.constant 4 : offset
+  %58 = index.scale %native_count, %57 : index, offset -> offset
+  %59 = buffer.alloca<workgroup> pool(%pool) align(4) %58 : buffer
+  %60 = index.constant 0 : offset
+  %61 = buffer.alloca<private> pool(%pool) align(1) %byte_length : buffer
+  %62 = index.constant 0 : offset
+  func.return
+}
+
+// ====
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+namespace loomt = loom::type;
+using Tile = loomt::view<loomt::shape<loomt::dynamic, 4>, float, loomt::encoding<loom::encoding::role::layout, 2>>;
+using Output = loomt::buffer<float>;
+
+[[loom::pipeline("kernel"), loom::symbol("resident.tile")]] void resident(unsigned factor, [[loom::launch]] Tile tile, float scale, Output output) [[loom::where(factor > 0u)]];
+
+[[loom::command_program, loom::symbol("run.tile")]] void run(unsigned factor, float scale, [[loom::launch]] Tile tile, Output output) {
+  [[loom::serial]] {
+    loom::kernel::launch<resident>(factor, tile, scale, output);
+  }
+}
+
+// ----
+command.def public @run.tile(%factor: i32, %scale: f32, %tile_dim0: index, %tile_layout: encoding<layout>) launch(%tile: view<[%tile_dim0]x4xf32, %tile_layout>, %output: buffer) {
+  command.serial {
+    kernel.launch @resident.tile[%factor, %tile_dim0, %tile_layout](%tile, %scale, %output) : [i32, index, encoding<layout>](view<[%tile_dim0]x4xf32, %tile_layout>, f32, buffer)
+  }
+  command.return
+}
+
+pipeline.decl<kernel> @resident.tile(%6: i32, %7: index, %8: encoding<layout>) run(%9: view<[%7]x4xf32, %8>, %10: f32, %11: buffer) where [ne(%6, 0)]
+
+// ====
+// Pipeline buffer contracts accept the same shaped-handle materialization as
+// native kernel launches. A proven zero-origin C++ allocation also projects to
+// its buffer root without transporting its source-only byte offset.
+#include <loomcxx/command.h>
+#include <loomcxx/kernel.h>
+
+namespace loomt = loom::type;
+using Bytes = loomt::buffer<unsigned char>;
+using Dynamic = loomt::view<loomt::shape<loomt::dynamic, 4>, float, loomt::encoding<loom::encoding::role::layout, 2>>;
+
+[[loom::pipeline("kernel")]] void materialized([[loom::launch]] Bytes input, Bytes scratch);
+
+[[loom::command_program]] void launch_materialized([[loom::launch]] Dynamic input) {
+  auto* scratch = loom::buffer::alloca<loom::memory_space::global, 64>(loom::type::offset{256});
+  loom::kernel::launch<materialized>(input, scratch);
+}
+
+// ----
+command.def public @launch_materialized(%input_dim0: index, %input_layout: encoding<layout>) launch(%input: view<[%input_dim0]x4xf32, %input_layout>) {
+  %3 = scalar.constant 256 : i32
+  %4 = scalar.extsi %3 : i32 to i64
+  %5 = index.cast %4 : i64 to offset
+  %scratch = buffer.alloca<global> align(64) %5 : buffer
+  %scratch_byte_offset = index.constant 0 : offset
+  kernel.launch @materialized(%input, %scratch) : (view<[%input_dim0]x4xf32, %input_layout>, buffer)
+  command.return
+}
+
+pipeline.decl<kernel> @materialized() run(%8: buffer, %9: buffer)
+
+// ====
+#include <loomcxx/kernel.h>
+#include <loomcxx/pipeline.h>
+#include <loomcxx/target.h>
+
+namespace loomt = loom::type;
+using Bytes = loomt::buffer<unsigned char>;
+
+struct [[loom::target("target.generic")]] generic_target {
+  const char* kind;
+};
+constexpr generic_target worker_target{.kind = "reference"};
+
+[[loom::pipeline("kernel")]] void child(unsigned factor, [[loom::launch]] Bytes output);
+
+[[loom::pipeline("kernel"), loom::target(worker_target)]] void resident(unsigned factor, loomt::index column, loomt::index count, [[loom::launch]] Bytes output) {
+  auto pool = loom::pipeline::memory<loom::memory_space::workgroup>(loomt::indices{column, loomt::index{3}});
+  auto* scratch = loom::buffer::alloca<unsigned char, loom::memory_space::workgroup, 64>(loomt::index{256}, pool);
+  (void)scratch;
+  loom::pipeline::compose<child>(factor, output);
+
+  [[loom::strand(loomt::indices{column, loomt::index{2}}, loomt::indices{count, loomt::index{1}}, loomt::indices{loomt::index{1}, loomt::index{1}}), loom::target(worker_target)]] {
+    auto worker = loom::kernel::workitem::id.x;
+    (void)worker;
+    (void)output;
+  }
+}
+
+// ----
+target.generic<reference> @worker_target
+
+pipeline.def<kernel> public target(@worker_target) @resident(%factor: i32, %column: index, %count: index) run(%output: buffer) {
+  %pool = pipeline.memory<workgroup>[%column, 3] : pool
+  %5 = scalar.constant 256 : i32
+  %6 = scalar.extsi %5 : i32 to i64
+  %7 = index.cast %6 : i64 to index
+  %8 = index.constant 1 : offset
+  %9 = index.scale %7, %8 : index, offset -> offset
+  %scratch = buffer.alloca<workgroup> pool(%pool) align(64) %9 : buffer
+  %scratch_byte_offset = index.constant 0 : offset
+  pipeline.compose @child[%factor](%output) : [i32](buffer)
+  pipeline.strand target(@worker_target) workers([%column, 2], [%count, 1], [1, 1]) {
+    %workitem_id_x = kernel.workitem.id<x> : index
+  }
+}
+
+pipeline.decl<kernel> @child(%13: i32) run(%14: buffer)

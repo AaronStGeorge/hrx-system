@@ -764,7 +764,12 @@ class CxxExpressionRenderer(CxxRenderContext):
         raise CxxRenderError(None, "dynamic index metadata has trailing values")
 
     def _mixed_index_record(
-        self, resolved: Any, *, dynamic_field: str, static_field: str
+        self,
+        resolved: Any,
+        *,
+        dynamic_field: str,
+        static_field: str,
+        force_typed: bool = False,
     ) -> str:
         """Renders a coordinate record without discarding index identities."""
 
@@ -794,7 +799,7 @@ class CxxExpressionRenderer(CxxRenderContext):
         else:
             raise CxxRenderError(None, "dynamic index metadata has trailing values")
 
-        strong = any(
+        strong = force_typed or any(
             value_id is not None and self._retains_address_identity(value_id)
             for _, value_id in entries
         )

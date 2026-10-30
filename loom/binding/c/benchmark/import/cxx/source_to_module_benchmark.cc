@@ -11,6 +11,7 @@
 
 #include "benchmark/benchmark.h"
 #include "loom/binding/c/benchmark/compile_throughput_benchmark.h"
+#include "loom/binding/c/benchmark/import/cxx/inputs/pipeline_sources.h"
 #include "loom/binding/c/benchmark/import/cxx/inputs/q8s32_sources.h"
 #include "loomc/import/cxx.h"
 
@@ -30,6 +31,13 @@ enum class CxxSourceMode {
   kPreambleCreate,
 };
 
+struct EmbeddedSourceSet {
+  // Returns the immutable generated source table.
+  const iree_file_toc_t* (*create)();
+  // Returns the number of entries in the generated source table.
+  size_t (*size)();
+};
+
 struct SourceToModuleInput {
   // Language accepted at the public source-to-module boundary.
   SourceLanguage language;
@@ -41,6 +49,17 @@ struct SourceToModuleInput {
   const char* header_identifier;
   // C++ frontend lifecycle measured by each timed invocation.
   CxxSourceMode cxx_mode = CxxSourceMode::kColdImport;
+  // Generated source table containing source_identifier and header_identifier.
+  const EmbeddedSourceSet* embedded_sources = nullptr;
+};
+
+constexpr EmbeddedSourceSet kPipelineSources = {
+    loomc_cxx_benchmark_pipeline_sources_create,
+    loomc_cxx_benchmark_pipeline_sources_size,
+};
+constexpr EmbeddedSourceSet kQ8S32Sources = {
+    loomc_cxx_benchmark_q8s32_sources_create,
+    loomc_cxx_benchmark_q8s32_sources_size,
 };
 
 static iree_status_t CreateSource(loomc_string_view_t identifier,
@@ -77,8 +96,8 @@ class SourceToModuleScenario final : public CompileScenario {
   iree_status_t SetUp(iree_host_size_t worker_count) override {
     IREE_RETURN_IF_ERROR(CompileScenario::SetUp(worker_count));
     if (input_.source_identifier) {
-      const auto* sources = loomc_cxx_benchmark_q8s32_sources_create();
-      const size_t source_count = loomc_cxx_benchmark_q8s32_sources_size();
+      const auto* sources = input_.embedded_sources->create();
+      const size_t source_count = input_.embedded_sources->size();
       EmbeddedSource source =
           FindEmbeddedSource(sources, source_count, input_.source_identifier);
       IREE_RETURN_IF_ERROR(CreateSource(source.identifier, source.contents,
@@ -278,8 +297,14 @@ Weight load_rank_three(const Weight* data, unsigned rows, unsigned tiles,
     nullptr, nullptr};
 constexpr SourceToModuleInput kPredicate = {
     SourceLanguage::kCxx, "#include <loomcxx/predicate.h>\n", nullptr, nullptr};
+constexpr SourceToModuleInput kPipeline = {
+    SourceLanguage::kCxx, "#include <loomcxx/pipeline.h>\n", nullptr, nullptr};
 constexpr SourceToModuleInput kKernel = {
     SourceLanguage::kCxx, "#include <loomcxx/kernel.h>\n", nullptr, nullptr};
+constexpr SourceToModuleInput kKernelPipeline = {
+    SourceLanguage::kCxx,
+    "#include <loomcxx/kernel.h>\n#include <loomcxx/pipeline.h>\n", nullptr,
+    nullptr};
 constexpr SourceToModuleInput kKernelPredicate = {
     SourceLanguage::kCxx,
     "#include <loomcxx/kernel.h>\n#include <loomcxx/predicate.h>\n", nullptr,
@@ -293,17 +318,54 @@ constexpr SourceToModuleInput kKernelPredicatePreambleCreate = {
     "#include <loomcxx/kernel.h>\n#include <loomcxx/predicate.h>\n", nullptr,
     nullptr, CxxSourceMode::kPreambleCreate};
 constexpr SourceToModuleInput kQ8S32Providers = {
-    SourceLanguage::kCxx, nullptr, "q8s32_specialization_providers.cxx",
-    "q8s32_specialization.h"};
+    SourceLanguage::kCxx,
+    nullptr,
+    "q8s32_specialization_providers.cxx",
+    "q8s32_specialization.h",
+    CxxSourceMode::kColdImport,
+    &kQ8S32Sources};
 constexpr SourceToModuleInput kQ8S32ProvidersPreamble = {
-    SourceLanguage::kCxx, nullptr, "q8s32_specialization_providers.cxx",
-    "q8s32_specialization.h", CxxSourceMode::kPreambleImport};
+    SourceLanguage::kCxx,
+    nullptr,
+    "q8s32_specialization_providers.cxx",
+    "q8s32_specialization.h",
+    CxxSourceMode::kPreambleImport,
+    &kQ8S32Sources};
 constexpr SourceToModuleInput kQ8S32ProvidersPreambleCreate = {
-    SourceLanguage::kCxx, nullptr, "q8s32_specialization_providers.cxx",
-    "q8s32_specialization.h", CxxSourceMode::kPreambleCreate};
+    SourceLanguage::kCxx,
+    nullptr,
+    "q8s32_specialization_providers.cxx",
+    "q8s32_specialization.h",
+    CxxSourceMode::kPreambleCreate,
+    &kQ8S32Sources};
 constexpr SourceToModuleInput kQ8S32AuthoredLoomProviders = {
-    SourceLanguage::kLoom, nullptr, "q8s32_specialization_providers.loom",
-    nullptr};
+    SourceLanguage::kLoom,
+    nullptr,
+    "q8s32_specialization_providers.loom",
+    nullptr,
+    CxxSourceMode::kColdImport,
+    &kQ8S32Sources};
+constexpr SourceToModuleInput kPipelineDefinition = {
+    SourceLanguage::kCxx,
+    nullptr,
+    "gated_projection_pipeline.cxx",
+    nullptr,
+    CxxSourceMode::kColdImport,
+    &kPipelineSources};
+constexpr SourceToModuleInput kPipelineDefinitionPreamble = {
+    SourceLanguage::kCxx,
+    nullptr,
+    "gated_projection_pipeline.cxx",
+    nullptr,
+    CxxSourceMode::kPreambleImport,
+    &kPipelineSources};
+constexpr SourceToModuleInput kPipelineDefinitionPreambleCreate = {
+    SourceLanguage::kCxx,
+    nullptr,
+    "gated_projection_pipeline.cxx",
+    nullptr,
+    CxxSourceMode::kPreambleCreate,
+    &kPipelineSources};
 
 BENCHMARK_CAPTURE(SourceToModule, NoIncludes, &kNoIncludes)
     ->Unit(::benchmark::kMicrosecond);
@@ -327,7 +389,11 @@ BENCHMARK_CAPTURE(SourceToModule, RankThreeStorageView, &kRankThreeStorageView)
     ->Unit(::benchmark::kMicrosecond);
 BENCHMARK_CAPTURE(SourceToModule, Predicate, &kPredicate)
     ->Unit(::benchmark::kMicrosecond);
+BENCHMARK_CAPTURE(SourceToModule, Pipeline, &kPipeline)
+    ->Unit(::benchmark::kMicrosecond);
 BENCHMARK_CAPTURE(SourceToModule, Kernel, &kKernel)
+    ->Unit(::benchmark::kMicrosecond);
+BENCHMARK_CAPTURE(SourceToModule, KernelPipeline, &kKernelPipeline)
     ->Unit(::benchmark::kMicrosecond);
 BENCHMARK_CAPTURE(SourceToModule, KernelPredicate, &kKernelPredicate)
     ->Unit(::benchmark::kMicrosecond);
@@ -347,6 +413,14 @@ BENCHMARK_CAPTURE(SourceToPreamble, Q8S32Providers,
     ->Unit(::benchmark::kMicrosecond);
 BENCHMARK_CAPTURE(SourceToModule, Q8S32AuthoredLoomProviders,
                   &kQ8S32AuthoredLoomProviders)
+    ->Unit(::benchmark::kMicrosecond);
+BENCHMARK_CAPTURE(SourceToModule, PipelineDefinition, &kPipelineDefinition)
+    ->Unit(::benchmark::kMicrosecond);
+BENCHMARK_CAPTURE(SourceToModule, PipelineDefinitionPreamble,
+                  &kPipelineDefinitionPreamble)
+    ->Unit(::benchmark::kMicrosecond);
+BENCHMARK_CAPTURE(SourceToPreamble, PipelineDefinition,
+                  &kPipelineDefinitionPreambleCreate)
     ->Unit(::benchmark::kMicrosecond);
 
 BENCHMARK_CAPTURE(SourceToModuleThroughput, Q8S32Providers, &kQ8S32Providers)

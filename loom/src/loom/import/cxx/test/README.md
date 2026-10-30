@@ -2,6 +2,9 @@
 
 Compiler behavior is authored in `.cxx-test` files and checked through the same
 `loom-check` modes, diagnostics, expectations, and updates as `.loom-test` files.
+Each file owns one coherent language or lowering family in one harness mode.
+Related cases extend that file through `//====` sections; a new file represents
+a distinct semantic family or run mode rather than one additional witness.
 Each `//====` case supplies C++ source; `//----` introduces its expected Loom
 output. `// ERROR` annotations check source diagnostics. `// INPUT:` selects
 import options such as the language standard, data model, or exported roots.

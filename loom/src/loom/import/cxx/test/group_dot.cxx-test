@@ -22,3 +22,26 @@ func.def public @mxfp8_group_dot(%payload: vector<32xf8E4M3>, %scale: vector<1xi
   %19 = vector.reduce<addf> %partial$17, %18 : vector<16xf32>, f32
   func.return %19 : f32
 }
+
+// ====
+// INPUT: cxx root=packed_group_dot
+#include "packed_group_dot.cxx"
+
+// ----
+func.def public @packed_group_dot(%table: vector<16xi8>, %packed: vector<16xi8>, %activations_low: vector<16xbf16>, %activations_high: vector<16xbf16>, %scale: f32, %seed: f32) -> (f32) {
+  %264 = vector.splati 15 : vector<16xi8>
+  %10 = vector.andi %packed, %264 : vector<16xi8>
+  %low_codes = vector.table.lookup %table[%10] : vector<16xi8>, vector<16xi8> -> vector<16xi8>
+  %259 = vector.splati 4 : vector<16xi8>
+  %15 = vector.shrui %packed, %259 : vector<16xi8>
+  %high_codes = vector.table.lookup %table[%15] : vector<16xi8>, vector<16xi8> -> vector<16xi8>
+  %low_weights = vector.sitofp %low_codes : vector<16xi8> to vector<16xbf16>
+  %high_weights = vector.sitofp %high_codes : vector<16xi8> to vector<16xbf16>
+  %partial$254 = vector.splatf 0.0 : vector<8xf32>
+  %partial$20 = vector.dot2f %low_weights, %activations_low, %partial$254 : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
+  %partial$21 = vector.dot2f %high_weights, %activations_high, %partial$20 : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
+  %22 = scalar.constant 0.0 : f32
+  %23 = vector.reduce<addf> %partial$21, %22 : vector<8xf32>, f32
+  %24 = scalar.fmaf %scale, %23, %seed : f32
+  func.return %24 : f32
+}

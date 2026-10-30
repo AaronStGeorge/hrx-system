@@ -273,6 +273,7 @@ bool Functions::ordinary_analysis_call(const DirectCall& call) {
   auto* function = call.function;
   if (!function || annotated(function, "kernel") ||
       command_programs_.contains(function) ||
+      pipeline_contracts_.contains(function) ||
       launches_.is_configuration(function) || is_check_record(function) ||
       annotated(function, "check_benchmark") ||
       intrinsics_.lookup(function, call.source)) {
@@ -903,7 +904,8 @@ loom_symbol_ref_t Functions::retain(FunctionInstance instance,
       function_contracts_.declaration(function, prototype);
     }
   }
-  if (!command_programs_.contains(function)) {
+  if (!command_programs_.contains(function) &&
+      !pipeline_contracts_.contains(function)) {
     admit_reference_parameters(function, owner ? owner : body->declaration());
   }
   auto retained = FunctionInstance{body, instance.receiver_abi};
@@ -1418,6 +1420,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
   auto parameters = symbol->parameters();
   bool kernel = annotated(symbol, "kernel");
   bool command_program = command_programs_.contains(symbol);
+  bool pipeline = pipeline_contracts_.contains(symbol);
   bool check_case = is_check_case(symbol);
   auto scenario = check_scenarios_.find(symbol->canonical());
   bool check_scenario = scenario != check_scenarios_.end();
@@ -1447,7 +1450,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
   std::optional<LaunchConfiguration> launch_configuration;
   BoundSignature configuration_signature;
   BoundSignature callable_signature;
-  BoundStagedSignature command_signature;
+  BoundStagedSignature staged_signature;
   if (kernel) {
     for (auto* parameter : parameters) {
       arguments.push_back(
@@ -1467,12 +1470,21 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
     }
   } else if (command_program) {
     launches_.reject_ordinary_function(symbol);
-    command_signature = command_programs_.bind(
+    staged_signature = command_programs_.bind(
         symbol, types, definition, builder,
         has_predicates ? SignatureIdentityRequirement::Required
                        : SignatureIdentityRequirement::DependentTypes);
     predicates = function_contracts_.bind(
-        symbol, types, command_signature.source_identities,
+        symbol, types, staged_signature.source_identities,
+        FunctionContractSignature::Flattened, definition);
+  } else if (pipeline) {
+    launches_.reject_ordinary_function(symbol);
+    staged_signature = pipeline_contracts_.bind(
+        symbol, types, definition, builder,
+        has_predicates ? SignatureIdentityRequirement::Required
+                       : SignatureIdentityRequirement::DependentTypes);
+    predicates = function_contracts_.bind(
+        symbol, types, staged_signature.source_identities,
         FunctionContractSignature::Flattened, definition);
   } else if (!check_case && !check_scenario) {
     callable_signature =
@@ -1542,10 +1554,33 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
         exported_.contains(symbol) ? LOOM_COMMAND_VISIBILITY_PUBLIC : 0,
         /*retain=*/0, target,
         callees_.at({symbol->canonical(), instance.receiver_abi}),
-        command_signature.specialization_types.data(),
-        command_signature.specialization_types.size(),
-        command_signature.binding_types.data(),
-        command_signature.binding_types.size(), predicates.data(),
+        staged_signature.specialization_types.data(),
+        staged_signature.specialization_types.size(),
+        staged_signature.binding_types.data(),
+        staged_signature.binding_types.size(), predicates.data(),
+        predicates.size(), locations.get(definition), &op));
+  } else if (pipeline) {
+    const auto target = target_definitions_.reference(symbol);
+    loom_pipeline_def_build_flags_t flags =
+        LOOM_PIPELINE_DEF_BUILD_FLAG_HAS_SCOPE;
+    if (exported_.contains(symbol)) {
+      flags |= LOOM_PIPELINE_DEF_BUILD_FLAG_HAS_VISIBILITY;
+    }
+    if (loom_symbol_ref_is_valid(target)) {
+      flags |= LOOM_PIPELINE_DEF_BUILD_FLAG_HAS_TARGET;
+    }
+    if (!predicates.empty()) {
+      flags |= LOOM_PIPELINE_DEF_BUILD_FLAG_HAS_PREDICATES;
+    }
+    check(loom_pipeline_def_build(
+        builder, flags, LOOM_PIPELINE_SCOPE_KERNEL,
+        exported_.contains(symbol) ? LOOM_PIPELINE_VISIBILITY_PUBLIC : 0,
+        /*retain=*/0, target,
+        callees_.at({symbol->canonical(), instance.receiver_abi}),
+        staged_signature.specialization_types.data(),
+        staged_signature.specialization_types.size(),
+        staged_signature.binding_types.data(),
+        staged_signature.binding_types.size(), predicates.data(),
         predicates.size(), locations.get(definition), &op));
   } else if (kernel) {
     if (!returns_void) {
@@ -1684,6 +1719,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
   auto* region = check_case            ? loom_check_case_body(op)
                  : check_scenario      ? loom_check_scenario_body(op)
                  : command_program     ? loom_command_def_body(op)
+                 : pipeline            ? loom_pipeline_def_body(op)
                  : kernel              ? loom_kernel_def_body(op)
                  : template_definition ? loom_template_def_body(op)
                                        : loom_func_def_body(op);
@@ -1696,6 +1732,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
       check_case            ? FunctionKind::CheckCase
       : check_scenario      ? FunctionKind::CheckScenario
       : command_program     ? FunctionKind::CommandProgram
+      : pipeline            ? FunctionKind::Pipeline
       : kernel              ? FunctionKind::Kernel
       : template_definition ? FunctionKind::TemplateDefinition
                             : FunctionKind::Ordinary,
@@ -1703,7 +1740,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
       reference_parameters(symbol),
       implicit_object(instance, definition),
       control_flow(symbol),
-      command_program ? command_signature.projection : nullptr,
+      (command_program || pipeline) ? staged_signature.projection : nullptr,
   };
   std::optional<FunctionBody> configuration;
   if (launch_configuration) {

@@ -7,6 +7,7 @@
 # bazel-to-cmake: skip
 
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
 
 package(
     default_visibility = ["//visibility:private"],
@@ -17,14 +18,15 @@ sh_test(
     name = "trajectory_test",
     srcs = [".doc-generate.sh"],
     data = [
+        "gated-projection.cxx",
         "run.sh",
-        "//loom/binding/c/benchmark/kernels/ffn:gate_up_quadratic_bf16_xdna.loom",
         "//loom/docs/examples:example.shlib",
         "//loom/src/loom/tools/loom-compile",
         "//loom/src/loom/tools/loom-format",
+        "//loom/src/loom/tools/loom-import-cxx",
     ],
-    target_compatible_with = select({
-        "//loom/config/emit:aie2p_elf": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/emit:aie2p_elf",
+        "//loom/config/import:cxx",
+    ]),
 )

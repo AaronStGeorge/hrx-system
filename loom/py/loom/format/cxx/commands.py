@@ -17,6 +17,7 @@ from loom.ir import (
     DynamicDim,
     DynamicEncoding,
     Operation,
+    ParameterizedType,
     PredicateListAttr,
     ShapedType,
     TypeKind,
@@ -51,11 +52,18 @@ def _quote_string(value: str | Utf8Attr) -> str:
 class CxxCommandRenderer(CxxExpressionRenderer):
     """Renders command definitions and operations from verified High IR."""
 
-    def _source_view_dependencies(self, value_id: int) -> tuple[int, ...]:
+    def _source_type_dependencies(self, value_id: int) -> tuple[int, ...]:
+        """Returns flattened identities carried inside one source value."""
+
         value_type = self.module.values[value_id].type
-        if not (
-            isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VIEW
-        ):
+        while isinstance(value_type, ParameterizedType):
+            if value_type.family_name not in {"channel", "read", "write"}:
+                return ()
+            value_type = value_type.get("payload")
+        if not isinstance(value_type, ShapedType) or value_type.type_kind not in {
+            TypeKind.TILE,
+            TypeKind.VIEW,
+        }:
             return ()
         dependencies: list[int] = []
         for dimension in value_type.dims:
@@ -110,7 +118,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
                     operation,
                     "launch binding is neither a buffer nor a typed view",
                 )
-            dependencies = self._source_view_dependencies(binding)
+            dependencies = self._source_type_dependencies(binding)
             for dependency in dependencies:
                 if dependency not in specialization_set:
                     raise CxxRenderError(
@@ -135,7 +143,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         specialization_dependencies: set[int] = set()
         specialization_views: dict[int, tuple[int, ...]] = {}
         for value in remaining:
-            dependencies = self._source_view_dependencies(value)
+            dependencies = self._source_type_dependencies(value)
             if not dependencies:
                 continue
             for dependency in dependencies:
@@ -180,12 +188,44 @@ class CxxCommandRenderer(CxxExpressionRenderer):
             )
         return specialization_parameters, binding_parameters
 
+    def _flat_source_parameters(
+        self, operation: Operation, values: list[int]
+    ) -> list[_SourceParameter]:
+        """Reconstructs ordinary source values from flattened components."""
+
+        dependencies = {
+            dependency
+            for value in values
+            for dependency in self._source_type_dependencies(value)
+        }
+        parameters = [
+            _SourceParameter(
+                value,
+                self._source_type_dependencies(value),
+                binding=False,
+            )
+            for value in values
+            if value not in dependencies
+        ]
+        flattened = [
+            component
+            for parameter in parameters
+            for component in (*parameter.dependencies, parameter.value_id)
+        ]
+        if flattened != values:
+            raise CxxRenderError(
+                operation,
+                "flattened signature dependencies do not form a C++ source-order "
+                "projection",
+            )
+        return parameters
+
     def _staged_parameter_type(self, operation: Operation, value_id: int) -> str:
         value_type = self.module.values[value_id].type
         if isinstance(value_type, BufferType):
             return "loom::type::buffer<unsigned char>"
         if isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VIEW:
-            return self.types.view(value_type, value_id in self.signed_values)
+            return self.cpp_type(value_id)
         type_name = self.cpp_type(value_id)
         if type_name == "auto":
             raise CxxRenderError(
@@ -240,20 +280,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         attributes = ["loom::command_program", f"loom::symbol({_quote_string(symbol)})"]
         target_symbol = resolved.attr("target")
         if target_symbol is not None:
-            target_info = self.targets.get(str(target_symbol))
-            if target_info is None:
-                raise CxxRenderError(
-                    operation,
-                    f"target record {target_symbol!s} is not present in the module",
-                )
-            if target_info.operation_name != "amdgpu.target":
-                raise CxxRenderError(
-                    target_info.operation,
-                    f"target record {target_info.operation_name} has no C++ "
-                    "declaration projection",
-                )
-            target_name = self.target_names[str(target_symbol)]
-            attributes.append(f"loom::target({target_name})")
+            attributes.append(self._target_attribute(operation, str(target_symbol)))
         return attributes
 
     def _command_signature(self, operation: Operation, arguments: list[int]) -> str:
@@ -302,11 +329,6 @@ class CxxCommandRenderer(CxxExpressionRenderer):
             raise CxxRenderError(
                 operation, "only kernel-scoped pipeline contracts are launchable"
             )
-        if resolved.attr("visibility") is not None:
-            raise CxxRenderError(
-                operation,
-                "public pipeline declarations have no C++ contract projection",
-            )
         if resolved.attr("retain") is not None:
             raise CxxRenderError(
                 operation, "retained pipeline declarations have no C++ projection"
@@ -318,20 +340,46 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         ]
         target_symbol = resolved.attr("target")
         if target_symbol is not None:
-            target_info = self.targets.get(str(target_symbol))
-            if target_info is None:
-                raise CxxRenderError(
-                    operation,
-                    f"target record {target_symbol!s} is not present in the module",
-                )
-            if target_info.operation_name != "amdgpu.target":
-                raise CxxRenderError(
-                    target_info.operation,
-                    f"target record {target_info.operation_name} has no C++ "
-                    "declaration projection",
-                )
-            attributes.append(f"loom::target({self.target_names[str(target_symbol)]})")
+            attributes.append(self._target_attribute(operation, str(target_symbol)))
         return attributes
+
+    def _pipeline_arguments(self, operation: Operation) -> list[int]:
+        if operation.name == "pipeline.decl":
+            return list(operation.operands)
+        body = self._resolved(operation).region("body")
+        if body is None or len(body.blocks) != 1:
+            raise CxxRenderError(
+                operation, "pipeline definition body must have one structured block"
+            )
+        return list(body.blocks[0].arg_ids)
+
+    def _pipeline_signature(self, operation: Operation, arguments: list[int]) -> str:
+        parameters, _, _ = self._bind_staged_parameters(
+            operation, arguments, allow_nonstorage_bindings=True
+        )
+        symbol = str(self._resolved(operation).attr("callee"))
+        visibility = self._resolved(operation).attr("visibility")
+        storage = (
+            "static "
+            if operation.name == "pipeline.def" and visibility != "public"
+            else ""
+        )
+        signature = f"{storage}void {self.pipeline_names[symbol]}("
+        signature += ", ".join(parameters) + ")"
+        predicates = self._resolved(operation).attr("predicates")
+        if predicates is not None:
+            if not isinstance(predicates, PredicateListAttr):
+                raise CxxRenderError(
+                    operation, "pipeline predicates are not predicate-list metadata"
+                )
+            conditions = [
+                condition
+                for predicate in predicates
+                if (condition := self._predicate(predicate)) is not None
+            ]
+            if conditions:
+                signature += " [[loom::where(" + " && ".join(conditions) + ")]]"
+        return signature
 
     def _render_pipeline_declaration(self, operation: Operation) -> None:
         self._validate_projected_attributes(
@@ -346,27 +394,53 @@ class CxxCommandRenderer(CxxExpressionRenderer):
                 "specialization_count",
             ),
         )
-        arguments = list(operation.operands)
-        parameters, _, _ = self._bind_staged_parameters(
-            operation, arguments, allow_nonstorage_bindings=True
-        )
-        symbol = str(self._resolved(operation).attr("callee"))
-        signature = f"void {self.pipeline_names[symbol]}(" + ", ".join(parameters) + ")"
-        predicates = self._resolved(operation).attr("predicates")
-        if predicates is not None:
-            if not isinstance(predicates, PredicateListAttr):
-                raise CxxRenderError(
-                    operation, "pipeline predicates are not predicate-list metadata"
-                )
-            conditions = [
-                condition
-                for predicate in predicates
-                if (condition := self._predicate(predicate)) is not None
-            ]
-            if conditions:
-                signature += " [[loom::where(" + " && ".join(conditions) + ")]]"
         self.writer.attributes(self._pipeline_attributes(operation))
-        self.writer.line(signature + ";")
+        self.writer.line(
+            self._pipeline_signature(operation, self._pipeline_arguments(operation))
+            + ";"
+        )
+
+    def _pipeline_source_arguments(
+        self,
+        operation: Operation,
+        pipeline: Operation,
+        specializations: list[int],
+        bindings: list[int],
+    ) -> list[str]:
+        """Reconstructs one pipeline call's source parameter order."""
+
+        source_specializations, source_bindings = self._source_parameters(
+            pipeline,
+            self._pipeline_arguments(pipeline),
+            allow_nonstorage_bindings=True,
+        )
+        if len(bindings) != len(source_bindings):
+            raise CxxRenderError(
+                operation, "pipeline call binding arity is inconsistent"
+            )
+        arguments: list[str] = []
+        specialization_ordinal = 0
+        for parameter in source_specializations:
+            specialization_ordinal += len(parameter.dependencies) + 1
+            if specialization_ordinal > len(specializations):
+                raise CxxRenderError(
+                    operation, "pipeline call specialization arity is inconsistent"
+                )
+            arguments.append(
+                self.expression(specializations[specialization_ordinal - 1])
+            )
+        for parameter, binding in zip(source_bindings, bindings, strict=True):
+            specialization_ordinal += len(parameter.dependencies)
+            if specialization_ordinal > len(specializations):
+                raise CxxRenderError(
+                    operation, "pipeline call specialization arity is inconsistent"
+                )
+            arguments.append(self.expression(binding))
+        if specialization_ordinal != len(specializations):
+            raise CxxRenderError(
+                operation, "pipeline call specialization arity is inconsistent"
+            )
+        return arguments
 
     def _render_command_program(self, operation: Operation) -> None:
         scope = self.operation_scopes[id(operation)]
@@ -421,42 +495,13 @@ class CxxCommandRenderer(CxxExpressionRenderer):
         symbol = str(resolved.attr("callee"))
         pipeline_name = self.pipeline_names.get(symbol)
         if pipeline_name is not None:
-            pipeline = self.pipeline_declarations[symbol]
-            source_specializations, source_bindings = self._source_parameters(
+            pipeline = self.pipeline_callables[symbol]
+            source_arguments = self._pipeline_source_arguments(
+                operation,
                 pipeline,
-                list(pipeline.operands),
-                allow_nonstorage_bindings=True,
+                resolved.value_ids("workloads"),
+                resolved.value_ids("arguments"),
             )
-            workloads = resolved.value_ids("workloads")
-            arguments = resolved.value_ids("arguments")
-            if len(arguments) != len(source_bindings):
-                raise CxxRenderError(
-                    operation, "pipeline launch binding arity is inconsistent"
-                )
-            source_arguments: list[str] = []
-            workload_ordinal = 0
-            for parameter in source_specializations:
-                workload_ordinal += len(parameter.dependencies) + 1
-                if workload_ordinal > len(workloads):
-                    raise CxxRenderError(
-                        operation,
-                        "pipeline launch specialization arity is inconsistent",
-                    )
-                source_arguments.append(
-                    self.expression(workloads[workload_ordinal - 1])
-                )
-            for parameter, argument in zip(source_bindings, arguments, strict=True):
-                workload_ordinal += len(parameter.dependencies)
-                if workload_ordinal > len(workloads):
-                    raise CxxRenderError(
-                        operation,
-                        "pipeline launch specialization arity is inconsistent",
-                    )
-                source_arguments.append(self.expression(argument))
-            if workload_ordinal != len(workloads):
-                raise CxxRenderError(
-                    operation, "pipeline launch specialization arity is inconsistent"
-                )
             self.writer.line(
                 f"loom::kernel::launch<{pipeline_name}>({', '.join(source_arguments)});"
             )
@@ -512,7 +557,7 @@ class CxxCommandRenderer(CxxExpressionRenderer):
             and result_type.type_kind == TypeKind.VIEW
         ):
             raise CxxRenderError(operation, "command parameter result is not a view")
-        shape, element, encoding = self.types.view_arguments(
+        shape, element, encoding = self.types.shaped_arguments(
             result_type, result in self.signed_values, const=True
         )
         template_arguments = [shape, element]

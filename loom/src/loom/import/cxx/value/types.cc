@@ -81,14 +81,41 @@ loom_type_t make_shaped_type(loom_type_kind_t kind, loom_scalar_type_t element,
   return result;
 }
 
-loom_type_t make_view_type(loom_scalar_type_t element,
-                           std::span<const uint64_t> dimensions,
-                           std::optional<loom_value_id_t> encoding,
-                           BoundTypeStorage& storage) {
-  auto result = make_shaped_type(LOOM_TYPE_VIEW, element, dimensions, storage);
+loom_type_t make_encoded_shaped_type(loom_type_kind_t kind,
+                                     loom_scalar_type_t element,
+                                     std::span<const uint64_t> dimensions,
+                                     std::optional<loom_value_id_t> encoding,
+                                     BoundTypeStorage& storage) {
+  auto result = make_shaped_type(kind, element, dimensions, storage);
   if (encoding) {
     result.encoding_id = static_cast<uint16_t>(*encoding);
     result.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+  }
+  return result;
+}
+
+loom_type_t make_channel_handle_type(loom_module_t* module,
+                                     loom_type_t payload_type,
+                                     ChannelHandleKind handle_kind,
+                                     bool mutable_read) {
+  loom_type_id_t payload_id = LOOM_TYPE_ID_INVALID;
+  check(loom_module_intern_type_id(module, payload_type, &payload_id));
+  loom_type_t result;
+  switch (handle_kind) {
+    case ChannelHandleKind::Channel:
+      check(loom_channel_type_make(module, payload_id, &result));
+      break;
+    case ChannelHandleKind::Read:
+      check(loom_read_type_make(
+          module, mutable_read ? LOOM_READ_TYPE_BUILD_FLAG_HAS_MODE : 0,
+          payload_id,
+          mutable_read ? LOOM_READ_TYPE_MODE_MUTABLE
+                       : static_cast<loom_read_type_mode_t>(0),
+          &result));
+      break;
+    case ChannelHandleKind::Write:
+      check(loom_write_type_make(module, payload_id, &result));
+      break;
   }
   return result;
 }
@@ -116,6 +143,57 @@ void ShapeExtents::assign(std::span<const int64_t> extents) {
   std::copy(extents.begin(), extents.end(), overflow_extents_.get());
 }
 
+loom_type_t TilePartition::bind_type(
+    std::span<const loom_value_id_t> dependencies,
+    BoundTypeStorage& storage) const {
+  IREE_ASSERT(dependencies.size() == component_count - 1);
+  if (!requires_binding()) {
+    return static_type;
+  }
+  std::array<uint64_t, LOOM_TYPE_MAX_RANK> dimensions;
+  size_t dependency = 0;
+  for (size_t axis = 0; axis < extents.size(); ++axis) {
+    dimensions[axis] = extents[axis] < 0
+                           ? loom_dim_pack_dynamic(dependencies[dependency++])
+                           : loom_dim_pack_static(extents[axis]);
+  }
+  std::optional<loom_value_id_t> encoding_value;
+  if (encoding) {
+    encoding_value = dependencies[dependency++];
+    IREE_ASSERT_LE(*encoding_value, UINT16_MAX);
+  }
+  IREE_ASSERT_EQ(dependency, dependencies.size());
+  return make_encoded_shaped_type(
+      LOOM_TYPE_TILE, element,
+      std::span<const uint64_t>(dimensions).first(extents.size()),
+      encoding_value, storage);
+}
+
+loom_value_id_t TilePartition::tile_value(
+    std::span<const loom_value_id_t> components) const {
+  IREE_ASSERT(components.size() == component_count);
+  return components.back();
+}
+
+loom_type_t ChannelPartition::bind_type(
+    loom_module_t* module, std::span<const loom_value_id_t> dependencies,
+    BoundTypeStorage& storage) const {
+  IREE_ASSERT(module);
+  IREE_ASSERT(dependencies.size() == component_count - 1);
+  if (!requires_binding()) {
+    return static_type;
+  }
+  const auto payload_type = payload->bind_type(dependencies, storage);
+  return make_channel_handle_type(module, payload_type, handle_kind,
+                                  mutable_read);
+}
+
+loom_value_id_t ChannelPartition::handle_value(
+    std::span<const loom_value_id_t> components) const {
+  IREE_ASSERT(components.size() == component_count);
+  return components.back();
+}
+
 loom_type_t VectorPartition::bind_type(
     std::span<const loom_value_id_t> dynamic_extents,
     BoundTypeStorage& storage) const {
@@ -137,6 +215,38 @@ loom_type_t VectorPartition::bind_type(
 }
 
 loom_value_id_t VectorPartition::vector_value(
+    std::span<const loom_value_id_t> components) const {
+  IREE_ASSERT(components.size() == component_count);
+  return components.back();
+}
+
+loom_type_t ViewPartition::bind_type(
+    std::span<const loom_value_id_t> dependencies,
+    BoundTypeStorage& storage) const {
+  IREE_ASSERT(dependencies.size() == component_count - 1);
+  if (!requires_binding()) {
+    return static_type;
+  }
+  std::array<uint64_t, LOOM_TYPE_MAX_RANK> dimensions;
+  size_t dependency = 0;
+  for (size_t axis = 0; axis < extents.size(); ++axis) {
+    dimensions[axis] = extents[axis] < 0
+                           ? loom_dim_pack_dynamic(dependencies[dependency++])
+                           : loom_dim_pack_static(extents[axis]);
+  }
+  std::optional<loom_value_id_t> encoding_value;
+  if (encoding) {
+    encoding_value = dependencies[dependency++];
+    IREE_ASSERT_LE(*encoding_value, UINT16_MAX);
+  }
+  IREE_ASSERT_EQ(dependency, dependencies.size());
+  return make_encoded_shaped_type(
+      LOOM_TYPE_VIEW, element,
+      std::span<const uint64_t>(dimensions).first(extents.size()),
+      encoding_value, storage);
+}
+
+loom_value_id_t ViewPartition::view_value(
     std::span<const loom_value_id_t> components) const {
   IREE_ASSERT(components.size() == component_count);
   return components.back();
@@ -218,6 +328,10 @@ bool Types::requires_binding(const cxx::Type* input, cxx::AST* owner) {
   const auto& admitted = partition(input, owner);
   if ((admitted.kind == ValueKind::Vector &&
        static_cast<const VectorPartition&>(admitted).is_dynamic()) ||
+      (admitted.kind == ValueKind::Tile &&
+       static_cast<const TilePartition&>(admitted).requires_binding()) ||
+      (admitted.kind == ValueKind::Channel &&
+       static_cast<const ChannelPartition&>(admitted).requires_binding()) ||
       (admitted.kind == ValueKind::View &&
        static_cast<const ViewPartition&>(admitted).requires_binding()) ||
       (admitted.kind == ValueKind::Tensor &&
@@ -292,6 +406,15 @@ const Partition* Types::special(const cxx::Type* input, cxx::AST* owner) {
   }
   if (name == "encoding") {
     return encoding(type, owner);
+  }
+  if (name == "pool") {
+    return pool(type, owner);
+  }
+  if (name == "tile") {
+    return tile(type, owner);
+  }
+  if (name == "channel" || name == "read" || name == "write") {
+    return channel(type, name, owner);
   }
   if (name == "vector") {
     return semantic_vector(type, owner);
@@ -495,6 +618,33 @@ const EncodingPartition* Types::encoding(const cxx::ClassType* input,
   return admitted;
 }
 
+const PoolPartition* Types::pool(const cxx::ClassType* input, cxx::AST* owner) {
+  auto* source = input->definition();
+  if (auto found = pools_.find(source); found != pools_.end()) {
+    return found->second.get();
+  }
+  auto traits = unit_.typeTraits();
+  if (source) {
+    traits.requireCompleteClass(source);
+    source = input->definition();
+  }
+  if (!source || !source->isComplete() || source->isUnion() ||
+      !source->baseClasses().empty() || !source->templateArguments().empty() ||
+      !traits.is_trivially_copyable(input) ||
+      !traits.has_trivial_destructor(input)) {
+    diagnostics_.reject(unit_, owner,
+                        "pool values require a complete non-template trivial "
+                        "class without bases");
+  }
+  auto result = std::make_unique<PoolPartition>();
+  result->kind = ValueKind::Pool;
+  result->component_count = 1;
+  result->source = source;
+  auto* admitted = result.get();
+  pools_.emplace(source, std::move(result));
+  return admitted;
+}
+
 ShapeExtents Types::parse_shape(const cxx::Type* input,
                                 std::string_view value_kind, cxx::AST* owner) {
   auto* shape_type =
@@ -549,6 +699,162 @@ ShapeExtents Types::parse_shape(const cxx::Type* input,
   result.assign(
       std::span<const int64_t>(parsed_extents).first(shape_arguments.size()));
   return result;
+}
+
+const TilePartition* Types::tile(const cxx::ClassType* input, cxx::AST* owner) {
+  auto* source = input->definition();
+  if (auto found = tiles_.find(source); found != tiles_.end()) {
+    return found->second.get();
+  }
+  auto traits = unit_.typeTraits();
+  if (source) {
+    traits.requireCompleteClass(source);
+    source = input->definition();
+  }
+  if (!source || !source->isComplete() || source->isUnion() ||
+      !source->baseClasses().empty() || !traits.is_trivially_copyable(input) ||
+      !traits.has_trivial_destructor(input)) {
+    diagnostics_.reject(unit_, owner,
+                        "tile values require a complete trivial class without "
+                        "bases");
+  }
+  auto arguments = source->templateArguments();
+  if (arguments.size() != 3) {
+    diagnostics_.reject(
+        unit_, owner,
+        "tile values require shape, element, and optional encoding type "
+        "arguments");
+  }
+  auto extents =
+      parse_shape(cxx::template_argument_type(arguments[0]), "tile", owner);
+  auto* element_type = cxx::template_argument_type(arguments[1]);
+  if (!element_type || traits.is_const(element_type) ||
+      traits.is_volatile(element_type)) {
+    diagnostics_.reject(unit_, owner,
+                        "tile elements require an unqualified source type");
+  }
+  auto element = get(element_type, owner);
+  if (loom_type_kind(element) != LOOM_TYPE_SCALAR) {
+    diagnostics_.reject(unit_, owner,
+                        "tile elements require a supported scalar type");
+  }
+  const EncodingPartition* tile_encoding = nullptr;
+  auto* encoding_type = cxx::template_argument_type(arguments[2]);
+  if (!encoding_type) {
+    diagnostics_.reject(unit_, owner,
+                        "tile encoding requires a source type argument");
+  }
+  if (unqualified(encoding_type)->kind() != cxx::TypeKind::kVoid) {
+    const auto& admitted_encoding = partition(encoding_type, owner);
+    if (admitted_encoding.kind != ValueKind::Encoding) {
+      diagnostics_.reject(unit_, owner,
+                          "tile encoding must be void or a Loom encoding type");
+    }
+    tile_encoding = &static_cast<const EncodingPartition&>(admitted_encoding);
+  }
+  size_t dynamic_count = 0;
+  for (auto extent : extents) {
+    dynamic_count += extent < 0;
+  }
+  auto result = std::make_unique<TilePartition>();
+  result->kind = ValueKind::Tile;
+  result->component_count = dynamic_count + (tile_encoding ? 2 : 1);
+  result->source = source;
+  result->element_type = element_type;
+  result->element = loom_type_element_type(element);
+  result->encoding = tile_encoding;
+  result->extents = std::move(extents);
+  for (size_t axis = 0; axis < result->extents.size(); ++axis) {
+    if (result->extents[axis] < 0) {
+      result->component_names.push_back("dim" + std::to_string(axis));
+    }
+  }
+  if (tile_encoding) {
+    result->component_names.emplace_back("encoding");
+  }
+  result->component_names.emplace_back();
+  if (!result->requires_binding()) {
+    std::array<uint64_t, LOOM_TYPE_MAX_RANK> dimensions;
+    for (size_t axis = 0; axis < result->extents.size(); ++axis) {
+      dimensions[axis] = loom_dim_pack_static(result->extents[axis]);
+    }
+    result->static_type = make_shaped_type(
+        LOOM_TYPE_TILE, result->element,
+        std::span<const uint64_t>(dimensions).first(result->extents.size()),
+        result->static_type_storage);
+  }
+  auto* admitted = result.get();
+  tiles_.emplace(source, std::move(result));
+  return admitted;
+}
+
+const ChannelPartition* Types::channel(const cxx::ClassType* input,
+                                       std::string_view name, cxx::AST* owner) {
+  auto* source = input->definition();
+  if (auto found = channels_.find(source); found != channels_.end()) {
+    return found->second.get();
+  }
+  auto traits = unit_.typeTraits();
+  if (source) {
+    traits.requireCompleteClass(source);
+    source = input->definition();
+  }
+  if (!source || !source->isComplete() || source->isUnion() ||
+      !source->baseClasses().empty() || !traits.is_trivially_copyable(input) ||
+      !traits.has_trivial_destructor(input)) {
+    diagnostics_.reject(
+        unit_, owner,
+        "channel handles require a complete trivial class without bases");
+  }
+  auto arguments = source->templateArguments();
+  const size_t expected_count = name == "read" ? 2 : 1;
+  if (arguments.size() != expected_count) {
+    diagnostics_.reject(
+        unit_, owner,
+        name == "read"
+            ? "read values require payload and access mode arguments"
+            : std::string(name) + " values require one payload argument");
+  }
+  auto* payload_type = cxx::template_argument_type(arguments[0]);
+  const auto* payload_partition =
+      payload_type ? &partition(payload_type, owner) : nullptr;
+  if (!payload_partition || payload_partition->kind != ValueKind::Tile) {
+    diagnostics_.reject(
+        unit_, owner, std::string(name) + " payload must be a Loom tile type");
+  }
+  const auto* payload = static_cast<const TilePartition*>(payload_partition);
+  bool mutable_read = false;
+  if (name == "read") {
+    cxx::ASTInterpreter interpreter(&unit_);
+    auto mode = cxx::template_argument_value(arguments[1]);
+    auto mode_value = mode ? interpreter.toInt(*mode) : std::nullopt;
+    if (!mode_value || (*mode_value != 0 && *mode_value != 1)) {
+      diagnostics_.reject(unit_, owner,
+                          "read access mode must be immutable or mutable");
+    }
+    mutable_read = *mode_value == 1;
+  }
+  if (!module_) {
+    diagnostics_.reject(unit_, owner,
+                        "channel source types require a destination module");
+  }
+  auto result = std::make_unique<ChannelPartition>();
+  result->kind = ValueKind::Channel;
+  result->component_count = payload->component_count;
+  result->source = source;
+  result->payload = payload;
+  result->handle_kind = name == "channel" ? ChannelHandleKind::Channel
+                        : name == "read"  ? ChannelHandleKind::Read
+                                          : ChannelHandleKind::Write;
+  result->mutable_read = mutable_read;
+  result->component_names = payload->component_names;
+  if (!result->requires_binding()) {
+    result->static_type = make_channel_handle_type(
+        module_, payload->static_type, result->handle_kind, mutable_read);
+  }
+  auto* admitted = result.get();
+  channels_.emplace(source, std::move(result));
+  return admitted;
 }
 
 const VectorPartition* Types::semantic_vector(const cxx::ClassType* input,
@@ -712,8 +1018,8 @@ const ViewPartition* Types::view(const cxx::ClassType* input, cxx::AST* owner) {
     for (size_t axis = 0; axis < result->extents.size(); ++axis) {
       dimensions[axis] = loom_dim_pack_static(result->extents[axis]);
     }
-    result->static_type = make_view_type(
-        result->element,
+    result->static_type = make_encoded_shaped_type(
+        LOOM_TYPE_VIEW, result->element,
         std::span<const uint64_t>(dimensions).first(result->extents.size()),
         std::nullopt, result->static_type_storage);
   }
@@ -875,8 +1181,23 @@ void Types::append_component_names(const Partition& partition,
     case ValueKind::Address:
     case ValueKind::OpaqueDialect:
     case ValueKind::Encoding:
+    case ValueKind::Pool:
       append({});
       return;
+    case ValueKind::Tile: {
+      const auto& tile = static_cast<const TilePartition&>(partition);
+      for (const auto& name : tile.component_names) {
+        append(name);
+      }
+      return;
+    }
+    case ValueKind::Channel: {
+      const auto& channel = static_cast<const ChannelPartition&>(partition);
+      for (const auto& name : channel.component_names) {
+        append(name);
+      }
+      return;
+    }
     case ValueKind::Vector: {
       const auto& vector = static_cast<const VectorPartition&>(partition);
       for (const auto& name : vector.component_names) {
@@ -1028,6 +1349,27 @@ loom_type_t Types::get(const cxx::Type* input, cxx::AST* ast) {
         return loom_type_scalar(
             static_cast<const AddressPartition*>(admitted)->element_type);
       }
+      if (admitted && admitted->kind == ValueKind::Pool) {
+        return loom_type_pool();
+      }
+      if (admitted && admitted->kind == ValueKind::Tile) {
+        const auto& tile = static_cast<const TilePartition&>(*admitted);
+        if (tile.requires_binding()) {
+          diagnostics_.reject(
+              unit_, ast,
+              "dependent tile types require bound component identities");
+        }
+        return tile.static_type;
+      }
+      if (admitted && admitted->kind == ValueKind::Channel) {
+        const auto& channel = static_cast<const ChannelPartition&>(*admitted);
+        if (channel.requires_binding()) {
+          diagnostics_.reject(
+              unit_, ast,
+              "dependent channel types require bound component identities");
+        }
+        return channel.static_type;
+      }
       if (admitted && admitted->kind == ValueKind::Vector) {
         const auto& vector = static_cast<const VectorPartition&>(*admitted);
         if (vector.is_dynamic()) {
@@ -1174,6 +1516,12 @@ void Types::admit_construction(cxx::FunctionSymbol* constructor,
     source = static_cast<const AddressPartition&>(admitted).source;
   } else if (admitted.kind == ValueKind::Encoding) {
     source = static_cast<const EncodingPartition&>(admitted).source;
+  } else if (admitted.kind == ValueKind::Pool) {
+    source = static_cast<const PoolPartition&>(admitted).source;
+  } else if (admitted.kind == ValueKind::Tile) {
+    source = static_cast<const TilePartition&>(admitted).source;
+  } else if (admitted.kind == ValueKind::Channel) {
+    source = static_cast<const ChannelPartition&>(admitted).source;
   } else if (admitted.kind == ValueKind::OpaqueDialect) {
     source = static_cast<const OpaqueDialectPartition&>(admitted).source;
   } else if (admitted.kind == ValueKind::Vector) {
@@ -1220,7 +1568,7 @@ void Types::append(const cxx::Type* input, cxx::AST* owner,
   }
   // Only dependent shaped types use temporary overflow payloads. The
   // rejection above therefore guarantees that no returned type borrows this
-  // local storage; static semantic vectors retain their own payload.
+  // local storage; static shaped partitions retain their own payload.
   BoundTypeStorage storage;
   append_bound(input, owner, {}, storage, output);
 }
@@ -1258,6 +1606,77 @@ void Types::append_bound(const cxx::Type* input, cxx::AST* owner,
       output.push_back(loom_type_encoding_with_role(
           static_cast<const EncodingPartition&>(admitted).role));
       return;
+    case ValueKind::Pool:
+      output.push_back(loom_type_pool());
+      return;
+    case ValueKind::Tile: {
+      const auto& tile = static_cast<const TilePartition&>(admitted);
+      if (tile.requires_binding() &&
+          identities.size() != tile.component_count) {
+        diagnostics_.reject(
+            unit_, owner,
+            "tile values require reserved destination component identities");
+      }
+      const size_t dependency_count = tile.component_count - 1;
+      size_t dependency = 0;
+      for (auto extent : tile.extents) {
+        if (extent < 0) {
+          output.push_back(loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
+          ++dependency;
+        }
+      }
+      if (tile.encoding) {
+        if (identities[dependency] > UINT16_MAX) {
+          diagnostics_.reject(
+              unit_, owner,
+              "tile encoding identity exceeds Loom's current type capacity");
+        }
+        output.push_back(loom_type_encoding_with_role(tile.encoding->role));
+        ++dependency;
+      }
+      IREE_ASSERT_EQ(dependency, dependency_count);
+      output.push_back(tile.bind_type(identities.empty()
+                                          ? std::span<const loom_value_id_t>{}
+                                          : identities.first(dependency_count),
+                                      storage));
+      return;
+    }
+    case ValueKind::Channel: {
+      const auto& channel = static_cast<const ChannelPartition&>(admitted);
+      if (channel.requires_binding() &&
+          identities.size() != channel.component_count) {
+        diagnostics_.reject(
+            unit_, owner,
+            "channel values require reserved destination component "
+            "identities");
+      }
+      const auto& payload = *channel.payload;
+      const size_t dependency_count = channel.component_count - 1;
+      size_t dependency = 0;
+      for (auto extent : payload.extents) {
+        if (extent < 0) {
+          output.push_back(loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
+          ++dependency;
+        }
+      }
+      if (payload.encoding) {
+        if (identities[dependency] > UINT16_MAX) {
+          diagnostics_.reject(
+              unit_, owner,
+              "channel payload encoding identity exceeds Loom's current type "
+              "capacity");
+        }
+        output.push_back(loom_type_encoding_with_role(payload.encoding->role));
+        ++dependency;
+      }
+      IREE_ASSERT_EQ(dependency, dependency_count);
+      output.push_back(channel.bind_type(
+          module_,
+          identities.empty() ? std::span<const loom_value_id_t>{}
+                             : identities.first(dependency_count),
+          storage));
+      return;
+    }
     case ValueKind::Vector: {
       const auto& vector = static_cast<const VectorPartition&>(admitted);
       if (vector.is_dynamic()) {
@@ -1320,40 +1739,32 @@ void Types::append_bound(const cxx::Type* input, cxx::AST* owner,
     }
     case ValueKind::View: {
       const auto& view = static_cast<const ViewPartition&>(admitted);
-      if (!view.requires_binding()) {
-        output.push_back(view.static_type);
-        return;
-      }
       if (view.requires_binding() &&
           identities.size() != admitted.component_count) {
         diagnostics_.reject(
             unit_, owner,
             "view values require reserved destination component identities");
       }
-      std::array<uint64_t, LOOM_TYPE_MAX_RANK> dimensions;
       size_t component = 0;
       for (size_t axis = 0; axis < view.extents.size(); ++axis) {
         if (view.extents[axis] < 0) {
-          dimensions[axis] = loom_dim_pack_dynamic(identities[component++]);
           output.push_back(loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
-        } else {
-          dimensions[axis] = loom_dim_pack_static(view.extents[axis]);
+          ++component;
         }
       }
-      std::optional<loom_value_id_t> encoding;
       if (view.encoding) {
-        encoding = identities[component++];
-        if (*encoding > UINT16_MAX) {
+        if (identities[component] > UINT16_MAX) {
           diagnostics_.reject(
               unit_, owner,
               "view encoding identity exceeds Loom's current type capacity");
         }
         output.push_back(loom_type_encoding_with_role(view.encoding->role));
+        ++component;
       }
-      output.push_back(make_view_type(
-          view.element,
-          std::span<const uint64_t>(dimensions).first(view.extents.size()),
-          encoding, storage));
+      output.push_back(view.bind_type(identities.empty()
+                                          ? std::span<const loom_value_id_t>{}
+                                          : identities.first(component),
+                                      storage));
       return;
     }
   }

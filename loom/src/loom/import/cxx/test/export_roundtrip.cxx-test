@@ -69,14 +69,22 @@ void strided_pair_dot(const _Float16* lhs, const _Float16* rhs, float* output, u
   loom::vector::store(result, output_view, {row, 0});
 }
 
-// Workgroup allocation and asynchronous gather retain their staging structure.
+// Workgroup allocation and every portable asynchronous transfer retain their
+// staging, predication, direction, participant set, and cache policy.
 [[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(64, 1, 1)]]
-void gather_tile(const unsigned char* input) {
+void async_transfers(const unsigned char* input, unsigned char* output, unsigned participants, bool enabled) {
   auto source = loom::buffer::view<4>(input, {}, loom::encoding::layout::dense<1>());
+  auto output_view = loom::buffer::view<4>(output, {}, loom::encoding::layout::dense<1>());
   auto* storage = loom::buffer::alloca<unsigned char, loom::memory_space::workgroup, 64>(256);
-  auto destination = loom::buffer::view<64, 4>(storage, {}, loom::encoding::layout::dense<2>());
-  auto transfer = loom::kernel::async::gather<loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, destination);
-  auto stage = loom::kernel::async::group(transfer);
+  auto lane_destination = loom::buffer::view<4>(storage, {}, loom::encoding::layout::dense<1>());
+  auto tile_destination = loom::buffer::view<64, 4>(storage, {}, loom::encoding::layout::dense<2>());
+  auto load = loom::kernel::async::copy<loom::kernel::async::direction::global_to_workgroup, loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, lane_destination);
+  auto store = loom::kernel::async::copy_mask<loom::kernel::async::direction::workgroup_to_global, loom::cache::scope::device, loom::cache::temporal::non_temporal_writeback>(lane_destination, output_view, enabled);
+  auto gather = loom::kernel::async::gather<loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, tile_destination);
+  auto gather_tail = loom::kernel::async::gather_mask<loom::cache::scope::cluster, loom::cache::temporal::last_use>(source, tile_destination, enabled);
+  auto cluster = loom::kernel::async::cluster::gather<loom::cache::scope::cluster, loom::cache::temporal::high_temporal>(source, lane_destination, participants);
+  auto cluster_tail = loom::kernel::async::cluster::gather_mask<loom::cache::scope::system, loom::cache::temporal::bypass>(source, lane_destination, participants, enabled);
+  auto stage = loom::kernel::async::group(load, store, gather, gather_tail, cluster, cluster_tail);
   loom::kernel::async::wait<0>(stage);
 }
 
@@ -157,13 +165,20 @@ void strided_pair_dot(const std::float16_t* lhs, const std::float16_t* rhs, floa
 }
 
 [[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(64, 1, 1)]]
-void gather_tile(const unsigned char* input) {
+void async_transfers(const unsigned char* input, unsigned char* output, unsigned participants, bool enabled) {
   auto source = loom::buffer::view<4>(input, {}, loom::encoding::layout::dense<1>());
+  auto output_view = loom::buffer::view<4>(output, {}, loom::encoding::layout::dense<1>());
   auto* storage = loom::buffer::alloca<unsigned char, loom::memory_space::workgroup, 64>(loom::type::index{256});
-  auto destination = loom::buffer::view<64, 4>(storage, {}, loom::encoding::layout::dense<2>());
-  auto transfer = loom::kernel::async::gather<loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, destination);
-  auto transfer_group = loom::kernel::async::group(transfer);
-  loom::kernel::async::wait<0>(transfer_group);
+  auto lane_destination = loom::buffer::view<4>(storage, {}, loom::encoding::layout::dense<1>());
+  auto tile_destination = loom::buffer::view<64, 4>(storage, {}, loom::encoding::layout::dense<2>());
+  auto load = loom::kernel::async::copy<loom::kernel::async::direction::global_to_workgroup, loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, lane_destination);
+  auto store = loom::kernel::async::copy_mask<loom::kernel::async::direction::workgroup_to_global, loom::cache::scope::device, loom::cache::temporal::non_temporal_writeback>(lane_destination, output_view, enabled);
+  auto gather = loom::kernel::async::gather<loom::cache::scope::workgroup, loom::cache::temporal::regular>(source, tile_destination);
+  auto gather_tail = loom::kernel::async::gather_mask<loom::cache::scope::cluster, loom::cache::temporal::last_use>(source, tile_destination, enabled);
+  auto cluster = loom::kernel::async::cluster::gather<loom::cache::scope::cluster, loom::cache::temporal::high_temporal>(source, lane_destination, participants);
+  auto cluster_tail = loom::kernel::async::cluster::gather_mask<loom::cache::scope::system, loom::cache::temporal::bypass>(source, lane_destination, participants, enabled);
+  auto load_group = loom::kernel::async::group(load, store, gather, gather_tail, cluster, cluster_tail);
+  loom::kernel::async::wait<0>(load_group);
 }
 
 [[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
@@ -366,13 +381,13 @@ using Row = loom::type::view<loom::type::shape<4>, float>;
 using Float32x4 = float __attribute__((ext_vector_type(4)));
 
 [[loom::symbol("math.copy_double"), loom::force_inline]]
-void math_copy_double(loom::type::view<loom::type::shape<4>, float> source, loom::type::view<loom::type::shape<4>, float> destination);
+void math_copy_double(loom::type::view<loom::type::shape<4>, const float> source, loom::type::view<loom::type::shape<4>, float> destination);
 
 [[loom::symbol("math.double"), loom::force_inline]]
 static Float32x4 math_double(Float32x4 input);
 
 [[loom::symbol("math.copy_double"), loom::force_inline]]
-void math_copy_double(loom::type::view<loom::type::shape<4>, float> source, loom::type::view<loom::type::shape<4>, float> destination) {
+void math_copy_double(loom::type::view<loom::type::shape<4>, const float> source, loom::type::view<loom::type::shape<4>, float> destination) {
   Float32x4 input = loom::vector::load<Float32x4>(source, loom::type::indices{loom::type::index{0}});
   Float32x4 result = math_double(input);
   loom::vector::store(result, destination, loom::type::indices{loom::type::index{0}});
@@ -428,7 +443,7 @@ Boolx4 classify(Int32x4 lhs, Int32x4 rhs, Float32x4 values);
 Float16x4 narrow(Float32x4 values);
 
 [[loom::symbol("bytes")]]
-loom::type::view<loom::type::shape<16>, unsigned char> bytes(loom::type::buffer<unsigned> data, loom::type::offset byte_offset);
+loom::type::view<loom::type::shape<16>, const unsigned char> bytes(loom::type::buffer<unsigned> data, loom::type::offset byte_offset);
 
 [[loom::symbol("infinity")]]
 float infinity();
@@ -449,9 +464,9 @@ Float16x4 narrow(Float32x4 values) {
 }
 
 [[loom::symbol("bytes")]]
-loom::type::view<loom::type::shape<16>, unsigned char> bytes(loom::type::buffer<unsigned> data, loom::type::offset byte_offset) {
-  auto words = loom::buffer::view<4>(data, byte_offset, {});
-  return loom::view::bitcast<loom::type::view<loom::type::shape<16>, unsigned char>>(words);
+loom::type::view<loom::type::shape<16>, const unsigned char> bytes(loom::type::buffer<unsigned> data, loom::type::offset byte_offset) {
+  auto words = loom::buffer::view<4>(loom::buffer::cast<const unsigned>(data), byte_offset, {});
+  return loom::view::bitcast<loom::type::view<loom::type::shape<16>, const unsigned char>>(words);
 }
 
 [[loom::symbol("infinity")]]
@@ -557,6 +572,7 @@ void run(unsigned factor, float scale, [[loom::launch]] Tile tile, Output output
 // ----
 #include <loomcxx/command.h>
 #include <loomcxx/kernel.h>
+#include <loomcxx/pipeline.h>
 
 [[loom::pipeline("kernel"), loom::symbol("resident.tile")]]
 void resident_tile(unsigned v6, [[loom::launch]] loom::type::view<loom::type::shape<loom::type::dynamic, 4>, float, loom::type::encoding<loom::encoding::role::layout, 2>> v9, float v10, loom::type::buffer<unsigned char> v11) [[loom::where((v6 != 0u))]];
@@ -593,6 +609,7 @@ using Bytes = loomt::buffer<unsigned char>;
 // ----
 #include <loomcxx/command.h>
 #include <loomcxx/kernel.h>
+#include <loomcxx/pipeline.h>
 
 [[loom::pipeline("kernel"), loom::symbol("consume.dynamic")]]
 void consume_dynamic([[loom::launch]] loom::type::buffer<unsigned char> v2);

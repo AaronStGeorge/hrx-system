@@ -496,6 +496,8 @@ Value Initialization::from_elements(const cxx::Type* type,
   if (partition.kind == ValueKind::Buffer ||
       partition.kind == ValueKind::OpaqueDialect ||
       partition.kind == ValueKind::Encoding ||
+      partition.kind == ValueKind::Pool || partition.kind == ValueKind::Tile ||
+      partition.kind == ValueKind::Channel ||
       partition.kind == ValueKind::Vector ||
       partition.kind == ValueKind::View ||
       partition.kind == ValueKind::Tensor) {

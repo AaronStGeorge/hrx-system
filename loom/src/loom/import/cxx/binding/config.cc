@@ -92,7 +92,8 @@ bool Configs::declaration(cxx::Symbol* symbol,
       !cxx::symbol_cast<cxx::NamespaceSymbol>(variable->parent())) {
     diagnostics_.reject(
         unit_, selected,
-        "config bindings require namespace-scope scalar variables");
+        "config bindings require namespace-scope scalar variables or "
+        "encoding values");
   }
   auto* clause = selected->attributeArgumentClause;
   auto* arguments = clause ? clause->expressionList : nullptr;
@@ -111,17 +112,42 @@ bool Configs::declaration(cxx::Symbol* symbol,
   auto* source_class =
       cxx::type_cast<cxx::ClassType>(types_.unqualified(source_type));
   const bool is_index = source_class && types_.is_index(source_type, owner);
+  const bool is_offset = source_class && types_.is_offset(source_type, owner);
+  const Partition* source_partition =
+      source_class ? &types_.partition(source_type, owner) : nullptr;
+  const auto* encoding =
+      source_partition && source_partition->kind == ValueKind::Encoding
+          ? static_cast<const EncodingPartition*>(source_partition)
+          : nullptr;
+  const bool is_encoding = encoding != nullptr;
   if (!traits.is_const(source_type) || traits.is_volatile(source_type) ||
       variable->isThreadLocal() ||
       !(traits.is_arithmetic(source_type) || traits.is_enum(source_type) ||
-        is_index)) {
+        is_index || is_offset || is_encoding)) {
     diagnostics_.reject(unit_, owner,
                         "config bindings require nonvolatile const numeric "
-                        "scalars without thread-local storage");
+                        "scalars or Loom address/encoding values without "
+                        "thread-local storage");
   }
-  auto type = types_.get(source_type, owner);
+  if (encoding && encoding->rank != 0) {
+    diagnostics_.reject(
+        unit_, owner,
+        "config encoding values require unranked schema or transform roles");
+  }
+  std::vector<loom_type_t> projected_types;
+  types_.append(source_type, owner, projected_types);
+  if (projected_types.size() != 1) {
+    diagnostics_.reject(unit_, owner,
+                        "config bindings require one Loom value component");
+  }
+  auto type = projected_types[0];
   std::vector<loom_predicate_t> predicates;
   if (where) {
+    if (is_encoding) {
+      diagnostics_.reject(unit_, where,
+                          "encoding config declarations do not accept numeric "
+                          "predicates");
+    }
     auto* clause = where->attributeArgumentClause;
     auto* arguments = clause ? clause->expressionList : nullptr;
     if (!arguments || arguments->next) {
@@ -156,19 +182,20 @@ bool Configs::declaration(cxx::Symbol* symbol,
       for (const auto* argument_type : predicate.argument_types) {
         const auto* unqualified_argument =
             argument_type ? types_.unqualified(argument_type) : nullptr;
-        const bool index_constant =
-            is_index && unqualified_argument &&
+        const bool address_constant =
+            (is_index || is_offset) && unqualified_argument &&
             ((traits.is_integral(unqualified_argument) &&
               unqualified_argument->kind() != cxx::TypeKind::kBool) ||
              traits.is_enum(unqualified_argument));
-        if (unqualified_argument && !index_constant &&
+        if (unqualified_argument && !address_constant &&
             unqualified_argument != types_.unqualified(source_type)) {
           diagnostics_.reject(
               unit_, where,
-              is_index ? "index config predicate arguments must be integral "
-                         "or enum constants"
-                       : "config predicate arguments must match the declared "
-                         "source type");
+              (is_index || is_offset)
+                  ? "address config predicate arguments must be integral or "
+                    "enum constants"
+                  : "config predicate arguments must match the declared "
+                    "source type");
         }
       }
       predicates.push_back(predicate.predicate);
@@ -176,6 +203,11 @@ bool Configs::declaration(cxx::Symbol* symbol,
   }
   std::optional<loom_attribute_t> value;
   if (variable->initializer()) {
+    if (is_encoding) {
+      diagnostics_.reject(
+          unit_, owner,
+          "encoding config definitions require an IR encoding attribute");
+    }
     if (!variable->constValue()) {
       diagnostics_.reject(unit_, owner,
                           "config definitions require a constant initializer");
@@ -256,8 +288,23 @@ void Configs::build(loom_builder_t* builder) {
           diagnostics_.reject(unit_, binding.owner, text);
         }
       }
-      check(loom_config_def_build(builder, 0, binding.reference, *binding.value,
-                                  binding.type, nullptr, 0, nullptr, 0,
+      auto predicates = binding.predicates;
+      loom_config_def_build_flags_t flags = 0;
+      loom_value_id_t identity = LOOM_VALUE_ID_INVALID;
+      if (!predicates.empty()) {
+        check(loom_builder_reserve_values(builder, 1, &identity));
+        for (auto& predicate : predicates) {
+          for (size_t index = 0; index < predicate.arg_count; ++index) {
+            if (predicate.arg_tags[index] == LOOM_PRED_ARG_VALUE) {
+              predicate.args[index] = identity;
+            }
+          }
+        }
+        flags |= LOOM_CONFIG_DEF_BUILD_FLAG_HAS_PREDICATES;
+      }
+      check(loom_config_def_build(builder, flags, binding.reference,
+                                  *binding.value, binding.type, nullptr, 0,
+                                  predicates.data(), predicates.size(),
                                   locations_.get(binding.owner), &op));
     } else {
       auto predicates = binding.predicates;
