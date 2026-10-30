@@ -158,9 +158,7 @@ Double2 entry() { return converted; }
 
 // ----
 func.def public @entry() -> (vector<2xf64>) {
-  %1 = scalar.constant 1.8446744073709552e+19 : f64
-  %2 = scalar.constant 9.2233720368547758e+18 : f64
-  %converted = vector.from_elements %1, %2 : vector<2xf64>
+  %converted = vector.constantf [1.8446744073709552e+19, 9.2233720368547758e+18] : vector<2xf64>
   func.return %converted : vector<2xf64>
 }
 
@@ -175,11 +173,7 @@ Float8x4 entry() { return converted; }
 
 // ----
 func.def public @entry() -> (vector<4xf8E4M3>) {
-  %1 = scalar.constant 1.125 : f8E4M3
-  %2 = scalar.constant 1.0 : f8E4M3
-  %3 = scalar.constant -0.0 : f8E4M3
-  %4 = scalar.constant 448.0 : f8E4M3
-  %converted = vector.from_elements %1, %2, %3, %4 : vector<4xf8E4M3>
+  %converted = vector.constantf [1.125, 1.0, -0.0, 448.0] : vector<4xf8E4M3>
   func.return %converted : vector<4xf8E4M3>
 }
 
@@ -208,9 +202,7 @@ BFloat2 entry() { return converted; }
 
 // ----
 func.def public @entry() -> (vector<2xbf16>) {
-  %1 = scalar.constant 9.2954296308927037e+18 : bf16
-  %2 = scalar.constant 9.2233720368547758e+18 : bf16
-  %converted = vector.from_elements %1, %2 : vector<2xbf16>
+  %converted = vector.constantf [9.2954296308927037e+18, 9.2233720368547758e+18] : vector<2xbf16>
   func.return %converted : vector<2xbf16>
 }
 

@@ -59,12 +59,35 @@ Float8x4 entry() { return values; }
 
 // ----
 func.def public @entry() -> (vector<4xf8E4M3>) {
-  %1 = scalar.constant 1.125 : f8E4M3
-  %2 = scalar.constant -0.0 : f8E4M3
-  %3 = scalar.constant 0.0 : f8E4M3
-  %4 = scalar.constant 0.0 : f8E4M3
-  %values = vector.from_elements %1, %2, %3, %4 : vector<4xf8E4M3>
+  %values = vector.constantf [1.125, -0.0, 0.0, 0.0] : vector<4xf8E4M3>
   func.return %values : vector<4xf8E4M3>
+}
+
+// ====
+using Float4 = float __attribute__((ext_vector_type(4)));
+constexpr Float4 values{1.5f, -0.0f, 3.25f};
+static_assert(values[0] == 1.5f && values[3] == 0.0f);
+Float4 entry() { return values; }
+
+// ----
+func.def public @entry() -> (vector<4xf32>) {
+  %values = vector.constantf [1.5, -0.0, 3.25, 0.0] : vector<4xf32>
+  func.return %values : vector<4xf32>
+}
+
+// ====
+using Float2 = float __attribute__((ext_vector_type(2)));
+constexpr float payload = __builtin_bit_cast(float, 0x7f812345u);
+constexpr Float2 values{payload, -0.0f};
+Float2 entry() { return values; }
+
+// ----
+func.def public @entry() -> (vector<2xf32>) {
+  %1 = scalar.constant 2139169605 : i32
+  %2 = scalar.bitcast %1 : i32 to f32
+  %3 = scalar.constant -0.0 : f32
+  %values = vector.from_elements %2, %3 : vector<2xf32>
+  func.return %values : vector<2xf32>
 }
 
 // ====
