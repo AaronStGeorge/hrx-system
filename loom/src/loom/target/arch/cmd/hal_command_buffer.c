@@ -238,6 +238,11 @@ static iree_status_t loom_cmd_program_hal_record_wave(
     switch (loom_cmd_program_command_kind_base(command.kind)) {
       case LOOM_CMD_PROGRAM_COMMAND_KIND_BARRIER_EXECUTION:
         break;
+      case LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP:
+        status = iree_make_status(
+            IREE_STATUS_UNIMPLEMENTED,
+            "command timestamp HAL materialization is not implemented");
+        break;
       case LOOM_CMD_PROGRAM_COMMAND_KIND_FILL: {
         iree_hal_buffer_ref_t target = {0};
         status = loom_cmd_program_hal_buffer_ref(

@@ -271,7 +271,8 @@ static iree_status_t loom_cmd_program_plan_validate_live_kernel_entries(
          command_ordinal < schedule->command_count; ++command_ordinal) {
       const loom_cmd_schedule_command_t* command =
           &schedule->commands[command_ordinal];
-      if (command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_PIPELINE_LAUNCH) {
+      if (command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_PIPELINE_LAUNCH ||
+          command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP) {
         continue;
       }
       const loom_symbol_ref_t entry_ref = command->callee;
@@ -471,6 +472,89 @@ static iree_status_t loom_cmd_program_plan_copy_u32_table(
   return iree_ok_status();
 }
 
+// Validate command-specific storage constraints against the placement owners'
+// completed rows. The scratch index borrows existing module storage and holds
+// no facts or IR-derived analysis of its own.
+static iree_status_t loom_cmd_program_plan_validate_timestamps(
+    loom_module_t* module, const loom_cmd_schedule_plan_t* schedule,
+    const loom_value_id_t* binding_values,
+    const loom_cmd_buffer_binding_t* bindings, iree_host_size_t binding_count,
+    const loom_cmd_buffer_range_t* ranges, iree_host_size_t range_count,
+    loom_cmd_transient_requirement_t* transient,
+    iree_diagnostic_emitter_t emitter, bool* out_valid) {
+  *out_valid = true;
+  loom_module_value_ordinal_scratch_acquire(module);
+  for (iree_host_size_t i = 0; i < binding_count; ++i) {
+    loom_module_value_ordinal_scratch_set(module, binding_values[i],
+                                          (loom_value_ordinal_t)i);
+  }
+  for (iree_host_size_t i = 0; i < range_count; ++i) {
+    loom_module_value_ordinal_scratch_set(
+        module, ranges[i].source_value,
+        (loom_value_ordinal_t)(binding_count + i));
+  }
+
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < schedule->command_count && *out_valid && iree_status_is_ok(status);
+       ++i) {
+    const loom_cmd_schedule_command_t* command = &schedule->commands[i];
+    if (command->kind != LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP) {
+      continue;
+    }
+    const loom_value_ordinal_t ordinal =
+        loom_module_value_ordinal_scratch_lookup(module,
+                                                 command->arguments.values[0]);
+    iree_string_view_t requirement = iree_string_view_empty();
+    if (ordinal == LOOM_VALUE_ORDINAL_INVALID) {
+      requirement = IREE_SV("an exactly placed buffer range");
+    } else {
+      loom_cmd_buffer_binding_t target;
+      if (ordinal < binding_count) {
+        target = bindings[ordinal];
+      } else {
+        const loom_cmd_buffer_range_t range = ranges[ordinal - binding_count];
+        target = (loom_cmd_buffer_binding_t){
+            .role = range.role,
+            .resource_index = range.resource_index,
+            .byte_offset = range.byte_offset,
+            .byte_length = range.byte_length,
+        };
+      }
+      if (target.role == LOOM_CMD_BUFFER_ROLE_FIXED) {
+        requirement = IREE_SV("writable invocation or transient storage");
+      } else if (target.byte_offset % LOOM_CMD_PROGRAM_TIMESTAMP_ALIGNMENT !=
+                     0 ||
+                 target.byte_length < LOOM_CMD_PROGRAM_TIMESTAMP_BYTE_LENGTH) {
+        requirement = IREE_SV("an aligned eight-byte destination");
+      } else if (target.resource_index == transient->binding_index) {
+        transient->minimum_alignment = iree_max(
+            transient->minimum_alignment, LOOM_CMD_PROGRAM_TIMESTAMP_ALIGNMENT);
+      }
+    }
+    if (!iree_string_view_is_empty(requirement)) {
+      const loom_diagnostic_param_t params[] = {loom_param_string(requirement)};
+      const loom_diagnostic_emission_t emission = {
+          .module = module,
+          .op = command->source_op,
+          .error = LOOM_ERR_LOWERING_071,
+          .params = params,
+          .param_count = IREE_ARRAYSIZE(params),
+      };
+      *out_valid = false;
+      status = iree_diagnostic_emit(emitter, &emission);
+    }
+  }
+  for (iree_host_size_t i = 0; i < range_count; ++i) {
+    loom_module_value_ordinal_scratch_clear(module, ranges[i].source_value);
+  }
+  for (iree_host_size_t i = 0; i < binding_count; ++i) {
+    loom_module_value_ordinal_scratch_clear(module, binding_values[i]);
+  }
+  loom_module_value_ordinal_scratch_release(module);
+  return status;
+}
+
 static iree_status_t loom_cmd_program_plan_build_lower_plan(
     loom_cmd_program_plan_t* plan, loom_module_t* plan_module,
     loom_op_t* root_program_op, const loom_cmd_schedule_plan_t* schedule,
@@ -512,9 +596,14 @@ static iree_status_t loom_cmd_program_plan_build_lower_plan(
   }
 
   uint32_t entry_requirement_count = 0;
+  bool has_timestamps = false;
   iree_host_size_t argument_offset = 0;
   for (iree_host_size_t i = 0; i < schedule->command_count; ++i) {
     const loom_cmd_schedule_command_t* command = &schedule->commands[i];
+    if (command->kind == LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP) {
+      has_timestamps = true;
+      continue;
+    }
     const loom_value_id_t* source_arguments = command->arguments.values;
     const uint16_t source_argument_count = command->arguments.count;
     IREE_ASSERT(loom_symbol_ref_is_valid(command->callee));
@@ -578,7 +667,8 @@ static iree_status_t loom_cmd_program_plan_build_lower_plan(
   const loom_func_like_t root_program =
       loom_func_like_cast(plan_module, root_program_op);
   uint16_t argument_count = 0;
-  loom_func_like_arg_ids(root_program, &argument_count);
+  const loom_value_id_t* argument_values =
+      loom_func_like_arg_ids(root_program, &argument_count);
   const int64_t specialization_count_i64 =
       loom_func_like_specialization_count(root_program);
   IREE_ASSERT_GE(specialization_count_i64, 0);
@@ -609,7 +699,6 @@ static iree_status_t loom_cmd_program_plan_build_lower_plan(
   if (!transient_valid) {
     return iree_ok_status();
   }
-  *out_transient = transient_layout.requirement;
 
   iree_host_size_t buffer_range_count = 0;
   if (!iree_host_size_checked_add(parameter_layout.buffer_range_count,
@@ -635,6 +724,18 @@ static iree_status_t loom_cmd_program_plan_build_lower_plan(
   }
 
   uint32_t* owned_entry_requirement_indices = NULL;
+  if (has_timestamps) {
+    bool timestamps_valid = false;
+    IREE_RETURN_IF_ERROR(loom_cmd_program_plan_validate_timestamps(
+        plan_module, schedule,
+        binding_count ? argument_values + specialization_count_i64 : NULL,
+        bindings, binding_count, buffer_ranges, buffer_range_count,
+        &transient_layout.requirement, diagnostic_emitter, &timestamps_valid));
+    if (!timestamps_valid) {
+      return iree_ok_status();
+    }
+  }
+  *out_transient = transient_layout.requirement;
   iree_status_t index_status = loom_cmd_program_plan_copy_u32_table(
       entry_requirement_indices, entry_requirement_count, plan->host_allocator,
       &owned_entry_requirement_indices);

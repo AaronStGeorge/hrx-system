@@ -1,0 +1,151 @@
+// RUN: emit command-program @capture_twice
+
+command.def public @capture_twice() launch(%sample: view<1xi64>) {
+  command.timestamp %sample : view<1xi64>
+  command.timestamp %sample : view<1xi64>
+  command.return
+}
+
+// ----
+low.func.def public retain target<cmd.core> abi(command_program) abi_layout({entry_count = 0, executable_count = 0, fixed_buffer_count = 0, rebindable_binding_count = 1}) @capture_twice() asm {
+  %1 = resource<command_input> {index = 0, source_type = buffer} : reg<cmd.binding>
+  %2 = cmd.constant.u64 0
+  %3 = cmd.constant.u64 -1
+  %4 = cmd.constant.u64 8
+  %5 = cmd.buffer.ref.binding %1, %2, %4
+  cmd.timestamp %5
+  %6 = cmd.buffer.ref.binding %1, %2, %4
+  cmd.timestamp.barrier %6
+  return
+}
+
+// ====
+
+// RUN: emit command-program @misaligned_capture
+
+command.def public @misaligned_capture() launch(%samples: buffer) {
+  %offset = index.constant 4 : offset
+  %sample = buffer.view %samples[%offset] : buffer -> view<1xi64>
+  // ERROR@+1: LOWERING/071 {requirement="an aligned eight-byte destination"}
+  command.timestamp %sample : view<1xi64>
+  command.return
+}
+
+// ====
+
+// RUN: emit command-program @unplaced_capture
+
+command.def public @unplaced_capture(%offset: offset) launch(%samples: buffer) {
+  %sample = buffer.view %samples[%offset] : buffer -> view<1xi64>
+  // ERROR@+1: LOWERING/071 {requirement="an exactly placed buffer range"}
+  command.timestamp %sample : view<1xi64>
+  command.return
+}
+
+// ====
+
+// RUN: emit command-program @immutable_capture
+
+command.def public @immutable_capture() launch(%parameters: buffer) {
+  %sample = command.parameter %parameters, "sample" : view<1xi64>
+  // ERROR@+1: LOWERING/071 {requirement="writable invocation or transient storage"}
+  command.timestamp %sample : view<1xi64>
+  command.return
+}
+
+// ====
+
+// Start precedes both siblings; end follows both. The interior capture and
+// independent dispatch share a wave and have no edge between them.
+// RUN: emit command-program @capture_fork
+
+kernel.entry.decl @work(%storage: buffer)
+
+command.def public @capture_fork() launch(%samples: buffer, %storage: buffer) {
+  %start_offset = index.constant 0 : offset
+  %interior_offset = index.constant 8 : offset
+  %end_offset = index.constant 16 : offset
+  %start = buffer.view %samples[%start_offset] : buffer -> view<1xi64>
+  %interior = buffer.view %samples[%interior_offset] : buffer -> view<1xi64>
+  %end = buffer.view %samples[%end_offset] : buffer -> view<1xi64>
+  %group_count = index.constant 1 : index
+  command.timestamp %start : view<1xi64>
+  command.concurrent {
+    command.timestamp %interior : view<1xi64>
+    kernel.dispatch @work[%group_count](%storage) : [index](buffer)
+  }
+  command.timestamp %end : view<1xi64>
+  command.return
+}
+
+// ----
+low.func.def public retain target<cmd.core> abi(command_program) abi_layout({entry_count = 1, executable_count = 1, fixed_buffer_count = 0, rebindable_binding_count = 2}) @capture_fork() asm {
+  %10 = resource<command_input> {index = 0, source_type = buffer} : reg<cmd.binding>
+  %11 = resource<command_input> {index = 1, source_type = buffer} : reg<cmd.binding>
+  %12 = resource<command_input> {index = 0, source_type = index} : reg<cmd.executable>
+  %13 = resource<command_input> {index = 0, source_type = index} : reg<cmd.entry>
+  %14 = cmd.constant.u64 0
+  %15 = cmd.constant.u64 -1
+  %16 = cmd.constant.u64 8
+  %17 = cmd.constant.u64 16
+  %18 = cmd.buffer.ref.binding %10, %14, %16
+  cmd.timestamp %18
+  %19 = cmd.buffer.ref.binding %10, %16, %16
+  cmd.timestamp.barrier %19
+  %20 = cmd.constant.u32 1
+  cmd.dispatch.direct<%12, %13>[%20, %20, %20](%11, %14, %15)
+  %21 = cmd.buffer.ref.binding %10, %17, %16
+  cmd.timestamp.barrier %21
+  return
+}
+
+// ====
+
+// A timestamp is a real transient use. The second allocation cannot reuse the
+// first sample until its later consumer completes. The final sample may reuse
+// the retired first range. Slab alignment must satisfy the clock write even
+// when the source allocation has only byte alignment.
+// RUN: emit command-program @capture_storage
+
+kernel.entry.decl @consume(%sample: view<1xi64>, %output: buffer)
+
+command.def public @capture_storage() launch(%output: buffer) {
+  %base_offset = index.constant 0 : offset
+  %bytes = index.constant 8 : offset
+  %group_count = index.constant 1 : index
+  %first_storage = buffer.alloca<global> align(1) %bytes : buffer
+  %first = buffer.view %first_storage[%base_offset] : buffer -> view<1xi64>
+  command.timestamp %first : view<1xi64>
+  %second_storage = buffer.alloca<global> align(1) %bytes : buffer
+  %second = buffer.view %second_storage[%base_offset] : buffer -> view<1xi64>
+  command.timestamp %second : view<1xi64>
+  kernel.dispatch @consume[%group_count](%first, %output) : [index](view<1xi64>, buffer)
+  kernel.dispatch @consume[%group_count](%second, %output) : [index](view<1xi64>, buffer)
+  %last_storage = buffer.alloca<global> align(1) %bytes : buffer
+  %last = buffer.view %last_storage[%base_offset] : buffer -> view<1xi64>
+  command.timestamp %last : view<1xi64>
+  kernel.dispatch @consume[%group_count](%last, %output) : [index](view<1xi64>, buffer)
+  command.return
+}
+
+// ----
+low.func.def public retain target<cmd.core> abi(command_program) abi_layout({entry_count = 1, executable_count = 1, fixed_buffer_count = 0, rebindable_binding_count = 2}) @capture_storage() asm {
+  %12 = resource<command_input> {index = 0, source_type = buffer} : reg<cmd.binding>
+  %13 = resource<command_input> {index = 1, source_type = buffer} : reg<cmd.binding>
+  %14 = resource<command_input> {index = 0, source_type = index} : reg<cmd.executable>
+  %15 = resource<command_input> {index = 0, source_type = index} : reg<cmd.entry>
+  %16 = cmd.constant.u64 0
+  %17 = cmd.constant.u64 -1
+  %18 = cmd.constant.u64 8
+  %19 = cmd.buffer.ref.binding %13, %16, %18
+  cmd.timestamp %19
+  %20 = cmd.buffer.ref.binding %13, %18, %18
+  cmd.timestamp.barrier %20
+  %21 = cmd.constant.u32 1
+  cmd.dispatch.direct.barrier<%14, %15>[%21, %21, %21](%13, %16, %18, %12, %16, %17)
+  cmd.dispatch.direct.barrier<%14, %15>[%21, %21, %21](%13, %18, %18, %12, %16, %17)
+  %22 = cmd.buffer.ref.binding %13, %16, %18
+  cmd.timestamp.barrier %22
+  cmd.dispatch.direct.barrier<%14, %15>[%21, %21, %21](%13, %16, %18, %12, %16, %17)
+  return
+}

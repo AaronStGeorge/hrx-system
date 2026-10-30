@@ -1,5 +1,12 @@
 // RUN: format bytecode
 
+command.def @capture() launch(%sample: view<1xi64>) {
+  command.timestamp %sample : view<1xi64>
+  command.return
+}
+
+// ====
+
 command.def @parameter_base() launch(%parameters: buffer) {
   %weight = command.parameter %parameters, "weight" : view<32x64xbf16>
   %base = command.parameter.base %weight : view<32x64xbf16> -> buffer

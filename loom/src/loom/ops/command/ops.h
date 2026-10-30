@@ -28,7 +28,8 @@ enum {
   LOOM_OP_COMMAND_CONCURRENT = LOOM_OP_KIND(LOOM_DIALECT_COMMAND, 6),
   LOOM_OP_COMMAND_PARAMETER = LOOM_OP_KIND(LOOM_DIALECT_COMMAND, 7),
   LOOM_OP_COMMAND_PARAMETER_BASE = LOOM_OP_KIND(LOOM_DIALECT_COMMAND, 8),
-  LOOM_OP_COMMAND_COUNT_ = 9,
+  LOOM_OP_COMMAND_TIMESTAMP = LOOM_OP_KIND(LOOM_DIALECT_COMMAND, 9),
+  LOOM_OP_COMMAND_COUNT_ = 10,
 };
 
 // Symbol visibility. Absent (0) means private (module-internal).
@@ -215,6 +216,19 @@ iree_status_t loom_command_parameter_base_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+
+// LOOM_OP_COMMAND_TIMESTAMP: Capture the executing queue family's clock into one naturally aligned 64-bit destination. The destination is an unencoded view<1xi64>; its bits contain raw unsigned ticks, not a duration or host time. Clock frequency and valid width belong to the execution domain. Serial and concurrent command regions determine ordering, just as for dispatches. Capture is a nondeterministic storage write; it does not synchronize the host or other queues. Successful program completion makes the sample valid, including a sample whose value is zero.
+// command.timestamp %sample : view<1xi64>
+LOOM_DEFINE_ISA(loom_command_timestamp_isa, LOOM_OP_COMMAND_TIMESTAMP)
+LOOM_DEFINE_OPERAND(loom_command_timestamp_target, 0)
+iree_status_t loom_command_timestamp_build(
+    loom_builder_t* builder,
+    loom_value_id_t target,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_command_timestamp_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the command dialect.
 const loom_op_vtable_t* const* loom_command_dialect_vtables(

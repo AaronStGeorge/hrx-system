@@ -1,5 +1,26 @@
 // RUN: verify
 
+command.def @capture() launch(%sample: view<1xi64>) {
+  command.timestamp %sample : view<1xi64>
+  command.return
+}
+
+// ====
+
+command.def @invalid_samples(%length: index) launch(%short: view<1xi32>, %pair: view<2xi64>, %dynamic: view<[%length]xi64>, %matrix: view<1x1xi64>) {
+  // ERROR@+1: TYPE/003 "target" "view<1xi32>" "unencoded view<1xi64>"
+  command.timestamp %short : view<1xi32>
+  // ERROR@+1: TYPE/003 "target" "view<2xi64>" "unencoded view<1xi64>"
+  command.timestamp %pair : view<2xi64>
+  // ERROR@+1: TYPE/003 "target" "unencoded view<1xi64>"
+  command.timestamp %dynamic : view<[%length]xi64>
+  // ERROR@+1: TYPE/003 "target" "view<1x1xi64>" "unencoded view<1xi64>"
+  command.timestamp %matrix : view<1x1xi64>
+  command.return
+}
+
+// ====
+
 command.def @decode(%token_count: index) launch(%parameters: buffer, %weights: buffer) {
   command.return
 }

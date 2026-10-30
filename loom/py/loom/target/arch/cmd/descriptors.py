@@ -320,6 +320,28 @@ def _copy_descriptor(*, barrier: bool) -> Descriptor:
     )
 
 
+def _timestamp_descriptor(*, barrier: bool) -> Descriptor:
+    key = "cmd.timestamp.barrier" if barrier else "cmd.timestamp"
+    return Descriptor(
+        key=key,
+        mnemonic=key,
+        semantic_tag=key.replace("cmd.", "command."),
+        operands=(_operand(_REG_BUFFER_REF, "target"),),
+        asm_forms=_asm(operands=("target",)),
+        effects=(_RECORD_EFFECT, _BARRIER_EFFECT) if barrier else (_RECORD_EFFECT,),
+        schedule_class=_SCHEDULE_BARRIER if barrier else _SCHEDULE_RECORD,
+        flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.BARRIER)
+        if barrier
+        else (DescriptorFlag.SIDE_EFFECTING,),
+        instruction_classes=(
+            InstructionClass.GENERIC_MEMORY,
+            InstructionClass.EXECUTION_BARRIER,
+        )
+        if barrier
+        else (InstructionClass.GENERIC_MEMORY,),
+    )
+
+
 _COMMAND_DESCRIPTORS = (
     _fill_descriptor(barrier=False),
     _fill_descriptor(barrier=True),
@@ -342,6 +364,8 @@ _COMMAND_DESCRIPTORS = (
         flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.BARRIER),
         instruction_classes=(InstructionClass.EXECUTION_BARRIER,),
     ),
+    _timestamp_descriptor(barrier=False),
+    _timestamp_descriptor(barrier=True),
 )
 
 

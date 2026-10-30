@@ -23,5 +23,6 @@ loom_check_test_suite(
         "scheduling.loom-test",
         "storage.loom-test",
         "template_composition.loom-test",
+        "timestamps.loom-test",
     ],
 )

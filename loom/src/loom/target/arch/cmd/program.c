@@ -122,6 +122,9 @@ loom_cmd_program_command_t loom_cmd_program_command_at(
           record + LOOM_CMD_PROGRAM_COMMAND_ARGUMENT_SCHEMA_INDEX_OFFSET),
   };
   switch ((uint32_t)loom_cmd_program_command_kind_base(kind)) {
+    case LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP:
+      command.payload.timestamp.target_buffer_ref = operand_0;
+      break;
     case LOOM_CMD_PROGRAM_COMMAND_KIND_FILL:
       command.payload.fill.target_buffer_ref = operand_0;
       command.payload.fill.pattern = operand_1;
@@ -547,6 +550,37 @@ static iree_status_t loom_cmd_program_validate_commands(
                               "command kind %u is unsupported", command.kind);
     }
     switch ((uint32_t)base_kind) {
+      case LOOM_CMD_PROGRAM_COMMAND_KIND_TIMESTAMP: {
+        if (command.argument_offset != 0 ||
+            command.argument_schema_index != 0 ||
+            command.payload.timestamp.target_buffer_ref >=
+                program->buffer_refs.count ||
+            iree_unaligned_load_le_u32(
+                record + LOOM_CMD_PROGRAM_COMMAND_OPERAND_1_OFFSET) != 0 ||
+            iree_unaligned_load_le_u32(
+                record + LOOM_CMD_PROGRAM_COMMAND_OPERAND_2_OFFSET) != 0 ||
+            operand_3 != 0 || operand_4 != 0) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "command timestamp %" PRIu32 " has a noncanonical payload", i);
+        }
+        const loom_cmd_program_buffer_ref_t target =
+            loom_cmd_program_buffer_ref_at(
+                program, command.payload.timestamp.target_buffer_ref);
+        const bool is_transient =
+            target.role == LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE &&
+            target.root_index == program->requirements.transient.binding_index;
+        if (target.byte_length != LOOM_CMD_PROGRAM_TIMESTAMP_BYTE_LENGTH ||
+            target.byte_offset % LOOM_CMD_PROGRAM_TIMESTAMP_ALIGNMENT != 0 ||
+            (is_transient && program->requirements.transient.minimum_alignment <
+                                 LOOM_CMD_PROGRAM_TIMESTAMP_ALIGNMENT)) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "command timestamp %" PRIu32
+                                  " requires an aligned eight-byte destination",
+                                  i);
+        }
+        break;
+      }
       case LOOM_CMD_PROGRAM_COMMAND_KIND_FILL:
         if (command.argument_offset != 0 ||
             command.argument_schema_index != 0 ||

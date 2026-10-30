@@ -156,7 +156,15 @@ static iree_status_t loom_cmd_schedule_append_command(
   loom_cmd_schedule_command_t command = {
       .source_op = op,
   };
-  if (loom_kernel_launch_isa(op)) {
+  if (loom_command_timestamp_isa(op)) {
+    command.callee = loom_symbol_ref_null();
+    command.kind = LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP;
+    command.arguments = (loom_cmd_schedule_value_slice_t){
+        .values = loom_op_const_operands(op),
+        .count = 1,
+    };
+    command.source_arguments = command.arguments;
+  } else if (loom_kernel_launch_isa(op)) {
     command.callee = loom_kernel_launch_callee(op);
     command.arguments =
         loom_cmd_schedule_value_slice(loom_kernel_launch_arguments(op));
@@ -180,7 +188,8 @@ static iree_status_t loom_cmd_schedule_append_command(
                        : LOOM_CMD_SCHEDULE_COMMAND_KIND_KERNEL_DISPATCH_DIRECT;
     command.source_arguments = command.arguments;
   }
-  if (!iree_host_size_checked_add(build->argument_value_count,
+  if (command.kind != LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP &&
+      !iree_host_size_checked_add(build->argument_value_count,
                                   command.arguments.count,
                                   &build->argument_value_count)) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -266,7 +275,8 @@ static iree_status_t loom_cmd_schedule_build_commands(
     } else if (loom_kernel_launch_concurrent_isa(op)) {
       child_region = loom_kernel_launch_concurrent_body(op);
       child_mode = LOOM_CMD_SCHEDULE_MODE_CONCURRENT;
-    } else if (loom_kernel_dispatch_isa(op) || loom_kernel_launch_isa(op)) {
+    } else if (loom_kernel_dispatch_isa(op) || loom_kernel_launch_isa(op) ||
+               loom_command_timestamp_isa(op)) {
       IREE_RETURN_IF_ERROR(loom_cmd_schedule_append_command(build, frame, op));
       continue;
     } else if (loom_buffer_alloca_isa(op)) {

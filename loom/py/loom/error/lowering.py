@@ -726,6 +726,16 @@ ERR_LOWERING_070 = ErrorDef(
     fix_hint="Wait for pending transfers before invoking an unbounded memory effect",
 )
 
+ERR_LOWERING_071 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=71,
+    severity=Severity.ERROR,
+    summary="Command timestamp storage cannot be placed.",
+    message="command.timestamp requires {requirement}",
+    params=(ErrorParam("requirement", ParamKind.STRING),),
+)
+
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_022,
     ERR_LOWERING_023,
@@ -765,4 +775,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_068,
     ERR_LOWERING_069,
     ERR_LOWERING_070,
+    ERR_LOWERING_071,
 )

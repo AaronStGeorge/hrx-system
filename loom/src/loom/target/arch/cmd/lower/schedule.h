@@ -25,6 +25,8 @@ typedef enum loom_cmd_schedule_command_kind_e {
   LOOM_CMD_SCHEDULE_COMMAND_KIND_KERNEL_DISPATCH_INDIRECT = 1,
   // One invocation of an independently specialized kernel-scoped pipeline.
   LOOM_CMD_SCHEDULE_COMMAND_KIND_PIPELINE_LAUNCH = 2,
+  // One queue-family clock sample written to the sole storage argument.
+  LOOM_CMD_SCHEDULE_COMMAND_KIND_TIMESTAMP = 3,
 } loom_cmd_schedule_command_kind_t;
 
 // Borrowed source SSA values retained by one classified issue row.
@@ -43,9 +45,9 @@ typedef struct loom_cmd_schedule_value_slice_t {
 typedef struct loom_cmd_schedule_command_t {
   // Source issue operation.
   const loom_op_t* source_op;
-  // Referenced logical kernel or executable entry symbol.
+  // Referenced logical kernel or executable entry; invalid for timestamps.
   loom_symbol_ref_t callee;
-  // Device-ABI argument values in authored order.
+  // Device-ABI arguments, or the timestamp's destination view.
   loom_cmd_schedule_value_slice_t arguments;
   // Complete source signature, including a pipeline's staged prefix.
   loom_cmd_schedule_value_slice_t source_arguments;
@@ -101,13 +103,13 @@ typedef struct loom_cmd_schedule_plan_t {
 // wave; nested serial spans are aligned by wave index, which may conservatively
 // add cross-sibling dependencies. The kernel.launch and command schedule ops
 // are equivalent structured scheduling forms. The body must already contain
-// configured kernel.dispatch operations or kernel-scoped pipeline launches;
-// ordinary logical kernels are resolved before scheduling. Allocation
-// definitions retain their first possible wave so storage planning can preserve
-// state from definition through last use. Pure leaf dataflow is ignored because
-// it emits no command; later placement consumes its resolved SSA facts
-// directly. Other residual source operations must have been specialized away
-// and are rejected. Issue rows classify direct/indirect dispatch forms once so
+// configured kernel.dispatch operations, kernel-scoped pipeline launches, or
+// command.timestamp captures. Ordinary logical kernels are resolved before
+// scheduling. Allocation definitions retain their first possible wave so
+// storage planning preserves state from definition through last use. Pure leaf
+// dataflow is ignored because it emits no command; later placement consumes its
+// resolved SSA facts directly. Other residual source operations must have been
+// specialized away and are rejected. Issue rows classify command forms once so
 // later command planning never needs to rediscover them.
 iree_status_t loom_cmd_schedule_plan_build(const loom_module_t* module,
                                            loom_region_t* program_body,

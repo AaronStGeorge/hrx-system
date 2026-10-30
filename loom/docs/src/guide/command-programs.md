@@ -54,10 +54,10 @@ callback outside the command artifact.
 A command program is not a pure function: launching a kernel and ordering work
 are its purpose. Those observable effects must nevertheless be represented by
 explicit command operations such as `kernel.launch`, `command.launch`,
-`command.serial`, and `command.concurrent`. Ordinary SSA computation around
-them is pure or deterministic read-only computation. Calls used to derive
-launch workloads carry the corresponding `pure` or `readonly` contract, just
-as calls in a kernel launch-configuration region do.
+`command.timestamp`, `command.serial`, and `command.concurrent`. Ordinary SSA
+computation around them is pure or deterministic read-only computation. Calls
+used to derive launch workloads carry the corresponding `pure` or `readonly`
+contract, just as calls in a kernel launch-configuration region do.
 
 The distinction keeps planning movable. The compiler can inline and fold
 pure shape arithmetic at its real caller-owned control-flow site. When a count
@@ -77,13 +77,13 @@ explicit indirect-count storage. They cannot leave an unresolved source
 branch, dynamic parameter key, or free scalar result in the materialized
 command program.
 
-The launch-binding group is intentionally buffers only. Planning classifies
+The launch-binding group accepts buffers and typed views. Planning classifies
 roots used by `command.parameter` as fixed materialization resources and
 ordinary roots as rebindable issue-time resources. Scalar specializations do
 not silently become host callbacks or device push constants. A scalar used by
 varying device arithmetic must live in device-visible storage, while an exact
 scalar kernel argument may specialize away. The type checker rejects
-non-buffer launch bindings so a caller and a command program cannot silently
+non-storage launch bindings so a caller and a command program cannot silently
 disagree about which ABI carries a value.
 
 !!! note "Workloads and specializations are different"
@@ -94,6 +94,42 @@ disagree about which ABI carries a value.
     facts to the complete reachable subgraph. Exact facts may change which
     kernels exist or make direct launch counts exact. Counts that intentionally
     remain issue-time dynamic use explicit indirect storage.
+
+## Clock captures belong to the command schedule
+
+[`command.timestamp`](../reference/dialects/command/ops/timestamp.md) writes one
+raw queue-family clock sample into an unencoded `view<1xi64>`. The destination
+uses ordinary invocation storage or command-program transient storage and must
+be eight-byte aligned. The operation is a nondeterministic write, so captures
+remain distinct even when they use the same destination.
+
+```loom
+kernel.entry.decl @step(%state: buffer)
+
+command.def @measured_step() launch(
+    %state: buffer, %start: view<1xi64>, %end: view<1xi64>) {
+  %group_count = index.constant 1 : index
+  command.timestamp %start : view<1xi64>
+  kernel.dispatch @step[%group_count](%state) : [index](buffer)
+  command.timestamp %end : view<1xi64>
+  command.return
+}
+```
+
+The outer serial schedule orders the first capture before the dispatch and the
+second capture after it. Inside `command.concurrent`, a capture has no edge to
+its siblings; put it before or after that region to bracket the whole group.
+Nested serial branches keep their internal order. Command planning preserves
+these boundaries using the same conservative waves as other commands.
+
+Samples contain unsigned ticks, not nanoseconds or host timestamps. Their
+frequency and valid bit width come from the execution domain. Successful
+completion establishes validity; a zero sample is valid. Capturing a clock does
+not synchronize the host or other queues.
+
+Source, Low, and portable command artifacts represent clock captures. The HAL
+materializer currently returns `UNIMPLEMENTED` for these records; executable
+timing requires its clock-capture and ordering implementation.
 
 ## Launch configuration stays with its caller
 
