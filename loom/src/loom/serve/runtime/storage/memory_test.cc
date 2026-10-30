@@ -1108,6 +1108,70 @@ TEST_F(DeviceMemoryTest, PoolTrimPreservesLiveWorkspaceAndMutableState) {
   }
 }
 
+TEST_F(DeviceMemoryTest, WorkspaceIdleWaitsForRawCapturesAfterModelRetirement) {
+  IREE_ASSERT_OK(
+      loom_serve_execution_reserve_workspace(execution, kSlabSize, 256));
+  const auto request = iree_hal_make_pool_reservation_request(kSlabSize, 256);
+  IREE_ASSERT_OK(
+      loom_serve_execution_alloca(execution, 1, &request, &workspace));
+  ASSERT_NO_FATAL_FAILURE(RoundTrip(workspace, 0, 0x12345678));
+
+  // A raw allocation capture has an independent lifetime from the model's
+  // tracked view, including after successful deallocation and readiness.
+  auto* root = iree_hal_buffer_allocated_buffer(workspace);
+  iree_hal_buffer_retain(root);
+  std::unique_ptr<iree_hal_buffer_t, decltype(&iree_hal_buffer_release)>
+      capture(root, iree_hal_buffer_release);
+  uint64_t completion = 0;
+  IREE_ASSERT_OK(
+      loom_serve_execution_dealloca(execution, workspace, &completion));
+  iree_hal_buffer_release(workspace);
+  workspace = nullptr;
+  IREE_ASSERT_OK(loom_serve_execution_drain(execution));
+  EXPECT_TRUE(loom_serve_execution_is_retired(execution));
+  loom_serve_execution_release(execution);
+  execution = nullptr;
+
+  auto* shared_workspace = loom_serve_pool_workspace(storage_owner);
+  // A completed model does not prove that the shared workspace is idle. Its
+  // retirement policy observes the outstanding raw capture without blocking.
+  EXPECT_TRUE(
+      loom_serve_workspace_trim_idle(shared_workspace, iree_time_now(), 1));
+  capture.reset();
+  IREE_ASSERT_OK(loom_serve_test_workspace_await_idle(shared_workspace));
+  IREE_ASSERT_OK(loom_serve_test_pool_trim_and_drain(storage_owner, 0));
+  const auto idle = loom_serve_pool_statistics(storage_owner);
+  EXPECT_EQ(idle.workspace.reservation_count, 0u);
+  EXPECT_EQ(idle.workspace.bytes_committed, 0u);
+  EXPECT_EQ(idle.retained.committed_bytes, 0u);
+}
+
+TEST_F(DeviceMemoryTest,
+       WorkspaceIdleDrivesColdAllocationsAfterModelRetirement) {
+  IREE_ASSERT_OK(
+      loom_serve_execution_reserve_workspace(execution, kSlabSize, 256));
+  const auto request = iree_hal_make_pool_reservation_request(kSlabSize, 256);
+  IREE_ASSERT_OK(
+      loom_serve_execution_alloca(execution, 1, &request, &workspace));
+  uint64_t completion = 0;
+  IREE_ASSERT_OK(
+      loom_serve_execution_dealloca(execution, workspace, &completion));
+  iree_hal_buffer_release(workspace);
+  workspace = nullptr;
+  // No payload consumer or model remains, but the cold allocation still
+  // requires physical-owner progress before its raw queue captures can retire.
+  EXPECT_TRUE(loom_serve_execution_is_retired(execution));
+  loom_serve_execution_release(execution);
+  execution = nullptr;
+  IREE_ASSERT_OK(loom_serve_test_workspace_await_idle(
+      loom_serve_pool_workspace(storage_owner)));
+  IREE_ASSERT_OK(loom_serve_test_pool_trim_and_drain(storage_owner, 0));
+  const auto idle = loom_serve_pool_statistics(storage_owner);
+  EXPECT_EQ(idle.workspace.reservation_count, 0u);
+  EXPECT_EQ(idle.workspace.bytes_committed, 0u);
+  EXPECT_EQ(idle.retained.committed_bytes, 0u);
+}
+
 TEST_F(DedicatedNativeWorkerMemoryTest,
        NativeAllocationPublicationDoesNotDoubleChargeAdmission) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(

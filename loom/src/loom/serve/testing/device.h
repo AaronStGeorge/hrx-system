@@ -40,6 +40,14 @@ const loom_serve_test_device_t* loom_serve_test_device(void);
 iree_status_t loom_serve_test_driver_acquire(loom_serve_host_t* host,
                                              iree_hal_driver_t** out_driver);
 
+// Joins raw workspace allocation captures through the normal idle policy.
+// Callers first retire model consumers and release all workspace views. Model
+// retirement alone does not join queue allocation bookkeeping. This is an
+// outer test-thread wait that advances remaining cold acquisitions;
+// trim_and_drain then joins physical backing returns.
+iree_status_t loom_serve_test_workspace_await_idle(
+    loom_serve_workspace_t* workspace);
+
 // Trims managed backing and observes native capacity notifications, including
 // cascading slab returns, before tests inspect physical accounting. Device work
 // remains independent: live reservations survive, and callers retire unused

@@ -434,6 +434,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     loom_serve_execution_release(shared_execution_);
     loom_serve_execution_release(execution_);
     iree_hal_semaphore_release(consumer_gate_);
+    IREE_EXPECT_OK(loom_serve_test_workspace_await_idle(
+        loom_serve_pool_workspace(storage_owner_)));
     IREE_EXPECT_OK(loom_serve_pool_trim(storage_owner_, 0));
     DrainNativeReturns();
     const auto memory = loom_serve_pool_statistics(storage_owner_);

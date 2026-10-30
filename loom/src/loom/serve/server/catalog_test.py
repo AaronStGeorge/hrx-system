@@ -667,7 +667,7 @@ def check_startup_failures(server_command, directory, catalog):
             )
 
 
-def check_empty_server(server_command, directory, device, backing):
+def check_empty_server(server_command, directory, driver, backing):
     catalog = directory / "empty.flags"
     catalog.write_text("# No startup models\n")
     for mode, arguments in (
@@ -723,7 +723,7 @@ def check_empty_server(server_command, directory, device, backing):
             ], resources
             assert len(resources["devices"]) == 1, resources
             actual = resources["devices"][0]
-            assert actual["key"] == "device" and actual["driver"] == device, actual
+            assert actual["key"] == "device" and actual["driver"] == driver, actual
             assert actual["id"] and actual["name"] and actual["backend"], actual
             assert actual["physical_devices"], actual
             for physical in actual["physical_devices"]:
@@ -1663,7 +1663,8 @@ def run_from_command_line(*, stress=False):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--server", type=Path, required=True)
     parser.add_argument("--fixture", type=Path, action="append", required=True)
-    parser.add_argument("--device", default="legacy-amdgpu")
+    parser.add_argument("--device", default="amdgpu")
+    parser.add_argument("--driver", required=True)
     parser.add_argument("--pool_backing", choices=("fixed", "elastic"), default="fixed")
     parser.add_argument("--rounds", type=int, default=1, choices=range(1, 17))
     arguments = parser.parse_args()
@@ -1712,7 +1713,7 @@ def run_from_command_line(*, stress=False):
                         )
             return
         check_empty_server(
-            server_command, directory, arguments.device, arguments.pool_backing
+            server_command, directory, arguments.driver, arguments.pool_backing
         )
         check_startup_failures(server_command, directory, catalog)
         check_control_contracts(server_command, directory, catalog)
