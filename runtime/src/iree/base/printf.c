@@ -27,7 +27,7 @@
 //   MSVC %I64d style — 0 uses in IREE
 //
 // Returns the number of characters that would have been written (excluding NUL)
-// if the output were unbounded, or -1 on format error (unknown specifier).
+// if the output were unbounded, or -1 on format or representational overflow.
 
 #include "iree/base/printf.h"
 
@@ -107,31 +107,61 @@ static inline double iree_printf_modf(double value, double* integral_part) {
 //   2. Callback mode: calls a per-character callback for each output character.
 //   3. Dry-run mode: counts characters without writing (NULL buffer, no
 //      callback).
-// Position is always tracked, even past the buffer capacity, so the return
-// value correctly reports the total formatted length.
+// Position is tracked past the buffer capacity, up to INT_MAX + 1, which marks
+// a length that cannot be represented by the printf return type.
 
 typedef struct {
+  // Optional destination storage; NULL for callback or size-only output.
   char* buffer;
+  // Writable bytes, excluding the NUL terminator.
   size_t capacity;
+  // Formatted length, or INT_MAX + 1 on overflow.
   size_t position;
+  // Optional streaming sink invoked for each output character.
   iree_printf_callback_t callback;
+  // Borrowed context passed to the streaming sink.
   void* callback_data;
 } iree_printf_output_t;
 
+// Account for a span without overflowing size_t on 32-bit targets. Overflow is
+// an error, never a successful truncated result.
+static inline bool iree_printf_output_advance(iree_printf_output_t* out,
+                                              size_t count) {
+  if (out->position > (size_t)INT_MAX ||
+      count > (size_t)INT_MAX - out->position) {
+    out->position = (size_t)INT_MAX + 1;
+    return false;
+  }
+  out->position += count;
+  return true;
+}
+
 static inline void iree_printf_output_char(iree_printf_output_t* out, char c) {
+  size_t position = out->position;
+  if (!iree_printf_output_advance(out, 1)) {
+    return;
+  }
   if (out->callback) {
     out->callback(c, out->callback_data);
-  } else if (out->buffer && out->position < out->capacity) {
-    out->buffer[out->position] = c;
+  } else if (out->buffer && position < out->capacity) {
+    out->buffer[position] = c;
   }
-  out->position++;
 }
 
 // Emit |count| copies of |c|.
 static void iree_printf_output_fill(iree_printf_output_t* out, char c,
                                     size_t count) {
-  for (size_t i = 0; i < count; i++) {
-    iree_printf_output_char(out, c);
+  size_t position = out->position;
+  if (!iree_printf_output_advance(out, count)) {
+    return;
+  }
+  if (out->callback) {
+    for (size_t i = 0; i < count; ++i) {
+      out->callback(c, out->callback_data);
+    }
+  } else if (out->buffer && position < out->capacity) {
+    size_t available = out->capacity - position;
+    memset(out->buffer + position, c, count < available ? count : available);
   }
 }
 
@@ -139,8 +169,18 @@ static void iree_printf_output_fill(iree_printf_output_t* out, char c,
 // least |length| readable bytes.
 static void iree_printf_output_string(iree_printf_output_t* out,
                                       const char* str, size_t length) {
-  for (size_t i = 0; i < length; i++) {
-    iree_printf_output_char(out, str[i]);
+  size_t position = out->position;
+  if (!iree_printf_output_advance(out, length)) {
+    return;
+  }
+  if (out->callback) {
+    for (size_t i = 0; i < length; ++i) {
+      out->callback(str[i], out->callback_data);
+    }
+  } else if (out->buffer && position < out->capacity && length > 0) {
+    size_t available = out->capacity - position;
+    memcpy(out->buffer + position, str,
+           length < available ? length : available);
   }
 }
 
@@ -208,24 +248,20 @@ static const char* iree_printf_parse_flags(const char* format,
 }
 
 // Parse an unsigned decimal integer from the format string.
-// Returns pointer past the last digit. |out_value| is unchanged if no digits.
-// Values are clamped to avoid signed integer overflow (undefined behavior).
-// The clamp limit is generous enough for any legitimate width/precision while
-// preventing UB from malicious or malformed format strings.
-#define IREE_PRINTF_MAX_WIDTH_PRECISION 10000
+// Returns pointer past the last digit, or NULL if the value exceeds INT_MAX.
+// |out_value| is unchanged if there are no digits.
 static const char* iree_printf_parse_uint(const char* format, int* out_value) {
   if (*format < '0' || *format > '9') {
     return format;
   }
   int value = 0;
   while (*format >= '0' && *format <= '9') {
-    if (value <= IREE_PRINTF_MAX_WIDTH_PRECISION) {
-      value = value * 10 + (*format - '0');
+    int digit = *format - '0';
+    if (value > (INT_MAX - digit) / 10) {
+      return NULL;
     }
+    value = value * 10 + digit;
     format++;
-  }
-  if (value > IREE_PRINTF_MAX_WIDTH_PRECISION) {
-    value = IREE_PRINTF_MAX_WIDTH_PRECISION;
   }
   *out_value = value;
   return format;
@@ -246,19 +282,19 @@ static const char* iree_printf_parse_spec(const char* format, va_list* args,
     out_spec->width = va_arg(*args, int);
     if (out_spec->width < 0) {
       // Negative width means left-justify with the absolute value.
-      // Cast to unsigned before negation to handle INT_MIN without UB.
-      out_spec->flags |= IREE_PRINTF_FLAG_LEFT;
-      out_spec->width = (int)(-(unsigned int)out_spec->width);
-      if (out_spec->width < 0) {
-        out_spec->width = 0;  // INT_MIN edge case.
+      // INT_MIN's absolute value cannot be represented as a width or result.
+      if (out_spec->width == INT_MIN) {
+        return NULL;
       }
-    }
-    if (out_spec->width > IREE_PRINTF_MAX_WIDTH_PRECISION) {
-      out_spec->width = IREE_PRINTF_MAX_WIDTH_PRECISION;
+      out_spec->flags |= IREE_PRINTF_FLAG_LEFT;
+      out_spec->width = -out_spec->width;
     }
     format++;
   } else {
     format = iree_printf_parse_uint(format, &out_spec->width);
+    if (!format) {
+      return NULL;
+    }
   }
 
   // Precision: '.' followed by literal or '*'.
@@ -272,12 +308,13 @@ static const char* iree_printf_parse_spec(const char* format, va_list* args,
         // Negative precision is treated as if precision were omitted.
         out_spec->has_precision = false;
         out_spec->precision = -1;
-      } else if (out_spec->precision > IREE_PRINTF_MAX_WIDTH_PRECISION) {
-        out_spec->precision = IREE_PRINTF_MAX_WIDTH_PRECISION;
       }
       format++;
     } else {
       format = iree_printf_parse_uint(format, &out_spec->precision);
+      if (!format) {
+        return NULL;
+      }
     }
   }
 
@@ -507,7 +544,7 @@ static void iree_printf_format_integer(iree_printf_output_t* out,
   }
 
   // Total content width: prefix + precision-padded digits.
-  int content_width = prefix_length + padded_digit_count;
+  size_t content_width = (size_t)prefix_length + padded_digit_count;
 
   // Determine padding. Zero-padding is only used when:
   //   - '0' flag is set
@@ -518,8 +555,8 @@ static void iree_printf_format_integer(iree_printf_output_t* out,
                       !spec->has_precision;
 
   int padding = 0;
-  if (spec->width > content_width) {
-    padding = spec->width - content_width;
+  if ((size_t)spec->width > content_width) {
+    padding = spec->width - (int)content_width;
   }
 
   if (use_zero_pad) {
@@ -1092,10 +1129,9 @@ static int iree_printf_format_exponential(
   // We need (precision + 1) significant digits total: 1 before the decimal
   // point and |precision| after. Clamp to the full binary64 precision; larger
   // requested precisions are emitted as trailing zeros.
-  int effective_sig_count = precision + 1;
-  if (effective_sig_count > IREE_PRINTF_MAX_FLOAT_PRECISION) {
-    effective_sig_count = IREE_PRINTF_MAX_FLOAT_PRECISION;
-  }
+  int effective_sig_count = precision < IREE_PRINTF_MAX_FLOAT_PRECISION
+                                ? precision + 1
+                                : IREE_PRINTF_MAX_FLOAT_PRECISION;
 
   const iree_printf_decimal_digits_t digits =
       iree_printf_extract_significant_digits(value, effective_sig_count);
@@ -1182,7 +1218,8 @@ static int iree_printf_format_significant_fixed(
     buffer[position++] =
         index >= 0 && index < digit_count ? significant_digits[index] : '0';
   }
-  *out_trailing_zeros = precision - digits.exponent - 1 + final_power;
+  int emitted_digit_count = digits.exponent - final_power + 1;
+  *out_trailing_zeros = precision - emitted_digit_count;
   if (*out_trailing_zeros < 0) {
     *out_trailing_zeros = 0;
   }
@@ -1366,10 +1403,10 @@ static void iree_printf_format_float(iree_printf_output_t* out,
   // Now emit with sign and padding.
   // Total content width includes the buffer contents plus any trailing zeros
   // that aren't in the buffer.
-  int content_width = sign_length + length + trailing_zeros;
+  size_t content_width = (size_t)sign_length + length + trailing_zeros;
   int padding = 0;
-  if (spec->width > content_width) {
-    padding = spec->width - content_width;
+  if ((size_t)spec->width > content_width) {
+    padding = spec->width - (int)content_width;
   }
 
   bool use_zero_pad = (spec->flags & IREE_PRINTF_FLAG_ZERO) &&
@@ -1418,7 +1455,7 @@ static int iree_printf_format(iree_printf_output_t* out, const char* format,
   va_copy(args_copy, args);
 
   const char* p = format;
-  while (*p) {
+  while (*p && out->position <= (size_t)INT_MAX) {
     if (*p != '%') {
       // Literal character — emit directly.
       iree_printf_output_char(out, *p);

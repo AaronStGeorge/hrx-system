@@ -51,11 +51,11 @@ iree_status_t loom_output_stream_write_format(loom_output_stream_t* stream,
   int result =
       iree_vfctprintf(loom_stream_printf_callback, &state, format, args);
   va_end(args);
-  if (result < 0) {
-    return iree_make_status(IREE_STATUS_INTERNAL, "format error");
-  }
   if (!iree_status_is_ok(state.status)) {
     return state.status;
+  }
+  if (result < 0) {
+    return iree_make_status(IREE_STATUS_INTERNAL, "format error");
   }
   // Flush remaining bytes.
   if (state.position > 0) {

@@ -113,6 +113,22 @@ TEST_F(DecisionProtocolTest, DefinesUniformTieAndSingletonAnswers) {
       std::string::npos);
 }
 
+TEST_F(DecisionProtocolTest, PreservesLargeEscapedAndStructuredLegends) {
+  const std::string text = "\"" + std::string(10001, 'x') + R"(\n\"\\λ")";
+  const std::string object = R"({"value":)" + text + "}";
+  const std::string array = "[" + text + "]";
+  IREE_ASSERT_OK(Parse(
+      R"({"model":"m","state":"a","questions":{"q":{"type":"score","instructions":"?","criteria":[)" +
+      text + "," + object + "," + array + "]}}}"));
+  IREE_ASSERT_OK(Encode({{0, 1, 0}}));
+  const std::string expected =
+      R"({"model":"fixture","answers":{"q":{"type":"score","score":1,"legend":{"0":)" +
+      text + R"(,"1":)" + object + R"(,"2":)" + array +
+      R"(},"confidence":1,"probabilities":{"0":0,"1":1,"2":0}}},"usage":{"input_tokens":17,"output_tokens":0}})";
+  EXPECT_EQ(Output().size(), expected.size());
+  EXPECT_TRUE(Output() == expected);
+}
+
 TEST_F(DecisionProtocolTest, RejectsMalformedSchemaAndDecodedDuplicateIds) {
   for (
       const char* questions :

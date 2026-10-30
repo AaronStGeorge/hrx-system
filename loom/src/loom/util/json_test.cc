@@ -6,6 +6,7 @@
 
 #include "loom/util/json.h"
 
+#include <climits>
 #include <limits>
 #include <string>
 
@@ -404,6 +405,27 @@ TEST(JsonString, FormattedCharactersCrossBatchBoundaries) {
       EXPECT_EQ(output.offset, expected.size());
     }
   }
+}
+
+TEST(JsonString, SinkFailureSurvivesALaterFormatError) {
+  char storage[8] = {};
+  iree_string_builder_t builder;
+  iree_string_builder_initialize_with_storage(storage, sizeof(storage),
+                                              &builder);
+  loom_output_stream_t output;
+  loom_output_stream_for_builder(&builder, &output);
+  loom_json_string_writer_t writer;
+  IREE_ASSERT_OK(loom_json_string_begin(&output, &writer));
+  const std::string text(256, 'x');
+  // The first full formatting batch fails to grow the sink. The later
+  // unrepresentable width must not replace or leak that owned failure.
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_output_stream_write_format(&writer.stream, "%s%*s", text.c_str(),
+                                      INT_MIN, ""));
+  EXPECT_EQ(output.offset, 1u);
+  EXPECT_EQ(writer.stream.offset, 0u);
+  iree_string_builder_deinitialize(&builder);
 }
 
 TEST(JsonString, OwnsIncompleteBytesUntilTheStringEnds) {
