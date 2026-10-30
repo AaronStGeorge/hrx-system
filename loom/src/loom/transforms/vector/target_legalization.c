@@ -14,6 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/construction.h"
 #include "loom/ops/vector/memory.h"
@@ -809,6 +810,53 @@ static iree_status_t loom_vector_legalize_from_elements(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_legalize_constanti(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (context->mode != LOOM_TARGET_LEGALIZATION_MODE_FINAL &&
+      context->policy != LOOM_TARGET_LEGALIZATION_POLICY_REFERENCE_ONLY) {
+    out_result->action = LOOM_TARGET_LEGALIZER_ACTION_DEFER;
+    return iree_ok_status();
+  }
+
+  const loom_attribute_t values = loom_vector_constanti_values(op);
+  const loom_type_t result_type =
+      loom_module_value_type(context->module, loom_vector_constanti_result(op));
+  const loom_type_t element_type =
+      loom_type_scalar(loom_type_element_type(result_type));
+  loom_rewriter_t* rewriter = context->rewriter;
+  loom_builder_set_before(&rewriter->builder, op);
+  const loom_value_id_t value_checkpoint =
+      loom_rewriter_value_checkpoint(rewriter);
+  loom_value_id_t* elements = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, values.count, sizeof(*elements), (void**)&elements));
+  for (uint16_t i = 0; i < values.count; ++i) {
+    loom_op_t* constant_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_scalar_constant_build(
+        &rewriter->builder, loom_attr_i64(values.i64_array[i]), element_type,
+        op->location, &constant_op));
+    elements[i] = loom_scalar_constant_result(constant_op);
+  }
+  loom_op_t* construction_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_from_elements_build(
+      &rewriter->builder, elements, values.count, result_type, op->location,
+      &construction_op));
+  const loom_value_id_t replacement =
+      loom_vector_from_elements_result(construction_op);
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, &replacement, 1, value_checkpoint));
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement, 1));
+  out_result->action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_legalize_dotf(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
@@ -1553,6 +1601,10 @@ static iree_status_t loom_vector_legalize_workgroup_reduce(
 }
 
 static const loom_target_legalizer_rule_t kVectorLegalizerRules[] = {
+    {
+        .root_kind = LOOM_OP_VECTOR_CONSTANTI,
+        .legalize = loom_vector_legalize_constanti,
+    },
     {
         .root_kind = LOOM_OP_VECTOR_NEGI,
         .legalize = loom_vector_legalize_signed_unary,

@@ -1917,3 +1917,17 @@ func.def @planned_out_of_range(%source: vector<4xi8>, %value: i8) -> (i8, vector
   %write = vector.insert %value into %source[%end] : i8, vector<4xi8>
   func.return %read, %write : i8, vector<4xi8>
 }
+
+// ====
+
+// RUN: pass canonicalize
+
+func.def @uniform_integer_literal() -> (vector<4xi32>) {
+  %value = vector.constanti [7, 7, 7, 7] : vector<4xi32>
+  func.return %value : vector<4xi32>
+}
+// ----
+func.def @uniform_integer_literal() -> (vector<4xi32>) {
+  %value = vector.splati 7 : vector<4xi32>
+  func.return %value : vector<4xi32>
+}

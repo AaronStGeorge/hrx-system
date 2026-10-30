@@ -533,6 +533,31 @@ vector_splatf = Op(
     eager_execution_cost=1,
 )
 
+vector_constanti = Op(
+    "vector.constanti",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Materialize a non-empty all-static fixed-width integer vector from "
+        "ordered literal lanes. Values use logical row-major lane order, and "
+        "their count must match the result shape. Uniform literals "
+        "canonicalize to vector.splati; target legalization expands remaining "
+        "literals through the shared scalar construction path."
+    ),
+    results=[Result("result", VECTOR)],
+    attrs=[AttrDef("values", ATTR_TYPE_I64_ARRAY, doc="Ordered integer lanes.")],
+    constraints=[
+        HasAllStaticVector("result"),
+        HasIntegerElement("result"),
+    ],
+    verify="loom_vector_constanti_verify",
+    canonicalize="loom_vector_constanti_canonicalize",
+    traits=[PURE, CONSTANT_LIKE],
+    format=[Attr("values"), COLON, ResultType("result")],
+    examples=["%v = vector.constanti [1, -2, 3, 4] : vector<2x2xi16>"],
+    eager_execution_cost=1,
+)
+
 vector_poison = Op(
     "vector.poison",
     group=vector_ops,
@@ -4769,6 +4794,7 @@ vector_reduce_axes = Op(
 VECTOR_CONSTRUCTION_OPS: tuple[Op, ...] = (
     vector_splati,
     vector_splatf,
+    vector_constanti,
     vector_poison,
     vector_empty,
     vector_splat,
@@ -4987,6 +5013,7 @@ VECTOR_OP_CATEGORY_GROUPS: tuple[tuple[OpCategory, tuple[Op, ...]], ...] = (
 # the registry.
 ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_splati,
-    *(op for _, category_ops in VECTOR_OP_CATEGORY_GROUPS for op in category_ops if op is not vector_splati and op is not vector_splatf),
+    *(op for _, category_ops in VECTOR_OP_CATEGORY_GROUPS for op in category_ops if op is not vector_splati and op is not vector_splatf and op is not vector_constanti),
     vector_splatf,
+    vector_constanti,
 )

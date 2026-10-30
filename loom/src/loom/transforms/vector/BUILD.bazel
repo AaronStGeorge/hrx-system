@@ -345,6 +345,7 @@ loom_cc_library(
         ":to_scalar",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/rewrite:rewriter",

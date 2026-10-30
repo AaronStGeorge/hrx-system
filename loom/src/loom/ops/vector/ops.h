@@ -180,7 +180,8 @@ enum {
   LOOM_OP_VECTOR_FRAGMENT_REPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 155),
   LOOM_OP_VECTOR_REFINE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 156),
   LOOM_OP_VECTOR_SPLATF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 157),
-  LOOM_OP_VECTOR_COUNT_ = 158,
+  LOOM_OP_VECTOR_CONSTANTI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 158),
+  LOOM_OP_VECTOR_COUNT_ = 159,
 };
 
 // IEEE 754 fast-math relaxation flags for float operations. nnan and ninf are independent author promises, not runtime checks or requests to clamp results. Together they guarantee finite floating-point results, but do not imply exact representability in a narrower type or absence of subnormals. Behavior outside an authored promise is not constrained by the operation's ordinary special-value contract. Flags do not refine unrelated uses of an operand.
@@ -3568,6 +3569,23 @@ iree_status_t loom_vector_splatf_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_CONSTANTI: Materialize a non-empty all-static fixed-width integer vector from ordered literal lanes. Values use logical row-major lane order, and their count must match the result shape. Uniform literals canonicalize to vector.splati; target legalization expands remaining literals through the shared scalar construction path.
+// %v = vector.constanti [1, -2, 3, 4] : vector<2x2xi16>
+LOOM_DEFINE_ISA(loom_vector_constanti_isa, LOOM_OP_VECTOR_CONSTANTI)
+LOOM_DEFINE_RESULT(loom_vector_constanti_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_constanti_values, 0)
+iree_status_t loom_vector_constanti_build(
+    loom_builder_t* builder,
+    const int64_t* values,
+    iree_host_size_t values_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_constanti_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_vector_constanti_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the vector dialect.
 const loom_op_vtable_t* const* loom_vector_dialect_vtables(
