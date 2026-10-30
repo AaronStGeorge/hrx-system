@@ -251,6 +251,16 @@ iree_status_t loom_testbench_value_table_assign_move(
     loom_testbench_value_table_t* table, loom_value_id_t value_id,
     loom_testbench_value_t* value);
 
+// Moves invocation results into |table| and restores shaped bindings from their
+// source types. Scalar results are available before resolving dynamic
+// dimensions. Providers may return raw storage spans; shaping retains their
+// storage and logical allocation references without copying bytes. Results
+// moved before a failure remain owned by |table|; the caller owns any remaining
+// |results|.
+iree_status_t loom_testbench_value_table_assign_results(
+    loom_testbench_value_table_t* table, iree_host_size_t result_count,
+    const loom_value_id_t* result_value_ids, loom_testbench_value_t* results);
+
 // Materializes |source_count| source plans in source order into |table|.
 iree_status_t loom_testbench_materialize_value_sources(
     const loom_testbench_value_materializer_options_t* options,

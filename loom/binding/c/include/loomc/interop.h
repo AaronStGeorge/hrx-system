@@ -274,6 +274,21 @@ LOOMC_API_EXPORT const loom_target_profile_t*
 loomc_target_profile_get_interop_view(
     const loomc_target_profile_t* target_profile);
 
+/// Returns the immutable native provider resolved when the profile was created.
+///
+/// Exact-version consumers inspect the provider's boundary and capability
+/// contracts without linking compiler-private lookup implementations.
+///
+/// @param target_profile Target profile to inspect. May be `NULL`.
+/// @return Borrowed native provider, or `NULL` when the input is `NULL`.
+///
+/// @lifetime
+/// The profile retains the provider's environment. The returned pointer remains
+/// valid until `target_profile` is released.
+LOOMC_API_EXPORT const loom_target_provider_t*
+loomc_target_profile_get_provider_interop_view(
+    const loomc_target_profile_t* target_profile);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

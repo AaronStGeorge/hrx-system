@@ -115,3 +115,8 @@ const loom_target_profile_t* loomc_target_profile_get_interop_view(
     const loomc_target_profile_t* target_profile) {
   return loomc_target_profile_loom_target_profile(target_profile);
 }
+
+const loom_target_provider_t* loomc_target_profile_get_provider_interop_view(
+    const loomc_target_profile_t* target_profile) {
+  return loomc_target_profile_loom_target_provider(target_profile);
+}

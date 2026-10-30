@@ -1,0 +1,181 @@
+// Ordinary host calls use the same view boundary as calls inside the program.
+func.def @first(%values: view<4xi32>) -> (i32) {
+  %value = view.load %values[0] : view<4xi32> -> i32
+  func.return %value : i32
+}
+
+func.def @middle(%values: view<8xi32>) -> (view<4xi32>) {
+  %middle = view.subview %values[2] : view<8xi32> -> view<4xi32>
+  func.return %middle : view<4xi32>
+}
+
+func.def @write_overlap(%middle: view<4xi32>, %whole: view<8xi32>, %replacement: i32) -> (i32) {
+  view.store %replacement, %middle[0] : i32, view<4xi32>
+  %observed = view.load %whole[2] : view<8xi32> -> i32
+  func.return %observed : i32
+}
+
+func.def @dynamic_middle(%values: view<8xi32>, %length: index) -> (%size: index, view<[%size]xi32>) {
+  %middle = view.subview %values[2] : view<8xi32> -> view<[%length]xi32>
+  func.return %length, %middle : index, view<[%length]xi32>
+}
+
+func.def @forward_dynamic(%size: index, %values: view<[%size]xi32>) -> (view<[%size]xi32>) {
+  func.return %values : view<[%size]xi32>
+}
+
+func.def @sum_dynamic(%size: index, %values: view<[%size]xi32>) -> (i32) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %initial_sum = scalar.constant 0 : i32
+  %sum = scf.for %i = [%begin to %size step %step](%sum = %initial_sum : i32) -> (i32) {
+    %value = view.load %values[%i] : view<[%size]xi32> -> i32
+    %next = scalar.addi %sum, %value : i32
+    scf.yield %next : i32
+  }
+  func.return %sum : i32
+}
+
+func.def @owned() -> (buffer, view<4xi8>) {
+  %storage = buffer.constant utf8("abcdef") : buffer
+  %origin = index.constant 1 : offset
+  %view = buffer.view %storage[%origin] : buffer -> view<4xi8>
+  func.return %storage, %view : buffer, view<4xi8>
+}
+
+// Reference and scalar slots alternate on both sides of the physical boundary.
+func.def @mixed(%tag: i64, %words: view<4xi32>, %storage: buffer, %real: f64, %bytes: view<4xi8>) -> (f64, view<4xi8>, i64, view<4xi32>, buffer) {
+  func.return %real, %bytes, %tag, %words, %storage : f64, view<4xi8>, i64, view<4xi32>, buffer
+}
+
+func.def @buffer_length(%storage: buffer) -> (offset) {
+  %length = buffer.length %storage
+  func.return %length : offset
+}
+
+func.def @matrix(%values: view<2x3xf64>) -> (view<1x3xf64>) {
+  %row = view.subview %values[1, 0] : view<2x3xf64> -> view<1x3xf64>
+  func.return %row : view<1x3xf64>
+}
+
+func.def @narrow_views(%halves: view<4xf16>, %integers: view<4xi16>) -> (view<4xi16>, view<4xf16>) {
+  func.return %integers, %halves : view<4xi16>, view<4xf16>
+}
+
+func.def @allocate_scalar(%value: i64) -> (view<i64>) {
+  %length = index.constant 8 : offset
+  %origin = index.constant 0 : offset
+  %storage = buffer.alloca<private> align(8) %length : buffer
+  %element = buffer.view %storage[%origin] : buffer -> view<1xi64>
+  view.store %value, %element[0] : i64, view<1xi64>
+  %view = buffer.view %storage[%origin] : buffer -> view<i64>
+  func.return %view : view<i64>
+}
+
+check.case public @view_argument {
+  %values = check.generate.iota offset(1) step(1) : view<4xi32>
+  %actual = func.call @first(%values) : (view<4xi32>) -> (i32)
+  %expected = check.literal value(1) : i32
+  check.expect.equal actual(%actual) expected(%expected) : i32
+  check.return
+}
+
+check.case public @returned_subview_contents {
+  %values = check.generate.iota offset(1) step(1) : view<8xi32>
+  %middle = func.call @middle(%values) : (view<8xi32>) -> (view<4xi32>)
+  %expected = check.generate.iota offset(3) step(1) : view<4xi32>
+  check.expect.bitwise actual(%middle) expected(%expected) : view<4xi32>
+  check.return
+}
+
+check.case public @returned_subview_alias {
+  %values = check.generate.iota offset(1) step(1) : view<8xi32>
+  %middle = func.call @middle(%values) : (view<8xi32>) -> (view<4xi32>)
+  %same_middle = func.call @middle(%values) : (view<8xi32>) -> (view<4xi32>)
+  check.expect.equal actual(%middle) expected(%same_middle) : view<4xi32>
+  %replacement = check.literal value(99) : i32
+  %observed = func.call @write_overlap(%middle, %values, %replacement) : (view<4xi32>, view<8xi32>, i32) -> (i32)
+  check.expect.equal actual(%observed) expected(%replacement) : i32
+  %after = func.call @first(%middle) : (view<4xi32>) -> (i32)
+  check.expect.equal actual(%after) expected(%replacement) : i32
+  check.return
+}
+
+check.case public @dynamic_view_results {
+  %length = check.literal value(4) : index
+  %values = check.generate.iota offset(1) step(1) : view<8xi32>
+  %size, %middle = func.call @dynamic_middle(%values, %length) : (view<8xi32>, index) -> (index, view<[%size]xi32>)
+  %forwarded = func.call @forward_dynamic(%size, %middle) : (index, view<[%size]xi32>) -> (view<[%size]xi32>)
+  %sum = func.call @sum_dynamic(%size, %forwarded) : (index, view<[%size]xi32>) -> (i32)
+  %expected = check.literal value(18) : i32
+  check.expect.equal actual(%size) expected(%length) : index
+  check.expect.equal actual(%sum) expected(%expected) : i32
+  check.return
+}
+
+check.case public @empty_dynamic_view {
+  %length = check.literal value(0) : index
+  %values = check.generate.iota offset(1) step(1) : view<8xi32>
+  %size, %middle = func.call @dynamic_middle(%values, %length) : (view<8xi32>, index) -> (index, view<[%size]xi32>)
+  %sum = func.call @sum_dynamic(%size, %middle) : (index, view<[%size]xi32>) -> (i32)
+  %expected = check.literal value(0) : i32
+  check.expect.equal actual(%size) expected(%length) : index
+  check.expect.equal actual(%sum) expected(%expected) : i32
+  check.return
+}
+
+check.case public @mixed_owned_results {
+  %storage, %bytes = func.call @owned() : () -> (buffer, view<4xi8>)
+  %words = check.generate.iota offset(10) step(1) : view<4xi32>
+  %tag = check.literal value(4294967313) : i64
+  %real = check.literal value(1.75) : f64
+  %actual_real, %actual_bytes, %actual_tag, %actual_words, %actual_storage = func.call @mixed(%tag, %words, %storage, %real, %bytes) : (i64, view<4xi32>, buffer, f64, view<4xi8>) -> (f64, view<4xi8>, i64, view<4xi32>, buffer)
+  %expected_bytes = check.generate.iota offset(98) step(1) : view<4xi8>
+  check.expect.equal actual(%actual_real) expected(%real) : f64
+  check.expect.bitwise actual(%actual_bytes) expected(%expected_bytes) : view<4xi8>
+  check.expect.equal actual(%actual_tag) expected(%tag) : i64
+  check.expect.equal actual(%actual_words) expected(%words) : view<4xi32>
+  %actual_length = func.call @buffer_length(%actual_storage) : (buffer) -> (offset)
+  %expected_length = check.literal value(6) : offset
+  check.expect.equal actual(%actual_length) expected(%expected_length) : offset
+  check.return
+}
+
+check.case public @multidimensional_view {
+  %values = check.generate.iota offset(0.5) step(0.25) : view<2x3xf64>
+  %row = func.call @matrix(%values) : (view<2x3xf64>) -> (view<1x3xf64>)
+  %expected = check.generate.iota offset(1.25) step(0.25) : view<1x3xf64>
+  check.expect.bitwise actual(%row) expected(%expected) : view<1x3xf64>
+  check.return
+}
+
+check.case public @owned_rank_zero_view {
+  %value = check.literal value(4294967313) : i64
+  %actual = func.call @allocate_scalar(%value) : (i64) -> (view<i64>)
+  %expected = check.generate.fill value(4294967313) : view<i64>
+  check.expect.bitwise actual(%actual) expected(%expected) : view<i64>
+  check.return
+}
+
+check.case public @narrow_view_elements {
+  %halves = check.generate.fill value(0.5) : view<4xf16>
+  %integers = check.generate.fill value(1234) : view<4xi16>
+  %actual_integers, %actual_halves = func.call @narrow_views(%halves, %integers) : (view<4xf16>, view<4xi16>) -> (view<4xi16>, view<4xf16>)
+  check.expect.bitwise actual(%actual_integers) expected(%integers) : view<4xi16>
+  check.expect.bitwise actual(%actual_halves) expected(%halves) : view<4xf16>
+  check.return
+}
+
+check.benchmark<@view_argument> @view_argument_benchmark
+
+check.benchmark<@returned_subview_alias> @returned_subview_benchmark
+
+check.benchmark<@dynamic_view_results> @dynamic_view_benchmark
+
+check.benchmark<@mixed_owned_results> @mixed_owned_benchmark
+
+check.benchmark<@multidimensional_view> @multidimensional_view_benchmark
+
+check.benchmark<@empty_dynamic_view> @empty_dynamic_view_benchmark
+
+check.benchmark<@owned_rank_zero_view> @owned_rank_zero_view_benchmark

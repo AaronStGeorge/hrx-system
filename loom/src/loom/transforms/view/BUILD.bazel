@@ -63,6 +63,7 @@ loom_cc_library(
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target:view_boundary",
         "//loom/src/loom/transforms/boundary:projection_core",
         "//loom/src/loom/transforms/encoding:layout_projection",
         "//runtime/src/iree/base",

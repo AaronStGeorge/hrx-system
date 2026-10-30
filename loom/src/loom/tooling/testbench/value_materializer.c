@@ -939,6 +939,12 @@ static iree_status_t loom_testbench_resolve_shape(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected shaped value type");
   }
+  if (loom_type_has_encoding(type)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "testbench buffer views require dense row-major storage without an "
+        "encoding");
+  }
   iree_host_size_t rank = loom_type_rank(type);
   if (rank > LOOM_TESTBENCH_MAX_SHAPE_RANK) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1680,24 +1686,18 @@ static iree_status_t loom_testbench_materialize_file_read_npy(
   return status;
 }
 
-static iree_status_t loom_testbench_materialize_tensor_view(
-    const loom_testbench_value_source_plan_t* source,
-    loom_testbench_value_table_t* table) {
-  const loom_testbench_value_t* source_value = NULL;
-  IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
-      table, source->tensor_view.source_value_id, &source_value));
-  if (!loom_testbench_value_buffer_view(source_value)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "check.tensor.view source is not a tensor");
-  }
-
+static iree_status_t loom_testbench_make_buffer_view(
+    const loom_testbench_value_table_t* table, loom_type_t type,
+    const loom_testbench_value_t* source_value, iree_device_size_t byte_offset,
+    loom_testbench_value_t* out_value) {
+  *out_value = (loom_testbench_value_t){0};
   iree_hal_dim_t shape[LOOM_TESTBENCH_MAX_SHAPE_RANK] = {0};
   iree_host_size_t shape_rank = 0;
   IREE_RETURN_IF_ERROR(
-      loom_testbench_resolve_shape(table, source->type, shape, &shape_rank));
+      loom_testbench_resolve_shape(table, type, shape, &shape_rank));
   iree_hal_element_type_t element_type = IREE_HAL_ELEMENT_TYPE_NONE;
   IREE_RETURN_IF_ERROR(loom_testbench_scalar_type_to_hal_element_type(
-      loom_type_element_type(source->type), &element_type));
+      loom_type_element_type(type), &element_type));
 
   iree_device_size_t element_count = 1;
   for (iree_host_size_t dimension_index = 0; dimension_index < shape_rank;
@@ -1705,7 +1705,7 @@ static iree_status_t loom_testbench_materialize_tensor_view(
     if (!iree_device_size_checked_mul(element_count, shape[dimension_index],
                                       &element_count)) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "check.tensor.view result element count "
+                              "buffer view result element count "
                               "overflows device size");
     }
   }
@@ -1715,28 +1715,24 @@ static iree_status_t loom_testbench_materialize_tensor_view(
                                     &bit_count) ||
       bit_count > IREE_DEVICE_SIZE_MAX - 7) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "check.tensor.view result byte length overflows "
+                            "buffer view result byte length overflows "
                             "device size");
   }
   const iree_device_size_t result_byte_length = (bit_count + 7) / 8;
-  if (source->tensor_view.byte_offset > source_value->buffer.byte_length ||
-      result_byte_length >
-          source_value->buffer.byte_length - source->tensor_view.byte_offset) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "check.tensor.view byte range [%" PRIdsz ", %" PRIdsz
-        ") exceeds source byte length %" PRIdsz,
-        source->tensor_view.byte_offset,
-        source->tensor_view.byte_offset + result_byte_length,
-        source_value->buffer.byte_length);
+  if (byte_offset > source_value->buffer.byte_length ||
+      result_byte_length > source_value->buffer.byte_length - byte_offset) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "buffer view byte range [%" PRIdsz ", %" PRIdsz
+                            ") exceeds source byte length %" PRIdsz,
+                            byte_offset, byte_offset + result_byte_length,
+                            source_value->buffer.byte_length);
   }
 
   iree_device_size_t source_byte_offset = 0;
   if (!iree_device_size_checked_add(source_value->buffer.byte_offset,
-                                    source->tensor_view.byte_offset,
-                                    &source_byte_offset)) {
+                                    byte_offset, &source_byte_offset)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "check.tensor.view source byte offset overflows "
+                            "buffer view source byte offset overflows "
                             "device size");
   }
   iree_hal_buffer_t* subspan_buffer = NULL;
@@ -1750,40 +1746,97 @@ static iree_status_t loom_testbench_materialize_tensor_view(
       &buffer_view);
   iree_hal_buffer_release(subspan_buffer);
 
-  loom_testbench_value_t value = {0};
   if (iree_status_is_ok(status)) {
-    status = loom_testbench_value_set_buffer_view_move(buffer_view, &value);
+    status = loom_testbench_value_set_buffer_view_move(buffer_view, out_value);
   }
   iree_device_size_t reference_byte_offset = 0;
   if (iree_status_is_ok(status) &&
-      !source_value->buffer_reference.is_traceable) {
+      source_value->buffer_reference.is_traceable &&
+      !iree_device_size_checked_add(source_value->buffer_reference.byte_offset,
+                                    byte_offset, &reference_byte_offset)) {
     status = iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "buffer view logical allocation byte offset overflows");
+  }
+  if (iree_status_is_ok(status) &&
+      source_value->buffer_reference.is_traceable) {
+    loom_testbench_value_set_buffer_reference(
+        source_value->buffer_reference.allocation_value_id,
+        reference_byte_offset, result_byte_length, out_value);
+  }
+  if (!iree_status_is_ok(status)) {
+    if (out_value->kind == LOOM_TESTBENCH_VALUE_KIND_NONE) {
+      iree_hal_buffer_view_release(buffer_view);
+    } else {
+      loom_testbench_value_deinitialize(out_value);
+    }
+  }
+  return status;
+}
+
+static iree_status_t loom_testbench_materialize_tensor_view(
+    const loom_testbench_value_source_plan_t* source,
+    loom_testbench_value_table_t* table) {
+  const loom_testbench_value_t* source_value = NULL;
+  IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
+      table, source->tensor_view.source_value_id, &source_value));
+  if (!loom_testbench_value_buffer_view(source_value)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "check.tensor.view source is not a tensor");
+  }
+  if (!source_value->buffer_reference.is_traceable) {
+    return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "check.tensor.view source has no logical allocation identity");
   }
-  if (iree_status_is_ok(status) &&
-      !iree_device_size_checked_add(source_value->buffer_reference.byte_offset,
-                                    source->tensor_view.byte_offset,
-                                    &reference_byte_offset)) {
-    status = iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "check.tensor.view logical allocation byte offset overflows");
-  }
-  if (iree_status_is_ok(status)) {
-    loom_testbench_value_set_buffer_reference(
-        source_value->buffer_reference.allocation_value_id,
-        reference_byte_offset, result_byte_length, &value);
-  }
-  if (iree_status_is_ok(status)) {
-    status =
-        loom_testbench_value_table_assign_move(table, source->value_id, &value);
-  }
-  if (!iree_status_is_ok(status)) {
-    if (value.kind == LOOM_TESTBENCH_VALUE_KIND_NONE) {
-      iree_hal_buffer_view_release(buffer_view);
-    } else {
-      loom_testbench_value_deinitialize(&value);
+  loom_testbench_value_t value = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_testbench_make_buffer_view(table, source->type, source_value,
+                                      source->tensor_view.byte_offset, &value));
+  iree_status_t status =
+      loom_testbench_value_table_assign_move(table, source->value_id, &value);
+  loom_testbench_value_deinitialize(&value);
+  return status;
+}
+
+iree_status_t loom_testbench_value_table_assign_results(
+    loom_testbench_value_table_t* table, iree_host_size_t result_count,
+    const loom_value_id_t* result_value_ids, loom_testbench_value_t* results) {
+  for (iree_host_size_t i = 0; i < result_count; ++i) {
+    if (results[i].kind == LOOM_TESTBENCH_VALUE_KIND_NONE) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "invocation result %zu was not assigned", i);
     }
+  }
+  // Dynamic dimensions may themselves be results. Publish the whole tuple
+  // before resolving any shaped type, independently of its position in the
+  // signature.
+  for (iree_host_size_t i = 0; i < result_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_testbench_value_table_assign_move(
+        table, result_value_ids[i], &results[i]));
+  }
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < result_count && iree_status_is_ok(status);
+       ++i) {
+    const loom_type_t type =
+        loom_module_value_type(table->module, result_value_ids[i]);
+    if (!loom_type_is_shaped(type)) {
+      continue;
+    }
+    loom_testbench_value_slot_t* slot =
+        loom_testbench_value_table_lookup_slot_mut(table, result_value_ids[i]);
+    if (slot->value.kind != LOOM_TESTBENCH_VALUE_KIND_BUFFER ||
+        slot->value.buffer.buffer_view) {
+      continue;
+    }
+    loom_testbench_value_t value = {0};
+    status =
+        loom_testbench_make_buffer_view(table, type, &slot->value, 0, &value);
+    if (iree_status_is_ok(status)) {
+      status = loom_testbench_value_table_assign_move(
+          table, result_value_ids[i], &value);
+    }
+    loom_testbench_value_deinitialize(&value);
   }
   return status;
 }

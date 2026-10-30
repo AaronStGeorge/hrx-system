@@ -121,6 +121,11 @@ LOOMC_API_PRIVATE loomc_status_t loomc_target_profile_create(
 LOOMC_API_PRIVATE const loom_target_profile_t*
 loomc_target_profile_loom_target_profile(const loomc_target_profile_t* profile);
 
+// Returns the provider resolved when the public profile was admitted.
+LOOMC_API_PRIVATE const loom_target_provider_t*
+loomc_target_profile_loom_target_provider(
+    const loomc_target_profile_t* profile);
+
 // Returns whether |profile| owns storage created with |destroy|. Target-family
 // adapters use their private destructor identity before accessing storage that
 // extends the native compiler profile. Family identity alone does not establish

@@ -59,8 +59,10 @@ loom_cc_library(
     target_compatible_with = _VM_EXECUTION_COMPATIBLE_WITH,
     deps = [
         ":buffer",
+        "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
         "//loom/binding/c/target/vm",
+        "//loom/src/loom/target:view_boundary",
         "//loom/src/loom/tooling/testbench:compiled_provider",
         "//loom/src/loom/tooling/testbench/scenario:executor",
         "//runtime/src/iree/base",

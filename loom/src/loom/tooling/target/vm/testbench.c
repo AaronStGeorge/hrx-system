@@ -13,8 +13,20 @@
 #include "iree/vm/sync.h"
 #include "loom/tooling/target/vm/buffer.h"
 #include "loomc/artifact.h"
+#include "loomc/interop.h"
 #include "loomc/iree.h"
 #include "loomc/target/vm.h"
+
+struct loom_vm_testbench_function_t {
+  // Borrowed native callable, live with the provider's process.
+  iree_vm_function_t callee;
+  // Borrowed source parameters supplying exact scalar types during marshalling.
+  const loom_value_id_t* parameter_ids;
+  // Number of source parameters, before boundary projection.
+  uint16_t parameter_count;
+  // Number of physical result variants, after boundary projection.
+  uint32_t result_count;
+};
 
 static void loom_vm_testbench_initialize_storage(
     iree_allocator_t host_allocator, loom_vm_testbench_t* out_testbench) {
@@ -27,15 +39,21 @@ iree_status_t loom_vm_testbench_initialize(
     loomc_target_environment_t* target_environment,
     iree_allocator_t host_allocator, loom_vm_testbench_t* out_testbench) {
   loom_vm_testbench_initialize_storage(host_allocator, out_testbench);
-  return iree_status_from_loomc(loomc_target_profile_select(
+  IREE_RETURN_IF_ERROR(iree_status_from_loomc(loomc_target_profile_select(
       target_environment, loomc_make_cstring_view("vm:core"),
       loomc_allocator_from_iree(host_allocator),
-      &out_testbench->target_profile));
+      &out_testbench->target_profile)));
+  const loom_target_provider_t* provider =
+      loomc_target_profile_get_provider_interop_view(
+          out_testbench->target_profile);
+  out_testbench->view_boundary_carrier = provider->view_boundary_carrier;
+  return iree_ok_status();
 }
 
 void loom_vm_testbench_deinitialize(loom_vm_testbench_t* testbench) {
   iree_vm_invocation_free(testbench->invocation);
   iree_vm_process_release(testbench->process);
+  iree_allocator_free(testbench->host_allocator, testbench->functions);
   iree_allocator_free(testbench->host_allocator, testbench->arguments);
   iree_allocator_free(testbench->host_allocator,
                       testbench->compile_failure_storage);
@@ -94,11 +112,27 @@ static iree_status_t loom_vm_testbench_record_compile_rejection(
 static void loom_vm_testbench_select_invocation_root(
     const loom_module_t* source,
     const loom_testbench_invocation_plan_t* invocation,
-    loomc_string_view_t* roots, iree_host_size_t* inout_max_arguments,
-    iree_host_size_t* inout_max_results) {
-  *inout_max_arguments =
-      iree_max(*inout_max_arguments, invocation->input_count);
-  *inout_max_results = iree_max(*inout_max_results, invocation->result_count);
+    loom_target_view_boundary_carrier_t view_carrier,
+    loomc_string_view_t* roots, loom_vm_testbench_function_t* functions,
+    iree_host_size_t* inout_max_arguments, iree_host_size_t* inout_max_results,
+    iree_host_size_t* inout_max_buffers) {
+  iree_host_size_t argument_count = 0;
+  for (iree_host_size_t i = 0; i < invocation->input_count; ++i) {
+    argument_count += loom_view_boundary_component_count(
+        view_carrier,
+        loom_module_value_type(source, invocation->input_value_ids[i]));
+  }
+  iree_host_size_t result_count = 0;
+  for (iree_host_size_t i = 0; i < invocation->result_count; ++i) {
+    result_count += loom_view_boundary_component_count(
+        view_carrier,
+        loom_module_value_type(source, invocation->result_value_ids[i]));
+  }
+  *inout_max_arguments = iree_max(*inout_max_arguments, argument_count);
+  *inout_max_results = iree_max(*inout_max_results, result_count);
+  *inout_max_buffers = iree_max(*inout_max_buffers, invocation->input_count);
+  functions[invocation->callee_ref.symbol_id].result_count =
+      (uint32_t)result_count;
   roots[invocation->callee_ref.symbol_id] =
       loomc_string_view_from_iree(loom_string_table_get(
           &source->strings,
@@ -139,11 +173,17 @@ static iree_status_t loom_vm_testbench_compile(
   iree_host_size_t root_count = 0;
   iree_host_size_t max_arguments = 0;
   iree_host_size_t max_results = 0;
+  iree_host_size_t max_buffers = 0;
   iree_status_t status = iree_ok_status();
   if (source->symbols.count != 0) {
     status = iree_allocator_malloc_array(testbench->host_allocator,
                                          source->symbols.count, sizeof(*roots),
                                          (void**)&roots);
+  }
+  if (iree_status_is_ok(status) && source->symbols.count != 0) {
+    status = iree_allocator_malloc_array(
+        testbench->host_allocator, source->symbols.count,
+        sizeof(*testbench->functions), (void**)&testbench->functions);
   }
   if (iree_status_is_ok(status)) {
     if (source->symbols.count != 0) {
@@ -151,14 +191,16 @@ static iree_status_t loom_vm_testbench_compile(
     }
     if (product_invocation != NULL) {
       loom_vm_testbench_select_invocation_root(
-          source, product_invocation, roots, &max_arguments, &max_results);
+          source, product_invocation, testbench->view_boundary_carrier, roots,
+          testbench->functions, &max_arguments, &max_results, &max_buffers);
     } else {
       // The runner owns invocation discovery. Direct callees are executable
       // roots; authored helpers are ordinary dependencies within this module.
       for (iree_host_size_t i = 0; i < testbench->invocations.count; ++i) {
         loom_vm_testbench_select_invocation_root(
-            source, testbench->invocations.values[i], roots, &max_arguments,
-            &max_results);
+            source, testbench->invocations.values[i],
+            testbench->view_boundary_carrier, roots, testbench->functions,
+            &max_arguments, &max_results, &max_buffers);
       }
     }
     for (iree_host_size_t i = 0; i < source->symbols.count; ++i) {
@@ -226,7 +268,7 @@ static iree_status_t loom_vm_testbench_compile(
         0, &total_size,
         IREE_STRUCT_FIELD(max_arguments, iree_vm_variant_t, NULL),
         IREE_STRUCT_FIELD(max_results, iree_vm_variant_t, &results_offset),
-        IREE_STRUCT_FIELD(max_arguments, iree_vm_buffer_t*,
+        IREE_STRUCT_FIELD(max_buffers, iree_vm_buffer_t*,
                           &argument_buffers_offset));
     if (iree_status_is_ok(status) && total_size) {
       status = iree_allocator_malloc(testbench->host_allocator, total_size,
@@ -239,7 +281,7 @@ static iree_status_t loom_vm_testbench_compile(
             (iree_vm_buffer_t**)((uint8_t*)testbench->arguments +
                                  argument_buffers_offset);
         memset(testbench->argument_buffers, 0,
-               max_arguments * sizeof(*testbench->argument_buffers));
+               max_buffers * sizeof(*testbench->argument_buffers));
       }
     }
     if (!iree_status_is_ok(status)) {
@@ -252,6 +294,30 @@ static iree_status_t loom_vm_testbench_compile(
   loomc_workspace_trim(testbench->compilation.workspace);
   iree_allocator_free(testbench->host_allocator, roots);
   return status;
+}
+
+static iree_status_t loom_vm_testbench_prepare_function(
+    loom_vm_testbench_t* testbench, iree_vm_process_t* process,
+    const loom_testbench_invocation_plan_t* invocation) {
+  loom_vm_testbench_function_t* prepared =
+      &testbench->functions[invocation->callee_ref.symbol_id];
+  if (!iree_vm_function_is_null(prepared->callee)) {
+    return iree_ok_status();
+  }
+  const loom_symbol_t* symbol =
+      &invocation->module->symbols.entries[invocation->callee_ref.symbol_id];
+  const loom_func_like_t function =
+      loom_func_like_const_cast(invocation->module, symbol->defining_op);
+  prepared->parameter_ids =
+      loom_func_like_arg_ids(function, &prepared->parameter_count);
+  const loom_string_id_t export_name = loom_func_like_export_symbol(function);
+  return iree_vm_process_lookup_function(
+      process, IREE_SV("test"),
+      loom_string_table_get(&invocation->module->strings,
+                            export_name == LOOM_STRING_ID_INVALID
+                                ? symbol->name_id
+                                : export_name),
+      &prepared->callee);
 }
 
 static iree_status_t loom_vm_testbench_prepare(
@@ -313,6 +379,16 @@ static iree_status_t loom_vm_testbench_prepare(
                                     testbench->host_allocator, &process);
   }
   iree_vm_program_release(program);
+  if (iree_status_is_ok(status) && product_invocation != NULL) {
+    status = loom_vm_testbench_prepare_function(testbench, process,
+                                                product_invocation);
+  } else if (iree_status_is_ok(status)) {
+    for (iree_host_size_t i = 0;
+         i < testbench->invocations.count && iree_status_is_ok(status); ++i) {
+      status = loom_vm_testbench_prepare_function(
+          testbench, process, testbench->invocations.values[i]);
+    }
+  }
   if (iree_status_is_ok(status)) {
     testbench->invocation = invocation;
     testbench->process = process;
@@ -415,7 +491,8 @@ static iree_status_t loom_vm_testbench_trace_buffer_reference(
 
 static iree_status_t loom_vm_testbench_export_buffer(
     loom_vm_testbench_t* testbench, iree_vm_variant_t result,
-    iree_host_size_t input_count, const loom_testbench_value_t* inputs,
+    int64_t byte_offset, iree_host_size_t input_count,
+    const loom_testbench_value_t* inputs,
     iree_vm_buffer_t* const* argument_buffers,
     loom_testbench_value_t* out_value) {
   iree_vm_buffer_t* source = NULL;
@@ -425,24 +502,30 @@ static iree_status_t loom_vm_testbench_export_buffer(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "VM function returned a null buffer reference");
   }
+  const iree_host_size_t length = iree_vm_buffer_length(source);
+  if (byte_offset < 0 || (uint64_t)byte_offset > length) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "returned VM view byte offset is outside its buffer");
+  }
   loom_testbench_buffer_reference_t reference = {0};
   IREE_RETURN_IF_ERROR(loom_vm_testbench_trace_buffer_reference(
       source, input_count, inputs, argument_buffers, &reference));
 
   iree_hal_buffer_t* buffer = NULL;
-  const iree_host_size_t length = iree_vm_buffer_length(source);
   IREE_RETURN_IF_ERROR(
       loom_vm_buffer_export(source, testbench->host_allocator, &buffer));
   *out_value = (loom_testbench_value_t){
       .kind = LOOM_TESTBENCH_VALUE_KIND_BUFFER,
       .buffer = {.kind = IREE_TOOLING_BUFFER_BINDING_KIND_STORAGE_BUFFER,
                  .buffer = buffer,
-                 .byte_length = length},
+                 .byte_offset = (iree_device_size_t)byte_offset,
+                 .byte_length = length - (iree_device_size_t)byte_offset},
   };
   if (reference.is_traceable) {
-    loom_testbench_value_set_buffer_reference(reference.allocation_value_id,
-                                              reference.byte_offset,
-                                              reference.byte_length, out_value);
+    loom_testbench_value_set_buffer_reference(
+        reference.allocation_value_id, reference.byte_offset + byte_offset,
+        reference.byte_length - byte_offset, out_value);
   }
   return iree_ok_status();
 }
@@ -453,37 +536,34 @@ static iree_status_t loom_vm_testbench_invoke_prepared(
     iree_host_size_t input_count, const loom_testbench_value_t* inputs,
     iree_host_size_t result_count, loom_testbench_value_t* out_results) {
   loom_vm_testbench_t* testbench = user_data;
-  const loom_symbol_t* symbol =
-      &invocation->module->symbols.entries[invocation->callee_ref.symbol_id];
-  const loom_func_like_t function =
-      loom_func_like_const_cast(invocation->module, symbol->defining_op);
-  uint16_t parameter_count = 0;
-  const loom_value_id_t* parameter_ids =
-      loom_func_like_arg_ids(function, &parameter_count);
-  const loom_string_id_t export_name = loom_func_like_export_symbol(function);
-  iree_vm_function_t callee = iree_vm_function_null();
-  IREE_RETURN_IF_ERROR(iree_vm_process_lookup_function(
-      testbench->process, IREE_SV("test"),
-      loom_string_table_get(&invocation->module->strings,
-                            export_name == LOOM_STRING_ID_INVALID
-                                ? symbol->name_id
-                                : export_name),
-      &callee));
+  const loom_vm_testbench_function_t* prepared =
+      &testbench->functions[invocation->callee_ref.symbol_id];
   iree_vm_variant_t* arguments = testbench->arguments;
   iree_vm_variant_t* results = testbench->results;
   iree_vm_buffer_t** argument_buffers = testbench->argument_buffers;
   iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0; i < parameter_count && iree_status_is_ok(status);
-       ++i) {
+  iree_host_size_t argument_count = 0;
+  for (iree_host_size_t i = 0;
+       i < prepared->parameter_count && iree_status_is_ok(status); ++i) {
+    const loom_type_t type =
+        loom_module_value_type(invocation->module, prepared->parameter_ids[i]);
+    iree_vm_variant_t* argument = &arguments[argument_count];
+    argument_count += loom_view_boundary_component_count(
+        testbench->view_boundary_carrier, type);
     if (inputs[i].kind == LOOM_TESTBENCH_VALUE_KIND_BUFFER) {
       status = loom_vm_testbench_import_buffer(testbench, &inputs[i].buffer,
-                                               &arguments[i]);
+                                               &argument[0]);
       if (iree_status_is_ok(status)) {
         status = iree_vm_buffer_ptr_from_variant_borrowed(
-            &testbench->ref_types, arguments[i], &argument_buffers[i]);
+            &testbench->ref_types, argument[0], &argument_buffers[i]);
       }
       if (iree_status_is_ok(status)) {
         iree_vm_buffer_retain(argument_buffers[i]);
+        if (loom_type_is_view(type)) {
+          // The imported buffer already exposes the binding's exact range.
+          argument[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET] =
+              iree_vm_variant_from_i64(0);
+        }
       }
     } else if (inputs[i].kind != LOOM_TESTBENCH_VALUE_KIND_SCALAR) {
       status = iree_make_status(
@@ -492,46 +572,45 @@ static iree_status_t loom_vm_testbench_invoke_prepared(
     } else {
       // The shared materializer stores narrow floats as raw words and narrow
       // integers as i32. The source signature supplies their exact VM tags.
-      const loom_scalar_type_t scalar_type = loom_type_element_type(
-          loom_module_value_type(invocation->module, parameter_ids[i]));
+      const loom_scalar_type_t scalar_type = loom_type_element_type(type);
       const iree_tooling_value_t value = inputs[i].scalar;
       switch (scalar_type) {
         case LOOM_SCALAR_TYPE_I8:
-          arguments[i] = iree_vm_variant_from_i8((int8_t)value.storage.i32);
+          argument[0] = iree_vm_variant_from_i8((int8_t)value.storage.i32);
           break;
         case LOOM_SCALAR_TYPE_I16:
-          arguments[i] = iree_vm_variant_from_i16((int16_t)value.storage.i32);
+          argument[0] = iree_vm_variant_from_i16((int16_t)value.storage.i32);
           break;
         case LOOM_SCALAR_TYPE_I1:
         case LOOM_SCALAR_TYPE_I32:
-          arguments[i] = iree_vm_variant_from_i32(value.storage.i32);
+          argument[0] = iree_vm_variant_from_i32(value.storage.i32);
           break;
         case LOOM_SCALAR_TYPE_INDEX:
         case LOOM_SCALAR_TYPE_OFFSET:
         case LOOM_SCALAR_TYPE_I64:
-          arguments[i] = iree_vm_variant_from_i64(value.storage.i64);
+          argument[0] = iree_vm_variant_from_i64(value.storage.i64);
           break;
         case LOOM_SCALAR_TYPE_F8E4M3:
-          arguments[i] =
+          argument[0] =
               iree_vm_variant_from_f8e4m3fn_bits((uint8_t)value.storage.u32);
           break;
         case LOOM_SCALAR_TYPE_F8E5M2:
-          arguments[i] =
+          argument[0] =
               iree_vm_variant_from_f8e5m2_bits((uint8_t)value.storage.u32);
           break;
         case LOOM_SCALAR_TYPE_F16:
-          arguments[i] =
+          argument[0] =
               iree_vm_variant_from_f16_bits((uint16_t)value.storage.u32);
           break;
         case LOOM_SCALAR_TYPE_BF16:
-          arguments[i] =
+          argument[0] =
               iree_vm_variant_from_bf16_bits((uint16_t)value.storage.u32);
           break;
         case LOOM_SCALAR_TYPE_F32:
-          arguments[i] = iree_vm_variant_from_f32(value.storage.f32);
+          argument[0] = iree_vm_variant_from_f32(value.storage.f32);
           break;
         case LOOM_SCALAR_TYPE_F64:
-          arguments[i] = iree_vm_variant_from_f64(value.storage.f64);
+          argument[0] = iree_vm_variant_from_f64(value.storage.f64);
           break;
         default:
           status = iree_make_status(IREE_STATUS_UNIMPLEMENTED,
@@ -542,10 +621,10 @@ static iree_status_t loom_vm_testbench_invoke_prepared(
     }
   }
   if (iree_status_is_ok(status)) {
-    status =
-        iree_vm_invoke(testbench->invocation, callee,
-                       iree_vm_variant_span_from_ptr(arguments, input_count),
-                       iree_vm_variant_span_from_ptr(results, result_count));
+    status = iree_vm_invoke(
+        testbench->invocation, prepared->callee,
+        iree_vm_variant_span_from_ptr(arguments, argument_count),
+        iree_vm_variant_span_from_ptr(results, prepared->result_count));
     // A failed invocation may have completed writes. Publish them while the
     // retained arguments still own their persistent mappings.
     for (iree_host_size_t i = 0; i < input_count; ++i) {
@@ -554,78 +633,91 @@ static iree_status_t loom_vm_testbench_invoke_prepared(
     }
   } else {
     iree_vm_variant_span_reset(
-        iree_vm_variant_span_from_ptr(arguments, input_count));
+        iree_vm_variant_span_from_ptr(arguments, argument_count));
   }
+  iree_host_size_t result_offset = 0;
   for (iree_host_size_t i = 0; i < result_count && iree_status_is_ok(status);
        ++i) {
-    if (iree_vm_variant_is_ref(results[i])) {
-      status = loom_vm_testbench_export_buffer(
-          testbench, results[i], input_count, inputs, argument_buffers,
-          &out_results[i]);
+    const loom_type_t type = loom_module_value_type(
+        invocation->module, invocation->result_value_ids[i]);
+    const iree_vm_variant_t* result = &results[result_offset];
+    result_offset += loom_view_boundary_component_count(
+        testbench->view_boundary_carrier, type);
+    if (iree_vm_variant_is_ref(result[0])) {
+      int64_t byte_offset = 0;
+      if (loom_type_is_view(type)) {
+        status = iree_vm_i64_from_variant(
+            result[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET], &byte_offset);
+      }
+      if (iree_status_is_ok(status)) {
+        status = loom_vm_testbench_export_buffer(
+            testbench, result[LOOM_VIEW_BOUNDARY_COMPONENT_BUFFER], byte_offset,
+            input_count, inputs, argument_buffers, &out_results[i]);
+      }
       continue;
     }
     out_results[i].kind = LOOM_TESTBENCH_VALUE_KIND_SCALAR;
-    switch (iree_vm_variant_scalar_type(results[i])) {
+    switch (iree_vm_variant_scalar_type(result[0])) {
       case IREE_VM_SCALAR_TYPE_I8: {
         int8_t value = 0;
-        status = iree_vm_i8_from_variant(results[i], &value);
+        status = iree_vm_i8_from_variant(result[0], &value);
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_I32;
         out_results[i].scalar.storage.i32 = value;
         break;
       }
       case IREE_VM_SCALAR_TYPE_I16: {
         int16_t value = 0;
-        status = iree_vm_i16_from_variant(results[i], &value);
+        status = iree_vm_i16_from_variant(result[0], &value);
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_I32;
         out_results[i].scalar.storage.i32 = value;
         break;
       }
       case IREE_VM_SCALAR_TYPE_I32:
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_I32;
-        status = iree_vm_i32_from_variant(results[i],
+        status = iree_vm_i32_from_variant(result[0],
                                           &out_results[i].scalar.storage.i32);
         break;
       case IREE_VM_SCALAR_TYPE_I64:
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_I64;
-        status = iree_vm_i64_from_variant(results[i],
+        status = iree_vm_i64_from_variant(result[0],
                                           &out_results[i].scalar.storage.i64);
         break;
       case IREE_VM_SCALAR_TYPE_F8E4M3FN: {
         uint8_t bits = 0;
-        status = iree_vm_f8e4m3fn_bits_from_variant(results[i], &bits);
+        status = iree_vm_f8e4m3fn_bits_from_variant(result[0], &bits);
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_RAW_U32;
         out_results[i].scalar.storage.u32 = bits;
         break;
       }
       case IREE_VM_SCALAR_TYPE_F8E5M2: {
         uint8_t bits = 0;
-        status = iree_vm_f8e5m2_bits_from_variant(results[i], &bits);
+        status = iree_vm_f8e5m2_bits_from_variant(result[0], &bits);
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_RAW_U32;
         out_results[i].scalar.storage.u32 = bits;
         break;
       }
       case IREE_VM_SCALAR_TYPE_F16: {
         uint16_t bits = 0;
-        status = iree_vm_f16_bits_from_variant(results[i], &bits);
+        status = iree_vm_f16_bits_from_variant(result[0], &bits);
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_RAW_U32;
         out_results[i].scalar.storage.u32 = bits;
         break;
       }
       case IREE_VM_SCALAR_TYPE_BF16: {
         uint16_t bits = 0;
-        status = iree_vm_bf16_bits_from_variant(results[i], &bits);
+        status = iree_vm_bf16_bits_from_variant(result[0], &bits);
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_RAW_U32;
         out_results[i].scalar.storage.u32 = bits;
         break;
       }
       case IREE_VM_SCALAR_TYPE_F32:
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_F32;
-        status = iree_vm_f32_from_variant(results[i],
+        status = iree_vm_f32_from_variant(result[0],
                                           &out_results[i].scalar.storage.f32);
         break;
       case IREE_VM_SCALAR_TYPE_F64:
         out_results[i].scalar.kind = IREE_TOOLING_VALUE_KIND_F64;
-        status = iree_vm_f64_from_variant(results[i],
+        status = iree_vm_f64_from_variant(result[0],
                                           &out_results[i].scalar.storage.f64);
         break;
       default:
@@ -636,7 +728,7 @@ static iree_status_t loom_vm_testbench_invoke_prepared(
     }
   }
   iree_vm_variant_span_reset(
-      iree_vm_variant_span_from_ptr(results, result_count));
+      iree_vm_variant_span_from_ptr(results, prepared->result_count));
   for (iree_host_size_t i = 0; i < input_count; ++i) {
     iree_vm_buffer_release(argument_buffers[i]);
     argument_buffers[i] = NULL;
@@ -738,6 +830,7 @@ static iree_status_t loom_vm_testbench_product_prepare(
   product->compilation = parent->compilation;
   product->result_callback = parent->result_callback;
   product->target_profile = parent->target_profile;
+  product->view_boundary_carrier = parent->view_boundary_carrier;
   loomc_target_profile_retain(product->target_profile);
   iree_status_t status =
       loom_vm_testbench_prepare(product, invocation->module, invocation);

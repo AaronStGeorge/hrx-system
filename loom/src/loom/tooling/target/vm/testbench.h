@@ -10,6 +10,7 @@
 #include "iree/vm/buffer.h"
 #include "iree/vm/invocation.h"
 #include "iree/vm/process.h"
+#include "loom/target/view_boundary.h"
 #include "loom/tooling/testbench/compiled_provider.h"
 #include "loom/tooling/testbench/scenario/executor.h"
 #include "loomc/target.h"
@@ -17,6 +18,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct loom_vm_testbench_function_t loom_vm_testbench_function_t;
 
 // Executes semantic functions through the VM. The direct-call provider compiles
 // all selected function roots on its first call and reuses one process. The
@@ -36,6 +39,8 @@ typedef struct loom_vm_testbench_t {
   loom_testbench_compile_result_callback_t result_callback;
   // Owned VM core profile applied to every selected semantic function.
   loomc_target_profile_t* target_profile;
+  // View ABI selected by the same provider that compiles the functions.
+  loom_target_view_boundary_carrier_t view_boundary_carrier;
   // Borrowed selected calls identifying the functions crossing the host ABI.
   loom_testbench_invocation_plan_list_t invocations;
   // Allocator for bytecode and runtime objects.
@@ -54,6 +59,8 @@ typedef struct loom_vm_testbench_t {
   iree_vm_process_t* process;
   // Owned reusable execution storage, never shared by concurrent calls.
   iree_vm_invocation_t* invocation;
+  // Owned callable boundaries indexed by immutable source symbol ID.
+  loom_vm_testbench_function_t* functions;
   // Owned reusable argument variants; also the base of the combined IO slab.
   iree_vm_variant_t* arguments;
   // Result variants within the IO slab, sized from the immutable case plan.

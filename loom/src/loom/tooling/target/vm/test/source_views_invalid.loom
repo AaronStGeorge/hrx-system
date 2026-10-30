@@ -1,0 +1,40 @@
+func.def @storage() -> (buffer) {
+  %storage = buffer.constant utf8("abcd") : buffer
+  func.return %storage : buffer
+}
+
+func.def @project(%storage: buffer, %origin: offset) -> (view<2xi8>) {
+  %view = buffer.view %storage[%origin] : buffer -> view<2xi8>
+  func.return %view : view<2xi8>
+}
+
+func.def @strided(%storage: buffer) -> (view<2xi8, #encoding.layout.strided<strides=[2]>>) {
+  %origin = index.constant 0 : offset
+  %view = buffer.view %storage[%origin] : buffer -> view<2xi8, #encoding.layout.strided<strides=[2]>>
+  func.return %view : view<2xi8, #encoding.layout.strided<strides=[2]>>
+}
+
+check.case @offset_outside {
+  %storage = func.call @storage() : () -> (buffer)
+  %origin = check.literal value(5) : offset
+  %view = func.call @project(%storage, %origin) : (buffer, offset) -> (view<2xi8>)
+  check.return
+}
+
+check.case @extent_outside {
+  %storage = func.call @storage() : () -> (buffer)
+  %origin = check.literal value(3) : offset
+  %view = func.call @project(%storage, %origin) : (buffer, offset) -> (view<2xi8>)
+  check.return
+}
+
+check.case @non_dense_result {
+  %storage = func.call @storage() : () -> (buffer)
+  %view = func.call @strided(%storage) : (buffer) -> (view<2xi8, #encoding.layout.strided<strides=[2]>>)
+  check.return
+}
+
+check.case @non_dense_input {
+  %view = check.generate.fill value(1) : view<2xi8, #encoding.layout.strided<strides=[2]>>
+  check.return
+}

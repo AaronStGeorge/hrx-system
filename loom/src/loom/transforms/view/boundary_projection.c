@@ -16,6 +16,7 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/target/provider.h"
+#include "loom/target/view_boundary.h"
 #include "loom/transforms/boundary/projection_plan.h"
 #include "loom/transforms/encoding/layout_projection.h"
 #include "loom/transforms/view/offset_expression.h"
@@ -134,21 +135,23 @@ static iree_status_t loom_view_boundary_initialize_schema(
   memset(state, 0, sizeof(*state));
   loom_type_t* component_types = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      plan->arena, 2, sizeof(*component_types), (void**)&component_types));
-  component_types[0] = loom_type_buffer();
-  component_types[1] = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
-
+      plan->arena, LOOM_VIEW_BOUNDARY_COMPONENT_COUNT, sizeof(*component_types),
+      (void**)&component_types));
   iree_string_view_t* component_name_suffixes = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      plan->arena, 2, sizeof(*component_name_suffixes),
-      (void**)&component_name_suffixes));
-  component_name_suffixes[0] = IREE_SV("root");
-  component_name_suffixes[1] = IREE_SV("offset");
+      plan->arena, LOOM_VIEW_BOUNDARY_COMPONENT_COUNT,
+      sizeof(*component_name_suffixes), (void**)&component_name_suffixes));
+  for (uint16_t i = 0; i < LOOM_VIEW_BOUNDARY_COMPONENT_COUNT; ++i) {
+    component_types[i] =
+        loom_view_boundary_component_type((loom_view_boundary_component_t)i);
+    component_name_suffixes[i] =
+        loom_view_boundary_component_name((loom_view_boundary_component_t)i);
+  }
   state->schema = (loom_boundary_projection_schema_t){
       .rule = rule,
       .component_types = component_types,
       .component_name_suffixes = component_name_suffixes,
-      .component_count = 2,
+      .component_count = LOOM_VIEW_BOUNDARY_COMPONENT_COUNT,
   };
   loom_boundary_projection_set_rule_state(plan, rule, state);
   return iree_ok_status();
@@ -667,8 +670,11 @@ static iree_status_t loom_view_boundary_materialize_offset(
   if (offset->dependency != IREE_HOST_SIZE_MAX) {
     const loom_boundary_projection_slot_t* candidate =
         &function->candidates[offset->dependency];
-    IREE_ASSERT(candidate->component_value_ids[1] != LOOM_VALUE_ID_INVALID);
-    offset->base_value_id = candidate->component_value_ids[1];
+    IREE_ASSERT(
+        candidate->component_value_ids[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET] !=
+        LOOM_VALUE_ID_INVALID);
+    offset->base_value_id =
+        candidate->component_value_ids[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET];
   }
   const loom_symbolic_expr_t* expression = offset->expression;
   IREE_ASSERT(expression != NULL);
@@ -776,13 +782,14 @@ static iree_status_t loom_view_boundary_materialize_coordinate(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
     const loom_view_boundary_coordinate_t* coordinate,
-    loom_value_id_t out_values[2]);
+    loom_value_id_t out_values[LOOM_VIEW_BOUNDARY_COMPONENT_COUNT]);
 
 static iree_status_t loom_view_boundary_materialize_selection(
     const loom_boundary_projection_rule_t* rule,
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
-    iree_host_size_t selection_index, loom_value_id_t out_values[2]) {
+    iree_host_size_t selection_index,
+    loom_value_id_t out_values[LOOM_VIEW_BOUNDARY_COMPONENT_COUNT]) {
   loom_view_boundary_projection_function_state_t* state =
       loom_view_boundary_function_state(rule, plan, function);
   IREE_ASSERT(state != NULL);
@@ -790,26 +797,27 @@ static iree_status_t loom_view_boundary_materialize_selection(
       &state->selections[selection_index];
   if (selection->buffer_value_id != LOOM_VALUE_ID_INVALID) {
     IREE_ASSERT(selection->offset_value_id != LOOM_VALUE_ID_INVALID);
-    out_values[0] = selection->buffer_value_id;
-    out_values[1] = selection->offset_value_id;
+    out_values[LOOM_VIEW_BOUNDARY_COMPONENT_BUFFER] =
+        selection->buffer_value_id;
+    out_values[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET] =
+        selection->offset_value_id;
     return iree_ok_status();
   }
 
-  loom_value_id_t true_values[2];
+  loom_value_id_t true_values[LOOM_VIEW_BOUNDARY_COMPONENT_COUNT];
   IREE_RETURN_IF_ERROR(loom_view_boundary_materialize_coordinate(
       rule, plan, function, &selection->true_coordinate, true_values));
-  loom_value_id_t false_values[2];
+  loom_value_id_t false_values[LOOM_VIEW_BOUNDARY_COMPONENT_COUNT];
   IREE_RETURN_IF_ERROR(loom_view_boundary_materialize_coordinate(
       rule, plan, function, &selection->false_coordinate, false_values));
 
-  const loom_type_t result_types[2] = {
-      loom_module_value_type(plan->module, true_values[0]),
-      loom_module_value_type(plan->module, true_values[1]),
-  };
-  IREE_ASSERT(loom_type_equal(
-      result_types[0], loom_module_value_type(plan->module, false_values[0])));
-  IREE_ASSERT(loom_type_equal(
-      result_types[1], loom_module_value_type(plan->module, false_values[1])));
+  loom_type_t result_types[LOOM_VIEW_BOUNDARY_COMPONENT_COUNT];
+  for (uint16_t i = 0; i < LOOM_VIEW_BOUNDARY_COMPONENT_COUNT; ++i) {
+    result_types[i] = loom_module_value_type(plan->module, true_values[i]);
+    IREE_ASSERT(
+        loom_type_equal(result_types[i],
+                        loom_module_value_type(plan->module, false_values[i])));
+  }
   loom_builder_t* builder = &plan->rewriter.builder;
   loom_builder_set_before(builder, selection->op);
   loom_op_t* if_op = NULL;
@@ -833,17 +841,20 @@ static iree_status_t loom_view_boundary_materialize_selection(
   loom_builder_restore(builder, saved);
 
   const loom_value_id_t source_value = selection->result_value_id;
-  selection->buffer_value_id = loom_op_results(if_op)[0];
-  selection->offset_value_id = loom_op_results(if_op)[1];
+  selection->buffer_value_id =
+      loom_op_results(if_op)[LOOM_VIEW_BOUNDARY_COMPONENT_BUFFER];
+  selection->offset_value_id =
+      loom_op_results(if_op)[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET];
   IREE_RETURN_IF_ERROR(loom_rewriter_try_set_derived_value_name(
       &plan->rewriter, source_value, selection->buffer_value_id,
       IREE_SV("root")));
   IREE_RETURN_IF_ERROR(loom_rewriter_try_set_derived_value_name(
       &plan->rewriter, source_value, selection->offset_value_id,
       IREE_SV("offset")));
-  out_values[0] = selection->buffer_value_id;
-  out_values[1] = selection->offset_value_id;
-  loom_boundary_projection_record(plan, rule, 1, 2);
+  out_values[LOOM_VIEW_BOUNDARY_COMPONENT_BUFFER] = selection->buffer_value_id;
+  out_values[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET] = selection->offset_value_id;
+  loom_boundary_projection_record(plan, rule, 1,
+                                  LOOM_VIEW_BOUNDARY_COMPONENT_COUNT);
   return iree_ok_status();
 }
 
@@ -852,7 +863,7 @@ static iree_status_t loom_view_boundary_materialize_coordinate(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
     const loom_view_boundary_coordinate_t* coordinate,
-    loom_value_id_t out_values[2]) {
+    loom_value_id_t out_values[LOOM_VIEW_BOUNDARY_COMPONENT_COUNT]) {
   if (coordinate->selection != IREE_HOST_SIZE_MAX) {
     IREE_RETURN_IF_ERROR(loom_view_boundary_materialize_selection(
         rule, plan, function, coordinate->selection, out_values));
@@ -861,22 +872,31 @@ static iree_status_t loom_view_boundary_materialize_coordinate(
     }
     loom_view_boundary_projection_function_state_t* state =
         loom_view_boundary_function_state(rule, plan, function);
-    state->offsets[coordinate->region_id].base_value_id = out_values[1];
+    state->offsets[coordinate->region_id].base_value_id =
+        out_values[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET];
   } else if (coordinate->dependency != IREE_HOST_SIZE_MAX) {
     const loom_boundary_projection_slot_t* candidate =
         &function->candidates[coordinate->dependency];
-    IREE_ASSERT(candidate->component_value_ids[0] != LOOM_VALUE_ID_INVALID);
-    IREE_ASSERT(candidate->component_value_ids[1] != LOOM_VALUE_ID_INVALID);
-    out_values[0] = candidate->component_value_ids[0];
+    IREE_ASSERT(
+        candidate->component_value_ids[LOOM_VIEW_BOUNDARY_COMPONENT_BUFFER] !=
+        LOOM_VALUE_ID_INVALID);
+    IREE_ASSERT(
+        candidate->component_value_ids[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET] !=
+        LOOM_VALUE_ID_INVALID);
+    out_values[LOOM_VIEW_BOUNDARY_COMPONENT_BUFFER] =
+        candidate->component_value_ids[LOOM_VIEW_BOUNDARY_COMPONENT_BUFFER];
     if (coordinate->region_id == LOOM_VIEW_REGION_ID_INVALID) {
-      out_values[1] = candidate->component_value_ids[1];
+      out_values[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET] =
+          candidate->component_value_ids[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET];
       return iree_ok_status();
     }
   } else {
-    out_values[0] = coordinate->buffer_value_id;
+    out_values[LOOM_VIEW_BOUNDARY_COMPONENT_BUFFER] =
+        coordinate->buffer_value_id;
   }
   return loom_view_boundary_materialize_offset(
-      rule, plan, function, coordinate->region_id, &out_values[1]);
+      rule, plan, function, coordinate->region_id,
+      &out_values[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET]);
 }
 
 static iree_status_t loom_view_boundary_materialize_source(
@@ -904,11 +924,14 @@ static iree_status_t loom_view_boundary_reconstruct(
     loom_location_id_t location, loom_value_id_t* out_logical_value) {
   (void)function;
   IREE_ASSERT(rule == slot->schema.rule);
-  IREE_ASSERT_EQ(slot->schema.component_count, 2);
+  IREE_ASSERT_EQ(slot->schema.component_count,
+                 LOOM_VIEW_BOUNDARY_COMPONENT_COUNT);
   loom_op_t* view_op = NULL;
   IREE_RETURN_IF_ERROR(loom_buffer_view_build(
-      &plan->rewriter.builder, slot->component_value_ids[0],
-      slot->component_value_ids[1], logical_type, location, &view_op));
+      &plan->rewriter.builder,
+      slot->component_value_ids[LOOM_VIEW_BOUNDARY_COMPONENT_BUFFER],
+      slot->component_value_ids[LOOM_VIEW_BOUNDARY_COMPONENT_OFFSET],
+      logical_type, location, &view_op));
   *out_logical_value = loom_buffer_view_result(view_op);
   loom_boundary_projection_record(plan, rule, 1, slot->schema.component_count);
   return iree_ok_status();
