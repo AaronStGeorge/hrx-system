@@ -19,6 +19,7 @@ extern "C" {
 typedef struct loom_block_t loom_block_t;
 typedef struct loom_op_t loom_op_t;
 typedef struct loom_region_t loom_region_t;
+typedef struct loom_cfg_loop_forest_t loom_cfg_loop_forest_t;
 
 // Precision of a retained Low loop execution count. An absent binding means
 // that no finite count is known.
@@ -77,6 +78,41 @@ iree_status_t loom_low_loop_execution_index_build(
 // Returns facts bound to |header|'s current terminator, or NULL.
 const loom_low_loop_execution_facts_t* loom_low_loop_execution_index_lookup(
     const loom_low_loop_execution_index_t* index, const loom_block_t* header);
+
+// Binary-lifted execution products over a retained loop forest. Each row spans
+// 2^level ancestors. Missing or overflowing counts remain unknown so a zero on
+// the same path can still prove a zero product; noncanonical paths stay
+// invalid.
+typedef struct loom_low_loop_execution_path_index_t {
+  // Borrowed immutable forest paired with the input execution facts.
+  const loom_cfg_loop_forest_t* forest;
+  // Number of ancestor-doubling rows.
+  uint32_t level_count;
+  // One-based nesting depth per loop interval.
+  uint32_t* depths;
+  // Ancestor beyond each row's path, indexed by level then loop interval.
+  uint32_t* ancestors;
+  // Trip-count product for each indexed path when its flags mark it known.
+  uint64_t* products;
+  // Structural validity and arithmetic certainty per indexed path.
+  uint8_t* factor_flags;
+} loom_low_loop_execution_path_index_t;
+
+// Builds path products in O(L log D) time and arena storage for L loop
+// intervals with maximum depth D. |forest| and |facts| describe the same block
+// order.
+iree_status_t loom_low_loop_execution_path_index_build(
+    const loom_cfg_loop_forest_t* forest,
+    const loom_low_loop_execution_index_t* facts, iree_arena_allocator_t* arena,
+    loom_low_loop_execution_path_index_t* out_index);
+
+// Computes the execution multiplier for moving work into a descendant loop in
+// O(log D) time. A destination header executes once more than its body count.
+// Returns false for non-descendant, noncanonical, unknown, or overflowing
+// paths.
+bool loom_low_loop_execution_path_multiplier(
+    const loom_low_loop_execution_path_index_t* index, uint32_t source_block,
+    uint32_t destination_block, uint64_t* out_execution_multiplier);
 
 // One operation-clone invocation translating bound control identities. The
 // source map is immutable; target bindings are appended to the target map.

@@ -512,8 +512,22 @@ loom_cc_library(
     hdrs = ["loop_execution.h"],
     deps = [
         "//loom/src/loom/ir",
+        "//loom/src/loom/util:cfg_loop",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "loop_execution_test",
+    srcs = ["loop_execution_test.cc"],
+    deps = [
+        ":loop_execution",
+        "//loom/src/loom/util:cfg_loop",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
