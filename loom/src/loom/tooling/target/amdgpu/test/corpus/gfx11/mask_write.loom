@@ -51,3 +51,59 @@ check.case public @mask_reuse {
   check.expect.equal actual(%selected_output) expected(%selected_expected) : tensor<65536xi32>
   check.return
 }
+
+// Swap the mask's halves on every backedge. Across eight iterations, each
+// lane must contribute exactly four times, independent of its initial half.
+low.func.def schedule(locked) target<amdgpu.gfx11.generic.core>(@target) @copied_mask_sum(%value: reg<amdgpu.vgpr>, %seed: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>) asm {
+  %zero = v_mov_b32 0
+  %begin = s_mov_b32 0
+  %step = s_mov_b32 1
+  %count = s_mov_b32 8
+  low.br ^loop(%seed: reg<amdgpu.sgpr x2>, %begin: reg<amdgpu.sgpr>, %zero: reg<amdgpu.vgpr>)
+^loop(%entry: reg<amdgpu.sgpr x2>, %index: reg<amdgpu.sgpr>, %accumulator: reg<amdgpu.vgpr>):
+  %current = copy %entry : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr x2>
+  %alias = low.assume %current [] : reg<amdgpu.sgpr x2>
+  %first = slice %alias[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %second = slice %current[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %swapped = concat(%second, %first) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %selected = v_cndmask_b32_src0_inline %value, %current {false_value = 0}
+  %sum = v_add_u32 %accumulator, %selected
+  %next = s_add_u32 %index, %step
+  %more = s_cmp_lt_u32 %next, %count
+  low.cond_br %more, ^latch, ^exit : reg<amdgpu.scc>
+^latch:
+  low.br ^loop(%swapped: reg<amdgpu.sgpr x2>, %next: reg<amdgpu.sgpr>, %sum: reg<amdgpu.vgpr>)
+^exit:
+  return %sum
+}
+
+kernel.def target(@target) @copied_mask_sum_kernel() {
+  %c1 = index.constant 1 : index
+  %groups = index.constant 16 : index
+  %width = index.constant 64 : index
+  kernel.launch.config workgroups(%groups, %c1, %c1) workgroup_size(%width, %c1, %c1) : index
+} launch(%output: buffer, %seed: i64) {
+  %lane = kernel.workitem.id<x> : index
+  %group = kernel.workgroup.id<x> : index
+  %width = index.constant 64 : index
+  %c1 = index.constant 1 : index
+  %start = index.mul %group, %width : index
+  %position = index.add %start, %lane : index
+  %ordinal = index.add %position, %c1 : index
+  %value = index.cast %ordinal : index to i32
+  %vector = vector.splat %value : vector<1xi32>
+  %sum = low.invoke @copied_mask_sum(%vector, %seed) : (vector<1xi32>, i64) -> (vector<1xi32>)
+  %base = index.constant 0 : offset
+  %view = buffer.view %output[%base] : buffer -> view<1024xi32>
+  vector.store %sum, %view[%position] : vector<1xi32>, view<1024xi32>
+  kernel.return
+}
+
+check.case public @copied_mask_permutation {
+  %output = check.generate.fill value(-1) : tensor<1024xi32>
+  %seed = check.literal value(4294967295) : i64
+  kernel.launch @copied_mask_sum_kernel(%output, %seed) : (tensor<1024xi32>, i64)
+  %expected = check.generate.iota offset(4) step(4) : tensor<1024xi32>
+  check.expect.equal actual(%output) expected(%expected) : tensor<1024xi32>
+  check.return
+}
