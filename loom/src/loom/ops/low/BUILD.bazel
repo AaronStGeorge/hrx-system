@@ -13,7 +13,7 @@ package(
 )
 
 _LOW_OPS_VISIBILITY = [
-    "//loom/binding/c:__pkg__",
+    "//loom/binding/c:implementation",
     "//loom/src/loom/analysis:__pkg__",
     "//loom/src/loom/codegen/low:__pkg__",
     "//loom/src/loom/codegen/low/allocation:__pkg__",

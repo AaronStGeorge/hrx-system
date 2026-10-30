@@ -13,7 +13,7 @@ package(
 )
 
 _LOW_PASS_ENVIRONMENT_VISIBILITY = [
-    "//loom/binding/c:__pkg__",
+    "//loom/binding/c:implementation",
     "//loom/src/loom/codegen:__pkg__",
     "//loom/src/loom/codegen/low/testing:__pkg__",
     "//loom/src/loom/codegen/low/transforms:__pkg__",

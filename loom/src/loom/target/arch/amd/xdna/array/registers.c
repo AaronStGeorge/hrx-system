@@ -46,7 +46,7 @@ typedef struct loom_xdna_register_field_t {
   uint8_t access_and_flags;
 } loom_xdna_register_field_t;
 
-#include "loom/target/arch/amd/xdna/array/register_tables.inl"
+#include "loom/target/arch/amd/xdna/array_register_tables.inl"
 
 loom_xdna_register_field_info_t loom_xdna_register_field_info(
     loom_xdna_register_field_id_t field_id) {

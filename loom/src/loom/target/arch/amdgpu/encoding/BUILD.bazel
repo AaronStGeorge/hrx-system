@@ -41,7 +41,7 @@ _DESCRIPTOR_SET_RDNA4_GFX1251 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["am
 
 _AMDGPU_ENCODING_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu:__pkg__",
-    "//loom/src/loom/target/arch/amdgpu/lower:__pkg__",
+    "//loom/src/loom/target/arch/amdgpu/lower:implementation",
     "//loom/src/loom/target/arch/amdgpu/planning:__pkg__",
     "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
 ]

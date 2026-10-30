@@ -30,7 +30,7 @@ loom_cc_library(
     srcs = ["local_memory.c"],
     hdrs = ["local_memory.h"],
     deps = [
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
         "//runtime/src/iree/base",
     ],
 )
@@ -71,9 +71,9 @@ loom_cc_library(
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/encoding",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
         "//loom/src/loom/target/arch/amd/xdna:error_defs",
         "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:array",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
@@ -88,9 +88,9 @@ loom_cc_library(
     visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
     deps = [
         ":plan",
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
-        "//loom/src/loom/target/arch/amd/xdna:array_registers",
         "//loom/src/loom/target/arch/amd/xdna/aie2p/emit:program",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
+        "//loom/src/loom/target/arch/amd/xdna/array:registers",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -114,8 +114,8 @@ loom_cc_library(
         "//loom/src/loom/rewrite:materialize",
         "//loom/src/loom/rewrite:remap",
         "//loom/src/loom/rewrite:rewriter",
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
         "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:core",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
         "//loom/src/loom/transforms/cfg:block_fusion",
         "//loom/src/loom/util:cfg_graph",
         "//loom/src/loom/util:dominance",
@@ -141,7 +141,7 @@ loom_cc_test(
     srcs = ["route_test.cc"],
     deps = [
         ":plan",
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -153,7 +153,7 @@ loom_cc_test(
     srcs = ["local_memory_test.cc"],
     deps = [
         ":local_memory",
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -164,7 +164,7 @@ loom_cc_test(
     srcs = ["channel_resources_test.cc"],
     deps = [
         ":plan",
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

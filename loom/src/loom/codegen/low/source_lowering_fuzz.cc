@@ -23,7 +23,7 @@
 #include "loom/ir/module.h"
 #include "loom/pass/builtin_registry.h"
 #include "loom/target/test/low_registry.h"
-#include "loom/target/test/lower.h"
+#include "loom/target/test/lower/registry.h"
 
 static loom_context_t g_context;
 static loom_target_low_descriptor_registry_t g_descriptor_registry;

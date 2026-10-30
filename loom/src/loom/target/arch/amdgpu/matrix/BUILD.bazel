@@ -47,7 +47,7 @@ loom_target_table_cc_library(
     ],
     generator = _AMDGPU_MATRIX_CONTRACT_TABLE_GENERATOR,
     visibility = [
-        "//loom/src/loom/target/arch/amdgpu/lower:__pkg__",
+        "//loom/src/loom/target/arch/amdgpu/lower:implementation",
     ],
     deps = [
         ":types",
@@ -61,7 +61,7 @@ loom_cc_library(
     hdrs = ["contract.h"],
     visibility = [
         "//loom/src/loom/target/arch/amdgpu:__pkg__",
-        "//loom/src/loom/target/arch/amdgpu/lower:__pkg__",
+        "//loom/src/loom/target/arch/amdgpu/lower:implementation",
         "//loom/src/loom/target/arch/amdgpu/planning:__pkg__",
         "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
     ],
@@ -84,7 +84,7 @@ loom_cc_library(
     hdrs = ["projection.h"],
     visibility = [
         "//loom/src/loom/target/arch/amdgpu:__pkg__",
-        "//loom/src/loom/target/arch/amdgpu/lower:__pkg__",
+        "//loom/src/loom/target/arch/amdgpu/lower:implementation",
     ],
     deps = [
         ":contract",

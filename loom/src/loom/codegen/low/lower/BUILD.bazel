@@ -13,6 +13,7 @@ package(
 )
 
 _LOWER_VISIBILITY = [
+    "//loom/src/loom/codegen/low/lower/abi/c:__pkg__",
     "//loom/src/loom/codegen/low/pipeline:__pkg__",
     "//loom/src/loom/codegen/low/testing:__pkg__",
     "//loom/src/loom/codegen/low/transforms/pipeline:__pkg__",
@@ -183,35 +184,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "c_abi_projection",
-    srcs = ["abi/c/projection.c"],
-    hdrs = ["abi/c/projection.h"],
-    visibility = _LOWER_VISIBILITY,
-    deps = [
-        ":lower",
-        "//loom/src/loom/codegen/low:builder",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:registers",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_test(
-    name = "c_abi_projection_test",
-    srcs = ["abi/c/projection_test.cc"],
-    deps = [
-        ":c_abi_projection",
-        "//loom/src/loom/target:registers",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
     name = "source_selection",
     srcs = ["source_selection.c"],
     hdrs = ["source_selection.h"],
@@ -331,8 +303,8 @@ loom_cc_test(
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
         "//loom/src/loom/target/test:target_record_table",
+        "//loom/src/loom/target/test/lower:registry",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -364,8 +336,8 @@ loom_cc_test(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
         "//loom/src/loom/target/test:target_record_table",
+        "//loom/src/loom/target/test/lower:registry",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -407,8 +379,8 @@ loom_cc_test(
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
         "//loom/src/loom/target/test:target_record_table",
+        "//loom/src/loom/target/test/lower:registry",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/verify",
         "//runtime/src/iree/testing:gtest",
@@ -432,8 +404,8 @@ loom_cc_test(
         "//loom/src/loom/ops/test",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
         "//loom/src/loom/target/test:target_record_table",
+        "//loom/src/loom/target/test/lower:registry",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -454,8 +426,8 @@ loom_cc_test(
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
         "//loom/src/loom/target/test:target_record_table",
+        "//loom/src/loom/target/test/lower:registry",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -472,8 +444,8 @@ loom_cc_test(
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
         "//loom/src/loom/target/test:target_record_table",
+        "//loom/src/loom/target/test/lower:registry",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -522,7 +494,7 @@ loom_cc_test(
     deps = [
         ":lower",
         "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/target/test:lower",
+        "//loom/src/loom/target/test/lower:registry",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

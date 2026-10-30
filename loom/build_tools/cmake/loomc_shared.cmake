@@ -52,7 +52,7 @@ macro(loomc_shared_libraries)
   list(TRANSFORM _LOOMC_COMPONENTS REPLACE "^::" "loom::binding::c::")
   if(NOT IREE_TARGET_HAS_THREADS)
     list(REMOVE_ITEM _LOOMC_COMPONENTS
-      loom::binding::c::task_pool loom::binding::c::task_queue)
+      loom::binding::c::src::task_pool loom::binding::c::src::task_queue)
   endif()
 endmacro()
 

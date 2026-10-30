@@ -258,7 +258,7 @@ loom_cc_library(
     deps = [
         ":leaf_object",
         ":relocation",
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
         "//loom/src/loom/target/emit/native:contribution",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -270,7 +270,7 @@ loom_cc_library(
     hdrs = ["program.h"],
     visibility = ["//loom/src/loom/target/arch/amd/xdna/aie2p:implementation"],
     deps = [
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
         "//runtime/src/iree/base",
     ],
 )
@@ -282,7 +282,7 @@ loom_cc_library(
     deps = [
         ":program",
         ":tile_link",
-        "//loom/src/loom/target/arch/amd/xdna:device_profile",
+        "//loom/src/loom/target/arch/amd/xdna/device:profile",
         "//loom/src/loom/target/emit/native:elf",
         "//loom/src/loom/target/emit/native:elf_sections",
         "//runtime/src/iree/base",
@@ -300,7 +300,7 @@ loom_cc_library(
         ":leaf_object",
         ":tile_link",
         "//loom/src/loom/analysis:source_storage_packing",
-        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna/array:facts",
         "//loom/src/loom/target/emit/native:contribution",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -347,7 +347,6 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:function_version",
         "//loom/src/loom/target:provider",
-        "//loom/src/loom/target/arch/amd/xdna:device_profile",
         "//loom/src/loom/target/arch/amd/xdna:error_defs",
         "//loom/src/loom/target/arch/amd/xdna/aie2p:provider",
         "//loom/src/loom/target/arch/amd/xdna/aie2p:target_facts",
@@ -358,6 +357,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amd/xdna/aie2p/array:resident",
         "//loom/src/loom/target/arch/amd/xdna/aie2p/descriptors:configuration",
         "//loom/src/loom/target/arch/amd/xdna/aie2p/records:target_records",
+        "//loom/src/loom/target/arch/amd/xdna/device:profile",
         "//loom/src/loom/target/reporting:low",
         "//loom/src/loom/target/reporting:report",
         "//loom/src/loom/util:fact_table",
@@ -374,7 +374,7 @@ loom_cc_test(
     deps = [
         ":program",
         ":xdna_product",
-        "//loom/src/loom/target/arch/amd/xdna:device_profile",
+        "//loom/src/loom/target/arch/amd/xdna/device:profile",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",

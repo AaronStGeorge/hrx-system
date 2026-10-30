@@ -1,0 +1,108 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+    "loom_generated_source_family",
+)
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+exports_files(
+    [
+        "e8m0_scale.c",
+        "float16.c",
+        "float64_narrow.c",
+        "float_to_integer64.c",
+        "fp4.c",
+        "fp8.c",
+        "fp8_descriptors.c",
+        "fp8_encode.c",
+        "fp8_lane.c",
+        "fp8_packed.c",
+        "fp8_plan.c",
+        "fp8_vector_conversion.c",
+        "fp8_vector_plan.c",
+        "vector_conversion.c",
+    ],
+    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"],
+)
+
+loom_generated_source_family(
+    name = "fp8_tables_gen",
+    generator = "//loom/py/loom/gen/target/arch/amdgpu/lower:narrow_float_tables",
+    output_flags = [
+        "--source",
+        "--counts-header",
+    ],
+    outputs = [
+        "fp8_tables.c",
+        "fp8_table_counts.h",
+    ],
+)
+
+loom_cc_library(
+    name = "fp8_api",
+    hdrs = [
+        "fp8.h",
+        "fp8_tables.h",
+        ":fp8_table_counts.h",
+    ],
+    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"],
+    deps = [
+        "//loom/src/loom/codegen/low/lower",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/target/arch/amdgpu/lower:component_api",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "fp8_tables",
+    srcs = [":fp8_tables.c"],
+    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"],
+    deps = [
+        ":fp8_api",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "encoding",
+    hdrs = [
+        "e8m0_scale.h",
+        "float16.h",
+        "float64_narrow.h",
+        "float_to_integer64.h",
+        "fp4.h",
+        "fp8_encode.h",
+        "fp8_vector_conversion.h",
+        "fp8_vector_plan.h",
+        "vector_conversion.h",
+    ],
+    visibility = ["//loom/src/loom/target/arch/amdgpu/lower:implementation"],
+    deps = [
+        ":fp8_api",
+        "//loom/src/loom/codegen/low/lower",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/arch/amdgpu/lower:component_api",
+        "//loom/src/loom/target/arch/amdgpu/lower:materializers",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+    ],
+)

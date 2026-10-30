@@ -52,6 +52,7 @@ py_test(
     main = "presubmit_test.py",
     tags = _PRESUBMIT_TEST_TAGS,
     deps = [
+        ":package_boundary",
         "//build_tools/devtools",
         "//libamdf/build_tools/bazel:configure",
         "//runtime/build_tools/bazel:configure",

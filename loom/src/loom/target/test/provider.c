@@ -11,7 +11,7 @@
 #include "loom/ops/test/registry.h"
 #include "loom/pass/test/registry.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
-#include "loom/target/test/lower.h"
+#include "loom/target/test/lower/registry.h"
 #include "loom/target/test/target_records.h"
 
 #define LOOM_TEST_MATH_CONSTRAINTS(_)                                      \

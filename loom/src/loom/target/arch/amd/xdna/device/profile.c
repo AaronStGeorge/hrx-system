@@ -6,7 +6,7 @@
 
 #include "loom/target/arch/amd/xdna/device/profile.h"
 
-#include "loom/target/arch/amd/xdna/device/profile_tables.inl"
+#include "loom/target/arch/amd/xdna/device_profile_tables.inl"
 
 const loom_xdna_device_profile_t* loom_xdna_device_profile_lookup(
     iree_string_view_t key) {

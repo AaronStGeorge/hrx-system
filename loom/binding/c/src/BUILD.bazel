@@ -1,0 +1,227 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/binding/c:public_headers.bzl", "LOOMC_BASE_HDRS", "LOOMC_PUBLIC_HDRS")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_cmake_extra_content",
+    "loom_cc_library",
+)
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+_ROOT_VISIBILITY = ["//loom/binding/c:__pkg__"]
+
+_BASE_HDRS = ["//loom/binding/c:" + path for path in LOOMC_BASE_HDRS]
+
+_PUBLIC_HDRS = ["//loom/binding/c:" + path for path in LOOMC_PUBLIC_HDRS]
+
+loom_cc_library(
+    name = "base",
+    srcs = [
+        "base.c",
+        "base_system.c",
+        "byte_sequence.c",
+        "status.c",
+    ],
+    hdrs = _BASE_HDRS,
+    includes = ["../include"],
+    visibility = _ROOT_VISIBILITY,
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_library(
+    name = "loomc",
+    srcs = [
+        "artifact.c",
+        "artifact_manifest.c",
+        "compile.c",
+        "compile_report.c",
+        "config.c",
+        "config_text.c",
+        "context.c",
+        "diagnostic.c",
+        "emit.c",
+        "interop.c",
+        "launch_config.c",
+        "link.c",
+        "link_dependency.c",
+        "link_index.c",
+        "link_materialization.c",
+        "module.c",
+        "module_bytecode.c",
+        "module_config.c",
+        "module_function.c",
+        "module_global.c",
+        "module_source.c",
+        "module_text.c",
+        "option_chain.c",
+        "pass_program.c",
+        "pass_run.c",
+        "pass_trace.c",
+        "product.c",
+        "request_index_overlay.c",
+        "result.c",
+        "source.c",
+        "target.c",
+        "task.c",
+        "workspace.c",
+        "//loom/binding/c:include/loomc/interop.h",
+    ],
+    hdrs = _PUBLIC_HDRS + [
+        "compile_report.h",
+        "config.h",
+        "context.h",
+        "diagnostic.h",
+        "emit.h",
+        "link_index.h",
+        "link_materialization.h",
+        "module.h",
+        "module_bytecode.h",
+        "option_chain.h",
+        "pass_program.h",
+        "pass_run.h",
+        "pass_trace.h",
+        "product.h",
+        "request_index_overlay.h",
+        "result.h",
+        "source.h",
+        "target.h",
+        "visibility.h",
+        "workspace.h",
+    ],
+    includes = [
+        ".",
+        "../include",
+    ],
+    visibility = _ROOT_VISIBILITY,
+    deps = [
+        ":base",
+        "//loom/src/loom/analysis:kernel_launch_config",
+        "//loom/src/loom/codegen:pass_environment",
+        "//loom/src/loom/codegen/low:launch_config_program",
+        "//loom/src/loom/codegen/low:repr",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/codegen/low/pipeline:legalizer_registry",
+        "//loom/src/loom/compile:request",
+        "//loom/src/loom/config:application",
+        "//loom/src/loom/config:schema",
+        "//loom/src/loom/config:text",
+        "//loom/src/loom/config:text_binding",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:json_sink",
+        "//loom/src/loom/error:renderer",
+        "//loom/src/loom/error:source",
+        "//loom/src/loom/format/bytecode:format",
+        "//loom/src/loom/format/bytecode:index",
+        "//loom/src/loom/format/bytecode:reader",
+        "//loom/src/loom/format/bytecode:selected_reader",
+        "//loom/src/loom/format/bytecode:writer",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/link:dependency_analysis",
+        "//loom/src/loom/link:dependency_report",
+        "//loom/src/loom/link:index_materializer",
+        "//loom/src/loom/link:materialization_environment",
+        "//loom/src/loom/link:module_index",
+        "//loom/src/loom/link:plan_materializer",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/pass:builtin_registry",
+        "//loom/src/loom/pass:environment",
+        "//loom/src/loom/pass:interpreter",
+        "//loom/src/loom/pass:pipeline_snapshot",
+        "//loom/src/loom/pass:program",
+        "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:report",
+        "//loom/src/loom/pass:tooling",
+        "//loom/src/loom/pass:trace",
+        "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/sanitizer:options",
+        "//loom/src/loom/target:function_version",
+        "//loom/src/loom/target:function_version_projection",
+        "//loom/src/loom/target:module_specialization",
+        "//loom/src/loom/target:pipeline",
+        "//loom/src/loom/target:predicate",
+        "//loom/src/loom/target:profile",
+        "//loom/src/loom/target:provider",
+        "//loom/src/loom/target:selection",
+        "//loom/src/loom/target:specialization",
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/target/reporting:artifact_manifest",
+        "//loom/src/loom/target/reporting:format",
+        "//loom/src/loom/target/reporting:report",
+        "//loom/src/loom/transforms/cleanup:configured",
+        "//loom/src/loom/transforms/cleanup:patterns",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/io:stream",
+    ],
+)
+
+iree_cmake_extra_content(
+    content = """
+if(IREE_TARGET_HAS_THREADS)
+""",
+    inline = True,
+)
+
+loom_cc_library(
+    name = "task_pool",
+    srcs = ["task_pool.c"],
+    hdrs = [
+        "//loom/binding/c:include/loomc/iree/task_pool.h",
+        "//loom/binding/c:include/loomc/task_pool.h",
+    ],
+    includes = ["../include"],
+    visibility = _ROOT_VISIBILITY,
+    deps = [
+        ":loomc",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/task",
+    ],
+)
+
+loom_cc_library(
+    name = "task_queue",
+    srcs = ["task_queue.c"],
+    hdrs = ["//loom/binding/c:include/loomc/task_queue.h"],
+    includes = ["../include"],
+    visibility = _ROOT_VISIBILITY,
+    deps = [
+        ":loomc",
+        ":task_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/task",
+    ],
+)
+
+iree_cmake_extra_content(
+    content = """
+endif()
+""",
+    inline = True,
+)

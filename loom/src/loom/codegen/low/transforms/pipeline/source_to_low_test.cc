@@ -49,7 +49,7 @@
 #include "loom/target/test/contracts/core_lower_rules.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/low_registry.h"
-#include "loom/target/test/lower.h"
+#include "loom/target/test/lower/registry.h"
 #include "loom/target/test/target_records.h"
 #include "loom/testing/module_ptr.h"
 #include "loom/transforms/symbol/inline_callables.h"

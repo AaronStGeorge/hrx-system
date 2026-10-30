@@ -48,6 +48,7 @@ from build_tools.devtools.source_lock import (
     NonEmptyTrackedFileSnapshot,
     source_mutation_lock,
 )
+from build_tools.lefthook import package_boundary
 
 BUILDIFIER_EXTENSIONS = {".bzl", ".BUILD"}
 BUILDIFIER_NAMES = {
@@ -1540,6 +1541,18 @@ def run_amdgpu_target_map(paths: list[str], fix: bool, verbose: bool) -> bool:
     return ok
 
 
+def run_package_boundary_check(paths: list[str], verbose: bool) -> bool:
+    return run_inline_check(
+        "Bazel package boundaries",
+        lambda: package_boundary.check_touched_packages(
+            REPO_ROOT,
+            paths,
+            verbose=verbose,
+        ),
+        verbose,
+    )
+
+
 def run_hygiene(paths: list[str], fix: bool, verbose: bool) -> bool:
     print_section("Hygiene")
     # The dependency graph spans the repository. Check its generated lock even
@@ -1565,6 +1578,7 @@ def run_hygiene(paths: list[str], fix: bool, verbose: bool) -> bool:
     )
     ok = run_inline_check("Watchwords", lambda: run_watchwords(paths), verbose) and ok
     ok = run_buildifier(paths, fix=fix, verbose=verbose) and ok
+    ok = run_package_boundary_check(paths, verbose=verbose) and ok
     ok = run_ruff(paths, fix=fix, verbose=verbose) and ok
     ok = run_clang_format(paths, fix=fix, verbose=verbose) and ok
     ok = run_amdgpu_target_map(paths, fix=fix, verbose=verbose) and ok
