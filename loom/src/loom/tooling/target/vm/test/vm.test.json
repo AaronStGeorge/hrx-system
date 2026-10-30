@@ -2,6 +2,146 @@
   "version": 1,
   "cases": [
     {
+      "name": "typed views preserve values, subranges, aliases, and lifetimes across host calls",
+      "steps": [
+        {
+          "name": "execute source",
+          "run": {
+            "tool": "loom-test",
+            "args": [
+              "{srcdir}/source_views.loom"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "\"case_count\":9",
+              "\"failed_sample_count\":0",
+              "\"skipped_case_count\":0",
+              "\"planning_issue_count\":0"
+            ]
+          }
+        },
+        {
+          "name": "benchmark the same calls",
+          "run": {
+            "tool": "loom-benchmark",
+            "args": [
+              "{srcdir}/source_views.loom",
+              "--iterations=1",
+              "--warmup-iterations=0"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "view_argument_benchmark",
+              "returned_subview_benchmark",
+              "dynamic_view_benchmark",
+              "mixed_owned_benchmark",
+              "multidimensional_view_benchmark",
+              "empty_dynamic_view_benchmark",
+              "owned_rank_zero_view_benchmark"
+            ]
+          }
+        },
+        {
+          "name": "link typed calls",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{srcdir}/source_views.loom",
+              "--mode=link",
+              "--root=@returned_subview_alias",
+              "--root=@dynamic_view_results",
+              "--root=@mixed_owned_results",
+              "--to=bc",
+              "--output={tmp}/views.loombc"
+            ]
+          }
+        },
+        {
+          "name": "execute linked bytecode",
+          "run": {
+            "tool": "loom-test",
+            "args": [
+              "{tmp}/views.loombc"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "\"case_count\":3",
+              "\"failed_sample_count\":0",
+              "\"skipped_case_count\":0",
+              "\"planning_issue_count\":0"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "typed view boundary diagnoses non_dense_input",
+      "run": {
+        "tool": "loom-test",
+        "args": [
+          "{srcdir}/source_views_invalid.loom",
+          "--case=non_dense_input"
+        ]
+      },
+      "exit": 1,
+      "stderr": {
+        "contains": [
+          "testbench buffer views require dense row-major storage without an encoding"
+        ]
+      }
+    },
+    {
+      "name": "typed view boundary diagnoses non_dense_result",
+      "run": {
+        "tool": "loom-test",
+        "args": [
+          "{srcdir}/source_views_invalid.loom",
+          "--case=non_dense_result"
+        ]
+      },
+      "exit": 1,
+      "stderr": {
+        "contains": [
+          "testbench buffer views require dense row-major storage without an encoding"
+        ]
+      }
+    },
+    {
+      "name": "typed view boundary diagnoses extent_outside",
+      "run": {
+        "tool": "loom-test",
+        "args": [
+          "{srcdir}/source_views_invalid.loom",
+          "--case=extent_outside"
+        ]
+      },
+      "exit": 1,
+      "stderr": {
+        "contains": [
+          "buffer view byte range [0, 2) exceeds source byte length 1"
+        ]
+      }
+    },
+    {
+      "name": "typed view boundary diagnoses offset_outside",
+      "run": {
+        "tool": "loom-test",
+        "args": [
+          "{srcdir}/source_views_invalid.loom",
+          "--case=offset_outside"
+        ]
+      },
+      "exit": 1,
+      "stderr": {
+        "contains": [
+          "returned VM view byte offset is outside its buffer"
+        ]
+      }
+    },
+    {
       "name": "ordinary math executes from source and linked bytecode without imports",
       "steps": [
         {

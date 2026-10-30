@@ -767,26 +767,6 @@ static iree_status_t loom_testbench_scenario_load_call(
                                              call->arguments);
 }
 
-static iree_status_t loom_testbench_scenario_store_call_results(
-    const loom_testbench_invocation_plan_t* invocation,
-    loom_testbench_product_call_t* call, loom_testbench_value_table_t* table) {
-  for (iree_host_size_t result_index = 0;
-       result_index < invocation->result_count; ++result_index) {
-    if (call->results[result_index].kind == LOOM_TESTBENCH_VALUE_KIND_NONE) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "scenario product result %zu was not assigned",
-                              result_index);
-    }
-  }
-  for (iree_host_size_t result_index = 0;
-       result_index < invocation->result_count; ++result_index) {
-    IREE_RETURN_IF_ERROR(loom_testbench_value_table_assign_move(
-        table, invocation->result_value_ids[result_index],
-        &call->results[result_index]));
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_testbench_scenario_load_batch_calls(
     const loom_testbench_invocation_plan_t* invocation,
     loom_testbench_scenario_trial_values_t* trial_values, bool use_oracle,
@@ -809,8 +789,9 @@ static iree_status_t loom_testbench_scenario_store_batch_results(
     loom_testbench_value_table_t* table =
         use_oracle ? &trial_values[call_index].oracle
                    : &trial_values[call_index].target;
-    IREE_RETURN_IF_ERROR(loom_testbench_scenario_store_call_results(
-        invocation, &calls[call_index], table));
+    IREE_RETURN_IF_ERROR(loom_testbench_value_table_assign_results(
+        table, invocation->result_count, invocation->result_value_ids,
+        calls[call_index].results));
   }
   return iree_ok_status();
 }

@@ -630,6 +630,12 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "view_boundary",
+    hdrs = ["view_boundary.h"],
+    deps = ["//loom/src/loom/ir:headers"],
+)
+
+loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
@@ -643,6 +649,7 @@ loom_cc_library(
         ":pipeline_options",
         ":profile",
         ":resolved_target",
+        ":view_boundary",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ir",

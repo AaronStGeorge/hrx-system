@@ -72,6 +72,8 @@ iree_execution_test_suite(
         "source_template.loom",
         "source_template_case.loom",
         "source_unavailable.loom",
+        "source_views.loom",
+        "source_views_invalid.loom",
     ],
     manifests = ["vm.test.json"],
     target_compatible_with = loom_config_compatible_with([

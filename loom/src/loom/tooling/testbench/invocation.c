@@ -273,26 +273,6 @@ static iree_status_t loom_testbench_load_invocation_values(
   return iree_ok_status();
 }
 
-static iree_status_t loom_testbench_store_invocation_results(
-    const loom_testbench_invocation_plan_t* invocation,
-    loom_testbench_value_table_t* table, loom_testbench_value_t* results) {
-  for (iree_host_size_t result_index = 0;
-       result_index < invocation->result_count; ++result_index) {
-    if (results[result_index].kind == LOOM_TESTBENCH_VALUE_KIND_NONE) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "invocation result %zu was not assigned",
-                              result_index);
-    }
-  }
-  for (iree_host_size_t result_index = 0;
-       result_index < invocation->result_count; ++result_index) {
-    IREE_RETURN_IF_ERROR(loom_testbench_value_table_assign_move(
-        table, invocation->result_value_ids[result_index],
-        &results[result_index]));
-  }
-  return iree_ok_status();
-}
-
 iree_status_t loom_testbench_run_prepared_invocation(
     loom_testbench_invocation_executor_t* executor,
     const loom_testbench_prepared_invocation_t* prepared,
@@ -322,8 +302,9 @@ iree_status_t loom_testbench_run_prepared_invocation(
   loom_testbench_reset_values(executor->workloads, invocation->workload_count);
   loom_testbench_reset_values(executor->inputs, invocation->input_count);
   if (iree_status_is_ok(status) && executor->issue_count == 0) {
-    status = loom_testbench_store_invocation_results(invocation, table,
-                                                     executor->results);
+    status = loom_testbench_value_table_assign_results(
+        table, invocation->result_count, invocation->result_value_ids,
+        executor->results);
   }
   loom_testbench_reset_values(executor->results, invocation->result_count);
   return status;

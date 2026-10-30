@@ -38,6 +38,7 @@
 #include "loom/target/reporting/artifact_manifest.h"
 #include "loom/target/reporting/report.h"
 #include "loom/target/resolved_target.h"
+#include "loom/target/view_boundary.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -80,15 +81,6 @@ typedef enum loom_target_call_policy_e {
   // normalization.
   LOOM_TARGET_CALL_POLICY_REQUIRE_INLINE = 1,
 } loom_target_call_policy_t;
-
-// Physical representation policy for source view values that survive across
-// function and CFG boundaries.
-typedef enum loom_target_view_boundary_carrier_e {
-  // Preserve one semantic view value for target-selected direct lowering.
-  LOOM_TARGET_VIEW_BOUNDARY_CARRIER_DIRECT = 0,
-  // Expand the view into its materializing buffer and root-relative offset.
-  LOOM_TARGET_VIEW_BOUNDARY_CARRIER_BUFFER_OFFSET = 1,
-} loom_target_view_boundary_carrier_t;
 
 // Physical carrier for lane predicates that cross loop boundaries.
 typedef enum loom_target_loop_predicate_carrier_e {
