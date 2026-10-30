@@ -312,6 +312,25 @@ loom_value_id_t Vectors::constant(const cxx::ConstValue& value,
                                   const cxx::Type* source_type,
                                   cxx::AST* owner) {
   const auto& list = *std::get<std::shared_ptr<cxx::InitializerList>>(value);
+  auto* vector = types_.native_vector(source_type);
+  auto output = types_.get(source_type, owner);
+  if (loom_scalar_type_is_integer(loom_type_element_type(output))) {
+    if (list.elements.size() > vector->elementCount()) {
+      diagnostics_.reject(unit_, owner, "too many vector initializer lanes");
+    }
+    std::vector<int64_t> values;
+    values.reserve(vector->elementCount());
+    for (const auto& element : list.elements) {
+      values.push_back(loom_attr_as_i64(scalars_.constant_attribute(
+          std::get<0>(element), vector->elementType(), owner)));
+    }
+    values.resize(vector->elementCount(), 0);
+    loom_op_t* op;
+    check(loom_vector_constanti_build(&builder_, values.data(), values.size(),
+                                      output, locations_.get(owner), &op));
+    return loom_vector_constanti_result(op);
+  }
+
   std::vector<loom_value_id_t> elements;
   elements.reserve(list.elements.size());
   for (const auto& [element, element_type] : list.elements) {

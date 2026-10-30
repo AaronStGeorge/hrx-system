@@ -144,11 +144,7 @@ Int4 entry() { return converted; }
 
 // ----
 func.def public @entry() -> (vector<4xi32>) {
-  %1 = scalar.constant 1 : i32
-  %2 = scalar.constant -2 : i32
-  %3 = scalar.constant 3 : i32
-  %4 = scalar.constant 0 : i32
-  %converted = vector.from_elements %1, %2, %3, %4 : vector<4xi32>
+  %converted = vector.constanti [1, -2, 3, 0] : vector<4xi32>
   func.return %converted : vector<4xi32>
 }
 
@@ -229,11 +225,7 @@ UInt4 entry() { return converted; }
 
 // ----
 func.def public @entry() -> (vector<4xi32>) {
-  %1 = scalar.constant 0 : i32
-  %2 = scalar.constant 1 : i32
-  %3 = scalar.constant 257 : i32
-  %4 = scalar.constant -2147483648 : i32
-  %converted = vector.from_elements %1, %2, %3, %4 : vector<4xi32>
+  %converted = vector.constanti [0, 1, 257, -2147483648] : vector<4xi32>
   func.return %converted : vector<4xi32>
 }
 

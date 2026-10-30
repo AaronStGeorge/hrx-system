@@ -156,11 +156,7 @@ func.def public @preserve_width(%value: vector<4xi32>) -> (vector<4xi32>) {
 }
 
 func.def public @folded() -> (vector<4xi32>) {
-  %34 = scalar.constant 1 : i32
-  %35 = scalar.constant -2 : i32
-  %36 = scalar.constant 3 : i32
-  %37 = scalar.constant 0 : i32
-  %converted = vector.from_elements %34, %35, %36, %37 : vector<4xi32>
+  %converted = vector.constanti [1, -2, 3, 0] : vector<4xi32>
   func.return %converted : vector<4xi32>
 }
 

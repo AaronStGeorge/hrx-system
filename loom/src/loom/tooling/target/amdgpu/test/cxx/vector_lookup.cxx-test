@@ -77,22 +77,22 @@ low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 0, direc
   %position = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %97 = v_mov_b32 3215825025
-  %98 = v_mov_b32 4142587343
-  %99 = v_mov_b32 639175937
-  %100 = v_mov_b32 1901675829
-  %106 = v_mov_b32 252645135
-  %107 = v_lshlrev_b32_src0_inline %position, 2
-  %108 = global_load_b32_saddr %107, %input
-  %indices = v_and_b32 %108, %106
-  %114 = v_and_b32_lit %indices, 117901063
-  %115 = v_perm_b32 %98, %97, %114
-  %116 = v_perm_b32 %100, %99, %114
-  %117 = v_and_b32_lit %indices, 134744072
-  %118 = v_lshrrev_b32_src0_inline %117, 1
-  %119 = v_or_b32_lit %118, 50462976
-  %result = v_perm_b32 %116, %115, %119
-  global_store_b32_saddr %107, %result, %output
+  %98 = v_mov_b32 3215825025
+  %99 = v_mov_b32 4142587343
+  %100 = v_mov_b32 639175937
+  %101 = v_mov_b32 1901675829
+  %107 = v_mov_b32 252645135
+  %108 = v_lshlrev_b32_src0_inline %position, 2
+  %109 = global_load_b32_saddr %108, %input
+  %indices = v_and_b32 %109, %107
+  %115 = v_and_b32_lit %indices, 117901063
+  %116 = v_perm_b32 %99, %98, %115
+  %117 = v_perm_b32 %101, %100, %115
+  %118 = v_and_b32_lit %indices, 134744072
+  %119 = v_lshrrev_b32_src0_inline %118, 1
+  %120 = v_or_b32_lit %119, 50462976
+  %result = v_perm_b32 %117, %116, %120
+  global_store_b32_saddr %108, %result, %output
   return
 }
 

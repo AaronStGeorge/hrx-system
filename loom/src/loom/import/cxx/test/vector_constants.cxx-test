@@ -6,11 +6,7 @@ Int4 entry() { return values; }
 
 // ----
 func.def public @entry() -> (vector<4xi32>) {
-  %1 = scalar.constant 1 : i32
-  %2 = scalar.constant 2 : i32
-  %3 = scalar.constant 0 : i32
-  %4 = scalar.constant 0 : i32
-  %values = vector.from_elements %1, %2, %3, %4 : vector<4xi32>
+  %values = vector.constanti [1, 2, 0, 0] : vector<4xi32>
   func.return %values : vector<4xi32>
 }
 
@@ -22,11 +18,7 @@ Int4 entry() { return values; }
 
 // ----
 func.def public @entry() -> (vector<4xi32>) {
-  %1 = scalar.constant 0 : i32
-  %2 = scalar.constant 0 : i32
-  %3 = scalar.constant 0 : i32
-  %4 = scalar.constant 0 : i32
-  %values = vector.from_elements %1, %2, %3, %4 : vector<4xi32>
+  %values = vector.constanti [0, 0, 0, 0] : vector<4xi32>
   func.return %values : vector<4xi32>
 }
 
@@ -40,18 +32,22 @@ Int4 entry() { return first + splat; }
 
 // ----
 func.def public @entry() -> (vector<4xi32>) {
-  %1 = scalar.constant 7 : i32
-  %2 = scalar.constant 0 : i32
-  %3 = scalar.constant 0 : i32
-  %4 = scalar.constant 0 : i32
-  %first = vector.from_elements %1, %2, %3, %4 : vector<4xi32>
-  %6 = scalar.constant 9 : i32
-  %7 = scalar.constant 9 : i32
-  %8 = scalar.constant 9 : i32
-  %9 = scalar.constant 9 : i32
-  %splat = vector.from_elements %6, %7, %8, %9 : vector<4xi32>
-  %11 = vector.addi %first, %splat : vector<4xi32>
-  func.return %11 : vector<4xi32>
+  %first = vector.constanti [7, 0, 0, 0] : vector<4xi32>
+  %splat = vector.constanti [9, 9, 9, 9] : vector<4xi32>
+  %3 = vector.addi %first, %splat : vector<4xi32>
+  func.return %3 : vector<4xi32>
+}
+
+// ====
+using Bytes4 = unsigned char __attribute__((ext_vector_type(4)));
+constexpr Bytes4 values{0, 127, 128, 255};
+static_assert(values[2] == 128 && values[3] == 255);
+Bytes4 entry() { return values; }
+
+// ----
+func.def public @entry() -> (vector<4xi8>) {
+  %values = vector.constanti [0, 127, -128, -1] : vector<4xi8>
+  func.return %values : vector<4xi8>
 }
 
 // ====
@@ -91,13 +87,22 @@ int entry() { return values[0]; }
 
 // ----
 func.def public @entry() -> (i32) {
-  %1 = scalar.constant 1 : i32
+  %values = vector.constanti [1, 2, 3, 4] : vector<4xi32>
+  %2 = scalar.constant 0 : i32
+  %3 = index.cast %2 : i32 to index
+  %4 = vector.extract %values[%3] : vector<4xi32> -> i32
+  func.return %4 : i32
+}
+
+// ====
+using Int4 = int __attribute__((ext_vector_type(4)));
+Int4 entry(int input) { return Int4{input, 2, 3, 4}; }
+
+// ----
+func.def public @entry(%input: i32) -> (vector<4xi32>) {
   %2 = scalar.constant 2 : i32
   %3 = scalar.constant 3 : i32
   %4 = scalar.constant 4 : i32
-  %values = vector.from_elements %1, %2, %3, %4 : vector<4xi32>
-  %6 = scalar.constant 0 : i32
-  %7 = index.cast %6 : i32 to index
-  %8 = vector.extract %values[%7] : vector<4xi32> -> i32
-  func.return %8 : i32
+  %5 = vector.from_elements %input, %2, %3, %4 : vector<4xi32>
+  func.return %5 : vector<4xi32>
 }
