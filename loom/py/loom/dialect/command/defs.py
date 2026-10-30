@@ -363,8 +363,8 @@ def _schedule(name: str, doc: str) -> Op:
                 terminator="command.yield",
             ),
         ],
+        # Composition owns ordering; nested operations carry memory effects.
         traits=[
-            UNKNOWN_EFFECTS,
             COMMAND_EFFECT,
             ImplicitTerminator("command.yield"),
         ],

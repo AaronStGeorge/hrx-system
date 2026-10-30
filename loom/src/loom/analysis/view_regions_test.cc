@@ -17,6 +17,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/channel/ops.h"
+#include "loom/ops/command/ops.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/global/ops.h"
 #include "loom/ops/index/ops.h"
@@ -42,6 +43,7 @@ class ViewRegionsTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_type_registry_register_common_types(&context_));
     RegisterDialect(LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_CHANNEL, loom_channel_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_COMMAND, loom_command_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
@@ -315,7 +317,7 @@ class ViewRegionsTest : public ::testing::Test {
 
   void Analyze(loom_value_fact_table_t* facts,
                loom_view_region_table_t* out_table) {
-    IREE_ASSERT_OK(loom_local_value_domain_acquire_for_region(
+    IREE_ASSERT_OK(loom_local_value_domain_acquire_for_region_tree(
         module_, loom_func_like_body(function_), &analysis_arena_,
         &value_domain_));
     loom_symbolic_expr_context_initialize(
@@ -824,6 +826,56 @@ TEST_F(ViewRegionsTest, ReadOnlyStorageRequiresAliasOrConstantProof) {
   EXPECT_FALSE(RootIsStable(&table, unmarked));
   EXPECT_TRUE(RootIsStable(&table, immutable));
   EXPECT_FALSE(RootIsStable(&table, unread));
+}
+
+TEST_F(ViewRegionsTest, SchedulesPreserveTheirChildMemoryEffects) {
+  const loom_value_id_t input =
+      BuildView(BuildNoAliasBuffer(DefineBufferArg()));
+  const loom_value_id_t samples = BuildNoAliasBuffer(DefineBufferArg());
+  const loom_value_id_t observed_samples = BuildReadOnlyView(samples);
+  const loom_value_id_t offset =
+      loom_index_constant_result(BuildOffsetConstant(0));
+  loom_op_t* sample = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(
+      &builder_, samples, offset,
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I64,
+                          loom_dim_pack_static(1), 0),
+      LOOM_LOCATION_UNKNOWN, &sample));
+
+  auto build_schedule = [&](auto build, auto yield, bool captures_clock) {
+    loom_op_t* schedule = nullptr;
+    IREE_ASSERT_OK(build(&builder_, LOOM_LOCATION_UNKNOWN, &schedule));
+    loom_builder_t body_builder;
+    loom_builder_initialize(
+        module_, &module_->arena,
+        loom_region_entry_block(loom_op_regions(schedule)[0]), &body_builder);
+    const int64_t indices[] = {0};
+    loom_op_t* load = nullptr;
+    IREE_ASSERT_OK(loom_vector_load_build(&body_builder, 0, 0, input, nullptr,
+                                          0, indices, 1, 0, 0, VectorType1D(4),
+                                          LOOM_LOCATION_UNKNOWN, &load));
+    if (captures_clock) {
+      loom_op_t* capture = nullptr;
+      IREE_ASSERT_OK(loom_command_timestamp_build(
+          &body_builder, loom_buffer_view_result(sample), LOOM_LOCATION_UNKNOWN,
+          &capture));
+    }
+    loom_op_t* terminator = nullptr;
+    IREE_ASSERT_OK(yield(&body_builder, LOOM_LOCATION_UNKNOWN, &terminator));
+  };
+  build_schedule(loom_command_serial_build, loom_command_yield_build, true);
+  build_schedule(loom_command_concurrent_build, loom_command_yield_build, true);
+  build_schedule(loom_kernel_launch_serial_build,
+                 loom_kernel_launch_yield_build, false);
+  build_schedule(loom_kernel_launch_concurrent_build,
+                 loom_kernel_launch_yield_build, false);
+
+  loom_value_fact_table_t facts = {};
+  ComputeFacts(&facts);
+  loom_view_region_table_t table = {};
+  Analyze(&facts, &table);
+  EXPECT_TRUE(RootIsStable(&table, input));
+  EXPECT_FALSE(RootIsStable(&table, observed_samples));
 }
 
 class AtomicStorageStabilityTest

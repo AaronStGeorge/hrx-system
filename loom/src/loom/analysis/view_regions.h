@@ -262,6 +262,7 @@ iree_status_t loom_view_region_table_derive_element_region(
 // values, and derives per-view/root accesses and memory-space interference.
 // Retains cross-execution value invariance when scoped writes require it.
 // The result covers nested control flow and is invalidated by IR mutation.
+// The supplied value domain must cover the complete region tree.
 iree_status_t loom_view_region_table_analyze(loom_view_region_table_t* table);
 
 // Returns analyzed aggregate access flags through |root_value_id| in constant

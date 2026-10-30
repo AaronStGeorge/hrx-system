@@ -2256,8 +2256,8 @@ def _launch_schedule(name: str, doc: str) -> Op:
                 terminator="kernel.launch.yield",
             ),
         ],
+        # Composition owns ordering; nested operations carry memory effects.
         traits=[
-            UNKNOWN_EFFECTS,
             COMMAND_EFFECT,
             ImplicitTerminator("kernel.launch.yield"),
             NoAncestor("kernel.def"),

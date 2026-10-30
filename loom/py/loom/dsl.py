@@ -1306,8 +1306,9 @@ UNKNOWN_EFFECTS = Trait("UnknownEffects")
 # does not imply memory access, ordering, non-determinism, or convergence.
 OBSERVABLE_EFFECT = Trait("ObservableEffect")
 # Op represents an explicit command-program effect such as dispatch or schedule
-# composition. The op must independently declare its exact or unknown effects;
-# this trait classifies those effects instead of replacing them.
+# composition. Leaf ops declare their exact or unknown effects; structural
+# ops inherit their regions' effects. This trait classifies effects instead
+# of replacing them.
 COMMAND_EFFECT = Trait("CommandEffect")
 # Op orders memory accesses without directly reading or writing a resource.
 # Fences are observable side effects but do not alias every memory operand;
@@ -5548,22 +5549,27 @@ def _validate_ownership_effects(
 def _validate_no_effect_conflicts(
     op_name: str,
     traits: tuple[Trait, ...],
+    regions: tuple[RegionDef, ...],
 ) -> None:
     """Validate trait-only ops for effect-related conflicts."""
     trait_names = {t.name for t in traits}
-    if "CommandEffect" in trait_names and not trait_names.intersection(
-        {
-            "UnknownEffects",
-            "ObservableEffect",
-            "MemoryFence",
-            "NonDeterministic",
-            "Convergent",
-        }
+    if (
+        "CommandEffect" in trait_names
+        and not regions
+        and not trait_names.intersection(
+            {
+                "UnknownEffects",
+                "ObservableEffect",
+                "MemoryFence",
+                "NonDeterministic",
+                "Convergent",
+            }
+        )
     ):
         raise ValueError(
-            f"Op '{op_name}': COMMAND_EFFECT requires explicit or unknown "
-            "observable effects. The trait classifies effects but does not "
-            "declare them."
+            f"Op '{op_name}': COMMAND_EFFECT requires regions or explicit or "
+            "unknown observable effects. The trait classifies effects but "
+            "does not declare them."
         )
     if "CompileTimeOnly" in trait_names:
         if "Hint" in trait_names:
@@ -6975,7 +6981,7 @@ class Op:
         if frozen_effects:
             _validate_effects(name, frozen_effects, frozen_operands, tuple(traits))
         else:
-            _validate_no_effect_conflicts(name, tuple(traits))
+            _validate_no_effect_conflicts(name, tuple(traits), frozen_regions)
         if frozen_ownership_effects:
             _validate_ownership_effects(
                 name,
@@ -7108,7 +7114,9 @@ class Op:
 
     @property
     def is_pure(self) -> bool:
-        """True if the op has no memory effects and is deterministic.
+        """True if the op has no intrinsic memory effects and is deterministic.
+
+        Nested regions retain their own effects independently of this property.
 
         An op is pure if it explicitly declares traits=[PURE], or if it
         has no effects, no ownership effects, no ALLOCATES results, and no HINT,
