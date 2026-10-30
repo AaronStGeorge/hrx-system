@@ -151,6 +151,8 @@ iree_cc_test(
     symbol_isolation_test
   SRCS
     "symbol_isolation_test.cc"
+  LINKOPTS
+    "-Wl,--export-dynamic"
   DEPS
     iree::base::base
     iree::testing::gtest
