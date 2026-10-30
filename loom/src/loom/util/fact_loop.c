@@ -747,11 +747,25 @@ static iree_status_t loom_value_fact_table_compute_counted_loop_summary(
   bool converged = false;
   bool exact_replayed = false;
   loom_value_fact_loop_sparse_body_t sparse_body = {0};
-  bool use_sparse_body = false;
+  const bool owns_sparse_permission = table->sparse_first_owner == loop.op;
+  const bool sparse_first = owns_sparse_permission &&
+                            loom_value_fact_loop_build_sparse_body(
+                                table, module, body, carried_arg_offset,
+                                count, &sparse_body);
+  bool use_sparse_body = sparse_first;
   for (uint32_t feedback_round = 0;
        feedback_round < LOOM_VALUE_FACT_LOOP_MAX_ITERATIONS; ++feedback_round) {
     IREE_RETURN_IF_ERROR(loom_value_fact_table_define_loop_entry_args(
         table, module, body, carried_arg_offset, current_facts, count));
+    const bool first_sparse_round = feedback_round == 0 && sparse_first;
+    if (first_sparse_round) {
+      // The previous complete body solve owns independent rows. Refresh the
+      // counted domain explicitly because the full region walk usually seeds
+      // it before the carried feedback equations run.
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_seed_loop_iv_arg(
+          table, module, loom_region_const_entry_block(body), loop.op));
+      table->replaying = true;
+    }
     IREE_RETURN_IF_ERROR(use_sparse_body
                              ? loom_value_fact_loop_refresh_sparse_body(
                                    table, module, &sparse_body)
