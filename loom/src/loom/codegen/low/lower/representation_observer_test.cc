@@ -20,7 +20,7 @@
 #include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/test/low_registry.h"
-#include "loom/target/test/lower.h"
+#include "loom/target/test/lower/registry.h"
 #include "loom/target/test/target_records.h"
 #include "loom/util/fact_table.h"
 

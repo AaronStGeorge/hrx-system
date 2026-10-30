@@ -11,8 +11,8 @@
 // tests exercise a real descriptor-driven target without linking optional
 // production backends.
 
-#ifndef LOOM_TARGET_TEST_LOWER_H_
-#define LOOM_TARGET_TEST_LOWER_H_
+#ifndef LOOM_TARGET_TEST_LOWER_REGISTRY_H_
+#define LOOM_TARGET_TEST_LOWER_REGISTRY_H_
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/lower/lower.h"
@@ -62,4 +62,4 @@ void loom_test_low_lower_policy_registry_initialize(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_TEST_LOWER_H_
+#endif  // LOOM_TARGET_TEST_LOWER_REGISTRY_H_

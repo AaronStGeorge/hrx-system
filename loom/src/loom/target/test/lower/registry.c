@@ -4,13 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/target/test/lower/registry.h"
+
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/target/registers.h"
 #include "loom/target/test/contracts/core.h"
 #include "loom/target/test/contracts/core_lower_rules.h"
 #include "loom/target/test/descriptors.h"
-#include "loom/target/test/lower.h"
 
 //===----------------------------------------------------------------------===//
 // Type mapping

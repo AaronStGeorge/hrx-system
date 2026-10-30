@@ -6,7 +6,7 @@
 
 #include "iree/testing/gtest.h"
 #include "loom/codegen/low/lower/lower.h"
-#include "loom/target/test/lower.h"
+#include "loom/target/test/lower/registry.h"
 
 namespace loom {
 namespace {
