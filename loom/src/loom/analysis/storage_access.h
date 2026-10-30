@@ -31,6 +31,16 @@ enum loom_storage_access_effect_bits_e {
 };
 typedef uint8_t loom_storage_access_effects_t;
 
+// Envelope of accesses reached through one reference. This describes proven
+// confinement, not an exact byte interval or a restriction on derived views.
+enum loom_storage_access_footprint_e {
+  // Every reached access stays within this reference's current byte span.
+  LOOM_STORAGE_ACCESS_FOOTPRINT_REFERENCE = 0,
+  // Accesses may reach elsewhere in the reference's backing storage.
+  LOOM_STORAGE_ACCESS_FOOTPRINT_STORAGE = 1,
+};
+typedef uint8_t loom_storage_access_footprint_t;
+
 typedef struct loom_storage_reference_t loom_storage_reference_t;
 
 typedef struct loom_storage_access_use_t {
@@ -66,6 +76,11 @@ struct loom_storage_reference_t {
   uint32_t index;
   // Completed union of read, write, and escape effects through all uses.
   loom_storage_access_effects_t effects;
+  // Completed access envelope relative to this reference's current span.
+  loom_storage_access_footprint_t footprint;
+  // Envelope required when transporting this reference's accesses to origins.
+  // Value-preserving relations retain the span; projections may change it.
+  loom_storage_access_footprint_t origin_footprint;
   // True while this node awaits monotone effect propagation.
   bool queued;
   // Next node in the construction worklist.
@@ -112,7 +127,10 @@ typedef struct loom_storage_access_scope_t {
 } loom_storage_access_scope_t;
 
 // Memory effects projected through one call boundary. Reference arguments
-// retain their own effects; unbounded accesses are not confined to arguments.
+// retain their own effects and proven footprint through all derived aliases.
+// Effect flags alone do not bound accesses to an argument view's current byte
+// span: a callee may move that view within its backing storage. Unbounded
+// accesses are not confined to arguments at all.
 typedef struct loom_storage_access_call_t {
   // Completed formal references in call argument order, with NULL entries for
   // scalar arguments. NULL when no bounded argument summary is needed or known.

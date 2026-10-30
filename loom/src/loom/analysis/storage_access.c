@@ -234,13 +234,23 @@ static iree_status_t loom_storage_access_reference(
   return iree_ok_status();
 }
 
-static void loom_storage_access_include(loom_storage_access_state_t* state,
-                                        loom_storage_reference_t* reference,
-                                        loom_storage_access_effects_t effects) {
-  if ((reference->effects | effects) == reference->effects) {
+static void loom_storage_access_include(
+    loom_storage_access_state_t* state, loom_storage_reference_t* reference,
+    loom_storage_access_effects_t effects,
+    loom_storage_access_footprint_t footprint) {
+  if (!effects) {
+    return;
+  }
+  if (iree_any_bit_set(effects, LOOM_STORAGE_ACCESS_ESCAPE)) {
+    footprint = LOOM_STORAGE_ACCESS_FOOTPRINT_STORAGE;
+  }
+  footprint = iree_max(reference->footprint, footprint);
+  if ((reference->effects | effects) == reference->effects &&
+      reference->footprint == footprint) {
     return;
   }
   reference->effects |= effects;
+  reference->footprint = footprint;
   if (reference->queued) {
     return;
   }
@@ -252,6 +262,14 @@ static void loom_storage_access_include(loom_storage_access_state_t* state,
     state->first_effect = reference;
   }
   state->last_effect = reference;
+}
+
+static void loom_storage_access_include_origin(
+    loom_storage_access_state_t* state, loom_storage_reference_t* origin,
+    const loom_storage_reference_t* destination) {
+  loom_storage_access_include(
+      state, origin, destination->effects,
+      iree_max(destination->footprint, destination->origin_footprint));
 }
 
 enum loom_storage_reference_edge_flag_bits_e {
@@ -281,7 +299,7 @@ static iree_status_t loom_storage_access_add_edge(
   }
   // A new caller can depend on an already completed callee. Retain its current
   // effects as well as the edge carrying any remaining construction updates.
-  loom_storage_access_include(state, origin, destination->effects);
+  loom_storage_access_include_origin(state, origin, destination);
   return iree_ok_status();
 }
 
@@ -316,7 +334,8 @@ static iree_status_t loom_storage_access_record_use(
     effects =
         (effects & ~LOOM_STORAGE_ACCESS_ASYNC) | LOOM_STORAGE_ACCESS_ESCAPE;
   }
-  loom_storage_access_include(state, reference, effects);
+  loom_storage_access_include(state, reference, effects,
+                              LOOM_STORAGE_ACCESS_FOOTPRINT_REFERENCE);
   return iree_ok_status();
 }
 
@@ -488,6 +507,14 @@ static iree_status_t loom_storage_access_visit(
           state, relation.source_value_id, &origin));
       IREE_RETURN_IF_ERROR(loom_storage_access_reference(
           state, relation.destination_value_id, &destination));
+      // Reference projections and storage ties establish shared backing, not
+      // equal byte spans. All other reference relations transport the value
+      // itself. Retain this contract where the relation is already owned;
+      // unused projections do not widen an origin's accesses.
+      if (relation.kind == LOOM_VALUE_RELATION_REFERENCE_SOURCE ||
+          relation.kind == LOOM_VALUE_RELATION_TIED_RESULT) {
+        destination->origin_footprint = LOOM_STORAGE_ACCESS_FOOTPRINT_STORAGE;
+      }
       IREE_RETURN_IF_ERROR(loom_storage_access_add_edge(
           state, origin, destination,
           LOOM_STORAGE_REFERENCE_EDGE_LOCAL_TRANSPORT));
@@ -542,7 +569,8 @@ static iree_status_t loom_storage_access_build_pending(
       for (uint16_t i = 0; i < entry->arg_count; ++i) {
         if (state->current->graph.arguments[i]) {
           loom_storage_access_include(state, state->current->graph.arguments[i],
-                                      LOOM_STORAGE_ACCESS_ESCAPE);
+                                      LOOM_STORAGE_ACCESS_ESCAPE,
+                                      LOOM_STORAGE_ACCESS_FOOTPRINT_STORAGE);
         }
       }
     }
@@ -578,7 +606,7 @@ static void loom_storage_access_solve(loom_storage_access_state_t* state) {
     reference->queued = false;
     for (const loom_storage_reference_edge_t* edge = reference->origins; edge;
          edge = edge->next_origin) {
-      loom_storage_access_include(state, edge->origin, reference->effects);
+      loom_storage_access_include_origin(state, edge->origin, reference);
     }
   }
 }
