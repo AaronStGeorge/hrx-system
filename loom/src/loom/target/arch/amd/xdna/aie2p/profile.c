@@ -30,7 +30,7 @@ const loom_target_profile_type_t loom_aie2p_target_profile_type = {
     .project_facts = loom_aie2p_target_profile_project_facts,
 };
 
-#include "loom/target/arch/amd/xdna/device/aie2p_profile_tables.inl"
+#include "loom/target/arch/amd/xdna/aie2p_profile_tables.inl"
 
 static const loom_aie2p_target_profile_t kCoreProfile = {
     .base =

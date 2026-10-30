@@ -24,7 +24,7 @@ typedef uint16_t loom_xdna_register_field_id_t;
 enum {
   LOOM_XDNA_REGISTER_FIELD_INVALID = 0,
 #define LOOM_XDNA_REGISTER_FIELD(symbol, value) symbol = value,
-#include "loom/target/arch/amd/xdna/array/register_field_ids.inl"
+#include "loom/target/arch/amd/xdna/array_register_field_ids.inl"
 #undef LOOM_XDNA_REGISTER_FIELD
 };
 

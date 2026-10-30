@@ -6,7 +6,7 @@
 
 #include "loom/target/arch/amd/xdna/array/facts.h"
 
-#include "loom/target/arch/amd/xdna/array/facts_tables.inl"
+#include "loom/target/arch/amd/xdna/array_facts_tables.inl"
 
 const loom_xdna_array_family_t* loom_xdna_npu2_array_family(void) {
   return &kLoomXdnaNpu2ArrayFamily;
