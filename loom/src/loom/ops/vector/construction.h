@@ -85,6 +85,15 @@ iree_status_t loom_vector_insert_combine_elements(loom_op_t* op,
                                                   loom_rewriter_t* rewriter,
                                                   bool* out_changed);
 
+// Rewrites the maximal single-consumer chain of static scalar inserts rooted
+// at a typed vector literal as one vector.from_elements containing the final
+// ordered lanes. |construction_op| may be the literal or any insert in its
+// chain. The caller owns the target cost decision; this helper is not
+// registered for target-independent canonicalization. Shared bases, dynamic
+// coordinates, and subvector inserts remain unchanged.
+iree_status_t loom_vector_literal_insert_chain_to_elements_rewrite_op(
+    loom_op_t* construction_op, loom_rewriter_t* rewriter, bool* out_rewritten);
+
 // Forwards the sole result to an existing value and erases the construction.
 iree_status_t loom_vector_replace_single_result_with_value(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t replacement);

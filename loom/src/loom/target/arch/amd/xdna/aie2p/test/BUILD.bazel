@@ -182,6 +182,7 @@ loom_check_test_suite(
         "vector_extract_shape.loom-test",
         "vector_float_extrema.loom-test",
         "vector_insert_packetization.loom-test",
+        "vector_literal_patch_selection.loom-test",
         "vector_memory_packetization.loom-test",
         "vector_reduce_axes.loom-test",
     ],
