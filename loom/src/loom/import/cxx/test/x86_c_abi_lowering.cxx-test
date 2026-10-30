@@ -185,3 +185,20 @@ extern "C" Words4 vector_identity(Words4 value) { return value; }
 low.func.def public target<x86.avx2.core> abi(object_function) abi_layout({signature = (vector<16xi8>) -> (vector<16xi8>), sysv = {argument_offsets = [-1], argument_registers = [0], result_registers = [0], stack_alignment = 0, stack_bytes = 0}}) @vector_identity(%value: reg<x86.xmm>) -> (reg<x86.xmm>) asm {
   return %value
 }
+
+// ====
+
+using Int8 = int __attribute__((ext_vector_type(8)));
+
+Int8 construct_mixed(int live) {
+  return Int8{11, 13, 17, live, 23, 29, 31, 37};
+}
+
+// ----
+low.func.def public target<x86.avx2.core> abi(object_function) abi_layout({signature = (i32) -> (vector<8xi32>)}) @construct_mixed(%live: reg<x86.gpr32>) -> (reg<x86.ymm>) asm {
+  %15 = avx2.vmovdqu.rodata.ymm @__low_rodata_d8227f88
+  %16 = vextractf128.xmm %15, 0
+  %17 = vpinsrd.xmm %16, %live, 3
+  %18 = vinsertf128.ymm.xmm %15, %17, 0
+  return %18
+}

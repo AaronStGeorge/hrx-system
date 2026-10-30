@@ -1,0 +1,120 @@
+// AIE scalar-push construction consumes the final lane sequence directly.
+// A typed literal with static live patches therefore emits the same Low shape
+// as an authored vector.from_elements and never materializes overwritten lanes.
+// RUN: emit source-low target=amd.xdna.aie2p:core output=low
+
+func.def @direct_i32x8(%live: i32) -> (vector<8xi32>) {
+  %lane0 = scalar.constant 11 : i32
+  %lane1 = scalar.constant 13 : i32
+  %lane2 = scalar.constant 17 : i32
+  %lane4 = scalar.constant 23 : i32
+  %lane5 = scalar.constant 29 : i32
+  %lane6 = scalar.constant 31 : i32
+  %lane7 = scalar.constant 37 : i32
+  %result = vector.from_elements %lane0, %lane1, %lane2, %live, %lane4, %lane5, %lane6, %lane7 : vector<8xi32>
+  func.return %result : vector<8xi32>
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @direct_i32x8(%live: reg<aie2p.er>) -> (reg<aie2p.vec256 x2>) asm {
+  %lane0 = mov.short 11
+  %lane1 = mov.short 13
+  %lane2 = mov.short 17
+  %lane4 = mov.short 23
+  %lane5 = mov.short 29
+  %lane6 = mov.short 31
+  %lane7 = mov.short 37
+  %19 = vbcst.32 %lane7
+  %20 = vpush.lo.32 %lane6, %19
+  %21 = vpush.lo.32 %lane5, %20
+  %22 = vpush.lo.32 %lane4, %21
+  %23 = vpush.lo.32 %live, %22
+  %24 = vpush.lo.32 %lane2, %23
+  %25 = vpush.lo.32 %lane1, %24
+  %result = vpush.lo.32 %lane0, %25
+  return %result
+}
+
+// ====
+
+func.def @literal_patch_i32x8(%live: i32) -> (vector<8xi32>) {
+  %base = vector.constanti [11, 13, 17, 19, 23, 29, 31, 37] : vector<8xi32>
+  %result = vector.insert %live into %base[3] : i32, vector<8xi32>
+  func.return %result : vector<8xi32>
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @literal_patch_i32x8(%live: reg<aie2p.er>) -> (reg<aie2p.vec256 x2>) asm {
+  %14 = mov.short 11
+  %15 = mov.short 13
+  %16 = mov.short 17
+  %17 = mov.short 23
+  %18 = mov.short 29
+  %19 = mov.short 31
+  %20 = mov.short 37
+  %21 = vbcst.32 %20
+  %22 = vpush.lo.32 %19, %21
+  %23 = vpush.lo.32 %18, %22
+  %24 = vpush.lo.32 %17, %23
+  %25 = vpush.lo.32 %live, %24
+  %26 = vpush.lo.32 %16, %25
+  %27 = vpush.lo.32 %15, %26
+  %result = vpush.lo.32 %14, %27
+  return %result
+}
+
+// ====
+
+func.def @literal_patch_f32x8(%left: f32, %right: f32) -> (vector<8xf32>) {
+  %base = vector.constantf [-0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0] : vector<8xf32>
+  %patched_left = vector.insert %left into %base[1] : f32, vector<8xf32>
+  %result = vector.insert %right into %patched_left[6] : f32, vector<8xf32>
+  func.return %result : vector<8xf32>
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @literal_patch_f32x8(%left: reg<aie2p.er>, %right: reg<aie2p.er>) -> (reg<aie2p.vec256 x2>) asm {
+  %16 = mov.i32 -2147483648
+  %17 = mov.i32 1073741824
+  %18 = mov.i32 1077936128
+  %19 = mov.i32 1082130432
+  %20 = mov.i32 1084227584
+  %21 = mov.i32 1088421888
+  %22 = vbcst.32 %21
+  %23 = vpush.lo.32 %right, %22
+  %24 = vpush.lo.32 %20, %23
+  %25 = vpush.lo.32 %19, %24
+  %26 = vpush.lo.32 %18, %25
+  %27 = vpush.lo.32 %17, %26
+  %28 = vpush.lo.32 %left, %27
+  %result = vpush.lo.32 %16, %28
+  return %result
+}
+
+// ====
+
+func.def @literal_patch_i16_2x4(%live: i16) -> (vector<2x4xi16>) {
+  %base = vector.constanti [11, 13, 17, 19, 23, 29, 31, 37] : vector<2x4xi16>
+  %result = vector.insert %live into %base[1, 2] : i16, vector<2x4xi16>
+  func.return %result : vector<2x4xi16>
+}
+
+// ----
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @literal_patch_i16_2x4(%live: reg<aie2p.er>) -> (reg<aie2p.vec256 x2>) asm {
+  %14 = mov.short 11
+  %15 = mov.short 13
+  %16 = mov.short 17
+  %17 = mov.short 19
+  %18 = mov.short 23
+  %19 = mov.short 29
+  %20 = mov.short 37
+  %21 = vbcst.16 %20
+  %22 = vpush.lo.16 %live, %21
+  %23 = vpush.lo.16 %19, %22
+  %24 = vpush.lo.16 %18, %23
+  %25 = vpush.lo.16 %17, %24
+  %26 = vpush.lo.16 %16, %25
+  %27 = vpush.lo.16 %15, %26
+  %result = vpush.lo.16 %14, %27
+  return %result
+}

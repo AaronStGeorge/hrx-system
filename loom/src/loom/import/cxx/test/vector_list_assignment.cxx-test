@@ -4,12 +4,10 @@ void entry(Int4* output, int first) { *output = {first, 1, 2, 3}; }
 
 // ----
 func.def public @entry(%output: buffer, %output_byte_offset: offset, %first: i32) {
-  %3 = scalar.constant 1 : i32
-  %4 = scalar.constant 2 : i32
-  %5 = scalar.constant 3 : i32
-  %6 = vector.from_elements %first, %3, %4, %5 : vector<4xi32>
-  %7 = buffer.view %output[%output_byte_offset] : buffer -> view<4xi32>
-  vector.store %6, %7[0] : vector<4xi32>, view<4xi32>
+  %3 = vector.constanti [0, 1, 2, 3] : vector<4xi32>
+  %4 = vector.insert %first into %3[0] : i32, vector<4xi32>
+  %5 = buffer.view %output[%output_byte_offset] : buffer -> view<4xi32>
+  vector.store %4, %5[0] : vector<4xi32>, view<4xi32>
   func.return
 }
 
@@ -44,10 +42,9 @@ Int4 entry(int first) {
 // ----
 func.def public @entry(%first: i32) -> (vector<4xi32>) {
   %state_value$2 = vector.constanti [0, 0, 0, 0] : vector<4xi32>
-  %3 = scalar.constant 9 : i32
-  %4 = scalar.constant 0 : i32
-  %state_value$5 = vector.from_elements %first, %3, %4, %4 : vector<4xi32>
-  func.return %state_value$5 : vector<4xi32>
+  %3 = vector.constanti [0, 9, 0, 0] : vector<4xi32>
+  %state_value$4 = vector.insert %first into %3[0] : i32, vector<4xi32>
+  func.return %state_value$4 : vector<4xi32>
 }
 
 // ====
@@ -81,11 +78,10 @@ Int4 entry(int first) { return identity({first, 9}); }
 
 // ----
 func.def public @entry(%first: i32) -> (vector<4xi32>) {
-  %2 = scalar.constant 9 : i32
-  %3 = scalar.constant 0 : i32
-  %4 = vector.from_elements %first, %2, %3, %3 : vector<4xi32>
-  %5 = func.call pure @identity(%4) : (vector<4xi32>) -> (vector<4xi32>)
-  func.return %5 : vector<4xi32>
+  %2 = vector.constanti [0, 9, 0, 0] : vector<4xi32>
+  %3 = vector.insert %first into %2[0] : i32, vector<4xi32>
+  %4 = func.call pure @identity(%3) : (vector<4xi32>) -> (vector<4xi32>)
+  func.return %4 : vector<4xi32>
 }
 
 func.def @identity(%value: vector<4xi32>) -> (vector<4xi32>) {

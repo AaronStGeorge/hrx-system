@@ -108,8 +108,15 @@ class Initialization {
                       cxx::VariableSymbol* implicit_element,
                       cxx::FunctionSymbol* constructor, cxx::AST* owner,
                       std::optional<Value> retained);
-  // Returns a compact vector literal when every source lane is a pure
-  // frontend constant. Runtime and side-effecting lanes remain SSA elements.
+  // Constructs a native vector from its complete source initializer. Pure
+  // constant lanes are retained as frontend values so the producer can choose
+  // between one typed literal with static patches and from_elements without
+  // changing live-expression evaluation order.
+  loom_value_id_t initialize_vector(const cxx::Type* type,
+                                    cxx::List<cxx::ExpressionAST*>* elements,
+                                    cxx::AST* owner);
+  // Returns the existing one-operation literal path when every source lane is
+  // a pure frontend constant. Mixed analysis is kept off this common path.
   std::optional<loom_value_id_t> constant_vector(
       const cxx::Type* type, cxx::List<cxx::ExpressionAST*>* elements,
       cxx::AST* owner);

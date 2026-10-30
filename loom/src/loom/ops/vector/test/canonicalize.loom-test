@@ -1981,3 +1981,24 @@ func.def @extract_floating_literal_slice() -> (vector<2xf16>) {
   %result = vector.constantf [3.0, 4.0] : vector<2xf16>
   func.return %result : vector<2xf16>
 }
+
+// ====
+
+// RUN: pass canonicalize
+
+// Universal cleanup may run after target legalization has expanded a literal.
+// Reconstructing the source literal here would create a legalization cycle;
+// the explicitly pre-legalization combine pass owns this transformation.
+func.def @literal_insert_requires_source_combine() -> (vector<4xi32>) {
+  %base = vector.constanti [1, 2, 3, 4] : vector<4xi32>
+  %replacement = scalar.constant 9 : i32
+  %result = vector.insert %replacement into %base[2] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+// ----
+func.def @literal_insert_requires_source_combine() -> (vector<4xi32>) {
+  %base = vector.constanti [1, 2, 3, 4] : vector<4xi32>
+  %replacement = scalar.constant 9 : i32
+  %result = vector.insert %replacement into %base[2] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}

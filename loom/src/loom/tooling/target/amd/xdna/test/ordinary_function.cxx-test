@@ -19,3 +19,30 @@ constexpr loom::aie2p::target core_target{.kind = "core"};
     loom::view::store(loom::view::load(lhs_values, index) * loom::view::load(rhs_values, index), output_values, index);
   }
 }
+
+// ====
+// RUN: emit source-low target=amd.xdna.aie2p:core output=low
+using Int8 = int __attribute__((ext_vector_type(8)));
+Int8 construct_mixed(int live) {
+  return Int8{11, 13, 17, live, 23, 29, 31, 37};
+}
+
+// ----
+low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @construct_mixed(%live: reg<aie2p.er>) -> (reg<aie2p.vec256 x2>) asm {
+  %14 = mov.short 11
+  %15 = mov.short 13
+  %16 = mov.short 17
+  %17 = mov.short 23
+  %18 = mov.short 29
+  %19 = mov.short 31
+  %20 = mov.short 37
+  %21 = vbcst.32 %20
+  %22 = vpush.lo.32 %19, %21
+  %23 = vpush.lo.32 %18, %22
+  %24 = vpush.lo.32 %17, %23
+  %25 = vpush.lo.32 %live, %24
+  %26 = vpush.lo.32 %16, %25
+  %27 = vpush.lo.32 %15, %26
+  %28 = vpush.lo.32 %14, %27
+  return %28
+}

@@ -1,0 +1,114 @@
+// Shared bases are not duplicated to fold independent patch branches.
+// RUN: pass target=amd.xdna.aie2p:core target-legalize{mode=final}
+
+func.def @shared_literal_base(%left: i32, %right: i32) -> (vector<4xi32>, vector<4xi32>) {
+  %base = vector.constanti [11, 13, 17, 19] : vector<4xi32>
+  %left_result = vector.insert %left into %base[1] : i32, vector<4xi32>
+  %right_result = vector.insert %right into %base[2] : i32, vector<4xi32>
+  func.return %left_result, %right_result : vector<4xi32>, vector<4xi32>
+}
+
+// ----
+func.def @shared_literal_base(%left: i32, %right: i32) -> (vector<4xi32>, vector<4xi32>) {
+  %7 = scalar.constant 11 : i32
+  %8 = scalar.constant 13 : i32
+  %9 = scalar.constant 17 : i32
+  %10 = scalar.constant 19 : i32
+  %base = vector.from_elements %7, %8, %9, %10 : vector<4xi32>
+  %left_result = vector.insert %left into %base[1] : i32, vector<4xi32>
+  %right_result = vector.insert %right into %base[2] : i32, vector<4xi32>
+  func.return %left_result, %right_result : vector<4xi32>, vector<4xi32>
+}
+
+// ====
+
+// Dynamic coordinates retain the target's register-indexed insertion path.
+// RUN: pass target=amd.xdna.aie2p:core target-legalize{mode=final}
+
+func.def @dynamic_literal_patch(%live: i32, %position: index) -> (vector<4xi32>) {
+  %base = vector.constanti [11, 13, 17, 19] : vector<4xi32>
+  %result = vector.insert %live into %base[%position] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ----
+func.def @dynamic_literal_patch(%live: i32, %position: index) -> (vector<4xi32>) {
+  %5 = scalar.constant 11 : i32
+  %6 = scalar.constant 13 : i32
+  %7 = scalar.constant 17 : i32
+  %8 = scalar.constant 19 : i32
+  %base = vector.from_elements %5, %6, %7, %8 : vector<4xi32>
+  %result = vector.insert %live into %base[%position] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ====
+
+// Subvector insertion remains a carrier-shape operation instead of expanding
+// its live row to scalar extracts.
+// RUN: pass target=amd.xdna.aie2p:core target-legalize{mode=final}
+
+func.def @subvector_literal_patch(%row: vector<4xf32>) -> (vector<2x4xf32>) {
+  %base = vector.constantf [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0] : vector<2x4xf32>
+  %result = vector.insert %row into %base[1] : vector<4xf32>, vector<2x4xf32>
+  func.return %result : vector<2x4xf32>
+}
+
+// ----
+func.def @subvector_literal_patch(%row: vector<4xf32>) -> (vector<2x4xf32>) {
+  %8 = scalar.constant 0.0 : f32
+  %9 = scalar.constant 1.0 : f32
+  %10 = scalar.constant 2.0 : f32
+  %11 = scalar.constant 3.0 : f32
+  %12 = scalar.constant 4.0 : f32
+  %13 = scalar.constant 5.0 : f32
+  %14 = scalar.constant 6.0 : f32
+  %15 = scalar.constant 7.0 : f32
+  %base = vector.from_elements %8, %9, %10, %11, %12, %13, %14, %15 : vector<2x4xf32>
+  %4 = vector.bitcast %base : vector<2x4xf32> to vector<8xf32>
+  %5 = vector.slice %4[0] : vector<8xf32> -> vector<4xf32>
+  %6 = vector.concat<0> %5, %row : vector<4xf32>, vector<4xf32> -> vector<8xf32>
+  %result = vector.bitcast %6 : vector<8xf32> to vector<2x4xf32>
+  func.return %result : vector<2x4xf32>
+}
+
+// ====
+
+// Integer literal selection includes predicate vectors.
+// RUN: pass target=amd.xdna.aie2p:core target-legalize{mode=final}
+
+func.def @predicate_literal_patch(%live: i1) -> (vector<4xi1>) {
+  %base = vector.constanti [0, 1, 0, 1] : vector<4xi1>
+  %result = vector.insert %live into %base[2] : i1, vector<4xi1>
+  func.return %result : vector<4xi1>
+}
+
+// ----
+func.def @predicate_literal_patch(%live: i1) -> (vector<4xi1>) {
+  %4 = scalar.constant 0 : i1
+  %5 = scalar.constant 1 : i1
+  %6 = scalar.constant 1 : i1
+  %result = vector.from_elements %4, %5, %live, %6 : vector<4xi1>
+  func.return %result : vector<4xi1>
+}
+
+// ====
+
+// Later writes to the same lane supersede both the literal and earlier patch.
+// RUN: pass target=amd.xdna.aie2p:core target-legalize{mode=final}
+
+func.def @repeated_literal_patch(%earlier: i16, %later: i16) -> (vector<4xi16>) {
+  %base = vector.constanti [11, 13, 17, 19] : vector<4xi16>
+  %patched = vector.insert %earlier into %base[2] : i16, vector<4xi16>
+  %result = vector.insert %later into %patched[2] : i16, vector<4xi16>
+  func.return %result : vector<4xi16>
+}
+
+// ----
+func.def @repeated_literal_patch(%earlier: i16, %later: i16) -> (vector<4xi16>) {
+  %6 = scalar.constant 11 : i16
+  %7 = scalar.constant 13 : i16
+  %8 = scalar.constant 19 : i16
+  %result = vector.from_elements %6, %7, %later, %8 : vector<4xi16>
+  func.return %result : vector<4xi16>
+}

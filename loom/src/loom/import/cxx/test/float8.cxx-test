@@ -88,41 +88,39 @@ func.def public @absolute(%value: f8E5M2) -> (f8E5M2) {
 }
 
 func.def public @pack(%first: f8E4M3, %second: f8E4M3) -> (vector<4xf8E4M3>) {
-  %rounded = scalar.constant 1.25 : f8E4M3
-  %31 = scalar.constant 2.0 : f64
-  %32 = scalar.negf %31 : f64
-  %33 = scalar.fptrunc %32 : f64 to f8E4M3
-  %34 = vector.from_elements %first, %second, %rounded, %33 : vector<4xf8E4M3>
-  func.return %34 : vector<4xf8E4M3>
+  %30 = scalar.constant 1.25 : f8E4M3
+  %31 = scalar.constant -2.0 : f8E4M3
+  %32 = vector.from_elements %first, %second, %30, %31 : vector<4xf8E4M3>
+  func.return %32 : vector<4xf8E4M3>
 }
 
 func.def public @lane(%values: vector<4xf8E4M3>, %index: i32) -> (f8E4M3) {
-  %38 = index.cast %index : i32 to index
-  %39 = vector.extract %values[%38] : vector<4xf8E4M3> -> f8E4M3
-  func.return %39 : f8E4M3
+  %36 = index.cast %index : i32 to index
+  %37 = vector.extract %values[%36] : vector<4xf8E4M3> -> f8E4M3
+  func.return %37 : f8E4M3
 }
 
 func.def public @copy(%input: buffer, %input_byte_offset: offset, %output: buffer, %output_byte_offset: offset, %index: i32) {
-  %45 = scalar.extui %index : i32 to i64
-  %46 = scalar.constant 4 : i64
-  %47 = scalar.muli %45, %46 : i64
-  %48 = index.cast %input_byte_offset : offset to i64
-  %49 = scalar.addi %48, %47 : i64
-  %50 = scalar.assume %49 [range(%49, 0, 9223372036854775807)] : i64
-  %51 = index.cast %50 : i64 to offset
-  %52 = buffer.view %input[%51] : buffer -> view<4xf8E4M3>
-  %53 = vector.load %52[0] : view<4xf8E4M3> -> vector<4xf8E4M3>
-  %54 = scalar.constant 1 : i32
-  %55 = scalar.addi %index, %54 : i32
-  %56 = scalar.extui %55 : i32 to i64
-  %57 = scalar.constant 4 : i64
-  %58 = scalar.muli %56, %57 : i64
-  %59 = index.cast %output_byte_offset : offset to i64
-  %60 = scalar.addi %59, %58 : i64
-  %61 = scalar.assume %60 [range(%60, 0, 9223372036854775807)] : i64
-  %62 = index.cast %61 : i64 to offset
-  %63 = buffer.view %output[%62] : buffer -> view<4xf8E4M3>
-  vector.store %53, %63[0] : vector<4xf8E4M3>, view<4xf8E4M3>
+  %43 = scalar.extui %index : i32 to i64
+  %44 = scalar.constant 4 : i64
+  %45 = scalar.muli %43, %44 : i64
+  %46 = index.cast %input_byte_offset : offset to i64
+  %47 = scalar.addi %46, %45 : i64
+  %48 = scalar.assume %47 [range(%47, 0, 9223372036854775807)] : i64
+  %49 = index.cast %48 : i64 to offset
+  %50 = buffer.view %input[%49] : buffer -> view<4xf8E4M3>
+  %51 = vector.load %50[0] : view<4xf8E4M3> -> vector<4xf8E4M3>
+  %52 = scalar.constant 1 : i32
+  %53 = scalar.addi %index, %52 : i32
+  %54 = scalar.extui %53 : i32 to i64
+  %55 = scalar.constant 4 : i64
+  %56 = scalar.muli %54, %55 : i64
+  %57 = index.cast %output_byte_offset : offset to i64
+  %58 = scalar.addi %57, %56 : i64
+  %59 = scalar.assume %58 [range(%58, 0, 9223372036854775807)] : i64
+  %60 = index.cast %59 : i64 to offset
+  %61 = buffer.view %output[%60] : buffer -> view<4xf8E4M3>
+  vector.store %51, %61[0] : vector<4xf8E4M3>, view<4xf8E4M3>
   func.return
 }
 

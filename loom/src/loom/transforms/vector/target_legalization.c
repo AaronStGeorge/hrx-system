@@ -857,25 +857,45 @@ static iree_status_t loom_vector_legalize_constant_elements(
   return iree_ok_status();
 }
 
-static iree_status_t loom_vector_legalize_constanti(
+iree_status_t loom_vector_legalize_literal_base_elements(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
     loom_target_legalizer_result_t* out_result) {
   (void)entry;
-  return loom_vector_legalize_constant_elements(
-      context, op, loom_vector_constanti_values(op),
-      loom_vector_constanti_result(op), false, out_result);
-}
-
-static iree_status_t loom_vector_legalize_constantf(
-    const loom_target_legalizer_entry_t* entry,
-    loom_target_legalization_context_t* context, loom_op_t* op,
-    loom_target_legalizer_result_t* out_result) {
-  (void)entry;
+  if (loom_vector_constanti_isa(op)) {
+    return loom_vector_legalize_constant_elements(
+        context, op, loom_vector_constanti_values(op),
+        loom_vector_constanti_result(op), false, out_result);
+  }
+  IREE_ASSERT_TRUE(loom_vector_constantf_isa(op));
   const loom_f64_array_t values = loom_vector_constantf_values(op);
   return loom_vector_legalize_constant_elements(
       context, op, loom_attr_f64_array(values.values, (uint16_t)values.count),
       loom_vector_constantf_result(op), true, out_result);
+}
+
+static iree_status_t loom_vector_legalize_literal_patches(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (context->mode != LOOM_TARGET_LEGALIZATION_MODE_FINAL &&
+      context->policy != LOOM_TARGET_LEGALIZATION_POLICY_REFERENCE_ONLY) {
+    out_result->action = LOOM_TARGET_LEGALIZER_ACTION_DEFER;
+    return iree_ok_status();
+  }
+
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_vector_literal_insert_chain_to_elements_rewrite_op(
+      op, context->rewriter, &rewritten));
+  if (rewritten) {
+    out_result->action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN;
+    return iree_ok_status();
+  }
+  return loom_vector_legalize_literal_base_elements(entry, context, op,
+                                                    out_result);
 }
 
 static iree_status_t loom_vector_legalize_dotf(
@@ -1624,11 +1644,11 @@ static iree_status_t loom_vector_legalize_workgroup_reduce(
 static const loom_target_legalizer_rule_t kVectorLegalizerRules[] = {
     {
         .root_kind = LOOM_OP_VECTOR_CONSTANTI,
-        .legalize = loom_vector_legalize_constanti,
+        .legalize = loom_vector_legalize_literal_patches,
     },
     {
         .root_kind = LOOM_OP_VECTOR_CONSTANTF,
-        .legalize = loom_vector_legalize_constantf,
+        .legalize = loom_vector_legalize_literal_patches,
     },
     {
         .root_kind = LOOM_OP_VECTOR_NEGI,

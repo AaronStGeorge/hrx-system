@@ -153,6 +153,7 @@ loom_check_test_suite(
         "vector_index_conversion.loom-test",
         "vector_interleave.loom-test",
         "vector_large_insert.loom-test",
+        "vector_literal_patch_construction.loom-test",
         "vector_load_underaligned.loom-test",
         "vector_load_underaligned_family.loom-test",
         "vector_mask_select.loom-test",

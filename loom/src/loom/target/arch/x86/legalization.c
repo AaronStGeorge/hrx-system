@@ -14,6 +14,7 @@
 #include "loom/target/arch/x86/vector_insert.h"
 #include "loom/transforms/scalar/target_legalization.h"
 #include "loom/transforms/vector/packet_legalization.h"
+#include "loom/transforms/vector/target_legalization.h"
 #include "loom/transforms/vector/to_scalar.h"
 
 static bool loom_x86_legalizer_descriptor_set_is_x86(
@@ -57,6 +58,24 @@ static iree_status_t loom_x86_retain_native_vector_op(
       .action = LOOM_TARGET_LEGALIZER_ACTION_DEFER,
   };
   return iree_ok_status();
+}
+
+// Expand literals independently from their patch users so x86 construction
+// selection can retain an immutable vector load before sparse lane updates.
+// Other targets continue to the shared construction selector when this
+// provider is linked into an all-target compiler.
+static iree_status_t loom_x86_legalize_vector_literal_base(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (!loom_x86_legalizer_descriptor_set_is_x86(context->descriptor_set)) {
+    return iree_ok_status();
+  }
+  return loom_vector_legalize_literal_base_elements(entry, context, op,
+                                                    out_result);
 }
 
 static bool loom_x86_match_vector_float8_extension(
@@ -200,6 +219,14 @@ static iree_status_t loom_x86_legalize_vector_packets(
 }
 
 static const loom_target_legalizer_rule_t kX86LegalizerRules[] = {
+    {
+        .root_kind = LOOM_OP_VECTOR_CONSTANTI,
+        .legalize = loom_x86_legalize_vector_literal_base,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_CONSTANTF,
+        .legalize = loom_x86_legalize_vector_literal_base,
+    },
     {
         .root_kind = LOOM_OP_VECTOR_LOAD,
         .legalize = loom_x86_legalize_vector_packets,

@@ -76,6 +76,11 @@ class Vectors {
   loom_value_id_t insert(loom_value_id_t destination, loom_value_id_t lane,
                          loom_value_id_t index, const cxx::Type* source_type,
                          const cxx::Type* index_type, cxx::AST* owner);
+  // Replaces one statically selected lane without manufacturing an index SSA
+  // value. The initializer has already proven the lane is in bounds.
+  loom_value_id_t insert_static(loom_value_id_t destination,
+                                loom_value_id_t lane, int64_t index,
+                                const cxx::Type* source_type, cxx::AST* owner);
 
  private:
   // Emits one numeric lane conversion after its concrete High source/result

@@ -182,6 +182,197 @@ func.def @materialized_insert_prefix(%fill: i8, %a: i8, %b: i8, %c: i8) -> (vect
 
 // ====
 
+// A complete exact construction has one typed integer literal regardless of
+// its arbitrary overwritten base or write order.
+func.def @complete_integer_literal_chain(%base: vector<4xi16>) -> (vector<4xi16>) {
+  %red = scalar.constant 11 : i16
+  %green = scalar.constant 13 : i16
+  %blue = scalar.constant 17 : i16
+  %alpha = scalar.constant 19 : i16
+  %with_blue = vector.insert %blue into %base[2] : i16, vector<4xi16>
+  %with_red = vector.insert %red into %with_blue[0] : i16, vector<4xi16>
+  %with_alpha = vector.insert %alpha into %with_red[3] : i16, vector<4xi16>
+  %result = vector.insert %green into %with_alpha[1] : i16, vector<4xi16>
+  func.return %result : vector<4xi16>
+}
+
+// ----
+func.def @complete_integer_literal_chain(%base: vector<4xi16>) -> (vector<4xi16>) {
+  %result = vector.constanti [11, 13, 17, 19] : vector<4xi16>
+  func.return %result : vector<4xi16>
+}
+
+// ====
+
+// Predicate inserts share the integer typed-literal construction path.
+func.def @complete_predicate_literal_chain(%base: vector<4xi1>) -> (vector<4xi1>) {
+  %enabled = scalar.constant true : i1
+  %disabled = scalar.constant false : i1
+  %with_enabled_tail = vector.insert %enabled into %base[2] : i1, vector<4xi1>
+  %with_enabled_head = vector.insert %enabled into %with_enabled_tail[0] : i1, vector<4xi1>
+  %with_disabled_tail = vector.insert %disabled into %with_enabled_head[3] : i1, vector<4xi1>
+  %result = vector.insert %disabled into %with_disabled_tail[1] : i1, vector<4xi1>
+  func.return %result : vector<4xi1>
+}
+
+// ----
+func.def @complete_predicate_literal_chain(%base: vector<4xi1>) -> (vector<4xi1>) {
+  %result = vector.constanti [1, 0, 1, 0] : vector<4xi1>
+  func.return %result : vector<4xi1>
+}
+
+// ====
+
+// Floating-point exact construction retains signed zero while removing every
+// scalar constructor and insertion.
+func.def @complete_floating_literal_chain(%base: vector<3xf32>) -> (vector<3xf32>) {
+  %left = scalar.constant -0.0 : f32
+  %middle = scalar.constant 1.0 : f32
+  %right = scalar.constant 2.0 : f32
+  %with_right = vector.insert %right into %base[2] : f32, vector<3xf32>
+  %with_left = vector.insert %left into %with_right[0] : f32, vector<3xf32>
+  %result = vector.insert %middle into %with_left[1] : f32, vector<3xf32>
+  func.return %result : vector<3xf32>
+}
+
+// ----
+func.def @complete_floating_literal_chain(%base: vector<3xf32>) -> (vector<3xf32>) {
+  %result = vector.constantf [-0.0, 1.0, 2.0] : vector<3xf32>
+  func.return %result : vector<3xf32>
+}
+
+// ====
+
+// A complete construction from one live scalar is the structural SSA splat.
+func.def @complete_dynamic_splat_chain(%base: vector<4xi32>, %value: i32) -> (vector<4xi32>) {
+  %with_two = vector.insert %value into %base[2] : i32, vector<4xi32>
+  %with_zero = vector.insert %value into %with_two[0] : i32, vector<4xi32>
+  %with_three = vector.insert %value into %with_zero[3] : i32, vector<4xi32>
+  %result = vector.insert %value into %with_three[1] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ----
+func.def @complete_dynamic_splat_chain(%base: vector<4xi32>, %value: i32) -> (vector<4xi32>) {
+  %result = vector.splat %value : vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ====
+
+// Literal updates are independent of the bounded small-lane fact summary.
+func.def @insert_into_wide_integer_literal() -> (vector<17xi32>) {
+  %base = vector.constanti [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] : vector<17xi32>
+  %replacement = scalar.constant 42 : i32
+  %result = vector.insert %replacement into %base[16] : i32, vector<17xi32>
+  func.return %result : vector<17xi32>
+}
+// ----
+func.def @insert_into_wide_integer_literal() -> (vector<17xi32>) {
+  %result = vector.constanti [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 42] : vector<17xi32>
+  func.return %result : vector<17xi32>
+}
+
+// ====
+
+// A static subvector write replaces its contiguous row-major literal range.
+func.def @insert_floating_literal_row() -> (vector<2x3xf16>) {
+  %base = vector.constantf [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] : vector<2x3xf16>
+  %row = vector.constantf [-0.0, 8.0, 9.0] : vector<3xf16>
+  %result = vector.insert %row into %base[1] : vector<3xf16>, vector<2x3xf16>
+  func.return %result : vector<2x3xf16>
+}
+// ----
+func.def @insert_floating_literal_row() -> (vector<2x3xf16>) {
+  %result = vector.constantf [1.0, 2.0, 3.0, -0.0, 8.0, 9.0] : vector<2x3xf16>
+  func.return %result : vector<2x3xf16>
+}
+
+// ====
+
+// Updating the only distinct lane exposes the canonical typed splat.
+func.def @insert_makes_uniform_literal() -> (vector<4xi8>) {
+  %base = vector.constanti [7, 0, 7, 7] : vector<4xi8>
+  %fill = scalar.constant 7 : i8
+  %result = vector.insert %fill into %base[1] : i8, vector<4xi8>
+  func.return %result : vector<4xi8>
+}
+// ----
+func.def @insert_makes_uniform_literal() -> (vector<4xi8>) {
+  %result = vector.splati 7 : vector<4xi8>
+  func.return %result : vector<4xi8>
+}
+
+// ====
+
+// Replacing a lane with its existing literal value removes the insertion.
+func.def @insert_unchanged_literal_lane() -> (vector<3xf32>) {
+  %base = vector.constantf [1.0, -0.0, 3.0] : vector<3xf32>
+  %replacement = scalar.constant -0.0 : f32
+  %result = vector.insert %replacement into %base[1] : f32, vector<3xf32>
+  func.return %result : vector<3xf32>
+}
+// ----
+func.def @insert_unchanged_literal_lane() -> (vector<3xf32>) {
+  %base = vector.constantf [1.0, -0.0, 3.0] : vector<3xf32>
+  func.return %base : vector<3xf32>
+}
+
+// ====
+
+// A live coordinate leaves literal-plus-patch construction available to the
+// target instead of choosing a generic representation.
+func.def @dynamic_literal_insert(%lane: index) -> (vector<4xi32>) {
+  %base = vector.constanti [1, 2, 3, 4] : vector<4xi32>
+  %replacement = scalar.constant 9 : i32
+  %result = vector.insert %replacement into %base[%lane] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+// ----
+func.def @dynamic_literal_insert(%lane: index) -> (vector<4xi32>) {
+  %base = vector.constanti [1, 2, 3, 4] : vector<4xi32>
+  %replacement = scalar.constant 9 : i32
+  %result = vector.insert %replacement into %base[%lane] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ====
+
+// A live patch remains explicit for target construction selection.
+func.def @live_literal_insert(%replacement: i32) -> (vector<4xi32>) {
+  %base = vector.constanti [1, 2, 3, 4] : vector<4xi32>
+  %result = vector.insert %replacement into %base[2] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+// ----
+func.def @live_literal_insert(%replacement: i32) -> (vector<4xi32>) {
+  %base = vector.constanti [1, 2, 3, 4] : vector<4xi32>
+  %result = vector.insert %replacement into %base[2] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ====
+
+// A narrow NaN carried by its payload bits is not representable by a binary64
+// literal and therefore remains in SSA form.
+func.def @insert_narrow_nan_payload() -> (vector<2xf16>) {
+  %payload_bits = scalar.constant 32257 : i16
+  %payload = scalar.bitcast %payload_bits : i16 to f16
+  %base = vector.constantf [1.0, 2.0] : vector<2xf16>
+  %result = vector.insert %payload into %base[1] : f16, vector<2xf16>
+  func.return %result : vector<2xf16>
+}
+// ----
+func.def @insert_narrow_nan_payload() -> (vector<2xf16>) {
+  %payload_bits = scalar.constant 32257 : i16
+  %payload = scalar.bitcast %payload_bits : i16 to f16
+  %base = vector.constantf [1.0, 2.0] : vector<2xf16>
+  %result = vector.insert %payload into %base[1] : f16, vector<2xf16>
+  func.return %result : vector<2xf16>
+}
+
+// ====
+
 // A partial update of an arbitrary base remains a mutation, not a constructor.
 func.def @partial_arbitrary_base(%base: vector<4xi32>, %value: i32) -> (vector<4xi32>) {
   %result = vector.insert %value into %base[2] : i32, vector<4xi32>
