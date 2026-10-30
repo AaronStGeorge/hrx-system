@@ -16,6 +16,15 @@
 extern "C" {
 #endif
 
+// Expands one vector.constanti or vector.constantf into its exact scalar lanes
+// and vector.from_elements base without consuming any vector.insert users.
+// Target providers use this when retaining the literal base separately from
+// sparse patches enables a target-native construction strategy.
+iree_status_t loom_vector_legalize_literal_base_elements(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result);
+
 // Rewrites a static vector.from_elements as a rank-one splat/insert chain. The
 // most frequent identical SSA lane seeds the splat, minimizing the number of
 // inserts. Multidimensional results are restored with a shape-only

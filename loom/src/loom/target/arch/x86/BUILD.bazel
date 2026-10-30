@@ -170,6 +170,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/x86/records:target_records",
         "//loom/src/loom/transforms/scalar:target_legalization",
         "//loom/src/loom/transforms/vector:packet_legalization",
+        "//loom/src/loom/transforms/vector:target_legalization",
         "//loom/src/loom/transforms/vector:to_scalar",
         "//runtime/src/iree/base",
     ],

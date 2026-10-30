@@ -45,3 +45,101 @@ func.def target(@target) @floating_literal_table() -> (vector<4xf32>) {
   %table = vector.insert %5 into %9[3] : f32, vector<4xf32>
   func.return %table : vector<4xf32>
 }
+
+// ====
+
+test.target<low_core> @target
+
+func.def target(@target) @integer_literal_patch(%live: i32) -> (vector<4xi32>) {
+  %base = vector.constanti [11, 22, 33, 44] : vector<4xi32>
+  %result = vector.insert %live into %base[1] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ----
+test.target<low_core> @target
+
+func.def target(@target) @integer_literal_patch(%live: i32) -> (vector<4xi32>) {
+  %4 = scalar.constant 11 : i32
+  %5 = scalar.constant 33 : i32
+  %6 = scalar.constant 44 : i32
+  %8 = vector.splat %4 : vector<4xi32>
+  %9 = vector.insert %live into %8[1] : i32, vector<4xi32>
+  %10 = vector.insert %5 into %9[2] : i32, vector<4xi32>
+  %result = vector.insert %6 into %10[3] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ====
+
+test.target<low_core> @target
+
+func.def target(@target) @floating_literal_repeated_patch(%first: f32, %last: f32) -> (vector<2x2xf32>) {
+  %base = vector.constantf [1.0, 2.0, -0.0, 4.0] : vector<2x2xf32>
+  %dead = vector.insert %first into %base[0, 1] : f32, vector<2x2xf32>
+  %result = vector.insert %last into %dead[0, 1] : f32, vector<2x2xf32>
+  func.return %result : vector<2x2xf32>
+}
+
+// ----
+test.target<low_core> @target
+
+func.def target(@target) @floating_literal_repeated_patch(%first: f32, %last: f32) -> (vector<2x2xf32>) {
+  %6 = scalar.constant 1.0 : f32
+  %7 = scalar.constant -0.0 : f32
+  %8 = scalar.constant 4.0 : f32
+  %result = vector.from_elements %6, %last, %7, %8 : vector<2x2xf32>
+  func.return %result : vector<2x2xf32>
+}
+
+// ====
+
+test.target<low_core> @target
+
+func.def target(@target) @shared_integer_literal(%live: i32) -> (vector<4xi32>, vector<4xi32>) {
+  %base = vector.constanti [11, 22, 33, 44] : vector<4xi32>
+  %patched = vector.insert %live into %base[1] : i32, vector<4xi32>
+  func.return %base, %patched : vector<4xi32>, vector<4xi32>
+}
+
+// ----
+test.target<low_core> @target
+
+func.def target(@target) @shared_integer_literal(%live: i32) -> (vector<4xi32>, vector<4xi32>) {
+  %5 = scalar.constant 11 : i32
+  %6 = scalar.constant 22 : i32
+  %7 = scalar.constant 33 : i32
+  %8 = scalar.constant 44 : i32
+  %10 = vector.splat %5 : vector<4xi32>
+  %11 = vector.insert %6 into %10[1] : i32, vector<4xi32>
+  %12 = vector.insert %7 into %11[2] : i32, vector<4xi32>
+  %base = vector.insert %8 into %12[3] : i32, vector<4xi32>
+  %patched = vector.insert %live into %base[1] : i32, vector<4xi32>
+  func.return %base, %patched : vector<4xi32>, vector<4xi32>
+}
+
+// ====
+
+test.target<low_core> @target
+
+func.def target(@target) @dynamic_integer_literal_patch(%live: i32, %lane: index) -> (vector<4xi32>) {
+  %base = vector.constanti [11, 22, 33, 44] : vector<4xi32>
+  %result = vector.insert %live into %base[%lane] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ----
+test.target<low_core> @target
+
+func.def target(@target) @dynamic_integer_literal_patch(%live: i32, %lane: index) -> (vector<4xi32>) {
+  %5 = scalar.constant 11 : i32
+  %6 = scalar.constant 22 : i32
+  %7 = scalar.constant 33 : i32
+  %8 = scalar.constant 44 : i32
+  %10 = vector.splat %5 : vector<4xi32>
+  %11 = vector.insert %6 into %10[1] : i32, vector<4xi32>
+  %12 = vector.insert %7 into %11[2] : i32, vector<4xi32>
+  %base = vector.insert %8 into %12[3] : i32, vector<4xi32>
+  %result = vector.insert %live into %base[%lane] : i32, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
