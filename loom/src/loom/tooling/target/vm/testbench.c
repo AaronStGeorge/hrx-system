@@ -43,12 +43,9 @@ iree_status_t loom_vm_testbench_initialize(
       target_environment, loomc_make_cstring_view("vm:core"),
       loomc_allocator_from_iree(host_allocator),
       &out_testbench->target_profile)));
-  const loom_target_profile_t* profile =
-      loomc_target_profile_get_interop_view(out_testbench->target_profile);
   const loom_target_provider_t* provider =
-      loom_target_environment_lookup_profile_provider(
-          loomc_target_environment_get_interop_view(target_environment),
-          profile->type);
+      loomc_target_profile_get_provider_interop_view(
+          out_testbench->target_profile);
   out_testbench->view_boundary_carrier = provider->view_boundary_carrier;
   return iree_ok_status();
 }

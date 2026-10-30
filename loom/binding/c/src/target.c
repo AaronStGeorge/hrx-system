@@ -53,6 +53,9 @@ struct loomc_target_profile_t {
   // Target environment whose provider package understands this profile.
   loomc_target_environment_t* target_environment;
 
+  // Provider resolved at profile admission, borrowed from target_environment.
+  const loom_target_provider_t* target_provider;
+
   // Copied stable identifier used in diagnostics and reports.
   loomc_string_view_t identifier;
 
@@ -740,6 +743,7 @@ loomc_status_t loomc_target_profile_create(
     loomc_target_profile_t** out_profile) {
   IREE_TRACE_ZONE_BEGIN(z0);
   loom_target_profile_t* pending_target_profile = target_profile;
+  const loom_target_provider_t* target_provider = NULL;
   loomc_target_profile_t* profile = NULL;
   loomc_status_t status = loomc_ok_status();
 
@@ -762,16 +766,16 @@ loomc_status_t loomc_target_profile_create(
         LOOMC_STATUS_INVALID_ARGUMENT,
         "target_profile requires a target-family profile type");
   }
-  if (loomc_status_is_ok(status) &&
-      (target_environment == NULL ||
-       loom_target_environment_lookup_profile_provider(
-           &target_environment->environment, pending_target_profile->type) ==
-           NULL)) {
-    status = loomc_status_from_iree(iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "target environment does not support profile family '%.*s'",
-        (int)pending_target_profile->type->name.size,
-        pending_target_profile->type->name.data));
+  if (loomc_status_is_ok(status)) {
+    target_provider = loom_target_environment_lookup_profile_provider(
+        &target_environment->environment, pending_target_profile->type);
+    if (target_provider == NULL) {
+      status = loomc_status_from_iree(iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "target environment does not support profile family '%.*s'",
+          (int)pending_target_profile->type->name.size,
+          pending_target_profile->type->name.data));
+    }
   }
   if (loomc_status_is_ok(status)) {
     status =
@@ -783,6 +787,7 @@ loomc_status_t loomc_target_profile_create(
     profile->allocator = allocator;
     profile->target_environment = target_environment;
     loomc_target_environment_retain(profile->target_environment);
+    profile->target_provider = target_provider;
     profile->target_profile = pending_target_profile;
     profile->target_profile_destroy = destroy;
     pending_target_profile = NULL;
@@ -851,6 +856,11 @@ loomc_status_t loomc_target_profile_select(
 const loom_target_profile_t* loomc_target_profile_loom_target_profile(
     const loomc_target_profile_t* profile) {
   return profile ? profile->target_profile : NULL;
+}
+
+const loom_target_provider_t* loomc_target_profile_loom_target_provider(
+    const loomc_target_profile_t* profile) {
+  return profile ? profile->target_provider : NULL;
 }
 
 bool loomc_target_profile_has_storage(

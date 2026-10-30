@@ -11,6 +11,7 @@
 #include <string>
 
 #include "iree/testing/gtest.h"
+#include "loomc/interop.h"
 #include "loomc/loomc.h"
 #include "test/util.h"
 
@@ -83,6 +84,44 @@ TEST(TargetVmTest, RejectsInvalidNamedProfiles) {
                                   loomc_make_cstring_view("wasm:simd128"),
                                   loomc_allocator_system(), &profile));
   EXPECT_EQ(profile, nullptr);
+}
+
+TEST(TargetVmTest, ProfileRetainsProviderFromComposedEnvironment) {
+  EXPECT_EQ(loomc_target_profile_get_provider_interop_view(nullptr), nullptr);
+
+  loomc_target_environment_t* raw_leaf = nullptr;
+  LOOMC_ASSERT_OK(
+      loomc_target_environment_create_vm(loomc_allocator_system(), &raw_leaf));
+  TargetEnvironmentPtr leaf(raw_leaf);
+  loomc_target_environment_t* raw_composed = nullptr;
+  LOOMC_ASSERT_OK(loomc_target_environment_create(
+      1, &raw_leaf, loomc_allocator_system(), &raw_composed));
+  TargetEnvironmentPtr composed(raw_composed);
+  const loom_target_environment_t* native_environment =
+      loomc_target_environment_get_interop_view(composed.get());
+
+  loomc_target_profile_t* raw_profile = nullptr;
+  LOOMC_ASSERT_OK(loomc_target_profile_select(
+      composed.get(), loomc_make_cstring_view("vm:core"),
+      loomc_allocator_system(), &raw_profile));
+  TargetProfilePtr profile(raw_profile);
+  leaf.reset();
+  composed.reset();
+
+  const loom_target_provider_t* provider =
+      loomc_target_profile_get_provider_interop_view(profile.get());
+  ASSERT_NE(provider, nullptr);
+  const loom_target_provider_set_t* providers =
+      native_environment->provider_set;
+  size_t matching_provider_count = 0;
+  for (size_t i = 0; i < providers->provider_count; ++i) {
+    matching_provider_count += providers->providers[i] == provider;
+  }
+  EXPECT_EQ(matching_provider_count, 1u);
+  EXPECT_EQ(provider->profile_type,
+            loomc_target_profile_get_interop_view(profile.get())->type);
+  EXPECT_EQ(provider->view_boundary_carrier,
+            LOOM_TARGET_VIEW_BOUNDARY_CARRIER_BUFFER_OFFSET);
 }
 
 TEST(TargetVmTest, CompilesAndEmitsBytecodeModule) {
